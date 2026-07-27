@@ -40,7 +40,10 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json-summary', 'html'],
       include: ['packages/*/src/**/*.ts'],
-      exclude: ['**/*.test.ts', '**/index.ts', '**/*.d.ts'],
+      // `src/test/**` is test infrastructure — jsdom stubs and render helpers.
+      // Measuring a no-op `observe()` that exists because jsdom lacks one says
+      // nothing about the code under test, and it drags a real threshold down.
+      exclude: ['**/*.test.ts', '**/index.ts', '**/*.d.ts', '**/src/test/**'],
       thresholds: Object.fromEntries(
         Object.entries(THRESHOLDS).map(([pkg, t]) => [
           `packages/${pkg}/src/**`,

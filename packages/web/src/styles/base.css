@@ -84,6 +84,38 @@
     background: transparent;
   }
 
+  /* The keyframes behind `--animate-*` in `tokens.css`. They live here rather
+   * than beside the tokens because `tokens.css` is parsed by the contrast
+   * assertion, and nested rules are exactly what that parser refuses.
+   *
+   * Opacity only, deliberately: the dialog is centred with a `translate`, and a
+   * keyframe touching `transform` would fight the class that positions it. */
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      scale: 0.98;
+    }
+  }
+
+  @keyframes slide-in {
+    from {
+      opacity: 0;
+      translate: 0.75rem 0;
+    }
+  }
+
   /* Honour the OS setting rather than shipping motion nobody asked for. */
   @media (prefers-reduced-motion: reduce) {
     *,

@@ -427,16 +427,33 @@ Notes for later steps:
 </details>
 
 <details>
-<summary><b>Step 16 — App shell and primitives</b></summary>
+<summary><b>Step 16 — App shell and primitives</b> ✅ done</summary>
 
 The two-column shell, the CVA button and badge recipes, and the interactive primitives.
 
-- Unstyled **Radix** for anything with interaction semantics — `Dialog`, `DropdownMenu`, `Tooltip`, `Popover`, `Tabs`, `Select`, `Switch`, `ScrollArea`. No shadcn/ui, no vendored component tree; Radix contributes behaviour and every class is ours. It also lets most of the z-index scale retire, since portals manage layering.
+- Unstyled **Radix** for anything with interaction semantics — `Dialog`, `DropdownMenu`, `Tooltip`, `Popover`, `Tabs`, `Select`, `Switch`, `ScrollArea`, plus `Toast`. No shadcn/ui, no vendored component tree; Radix contributes behaviour and every class is ours. It also lets most of the z-index scale retire, since portals manage layering.
 - One badge recipe parameterised on semantic role, replacing ~25 hand-written variants of the same pill.
 - One toast helper. The three-state `dark | light | system` theme toggle. The login overlay.
 - TanStack Router and Query for routes and REST; Zustand for live turn state, because Query is the wrong tool for a stream you accumulate.
 
-**Done when:** every interactive element is keyboard-reachable with a visible ring, dialogs trap focus and close on Escape, and every component has been reviewed in **both** themes — reviewing only in dark is how a light theme ships broken.
+**Done when:** every interactive element is keyboard-reachable with a visible ring, dialogs trap focus and close on Escape, and every component has been reviewed in **both** themes — reviewing only in dark is how a light theme ships broken. ✅ (190 tests in `@ghostai/web`; the keyboard sweep walks the style-guide page, which instantiates every primitive; both themes reviewed in a browser against the built bundle)
+
+Notes for later steps:
+
+- **The style guide replaced the swatch grid rather than being deleted by it.** `/tokens` now renders every token _and_ every recipe variant, which is what makes "reviewed in both themes" a page you look at instead of a tour of the app. It is also the widest gate target and the page the keyboard sweep walks, so a primitive added without a variant on that page is a primitive nothing reviews. **Add new primitives to it.**
+- **The badge variant is `tone`, not `role`.** `role` is an HTML attribute; a prop of that name on a `<span>` either shadows it or passes `"danger"` into the accessibility tree as an ARIA role. TypeScript catches the collision, which is how it was found — but only because the props extend `HTMLAttributes`.
+- **Nothing suppresses the focus outline, and `a11y.test.tsx` sweeps the source to keep it that way.** The base layer's `:focus-visible` ring is the whole accessibility story for focus; a component that set `outline-none` would opt out of it silently, and the usual reason — a ring on mouse clicks — is what `:focus-visible` already solved. The same file asserts icon-only buttons carry a name.
+- **`toast()` is a plain function over a Zustand store, not a hook.** The callers that most need it are not components: Step 17's socket handler raising "reconnecting", a fetch raising "your session expired", a mutation callback. A `useToast()` would have been unreachable from all three.
+- **Live turn state is `state/turn.ts`, and it is deliberately nearly empty.** Query owns fetched state; a stream you accumulate is not fetched state. The store already carries `connection`, `busy`, `sessionKey` and `lastSeq` because the shell reads the first two — **Step 17 fills in the rest and must keep `applySeq` monotonic**, or a reconnect resumes from a sequence a replayed frame moved backwards.
+- **`@/` is an alias, not a convention preference.** The repo bans `../../*` imports because that is how one package reaches into another's source, and `components/ui/x.tsx` importing `../../lib/cn.js` is indistinguishable from it to a linter. The alias is declared in `tsconfig.json`, `vite.config.ts` and `vitest.config.ts` — all three, or resolution differs between typecheck, build and test.
+- **`zod` is a direct dependency of `@ghostai/web` now.** The router validates `?session=` with it, and Step 17 will `safeParse` every socket frame with the protocol's own schemas. It is not inherited from `@ghostai/protocol`: pnpm's isolated `node_modules` means an undeclared import fails to resolve.
+- **The REST client parses every response against its protocol schema.** A field the server stopped sending becomes a failed request rather than `undefined` in a component three renders later. `ApiError.isUnauthenticated` is the seam the login overlay reads — a 401 is the normal state of a fresh browser, so it is a value and not a crash, and Query is configured never to retry it.
+- **The login overlay is an overlay and not a `/login` route**, because a session can expire mid-turn: a route would navigate away from the conversation, lose the composer's contents and the socket, and then have to find its way back.
+- **The shell is the router's root route**, so navigating never remounts the sidebar or the header — which is where Step 17 hangs the WebSocket. `shell.test.tsx` asserts the header and sidebar are the _same_ DOM nodes after a navigation.
+- **The sidebar is one component in two places**, inline above `md` and inside a `Dialog` below it. Two copies would drift, and the drawer is the one nobody opens while developing.
+- **Radix needs four jsdom stubs to run at all** — pointer capture, `scrollIntoView`, `ResizeObserver`, `scrollTo` — and `src/test/setup.ts` owns them. Without them the components throw, which reads as a bug in the component rather than a gap in the environment.
+- **The bundle is 604 kB raw / 186 kB gzipped**, over Vite's default 500 kB warning. Left visible rather than tuned away: it is fine for a same-origin self-hosted app today, and it is the number to watch when **Step 17 adds Shiki, which must be lazy-loaded** rather than pulled into the entry chunk.
+- Routes for Steps 17 and 18 render a `Placeholder` naming the step that fills them in — a to-do list the application carries, rather than a stub that looks like a broken feature.
 
 </details>
 

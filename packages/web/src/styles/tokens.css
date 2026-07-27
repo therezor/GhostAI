@@ -305,6 +305,19 @@
 
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in-out-quint: cubic-bezier(0.83, 0, 0.17, 1);
+
+  /* Entrances and exits for the floating surfaces. Radix waits for
+   * `animationend` before unmounting, which is the only reason a dialog or a
+   * toast can animate *out* at all — a CSS transition never gets to run on an
+   * element React has already removed.
+   *
+   * The `@keyframes` themselves live in `base.css`: this file is parsed by
+   * `tokens/sheet.ts` for the contrast assertion, and a parser that accepted
+   * nested rules would be a parser that could also silently skip a token. */
+  --animate-fade-in: fade-in var(--duration-fast) var(--ease-out-quint);
+  --animate-fade-out: fade-out var(--duration-fast) var(--ease-out-quint);
+  --animate-pop-in: pop-in var(--duration-fast) var(--ease-out-quint);
+  --animate-slide-in: slide-in var(--duration-base) var(--ease-out-quint);
 }
 
 /* ------------------------------------------------------------------ *

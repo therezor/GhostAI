@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { parseDeclarations, readTokensCss, resolveTokens } from '../tokens/sheet.js';
+import { parseDeclarations, readTokensCss, resolveTokens } from '@/tokens/sheet.js';
 
 const css = readTokensCss();
 const declarations = parseDeclarations(css);

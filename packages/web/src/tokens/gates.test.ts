@@ -100,7 +100,8 @@ describe('the package itself', () => {
     expect(files).toContain('index.html');
     expect(files).toContain('src/styles/tokens.css');
     expect(files).toContain('src/styles/base.css');
-    expect(files).toContain('src/App.tsx');
+    expect(files).toContain('src/routes/tokens.tsx');
+    expect(files).toContain('src/components/ui/button.tsx');
     // The gate machinery is excluded: it contains every literal it bans.
     expect(files.filter((file) => file.startsWith('src/tokens/'))).toEqual([]);
   });

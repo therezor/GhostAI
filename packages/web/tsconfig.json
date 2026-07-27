@@ -20,7 +20,17 @@
     // nothing to declare, there is nothing for it to protect.
     "isolatedDeclarations": false,
 
-    "rootDir": "./src"
+    "rootDir": "./src",
+
+    // `@/` for anything outside the current directory. The repo bans
+    // `../../*` imports because that is how one package reaches into another's
+    // source — and inside a package with a `components/ui/` depth, the same
+    // pattern is just a relative path. The alias sidesteps the ambiguity
+    // instead of loosening the rule that catches the real thing.
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
   },
   "include": ["src/**/*"]
 }

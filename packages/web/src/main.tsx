@@ -12,16 +12,22 @@ import '@fontsource-variable/inter';
 import '@fontsource-variable/jetbrains-mono';
 import './styles/app.css';
 
+import { RouterProvider } from '@tanstack/react-router';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import { App } from './App.js';
+import { Providers } from './app/providers.js';
+import { createAppRouter } from './app/router.js';
 
 const container = document.getElementById('root');
 if (container === null) throw new Error('No #root in index.html');
 
+const router = createAppRouter();
+
 createRoot(container).render(
   <StrictMode>
-    <App />
+    <Providers>
+      <RouterProvider router={router} />
+    </Providers>
   </StrictMode>,
 );
