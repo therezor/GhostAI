@@ -78,6 +78,7 @@ describe('resolveGhostPaths', () => {
       dbFile: join(root, 'ghost.db'),
       logsDir: join(root, 'logs'),
       pluginsDir: join(root, 'plugins'),
+      vaultFile: join(root, 'vault.json'),
       keyFile: join(root, 'vault.key'),
     });
   });

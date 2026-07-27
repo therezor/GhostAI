@@ -9,7 +9,7 @@ A self-hosted, security-first AI agent written in TypeScript. One process, one p
 - **Security in the core** — encrypted credential vault, workspace jail, argv-only exec (never a shell), SSRF/DNS-rebinding guard, tool-output nonce wrapping, and per-tool approval prompts.
 - **Extensible** — a versioned plugin SDK for tools, channels, providers, TTS/STT, and embedders.
 
-> **Status: pre-alpha.** The toolchain, `@ghostai/protocol`, `@ghostai/core`, `@ghostai/security` and `@ghostai/providers` are done; the remaining packages are empty. See [Build order](#build-order) below.
+> **Status: pre-alpha.** Phase 1 is complete — `ghost chat` runs a turn end to end from a terminal, through `protocol`, `core`, `security`, `providers`, `tools`, `agent` and `cli`. Everything from the server and the web UI onward is still empty. See [Build order](#build-order) below.
 
 ---
 
@@ -293,11 +293,30 @@ Notes for later steps:
 </details>
 
 <details>
-<summary><b>Step 8 — <code>@ghostai/cli</code></b></summary>
+<summary><b>Step 8 — <code>@ghostai/cli</code></b> ✅ done</summary>
 
 `commander` with lazy-imported subcommands, so `ghost --help` never loads the agent. Ship `ghost chat` first — a terminal renderer for the `AgentEvent` stream.
 
-**Phase 1 done when:** `ghost chat` against local Ollama completes a turn involving multiple tool calls; the session persists and reloads with tool-call pairing intact; `Ctrl-C` mid-tool kills the child process and exits cleanly.
+- `runTurn` — the whole of what the CLI does with the event stream, over one `AbortSignal` per turn.
+- Three drivers over it: a message argument, a piped stdin, and a `readline` prompt with `/help`, `/clear`, `/session`, `/exit`.
+- `createChatRuntime` — the composition root: config → provider, jail, store, registry, loop.
+- `loadConfig` landed in `@ghostai/core`, where `protocol/config.ts` always said load-time normalisation belongs.
+
+**Phase 1 done when:** `ghost chat` against local Ollama completes a turn involving multiple tool calls; the session persists and reloads with tool-call pairing intact; `Ctrl-C` mid-tool kills the child process and exits cleanly. ✅ (96/88, all three verified against the built binary and a scripted OpenAI-compatible server on loopback rather than Ollama itself)
+
+Notes for later steps:
+
+- **`ghost --help` imports nothing from `@ghostai/*` at module scope** — only `commander` and types, which erase. `@ghostai/core` alone pulls pino, zod and `node:sqlite`; even `isGhostError` is imported inside the `catch` that needs it, on a path that has already failed. `tsup` ESM code splitting makes the subcommand a real second chunk, so this is checkable in `dist/` rather than a matter of intent.
+- **`runCli` returns an exit code and never calls `process.exit`.** `exit` tears the process down with whatever is still buffered on stdout unwritten, and on a piped `ghost chat` that is the answer. `process.exitCode` and a natural drain is the whole of the bin.
+- **The outcome of a turn is read off `turn.end`, not re-derived from the signal.** A provider that aborts for its own reasons is still an interrupted turn, and inferring it from `signal.aborted` reports that one as a clean success. `stopReason` is the loop's word for it and every other transport will have the same field.
+- **`agents.defaults.workspace` now defaults to `''`, meaning `<root>/workspace`.** It previously defaulted to the literal `~/.ghostai/workspace`, which restates the _default_ root — so an install relocated with `GHOSTAI_HOME` kept its workspace under the home directory and pointed the agent's filesystem tools at a tree the operator thought they had moved. Anything else reading a path out of config must resolve it against the root, never against the process working directory.
+- **`removeNodeProtocol: false` in every `tsup.config.ts`.** tsup rewrites `node:sqlite` to `sqlite` by default — a compatibility shim for node older than 14.18 — and `node:sqlite` has no unprefixed form, so the published bundle was unloadable. Nothing caught it until the CLI became the first package that _runs_ its own `dist/`. The default flips in tsup 9.
+- **Ctrl-C during a turn belongs to the turn; at an idle prompt it means leave.** One `AbortController` per turn, replaced each time — an aborted one cannot be reset, and reusing it would stop every later turn before its first iteration. `rl.question` is cancelled with an `AbortSignal` rather than `rl.close()`, which leaves a pending question unsettled forever and hangs the process on the very Ctrl-C meant to end it.
+- **The renderer never prints the nonce envelope.** `tool.result` carries the tool's own output for exactly that reason. Any future channel renderer inherits the same rule.
+- **`GhostPaths` gained `vaultFile`.** The vault had a key-file path and nowhere to put the ciphertext.
+- The credential order is vault → environment, and the vault is not opened at all for a local provider with no `envKey` — `resolveVaultKey` writes a key to the OS keychain the first time it runs, and `ghost chat` against Ollama must not create one.
+- Provider resolution is `resolveProvider`'s order plus exactly one CLI step after its `null`: a provider whose `envKey` is exported. Beyond that it refuses to guess and prints what to set.
+
 </details>
 
 ### Later phases

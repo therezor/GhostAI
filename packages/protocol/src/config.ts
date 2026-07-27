@@ -33,7 +33,18 @@ export type ReasoningEffort = z.infer<typeof ReasoningEffortSchema>;
 // ---------------------------------------------------------------------------
 
 export const AgentDefaultsSchema = z.object({
-  workspace: z.string().min(1).default('~/.ghostai/workspace'),
+  /**
+   * Empty means `<root>/workspace`, where the root is `GHOSTAI_HOME` or
+   * `~/.ghostai`.
+   *
+   * Deliberately *not* defaulted to the literal `~/.ghostai/workspace`: that
+   * string restates the default root, so an install that moved its root with
+   * `GHOSTAI_HOME` would keep a workspace back under the home directory —
+   * silently pointing the agent's filesystem tools at a tree the operator
+   * thought they had relocated. A relative path here is resolved against the
+   * root, never against the process working directory.
+   */
+  workspace: z.string().default(''),
   /** Empty means "resolve from whichever provider has credentials". */
   model: z.string().default(''),
   /** `auto` runs the registry's resolution order; otherwise a provider id. */

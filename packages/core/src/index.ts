@@ -35,6 +35,8 @@ export {
   type ResolveGhostPathsOptions,
 } from './paths.js';
 
+export { loadConfig, parseConfig, type LoadConfigOptions, type LoadedConfig } from './config.js';
+
 export {
   REDACT_CENSOR,
   REDACT_PATHS,

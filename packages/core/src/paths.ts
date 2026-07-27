@@ -63,6 +63,8 @@ export interface GhostPaths {
   readonly logsDir: string;
   /** A private npm project, never a scan of the host's `node_modules`. */
   readonly pluginsDir: string;
+  /** The encrypted credential store. Ciphertext only — safe beside the config. */
+  readonly vaultFile: string;
   /** The vault's key file, used only when no OS keychain is available. */
   readonly keyFile: string;
 }
@@ -98,6 +100,7 @@ export function resolveGhostPaths(options: ResolveGhostPathsOptions = {}): Ghost
     dbFile: join(root, 'ghost.db'),
     logsDir: join(root, 'logs'),
     pluginsDir: join(root, 'plugins'),
+    vaultFile: join(root, 'vault.json'),
     keyFile: join(root, 'vault.key'),
   };
 }
