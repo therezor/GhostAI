@@ -260,7 +260,7 @@ Notes for later steps:
 </details>
 
 <details>
-<summary><b>Step 11 — <code>@ghostai/server</code>: app, boot, auth</b></summary>
+<summary><b>Step 11 — <code>@ghostai/server</code>: app, boot, auth</b> ✅ done</summary>
 
 Fastify 5 on one port for the API, the WebSocket and the static UI.
 
@@ -270,7 +270,22 @@ Fastify 5 on one port for the API, the WebSocket and the static UI.
 - `@fastify/swagger` fed `PROTOCOL_SCHEMAS` as its `$defs` pool, so the OpenAPI document is generated and cannot drift from the routes.
 - A **route manifest** — `{ method, url, auth }` — that the router registers _from_, so the auth test iterates it and a new route cannot be silently unauthenticated.
 
-**Done when:** the table-driven `fastify.inject()` auth matrix passes over every manifest entry across five auth states, the boot refusal has a test, and login is rate-limited.
+**Done when:** the table-driven `fastify.inject()` auth matrix passes over every manifest entry across five auth states, the boot refusal has a test, and login is rate-limited. ✅ (99.2/94.8, matrix over 5 routes × 5 states)
+
+Notes for later steps:
+
+- **There are two boot refusals, not one.** The second is authentication enabled with no password set. Starting anyway produces a server whose login can never succeed and whose every route answers 401 — which reads as a broken UI rather than as setup that was never finished. `createServer` takes a `password` option that sets or rotates the hash before the policy runs; reading `GHOSTAI_PASSWORD` and `--password` is deliberately the caller's job, so Step 14's `ghost serve` owns it and nothing here needs `process.env` to be testable.
+- **The password lives in `auth_secrets`, not in the `CredentialVault`.** The vault exists for secrets that have to be _recovered_ — an API key is useless unless it can be read back into a header. A password is only ever compared against a one-way digest, so encrypting it adds key management to something already unreadable.
+- **A session token is `<id>.<secret>`, and that shape is what makes `timingSafeEqual` mean anything.** The row is found by `id`, which is not a credential; the secret is then compared as a SHA-256 digest of fixed length. A single opaque token looked up by its own value puts the secret in a SQL `=`, which short-circuits on the first differing byte. SHA-256 rather than argon2id for the token, because a KDF's cost buys nothing against 32 bytes of `randomBytes` and would put ~50 ms on every authenticated request.
+- **Rotating the password revokes every session.** The reason to change it is that the old one may be known, and a token minted under it outliving the rotation makes the rotation cosmetic.
+- **`Secure` is set unless this is plain HTTP to a loopback host.** Safari refuses to store a `Secure` cookie over `http://`, localhost included, so an unconditional flag makes `ghost serve` unusable in one browser on the default bind. The consequence — a plain-HTTP LAN bind cannot hold a session — is the intended outcome, not a gap.
+- **Zod validates and Zod documents; Fastify's AJV is handed nothing.** `z.toJSONSchema` emits draft 2020-12 and AJV compiles draft-07, so the route's Zod schema is the validator (via `setValidatorCompiler`) and the same object becomes JSON Schema in `@fastify/swagger`'s `transform`. A response that _is_ a registered protocol schema emits a `$ref` into `components.schemas`; a request body always inlines **in input mode**, because output mode lists every `.default()` field as required and a client told that will invent values.
+- **Nothing relies on serialisation to keep a credential out of a response.** Replacing the serializer compiler with `JSON.stringify` gives up schema-based response filtering; the routes simply never put a secret in a body. Step 13's `GET /api/settings` has to hold that line itself.
+- **`@fastify/rate-limit` _throws_ whatever `errorResponseBuilder` returns**, so it must return an `Error`. A plain envelope object arrives at the error handler as an unrecognised value and becomes a 500 — which is how the limit silently stops being a limit. `HttpError` carries the status and code through to the one place a body is built.
+- **The manifest carries an `id`, and `createRoutes` returns `Record<RouteId, RouteDefinition>`.** A manifest entry with no handler and a handler with no manifest entry are both type errors. `signed` is deliberately not yet in `RouteAuth`: it arrives in Step 13 beside the code that verifies a signature, because a variant nothing can enforce is worse than one that does not exist.
+- **The auth hook reads `config.server.auth.enabled` from the object it was built with.** Step 13's `PATCH /api/settings` must re-point the server at the merged config — or, better, leave `enabled` out of what a running server honours, since a live toggle from `true` to `false` is a request to unauthenticate an already-authenticated session.
+- `AuthSessionResponseSchema` was added to `protocol/rest.ts` for `GET /api/auth/me`; the registry test in `@ghostai/protocol` covers it automatically.
+- The coverage gate for this package is 85/80, above the 70/65 default — an untested branch in the auth surface is a way in, not a bug report.
 
 </details>
 

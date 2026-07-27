@@ -10,6 +10,9 @@ const THRESHOLDS: Record<string, { lines: number; branches: number }> = {
   core: { lines: 90, branches: 85 },
   agent: { lines: 85, branches: 80 },
   runtime: { lines: 85, branches: 80 },
+  // Above the 70/65 default: an untested branch in the auth surface is a way
+  // in, and the route manifest only guarantees what the matrix actually runs.
+  server: { lines: 85, branches: 80 },
   providers: { lines: 80, branches: 75 },
   tools: { lines: 80, branches: 75 },
   mcp: { lines: 80, branches: 75 },

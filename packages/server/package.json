@@ -1,0 +1,37 @@
+{
+  "name": "@ghostai/server",
+  "version": "0.0.0",
+  "description": "Fastify app, boot policy, and authentication.",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "!dist/**/*.test.*"
+  ],
+  "scripts": {
+    "build": "tsup && tsc -b",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.0",
+    "@fastify/rate-limit": "^10.2.0",
+    "@fastify/swagger": "^9.4.0",
+    "@ghostai/core": "workspace:*",
+    "@ghostai/protocol": "workspace:*",
+    "@ghostai/security": "workspace:*",
+    "@node-rs/argon2": "^2.0.0",
+    "fastify": "^5.2.0",
+    "zod": "^4.0.0"
+  }
+}

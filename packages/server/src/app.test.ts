@@ -1,0 +1,532 @@
+import { readFileSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
+
+import { ConfigSchema, type Config } from '@ghostai/protocol';
+import { afterEach, describe, expect, it } from 'vitest';
+
+import { SERVER_VERSION, createServer, type GhostServer } from './app.js';
+import type { PasswordHasher } from './auth-store.js';
+import { SESSION_COOKIE } from './auth.js';
+import { ROUTE_MANIFEST, type RouteSpec } from './manifest.js';
+import { createRoutes } from './routes.js';
+
+const PASSWORD = 'a-test-password';
+
+/** argon2id is ~50 ms a call by design; a matrix that logs in 25 times cannot pay it. */
+const fakeHasher: PasswordHasher = {
+  hash: async (password) => `fake:${password}`,
+  verify: async (digest, password) => digest === `fake:${password}`,
+};
+
+const started: GhostServer[] = [];
+const opened: DatabaseSync[] = [];
+
+afterEach(async () => {
+  while (started.length > 0) await started.pop()?.close();
+  while (opened.length > 0) opened.pop()?.close();
+});
+
+function config(server: Record<string, unknown> = {}): Config {
+  return ConfigSchema.parse({ server });
+}
+
+interface StartOptions {
+  readonly config?: Config;
+  readonly password?: string | null;
+}
+
+async function start(options: StartOptions = {}): Promise<GhostServer> {
+  const database = new DatabaseSync(':memory:');
+  opened.push(database);
+  const server = await createServer({
+    config: options.config ?? config(),
+    database,
+    hasher: fakeHasher,
+    ...(options.password === null ? {} : { password: options.password ?? PASSWORD }),
+  });
+  started.push(server);
+  return server;
+}
+
+// ---------------------------------------------------------------------------
+// The auth matrix
+// ---------------------------------------------------------------------------
+
+type StateName = 'no credential' | 'bad cookie' | 'good cookie' | 'bad bearer' | 'good bearer';
+
+const STATES: readonly StateName[] = [
+  'no credential',
+  'bad cookie',
+  'good cookie',
+  'bad bearer',
+  'good bearer',
+];
+
+const ACCEPTED: ReadonlySet<StateName> = new Set<StateName>(['good cookie', 'good bearer']);
+
+function headersFor(state: StateName, token: string): Record<string, string> {
+  switch (state) {
+    case 'no credential':
+      return {};
+    case 'bad cookie':
+      return { cookie: `${SESSION_COOKIE}=deadbeef.notatoken` };
+    case 'good cookie':
+      return { cookie: `${SESSION_COOKIE}=${token}` };
+    case 'bad bearer':
+      return { authorization: 'Bearer deadbeef.notatoken' };
+    case 'good bearer':
+      return { authorization: `Bearer ${token}` };
+  }
+}
+
+/**
+ * The table-driven matrix.
+ *
+ * It iterates `ROUTE_MANIFEST` rather than a list written beside it, so a route
+ * added to the manifest is covered the moment it exists — and one that is not in
+ * the manifest is not served at all.
+ */
+describe('auth matrix', () => {
+  describe.each(ROUTE_MANIFEST)('$method $url ($auth)', (spec: RouteSpec) => {
+    it.each(STATES)('%s', async (state) => {
+      const server = await start();
+      // A fresh token per case: `auth.logout` revokes the one it was given.
+      const token = server.auth.issue('test').token;
+      const response = await server.app.inject({
+        method: spec.method,
+        url: spec.url,
+        headers: headersFor(state, token),
+        ...(spec.method === 'POST' ? { payload: { password: PASSWORD } } : {}),
+      });
+
+      if (spec.auth === 'public' || ACCEPTED.has(state)) {
+        expect(response.statusCode).toBeLessThan(400);
+      } else {
+        expect(response.statusCode).toBe(401);
+        expect(response.json()).toEqual({
+          error: { code: 'unauthorized', message: expect.any(String) },
+        });
+      }
+    });
+  });
+
+  it('lets every route through when authentication is disabled', async () => {
+    const server = await start({
+      config: config({ auth: { enabled: false } }),
+      password: null,
+    });
+
+    for (const spec of ROUTE_MANIFEST) {
+      const response = await server.app.inject({
+        method: spec.method,
+        url: spec.url,
+        ...(spec.method === 'POST' ? { payload: { password: PASSWORD } } : {}),
+      });
+      // Login is the one exception: with auth off there is nothing to log in to.
+      const expected = spec.id === 'auth.login' ? 400 : 200;
+      expect({ id: spec.id, status: response.statusCode }).toEqual({
+        id: spec.id,
+        status: spec.id === 'auth.logout' ? 204 : expected,
+      });
+    }
+  });
+
+  it('rejects a token that expired since it was issued', async () => {
+    const server = await start({ config: config({ auth: { sessionTtlMs: 1 } }) });
+    const token = server.auth.issue().token;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/auth/me',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(response.statusCode).toBe(401);
+  });
+
+  // Both directions of the manifest↔handler join. The type checker enforces it
+  // too, but only for code that compiles; this fails the same way at runtime.
+  it('has exactly one handler per manifest entry', async () => {
+    const server = await start();
+    const ids = Object.keys(
+      createRoutes({
+        config: server.config,
+        auth: server.auth,
+        database: new DatabaseSync(':memory:'),
+        openapiDocument: () => ({}),
+      }),
+    );
+
+    expect(ids.sort()).toEqual(ROUTE_MANIFEST.map((spec) => spec.id).sort());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Login
+// ---------------------------------------------------------------------------
+
+describe('login', () => {
+  it('exchanges the password for a session cookie', async () => {
+    const server = await start();
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { password: PASSWORD },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ ok: true, expiresAtMs: expect.any(Number) });
+
+    const cookie = response.cookies.find((entry) => entry.name === SESSION_COOKIE);
+    expect(cookie?.httpOnly).toBe(true);
+    expect(cookie?.sameSite).toBe('Strict');
+    expect(cookie?.path).toBe('/');
+  });
+
+  // A token in the body is a token an injected script can read, and this
+  // application renders markdown a language model wrote.
+  it('never puts the token in the response body', async () => {
+    const server = await start();
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { password: PASSWORD },
+    });
+    const token = response.cookies.find((entry) => entry.name === SESSION_COOKIE)?.value;
+
+    expect(token).toBeTruthy();
+    expect(response.payload).not.toContain(token);
+    expect(response.payload).not.toContain(PASSWORD);
+  });
+
+  it('issues a cookie that then authenticates', async () => {
+    const server = await start();
+    const login = await server.app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { password: PASSWORD },
+    });
+    const token = login.cookies.find((entry) => entry.name === SESSION_COOKIE)?.value ?? '';
+
+    const me = await server.app.inject({
+      method: 'GET',
+      url: '/api/auth/me',
+      headers: { cookie: `${SESSION_COOKIE}=${token}` },
+    });
+    expect(me.statusCode).toBe(200);
+    expect(me.json()).toEqual({
+      authenticated: true,
+      authEnabled: true,
+      expiresAtMs: expect.any(Number),
+    });
+  });
+
+  it('refuses the wrong password with a 401 and no cookie', async () => {
+    const server = await start();
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { password: 'wrong' },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error.code).toBe('unauthorized');
+    expect(response.cookies).toHaveLength(0);
+  });
+
+  it('reports a malformed body as a 422 pointing at the field', async () => {
+    const server = await start();
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { password: 42 },
+    });
+
+    expect(response.statusCode).toBe(422);
+    expect(response.json().error.code).toBe('bad_request');
+    expect(Object.keys(response.json().error.details)).toEqual(['/password']);
+  });
+
+  it('refuses a login when authentication is disabled', async () => {
+    const server = await start({ config: config({ auth: { enabled: false } }), password: null });
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { password: PASSWORD },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toMatch(/disabled/);
+  });
+
+  it('cannot be used after a logout', async () => {
+    const server = await start();
+    const token = server.auth.issue().token;
+    const headers = { authorization: `Bearer ${token}` };
+
+    expect(
+      (await server.app.inject({ method: 'POST', url: '/api/auth/logout', headers })).statusCode,
+    ).toBe(204);
+    expect(
+      (await server.app.inject({ method: 'GET', url: '/api/auth/me', headers })).statusCode,
+    ).toBe(401);
+  });
+
+  it('answers /api/auth/me without a session when authentication is off', async () => {
+    const server = await start({ config: config({ auth: { enabled: false } }), password: null });
+    const response = await server.app.inject({ method: 'GET', url: '/api/auth/me' });
+
+    expect(response.json()).toEqual({ authenticated: true, authEnabled: false });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Rate limiting
+// ---------------------------------------------------------------------------
+
+describe('rate limiting', () => {
+  async function hammer(server: GhostServer, url: string, times: number): Promise<number[]> {
+    const codes: number[] = [];
+    for (let i = 0; i < times; i += 1) {
+      const response = await server.app.inject({
+        method: url.endsWith('login') ? 'POST' : 'GET',
+        url,
+        payload: { password: 'wrong' },
+      });
+      codes.push(response.statusCode);
+    }
+    return codes;
+  }
+
+  // The general limit protects the process from load; this one protects a
+  // single password from being guessed, and it is not the same setting.
+  it('limits login attempts even with the global limit disabled', async () => {
+    const server = await start({ config: config({ auth: { rateLimitPerMinute: 0 } }) });
+    const codes = await hammer(server, '/api/auth/login', 11);
+
+    expect(codes.slice(0, 10).every((code) => code === 401)).toBe(true);
+    expect(codes.at(-1)).toBe(429);
+  });
+
+  it('answers a rate-limited request in the standard error envelope', async () => {
+    const server = await start();
+    await hammer(server, '/api/auth/login', 10);
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { password: 'wrong' },
+    });
+
+    expect(response.statusCode).toBe(429);
+    expect(response.json()).toEqual({
+      error: { code: 'rate_limited', message: expect.stringContaining('Retry in') },
+    });
+  });
+
+  it('applies the configured global limit to every other route', async () => {
+    const server = await start({ config: config({ auth: { rateLimitPerMinute: 2 } }) });
+    const codes = await hammer(server, '/api/health', 3);
+
+    expect(codes).toEqual([200, 200, 429]);
+  });
+
+  it('leaves other routes unlimited when the setting is zero', async () => {
+    const server = await start({ config: config({ auth: { rateLimitPerMinute: 0 } }) });
+    const codes = await hammer(server, '/api/health', 20);
+
+    expect(codes.every((code) => code === 200)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Errors, health, boot, and the document
+// ---------------------------------------------------------------------------
+
+describe('errors', () => {
+  it('answers an unknown route in the error envelope', async () => {
+    const server = await start();
+    const response = await server.app.inject({ method: 'GET', url: '/api/nope' });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({
+      error: { code: 'not_found', message: expect.stringContaining('/api/nope') },
+    });
+  });
+
+  it('reports a malformed JSON body as a 400, not a 500', async () => {
+    const server = await start();
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: '{not json',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('bad_request');
+  });
+});
+
+describe('health', () => {
+  it('reports ok while the database answers', async () => {
+    const server = await start();
+    const response = await server.app.inject({ method: 'GET', url: '/api/health' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      status: 'ok',
+      checks: [{ name: 'database', status: 'ok', detail: '' }],
+    });
+  });
+
+  it('reports fail once the database is gone', async () => {
+    const database = new DatabaseSync(':memory:');
+    const server = await createServer({
+      config: config(),
+      database,
+      hasher: fakeHasher,
+      password: PASSWORD,
+    });
+    started.push(server);
+    database.close();
+
+    const response = await server.app.inject({ method: 'GET', url: '/api/health' });
+    expect(response.json().status).toBe('fail');
+  });
+});
+
+describe('boot', () => {
+  it('refuses a non-loopback bind with authentication off', async () => {
+    const database = new DatabaseSync(':memory:');
+    opened.push(database);
+
+    await expect(
+      createServer({
+        config: config({ host: '0.0.0.0', auth: { enabled: false } }),
+        database,
+        hasher: fakeHasher,
+      }),
+    ).rejects.toThrow(/Refusing to start/);
+  });
+
+  it('refuses to start with authentication on and no password', async () => {
+    const database = new DatabaseSync(':memory:');
+    opened.push(database);
+
+    await expect(createServer({ config: config(), database, hasher: fakeHasher })).rejects.toThrow(
+      /no password has been set/,
+    );
+  });
+
+  it('accepts a password that was already set on a previous boot', async () => {
+    const database = new DatabaseSync(':memory:');
+    opened.push(database);
+
+    const first = await createServer({
+      config: config(),
+      database,
+      hasher: fakeHasher,
+      password: PASSWORD,
+    });
+    await first.close();
+
+    const second = await createServer({ config: config(), database, hasher: fakeHasher });
+    started.push(second);
+
+    const response = await second.app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { password: PASSWORD },
+    });
+    expect(response.statusCode).toBe(200);
+  });
+
+  it('listens on a real socket and stops', async () => {
+    const server = await start();
+    const address = await server.listen({ port: 0 });
+
+    expect(address).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+  });
+
+  it('states a version that matches the manifest', () => {
+    const manifest: unknown = JSON.parse(
+      readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+    );
+    expect((manifest as { version: string }).version).toBe(SERVER_VERSION);
+  });
+});
+
+describe('the generated document', () => {
+  async function document(): Promise<Record<string, never>> {
+    const server = await start();
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/openapi.json',
+      headers: { authorization: `Bearer ${server.auth.issue().token}` },
+    });
+    return await response.json();
+  }
+
+  it('is OpenAPI 3.1 with the protocol schemas as its component pool', async () => {
+    const doc = await document();
+
+    expect(doc).toMatchObject({ openapi: '3.1.0', info: { version: SERVER_VERSION } });
+    const schemas = (doc as unknown as { components: { schemas: Record<string, unknown> } })
+      .components.schemas;
+    expect(Object.keys(schemas).length).toBeGreaterThan(50);
+    expect(schemas).toHaveProperty('LoginRequest');
+    expect(schemas).toHaveProperty('AuthSessionResponse');
+  });
+
+  it('describes every manifest route once', async () => {
+    const doc = (await document()) as unknown as { paths: Record<string, Record<string, unknown>> };
+
+    for (const spec of ROUTE_MANIFEST) {
+      expect(doc.paths[spec.url]?.[spec.method.toLowerCase()]).toBeDefined();
+    }
+  });
+
+  // The point of the `$defs` pool: a response that *is* a protocol schema
+  // references it rather than restating it, so the two cannot drift.
+  it('references the pool from a response rather than inlining it', async () => {
+    const doc = (await document()) as unknown as {
+      paths: Record<
+        string,
+        { get?: { responses: Record<string, { content: Record<string, { schema: unknown }> }> } }
+      >;
+    };
+    const schema =
+      doc.paths['/api/auth/me']?.get?.responses['200']?.content['application/json']?.schema;
+
+    expect(schema).toEqual({ $ref: '#/components/schemas/AuthSessionResponse' });
+  });
+
+  // Input mode, so a field carrying `.default()` is not advertised as required.
+  it('inlines a request body in input mode', async () => {
+    const doc = (await document()) as unknown as {
+      paths: Record<
+        string,
+        { post?: { requestBody: { content: Record<string, { schema: Record<string, unknown> }> } } }
+      >;
+    };
+    const schema =
+      doc.paths['/api/auth/login']?.post?.requestBody.content['application/json']?.schema;
+
+    expect(schema).toMatchObject({ type: 'object', required: ['password'] });
+  });
+
+  it('marks the authenticated routes as authenticated', async () => {
+    const doc = (await document()) as unknown as {
+      paths: Record<string, Record<string, { security?: unknown[] }>>;
+    };
+
+    for (const spec of ROUTE_MANIFEST) {
+      const operation = doc.paths[spec.url]?.[spec.method.toLowerCase()];
+      const security = operation?.security ?? [];
+      expect({ id: spec.id, secured: security.length > 0 }).toEqual({
+        id: spec.id,
+        secured: spec.auth === 'required',
+      });
+    }
+  });
+});

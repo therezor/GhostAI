@@ -8,6 +8,7 @@
     { "path": "packages/tools" },
     { "path": "packages/agent" },
     { "path": "packages/runtime" },
+    { "path": "packages/server" },
     { "path": "packages/cli" }
   ]
 }

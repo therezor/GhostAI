@@ -313,3 +313,18 @@ export const LoginResponseSchema = z.object({
   expiresAtMs: z.number().int().nonnegative(),
 });
 export type LoginResponse = z.infer<typeof LoginResponseSchema>;
+
+/**
+ * Who the caller is, as far as the server is concerned.
+ *
+ * `authEnabled` is here so the UI has one request to make before deciding
+ * whether to render the login overlay. With auth off every caller is
+ * authenticated and there is no session behind it, which is why `expiresAtMs`
+ * is optional rather than a sentinel.
+ */
+export const AuthSessionResponseSchema = z.object({
+  authenticated: z.boolean(),
+  authEnabled: z.boolean(),
+  expiresAtMs: z.number().int().nonnegative().optional(),
+});
+export type AuthSessionResponse = z.infer<typeof AuthSessionResponseSchema>;

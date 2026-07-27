@@ -97,6 +97,21 @@ const PACKAGES = {
     // reconfigure does not drop it. Nothing in the runtime graph imports zod.
     devDeps: { zod: '^4.0.0' },
   },
+  server: {
+    description: 'Fastify app, boot policy, and authentication.',
+    internal: ['protocol', 'core', 'security'],
+    // `zod` is a runtime dependency here, unlike in `agent` and `runtime`: the
+    // route helper calls `z.toJSONSchema` to generate the OpenAPI document and
+    // `safeParse` to validate every request body.
+    deps: {
+      '@fastify/cookie': '^11.0.0',
+      '@fastify/rate-limit': '^10.2.0',
+      '@fastify/swagger': '^9.4.0',
+      '@node-rs/argon2': '^2.0.0',
+      fastify: '^5.2.0',
+      zod: '^4.0.0',
+    },
+  },
   cli: {
     description: 'GhostAI command line interface.',
     internal: ['protocol', 'core', 'security', 'providers', 'tools', 'agent', 'runtime'],

@@ -153,6 +153,7 @@ export const PROTOCOL_SCHEMAS = {
   AutomationRunListResponse: rest.AutomationRunListResponseSchema,
   LoginRequest: rest.LoginRequestSchema,
   LoginResponse: rest.LoginResponseSchema,
+  AuthSessionResponse: rest.AuthSessionResponseSchema,
 } satisfies Record<string, z.ZodType>;
 
 export type ProtocolSchemaName = keyof typeof PROTOCOL_SCHEMAS;

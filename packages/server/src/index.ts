@@ -1,0 +1,85 @@
+/**
+ * @ghostai/server — the HTTP surface.
+ *
+ * One Fastify instance on one port, serving the REST API, the WebSocket and the
+ * built UI. It depends on `protocol`, `core` and `security`, and on nothing
+ * above them: the agent loop must never be able to reach back into the
+ * transport, so the dependency only points one way and the event stream is the
+ * only path out.
+ *
+ * Two invariants this package exists to hold:
+ *
+ *  - **No route is served except from `ROUTE_MANIFEST`.** The router registers
+ *    from it and the auth matrix test iterates it, so "is this route
+ *    authenticated" is answered by a table rather than by remembering.
+ *  - **A configuration that would expose an unauthenticated, shell-capable
+ *    agent does not start.** `assertBootPolicy` is a refusal, not a warning.
+ */
+
+export {
+  SERVER_VERSION,
+  createServer,
+  type GhostServer,
+  type ListenOptions,
+  type ServerOptions,
+} from './app.js';
+
+export {
+  AuthStore,
+  TOKEN_ID_BYTES,
+  TOKEN_SECRET_BYTES,
+  argon2Hasher,
+  type AuthSession,
+  type AuthStoreOptions,
+  type IssuedToken,
+  type PasswordHasher,
+} from './auth-store.js';
+
+export {
+  SESSION_COOKIE,
+  clearSessionCookie,
+  cookieSecure,
+  createAuthHook,
+  readCredential,
+  sessionOf,
+  setSessionCookie,
+  type AuthHookOptions,
+} from './auth.js';
+
+export { assertBootPolicy, type BootPolicyInput } from './boot.js';
+
+export {
+  HttpError,
+  badRequest,
+  errorBody,
+  notFound,
+  registerErrorHandler,
+  resolveError,
+  unauthorized,
+  unprocessable,
+  type ResolvedError,
+} from './errors.js';
+
+export {
+  ROUTE_MANIFEST,
+  type RouteAuth,
+  type RouteId,
+  type RouteMethod,
+  type RouteSpec,
+} from './manifest.js';
+
+export {
+  LOGIN_ATTEMPTS_PER_MINUTE,
+  createRoutes,
+  type RouteDefinition,
+  type RouteDeps,
+  type RouteRateLimit,
+} from './routes.js';
+
+export {
+  PROTOCOL_COMPONENTS,
+  componentRef,
+  jsonSchemaTransform,
+  jsonSerializerCompiler,
+  zodValidatorCompiler,
+} from './schema.js';
