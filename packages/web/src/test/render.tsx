@@ -44,6 +44,70 @@ export function urlOf(input: RequestInfo | URL): string {
   return input instanceof URL ? input.href : input.url;
 }
 
+/** One request the stub answered, in the shape an assertion wants to read. */
+export interface RecordedRequest {
+  readonly method: string;
+  readonly path: string;
+  readonly query: URLSearchParams;
+  /** Parsed when the body was JSON; the raw value otherwise. */
+  readonly body: unknown;
+}
+
+export type StubRoute = [number, unknown] | ((request: RecordedRequest) => [number, unknown]);
+
+/**
+ * `stubFetch` with a method, a body and a memory.
+ *
+ * The panels in Settings and Files are mostly *writes*, and a write is only
+ * half-tested by what the screen says afterwards: the other half is what went
+ * over the wire — that a settings patch carried the one section its panel owns,
+ * that a credential went out as a `PUT` and came back as nothing. The returned
+ * array is that half.
+ *
+ * Keys are `"PATCH /api/settings"`, or a bare path to answer any method.
+ */
+export function stubApi(routes: Record<string, StubRoute>): RecordedRequest[] {
+  const calls: RecordedRequest[] = [];
+
+  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = urlOf(input);
+    const [path = url, search = ''] = url.split('?');
+    const method = (init?.method ?? 'GET').toUpperCase();
+
+    const record: RecordedRequest = {
+      method,
+      path,
+      query: new URLSearchParams(search),
+      body: parseBody(init?.body),
+    };
+    calls.push(record);
+
+    const match = routes[`${method} ${path}`] ?? routes[path];
+    if (match === undefined) {
+      return Promise.reject(new Error(`Unstubbed request: ${method} ${url}`));
+    }
+
+    const [status, payload] = typeof match === 'function' ? match(record) : match;
+    return Promise.resolve(
+      new Response(status === 204 ? null : JSON.stringify(payload), {
+        status,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+  });
+
+  return calls;
+}
+
+function parseBody(body: BodyInit | null | undefined): unknown {
+  if (typeof body !== 'string') return body;
+  try {
+    return JSON.parse(body) as unknown;
+  } catch {
+    return body;
+  }
+}
+
 export function stubFetch(routes: Record<string, [number, unknown]>): void {
   vi.stubGlobal('fetch', (input: RequestInfo | URL) => {
     const url = urlOf(input);

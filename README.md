@@ -9,7 +9,7 @@ A self-hosted, security-first AI agent written in TypeScript. One process, one p
 - **Security in the core** — encrypted credential vault, workspace jail, argv-only exec (never a shell), SSRF/DNS-rebinding guard, tool-output nonce wrapping, and per-tool approval prompts.
 - **Extensible** — a versioned plugin SDK for tools, channels, providers, TTS/STT, and embedders.
 
-> **Status: pre-alpha.** Phase 1 is complete — `ghost chat` runs a turn end to end from a terminal — and Phase 2 has reached the server: `ghost serve` puts the REST API, the WebSocket and every channel in front of the same agent. The web UI is the part that is still empty. See [Build order](#build-order) below.
+> **Status: pre-alpha.** Phase 1 is complete — `ghost chat` runs a turn end to end from a terminal — and Phase 2 is nearly there: `ghost serve` puts the REST API, the WebSocket and every channel in front of the same agent, and the browser UI has chat, settings, files and notifications. What is left is the end-to-end and design-fidelity gate. See [Build plan](#build-plan) below.
 
 ---
 

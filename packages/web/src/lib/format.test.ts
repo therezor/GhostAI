@@ -9,7 +9,15 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { formatArgs, formatBytes, formatDuration, summariseArgs } from './format.js';
+import {
+  formatArgs,
+  formatBytes,
+  formatDate,
+  formatDuration,
+  formatRelativeTime,
+  formatTokens,
+  summariseArgs,
+} from './format.js';
 
 describe('formatDuration', () => {
   it('keeps milliseconds below a second', () => {
@@ -86,5 +94,53 @@ describe('tool arguments', () => {
     cycle.self = cycle;
 
     expect(formatArgs(cycle)).toBe('[unserialisable]');
+  });
+});
+
+describe('formatRelativeTime', () => {
+  const now = Date.UTC(2026, 6, 27, 12, 0, 0);
+
+  it('reads anything under a minute as just now', () => {
+    expect(formatRelativeTime(now - 1, now)).toBe('just now');
+    expect(formatRelativeTime(now - 59_999, now)).toBe('just now');
+  });
+
+  it('steps up through minutes, hours and days', () => {
+    expect(formatRelativeTime(now - 60_000, now)).toBe('1m ago');
+    expect(formatRelativeTime(now - 3_600_000, now)).toBe('1h ago');
+    expect(formatRelativeTime(now - 3 * 86_400_000, now)).toBe('3d ago');
+  });
+
+  it('switches to a date past a week, where counting back stops working', () => {
+    expect(formatRelativeTime(now - 8 * 86_400_000, now)).toBe(formatDate(now - 8 * 86_400_000));
+  });
+
+  it('reads a timestamp from a slightly fast server as just now, not as negative', () => {
+    // The browser and the server keep separate clocks. A few seconds of skew is
+    // normal; "-3s ago" is not a thing to render.
+    expect(formatRelativeTime(now + 5000, now)).toBe('just now');
+  });
+
+  it('says nothing rather than Invalid Date for a broken value', () => {
+    expect(formatRelativeTime(Number.NaN, now)).toBe('—');
+    expect(formatDate(Number.NaN)).toBe('—');
+  });
+});
+
+describe('formatTokens', () => {
+  it('groups thousands with a separator the tests can rely on', () => {
+    // Not `toLocaleString`: on a machine set to de-DE that returns "8.192",
+    // which reads as eight in the one panel whose job is a legible budget.
+    expect(formatTokens(8192)).toBe('8,192');
+    expect(formatTokens(1_234_567)).toBe('1,234,567');
+  });
+
+  it('leaves small counts alone', () => {
+    expect(formatTokens(0)).toBe('0');
+    expect(formatTokens(999)).toBe('999');
+  });
+
+  it('survives a broken value', () => {
+    expect(formatTokens(Number.NaN)).toBe('—');
   });
 });

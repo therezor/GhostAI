@@ -28,6 +28,29 @@ export function Input({ className, ...props }: ComponentProps<'input'>): JSX.Ele
   );
 }
 
+/**
+ * The same input, sized for a list.
+ *
+ * `field-sizing-content` rather than a row count or a measured height: the
+ * lists edited in Settings are two lines on one provider and twelve on another,
+ * and a fixed `rows` is wrong for both. `min-h` is in `rem` like everything
+ * else, so it grows with the user's font size instead of clipping at 200%.
+ */
+export function Textarea({ className, ...props }: ComponentProps<'textarea'>): JSX.Element {
+  return (
+    <textarea
+      className={cn(
+        'field-sizing-content min-h-16 w-full rounded-md border border-line bg-surface-1 px-3 py-2',
+        'font-mono text-xs text-fg-1 placeholder:text-fg-3',
+        'aria-invalid:border-danger-fg',
+        'disabled:pointer-events-none disabled:text-fg-3',
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
 export function Label({ className, ...props }: ComponentProps<'label'>): JSX.Element {
   return <label className={cn('text-sm font-medium text-fg-2', className)} {...props} />;
 }

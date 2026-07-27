@@ -9,12 +9,12 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { Ghost } from 'lucide-react';
 import type { JSX } from 'react';
 
 import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
 import { Badge } from '@/components/ui/badge.js';
+import { Skull } from '@/components/skull.js';
 
 const PROMPTS: readonly string[] = [
   'Summarise the files in this workspace.',
@@ -30,7 +30,7 @@ export function Welcome({ onPick }: { readonly onPick: (prompt: string) => void 
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col items-center gap-5 px-4 py-16 text-center">
-      <Ghost className="size-10 text-fg-3" aria-hidden="true" />
+      <Skull className="size-10 text-fg-3" aria-hidden="true" />
 
       <div className="flex flex-col items-center gap-1.5">
         <h1 className="text-xl font-medium">Ready when you are.</h1>

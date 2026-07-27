@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!--
+    The same drawing as `src/components/skull.tsx`, with the colour written
+    out. A browser tab has no cascade to inherit a colour from, so the mark
+    would resolve to black and disappear on a dark tab strip — which is why
+    this file is the one place in the package a raw colour is correct rather
+    than a mistake. (The token gates scan `index.html` and `src/**`; this is
+    neither, and `skull.test.tsx` keeps the geometry in step with the
+    component.)
+
+    #e8a317 is the brand gold — `oklch(0.763 0.155 77.3)` resolved to sRGB. One
+    colour for both tab strips rather than a `prefers-color-scheme` swap: it is
+    mid-luminance, so it holds against white and against near-black, and a
+    favicon that changes colour with the OS theme is one users stop recognising.
+  -->
+  <path
+    fill="#e8a317"
+    fill-rule="evenodd"
+    d="M7 2.5h10l3 3V13l-3 4v4.5h-2V20h-2v1.5h-2V20H9v1.5H7V17l-3-4V5.5zM7 8h4v3l-2 2-2-2zM13 8h4v3l-2 2-2-2zM12 14l1.5 2.5h-3z"
+  />
+</svg>

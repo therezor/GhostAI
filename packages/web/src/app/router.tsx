@@ -51,9 +51,19 @@ const chatRoute = createRoute({
   component: ChatRoute,
 });
 
+/**
+ * The directory the file browser is showing, and the settings panel that is
+ * open. Both are in the URL for the same reason `?session=` is: they are the
+ * whole state of the screen, so a reload, a link and the Back button all work
+ * without a store to keep in step with them.
+ */
+const filesSearchSchema = z.object({ path: z.string().optional() });
+const settingsSearchSchema = z.object({ panel: z.string().optional() });
+
 const filesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/files',
+  validateSearch: filesSearchSchema,
   component: FilesRoute,
 });
 
@@ -66,6 +76,7 @@ const notificationsRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings',
+  validateSearch: settingsSearchSchema,
   component: SettingsRoute,
 });
 

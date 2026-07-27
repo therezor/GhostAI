@@ -28,6 +28,7 @@ import { Badge } from '@/components/ui/badge.js';
 import { Button } from '@/components/ui/button.js';
 import { Dialog, DialogContent, DialogHeading, DialogTrigger } from '@/components/ui/dialog.js';
 import { ThemeToggle } from '@/components/theme-toggle.js';
+import { ContextInspector } from '@/context/context-inspector.js';
 import { Sidebar } from './sidebar.js';
 
 export function Shell({ children }: { readonly children: ReactNode }): JSX.Element {
@@ -72,6 +73,9 @@ function Header({
   });
 
   const connection = useTurnStore((state) => state.connection);
+  // The header, not the chat route: the inspector measures the session the
+  // socket is on, and that outlives a trip to Settings and back.
+  const sessionKey = useTurnStore((state) => state.sessionKey);
 
   return (
     <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-surface-1 px-3">
@@ -102,6 +106,7 @@ function Header({
       <div className="flex-1" />
 
       <ConnectionBadge connection={connection} />
+      <ContextInspector sessionKey={sessionKey} />
       <ThemeToggle />
     </header>
   );

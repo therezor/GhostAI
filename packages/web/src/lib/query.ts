@@ -30,6 +30,7 @@ export const queryKeys = {
   models: ['models'] as const,
   tools: ['tools'] as const,
   files: (path: string) => ['files', path] as const,
+  context: (key: string) => ['sessions', key, 'context'] as const,
 };
 
 export function createQueryClient(): QueryClient {

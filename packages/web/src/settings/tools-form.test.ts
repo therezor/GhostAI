@@ -1,0 +1,98 @@
+/**
+ * The Tools panel's validation.
+ *
+ * The case that earns its place is the approval timeout's lower bound. Every
+ * other duration in the config tree reads `0` as "no limit", and this one is
+ * `.positive()` — an approval that never expires holds a turn, its tool call and
+ * its provider connection open for a browser tab that was closed an hour ago.
+ * The bound is easy to get wrong precisely because the convention everywhere
+ * else says it should be allowed.
+ */
+
+import { ConfigPatchSchema, ToolsConfigSchema, type ToolsConfig } from '@ghostai/protocol';
+import { describe, expect, it } from 'vitest';
+
+import { toToolsForm, toToolsPatch } from './tools-form.js';
+
+const config = (overrides: Partial<ToolsConfig> = {}): ToolsConfig =>
+  ToolsConfigSchema.parse(overrides);
+
+describe('toToolsForm', () => {
+  it('reads the shipped defaults', () => {
+    const form = toToolsForm(config());
+
+    expect(form.approvals).toEqual({
+      safe: 'allow',
+      write: 'allow',
+      exec: 'ask',
+      network: 'ask',
+    });
+    expect(form.approvalTimeoutSeconds).toBe('300');
+    expect(form.execEnabled).toBe(true);
+  });
+});
+
+describe('toToolsPatch', () => {
+  it('round-trips the config it was built from', () => {
+    const result = toToolsPatch(toToolsForm(config()));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.patch.tools?.approvals).toEqual({
+      safe: 'allow',
+      write: 'allow',
+      exec: 'ask',
+      network: 'ask',
+      timeoutMs: 300_000,
+    });
+    expect(Object.keys(result.patch)).toEqual(['tools']);
+  });
+
+  it('carries a changed policy', () => {
+    const form = toToolsForm(config());
+    const result = toToolsPatch({ ...form, approvals: { ...form.approvals, exec: 'deny' } });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.patch.tools?.approvals?.exec).toBe('deny');
+  });
+
+  it('refuses an approval timeout of zero, unlike every other duration here', () => {
+    const result = toToolsPatch({ ...toToolsForm(config()), approvalTimeoutSeconds: '0' });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.approvalTimeoutSeconds).toBe('Must be at least 1');
+  });
+
+  it('allows an exec timeout of zero, where zero does mean no limit', () => {
+    const result = toToolsPatch({ ...toToolsForm(config()), execTimeoutSeconds: '0' });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.patch.tools?.exec?.timeoutMs).toBe(0);
+  });
+
+  it('reports both bad byte counts at once', () => {
+    const result = toToolsPatch({
+      ...toToolsForm(config()),
+      execMaxOutputBytes: '0',
+      maxOutputChars: '',
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors).toEqual({
+      execMaxOutputBytes: 'Must be at least 1',
+      maxOutputChars: 'Required',
+    });
+  });
+
+  it('produces a patch the protocol accepts', () => {
+    const result = toToolsPatch(toToolsForm(config()));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(() => ConfigPatchSchema.parse(result.patch)).not.toThrow();
+  });
+});

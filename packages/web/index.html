@@ -7,6 +7,13 @@
     <title>GhostAI</title>
 
     <!--
+      Same-origin and shipped in the tarball, like the fonts. An SVG rather than
+      an `.ico`: one file, sharp at every size, and no build step to generate
+      the four raster sizes a tab, a bookmark and a pinned shortcut each want.
+    -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+
+    <!--
       The pre-paint stamp. Blocking and inline on purpose: it has to run before
       the first paint, and anything deferred, bundled or async paints the
       default theme first and corrects it a frame later — which is the flash.

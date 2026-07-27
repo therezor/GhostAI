@@ -33,6 +33,61 @@ export function formatDuration(ms: number): string {
   return `${String(hours)}h ${String(minutes % 60).padStart(2, '0')}m`;
 }
 
+/**
+ * How long ago something happened, for a list that is read at a glance.
+ *
+ * `now` is a parameter rather than a `Date.now()` call so the boundaries can be
+ * tested without a fake clock, and so a list re-rendering mid-scroll cannot show
+ * two rows measured against two different instants.
+ *
+ * A timestamp slightly in the *future* reads as "just now" rather than
+ * "-3s ago": the server and the browser have separate clocks, and a few seconds
+ * of skew is normal rather than an error worth rendering.
+ */
+export function formatRelativeTime(atMs: number, now: number): string {
+  if (!Number.isFinite(atMs)) return '—';
+
+  const elapsed = now - atMs;
+  if (elapsed < 60_000) return 'just now';
+
+  const minutes = Math.floor(elapsed / 60_000);
+  if (minutes < 60) return `${String(minutes)}m ago`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${String(hours)}h ago`;
+
+  const days = Math.floor(hours / 24);
+  // Past a week the relative form stops being informative — "23d ago" is worse
+  // than a date, because nobody counts back three weeks in their head.
+  return days < 7 ? `${String(days)}d ago` : formatDate(atMs);
+}
+
+/** An absolute date, in the browser's locale, for anything older than a week. */
+export function formatDate(atMs: number): string {
+  if (!Number.isFinite(atMs)) return '—';
+  return new Date(atMs).toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+/**
+ * A token count with thousands separators.
+ *
+ * Grouped by hand rather than through `toLocaleString`, because the separator
+ * this returns is compared in tests and a machine set to `de-DE` would produce
+ * `8.192` — a number that reads as eight in the one panel whose entire job is
+ * making a budget legible.
+ */
+export function formatTokens(tokens: number): string {
+  if (!Number.isFinite(tokens)) return '—';
+
+  const rounded = Math.round(Math.abs(tokens));
+  const grouped = String(rounded).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return tokens < 0 ? `-${grouped}` : grouped;
+}
+
 const UNITS = ['B', 'kB', 'MB', 'GB', 'TB'] as const;
 
 export function formatBytes(bytes: number): string {

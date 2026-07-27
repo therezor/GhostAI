@@ -21,20 +21,34 @@
 
 import {
   AuthSessionResponseSchema,
+  ContextResponseSchema,
   ErrorResponseSchema,
+  FileListResponseSchema,
   LoginResponseSchema,
+  ModelsResponseSchema,
   NotificationListResponseSchema,
+  NotificationSchema,
+  ProvidersResponseSchema,
   SessionListResponseSchema,
   SessionMessagesResponseSchema,
+  SettingsResponseSchema,
   SignedUrlSchema,
   StatusResponseSchema,
   ToolListResponseSchema,
   UploadResponseSchema,
   type AuthSessionResponse,
+  type ConfigPatch,
+  type ContextResponse,
+  type FileListResponse,
   type LoginResponse,
+  type ModelsResponse,
+  type Notification,
   type NotificationListResponse,
+  type ProvidersResponse,
   type SessionListResponse,
   type SessionMessagesResponse,
+  type SetCredentialRequest,
+  type SettingsResponse,
   type SignedUrl,
   type StatusResponse,
   type ToolListResponse,
@@ -106,13 +120,20 @@ export async function requestVoid(path: string, options: RequestOptions = {}): P
 }
 
 /**
- * The endpoints the shell itself needs.
+ * The endpoints something in this package actually calls.
  *
- * Deliberately not a client for all 30 routes: Step 18's panels own the ones
- * they call, and a wrapper written before its caller is a wrapper written to
- * the wrong shape — and an untested one, since nothing exercises it. These five
- * are what the shell, the sidebar and the login overlay actually call; the rest
- * arrive beside their callers, over the same `request`.
+ * Still not a client for all thirty routes: a wrapper written before its caller
+ * is a wrapper written to the wrong shape, and an untested one, since nothing
+ * exercises it. Everything here has a caller, and the routes that do not appear
+ * — session rename, session delete, the automation surface — are the ones whose
+ * panels arrive in a later phase.
+ *
+ * One rule holds across the whole object and is the reason `setCredential`
+ * returns `void`: **no response body ever carries a credential.** The vault is
+ * write-only over HTTP, so a key goes in through `PUT /api/settings/credentials`
+ * and the only thing that comes back out anywhere is the per-provider boolean
+ * in `SettingsResponse.credentialsPresent`. A client method that returned what
+ * it stored would be a read path for a store that has none.
  */
 export const api = {
   me: (signal?: AbortSignal): Promise<AuthSessionResponse> =>
@@ -137,8 +158,58 @@ export const api = {
       ...(signal ? { signal } : {}),
     }),
 
+  /** The updated row rather than a 204, so one item reconciles without a refetch. */
+  readNotification: (id: string): Promise<Notification> =>
+    request(`/api/notifications/${encodeURIComponent(id)}/read`, NotificationSchema, {
+      method: 'POST',
+    }),
+
+  readAllNotifications: (): Promise<void> =>
+    requestVoid('/api/notifications/read', { method: 'POST' }),
+
+  deleteNotification: (id: string): Promise<void> =>
+    requestVoid(`/api/notifications/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
   tools: (signal?: AbortSignal): Promise<ToolListResponse> =>
     request('/api/tools', ToolListResponseSchema, { ...(signal ? { signal } : {}) }),
+
+  settings: (signal?: AbortSignal): Promise<SettingsResponse> =>
+    request('/api/settings', SettingsResponseSchema, { ...(signal ? { signal } : {}) }),
+
+  /**
+   * A deep-partial patch, never the whole tree.
+   *
+   * `ConfigPatch` is what makes saving one panel leave the others alone: it is
+   * built by `patchOf()` with every default stripped, so a field this request
+   * does not mention is a field the server does not touch.
+   */
+  patchSettings: (patch: ConfigPatch): Promise<SettingsResponse> =>
+    request('/api/settings', SettingsResponseSchema, { method: 'PATCH', body: patch }),
+
+  /** Write-only. `value: null` clears the entry; nothing reads one back. */
+  setCredential: (body: SetCredentialRequest): Promise<void> =>
+    requestVoid('/api/settings/credentials', { method: 'PUT', body }),
+
+  providers: (signal?: AbortSignal): Promise<ProvidersResponse> =>
+    request('/api/providers', ProvidersResponseSchema, { ...(signal ? { signal } : {}) }),
+
+  models: (signal?: AbortSignal): Promise<ModelsResponse> =>
+    request('/api/models', ModelsResponseSchema, { ...(signal ? { signal } : {}) }),
+
+  /** What a turn on this session would actually send, for the context inspector. */
+  context: (key: string, signal?: AbortSignal): Promise<ContextResponse> =>
+    request(`/api/sessions/${encodeURIComponent(key)}/context`, ContextResponseSchema, {
+      ...(signal ? { signal } : {}),
+    }),
+
+  files: (path: string, signal?: AbortSignal): Promise<FileListResponse> =>
+    request('/api/files', FileListResponseSchema, {
+      query: { path },
+      ...(signal ? { signal } : {}),
+    }),
+
+  deleteFile: (path: string): Promise<void> =>
+    requestVoid('/api/files', { method: 'DELETE', query: { path } }),
 
   /**
    * Writes a file into the workspace and returns a URL an `<img>` can load.

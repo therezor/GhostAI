@@ -1,0 +1,107 @@
+/**
+ * The token budget.
+ *
+ * Three properties carry the panel: the sections come back in a fixed order
+ * whatever order the JSON had, the segments account for the total the server
+ * reported, and a budget past the window says so instead of rendering as full.
+ * The last one is the reason the panel exists — a bar that reads 100% for both
+ * "exactly full" and "twice over" cannot answer the question it was opened for.
+ */
+
+import { describe, expect, it } from 'vitest';
+
+import { summariseContext } from './breakdown.js';
+
+const input = {
+  breakdown: { messages: 3000, systemPrompt: 1000, tools: 1000 },
+  estimatedTokens: 5000,
+  contextWindowTokens: 10_000,
+};
+
+describe('summariseContext', () => {
+  it('orders the known sections regardless of the key order it received', () => {
+    // JSON preserves insertion order, and the server's is not the reading order.
+    expect(summariseContext(input).segments.map((segment) => segment.key)).toEqual([
+      'systemPrompt',
+      'tools',
+      'messages',
+    ]);
+  });
+
+  it('measures each section against the window', () => {
+    const { segments, usedPercent, freeTokens, over } = summariseContext(input);
+
+    expect(segments.map((segment) => segment.percent)).toEqual([10, 10, 30]);
+    expect(usedPercent).toBe(50);
+    expect(freeTokens).toBe(5000);
+    expect(over).toBe(false);
+  });
+
+  it('labels the sections in words', () => {
+    expect(summariseContext(input).segments.map((segment) => segment.label)).toEqual([
+      'System prompt',
+      'Tool definitions',
+      'Conversation',
+    ]);
+  });
+
+  it('accounts for whatever the sections do not add up to', () => {
+    // The server's total is authoritative; a bar that does not sum to the number
+    // printed above it is a bar nobody trusts twice.
+    const budget = summariseContext({ ...input, estimatedTokens: 6000 });
+    const other = budget.segments.at(-1);
+
+    expect(other?.key).toBe('other');
+    expect(other?.tokens).toBe(1000);
+    expect(budget.segments.reduce((total, segment) => total + segment.tokens, 0)).toBe(6000);
+  });
+
+  it('adds no remainder when the sections already add up', () => {
+    expect(summariseContext(input).segments.map((s) => s.key)).not.toContain('other');
+  });
+
+  it('reports a budget past the window rather than clamping it', () => {
+    const budget = summariseContext({ ...input, estimatedTokens: 12_000 });
+
+    expect(budget.over).toBe(true);
+    expect(budget.usedPercent).toBe(120);
+    // Not negative: "remaining" is a quantity, and there is none.
+    expect(budget.freeTokens).toBe(0);
+  });
+
+  it('sorts a section it has never seen after the known ones, and names it', () => {
+    const budget = summariseContext({
+      ...input,
+      breakdown: { ...input.breakdown, knowledge_base: 500, memory: 200 },
+      estimatedTokens: 5700,
+    });
+
+    expect(budget.segments.map((segment) => segment.key)).toEqual([
+      'systemPrompt',
+      'tools',
+      'messages',
+      'knowledge_base',
+      'memory',
+    ]);
+    expect(budget.segments.at(3)?.label).toBe('Knowledge base');
+  });
+
+  it('survives a window of zero rather than dividing by it', () => {
+    const budget = summariseContext({ ...input, contextWindowTokens: 0 });
+
+    expect(budget.segments.every((segment) => segment.percent === 0)).toBe(true);
+    expect(budget.usedPercent).toBe(0);
+  });
+
+  it('treats an empty breakdown as one unattributed block', () => {
+    const budget = summariseContext({
+      breakdown: {},
+      estimatedTokens: 400,
+      contextWindowTokens: 800,
+    });
+
+    expect(budget.segments).toEqual([
+      { key: 'other', label: 'Unattributed', tokens: 400, percent: 50 },
+    ]);
+  });
+});
