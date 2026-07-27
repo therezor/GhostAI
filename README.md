@@ -9,7 +9,7 @@ A self-hosted, security-first AI agent written in TypeScript. One process, one p
 - **Security in the core** — encrypted credential vault, workspace jail, argv-only exec (never a shell), SSRF/DNS-rebinding guard, tool-output nonce wrapping, and per-tool approval prompts.
 - **Extensible** — a versioned plugin SDK for tools, channels, providers, TTS/STT, and embedders.
 
-> **Status: pre-alpha.** The toolchain and `@ghostai/protocol` are done; the remaining packages are empty. See [Build order](#build-order) below.
+> **Status: pre-alpha.** The toolchain, `@ghostai/protocol` and `@ghostai/core` are done; the remaining packages are empty. See [Build order](#build-order) below.
 
 ---
 
@@ -154,7 +154,7 @@ Notes for later steps:
 </details>
 
 <details>
-<summary><b>Step 3 — <code>@ghostai/core</code></b></summary>
+<summary><b>Step 3 — <code>@ghostai/core</code></b> ✅ done</summary>
 
 The shared spine. No network, no `child_process`.
 
@@ -165,7 +165,20 @@ The shared spine. No network, no `child_process`.
 - `MessageBus` — `AsyncIterable` inbound/outbound queues with per-sender rate limiting.
 - pino `Logger` with redaction paths, injectable `Clock`, path helpers, typed error taxonomy.
 
-**Done when:** `findLegalStart` is property-tested with `fast-check` (no generated message array ever yields an orphaned tool result), the store survives a reopen with tool-call pairing intact, and coverage is ≥ 90/85.
+**Done when:** `findLegalStart` is property-tested with `fast-check` (no generated message array ever yields an orphaned tool result), the store survives a reopen with tool-call pairing intact, and coverage is ≥ 90/85. ✅ (97/94)
+
+Notes for later steps:
+
+- **`append` takes the schema's _input_ type**, so `toolCalls`, `isError` and `truncated` may be omitted and the schema fills them. Validation happens on write, which is where a malformed message is still attributable to the caller that produced it.
+- **`seq`, not `createdAtMs`, is the message ordering.** Parallel tool results routinely land in the same millisecond, so time alone leaves their order arbitrary. `seq` is also the pagination cursor and never rewinds — `clearMessages()` deliberately leaves `next_seq` alone so a reconnecting client's stale cursor cannot start addressing different messages.
+- **`lastConsolidatedSeq` is applied in SQL by `SessionStore.history()`**, which then passes `fromIndex: 0` to `historyForLLM`. Passing both would skip a second block of the same size.
+- **Order inside `historyForLLM` is not interchangeable.** Trimming to the first `user` message can itself strand a `tool` result, so `findLegalStart` has to run after the trim, not before.
+- **`SessionStore` accepts an existing `DatabaseSync`.** The scheduler, auth and the knowledge base share this one file; hand them the same connection so writes share a WAL and cross-table transactions are possible. A store given a connection never closes it.
+- `foreign_keys` is per-connection and off by default in SQLite — a store opened on a borrowed connection re-enables it, but anything else opening one must do the same or deletes stop cascading.
+- **`Clock` separates `now()` from `monotonic()`.** Anything measuring a _duration_ — the wall-clock cap, the tool heartbeat, rate-limit refill — must use `monotonic()`, or an NTP correction mid-turn corrupts it.
+- **`RateLimiter` eviction is fail-open.** Past `MAX_TRACKED_SENDERS` the least-recently-used buckets are dropped, so a flood of distinct sender ids cannot lock out real users or grow the map without bound.
+- Redaction is by _path_, so log structured context (`log.info({ tool }, 'executing')`) rather than interpolating into the message string, where nothing can reach it.
+
 </details>
 
 <details>
