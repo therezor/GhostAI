@@ -1,0 +1,12 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/protocol" },
+    { "path": "packages/core" },
+    { "path": "packages/security" },
+    { "path": "packages/providers" },
+    { "path": "packages/tools" },
+    { "path": "packages/agent" },
+    { "path": "packages/cli" }
+  ]
+}

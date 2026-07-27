@@ -1,0 +1,32 @@
+{
+  "name": "@ghostai/providers",
+  "version": "0.0.0",
+  "description": "LLM provider registry, wire adapters, and resilience decorator.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "!dist/**/*.test.*"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@ghostai/core": "workspace:*",
+    "@ghostai/protocol": "workspace:*",
+    "@ghostai/security": "workspace:*",
+    "gpt-tokenizer": "^2.8.0"
+  }
+}

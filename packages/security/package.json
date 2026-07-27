@@ -1,0 +1,31 @@
+{
+  "name": "@ghostai/security",
+  "version": "0.0.0",
+  "description": "Credential vault, workspace jail, SSRF-guarded fetch, exec argv guard.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "!dist/**/*.test.*"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@ghostai/core": "workspace:*",
+    "@ghostai/protocol": "workspace:*",
+    "undici": "^7.2.0"
+  }
+}

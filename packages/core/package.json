@@ -1,0 +1,31 @@
+{
+  "name": "@ghostai/core",
+  "version": "0.0.0",
+  "description": "Canonical message types, session store, message bus, logger, clock.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "!dist/**/*.test.*"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@ghostai/protocol": "workspace:*",
+    "pino": "^9.5.0",
+    "zod": "^4.0.0"
+  }
+}

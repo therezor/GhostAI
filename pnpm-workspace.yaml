@@ -1,0 +1,9 @@
+packages:
+  - 'packages/*'
+  - 'plugins/*'
+  - 'examples/*'
+allowBuilds:
+  # esbuild powers tsup and vitest; unrs-resolver powers eslint-plugin-import-x.
+  # Both are build-time only and need their postinstall to fetch a native binary.
+  esbuild: true
+  unrs-resolver: true
