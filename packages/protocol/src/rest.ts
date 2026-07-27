@@ -247,6 +247,20 @@ export const SignedUrlSchema = z.object({
 });
 export type SignedUrl = z.infer<typeof SignedUrlSchema>;
 
+/**
+ * Asking for one.
+ *
+ * A body rather than a query parameter, and the reason is the audit log: a
+ * workspace path in a URL is written to every access log between the browser
+ * and the server, and the whole point of the signature is that the *URL* is the
+ * thing that travels.
+ */
+export const SignedUrlRequestSchema = z.object({
+  /** Workspace-relative, like every other path that crosses this boundary. */
+  path: z.string().min(1),
+});
+export type SignedUrlRequest = z.infer<typeof SignedUrlRequestSchema>;
+
 export const UploadResponseSchema = z.object({
   path: z.string().min(1),
   sizeBytes: z.number().int().nonnegative(),

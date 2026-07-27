@@ -20,21 +20,66 @@
  *   probe, and the login that mints the credential.
  * - `required` — a valid session cookie or bearer token, unless authentication
  *   is disabled for the whole server.
- *
- * `signed` — the HMAC-signed media URL an `<img src>` can carry — arrives in
- * Step 13 alongside the code that verifies a signature. A variant that nothing
- * can enforce is worse than one that does not exist yet.
+ * - `signed` — the credential is in the URL: an HMAC-signed, expiring token
+ *   naming one workspace path. Exactly one route uses it, because `<img src>`
+ *   can carry neither a header nor, reliably, a `SameSite=Strict` cookie. A
+ *   session is *not* accepted there and a signature is not accepted anywhere
+ *   else, so neither carrier widens the other's reach.
  */
-export type RouteAuth = 'public' | 'required';
+export type RouteAuth = 'public' | 'required' | 'signed';
 
 export type RouteMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 
 const MANIFEST = [
+  // Status and health
   { id: 'system.health', method: 'GET', url: '/api/health', auth: 'public' },
+  { id: 'system.status', method: 'GET', url: '/api/status', auth: 'required' },
   { id: 'system.openapi', method: 'GET', url: '/api/openapi.json', auth: 'required' },
+
+  // Auth
   { id: 'auth.login', method: 'POST', url: '/api/auth/login', auth: 'public' },
   { id: 'auth.logout', method: 'POST', url: '/api/auth/logout', auth: 'required' },
   { id: 'auth.me', method: 'GET', url: '/api/auth/me', auth: 'required' },
+
+  // Settings and credentials
+  { id: 'settings.get', method: 'GET', url: '/api/settings', auth: 'required' },
+  { id: 'settings.patch', method: 'PATCH', url: '/api/settings', auth: 'required' },
+  { id: 'settings.credential', method: 'PUT', url: '/api/settings/credentials', auth: 'required' },
+
+  // Providers and models
+  { id: 'providers.list', method: 'GET', url: '/api/providers', auth: 'required' },
+  { id: 'models.list', method: 'GET', url: '/api/models', auth: 'required' },
+
+  // Sessions, messages, context
+  { id: 'sessions.list', method: 'GET', url: '/api/sessions', auth: 'required' },
+  { id: 'sessions.create', method: 'POST', url: '/api/sessions', auth: 'required' },
+  { id: 'sessions.get', method: 'GET', url: '/api/sessions/:key', auth: 'required' },
+  { id: 'sessions.update', method: 'PATCH', url: '/api/sessions/:key', auth: 'required' },
+  { id: 'sessions.delete', method: 'DELETE', url: '/api/sessions/:key', auth: 'required' },
+  { id: 'sessions.messages', method: 'GET', url: '/api/sessions/:key/messages', auth: 'required' },
+  { id: 'sessions.clear', method: 'DELETE', url: '/api/sessions/:key/messages', auth: 'required' },
+  { id: 'sessions.context', method: 'GET', url: '/api/sessions/:key/context', auth: 'required' },
+
+  // Tools
+  { id: 'tools.list', method: 'GET', url: '/api/tools', auth: 'required' },
+
+  // Files, upload and signed media
+  { id: 'files.list', method: 'GET', url: '/api/files', auth: 'required' },
+  { id: 'files.delete', method: 'DELETE', url: '/api/files', auth: 'required' },
+  { id: 'files.upload', method: 'POST', url: '/api/files/upload', auth: 'required' },
+  { id: 'files.sign', method: 'POST', url: '/api/files/signed-url', auth: 'required' },
+  { id: 'media.get', method: 'GET', url: '/api/media/:token', auth: 'signed' },
+
+  // Notifications
+  { id: 'notifications.list', method: 'GET', url: '/api/notifications', auth: 'required' },
+  { id: 'notifications.readAll', method: 'POST', url: '/api/notifications/read', auth: 'required' },
+  {
+    id: 'notifications.read',
+    method: 'POST',
+    url: '/api/notifications/:id/read',
+    auth: 'required',
+  },
+  { id: 'notifications.delete', method: 'DELETE', url: '/api/notifications/:id', auth: 'required' },
 ] as const;
 
 export type RouteId = (typeof MANIFEST)[number]['id'];

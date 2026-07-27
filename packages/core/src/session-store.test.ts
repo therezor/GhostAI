@@ -137,6 +137,70 @@ describe('sessions', () => {
     store.close();
   });
 
+  it('resumes a listing from a keyset cursor', () => {
+    let now = NOW;
+    const store = new SessionStore({
+      clock: { ...fixedClock, now: () => now },
+      newId: counterIds(),
+    });
+    for (const key of ['a', 'b', 'c']) {
+      store.ensureSession(key);
+      now += 1000;
+    }
+
+    // Newest first, so the listing runs c, b, a.
+    const [first] = store.listSessions({ limit: 1 });
+    const rest = store.listSessions({
+      after: { updatedAtMs: first?.updatedAtMs ?? 0, key: first?.key ?? '' },
+    });
+
+    expect(first?.key).toBe('c');
+    expect(rest.map((session) => session.key)).toEqual(['b', 'a']);
+    store.close();
+  });
+
+  /**
+   * The property the cursor exists for, and the one an offset cannot hold: a
+   * turn landing between two pages moves a session to the front, which shifts
+   * every offset behind it and makes a reader see one row twice.
+   */
+  it('does not repeat a row when an append reorders the listing', () => {
+    let now = NOW;
+    const store = new SessionStore({
+      clock: { ...fixedClock, now: () => now },
+      newId: counterIds(),
+    });
+    for (const key of ['a', 'b', 'c']) {
+      store.ensureSession(key);
+      now += 1000;
+    }
+
+    const page = store.listSessions({ limit: 1 });
+    const cursor = { updatedAtMs: page[0]?.updatedAtMs ?? 0, key: page[0]?.key ?? '' };
+
+    now += 1000;
+    store.append('a', userMessage('a turn landed'));
+
+    const next = store.listSessions({ after: cursor });
+    // `a` jumped ahead of the cursor and is not served twice; `b`, which the
+    // reader had not reached, still arrives.
+    expect(next.map((session) => session.key)).toEqual(['b']);
+    store.close();
+  });
+
+  it('breaks a timestamp tie by key, in one direction only', () => {
+    const store = makeStore();
+    for (const key of ['a', 'b', 'c']) store.ensureSession(key);
+
+    // Every row shares `NOW`, so the whole ordering rests on the key column.
+    const first = store.listSessions({ limit: 1 });
+    expect(first[0]?.key).toBe('a');
+
+    const rest = store.listSessions({ after: { updatedAtMs: NOW, key: 'a' } });
+    expect(rest.map((session) => session.key)).toEqual(['b', 'c']);
+    store.close();
+  });
+
   it('patches only the fields it is given', () => {
     const store = makeStore();
     store.ensureSession('a', { title: 'Title', profileId: 'p1' });

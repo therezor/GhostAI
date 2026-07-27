@@ -313,6 +313,14 @@ export interface TurnInput {
   readonly turnId?: string;
 }
 
+/** What the context inspector knows about the session it is inspecting. */
+export interface PromptPreviewInput {
+  readonly sessionKey: string;
+  /** Defaults to `web`: nothing previews a prompt from a terminal. */
+  readonly channel?: string;
+  readonly profileId?: string;
+}
+
 export interface TurnResult {
   readonly turnId: string;
   readonly stopReason: StopReason;
@@ -380,9 +388,54 @@ export class AgentLoop {
     return this.#model;
   }
 
+  /** The provider a turn on this loop would reach. Reported by `GET /api/status`. */
+  get provider(): string {
+    return this.#provider.id;
+  }
+
   /** The queue this loop drains. Exposed so a transport can push into it. */
   get steering(): SteeringQueue {
     return this.#steering;
+  }
+
+  /**
+   * The system prompt a turn on `sessionKey` would be sent, without running one.
+   *
+   * This exists so the context inspector shows the prompt the agent actually
+   * uses rather than a second assembly of it. Composing the two halves outside
+   * the loop would work today and quietly lie later: memory, skills and profiles
+   * arrive as `ContextContributor`s attached to *this* object, and a reimplementation
+   * elsewhere cannot see them.
+   *
+   * The runtime half is built at iteration 1 with a throwaway nonce. Both are
+   * per-turn values with no meaning outside a turn, and the alternative —
+   * reporting the nonce of some other turn — would be worse than reporting one
+   * that was never used.
+   */
+  async previewPrompt(input: PromptPreviewInput): Promise<string> {
+    const context: StaticPromptContext = {
+      workspaceRoot: this.#jail.root,
+      sessionKey: input.sessionKey,
+      profileId: input.profileId,
+      channel: input.channel ?? 'web',
+    };
+
+    const staticPrompt = await buildStaticPrompt({
+      context,
+      contributors: this.#contributors,
+    });
+    const runtimeBlock = buildRuntimeBlock({
+      context: {
+        ...context,
+        iteration: 1,
+        maxIterations: this.#config.maxToolIterations,
+        nowMs: this.#clock.now(),
+      },
+      nonce: createToolOutputNonce(this.#random),
+      contributors: this.#contributors,
+    });
+
+    return composeSystemPrompt(staticPrompt, runtimeBlock);
   }
 
   /** Queues a correction for the turn currently running on `sessionKey`. */

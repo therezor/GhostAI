@@ -24,6 +24,38 @@ export {
   type ServerOptions,
 } from './app.js';
 
+export type { AgentView, ExtensionCounts, ServerRuntime } from './runtime.js';
+
+export {
+  NotificationStore,
+  type CreateNotificationInput,
+  type ListNotificationsOptions,
+  type NotificationStoreOptions,
+} from './notifications.js';
+
+export {
+  MEDIA_SECRET_NAME,
+  assertSigningKey,
+  mediaUrl,
+  signMediaToken,
+  verifyMediaToken,
+  type MediaClaim,
+} from './signing.js';
+
+export {
+  decodeMessageCursor,
+  decodeNotificationCursor,
+  decodeSessionCursor,
+  encodeMessageCursor,
+  encodeNotificationCursor,
+  encodeSessionCursor,
+  type MessageCursor,
+  type NotificationCursor,
+  type SessionListCursor,
+} from './cursor.js';
+
+export { DEFAULT_MIME_TYPE, inlineSafe, listDirectory, mimeTypeFor } from './workspace.js';
+
 export { HubApprovalGate, type HubApprovalGateOptions } from './approvals.js';
 
 export {
@@ -41,6 +73,7 @@ export { ReplayBuffer, type ReplaySlice, type SequencedServerMessage } from './r
 
 export {
   AuthStore,
+  SECRET_BYTES,
   TOKEN_ID_BYTES,
   TOKEN_SECRET_BYTES,
   argon2Hasher,
@@ -55,10 +88,13 @@ export {
   clearSessionCookie,
   cookieSecure,
   createAuthHook,
+  createSignedHook,
+  mediaClaimOf,
   readCredential,
   sessionOf,
   setSessionCookie,
   type AuthHookOptions,
+  type SignedHookOptions,
 } from './auth.js';
 
 export { assertBootPolicy, type BootPolicyInput } from './boot.js';
@@ -85,9 +121,11 @@ export {
 
 export {
   LOGIN_ATTEMPTS_PER_MINUTE,
+  MAX_UPLOAD_BYTES,
   createRoutes,
   type RouteDefinition,
   type RouteDeps,
+  type RouteGroup,
   type RouteRateLimit,
 } from './routes.js';
 

@@ -80,6 +80,7 @@ export {
   type CreateSessionOptions,
   type ListSessionsOptions,
   type ReadMessagesOptions,
+  type SessionCursor,
   type SessionRecord,
   type SessionStoreOptions,
   type SessionSummaryRecord,

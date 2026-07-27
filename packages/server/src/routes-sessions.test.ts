@@ -1,0 +1,404 @@
+/**
+ * Sessions, messages, pagination and the context inspector.
+ *
+ * The pagination tests are the point of this file. Both listings are paged with
+ * a keyset cursor rather than an offset, and the property that buys — a row
+ * appended mid-scroll cannot make a reader see one row twice or miss another —
+ * is only real if something appends mid-scroll. Two tests do.
+ */
+
+import { assistantMessage, textOf, userMessage } from '@ghostai/core';
+import type {
+  ChatMessage,
+  ContextResponse,
+  SessionListResponse,
+  SessionMessagesResponse,
+} from '@ghostai/protocol';
+import { afterEach, describe, expect, it } from 'vitest';
+
+import { manualClock } from './testkit/clock.js';
+import { startTestServer, type TestServer } from './testkit/server.js';
+
+const running: TestServer[] = [];
+
+afterEach(async () => {
+  while (running.length > 0) await running.pop()?.close();
+});
+
+async function start(...args: Parameters<typeof startTestServer>): Promise<TestServer> {
+  const started = await startTestServer(...args);
+  running.push(started);
+  return started;
+}
+
+/** The text of each stored message, which is what the assertions are about. */
+function texts(messages: { message: ChatMessage }[]): string[] {
+  return messages.map((stored) => textOf(stored.message));
+}
+
+interface Page {
+  readonly ids: string[];
+  readonly nextCursor: string | undefined;
+}
+
+// ---------------------------------------------------------------------------
+// CRUD
+// ---------------------------------------------------------------------------
+
+describe('sessions CRUD', () => {
+  it('creates a session and returns it', async () => {
+    const { server, headers } = await start();
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers,
+      payload: { key: 'web-1', title: 'First' },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toEqual({
+      key: 'web-1',
+      title: 'First',
+      messageCount: 0,
+      createdAtMs: expect.any(Number),
+      updatedAtMs: expect.any(Number),
+      origin: 'web',
+    });
+  });
+
+  it('mints a key when the client does not supply one', async () => {
+    const { server, headers } = await start();
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers,
+      payload: {},
+    });
+
+    expect(response.json().key).toMatch(/^web-/);
+  });
+
+  // A retried create is a create whose response was lost, not a conflict.
+  it('is idempotent on a repeated key', async () => {
+    const { server, headers } = await start();
+    const payload = { key: 'web-1', title: 'First' };
+    await server.app.inject({ method: 'POST', url: '/api/sessions', headers, payload });
+    const second = await server.app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers,
+      payload,
+    });
+
+    expect(second.statusCode).toBe(201);
+    expect(second.json().key).toBe('web-1');
+  });
+
+  it('reads one session, with its message count', async () => {
+    const { server, headers, runtime } = await start();
+    runtime.store.append('web-1', userMessage('hello'));
+
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/sessions/web-1',
+      headers,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ key: 'web-1', messageCount: 1 });
+  });
+
+  it('renames a session', async () => {
+    const { server, headers, runtime } = await start();
+    runtime.store.ensureSession('web-1', { title: 'Old' });
+
+    const response = await server.app.inject({
+      method: 'PATCH',
+      url: '/api/sessions/web-1',
+      headers,
+      payload: { title: 'New' },
+    });
+
+    expect(response.json().title).toBe('New');
+    expect(runtime.store.getSession('web-1')?.title).toBe('New');
+  });
+
+  it('deletes a session and its messages', async () => {
+    const { server, headers, runtime } = await start();
+    runtime.store.append('web-1', userMessage('hello'));
+
+    const response = await server.app.inject({
+      method: 'DELETE',
+      url: '/api/sessions/web-1',
+      headers,
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(runtime.store.getSession('web-1')).toBeUndefined();
+  });
+
+  it('clears a transcript but keeps the session', async () => {
+    const { server, headers, runtime } = await start();
+    runtime.store.append('web-1', userMessage('hello'));
+
+    const response = await server.app.inject({
+      method: 'DELETE',
+      url: '/api/sessions/web-1/messages',
+      headers,
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(runtime.store.getSession('web-1')).toBeDefined();
+    expect(runtime.store.messageCount('web-1')).toBe(0);
+  });
+
+  // A missing session is a 404 everywhere, rather than an empty listing on one
+  // route and a silently created session on another.
+  it.each([
+    ['GET', '/api/sessions/nope'],
+    ['PATCH', '/api/sessions/nope'],
+    ['DELETE', '/api/sessions/nope'],
+    ['GET', '/api/sessions/nope/messages'],
+    ['DELETE', '/api/sessions/nope/messages'],
+    ['GET', '/api/sessions/nope/context'],
+  ])('answers 404 for %s %s', async (method, url) => {
+    const { server, headers } = await start();
+    const response = await server.app.inject({
+      method: method as 'GET',
+      url,
+      headers,
+      ...(method === 'PATCH' ? { payload: { title: 'x' } } : {}),
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.code).toBe('not_found');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Session pagination
+// ---------------------------------------------------------------------------
+
+describe('GET /api/sessions', () => {
+  async function page(test: TestServer, query: string): Promise<Page> {
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: `/api/sessions${query}`,
+      headers: test.headers,
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json<SessionListResponse>();
+    return {
+      ids: body.sessions.map((session) => session.key),
+      nextCursor: body.nextCursor,
+    };
+  }
+
+  it('orders by most recent activity', async () => {
+    const clock = manualClock();
+    const test = await start({ clock });
+    for (const key of ['a', 'b', 'c']) {
+      test.runtime.store.append(key, userMessage(key));
+      clock.advance(1000);
+    }
+    test.runtime.store.append('a', userMessage('again'));
+
+    expect((await page(test, '')).ids).toEqual(['a', 'c', 'b']);
+  });
+
+  it('filters by origin', async () => {
+    const test = await start();
+    test.runtime.store.ensureSession('a', { origin: 'web' });
+    test.runtime.store.ensureSession('b', { origin: 'telegram' });
+
+    expect((await page(test, '?origin=telegram')).ids).toEqual(['b']);
+  });
+
+  it('issues a cursor only when there is another row', async () => {
+    const test = await start();
+    for (const key of ['a', 'b']) test.runtime.store.ensureSession(key);
+
+    expect((await page(test, '?limit=1')).nextCursor).toEqual(expect.any(String));
+    expect((await page(test, '?limit=2')).nextCursor).toBeUndefined();
+  });
+
+  /**
+   * The boundary test the plan asks for.
+   *
+   * A session is bumped to the front of the ordering between the two page
+   * requests. Under offset pagination the row at the cursor position shifts by
+   * one and the reader both re-sees a session and skips one; under a keyset
+   * cursor the bumped session is behind the reader and everything it has not
+   * seen still arrives exactly once.
+   */
+  it('survives an append landing between two pages', async () => {
+    const clock = manualClock();
+    const test = await start({ clock });
+    for (const key of ['a', 'b', 'c', 'd']) {
+      test.runtime.store.ensureSession(key);
+      clock.advance(1000);
+    }
+
+    const first = await page(test, '?limit=2');
+    // `d` was created last, so the newest-first listing starts there.
+    expect(first.ids).toEqual(['d', 'c']);
+
+    // The concurrent append: a turn lands on the oldest session, moving it to
+    // the front — past the reader, which is the case that breaks an offset.
+    clock.advance(1000);
+    test.runtime.store.append('a', userMessage('a turn landed'));
+
+    const second = await page(
+      test,
+      `?limit=2&cursor=${encodeURIComponent(first.nextCursor ?? '')}`,
+    );
+
+    const seen = [...first.ids, ...second.ids];
+    // No row twice — which an offset cursor could not promise here — and `b`,
+    // the one row the reader had not reached, still arrives.
+    expect(new Set(seen).size).toBe(seen.length);
+    expect(second.ids).toEqual(['b']);
+  });
+
+  it('rejects a cursor it did not issue', async () => {
+    const { server, headers } = await start();
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/sessions?cursor=not-a-cursor',
+      headers,
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toMatch(/cursor/i);
+  });
+
+  it('refuses a limit past the cap', async () => {
+    const { server, headers } = await start();
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/sessions?limit=1000',
+      headers,
+    });
+
+    expect(response.statusCode).toBe(422);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Message pagination
+// ---------------------------------------------------------------------------
+
+describe('GET /api/sessions/:key/messages', () => {
+  it('pages a transcript in order, with a concurrent append', async () => {
+    const test = await start();
+    for (const text of ['one', 'two', 'three']) {
+      test.runtime.store.append('web-1', userMessage(text));
+    }
+
+    const first = await test.server.app.inject({
+      method: 'GET',
+      url: '/api/sessions/web-1/messages?limit=2',
+      headers: test.headers,
+    });
+    const firstBody = first.json<SessionMessagesResponse>();
+    expect(texts(firstBody.messages)).toEqual(['one', 'two']);
+
+    // A turn writes while the client is between pages. `seq` is monotonic and
+    // append-only, so the cursor still addresses the same position.
+    test.runtime.store.append('web-1', userMessage('four'));
+
+    const second = await test.server.app.inject({
+      method: 'GET',
+      url: `/api/sessions/web-1/messages?limit=2&cursor=${encodeURIComponent(firstBody.nextCursor ?? '')}`,
+      headers: test.headers,
+    });
+
+    const secondBody = second.json<SessionMessagesResponse>();
+    expect(texts(secondBody.messages)).toEqual(['three', 'four']);
+    expect(secondBody.nextCursor).toBeUndefined();
+  });
+
+  it('returns an empty page for a session with no messages', async () => {
+    const test = await start();
+    test.runtime.store.ensureSession('web-1');
+
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: '/api/sessions/web-1/messages',
+      headers: test.headers,
+    });
+
+    expect(response.json()).toEqual({ sessionKey: 'web-1', messages: [] });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Context
+// ---------------------------------------------------------------------------
+
+describe('GET /api/sessions/:key/context', () => {
+  it('reports the prompt, the window and where the tokens went', async () => {
+    const test = await start({ systemPrompt: 'SYSTEM PROMPT' });
+    test.runtime.store.append('web-1', userMessage('hello'));
+    test.runtime.store.append('web-1', assistantMessage('hi'));
+
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: '/api/sessions/web-1/context',
+      headers: test.headers,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json<ContextResponse>();
+    expect(body.sessionKey).toBe('web-1');
+    expect(body.systemPrompt).toBe('SYSTEM PROMPT');
+    expect(body.messages).toHaveLength(2);
+    // Stored messages, so each one carries the id the transcript uses — which is
+    // what lets the inspector point at a row rather than describe it.
+    expect(body.messages[0]).toMatchObject({ id: expect.any(String), sessionKey: 'web-1' });
+    expect(body.contextWindowTokens).toBe(65_536);
+    expect(body.estimatedTokens).toBe(
+      Object.values(body.breakdown).reduce((total, tokens) => total + tokens, 0),
+    );
+  });
+
+  /**
+   * The window is `historyForLLM`'s, not a second implementation of it.
+   *
+   * A transcript that opens on an orphaned `tool` result is the case every
+   * provider rejects with a 400, and the inspector has to show the repaired
+   * window rather than the raw rows — otherwise it describes a request that
+   * would never be sent.
+   */
+  it('shows the repaired window rather than the raw rows', async () => {
+    const test = await start();
+    test.runtime.store.appendMany('web-1', [
+      { role: 'tool', content: 'orphaned', toolCallId: 'call-1', name: 'read_file' },
+      userMessage('hello'),
+    ]);
+
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: '/api/sessions/web-1/context',
+      headers: test.headers,
+    });
+
+    const body = response.json<ContextResponse>();
+    expect(body.messages.map((stored) => stored.message.role)).toEqual(['user']);
+  });
+
+  it('skips messages already folded into the memory files', async () => {
+    const test = await start();
+    test.runtime.store.append('web-1', userMessage('consolidated'));
+    test.runtime.store.append('web-1', userMessage('still here'));
+    test.runtime.store.updateSession('web-1', { lastConsolidatedSeq: 1 });
+
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: '/api/sessions/web-1/context',
+      headers: test.headers,
+    });
+
+    expect(texts(response.json<ContextResponse>().messages)).toEqual(['still here']);
+  });
+});

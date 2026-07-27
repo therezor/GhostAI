@@ -36,6 +36,9 @@ export const TOKEN_SECRET_BYTES = 32;
 /** Bytes in the lookup half. Not a secret — only a row address. */
 export const TOKEN_ID_BYTES = 12;
 
+/** Bytes in a named server secret — an HMAC key, not a password. */
+export const SECRET_BYTES = 32;
+
 /**
  * How stale `last_seen_at_ms` may get before a read writes.
  *
@@ -216,6 +219,38 @@ export class AuthStore {
       .run(id, sha256(secret), label, now, expiresAtMs, now);
 
     return { token: `${id}.${secret}`, id, expiresAtMs };
+  }
+
+  /**
+   * A named server secret, created on first use.
+   *
+   * The media URL signer needs a key that survives a restart — a signature
+   * minted before a reload has to still verify after it, or every image in an
+   * open tab breaks on deploy — and that is the same durable, never-transmitted
+   * storage the password already has. Generating it lazily rather than at boot
+   * means an install that never serves a file never writes one.
+   *
+   * The password is refused by name: it is stored as a one-way digest, and a
+   * caller that got it back here would be handing an argon2 encoding to
+   * whatever asked for a signing key.
+   */
+  ensureSecret(name: string): string {
+    if (name === PASSWORD_SECRET) {
+      throw new GhostError('invalid_input', 'The password is not a readable secret');
+    }
+    const existing = this.#readSecret(name);
+    if (existing !== undefined) return existing;
+
+    const secret = this.#random(SECRET_BYTES).toString('base64url');
+    // `DO NOTHING` rather than `DO UPDATE`: two requests racing to serve the
+    // first signed URL must end up with the same key, not the second one's.
+    this.#db
+      .prepare(
+        `INSERT INTO auth_secrets (name, value, updated_at_ms) VALUES (?, ?, ?)
+         ON CONFLICT(name) DO NOTHING`,
+      )
+      .run(name, secret, this.#clock.now());
+    return this.#readSecret(name) ?? secret;
   }
 
   /** `undefined` for anything that is not a live session — never a reason why. */

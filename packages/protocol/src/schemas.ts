@@ -146,6 +146,7 @@ export const PROTOCOL_SCHEMAS = {
   FileEntry: rest.FileEntrySchema,
   FileListResponse: rest.FileListResponseSchema,
   SignedUrl: rest.SignedUrlSchema,
+  SignedUrlRequest: rest.SignedUrlRequestSchema,
   UploadResponse: rest.UploadResponseSchema,
   Notification: rest.NotificationSchema,
   NotificationListResponse: rest.NotificationListResponseSchema,

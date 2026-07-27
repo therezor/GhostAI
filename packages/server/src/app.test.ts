@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import { ConfigSchema, type Config } from '@ghostai/protocol';
@@ -8,7 +10,9 @@ import { SERVER_VERSION, createServer, type GhostServer } from './app.js';
 import type { PasswordHasher } from './auth-store.js';
 import { SESSION_COOKIE } from './auth.js';
 import { ROUTE_MANIFEST, type RouteSpec } from './manifest.js';
+import { NotificationStore } from './notifications.js';
 import { createRoutes } from './routes.js';
+import { createFakeRuntime } from './testkit/runtime.js';
 
 const PASSWORD = 'a-test-password';
 
@@ -20,14 +24,22 @@ const fakeHasher: PasswordHasher = {
 
 const started: GhostServer[] = [];
 const opened: DatabaseSync[] = [];
+const workspaces: string[] = [];
 
 afterEach(async () => {
   while (started.length > 0) await started.pop()?.close();
   while (opened.length > 0) opened.pop()?.close();
+  while (workspaces.length > 0) rmSync(workspaces.pop() ?? '', { recursive: true, force: true });
 });
 
 function config(server: Record<string, unknown> = {}): Config {
   return ConfigSchema.parse({ server });
+}
+
+function workspace(): string {
+  const root = mkdtempSync(join(tmpdir(), 'ghostai-app-'));
+  workspaces.push(root);
+  return root;
 }
 
 interface StartOptions {
@@ -38,8 +50,10 @@ interface StartOptions {
 async function start(options: StartOptions = {}): Promise<GhostServer> {
   const database = new DatabaseSync(':memory:');
   opened.push(database);
+  const settings = options.config ?? config();
   const server = await createServer({
-    config: options.config ?? config(),
+    config: settings,
+    runtime: createFakeRuntime({ database, workspace: workspace(), config: settings }),
     database,
     hasher: fakeHasher,
     ...(options.password === null ? {} : { password: options.password ?? PASSWORD }),
@@ -80,11 +94,52 @@ function headersFor(state: StateName, token: string): Record<string, string> {
 }
 
 /**
+ * A body good enough to get past validation, per route.
+ *
+ * The matrix is about *reaching* a handler, not about what it answers, so every
+ * route with a required body needs one that parses — otherwise a 422 from the
+ * validator would be indistinguishable from a rejection by the auth hook.
+ */
+const PAYLOADS: Readonly<Record<string, Record<string, unknown>>> = {
+  'auth.login': { password: PASSWORD },
+  'settings.patch': { agents: { defaults: { temperature: 0.5 } } },
+  'settings.credential': { namespace: 'providers', key: 'openai', value: 'sk-test' },
+  'sessions.create': { title: 'from the matrix' },
+  'sessions.update': { title: 'renamed' },
+  'files.sign': { path: 'note.txt' },
+};
+
+/** Query parameters a route needs before its handler is reached. */
+const QUERIES: Readonly<Record<string, string>> = {
+  'files.delete': '?path=note.txt',
+  'files.upload': '?path=note.txt',
+};
+
+/** The path as the document spells it: Fastify's `:key` is OpenAPI's `{key}`. */
+function documentPath(url: string): string {
+  return url.replaceAll(/:(\w+)/g, '{$1}');
+}
+
+function urlFor(spec: RouteSpec): string {
+  return (
+    spec.url.replace(':key', 'a-session').replace(':id', 'an-id').replace(':token', 'not.a.token') +
+    (QUERIES[spec.id] ?? '')
+  );
+}
+
+/**
  * The table-driven matrix.
  *
  * It iterates `ROUTE_MANIFEST` rather than a list written beside it, so a route
  * added to the manifest is covered the moment it exists — and one that is not in
  * the manifest is not served at all.
+ *
+ * What it asserts is deliberately narrow: an unauthenticated caller gets a 401,
+ * and an authenticated one gets *something other than* a 401. Insisting on a 2xx
+ * would make this a test of every handler's happy path — needing a seeded
+ * session, an existing file and a real notification id — and it would then fail
+ * for reasons that have nothing to do with authentication, which is the one
+ * property the manifest exists to guarantee.
  */
 describe('auth matrix', () => {
   describe.each(ROUTE_MANIFEST)('$method $url ($auth)', (spec: RouteSpec) => {
@@ -94,13 +149,20 @@ describe('auth matrix', () => {
       const token = server.auth.issue('test').token;
       const response = await server.app.inject({
         method: spec.method,
-        url: spec.url,
+        url: urlFor(spec),
         headers: headersFor(state, token),
-        ...(spec.method === 'POST' ? { payload: { password: PASSWORD } } : {}),
+        ...(spec.id in PAYLOADS ? { payload: PAYLOADS[spec.id] } : {}),
       });
 
+      // A signed route's credential is in the URL, and the matrix never has a
+      // valid one — so a session must not open it, in any state.
+      if (spec.auth === 'signed') {
+        expect(response.statusCode).toBe(401);
+        return;
+      }
+
       if (spec.auth === 'public' || ACCEPTED.has(state)) {
-        expect(response.statusCode).toBeLessThan(400);
+        expect(response.statusCode).not.toBe(401);
       } else {
         expect(response.statusCode).toBe(401);
         expect(response.json()).toEqual({
@@ -119,14 +181,14 @@ describe('auth matrix', () => {
     for (const spec of ROUTE_MANIFEST) {
       const response = await server.app.inject({
         method: spec.method,
-        url: spec.url,
-        ...(spec.method === 'POST' ? { payload: { password: PASSWORD } } : {}),
+        url: urlFor(spec),
+        ...(spec.id in PAYLOADS ? { payload: PAYLOADS[spec.id] } : {}),
       });
-      // Login is the one exception: with auth off there is nothing to log in to.
-      const expected = spec.id === 'auth.login' ? 400 : 200;
-      expect({ id: spec.id, status: response.statusCode }).toEqual({
+      // The signature is not a login and is not switched off with one.
+      const expected = spec.auth === 'signed' ? 401 : 'not 401';
+      expect({ id: spec.id, status: response.statusCode === 401 ? 401 : 'not 401' }).toEqual({
         id: spec.id,
-        status: spec.id === 'auth.logout' ? 204 : expected,
+        status: expected,
       });
     }
   });
@@ -148,12 +210,17 @@ describe('auth matrix', () => {
   // too, but only for code that compiles; this fails the same way at runtime.
   it('has exactly one handler per manifest entry', async () => {
     const server = await start();
+    const database = new DatabaseSync(':memory:');
+    opened.push(database);
     const ids = Object.keys(
       createRoutes({
         config: server.config,
+        runtime: createFakeRuntime({ database, workspace: workspace() }),
         auth: server.auth,
-        database: new DatabaseSync(':memory:'),
+        notifications: new NotificationStore({ database }),
+        database,
         openapiDocument: () => ({}),
+        startedAt: 0,
       }),
     );
 
@@ -383,6 +450,7 @@ describe('health', () => {
     const database = new DatabaseSync(':memory:');
     const server = await createServer({
       config: config(),
+      runtime: createFakeRuntime({ database, workspace: workspace() }),
       database,
       hasher: fakeHasher,
       password: PASSWORD,
@@ -403,6 +471,7 @@ describe('boot', () => {
     await expect(
       createServer({
         config: config({ host: '0.0.0.0', auth: { enabled: false } }),
+        runtime: createFakeRuntime({ database, workspace: workspace() }),
         database,
         hasher: fakeHasher,
       }),
@@ -413,9 +482,14 @@ describe('boot', () => {
     const database = new DatabaseSync(':memory:');
     opened.push(database);
 
-    await expect(createServer({ config: config(), database, hasher: fakeHasher })).rejects.toThrow(
-      /no password has been set/,
-    );
+    await expect(
+      createServer({
+        config: config(),
+        runtime: createFakeRuntime({ database, workspace: workspace() }),
+        database,
+        hasher: fakeHasher,
+      }),
+    ).rejects.toThrow(/no password has been set/);
   });
 
   it('accepts a password that was already set on a previous boot', async () => {
@@ -424,13 +498,19 @@ describe('boot', () => {
 
     const first = await createServer({
       config: config(),
+      runtime: createFakeRuntime({ database, workspace: workspace() }),
       database,
       hasher: fakeHasher,
       password: PASSWORD,
     });
     await first.close();
 
-    const second = await createServer({ config: config(), database, hasher: fakeHasher });
+    const second = await createServer({
+      config: config(),
+      runtime: createFakeRuntime({ database, workspace: workspace() }),
+      database,
+      hasher: fakeHasher,
+    });
     started.push(second);
 
     const response = await second.app.inject({
@@ -482,7 +562,7 @@ describe('the generated document', () => {
     const doc = (await document()) as unknown as { paths: Record<string, Record<string, unknown>> };
 
     for (const spec of ROUTE_MANIFEST) {
-      expect(doc.paths[spec.url]?.[spec.method.toLowerCase()]).toBeDefined();
+      expect(doc.paths[documentPath(spec.url)]?.[spec.method.toLowerCase()]).toBeDefined();
     }
   });
 
@@ -521,7 +601,7 @@ describe('the generated document', () => {
     };
 
     for (const spec of ROUTE_MANIFEST) {
-      const operation = doc.paths[spec.url]?.[spec.method.toLowerCase()];
+      const operation = doc.paths[documentPath(spec.url)]?.[spec.method.toLowerCase()];
       const security = operation?.security ?? [];
       expect({ id: spec.id, secured: security.length > 0 }).toEqual({
         id: spec.id,

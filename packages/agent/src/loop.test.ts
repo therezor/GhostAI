@@ -1228,3 +1228,56 @@ describe('AgentLoop approvals', () => {
     });
   });
 });
+
+describe('AgentLoop.previewPrompt', () => {
+  /**
+   * The context inspector shows the prompt the agent uses, not a second
+   * assembly of it — which is why this lives on the loop rather than in the
+   * route that renders it. The assertion is the one that would catch a
+   * reimplementation drifting: the preview matches what a turn actually sent.
+   */
+  it('matches the prompt a turn would carry', async () => {
+    const { loop, provider } = harness();
+    await runTurn(loop, { sessionKey: SESSION, content: 'hello', channel: 'web' });
+
+    const sent = systemPromptOf(provider.requests[0]!);
+    const preview = await loop.previewPrompt({ sessionKey: SESSION, channel: 'web' });
+
+    // The nonce is per-turn and has no meaning outside one, so the delimiter is
+    // the only part that legitimately differs.
+    const withoutNonce = (prompt: string): string => prompt.replaceAll(/ghost-tool-[0-9a-f]+/g, '');
+    expect(withoutNonce(preview)).toBe(withoutNonce(sent));
+  });
+
+  it('sees the contributors a turn would see', async () => {
+    const { loop } = harness({
+      loop: {
+        contributors: [
+          {
+            name: 'memory',
+            staticSection: () => '## Memory\n\nThe user prefers rem over px.',
+          },
+        ],
+      },
+    });
+
+    const preview = await loop.previewPrompt({ sessionKey: SESSION });
+
+    // A prompt reassembled outside the loop could not know about this section,
+    // and the inspector would quietly under-report the token cost.
+    expect(preview).toContain('The user prefers rem over px');
+  });
+
+  it('names the session and defaults the channel to web', async () => {
+    const { loop } = harness();
+    const preview = await loop.previewPrompt({ sessionKey: SESSION });
+
+    expect(preview).toContain(`Session: ${SESSION}`);
+    expect(preview).toContain('Channel: web');
+  });
+
+  it('reports the provider a turn would reach', () => {
+    const { loop, provider } = harness();
+    expect(loop.provider).toBe(provider.id);
+  });
+});

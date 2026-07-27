@@ -1,0 +1,101 @@
+/**
+ * The notification list a UI shows, and the two ways an entry leaves it.
+ *
+ * Nothing here creates one. Notifications are raised by things that run without
+ * anyone watching — an automation run finishing, an approval expiring — and the
+ * route surface is deliberately read-and-dismiss: a `POST /api/notifications`
+ * would be an endpoint whose only purpose is letting a client fabricate the
+ * server's own reports.
+ */
+
+import {
+  NotificationListResponseSchema,
+  NotificationSchema,
+  type Notification,
+  type NotificationListResponse,
+} from '@ghostai/protocol';
+import type { FastifyReply } from 'fastify';
+
+import { decodeNotificationCursor, encodeNotificationCursor } from '../cursor.js';
+import { notFound } from '../errors.js';
+import {
+  IdParamsSchema,
+  NotificationListQuerySchema,
+  type IdParams,
+  type NotificationListQuery,
+} from '../queries.js';
+import type { RouteDeps, RouteGroup } from './types.js';
+
+type NotificationRouteId =
+  'notifications.list' | 'notifications.read' | 'notifications.readAll' | 'notifications.delete';
+
+export function notificationRoutes(deps: RouteDeps): RouteGroup<NotificationRouteId> {
+  const store = deps.notifications;
+
+  return {
+    'notifications.list': {
+      summary: 'Notifications, newest first',
+      schema: {
+        querystring: NotificationListQuerySchema,
+        response: { 200: NotificationListResponseSchema },
+      },
+      handler: (request): NotificationListResponse => {
+        const query = request.query as NotificationListQuery;
+        const rows = store.list({
+          limit: query.limit + 1,
+          ...(query.unread === true ? { unreadOnly: true } : {}),
+          ...(query.cursor === undefined ? {} : { after: decodeNotificationCursor(query.cursor) }),
+        });
+
+        const page = rows.slice(0, query.limit);
+        const last = page.at(-1);
+        return {
+          notifications: page,
+          // Always the total, never the count of what this page happened to
+          // contain: the badge counts what is waiting, not what is on screen.
+          unreadCount: store.unreadCount(),
+          ...(rows.length > query.limit && last !== undefined
+            ? {
+                nextCursor: encodeNotificationCursor({
+                  createdAtMs: last.createdAtMs,
+                  id: last.id,
+                }),
+              }
+            : {}),
+        };
+      },
+    },
+
+    'notifications.read': {
+      summary: 'Mark one notification read',
+      schema: { params: IdParamsSchema, response: { 200: NotificationSchema } },
+      handler: (request): Notification => {
+        const { id } = request.params as IdParams;
+        const updated = store.markRead(id);
+        if (updated === undefined) throw notFound(`No notification "${id}"`);
+        // The updated row rather than a 204, so a client can reconcile one item
+        // instead of refetching a list it is in the middle of scrolling.
+        return updated;
+      },
+    },
+
+    'notifications.readAll': {
+      summary: 'Mark every notification read',
+      schema: {},
+      handler: (_request, reply): FastifyReply => {
+        store.markAllRead();
+        return reply.status(204).send();
+      },
+    },
+
+    'notifications.delete': {
+      summary: 'Delete one notification',
+      schema: { params: IdParamsSchema },
+      handler: (request, reply): FastifyReply => {
+        const { id } = request.params as IdParams;
+        if (!store.delete(id)) throw notFound(`No notification "${id}"`);
+        return reply.status(204).send();
+      },
+    },
+  };
+}

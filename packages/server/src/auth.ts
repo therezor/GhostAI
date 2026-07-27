@@ -14,6 +14,7 @@
  */
 
 import { isLoopbackHost, type Config } from '@ghostai/protocol';
+import { systemClock, type Clock } from '@ghostai/core';
 import type { FastifyReply, FastifyRequest, onRequestHookHandler } from 'fastify';
 
 // Loads `@fastify/cookie`'s augmentation of FastifyRequest/FastifyReply without
@@ -22,6 +23,7 @@ import type {} from '@fastify/cookie';
 
 import type { AuthSession, AuthStore } from './auth-store.js';
 import { unauthorized } from './errors.js';
+import { MEDIA_SECRET_NAME, verifyMediaToken, type MediaClaim } from './signing.js';
 
 export const SESSION_COOKIE = 'ghost_session';
 const BEARER_PREFIX = 'bearer ';
@@ -138,6 +140,65 @@ export function createAuthHook(options: AuthHookOptions): onRequestHookHandler {
     }
 
     SESSIONS.set(request, session);
+    done();
+  };
+}
+
+/**
+ * The verified media claim for a request, kept the same way sessions are.
+ *
+ * Separate map, separate accessor: a route reading `sessionOf` must not
+ * accidentally be satisfied by a signature, and a route reading `mediaClaimOf`
+ * must not be satisfied by a session. The two credentials authorise different
+ * things — one is "this user", the other is "this file" — and conflating them
+ * is how a signature ends up granting more than the file it names.
+ */
+const MEDIA_CLAIMS = new WeakMap<FastifyRequest, MediaClaim>();
+
+export function mediaClaimOf(request: FastifyRequest): MediaClaim | undefined {
+  return MEDIA_CLAIMS.get(request);
+}
+
+export interface SignedHookOptions {
+  readonly auth: AuthStore;
+  readonly clock?: Clock;
+}
+
+/**
+ * The hook the one `signed` route in the manifest is registered with.
+ *
+ * A session is deliberately not accepted here. The point of the signed URL is
+ * that it works where a credential cannot travel — an `<img src>` — and
+ * accepting a cookie as well would make the signature optional, which is the
+ * same as not having one.
+ *
+ * Note what this hook does *not* do: it does not decide whether authentication
+ * is enabled. A signature is checked whether or not the server has a password,
+ * because it is not standing in for a login — it is naming a file.
+ */
+export function createSignedHook(options: SignedHookOptions): onRequestHookHandler {
+  const clock = options.clock ?? systemClock;
+
+  return function verifySignature(request, _reply, done) {
+    const token = (request.params as { token?: unknown } | undefined)?.token;
+    if (typeof token !== 'string' || token === '') {
+      done(unauthorized('A signed URL is required'));
+      return;
+    }
+
+    const claim = verifyMediaToken(
+      options.auth.ensureSecret(MEDIA_SECRET_NAME),
+      token,
+      clock.now(),
+    );
+    if (claim === undefined) {
+      // One message for forged, malformed and expired, for the same reason the
+      // session hook gives one for all three of its failures.
+      done(unauthorized('Invalid or expired signed URL'));
+      return;
+    }
+
+    MEDIA_CLAIMS.set(request, claim);
     done();
   };
 }

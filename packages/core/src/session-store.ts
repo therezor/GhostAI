@@ -130,6 +130,27 @@ export interface ListSessionsOptions {
   readonly limit?: number;
   readonly offset?: number;
   readonly origin?: string;
+  /**
+   * Keyset cursor: the `(updatedAtMs, key)` of the last row already seen.
+   *
+   * Preferred over `offset` for anything a user pages through, because the
+   * ordering key moves. A turn landing between two requests bumps a session to
+   * the front, which shifts every offset behind it by one and makes an
+   * offset-paged reader see one row twice and miss another. A keyset predicate
+   * asks for "strictly after this row in the sort order" instead, so a row that
+   * moves forward is one the reader has already passed and a row that does not
+   * move keeps its place.
+   *
+   * Ignored unless both fields are present — half a cursor cannot address a
+   * position in a two-column ordering.
+   */
+  readonly after?: SessionCursor;
+}
+
+/** A position in the `updated_at_ms DESC, key ASC` ordering `listSessions` uses. */
+export interface SessionCursor {
+  readonly updatedAtMs: number;
+  readonly key: string;
 }
 
 export interface ReadMessagesOptions {
@@ -342,15 +363,30 @@ export class SessionStore {
 
   listSessions(options: ListSessionsOptions = {}): SessionSummaryRecord[] {
     this.#assertOpen();
-    const { limit = 50, offset = 0, origin } = options;
+    const { limit = 50, offset = 0, origin, after } = options;
 
+    // The predicate is the sort order written as a comparison: strictly older,
+    // or the same instant and a key that sorts later. Bound as `?` twice each
+    // rather than named, because `node:sqlite` binds positionally.
     const rows = this.#stmt(
       `SELECT s.*, (SELECT COUNT(*) FROM messages m WHERE m.session_key = s.key) AS message_count
          FROM sessions s
         WHERE (? IS NULL OR s.origin = ?)
+          AND (? IS NULL
+               OR s.updated_at_ms < ?
+               OR (s.updated_at_ms = ? AND s.key > ?))
         ORDER BY s.updated_at_ms DESC, s.key ASC
         LIMIT ? OFFSET ?`,
-    ).all(origin ?? null, origin ?? null, limit, offset);
+    ).all(
+      origin ?? null,
+      origin ?? null,
+      after?.updatedAtMs ?? null,
+      after?.updatedAtMs ?? null,
+      after?.updatedAtMs ?? null,
+      after?.key ?? null,
+      limit,
+      offset,
+    );
 
     return rows.map((row) => ({
       ...rowToSession(row),

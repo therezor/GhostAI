@@ -63,6 +63,7 @@ export {
   CANCELLED_TOOL_RESULT,
   TOOL_HEARTBEAT_MS,
   type AgentLoopOptions,
+  type PromptPreviewInput,
   type TurnInput,
   type TurnResult,
 } from './loop.js';
