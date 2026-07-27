@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "description": "GhostAI command line interface.",
   "type": "module",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "exports": {
     ".": {
       "development": "./src/index.ts",
@@ -21,7 +21,7 @@
     "ghost": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && tsc -b",
     "typecheck": "tsc -b",
     "test": "vitest run",
     "lint": "eslint src"

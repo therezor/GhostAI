@@ -9,7 +9,7 @@ A self-hosted, security-first AI agent written in TypeScript. One process, one p
 - **Security in the core** — encrypted credential vault, workspace jail, argv-only exec (never a shell), SSRF/DNS-rebinding guard, tool-output nonce wrapping, and per-tool approval prompts.
 - **Extensible** — a versioned plugin SDK for tools, channels, providers, TTS/STT, and embedders.
 
-> **Status: pre-alpha.** The monorepo and toolchain are set up; the packages are empty. See [Build order](#build-order) below.
+> **Status: pre-alpha.** The toolchain and `@ghostai/protocol` are done; the remaining packages are empty. See [Build order](#build-order) below.
 
 ---
 
@@ -89,7 +89,8 @@ The agent must never reach back into the HTTP server. Keep it that way.
 ## Conventions
 
 - **ESM only.** `"type": "module"` everywhere, `.js` extensions in relative imports (NodeNext resolution).
-- **`isolatedDeclarations` is on.** Every exported function needs an explicit return type. This keeps declaration emit fast and makes the public API surface reviewable in diffs.
+- **`isolatedDeclarations` is on** everywhere except `protocol`. Every exported function needs an explicit return type; this keeps declaration emit fast and makes the public API surface reviewable in diffs. `protocol` is the one exception, because a Zod schema export _is_ an inference result and cannot carry a hand-written annotation without recreating the drift the schemas exist to prevent.
+- **`tsup` owns the JavaScript, `tsc -b` owns the types.** `emitDeclarationOnly` keeps `tsc` from overwriting the bundle, and `clean: false` keeps `tsup` from deleting the declarations. `pnpm build` runs both, in that order. Delete `dist` to force a full rebuild.
 - **Zod is the single source of truth** for config, wire messages, and tool parameters. Types come from `z.infer`; JSON Schema comes from `z.toJSONSchema`. Never hand-write a type that a schema could produce.
 - **Errors are values, not strings.** Never branch on substrings of an error message. Return a typed discriminated union with a `kind` field.
 - **One cancellation mechanism.** A single `AbortSignal` threads from the request through the loop, the provider fetch, tool execution, and any child process. No parallel `_running` flags or bespoke timeouts.
@@ -131,7 +132,7 @@ pnpm workspace, Turborepo, TypeScript project references, Vitest with coverage g
 </details>
 
 <details>
-<summary><b>Step 2 — <code>@ghostai/protocol</code></b></summary>
+<summary><b>Step 2 — <code>@ghostai/protocol</code></b> ✅ done</summary>
 
 Zod schemas and the types derived from them. No logic, no I/O.
 
@@ -141,7 +142,15 @@ Zod schemas and the types derived from them. No logic, no I/O.
 - Automation job schema (`at` | `every` | `cron` schedules; `scheduled` | `heartbeat` payloads).
 - `parseMentions()` — extracts `@kb:`, `@mcp:`, `@skill:` from message text. Lives here so every channel gets identical behaviour, not just the web UI.
 
-**Done when:** every schema round-trips through `z.toJSONSchema`, `parseMentions` is unit-tested against quoted/unquoted/adjacent forms, and the package has zero runtime dependencies beyond `zod`.
+**Done when:** every schema round-trips through `z.toJSONSchema`, `parseMentions` is unit-tested against quoted/unquoted/adjacent forms, and the package has zero runtime dependencies beyond `zod`. ✅
+
+Notes for later steps:
+
+- `isolatedDeclarations` is off in `packages/protocol/tsconfig.json` only. Zod schema exports are inference results, so the declaration emitter cannot type them (TS9010); the alternative is hand-writing a type beside every schema, which is the drift this package exists to remove. Every other package keeps the flag on.
+- `PROTOCOL_SCHEMAS` is the registry of every exported schema. The round-trip test iterates it, and a reflection test fails if a module exports a `*Schema` that isn't registered — so `@ghostai/server` can hand the whole object to `@fastify/swagger` as the `$defs` pool.
+- `providers` in the config tree is `Record<string, ProviderConfig>`. `@ghostai/providers` narrows it to `Record<ProviderId, ProviderConfig>` from its own `PROVIDERS` table, since protocol cannot depend on a package downstream of it.
+- Automation schedule and payload variants are `strictObject`, not `object`. Key-stripping would silently drop a stray `atMs` from a cron schedule and run the job on the wrong trigger.
+
 </details>
 
 <details>
@@ -239,4 +248,4 @@ Detailed in the design document. Each is independently shippable:
 
 ## License
 
-Apache-2.0
+MIT

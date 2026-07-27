@@ -69,7 +69,7 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
     version: '0.0.0',
     description: cfg.description,
     type: 'module',
-    license: 'Apache-2.0',
+    license: 'MIT',
     exports: {
       '.': {
         development: './src/index.ts',
@@ -84,7 +84,7 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
     files: ['dist', '!dist/**/*.test.*'],
     ...(cfg.bin ? { bin: cfg.bin } : {}),
     scripts: {
-      build: 'tsup',
+      build: 'tsup && tsc -b',
       typecheck: 'tsc -b',
       test: 'vitest run',
       lint: 'eslint src',
@@ -111,7 +111,10 @@ export default defineConfig({
   entry: ['src/index.ts'],
   format: ['esm'],
   target: 'node22',
-  clean: true,
+  // tsc -b writes its declarations and .tsbuildinfo into this same dist, so
+  // cleaning here would delete them and leave tsc believing they still exist.
+  // Removing dist by hand is what forces a full rebuild of both tools.
+  clean: false,
   dts: false, // tsc -b emits declarations; rollup-plugin-dts is the slow path
   sourcemap: true,
 });

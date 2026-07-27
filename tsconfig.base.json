@@ -25,6 +25,11 @@
     "sourceMap": true,
     "incremental": true,
 
+    // tsup owns the JavaScript, tsc owns the types. Without this, `tsc -b`
+    // also emits per-file JS into the same `dist` and overwrites tsup's
+    // bundled `index.js` — so which one ships depends on which ran last.
+    "emitDeclarationOnly": true,
+
     "skipLibCheck": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
