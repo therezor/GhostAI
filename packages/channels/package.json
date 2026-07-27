@@ -1,0 +1,35 @@
+{
+  "name": "@ghostai/channels",
+  "version": "0.0.0",
+  "description": "The channel contract and the manager bridging MessageBus to the session hub.",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testkit": {
+      "development": "./src/testkit/index.ts",
+      "types": "./dist/testkit/index.d.ts",
+      "default": "./dist/testkit/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "!dist/**/*.test.*"
+  ],
+  "scripts": {
+    "build": "tsup && tsc -b",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@ghostai/core": "workspace:*",
+    "@ghostai/protocol": "workspace:*"
+  }
+}

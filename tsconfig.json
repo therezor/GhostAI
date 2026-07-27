@@ -10,6 +10,7 @@
     { "path": "packages/runtime" },
     { "path": "packages/server" },
     { "path": "packages/channels" },
+    { "path": "packages/web" },
     { "path": "packages/cli" },
     { "path": "examples/loopback-channel" }
   ]

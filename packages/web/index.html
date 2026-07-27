@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark light" />
+    <title>GhostAI</title>
+
+    <!--
+      The pre-paint stamp. Blocking and inline on purpose: it has to run before
+      the first paint, and anything deferred, bundled or async paints the
+      default theme first and corrects it a frame later — which is the flash.
+
+      It duplicates `src/theme/theme.ts` in about ten lines because it cannot
+      import it: a module script is deferred by definition. `theme.test.ts`
+      extracts this script, runs it, and asserts it agrees with the module on
+      every combination of stored preference and OS setting, so the duplication
+      cannot drift silently.
+    -->
+    <script>
+      (function () {
+        var stored = null;
+        try {
+          stored = localStorage.getItem('ghostai.theme');
+        } catch (error) {
+          /* Storage is unreachable in a cross-origin iframe. Fall back to the OS. */
+        }
+
+        var light =
+          stored === 'light' ||
+          (stored !== 'dark' && window.matchMedia('(prefers-color-scheme: light)').matches);
+
+        document.documentElement.dataset.theme = light ? 'light' : 'dark';
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

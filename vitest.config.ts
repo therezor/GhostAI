@@ -17,6 +17,11 @@ const THRESHOLDS: Record<string, { lines: number; branches: number }> = {
   // manager is the only thing standing between a channel and another channel's
   // replies. Both are small enough that the default bar would prove nothing.
   channels: { lines: 90, branches: 85 },
+  // The token layer is the UI's `security`: an untested branch in the contrast
+  // resolver or a gate regex is a rule that reports "clean" without checking.
+  // Only the `.ts` half is measured — the components are `.tsx`, and Step 19's
+  // Playwright run is what covers those.
+  web: { lines: 85, branches: 80 },
   providers: { lines: 80, branches: 75 },
   tools: { lines: 80, branches: 75 },
   mcp: { lines: 80, branches: 75 },

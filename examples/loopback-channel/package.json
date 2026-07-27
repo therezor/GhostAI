@@ -1,0 +1,26 @@
+{
+  "name": "@ghostai/example-loopback-channel",
+  "version": "0.0.0",
+  "description": "A reference channel with no network: the shortest complete implementation of the channel contract.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@ghostai/channels": "workspace:*",
+    "@ghostai/core": "workspace:*",
+    "@ghostai/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@ghostai/agent": "workspace:*",
+    "@ghostai/providers": "workspace:*",
+    "@ghostai/security": "workspace:*",
+    "@ghostai/server": "workspace:*",
+    "@ghostai/tools": "workspace:*"
+  }
+}

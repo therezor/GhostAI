@@ -388,40 +388,13 @@ Notes for later steps:
 </details>
 
 <details>
-<summary><b>Step 15 — <code>@ghostai/web</code>: the token layer</b></summary>
+<summary><b>Step 15 — <code>@ghostai/web</code>: the token layer</b> ✅ done</summary>
 
-Vite 6, React 19, Tailwind 4. Tailwind 4 is CSS-first, so **there is no `tailwind.config.js`** — the tokens _are_ the config. Ship the whole token layer before the first component.
+Vite 8, React 19, Tailwind 4. Tailwind 4 is CSS-first, so **there is no `tailwind.config.js`** — the tokens _are_ the config, in two `@theme` blocks inside `tokens.css`. The whole token layer shipped before the first component.
 
-Every colour derives from a small seed block, which is what makes a second theme fourteen numbers instead of a second stylesheet:
+Every colour derives from a seed block, which is what makes a second theme two dozen numbers instead of a second stylesheet. `src/styles/tokens.css` holds the dark seeds, the light seeds, the ~30 derived tokens and the Tailwind theme; nothing else in the package contains a colour.
 
-```css
-:root {
-  color-scheme: dark light;
-
-  --seed-accent-l: 0.763; /* the brand gold, measured in OKLCH */
-  --seed-accent-c: 0.155;
-  --seed-accent-h: 77.3;
-  --seed-accent-fg-l: 0.763; /* accent as *text*; diverges in light */
-
-  --seed-surface-0: 0.159; /* page     */
-  --seed-surface-1: 0.192; /* sunken   */
-  --seed-surface-2: 0.225; /* card     */
-  --seed-surface-3: 0.258; /* elevated */
-
-  --seed-overlay-rgb: 255 255 255; /* borders, hover, every alpha fill */
-  --seed-hover-a: 0.05;
-  --seed-active-a: 0.09;
-
-  --seed-text-1: 0.931;
-  --seed-text-2: 0.686;
-  --seed-text-3: 0.545;
-
-  --seed-semantic-c: 0.168;
-  --seed-semantic-l: 0.75;
-}
-```
-
-Light is the same block with different numbers: `--seed-accent-fg-l: 0.605`, surfaces `0.975 / 0.945 / 0.995 / 1.000`, `--seed-overlay-rgb: 0 0 0`, text `0.235 / 0.470 / 0.600`, `--seed-semantic-l: 0.58`. Resolution is `prefers-color-scheme` with `:root[data-theme]` overriding in **both** directions, stamped on `<html>` by a blocking inline script so the page never flashes the wrong theme.
+Resolution is `prefers-color-scheme` with `:root[data-theme]` overriding in **both** directions, stamped on `<html>` by a blocking inline script in `index.html` so the page never flashes the wrong theme.
 
 Three decisions worth knowing before writing a component:
 
@@ -431,9 +404,25 @@ Three decisions worth knowing before writing a component:
 
 Additions with nothing to port: a real `:focus-visible` layer, a grabbable `0.5rem` scrollbar, and self-hosted Inter and JetBrains Mono via `@fontsource-variable` — a font CDN in a self-hosted privacy-first product leaks every user's IP and breaks air-gapped installs.
 
-Three blocking lint gates: no `px` literals outside `tokens.css`; no raw hex, `rgb()` or `oklch()` outside `tokens.css`; and no `--color-accent` in a text or border position.
+Three blocking gates: no `px` literals outside `tokens.css`; no raw hex, `rgb()` or `oklch()` outside `tokens.css`; and no `--color-accent` in a text or border position.
 
-**Done when:** a page rendering nothing but a token swatch grid passes all three gates, every text-on-surface pairing meets WCAG AA **in both themes** under an automated contrast assertion, the theme toggles without a reload or a flash, the page reflows at 200% browser font size, and it renders with the network blocked.
+**Done when:** a page rendering nothing but a token swatch grid passes all three gates, every text-on-surface pairing meets WCAG AA **in both themes** under an automated contrast assertion, the theme toggles without a reload or a flash, the page reflows at 200% browser font size, and it renders with the network blocked. ✅ (142 tests; 88 contrast assertions across both themes; the gate sweep runs over `index.html` and every shipped `.css`/`.tsx`)
+
+Notes for later steps:
+
+- **The seed numbers in the plan did not survive the contrast assertion, which is the point of having written it first.** Three classes of change: light text and semantic text went darker (`--seed-text-3` `0.600 → 0.520`, `--seed-semantic-fg-l` `0.58 → 0.49`) because the planned values measured 3.9–4.4:1 on the sunken surface; a single `--seed-semantic-c: 0.168` turned out to be **outside sRGB** for blue and red at the fill lightness, so it is now `0.127` dark / `0.138` light — the largest chroma the tightest hue can hold; and the light surfaces lost their accent tint (`--seed-neutral-c: 0` in light) because `oklch(1 0.005 77.3)` — the planned pure-white top surface — is not a colour a display can show.
+- **Chroma is a per-theme seed, not a constant.** `--seed-accent-fg-c` and `--seed-semantic-fg-c` exist because sRGB holds far less chroma at L 0.49 than at L 0.763: a gold that kept C 0.155 while its lightness dropped for the light theme would be clipped to a colour nobody chose, and clipped colours make the contrast maths fiction. **Any later step that adds a role adds four seeds, not two.**
+- **`@theme inline`, never plain `@theme`.** The utility has to emit `var(--surface-0)` and resolve at paint time; a plain `@theme` freezes whichever value was current when Tailwind ran, which is to say dark. This is what makes the toggle one attribute write with no stylesheet swap.
+- **The light seeds are declared twice** — a media query and an attribute selector cannot share a selector list — and `styles/tokens.test.ts` asserts the two blocks declare the same properties with the same values, plus that every dark seed has a light counterpart. A seed missing from the light block silently keeps its dark value, which is how one component ends up still inverted.
+- **The gates are functions over source text, not an ESLint rule.** The same three rules have to hold in CSS, in TSX class strings and in `index.html`, and no single linter reads all three. They run two ways: `tokens/gates.test.ts` sweeps the package under `pnpm test`, and `pnpm --filter @ghostai/web lint` runs `run-gates.ts` as a command. `src/tokens/**` is excluded from the sweep — it contains every literal it bans — and so are test files. **Step 19 owns making the command a CI step in its own right.**
+- **Contrast is measured against the file that ships.** `tokens/sheet.ts` parses `tokens.css`, resolves `var()` chains for one theme, and `tokens/color.ts` converts OKLCH → sRGB → WCAG luminance. A TypeScript palette object that generated the stylesheet would have left the stylesheet free to drift from the thing under test. The parser accepts only the subset the sheet uses and **throws on anything else** — including nested rules — so a token it could not see is a build error rather than a token nothing checks. `color-mix()` is deliberately unused for that reason; soft fills are `oklch(… / α)`.
+- **The gamut assertion is load-bearing for every other assertion.** An out-of-sRGB colour is clipped by the display, so its measured contrast describes a colour the user never sees.
+- **The pre-paint script is tested by extraction, not by copy.** `theme.test.ts` pulls the inline script out of the real `index.html`, runs it against a stubbed DOM and asserts it agrees with `theme.ts` on all eight combinations of stored preference and OS setting. The stored value is the _preference_ (`dark | light | system`); the stamped value is the _resolution_ — storing the resolution would turn "follow the system" into "dark forever, because it was dark when you first loaded".
+- **`localStorage` is stubbed in tests rather than taken from the environment.** Node 26 ships its own experimental global that shadows jsdom's and is inert without `--localstorage-file`.
+- **`ghost serve` now finds a UI.** `@ghostai/web` is a dependency of `@ghostai/cli`, so `resolveUiRoot(undefined)` resolves `dist/` through the package graph and turbo builds the SPA before the CLI. Two `serve.test.ts` cases assumed the package did not exist and now assert against whichever state the checkout is in — built or not — because both are real.
+- **`useTheme` is the only React state here.** Step 16's toggle should consume it rather than reimplement it, and `watchSystemTheme` is why a `system` preference keeps tracking after first paint: the OS can flip at sunset and the pre-paint script only ran once.
+- **200% reflow and "renders with the network blocked" are structural, not visual, at this step.** The first is the `no-px` gate plus a rem-only type scale; the second is `self-contained.test.ts`, which fails on any external origin in the shipped source. Step 19's Playwright run is what observes both in a browser.
+- The package's `tsconfig.json` is the only one in the repo with `noEmit`: Vite owns the JavaScript, nothing imports `@ghostai/web` for its types, and `isolatedDeclarations` is off because a component's props are exactly the shape it cannot write a declaration for.
 
 </details>
 

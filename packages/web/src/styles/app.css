@@ -1,0 +1,14 @@
+/**
+ * The one stylesheet the app imports. Order matters: Tailwind's own layers
+ * first, then the tokens they resolve against, then the base layer that reads
+ * the tokens.
+ *
+ * There is no `tailwind.config.js`. Tailwind 4 is CSS-first — `@theme` in
+ * `tokens.css` *is* the config, which is what keeps the token layer a single
+ * file rather than a stylesheet and a JavaScript object that have to agree.
+ */
+
+@import 'tailwindcss';
+
+@import './tokens.css';
+@import './base.css';
