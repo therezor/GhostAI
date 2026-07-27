@@ -1,7 +1,7 @@
 {
   "name": "@ghostai/server",
   "version": "0.0.0",
-  "description": "Fastify app, boot policy, and authentication.",
+  "description": "Fastify app, boot policy, authentication, and the session hub.",
   "type": "module",
   "license": "MIT",
   "exports": {
@@ -27,6 +27,7 @@
     "@fastify/cookie": "^11.0.0",
     "@fastify/rate-limit": "^10.2.0",
     "@fastify/swagger": "^9.4.0",
+    "@ghostai/agent": "workspace:*",
     "@ghostai/core": "workspace:*",
     "@ghostai/protocol": "workspace:*",
     "@ghostai/security": "workspace:*",

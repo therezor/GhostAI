@@ -1,0 +1,234 @@
+import { describe, expect, it } from 'vitest';
+
+import type { ApprovalRequest } from '@ghostai/agent';
+import type { Clock, TimerHandle } from '@ghostai/core';
+
+import { HubApprovalGate } from './approvals.js';
+
+const START_MS = 1_700_000_000_000;
+const TIMEOUT_MS = 60_000;
+
+interface ManualClock extends Clock {
+  advance(ms: number): void;
+  readonly pending: number;
+}
+
+/**
+ * Timers that fire when the test says so.
+ *
+ * The gate's deadline is the thing under test in two of the cases below, and a
+ * clock that is a parameter states the advance where the assertion is instead
+ * of interleaving `vi.advanceTimersByTime` with the promise it is racing.
+ */
+function manualClock(): ManualClock {
+  const timers = new Map<number, { at: number; callback: () => void }>();
+  let elapsed = 0;
+  let nextId = 1;
+
+  return {
+    now: () => START_MS + elapsed,
+    monotonic: () => elapsed,
+    setTimeout(callback, delayMs) {
+      const id = nextId++;
+      timers.set(id, { at: elapsed + delayMs, callback });
+      return id as unknown as TimerHandle;
+    },
+    clearTimeout(handle) {
+      timers.delete(handle as unknown as number);
+    },
+    sleep: () => Promise.resolve(),
+    advance(ms) {
+      elapsed += ms;
+      for (const [id, timer] of [...timers].sort((a, b) => a[1].at - b[1].at)) {
+        if (timer.at > elapsed) continue;
+        timers.delete(id);
+        timer.callback();
+      }
+    },
+    get pending() {
+      return timers.size;
+    },
+  };
+}
+
+interface RequestOptions {
+  readonly sessionKey?: string;
+  readonly callId?: string;
+  readonly name?: string;
+  readonly signal?: AbortSignal;
+  readonly expiresAtMs?: number;
+}
+
+function approvalRequest(options: RequestOptions = {}): ApprovalRequest {
+  return {
+    sessionKey: options.sessionKey ?? 'web:1',
+    turnId: 'turn-1',
+    callId: options.callId ?? 'call-1',
+    name: options.name ?? 'exec',
+    args: { argv: ['ls'] },
+    risk: 'exec',
+    expiresAtMs: options.expiresAtMs ?? START_MS + TIMEOUT_MS,
+    signal: options.signal ?? new AbortController().signal,
+  };
+}
+
+describe('HubApprovalGate', () => {
+  it('parks a request until a client answers it', async () => {
+    const gate = new HubApprovalGate({ clock: manualClock() });
+    const pending = gate.request(approvalRequest());
+
+    expect(gate.pendingCount).toBe(1);
+    expect(gate.resolve('call-1', true, 'once')).toBe(true);
+
+    await expect(pending).resolves.toEqual({ approved: true, scope: 'once' });
+    expect(gate.pendingCount).toBe(0);
+  });
+
+  it('answers to nobody for an unknown call id', () => {
+    const gate = new HubApprovalGate({ clock: manualClock() });
+    expect(gate.resolve('call-nobody-asked-about', true, 'once')).toBe(false);
+  });
+
+  it('does not remember an answer scoped to once', async () => {
+    const gate = new HubApprovalGate({ clock: manualClock() });
+
+    const first = gate.request(approvalRequest({ callId: 'a' }));
+    gate.resolve('a', true, 'once');
+    await first;
+
+    const second = gate.request(approvalRequest({ callId: 'b' }));
+    expect(gate.pendingCount).toBe(1);
+    gate.resolve('b', true, 'once');
+    await second;
+  });
+
+  it('remembers a session-scoped answer for that session alone', async () => {
+    const gate = new HubApprovalGate({ clock: manualClock() });
+
+    const first = gate.request(approvalRequest({ callId: 'a', sessionKey: 'web:1' }));
+    gate.resolve('a', true, 'session');
+    await first;
+
+    // Same session, same tool: answered without asking.
+    await expect(
+      gate.request(approvalRequest({ callId: 'b', sessionKey: 'web:1' })),
+    ).resolves.toEqual({ approved: true, scope: 'session' });
+    expect(gate.pendingCount).toBe(0);
+
+    // Another session has not answered anything.
+    void gate.request(approvalRequest({ callId: 'c', sessionKey: 'web:2' }));
+    expect(gate.pendingCount).toBe(1);
+  });
+
+  it('remembers an always-scoped answer across sessions', async () => {
+    const gate = new HubApprovalGate({ clock: manualClock() });
+
+    const first = gate.request(approvalRequest({ callId: 'a', sessionKey: 'web:1' }));
+    gate.resolve('a', true, 'always');
+    await first;
+
+    await expect(
+      gate.request(approvalRequest({ callId: 'b', sessionKey: 'telegram:9' })),
+    ).resolves.toEqual({ approved: true, scope: 'always' });
+  });
+
+  it('remembers a refusal exactly like an approval', async () => {
+    const gate = new HubApprovalGate({ clock: manualClock() });
+
+    const first = gate.request(approvalRequest({ callId: 'a' }));
+    gate.resolve('a', false, 'session');
+    await expect(first).resolves.toEqual({ approved: false, scope: 'session' });
+
+    await expect(gate.request(approvalRequest({ callId: 'b' }))).resolves.toEqual({
+      approved: false,
+      scope: 'session',
+    });
+  });
+
+  it('scopes memory by tool name, so another tool still asks', async () => {
+    const gate = new HubApprovalGate({ clock: manualClock() });
+
+    const first = gate.request(approvalRequest({ callId: 'a', name: 'exec' }));
+    gate.resolve('a', true, 'session');
+    await first;
+
+    void gate.request(approvalRequest({ callId: 'b', name: 'write_file' }));
+    expect(gate.pendingCount).toBe(1);
+  });
+
+  it('denies when the deadline passes unanswered', async () => {
+    const clock = manualClock();
+    const gate = new HubApprovalGate({ clock });
+    const pending = gate.request(approvalRequest());
+
+    clock.advance(TIMEOUT_MS);
+
+    await expect(pending).resolves.toMatchObject({ approved: false });
+    expect(gate.pendingCount).toBe(0);
+    expect(clock.pending).toBe(0);
+  });
+
+  it('denies immediately when the deadline has already passed', async () => {
+    const clock = manualClock();
+    const gate = new HubApprovalGate({ clock });
+    const pending = gate.request(approvalRequest({ expiresAtMs: START_MS - 1 }));
+
+    clock.advance(0);
+
+    await expect(pending).resolves.toMatchObject({ approved: false });
+  });
+
+  it('drops a prompt when its turn is cancelled', async () => {
+    const clock = manualClock();
+    const gate = new HubApprovalGate({ clock });
+    const controller = new AbortController();
+    const pending = gate.request(approvalRequest({ signal: controller.signal }));
+
+    controller.abort();
+
+    await expect(pending).resolves.toMatchObject({ approved: false });
+    expect(gate.pendingCount).toBe(0);
+    // The timer is disarmed too: a cancelled turn must not leave the clock
+    // holding a callback for a prompt nobody can see.
+    expect(clock.pending).toBe(0);
+  });
+
+  it('refuses without parking when the turn is already cancelled', async () => {
+    const gate = new HubApprovalGate({ clock: manualClock() });
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      gate.request(approvalRequest({ signal: controller.signal })),
+    ).resolves.toMatchObject({ approved: false });
+    expect(gate.pendingCount).toBe(0);
+  });
+
+  it('supersedes an earlier prompt that reused a call id', async () => {
+    const gate = new HubApprovalGate({ clock: manualClock() });
+    const first = gate.request(approvalRequest({ callId: 'call-1' }));
+    const second = gate.request(approvalRequest({ callId: 'call-1' }));
+
+    await expect(first).resolves.toMatchObject({ approved: false });
+    expect(gate.pendingCount).toBe(1);
+
+    gate.resolve('call-1', true, 'once');
+    await expect(second).resolves.toMatchObject({ approved: true });
+  });
+
+  it('settles pending prompts and forgets memory when a session closes', async () => {
+    const gate = new HubApprovalGate({ clock: manualClock() });
+
+    const remembered = gate.request(approvalRequest({ callId: 'a', sessionKey: 'web:1' }));
+    gate.resolve('a', true, 'session');
+    await remembered;
+
+    const pending = gate.request(approvalRequest({ callId: 'b', sessionKey: 'web:2' }));
+    gate.clearSession('web:2');
+    await expect(pending).resolves.toMatchObject({ approved: false });
+
+    gate.clearSession('web:1');
+    void gate.request(approvalRequest({ callId: 'c', sessionKey: 'web:1' }));
+    expect(gate.pendingCount).toBe(1);
+  });
+});

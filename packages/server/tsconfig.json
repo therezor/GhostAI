@@ -15,6 +15,9 @@
     },
     {
       "path": "../security"
+    },
+    {
+      "path": "../agent"
     }
   ]
 }

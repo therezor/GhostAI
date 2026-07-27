@@ -100,6 +100,16 @@ export function notFound(message: string): HttpError {
 
 export interface ResolvedError {
   readonly status: number;
+  /**
+   * The wire code, still narrowed to the union.
+   *
+   * `body.error.code` is the same value widened to `string`, because the
+   * response schema types it that way — a document generated from it must not
+   * pin clients to today's list. The WebSocket's `error` event does carry the
+   * union, and a failing turn resolves through here rather than deriving a
+   * second mapping from a kind to a code.
+   */
+  readonly code: ErrorCode;
   readonly body: ErrorResponse;
   /** The error to log, normalised. Never the body — the body is redacted. */
   readonly cause: GhostError;
@@ -143,6 +153,7 @@ export function resolveError(value: unknown): ResolvedError {
   if (isHttpError(value)) {
     return {
       status: value.status,
+      code: value.code,
       body: errorBody(value.code, value.message, value.details),
       cause: value,
     };
@@ -150,9 +161,11 @@ export function resolveError(value: unknown): ResolvedError {
 
   const clientStatus = clientErrorStatus(value);
   if (clientStatus !== undefined && !isGhostError(value)) {
+    const code = codeForStatus(clientStatus);
     return {
       status: clientStatus,
-      body: errorBody(codeForStatus(clientStatus), (value as Error).message),
+      code,
+      body: errorBody(code, (value as Error).message),
       cause: toGhostError(value, 'invalid_input'),
     };
   }
@@ -162,7 +175,12 @@ export function resolveError(value: unknown): ResolvedError {
   // A `GhostError` is written for an operator; anything else at 5xx is not.
   const expected = isGhostError(value);
   const message = mapped.status >= 500 && !expected ? OPAQUE_500 : ghost.message;
-  return { status: mapped.status, body: errorBody(mapped.code, message), cause: ghost };
+  return {
+    status: mapped.status,
+    code: mapped.code,
+    body: errorBody(mapped.code, message),
+    cause: ghost,
+  };
 }
 
 export function errorBody(

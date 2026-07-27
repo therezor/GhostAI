@@ -24,6 +24,21 @@ export {
   type ServerOptions,
 } from './app.js';
 
+export { HubApprovalGate, type HubApprovalGateOptions } from './approvals.js';
+
+export {
+  DEFAULT_MAX_QUEUE_DEPTH,
+  DEFAULT_MAX_SESSIONS,
+  RESUME_MESSAGE_LIMIT,
+  SessionHub,
+  type ConnectOptions,
+  type HubClient,
+  type SessionHubOptions,
+  type TurnRunner,
+} from './hub.js';
+
+export { ReplayBuffer, type ReplaySlice, type SequencedServerMessage } from './replay.js';
+
 export {
   AuthStore,
   TOKEN_ID_BYTES,

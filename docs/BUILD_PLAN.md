@@ -290,7 +290,7 @@ Notes for later steps:
 </details>
 
 <details>
-<summary><b>Step 12 — <code>SessionHub</code>: turns, queueing, replay, fanout</b></summary>
+<summary><b>Step 12 — <code>SessionHub</code>: turns, queueing, replay, fanout</b> ✅ done</summary>
 
 The protocol specifies `message.queued`, `session.status.queueDepth`, `session_busy` and `session.resume { lastSeq }`, and none of it has an implementation. `AgentLoop` will happily run two turns on one session key and interleave their writes. This is the one genuinely new design in the phase.
 
@@ -302,7 +302,24 @@ The protocol specifies `message.queued`, `session.status.queueDepth`, `session_b
 - The Step 10 approval gate is implemented here, resolving against inbound `tool.approve` and denying on `expiresAtMs`.
 - Every inbound frame is `safeParse`d; a parse failure is an `error` event, never a throw.
 
-**Done when:** tests cover two concurrent messages on one session, stop mid-tool, an exact replay from mid-stream, a resume past the ring boundary, and three connections receiving one stream.
+**Done when:** tests cover two concurrent messages on one session, stop mid-tool, an exact replay from mid-stream, a resume past the ring boundary, and three connections receiving one stream. ✅
+
+Notes for later steps:
+
+- **`@ghostai/server` now depends on `@ghostai/agent`.** That arrow was always going to appear: the hub drives `AgentLoop.run()`. It points one way only — the loop still cannot see a transport — and pnpm's isolated `node_modules` plus the layering rule keep it that way.
+- **The hub takes a `TurnRunner`, not an `AgentLoop`.** Two methods, `run` and `steer`, which `AgentLoop` satisfies structurally. That is what lets `hub.test.ts` drive a scripted async generator instead of standing up a provider, a jail, a registry and a store to assert that a second message queues.
+- **Construction order for `ghost serve`:** the gate first, then the runtime, then the hub — `new HubApprovalGate()` → `createRuntime({ approvals })` → `new SessionHub({ store: runtime.store, loop: () => runtime.loop, approvals })`. The runtime needs the gate at construction and the hub needs the runtime, so the gate is built outside both. `loop` is a thunk for the same reason `reconfigure` rebuilds it: the next turn takes the new loop, the running one keeps its own.
+- **Sequenced means broadcast.** Every event carrying a `seq` goes to every subscriber of the session and into the ring; `connected`, `pong` and `error` are the only frames addressed to one connection. A targeted frame with a `seq` would make one client's `lastSeq` mean something different from another's.
+- **A replayed frame keeps the `seq` it was emitted with**, so a client must track the _maximum_ `seq` it has seen, not the last one it received: the `session.replay` envelope is a new event and therefore carries a higher number than the tail that follows it.
+- **The two resume answers are exclusive.** Covered by the ring: the verbatim tail, which includes the deltas of a turn still running. Past it: `complete: false` plus the stored tail, and no ring frames — a stored assistant message and the deltas that produced it are the same text twice.
+- **`message.ack.messageId` is the turn id**, not a stored row id. A queued message has not been persisted yet, and an ack that waited for persistence would wait for the turn in front of it — the one moment the client needs the ack. Step 15's client should key its optimistic bubble on it and reconcile against `turnId` when history arrives.
+- **`turn.stop` aborts the running turn and leaves the queue alone.** Each queued message is something the user deliberately sent, and there is no `message.dropped` event with which to report discarding one.
+- **`session_busy` is the queue cap**, the only place that code is emitted. Without a bound the queue fills from a socket and drains from a loop that may be blocked in a slow tool.
+- **Idle session state is evicted oldest-first past `maxSessions`**, and a reconnect to an evicted session lands on the same path as one past the ring boundary. Anything live — a client, a running turn, a queue — is never evicted; the cap yields rather than dropping work.
+- **`always`-scoped approvals live as long as the process.** Persisting "never ask me about this tool again" is a settings write, and Step 13 owns the route that could revoke it; a decision stored through a path nothing can undo is worse than one that expires with the server.
+- **`audio.transcribe` answers `config_invalid`.** The frame is in the protocol and there is no STT provider yet; a typed refusal keeps the inbound switch exhaustive instead of leaving a message type silently unhandled.
+- `ResolvedError` gained a typed `code`, so a turn that throws resolves through the same table the REST error handler uses rather than deriving a second kind→code mapping. `body.error.code` stays widened to `string` because the response schema is.
+- **Nothing serves the hub yet.** It is transport-agnostic on purpose — `connect({ send })`, `receive(frame)`, `close()` — and Step 14's `ghost serve` is where a `@fastify/websocket` handler binds those three to a socket. A channel binds the same three without one.
 
 </details>
 

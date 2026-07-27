@@ -98,8 +98,12 @@ const PACKAGES = {
     devDeps: { zod: '^4.0.0' },
   },
   server: {
-    description: 'Fastify app, boot policy, and authentication.',
-    internal: ['protocol', 'core', 'security'],
+    description: 'Fastify app, boot policy, authentication, and the session hub.',
+    // `agent` is a dependency of the *transport*, never the other way round: the
+    // hub drives `AgentLoop.run()` and forwards its events, and the loop has no
+    // idea a socket exists. The layering lint rule and pnpm's isolated
+    // node_modules together keep that arrow pointing one way.
+    internal: ['protocol', 'core', 'security', 'agent'],
     // `zod` is a runtime dependency here, unlike in `agent` and `runtime`: the
     // route helper calls `z.toJSONSchema` to generate the OpenAPI document and
     // `safeParse` to validate every request body.

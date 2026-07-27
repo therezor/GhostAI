@@ -186,6 +186,9 @@ importers:
       '@fastify/swagger':
         specifier: ^9.4.0
         version: 9.8.1(supports-color@7.2.0)
+      '@ghostai/agent':
+        specifier: workspace:*
+        version: link:../agent
       '@ghostai/core':
         specifier: workspace:*
         version: link:../core
