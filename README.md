@@ -9,7 +9,7 @@ A self-hosted, security-first AI agent written in TypeScript. One process, one p
 - **Security in the core** — encrypted credential vault, workspace jail, argv-only exec (never a shell), SSRF/DNS-rebinding guard, tool-output nonce wrapping, and per-tool approval prompts.
 - **Extensible** — a versioned plugin SDK for tools, channels, providers, TTS/STT, and embedders.
 
-> **Status: pre-alpha.** The toolchain, `@ghostai/protocol` and `@ghostai/core` are done; the remaining packages are empty. See [Build order](#build-order) below.
+> **Status: pre-alpha.** The toolchain, `@ghostai/protocol`, `@ghostai/core`, `@ghostai/security` and `@ghostai/providers` are done; the remaining packages are empty. See [Build order](#build-order) below.
 
 ---
 
@@ -207,14 +207,30 @@ Notes for later steps:
 </details>
 
 <details>
-<summary><b>Step 5 — <code>@ghostai/providers</code></b></summary>
+<summary><b>Step 5 — <code>@ghostai/providers</code></b> ✅ done</summary>
 
-- `ProviderSpec` type and the `PROVIDERS` registry table declared `as const satisfies readonly ProviderSpec[]`, so `type ProviderId = (typeof PROVIDERS)[number]['id']` and the config type derives from the table. Adding a provider must be a one-line table entry.
-- The `openai-chat` wire adapter — this alone covers Ollama, LM Studio, llama.cpp, vLLM, OpenAI, OpenRouter, DeepSeek, and Groq.
+- `ProviderSpec` type and the `PROVIDERS` registry table declared `as const`, so `type ProviderId = (typeof PROVIDERS)[number]['id']` and the config type derives from the table. Adding a provider is a table entry.
+- The `openai-chat` wire adapter — this alone covers Ollama, LM Studio, llama.cpp, vLLM, OpenAI, OpenRouter, DeepSeek, Groq, xAI and Gemini's compatibility endpoint.
 - Typed `ProviderError { kind, retryable, status, param }`. Never sniff substrings of a response.
 - `withResilience()` — one decorator wrapping both streaming and non-streaming, with a declarative `DegradationStep[]`: drop `reasoning_effort` → drop `tool_choice` → strip images → truncate oldest turns. Plus retry with jitter and a stream→non-stream fallback on SSE parse failure.
 
-**Done when:** the exported `providerConformance(makeProvider)` suite passes — parallel tool calls, streaming deltas, mid-stream abort, 429→retry→success, 400 `unsupported_param`→degrade→success, malformed SSE→non-streaming fallback, vision input, usage reporting — all driven by `undici.MockAgent` with no network access.
+**Done when:** the exported `providerConformance({ create })` suite passes — parallel tool calls, streaming deltas, mid-stream abort, 429→retry→success, 400 `unsupported_param`→degrade→success, context length→truncate→success, malformed SSE→non-streaming fallback, vision input, tool-result round-trip, usage reporting — with no network access. ✅ (98/93, suite run against `ollama`, `openai` and `openrouter`)
+
+Notes for later steps:
+
+- **`as const satisfies readonly ProviderSpec[]` is unavailable here**: `isolatedDeclarations` cannot emit a declaration for it (TS9010). The table is therefore `as const` under a private name for the literal types `ProviderId` needs, and `PROVIDERS` is the same array exported as `readonly ProviderSpec[]` — which is also the assignment that type-checks every entry, and the view to read, since on the literal type an entry that omits `isGateway` has no such property.
+- **`ChatRequest`'s optional fields are `?: T | undefined`**, deliberately against `exactOptionalPropertyTypes`. The degradation ladder exists to _remove_ parameters, and `{ ...request, reasoningEffort: undefined }` has to be expressible; the alternative is a destructure-and-rebuild that silently drops any field added later.
+- **A stream that has already emitted a delta is never retried or degraded.** Restarting it would replay text the user is reading. The SSE→non-streaming fallback is subject to the same rule — it only fires when the stream failed before saying anything.
+- **A degradation does not spend the retry budget and does not sleep.** It is a repair, not a transient failure; the ladder is finite because each step removes something the request carried and so cannot fire twice.
+- **The ladder fires on a bare `400` as well as on `unsupported_param`.** Local inference servers return no `code` and no `param`, and dropping a parameter the request actually carried is safe either way — against a genuinely malformed request the ladder runs out and the original error surfaces.
+- **Provider base URLs deliberately bypass `guardedFetch`.** That guard stops the _model_ choosing a destination; a base URL is operator config and the common case is loopback. What `assertUsableApiBase` enforces instead is narrower and real: an API key never goes over plain HTTP to a public address, classified through `parseIpLiteral`/`classifyAddress` so `http://134744072/` is caught too.
+- **`ProviderError extends GhostError`**, so a failure reaching the agent loop keeps a `kind` from the core taxonomy and `toGhostError` cannot downgrade it to `internal`. The finer `reason` is what the ladder switches on. This required widening `GhostError.name` to `string` so a subclass can name itself.
+- **The conformance suite lives in `src/testkit/` and is not exported from `index.ts`** — it imports `vitest`, and shipping that in the package entry would put a test framework in the runtime graph. Adapters import it relatively. Its fixtures are `openai-chat` shaped; when a second wire lands, the scenarios stay and the response builders move behind a per-wire fixture interface.
+- **Adapters take an injected `fetchImpl`, and optionally a `dispatcher`.** Injection is what makes a truncated event stream or an abort mid-delta a one-line fixture; the `dispatcher` hook covers `ProxyAgent` and lets two tests drive the real `undici.fetch` through a `MockAgent`, so the default transport is covered too.
+- **`estimateTokens` is a character heuristic and `loadTokenCounter()` is async.** `gpt-tokenizer` costs ~40 ms and ~50 MB at import; paying that at module load would charge every consumer of this package for a table used on the failure path.
+- The `anthropic` entry declares `wire: 'anthropic-messages'`, and `createProvider` refuses it with a `config` error naming the wire. Pointing it at `/chat/completions` would surface as a 404 mid-turn, which reads as "the model is gone".
+- `scripts/gen-packages.mjs` now carries per-package `compilerOptions` and `tsconfigNotes`, so re-running it no longer deletes `protocol`'s `isolatedDeclarations: false` override or the comment explaining it.
+
 </details>
 
 <details>

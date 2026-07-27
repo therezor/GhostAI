@@ -91,6 +91,9 @@ export default tseslint.config(
     files: ['**/*.test.ts', '**/test/**/*.ts', '**/testkit/**/*.ts'],
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',
+      // A scripted async generator — a stream fixture — legitimately has
+      // nothing to await; the rule only ever fires on those here.
+      '@typescript-eslint/require-await': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
       '@typescript-eslint/no-unsafe-argument': 'off',

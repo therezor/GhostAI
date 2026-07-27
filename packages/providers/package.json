@@ -27,6 +27,7 @@
     "@ghostai/core": "workspace:*",
     "@ghostai/protocol": "workspace:*",
     "@ghostai/security": "workspace:*",
-    "gpt-tokenizer": "^2.8.0"
+    "gpt-tokenizer": "^2.8.0",
+    "undici": "^7.2.0"
   }
 }

@@ -19,11 +19,46 @@ async function writeFormatted(path, contents) {
   writeFileSync(path, await prettier.format(contents, { ...config, filepath: path }));
 }
 
-/** @type {Record<string, { description: string; deps?: Record<string,string>; internal?: string[]; bin?: Record<string,string> }>} */
+/**
+ * Injects `//` comments above named keys of a serialized tsconfig.
+ *
+ * JSON has no syntax for a comment and `tsconfig.json` does, so the rationale
+ * for an override cannot survive `JSON.stringify`. Without this, re-running the
+ * generator silently deletes the explanation for every deviation from the base
+ * config — which is the half of the file worth reading.
+ */
+function withNotes(json, notes) {
+  let out = json;
+  for (const [key, note] of Object.entries(notes)) {
+    const comment = note
+      .split('\n')
+      .map((line) => (line === '' ? '//' : `// ${line}`))
+      .join('\n');
+    out = out.replace(new RegExp(`^(\\s*)"${key}":`, 'm'), `\n${comment}\n$1"${key}":`);
+  }
+  return out;
+}
+
+/** @type {Record<string, { description: string; deps?: Record<string,string>; internal?: string[]; bin?: Record<string,string>; compilerOptions?: Record<string, unknown>; tsconfigNotes?: Record<string,string> }>} */
 const PACKAGES = {
   protocol: {
     description: 'Zod schemas and derived types shared by every GhostAI package.',
     deps: { zod: '^4.0.0' },
+    compilerOptions: { isolatedDeclarations: false },
+    tsconfigNotes: {
+      isolatedDeclarations: [
+        'The one package that cannot honour `isolatedDeclarations`. Every export',
+        'here is a Zod schema whose type is the *result* of inference',
+        '(`z.object({...})` → a deep `ZodObject<...>`), so the declaration emitter',
+        'cannot write a signature without type-checking the expression: TS9010.',
+        '',
+        'The alternative is to hand-write a TS type beside every schema and',
+        'annotate it as `z.ZodType<T>`, which reintroduces exactly the',
+        'schema/type drift this package exists to remove. Inference is the more',
+        'valuable half of the pair, so it wins here and only here; every other',
+        'package keeps the flag on.',
+      ].join('\n'),
+    },
   },
   core: {
     description: 'Canonical message types, session store, message bus, logger, clock.',
@@ -38,7 +73,10 @@ const PACKAGES = {
   providers: {
     description: 'LLM provider registry, wire adapters, and resilience decorator.',
     internal: ['protocol', 'core', 'security'],
-    deps: { 'gpt-tokenizer': '^2.8.0' },
+    // undici for the streaming request path: `fetch` alone cannot carry a
+    // per-provider dispatcher, and the pool's idle timeouts are what tell a
+    // hung model server apart from a slow one.
+    deps: { 'gpt-tokenizer': '^2.8.0', undici: '^7.2.0' },
   },
   tools: {
     description: 'Tool definition helper, registry, and built-in tools.',
@@ -100,6 +138,7 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
       rootDir: './src',
       outDir: './dist',
       tsBuildInfoFile: './dist/.tsbuildinfo',
+      ...(cfg.compilerOptions ?? {}),
     },
     include: ['src/**/*'],
     references: (cfg.internal ?? []).map((dep) => ({ path: `../${dep}` })),
@@ -121,7 +160,10 @@ export default defineConfig({
 `;
 
   await writeFormatted(join(dir, 'package.json'), JSON.stringify(pkg, null, 2));
-  await writeFormatted(join(dir, 'tsconfig.json'), JSON.stringify(tsconfig, null, 2));
+  await writeFormatted(
+    join(dir, 'tsconfig.json'),
+    withNotes(JSON.stringify(tsconfig, null, 2), cfg.tsconfigNotes ?? {}),
+  );
   await writeFormatted(join(dir, 'tsup.config.ts'), tsup);
   console.log(`generated packages/${name}`);
 }

@@ -82,7 +82,10 @@ export interface GhostErrorOptions {
 }
 
 export class GhostError extends Error {
-  override readonly name = 'GhostError';
+  // `string`, not the literal, so a subclass can name itself — `ProviderError`
+  // in `@ghostai/providers` is one. A literal here would make its own `name`
+  // unassignable to the base property's type.
+  override readonly name: string = 'GhostError';
   readonly kind: ErrorKind;
   readonly retryable: boolean;
   readonly details: Readonly<Record<string, unknown>>;

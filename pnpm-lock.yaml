@@ -127,6 +127,9 @@ importers:
       gpt-tokenizer:
         specifier: ^2.8.0
         version: 2.9.0
+      undici:
+        specifier: ^7.2.0
+        version: 7.29.0
 
   packages/security:
     dependencies:
