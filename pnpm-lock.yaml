@@ -86,6 +86,9 @@ importers:
       '@ghostai/providers':
         specifier: workspace:*
         version: link:../providers
+      '@ghostai/runtime':
+        specifier: workspace:*
+        version: link:../runtime
       '@ghostai/security':
         specifier: workspace:*
         version: link:../security
@@ -134,6 +137,31 @@ importers:
       undici:
         specifier: ^7.2.0
         version: 7.29.0
+
+  packages/runtime:
+    dependencies:
+      '@ghostai/agent':
+        specifier: workspace:*
+        version: link:../agent
+      '@ghostai/core':
+        specifier: workspace:*
+        version: link:../core
+      '@ghostai/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@ghostai/providers':
+        specifier: workspace:*
+        version: link:../providers
+      '@ghostai/security':
+        specifier: workspace:*
+        version: link:../security
+      '@ghostai/tools':
+        specifier: workspace:*
+        version: link:../tools
+    devDependencies:
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
 
   packages/security:
     dependencies:

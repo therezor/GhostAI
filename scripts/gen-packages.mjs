@@ -39,7 +39,7 @@ function withNotes(json, notes) {
   return out;
 }
 
-/** @type {Record<string, { description: string; deps?: Record<string,string>; internal?: string[]; bin?: Record<string,string>; compilerOptions?: Record<string, unknown>; tsconfigNotes?: Record<string,string> }>} */
+/** @type {Record<string, { description: string; deps?: Record<string,string>; devDeps?: Record<string,string>; internal?: string[]; bin?: Record<string,string>; compilerOptions?: Record<string, unknown>; tsconfigNotes?: Record<string,string> }>} */
 const PACKAGES = {
   protocol: {
     description: 'Zod schemas and derived types shared by every GhostAI package.',
@@ -86,10 +86,20 @@ const PACKAGES = {
   agent: {
     description: 'The agent loop, subagent manager, and context contributors.',
     internal: ['protocol', 'core', 'security', 'providers', 'tools'],
+    // Tests only — the tests here define tools with `defineTool`. Nothing in
+    // this package's runtime graph imports zod.
+    devDeps: { zod: '^4.0.0' },
+  },
+  runtime: {
+    description: 'The shared composition root: config in, a running agent out.',
+    internal: ['protocol', 'core', 'security', 'providers', 'tools', 'agent'],
+    // Tests only — one test registers a tool with `defineTool` to prove a
+    // reconfigure does not drop it. Nothing in the runtime graph imports zod.
+    devDeps: { zod: '^4.0.0' },
   },
   cli: {
     description: 'GhostAI command line interface.',
-    internal: ['protocol', 'core', 'security', 'providers', 'tools', 'agent'],
+    internal: ['protocol', 'core', 'security', 'providers', 'tools', 'agent', 'runtime'],
     deps: { commander: '^13.0.0', picocolors: '^1.1.0' },
     bin: { ghost: './dist/index.js' },
   },
@@ -129,6 +139,9 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
     },
     dependencies: Object.keys(dependencies).length
       ? Object.fromEntries(Object.entries(dependencies).sort())
+      : undefined,
+    devDependencies: cfg.devDeps
+      ? Object.fromEntries(Object.entries(cfg.devDeps).sort())
       : undefined,
   };
 

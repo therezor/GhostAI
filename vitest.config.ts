@@ -9,6 +9,7 @@ const THRESHOLDS: Record<string, { lines: number; branches: number }> = {
   security: { lines: 95, branches: 95 },
   core: { lines: 90, branches: 85 },
   agent: { lines: 85, branches: 80 },
+  runtime: { lines: 85, branches: 80 },
   providers: { lines: 80, branches: 75 },
   tools: { lines: 80, branches: 75 },
   mcp: { lines: 80, branches: 75 },

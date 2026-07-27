@@ -338,6 +338,33 @@ describe('execute', () => {
     expect(execution.durationMs).toBe(30_000);
   });
 
+  it('takes a new timeout from a settings change', async () => {
+    // Editable at runtime because the alternative — a new registry when
+    // `toolTimeoutMs` changes — throws away every MCP and plugin registration
+    // on it, which is far more than the operator asked to change.
+    const clock = manualClock();
+    const registry = new ToolRegistry({ timeoutMs: 30_000, clock });
+    registry.register(blocking('deaf', true));
+
+    registry.timeoutMs = 1_000;
+    const running = registry.execute({ name: 'deaf' }, context);
+    await Promise.resolve();
+    clock.advance(1_000);
+
+    await expect(running).resolves.toMatchObject({ isError: true, errorKind: 'timeout' });
+  });
+
+  it('refuses a timeout that is not a duration', () => {
+    const registry = new ToolRegistry();
+    expect(() => {
+      registry.timeoutMs = -1;
+    }).toThrow(/non-negative/);
+    expect(() => {
+      registry.timeoutMs = Number.NaN;
+    }).toThrow(/non-negative/);
+    expect(registry.timeoutMs).toBe(0);
+  });
+
   it('reports an abort as aborted even when a timeout is configured', async () => {
     const clock = manualClock();
     const registry = new ToolRegistry({ timeoutMs: 30_000, clock });

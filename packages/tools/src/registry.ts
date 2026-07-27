@@ -123,19 +123,42 @@ function rejectOnAbort(
 
 export class ToolRegistry {
   private readonly tools = new Map<string, Registration>();
-  private readonly timeoutMs: number;
+  private currentTimeoutMs: number;
   private readonly clock: Clock;
   private readonly logger: Logger;
   private cachedDefinitions: readonly ToolDefinition[] | null = null;
 
   constructor(options: ToolRegistryOptions = {}) {
-    this.timeoutMs = options.timeoutMs ?? 0;
+    this.currentTimeoutMs = options.timeoutMs ?? 0;
     this.clock = options.clock ?? systemClock;
     this.logger = options.logger ?? silentLogger;
   }
 
   get size(): number {
     return this.tools.size;
+  }
+
+  get timeoutMs(): number {
+    return this.currentTimeoutMs;
+  }
+
+  /**
+   * The one mutable setting on a registry.
+   *
+   * `agents.defaults.toolTimeoutMs` is editable in the settings panel, and the
+   * alternative — building a new registry when it changes — would throw away
+   * every MCP and plugin registration on it, which is far more than the
+   * operator asked to change. A call already in flight keeps the timeout it
+   * started under; the timer is armed at entry and never re-read.
+   */
+  set timeoutMs(ms: number) {
+    if (!Number.isFinite(ms) || ms < 0) {
+      throw new GhostError(
+        'config',
+        `Tool timeout must be a non-negative number, got ${String(ms)}`,
+      );
+    }
+    this.currentTimeoutMs = ms;
   }
 
   /**

@@ -1,0 +1,27 @@
+/**
+ * @ghostai/runtime — config in, a running agent out.
+ *
+ * One package, one job: hold the wiring that every entry point needs and none
+ * of them should own. `ghost chat`, the HTTP server, a channel and the
+ * scheduler all want the same provider resolution, the same credential order,
+ * the same jail and the same loop — and the Python original is the argument for
+ * this package existing, having implemented that wiring once per entry point
+ * and drifted between them.
+ *
+ * **No HTTP, and nothing above `@ghostai/agent`.** A transport builds a runtime;
+ * a runtime never knows what is driving it.
+ */
+
+export { PROVIDER_CREDENTIAL_NAMESPACE, findCredential, openVault } from './credentials.js';
+
+export { mergeConfigPatch } from './merge.js';
+
+export {
+  MAX_CACHED_PROVIDERS,
+  ProviderCache,
+  providerCacheKey,
+  type ProviderCacheOptions,
+  type ProviderRequest,
+} from './provider-cache.js';
+
+export { createRuntime, type GhostRuntime, type RuntimeOptions } from './runtime.js';

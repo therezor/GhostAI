@@ -1,7 +1,7 @@
 {
-  "name": "@ghostai/cli",
+  "name": "@ghostai/runtime",
   "version": "0.0.0",
-  "description": "GhostAI command line interface.",
+  "description": "The shared composition root: config in, a running agent out.",
   "type": "module",
   "license": "MIT",
   "exports": {
@@ -17,9 +17,6 @@
     "dist",
     "!dist/**/*.test.*"
   ],
-  "bin": {
-    "ghost": "./dist/index.js"
-  },
   "scripts": {
     "build": "tsup && tsc -b",
     "typecheck": "tsc -b",
@@ -31,10 +28,10 @@
     "@ghostai/core": "workspace:*",
     "@ghostai/protocol": "workspace:*",
     "@ghostai/providers": "workspace:*",
-    "@ghostai/runtime": "workspace:*",
     "@ghostai/security": "workspace:*",
-    "@ghostai/tools": "workspace:*",
-    "commander": "^13.0.0",
-    "picocolors": "^1.1.0"
+    "@ghostai/tools": "workspace:*"
+  },
+  "devDependencies": {
+    "zod": "^4.0.0"
   }
 }
