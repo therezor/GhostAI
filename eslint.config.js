@@ -60,6 +60,12 @@ export default tseslint.config(
       '@typescript-eslint/require-await': 'error',
       '@typescript-eslint/return-await': ['error', 'always'],
 
+      // Off because it contradicts `isolatedDeclarations`, which is a build
+      // requirement rather than a preference. An exported `const X = /re/`
+      // cannot have its declaration emitted without an explicit `: RegExp`,
+      // and this rule calls that same annotation redundant.
+      '@typescript-eslint/no-inferrable-types': 'off',
+
       '@typescript-eslint/consistent-type-imports': [
         'error',
         { prefer: 'type-imports', fixStyle: 'inline-type-imports' },

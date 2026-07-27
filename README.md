@@ -234,7 +234,7 @@ Notes for later steps:
 </details>
 
 <details>
-<summary><b>Step 6 — <code>@ghostai/tools</code></b></summary>
+<summary><b>Step 6 — <code>@ghostai/tools</code></b> ✅ done</summary>
 
 - `defineTool({ name, description, schema, annotations, execute })` — computes JSON Schema once via `z.toJSONSchema`, implements `parseArgs` with `safeParse`, and infers the `execute` argument type from the schema.
 - `ToolRegistry` — source-tagged registration (`builtin` | `mcp` | `plugin`), `unregisterBySource()` for exact teardown, memoized `definitions()` invalidated on mutation, and an `execute()` that validates, enforces timeout and signal, truncates, and never throws.
@@ -242,7 +242,23 @@ Notes for later steps:
 
 `exec` takes `argv: string[]` — not a command string — and runs `execFile` with `shell: false`.
 
-**Done when:** `toolConformance(tool)` passes for every built-in (schema round-trip, rejects wrong-typed and extra args, coerces LLM string-numbers, honours `signal` within 100 ms, respects `maxResultChars`), and every filesystem tool is jailed.
+**Done when:** `toolConformance(tool)` passes for every built-in (schema round-trip, rejects wrong-typed and extra args, coerces LLM string-numbers, honours `signal` within 100 ms, respects `maxResultChars`), and every filesystem tool is jailed. ✅ (99/97)
+
+Notes for later steps:
+
+- **`z.toJSONSchema` is called with `io: 'input'`.** The default output view lists any field carrying `.default()` as `required` — it is always present once parsing has run — so advertising it tells the model to supply every optional argument, and it obliges by inventing values. Any future schema-to-tool path (MCP proxying, plugin tools) has to pass the same flag.
+- **A tool schema must be a `z.strictObject`, checked at definition time.** `z.object` strips unknown keys, so a model that adds `recursive: true` to `read_file` would have its mistake silently discarded and get an answer to a question it did not ask. `defineTool` refuses a schema whose emitted `additionalProperties` is not `false`.
+- **Numbers coerce, booleans deliberately do not.** `z.coerce.number()` is what makes the `"10"` models routinely emit work. `z.coerce.boolean()` is `Boolean(value)` and turns `"false"` into `true` — on `edit_file.replaceAll` that inverts the model's stated intent, so booleans stay strict.
+- **Built-ins are exported as `AnyTool`, not their inferred type.** `isolatedDeclarations` cannot emit a declaration for an inference result, and hand-writing an interface beside every schema is the drift `defineTool` exists to remove. Inference still applies inside `execute`, which is where it matters. The same rule made `no-inferrable-types` conflict with an exported `RegExp`; the rule is now off repo-wide, since `isolatedDeclarations` is a build requirement and it is a preference.
+- **`definitions()` is sorted by name, in code-unit order.** Tool definitions live in the prompt prefix providers cache; an MCP server reconnecting and re-registering in a different order would rewrite that prefix for no semantic change. `localeCompare` would make the same prefix differ between a developer's machine and the container.
+- **`ToolRegistry.execute` races the handler against the timeout rather than only signalling it.** A handler that ignores its signal would otherwise hang the turn forever. Racing cannot unwind work already in flight, which is why every built-in also checks the signal and why `exec` hands it to the child. The late rejection of the losing promise is swallowed deliberately — without that, a timed-out tool takes the process down.
+- **`AbortSignal.aborted` is read through a function (`isAborted`).** TypeScript narrows the property after an early `if (signal.aborted) return`, and then reports every later check in the same function as dead code — on the one value whose purpose is to change while the function runs.
+- **`exec` uses `spawn`, not `execFile`.** Both are `shell: false`; what differs is overflow. `execFile`'s `maxBuffer` kills the child and discards everything it wrote, so a build logging 2 MB returns nothing. Streaming into `createOutputCap` — which `@ghostai/security` exports for exactly this — keeps the head and lets the command finish.
+- **A non-zero exit is a result, not a thrown failure.** `grep` finding nothing exits 1 and a failing compiler is the answer that was asked for; both come back with `isError` set and the output intact. The model's `timeoutMs` may lower the operator's cap but never raise it.
+- **Filesystem errors are re-described against the workspace-relative path** (`fsFailure`). A raw `ENOENT … '/Users/x/.ghostai/workspace/notes.md'` teaches the model to send absolute paths back, which the jail then rejects. A `GhostError` passes through untouched so `jail_escape` is never downgraded.
+- `toolConformance` lives in `src/testkit/` and is not exported from `index.ts`, for the same reason as the provider suite: it imports `vitest`. Its cases are derived from the tool's own JSON Schema, so a tool that gains a numeric argument gains its coercion test automatically.
+- `registerBuiltins` omits `exec` when config disables it. A disabled tool the model can still see costs it a turn to discover.
+
 </details>
 
 <details>
