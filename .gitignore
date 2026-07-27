@@ -10,3 +10,4 @@ coverage/
 !.env.example
 .vitest-cache/
 packages/web/dist/
+.idea
