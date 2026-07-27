@@ -182,7 +182,7 @@ Notes for later steps:
 </details>
 
 <details>
-<summary><b>Step 4 — <code>@ghostai/security</code></b></summary>
+<summary><b>Step 4 — <code>@ghostai/security</code></b> ✅ done</summary>
 
 The package that has to be right. Budget more time here than its size suggests.
 
@@ -192,7 +192,18 @@ The package that has to be right. Budget more time here than its size suggests.
 - Exec argv guard — `argv[0]` allow/deny list, jail every path-like argument, env allowlist, output byte caps.
 - `CredentialVault` — AES-256-GCM, key from OS keychain with a `0600` keyfile fallback.
 
-**Done when:** each of the five items has property tests covering the encoding/escaping bypass classes listed above, and coverage is ≥ 95/95.
+**Done when:** each of the five items has property tests covering the encoding/escaping bypass classes listed above, and coverage is ≥ 95/95. ✅ (99.8/98)
+
+Notes for later steps:
+
+- **`toolOutputPolicy(nonce)` belongs in the _runtime_ half of the system prompt**, not the static half. The nonce changes every turn, so putting it in the cached block would invalidate the prefix on every iteration — the exact thing the static/runtime split in Step 7 exists to avoid.
+- **`wrapToolOutput` returns findings; it never edits the content.** The agent loop maps them onto the `notice` event (`kind: 'prompt_injection'`) via `describeInjectionFindings`. Nothing else may act on a finding — the delimiters are the defence, the finding is only a badge.
+- **The jail rejects absolute paths as _inputs_.** Tool schemas must therefore document paths as workspace-relative, and error text should say so. `contains()` skips canonicalisation and is for paths GhostAI produced itself (the media route in Phase 2); agent input goes through `check`/`resolve`.
+- **`guardExec` validates every argument, not just the path-shaped ones** — `cat notes.txt` where `notes.txt` symlinks to `/etc/shadow` is the case a separator heuristic misses. It returns a plan and never spawns: `@ghostai/tools` owns the `execFile` call, and `plan.paths` is what the approval prompt should display.
+- **`guardedFetch` is for model-directed egress.** Provider base URLs are operator config, not model input, and a local model server is loopback — so `@ghostai/providers` either uses its own dispatcher or passes `allowLoopback`/`allowedHosts`. Blocking a provider call as SSRF would be the guard misfiring on the one host it is meant to trust.
+- **`parseIpLiteral` returning `null` is what earns a host a DNS lookup.** Anything that resolves numerically — decimal, octal, hex, short form, IPv4-mapped — is classified as an address first. Any new egress path must go through `validateTarget` rather than re-deriving this.
+- The vault is synchronous and single-file, and refuses to start on a failed authentication tag rather than reporting an empty vault — a "recovered" empty vault would be overwritten by the next `set`.
+
 </details>
 
 <details>
