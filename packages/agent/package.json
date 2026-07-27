@@ -29,5 +29,8 @@
     "@ghostai/providers": "workspace:*",
     "@ghostai/security": "workspace:*",
     "@ghostai/tools": "workspace:*"
+  },
+  "devDependencies": {
+    "zod": "^4.0.0"
   }
 }

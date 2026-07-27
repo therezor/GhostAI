@@ -1,0 +1,147 @@
+/**
+ * What a turn emits.
+ *
+ * One discriminated union, and every member is a `ServerMessage` from
+ * `@ghostai/protocol` minus the fields the transport owns. The WebSocket hub in
+ * Phase 2 forwards an event by stamping a `seq` on it — there is no mapping
+ * table, no per-event translation function, and therefore no place for the two
+ * shapes to drift. `events.test.ts` asserts that literally: every event here,
+ * plus a `seq`, parses as a `ServerMessage`.
+ *
+ * The transport owns exactly two things:
+ *
+ *  - **`seq`**, because sequencing is per *connection state*, not per turn. The
+ *    loop does not know what else the session has emitted, and a counter it
+ *    kept would restart on every turn.
+ *  - **`sessionKey`** on the events that carry one. The loop is handed a session
+ *    key and puts it on `turn.start`, where a client learns which conversation
+ *    the turn belongs to; the per-delta events identify themselves by `turnId`
+ *    alone, which is what keeps a streaming event small.
+ *
+ * The names are the protocol's dotted names rather than a local convention. A
+ * CLI renderer and a WebSocket client then switch on the same strings, and the
+ * 1:1 property stays visible at every call site instead of living in a comment.
+ */
+
+import type { ErrorCode, NoticeKind, StopReason, ToolRisk, Usage } from '@ghostai/protocol';
+
+export interface TurnStartEvent {
+  readonly type: 'turn.start';
+  readonly sessionKey: string;
+  readonly turnId: string;
+  readonly model: string;
+  readonly provider: string;
+}
+
+/** A chunk of the answer. Consumers append; the loop never resends. */
+export interface AssistantDeltaEvent {
+  readonly type: 'assistant.delta';
+  readonly turnId: string;
+  readonly text: string;
+}
+
+export interface ReasoningDeltaEvent {
+  readonly type: 'reasoning.delta';
+  readonly turnId: string;
+  readonly text: string;
+}
+
+export interface ToolCallEvent {
+  readonly type: 'tool.call';
+  readonly turnId: string;
+  readonly callId: string;
+  readonly name: string;
+  /** Parsed arguments when the model emitted valid JSON; the raw string otherwise. */
+  readonly args: unknown;
+  readonly risk: ToolRisk;
+}
+
+/**
+ * Liveness while a tool runs.
+ *
+ * Emitted on a fixed cadence rather than on tool progress, because the tools
+ * that need it — an `exec` running a build, an MCP call to a slow server —
+ * report nothing until they finish. A UI showing a spinner needs to know the
+ * difference between "still working" and "the loop died", and only the loop can
+ * tell it that.
+ */
+export interface ToolProgressEvent {
+  readonly type: 'tool.progress';
+  readonly turnId: string;
+  readonly callId: string;
+  readonly elapsedMs: number;
+  readonly message?: string;
+}
+
+/**
+ * The outcome of one call.
+ *
+ * `content` is the tool's own output — truncated, but *not* wrapped in the
+ * turn's delimiter. The envelope exists to tell a language model which region
+ * of its context is inert data; showing it to a human in a tool card would be
+ * displaying a defence mechanism as though it were part of the answer. The
+ * wrapped form is what goes to history and to the model.
+ */
+export interface ToolResultEvent {
+  readonly type: 'tool.result';
+  readonly turnId: string;
+  readonly callId: string;
+  readonly ok: boolean;
+  readonly content: string;
+  readonly truncated: boolean;
+  readonly durationMs: number;
+}
+
+/**
+ * Advisory. Never a reason for the loop to change what it does.
+ *
+ * `prompt_injection` is the one that has to stay advisory: the detection is
+ * non-destructive by design, so a finding raises a badge and the tool output
+ * reaches the model byte-for-byte. Acting on a finding — dropping the result,
+ * rewriting it — is how a security feature becomes a way to blind the agent to
+ * any document that discusses prompt injection.
+ */
+export interface NoticeEvent {
+  readonly type: 'notice';
+  readonly kind: NoticeKind;
+  readonly message: string;
+  readonly turnId?: string;
+  readonly callId?: string;
+}
+
+/**
+ * The turn failed.
+ *
+ * Distinct from `turn.end` with `stopReason: 'error'`, which still follows:
+ * this carries what went wrong, and `turn.end` closes the turn exactly once
+ * however it ended. A consumer that only tracks turn lifecycle can ignore this
+ * event entirely.
+ */
+export interface AgentErrorEvent {
+  readonly type: 'error';
+  readonly code: ErrorCode;
+  readonly message: string;
+  readonly retryable: boolean;
+  readonly turnId?: string;
+}
+
+export interface TurnEndEvent {
+  readonly type: 'turn.end';
+  readonly turnId: string;
+  readonly stopReason: StopReason;
+  readonly usage?: Usage;
+  readonly iterations: number;
+}
+
+export type AgentEvent =
+  | TurnStartEvent
+  | AssistantDeltaEvent
+  | ReasoningDeltaEvent
+  | ToolCallEvent
+  | ToolProgressEvent
+  | ToolResultEvent
+  | NoticeEvent
+  | AgentErrorEvent
+  | TurnEndEvent;
+
+export type AgentEventType = AgentEvent['type'];

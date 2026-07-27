@@ -67,6 +67,10 @@ importers:
       '@ghostai/tools':
         specifier: workspace:*
         version: link:../tools
+    devDependencies:
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
 
   packages/cli:
     dependencies:

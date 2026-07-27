@@ -1,0 +1,668 @@
+/**
+ * The agent loop.
+ *
+ * One turn is: append what the user said, then repeat — assemble a request from
+ * history, stream the model's answer, run whatever tools it asked for, append
+ * the results — until the model answers without calling a tool, or a cap stops
+ * it. The loop is an async generator, so a caller drives it with `for await` and
+ * gets cancellation for free: abandoning the iterator unwinds the turn through
+ * the same `finally` a completed turn runs.
+ *
+ * Everything here is either a cost decision or a correctness decision, and the
+ * ones that look like details are the ones that matter:
+ *
+ *  - **The nonce and the tool definitions are computed once per turn**, not per
+ *    iteration. Both sit in the part of the prompt providers cache; regenerating
+ *    them mid-turn would rewrite the prefix and throw the cache away five times
+ *    over for no semantic change.
+ *  - **The caps are checked at the top of the iteration.** Checking after the
+ *    provider call lets a turn exceed its wall-clock cap by one full request
+ *    plus its tool calls, which on a slow local model is minutes.
+ *  - **Steering is drained before the caps are checked**, so a correction that
+ *    arrives during the last legal iteration is still in history when that
+ *    iteration builds its request.
+ *  - **A steering message arriving while the model composes its final answer
+ *    makes the loop `continue`, not `break`.** Ending the turn there discards
+ *    the correction, and from the outside a discarded correction is
+ *    indistinguishable from an ignored one.
+ *  - **An error response is never appended to history.** A provider 400 written
+ *    into the transcript is replayed on every subsequent request in that
+ *    session, so one malformed turn becomes a permanently poisoned session.
+ *  - **A cancelled tool call still gets a `tool` message.** Providers reject an
+ *    `assistant` turn whose `tool_calls` were never answered, so stopping mid-
+ *    tool without writing a result would make the *next* turn fail on history
+ *    the user cannot see — the failure surfaces long after the Ctrl-C that
+ *    caused it.
+ *
+ * The signal threads from the caller through the provider request, tool
+ * execution and any child process. There is one cancellation mechanism, and
+ * this is it.
+ */
+
+import { randomUUID } from 'node:crypto';
+
+import {
+  DEFAULT_MAX_TOOL_RESULT_CHARS,
+  GhostError,
+  assistantMessage,
+  isAbortError,
+  silentLogger,
+  systemClock,
+  systemMessage,
+  textOf,
+  toGhostError,
+  truncateHeadTail,
+  userMessage,
+  type ChatMessageInput,
+  type Clock,
+  type ErrorKind,
+  type Logger,
+  type SessionStore,
+  type TimerHandle,
+} from '@ghostai/core';
+import {
+  AgentDefaultsSchema,
+  type AgentDefaults,
+  type ContentPart,
+  type ErrorCode,
+  type StopReason,
+  type ToolCall,
+  type ToolRisk,
+  type ToolsConfig,
+  type Usage,
+} from '@ghostai/protocol';
+import {
+  emptyUsage,
+  type ChatProvider,
+  type ChatRequest,
+  type ChatResult,
+} from '@ghostai/providers';
+import {
+  createToolOutputNonce,
+  describeInjectionFindings,
+  systemRandom,
+  wrapToolOutput,
+  type RandomSource,
+  type WorkspaceJail,
+} from '@ghostai/security';
+import {
+  DEFAULT_TOOLS_CONFIG,
+  type ToolContext,
+  type ToolExecution,
+  type ToolRegistry,
+} from '@ghostai/tools';
+
+import type { AgentEvent } from './events.js';
+import {
+  buildRuntimeBlock,
+  buildStaticPrompt,
+  composeSystemPrompt,
+  type ContextContributor,
+  type StaticPromptContext,
+} from './prompt.js';
+import { SteeringQueue, steeringText } from './steering.js';
+
+/**
+ * How often a running tool reports that it is still running.
+ *
+ * Long enough that a normal tool call never emits one, short enough that a UI
+ * showing a spinner is never left guessing whether the process died. The tools
+ * this exists for — a build under `exec`, a slow MCP server — produce no output
+ * at all until they finish, so the loop is the only thing that can say.
+ */
+export const TOOL_HEARTBEAT_MS = 15_000;
+
+/** What a cancelled call records, so the `assistant` turn stays answered. */
+export const CANCELLED_TOOL_RESULT = 'Cancelled: the turn was stopped before this tool finished.';
+
+function maxIterationsText(maxIterations: number): string {
+  return (
+    `I stopped after ${String(maxIterations)} tool iterations without finishing. ` +
+    `Tell me which part to focus on, or break the task into smaller steps.`
+  );
+}
+
+function wallTimeoutText(elapsedMs: number, capMs: number): string {
+  return (
+    `I ran out of time for this turn — ${String(Math.round(elapsedMs / 1000))}s against a ` +
+    `${String(Math.round(capMs / 1000))}s cap. Ask me to continue, or narrow the task.`
+  );
+}
+
+/**
+ * Core error kinds → the wire's error codes.
+ *
+ * A mapping table rather than a chain of conditionals, so a kind added to the
+ * taxonomy without a code here lands on `internal` rather than on whichever
+ * branch happened to be last.
+ */
+const ERROR_CODES: Partial<Record<ErrorKind, ErrorCode>> = {
+  invalid_input: 'bad_request',
+  not_found: 'not_found',
+  conflict: 'bad_request',
+  permission_denied: 'unauthorized',
+  jail_escape: 'unauthorized',
+  network: 'provider_error',
+  provider: 'provider_error',
+  tool: 'tool_error',
+  timeout: 'provider_error',
+  rate_limited: 'rate_limited',
+  config: 'config_invalid',
+};
+
+function errorCodeFor(kind: ErrorKind): ErrorCode {
+  return ERROR_CODES[kind] ?? 'internal';
+}
+
+/**
+ * The model's arguments, as the UI should see them.
+ *
+ * Parsing is best-effort on purpose: malformed JSON from a model is common
+ * enough that it must not break the event stream, and the registry is the thing
+ * that turns it into a typed tool error the model can recover from. Here it is
+ * only being displayed.
+ */
+function parseToolArgs(argumentsJson: string): unknown {
+  if (argumentsJson.trim() === '') return {};
+  try {
+    return JSON.parse(argumentsJson) as unknown;
+  } catch {
+    return argumentsJson;
+  }
+}
+
+function sumOptional(a: number | undefined, b: number | undefined): number | undefined {
+  if (a === undefined) return b;
+  if (b === undefined) return a;
+  return a + b;
+}
+
+/** Adds one request's usage to the turn's running total. */
+function accumulateUsage(total: Usage, next: Usage): Usage {
+  const cachedTokens = sumOptional(total.cachedTokens, next.cachedTokens);
+  const reasoningTokens = sumOptional(total.reasoningTokens, next.reasoningTokens);
+  return {
+    promptTokens: total.promptTokens + next.promptTokens,
+    completionTokens: total.completionTokens + next.completionTokens,
+    totalTokens: total.totalTokens + next.totalTokens,
+    ...(cachedTokens === undefined ? {} : { cachedTokens }),
+    ...(reasoningTokens === undefined ? {} : { reasoningTokens }),
+  };
+}
+
+function cancelledExecution(name: string): ToolExecution {
+  return {
+    name,
+    content: CANCELLED_TOOL_RESULT,
+    isError: true,
+    truncated: false,
+    durationMs: 0,
+    errorKind: 'aborted',
+  };
+}
+
+export interface AgentLoopOptions {
+  /** Already wrapped in `withResilience` by `createProvider`. */
+  readonly provider: ChatProvider;
+  readonly tools: ToolRegistry;
+  readonly store: SessionStore;
+  /** Supplies the workspace root for the prompt and the jail for every tool. */
+  readonly jail: WorkspaceJail;
+  /** Defaults to the schema's defaults, so a caller without a config file works. */
+  readonly config?: AgentDefaults;
+  readonly toolsConfig?: ToolsConfig;
+  /** Overrides `config.model`. One of the two must be non-empty. */
+  readonly model?: string;
+  readonly contributors?: readonly ContextContributor[];
+  readonly steering?: SteeringQueue;
+  readonly clock?: Clock;
+  readonly logger?: Logger;
+  /** The nonce source. Never pin this outside a test — see `@ghostai/security`. */
+  readonly random?: RandomSource;
+  /** Turn ids. Injected so a test asserts on stable values. */
+  readonly newId?: () => string;
+  /** Source for the exec env allow-list. Defaults to `process.env`. */
+  readonly env?: Readonly<Record<string, string | undefined>>;
+  /** `0` disables the heartbeat. */
+  readonly toolHeartbeatMs?: number;
+  /** Head+tail budget for one tool result before it enters history. */
+  readonly maxToolResultChars?: number;
+}
+
+export interface TurnInput {
+  readonly sessionKey: string;
+  /** A string for the common case; parts for an image the user attached. */
+  readonly content: string | readonly ContentPart[];
+  /** The turn's cancellation. Threads to the provider, the tools and their children. */
+  readonly signal?: AbortSignal;
+  /** Where the message came from. Recorded as the session's origin. */
+  readonly channel?: string;
+  readonly profileId?: string;
+  /** Supplied by the caller when it has already told a client the id. */
+  readonly turnId?: string;
+}
+
+export interface TurnResult {
+  readonly turnId: string;
+  readonly stopReason: StopReason;
+  /** Provider requests made. Never more than `config.maxToolIterations`. */
+  readonly iterations: number;
+  readonly usage: Usage;
+  /** The final answer, or the explanation of why there is none. */
+  readonly text: string;
+}
+
+/** A timer that can be abandoned without leaving the clock holding a callback. */
+interface Tick {
+  readonly promise: Promise<null>;
+  cancel(): void;
+}
+
+export class AgentLoop {
+  readonly #provider: ChatProvider;
+  readonly #tools: ToolRegistry;
+  readonly #store: SessionStore;
+  readonly #jail: WorkspaceJail;
+  readonly #config: AgentDefaults;
+  readonly #toolsConfig: ToolsConfig;
+  readonly #model: string;
+  readonly #contributors: readonly ContextContributor[];
+  readonly #steering: SteeringQueue;
+  readonly #clock: Clock;
+  readonly #logger: Logger;
+  readonly #random: RandomSource;
+  readonly #newId: () => string;
+  readonly #env: Readonly<Record<string, string | undefined>>;
+  readonly #heartbeatMs: number;
+  readonly #maxToolResultChars: number;
+
+  constructor(options: AgentLoopOptions) {
+    this.#provider = options.provider;
+    this.#tools = options.tools;
+    this.#store = options.store;
+    this.#jail = options.jail;
+    this.#config = options.config ?? AgentDefaultsSchema.parse({});
+    this.#toolsConfig = options.toolsConfig ?? DEFAULT_TOOLS_CONFIG;
+    this.#contributors = options.contributors ?? [];
+    this.#steering =
+      options.steering ?? new SteeringQueue({ logger: options.logger ?? silentLogger });
+    this.#clock = options.clock ?? systemClock;
+    this.#logger = options.logger ?? silentLogger;
+    this.#random = options.random ?? systemRandom;
+    this.#newId = options.newId ?? randomUUID;
+    this.#env = options.env ?? process.env;
+    this.#heartbeatMs = options.toolHeartbeatMs ?? TOOL_HEARTBEAT_MS;
+    this.#maxToolResultChars = options.maxToolResultChars ?? DEFAULT_MAX_TOOL_RESULT_CHARS;
+
+    const model = options.model ?? this.#config.model;
+    if (model === '') {
+      throw new GhostError('config', 'No model configured for the agent loop', {
+        details: { provider: this.#provider.id },
+      });
+    }
+    this.#model = model;
+  }
+
+  get model(): string {
+    return this.#model;
+  }
+
+  /** The queue this loop drains. Exposed so a transport can push into it. */
+  get steering(): SteeringQueue {
+    return this.#steering;
+  }
+
+  /** Queues a correction for the turn currently running on `sessionKey`. */
+  steer(sessionKey: string, content: string): void {
+    this.#steering.push(sessionKey, content, this.#clock.now());
+  }
+
+  /**
+   * Runs one turn, emitting events as they happen.
+   *
+   * The generator's return value carries the outcome; the events carry
+   * everything a UI needs to render it. A caller that only wants the answer can
+   * ignore the events, and one that only wants to render can ignore the return.
+   */
+  async *run(input: TurnInput): AsyncGenerator<AgentEvent, TurnResult> {
+    const { sessionKey } = input;
+    const turnId = input.turnId ?? this.#newId();
+    const channel = input.channel ?? 'cli';
+    // A signal that never fires, so every path below reads `signal.aborted`
+    // rather than re-deriving what "no cancellation" means.
+    const signal = input.signal ?? new AbortController().signal;
+
+    const maxIterations = this.#config.maxToolIterations;
+    const wallTimeoutMs = this.#config.loopWallTimeoutMs;
+
+    // Once per turn, both of them: see the module header.
+    const nonce = createToolOutputNonce(this.#random);
+    const toolDefinitions = this.#tools.definitions();
+
+    const promptContext: StaticPromptContext = {
+      workspaceRoot: this.#jail.root,
+      sessionKey,
+      profileId: input.profileId,
+      channel,
+    };
+
+    this.#store.ensureSession(sessionKey, {
+      origin: channel,
+      ...(input.profileId === undefined ? {} : { profileId: input.profileId }),
+    });
+    this.#store.append(sessionKey, userMessage(input.content), { turnId });
+
+    const staticPrompt = await buildStaticPrompt({
+      context: promptContext,
+      contributors: this.#contributors,
+    });
+
+    const toolContext: ToolContext = {
+      jail: this.#jail,
+      signal,
+      config: this.#toolsConfig,
+      clock: this.#clock,
+      logger: this.#logger,
+      env: this.#env,
+    };
+
+    const startedAt = this.#clock.monotonic();
+    let iteration = 0;
+    let elapsedMs = 0;
+    let stopReason: StopReason | undefined;
+    let finalText = '';
+    let usage: Usage = emptyUsage();
+
+    try {
+      // Inside the `try`, so a caller that abandons the iterator before the
+      // first iteration still runs the cleanup below.
+      yield {
+        type: 'turn.start',
+        sessionKey,
+        turnId,
+        model: this.#model,
+        provider: this.#provider.id,
+      };
+
+      while (iteration < maxIterations) {
+        for (const message of this.#steering.drain(sessionKey)) {
+          this.#store.append(sessionKey, userMessage(steeringText(message)), { turnId });
+        }
+
+        if (signal.aborted) {
+          stopReason = 'aborted';
+          break;
+        }
+
+        elapsedMs = this.#clock.monotonic() - startedAt;
+        if (wallTimeoutMs > 0 && elapsedMs >= wallTimeoutMs) {
+          this.#logger.warn({ sessionKey, turnId, elapsedMs, wallTimeoutMs }, 'turn wall timeout');
+          stopReason = 'wall_timeout';
+          break;
+        }
+
+        iteration += 1;
+
+        const runtimeBlock = buildRuntimeBlock({
+          context: { ...promptContext, iteration, maxIterations, nowMs: this.#clock.now() },
+          nonce,
+          contributors: this.#contributors,
+        });
+
+        const request: ChatRequest = {
+          model: this.#model,
+          messages: [
+            systemMessage(composeSystemPrompt(staticPrompt, runtimeBlock)),
+            // Re-read every iteration: the tool results this turn just wrote are
+            // part of the next request, and reading them back from the store is
+            // what keeps history and the request identical rather than merely
+            // similar.
+            ...this.#store.history(sessionKey, { maxToolResultChars: 0 }),
+          ],
+          ...(toolDefinitions.length === 0 ? {} : { tools: toolDefinitions }),
+          maxTokens: this.#config.maxTokens,
+          temperature: this.#config.temperature,
+          reasoningEffort: this.#config.reasoningEffort,
+          signal,
+        };
+
+        let result: ChatResult | undefined;
+        try {
+          for await (const event of this.#provider.stream(request)) {
+            if (event.type === 'text') {
+              if (event.text !== '') yield { type: 'assistant.delta', turnId, text: event.text };
+            } else if (event.type === 'reasoning') {
+              if (event.text !== '') yield { type: 'reasoning.delta', turnId, text: event.text };
+            } else {
+              result = event.result;
+            }
+          }
+        } catch (error) {
+          const ghost = toGhostError(error, 'provider');
+          if (isAbortError(error) || ghost.kind === 'aborted') {
+            stopReason = 'aborted';
+            break;
+          }
+          this.#logger.error(
+            { sessionKey, turnId, iteration, kind: ghost.kind, err: ghost.message },
+            'provider request failed',
+          );
+          yield {
+            type: 'error',
+            code: errorCodeFor(ghost.kind),
+            message: ghost.message,
+            retryable: ghost.retryable,
+            turnId,
+          };
+          stopReason = 'error';
+          break;
+        }
+
+        if (result === undefined) {
+          // A stream that ends without its `done` event has not reported tool
+          // calls, usage or a finish reason. Treating that as an empty answer
+          // would silently end the turn on a transport bug.
+          yield {
+            type: 'error',
+            code: 'provider_error',
+            message: 'The provider ended the stream without a result.',
+            retryable: true,
+            turnId,
+          };
+          stopReason = 'error';
+          break;
+        }
+
+        usage = accumulateUsage(usage, result.usage);
+
+        if (result.message.toolCalls.length === 0) {
+          this.#store.append(sessionKey, result.message, { turnId });
+          finalText = textOf(result.message);
+          // The correction arrived while this answer was being composed. Keep
+          // going so it is answered, rather than ending a turn the user has
+          // already asked to change.
+          if (this.#steering.hasPending(sessionKey)) continue;
+          stopReason = 'complete';
+          break;
+        }
+
+        const cancelled = yield* this.#runToolCalls(result, {
+          sessionKey,
+          turnId,
+          nonce,
+          signal,
+          toolContext,
+        });
+        if (cancelled) {
+          stopReason = 'aborted';
+          break;
+        }
+      }
+    } finally {
+      // Whatever ended the turn — completion, a cap, an abandoned iterator —
+      // nothing queued for it may leak into the next one.
+      this.#steering.clear(sessionKey);
+    }
+
+    stopReason ??= 'max_iterations';
+
+    if (stopReason === 'max_iterations' || stopReason === 'wall_timeout') {
+      // Unlike an error, this is persisted: the next turn's history has to
+      // explain why the task stopped half-done, or the model reads its own
+      // truncated work as complete.
+      finalText =
+        stopReason === 'max_iterations'
+          ? maxIterationsText(maxIterations)
+          : wallTimeoutText(elapsedMs, wallTimeoutMs);
+      this.#store.append(sessionKey, assistantMessage(finalText), { turnId });
+      yield { type: 'assistant.delta', turnId, text: finalText };
+    }
+
+    yield { type: 'turn.end', turnId, stopReason, usage, iterations: iteration };
+
+    return { turnId, stopReason, iterations: iteration, usage, text: finalText };
+  }
+
+  /**
+   * Runs every tool the model asked for. Returns whether the turn was cancelled.
+   *
+   * The assistant message and all of its results are appended in one
+   * transaction at the end, because a partial write is exactly the orphaned
+   * tool result that `findLegalStart` then has to repair on every later
+   * request. Once cancelled, the remaining calls are not executed — but each
+   * still gets a result, so the `assistant` turn is never left with an
+   * unanswered `tool_call`.
+   */
+  async *#runToolCalls(
+    result: ChatResult,
+    turn: {
+      sessionKey: string;
+      turnId: string;
+      nonce: string;
+      signal: AbortSignal;
+      toolContext: ToolContext;
+    },
+  ): AsyncGenerator<AgentEvent, boolean> {
+    const pending: ChatMessageInput[] = [result.message];
+    let cancelled = turn.signal.aborted;
+
+    for (const call of result.message.toolCalls) {
+      yield {
+        type: 'tool.call',
+        turnId: turn.turnId,
+        callId: call.id,
+        name: call.name,
+        args: parseToolArgs(call.argumentsJson),
+        risk: this.#riskOf(call.name),
+      };
+
+      const execution = cancelled
+        ? cancelledExecution(call.name)
+        : yield* this.#executeWithHeartbeat(call, turn.toolContext, turn.turnId);
+
+      if (execution.errorKind === 'aborted') cancelled = true;
+
+      // Truncate first, wrap second. The other order cuts the closing delimiter
+      // off the envelope, and a tool result the model cannot see the end of is
+      // a tool result it reads as continuing into the conversation.
+      const truncation = truncateHeadTail(execution.content, this.#maxToolResultChars);
+      const wrapped = wrapToolOutput(truncation.text, { toolName: call.name, nonce: turn.nonce });
+      const truncated = truncation.truncated || execution.truncated;
+
+      pending.push({
+        role: 'tool',
+        toolCallId: call.id,
+        name: call.name,
+        content: wrapped.text,
+        isError: execution.isError,
+        truncated,
+      });
+
+      yield {
+        type: 'tool.result',
+        turnId: turn.turnId,
+        callId: call.id,
+        ok: !execution.isError,
+        content: truncation.text,
+        truncated,
+        durationMs: execution.durationMs,
+      };
+
+      if (wrapped.findings.length > 0) {
+        this.#logger.warn(
+          { tool: call.name, signals: wrapped.findings.map((finding) => finding.signal) },
+          'prompt injection signals in tool output',
+        );
+        yield {
+          type: 'notice',
+          kind: 'prompt_injection',
+          message: describeInjectionFindings(wrapped.findings),
+          turnId: turn.turnId,
+          callId: call.id,
+        };
+      }
+    }
+
+    this.#store.appendMany(turn.sessionKey, pending, { turnId: turn.turnId });
+    return cancelled;
+  }
+
+  /**
+   * One tool call, with a liveness event on a fixed cadence while it runs.
+   *
+   * The heartbeat is driven by the injected clock and raced against the call,
+   * so a test advances fake timers instead of waiting 15 real seconds. The
+   * timeout itself is not enforced here — `ToolRegistry` owns it, and owning it
+   * in two places is how a call ends up with two different deadlines.
+   */
+  async *#executeWithHeartbeat(
+    call: ToolCall,
+    context: ToolContext,
+    turnId: string,
+  ): AsyncGenerator<AgentEvent, ToolExecution> {
+    const started = this.#clock.monotonic();
+    const running = this.#tools.execute(call, context).then((execution) => ({ execution }));
+
+    if (this.#heartbeatMs <= 0) return (await running).execution;
+
+    for (;;) {
+      const beat = this.#tick(this.#heartbeatMs);
+      const outcome = await Promise.race([running, beat.promise]);
+      beat.cancel();
+      if (outcome !== null) return outcome.execution;
+      yield {
+        type: 'tool.progress',
+        turnId,
+        callId: call.id,
+        elapsedMs: this.#clock.monotonic() - started,
+        message: `${call.name} is still running`,
+      };
+    }
+  }
+
+  #riskOf(name: string): ToolRisk {
+    return this.#tools.get(name)?.risk ?? 'safe';
+  }
+
+  /**
+   * A promise that resolves once the clock advances, and a way to stop waiting.
+   *
+   * Cancelling matters more than it looks: one turn can make dozens of tool
+   * calls, and a timer left armed on a real clock keeps the event loop alive
+   * after the turn that created it has ended.
+   */
+  #tick(delayMs: number): Tick {
+    let handle: TimerHandle | undefined;
+    const promise = new Promise<null>((resolve) => {
+      handle = this.#clock.setTimeout(() => {
+        resolve(null);
+      }, delayMs);
+    });
+    return {
+      promise,
+      cancel: () => {
+        if (handle !== undefined) this.#clock.clearTimeout(handle);
+      },
+    };
+  }
+}

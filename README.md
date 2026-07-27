@@ -262,7 +262,7 @@ Notes for later steps:
 </details>
 
 <details>
-<summary><b>Step 7 — <code>@ghostai/agent</code></b></summary>
+<summary><b>Step 7 — <code>@ghostai/agent</code></b> ✅ done</summary>
 
 The loop, as an async generator emitting a single `AgentEvent` discriminated union that serialises 1:1 onto the WebSocket later.
 
@@ -275,7 +275,21 @@ The loop, as an async generator emitting a single `AgentEvent` discriminated uni
 - Error responses are not persisted to history; a poisoned turn must not poison the session.
 - One `AbortSignal`, threaded all the way to `child.kill()`.
 
-**Done when:** the loop is tested with fake timers (no real sleeping) for the iteration cap, wall-clock cap, heartbeat cadence, and mid-tool abort; and coverage is ≥ 85/80.
+**Done when:** the loop is tested with fake timers (no real sleeping) for the iteration cap, wall-clock cap, heartbeat cadence, and mid-tool abort; and coverage is ≥ 85/80. ✅ (100/95.9)
+
+Notes for later steps:
+
+- **`AgentEvent` _is_ `ServerMessage` minus the fields the transport owns** — `seq`, and `sessionKey` on the events that carry one. The names are the protocol's dotted names, and `events.test.ts` parses every event through `ServerMessageSchema` with a `seq` stamped on, so the WS hub in Phase 2 is a `seq` counter and a forward, not a mapping table. A field renamed on either side fails that test.
+- **Truncate first, wrap second — never the reverse.** Truncating a wrapped envelope cuts off the closing delimiter, and the model then reads the rest of the conversation as tool output. For the same reason the loop passes `maxToolResultChars: 0` to `SessionStore.history()`: stored results were already truncated at write time, and re-truncating them would cut the delimiter off history.
+- **A `tool.result` event carries the tool's own output; history carries the envelope.** The delimiters exist to tell a language model which region of its context is inert; rendering them in a tool card would be displaying a defence mechanism as part of the answer.
+- **Every tool call gets a `tool` message, including one that never ran.** Providers reject an `assistant` turn whose `tool_calls` were not all answered, so a Ctrl-C mid-tool that wrote no result would fail the _next_ turn, on history the user cannot see. The assistant message and all of its results are appended in one `appendMany` transaction, since a partial write is exactly the orphaned-tool-result state `findLegalStart` then has to repair on every later request.
+- **`max_iterations` and `wall_timeout` persist an explanation; an error persists nothing.** The next turn has to know the task stopped half-done, or the model reads its own truncated work as complete — but a provider 400 written into the transcript is replayed on every subsequent request, so one bad turn would poison the session permanently.
+- **`turn.start` is yielded inside the `try`.** A caller that abandons the iterator before the first iteration still runs the cleanup that clears the session's steering queue.
+- **The loop owns the heartbeat cadence; `ToolRegistry` owns the tool timeout.** Enforcing a deadline in both places is how one call ends up with two of them. The heartbeat is a race against the injected clock, so a test advances time instead of waiting 15 s.
+- **`ContextContributor` is the seam Phase 3 arrives through.** `staticSection` is called once per turn, may do I/O, and must return the same text for the life of the session — anything that varies hands back the cache benefit the split was built for. `runtimeSection` is synchronous and runs every iteration, so it is the wrong place for I/O. The loop never imports `@ghostai/memory`.
+- The steering queue is bounded (16 per session) and drops the **oldest** on overflow: the newest correction is the one the user is waiting on.
+- `zod` is a `devDependency` here only — the tests define tools with `defineTool`. Nothing in the runtime graph of this package imports it.
+
 </details>
 
 <details>
