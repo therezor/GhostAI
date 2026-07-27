@@ -44,12 +44,26 @@ const SESSIONS = {
   ],
 };
 
+const MESSAGES = {
+  sessionKey: 'web:7',
+  messages: [
+    {
+      id: 'm1',
+      sessionKey: 'web:7',
+      createdAtMs: 1,
+      turnId: 't1',
+      message: { role: 'user', content: [{ type: 'text', text: 'a stored question' }] },
+    },
+  ],
+};
+
 function renderApp(initial = '/'): { readonly user: ReturnType<typeof userEvent.setup> } {
   stubFetch({
     '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
     '/api/status': [200, STATUS],
     '/api/sessions': [200, SESSIONS],
     '/api/notifications': [200, { notifications: [], unreadCount: 3 }],
+    '/api/sessions/web%3A7/messages': [200, MESSAGES],
   });
 
   const router = createAppRouter();
@@ -68,7 +82,8 @@ describe('the shell', () => {
   it('renders the sidebar, the route and what the agent is running', async () => {
     renderApp();
 
-    expect(await screen.findByRole('heading', { name: 'Chat' })).toBeInTheDocument();
+    // The chat route on an empty session is the welcome screen.
+    expect(await screen.findByRole('heading', { name: 'Ready when you are.' })).toBeInTheDocument();
     expect(await screen.findByText('ollama · test-model')).toBeInTheDocument();
 
     const sidebar = screen.getByRole('complementary', { name: 'Sidebar' });
@@ -104,8 +119,10 @@ describe('the shell', () => {
   it('reports the socket state in a live region', async () => {
     renderApp();
 
+    // The shell opens the socket on mount, so the badge starts at Connecting
+    // rather than Offline — `test/setup.ts` supplies a socket that never opens.
     const status = await screen.findByRole('status');
-    expect(status).toHaveTextContent('Offline');
+    expect(status).toHaveTextContent('Connecting');
 
     useTurnStore.getState().setConnection('open');
     await waitFor(() => {
@@ -133,12 +150,14 @@ describe('the shell', () => {
     expect(await screen.findByRole('heading', { name: 'Not found' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('link', { name: 'Back to chat' }));
-    expect(await screen.findByRole('heading', { name: 'Chat' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Ready when you are.' })).toBeInTheDocument();
   });
 
   it('validates ?session= rather than handing a component whatever was in the URL', async () => {
     renderApp('/?session=web%3A7');
 
-    expect(await screen.findByText(/Requested session: web:7/)).toBeInTheDocument();
+    // The decoded key reached the history fetch, which is the only thing that
+    // proves the router parsed it rather than passing the raw parameter along.
+    expect(await screen.findByText('a stored question')).toBeInTheDocument();
   });
 });

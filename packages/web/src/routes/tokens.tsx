@@ -16,6 +16,11 @@
 
 import type { JSX, ReactNode } from 'react';
 
+import type { NoticeKind } from '@ghostai/protocol';
+
+import { Notice } from '@/chat/notice.js';
+import { ToolCard } from '@/chat/tool-card.js';
+import type { ToolPart } from '@/state/transcript.js';
 import { Badge } from '@/components/ui/badge.js';
 import { Button } from '@/components/ui/button.js';
 import {
@@ -304,10 +309,125 @@ export function TokensRoute(): JSX.Element {
             </div>
           </div>
         </Section>
+
+        <Section
+          title="Notices"
+          hint="Five kinds, two meanings: two describe a refusal, three describe a degradation."
+        >
+          <div className="flex flex-col gap-2">
+            {NOTICES.map(([kind, message]) => (
+              <Notice key={kind} kind={kind} message={message} />
+            ))}
+          </div>
+        </Section>
+
+        <Section
+          title="Tool cards"
+          hint="Every status a call passes through, including the one where it is waiting on you."
+        >
+          <div className="flex flex-col gap-2">
+            {TOOL_CARDS.map((tool) => (
+              <ToolCard
+                key={tool.id}
+                tool={tool}
+                onApprove={(_callId, approved) => {
+                  toast(
+                    approved
+                      ? { title: 'Approved', role: 'success' }
+                      : { title: 'Denied', role: 'warning' },
+                  );
+                }}
+              />
+            ))}
+          </div>
+        </Section>
       </div>
     </div>
   );
 }
+
+const NOTICES: readonly (readonly [NoticeKind, string])[] = [
+  ['prompt_injection', 'The fetched page contained instruction_override text.'],
+  ['approval_denied', 'exec was refused by the operator.'],
+  ['degraded', 'Dropped images to fit the provider’s request limit.'],
+  ['truncated_history', 'Trimmed 12 older messages to fit the context window.'],
+  ['provider_fallback', 'The streaming request failed; retried without streaming.'],
+];
+
+/**
+ * One card per status, because the states differ by more than a colour: the
+ * approval prompt is a different shape, and a failure is the one where the
+ * output is the point.
+ */
+const TOOL_CARDS: readonly ToolPart[] = [
+  {
+    kind: 'tool',
+    id: 'guide-running',
+    name: 'exec',
+    args: { command: 'pnpm test' },
+    risk: 'exec',
+    status: 'running',
+    elapsedMs: 42_000,
+    durationMs: undefined,
+    content: undefined,
+    truncated: false,
+    approval: undefined,
+    notices: [],
+  },
+  {
+    kind: 'tool',
+    id: 'guide-approval',
+    name: 'exec',
+    args: { command: 'rm -rf build' },
+    risk: 'exec',
+    status: 'awaiting-approval',
+    elapsedMs: 0,
+    durationMs: undefined,
+    content: undefined,
+    truncated: false,
+    // Far enough out that the countdown is not the thing being reviewed.
+    approval: { expiresAtMs: Date.now() + 3_600_000, answered: undefined },
+    notices: [],
+  },
+  {
+    kind: 'tool',
+    id: 'guide-ok',
+    name: 'read_file',
+    args: { path: 'package.json' },
+    risk: 'safe',
+    status: 'ok',
+    elapsedMs: 0,
+    durationMs: 8,
+    content: '{\n  "name": "@ghostai/web"\n}',
+    truncated: true,
+    approval: undefined,
+    notices: [],
+  },
+  {
+    kind: 'tool',
+    id: 'guide-error',
+    name: 'fetch',
+    // Loopback rather than a real host: `self-contained.test.ts` sweeps the
+    // shipped source for off-origin URLs and does not care that this one is a
+    // string in a style guide.
+    args: { url: 'http://localhost:8080/health' },
+    risk: 'network',
+    status: 'error',
+    elapsedMs: 0,
+    durationMs: 1_400,
+    content: 'ECONNREFUSED',
+    truncated: false,
+    approval: undefined,
+    notices: [
+      {
+        kind: 'notice',
+        id: 'guide-notice',
+        notice: 'prompt_injection',
+        message: 'The response body looked like an instruction.',
+      },
+    ],
+  },
+];
 
 function Section({
   title,

@@ -15,7 +15,7 @@ import { Monitor, Moon, Sun } from 'lucide-react';
 import type { JSX } from 'react';
 
 import { cn } from '@/lib/cn.js';
-import { useTheme } from '@/theme/use-theme.js';
+import { useAppTheme } from '@/theme/theme-context.js';
 import type { ThemePreference } from '@/theme/theme.js';
 import {
   DropdownMenu,
@@ -36,7 +36,7 @@ const OPTIONS: readonly { readonly value: ThemePreference; readonly label: strin
 const ICONS = { dark: Moon, light: Sun, system: Monitor } as const;
 
 export function ThemeToggle({ className }: { readonly className?: string }): JSX.Element {
-  const { preference, resolved, setPreference } = useTheme();
+  const { preference, resolved, setPreference } = useAppTheme();
   const Icon = ICONS[preference];
 
   return (

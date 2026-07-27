@@ -12,15 +12,27 @@
  * The split holds for the rest of the app too: the session list, settings and
  * files are Query; the turn in flight is here.
  *
- * Step 17 fills this in — the socket, the delta coalescing on
- * `requestAnimationFrame`, the tool cards, the replay resume. What exists now is
- * the shape those pieces write into, and the two things the shell already reads:
- * whether a turn is running, and whether the socket is connected.
+ * What is *not* here is any decision about what a frame means — that is
+ * `transcript.ts`, which is pure and tested without a store. This file is the
+ * holder: it owns the cursor, the connection status and the busy flag, and it
+ * hands each frame to the reducer.
  */
 
 import { create } from 'zustand';
 
-export type ConnectionStatus = 'connecting' | 'open' | 'reconnecting' | 'closed';
+import type { ServerMessage, StoredMessage } from '@ghostai/protocol';
+
+import {
+  appendPendingUserMessage,
+  applyServerMessage,
+  markApprovalAnswered,
+  mergeStoredHistory,
+  EMPTY_TRANSCRIPT,
+  type Transcript,
+} from './transcript.js';
+import type { ConnectionStatus } from '@/lib/socket.js';
+
+export type { ConnectionStatus };
 
 export interface TurnState {
   /** The session the socket is attached to, or `undefined` before the first. */
@@ -28,13 +40,29 @@ export interface TurnState {
   readonly connection: ConnectionStatus;
   /** True between `turn.start` and `turn.end` — what drives send ⇄ stop. */
   readonly busy: boolean;
+  /** Messages accepted and not yet started. Shown beside the composer. */
+  readonly queueDepth: number;
   /** The last server `seq` applied, which a reconnect resumes from. */
   readonly lastSeq: number;
+  readonly transcript: Transcript;
 
   readonly setConnection: (connection: ConnectionStatus) => void;
   readonly setBusy: (busy: boolean) => void;
   readonly attach: (sessionKey: string) => void;
   readonly applySeq: (seq: number) => void;
+  /** One server frame: the cursor, the status flags and the transcript. */
+  readonly apply: (message: ServerMessage) => void;
+  /** The optimistic bubble, before the ack that confirms it. */
+  readonly appendPending: (input: {
+    readonly clientMessageId: string;
+    readonly text: string;
+    readonly attachments?: readonly { readonly type: string; readonly url: string }[];
+  }) => void;
+  /** This tab answered an approval prompt; the buttons go now, not on the echo. */
+  readonly answerApproval: (callId: string, answered: 'approved' | 'denied') => void;
+  /** Puts a fetched history under whatever the socket has already built. */
+  readonly mergeHistory: (messages: readonly StoredMessage[]) => void;
+  readonly setTranscript: (transcript: Transcript) => void;
   readonly reset: () => void;
 }
 
@@ -42,7 +70,9 @@ const INITIAL = {
   sessionKey: undefined,
   connection: 'closed' as ConnectionStatus,
   busy: false,
+  queueDepth: 0,
   lastSeq: 0,
+  transcript: EMPTY_TRANSCRIPT,
 };
 
 export const useTurnStore = create<TurnState>((set) => ({
@@ -56,9 +86,18 @@ export const useTurnStore = create<TurnState>((set) => ({
   },
   attach: (sessionKey) => {
     // A different session is a different replay buffer: carrying `lastSeq`
-    // across would resume from a sequence number that means nothing there.
+    // across would resume from a sequence number that means nothing there. The
+    // transcript goes with it for the same reason.
     set((state) =>
-      state.sessionKey === sessionKey ? {} : { sessionKey, lastSeq: 0, busy: false },
+      state.sessionKey === sessionKey
+        ? {}
+        : {
+            sessionKey,
+            lastSeq: 0,
+            busy: false,
+            queueDepth: 0,
+            transcript: EMPTY_TRANSCRIPT,
+          },
     );
   },
   applySeq: (seq) => {
@@ -66,6 +105,56 @@ export const useTurnStore = create<TurnState>((set) => ({
     // the cursor backwards, or the next resume asks for events twice.
     set((state) => (seq > state.lastSeq ? { lastSeq: seq } : {}));
   },
+
+  apply: (message) => {
+    set((state) => {
+      // Mutable because it is built up across a switch. `TurnState` is readonly
+      // for its consumers, which is a different question from how a patch to it
+      // is assembled.
+      const next: { -readonly [K in keyof TurnState]?: TurnState[K] } = {};
+
+      if ('seq' in message && message.seq > state.lastSeq) next.lastSeq = message.seq;
+
+      switch (message.type) {
+        case 'connected':
+          // The server names the session when the client did not — a fresh tab
+          // gets its key here and nowhere else.
+          next.sessionKey = message.sessionKey;
+          break;
+        case 'session.status':
+          next.busy = message.busy;
+          next.queueDepth = message.queueDepth;
+          break;
+        case 'turn.start':
+          next.busy = true;
+          break;
+        default:
+          break;
+      }
+
+      const transcript = applyServerMessage(state.transcript, message);
+      if (transcript !== state.transcript) next.transcript = transcript;
+
+      return next;
+    });
+  },
+
+  appendPending: (input) => {
+    set((state) => ({ transcript: appendPendingUserMessage(state.transcript, input) }));
+  },
+
+  answerApproval: (callId, answered) => {
+    set((state) => ({ transcript: markApprovalAnswered(state.transcript, callId, answered) }));
+  },
+
+  mergeHistory: (messages) => {
+    set((state) => ({ transcript: mergeStoredHistory(state.transcript, messages) }));
+  },
+
+  setTranscript: (transcript) => {
+    set({ transcript });
+  },
+
   reset: () => {
     set(INITIAL);
   },

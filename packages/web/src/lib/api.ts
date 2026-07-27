@@ -26,13 +26,19 @@ import {
   NotificationListResponseSchema,
   SessionListResponseSchema,
   SessionMessagesResponseSchema,
+  SignedUrlSchema,
   StatusResponseSchema,
+  ToolListResponseSchema,
+  UploadResponseSchema,
   type AuthSessionResponse,
   type LoginResponse,
   type NotificationListResponse,
   type SessionListResponse,
   type SessionMessagesResponse,
+  type SignedUrl,
   type StatusResponse,
+  type ToolListResponse,
+  type UploadResponse,
 } from '@ghostai/protocol';
 import type { z } from 'zod';
 
@@ -130,6 +136,33 @@ export const api = {
     request('/api/notifications', NotificationListResponseSchema, {
       ...(signal ? { signal } : {}),
     }),
+
+  tools: (signal?: AbortSignal): Promise<ToolListResponse> =>
+    request('/api/tools', ToolListResponseSchema, { ...(signal ? { signal } : {}) }),
+
+  /**
+   * Writes a file into the workspace and returns a URL an `<img>` can load.
+   *
+   * The body is the raw bytes rather than a `multipart/form-data` envelope,
+   * because that is what the route reads: a browser already has the `File`, and
+   * a base64 or multipart wrapper would inflate every upload to describe what
+   * `Content-Type` already says.
+   */
+  upload: (path: string, file: Blob, signal?: AbortSignal): Promise<UploadResponse> =>
+    request('/api/files/upload', UploadResponseSchema, {
+      method: 'POST',
+      query: { path },
+      body: file,
+      ...(signal ? { signal } : {}),
+    }),
+
+  /** A short-lived signed URL for a workspace path an `<img>` will load. */
+  signUrl: (path: string, signal?: AbortSignal): Promise<SignedUrl> =>
+    request('/api/files/signed-url', SignedUrlSchema, {
+      method: 'POST',
+      body: { path },
+      ...(signal ? { signal } : {}),
+    }),
 };
 
 async function send(path: string, options: RequestOptions): Promise<Response> {
@@ -137,13 +170,16 @@ async function send(path: string, options: RequestOptions): Promise<Response> {
 
   const url = query === undefined ? path : `${path}?${searchParams(query)}`;
   const hasBody = body !== undefined;
+  // A `Blob` is an upload: it goes as its own bytes, and the browser sets the
+  // `Content-Type` from the file. Anything else is JSON.
+  const raw = body instanceof Blob;
 
   return await fetch(url, {
     method,
     // The cookie is the credential, and it is `SameSite=Strict`.
     credentials: 'same-origin',
-    ...(hasBody ? { headers: { 'content-type': 'application/json' } } : {}),
-    ...(hasBody ? { body: JSON.stringify(body) } : {}),
+    ...(hasBody && !raw ? { headers: { 'content-type': 'application/json' } } : {}),
+    ...(hasBody ? { body: raw ? body : JSON.stringify(body) } : {}),
     ...(signal ? { signal } : {}),
   });
 }

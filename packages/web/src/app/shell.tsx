@@ -7,17 +7,23 @@
  * than a button that opens the real thing.
  *
  * The header carries what the agent is doing rather than a logo: the resolved
- * model, the socket's state, and the theme control. Step 17 replaces the
- * placeholder body; the frame around it does not change again.
+ * model, the socket's state, and the theme control.
+ *
+ * The WebSocket hangs here, and here specifically: this is the router's root
+ * component, so it is the only one that survives every navigation. A socket
+ * opened by the chat route would be closed and redialled by a trip to Settings,
+ * which would drop the turn the user went to Settings to reconfigure.
  */
 
 import { useQuery } from '@tanstack/react-query';
+import { useSearch } from '@tanstack/react-router';
 import { Menu } from 'lucide-react';
 import { useState, type JSX, type ReactNode } from 'react';
 
 import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
 import { useTurnStore } from '@/state/turn.js';
+import { useConnection } from '@/chat/use-connection.js';
 import { Badge } from '@/components/ui/badge.js';
 import { Button } from '@/components/ui/button.js';
 import { Dialog, DialogContent, DialogHeading, DialogTrigger } from '@/components/ui/dialog.js';
@@ -26,6 +32,12 @@ import { Sidebar } from './sidebar.js';
 
 export function Shell({ children }: { readonly children: ReactNode }): JSX.Element {
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // `strict: false` because the shell is above every route and only one of them
+  // has a `session` parameter — on the others the answer is legitimately
+  // `undefined`, which is a request to keep the socket where it is.
+  const search: { session?: string } = useSearch({ strict: false });
+  useConnection(search.session);
 
   return (
     <div className="flex h-dvh flex-col bg-surface-0 text-fg-1">
