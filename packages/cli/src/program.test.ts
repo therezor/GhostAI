@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { ChatOptions } from './chat.js';
 import { VERSION, runCli } from './program.js';
+import type { ServeCommandOptions } from './serve.js';
 
 function sink(): NodeJS.WritableStream & { text: string } {
   const target = {
@@ -183,5 +184,78 @@ describe('runCli', () => {
 
     expect(run.code).toBe(1);
     expect(run.err).toContain('undefined is not a function');
+  });
+});
+
+describe('ghost serve', () => {
+  /** The parser, with the server stubbed: nothing here binds a port. */
+  async function serve(
+    args: readonly string[],
+    env: Readonly<Record<string, string | undefined>> = {},
+  ): Promise<{ code: number; err: string; calls: ServeCommandOptions[] }> {
+    const out = sink();
+    const errOut = sink();
+    const calls: ServeCommandOptions[] = [];
+    const code = await runCli(['node', 'ghost', ...args], {
+      out,
+      errOut,
+      env,
+      runServe: async (options) => {
+        calls.push(options);
+        return 0;
+      },
+    });
+    return { code, err: errOut.text, calls };
+  }
+
+  it('maps every flag onto the serve options', async () => {
+    const run = await serve([
+      'serve',
+      '--host',
+      '0.0.0.0',
+      '--port',
+      '8080',
+      '--workspace',
+      '/tmp/ws',
+      '--password',
+      'hunter2',
+      '--ui',
+      '/tmp/dist',
+    ]);
+
+    expect(run.code).toBe(0);
+    expect(run.calls[0]).toMatchObject({
+      host: '0.0.0.0',
+      port: 8080,
+      workspace: '/tmp/ws',
+      password: 'hunter2',
+      ui: '/tmp/dist',
+      logLevel: 'info',
+    });
+  });
+
+  it('reads the password from the environment when the flag is absent', async () => {
+    const run = await serve(['serve'], { GHOSTAI_PASSWORD: 'from-the-env' });
+
+    expect(run.calls[0]?.password).toBe('from-the-env');
+  });
+
+  it('leaves the password unset rather than passing an empty one', async () => {
+    const run = await serve(['serve'], { GHOSTAI_PASSWORD: '' });
+
+    expect(run.calls[0]?.password).toBeUndefined();
+  });
+
+  it('refuses a port that is not one, before anything binds', async () => {
+    const run = await serve(['serve', '--port', 'http']);
+
+    expect(run.code).toBe(1);
+    expect(run.calls).toHaveLength(0);
+  });
+
+  it('is listed in the help without loading the server', async () => {
+    const run = await cli(['--help']);
+
+    expect(run.out).toContain('serve');
   });
 });

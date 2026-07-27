@@ -36,6 +36,12 @@ const MANIFEST = [
   { id: 'system.status', method: 'GET', url: '/api/status', auth: 'required' },
   { id: 'system.openapi', method: 'GET', url: '/api/openapi.json', auth: 'required' },
 
+  // The socket. In the manifest like everything else, and `required` like
+  // almost everything else: an unauthenticated upgrade is a shell-capable agent
+  // that anyone who can reach the port may drive, which is the exact failure
+  // `assertBootPolicy` refuses to start for.
+  { id: 'ws.connect', method: 'GET', url: '/ws', auth: 'required' },
+
   // Auth
   { id: 'auth.login', method: 'POST', url: '/api/auth/login', auth: 'public' },
   { id: 'auth.logout', method: 'POST', url: '/api/auth/logout', auth: 'required' },

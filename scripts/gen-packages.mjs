@@ -103,23 +103,61 @@ const PACKAGES = {
     // hub drives `AgentLoop.run()` and forwards its events, and the loop has no
     // idea a socket exists. The layering lint rule and pnpm's isolated
     // node_modules together keep that arrow pointing one way.
-    internal: ['protocol', 'core', 'security', 'agent'],
+    // `providers` is here for its registry alone — `describeProvider` over the
+    // `PROVIDERS` table is what `GET /api/providers` serves — not for an
+    // adapter: nothing in this package makes a model request.
+    internal: ['protocol', 'core', 'security', 'providers', 'agent'],
     // `zod` is a runtime dependency here, unlike in `agent` and `runtime`: the
     // route helper calls `z.toJSONSchema` to generate the OpenAPI document and
     // `safeParse` to validate every request body.
     deps: {
       '@fastify/cookie': '^11.0.0',
       '@fastify/rate-limit': '^10.2.0',
+      '@fastify/static': '^8.1.0',
       '@fastify/swagger': '^9.4.0',
+      '@fastify/websocket': '^11.0.0',
       '@node-rs/argon2': '^2.0.0',
       fastify: '^5.2.0',
       zod: '^4.0.0',
     },
+    // `@readme/openapi-parser` validates the generated document as OpenAPI 3.1;
+    // `ws` is the socket test client, because the WebSocket route is the one
+    // surface `fastify.inject()` cannot reach.
+    devDeps: { '@readme/openapi-parser': '^6.3.0', '@types/ws': '^8.5.0', ws: '^8.18.0' },
+  },
+  channels: {
+    description: 'The channel contract and the manager bridging MessageBus to the session hub.',
+    // The one package that exports its testkit. `channelConformance` has to be
+    // runnable by a channel that lives *outside* this repo — a plugin channel
+    // in Phase 4 — and the provider and tool suites' rule (importable only from
+    // inside the package) would make the contract unverifiable exactly where it
+    // matters most. It stays off the package entry, so `vitest` is still not in
+    // anyone's runtime graph unless they ask for it by subpath.
+    subpaths: { './testkit': 'src/testkit/index.ts' },
+    external: ['vitest'],
+    // Neither `server` nor `agent`. A channel publishes an `InboundMessage` and
+    // consumes `OutboundMessage`s; the hub it bridges to is stated here as a
+    // structural port, so this package cannot reach into the transport it feeds
+    // and a plugin channel cannot reach the agent loop through it.
+    internal: ['protocol', 'core'],
   },
   cli: {
     description: 'GhostAI command line interface.',
-    internal: ['protocol', 'core', 'security', 'providers', 'tools', 'agent', 'runtime'],
+    internal: [
+      'protocol',
+      'core',
+      'security',
+      'providers',
+      'tools',
+      'agent',
+      'runtime',
+      'server',
+      'channels',
+    ],
     deps: { commander: '^13.0.0', picocolors: '^1.1.0' },
+    // `ws` is the socket client `serve.test.ts` drives the running server with;
+    // nothing in the CLI's runtime graph imports it.
+    devDeps: { '@types/ws': '^8.5.0', ws: '^8.18.0' },
     bin: { ghost: './dist/index.js' },
   },
 };
@@ -143,6 +181,19 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
         types: './dist/index.d.ts',
         default: './dist/index.js',
       },
+      ...Object.fromEntries(
+        Object.entries(cfg.subpaths ?? {}).map(([subpath, entry]) => {
+          const out = entry.replace(/^src\//, '').replace(/\.ts$/, '');
+          return [
+            subpath,
+            {
+              development: `./${entry}`,
+              types: `./dist/${out}.d.ts`,
+              default: `./dist/${out}.js`,
+            },
+          ];
+        }),
+      ),
     },
     main: './dist/index.js',
     types: './dist/index.d.ts',
@@ -176,10 +227,12 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
     references: (cfg.internal ?? []).map((dep) => ({ path: `../${dep}` })),
   };
 
+  const entries = ["'src/index.ts'", ...Object.values(cfg.subpaths ?? {}).map((e) => `'${e}'`)];
+
   const tsup = `import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  entry: [${entries.join(', ')}],
   format: ['esm'],
   target: 'node22',
   // tsc -b writes its declarations and .tsbuildinfo into this same dist, so
@@ -187,7 +240,15 @@ export default defineConfig({
   // Removing dist by hand is what forces a full rebuild of both tools.
   clean: false,
   dts: false, // tsc -b emits declarations; rollup-plugin-dts is the slow path
-  sourcemap: true,
+  sourcemap: true,${
+    cfg.external === undefined
+      ? ''
+      : `
+  // tsup bundles anything it can resolve that is not a declared dependency, and
+  // a test framework resolvable from the workspace root is exactly that: without
+  // this, half a megabyte of ${cfg.external.join(', ')} ends up inside dist/.
+  external: [${cfg.external.map((name) => `'${name}'`).join(', ')}],`
+  }
   // tsup rewrites \`node:sqlite\` to \`sqlite\` otherwise — a compatibility shim for
   // node versions older than 14.18 that turns a builtin into a missing package.
   // \`node:sqlite\` has no unprefixed form at all, so the rewrite is unloadable.

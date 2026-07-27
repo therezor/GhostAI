@@ -17,11 +17,13 @@
  */
 
 export {
+  MAX_PARAM_LENGTH,
   SERVER_VERSION,
   createServer,
   type GhostServer,
   type ListenOptions,
   type ServerOptions,
+  type UiOptions,
 } from './app.js';
 
 export type { AgentView, ExtensionCounts, ServerRuntime } from './runtime.js';
@@ -108,6 +110,7 @@ export {
   resolveError,
   unauthorized,
   unprocessable,
+  type ErrorHandlerOptions,
   type ResolvedError,
 } from './errors.js';
 
@@ -121,6 +124,7 @@ export {
 
 export {
   LOGIN_ATTEMPTS_PER_MINUTE,
+  MAX_BUFFERED_BYTES,
   MAX_UPLOAD_BYTES,
   createRoutes,
   type RouteDefinition,

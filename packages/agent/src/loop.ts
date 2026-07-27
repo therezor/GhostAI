@@ -69,6 +69,7 @@ import {
   type AgentDefaults,
   type ContentPart,
   type ErrorCode,
+  type ParsedMentions,
   type StopReason,
   type ToolCall,
   type ToolRisk,
@@ -311,6 +312,16 @@ export interface TurnInput {
   readonly profileId?: string;
   /** Supplied by the caller when it has already told a client the id. */
   readonly turnId?: string;
+  /**
+   * `@kb:`, `@mcp:` and `@skill:` mentions found in the message.
+   *
+   * Parsed by the transport rather than here, and by exactly one transport: the
+   * hub does it for every channel, so a mention means the same thing typed into
+   * a browser and typed into a chat app. The loop only carries it — it reaches
+   * `runtimeSection`, which is where the contributors that act on it arrive in
+   * Phase 3, and nothing in this package reads it.
+   */
+  readonly mentions?: ParsedMentions;
 }
 
 /** What the context inspector knows about the session it is inspecting. */
@@ -530,7 +541,15 @@ export class AgentLoop {
         iteration += 1;
 
         const runtimeBlock = buildRuntimeBlock({
-          context: { ...promptContext, iteration, maxIterations, nowMs: this.#clock.now() },
+          context: {
+            ...promptContext,
+            iteration,
+            maxIterations,
+            nowMs: this.#clock.now(),
+            // Turn-scoped, so it belongs to the half of the prompt that is
+            // rebuilt every iteration and never to the cached prefix.
+            ...(input.mentions === undefined ? {} : { mentions: input.mentions }),
+          },
           nonce,
           contributors: this.#contributors,
         });

@@ -13,6 +13,10 @@ const THRESHOLDS: Record<string, { lines: number; branches: number }> = {
   // Above the 70/65 default: an untested branch in the auth surface is a way
   // in, and the route manifest only guarantees what the matrix actually runs.
   server: { lines: 85, branches: 80 },
+  // The bridge decides what a channel says on the operator's behalf, and the
+  // manager is the only thing standing between a channel and another channel's
+  // replies. Both are small enough that the default bar would prove nothing.
+  channels: { lines: 90, branches: 85 },
   providers: { lines: 80, branches: 75 },
   tools: { lines: 80, branches: 75 },
   mcp: { lines: 80, branches: 75 },
@@ -22,7 +26,10 @@ const DEFAULT_THRESHOLD = { lines: 70, branches: 65 };
 
 export default defineConfig({
   test: {
-    projects: ['packages/*'],
+    // `examples/*` are workspace packages like any other: the loopback channel
+    // is what proves `channelConformance`, and a suite that does not run is a
+    // contract nothing holds.
+    projects: ['packages/*', 'examples/*'],
     passWithNoTests: true,
     coverage: {
       provider: 'v8',

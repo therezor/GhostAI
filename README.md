@@ -9,7 +9,7 @@ A self-hosted, security-first AI agent written in TypeScript. One process, one p
 - **Security in the core** — encrypted credential vault, workspace jail, argv-only exec (never a shell), SSRF/DNS-rebinding guard, tool-output nonce wrapping, and per-tool approval prompts.
 - **Extensible** — a versioned plugin SDK for tools, channels, providers, TTS/STT, and embedders.
 
-> **Status: pre-alpha.** Phase 1 is complete — `ghost chat` runs a turn end to end from a terminal, through `protocol`, `core`, `security`, `providers`, `tools`, `agent` and `cli`. Everything from the server and the web UI onward is still empty. See [Build order](#build-order) below.
+> **Status: pre-alpha.** Phase 1 is complete — `ghost chat` runs a turn end to end from a terminal — and Phase 2 has reached the server: `ghost serve` puts the REST API, the WebSocket and every channel in front of the same agent. The web UI is the part that is still empty. See [Build order](#build-order) below.
 
 ---
 
@@ -59,14 +59,14 @@ packages/
   agent/         AgentLoop, SubagentManager, context contributors
   runtime/       Composition root: config → provider, jail, store, registry, loop
   scheduler/     Cron/interval automation service + heartbeat agent
-  channels/      Channel interface, ChannelManager, Telegram
+  channels/      Channel contract, ChannelManager (Telegram in Phase 3)
   plugin-sdk/    Public plugin contract. Zero deps. Semver-frozen.
   plugin-host/   Discovery, manifest validation, lifecycle, capability gating
   server/        Fastify: REST, WebSocket hub, auth, static, OpenAPI
   web/           React SPA
   cli/           bin: `ghost`
 plugins/         First-party plugins, published separately
-examples/        Plugin template, MCP fixture server
+examples/        Loopback channel, plugin template, MCP fixture server
 scripts/         Repo tooling
 ```
 
@@ -108,6 +108,8 @@ Enforced by `pnpm test:coverage`, blocking in CI:
 | `security`                  | 95    | 95       |
 | `core`                      | 90    | 85       |
 | `agent`                     | 85    | 80       |
+| `channels`                  | 90    | 85       |
+| `server`                    | 85    | 80       |
 | `providers`, `mcp`, `tools` | 80    | 75       |
 | everything else             | 70    | 65       |
 

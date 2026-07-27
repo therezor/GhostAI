@@ -1,10 +1,10 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { loadConfig, parseConfig } from './config.js';
+import { loadConfig, parseConfig, saveConfig } from './config.js';
 import { isGhostError } from './errors.js';
 
 const tempDirs: string[] = [];
@@ -167,5 +167,61 @@ describe('loadConfig', () => {
     const loaded = loadConfig({ env: { GHOSTAI_HOME: root } });
     expect(loaded.config.server.port).toBe(4100);
     expect(loaded.paths.root).toBe(resolve(root));
+  });
+});
+
+describe('saveConfig', () => {
+  it('round-trips through loadConfig', () => {
+    const root = tempHome();
+    const file = join(root, 'config.json');
+    const config = parseConfig('{}', file);
+
+    saveConfig(file, { ...config, server: { ...config.server, port: 4242 } });
+
+    expect(loadConfig({ root }).config.server.port).toBe(4242);
+  });
+
+  it('writes a file a human can read and edit', () => {
+    const root = tempHome();
+    const file = join(root, 'config.json');
+
+    saveConfig(file, parseConfig('{}', file));
+
+    const text = readFileSync(file, 'utf8');
+    expect(text.startsWith('{\n  "agents"')).toBe(true);
+    expect(text.endsWith('}\n')).toBe(true);
+  });
+
+  it('creates the directory it is asked to write into', () => {
+    const file = join(tempHome(), 'nested', 'deeper', 'config.json');
+
+    saveConfig(file, parseConfig('{}', file));
+
+    expect(loadConfig({ file, root: tempHome() }).fromFile).toBe(true);
+  });
+
+  it('refuses to write settings the next boot would reject', () => {
+    const file = join(tempHome(), 'config.json');
+    const config = parseConfig('{}', file);
+    const broken = { ...config, server: { ...config.server, port: 70_000 } };
+
+    expect(() => saveConfig(file, broken)).toThrow(/Refusing to write/);
+    expect(existsSync(file)).toBe(false);
+  });
+
+  it('leaves the previous file in place when the write fails', () => {
+    const root = tempHome();
+    const file = join(root, 'config.json');
+    saveConfig(file, parseConfig('{}', file));
+    const before = readFileSync(file, 'utf8');
+
+    // A directory where the temp file wants to go: the write fails, and the
+    // rename that would have replaced the real file never runs.
+    mkdirSync(`${file}.tmp`);
+
+    expect(() => saveConfig(file, parseConfig('{"server":{"port":4242}}', file))).toThrow(
+      /could not be written/,
+    );
+    expect(readFileSync(file, 'utf8')).toBe(before);
   });
 });

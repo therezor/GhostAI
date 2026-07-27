@@ -22,16 +22,24 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
+import fastifyStatic from '@fastify/static';
 import swagger from '@fastify/swagger';
+import websocket from '@fastify/websocket';
 import { silentLogger, systemClock, type Clock, type Logger } from '@ghostai/core';
 import type { Config } from '@ghostai/protocol';
 import type { RandomSource } from '@ghostai/security';
-import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
+import Fastify, {
+  type FastifyBaseLogger,
+  type FastifyInstance,
+  type FastifyReply,
+  type FastifyRequest,
+} from 'fastify';
 
 import { AuthStore, type PasswordHasher } from './auth-store.js';
 import { SESSION_COOKIE, createAuthHook, createSignedHook } from './auth.js';
 import { assertBootPolicy } from './boot.js';
 import { HttpError, registerErrorHandler } from './errors.js';
+import type { SessionHub } from './hub.js';
 import { ROUTE_MANIFEST } from './manifest.js';
 import { NotificationStore } from './notifications.js';
 import type { ServerRuntime } from './runtime.js';
@@ -67,6 +75,24 @@ export interface ServerOptions {
    */
   readonly runtime: ServerRuntime;
   /**
+   * The hub the socket route serves.
+   *
+   * Built by the caller, not here: the hub needs an approval gate, and the gate
+   * has to exist before the runtime is constructed — `createRuntime({ approvals })`
+   * is what threads it into the loop. Untying that knot from inside this
+   * function is not possible, and a hub built here would be a second one.
+   */
+  readonly hub: SessionHub;
+  /**
+   * A built single-page app to serve, and the SPA fallback that goes with it.
+   *
+   * Absent serves the API alone, which is what a test and a headless install
+   * want. It is an option rather than a separate `app.register` afterwards
+   * because `createServer` awaits `app.ready()` — after that Fastify accepts no
+   * further routes, so anything the UI needs has to be decided here.
+   */
+  readonly ui?: UiOptions;
+  /**
    * The connection `SessionStore`, the scheduler and the knowledge base share.
    *
    * Required rather than opened here: one WAL is the point, and a server that
@@ -89,6 +115,19 @@ export interface ServerOptions {
   readonly hasher?: PasswordHasher;
 }
 
+export interface UiOptions {
+  /** The directory holding `index.html` and the hashed asset bundle. */
+  readonly root: string;
+  /**
+   * The document a client-routed path falls back to. Defaults to `index.html`.
+   *
+   * The fallback is deliberately not applied under `/api` or `/ws`: a mistyped
+   * route there is a 404 a client can read, and answering it with an HTML page
+   * turns a typo into "the JSON parser failed", which is a much longer bug.
+   */
+  readonly index?: string;
+}
+
 export interface ListenOptions {
   readonly host?: string;
   /** Overrides `server.port`. `0` asks the OS for a free one. */
@@ -104,6 +143,42 @@ export interface GhostServer {
   /** Resolves to the bound address. */
   listen(options?: ListenOptions): Promise<string>;
   close(): Promise<void>;
+}
+
+/** Paths that must 404 as JSON rather than falling back to the SPA shell. */
+const API_PREFIXES: readonly string[] = ['/api', '/ws'];
+
+/**
+ * Serves the built UI, and routes everything the router did not match to it.
+ *
+ * A single-page app owns its own URLs — `/settings`, `/session/abc` — and none
+ * of them exist on the server, so a reload of any page but `/` is a 404 unless
+ * the shell is served for it. That is the whole of the fallback, and its one
+ * rule is the exclusion below: an unknown `/api` path is a client bug, and
+ * answering it with HTML makes it surface as a JSON parse error somewhere else
+ * entirely.
+ */
+async function registerUi(app: FastifyInstance, ui: UiOptions): Promise<void> {
+  await app.register(fastifyStatic, {
+    root: ui.root,
+    // The API owns `/api`; the UI owns the rest of the origin. `index: false`
+    // because the not-found fallback serves the shell, and letting the static
+    // plugin do it too would mean two paths to the same file.
+    index: false,
+    wildcard: false,
+  });
+}
+
+/** The fallback itself, installed into the one not-found handler. */
+function spaFallback(ui: UiOptions): (request: FastifyRequest, reply: FastifyReply) => boolean {
+  const index = ui.index ?? 'index.html';
+  return (request, reply) => {
+    if (request.method !== 'GET' || API_PREFIXES.some((prefix) => request.url.startsWith(prefix))) {
+      return false;
+    }
+    void reply.sendFile(index);
+    return true;
+  };
 }
 
 /**
@@ -134,19 +209,27 @@ export async function createServer(options: ServerOptions): Promise<GhostServer>
 
   const app = Fastify({
     loggerInstance: logger,
-    // Fastify's default is 100 characters, which two routes here exceed as a
-    // matter of course: a signed media token is a base64url payload naming a
-    // workspace path plus a 43-character MAC, and a session key is whatever the
-    // channel that opened it chose. Both would answer 414 to a perfectly
-    // ordinary request.
-    maxParamLength: MAX_PARAM_LENGTH,
+    // Under `routerOptions` rather than at the top level: the flat form is
+    // deprecated in Fastify 5 and warns once per route, which is a page of
+    // FSTDEP022 on every boot and every test run.
+    routerOptions: {
+      // Fastify's default is 100 characters, which two routes here exceed as a
+      // matter of course: a signed media token is a base64url payload naming a
+      // workspace path plus a 43-character MAC, and a session key is whatever
+      // the channel that opened it chose. Both would answer 414 to a perfectly
+      // ordinary request.
+      maxParamLength: MAX_PARAM_LENGTH,
+    },
   });
 
   // Zod validates and Zod documents; Fastify's AJV is handed nothing. See
   // `schema.ts` for why feeding it draft-2020-12 output is the worse trade.
   app.setValidatorCompiler(zodValidatorCompiler);
   app.setSerializerCompiler(jsonSerializerCompiler);
-  registerErrorHandler(app);
+  registerErrorHandler(
+    app,
+    options.ui === undefined ? {} : { onNotFound: spaFallback(options.ui) },
+  );
 
   // Anything that is not JSON arrives as a `Buffer`, which is what makes the
   // upload a plain `POST` of the file rather than a multipart parser and the
@@ -162,6 +245,11 @@ export async function createServer(options: ServerOptions): Promise<GhostServer>
   });
 
   await app.register(cookie);
+
+  // Registered before the routes, because the plugin works through an `onRoute`
+  // hook: a route declaring `wsHandler` before this ran would be an ordinary
+  // GET that answers 426 to an upgrade request nobody reads.
+  await app.register(websocket);
 
   const perMinute = config.server.auth.rateLimitPerMinute;
   await app.register(rateLimit, {
@@ -220,12 +308,14 @@ export async function createServer(options: ServerOptions): Promise<GhostServer>
   const routes = createRoutes({
     config,
     runtime: options.runtime,
+    hub: options.hub,
     auth,
     notifications,
     database,
     openapiDocument: () => app.swagger(),
     startedAt: clock.monotonic(),
     ...(options.clock === undefined ? {} : { clock: options.clock }),
+    ...(options.logger === undefined ? {} : { logger: options.logger }),
   });
 
   for (const spec of ROUTE_MANIFEST) {
@@ -250,6 +340,7 @@ export async function createServer(options: ServerOptions): Promise<GhostServer>
         security: spec.auth === 'required' ? [{ cookieAuth: [] }, { bearerAuth: [] }] : [],
       },
       ...(hook === undefined ? {} : { onRequest: hook }),
+      ...(route.wsHandler === undefined ? {} : { wsHandler: route.wsHandler }),
       ...(route.bodyLimit === undefined ? {} : { bodyLimit: route.bodyLimit }),
       ...(route.rateLimit === undefined
         ? {}
@@ -261,6 +352,8 @@ export async function createServer(options: ServerOptions): Promise<GhostServer>
       handler: route.handler,
     });
   }
+
+  if (options.ui !== undefined) await registerUi(app, options.ui);
 
   await app.ready();
 

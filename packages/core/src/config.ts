@@ -28,12 +28,18 @@
  *    in, with an explicit caller-supplied workspace still winning over both.
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 import { ConfigSchema, type Config } from '@ghostai/protocol';
 
 import { GhostError } from './errors.js';
-import { resolveGhostPaths, type GhostPaths, type ResolveGhostPathsOptions } from './paths.js';
+import {
+  ensureDir,
+  resolveGhostPaths,
+  type GhostPaths,
+  type ResolveGhostPathsOptions,
+} from './paths.js';
 
 export interface LoadConfigOptions extends ResolveGhostPathsOptions {
   /** Overrides `<root>/config.json`. */
@@ -92,6 +98,51 @@ export function parseConfig(text: string, file: string): Config {
 
 function describeJsonError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Writes the settings tree back.
+ *
+ * The other half of `loadConfig`, and it lives here for the same reason: a
+ * settings save from the UI and a config file written by hand have to be the
+ * same file in the same shape, and two implementations of "what a config file
+ * looks like" is one more than the format can survive.
+ *
+ * Three properties it holds:
+ *
+ *  - **It validates before it writes.** A patch that merged into something the
+ *    schema rejects is a config the next boot refuses to load, and discovering
+ *    that at the next restart is discovering it at the worst moment.
+ *  - **The replacement is atomic.** A crash mid-write leaves the previous file
+ *    intact rather than a truncated one — a half-written `config.json` is an
+ *    install that will not start.
+ *  - **Two spaces and a trailing newline**, because this file is edited by hand
+ *    at least as often as it is written by a program, and a save from the UI
+ *    should not reformat what an operator wrote.
+ */
+export function saveConfig(file: string, config: Config): Config {
+  const parsed = ConfigSchema.safeParse(config);
+  if (!parsed.success) {
+    throw new GhostError('config', `Refusing to write invalid settings to ${file}`, {
+      cause: parsed.error,
+      details: { file },
+    });
+  }
+
+  ensureDir(dirname(file));
+  // Same directory, so the rename is a rename and not a cross-device copy —
+  // which is not atomic and is exactly what this is avoiding.
+  const temporary = `${file}.tmp`;
+  try {
+    writeFileSync(temporary, `${JSON.stringify(parsed.data, null, 2)}\n`, { mode: 0o600 });
+    renameSync(temporary, file);
+  } catch (error) {
+    throw new GhostError('config', `${file} could not be written`, {
+      cause: error,
+      details: { file },
+    });
+  }
+  return parsed.data;
 }
 
 /**

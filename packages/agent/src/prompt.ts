@@ -26,6 +26,7 @@
 
 import { arch, platform as hostPlatform, versions } from 'node:process';
 
+import type { ParsedMentions } from '@ghostai/protocol';
 import { toolOutputPolicy } from '@ghostai/security';
 
 /** The separator between top-level sections. Also joins the two halves. */
@@ -47,6 +48,17 @@ export interface RuntimePromptContext extends StaticPromptContext {
   readonly maxIterations: number;
   /** Wall-clock epoch milliseconds, from the injected clock. */
   readonly nowMs: number;
+  /**
+   * The `@kb:` / `@mcp:` / `@skill:` mentions on the message that started this
+   * turn, parsed once by the transport for every channel.
+   *
+   * Here rather than on `StaticPromptContext` because it changes per turn, and
+   * a contributor that read a per-turn value from `staticSection` would be
+   * claiming a section is stable when it is not. Nothing reads it yet — memory,
+   * MCP scoping and skills arrive in Phase 3 — but a mention that never reaches
+   * the prompt is a feature the UI advertises and the agent cannot see.
+   */
+  readonly mentions?: ParsedMentions;
 }
 
 /**

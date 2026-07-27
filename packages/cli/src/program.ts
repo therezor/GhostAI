@@ -26,6 +26,7 @@ import { Command, CommanderError } from 'commander';
 import type { LogLevel } from '@ghostai/core';
 
 import type { ChatOptions } from './chat.js';
+import type { ServeCommandOptions } from './serve.js';
 
 /**
  * Kept in step with `package.json` by `program.test.ts`.
@@ -44,6 +45,8 @@ export interface CliDeps {
   readonly errOut?: NodeJS.WritableStream;
   /** Injected so a test can drive the parser without booting an agent. */
   readonly runChat?: (options: ChatOptions) => Promise<number>;
+  /** Injected so a test can drive the parser without binding a port. */
+  readonly runServe?: (options: ServeCommandOptions) => Promise<number>;
   readonly env?: Readonly<Record<string, string | undefined>>;
 }
 
@@ -51,6 +54,14 @@ interface GlobalOptions {
   readonly home?: string;
   readonly logLevel?: string;
   readonly color: boolean;
+}
+
+interface ServeCliOptions {
+  readonly host?: string;
+  readonly port?: string;
+  readonly workspace?: string;
+  readonly password?: string;
+  readonly ui?: string;
 }
 
 interface ChatCliOptions {
@@ -70,6 +81,22 @@ async function defaultRunChat(options: ChatOptions): Promise<number> {
   return await chatCommand(options);
 }
 
+/** Likewise `serveCommand`, which pulls Fastify, argon2id and the whole server. */
+async function defaultRunServe(options: ServeCommandOptions): Promise<number> {
+  const { serveCommand } = await import('./serve.js');
+  return await serveCommand(options);
+}
+
+/** A port from the command line, refused before anything binds. */
+function resolvePort(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < 0 || port > 65_535) {
+    throw new CommanderError(1, 'ghost.port', `"${value}" is not a port number`);
+  }
+  return port;
+}
+
 function resolveLogLevel(value: string | undefined): LogLevel | undefined {
   if (value === undefined) return undefined;
   if (!LOG_LEVELS.includes(value)) {
@@ -81,7 +108,9 @@ function resolveLogLevel(value: string | undefined): LogLevel | undefined {
 export function buildProgram(deps: CliDeps = {}): Command {
   const out = deps.out ?? process.stdout;
   const errOut = deps.errOut ?? process.stderr;
+  const env = deps.env ?? process.env;
   const runChat = deps.runChat ?? defaultRunChat;
+  const runServe = deps.runServe ?? defaultRunServe;
 
   const program = new Command('ghost')
     .description('A self-hosted agent that runs where your files are.')
@@ -135,6 +164,39 @@ export function buildProgram(deps: CliDeps = {}): Command {
       command.setOptionValue('exitCode', code);
     });
 
+  program
+    .command('serve')
+    .description('Serve the web UI and the API on one port.')
+    .option('-H, --host <host>', 'bind address, overriding the configured default')
+    .option('-P, --port <port>', 'port, overriding the configured default')
+    .option('-w, --workspace <dir>', 'workspace root, overriding the configured default')
+    .option('--password <password>', 'set or rotate the login password (or GHOSTAI_PASSWORD)')
+    .option('--ui <dir>', 'a built UI to serve, instead of the bundled one')
+    .action(async (options: ServeCliOptions, command: Command) => {
+      const globals = command.parent?.opts<GlobalOptions>() ?? { color: true };
+      const level = resolveLogLevel(globals.logLevel);
+      // The environment is read here rather than in `serveCommand`, which then
+      // stays testable without anyone mutating `process.env`.
+      const password = options.password ?? env.GHOSTAI_PASSWORD;
+
+      const code = await runServe({
+        ...(options.host === undefined ? {} : { host: options.host }),
+        ...(resolvePort(options.port) === undefined ? {} : { port: resolvePort(options.port) }),
+        ...(options.workspace === undefined ? {} : { workspace: options.workspace }),
+        ...(password === undefined || password === '' ? {} : { password }),
+        ...(options.ui === undefined ? {} : { ui: options.ui }),
+        ...(globals.home === undefined ? {} : { home: globals.home }),
+        // A server is a long-running process, and `warn` on one is a process
+        // that says nothing about the requests it is serving.
+        logLevel: level ?? 'info',
+        colors: globals.color,
+        out,
+        errOut,
+        env,
+      });
+      command.setOptionValue('exitCode', code);
+    });
+
   return program;
 }
 
@@ -183,7 +245,11 @@ export async function runCli(argv: readonly string[], deps: CliDeps = {}): Promi
     return 1;
   }
 
-  const command = program.commands.find((child) => child.name() === 'chat');
-  const code: unknown = command?.getOptionValue('exitCode');
-  return typeof code === 'number' ? code : 0;
+  // Whichever subcommand ran set it; the others left theirs unset. Reading the
+  // one that has a number is what keeps this from having to know which ran.
+  for (const command of program.commands) {
+    const code: unknown = command.getOptionValue('exitCode');
+    if (typeof code === 'number') return code;
+  }
+  return 0;
 }

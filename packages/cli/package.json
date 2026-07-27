@@ -28,13 +28,19 @@
   },
   "dependencies": {
     "@ghostai/agent": "workspace:*",
+    "@ghostai/channels": "workspace:*",
     "@ghostai/core": "workspace:*",
     "@ghostai/protocol": "workspace:*",
     "@ghostai/providers": "workspace:*",
     "@ghostai/runtime": "workspace:*",
     "@ghostai/security": "workspace:*",
+    "@ghostai/server": "workspace:*",
     "@ghostai/tools": "workspace:*",
     "commander": "^13.0.0",
     "picocolors": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.0",
+    "ws": "^8.18.0"
   }
 }

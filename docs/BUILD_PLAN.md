@@ -359,14 +359,31 @@ Notes for later steps:
 </details>
 
 <details>
-<summary><b>Step 14 — <code>@ghostai/channels</code> and <code>ghost serve</code></b></summary>
+<summary><b>Step 14 — <code>@ghostai/channels</code> and <code>ghost serve</code></b> ✅ done</summary>
 
 - `Channel`, `ChannelFactory` and `ChannelManager`, bridging the existing `MessageBus` to `SessionHub`. Channels publish `InboundMessage` and consume `OutboundMessage`; they never touch `AgentLoop`.
-- `channelConformance(factory)` in `src/testkit/` — not exported from `index.ts`, since it imports `vitest`, the same rule the provider and tool suites follow. A `loopback` reference channel in `examples/` proves the contract without a network.
+- `channelConformance(factory)` in `src/testkit/`, with a `loopback` reference channel in `examples/` proving the contract without a network.
 - `parseMentions()` runs server-side in the hub for every channel, so `@kb:` is not a web-only feature.
 - `ghost serve` — lazy-imported like every other subcommand, so `ghost --help` still loads nothing from `@ghostai/*`. Serves the built SPA with an SPA fallback and prints the URL and whether auth is on.
 
-**Done when:** the loopback channel round-trips a message through the same agent into the same session store as a web turn, and `ghost serve` serves the SPA on one port.
+**Done when:** the loopback channel round-trips a message through the same agent into the same session store as a web turn, and `ghost serve` serves the SPA on one port. ✅ (channels 97/94, the round trip asserted against a real `SessionHub`, `AgentLoop` and `SessionStore` in `examples/loopback-channel`)
+
+Notes for later steps:
+
+- **The socket is a manifest route, not a registration in `ghost serve`.** `createServer` awaits `app.ready()`, so nothing can add a route afterwards — which settles where `GET /ws` and the static UI belong. `ServerOptions` gained `hub` (required) and `ui`. The gain is not tidiness: `/ws` is `auth: 'required'` in `ROUTE_MANIFEST`, so the auth matrix covers the upgrade, and an unauthenticated socket would have been an anonymous shell-capable agent that no test was looking at.
+- **`wsHandler` beside `handler`, never `{ websocket: true }`.** That form hides the route from the generated document and answers a plain GET with a bare 404. The route therefore keeps its schema, its OpenAPI entry and a 426 for a request that forgot to upgrade. `?session=` is validated before the upgrade, so a bad query is a 422 rather than a socket that opens on a session nobody asked for.
+- **A socket that stops reading is closed, not buffered.** `send` throws past `MAX_BUFFERED_BYTES`, which the hub already reads as a dead connection. Without it one tab that stopped draining holds a turn's whole output per session.
+- **The SPA fallback is a callback into the one not-found handler**, since Fastify allows exactly one. It answers `GET` only, and never under `/api` or `/ws`: HTML for an unknown API path surfaces as a JSON parse error somewhere unrelated. The shell itself is unauthenticated — every byte of data behind it is not, and a login screen that needed a session could never load.
+- **A channel cannot name another channel's session.** `ChannelManager` prefixes any key not already starting with `<channelId>:`, so a plugin channel publishing `web:1` writes into `plugin:web:1` rather than into a browser's conversation. It also stamps `channelId` on publish, so a channel cannot speak as another one, and it never hands out the `MessageBus` — a channel that drained `outbound()` would take other channels' replies out of a competing-consumer queue.
+- **`Channel.accepts` is why `progress` is opt-in.** The projection's `progress` carries the answer _so far_ and `reply` carries the whole of it, which is what a transport that edits in place wants and what a transport that can only post renders as the answer twice. The default omits `progress`; Telegram's `StreamingEditor` declares it.
+- **One hub connection per `(channel, session)`, LRU-bounded at 256 and never evicting a busy one.** A connection the hub can see is a session the hub will not evict, so the bound has to live in the manager. Outbound delivery is chained per channel: order holds within a channel, and a channel blocked on a `RetryAfter` cannot hold up another.
+- **`TurnInput.mentions` is the seam `@kb:` will arrive through.** The hub parses mentions once, for every transport, and the loop passes them to `RuntimePromptContext` — the runtime half of the prompt, because they are turn-scoped and `staticSection` must stay stable for the session. Nothing reads them until Phase 3; a contributor that does will get them from the browser and from Telegram identically.
+- **`saveConfig` landed in `@ghostai/core`, beside `loadConfig`.** Validate, write to `<file>.tmp`, rename — so a crash mid-write leaves the previous file rather than a truncated one, and a patch that merged into something the schema rejects is refused before it becomes a config the next boot cannot load.
+- **`--host` goes through the config; `--port` does not.** `assertBootPolicy` reads the config it was handed, so a `--host 0.0.0.0` applied only at `listen` time would walk past the refusal that exists to stop an unauthenticated LAN bind. A port carries no such decision — and `--port 0` is not expressible in a schema that requires a real port number.
+- **`credentialsPresent()` does not open the vault to answer.** `resolveVaultKey` mints a keychain entry the first time it runs, so the adapter reads the vault only when one already exists on disk or when a key is being written. A `PUT /api/settings/credentials` is followed by `reconfigure({})`, which re-reads the credential — that is what makes a key saved in the UI usable on the next turn without a restart.
+- **`@ghostai/channels/testkit` is a real subpath export**, unlike the provider and tool suites which are importable only from inside their own package. A channel is the one implementation that will routinely live outside this repo, and `vitest` is marked `external` in tsup so the entry does not carry it. Step 15's `@ghostai/web` needs no equivalent.
+- **`examples/*` are vitest projects now**, so the loopback channel's conformance run is part of `pnpm test` rather than a file nobody executes.
+- `Fastify` is constructed with `routerOptions.maxParamLength`; the flat form is deprecated in Fastify 5 and warned once per route.
 
 </details>
 

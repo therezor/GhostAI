@@ -16,8 +16,10 @@ import { DatabaseSync } from 'node:sqlite';
 import type { Clock } from '@ghostai/core';
 import { ConfigSchema, type Config, type ToolDefinition } from '@ghostai/protocol';
 
-import { createServer, type GhostServer } from '../app.js';
+import { createServer, type GhostServer, type UiOptions } from '../app.js';
 import type { PasswordHasher } from '../auth-store.js';
+import type { SessionHub } from '../hub.js';
+import { createTestHub, type FakeRunner } from './hub.js';
 import { createFakeRuntime, type FakeRuntime } from './runtime.js';
 
 /** argon2id is ~50 ms a call by design; a route test cannot pay it per case. */
@@ -37,11 +39,18 @@ export interface TestServerOptions {
   readonly systemPrompt?: string;
   /** Drives the store, the signer and the session TTL together. */
   readonly clock?: Clock;
+  /** What the scripted turn behind the socket answers with. */
+  readonly answer?: string;
+  /** A built UI to serve, with the SPA fallback that goes with it. */
+  readonly ui?: UiOptions;
 }
 
 export interface TestServer {
   readonly server: GhostServer;
   readonly runtime: FakeRuntime;
+  readonly hub: SessionHub;
+  /** Every turn the socket's scripted loop was asked to run. */
+  readonly runner: FakeRunner;
   /** The jail root. Tests write fixtures straight into it. */
   readonly workspace: string;
   /** A `Bearer` header that authenticates every `required` route. */
@@ -68,21 +77,28 @@ export async function startTestServer(options: TestServerOptions = {}): Promise<
       : { credentialsPresent: options.credentialsPresent }),
   });
 
+  const { hub, runner } = createTestHub(runtime.store, config, options.answer);
+
   const server = await createServer({
     config,
     runtime,
+    hub,
     database,
     hasher: fakeHasher,
     password: TEST_PASSWORD,
     ...(options.clock === undefined ? {} : { clock: options.clock }),
+    ...(options.ui === undefined ? {} : { ui: options.ui }),
   });
 
   return {
     server,
     runtime,
+    hub,
+    runner,
     workspace,
     headers: { authorization: `Bearer ${server.auth.issue('test').token}` },
     close: async () => {
+      hub.close();
       await server.close();
       database.close();
       rmSync(workspace, { recursive: true, force: true });

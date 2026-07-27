@@ -21,15 +21,18 @@ import { settingsRoutes } from './routes/settings.js';
 import { systemRoutes } from './routes/system.js';
 import { toolRoutes } from './routes/tools.js';
 import type { RouteDefinition, RouteDeps } from './routes/types.js';
+import { wsRoutes } from './routes/ws.js';
 import type { RouteId } from './manifest.js';
 
 export { LOGIN_ATTEMPTS_PER_MINUTE } from './routes/auth.js';
 export { MAX_UPLOAD_BYTES } from './routes/files.js';
+export { MAX_BUFFERED_BYTES } from './routes/ws.js';
 export type { RouteDefinition, RouteDeps, RouteGroup, RouteRateLimit } from './routes/types.js';
 
 export function createRoutes(deps: RouteDeps): Record<RouteId, RouteDefinition> {
   return {
     ...systemRoutes(deps),
+    ...wsRoutes(deps),
     ...authRoutes(deps),
     ...settingsRoutes(deps),
     ...providerRoutes(deps),

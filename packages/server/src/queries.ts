@@ -68,6 +68,22 @@ export const NotificationListQuerySchema: z.ZodType<NotificationListQuery> = z.o
     .optional(),
 });
 
+export interface WsQuery {
+  /** The session to open on. Absent asks the hub to mint one. */
+  readonly session?: string | undefined;
+}
+
+/**
+ * The socket's only query parameter.
+ *
+ * Validated before the upgrade rather than after, so a client that sends
+ * `?session=` gets a 400 it can read instead of a socket that opens, mints a
+ * session it did not ask for, and looks like it lost the conversation.
+ */
+export const WsQuerySchema: z.ZodType<WsQuery> = z.object({
+  session: z.string().min(1).optional(),
+});
+
 export interface PathQuery {
   readonly path: string;
 }

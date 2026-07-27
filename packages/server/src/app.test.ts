@@ -9,9 +9,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { SERVER_VERSION, createServer, type GhostServer } from './app.js';
 import type { PasswordHasher } from './auth-store.js';
 import { SESSION_COOKIE } from './auth.js';
+import type { SessionHub } from './hub.js';
 import { ROUTE_MANIFEST, type RouteSpec } from './manifest.js';
 import { NotificationStore } from './notifications.js';
 import { createRoutes } from './routes.js';
+import { createTestHub } from './testkit/hub.js';
 import { createFakeRuntime } from './testkit/runtime.js';
 
 const PASSWORD = 'a-test-password';
@@ -25,8 +27,10 @@ const fakeHasher: PasswordHasher = {
 const started: GhostServer[] = [];
 const opened: DatabaseSync[] = [];
 const workspaces: string[] = [];
+const hubs: SessionHub[] = [];
 
 afterEach(async () => {
+  while (hubs.length > 0) hubs.pop()?.close();
   while (started.length > 0) await started.pop()?.close();
   while (opened.length > 0) opened.pop()?.close();
   while (workspaces.length > 0) rmSync(workspaces.pop() ?? '', { recursive: true, force: true });
@@ -42,6 +46,23 @@ function workspace(): string {
   return root;
 }
 
+/**
+ * The two collaborators `createServer` will not build for itself, as a pair.
+ *
+ * The hub is required because the socket route is in the manifest; the tests
+ * below are about boot policy and health, so neither is anything they have an
+ * opinion about.
+ */
+function collaborators(
+  database: DatabaseSync,
+  settings: Config = config(),
+): { runtime: ReturnType<typeof createFakeRuntime>; hub: SessionHub } {
+  const runtime = createFakeRuntime({ database, workspace: workspace(), config: settings });
+  const { hub } = createTestHub(runtime.store, settings);
+  hubs.push(hub);
+  return { runtime, hub };
+}
+
 interface StartOptions {
   readonly config?: Config;
   readonly password?: string | null;
@@ -51,9 +72,13 @@ async function start(options: StartOptions = {}): Promise<GhostServer> {
   const database = new DatabaseSync(':memory:');
   opened.push(database);
   const settings = options.config ?? config();
+  const runtime = createFakeRuntime({ database, workspace: workspace(), config: settings });
+  const { hub } = createTestHub(runtime.store, settings);
+  hubs.push(hub);
   const server = await createServer({
     config: settings,
-    runtime: createFakeRuntime({ database, workspace: workspace(), config: settings }),
+    runtime,
+    hub,
     database,
     hasher: fakeHasher,
     ...(options.password === null ? {} : { password: options.password ?? PASSWORD }),
@@ -212,10 +237,14 @@ describe('auth matrix', () => {
     const server = await start();
     const database = new DatabaseSync(':memory:');
     opened.push(database);
+    const runtime = createFakeRuntime({ database, workspace: workspace() });
+    const { hub } = createTestHub(runtime.store);
+    hubs.push(hub);
     const ids = Object.keys(
       createRoutes({
         config: server.config,
-        runtime: createFakeRuntime({ database, workspace: workspace() }),
+        runtime,
+        hub,
         auth: server.auth,
         notifications: new NotificationStore({ database }),
         database,
@@ -450,7 +479,7 @@ describe('health', () => {
     const database = new DatabaseSync(':memory:');
     const server = await createServer({
       config: config(),
-      runtime: createFakeRuntime({ database, workspace: workspace() }),
+      ...collaborators(database),
       database,
       hasher: fakeHasher,
       password: PASSWORD,
@@ -471,7 +500,7 @@ describe('boot', () => {
     await expect(
       createServer({
         config: config({ host: '0.0.0.0', auth: { enabled: false } }),
-        runtime: createFakeRuntime({ database, workspace: workspace() }),
+        ...collaborators(database),
         database,
         hasher: fakeHasher,
       }),
@@ -485,7 +514,7 @@ describe('boot', () => {
     await expect(
       createServer({
         config: config(),
-        runtime: createFakeRuntime({ database, workspace: workspace() }),
+        ...collaborators(database),
         database,
         hasher: fakeHasher,
       }),
@@ -498,7 +527,7 @@ describe('boot', () => {
 
     const first = await createServer({
       config: config(),
-      runtime: createFakeRuntime({ database, workspace: workspace() }),
+      ...collaborators(database),
       database,
       hasher: fakeHasher,
       password: PASSWORD,
@@ -507,7 +536,7 @@ describe('boot', () => {
 
     const second = await createServer({
       config: config(),
-      runtime: createFakeRuntime({ database, workspace: workspace() }),
+      ...collaborators(database),
       database,
       hasher: fakeHasher,
     });

@@ -197,13 +197,30 @@ export function errorBody(
   };
 }
 
+export interface ErrorHandlerOptions {
+  /**
+   * A last chance to answer a request no route matched.
+   *
+   * Returning `true` means it was handled — this is how the single-page app's
+   * shell is served for a client-routed path. Returning `false` falls through
+   * to the 404 envelope. It is a callback rather than a flag because Fastify
+   * allows exactly one not-found handler per instance, and what belongs in it
+   * (which paths are the API's, which document is the shell) is the caller's
+   * knowledge, not this module's.
+   */
+  readonly onNotFound?: (request: FastifyRequest, reply: FastifyReply) => boolean;
+}
+
 /**
  * Installs the error and not-found handlers.
  *
  * Both go through `resolveError`, so there is exactly one place a non-2xx body
  * is constructed and no route can invent a second shape.
  */
-export function registerErrorHandler(app: FastifyInstance): void {
+export function registerErrorHandler(
+  app: FastifyInstance,
+  options: ErrorHandlerOptions = {},
+): void {
   app.setErrorHandler((error: unknown, request: FastifyRequest, reply: FastifyReply) => {
     const resolved = resolveError(error);
     // Structured, not interpolated: pino redacts by path, and a message built
@@ -215,6 +232,7 @@ export function registerErrorHandler(app: FastifyInstance): void {
   });
 
   app.setNotFoundHandler((request: FastifyRequest, reply: FastifyReply) => {
+    if (options.onNotFound?.(request, reply) === true) return;
     void reply
       .status(404)
       .send(errorBody('not_found', `No route for ${request.method} ${request.url}`));

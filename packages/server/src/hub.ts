@@ -53,11 +53,13 @@ import {
 import {
   ClientMessageSchema,
   PROTOCOL_VERSION,
+  parseMentions,
   type Attachment,
   type ClientMessage,
   type Config,
   type ContentPart,
   type ErrorCode,
+  type ParsedMentions,
   type ServerMessage,
 } from '@ghostai/protocol';
 
@@ -198,6 +200,8 @@ interface QueuedTurn {
   readonly content: string | readonly ContentPart[];
   readonly profileId: string | undefined;
   readonly channel: string;
+  /** Parsed at submit time, so a queued message is not reparsed to run it. */
+  readonly mentions: ParsedMentions;
 }
 
 interface RunningTurn {
@@ -514,6 +518,11 @@ export class SessionHub {
       content: toContent(message.content, message.attachments),
       profileId: message.profileId ?? connection.profileId,
       channel: connection.channel,
+      // Here, and only here. Parsing mentions in the WebSocket handler would
+      // make `@kb:` a browser feature: a channel bridging through this hub
+      // sends the same frame and would get none of it. The text is never
+      // modified — the model sees exactly what the user typed.
+      mentions: parseMentions(message.content),
     });
 
     this.#emit(state, {
@@ -581,6 +590,7 @@ export class SessionHub {
         signal: controller.signal,
         channel: turn.channel,
         turnId: turn.id,
+        mentions: turn.mentions,
         ...(turn.profileId === undefined ? {} : { profileId: turn.profileId }),
       });
 

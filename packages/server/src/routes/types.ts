@@ -9,11 +9,13 @@
 
 import type { DatabaseSync } from 'node:sqlite';
 
-import type { Clock } from '@ghostai/core';
+import type { WebSocket } from '@fastify/websocket';
+import type { Clock, Logger } from '@ghostai/core';
 import type { Config } from '@ghostai/protocol';
 import type { FastifyReply, FastifyRequest, FastifySchema } from 'fastify';
 
 import type { AuthStore } from '../auth-store.js';
+import type { SessionHub } from '../hub.js';
 import type { RouteId } from '../manifest.js';
 import type { NotificationStore } from '../notifications.js';
 import type { ServerRuntime } from '../runtime.js';
@@ -52,6 +54,17 @@ export interface RouteDefinition {
    * a method shorthand makes a `this`-scoping hazard.
    */
   readonly handler: (request: FastifyRequest, reply: FastifyReply) => unknown;
+  /**
+   * Handles the request when it is a WebSocket upgrade.
+   *
+   * Declared beside `handler` rather than replacing it, which is what
+   * `{ websocket: true }` would do: that form hides the route from the
+   * generated document and answers a plain GET with a bare 404, and both are
+   * things this repo checks. With both present the ordinary handler still runs
+   * for an ordinary request — 426, in the one error envelope — and the route
+   * stays in the manifest, in the auth matrix and in the OpenAPI document.
+   */
+  readonly wsHandler?: (socket: WebSocket, request: FastifyRequest) => void;
 }
 
 export interface RouteDeps {
@@ -66,6 +79,15 @@ export interface RouteDeps {
    */
   readonly config: Config;
   readonly runtime: ServerRuntime;
+  /**
+   * The one hub in the process.
+   *
+   * Required, not optional: it is what the socket route serves, and a server
+   * built without one would register `GET /ws` — which the manifest says is
+   * served — over nothing. Building it is the caller's job because the approval
+   * gate has to exist before the runtime that the hub then drives.
+   */
+  readonly hub: SessionHub;
   readonly auth: AuthStore;
   readonly notifications: NotificationStore;
   /** Pinged by the health check, which is the only honest liveness signal. */
@@ -75,4 +97,5 @@ export interface RouteDeps {
   /** Monotonic, from the injected clock, so `uptimeMs` survives an NTP step. */
   readonly startedAt: number;
   readonly clock?: Clock;
+  readonly logger?: Logger;
 }
