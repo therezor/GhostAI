@@ -32,7 +32,11 @@
  *    `assistant` turn whose `tool_calls` were never answered, so stopping mid-
  *    tool without writing a result would make the *next* turn fail on history
  *    the user cannot see — the failure surfaces long after the Ctrl-C that
- *    caused it.
+ *    caused it. A *denied* call is the same case: no execution, still a result.
+ *  - **Approval is checked between the `tool.call` event and execution**, which
+ *    is the only place it can be checked once for every transport. What the
+ *    loop decides is whether to ask; what the answer is, and how long it holds,
+ *    belong to the gate. See `approval.ts`.
  *
  * The signal threads from the caller through the provider request, tool
  * execution and any child process. There is one cancellation mechanism, and
@@ -92,6 +96,13 @@ import {
   type ToolRegistry,
 } from '@ghostai/tools';
 
+import {
+  deniedNotice,
+  deniedToolResult,
+  type ApprovalGate,
+  type ApprovalRequest,
+  type DenialReason,
+} from './approval.js';
 import type { AgentEvent } from './events.js';
 import {
   buildRuntimeBlock,
@@ -201,6 +212,56 @@ function cancelledExecution(name: string): ToolExecution {
   };
 }
 
+/** A call that was refused. `durationMs` is zero because nothing ran. */
+function deniedExecution(name: string, reason: DenialReason): ToolExecution {
+  return {
+    name,
+    content: deniedToolResult(name, reason),
+    isError: true,
+    truncated: false,
+    durationMs: 0,
+    errorKind: 'permission_denied',
+  };
+}
+
+/** How an awaited approval ended. */
+type ApprovalOutcome = 'approved' | 'aborted' | DenialReason;
+
+/** A promise that settles when a signal fires, and a way to stop listening. */
+interface AbortWatch {
+  readonly promise: Promise<'aborted'>;
+  dispose(): void;
+}
+
+function watchAbort(signal: AbortSignal): AbortWatch {
+  // A second controller purely to remove the listener: a turn making dozens of
+  // approved calls would otherwise leave one listener per call attached to a
+  // signal that lives as long as the turn.
+  const listening = new AbortController();
+  const promise = new Promise<'aborted'>((resolve) => {
+    // An `abort` listener added to a signal that has *already* fired is never
+    // called, so a watcher without this line waits out the full approval
+    // deadline on a turn that was cancelled a moment earlier.
+    if (signal.aborted) {
+      resolve('aborted');
+      return;
+    }
+    signal.addEventListener(
+      'abort',
+      () => {
+        resolve('aborted');
+      },
+      { once: true, signal: listening.signal },
+    );
+  });
+  return {
+    promise,
+    dispose: () => {
+      listening.abort();
+    },
+  };
+}
+
 export interface AgentLoopOptions {
   /** Already wrapped in `withResilience` by `createProvider`. */
   readonly provider: ChatProvider;
@@ -214,6 +275,16 @@ export interface AgentLoopOptions {
   /** Overrides `config.model`. One of the two must be non-empty. */
   readonly model?: string;
   readonly contributors?: readonly ContextContributor[];
+  /**
+   * Who to ask before a tool whose risk band is set to `ask` runs.
+   *
+   * Absent means nobody is there to ask, and an `ask` policy then runs the tool
+   * — today's behaviour, and what keeps a terminal session unchanged. A `deny`
+   * policy is enforced with or without a gate. Any transport that exposes this
+   * agent to something other than its operator's own keyboard should install
+   * one.
+   */
+  readonly approvals?: ApprovalGate;
   readonly steering?: SteeringQueue;
   readonly clock?: Clock;
   readonly logger?: Logger;
@@ -267,6 +338,7 @@ export class AgentLoop {
   readonly #toolsConfig: ToolsConfig;
   readonly #model: string;
   readonly #contributors: readonly ContextContributor[];
+  readonly #approvals: ApprovalGate | undefined;
   readonly #steering: SteeringQueue;
   readonly #clock: Clock;
   readonly #logger: Logger;
@@ -284,6 +356,7 @@ export class AgentLoop {
     this.#config = options.config ?? AgentDefaultsSchema.parse({});
     this.#toolsConfig = options.toolsConfig ?? DEFAULT_TOOLS_CONFIG;
     this.#contributors = options.contributors ?? [];
+    this.#approvals = options.approvals;
     this.#steering =
       options.steering ?? new SteeringQueue({ logger: options.logger ?? silentLogger });
     this.#clock = options.clock ?? systemClock;
@@ -547,18 +620,26 @@ export class AgentLoop {
     let cancelled = turn.signal.aborted;
 
     for (const call of result.message.toolCalls) {
+      const risk = this.#riskOf(call.name);
       yield {
         type: 'tool.call',
         turnId: turn.turnId,
         callId: call.id,
         name: call.name,
         args: parseToolArgs(call.argumentsJson),
-        risk: this.#riskOf(call.name),
+        risk,
       };
 
-      const execution = cancelled
-        ? cancelledExecution(call.name)
-        : yield* this.#executeWithHeartbeat(call, turn.toolContext, turn.turnId);
+      let execution: ToolExecution;
+      if (cancelled) {
+        execution = cancelledExecution(call.name);
+      } else {
+        // Between the event and the execution, and nowhere else: a transport
+        // that gated it for itself would be one `if` away from an ungated one.
+        const refusal = yield* this.#authorize(call, risk, turn);
+        execution =
+          refusal ?? (yield* this.#executeWithHeartbeat(call, turn.toolContext, turn.turnId));
+      }
 
       if (execution.errorKind === 'aborted') cancelled = true;
 
@@ -605,6 +686,126 @@ export class AgentLoop {
 
     this.#store.appendMany(turn.sessionKey, pending, { turnId: turn.turnId });
     return cancelled;
+  }
+
+  /**
+   * Whether this call may run — and, if not, the result that says so.
+   *
+   * Returning `undefined` means proceed. Anything else is a `ToolExecution`
+   * that never executed, which is what keeps the "every tool call gets a `tool`
+   * message" rule true for a call the user refused: a denial the model cannot
+   * see is an unanswered `tool_call`, and that is a provider 400 on the next
+   * turn rather than a refusal it can work around.
+   *
+   * An abort during an approval is a cancellation, not a denial. The difference
+   * matters to the caller: a denial lets the turn continue so the model can
+   * respond to it, while a cancellation stops the turn and the remaining calls.
+   */
+  async *#authorize(
+    call: ToolCall,
+    risk: ToolRisk,
+    turn: { sessionKey: string; turnId: string; signal: AbortSignal },
+  ): AsyncGenerator<AgentEvent, ToolExecution | undefined> {
+    const approvals = this.#toolsConfig.approvals;
+    const policy = approvals[risk];
+    if (policy === 'allow') return undefined;
+
+    let denial: DenialReason;
+    if (policy === 'deny') {
+      denial = 'policy';
+    } else {
+      const gate = this.#approvals;
+      // `ask` with nobody to ask. Denying here would make the default config
+      // refuse every `exec` in a terminal session, where the operator asking
+      // for the command *is* the approval.
+      if (gate === undefined) return undefined;
+
+      const expiresAtMs = this.#clock.now() + approvals.timeoutMs;
+      const request: ApprovalRequest = {
+        sessionKey: turn.sessionKey,
+        turnId: turn.turnId,
+        callId: call.id,
+        name: call.name,
+        args: parseToolArgs(call.argumentsJson),
+        risk,
+        expiresAtMs,
+        signal: turn.signal,
+      };
+
+      yield {
+        type: 'tool.approvalRequest',
+        turnId: turn.turnId,
+        callId: call.id,
+        name: call.name,
+        args: request.args,
+        risk,
+        expiresAtMs,
+      };
+
+      const outcome = await this.#decide(gate, request, approvals.timeoutMs);
+      if (outcome === 'approved') return undefined;
+      if (outcome === 'aborted') return cancelledExecution(call.name);
+      denial = outcome;
+    }
+
+    this.#logger.warn(
+      { sessionKey: turn.sessionKey, turnId: turn.turnId, tool: call.name, risk, policy, denial },
+      'tool call denied',
+    );
+    yield {
+      type: 'notice',
+      kind: 'approval_denied',
+      message: deniedNotice(call.name, denial),
+      turnId: turn.turnId,
+      callId: call.id,
+    };
+    return deniedExecution(call.name, denial);
+  }
+
+  /**
+   * Waits for a decision, a deadline, or the turn ending — whichever is first.
+   *
+   * The deadline is enforced here rather than left to the gate because the case
+   * it exists for is a gate that never answers: a browser tab closed on an open
+   * prompt, or a channel that has no way to render one. The timer is on the
+   * injected clock, so a test advances time instead of waiting five minutes.
+   *
+   * A gate that throws denies. There is no failure mode of an approval
+   * mechanism where the safe reading is "go ahead".
+   */
+  async #decide(
+    gate: ApprovalGate,
+    request: ApprovalRequest,
+    timeoutMs: number,
+  ): Promise<ApprovalOutcome> {
+    const deadline = this.#tick(timeoutMs);
+    const abort = watchAbort(request.signal);
+    try {
+      return await Promise.race<ApprovalOutcome>([
+        gate.request(request).then(
+          (decision) => {
+            this.#logger.info(
+              { tool: request.name, approved: decision.approved, scope: decision.scope },
+              'approval decision',
+            );
+            return decision.approved ? 'approved' : 'declined';
+          },
+          (error: unknown) => {
+            if (isAbortError(error)) return 'aborted';
+            this.#logger.error(
+              { tool: request.name, err: toGhostError(error, 'internal').message },
+              'approval gate failed',
+            );
+            return 'declined';
+          },
+        ),
+        deadline.promise.then((): ApprovalOutcome => 'timeout'),
+        abort.promise,
+      ]);
+    } finally {
+      deadline.cancel();
+      abort.dispose();
+    }
   }
 
   /**

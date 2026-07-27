@@ -74,6 +74,26 @@ export interface ToolProgressEvent {
 }
 
 /**
+ * A call is waiting for a decision, and nothing has run yet.
+ *
+ * Emitted only where the policy for the tool's risk band is `ask` *and* a gate
+ * is installed, so a transport that never answers one will never see one. The
+ * loop enforces `expiresAtMs` itself rather than trusting the gate to — the
+ * deadline exists precisely for the case where nothing answers.
+ */
+export interface ToolApprovalRequestEvent {
+  readonly type: 'tool.approvalRequest';
+  readonly turnId: string;
+  readonly callId: string;
+  readonly name: string;
+  /** Parsed arguments when the model emitted valid JSON; the raw string otherwise. */
+  readonly args: unknown;
+  readonly risk: ToolRisk;
+  /** Wall clock, not elapsed: a reconnecting client has to render the same deadline. */
+  readonly expiresAtMs: number;
+}
+
+/**
  * The outcome of one call.
  *
  * `content` is the tool's own output — truncated, but *not* wrapped in the
@@ -139,6 +159,7 @@ export type AgentEvent =
   | ReasoningDeltaEvent
   | ToolCallEvent
   | ToolProgressEvent
+  | ToolApprovalRequestEvent
   | ToolResultEvent
   | NoticeEvent
   | AgentErrorEvent

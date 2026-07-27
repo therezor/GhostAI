@@ -34,6 +34,15 @@ const SAMPLES: Record<AgentEventType, AgentEvent> = {
     elapsedMs: 15_000,
     message: 'exec is still running',
   },
+  'tool.approvalRequest': {
+    type: 'tool.approvalRequest',
+    turnId: 'turn-1',
+    callId: 'call-1',
+    name: 'exec',
+    args: { argv: ['git', 'status'] },
+    risk: 'exec',
+    expiresAtMs: 1_700_000_300_000,
+  },
   'tool.result': {
     type: 'tool.result',
     turnId: 'turn-1',

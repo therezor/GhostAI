@@ -237,7 +237,7 @@ Notes for later steps:
 </details>
 
 <details>
-<summary><b>Step 10 — Tool approval gate</b></summary>
+<summary><b>Step 10 — Tool approval gate</b> ✅ done</summary>
 
 The protocol declares this end to end — `ToolRisk`, `ToolApprovalPolicy` (`allow|ask|deny`), `ApprovalScope` (`once|session|always`), `ToolApprovalsConfig`, and the `tool.approvalRequest` / `tool.approve` pair — and nothing reads any of it. `AgentLoop` executes unconditionally after yielding `tool.call`. A browser-exposed agent with unattended `exec` is exactly what that config exists to prevent, so this lands before the WebSocket hub, not after.
 
@@ -246,7 +246,16 @@ The protocol declares this end to end — `ToolRisk`, `ToolApprovalPolicy` (`all
 - A denial still writes a `tool` message — every tool call gets one, including one that never ran, or the _next_ turn 400s on an unanswered `tool_calls` — plus a `notice` with `kind: 'approval_denied'`.
 - Timeout and abort both resolve as denial. Scope memory belongs to the gate implementation, not the loop.
 
-**Done when:** fake-timer tests cover allow / ask-approve / ask-deny / ask-timeout / abort-during-approval, history carries a `tool` message in every case, and coverage stays ≥ 85/80.
+**Done when:** fake-timer tests cover allow / ask-approve / ask-deny / ask-timeout / abort-during-approval, history carries a `tool` message in every case, and coverage stays ≥ 85/80. ✅ (100/98.4)
+
+Notes for later steps:
+
+- **The loop decides whether to ask; the gate decides the answer.** Policy resolution is a pure function of the tool's risk band and `tools.approvals`, so no transport can forget to check and none can decide differently. Scope — `once | session | always` — is memory, and memory needs a session-shaped store and somewhere to persist `always`; both belong to the thing holding a connection to a human. The loop reads `decision.approved` and nothing else.
+- **An absent gate means nobody is there to ask, so an `ask` policy runs the tool.** That is what keeps `ghost chat` unchanged — the operator who typed the message _is_ the approval. A `deny` policy is enforced with or without a gate, since refusing needs no one to answer. **Step 11's server must install a gate**, or the default `exec: ask` runs unattended behind a browser.
+- **The loop owns the approval deadline**, for the same reason it owns the heartbeat and not the tool timeout: the case `expiresAtMs` exists for is a gate that never answers — a tab closed on an open prompt — and only the turn knows it is still waiting. The timer is on the injected clock.
+- **A denial is an answer; an abort is not.** A denial writes a `tool` message and lets the turn continue, so the model can respond to it — the whole point of the refusal text is to stop a retry loop. An abort returns the same `cancelled` path as a mid-tool Ctrl-C, which ends the turn and answers every remaining call without asking about it. A gate that _rejects_ denies, except with an abort-shaped error; there is no failure of an approval mechanism whose safe reading is "go ahead".
+- **`addEventListener('abort')` on an already-fired signal never runs**, so the approval watcher checks `signal.aborted` first. Without that, a turn cancelled in the window between the `tool.call` event and the decision would sit out the full five-minute deadline before noticing.
+- `RuntimeOptions.approvals` passes a gate through to every loop the runtime builds and survives `reconfigure` — the gate belongs to the process, config only says which risk bands need asking about.
 
 </details>
 

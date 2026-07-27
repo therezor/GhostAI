@@ -6,11 +6,25 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { GhostError, SessionStore, hasOrphanedToolResult, textOf } from '@ghostai/core';
-import { AgentDefaultsSchema, type AgentDefaults, type ChatMessage } from '@ghostai/protocol';
+import {
+  AgentDefaultsSchema,
+  type AgentDefaults,
+  type ApprovalScope,
+  type ChatMessage,
+  type ToolApprovalPolicy,
+  type ToolRisk,
+  type ToolsConfig,
+} from '@ghostai/protocol';
 import { ProviderError, type ChatRequest } from '@ghostai/providers';
 import { WorkspaceJail, toolOutputTag } from '@ghostai/security';
-import { ToolRegistry, defineTool, type AnyTool } from '@ghostai/tools';
+import { DEFAULT_TOOLS_CONFIG, ToolRegistry, defineTool, type AnyTool } from '@ghostai/tools';
 
+import {
+  deniedToolResult,
+  type ApprovalDecision,
+  type ApprovalGate,
+  type ApprovalRequest,
+} from './approval.js';
 import type { AgentEvent } from './events.js';
 import {
   AgentLoop,
@@ -204,6 +218,81 @@ function pendingTool(name = 'slow'): PendingTool {
       resolve(value);
     },
   };
+}
+
+/** A tool in the `exec` risk band, which the default policy asks about. */
+function shellTool(): { readonly tool: AnyTool; readonly calls: () => number } {
+  let calls = 0;
+  const tool = defineTool({
+    name: 'shell',
+    description: 'Pretends to run a command.',
+    schema: z.strictObject({ argv: z.array(z.string()) }),
+    risk: 'exec',
+    execute: (args) => {
+      calls += 1;
+      return `ran ${args.argv.join(' ')}`;
+    },
+  });
+  return { tool, calls: () => calls };
+}
+
+interface ManualGate {
+  readonly gate: ApprovalGate;
+  /** Every request the loop has made, in order. */
+  readonly requests: readonly ApprovalRequest[];
+  /** Answers the oldest request still waiting. */
+  answer(approved: boolean, scope?: ApprovalScope): void;
+}
+
+/** A gate that answers only when the test says so, like a human. */
+function manualGate(): ManualGate {
+  const requests: ApprovalRequest[] = [];
+  const waiting: ((decision: ApprovalDecision) => void)[] = [];
+
+  return {
+    gate: {
+      request: (request) => {
+        requests.push(request);
+        return new Promise<ApprovalDecision>((resolve) => {
+          waiting.push(resolve);
+        });
+      },
+    },
+    requests,
+    answer(approved, scope = 'once') {
+      const resolve = waiting.shift();
+      if (resolve === undefined) throw new Error('nothing was waiting for approval');
+      resolve({ approved, scope });
+    },
+  };
+}
+
+/** A tools config with one risk band's policy replaced. */
+function policyFor(risk: ToolRisk, policy: ToolApprovalPolicy): ToolsConfig {
+  return {
+    ...DEFAULT_TOOLS_CONFIG,
+    approvals: { ...DEFAULT_TOOLS_CONFIG.approvals, [risk]: policy },
+  };
+}
+
+interface RunningTurn {
+  /** Appended to as the turn runs. */
+  readonly events: AgentEvent[];
+  readonly done: Promise<TurnResult>;
+}
+
+/** Starts a turn without awaiting it, so the test can answer a gate mid-turn. */
+function startTurn(loop: AgentLoop, input: TurnInput): RunningTurn {
+  const iterator = loop.run(input);
+  const events: AgentEvent[] = [];
+  const done = (async (): Promise<TurnResult> => {
+    for (;;) {
+      const step = await iterator.next();
+      if (step.done === true) return step.value;
+      events.push(step.value);
+    }
+  })();
+  return { events, done };
 }
 
 describe('AgentLoop', () => {
@@ -799,5 +888,343 @@ describe('AgentLoop', () => {
     const { loop } = harness({ loop: { model: 'llama3.2' } });
 
     expect(loop.model).toBe('llama3.2');
+  });
+});
+
+describe('AgentLoop approvals', () => {
+  const SHELL_TURNS: readonly ScriptedTurn[] = [
+    { toolCalls: [toolCall('c1', 'shell', { argv: ['ls', '-la'] })] },
+    { deltas: ['done'] },
+  ];
+
+  it('asks before a tool whose risk band is set to ask, and runs it once approved', async () => {
+    const clock = manualClock();
+    const shell = shellTool();
+    const gate = manualGate();
+    const { loop, store } = harness({
+      clock,
+      tools: [shell.tool],
+      turns: SHELL_TURNS,
+      loop: { approvals: gate.gate, toolHeartbeatMs: 0 },
+    });
+
+    const turn = startTurn(loop, { sessionKey: SESSION, content: 'list the files' });
+    await waitFor(() => gate.requests.length === 1);
+
+    // Nothing has run: the gate is between the event and the execution, not
+    // beside it.
+    expect(shell.calls()).toBe(0);
+    expect(gate.requests[0]).toMatchObject({
+      sessionKey: SESSION,
+      turnId: 'turn-1',
+      callId: 'c1',
+      name: 'shell',
+      args: { argv: ['ls', '-la'] },
+      risk: 'exec',
+      expiresAtMs: clock.now() + DEFAULT_TOOLS_CONFIG.approvals.timeoutMs,
+    });
+
+    gate.answer(true, 'session');
+    const result = await turn.done;
+
+    expect(typesOf(turn.events)).toEqual([
+      'turn.start',
+      'tool.call',
+      'tool.approvalRequest',
+      'tool.result',
+      'assistant.delta',
+      'turn.end',
+    ]);
+    // The event carries the same deadline as the request, so a reconnecting
+    // client and the loop expire the prompt at the same moment.
+    expect(turn.events[2]).toMatchObject({
+      type: 'tool.approvalRequest',
+      callId: 'c1',
+      risk: 'exec',
+      expiresAtMs: gate.requests[0]?.expiresAtMs,
+    });
+    expect(turn.events[3]).toMatchObject({ type: 'tool.result', ok: true, content: 'ran ls -la' });
+    expect(shell.calls()).toBe(1);
+    expect(result.stopReason).toBe('complete');
+    expect(unansweredToolCalls(messagesOf(store))).toEqual([]);
+  });
+
+  it('does not ask about a tool whose risk band is allowed', async () => {
+    const gate = manualGate();
+    const { loop } = harness({
+      tools: [echoTool],
+      turns: [{ toolCalls: [toolCall('c1', 'echo', { text: 'hi' })] }, { deltas: ['done'] }],
+      loop: { approvals: gate.gate, toolHeartbeatMs: 0 },
+    });
+
+    const { events } = await runTurn(loop, { sessionKey: SESSION, content: 'go' });
+
+    expect(gate.requests).toHaveLength(0);
+    expect(typesOf(events)).not.toContain('tool.approvalRequest');
+  });
+
+  it('answers a refused call rather than executing it, and lets the turn continue', async () => {
+    const shell = shellTool();
+    const gate = manualGate();
+    const { loop, store } = harness({
+      tools: [shell.tool],
+      turns: SHELL_TURNS,
+      loop: { approvals: gate.gate, toolHeartbeatMs: 0 },
+    });
+
+    const turn = startTurn(loop, { sessionKey: SESSION, content: 'list the files' });
+    await waitFor(() => gate.requests.length === 1);
+    gate.answer(false);
+    const result = await turn.done;
+
+    expect(shell.calls()).toBe(0);
+    expect(typesOf(turn.events)).toEqual([
+      'turn.start',
+      'tool.call',
+      'tool.approvalRequest',
+      'notice',
+      'tool.result',
+      'assistant.delta',
+      'turn.end',
+    ]);
+    expect(turn.events[3]).toMatchObject({
+      type: 'notice',
+      kind: 'approval_denied',
+      callId: 'c1',
+    });
+    expect(turn.events[4]).toMatchObject({
+      type: 'tool.result',
+      ok: false,
+      content: deniedToolResult('shell', 'declined'),
+    });
+
+    // A refusal is an answer, not a failure: the model gets to respond to it.
+    expect(result).toMatchObject({ stopReason: 'complete', iterations: 2 });
+
+    // The reason a refused call still writes a `tool` message — an unanswered
+    // `tool_call` is a provider 400 on the *next* turn.
+    const messages = messagesOf(store);
+    expect(unansweredToolCalls(messages)).toEqual([]);
+    expect(hasOrphanedToolResult(messages)).toBe(false);
+    const stored = messages.find((message) => message.role === 'tool');
+    expect(stored?.role === 'tool' ? stored.isError : false).toBe(true);
+  });
+
+  it('denies a call nobody answered before the deadline', async () => {
+    const clock = manualClock();
+    const shell = shellTool();
+    const gate = manualGate();
+    const { loop, store } = harness({
+      clock,
+      tools: [shell.tool],
+      turns: SHELL_TURNS,
+      loop: { approvals: gate.gate, toolHeartbeatMs: 0 },
+    });
+
+    const turn = startTurn(loop, { sessionKey: SESSION, content: 'list the files' });
+    await waitFor(() => gate.requests.length === 1);
+
+    // The gate is never answered — a browser tab closed on an open prompt.
+    clock.advance(DEFAULT_TOOLS_CONFIG.approvals.timeoutMs);
+    const result = await turn.done;
+
+    expect(shell.calls()).toBe(0);
+    expect(turn.events.find((event) => event.type === 'tool.result')).toMatchObject({
+      ok: false,
+      content: deniedToolResult('shell', 'timeout'),
+    });
+    expect(result.stopReason).toBe('complete');
+    expect(unansweredToolCalls(messagesOf(store))).toEqual([]);
+    // Nothing left armed once the decision is over.
+    expect(clock.pending).toBe(0);
+  });
+
+  it('treats an abort during an approval as a stop, not a denial', async () => {
+    const controller = new AbortController();
+    const shell = shellTool();
+    const gate = manualGate();
+    const { loop, store } = harness({
+      tools: [shell.tool],
+      turns: [
+        {
+          toolCalls: [
+            toolCall('c1', 'shell', { argv: ['ls'] }),
+            toolCall('c2', 'shell', { argv: ['pwd'] }),
+          ],
+        },
+      ],
+      loop: { approvals: gate.gate, toolHeartbeatMs: 0 },
+    });
+
+    const turn = startTurn(loop, {
+      sessionKey: SESSION,
+      content: 'list the files',
+      signal: controller.signal,
+    });
+    await waitFor(() => gate.requests.length === 1);
+    controller.abort();
+    const result = await turn.done;
+
+    expect(shell.calls()).toBe(0);
+    expect(result.stopReason).toBe('aborted');
+    // A denial would have let the turn carry on and asked about `c2`; a stop
+    // ends it, and every remaining call is answered without being asked about.
+    expect(gate.requests).toHaveLength(1);
+    expect(typesOf(turn.events)).not.toContain('notice');
+
+    const results = turn.events.filter((event) => event.type === 'tool.result');
+    expect(results).toHaveLength(2);
+    for (const event of results) {
+      expect(event).toMatchObject({ ok: false, content: CANCELLED_TOOL_RESULT });
+    }
+    expect(unansweredToolCalls(messagesOf(store))).toEqual([]);
+  });
+
+  it('stops without waiting when the turn is aborted as the call arrives', async () => {
+    const clock = manualClock();
+    const controller = new AbortController();
+    const shell = shellTool();
+    const gate = manualGate();
+    const { loop } = harness({
+      clock,
+      tools: [shell.tool],
+      turns: SHELL_TURNS,
+      loop: { approvals: gate.gate, toolHeartbeatMs: 0 },
+    });
+
+    const iterator = loop.run({
+      sessionKey: SESSION,
+      content: 'list the files',
+      signal: controller.signal,
+    });
+    expect((await iterator.next()).value).toMatchObject({ type: 'turn.start' });
+    expect((await iterator.next()).value).toMatchObject({ type: 'tool.call' });
+
+    // Between the event and the decision — the window where the signal has
+    // already fired, so an `abort` listener added afterwards is never called.
+    // Without the already-aborted check the turn would sit here for the full
+    // five-minute approval deadline.
+    controller.abort();
+
+    const events: AgentEvent[] = [];
+    for (;;) {
+      const step = await iterator.next();
+      if (step.done === true) {
+        expect(step.value.stopReason).toBe('aborted');
+        break;
+      }
+      events.push(step.value);
+    }
+
+    expect(shell.calls()).toBe(0);
+    expect(events.find((event) => event.type === 'tool.result')).toMatchObject({
+      content: CANCELLED_TOOL_RESULT,
+    });
+    expect(clock.pending).toBe(0);
+  });
+
+  it('treats a gate that rejects with an abort as a stop', async () => {
+    const shell = shellTool();
+    const gate: ApprovalGate = {
+      request: () => Promise.reject(new GhostError('aborted', 'the connection closed')),
+    };
+    const { loop } = harness({
+      tools: [shell.tool],
+      turns: SHELL_TURNS,
+      loop: { approvals: gate, toolHeartbeatMs: 0 },
+    });
+
+    const { events, result } = await runTurn(loop, { sessionKey: SESSION, content: 'list them' });
+
+    // A gate that goes away is not a user who said no: the turn stops rather
+    // than telling the model its call was refused.
+    expect(shell.calls()).toBe(0);
+    expect(result.stopReason).toBe('aborted');
+    expect(events.find((event) => event.type === 'tool.result')).toMatchObject({
+      content: CANCELLED_TOOL_RESULT,
+    });
+  });
+
+  it('never asks about a tool the policy denies outright', async () => {
+    const shell = shellTool();
+    const gate = manualGate();
+    const { loop, store } = harness({
+      tools: [shell.tool],
+      turns: SHELL_TURNS,
+      loop: {
+        approvals: gate.gate,
+        toolsConfig: policyFor('exec', 'deny'),
+        toolHeartbeatMs: 0,
+      },
+    });
+
+    const { events, result } = await runTurn(loop, { sessionKey: SESSION, content: 'list them' });
+
+    // Refusing needs nobody to answer, so nothing is asked.
+    expect(gate.requests).toHaveLength(0);
+    expect(typesOf(events)).not.toContain('tool.approvalRequest');
+    expect(shell.calls()).toBe(0);
+    expect(events.find((event) => event.type === 'notice')).toMatchObject({
+      kind: 'approval_denied',
+    });
+    expect(events.find((event) => event.type === 'tool.result')).toMatchObject({
+      ok: false,
+      content: deniedToolResult('shell', 'policy'),
+    });
+    expect(result.stopReason).toBe('complete');
+    expect(unansweredToolCalls(messagesOf(store))).toEqual([]);
+  });
+
+  it('enforces a deny policy even with no gate installed', async () => {
+    const shell = shellTool();
+    const { loop } = harness({
+      tools: [shell.tool],
+      turns: SHELL_TURNS,
+      loop: { toolsConfig: policyFor('exec', 'deny'), toolHeartbeatMs: 0 },
+    });
+
+    const { events } = await runTurn(loop, { sessionKey: SESSION, content: 'list them' });
+
+    expect(shell.calls()).toBe(0);
+    expect(events.find((event) => event.type === 'tool.result')).toMatchObject({ ok: false });
+  });
+
+  it('runs an ask-policy tool when there is no gate to ask', async () => {
+    const shell = shellTool();
+    const { loop } = harness({
+      tools: [shell.tool],
+      turns: SHELL_TURNS,
+      loop: { toolHeartbeatMs: 0 },
+    });
+
+    const { events, result } = await runTurn(loop, { sessionKey: SESSION, content: 'list them' });
+
+    // Today's behaviour, which is what keeps a terminal session unchanged: the
+    // operator who typed the message is the approval.
+    expect(shell.calls()).toBe(1);
+    expect(typesOf(events)).not.toContain('tool.approvalRequest');
+    expect(result.stopReason).toBe('complete');
+  });
+
+  it('denies when the gate itself fails', async () => {
+    const shell = shellTool();
+    const gate: ApprovalGate = {
+      request: () => Promise.reject(new Error('the approval store is unreachable')),
+    };
+    const { loop } = harness({
+      tools: [shell.tool],
+      turns: SHELL_TURNS,
+      loop: { approvals: gate, toolHeartbeatMs: 0 },
+    });
+
+    const { events } = await runTurn(loop, { sessionKey: SESSION, content: 'list them' });
+
+    // There is no failure of an approval mechanism whose safe reading is "go
+    // ahead".
+    expect(shell.calls()).toBe(0);
+    expect(events.find((event) => event.type === 'tool.result')).toMatchObject({
+      ok: false,
+      content: deniedToolResult('shell', 'declined'),
+    });
   });
 });

@@ -20,12 +20,22 @@ export type {
   AssistantDeltaEvent,
   NoticeEvent,
   ReasoningDeltaEvent,
+  ToolApprovalRequestEvent,
   ToolCallEvent,
   ToolProgressEvent,
   ToolResultEvent,
   TurnEndEvent,
   TurnStartEvent,
 } from './events.js';
+
+export {
+  deniedNotice,
+  deniedToolResult,
+  type ApprovalDecision,
+  type ApprovalGate,
+  type ApprovalRequest,
+  type DenialReason,
+} from './approval.js';
 
 export {
   SECTION_SEPARATOR,
