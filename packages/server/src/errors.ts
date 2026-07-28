@@ -98,6 +98,20 @@ export function notFound(message: string): HttpError {
   return new HttpError(404, 'not_found', 'not_found', message);
 }
 
+/**
+ * The request was legal and the current state refuses it.
+ *
+ * Distinct from `badRequest`, and the distinction is what a client does next: a
+ * 400 means "fix the request", a 409 means "look again and decide". Saving a
+ * file the agent rewrote since it was loaded is the second, not the first.
+ */
+export function conflict(
+  message: string,
+  details?: Readonly<Record<string, unknown>>,
+): HttpError {
+  return new HttpError(409, 'bad_request', 'conflict', message, details);
+}
+
 export interface ResolvedError {
   readonly status: number;
   /**

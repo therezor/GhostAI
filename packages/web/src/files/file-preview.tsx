@@ -1,21 +1,25 @@
 /**
  * Looking at one workspace file.
  *
- * Everything here goes through a signed URL, and that is the whole design.
- * `<img src>` cannot carry an `Authorization` header and cannot be relied on to
- * carry a `SameSite=Strict` cookie, so the tempting fix is to make the file
- * endpoint public — which is anonymous read access to a tree a language model
- * writes to. `POST /api/files/signed-url` mints a short-lived HMAC token naming
- * one path instead, and the endpoint stays authenticated.
+ * Two paths out of here, and which one a file takes is decided in two different
+ * places on purpose:
  *
- * Two consequences show up in this component rather than on the server:
+ *  - **A picture is decided by the MIME type**, on the server, and rendered
+ *    through a signed URL. `<img src>` cannot carry an `Authorization` header
+ *    and cannot be relied on to carry a `SameSite=Strict` cookie, so the
+ *    tempting fix is to make the file endpoint public — which is anonymous read
+ *    access to a tree a language model writes to. `POST /api/files/signed-url`
+ *    mints a short-lived HMAC token naming one path instead, and the endpoint
+ *    stays authenticated.
+ *  - **Everything else is offered to the editor**, which asks
+ *    `GET /api/files/text` and lets the *bytes* decide. The server's MIME table
+ *    is deliberately small, so guessing here would refuse `.py`, `.ts` and
+ *    `.css` — the files most worth opening — for having no entry in it. A file
+ *    that really is binary comes back as a refusal and lands on the download
+ *    panel, one request later.
  *
- *  - **The kind comes from the server's MIME type**, not from the extension.
- *    `/api/media/:token` serves anything it does not recognise as an
- *    attachment with `nosniff`, so an `<img>` built from a guess would render a
- *    broken image over a response the browser was never going to display.
- *  - **A text preview is fetched and read as text**, not put in an `<iframe>`.
- *    The workspace holds model-authored files; an iframe would execute one.
+ * Text is read into the page, never framed. The workspace holds model-authored
+ * files; an `<iframe>` would execute one.
  */
 
 import { useQuery } from '@tanstack/react-query';
@@ -24,33 +28,44 @@ import type { JSX } from 'react';
 
 import type { FileEntry } from '@ghostai/protocol';
 
-import { api } from '@/lib/api.js';
+import { ApiError, api } from '@/lib/api.js';
 import { formatBytes } from '@/lib/format.js';
+import { queryKeys } from '@/lib/query.js';
 import { Button } from '@/components/ui/button.js';
-import { MAX_TEXT_PREVIEW_BYTES, previewKind } from './paths.js';
+import { FileEditor } from './file-editor.js';
+import { isImage } from './paths.js';
 
-export function FilePreview({ entry }: { readonly entry: FileEntry }): JSX.Element {
-  const kind = previewKind(entry.mimeType);
+export interface FilePreviewProps {
+  readonly entry: FileEntry;
+  readonly onDirtyChange?: (dirty: boolean) => void;
+}
+
+export function FilePreview({ entry, onDirtyChange }: FilePreviewProps): JSX.Element {
+  const image = isImage(entry.mimeType);
 
   const signed = useQuery({
-    queryKey: ['files', 'signed', entry.path],
-    queryFn: () => api.signUrl(entry.path),
+    queryKey: queryKeys.fileUrl(entry.path),
+    queryFn: ({ signal }) => api.signUrl(entry.path, signal),
     // A URL that expired while the dialog was open is not a cached answer worth
     // keeping: the next open mints a fresh one.
     gcTime: 0,
   });
 
-  const tooBig = entry.sizeBytes > MAX_TEXT_PREVIEW_BYTES;
-
+  /**
+   * Whether the editor will take this file, asked once and cheaply.
+   *
+   * The editor runs the same query — same key, same client — so this is not a
+   * second request: it is the same one, read here to decide which panel to
+   * render and read there for its content.
+   */
   const text = useQuery({
-    queryKey: ['files', 'text', entry.path, signed.data?.url],
-    queryFn: async () => {
-      const url = signed.data?.url ?? '';
-      const response = await fetch(url, { credentials: 'same-origin' });
-      if (!response.ok) throw new Error(`Could not read the file (${String(response.status)})`);
-      return await response.text();
-    },
-    enabled: kind === 'text' && !tooBig && signed.data !== undefined,
+    queryKey: queryKeys.fileText(entry.path),
+    queryFn: ({ signal }) => api.readText(entry.path, signal),
+    enabled: !image,
+    staleTime: 0,
+    gcTime: 0,
+    // A binary file is a 400 and is the answer, not a hiccup worth two retries.
+    retry: false,
   });
 
   if (signed.isPending) return <p className="file-preview__note">Preparing a link…</p>;
@@ -63,35 +78,31 @@ export function FilePreview({ entry }: { readonly entry: FileEntry }): JSX.Eleme
   }
 
   const { url } = signed.data;
+  // Only a refusal to *read it as text* falls back to the download panel. A 403
+  // or a 500 is a failure the editor should report as one, not a file quietly
+  // reclassified as binary.
+  const notText = text.isError && text.error instanceof ApiError && text.error.status === 400;
 
   return (
     <div className="stack file-preview">
-      {kind === 'image' && (
+      {image && (
         // Constrained by the viewport rather than by the image, so a very large
         // screenshot from a tool call does not push the dialog off the screen.
         <img src={url} alt={entry.name} className="file-preview__image" />
       )}
 
-      {kind === 'text' &&
-        (tooBig ? (
-          <Unpreviewable
-            reason={`This file is ${formatBytes(entry.sizeBytes)}, past the ${formatBytes(
-              MAX_TEXT_PREVIEW_BYTES,
-            )} preview limit.`}
-          />
-        ) : text.isPending ? (
-          <p className="file-preview__note">Reading…</p>
-        ) : text.isError ? (
-          <p role="alert" className="page__error">
-            {text.error.message}
+      {!image &&
+        (notText ? (
+          <p className="notice">
+            <FileWarning />
+            <span>
+              This file is not text, so there is nothing to show or edit here. Download it to open
+              it in something that understands it.
+            </span>
           </p>
         ) : (
-          <pre className="file-preview__body">{text.data}</pre>
+          <FileEditor entry={entry} {...(onDirtyChange ? { onDirtyChange } : {})} />
         ))}
-
-      {kind === 'other' && (
-        <Unpreviewable reason="This type is served as a download rather than rendered in the page." />
-      )}
 
       <div className="cluster">
         <Button asChild variant="secondary">
@@ -107,14 +118,5 @@ export function FilePreview({ entry }: { readonly entry: FileEntry }): JSX.Eleme
         </span>
       </div>
     </div>
-  );
-}
-
-function Unpreviewable({ reason }: { readonly reason: string }): JSX.Element {
-  return (
-    <p className="notice">
-      <FileWarning />
-      <span>{reason}</span>
-    </p>
   );
 }

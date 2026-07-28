@@ -1,9 +1,11 @@
 /**
- * The file browser and its preview.
+ * The file browser, its editor and its preview.
  *
  * A table rather than a list of cards, because the columns are the point: a
  * reader scanning a workspace is comparing sizes and modification times down a
- * column, which is the one thing a card layout makes impossible.
+ * column, which is the one thing a card layout makes impossible. Once the
+ * columns sort, that is doubly true — a sort control on a card grid has nothing
+ * to sit at the top of.
  *
  * The `Modified` column is dropped on a narrow screen rather than wrapped. A
  * relative timestamp that wraps to two lines doubles the height of every row
@@ -27,6 +29,34 @@
   .file-table th {
     padding-bottom: var(--space-2);
     font-weight: inherit;
+  }
+
+  /* The heading *is* the control, so it inherits the heading's type rather than
+   * carrying a second, louder one inside it. The arrow is the only thing that
+   * marks the active column: a bolder or brighter heading would be a second
+   * signal for one state, and it would fight the caps treatment above. */
+  .file-table__sort {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    color: inherit;
+  }
+
+  .file-table__sort:hover {
+    color: var(--fg-1);
+  }
+
+  .file-table__sort > svg {
+    width: var(--size-icon-sm);
+    height: var(--size-icon-sm);
+  }
+
+  th[aria-sort='ascending'] .file-table__sort,
+  th[aria-sort='descending'] .file-table__sort {
+    color: var(--fg-1);
   }
 
   .file-table td {
@@ -81,6 +111,41 @@
    * row whose click changes where you are rather than what you are looking at. */
   .file-table__open--directory > svg {
     color: var(--accent-fg);
+  }
+
+  /* ── Toolbar and drop target ───────────────────────────────── */
+
+  .file-toolbar {
+    --gap: var(--space-3);
+  }
+
+  .file-filter {
+    --gap: var(--space-2);
+
+    /* A measure, not a fixed control: the filter is one word most of the time,
+     * and a search box as wide as the table reads as the page's main input
+     * rather than as a way to narrow what is already on screen. */
+    width: min(16rem, 100%);
+  }
+
+  .file-filter > svg {
+    flex-shrink: 0;
+    width: var(--size-icon-sm);
+    height: var(--size-icon-sm);
+    color: var(--fg-3);
+  }
+
+  /* The whole listing is the drop target, including the empty state, which is
+   * the case where dropping is most useful and where a target sized to the
+   * rows would be a few pixels tall. */
+  .file-drop {
+    border: var(--hairline) dashed transparent;
+    border-radius: var(--radius-md);
+  }
+
+  .file-drop--over {
+    border-color: var(--accent-fg);
+    background-color: var(--accent-soft);
   }
 
   /* ── Breadcrumbs ───────────────────────────────────────────── */
@@ -153,6 +218,128 @@
 
   .file-preview__note {
     color: var(--fg-3);
+  }
+
+  /* ── Editor ────────────────────────────────────────────────── */
+
+  .file-editor {
+    --gap: var(--space-2);
+  }
+
+  .file-editor__toolbar {
+    --gap: var(--space-1);
+  }
+
+  /* Ambient, not a banner. "Unsaved changes" is a state to notice while
+   * reading, and a filled amber pill for it would be the loudest thing in a
+   * dialog whose subject is the text underneath. */
+  .file-editor__state {
+    font-size: var(--text-2xs);
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    color: var(--fg-3);
+  }
+
+  .file-editor__status {
+    font-size: var(--text-2xs);
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    color: var(--fg-3);
+  }
+
+  /* ── The code surface ──────────────────────────────────────── */
+
+  /**
+   * The one element that scrolls.
+   *
+   * The textarea inside grows to its own content and the highlight layer is
+   * pinned over it, so both move together with no scroll handler — see
+   * `code-editor.tsx`. The type is declared once, here, and inherited by every
+   * layer: a `<pre>` and a `<textarea>` that disagree about font, size or
+   * line-height are two texts that drift apart a fraction of a pixel per line,
+   * and by line forty the colouring sits visibly above the caret.
+   */
+  .code-editor {
+    position: relative;
+    display: flex;
+    height: 60vh;
+    overflow: auto;
+    background-color: var(--surface-1);
+    border: var(--hairline) solid var(--line);
+    border-radius: var(--radius-md);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
+    tab-size: 2;
+  }
+
+  /* A second, calmer edge while the caret is in it. The textarea keeps its own
+   * `:focus-visible` ring — nothing here removes it — but that ring hugs a box
+   * as tall as the file, so this is the part of it a reader can actually see. */
+  .code-editor:focus-within {
+    border-color: var(--accent-fg);
+  }
+
+  /* Sticky rather than fixed-position, so it holds its column through a
+   * horizontal scroll while still scrolling vertically with the code. Opaque
+   * for the same reason: long lines pass underneath it. */
+  .code-editor__gutter {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    flex: none;
+    padding: var(--space-3) var(--space-2);
+    background-color: var(--surface-1);
+    border-right: var(--hairline) solid var(--line);
+    color: var(--fg-3);
+    text-align: right;
+    white-space: pre;
+    user-select: none;
+  }
+
+  .code-editor__code {
+    position: relative;
+    flex: 1 1 auto;
+  }
+
+  .code-editor__highlight,
+  .code-editor__input {
+    margin: 0;
+    padding: var(--space-3);
+    font: inherit;
+    line-height: inherit;
+    letter-spacing: inherit;
+    tab-size: inherit;
+    white-space: pre;
+  }
+
+  .code-editor__input {
+    display: block;
+    /* Grows to the text, so the box above is the only scroller. */
+    field-sizing: content;
+    width: 100%;
+    min-height: 100%;
+    overflow: hidden;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    color: var(--fg-1);
+    resize: none;
+  }
+
+  /* Only while the colouring underneath is current. The caret and the selection
+   * stay visible; the glyphs come from the layer behind. */
+  .code-editor__input--ghost {
+    color: transparent;
+    caret-color: var(--fg-1);
+  }
+
+  .code-editor__highlight {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    /* Clicks belong to the textarea; this layer is a picture of it. */
+    pointer-events: none;
   }
 
   .dialog--preview {

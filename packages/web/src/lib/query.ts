@@ -30,6 +30,11 @@ export const queryKeys = {
   models: ['models'] as const,
   tools: ['tools'] as const,
   files: (path: string) => ['files', path] as const,
+  // Their own roots rather than `['files', 'text', …]`: invalidation matches by
+  // prefix, so nesting them under `files` would make refreshing a directory
+  // that happens to be named `text` drop every open file's buffer.
+  fileText: (path: string) => ['file-text', path] as const,
+  fileUrl: (path: string) => ['file-url', path] as const,
   context: (key: string) => ['sessions', key, 'context'] as const,
 };
 

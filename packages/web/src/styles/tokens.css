@@ -457,14 +457,23 @@
    * quadruple between themes to mean the same thing is a token that was doing
    * two jobs. `--line-strong` does the one job, everywhere. */
 
-  /* Two steps. There were six, one per kind of floating thing, and five of them
-   * were answering a question the DOM already answers: everything that overlays
-   * the page is portalled to the end of `<body>`, so a dialog opened after a
-   * menu is painted after it regardless of z-index. What is left is the one
-   * ordering that is *not* mount order — a tooltip has to clear whatever it is
-   * explaining, including a dialog that opened before it. */
+  /* Three steps. There were six, one per kind of floating thing, and most of
+   * them were answering a question the DOM already answers: everything that
+   * overlays the page is portalled to the end of `<body>`, so a dialog opened
+   * after a menu is painted after it regardless of z-index. What is left are
+   * the orderings that are *not* mount order, and each step is one of them.
+   *
+   * A toast is the case that mount order gets exactly backwards. The viewport
+   * is mounted once, with the app, so it is early in `<body>` — and a dialog
+   * opened an hour later portals after it and paints over the top. The result
+   * is that "Saved" lands behind the editor that saved, dimmed by that dialog's
+   * own scrim, which is the one moment it had to be readable.
+   *
+   * A tooltip clears both: it explains whatever is under the cursor, and that
+   * can be a control inside a dialog or the toast sitting over it. */
   --z-overlay: 10;
-  --z-tooltip: 20;
+  --z-toast: 20;
+  --z-tooltip: 30;
 
   /* The one legitimate `px` in the codebase. A hairline is a device concept: a
    * rem border doubles at 200% zoom, where the intent is that it stays a line. */

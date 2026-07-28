@@ -13,6 +13,8 @@
  * for every caller. These functions decide what to display and what to ask for.
  */
 
+import type { FileEntry } from '@ghostai/protocol';
+
 /** The workspace root, in the one spelling this package uses. */
 export const ROOT_PATH = '';
 
@@ -70,10 +72,9 @@ export function parentOf(path: string): string {
   return cut === -1 ? ROOT_PATH : normalised.slice(0, cut);
 }
 
-export type PreviewKind = 'image' | 'text' | 'other';
-
 /**
- * How to show a file, decided from the MIME type the *server* assigned.
+ * Whether to render this file as a picture, from the MIME type the *server*
+ * assigned.
  *
  * Never from the extension, and the difference matters: the server's table is
  * deliberately small and answers `application/octet-stream` for anything it does
@@ -81,19 +82,110 @@ export type PreviewKind = 'image' | 'text' | 'other';
  * `Content-Disposition: attachment`. Deciding here from the filename would put
  * an `<img>` around a response the server refuses to let a browser render, and
  * the reader would see a broken image rather than a download link.
+ *
+ * This is the *only* question the browser answers about a file's type. It used
+ * to also decide "is this text", and that was wrong in the direction that
+ * mattered: `.py`, `.ts` and `.css` are all `application/octet-stream` in the
+ * server's table, so every source file in the workspace was declared
+ * unpreviewable. Whether something is text is now decided by
+ * `GET /api/files/text`, which looks at the bytes.
  */
-export function previewKind(mimeType: string | undefined): PreviewKind {
-  if (mimeType === undefined) return 'other';
-  if (mimeType.startsWith('image/')) return 'image';
-  if (mimeType.startsWith('text/') || mimeType.startsWith('application/json')) return 'text';
-  return 'other';
+export function isImage(mimeType: string | undefined): boolean {
+  return mimeType?.startsWith('image/') === true;
 }
 
 /**
- * The cap on a text preview, in bytes.
+ * Files whose *name* is the type, because they have no extension.
  *
- * A workspace holds whatever the agent wrote to it, and "open the 40 MB log the
- * last turn produced" should not be a way to hang the tab. Past this the panel
- * offers the file rather than rendering it.
+ * Short on purpose. It is not a registry of every extensionless convention —
+ * it is the handful an agent's workspace actually accumulates, and anything
+ * missing renders as plain monospace, which is a perfectly good way to read a
+ * file.
  */
-export const MAX_TEXT_PREVIEW_BYTES = 256 * 1024;
+const NAMED_LANGUAGES: Readonly<Record<string, string>> = {
+  dockerfile: 'dockerfile',
+  makefile: 'makefile',
+};
+
+/**
+ * The fence token a file's syntax highlighting should be asked for under.
+ *
+ * The *extension*, lowercased — `py`, `ts`, `yml` — and deliberately not a
+ * resolved grammar name: `highlight.ts` already owns the alias table that maps
+ * `py` to Python, and a second copy of it here would be the one that goes stale
+ * when a grammar is added there. An extension that table does not know produces
+ * no highlighting and no error.
+ *
+ * This is also why nothing here imports the highlighter: it is a string
+ * function, so the editor can label its toolbar without pulling a grammar
+ * engine into the entry chunk.
+ */
+export function languageForFile(name: string): string {
+  const named = NAMED_LANGUAGES[name.toLowerCase()];
+  if (named !== undefined) return named;
+
+  const dot = name.lastIndexOf('.');
+  // `> 0`, not `>= 0`: a leading dot is `.gitignore`, whose "extension" is the
+  // whole name.
+  return dot > 0 ? name.slice(dot + 1).toLowerCase() : '';
+}
+
+export type SortKey = 'name' | 'size' | 'modified';
+
+export interface SortOrder {
+  readonly key: SortKey;
+  readonly descending: boolean;
+}
+
+export const DEFAULT_SORT: SortOrder = { key: 'name', descending: false };
+
+/**
+ * One directory's entries, ordered for reading.
+ *
+ * **Directories stay first in every order, including a reversed one.** They are
+ * not big files or old files, they are the places to go next, and a "largest
+ * first" that scattered them through the list would turn navigating into
+ * searching. The chosen column orders within each group.
+ *
+ * The server already answers directories-first-then-name, so the default order
+ * costs nothing and matches the listing exactly; this reorders only once a
+ * reader has asked for a different column.
+ */
+export function sortEntries<T extends FileEntry>(
+  entries: readonly T[],
+  order: SortOrder,
+): readonly T[] {
+  const direction = order.descending ? -1 : 1;
+
+  return [...entries].sort((a, b) => {
+    if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+
+    switch (order.key) {
+      case 'size':
+        // Ties broken by name rather than left to the sort's stability, so the
+        // eight zero-byte files a turn just created do not shuffle on refetch.
+        return (a.sizeBytes - b.sizeBytes) * direction || a.name.localeCompare(b.name);
+      case 'modified':
+        return (a.modifiedAtMs - b.modifiedAtMs) * direction || a.name.localeCompare(b.name);
+      case 'name':
+        return a.name.localeCompare(b.name) * direction;
+    }
+  });
+}
+
+/**
+ * The entries whose name contains `query`, case-insensitively.
+ *
+ * A filter over the listing already loaded rather than a request, because the
+ * listing is one directory and is already here. A search that *recursed* would
+ * be a different feature needing the server; this is the one that makes a
+ * directory of two hundred generated files usable.
+ */
+export function filterEntries<T extends FileEntry>(
+  entries: readonly T[],
+  query: string,
+): readonly T[] {
+  const needle = query.trim().toLowerCase();
+  if (needle === '') return entries;
+  return entries.filter((entry) => entry.name.toLowerCase().includes(needle));
+}

@@ -23,7 +23,9 @@ import {
   AuthSessionResponseSchema,
   ContextResponseSchema,
   ErrorResponseSchema,
+  FileEntrySchema,
   FileListResponseSchema,
+  FileTextResponseSchema,
   LoginResponseSchema,
   ModelsResponseSchema,
   NotificationListResponseSchema,
@@ -39,7 +41,9 @@ import {
   type AuthSessionResponse,
   type ConfigPatch,
   type ContextResponse,
+  type FileEntry,
   type FileListResponse,
+  type FileTextResponse,
   type LoginResponse,
   type ModelsResponse,
   type Notification,
@@ -208,8 +212,19 @@ export const api = {
       ...(signal ? { signal } : {}),
     }),
 
-  deleteFile: (path: string): Promise<void> =>
-    requestVoid('/api/files', { method: 'DELETE', query: { path } }),
+  /**
+   * Deletes a file, or a directory.
+   *
+   * `recursive` is only sent when it is true, and it is what lets a directory
+   * take its contents with it. Without it the server removes an empty directory
+   * and refuses a full one — so emptying a tree is never something a request
+   * happens to do.
+   */
+  deleteFile: (path: string, recursive = false): Promise<void> =>
+    requestVoid('/api/files', {
+      method: 'DELETE',
+      query: { path, ...(recursive ? { recursive: 'true' } : {}) },
+    }),
 
   /**
    * Writes a file into the workspace and returns a URL an `<img>` can load.
@@ -226,6 +241,40 @@ export const api = {
       body: file,
       ...(signal ? { signal } : {}),
     }),
+
+  /**
+   * One file as text, for the editor.
+   *
+   * Not the signed URL, and not a duplicate of it. A signature exists so an
+   * `<img>` can fetch bytes without a header; this returns characters, plus the
+   * `modifiedAtMs` that `writeText` sends back to prove nothing moved. It also
+   * answers for the source files the MIME table does not know — `.py`, `.ts`,
+   * `.css` — which the media route serves as attachments.
+   */
+  readText: (path: string, signal?: AbortSignal): Promise<FileTextResponse> =>
+    request('/api/files/text', FileTextResponseSchema, {
+      query: { path },
+      ...(signal ? { signal } : {}),
+    }),
+
+  /**
+   * Saves text, refusing when the file moved under the editor.
+   *
+   * `expectedModifiedAtMs` is the timestamp the editor loaded. Omitting it is
+   * how a new file is created — there is nothing yet to conflict with.
+   */
+  writeText: (
+    path: string,
+    content: string,
+    expectedModifiedAtMs?: number,
+  ): Promise<FileEntry> =>
+    request('/api/files/text', FileEntrySchema, {
+      method: 'PUT',
+      body: { path, content, ...(expectedModifiedAtMs === undefined ? {} : { expectedModifiedAtMs }) },
+    }),
+
+  createDirectory: (path: string): Promise<FileEntry> =>
+    request('/api/files/directory', FileEntrySchema, { method: 'POST', body: { path } }),
 
   /** A short-lived signed URL for a workspace path an `<img>` will load. */
   signUrl: (path: string, signal?: AbortSignal): Promise<SignedUrl> =>

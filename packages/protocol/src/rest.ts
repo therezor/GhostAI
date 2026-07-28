@@ -269,6 +269,66 @@ export const UploadResponseSchema = z.object({
 });
 export type UploadResponse = z.infer<typeof UploadResponseSchema>;
 
+/**
+ * One text file, as an editor needs it.
+ *
+ * Distinct from the signed media URL, and not a duplicate of it. A signature
+ * exists so a browser *element* — an `<img>` that cannot send a header — can
+ * fetch bytes, and `/api/media/:token` therefore answers with the rules a
+ * browser needs: `nosniff`, and `attachment` for anything it might execute. An
+ * editor needs none of that. It needs the characters in a JSON string, which
+ * render in a `<textarea>` and execute nowhere, and it needs `modifiedAtMs` —
+ * which a media response does not carry and which is what makes a save
+ * conflict detectable.
+ */
+export const FileTextResponseSchema = z.object({
+  path: z.string().min(1),
+  content: z.string(),
+  /** The file's size on disk. Larger than `content` when `truncated`. */
+  sizeBytes: z.number().int().nonnegative(),
+  modifiedAtMs: z.number().int().nonnegative(),
+  /**
+   * The file was longer than the read limit and `content` is a prefix.
+   *
+   * An editor that saved a prefix would delete the rest of the file, so this is
+   * the flag that makes the panel read-only rather than a detail for a footer.
+   */
+  truncated: z.boolean(),
+});
+export type FileTextResponse = z.infer<typeof FileTextResponseSchema>;
+
+/**
+ * Saving one.
+ *
+ * `expectedModifiedAtMs` is the reason this is not just a `PUT` of the body.
+ * The workspace is a tree a language model writes to while a person is looking
+ * at it, so "the agent rewrote the file under the open editor" is an ordinary
+ * Tuesday rather than a race worth ignoring. Sending back the timestamp the
+ * editor loaded turns that into a 409 the panel can explain, instead of a
+ * silent overwrite of a turn's work.
+ *
+ * Absent means "write it regardless" — which is what creating a new file is.
+ *
+ * A modification time, not a hash, and it carries that mechanism's one
+ * weakness: two writes inside the filesystem's timestamp resolution are
+ * indistinguishable. This is the same trade `If-Unmodified-Since` has made for
+ * thirty years, and it holds for the case that actually happens — a person
+ * editing for seconds while a turn runs — rather than for two writes in the
+ * same millisecond.
+ */
+export const FileWriteRequestSchema = z.object({
+  path: z.string().min(1),
+  content: z.string(),
+  expectedModifiedAtMs: z.number().int().nonnegative().optional(),
+});
+export type FileWriteRequest = z.infer<typeof FileWriteRequestSchema>;
+
+export const CreateDirectoryRequestSchema = z.object({
+  /** Workspace-relative, like every other path that crosses this boundary. */
+  path: z.string().min(1),
+});
+export type CreateDirectoryRequest = z.infer<typeof CreateDirectoryRequestSchema>;
+
 // ---------------------------------------------------------------------------
 // Notifications
 // ---------------------------------------------------------------------------

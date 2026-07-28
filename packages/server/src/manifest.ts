@@ -73,6 +73,9 @@ const MANIFEST = [
   { id: 'files.list', method: 'GET', url: '/api/files', auth: 'required' },
   { id: 'files.delete', method: 'DELETE', url: '/api/files', auth: 'required' },
   { id: 'files.upload', method: 'POST', url: '/api/files/upload', auth: 'required' },
+  { id: 'files.read', method: 'GET', url: '/api/files/text', auth: 'required' },
+  { id: 'files.write', method: 'PUT', url: '/api/files/text', auth: 'required' },
+  { id: 'files.mkdir', method: 'POST', url: '/api/files/directory', auth: 'required' },
   { id: 'files.sign', method: 'POST', url: '/api/files/signed-url', auth: 'required' },
   { id: 'media.get', method: 'GET', url: '/api/media/:token', auth: 'signed' },
 

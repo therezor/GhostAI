@@ -6,10 +6,17 @@
  * browser would execute is never served inline.
  */
 
-import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 
-import { ConfigSchema, type SignedUrl } from '@ghostai/protocol';
+import { ConfigSchema, type FileEntry, type FileTextResponse, type SignedUrl } from '@ghostai/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { MEDIA_SECRET_NAME, mediaUrl, signMediaToken } from './signing.js';
@@ -217,7 +224,7 @@ describe('DELETE /api/files', () => {
     expect(listing.json().entries).toEqual([]);
   });
 
-  it('refuses to delete a directory', async () => {
+  it('deletes an empty directory, which has nothing to lose', async () => {
     const test = await start();
     mkdirSync(join(test.workspace, 'notes'));
 
@@ -227,8 +234,56 @@ describe('DELETE /api/files', () => {
       headers: test.headers,
     });
 
-    expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toMatch(/directory/);
+    expect(response.statusCode).toBe(204);
+    expect(existsSync(join(test.workspace, 'notes'))).toBe(false);
+  });
+
+  /**
+   * The guard that matters. Emptying a tree must never be something a request
+   * *happens* to do — a mistyped path or a script looping over names would
+   * otherwise take the contents with it.
+   */
+  it('refuses a directory with contents unless the caller said so', async () => {
+    const test = await start();
+    mkdirSync(join(test.workspace, 'notes'));
+    write(test, 'notes/keep.md', 'still here');
+
+    const response = await test.server.app.inject({
+      method: 'DELETE',
+      url: '/api/files?path=notes',
+      headers: test.headers,
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.details).toEqual({ entryCount: 1 });
+    expect(existsSync(join(test.workspace, 'notes/keep.md'))).toBe(true);
+  });
+
+  it('takes the contents when it does', async () => {
+    const test = await start();
+    mkdirSync(join(test.workspace, 'notes/deep'), { recursive: true });
+    write(test, 'notes/deep/gone.md', 'bye');
+
+    const response = await test.server.app.inject({
+      method: 'DELETE',
+      url: '/api/files?path=notes&recursive=true',
+      headers: test.headers,
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(existsSync(join(test.workspace, 'notes'))).toBe(false);
+  });
+
+  it('refuses a directory outside the workspace even with the flag', async () => {
+    const test = await start();
+
+    const response = await test.server.app.inject({
+      method: 'DELETE',
+      url: `/api/files?path=${encodeURIComponent('../')}&recursive=true`,
+      headers: test.headers,
+    });
+
+    expect(response.statusCode).toBe(403);
   });
 
   it('answers 404 for a file that is not there', async () => {
@@ -240,6 +295,227 @@ describe('DELETE /api/files', () => {
     });
 
     expect(response.statusCode).toBe(404);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Reading and writing text
+// ---------------------------------------------------------------------------
+
+describe('GET /api/files/text', () => {
+  async function read(test: TestServer, path: string): Promise<Awaited<ReturnType<TestServer['server']['app']['inject']>>> {
+    return await test.server.app.inject({
+      method: 'GET',
+      url: `/api/files/text?path=${encodeURIComponent(path)}`,
+      headers: test.headers,
+    });
+  }
+
+  it('answers with the file and the timestamp a save has to match', async () => {
+    const test = await start();
+    write(test, 'note.md', '# hello\n');
+
+    const response = await read(test, 'note.md');
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json<FileTextResponse>()).toEqual({
+      path: 'note.md',
+      content: '# hello\n',
+      sizeBytes: 8,
+      modifiedAtMs: expect.any(Number),
+      truncated: false,
+    });
+  });
+
+  /**
+   * The whole reason this route exists rather than a second read through
+   * `/api/media/:token`. The MIME table is deliberately small, so a `.py` is
+   * `application/octet-stream` and the media route serves it as an attachment —
+   * which is right for a browser and useless for an editor.
+   */
+  it('opens a source file the MIME table has never heard of', async () => {
+    const test = await start();
+    write(test, 'script.py', 'print("hi")\n');
+
+    const response = await read(test, 'script.py');
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json<FileTextResponse>().content).toBe('print("hi")\n');
+  });
+
+  it('refuses a binary file rather than answering with mojibake', async () => {
+    const test = await start();
+    writeFileSync(join(test.workspace, 'blob.dat'), Buffer.from([0x89, 0x50, 0x00, 0x01]));
+
+    const response = await read(test, 'blob.dat');
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toMatch(/Not a text file/);
+  });
+
+  it('truncates a file past the read limit and says that it did', async () => {
+    const test = await start();
+    write(test, 'huge.log', 'x'.repeat(600 * 1024));
+
+    const body = (await read(test, 'huge.log')).json<FileTextResponse>();
+
+    expect(body.truncated).toBe(true);
+    expect(body.sizeBytes).toBe(600 * 1024);
+    // A prefix, not the file: saving this back would delete the rest, which is
+    // what `truncated` exists to stop the editor from offering.
+    expect(body.content.length).toBeLessThan(body.sizeBytes);
+  });
+
+  it('refuses a directory, and a path that leaves the workspace', async () => {
+    const test = await start();
+    mkdirSync(join(test.workspace, 'notes'));
+
+    expect((await read(test, 'notes')).statusCode).toBe(400);
+    expect((await read(test, '../outside')).statusCode).toBe(403);
+    expect((await read(test, 'gone.txt')).statusCode).toBe(404);
+  });
+});
+
+describe('PUT /api/files/text', () => {
+  async function save(
+    test: TestServer,
+    payload: Record<string, unknown>,
+  ): Promise<Awaited<ReturnType<TestServer['server']['app']['inject']>>> {
+    return await test.server.app.inject({
+      method: 'PUT',
+      url: '/api/files/text',
+      headers: test.headers,
+      payload,
+    });
+  }
+
+  it('writes the content and answers with the entry it produced', async () => {
+    const test = await start();
+    write(test, 'note.md', 'old');
+
+    const response = await save(test, { path: 'note.md', content: 'new content' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json<FileEntry>()).toEqual({
+      path: 'note.md',
+      name: 'note.md',
+      isDirectory: false,
+      sizeBytes: 11,
+      modifiedAtMs: expect.any(Number),
+      mimeType: 'text/markdown; charset=utf-8',
+    });
+    expect(readFileSync(join(test.workspace, 'note.md'), 'utf8')).toBe('new content');
+  });
+
+  it('creates a file that is not there yet, and the directory over it', async () => {
+    const test = await start();
+
+    const response = await save(test, { path: 'drafts/new.txt', content: 'first' });
+
+    expect(response.statusCode).toBe(200);
+    expect(readFileSync(join(test.workspace, 'drafts/new.txt'), 'utf8')).toBe('first');
+  });
+
+  /**
+   * The case the timestamp is for: a turn rewrote the file while the editor sat
+   * open on it, and saving would delete that turn's work.
+   */
+  it('refuses a save whose file moved since it was read', async () => {
+    const test = await start();
+    write(test, 'note.md', 'as loaded');
+    const loaded = (
+      await test.server.app.inject({
+        method: 'GET',
+        url: '/api/files/text?path=note.md',
+        headers: test.headers,
+      })
+    ).json<FileTextResponse>();
+
+    write(test, 'note.md', 'what the agent wrote');
+    // Stamped rather than left to the clock: two writes in one millisecond
+    // share an `mtimeMs`, and a test that happened to run fast would assert
+    // that the guard does nothing.
+    const later = new Date(Date.now() + 5_000);
+    utimesSync(join(test.workspace, 'note.md'), later, later);
+
+    const response = await save(test, {
+      path: 'note.md',
+      content: 'what the browser had',
+      expectedModifiedAtMs: loaded.modifiedAtMs,
+    });
+
+    expect(response.statusCode).toBe(409);
+    // And the agent's work is still there.
+    expect(readFileSync(join(test.workspace, 'note.md'), 'utf8')).toBe('what the agent wrote');
+  });
+
+  it('refuses a save whose file was deleted since it was read', async () => {
+    const test = await start();
+
+    const response = await save(test, {
+      path: 'gone.md',
+      content: 'x',
+      expectedModifiedAtMs: 1_700_000_000_000,
+    });
+
+    expect(response.statusCode).toBe(409);
+  });
+
+  it('writes without a timestamp, which is what creating a file is', async () => {
+    const test = await start();
+    write(test, 'note.md', 'old');
+
+    expect((await save(test, { path: 'note.md', content: 'clobbered' })).statusCode).toBe(200);
+    expect(readFileSync(join(test.workspace, 'note.md'), 'utf8')).toBe('clobbered');
+  });
+
+  it('refuses a directory, and a path that leaves the workspace', async () => {
+    const test = await start();
+    mkdirSync(join(test.workspace, 'notes'));
+
+    expect((await save(test, { path: 'notes', content: 'x' })).statusCode).toBe(400);
+    expect((await save(test, { path: '../escaped.txt', content: 'x' })).statusCode).toBe(403);
+  });
+});
+
+describe('POST /api/files/directory', () => {
+  async function create(
+    test: TestServer,
+    path: string,
+  ): Promise<Awaited<ReturnType<TestServer['server']['app']['inject']>>> {
+    return await test.server.app.inject({
+      method: 'POST',
+      url: '/api/files/directory',
+      headers: test.headers,
+      payload: { path },
+    });
+  }
+
+  it('creates a directory and answers with its entry', async () => {
+    const test = await start();
+
+    const response = await create(test, 'drafts');
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json<FileEntry>()).toEqual({
+      path: 'drafts',
+      name: 'drafts',
+      isDirectory: true,
+      sizeBytes: 0,
+      modifiedAtMs: expect.any(Number),
+    });
+  });
+
+  it('refuses a path something is already at', async () => {
+    const test = await start();
+    mkdirSync(join(test.workspace, 'drafts'));
+
+    expect((await create(test, 'drafts')).statusCode).toBe(409);
+  });
+
+  it('refuses a path that leaves the workspace', async () => {
+    const test = await start();
+    expect((await create(test, '../escaped')).statusCode).toBe(403);
   });
 });
 

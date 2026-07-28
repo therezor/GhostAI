@@ -104,6 +104,31 @@ export const OptionalPathQuerySchema: z.ZodType<PathQuery> = z.object({
   path: z.string().default('.'),
 });
 
+export interface DeleteQuery extends PathQuery {
+  readonly recursive?: boolean | undefined;
+}
+
+/**
+ * A delete, and whether it may take a directory's contents with it.
+ *
+ * The flag exists so that emptying a tree cannot be something a request
+ * *happens* to do. A bare `DELETE /api/files?path=notes` removes an empty
+ * directory and refuses a full one — so a mistyped path, a stale bookmark or a
+ * script looping over names cannot recurse, and the caller that means it has to
+ * say a word that only means that.
+ *
+ * An enum rather than `z.stringbool()`, matching `NotificationListQuery`: the
+ * generated document then lists the two values a client may send instead of
+ * saying "string".
+ */
+export const DeleteQuerySchema: z.ZodType<DeleteQuery> = z.object({
+  path: z.string().min(1),
+  recursive: z
+    .enum(['true', 'false'])
+    .transform((value) => value === 'true')
+    .optional(),
+});
+
 export interface SessionParams {
   readonly key: string;
 }

@@ -13,8 +13,8 @@
  * executes.
  */
 
-import { readdirSync, statSync, type Stats } from 'node:fs';
-import { extname, join, relative } from 'node:path';
+import { closeSync, openSync, readdirSync, readSync, statSync, type Stats } from 'node:fs';
+import { basename, extname, join, relative } from 'node:path';
 
 import type { FileEntry } from '@ghostai/protocol';
 import type { WorkspaceJail } from '@ghostai/security';
@@ -75,6 +75,11 @@ export function inlineSafe(path: string): boolean {
   return !NEVER_INLINE.has(extname(path).toLowerCase());
 }
 
+/** One entry, for a path a caller already has stats for. */
+export function entryAt(jail: WorkspaceJail, absolutePath: string, stats: Stats): FileEntry {
+  return entryFor(jail, absolutePath, basename(absolutePath), stats);
+}
+
 function entryFor(
   jail: WorkspaceJail,
   absolutePath: string,
@@ -129,4 +134,59 @@ export function listDirectory(jail: WorkspaceJail, directory: string): FileEntry
     if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
     return a.name.localeCompare(b.name);
   });
+}
+
+/**
+ * The most bytes a text read returns.
+ *
+ * A workspace holds whatever the agent wrote to it, and "open the 400 MB log
+ * the last turn produced" must not be a way to make the server allocate 400 MB
+ * or the tab freeze rendering it. Past this the read returns a prefix and says
+ * so, and the editor goes read-only — a saved prefix would delete the rest.
+ */
+export const MAX_TEXT_BYTES: number = 512 * 1024;
+
+export interface WorkspaceText {
+  readonly content: string;
+  readonly truncated: boolean;
+}
+
+/**
+ * One file as text, or `undefined` when the bytes are not text.
+ *
+ * "Not text" is a NUL byte in the prefix — the same heuristic `git` uses, and
+ * for the same reason: it is the one signal that costs nothing and is almost
+ * never wrong about a real file. The alternative, trusting the extension, is
+ * wrong in both directions here, because the MIME table above is deliberately
+ * small and answers `application/octet-stream` for `.py`, `.ts` and every other
+ * source file a person would actually want to open.
+ *
+ * Only the first `MAX_TEXT_BYTES` are read, not the whole file and then a
+ * slice: the size is whatever the agent wrote, and `readFileSync` on it is the
+ * allocation this exists to avoid.
+ */
+export function readText(absolutePath: string, sizeBytes: number): WorkspaceText | undefined {
+  const cap = Math.min(sizeBytes, MAX_TEXT_BYTES);
+  const buffer = Buffer.alloc(cap);
+
+  const descriptor = openSync(absolutePath, 'r');
+  let filled = 0;
+  try {
+    while (filled < cap) {
+      const read = readSync(descriptor, buffer, filled, cap - filled, filled);
+      if (read === 0) break;
+      filled += read;
+    }
+  } finally {
+    closeSync(descriptor);
+  }
+
+  const bytes = buffer.subarray(0, filled);
+  if (bytes.includes(0)) return undefined;
+
+  // Lossy on purpose. A cut at `MAX_TEXT_BYTES` can land mid-codepoint, which
+  // costs one replacement character at the very end of content that is already
+  // read-only for being truncated. A fatal decoder would turn that into a
+  // failure to open the file at all.
+  return { content: new TextDecoder('utf-8').decode(bytes), truncated: sizeBytes > cap };
 }

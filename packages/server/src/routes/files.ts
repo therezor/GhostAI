@@ -15,15 +15,32 @@
  * closing rather than a hypothetical.
  */
 
-import { createReadStream, statSync, unlinkSync, writeFileSync, type Stats } from 'node:fs';
+import {
+  createReadStream,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+  type Stats,
+} from 'node:fs';
 import { dirname } from 'node:path';
 
 import {
+  CreateDirectoryRequestSchema,
+  FileEntrySchema,
   FileListResponseSchema,
+  FileTextResponseSchema,
+  FileWriteRequestSchema,
   SignedUrlRequestSchema,
   SignedUrlSchema,
   UploadResponseSchema,
+  type CreateDirectoryRequest,
+  type FileEntry,
   type FileListResponse,
+  type FileTextResponse,
+  type FileWriteRequest,
   type SignedUrl,
   type SignedUrlRequest,
   type UploadResponse,
@@ -33,18 +50,35 @@ import type { WorkspaceJail } from '@ghostai/security';
 import type { FastifyReply } from 'fastify';
 
 import { mediaClaimOf } from '../auth.js';
-import { badRequest, notFound } from '../errors.js';
+import { badRequest, conflict, notFound } from '../errors.js';
 import {
+  DeleteQuerySchema,
   OptionalPathQuerySchema,
   PathQuerySchema,
   TokenParamsSchema,
+  type DeleteQuery,
   type PathQuery,
 } from '../queries.js';
 import { MEDIA_SECRET_NAME, mediaUrl, signMediaToken } from '../signing.js';
-import { inlineSafe, listDirectory, mimeTypeFor } from '../workspace.js';
+import {
+  entryAt,
+  inlineSafe,
+  listDirectory,
+  mimeTypeFor,
+  readText,
+  MAX_TEXT_BYTES,
+} from '../workspace.js';
 import type { RouteDeps, RouteGroup } from './types.js';
 
-type FileRouteId = 'files.list' | 'files.delete' | 'files.upload' | 'files.sign' | 'media.get';
+type FileRouteId =
+  | 'files.list'
+  | 'files.delete'
+  | 'files.upload'
+  | 'files.read'
+  | 'files.write'
+  | 'files.mkdir'
+  | 'files.sign'
+  | 'media.get';
 
 /**
  * The cap on one upload.
@@ -56,12 +90,31 @@ type FileRouteId = 'files.list' | 'files.delete' | 'files.upload' | 'files.sign'
  */
 export const MAX_UPLOAD_BYTES: number = 25 * 1024 * 1024;
 
+/**
+ * The cap on one save.
+ *
+ * Twice the read limit rather than equal to it: the body is JSON, so every
+ * quote, backslash and newline in the file costs a second byte on the wire, and
+ * a limit equal to `MAX_TEXT_BYTES` would refuse to save a file the same route
+ * had just agreed to open.
+ */
+export const MAX_TEXT_BODY_BYTES: number = MAX_TEXT_BYTES * 2;
+
 /** `statSync`, with "does not exist" turned into the 404 it is. */
 function statOr404(absolutePath: string, relativePath: string): Stats {
   try {
     return statSync(absolutePath);
   } catch {
     throw notFound(`No such file: ${relativePath}`);
+  }
+}
+
+/** `statSync`, with "does not exist" as a value — the write path needs both. */
+function statOrUndefined(absolutePath: string): Stats | undefined {
+  try {
+    return statSync(absolutePath);
+  } catch {
+    return undefined;
   }
 }
 
@@ -99,19 +152,29 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
     },
 
     'files.delete': {
-      summary: 'Delete one workspace file',
-      schema: { querystring: PathQuerySchema },
+      summary: 'Delete one workspace file or directory',
+      schema: { querystring: DeleteQuerySchema },
       handler: (request, reply): FastifyReply => {
-        const { path } = request.query as PathQuery;
+        const { path, recursive } = request.query as DeleteQuery;
         const absolute = jail().resolve(path);
         const stats = statOr404(absolute, path);
-        // Files only. A recursive delete triggered by a URL is a large,
-        // irreversible action behind a small mistake, and nothing in the UI
-        // needs one — the tool the agent runs on the operator's instruction is
-        // the path for that.
-        if (stats.isDirectory()) throw badRequest(`Refusing to delete a directory: ${path}`);
 
-        unlinkSync(absolute);
+        if (!stats.isDirectory()) {
+          unlinkSync(absolute);
+          return reply.status(204).send();
+        }
+
+        // A recursive delete is a large, irreversible action, and it must never
+        // be something a request *happens* to do — a mistyped path or a script
+        // looping over names would otherwise empty a tree. So the contents go
+        // only when the caller said the word that means exactly that; an empty
+        // directory has no contents to lose and needs no ceremony.
+        const contents = readdirSync(absolute);
+        if (contents.length > 0 && recursive !== true) {
+          throw conflict(`Directory is not empty: ${path}`, { entryCount: contents.length });
+        }
+
+        rmSync(absolute, { recursive: true });
         return reply.status(204).send();
       },
     },
@@ -147,6 +210,86 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
           // without a second round trip to ask permission to look at it.
           signedUrl: sign(relative),
         };
+      },
+    },
+
+    'files.read': {
+      summary: 'One workspace file, as text',
+      schema: { querystring: PathQuerySchema, response: { 200: FileTextResponseSchema } },
+      handler: (request): FileTextResponse => {
+        const { path } = request.query as PathQuery;
+        const absolute = jail().resolve(path);
+        const stats = statOr404(absolute, path);
+        if (stats.isDirectory()) throw badRequest(`Not a file: ${path}`);
+
+        const text = readText(absolute, stats.size);
+        // Decided from the bytes, not from the extension: the MIME table is
+        // deliberately small, so an extension check would refuse `.py` and
+        // `.ts` — the files a person most wants to open — while accepting a
+        // `.txt` that happens to hold a binary blob.
+        if (text === undefined) throw badRequest(`Not a text file: ${path}`);
+
+        return {
+          path: jail().relative(absolute),
+          content: text.content,
+          sizeBytes: stats.size,
+          modifiedAtMs: Math.floor(stats.mtimeMs),
+          truncated: text.truncated,
+        };
+      },
+    },
+
+    'files.write': {
+      summary: 'Write text to a workspace file',
+      schema: { body: FileWriteRequestSchema, response: { 200: FileEntrySchema } },
+      bodyLimit: MAX_TEXT_BODY_BYTES,
+      handler: (request): FileEntry => {
+        const { path, content, expectedModifiedAtMs } = request.body as FileWriteRequest;
+        const absolute = jail().resolve(path);
+        const before = statOrUndefined(absolute);
+        if (before?.isDirectory() === true) throw badRequest(`Not a file: ${path}`);
+
+        // The workspace is a tree a language model writes to while somebody is
+        // looking at it. An editor that loaded the file, sat open through a
+        // turn, and then saved would silently delete whatever that turn wrote —
+        // so a caller that says which version it read gets told when that is no
+        // longer the version on disk. A caller that says nothing is creating a
+        // file and has nothing to conflict with.
+        if (expectedModifiedAtMs !== undefined) {
+          if (before === undefined) {
+            throw conflict(`Deleted since it was read: ${path}`);
+          }
+          if (Math.floor(before.mtimeMs) !== expectedModifiedAtMs) {
+            throw conflict(`Changed since it was read: ${path}`, {
+              modifiedAtMs: Math.floor(before.mtimeMs),
+            });
+          }
+        }
+
+        ensureDir(dirname(absolute));
+        writeFileSync(absolute, content, 'utf8');
+
+        // Stat again rather than computing the entry from `content`: the size
+        // on disk is the byte length after UTF-8 encoding, and `modifiedAtMs`
+        // is the value the next save has to match.
+        return entryAt(jail(), absolute, statSync(absolute));
+      },
+    },
+
+    'files.mkdir': {
+      summary: 'Create a workspace directory',
+      schema: { body: CreateDirectoryRequestSchema, response: { 201: FileEntrySchema } },
+      handler: (request, reply): FileEntry => {
+        const { path } = request.body as CreateDirectoryRequest;
+        const absolute = jail().resolve(path);
+        // Not idempotent, deliberately: "New folder" that quietly returns an
+        // existing one is how two things end up sharing a directory nobody
+        // meant to share.
+        if (statOrUndefined(absolute) !== undefined) throw conflict(`Already exists: ${path}`);
+
+        mkdirSync(absolute, { recursive: true });
+        void reply.status(201);
+        return entryAt(jail(), absolute, statSync(absolute));
       },
     },
 

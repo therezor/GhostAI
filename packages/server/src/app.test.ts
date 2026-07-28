@@ -132,12 +132,15 @@ const PAYLOADS: Readonly<Record<string, Record<string, unknown>>> = {
   'sessions.create': { title: 'from the matrix' },
   'sessions.update': { title: 'renamed' },
   'files.sign': { path: 'note.txt' },
+  'files.write': { path: 'note.txt', content: 'from the matrix' },
+  'files.mkdir': { path: 'from-the-matrix' },
 };
 
 /** Query parameters a route needs before its handler is reached. */
 const QUERIES: Readonly<Record<string, string>> = {
   'files.delete': '?path=note.txt',
   'files.upload': '?path=note.txt',
+  'files.read': '?path=note.txt',
 };
 
 /** The path as the document spells it: Fastify's `:key` is OpenAPI's `{key}`. */
