@@ -24,7 +24,11 @@ test.describe('a tool that needs approval', () => {
 
     await card.getByRole('button', { name: 'Once', exact: true }).click();
 
-    await expect(card.getByText('Approved — waiting for the agent.')).toBeVisible();
+    // The durable state, not the prompt's "Approved — waiting for the agent."
+    // line — the same race the denial below avoids. The line lives only while
+    // the gate is still waiting, and a scripted provider answers inside a frame,
+    // so asserting on it here passes or fails on how busy the runner is. Its
+    // rendering is covered deterministically in `chat/approval.test.tsx`.
     await expect(card.getByLabel('Succeeded')).toBeVisible();
     await expect(
       app.getByTestId('transcript').getByText('That is the runtime version.'),
