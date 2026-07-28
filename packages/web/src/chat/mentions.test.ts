@@ -12,8 +12,7 @@ import { describe, expect, it } from 'vitest';
 
 import { applyMention, mentionAtCaret, mentionSuggestions } from './mentions.js';
 
-const at = (text: string): ReturnType<typeof mentionAtCaret> =>
-  mentionAtCaret(text, text.length);
+const at = (text: string): ReturnType<typeof mentionAtCaret> => mentionAtCaret(text, text.length);
 
 describe('mentionAtCaret', () => {
   it('finds a namespace being typed', () => {

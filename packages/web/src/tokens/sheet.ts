@@ -5,7 +5,7 @@
  * that the stylesheet was generated from — but then the thing under test would
  * be the generator, and the stylesheet that actually ships could drift from it
  * without a single test going red. So this parses the real file: the same bytes
- * Vite hands to Tailwind are the bytes the assertion measures.
+ * Vite serves are the bytes the assertion measures.
  *
  * It is a deliberately small subset of CSS — top-level rules, one level of
  * `@media` nesting, custom properties only — because `tokens.css` is a

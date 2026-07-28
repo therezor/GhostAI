@@ -22,33 +22,22 @@ import { readTokensCss, resolveTokens, toRgba, type ThemeName } from './sheet.js
 const AA_NORMAL = 4.5;
 
 const THEMES: readonly ThemeName[] = ['dark', 'light'];
-const SURFACES = [
-  '--color-surface-0',
-  '--color-surface-1',
-  '--color-surface-2',
-  '--color-surface-3',
-];
+const SURFACES = ['--surface-0', '--surface-1', '--surface-2', '--surface-3'];
 
 /** Every token intended to carry text or an icon on a surface. */
 const FOREGROUNDS = [
-  '--color-fg-1',
-  '--color-fg-2',
-  '--color-fg-3',
-  '--color-accent-fg',
-  '--color-success-fg',
-  '--color-warning-fg',
-  '--color-danger-fg',
-  '--color-info-fg',
+  '--fg-1',
+  '--fg-2',
+  '--fg-3',
+  '--accent-fg',
+  '--success-fg',
+  '--warning-fg',
+  '--danger-fg',
+  '--info-fg',
 ];
 
 /** Fills that carry text, and the one token that goes on top of them. */
-const FILLS = [
-  '--color-accent',
-  '--color-success',
-  '--color-warning',
-  '--color-danger',
-  '--color-info',
-];
+const FILLS = ['--accent', '--success', '--warning', '--danger', '--info'];
 
 const css = readTokensCss();
 
@@ -73,11 +62,11 @@ describe.each(THEMES)('%s theme', (theme) => {
     },
   );
 
-  it.each(FILLS)('--color-on-fill meets AA on %s', (fill) => {
+  it.each(FILLS)('--on-fill meets AA on %s', (fill) => {
     const background = color(fill);
-    const ratio = contrastRatio(composite(color('--color-on-fill'), background), background);
+    const ratio = contrastRatio(composite(color('--on-fill'), background), background);
 
-    expect(ratio, `--color-on-fill on ${fill} is ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(
+    expect(ratio, `--on-fill on ${fill} is ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(
       AA_NORMAL,
     );
   });
@@ -92,12 +81,12 @@ describe.each(THEMES)('%s theme', (theme) => {
     '%s-fg on %s-soft meets AA over every surface',
     (role) => {
       for (const surface of SURFACES) {
-        const background = composite(color(`--color-${role}-soft`), color(surface));
-        const ratio = contrastRatio(composite(color(`--color-${role}-fg`), background), background);
+        const background = composite(color(`--${role}-soft`), color(surface));
+        const ratio = contrastRatio(composite(color(`--${role}-fg`), background), background);
 
         expect(
           ratio,
-          `--color-${role}-fg on --color-${role}-soft over ${surface} is ${ratio.toFixed(2)}:1`,
+          `--${role}-fg on --${role}-soft over ${surface} is ${ratio.toFixed(2)}:1`,
         ).toBeGreaterThanOrEqual(AA_NORMAL);
       }
     },
@@ -111,11 +100,9 @@ describe.each(THEMES)('%s theme', (theme) => {
   it('lines are visible against the surfaces they sit on', () => {
     for (const surface of SURFACES) {
       const background = color(surface);
-      const ratio = contrastRatio(composite(color('--color-line-strong'), background), background);
+      const ratio = contrastRatio(composite(color('--line-strong'), background), background);
 
-      expect(ratio, `--color-line-strong on ${surface} is ${ratio.toFixed(2)}:1`).toBeGreaterThan(
-        1.5,
-      );
+      expect(ratio, `--line-strong on ${surface} is ${ratio.toFixed(2)}:1`).toBeGreaterThan(1.5);
     }
   });
 
@@ -125,8 +112,10 @@ describe.each(THEMES)('%s theme', (theme) => {
    * depends on this one.
    */
   it('every colour is inside the sRGB gamut', () => {
+    // Every value that *is* a colour, rather than every token whose name looks
+    // like one: the sheet no longer namespaces colours, so the notation is the
+    // only honest filter. A shadow starts with a length, so it does not match.
     const outside = [...tokens]
-      .filter(([name]) => name.startsWith('--color-'))
       .filter(([, value]) => /^(?:oklch|rgb)\(/.test(value))
       .filter(([, value]) => toRgba(value).outOfGamut)
       .map(([name, value]) => `${name}: ${value}`);

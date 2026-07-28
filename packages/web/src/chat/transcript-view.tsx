@@ -32,11 +32,7 @@ export interface TranscriptViewProps {
   readonly onApprove: (callId: string, approved: boolean, scope: ApprovalScope) => void;
 }
 
-export function TranscriptView({
-  transcript,
-  busy,
-  onApprove,
-}: TranscriptViewProps): JSX.Element {
+export function TranscriptView({ transcript, busy, onApprove }: TranscriptViewProps): JSX.Element {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [pinned, setPinned] = useState(true);
 
@@ -71,16 +67,12 @@ export function TranscriptView({
   const lastTurn = transcript.findLast((item) => item.kind === 'turn');
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col">
-      <div ref={viewportRef} className="min-h-0 flex-1 overflow-y-auto" data-testid="transcript">
-        <ol className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6">
+    <div className="transcript">
+      <div ref={viewportRef} className="transcript__viewport" data-testid="transcript">
+        <ol className="stack transcript__list">
           {transcript.map((item) => (
-            <li key={item.id} className="flex min-w-0 flex-col">
-              <Message
-                item={item}
-                streaming={busy && item === lastTurn}
-                onApprove={onApprove}
-              />
+            <li key={item.id} className="transcript__item">
+              <Message item={item} streaming={busy && item === lastTurn} onApprove={onApprove} />
             </li>
           ))}
         </ol>
@@ -90,7 +82,7 @@ export function TranscriptView({
         <Button
           size="sm"
           variant="secondary"
-          className="absolute bottom-3 left-1/2 -translate-x-1/2 shadow-md"
+          className="transcript__jump"
           onClick={() => {
             setPinned(true);
             scrollToBottom('smooth');

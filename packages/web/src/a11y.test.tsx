@@ -41,7 +41,7 @@ describe('the focus ring', () => {
     expect(base?.source).toMatch(/:focus-visible\s*\{[^}]*outline:/);
     // A stroke, so the accent *text* token — the fill is a 2:1 pairing on a
     // white card, which is the whole reason the third gate exists.
-    expect(base?.source).toContain('var(--color-accent-fg)');
+    expect(base?.source).toContain('var(--accent-fg)');
   });
 });
 

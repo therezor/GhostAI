@@ -73,9 +73,7 @@ interface Harness {
   readonly invalid: string[];
 }
 
-function harness(
-  options: { readonly onOpen?: ReconnectingSocketOptions['onOpen'] } = {},
-): Harness {
+function harness(options: { readonly onOpen?: ReconnectingSocketOptions['onOpen'] } = {}): Harness {
   const messages: ServerMessage[] = [];
   const statuses: string[] = [];
   const invalid: string[] = [];

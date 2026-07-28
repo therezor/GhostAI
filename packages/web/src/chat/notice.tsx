@@ -24,7 +24,11 @@ import type { BadgeProps } from '@/components/ui/badge.js';
 
 const NOTICES: Record<
   NoticeKind,
-  { readonly label: string; readonly tone: NonNullable<BadgeProps['tone']>; readonly icon: typeof Info }
+  {
+    readonly label: string;
+    readonly tone: NonNullable<BadgeProps['tone']>;
+    readonly icon: typeof Info;
+  }
 > = {
   prompt_injection: { label: 'Possible prompt injection', tone: 'danger', icon: ShieldAlert },
   approval_denied: { label: 'Denied', tone: 'danger', icon: ShieldX },
@@ -33,13 +37,14 @@ const NOTICES: Record<
   provider_fallback: { label: 'Provider fallback', tone: 'info', icon: Info },
 };
 
+/** Neutral is the base rule in `chat.css`, so it needs no modifier. */
 const TONE_CLASSES = {
-  danger: 'border-danger-fg/40 bg-danger-soft text-danger-fg',
-  warning: 'border-warning-fg/40 bg-warning-soft text-warning-fg',
-  info: 'border-info-fg/40 bg-info-soft text-info-fg',
-  success: 'border-success-fg/40 bg-success-soft text-success-fg',
-  accent: 'border-accent-fg/40 bg-accent-soft text-accent-fg',
-  neutral: 'border-line-strong bg-hover text-fg-2',
+  danger: 'notice--danger',
+  warning: 'notice--warning',
+  info: 'notice--info',
+  success: 'notice--success',
+  accent: 'notice--accent',
+  neutral: '',
 } as const;
 
 export function Notice({
@@ -58,15 +63,12 @@ export function Notice({
       // Not a `Badge`: a notice carries a sentence, and a pill that wraps to
       // three lines is not a pill. The tone vocabulary is shared, the shape is
       // not.
-      className={cn(
-        'flex items-start gap-2 rounded-md border px-2.5 py-1.5 text-xs',
-        TONE_CLASSES[tone],
-        className,
-      )}
+      className={cn('notice', TONE_CLASSES[tone], className)}
     >
-      <Icon className="mt-0.5 size-3.5 shrink-0" />
-      <span className="min-w-0">
-        <span className="font-medium">{label}.</span> <span className="text-fg-2">{message}</span>
+      <Icon />
+      <span>
+        <span className="notice__label">{label}.</span>{' '}
+        <span className="notice__message">{message}</span>
       </span>
     </div>
   );

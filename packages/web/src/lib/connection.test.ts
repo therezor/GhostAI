@@ -249,7 +249,8 @@ describe('speaking', () => {
     // The gate is the server's; the acknowledgement is ours, and it happens on
     // the click rather than on the echo.
     const turn = useTurnStore.getState().transcript.find((item) => item.kind === 'turn');
-    const tool = turn?.kind === 'turn' ? turn.parts.find((part) => part.kind === 'tool') : undefined;
+    const tool =
+      turn?.kind === 'turn' ? turn.parts.find((part) => part.kind === 'tool') : undefined;
     expect(tool?.kind === 'tool' ? tool.approval?.answered : undefined).toBe('approved');
   });
 });

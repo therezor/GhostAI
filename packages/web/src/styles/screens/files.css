@@ -1,0 +1,161 @@
+/**
+ * The file browser and its preview.
+ *
+ * A table rather than a list of cards, because the columns are the point: a
+ * reader scanning a workspace is comparing sizes and modification times down a
+ * column, which is the one thing a card layout makes impossible.
+ *
+ * The `Modified` column is dropped on a narrow screen rather than wrapped. A
+ * relative timestamp that wraps to two lines doubles the height of every row
+ * for information that is the least urgent of the three.
+ */
+
+@layer screens {
+  .file-table {
+    width: 100%;
+  }
+
+  .file-table thead tr {
+    font-size: var(--text-2xs);
+    font-weight: var(--weight-semibold);
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    color: var(--fg-3);
+    text-align: left;
+  }
+
+  .file-table th {
+    padding-bottom: var(--space-2);
+    font-weight: inherit;
+  }
+
+  .file-table td {
+    padding-block: var(--space-1-5);
+  }
+
+  .file-table tbody tr {
+    border-top: var(--hairline) solid var(--line);
+  }
+
+  .file-table__meta {
+    font-size: var(--text-sm);
+    color: var(--fg-3);
+  }
+
+  .file-table__actions {
+    text-align: right;
+  }
+
+  .file-table__modified {
+    display: none;
+  }
+
+  @media (min-width: 40rem) {
+    .file-table__modified {
+      display: table-cell;
+    }
+  }
+
+  .file-table__open {
+    display: flex;
+    max-width: 100%;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1);
+    border-radius: var(--radius-md);
+    text-align: left;
+  }
+
+  .file-table__open:hover {
+    background-color: var(--hover);
+  }
+
+  .file-table__open > svg {
+    flex-shrink: 0;
+    width: var(--size-icon-md);
+    height: var(--size-icon-md);
+    color: var(--fg-3);
+  }
+
+  /* A directory is the one thing in this list worth the accent: it is the only
+   * row whose click changes where you are rather than what you are looking at. */
+  .file-table__open--directory > svg {
+    color: var(--accent-fg);
+  }
+
+  /* ── Breadcrumbs ───────────────────────────────────────────── */
+
+  .breadcrumbs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  .breadcrumbs li {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  .breadcrumbs__separator {
+    color: var(--fg-3);
+  }
+
+  .breadcrumbs__current {
+    font-weight: var(--weight-medium);
+    color: var(--fg-1);
+  }
+
+  .breadcrumbs__link {
+    padding: var(--space-0-5) var(--space-1);
+    border-radius: var(--radius-md);
+    color: var(--fg-2);
+  }
+
+  .breadcrumbs__link:hover {
+    background-color: var(--hover);
+    color: var(--fg-1);
+  }
+
+  /* ── Preview ───────────────────────────────────────────────── */
+
+  .file-preview {
+    --gap: var(--space-2);
+  }
+
+  .file-preview__meta {
+    font-size: var(--text-sm);
+    color: var(--fg-3);
+  }
+
+  .file-preview__body {
+    max-height: 60vh;
+    overflow: auto;
+    padding: var(--space-3);
+    background-color: var(--surface-1);
+    border: var(--hairline) solid var(--line);
+    border-radius: var(--radius-md);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+  }
+
+  .file-preview__image {
+    max-height: 60vh;
+    margin-inline: auto;
+    border: var(--hairline) solid var(--line);
+    border-radius: var(--radius-md);
+    object-fit: contain;
+  }
+
+  .file-preview__note {
+    color: var(--fg-3);
+  }
+
+  .dialog--preview {
+    width: min(48rem, calc(100vw - var(--space-8)));
+  }
+}

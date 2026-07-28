@@ -86,6 +86,12 @@ const PACKAGES = {
   agent: {
     description: 'The agent loop, subagent manager, and context contributors.',
     internal: ['protocol', 'core', 'security', 'providers', 'tools'],
+    // The scripted provider, exported because the end-to-end suite is a second
+    // consumer in another package. Duplicating it there would let the model a
+    // browser test drives behave differently from the one every loop test
+    // asserts against. Unlike the provider and tool conformance suites this
+    // imports no `vitest`, so the entry pulls no test framework into a graph.
+    subpaths: { './testkit': 'src/testkit/index.ts' },
     // Tests only — the tests here define tools with `defineTool`. Nothing in
     // this package's runtime graph imports zod.
     devDeps: { zod: '^4.0.0' },
@@ -154,7 +160,17 @@ const PACKAGES = {
       'server',
       'channels',
     ],
-    deps: { commander: '^13.0.0', picocolors: '^1.1.0' },
+    // `@ghostai/web` is a plain dependency and not an `internal`, because the
+    // relationship is not a TypeScript one: `resolveUiRoot` finds the built SPA
+    // through `require.resolve('@ghostai/web/package.json')` and serves the
+    // directory. A project reference would make `tsc -b` demand declarations
+    // from a package whose tsconfig is `noEmit` — Vite owns its JavaScript, and
+    // nothing here imports a type from it.
+    deps: {
+      '@ghostai/web': 'workspace:*',
+      commander: '^13.0.0',
+      picocolors: '^1.1.0',
+    },
     // `ws` is the socket client `serve.test.ts` drives the running server with;
     // nothing in the CLI's runtime graph imports it.
     devDeps: { '@types/ws': '^8.5.0', ws: '^8.18.0' },
@@ -224,10 +240,34 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
       ...(cfg.compilerOptions ?? {}),
     },
     include: ['src/**/*'],
-    references: (cfg.internal ?? []).map((dep) => ({ path: `../${dep}` })),
+    // The file, not the directory. `tsc -b` accepts either and resolves a
+    // directory to the `tsconfig.json` inside it; Playwright's config loader
+    // reads these same files to find path aliases and only accepts the explicit
+    // form, so a reference written the short way makes the end-to-end suite
+    // fail to start with an error about a package it never imported.
+    references: (cfg.internal ?? []).map((dep) => ({ path: `../${dep}/tsconfig.json` })),
   };
 
   const entries = ["'src/index.ts'", ...Object.values(cfg.subpaths ?? {}).map((e) => `'${e}'`)];
+
+  // Without a config of its own, a package running `vitest run` from its own
+  // directory finds the *root* config and inherits its `projects` globs — which
+  // are relative to the root, match nothing from inside `packages/x`, and fail
+  // with "No projects were found". So `pnpm --filter @ghostai/x test` was broken
+  // everywhere, which is why the build plan noticed it for `protocol` alone: it
+  // is the package a contributor is most likely to run on its own.
+  //
+  // The `name` is the second half. It is what `vitest --project <name>` selects
+  // and what labels a line of output in a run that spans twelve packages.
+  const vitest = `import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    name: '${name}',
+    include: ['src/**/*.test.ts'],
+  },
+});
+`;
 
   const tsup = `import { defineConfig } from 'tsup';
 
@@ -263,5 +303,6 @@ export default defineConfig({
     withNotes(JSON.stringify(tsconfig, null, 2), cfg.tsconfigNotes ?? {}),
   );
   await writeFormatted(join(dir, 'tsup.config.ts'), tsup);
+  await writeFormatted(join(dir, 'vitest.config.ts'), vitest);
   console.log(`generated packages/${name}`);
 }

@@ -29,26 +29,26 @@ export function Welcome({ onPick }: { readonly onPick: (prompt: string) => void 
   });
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col items-center gap-5 px-4 py-16 text-center">
-      <Skull className="size-10 text-fg-3" aria-hidden="true" />
+    <div className="stack welcome">
+      <Skull className="welcome__mark" aria-hidden="true" />
 
-      <div className="flex flex-col items-center gap-1.5">
-        <h1 className="text-xl font-medium">Ready when you are.</h1>
+      <div className="stack welcome__heading">
+        <h1 className="welcome__title">Ready when you are.</h1>
         {status.isSuccess && (
-          <p className="flex flex-wrap items-center justify-center gap-1.5 text-sm text-fg-2">
+          <p className="cluster welcome__agent">
             <Badge tone="neutral">{status.data.provider}</Badge>
-            <span className="font-mono text-xs">{status.data.model}</span>
+            <span className="welcome__model">{status.data.model}</span>
           </p>
         )}
       </div>
 
-      <p className="max-w-prose text-sm text-fg-2">
+      <p className="welcome__note">
         The agent reads and writes inside its workspace, and asks before it runs a command or
         reaches the network. Every tool call shows up in the transcript with its arguments and its
         output.
       </p>
 
-      <ul className="flex w-full flex-col gap-2">
+      <ul className="stack welcome__prompts">
         {PROMPTS.map((prompt) => (
           <li key={prompt}>
             <button
@@ -56,7 +56,7 @@ export function Welcome({ onPick }: { readonly onPick: (prompt: string) => void 
               onClick={() => {
                 onPick(prompt);
               }}
-              className="w-full rounded-md border border-line bg-surface-2 px-3 py-2 text-left text-sm text-fg-2 hover:bg-hover hover:text-fg-1"
+              className="welcome__prompt"
             >
               {prompt}
             </button>

@@ -1,0 +1,78 @@
+/**
+ * Layout primitives.
+ *
+ * The whole of the generic layer — five classes, no size variants, no colours.
+ * Everything else in `styles/` names a *thing* (`.sidebar`, `.tool-card`) and
+ * sets its own values.
+ *
+ * That split is the point. A utility framework lets a component's layout be
+ * written at the call site, which is why a sidebar's width can drift from 17rem
+ * to 16rem in one file without anyone deciding to change it. These three
+ * layout classes carry direction and alignment only; the *gap* is set by the
+ * owning component through `--gap`, so spacing is always a decision recorded in
+ * the stylesheet next to the thing it spaces.
+ *
+ * `> * { min-width: 0 }` is the load-bearing line. A flex child's automatic
+ * minimum size is its content, so an unbreakable string — a session key, a
+ * base64 blob in a tool result — refuses to shrink and pushes the whole column
+ * wide instead of ellipsising.
+ */
+
+@layer layout {
+  .stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap, var(--space-2));
+  }
+
+  .row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--gap, var(--space-2));
+  }
+
+  .cluster {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--gap, var(--space-2));
+  }
+
+  .stack > *,
+  .row > *,
+  .cluster > * {
+    min-width: 0;
+  }
+
+  /** Eats the remaining main-axis space, so siblings after it sit at the end. */
+  .spacer {
+    flex: 1 1 auto;
+  }
+
+  /** One line, ellipsised. Needs an ancestor that has actually been given a width. */
+  .truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /**
+   * Available to a screen reader, absent from the page.
+   *
+   * `clip-path` rather than `display: none` or `visibility: hidden`, both of
+   * which remove the element from the accessibility tree along with the
+   * layout — which is the opposite of what this is for.
+   */
+  .sr-only {
+    position: absolute;
+    width: var(--hairline);
+    height: var(--hairline);
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border-width: 0;
+  }
+}

@@ -12,9 +12,9 @@ import { buttonVariants } from '@/components/ui/button.js';
 
 export function NotFoundRoute(): JSX.Element {
   return (
-    <div className="mx-auto flex max-w-2xl flex-col items-start gap-3 p-8">
-      <h1 className="text-xl font-medium">Not found</h1>
-      <p className="text-sm text-fg-2">There is nothing at this address.</p>
+    <div className="stack page page--reading">
+      <h1 className="page__title">Not found</h1>
+      <p className="page__note">There is nothing at this address.</p>
       <Link to="/" className={buttonVariants({ variant: 'secondary' })}>
         Back to chat
       </Link>

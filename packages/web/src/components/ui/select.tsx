@@ -17,7 +17,6 @@ import { Check, ChevronDown } from 'lucide-react';
 import type { ComponentProps, JSX } from 'react';
 
 import { cn } from '@/lib/cn.js';
-import { surfaceClasses } from './dropdown-menu.js';
 
 export const Select = SelectPrimitive.Root;
 export const SelectGroup = SelectPrimitive.Group;
@@ -29,19 +28,10 @@ export function SelectTrigger({
   ...props
 }: ComponentProps<typeof SelectPrimitive.Trigger>): JSX.Element {
   return (
-    <SelectPrimitive.Trigger
-      className={cn(
-        'inline-flex h-9 w-full items-center justify-between gap-2 rounded-md',
-        'border border-line bg-surface-1 px-3 text-sm text-fg-1',
-        'hover:bg-hover data-[placeholder]:text-fg-3',
-        'disabled:pointer-events-none disabled:text-fg-3',
-        className,
-      )}
-      {...props}
-    >
+    <SelectPrimitive.Trigger className={cn('select-trigger', className)} {...props}>
       {children}
       <SelectPrimitive.Icon asChild>
-        <ChevronDown className="size-4 text-fg-3" />
+        <ChevronDown className="select-trigger__icon" />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   );
@@ -58,14 +48,15 @@ export function SelectContent({
       <SelectPrimitive.Content
         position={position}
         className={cn(
-          surfaceClasses,
-          'max-h-[min(20rem,var(--radix-select-content-available-height))]',
-          position === 'popper' && 'w-[var(--radix-select-trigger-width)]',
+          'floating select-content',
+          position === 'popper' && 'select-content--popper',
           className,
         )}
         {...props}
       >
-        <SelectPrimitive.Viewport className="p-0">{children}</SelectPrimitive.Viewport>
+        <SelectPrimitive.Viewport className="select-content__viewport">
+          {children}
+        </SelectPrimitive.Viewport>
       </SelectPrimitive.Content>
     </SelectPrimitive.Portal>
   );
@@ -77,18 +68,10 @@ export function SelectItem({
   ...props
 }: ComponentProps<typeof SelectPrimitive.Item>): JSX.Element {
   return (
-    <SelectPrimitive.Item
-      className={cn(
-        'relative flex cursor-default items-center rounded-md py-1.5 pr-2 pl-7 text-sm text-fg-2',
-        'select-none data-[highlighted]:bg-hover data-[highlighted]:text-fg-1',
-        'data-[disabled]:pointer-events-none data-[disabled]:text-fg-3',
-        className,
-      )}
-      {...props}
-    >
-      <span className="absolute left-2 inline-flex items-center justify-center">
+    <SelectPrimitive.Item className={cn('menu__item menu__item--checkable', className)} {...props}>
+      <span className="menu__indicator">
         <SelectPrimitive.ItemIndicator>
-          <Check className="size-3.5 text-accent-fg" />
+          <Check />
         </SelectPrimitive.ItemIndicator>
       </span>
       <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
@@ -100,13 +83,5 @@ export function SelectLabel({
   className,
   ...props
 }: ComponentProps<typeof SelectPrimitive.Label>): JSX.Element {
-  return (
-    <SelectPrimitive.Label
-      className={cn(
-        'px-2 py-1.5 text-2xs font-medium tracking-wide text-fg-3 uppercase',
-        className,
-      )}
-      {...props}
-    />
-  );
+  return <SelectPrimitive.Label className={cn('menu__label', className)} {...props} />;
 }

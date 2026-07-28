@@ -36,7 +36,7 @@ export function ReasoningBlock({ text, live = false }: ReasoningBlockProps): JSX
   }, [live, pinned]);
 
   return (
-    <div className="rounded-md border border-line bg-surface-1">
+    <div className="reasoning">
       <button
         type="button"
         aria-expanded={open}
@@ -45,24 +45,15 @@ export function ReasoningBlock({ text, live = false }: ReasoningBlockProps): JSX
           setPinned(true);
           setOpen((value) => !value);
         }}
-        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs text-fg-3 hover:bg-hover hover:text-fg-2"
+        className="reasoning__toggle"
       >
-        <ChevronRight
-          className={cn('size-3.5 shrink-0 transition-transform', open && 'rotate-90')}
-        />
-        <Brain className="size-3.5 shrink-0" />
+        <ChevronRight className={cn('disclosure-chevron', open && 'disclosure-chevron--open')} />
+        <Brain />
         <span>Reasoning</span>
-        {live && <span className="ml-auto animate-pulse">thinking…</span>}
+        {live && <span className="reasoning__live">thinking…</span>}
       </button>
 
-      <div
-        id={bodyId}
-        hidden={!open}
-        // Plain text, not markdown: reasoning is a stream of consciousness that
-        // frequently opens a fence it never closes, and a renderer that took it
-        // seriously would swallow the rest of the block into a code element.
-        className="border-t border-line px-3 py-2 text-sm whitespace-pre-wrap text-fg-3"
-      >
+      <div id={bodyId} hidden={!open} className="reasoning__body">
         {text}
       </div>
     </div>

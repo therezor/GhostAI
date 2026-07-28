@@ -8,22 +8,22 @@
   "include": ["src/**/*"],
   "references": [
     {
-      "path": "../protocol"
+      "path": "../protocol/tsconfig.json"
     },
     {
-      "path": "../core"
+      "path": "../core/tsconfig.json"
     },
     {
-      "path": "../security"
+      "path": "../security/tsconfig.json"
     },
     {
-      "path": "../providers"
+      "path": "../providers/tsconfig.json"
     },
     {
-      "path": "../tools"
+      "path": "../tools/tsconfig.json"
     },
     {
-      "path": "../agent"
+      "path": "../agent/tsconfig.json"
     }
   ]
 }

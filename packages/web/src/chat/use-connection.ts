@@ -17,7 +17,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
 import { queryKeys } from '@/lib/query.js';
-import { closeConnection, onServerMessage, openConnection, switchSession } from '@/lib/connection.js';
+import {
+  closeConnection,
+  onServerMessage,
+  openConnection,
+  switchSession,
+} from '@/lib/connection.js';
 import { toast } from '@/components/ui/toast.js';
 
 export function useConnection(sessionKey: string | undefined): void {

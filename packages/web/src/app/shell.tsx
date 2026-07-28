@@ -41,20 +41,15 @@ export function Shell({ children }: { readonly children: ReactNode }): JSX.Eleme
   useConnection(search.session);
 
   return (
-    <div className="flex h-dvh flex-col bg-surface-0 text-fg-1">
+    <div className="shell">
       <Header onOpenDrawer={setDrawerOpen} drawerOpen={drawerOpen} />
 
-      <div className="flex min-h-0 flex-1">
-        <aside
-          aria-label="Sidebar"
-          className="hidden w-64 shrink-0 overflow-y-auto border-r border-line bg-surface-1 md:block"
-        >
+      <div className="shell__body">
+        <aside aria-label="Sidebar" className="shell__sidebar">
           <Sidebar />
         </aside>
 
-        {/* `min-w-0`, or a long unbroken token in a code block makes the whole
-            column scroll sideways instead of the block itself. */}
-        <main className="min-w-0 flex-1 overflow-y-auto">{children}</main>
+        <main className="shell__main">{children}</main>
       </div>
     </div>
   );
@@ -78,14 +73,14 @@ function Header({
   const sessionKey = useTurnStore((state) => state.sessionKey);
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-surface-1 px-3">
+    <header className="app-header">
       <Dialog open={drawerOpen} onOpenChange={onOpenDrawer}>
         <DialogTrigger asChild>
-          <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open menu">
+          <Button variant="ghost" size="icon" className="shell__menu-button" aria-label="Open menu">
             <Menu />
           </Button>
         </DialogTrigger>
-        <DialogContent className="top-0 left-0 h-dvh w-72 max-w-[85vw] translate-none rounded-none rounded-r-xl">
+        <DialogContent className="dialog--drawer">
           <DialogHeading className="sr-only">Navigation</DialogHeading>
           <Sidebar
             onNavigate={() => {
@@ -95,15 +90,15 @@ function Header({
         </DialogContent>
       </Dialog>
 
-      <span className="font-medium">GhostAI</span>
+      <span className="app-header__brand">GhostAI</span>
 
       {status.isSuccess && (
-        <span className="hidden truncate text-xs text-fg-3 sm:inline">
+        <span className="app-header__agent truncate">
           {status.data.provider} · {status.data.model}
         </span>
       )}
 
-      <div className="flex-1" />
+      <div className="spacer" />
 
       <ConnectionBadge connection={connection} />
       <ContextInspector sessionKey={sessionKey} />

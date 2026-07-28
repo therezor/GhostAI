@@ -2,16 +2,18 @@
  * The button recipe.
  *
  * One `cva` call replaces what would otherwise be a dozen near-identical
- * components — and, more importantly, makes the *rules* legible: a primary
- * button is `--color-accent` as a fill with `--color-on-fill` as its text, and
- * that pairing is asserted at AA in both themes by the contrast suite. A
- * variant that invented its own colours would be outside that guarantee.
+ * components. It names classes rather than describing appearance: what a
+ * primary button *looks* like is `styles/components/button.css`, and this file
+ * only decides which of those names apply. The split matters because a variant
+ * is a design decision — an accent fill with `--on-fill` text, asserted at AA
+ * in both themes by the contrast suite — and a decision expressed as a string
+ * of utilities at the call site is a decision nothing can review.
  *
  * Nothing here suppresses the focus outline, and nothing anywhere else does
  * either. The base layer's `:focus-visible` ring applies to every focusable
  * element, so a component that removed it would be opting out of the one thing
  * that makes the app keyboard usable — which is why `a11y.test.tsx` sweeps the
- * source for the utilities that would.
+ * source for the declarations that would.
  */
 
 import { Slot } from '@radix-ui/react-slot';
@@ -20,34 +22,24 @@ import type { ButtonHTMLAttributes, JSX, Ref } from 'react';
 
 import { cn } from '@/lib/cn.js';
 
-export const buttonVariants = cva(
-  cn(
-    'inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-medium',
-    'transition-colors duration-100 select-none',
-    // A disabled control still has to be readable — `opacity-50` on a
-    // `--color-fg-2` label is not, so the tier moves instead.
-    'disabled:pointer-events-none disabled:text-fg-3 disabled:opacity-70',
-    '[&_svg]:pointer-events-none [&_svg]:shrink-0',
-  ),
-  {
-    variants: {
-      variant: {
-        primary: 'bg-accent text-on-fill hover:brightness-110 active:brightness-95',
-        secondary: 'bg-surface-3 text-fg-1 border border-line hover:bg-hover',
-        ghost: 'text-fg-2 hover:bg-hover hover:text-fg-1',
-        danger: 'bg-danger text-on-fill hover:brightness-110 active:brightness-95',
-        link: 'text-accent-fg underline underline-offset-2 hover:brightness-110',
-      },
-      size: {
-        sm: 'h-7 px-2.5 text-xs [&_svg]:size-3.5',
-        md: 'h-9 px-3.5 text-sm [&_svg]:size-4',
-        lg: 'h-11 px-5 text-md [&_svg]:size-5',
-        icon: 'size-9 [&_svg]:size-4',
-      },
+export const buttonVariants = cva('btn', {
+  variants: {
+    variant: {
+      primary: 'btn--primary',
+      secondary: 'btn--secondary',
+      ghost: 'btn--ghost',
+      danger: 'btn--danger',
+      link: 'btn--link',
     },
-    defaultVariants: { variant: 'secondary', size: 'md' },
+    size: {
+      sm: 'btn--sm',
+      md: 'btn--md',
+      lg: 'btn--lg',
+      icon: 'btn--icon',
+    },
   },
-);
+  defaultVariants: { variant: 'secondary', size: 'md' },
+});
 
 export interface ButtonProps
   extends ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {

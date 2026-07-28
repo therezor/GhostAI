@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 /**
- * Deliberately not `vite.config.ts`: nothing here needs the React or Tailwind
+ * Deliberately not `vite.config.ts`: nothing here needs the React
  * plugins, and loading them would put a CSS compile in front of a test that
  * reads `tokens.css` as text. The `@/` alias is duplicated from there for the
  * same reason — it is resolution, not bundling, and both configs need it.

@@ -12,6 +12,7 @@ import {
   type ApprovalScope,
   type ChatMessage,
   type ToolApprovalPolicy,
+  ServerMessageSchema,
   type ToolRisk,
   type ToolsConfig,
 } from '@ghostai/protocol';
@@ -296,6 +297,72 @@ function startTurn(loop: AgentLoop, input: TurnInput): RunningTurn {
 }
 
 describe('AgentLoop', () => {
+  it('emits events a client can parse, on a clock that does not tick in whole milliseconds', async () => {
+    // `events.test.ts` checks one hand-written sample per event type against
+    // `ServerMessageSchema`. Hand-written samples are the weakness: they are
+    // written by someone reading the schema, so they satisfy it by
+    // construction. This runs the same check over events the loop *produced*,
+    // on a clock like the real one — `systemClock.monotonic()` is
+    // `performance.now()`, which returns fractions, and `durationMs` and
+    // `elapsedMs` are `z.number().int()` on the wire.
+    //
+    // The failure this exists to prevent is silent at every layer but the last:
+    // the loop emits it, the hub forwards it, and the browser's `safeParse`
+    // drops the frame that says the call finished. What the user sees is a
+    // tool card spinning forever over a tool that returned in a millisecond.
+    const clock = manualClock();
+    // A drift that accumulates, not a constant offset: two readings of a
+    // constant-offset clock differ by a whole number again, which is precisely
+    // the fraction `performance.now()` does *not* give you.
+    let drift = 0;
+    const fractional: ManualClock = {
+      ...clock,
+      monotonic: () => {
+        drift += 0.4104;
+        return clock.monotonic() + drift;
+      },
+    };
+
+    // A turn that runs a tool to completion covers `tool.result`.
+    const finished = harness({
+      clock: fractional,
+      tools: [echoTool],
+      turns: [{ toolCalls: [toolCall('call-1', 'echo', { text: 'hi' })] }, { deltas: ['done'] }],
+    });
+    const events: AgentEvent[] = (
+      await runTurn(finished.loop, { sessionKey: SESSION, content: 'go' })
+    ).events;
+
+    // A turn held open across a heartbeat covers `tool.progress` — the other
+    // event carrying a duration, and one no completed turn ever emits.
+    const slow = pendingTool();
+    const stalled = harness({
+      clock: fractional,
+      tools: [slow.tool],
+      turns: [{ toolCalls: [toolCall('call-2', 'slow', {})] }, { deltas: ['done'] }],
+    });
+    const iterator = stalled.loop.run({ sessionKey: SESSION, content: 'go' });
+    await iterator.next();
+    await iterator.next();
+    const beat = iterator.next();
+    await flush();
+    clock.advance(15_000);
+    const progress = await beat;
+    if (progress.done !== true) events.push(progress.value);
+    slow.release();
+
+    expect(typesOf(events)).toContain('tool.result');
+    expect(typesOf(events)).toContain('tool.progress');
+
+    // `seq` is the hub's contribution and the only thing it adds — see the note
+    // on `SessionHub` about `AgentEvent` + `seq` *being* a `ServerMessage`.
+    const rejected = events
+      .filter((event) => !ServerMessageSchema.safeParse({ ...event, seq: 1 }).success)
+      .map((event) => event.type);
+
+    expect(rejected).toEqual([]);
+  });
+
   it('streams an answer and persists the exchange', async () => {
     const { loop, store, provider } = harness({ turns: [{ deltas: ['Hel', 'lo'] }] });
 

@@ -48,25 +48,20 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
   const unreadCount = unread.data?.unreadCount ?? 0;
 
   return (
-    <div className="flex h-full flex-col gap-4 p-3">
-      <nav aria-label="Sections" className="flex flex-col gap-0.5">
+    <div className="stack sidebar">
+      <nav aria-label="Sections" className="stack sidebar__nav">
         {NAV.map(({ to, label, icon: Icon }) => (
           <Link
             key={to}
             to={to}
             onClick={onNavigate}
-            className={cn(
-              'flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm',
-              // `aria-current` is the accessible half of the same statement the
-              // surface change makes visually.
-              isActive(pathname, to)
-                ? 'bg-surface-3 text-fg-1'
-                : 'text-fg-2 hover:bg-hover hover:text-fg-1',
-            )}
+            // `aria-current` is the accessible half of the same statement the
+            // surface change makes visually.
+            className={cn('sidebar__link', isActive(pathname, to) && 'sidebar__link--active')}
             {...(isActive(pathname, to) ? { 'aria-current': 'page' as const } : {})}
           >
-            <Icon className="size-4 shrink-0" />
-            <span className="flex-1 truncate">{label}</span>
+            <Icon />
+            <span className="sidebar__link-label truncate">{label}</span>
             {to === '/notifications' && unreadCount > 0 && (
               <Badge tone="accent">{unreadCount}</Badge>
             )}
@@ -75,18 +70,18 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
       </nav>
 
       <Section title="Sessions">
-        <ScrollArea className="max-h-64">
-          <ul className="flex flex-col gap-0.5 pr-1">
+        <ScrollArea className="sidebar__sessions">
+          <ul className="stack sidebar__session-list">
             {(sessions.data?.sessions ?? []).map((session) => (
               <li key={session.key}>
                 <Link
                   to="/"
                   search={{ session: session.key }}
                   onClick={onNavigate}
-                  className="flex flex-col rounded-md px-2.5 py-1.5 text-sm text-fg-2 hover:bg-hover hover:text-fg-1"
+                  className="sidebar__session"
                 >
                   <span className="truncate">{session.title || session.key}</span>
-                  <span className="text-2xs text-fg-3">
+                  <span className="sidebar__session-count">
                     {session.messageCount} message{session.messageCount === 1 ? '' : 's'}
                   </span>
                 </Link>
@@ -94,10 +89,10 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
             ))}
 
             {sessions.isSuccess && sessions.data.sessions.length === 0 && (
-              <li className="px-2.5 py-1.5 text-xs text-fg-3">No conversations yet.</li>
+              <li className="sidebar__note">No conversations yet.</li>
             )}
             {sessions.isError && (
-              <li className="px-2.5 py-1.5 text-xs text-danger-fg">Could not load sessions.</li>
+              <li className="sidebar__note sidebar__note--error">Could not load sessions.</li>
             )}
           </ul>
         </ScrollArea>
@@ -119,8 +114,8 @@ function Section({
   readonly children: ReactNode;
 }): JSX.Element {
   return (
-    <section className="flex min-h-0 flex-col gap-1">
-      <h2 className="px-2.5 text-2xs font-medium tracking-wide text-fg-3 uppercase">{title}</h2>
+    <section className="stack sidebar__section">
+      <h2 className="sidebar__section-title">{title}</h2>
       {children}
     </section>
   );

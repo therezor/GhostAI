@@ -79,11 +79,12 @@ const ICONS: Record<ToastRole, typeof Info> = {
   danger: AlertTriangle,
 };
 
+/** Info is the base rule, so it needs no modifier of its own. */
 const ROLE_CLASSES: Record<ToastRole, string> = {
-  info: 'text-info-fg',
-  success: 'text-success-fg',
-  warning: 'text-warning-fg',
-  danger: 'text-danger-fg',
+  info: '',
+  success: 'toast--success',
+  warning: 'toast--warning',
+  danger: 'toast--danger',
 };
 
 /**
@@ -113,20 +114,14 @@ export function Toaster(): JSX.Element {
             onOpenChange={(open) => {
               if (!open) dismiss(record.id);
             }}
-            className={cn(
-              'flex items-start gap-3 rounded-lg border border-line bg-surface-3 p-3 shadow-lg',
-              'data-[state=open]:animate-slide-in data-[state=closed]:animate-fade-out',
-              'data-[swipe=end]:animate-fade-out',
-            )}
+            className={cn('toast', ROLE_CLASSES[role])}
           >
-            <Icon className={cn('mt-0.5 size-4 shrink-0', ROLE_CLASSES[role])} />
+            <Icon className="toast__icon" />
 
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <ToastPrimitive.Title className="text-sm font-medium text-fg-1">
-                {record.title}
-              </ToastPrimitive.Title>
+            <div className="stack toast__body">
+              <ToastPrimitive.Title className="toast__title">{record.title}</ToastPrimitive.Title>
               {record.description !== undefined && (
-                <ToastPrimitive.Description className="text-xs break-words text-fg-2">
+                <ToastPrimitive.Description className="toast__description">
                   {record.description}
                 </ToastPrimitive.Description>
               )}
@@ -136,28 +131,20 @@ export function Toaster(): JSX.Element {
               <ToastPrimitive.Action
                 altText={record.action.label}
                 onClick={record.action.onSelect}
-                className="rounded-md px-2 py-1 text-xs font-medium text-accent-fg hover:bg-hover"
+                className="toast__action"
               >
                 {record.action.label}
               </ToastPrimitive.Action>
             )}
 
-            <ToastPrimitive.Close
-              aria-label="Dismiss"
-              className="rounded-md p-1 text-fg-3 hover:bg-hover hover:text-fg-1"
-            >
-              <X className="size-3.5" />
+            <ToastPrimitive.Close aria-label="Dismiss" className="toast__close">
+              <X />
             </ToastPrimitive.Close>
           </ToastPrimitive.Root>
         );
       })}
 
-      <ToastPrimitive.Viewport
-        className={cn(
-          'fixed right-0 bottom-0 z-50 flex w-[min(24rem,100vw)] flex-col gap-2 p-4',
-          'max-h-dvh overflow-hidden',
-        )}
-      />
+      <ToastPrimitive.Viewport className="toast-viewport" />
     </ToastPrimitive.Provider>
   );
 }

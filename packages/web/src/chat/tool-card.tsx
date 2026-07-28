@@ -24,14 +24,7 @@
  *    the machinery instead of the answer.
  */
 
-import {
-  AlertCircle,
-  CheckCircle2,
-  ChevronRight,
-  Loader2,
-  Terminal,
-  Wrench,
-} from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronRight, Loader2, Terminal, Wrench } from 'lucide-react';
 import { useEffect, useId, useState, type JSX } from 'react';
 
 import type { ApprovalScope, ToolRisk } from '@ghostai/protocol';
@@ -78,10 +71,7 @@ export function ToolCard({ tool, onApprove }: ToolCardProps): JSX.Element {
       // turn with six calls in it can move between them instead of reading
       // through them.
       aria-label={`Tool call: ${tool.name}`}
-      className={cn(
-        'overflow-hidden rounded-md border bg-surface-2',
-        tool.status === 'awaiting-approval' ? 'border-warning-fg/40' : 'border-line',
-      )}
+      className={cn('tool-card', tool.status === 'awaiting-approval' && 'tool-card--awaiting')}
     >
       <h4 className="contents">
         <button
@@ -91,24 +81,25 @@ export function ToolCard({ tool, onApprove }: ToolCardProps): JSX.Element {
           onClick={() => {
             setOpen((value) => !value);
           }}
-          className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-hover"
+          className="tool-card__header"
         >
           <ChevronRight
-            className={cn('size-3.5 shrink-0 text-fg-3 transition-transform', open && 'rotate-90')}
+            className={cn(
+              'tool-card__chevron disclosure-chevron',
+              open && 'disclosure-chevron--open',
+            )}
           />
           <StatusIcon status={tool.status} />
-          <span className="font-mono text-sm text-fg-1">{tool.name}</span>
+          <span className="tool-card__name">{tool.name}</span>
           {/* Labelled, because a pill reading `exec` is cryptic on its own —
               and because the band and the tool are often the same word. */}
           <Badge tone={risk.tone} aria-label={`Risk: ${risk.label}`}>
             {risk.label}
           </Badge>
 
-          {summary !== '' && (
-            <span className="min-w-0 truncate font-mono text-2xs text-fg-3">{summary}</span>
-          )}
+          {summary !== '' && <span className="tool-card__summary truncate">{summary}</span>}
 
-          <span className="ml-auto shrink-0 tabular-nums text-2xs text-fg-3">
+          <span className="tool-card__timing">
             {tool.status === 'running' && formatDuration(elapsedMs)}
             {tool.status === 'awaiting-approval' && 'waiting for you'}
             {tool.durationMs !== undefined && formatDuration(tool.durationMs)}
@@ -127,7 +118,7 @@ export function ToolCard({ tool, onApprove }: ToolCardProps): JSX.Element {
       )}
 
       {tool.notices.length > 0 && (
-        <div className="flex flex-col gap-1.5 px-2.5 py-2">
+        <div className="stack tool-card__notices">
           {tool.notices.map((notice) => (
             <Notice key={notice.id} kind={notice.notice} message={notice.message} />
           ))}
@@ -138,12 +129,10 @@ export function ToolCard({ tool, onApprove }: ToolCardProps): JSX.Element {
           thirty calls in it would otherwise carry thirty tool outputs — some of
           them tens of kilobytes — in the DOM to render nothing. */}
       {open && (
-        <div id={bodyId} className="flex flex-col gap-2 border-t border-line p-2.5">
+        <div id={bodyId} className="stack tool-card__body">
           {summary !== '' && (
             <Labelled label="Arguments">
-              <pre className="overflow-x-auto rounded-xs bg-surface-1 p-2 font-mono text-2xs text-fg-2">
-                {formatArgs(tool.args)}
-              </pre>
+              <pre className="tool-card__pre">{formatArgs(tool.args)}</pre>
             </Labelled>
           )}
 
@@ -151,7 +140,7 @@ export function ToolCard({ tool, onApprove }: ToolCardProps): JSX.Element {
             <Labelled label={tool.status === 'error' ? 'Error' : 'Output'}>
               <Output content={tool.content} terminal={tool.name === 'exec'} />
               {tool.truncated && (
-                <p className="mt-1 text-2xs text-fg-3">
+                <p className="tool-card__note">
                   Output was truncated in the middle to fit the tool-output budget. The model saw
                   the same thing.
                 </p>
@@ -160,7 +149,7 @@ export function ToolCard({ tool, onApprove }: ToolCardProps): JSX.Element {
           )}
 
           {tool.content === undefined && tool.status === 'running' && (
-            <p className="text-xs text-fg-3">Running…</p>
+            <p className="tool-card__running">Running…</p>
           )}
         </div>
       )}
@@ -176,20 +165,14 @@ function Labelled({
   readonly children: React.ReactNode;
 }): JSX.Element {
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-2xs font-medium tracking-wide text-fg-3 uppercase">{label}</span>
+    <div className="stack tool-card__field">
+      <span className="tool-card__label">{label}</span>
       {children}
     </div>
   );
 }
 
-/**
- * `exec` output is a terminal; everything else is a code block.
- *
- * `whitespace-pre-wrap` rather than `pre`: a command that printed a 300-column
- * table should wrap rather than force the whole card to scroll sideways, and
- * `break-words` is what stops one unbroken token doing the same.
- */
+/** `exec` output is a terminal; everything else is a code block. */
 function Output({
   content,
   terminal,
@@ -199,12 +182,9 @@ function Output({
 }): JSX.Element {
   return (
     <pre
-      className={cn(
-        'max-h-80 overflow-auto rounded-xs p-2 font-mono text-2xs whitespace-pre-wrap break-words',
-        terminal ? 'bg-surface-0 text-fg-2' : 'bg-surface-1 text-fg-2',
-      )}
+      className={cn('tool-card__pre tool-card__output', terminal && 'tool-card__output--terminal')}
     >
-      {content === '' ? <span className="text-fg-3">(no output)</span> : content}
+      {content === '' ? <span className="tool-card__empty">(no output)</span> : content}
     </pre>
   );
 }
@@ -212,15 +192,26 @@ function Output({
 function StatusIcon({ status }: { readonly status: ToolPart['status'] }): JSX.Element {
   switch (status) {
     case 'running':
-      return <Loader2 className="size-3.5 shrink-0 animate-spin text-fg-3" aria-label="Running" />;
+      return (
+        <Loader2 className="tool-card__status tool-card__status--running" aria-label="Running" />
+      );
     case 'awaiting-approval':
-      return <Terminal className="size-3.5 shrink-0 text-warning-fg" aria-label="Needs approval" />;
+      return (
+        <Terminal
+          className="tool-card__status tool-card__status--awaiting"
+          aria-label="Needs approval"
+        />
+      );
     case 'ok':
-      return <CheckCircle2 className="size-3.5 shrink-0 text-success-fg" aria-label="Succeeded" />;
+      return (
+        <CheckCircle2 className="tool-card__status tool-card__status--ok" aria-label="Succeeded" />
+      );
     case 'error':
-      return <AlertCircle className="size-3.5 shrink-0 text-danger-fg" aria-label="Failed" />;
+      return (
+        <AlertCircle className="tool-card__status tool-card__status--error" aria-label="Failed" />
+      );
     default:
-      return <Wrench className="size-3.5 shrink-0 text-fg-3" />;
+      return <Wrench className="tool-card__status" />;
   }
 }
 

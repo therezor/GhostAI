@@ -40,13 +40,13 @@ import { summariseContext, type ContextSegment } from './breakdown.js';
 
 /** Section → fill. Anything the server adds later lands on the neutral fill. */
 const SEGMENT_FILLS: Readonly<Record<string, string>> = {
-  systemPrompt: 'bg-info',
-  tools: 'bg-accent',
-  messages: 'bg-success',
-  other: 'bg-warning',
+  systemPrompt: 'context-fill--system-prompt',
+  tools: 'context-fill--tools',
+  messages: 'context-fill--messages',
+  other: 'context-fill--other',
 };
 
-const FALLBACK_FILL = 'bg-line-strong';
+const FALLBACK_FILL = 'context-fill--fallback';
 
 export function ContextInspector({
   sessionKey,
@@ -70,7 +70,7 @@ export function ContextInspector({
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="w-[min(44rem,calc(100vw-2rem))]">
+      <DialogContent className="dialog--context">
         <DialogHeader>
           <DialogHeading>Context</DialogHeading>
           <DialogSubheading>
@@ -94,7 +94,7 @@ function ContextBody({ sessionKey }: { readonly sessionKey: string }): JSX.Eleme
     gcTime: 0,
   });
 
-  if (context.isPending) return <p className="text-sm text-fg-3">Measuring…</p>;
+  if (context.isPending) return <p className="page__note">Measuring…</p>;
   if (context.isError) {
     // A 404 here is not a failure. The socket mints a session key the moment a
     // tab connects, and the store does not hold a row for it until the first
@@ -103,7 +103,7 @@ function ContextBody({ sessionKey }: { readonly sessionKey: string }): JSX.Eleme
     // question.
     if (context.error instanceof ApiError && context.error.status === 404) {
       return (
-        <p className="text-sm text-fg-3">
+        <p className="page__note">
           Nothing to measure yet — this conversation has not started. Send a message and the budget
           appears here.
         </p>
@@ -111,7 +111,7 @@ function ContextBody({ sessionKey }: { readonly sessionKey: string }): JSX.Eleme
     }
 
     return (
-      <p role="alert" className="text-sm text-danger-fg">
+      <p role="alert" className="page__error">
         Could not read the context: {context.error.message}
       </p>
     );
@@ -123,13 +123,13 @@ function ContextBody({ sessionKey }: { readonly sessionKey: string }): JSX.Eleme
   const scale = budget.over && budget.usedPercent > 0 ? 100 / budget.usedPercent : 1;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-baseline gap-2">
-        <span className="text-2xl font-medium text-fg-1">{formatTokens(budget.usedTokens)}</span>
-        <span className="text-sm text-fg-3">
+    <div className="stack context">
+      <div className="cluster context__headline">
+        <span className="context__used">{formatTokens(budget.usedTokens)}</span>
+        <span className="context__of">
           of {formatTokens(budget.windowTokens)} tokens · {budget.usedPercent.toFixed(0)}%
         </span>
-        <span className="flex-1" />
+        <span className="spacer" />
         {budget.over ? (
           <Badge tone="danger">over the window</Badge>
         ) : (
@@ -140,7 +140,7 @@ function ContextBody({ sessionKey }: { readonly sessionKey: string }): JSX.Eleme
       {/* The bar is decoration for the table below it, which carries the same
           numbers as text — so it is hidden from the accessibility tree rather
           than announced as a row of empty divs. */}
-      <div aria-hidden="true" className="flex h-3 w-full overflow-hidden rounded-sm bg-surface-3">
+      <div aria-hidden="true" className="context__bar">
         {budget.segments.map((segment) => (
           <div
             key={segment.key}
@@ -150,19 +150,13 @@ function ContextBody({ sessionKey }: { readonly sessionKey: string }): JSX.Eleme
         ))}
       </div>
 
-      <table className="w-full border-collapse text-sm">
+      <table className="context__table">
         <caption className="sr-only">Token usage by section</caption>
         <thead>
-          <tr className="text-left text-2xs tracking-wide text-fg-3 uppercase">
-            <th scope="col" className="pb-1 font-medium">
-              Section
-            </th>
-            <th scope="col" className="pb-1 text-right font-medium">
-              Tokens
-            </th>
-            <th scope="col" className="pb-1 text-right font-medium">
-              Share
-            </th>
+          <tr>
+            <th scope="col">Section</th>
+            <th scope="col">Tokens</th>
+            <th scope="col">Share</th>
           </tr>
         </thead>
         <tbody>
@@ -172,16 +166,14 @@ function ContextBody({ sessionKey }: { readonly sessionKey: string }): JSX.Eleme
         </tbody>
       </table>
 
-      <div className="flex flex-wrap gap-4 text-xs text-fg-3">
+      <div className="cluster context__meta">
         <span>{context.data.messages.length} messages in the window</span>
         <span>{sessionKey}</span>
       </div>
 
-      <details className="rounded-md border border-line bg-surface-1">
-        <summary className="cursor-default px-3 py-2 text-sm text-fg-2">System prompt</summary>
-        <pre className="max-h-64 overflow-auto border-t border-line px-3 py-2 font-mono text-xs whitespace-pre-wrap text-fg-2">
-          {context.data.systemPrompt}
-        </pre>
+      <details className="context__prompt">
+        <summary>System prompt</summary>
+        <pre>{context.data.systemPrompt}</pre>
       </details>
     </div>
   );
@@ -189,23 +181,18 @@ function ContextBody({ sessionKey }: { readonly sessionKey: string }): JSX.Eleme
 
 function SegmentRow({ segment }: { readonly segment: ContextSegment }): JSX.Element {
   return (
-    <tr className="border-t border-line">
-      <th scope="row" className="py-1.5 text-left font-normal text-fg-2">
-        <span className="flex items-center gap-2">
+    <tr>
+      <th scope="row">
+        <span className="row">
           <span
             aria-hidden="true"
-            className={cn(
-              'inline-block size-2 rounded-xs',
-              SEGMENT_FILLS[segment.key] ?? FALLBACK_FILL,
-            )}
+            className={cn('context__swatch', SEGMENT_FILLS[segment.key] ?? FALLBACK_FILL)}
           />
           {segment.label}
         </span>
       </th>
-      <td className="py-1.5 text-right font-mono text-xs text-fg-1">
-        {formatTokens(segment.tokens)}
-      </td>
-      <td className="py-1.5 text-right text-xs text-fg-3">{segment.percent.toFixed(1)}%</td>
+      <td className="context__tokens">{formatTokens(segment.tokens)}</td>
+      <td className="context__share">{segment.percent.toFixed(1)}%</td>
     </tr>
   );
 }

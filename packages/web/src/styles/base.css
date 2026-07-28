@@ -1,5 +1,5 @@
 /**
- * Base layer: the handful of element defaults the token layer implies.
+ * Base layer: the element defaults the token layer implies.
  *
  * Everything here is a token reference. No colour, no `px`, no font stack —
  * those live in `tokens.css` and nowhere else.
@@ -7,22 +7,16 @@
 
 @layer base {
   html {
-    /* Deliberately no `font-size` override. Density comes from the type scale;
-     * a root font size in px is how a UI stops honouring the browser setting. */
-    background-color: var(--color-surface-0);
-    -webkit-text-size-adjust: 100%;
+    background-color: var(--surface-0);
   }
 
   body {
-    margin: 0;
-    background-color: var(--color-surface-0);
-    color: var(--color-fg-1);
+    background-color: var(--surface-0);
+    color: var(--fg-1);
     font-family: var(--font-sans);
     font-size: var(--text-base);
-    line-height: var(--text-base--line-height);
+    line-height: var(--leading-base);
     font-feature-settings: 'cv05' 1; /* the single-storey l — Inter's is ambiguous next to 1 */
-    -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
   }
 
   code,
@@ -34,15 +28,20 @@
     font-variant-ligatures: none;
   }
 
+  strong,
+  b {
+    font-weight: var(--weight-semibold);
+  }
+
   /* A real focus-visible layer, applied once to everything rather than
    * per-component. `:focus-visible` and not `:focus`: a ring on every mouse
    * click is what leads to `outline: none` and a keyboard-unusable app. The
-   * stroke is `--color-accent-fg`, not `--color-accent` — a ring is a stroke,
-   * and the fill value is a 2:1 pairing against a white card. */
+   * stroke is `--accent-fg`, not `--accent` — a ring is a stroke, and the fill
+   * value is a 2:1 pairing against a white card. */
   :focus-visible {
-    outline: var(--ring-width) solid var(--color-accent-fg);
+    outline: var(--ring-width) solid var(--accent-fg);
     outline-offset: var(--ring-offset);
-    border-radius: var(--radius-xs);
+    border-radius: var(--radius-sm);
   }
 
   /* Only for elements that manage their own ring; the ring above is the default. */
@@ -51,14 +50,19 @@
   }
 
   ::selection {
-    background-color: var(--color-accent-soft);
-    color: var(--color-fg-1);
+    background-color: var(--accent-soft);
+    color: var(--fg-1);
+  }
+
+  ::placeholder {
+    color: var(--fg-3);
+    opacity: 1; /* Firefox fades placeholders by default, below the measured tier */
   }
 
   /* Grabbable rather than hairline, and themed rather than the platform's.
    * `scrollbar-color` covers Firefox; the `::-webkit-` rules cover the rest. */
   * {
-    scrollbar-color: var(--color-line-strong) transparent;
+    scrollbar-color: var(--line-strong) transparent;
     scrollbar-width: thin;
   }
 
@@ -72,24 +76,30 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background-color: var(--color-line-strong);
-    border-radius: var(--radius-xl);
+    background-color: var(--line-strong);
+    border-radius: var(--radius-full);
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background-color: var(--color-fg-3);
+    background-color: var(--fg-3);
   }
 
   ::-webkit-scrollbar-corner {
     background: transparent;
   }
 
-  /* The keyframes behind `--animate-*` in `tokens.css`. They live here rather
-   * than beside the tokens because `tokens.css` is parsed by the contrast
-   * assertion, and nested rules are exactly what that parser refuses.
+  /* The keyframes the floating surfaces animate with. Radix waits for
+   * `animationend` before unmounting, which is the only reason a dialog or a
+   * toast can animate *out* at all — a CSS transition never gets to run on an
+   * element React has already removed.
    *
-   * Opacity only, deliberately: the dialog is centred with a `translate`, and a
-   * keyframe touching `transform` would fight the class that positions it. */
+   * They live here rather than beside the tokens because `tokens.css` is parsed
+   * by the contrast assertion, and nested rules are exactly what that parser
+   * refuses.
+   *
+   * Opacity only for the dialog pair, deliberately: the dialog is centred with
+   * a `translate`, and a keyframe touching `transform` would fight the rule
+   * that positions it. */
   @keyframes fade-in {
     from {
       opacity: 0;
@@ -113,6 +123,12 @@
     from {
       opacity: 0;
       translate: 0.75rem 0;
+    }
+  }
+
+  @keyframes spin {
+    to {
+      rotate: 360deg;
     }
   }
 

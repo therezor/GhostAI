@@ -40,10 +40,10 @@ const LEVEL_ICONS = {
 } as const;
 
 const LEVEL_CLASSES = {
-  info: 'text-info-fg',
-  success: 'text-success-fg',
-  warning: 'text-warning-fg',
-  error: 'text-danger-fg',
+  info: 'notification__icon--info',
+  success: 'notification__icon--success',
+  warning: 'notification__icon--warning',
+  error: 'notification__icon--error',
 } as const;
 
 export function NotificationsRoute(): JSX.Element {
@@ -95,13 +95,13 @@ export function NotificationsRoute(): JSX.Element {
   const now = Date.now();
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-4 sm:p-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-medium">Notifications</h1>
-        <span className="text-sm text-fg-3">
+    <div className="stack page page--reading">
+      <div className="cluster page__header">
+        <h1 className="page__title">Notifications</h1>
+        <span className="page__note">
           {unreadCount === 0 ? 'All caught up' : `${String(unreadCount)} unread`}
         </span>
-        <span className="flex-1" />
+        <span className="spacer" />
         <Button
           variant="secondary"
           disabled={unreadCount === 0 || markAllRead.isPending}
@@ -114,24 +114,24 @@ export function NotificationsRoute(): JSX.Element {
         </Button>
       </div>
 
-      {notifications.isPending && <p className="text-sm text-fg-3">Loading…</p>}
+      {notifications.isPending && <p className="page__note">Loading…</p>}
       {notifications.isError && (
-        <p role="alert" className="text-sm text-danger-fg">
+        <p role="alert" className="page__error">
           Could not load notifications: {notifications.error.message}
         </p>
       )}
 
       {notifications.isSuccess &&
         (rows.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 rounded-lg border border-line bg-surface-1 p-8 text-center">
-            <Bell className="size-5 text-fg-3" />
-            <p className="text-sm text-fg-2">Nothing here yet.</p>
-            <p className="text-xs text-fg-3">
+          <div className="stack page__empty">
+            <Bell />
+            <p className="page__empty-title">Nothing here yet.</p>
+            <p className="page__empty-note">
               Automation runs and expired approvals report themselves here.
             </p>
           </div>
         ) : (
-          <ul className="flex flex-col gap-2">
+          <ul className="stack notification-list">
             {rows.map((row) => (
               <li key={row.id}>
                 <NotificationRow
@@ -169,41 +169,29 @@ function NotificationRow({
   return (
     <article
       aria-label={notification.title}
-      className={cn(
-        'flex items-start gap-3 rounded-lg border p-3',
-        // Unread is raised and read is *transparent* — not a lower surface.
-        // Two filled surfaces invert their emphasis between the themes: in
-        // light, the greyer card is the one that stands out from a white page,
-        // so the read row would draw the eye. A row with no fill recedes into
-        // the background in both.
-        unread ? 'border-line-strong bg-surface-2' : 'border-line bg-transparent',
-      )}
+      className={cn('notification', unread && 'notification--unread')}
     >
-      <Icon className={cn('mt-0.5 size-4 shrink-0', LEVEL_CLASSES[notification.level])} />
+      <Icon className={cn('notification__icon', LEVEL_CLASSES[notification.level])} />
 
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="flex flex-wrap items-baseline gap-2">
-          <span className={cn('text-sm', unread ? 'font-medium text-fg-1' : 'text-fg-2')}>
-            {notification.title}
-          </span>
+      <div className="stack notification__body">
+        <div className="cluster notification__head">
+          <span className="notification__title">{notification.title}</span>
           <time
             dateTime={new Date(notification.createdAtMs).toISOString()}
-            className="text-2xs text-fg-3"
+            className="notification__time"
           >
             {formatRelativeTime(notification.createdAtMs, now)}
           </time>
         </div>
 
-        {notification.body !== '' && (
-          <p className="text-xs break-words text-fg-2">{notification.body}</p>
-        )}
+        {notification.body !== '' && <p className="notification__text">{notification.body}</p>}
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="cluster notification__actions">
           {notification.sessionKey !== undefined && (
             <Link
               to="/"
               search={{ session: notification.sessionKey }}
-              className="text-xs text-accent-fg underline underline-offset-2"
+              className="notification__link"
             >
               Open the conversation
             </Link>

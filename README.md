@@ -3,13 +3,13 @@
 A self-hosted, security-first AI agent written in TypeScript. One process, one port, one SQLite file.
 
 - **Local-first models** — Ollama, LM Studio, llama.cpp, vLLM, or any OpenAI-compatible endpoint. Cloud providers (Anthropic, OpenAI, OpenRouter, Gemini) are opt-in.
-- **Web UI** — React + Vite + Tailwind, dark and dense, served by the same process as the agent.
+- **Web UI** — React + Vite over a hand-written token layer, dark and dense, served by the same process as the agent.
 - **Telegram bot** — the built-in chat channel; others arrive as plugins.
 - **MCP client _and_ server** — connect to any MCP server, and expose GhostAI's own tools to other agents.
 - **Security in the core** — encrypted credential vault, workspace jail, argv-only exec (never a shell), SSRF/DNS-rebinding guard, tool-output nonce wrapping, and per-tool approval prompts.
 - **Extensible** — a versioned plugin SDK for tools, channels, providers, TTS/STT, and embedders.
 
-> **Status: pre-alpha.** Phase 1 is complete — `ghost chat` runs a turn end to end from a terminal — and Phase 2 is nearly there: `ghost serve` puts the REST API, the WebSocket and every channel in front of the same agent, and the browser UI has chat, settings, files and notifications. What is left is the end-to-end and design-fidelity gate. See [Build plan](#build-plan) below.
+> **Status: pre-alpha.** Phases 1 and 2 are complete. `ghost chat` runs a turn end to end from a terminal; `ghost serve` puts the REST API, the WebSocket and every channel in front of the same agent; and the browser UI has chat, settings, files and notifications, behind an end-to-end suite that drives a real server in a real browser in both colour schemes. Phase 3 is next. See [Build plan](#build-plan) below.
 
 ---
 
@@ -31,16 +31,17 @@ pnpm build
 
 ## Commands
 
-| Command                             | Does                                                                      |
-| ----------------------------------- | ------------------------------------------------------------------------- |
-| `pnpm check`                        | The full gate: `typecheck`, `lint`, `test`. Run this before every commit. |
-| `pnpm typecheck`                    | `tsc -b` across all project references                                    |
-| `pnpm lint` / `pnpm lint:fix`       | ESLint with type-aware rules                                              |
-| `pnpm format` / `pnpm format:check` | Prettier                                                                  |
-| `pnpm test` / `pnpm test:watch`     | Vitest                                                                    |
-| `pnpm test:coverage`                | Vitest with the per-package coverage gates enforced                       |
-| `pnpm build`                        | Turborepo build across the graph                                          |
-| `node scripts/gen-packages.mjs`     | Regenerate package manifests after changing the package graph             |
+| Command                               | Does                                                                               |
+| ------------------------------------- | ---------------------------------------------------------------------------------- |
+| `pnpm check`                          | The full gate: `typecheck`, `lint`, `test`. Run this before every commit.          |
+| `pnpm typecheck`                      | `tsc -b` across all project references                                             |
+| `pnpm lint` / `pnpm lint:fix`         | ESLint with type-aware rules                                                       |
+| `pnpm format` / `pnpm format:check`   | Prettier                                                                           |
+| `pnpm test` / `pnpm test:watch`       | Vitest                                                                             |
+| `pnpm test:coverage`                  | Vitest with the per-package coverage gates enforced                                |
+| `pnpm --filter @ghostai/e2e test:e2e` | Playwright against a real server, in both colour schemes. Needs `pnpm build` first |
+| `pnpm build`                          | Turborepo build across the graph                                                   |
+| `node scripts/gen-packages.mjs`       | Regenerate package manifests after changing the package graph                      |
 
 ---
 
@@ -121,7 +122,31 @@ Enforced by `pnpm test:coverage`, blocking in CI:
 
 The phase-by-phase build order, with the done-criterion for each step and the notes each completed step left for the ones after it, lives in [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md).
 
-Phase 1 — the agent working from a terminal — is done. Phase 2 puts a Fastify server and a React web UI in front of it.
+Phase 1 — the agent working from a terminal — is done, and so is Phase 2: the Fastify server and the React web UI in front of it. Phase 3 adds the full provider table, the MCP client, memory and skills, and Telegram.
+
+---
+
+## Working on the UI
+
+**There is no CSS framework.** `packages/web/src/styles/` is hand-written CSS in five cascade layers — `reset`, `base`, `layout`, `components`, `screens` — declared in that order at the top of `app.css`. A component names what it _is_ (`.tool-card`, `.sidebar__link`) and the stylesheet says what that looks like; `cn()` joins class names and nothing resolves conflicts, because a screen rule already beats a component rule by layer rather than by specificity.
+
+`styles/tokens.css` is the vocabulary all of it is written in, and the only file allowed to contain a raw colour or a `px` literal. Three gates enforce that (`pnpm --filter @ghostai/web lint`), and `tokens/contrast.test.ts` resolves the sheet for both themes and holds every text-on-surface pairing to WCAG AA — so a seed edit that darkens text past the line fails the suite rather than shipping. `/tokens` in the running app renders every token and every primitive on one page, which is the fastest way to see what a change did.
+
+Three more things worth knowing before the first hour is spent on any of them.
+
+**Restart `ghost serve` after a UI build.** It enumerates the UI directory once, at boot (`@fastify/static` with `wildcard: false`), so a rebuild underneath a running server serves the new `index.html` and 404s its hashed assets into the SPA fallback. The result is a blank page that looks like a crash and is not one. For an edit-reload loop, run `pnpm --filter @ghostai/web dev` instead — the Vite dev server proxies `/api` and `/ws` to `ghost serve` on the default port.
+
+**The end-to-end suite drives the built bundle**, so `pnpm build` is a precondition rather than a convenience:
+
+```bash
+pnpm build
+pnpm --filter @ghostai/e2e exec playwright install chromium   # once
+pnpm --filter @ghostai/e2e test:e2e
+```
+
+Every spec boots its own server in-process against a scripted model, so nothing reaches the network and nothing shares state. The colour scheme is a Playwright project, which means every assertion runs twice — reviewing only in dark is how a light theme ships broken.
+
+The design-fidelity gate compares the shell's geometry and colour ramps against a checkout of the product being replaced. It is not in this repository and is not required: point `GHOSTAI_FIDELITY_ORIGINAL` at it to run the gate, and `pnpm --filter @ghostai/e2e baseline` to write the side-by-side captures. Without it the gate skips.
 
 ---
 

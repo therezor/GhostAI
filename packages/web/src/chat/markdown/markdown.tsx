@@ -40,7 +40,7 @@ export function Markdown({ text, streaming = false, className }: MarkdownProps):
   const blocks = splitBlocks(text);
 
   return (
-    <div className={cn('flex flex-col gap-3 text-md break-words', className)}>
+    <div className={cn('markdown', className)}>
       {blocks.map((block, index) => (
         <MemoBlock
           key={block.key}
@@ -80,7 +80,7 @@ function renderBlock(token: Token, complete: boolean): ReactNode {
       return renderHeading(token as Tokens.Heading);
 
     case 'paragraph':
-      return <p className="leading-relaxed">{renderInline(inlineTokens(token))}</p>;
+      return <p>{renderInline(inlineTokens(token))}</p>;
 
     case 'code': {
       const code = token as Tokens.Code;
@@ -98,7 +98,7 @@ function renderBlock(token: Token, complete: boolean): ReactNode {
 
     case 'blockquote':
       return (
-        <blockquote className="flex flex-col gap-2 border-l-2 border-line-strong pl-3 text-fg-2">
+        <blockquote>
           {(token as Tokens.Blockquote).tokens.map((child, index) => (
             <MemoBlock key={index} token={child} raw={child.raw} complete={complete} />
           ))}
@@ -112,16 +112,16 @@ function renderBlock(token: Token, complete: boolean): ReactNode {
       return renderTable(token as Tokens.Table);
 
     case 'hr':
-      return <hr className="border-line" />;
+      return <hr />;
 
     // A model writing `<div>` in prose meant to show the tag, not to open one.
     // Rendering the source is both the safe answer and the intended one.
     case 'html':
-      return <p className="font-mono text-sm text-fg-2">{(token as Tokens.HTML).raw}</p>;
+      return <p className="markdown__html">{(token as Tokens.HTML).raw}</p>;
 
     // A stray inline run at block level — the tail of a list item, usually.
     case 'text':
-      return <p className="leading-relaxed">{renderInline(inlineTokens(token))}</p>;
+      return <p>{renderInline(inlineTokens(token))}</p>;
 
     // Link reference definitions produce no output; `space` is filtered in
     // `splitBlocks`. Anything else is a token type marked added since.
@@ -130,43 +130,27 @@ function renderBlock(token: Token, complete: boolean): ReactNode {
   }
 }
 
-const HEADING_CLASSES: Record<number, string> = {
-  1: 'text-xl font-semibold',
-  2: 'text-lg font-semibold',
-  3: 'text-md font-semibold',
-  4: 'text-md font-medium',
-  5: 'text-base font-medium',
-  6: 'text-base font-medium text-fg-2',
-};
-
 function renderHeading(token: Tokens.Heading): ReactNode {
   const depth = Math.min(Math.max(token.depth, 1), 6);
   const Tag = `h${String(depth)}` as 'h1';
 
-  return (
-    <Tag className={cn('mt-1 leading-snug', HEADING_CLASSES[depth])}>
-      {renderInline(inlineTokens(token))}
-    </Tag>
-  );
+  return <Tag>{renderInline(inlineTokens(token))}</Tag>;
 }
 
 function renderList(token: Tokens.List, complete: boolean): ReactNode {
   const Tag = token.ordered ? 'ol' : 'ul';
   const start = typeof token.start === 'number' ? token.start : undefined;
+  // A `data-` attribute rather than a class: the markdown stylesheet addresses
+  // these elements by tag, and this is the one distinction the tag cannot make.
+  const task = token.items.some((item) => item.task);
 
   return (
     <Tag
-      className={cn(
-        'flex flex-col gap-1 pl-5',
-        token.ordered ? 'list-decimal' : 'list-disc',
-        // A task list draws its own checkboxes; the bullets would be a second
-        // marker beside them.
-        token.items.some((item) => item.task) && 'list-none pl-1',
-      )}
+      {...(task ? { 'data-task': 'true' as const } : {})}
       {...(start !== undefined && start !== 1 ? { start } : {})}
     >
       {token.items.map((item, index) => (
-        <li key={index} className={cn('leading-relaxed', item.task && 'flex items-start gap-2')}>
+        <li key={index} {...(item.task ? { 'data-task': 'true' as const } : {})}>
           {item.task && (
             <input
               type="checkbox"
@@ -177,17 +161,11 @@ function renderList(token: Tokens.List, complete: boolean): ReactNode {
               // could change.
               tabIndex={-1}
               aria-label={item.checked === true ? 'Done' : 'Not done'}
-              className="mt-1.5 accent-fg-2"
             />
           )}
-          <div className="flex min-w-0 flex-col gap-1">
+          <div>
             {item.tokens.map((child, childIndex) => (
-              <MemoBlock
-                key={childIndex}
-                token={child}
-                raw={child.raw}
-                complete={complete}
-              />
+              <MemoBlock key={childIndex} token={child} raw={child.raw} complete={complete} />
             ))}
           </div>
         </li>
@@ -196,23 +174,19 @@ function renderList(token: Tokens.List, complete: boolean): ReactNode {
   );
 }
 
-const ALIGN_CLASSES = { left: 'text-left', center: 'text-center', right: 'text-right' } as const;
-
 function renderTable(token: Tokens.Table): ReactNode {
-  const align = (index: number): string => {
+  const align = (index: number): { readonly 'data-align'?: 'left' | 'center' | 'right' } => {
     const value = token.align[index];
-    return value === null || value === undefined ? '' : ALIGN_CLASSES[value];
+    return value === null || value === undefined ? {} : { 'data-align': value };
   };
 
   return (
-    // The scroller is the table's own, not the column's: a wide table has to
-    // scroll sideways inside the message rather than making the whole page do it.
-    <div className="max-w-full overflow-x-auto">
-      <table className="w-full border-collapse text-sm">
+    <div className="markdown__table-scroll">
+      <table>
         <thead>
-          <tr className="border-b border-line-strong">
+          <tr>
             {token.header.map((cell, index) => (
-              <th key={index} className={cn('px-2 py-1.5 font-medium', align(index))}>
+              <th key={index} {...align(index)}>
                 {renderInline(cell.tokens)}
               </th>
             ))}
@@ -220,9 +194,9 @@ function renderTable(token: Tokens.Table): ReactNode {
         </thead>
         <tbody>
           {token.rows.map((row, rowIndex) => (
-            <tr key={rowIndex} className="border-b border-line last:border-0">
+            <tr key={rowIndex}>
               {row.map((cell, index) => (
-                <td key={index} className={cn('px-2 py-1.5 align-top', align(index))}>
+                <td key={index} {...align(index)}>
                   {renderInline(cell.tokens)}
                 </td>
               ))}
@@ -257,20 +231,16 @@ function Inline({ token }: { readonly token: Token }): ReactNode {
       return <>{(token as Tokens.Escape).text}</>;
 
     case 'strong':
-      return <strong className="font-semibold">{renderInline(inlineTokens(token))}</strong>;
+      return <strong>{renderInline(inlineTokens(token))}</strong>;
 
     case 'em':
-      return <em className="italic">{renderInline(inlineTokens(token))}</em>;
+      return <em>{renderInline(inlineTokens(token))}</em>;
 
     case 'del':
-      return <del className="text-fg-3 line-through">{renderInline(inlineTokens(token))}</del>;
+      return <del>{renderInline(inlineTokens(token))}</del>;
 
     case 'codespan':
-      return (
-        <code className="rounded-xs bg-surface-3 px-1 py-0.5 font-mono text-sm">
-          {(token as Tokens.Codespan).text}
-        </code>
-      );
+      return <code>{(token as Tokens.Codespan).text}</code>;
 
     case 'br':
       return <br />;
@@ -305,7 +275,6 @@ function InlineLink({ token }: { readonly token: Tokens.Link }): ReactNode {
       // reaching back through `window.opener`. `noreferrer` is the privacy half.
       target="_blank"
       rel="noopener noreferrer nofollow"
-      className="text-accent-fg underline underline-offset-2 hover:brightness-110"
       {...(token.title === null || token.title === undefined ? {} : { title: token.title })}
     >
       {children}
@@ -327,7 +296,6 @@ function InlineImage({ token }: { readonly token: Tokens.Image }): ReactNode {
         href={href}
         target="_blank"
         rel="noopener noreferrer nofollow"
-        className="text-accent-fg underline underline-offset-2"
         title="External image — opens in a new tab rather than loading here"
       >
         {token.text === '' ? href : token.text}
@@ -335,12 +303,5 @@ function InlineImage({ token }: { readonly token: Tokens.Image }): ReactNode {
     );
   }
 
-  return (
-    <img
-      src={href}
-      alt={token.text}
-      loading="lazy"
-      className="my-1 max-w-full rounded-md border border-line"
-    />
-  );
+  return <img src={href} alt={token.text} loading="lazy" />;
 }

@@ -85,7 +85,7 @@ export function AgentPanel({ config }: { readonly config: Config }): JSX.Element
   const available = modelOptions(models.data?.models ?? [], form.provider, form.model);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="stack settings-panel">
       <Section
         title="Model"
         description="Applies to the next turn. A turn already running keeps the provider it started on."

@@ -68,20 +68,18 @@ export function CodeBlock({ code, lang, complete }: CodeBlockProps): JSX.Element
   const highlighted = complete ? lines : undefined;
 
   return (
-    <figure className="overflow-hidden rounded-md border border-line bg-surface-1">
-      <figcaption className="flex items-center justify-between border-b border-line px-3 py-1">
-        <span className="font-mono text-2xs tracking-wide text-fg-3 uppercase">
-          {lang === '' ? 'text' : lang}
-        </span>
+    <figure className="code-block">
+      <figcaption className="code-block__caption">
+        <span className="code-block__lang">{lang === '' ? 'text' : lang}</span>
         <CopyButton text={code} />
       </figcaption>
 
-      <pre className="overflow-x-auto p-3 text-sm leading-relaxed">
-        <code className="font-mono">
+      <pre className="code-block__code">
+        <code>
           {highlighted === undefined
             ? code
             : highlighted.map((line, index) => (
-                <span key={index} className="block min-h-[1lh]">
+                <span key={index} className="code-block__line">
                   {line.map((token, tokenIndex) => (
                     // The colour is the theme's, applied inline. It is the one
                     // place a raw colour is correct: a syntax theme is not part
@@ -126,13 +124,9 @@ function CopyButton({ text }: { readonly text: string }): JSX.Element {
           if (ok) setCopied(true);
         });
       }}
-      className={cn(
-        'flex items-center gap-1 rounded-xs px-1.5 py-0.5 text-2xs',
-        'text-fg-3 hover:bg-hover hover:text-fg-1',
-        copied && 'text-success-fg',
-      )}
+      className={cn('code-block__copy', copied && 'code-block__copy--done')}
     >
-      {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+      {copied ? <Check /> : <Copy />}
       {copied ? 'Copied' : 'Copy'}
     </button>
   );

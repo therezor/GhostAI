@@ -19,10 +19,6 @@ export const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
 export const DropdownMenuGroup = DropdownMenuPrimitive.Group;
 export const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup;
 
-/** Shared by every floating surface here, so a popover and a menu cannot drift. */
-export const surfaceClasses =
-  'z-50 min-w-[8rem] overflow-hidden rounded-lg border border-line bg-surface-3 p-1 shadow-md';
-
 export function DropdownMenuContent({
   className,
   sideOffset = 6,
@@ -32,25 +28,20 @@ export function DropdownMenuContent({
     <DropdownMenuPrimitive.Portal>
       <DropdownMenuPrimitive.Content
         sideOffset={sideOffset}
-        className={cn(surfaceClasses, 'data-[state=open]:animate-pop-in', className)}
+        // `.floating` is the surface a menu, a popover and a select listbox all
+        // share — see `styles/components/menu.css`.
+        className={cn('floating', className)}
         {...props}
       />
     </DropdownMenuPrimitive.Portal>
   );
 }
 
-export const itemClasses = cn(
-  'relative flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm text-fg-2',
-  'select-none data-[highlighted]:bg-hover data-[highlighted]:text-fg-1',
-  'data-[disabled]:pointer-events-none data-[disabled]:text-fg-3 data-[disabled]:opacity-70',
-  '[&_svg]:size-4 [&_svg]:shrink-0',
-);
-
 export function DropdownMenuItem({
   className,
   ...props
 }: ComponentProps<typeof DropdownMenuPrimitive.Item>): JSX.Element {
-  return <DropdownMenuPrimitive.Item className={cn(itemClasses, className)} {...props} />;
+  return <DropdownMenuPrimitive.Item className={cn('menu__item', className)} {...props} />;
 }
 
 export function DropdownMenuRadioItem({
@@ -59,10 +50,13 @@ export function DropdownMenuRadioItem({
   ...props
 }: ComponentProps<typeof DropdownMenuPrimitive.RadioItem>): JSX.Element {
   return (
-    <DropdownMenuPrimitive.RadioItem className={cn(itemClasses, 'pl-7', className)} {...props}>
-      <span className="absolute left-2 inline-flex items-center justify-center">
+    <DropdownMenuPrimitive.RadioItem
+      className={cn('menu__item menu__item--checkable', className)}
+      {...props}
+    >
+      <span className="menu__indicator">
         <DropdownMenuPrimitive.ItemIndicator>
-          <Check className="size-3.5 text-accent-fg" />
+          <Check />
         </DropdownMenuPrimitive.ItemIndicator>
       </span>
       {children}
@@ -74,15 +68,7 @@ export function DropdownMenuLabel({
   className,
   ...props
 }: ComponentProps<typeof DropdownMenuPrimitive.Label>): JSX.Element {
-  return (
-    <DropdownMenuPrimitive.Label
-      className={cn(
-        'px-2 py-1.5 text-2xs font-medium tracking-wide text-fg-3 uppercase',
-        className,
-      )}
-      {...props}
-    />
-  );
+  return <DropdownMenuPrimitive.Label className={cn('menu__label', className)} {...props} />;
 }
 
 export function DropdownMenuSeparator({
@@ -90,11 +76,6 @@ export function DropdownMenuSeparator({
   ...props
 }: ComponentProps<typeof DropdownMenuPrimitive.Separator>): JSX.Element {
   return (
-    // A border rather than a filled `h-px` div: the hairline is `--hairline`,
-    // and `border` is the one utility that already means exactly that.
-    <DropdownMenuPrimitive.Separator
-      className={cn('my-1 border-t border-line', className)}
-      {...props}
-    />
+    <DropdownMenuPrimitive.Separator className={cn('menu__separator', className)} {...props} />
   );
 }

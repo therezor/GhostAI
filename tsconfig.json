@@ -12,6 +12,7 @@
     { "path": "packages/channels" },
     { "path": "packages/web" },
     { "path": "packages/cli" },
+    { "path": "packages/e2e" },
     { "path": "examples/loopback-channel" }
   ]
 }

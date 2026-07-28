@@ -36,7 +36,7 @@ describe('the style guide', () => {
   it('paints itself from tokens rather than from literals', () => {
     const { container } = renderWithProviders(<TokensRoute />);
 
-    expect(container.innerHTML).toContain('var(--color-surface-0)');
+    expect(container.innerHTML).toContain('var(--surface-0)');
     expect(container.innerHTML).not.toMatch(/#[0-9a-fA-F]{6}/);
   });
 });

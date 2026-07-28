@@ -37,18 +37,15 @@ export function SettingsRoute(): JSX.Element {
   const panel = panelById(requested);
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 p-4 sm:p-6">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-xl font-medium">Settings</h1>
-        <p className="text-sm text-fg-3">{panel.summary}</p>
+    <div className="stack page page--wide">
+      <div className="stack page__heading">
+        <h1 className="page__title">Settings</h1>
+        <p className="page__note">{panel.summary}</p>
       </div>
 
       {settings.data?.loadError !== undefined && (
-        <p
-          role="alert"
-          className="flex items-start gap-2 rounded-lg border border-warning-fg bg-warning-soft p-3 text-xs text-warning-fg"
-        >
-          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+        <p role="alert" className="settings-load-error">
+          <AlertTriangle />
           <span>
             The settings file could not be read and defaults are in use. Saving here overwrites it.
             ({settings.data.loadError})
@@ -66,7 +63,7 @@ export function SettingsRoute(): JSX.Element {
       >
         {/* Scrolls rather than wraps: a tab strip that reflows to two rows moves
             every tab under the pointer as the window is resized. */}
-        <TabsList className="max-w-full overflow-x-auto">
+        <TabsList className="settings-tabs">
           {SETTINGS_PANELS.map((entry) => (
             <TabsTrigger key={entry.id} value={entry.id}>
               {entry.label}
@@ -92,10 +89,10 @@ function PanelBody({ panelId }: { readonly panelId: string }): JSX.Element {
 
   if (isPlanned(panel)) return <PlannedPanel panel={panel} />;
 
-  if (settings.isPending) return <p className="text-sm text-fg-3">Loading settings…</p>;
+  if (settings.isPending) return <p className="page__note">Loading settings…</p>;
   if (settings.isError) {
     return (
-      <p role="alert" className="text-sm text-danger-fg">
+      <p role="alert" className="page__error">
         Could not load settings: {settings.error.message}
       </p>
     );

@@ -81,30 +81,26 @@ export function ToolsPanel({ config }: { readonly config: Config }): JSX.Element
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="stack settings-panel">
       <Section
         title="Approval policy"
         description="Applies to every channel, not only this browser. With no one connected to approve, an “ask” from a channel is denied when it expires."
       >
-        <table className="w-full border-collapse text-sm">
+        <table className="approval-matrix">
           <thead>
-            <tr className="text-left text-2xs tracking-wide text-fg-3 uppercase">
-              <th scope="col" className="pb-2 font-medium">
-                Risk
-              </th>
-              <th scope="col" className="pb-2 font-medium">
-                Policy
-              </th>
+            <tr>
+              <th scope="col">Risk</th>
+              <th scope="col">Policy</th>
             </tr>
           </thead>
           <tbody>
             {RISK_BANDS.map((risk) => (
-              <tr key={risk} className="border-t border-line">
-                <th scope="row" className="py-3 pr-4 text-left font-normal">
-                  <span className="block font-medium text-fg-1">{RISK_COPY[risk].label}</span>
-                  <span className="block text-xs text-fg-3">{RISK_COPY[risk].detail}</span>
+              <tr key={risk}>
+                <th scope="row">
+                  <span className="approval-matrix__band">{RISK_COPY[risk].label}</span>
+                  <span className="approval-matrix__detail">{RISK_COPY[risk].detail}</span>
                 </th>
-                <td className="w-40 py-3">
+                <td className="approval-matrix__policy">
                   <SelectField
                     label={<span className="sr-only">{RISK_COPY[risk].label} policy</span>}
                     value={form.approvals[risk]}
@@ -205,14 +201,18 @@ export function ToolsPanel({ config }: { readonly config: Config }): JSX.Element
         description="What the model is offered right now, and what the matrix above does to each one."
       >
         {tools.isSuccess && tools.data.tools.length > 0 ? (
-          <ul className="flex flex-col divide-y divide-line">
+          <ul className="settings-divided-list">
             {tools.data.tools.map((tool) => {
               const policy = policyFor(tool.risk, form.approvals);
               return (
-                <li key={tool.name} className="flex items-start gap-3 py-2.5">
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <span className="font-mono text-xs text-fg-1">{tool.name}</span>
-                    <span className="truncate text-xs text-fg-3">{tool.description}</span>
+                <li key={tool.name}>
+                  <div className="settings-divided-list__text">
+                    <span className="settings-divided-list__name settings-divided-list__name--mono">
+                      {tool.name}
+                    </span>
+                    <span className="settings-divided-list__detail truncate">
+                      {tool.description}
+                    </span>
                   </div>
                   <Badge tone="neutral">{tool.risk}</Badge>
                   <Badge tone={POLICY_TONE[policy]}>{POLICY_LABELS[policy]}</Badge>
@@ -221,7 +221,7 @@ export function ToolsPanel({ config }: { readonly config: Config }): JSX.Element
             })}
           </ul>
         ) : (
-          <p className="text-sm text-fg-3">
+          <p className="page__note">
             {tools.isPending ? 'Loading tools…' : 'No tools are registered.'}
           </p>
         )}

@@ -25,6 +25,7 @@ import { useEffect, useState, type JSX } from 'react';
 
 import type { ApprovalScope } from '@ghostai/protocol';
 
+import { cn } from '@/lib/cn.js';
 import { formatDuration } from '@/lib/format.js';
 import { Button } from '@/components/ui/button.js';
 import { Tooltip } from '@/components/ui/tooltip.js';
@@ -42,7 +43,11 @@ const SCOPES: readonly {
   readonly hint: string;
 }[] = [
   { scope: 'once', label: 'Once', hint: 'Run this one call. The next one asks again.' },
-  { scope: 'session', label: 'This session', hint: 'Allow this tool for the rest of this conversation.' },
+  {
+    scope: 'session',
+    label: 'This session',
+    hint: 'Allow this tool for the rest of this conversation.',
+  },
   {
     scope: 'always',
     label: 'Always',
@@ -60,12 +65,13 @@ export function ApprovalPrompt({
 
   if (answered !== undefined) {
     return (
-      <p className="flex items-center gap-1.5 border-t border-line px-3 py-2 text-xs text-fg-3">
-        {answered === 'approved' ? (
-          <Check className="size-3.5 text-success-fg" />
-        ) : (
-          <X className="size-3.5 text-danger-fg" />
+      <p
+        className={cn(
+          'row approval__resolved',
+          answered === 'approved' ? 'approval__resolved--approved' : 'approval__resolved--denied',
         )}
+      >
+        {answered === 'approved' ? <Check /> : <X />}
         {answered === 'approved' ? 'Approved' : 'Denied'} — waiting for the agent.
       </p>
     );
@@ -73,30 +79,28 @@ export function ApprovalPrompt({
 
   if (remainingMs <= 0) {
     return (
-      <p className="border-t border-line px-3 py-2 text-xs text-fg-3">
-        The approval window closed. The call was refused.
-      </p>
+      <p className="row approval__resolved">The approval window closed. The call was refused.</p>
     );
   }
 
   return (
-    <div className="flex flex-col gap-2 border-t border-line bg-warning-soft px-3 py-2.5">
-      <p className="flex items-center gap-1.5 text-xs text-fg-1">
-        <ShieldAlert className="size-3.5 shrink-0 text-warning-fg" />
+    <div className="stack approval">
+      <p className="row approval__line">
+        <ShieldAlert />
         <span>
-          <strong className="font-medium">{toolName}</strong> needs approval to run.
+          <strong>{toolName}</strong> needs approval to run.
         </span>
         {/* A live region, because the number changes without anyone acting —
             but `polite` and on a coarse value, or a screen reader reads a
             countdown out loud once a second. */}
-        <span className="ml-auto tabular-nums text-fg-3" role="timer" aria-live="off">
+        <span className="approval__timer" role="timer" aria-live="off">
           {/* Formatted, not raw seconds: a generous `approvals.timeoutMs`
               otherwise counts down from a four-digit number. */}
           {formatDuration(Math.ceil(remainingMs / 1000) * 1000)}
         </span>
       </p>
 
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="cluster approval__actions">
         {SCOPES.map(({ scope, label, hint }) => (
           <Tooltip key={scope} label={hint}>
             <Button
@@ -111,7 +115,7 @@ export function ApprovalPrompt({
           </Tooltip>
         ))}
 
-        <div className="flex-1" />
+        <div className="spacer" />
 
         <Button
           size="sm"

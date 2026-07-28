@@ -46,11 +46,11 @@ export function ProvidersPanel({ config }: { readonly config: Config }): JSX.Ele
   });
 
   if (providers.isPending) {
-    return <p className="text-sm text-fg-3">Loading providers…</p>;
+    return <p className="page__note">Loading providers…</p>;
   }
   if (providers.isError) {
     return (
-      <p role="alert" className="text-sm text-danger-fg">
+      <p role="alert" className="page__error">
         Could not load providers: {providers.error.message}
       </p>
     );
@@ -61,7 +61,7 @@ export function ProvidersPanel({ config }: { readonly config: Config }): JSX.Ele
       title="Providers"
       description="Keys are written to the encrypted vault and are never returned by the API. A key saved here is used by the next turn, with no restart."
     >
-      <ul className="flex flex-col gap-2">
+      <ul className="stack settings-list">
         {providers.data.providers.map((provider) => (
           <li key={provider.id}>
             <ProviderRow provider={provider} config={config} />
@@ -83,7 +83,7 @@ function ProviderRow({
   const bodyId = useId();
 
   return (
-    <div className="rounded-lg border border-line bg-surface-2">
+    <div className="provider-row">
       <button
         type="button"
         aria-expanded={open}
@@ -91,18 +91,21 @@ function ProviderRow({
         onClick={() => {
           setOpen((value) => !value);
         }}
-        className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left hover:bg-hover"
+        className="provider-row__header"
       >
         <ChevronRight
-          className={cn('size-4 shrink-0 text-fg-3 transition-transform', open && 'rotate-90')}
+          className={cn(
+            'provider-row__chevron disclosure-chevron',
+            open && 'disclosure-chevron--open',
+          )}
         />
-        <span className="truncate text-sm font-medium text-fg-1">{provider.displayName}</span>
+        <span className="provider-row__name truncate">{provider.displayName}</span>
 
         {provider.isLocal && <Badge tone="neutral">local</Badge>}
         {provider.isGateway && <Badge tone="info">gateway</Badge>}
         {provider.isOAuth && <Badge tone="info">oauth</Badge>}
 
-        <span className="flex-1" />
+        <span className="spacer" />
 
         {/* The dot is a badge with a word in it. A bare coloured dot carries the
             state in colour alone, which is the one encoding some readers do not
@@ -113,7 +116,7 @@ function ProviderRow({
       </button>
 
       {open && (
-        <div id={bodyId} className="flex flex-col gap-4 border-t border-line px-3 py-4">
+        <div id={bodyId} className="stack provider-row__body">
           <CredentialField provider={provider} />
           <ConnectionForm provider={provider} config={config} />
         </div>
@@ -132,13 +135,13 @@ function CredentialField({ provider }: { readonly provider: ProviderInfo }): JSX
   // that accepted a key nothing would ever read is a stub wearing a working
   // control's clothes, so it is a sentence instead.
   if (provider.envKey === undefined && provider.isLocal) {
-    return <p className="text-xs text-fg-3">This provider takes no key.</p>;
+    return <p className="settings-field__hint">This provider takes no key.</p>;
   }
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="stack settings-field">
       <Label htmlFor={id}>API key</Label>
-      <div className="flex flex-wrap gap-2">
+      <div className="cluster">
         <Input
           id={id}
           // `new-password` rather than `off`: password managers ignore `off` and
@@ -149,7 +152,7 @@ function CredentialField({ provider }: { readonly provider: ProviderInfo }): JSX
           spellCheck={false}
           value={value}
           placeholder={provider.credentialsPresent ? 'Replace the saved key' : 'Paste a key'}
-          className="min-w-48 flex-1"
+          className="provider-row__key-input"
           onChange={(event) => {
             setValue(event.target.value);
           }}
@@ -180,7 +183,7 @@ function CredentialField({ provider }: { readonly provider: ProviderInfo }): JSX
           </Button>
         )}
       </div>
-      <p className="text-xs text-fg-3">
+      <p className="settings-field__hint">
         {provider.envKey === undefined
           ? 'Stored in the encrypted vault.'
           : `Stored in the encrypted vault. ${provider.envKey} in the environment is used when no key is saved.`}
@@ -209,7 +212,7 @@ function ConnectionForm({
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="stack settings-panel">
       <TextField
         label="API base"
         value={form.apiBase}
@@ -221,7 +224,7 @@ function ConnectionForm({
         hint="Empty uses the default shown above."
       />
 
-      <div className="flex flex-col gap-1.5">
+      <div className="stack settings-field">
         <Label htmlFor={modelsId}>Models</Label>
         <Textarea
           id={modelsId}
@@ -232,13 +235,13 @@ function ConnectionForm({
             update('models', event.target.value);
           }}
         />
-        <p className="text-xs text-fg-3">
+        <p className="settings-field__hint">
           What the Agent panel offers for this provider. Nothing enumerates a local server&apos;s
           models, so this list is the catalogue.
         </p>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="row">
         <Button
           disabled={!dirty || saving}
           onClick={() => {
@@ -248,7 +251,7 @@ function ConnectionForm({
         >
           {saving ? 'Saving…' : 'Save connection'}
         </Button>
-        <span role="status" aria-live="polite" className="text-xs text-fg-3">
+        <span role="status" aria-live="polite" className="settings-save-bar__state">
           {dirty ? 'Unsaved changes' : ''}
         </span>
       </div>

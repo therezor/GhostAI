@@ -1,0 +1,122 @@
+/**
+ * The sidebar: navigation and the session list.
+ *
+ * Two things come straight from the product being replaced, because both are
+ * right and neither is obvious.
+ *
+ * The **section label** is 0.6875rem, semibold, uppercase, tracked out, in the
+ * muted tier. Uppercase at that size is unreadable without the tracking, which
+ * is why `--tracking-caps` exists as a token rather than being typed in at each
+ * of the four places that need it.
+ *
+ * The **row treatment** is a surface change, not a colour change. An active nav
+ * row is a lighter surface with brighter text; an inactive one is transparent
+ * with muted text and lifts on hover. Colouring the active row gold instead
+ * would put five gold rows in a column and leave the accent meaning nothing.
+ *
+ * The one place the accent does appear is the unread badge, which is the only
+ * thing in the column that is asking to be looked at.
+ */
+
+@layer screens {
+  .sidebar {
+    --gap: var(--space-4);
+
+    height: 100%;
+    padding: var(--space-3);
+  }
+
+  .sidebar__nav {
+    --gap: var(--space-0-5);
+  }
+
+  .sidebar__link {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2-5);
+    padding: var(--space-2) var(--space-2-5);
+    border-radius: var(--radius-md);
+    color: var(--fg-2);
+    transition:
+      background-color var(--duration-fast) var(--ease-out-quint),
+      color var(--duration-fast) var(--ease-out-quint);
+  }
+
+  .sidebar__link:hover {
+    background-color: var(--hover);
+    color: var(--fg-1);
+  }
+
+  .sidebar__link--active {
+    background-color: var(--surface-3);
+    color: var(--fg-1);
+  }
+
+  .sidebar__link > svg {
+    flex-shrink: 0;
+    width: var(--size-icon-md);
+    height: var(--size-icon-md);
+  }
+
+  .sidebar__link-label {
+    flex: 1 1 auto;
+  }
+
+  .sidebar__section {
+    --gap: var(--space-1);
+
+    min-height: 0;
+  }
+
+  .sidebar__section-title {
+    padding-inline: var(--space-2-5);
+    font-size: var(--text-2xs);
+    line-height: var(--leading-2xs);
+    font-weight: var(--weight-semibold);
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    color: var(--fg-3);
+  }
+
+  .sidebar__sessions {
+    max-height: 16rem;
+  }
+
+  .sidebar__session-list {
+    --gap: var(--space-0-5);
+
+    padding-right: var(--space-1);
+  }
+
+  .sidebar__session {
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-1-5) var(--space-2-5);
+    border-radius: var(--radius-md);
+    color: var(--fg-2);
+    transition:
+      background-color var(--duration-fast) var(--ease-out-quint),
+      color var(--duration-fast) var(--ease-out-quint);
+  }
+
+  .sidebar__session:hover {
+    background-color: var(--hover);
+    color: var(--fg-1);
+  }
+
+  .sidebar__session-count {
+    font-size: var(--text-xs);
+    line-height: var(--leading-xs);
+    color: var(--fg-3);
+  }
+
+  .sidebar__note {
+    padding: var(--space-1-5) var(--space-2-5);
+    font-size: var(--text-sm);
+    color: var(--fg-3);
+  }
+
+  .sidebar__note--error {
+    color: var(--danger-fg);
+  }
+}

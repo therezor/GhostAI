@@ -63,34 +63,46 @@ describe('the reconnect cursor', () => {
     expect(readCursor('web:1', storage)).toBe(42);
   });
 
-  it('is zero for a different session', () => {
+  it('round-trips a zero, which is not the same as an absence', () => {
+    const storage = memory();
+
+    // "This tab has been here and nothing is in storage yet" — a reload during
+    // a session's first turn, and the case that most needs the ring.
+    writeCursor('web:1', 0, storage);
+
+    expect(readCursor('web:1', storage)).toBe(0);
+  });
+
+  it('is absent for a different session', () => {
     const storage = memory();
     writeCursor('web:1', 42, storage);
 
     // A sequence number from another conversation addresses nothing in this
     // one's replay ring.
-    expect(readCursor('web:2', storage)).toBe(0);
+    expect(readCursor('web:2', storage)).toBeUndefined();
   });
 
-  it('is zero when nothing was ever written', () => {
-    expect(readCursor('web:1', memory())).toBe(0);
+  it('is absent when nothing was ever written', () => {
+    expect(readCursor('web:1', memory())).toBeUndefined();
   });
 
-  it('is zero for an entry that is not a cursor', () => {
-    expect(readCursor('web:1', memory({ 'ghostai.cursor': 'not json' }))).toBe(0);
-    expect(readCursor('web:1', memory({ 'ghostai.cursor': '{"sessionKey":"web:1"}' }))).toBe(0);
+  it('is absent for an entry that is not a cursor', () => {
+    expect(readCursor('web:1', memory({ 'ghostai.cursor': 'not json' }))).toBeUndefined();
+    expect(
+      readCursor('web:1', memory({ 'ghostai.cursor': '{"sessionKey":"web:1"}' })),
+    ).toBeUndefined();
     expect(
       readCursor('web:1', memory({ 'ghostai.cursor': '{"sessionKey":"web:1","lastSeq":-2}' })),
-    ).toBe(0);
+    ).toBeUndefined();
     expect(
       readCursor('web:1', memory({ 'ghostai.cursor': '{"sessionKey":"web:1","lastSeq":1.5}' })),
-    ).toBe(0);
+    ).toBeUndefined();
   });
 
   it('survives storage that refuses to answer', () => {
     // A tab that cannot rebuild its in-flight turn beats a tab that throws
     // while rendering one.
-    expect(readCursor('web:1', hostile)).toBe(0);
+    expect(readCursor('web:1', hostile)).toBeUndefined();
     expect(() => {
       writeCursor('web:1', 4, hostile);
     }).not.toThrow();
@@ -100,7 +112,7 @@ describe('the reconnect cursor', () => {
   });
 
   it('survives storage that is not there at all', () => {
-    expect(readCursor('web:1', undefined)).toBe(0);
+    expect(readCursor('web:1', undefined)).toBeUndefined();
     expect(() => {
       writeCursor('web:1', 4, undefined);
     }).not.toThrow();
@@ -112,6 +124,6 @@ describe('the reconnect cursor', () => {
 
     clearCursor(storage);
 
-    expect(readCursor('web:1', storage)).toBe(0);
+    expect(readCursor('web:1', storage)).toBeUndefined();
   });
 });

@@ -21,51 +21,30 @@ import type { HTMLAttributes, JSX } from 'react';
 
 import { cn } from '@/lib/cn.js';
 
-export const badgeVariants = cva(
-  'inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-2xs font-medium whitespace-nowrap [&_svg]:size-3',
-  {
-    variants: {
-      tone: {
-        neutral: '',
-        accent: '',
-        success: '',
-        warning: '',
-        danger: '',
-        info: '',
-      },
-      variant: {
-        soft: '',
-        solid: 'text-on-fill',
-        outline: 'border bg-transparent',
-      },
+/**
+ * Tone and variant are independent here, where the previous version needed
+ * eighteen compound entries to pair them. The stylesheet is what changed: a
+ * tone now sets custom properties and a variant reads them, so `accent` and
+ * `outline` compose in CSS instead of having to be enumerated in TypeScript.
+ */
+export const badgeVariants = cva('badge', {
+  variants: {
+    tone: {
+      neutral: 'badge--neutral',
+      accent: 'badge--accent',
+      success: 'badge--success',
+      warning: 'badge--warning',
+      danger: 'badge--danger',
+      info: 'badge--info',
     },
-    // The pairing is what carries the meaning, so it is expressed as one:
-    // `role` alone cannot know whether it is colouring a fill or a label.
-    compoundVariants: [
-      { tone: 'neutral', variant: 'soft', class: 'bg-hover text-fg-2' },
-      { tone: 'accent', variant: 'soft', class: 'bg-accent-soft text-accent-fg' },
-      { tone: 'success', variant: 'soft', class: 'bg-success-soft text-success-fg' },
-      { tone: 'warning', variant: 'soft', class: 'bg-warning-soft text-warning-fg' },
-      { tone: 'danger', variant: 'soft', class: 'bg-danger-soft text-danger-fg' },
-      { tone: 'info', variant: 'soft', class: 'bg-info-soft text-info-fg' },
-
-      { tone: 'neutral', variant: 'solid', class: 'bg-line-strong text-fg-1' },
-      { tone: 'accent', variant: 'solid', class: 'bg-accent' },
-      { tone: 'success', variant: 'solid', class: 'bg-success' },
-      { tone: 'warning', variant: 'solid', class: 'bg-warning' },
-      { tone: 'danger', variant: 'solid', class: 'bg-danger' },
-      { tone: 'info', variant: 'solid', class: 'bg-info' },
-
-      { tone: 'neutral', variant: 'outline', class: 'border-line-strong text-fg-2' },
-      { tone: 'accent', variant: 'outline', class: 'border-accent-fg text-accent-fg' },
-      { tone: 'success', variant: 'outline', class: 'border-success-fg text-success-fg' },
-      { tone: 'warning', variant: 'outline', class: 'border-warning-fg text-warning-fg' },
-      { tone: 'danger', variant: 'outline', class: 'border-danger-fg text-danger-fg' },
-      { tone: 'info', variant: 'outline', class: 'border-info-fg text-info-fg' },
-    ],
-    defaultVariants: { tone: 'neutral', variant: 'soft' },
+    variant: {
+      soft: 'badge--soft',
+      solid: 'badge--solid',
+      outline: 'badge--outline',
+    },
   },
-);
+  defaultVariants: { tone: 'neutral', variant: 'soft' },
+});
 
 export interface BadgeProps
   extends HTMLAttributes<HTMLSpanElement>, VariantProps<typeof badgeVariants> {}

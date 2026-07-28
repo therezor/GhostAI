@@ -29,11 +29,7 @@ export function TooltipContent({
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Content
         sideOffset={sideOffset}
-        className={cn(
-          'z-50 rounded-md border border-line bg-surface-3 px-2 py-1 text-xs text-fg-1 shadow-md',
-          'data-[state=delayed-open]:animate-pop-in',
-          className,
-        )}
+        className={cn('tooltip', className)}
         {...props}
       />
     </TooltipPrimitive.Portal>

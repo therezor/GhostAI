@@ -33,30 +33,12 @@ export function DialogContent({
 }: ComponentProps<typeof DialogPrimitive.Content> & { readonly showClose?: boolean }): JSX.Element {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay
-        className={cn(
-          'fixed inset-0 z-50 bg-surface-0/70 backdrop-blur-sm',
-          'data-[state=open]:animate-in data-[state=closed]:animate-out',
-        )}
-      />
-      <DialogPrimitive.Content
-        className={cn(
-          'fixed top-1/2 left-1/2 z-50 w-[min(32rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2',
-          'max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl border border-line bg-surface-2 p-5 shadow-lg',
-          className,
-        )}
-        {...props}
-      >
+      <DialogPrimitive.Overlay className="dialog-overlay" />
+      <DialogPrimitive.Content className={cn('dialog', className)} {...props}>
         {children}
         {showClose && (
-          <DialogPrimitive.Close
-            aria-label="Close"
-            className={cn(
-              'absolute top-3.5 right-3.5 inline-flex size-7 items-center justify-center',
-              'rounded-md text-fg-3 hover:bg-hover hover:text-fg-1',
-            )}
-          >
-            <X className="size-4" />
+          <DialogPrimitive.Close aria-label="Close" className="dialog__close">
+            <X />
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Content>
@@ -65,23 +47,25 @@ export function DialogContent({
 }
 
 export function DialogHeader({ className, ...props }: ComponentProps<'div'>): JSX.Element {
-  return <div className={cn('mb-4 flex flex-col gap-1 pr-8', className)} {...props} />;
+  return <div className={cn('stack dialog__header', className)} {...props} />;
 }
 
 export function DialogFooter({ className, ...props }: ComponentProps<'div'>): JSX.Element {
-  return <div className={cn('mt-5 flex flex-wrap justify-end gap-2', className)} {...props} />;
+  return <div className={cn('dialog__footer', className)} {...props} />;
 }
 
 export function DialogHeading({
   className,
   ...props
 }: ComponentProps<typeof DialogPrimitive.Title>): JSX.Element {
-  return <DialogPrimitive.Title className={cn('text-lg font-medium', className)} {...props} />;
+  return <DialogPrimitive.Title className={cn('dialog__title', className)} {...props} />;
 }
 
 export function DialogSubheading({
   className,
   ...props
 }: ComponentProps<typeof DialogPrimitive.Description>): JSX.Element {
-  return <DialogPrimitive.Description className={cn('text-sm text-fg-2', className)} {...props} />;
+  return (
+    <DialogPrimitive.Description className={cn('dialog__description', className)} {...props} />
+  );
 }

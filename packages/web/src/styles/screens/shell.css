@@ -1,0 +1,172 @@
+/**
+ * The app shell: a header across the top, a fixed left column, and everything
+ * else.
+ *
+ * The three dimensions here — `--layout-sidebar`, `--layout-header` and, in
+ * `chat.css`, `--layout-chat` — are the numbers the fidelity gate measures.
+ * They are read from tokens rather than written here so that there is exactly
+ * one place a sidebar width can be changed, which is what stopped 17rem
+ * drifting to 16rem in one file while five others still said 17.
+ *
+ * `100dvh` rather than `100vh`: on a phone the visual viewport shrinks when the
+ * URL bar appears, and a `vh`-tall shell puts the composer under it.
+ */
+
+@layer screens {
+  .shell {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    background-color: var(--surface-0);
+    color: var(--fg-1);
+  }
+
+  .shell__body {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  /* Below the breakpoint the left column is not narrowed, it is removed — and
+   * reached through a drawer instead. A sidebar squeezed to 4rem is a sidebar
+   * whose labels are gone and whose targets are too small, which is worse on a
+   * phone than a button that opens the real thing. */
+  .shell__sidebar {
+    display: none;
+    flex-shrink: 0;
+    width: var(--layout-sidebar);
+    overflow-y: auto;
+    background-color: var(--surface-1);
+    border-right: var(--hairline) solid var(--line);
+  }
+
+  .shell__main {
+    flex: 1 1 auto;
+    /* Or a long unbroken token in a code block makes the whole column scroll
+     * sideways instead of the block itself. */
+    min-width: 0;
+    overflow-y: auto;
+  }
+
+  @media (min-width: 48rem) {
+    .shell__sidebar {
+      display: block;
+    }
+
+    .shell__menu-button {
+      display: none;
+    }
+  }
+
+  /* ── Header ────────────────────────────────────────────────── */
+
+  .app-header {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: var(--space-2);
+    height: var(--layout-header);
+    padding-inline: var(--space-3);
+    background-color: var(--surface-1);
+    border-bottom: var(--hairline) solid var(--line);
+  }
+
+  .app-header__brand {
+    font-weight: var(--weight-semibold);
+    letter-spacing: -0.01em;
+    color: var(--accent-fg);
+  }
+
+  /* The resolved provider and model. Hidden on the narrowest screens, where the
+   * connection state and the theme control are the two things worth the room. */
+  .app-header__agent {
+    display: none;
+    font-size: var(--text-xs);
+    color: var(--fg-3);
+  }
+
+  @media (min-width: 40rem) {
+    .app-header__agent {
+      display: inline;
+    }
+  }
+
+  /* ── The page frame ────────────────────────────────────────── *
+   *
+   * Files, Notifications, Settings and the style guide are all the same shape:
+   * a centred column with a heading row on top. It is one rule rather than four
+   * near-identical ones, which is the difference between changing the page
+   * gutter once and changing it four times and missing one.
+   */
+
+  .page {
+    --gap: var(--space-4);
+
+    width: 100%;
+    margin-inline: auto;
+    padding: var(--space-4);
+  }
+
+  @media (min-width: 40rem) {
+    .page {
+      padding: var(--space-6);
+    }
+  }
+
+  .page--wide {
+    max-width: 64rem;
+  }
+
+  .page--reading {
+    max-width: var(--layout-chat);
+  }
+
+  .page__header {
+    --gap: var(--space-3);
+  }
+
+  /** A title with its one-line summary under it, set as a pair. */
+  .page__heading {
+    --gap: var(--space-1);
+  }
+
+  .page__title {
+    font-size: var(--text-xl);
+    line-height: var(--leading-xl);
+    font-weight: var(--weight-semibold);
+  }
+
+  .page__note {
+    color: var(--fg-3);
+  }
+
+  .page__error {
+    color: var(--danger-fg);
+  }
+
+  .page__empty {
+    --gap: var(--space-2);
+
+    align-items: center;
+    padding: var(--space-8);
+    background-color: var(--surface-1);
+    border: var(--hairline) solid var(--line);
+    border-radius: var(--radius-lg);
+    text-align: center;
+  }
+
+  .page__empty > svg {
+    width: var(--size-icon-lg);
+    height: var(--size-icon-lg);
+    color: var(--fg-3);
+  }
+
+  .page__empty-title {
+    color: var(--fg-2);
+  }
+
+  .page__empty-note {
+    font-size: var(--text-sm);
+    color: var(--fg-3);
+  }
+}

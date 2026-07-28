@@ -73,9 +73,7 @@ describe('highlight', () => {
 
     // A highlighter that drops or duplicates a character is a highlighter that
     // silently corrupts the code the user is about to copy.
-    const rebuilt = lines
-      ?.map((line) => line.map((token) => token.content).join(''))
-      .join('\n');
+    const rebuilt = lines?.map((line) => line.map((token) => token.content).join('')).join('\n');
     expect(rebuilt).toBe(code);
   });
 

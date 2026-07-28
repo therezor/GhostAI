@@ -14,15 +14,15 @@
  *  2. **No raw colour outside `tokens.css`.** A hex, `rgb()`, `hsl()` or
  *     `oklch()` in a component is a colour that cannot change with the theme
  *     and was never measured for contrast.
- *  3. **No `--color-accent` in a text, icon or stroke position.** Fill uses
- *     `--color-accent`; text and strokes use `--color-accent-fg`. The two are
- *     identical in dark, so this rule is only load-bearing in light — which is
- *     to say it is invisible in the theme most of the work happens in.
+ *  3. **No `--accent` in a text, icon or stroke position.** Fill uses
+ *     `--accent`; text and strokes use `--accent-fg`. The two are identical in
+ *     dark, so this rule is only load-bearing in light — which is to say it is
+ *     invisible in the theme most of the work happens in.
  *
  * They are ordinary functions over source text rather than an ESLint rule or a
  * Stylelint plugin, because the same three rules have to hold in CSS, in TSX
- * class strings and in `index.html`, and no single linter reads all three.
- * `gates.test.ts` runs them over the whole package.
+ * and in `index.html`, and no single linter reads all three. `gates.test.ts`
+ * runs them over the whole package.
  */
 
 /** One violation, addressed the way an editor addresses it. */
@@ -87,22 +87,20 @@ const STROKE_PROPERTIES = [
 ];
 
 /**
- * `var(--color-accent)` in a stroke declaration. The negative lookahead is what
- * lets `--color-accent-fg` — the correct token — through: it never matches
- * `--color-accent` followed by anything but a closing paren.
+ * `var(--accent)` in a stroke declaration. The closing paren in the pattern is
+ * what lets `--accent-fg` — the correct token — through: it never matches
+ * `--accent` followed by anything but whitespace and a `)`.
+ *
+ * This used to be half of the rule. The other half scanned for utility classes
+ * like `text-accent`, which compiled to the same mistake through a different
+ * spelling. With the utilities gone, every colour in the package is written as
+ * a CSS declaration, so one pattern covers what two used to — and a rule with
+ * one way to be broken is a rule that can actually be checked.
  */
 const ACCENT_IN_CSS = new RegExp(
-  String.raw`(?:^|[;{}])\s*(${STROKE_PROPERTIES.join('|')})\s*:[^;{}]*var\(\s*--color-accent\s*\)`,
+  String.raw`(?:^|[;{}])\s*(${STROKE_PROPERTIES.join('|')})\s*:[^;{}]*var\(\s*--accent\s*\)`,
   'gm',
 );
-
-/**
- * The same rule for Tailwind utilities. `text-accent` compiles to
- * `color: var(--color-accent)`, which is the mistake this exists to catch;
- * `text-accent-fg` is the one to write instead.
- */
-const ACCENT_IN_UTILITY =
-  /(?<![\w-])(?:text|border|ring|outline|divide|decoration|caret|fill|stroke|placeholder|accent)-accent(?![\w-])/g;
 
 /** All three gates over one file. */
 export function checkFile({ file, source }: SourceFile): readonly Violation[] {
@@ -115,7 +113,6 @@ export function checkFile({ file, source }: SourceFile): readonly Violation[] {
   }
 
   out.push(...scan(file, source, ACCENT_IN_CSS, 'accent-position'));
-  out.push(...scan(file, source, ACCENT_IN_UTILITY, 'accent-position'));
 
   return out;
 }

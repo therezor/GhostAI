@@ -738,7 +738,12 @@ export class AgentLoop {
         ok: !execution.isError,
         content: truncation.text,
         truncated,
-        durationMs: execution.durationMs,
+        // Whole milliseconds, because this event *is* a `ServerMessage` and the
+        // protocol says `z.number().int()`. `monotonic()` is `performance.now()`,
+        // which returns fractions — and a client that validates its frames drops
+        // the one that says the call finished, leaving a tool card spinning
+        // forever over a tool that returned in a millisecond.
+        durationMs: Math.round(execution.durationMs),
       };
 
       if (wrapped.findings.length > 0) {
@@ -907,7 +912,9 @@ export class AgentLoop {
         type: 'tool.progress',
         turnId,
         callId: call.id,
-        elapsedMs: this.#clock.monotonic() - started,
+        // Whole milliseconds — see `tool.result` above for why a fraction here
+        // is a frame the client throws away rather than a rounding detail.
+        elapsedMs: Math.round(this.#clock.monotonic() - started),
         message: `${call.name} is still running`,
       };
     }

@@ -40,20 +40,17 @@ export function Section({
   readonly className?: string;
 }): JSX.Element {
   return (
-    <section
-      aria-label={title}
-      className={cn('rounded-lg border border-line bg-surface-1 p-4', className)}
-    >
-      <h3 className="text-md font-medium text-fg-1">{title}</h3>
-      {description !== undefined && <p className="mt-1 text-xs text-fg-3">{description}</p>}
-      <div className="mt-4 flex flex-col gap-4">{children}</div>
+    <section aria-label={title} className={cn('settings-section', className)}>
+      <h3 className="settings-section__title">{title}</h3>
+      {description !== undefined && <p className="settings-section__description">{description}</p>}
+      <div className="stack settings-section__body">{children}</div>
     </section>
   );
 }
 
 /** Two columns above `sm`, one below — a settings form is the last place to force a scroll. */
 export function FieldGrid({ children }: { readonly children: ReactNode }): JSX.Element {
-  return <div className="grid gap-4 sm:grid-cols-2">{children}</div>;
+  return <div className="settings-grid">{children}</div>;
 }
 
 export interface TextFieldProps extends Omit<ComponentProps<'input'>, 'id' | 'onChange'> {
@@ -90,7 +87,7 @@ export function TextField({
     .join(' ');
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="stack settings-field">
       <Label htmlFor={id}>{label}</Label>
       <Input
         id={id}
@@ -103,12 +100,12 @@ export function TextField({
         {...props}
       />
       {hint !== undefined && (
-        <p id={hintId} className="text-xs text-fg-3">
+        <p id={hintId} className="settings-field__hint">
           {hint}
         </p>
       )}
       {error !== undefined && (
-        <p id={errorId} role="alert" className="text-xs text-danger-fg">
+        <p id={errorId} role="alert" className="settings-field__error">
           {error}
         </p>
       )}
@@ -150,7 +147,7 @@ export function SelectField({
   const hintId = `${id}-hint`;
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="stack settings-field">
       <Label htmlFor={id}>{label}</Label>
       <Select
         value={value}
@@ -169,7 +166,7 @@ export function SelectField({
         </SelectContent>
       </Select>
       {hint !== undefined && (
-        <p id={hintId} className="text-xs text-fg-3">
+        <p id={hintId} className="settings-field__hint">
           {hint}
         </p>
       )}
@@ -196,10 +193,10 @@ export function SwitchRow({
   const id = useId();
 
   return (
-    <div className="flex items-start justify-between gap-4">
-      <div className="flex min-w-0 flex-col gap-0.5">
+    <div className="settings-switch-row">
+      <div className="stack settings-switch-row__text">
         <Label htmlFor={id}>{label}</Label>
-        {hint !== undefined && <p className="text-xs text-fg-3">{hint}</p>}
+        {hint !== undefined && <p className="settings-field__hint">{hint}</p>}
       </div>
       <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
     </div>
@@ -228,7 +225,7 @@ export function SaveBar({
   readonly children?: ReactNode;
 }): JSX.Element {
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="cluster settings-save-bar">
       <Button variant="primary" disabled={!dirty || saving} onClick={onSave}>
         {saving ? 'Saving…' : 'Save changes'}
       </Button>
@@ -240,7 +237,7 @@ export function SaveBar({
       {children}
       {/* Announced rather than only coloured: "unsaved changes" is the state a
           user is most likely to leave the page in the middle of. */}
-      <span role="status" aria-live="polite" className="text-xs text-fg-3">
+      <span role="status" aria-live="polite" className="settings-save-bar__state">
         {dirty ? 'Unsaved changes' : ''}
       </span>
     </div>

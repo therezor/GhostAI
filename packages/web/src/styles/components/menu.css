@@ -1,0 +1,104 @@
+/**
+ * Floating surfaces, and the rows inside them.
+ *
+ * `.floating` is shared by the dropdown menu, the popover and the select
+ * listbox, for the reason it always was: a menu and a popover that disagree
+ * about border, radius or elevation read as two different applications. It is a
+ * class here rather than an exported string of utilities, which means the
+ * sharing is now enforced by the stylesheet instead of by everyone remembering
+ * to import the same constant.
+ *
+ * Everything floating is portalled to the end of `<body>`, so stacking is a DOM
+ * order question and one z-index step covers all of it.
+ */
+
+@layer components {
+  .floating {
+    z-index: var(--z-dropdown);
+    min-width: 8rem;
+    overflow: hidden;
+    padding: var(--space-1);
+    background-color: var(--surface-3);
+    border: var(--hairline) solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+  }
+
+  .floating[data-state='open'] {
+    animation: pop-in var(--duration-fast) var(--ease-out-quint);
+  }
+
+  .menu__item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1-5) var(--space-2);
+    border-radius: var(--radius-md);
+    color: var(--fg-2);
+    cursor: default;
+    user-select: none;
+  }
+
+  .menu__item > svg {
+    width: var(--size-icon-md);
+    height: var(--size-icon-md);
+    flex-shrink: 0;
+  }
+
+  .menu__item[data-highlighted] {
+    background-color: var(--hover);
+    color: var(--fg-1);
+  }
+
+  /* The ring is drawn inside the row rather than around it. `.floating` clips
+   * its content, so the default outward offset would put the ring's outer edge
+   * under the panel's own edge and shave it off on the first and last rows.
+   * Inset, not removed — the highlight is a surface change, and a surface
+   * change alone is not a focus indicator. */
+  .menu__item:focus-visible {
+    outline-offset: calc(-1 * var(--ring-offset));
+  }
+
+  /* No opacity. A row faded to 70% over a hover fill is a row nobody can read,
+   * and the muted tier already says "not available" legibly on every surface. */
+  .menu__item[data-disabled] {
+    pointer-events: none;
+    color: var(--fg-3);
+  }
+
+  /** Room on the left for the selected-item tick. */
+  .menu__item--checkable {
+    padding-left: var(--space-7);
+  }
+
+  .menu__indicator {
+    position: absolute;
+    left: var(--space-2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-fg);
+  }
+
+  .menu__indicator > svg {
+    width: var(--size-icon-sm);
+    height: var(--size-icon-sm);
+  }
+
+  .menu__label {
+    padding: var(--space-1-5) var(--space-2);
+    font-size: var(--text-2xs);
+    line-height: var(--leading-2xs);
+    font-weight: var(--weight-medium);
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    color: var(--fg-3);
+  }
+
+  .menu__separator {
+    margin-block: var(--space-1);
+    border: none;
+    border-top: var(--hairline) solid var(--line);
+  }
+}

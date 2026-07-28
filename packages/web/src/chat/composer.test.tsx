@@ -21,9 +21,10 @@ interface Sent {
   readonly attachments: readonly Attachment[];
 }
 
-function mount(
-  overrides: Partial<React.ComponentProps<typeof Composer>> = {},
-): { readonly sent: Sent[]; readonly stops: number[] } {
+function mount(overrides: Partial<React.ComponentProps<typeof Composer>> = {}): {
+  readonly sent: Sent[];
+  readonly stops: number[];
+} {
   const sent: Sent[] = [];
   const stops: number[] = [];
 
@@ -84,7 +85,7 @@ describe('sending', () => {
 
     // The mirror is what sizes the grid cell; the textarea stretches to fill
     // it. No `scrollHeight` read, and no pixel height written anywhere.
-    const mirror = document.body.querySelector('[aria-hidden="true"].invisible');
+    const mirror = document.body.querySelector('.composer__mirror');
     expect(mirror?.textContent).toBe('one\ntwo\n');
     expect(box().getAttribute('style')).toBeNull();
   });
@@ -185,10 +186,7 @@ describe('attachments', () => {
     });
     const { sent } = mount();
 
-    await user.upload(
-      filePicker(),
-      new File(['hello'], 'note.txt', { type: 'text/plain' }),
-    );
+    await user.upload(filePicker(), new File(['hello'], 'note.txt', { type: 'text/plain' }));
 
     // A four-second upload starting when Send is pressed is four seconds of a
     // button that appears to have done nothing.
@@ -218,10 +216,7 @@ describe('attachments', () => {
   it('drops a staged file on request', async () => {
     const user = userEvent.setup();
     stubFetch({
-      '/api/files/upload': [
-        201,
-        { path: 'uploads/a-x.txt', sizeBytes: 1, mimeType: 'text/plain' },
-      ],
+      '/api/files/upload': [201, { path: 'uploads/a-x.txt', sizeBytes: 1, mimeType: 'text/plain' }],
     });
     mount();
 

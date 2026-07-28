@@ -14,7 +14,6 @@
 import { Monitor, Moon, Sun } from 'lucide-react';
 import type { JSX } from 'react';
 
-import { cn } from '@/lib/cn.js';
 import { useAppTheme } from '@/theme/theme-context.js';
 import type { ThemePreference } from '@/theme/theme.js';
 import {
@@ -65,7 +64,7 @@ export function ThemeToggle({ className }: { readonly className?: string }): JSX
             const OptionIcon = ICONS[option.value];
             return (
               <DropdownMenuRadioItem key={option.value} value={option.value}>
-                <OptionIcon className={cn('size-4', option.value === preference && 'text-fg-1')} />
+                <OptionIcon />
                 {option.label}
               </DropdownMenuRadioItem>
             );

@@ -34,7 +34,13 @@ export default defineConfig({
     // `examples/*` are workspace packages like any other: the loopback channel
     // is what proves `channelConformance`, and a suite that does not run is a
     // contract nothing holds.
-    projects: ['packages/*', 'examples/*'],
+    //
+    // `packages/e2e` is the one exclusion. Its specs are Playwright's, and the
+    // two runners' `test`/`expect` are different objects — vitest collecting a
+    // `.spec.ts` fails with "Playwright Test did not expect test.describe() to
+    // be called here", which reads as a broken suite rather than the wrong
+    // runner. It has its own command; see the `e2e` job in CI.
+    projects: ['packages/*', '!packages/e2e', 'examples/*'],
     passWithNoTests: true,
     coverage: {
       provider: 'v8',

@@ -1,0 +1,67 @@
+/**
+ * Switch.
+ *
+ * On is `--accent` as a fill — a fill is exactly what the accent token is for —
+ * and off is the strong line colour rather than a surface, so the track stays
+ * visible against all four surfaces.
+ *
+ * Disabled drops the track to the plain line colour instead of fading the
+ * control. A 60%-opacity switch on a card is a switch whose state you cannot
+ * read, which for a control whose entire content *is* its state is the whole
+ * of the information gone.
+ */
+
+@layer components {
+  .switch {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    width: 2.25rem;
+    height: 1.25rem;
+    padding: var(--space-0-5);
+    border: var(--hairline) solid transparent;
+    border-radius: var(--radius-full);
+    transition: background-color var(--duration-fast) var(--ease-out-quint);
+  }
+
+  .switch[data-state='checked'] {
+    background-color: var(--accent);
+  }
+
+  .switch[data-state='unchecked'] {
+    background-color: var(--line-strong);
+  }
+
+  .switch:disabled {
+    pointer-events: none;
+    background-color: var(--line);
+    border-color: var(--line-strong);
+  }
+
+  /* The thumb inverts with the track rather than staying one colour: a single
+   * thumb colour is legible on one of the two tracks and washed out on the
+   * other, in whichever theme you did not check. */
+  .switch__thumb {
+    display: block;
+    width: var(--space-4);
+    height: var(--space-4);
+    border-radius: var(--radius-full);
+    box-shadow: var(--shadow-xs);
+    pointer-events: none;
+    transition: translate var(--duration-fast) var(--ease-out-quint);
+  }
+
+  .switch__thumb[data-state='checked'] {
+    background-color: var(--on-fill);
+    translate: var(--space-4) 0;
+  }
+
+  .switch__thumb[data-state='unchecked'] {
+    background-color: var(--fg-2);
+    translate: 0 0;
+  }
+
+  .switch:disabled .switch__thumb {
+    background-color: var(--fg-3);
+  }
+}

@@ -336,7 +336,10 @@ export function applyServerMessage(items: Transcript, message: ServerMessage): T
           }));
 
     case 'steer':
-      return [...items, { kind: 'steer', id: `steer:${String(message.seq)}`, text: message.content }];
+      return [
+        ...items,
+        { kind: 'steer', id: `steer:${String(message.seq)}`, text: message.content },
+      ];
 
     case 'session.reset':
       return EMPTY_TRANSCRIPT;
@@ -401,9 +404,7 @@ function growsATurn(
   message: ServerMessage,
 ): message is Extract<ServerMessage, { turnId?: string }> & { turnId: string } {
   return (
-    GROWTH_EVENTS.has(message.type) &&
-    'turnId' in message &&
-    typeof message.turnId === 'string'
+    GROWTH_EVENTS.has(message.type) && 'turnId' in message && typeof message.turnId === 'string'
   );
 }
 
@@ -460,7 +461,7 @@ export function mergeStoredHistory(
   existing: Transcript,
   messages: readonly StoredMessage[],
 ): Transcript {
-  const base = fromStoredMessages(messages);
+  const base = withLiveRiskBands(fromStoredMessages(messages), existing);
 
   const ids = new Set(base.map((item) => item.id));
   // The second key, and the one that does the real work: a message sent a
@@ -468,7 +469,9 @@ export function mergeStoredHistory(
   // storage under a row id nothing on the client has ever seen. The turn id is
   // all they share.
   const turns = new Set(
-    base.flatMap((item) => (item.kind === 'user' && item.turnId !== undefined ? [item.turnId] : [])),
+    base.flatMap((item) =>
+      item.kind === 'user' && item.turnId !== undefined ? [item.turnId] : [],
+    ),
   );
 
   const merged: TranscriptItem[] = [...base];
@@ -483,6 +486,43 @@ export function mergeStoredHistory(
   }
 
   return merged;
+}
+
+/**
+ * Puts back the one thing storage cannot remember.
+ *
+ * A stored tool call has no risk band: the band was a property of the registry
+ * at call time, and the row holds the model's arguments and the result. So
+ * `fromStoredMessages` fills in `safe`, which is the honest answer for a
+ * conversation loaded fresh — and the wrong one for a call this tab watched
+ * happen. Without this, an `exec` the user was asked to approve is relabelled
+ * `read` the instant its turn lands in the database, which is the badge
+ * changing its mind about how dangerous something was after the fact.
+ *
+ * Keyed on the call id, which the socket and the row genuinely share — unlike
+ * the message id, which is why `mergeStoredHistory` needs a second key at all.
+ */
+function withLiveRiskBands(base: Transcript, existing: Transcript): Transcript {
+  const bands = new Map<string, ToolRisk>();
+  for (const item of existing) {
+    if (item.kind !== 'turn') continue;
+    for (const part of item.parts) {
+      if (part.kind === 'tool') bands.set(part.id, part.risk);
+    }
+  }
+  if (bands.size === 0) return base;
+
+  return base.map((item) => {
+    if (item.kind !== 'turn') return item;
+    return {
+      ...item,
+      parts: item.parts.map((part) => {
+        if (part.kind !== 'tool') return part;
+        const risk = bands.get(part.id);
+        return risk === undefined ? part : { ...part, risk };
+      }),
+    };
+  });
 }
 
 /**
@@ -614,8 +654,7 @@ function acknowledge(
   clientMessageId: string | undefined,
 ): Transcript {
   const pending = items.findIndex(
-    (item) =>
-      item.kind === 'user' && item.pending && item.clientMessageId === clientMessageId,
+    (item) => item.kind === 'user' && item.pending && item.clientMessageId === clientMessageId,
   );
   if (pending === -1) return items;
 
@@ -805,9 +844,7 @@ function textOf(content: readonly ContentPart[]): string {
  */
 function attachmentsOf(content: readonly ContentPart[]): readonly Attachment[] {
   return content.flatMap((part) =>
-    part.type === 'image' && part.url !== undefined
-      ? [{ type: part.mimeType, url: part.url }]
-      : [],
+    part.type === 'image' && part.url !== undefined ? [{ type: part.mimeType, url: part.url }] : [],
   );
 }
 

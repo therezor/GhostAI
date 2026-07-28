@@ -21,8 +21,7 @@ describe('no-px', () => {
     expect(rules('src/x.css', '.a { padding: 12px; }')).toEqual(['no-px']);
   });
 
-  it('catches a px literal in a Tailwind arbitrary value and an inline style', () => {
-    expect(rules('src/x.tsx', '<div className="w-[13px]" />')).toEqual(['no-px']);
+  it('catches a px literal in an inline style, which is the one place TSX can carry one', () => {
     expect(rules('src/x.tsx', "<div style={{ top: '1.5px' }} />")).toEqual(['no-px']);
   });
 
@@ -40,7 +39,7 @@ describe('no-raw-color', () => {
   it('catches hex in every length', () => {
     expect(rules('src/x.css', '.a { color: #fff; }')).toEqual(['no-raw-color']);
     expect(rules('src/x.css', '.a { color: #1a1a1a; }')).toEqual(['no-raw-color']);
-    expect(rules('src/x.tsx', '<div className="bg-[#0f0f0f80]" />')).toEqual(['no-raw-color']);
+    expect(rules('src/x.tsx', "<div style={{ color: '#0f0f0f80' }} />")).toEqual(['no-raw-color']);
   });
 
   it('catches every colour function', () => {
@@ -50,7 +49,7 @@ describe('no-raw-color', () => {
   });
 
   it('allows a token reference, and allows raw colour in the token sheet', () => {
-    expect(rules('src/x.css', '.a { color: var(--color-fg-1); }')).toEqual([]);
+    expect(rules('src/x.css', '.a { color: var(--fg-1); }')).toEqual([]);
     expect(rules(TOKEN_SHEET, ':root { --shadow-xs: 0 0 0 rgb(0 0 0 / 0.18); }')).toEqual([]);
   });
 
@@ -62,32 +61,28 @@ describe('no-raw-color', () => {
 describe('accent-position', () => {
   it('catches the fill token in a text or stroke declaration', () => {
     for (const property of ['color', 'border-color', 'outline', 'fill', 'stroke']) {
-      expect(rules('src/x.css', `.a { ${property}: var(--color-accent); }`)).toEqual([
-        'accent-position',
-      ]);
+      expect(rules('src/x.css', `.a { ${property}: var(--accent); }`)).toEqual(['accent-position']);
     }
   });
 
-  it('catches the Tailwind utilities that compile to the same thing', () => {
-    expect(rules('src/x.tsx', '<span className="text-accent" />')).toEqual(['accent-position']);
-    expect(rules('src/x.tsx', '<span className="border-accent ring-accent" />')).toEqual([
-      'accent-position',
+  it('catches it inside a shorthand, where it is easiest to miss', () => {
+    expect(rules('src/x.css', '.a { border: var(--hairline) solid var(--accent); }')).toEqual([
       'accent-position',
     ]);
   });
 
   it('allows the fill token as a fill', () => {
-    expect(rules('src/x.css', '.a { background-color: var(--color-accent); }')).toEqual([]);
-    expect(rules('src/x.tsx', '<span className="bg-accent" />')).toEqual([]);
+    expect(rules('src/x.css', '.a { background-color: var(--accent); }')).toEqual([]);
+    expect(rules('src/x.css', '.a { background-color: var(--accent-soft); }')).toEqual([]);
   });
 
   it('allows the -fg token everywhere, which is the whole point', () => {
-    expect(rules('src/x.css', '.a { color: var(--color-accent-fg); }')).toEqual([]);
-    expect(rules('src/x.tsx', '<span className="text-accent-fg border-accent-fg" />')).toEqual([]);
+    expect(rules('src/x.css', '.a { color: var(--accent-fg); }')).toEqual([]);
+    expect(rules('src/x.css', '.a { border-color: var(--accent-fg); }')).toEqual([]);
   });
 
   it('applies inside the token sheet too — it is a usage rule, not a literal rule', () => {
-    expect(rules(TOKEN_SHEET, '.a { color: var(--color-accent); }')).toEqual(['accent-position']);
+    expect(rules(TOKEN_SHEET, '.a { color: var(--accent); }')).toEqual(['accent-position']);
   });
 });
 

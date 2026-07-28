@@ -3,8 +3,14 @@
  *
  * The replay buffer is the only thing that can rebuild a turn that has not
  * finished — storage holds no half-written assistant message — and the protocol
- * asks for one number to do it: the last `seq` the client rendered. That number
- * lives in memory, and a reload is precisely the event that destroys memory. So
+ * asks for one number to do it. The number is *not* the last `seq` this tab
+ * rendered: after a reload the transcript is gone, so resuming from there asks
+ * the ring for the frames after the ones just forgotten, gets none, and loses
+ * the turn. What is stored is the boundary between the two sources — the last
+ * `seq` at which everything before it is in storage, which is to say the last
+ * moment this tab was not mid-turn. `connection.ts` is where it is computed.
+ *
+ * That number lives in memory, and a reload is precisely the event that destroys memory. So
  * it is written where a reload does not reach: `sessionStorage`, which is
  * per-tab and survives F5, and is therefore exactly the granularity of the thing
  * being recovered from. `localStorage` would be wrong — two tabs on two
@@ -28,23 +34,33 @@ interface Cursor {
 }
 
 /**
- * The stored cursor for this session, or 0.
+ * The stored cursor for this session, or `undefined` when there is not one.
  *
- * Zero for a different session, for a corrupt entry, and for storage that
- * throws — which it does in a cross-origin iframe and under Safari's private
- * mode. A cursor of 0 means "resume nothing", which is the safe answer to every
- * one of those.
+ * `undefined` for a different session, for a corrupt entry, and for storage
+ * that throws — which it does in a cross-origin iframe and under Safari's
+ * private mode.
+ *
+ * Not `0`, and the difference is load-bearing. A stored `0` means "this tab has
+ * rendered this conversation, and nothing in it is in storage yet" — which is
+ * exactly a reload during the session's *first* turn, and the case that most
+ * needs the ring. No entry at all means this tab has never been here, where
+ * replaying the ring would duplicate the history REST is already fetching.
+ * Collapsing the two onto one number makes the first turn the one turn a reload
+ * cannot recover.
  */
-export function readCursor(sessionKey: string, storage: Storage | undefined = safeStorage()): number {
+export function readCursor(
+  sessionKey: string,
+  storage: Storage | undefined = safeStorage(),
+): number | undefined {
   try {
     const raw = storage?.getItem(KEY);
-    if (raw === null || raw === undefined) return 0;
+    if (raw === null || raw === undefined) return undefined;
 
     const parsed: unknown = JSON.parse(raw);
-    if (!isCursor(parsed) || parsed.sessionKey !== sessionKey) return 0;
+    if (!isCursor(parsed) || parsed.sessionKey !== sessionKey) return undefined;
     return parsed.lastSeq;
   } catch {
-    return 0;
+    return undefined;
   }
 }
 

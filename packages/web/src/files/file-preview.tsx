@@ -53,10 +53,10 @@ export function FilePreview({ entry }: { readonly entry: FileEntry }): JSX.Eleme
     enabled: kind === 'text' && !tooBig && signed.data !== undefined,
   });
 
-  if (signed.isPending) return <p className="text-sm text-fg-3">Preparing a link…</p>;
+  if (signed.isPending) return <p className="file-preview__note">Preparing a link…</p>;
   if (signed.isError) {
     return (
-      <p role="alert" className="text-sm text-danger-fg">
+      <p role="alert" className="page__error">
         {signed.error.message}
       </p>
     );
@@ -65,15 +65,11 @@ export function FilePreview({ entry }: { readonly entry: FileEntry }): JSX.Eleme
   const { url } = signed.data;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="stack file-preview">
       {kind === 'image' && (
         // Constrained by the viewport rather than by the image, so a very large
         // screenshot from a tool call does not push the dialog off the screen.
-        <img
-          src={url}
-          alt={entry.name}
-          className="max-h-[60vh] w-full rounded-md border border-line object-contain"
-        />
+        <img src={url} alt={entry.name} className="file-preview__image" />
       )}
 
       {kind === 'text' &&
@@ -84,22 +80,20 @@ export function FilePreview({ entry }: { readonly entry: FileEntry }): JSX.Eleme
             )} preview limit.`}
           />
         ) : text.isPending ? (
-          <p className="text-sm text-fg-3">Reading…</p>
+          <p className="file-preview__note">Reading…</p>
         ) : text.isError ? (
-          <p role="alert" className="text-sm text-danger-fg">
+          <p role="alert" className="page__error">
             {text.error.message}
           </p>
         ) : (
-          <pre className="max-h-[60vh] overflow-auto rounded-md border border-line bg-surface-1 p-3 font-mono text-xs whitespace-pre-wrap text-fg-1">
-            {text.data}
-          </pre>
+          <pre className="file-preview__body">{text.data}</pre>
         ))}
 
       {kind === 'other' && (
         <Unpreviewable reason="This type is served as a download rather than rendered in the page." />
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="cluster">
         <Button asChild variant="secondary">
           {/* `rel` on a `_blank` link: without it the opened tab gets a handle
               on this one through `window.opener`. */}
@@ -108,7 +102,7 @@ export function FilePreview({ entry }: { readonly entry: FileEntry }): JSX.Eleme
             Download
           </a>
         </Button>
-        <span className="text-xs text-fg-3">
+        <span className="file-preview__meta">
           {formatBytes(entry.sizeBytes)} · {entry.mimeType ?? 'unknown type'}
         </span>
       </div>
@@ -118,8 +112,8 @@ export function FilePreview({ entry }: { readonly entry: FileEntry }): JSX.Eleme
 
 function Unpreviewable({ reason }: { readonly reason: string }): JSX.Element {
   return (
-    <p className="flex items-start gap-2 rounded-md border border-line bg-surface-1 p-3 text-xs text-fg-2">
-      <FileWarning className="mt-0.5 size-4 shrink-0 text-fg-3" />
+    <p className="notice">
+      <FileWarning />
       <span>{reason}</span>
     </p>
   );

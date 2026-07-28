@@ -62,33 +62,25 @@ describe('the two light seed blocks', () => {
   });
 });
 
-describe('the Tailwind theme', () => {
-  const themed = declarations
-    .filter((declaration) => declaration.selector.startsWith('@theme'))
-    .map((declaration) => declaration.property);
+describe('the derived layer', () => {
+  const declared = new Set(declarations.map((declaration) => declaration.property));
 
-  it('is declared `inline`, so a theme flip repaints without rebuilding CSS', () => {
-    const colorBlock = declarations.find((declaration) =>
-      declaration.property.startsWith('--color-'),
-    );
-
-    expect(colorBlock?.selector).toBe('@theme inline');
-  });
-
-  it('exposes every colour the components use', () => {
+  it('exposes every colour the stylesheets use', () => {
     for (const token of [
-      '--color-surface-0',
-      '--color-surface-3',
-      '--color-fg-1',
-      '--color-fg-3',
-      '--color-hover',
-      '--color-line',
-      '--color-accent',
-      '--color-accent-fg',
-      '--color-on-fill',
-      '--color-danger-soft',
+      '--surface-0',
+      '--surface-3',
+      '--fg-1',
+      '--fg-3',
+      '--hover',
+      '--line',
+      '--accent',
+      '--accent-fg',
+      '--on-fill',
+      '--danger-soft',
+      '--danger-edge',
+      '--scrim',
     ]) {
-      expect(themed).toContain(token);
+      expect(declared).toContain(token);
     }
   });
 
@@ -99,15 +91,43 @@ describe('the Tailwind theme', () => {
       }
     }
   });
+
+  /**
+   * There is no framework underneath this sheet any more, so a colour that only
+   * exists as a seed is a colour no stylesheet can name. Every seed has to be
+   * consumed by something in the derived block — an orphan is a value someone
+   * added and then wired up nowhere.
+   */
+  it('consumes every seed it declares', () => {
+    const seeds = [...declared].filter((property) => property.startsWith('--seed-'));
+    const derived = declarations
+      .filter((declaration) => !declaration.property.startsWith('--seed-'))
+      .map((declaration) => declaration.value)
+      .join(' ');
+
+    const orphans = seeds.filter((seed) => !derived.includes(seed));
+    expect(orphans).toEqual([]);
+  });
 });
 
 describe('sizing', () => {
-  const sizes = declarations.filter(
-    (declaration) =>
-      declaration.property.startsWith('--text-') ||
-      declaration.property.startsWith('--radius-') ||
-      declaration.property.startsWith('--spacing'),
+  /**
+   * Every scale in the sheet, not only the type scale. With no utility
+   * framework there is nowhere else a length can come from, so a `px` that
+   * slipped into any of these is a piece of the UI that stopped honouring the
+   * browser's font size.
+   */
+  const PREFIXES = ['--text-', '--leading-', '--radius-', '--space-', '--size-', '--layout-'];
+
+  const sizes = declarations.filter((declaration) =>
+    PREFIXES.some((prefix) => declaration.property.startsWith(prefix)),
   );
+
+  it('covers every scale', () => {
+    // Guards the list above: a scale renamed out from under these prefixes
+    // would otherwise make the assertion below vacuously pass.
+    expect(sizes.length).toBeGreaterThan(40);
+  });
 
   it('is expressed in rem, so the UI honours the browser font size', () => {
     for (const { property, value } of sizes) {
@@ -115,8 +135,10 @@ describe('sizing', () => {
     }
   });
 
-  it('never overrides the root font size', () => {
-    // The one way to make a rem scale stop honouring the browser setting.
-    expect(css).not.toMatch(/html\s*\{[^}]*font-size/);
-  });
+  // "never overrides the root font size" lives in `stylesheets.test.ts` now.
+  // It used to be a regex over this file's raw text, which cannot tell a rule
+  // from a comment *about* a rule — and the comment explaining why the root
+  // font size is never set had to spell one out. The replacement parses rules
+  // and covers every stylesheet plus `index.html`, which is the scope the claim
+  // was always making anyway.
 });

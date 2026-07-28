@@ -19,12 +19,12 @@ export function PlannedPanel({ panel }: { readonly panel: SettingsPanel }): JSX.
 
   return (
     <Section title={panel.label} description={panel.summary}>
-      <ul className="flex flex-col divide-y divide-line">
+      <ul className="settings-divided-list">
         {systems.map((system) => (
-          <li key={system.name} className="flex items-start gap-3 py-3">
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="text-sm font-medium text-fg-1">{system.name}</span>
-              <span className="text-xs text-fg-3">{system.detail}</span>
+          <li key={system.name}>
+            <div className="settings-divided-list__text">
+              <span className="settings-divided-list__name">{system.name}</span>
+              <span className="settings-divided-list__detail">{system.detail}</span>
             </div>
             <Badge tone="info">Phase {system.phase}</Badge>
           </li>

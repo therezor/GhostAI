@@ -22,12 +22,12 @@ export function Placeholder({
   readonly children?: ReactNode;
 }): JSX.Element {
   return (
-    <div className="mx-auto flex max-w-2xl flex-col items-start gap-3 p-8">
-      <div className="flex items-center gap-2">
-        <h1 className="text-xl font-medium">{title}</h1>
+    <div className="stack page page--reading">
+      <div className="row">
+        <h1 className="page__title">{title}</h1>
         <Badge tone="info">{step}</Badge>
       </div>
-      <p className="text-sm text-fg-2">{children}</p>
+      <p className="page__note">{children}</p>
     </div>
   );
 }

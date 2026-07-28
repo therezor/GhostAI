@@ -50,25 +50,17 @@ export function LoginOverlay(): JSX.Element | null {
   return (
     // Not a Dialog: there is nothing behind it to return focus to, and its
     // "closed" state is a successful login rather than an Escape key.
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="login-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-surface-0 p-4"
-    >
-      <form
-        onSubmit={submit}
-        className="flex w-[min(24rem,100%)] flex-col gap-4 rounded-xl border border-line bg-surface-2 p-6 shadow-lg"
-      >
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2 text-accent-fg">
-            <Lock className="size-4" />
-            <span className="text-2xs font-medium tracking-wide uppercase">GhostAI</span>
+    <div role="dialog" aria-modal="true" aria-labelledby="login-title" className="login-overlay">
+      <form onSubmit={submit} className="stack login-card">
+        <div className="stack login-card__header">
+          <div className="row login-card__eyebrow">
+            <Lock />
+            <span>GhostAI</span>
           </div>
-          <h1 id="login-title" className="text-lg font-medium">
+          <h1 id="login-title" className="login-card__title">
             Sign in
           </h1>
-          <p className="text-sm text-fg-2">This agent can read and write files and run commands.</p>
+          <p className="login-card__note">This agent can read and write files and run commands.</p>
         </div>
 
         <Field

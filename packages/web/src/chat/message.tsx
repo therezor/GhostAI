@@ -41,11 +41,7 @@ export function Message({ item, streaming, onApprove }: MessageProps): JSX.Eleme
     case 'turn':
       return <TurnMessage turn={item} streaming={streaming} onApprove={onApprove} />;
     case 'steer':
-      return (
-        <p className="self-center rounded-full bg-surface-2 px-3 py-1 text-xs text-fg-3">
-          Steered mid-turn: {item.text}
-        </p>
-      );
+      return <p className="steer">Steered mid-turn: {item.text}</p>;
     case 'notice':
       return <Notice kind={item.notice} message={item.message} />;
   }
@@ -53,21 +49,13 @@ export function Message({ item, streaming, onApprove }: MessageProps): JSX.Eleme
 
 function UserMessage({ item }: { readonly item: UserItem }): JSX.Element {
   return (
-    <div className="flex flex-col items-end gap-1 self-end">
-      <div
-        className={cn(
-          'max-w-[85%] rounded-xl rounded-br-sm bg-surface-3 px-3 py-2 text-md whitespace-pre-wrap',
-          // Not markdown: what the user typed is what the model receives, so
-          // rendering their asterisks as emphasis would show them a different
-          // message from the one they sent.
-          item.pending && 'text-fg-2',
-        )}
-      >
+    <div className="stack message-user">
+      <div className={cn('message-user__bubble', item.pending && 'message-user__bubble--pending')}>
         {item.text}
       </div>
 
       {item.attachments.length > 0 && (
-        <ul className="flex flex-wrap justify-end gap-1">
+        <ul className="cluster message-user__attachments">
           {item.attachments.map((attachment) => (
             <li key={attachment.url}>
               <Badge tone="neutral">{attachment.name ?? attachment.type}</Badge>
@@ -77,7 +65,7 @@ function UserMessage({ item }: { readonly item: UserItem }): JSX.Element {
       )}
 
       {item.pending && (
-        <span className="text-2xs text-fg-3" role="status">
+        <span className="message-user__pending" role="status">
           Sending…
         </span>
       )}
@@ -98,7 +86,7 @@ function TurnMessage({
   const hasAnswer = turn.parts.some((part) => part.kind === 'text');
 
   return (
-    <article className="flex min-w-0 flex-col gap-3">
+    <article className="stack turn">
       {turn.parts.map((part) => {
         const live = streaming && !turn.done && part === lastPart;
 
@@ -125,15 +113,20 @@ function TurnMessage({
       })}
 
       {streaming && !turn.done && turn.parts.length === 0 && (
-        <p className="text-sm text-fg-3" role="status">
-          <span className="animate-pulse">Thinking…</span>
+        <p className="turn__thinking" role="status">
+          <span className="thinking-dots" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </span>{' '}
+          Thinking…
         </p>
       )}
 
       {turn.failure !== undefined && (
-        <p className="flex items-start gap-2 rounded-md border border-danger-fg/40 bg-danger-soft px-2.5 py-1.5 text-xs text-danger-fg">
-          <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
-          <span className="min-w-0 text-fg-2">
+        <p className="turn__failure">
+          <AlertCircle />
+          <span>
             {turn.failure.message}
             {turn.failure.retryable && ' Sending the message again may work.'}
           </span>
@@ -168,10 +161,10 @@ function TurnFooter({ turn }: { readonly turn: TurnItem }): JSX.Element | null {
   if (reason === undefined && usage === undefined) return null;
 
   return (
-    <footer className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-fg-3">
-      {reason !== undefined && <span className="text-warning-fg">{reason}</span>}
+    <footer className="turn__footer">
+      {reason !== undefined && <span className="turn__stop-reason">{reason}</span>}
       {usage !== undefined && (
-        <span className="tabular-nums">
+        <span className="turn__usage">
           {usage.promptTokens.toLocaleString()} in · {usage.completionTokens.toLocaleString()} out
           {usage.cachedTokens !== undefined &&
             usage.cachedTokens > 0 &&

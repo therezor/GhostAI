@@ -164,20 +164,17 @@ export function Composer({
   };
 
   return (
-    <div className="border-t border-line bg-surface-1 px-3 py-2.5">
-      <div className="mx-auto flex max-w-3xl flex-col gap-2">
+    <div className="composer">
+      <div className="stack composer__inner">
         {files.length > 0 && (
-          <ul className="flex flex-wrap gap-1.5">
+          <ul className="cluster composer__files">
             {files.map((file) => (
               <li
                 key={file.id}
-                className={cn(
-                  'flex items-center gap-1.5 rounded-md border border-line bg-surface-2 px-2 py-1 text-xs',
-                  file.failed && 'border-danger-fg/40 text-danger-fg',
-                )}
+                className={cn('composer__file', file.failed && 'composer__file--failed')}
               >
-                <span className="max-w-40 truncate">{file.name}</span>
-                <span className="text-2xs text-fg-3">
+                <span className="composer__file-name truncate">{file.name}</span>
+                <span className="composer__file-state">
                   {file.failed
                     ? 'failed'
                     : file.attachment === undefined
@@ -190,23 +187,18 @@ export function Composer({
                   onClick={() => {
                     setFiles((current) => current.filter((entry) => entry.id !== file.id));
                   }}
-                  className="rounded-xs text-fg-3 hover:text-fg-1"
+                  className="composer__file-remove"
                 >
-                  <X className="size-3" />
+                  <X />
                 </button>
               </li>
             ))}
           </ul>
         )}
 
-        <div className="relative flex items-end gap-2 rounded-lg border border-line bg-surface-2 p-1.5 focus-within:border-line-strong">
+        <div className="composer__box">
           {open && (
-            <ul
-              id={listboxId}
-              role="listbox"
-              aria-label="Mentions"
-              className="absolute bottom-full left-0 mb-1 w-72 overflow-hidden rounded-md border border-line bg-surface-3 shadow-md"
-            >
+            <ul id={listboxId} role="listbox" aria-label="Mentions" className="composer__mentions">
               {suggestions.map((suggestion, index) => (
                 <li
                   key={suggestion.insert}
@@ -220,12 +212,12 @@ export function Composer({
                     accept(suggestion);
                   }}
                   className={cn(
-                    'flex cursor-pointer items-baseline gap-2 px-2.5 py-1.5 text-sm',
-                    index === highlight ? 'bg-hover text-fg-1' : 'text-fg-2',
+                    'composer__mention',
+                    index === highlight && 'composer__mention--active',
                   )}
                 >
-                  <span className="font-mono">{suggestion.label}</span>
-                  <span className="truncate text-2xs text-fg-3">{suggestion.hint}</span>
+                  <span className="composer__mention-label">{suggestion.label}</span>
+                  <span className="composer__mention-hint truncate">{suggestion.hint}</span>
                 </li>
               ))}
             </ul>
@@ -245,20 +237,16 @@ export function Composer({
             ref={fileInputRef}
             type="file"
             multiple
-            className="hidden"
+            hidden
             onChange={onPickFiles}
             aria-hidden="true"
             tabIndex={-1}
           />
 
-          {/* The grid is the auto-grow: the mirror below sizes the cell and the
-              textarea fills it. The trailing newline in the mirror is what
-              keeps the last line from being clipped as it is typed. */}
-          <div className="grid max-h-48 flex-1 overflow-y-auto">
-            <div
-              aria-hidden="true"
-              className="invisible col-start-1 row-start-1 px-1 py-1.5 text-md break-words whitespace-pre-wrap"
-            >
+          {/* The trailing newline in the mirror is what keeps the last line
+              from being clipped as it is typed — see `.composer__grow`. */}
+          <div className="composer__grow">
+            <div aria-hidden="true" className="composer__mirror">
               {`${text}\n`}
             </div>
             <textarea
@@ -286,12 +274,17 @@ export function Composer({
                     'aria-activedescendant': `${listboxId}-${String(highlight)}`,
                   }
                 : {})}
-              className="col-start-1 row-start-1 resize-none overflow-hidden bg-transparent px-1 py-1.5 text-md text-fg-1 placeholder:text-fg-3"
+              className="composer__input"
             />
           </div>
 
           {busy ? (
-            <Button variant="danger" size="icon" aria-label="Stop the current turn" onClick={onStop}>
+            <Button
+              variant="danger"
+              size="icon"
+              aria-label="Stop the current turn"
+              onClick={onStop}
+            >
               <Square />
             </Button>
           ) : (
@@ -307,8 +300,12 @@ export function Composer({
           )}
         </div>
 
-        <p className="flex min-h-4 items-center gap-2 text-2xs text-fg-3">
-          {!connected && <span className="text-warning-fg">Offline — messages will be sent when the connection returns.</span>}
+        <p className="composer__hint">
+          {!connected && (
+            <span className="composer__hint--offline">
+              Offline — messages will be sent when the connection returns.
+            </span>
+          )}
           {connected && busy && <span>A turn is running. Enter queues your message.</span>}
           {queueDepth > 0 && (
             <span>
@@ -372,7 +369,10 @@ async function stage(
     setFiles((current) =>
       current.map((staged) => (staged.id === id ? { ...staged, failed: true } : staged)),
     );
-    toast.error(`Could not upload ${file.name}`, error instanceof Error ? error.message : undefined);
+    toast.error(
+      `Could not upload ${file.name}`,
+      error instanceof Error ? error.message : undefined,
+    );
   }
 }
 

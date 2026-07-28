@@ -28,6 +28,7 @@ import { useRef, useState, type JSX } from 'react';
 
 import type { FileEntry } from '@ghostai/protocol';
 
+import { cn } from '@/lib/cn.js';
 import { api } from '@/lib/api.js';
 import { formatBytes, formatRelativeTime } from '@/lib/format.js';
 import { queryKeys } from '@/lib/query.js';
@@ -99,10 +100,10 @@ export function FilesRoute(): JSX.Element {
   const now = Date.now();
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 p-4 sm:p-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-medium">Files</h1>
-        <span className="flex-1" />
+    <div className="stack page page--wide">
+      <div className="cluster page__header">
+        <h1 className="page__title">Files</h1>
+        <span className="spacer" />
         <Button
           disabled={upload.isPending}
           onClick={() => {
@@ -135,41 +136,40 @@ export function FilesRoute(): JSX.Element {
         }}
       />
 
-      {listing.isPending && <p className="text-sm text-fg-3">Loading…</p>}
+      {listing.isPending && <p className="page__note">Loading…</p>}
       {listing.isError && (
-        <p role="alert" className="text-sm text-danger-fg">
+        <p role="alert" className="page__error">
           Could not list this directory: {listing.error.message}
         </p>
       )}
 
       {listing.isSuccess &&
         (listing.data.entries.length === 0 ? (
-          <p className="text-sm text-fg-3">This directory is empty.</p>
+          <p className="page__note">This directory is empty.</p>
         ) : (
-          <table className="w-full border-collapse text-sm">
+          <table className="file-table">
             <thead>
-              <tr className="text-left text-2xs tracking-wide text-fg-3 uppercase">
-                <th scope="col" className="pb-2 font-medium">
-                  Name
-                </th>
-                <th scope="col" className="pb-2 font-medium">
-                  Size
-                </th>
-                <th scope="col" className="hidden pb-2 font-medium sm:table-cell">
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Size</th>
+                <th scope="col" className="file-table__modified">
                   Modified
                 </th>
-                <th scope="col" className="pb-2">
+                <th scope="col">
                   <span className="sr-only">Actions</span>
                 </th>
               </tr>
             </thead>
             <tbody>
               {listing.data.entries.map((entry) => (
-                <tr key={entry.path} className="border-t border-line">
-                  <td className="py-1.5">
+                <tr key={entry.path}>
+                  <td>
                     <button
                       type="button"
-                      className="flex max-w-full items-center gap-2 rounded-md px-1 py-1 text-left hover:bg-hover"
+                      className={cn(
+                        'file-table__open',
+                        entry.isDirectory && 'file-table__open--directory',
+                      )}
                       onClick={() => {
                         if (entry.isDirectory) {
                           void navigate({ to: '/files', search: { path: entry.path } });
@@ -178,21 +178,17 @@ export function FilesRoute(): JSX.Element {
                         }
                       }}
                     >
-                      {entry.isDirectory ? (
-                        <Folder className="size-4 shrink-0 text-accent-fg" />
-                      ) : (
-                        <FileIcon className="size-4 shrink-0 text-fg-3" />
-                      )}
+                      {entry.isDirectory ? <Folder /> : <FileIcon />}
                       <span className="truncate">{entry.name}</span>
                     </button>
                   </td>
-                  <td className="py-1.5 text-xs text-fg-3">
+                  <td className="file-table__meta">
                     {entry.isDirectory ? '—' : formatBytes(entry.sizeBytes)}
                   </td>
-                  <td className="hidden py-1.5 text-xs text-fg-3 sm:table-cell">
+                  <td className="file-table__meta file-table__modified">
                     {formatRelativeTime(entry.modifiedAtMs, now)}
                   </td>
-                  <td className="py-1.5 text-right">
+                  <td className="file-table__actions">
                     {!entry.isDirectory && (
                       <Button
                         variant="ghost"
@@ -218,7 +214,7 @@ export function FilesRoute(): JSX.Element {
           if (!open) setPreview(undefined);
         }}
       >
-        <DialogContent className="w-[min(48rem,calc(100vw-2rem))]">
+        <DialogContent className="dialog--preview">
           <DialogHeader>
             <DialogHeading>{preview?.name ?? ''}</DialogHeading>
             <DialogSubheading>{preview?.path ?? ''}</DialogSubheading>
@@ -276,21 +272,21 @@ function Breadcrumbs({
 
   return (
     <nav aria-label="Breadcrumb">
-      <ol className="flex flex-wrap items-center gap-1 text-sm">
+      <ol className="breadcrumbs">
         {crumbs.map((crumb, index) => {
           const last = index === crumbs.length - 1;
           return (
-            <li key={crumb.path} className="flex items-center gap-1">
-              {index > 0 && <span className="text-fg-3">/</span>}
+            <li key={crumb.path}>
+              {index > 0 && <span className="breadcrumbs__separator">/</span>}
               {last ? (
                 // The current directory is text, not a link to itself.
-                <span aria-current="page" className="font-medium text-fg-1">
+                <span aria-current="page" className="breadcrumbs__current">
                   {crumb.label}
                 </span>
               ) : (
                 <button
                   type="button"
-                  className="rounded-md px-1 py-0.5 text-fg-2 hover:bg-hover hover:text-fg-1"
+                  className="breadcrumbs__link"
                   onClick={() => {
                     onNavigate(crumb.path);
                   }}

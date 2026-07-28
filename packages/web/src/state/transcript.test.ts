@@ -73,7 +73,15 @@ describe('accumulating a turn', () => {
       START,
       { type: 'assistant.delta', turnId: 't1', text: 'Let me look.' },
       { type: 'tool.call', turnId: 't1', callId: 'c1', name: 'read', args: {}, risk: 'safe' },
-      { type: 'tool.result', turnId: 't1', callId: 'c1', ok: true, content: 'ok', truncated: false, durationMs: 5 },
+      {
+        type: 'tool.result',
+        turnId: 't1',
+        callId: 'c1',
+        ok: true,
+        content: 'ok',
+        truncated: false,
+        durationMs: 5,
+      },
       { type: 'assistant.delta', turnId: 't1', text: 'Found it.' },
     );
 
@@ -279,7 +287,12 @@ describe('notices', () => {
     // A warning rendered away from the output it describes is a warning about
     // nothing in particular.
     expect(toolsOf(items)[0]?.notices).toEqual([
-      { kind: 'notice', id: 'notice:3', notice: 'prompt_injection', message: 'instruction_override' },
+      {
+        kind: 'notice',
+        id: 'notice:3',
+        notice: 'prompt_injection',
+        message: 'instruction_override',
+      },
     ]);
   });
 
@@ -638,6 +651,32 @@ describe('merging a fetched history', () => {
     // render the conversation twice.
     expect(merged.map((item) => item.kind)).toEqual(['user', 'turn']);
     expect(turnOf(merged).parts).toHaveLength(1);
+  });
+
+  it('keeps the risk band the socket reported, which storage does not record', () => {
+    const live = play(START, {
+      type: 'tool.call',
+      turnId: 't1',
+      callId: 'c1',
+      name: 'exec',
+      args: { argv: ['node', '--version'] },
+      risk: 'exec',
+    });
+
+    const merged = mergeStoredHistory(live, [
+      row,
+      stored('row-2', 't1', {
+        role: 'assistant',
+        content: [],
+        toolCalls: [{ id: 'c1', name: 'exec', argumentsJson: '{"argv":["node","--version"]}' }],
+      }),
+    ]);
+
+    // The row cannot say what band the call was in — that was the registry's
+    // answer at call time — so the stored form fills in `safe`. Letting it win
+    // would relabel an `exec` the user was asked to approve as `read`, the
+    // moment its turn lands in the database.
+    expect(toolsOf(merged)[0]).toMatchObject({ name: 'exec', risk: 'exec' });
   });
 
   it('recognises an acked bubble as the message storage just returned', () => {
