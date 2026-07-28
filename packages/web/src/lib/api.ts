@@ -151,8 +151,11 @@ export const api = {
   me: (signal?: AbortSignal): Promise<AuthSessionResponse> =>
     request('/api/auth/me', AuthSessionResponseSchema, { ...(signal ? { signal } : {}) }),
 
-  login: (password: string): Promise<LoginResponse> =>
-    request('/api/auth/login', LoginResponseSchema, { method: 'POST', body: { password } }),
+  login: (username: string, password: string): Promise<LoginResponse> =>
+    request('/api/auth/login', LoginResponseSchema, {
+      method: 'POST',
+      body: { username, password },
+    }),
 
   /** Public, and the one request the app makes before it knows anything else. */
   setupStatus: (signal?: AbortSignal): Promise<SetupStatusResponse> =>
@@ -162,9 +165,19 @@ export const api = {
   claimSetup: (code: string): Promise<LoginResponse> =>
     request('/api/setup/claim', LoginResponseSchema, { method: 'POST', body: { code } }),
 
-  /** Sets the password and re-issues the session `setPassword` just revoked. */
-  setSetupPassword: (password: string): Promise<LoginResponse> =>
-    request('/api/setup/password', LoginResponseSchema, { method: 'POST', body: { password } }),
+  /**
+   * Sets the password and re-issues the session the server just revoked.
+   *
+   * One method for the wizard's password step and the Account panel's change
+   * form, because it is one route: `currentPassword` is what the server demands
+   * once a password exists, and the wizard has none to send.
+   */
+  setSetupPassword: (body: {
+    readonly password: string;
+    readonly currentPassword?: string;
+    readonly username?: string;
+  }): Promise<LoginResponse> =>
+    request('/api/setup/password', LoginResponseSchema, { method: 'POST', body }),
 
   status: (signal?: AbortSignal): Promise<StatusResponse> =>
     request('/api/status', StatusResponseSchema, { ...(signal ? { signal } : {}) }),

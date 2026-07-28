@@ -326,7 +326,9 @@ export function Composer({
               Offline — messages will be sent when the connection returns.
             </span>
           )}
-          {configured && connected && busy && <span>A turn is running. Enter queues your message.</span>}
+          {configured && connected && busy && (
+            <span>A turn is running. Enter queues your message.</span>
+          )}
           {queueDepth > 0 && (
             <span>
               {queueDepth} message{queueDepth === 1 ? '' : 's'} waiting.

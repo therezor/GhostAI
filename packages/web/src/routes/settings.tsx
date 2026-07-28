@@ -23,6 +23,7 @@ import { AlertTriangle } from 'lucide-react';
 import type { JSX } from 'react';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.js';
+import { AccountPanel } from '@/settings/account-panel.js';
 import { AgentPanel } from '@/settings/agent-panel.js';
 import { PlannedPanel } from '@/settings/planned-panel.js';
 import { ProvidersPanel } from '@/settings/providers-panel.js';
@@ -88,6 +89,12 @@ function PanelBody({ panelId }: { readonly panelId: string }): JSX.Element {
   const panel = panelById(panelId);
 
   if (isPlanned(panel)) return <PlannedPanel panel={panel} />;
+
+  // Before the settings gate, and the only panel that goes before it: a
+  // credential is not in `config.json`, so this panel has nothing to wait for —
+  // and an install whose settings request is failing is exactly the one whose
+  // owner may be trying to fix their password.
+  if (panel.id === 'account') return <AccountPanel />;
 
   if (settings.isPending) return <p className="page__note">Loading settings…</p>;
   if (settings.isError) {

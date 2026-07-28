@@ -15,7 +15,13 @@
 
 import { test as base, expect, type Page } from '@playwright/test';
 
-import { startHarness, PASSWORD, type Harness, type HarnessOptions } from './harness/server.js';
+import {
+  startHarness,
+  PASSWORD,
+  USERNAME,
+  type Harness,
+  type HarnessOptions,
+} from './harness/server.js';
 
 export interface Fixtures {
   readonly harness: Harness;
@@ -38,7 +44,7 @@ export const test = base.extend<Fixtures & Options>({
 
   app: async ({ page, harness }, use) => {
     const response = await page.request.post(`${harness.url}/api/auth/login`, {
-      data: { password: PASSWORD },
+      data: { username: USERNAME, password: PASSWORD },
     });
     expect(response.ok(), 'the harness login should succeed').toBe(true);
 

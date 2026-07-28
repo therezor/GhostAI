@@ -65,7 +65,7 @@ describe('jsonSchemaTransform', () => {
   // send values the schema exists to fill in, and it obliges.
   it('inlines a request body in input mode', () => {
     const body = transform({ body: LoginRequestSchema }).body as Record<string, unknown>;
-    expect(body).toMatchObject({ type: 'object', required: ['password'] });
+    expect(body).toMatchObject({ type: 'object', required: ['username', 'password'] });
     expect(body).not.toHaveProperty('$ref');
   });
 
@@ -104,7 +104,7 @@ describe('zodValidatorCompiler', () => {
   });
 
   it('reports a failure as a 422 keyed by JSON pointer', () => {
-    const result = validate(LoginRequestSchema, { password: 42 }) as {
+    const result = validate(LoginRequestSchema, { username: 'ghost', password: 42 }) as {
       error: { status: number; code: string; details: Record<string, string> };
     };
 

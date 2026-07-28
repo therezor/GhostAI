@@ -43,6 +43,11 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = [
     summary: 'What the agent may do on its own, and what it has to ask about first.',
   },
   {
+    id: 'account',
+    label: 'Account',
+    summary: 'The username and password this server is signed into with.',
+  },
+  {
     id: 'extensions',
     label: 'Extensions',
     summary: 'MCP servers, skills, channels and plugins.',

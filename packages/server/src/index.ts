@@ -102,6 +102,20 @@ export {
 export { assertBootPolicy, type BootPolicyInput } from './boot.js';
 
 export {
+  ACCOUNT_SCOPE,
+  BASE_DELAY_MS,
+  DECAY_MS,
+  FREE_ATTEMPTS,
+  LoginThrottle,
+  MAX_ACCOUNT_DELAY_MS,
+  MAX_ADDRESS_DELAY_MS,
+  MAX_TRACKED_ADDRESSES,
+  delayFor,
+  type LoginThrottleOptions,
+  type ThrottleBlock,
+} from './login-throttle.js';
+
+export {
   HttpError,
   badRequest,
   errorBody,

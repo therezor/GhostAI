@@ -119,10 +119,10 @@ describe('request', () => {
     );
     vi.stubGlobal('fetch', fetchSpy);
 
-    await api.login('hunter2');
+    await api.login('ghost', 'hunter2');
 
     const init = fetchSpy.mock.calls[0]?.[1];
-    expect(init?.body).toBe(JSON.stringify({ password: 'hunter2' }));
+    expect(init?.body).toBe(JSON.stringify({ username: 'ghost', password: 'hunter2' }));
     expect(init?.headers).toEqual({ 'content-type': 'application/json' });
   });
 

@@ -197,14 +197,7 @@ export function keychainStore(options: KeychainStoreOptions = {}): KeyStore {
 
   if (platform === 'darwin') {
     const load = (): Buffer | null => {
-      const result = run('security', [
-        'find-generic-password',
-        '-s',
-        service,
-        '-a',
-        account,
-        '-w',
-      ]);
+      const result = run('security', ['find-generic-password', '-s', service, '-a', account, '-w']);
       return result.status === 0 ? decode(result.stdout) : null;
     };
 

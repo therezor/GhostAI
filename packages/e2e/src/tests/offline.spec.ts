@@ -31,7 +31,7 @@ test.describe('with every foreign origin blocked', () => {
     });
 
     const response = await page.request.post(`${harness.url}/api/auth/login`, {
-      data: { password: 'e2e-password' },
+      data: { username: 'ghost', password: 'e2e-password' },
     });
     expect(response.ok()).toBe(true);
 

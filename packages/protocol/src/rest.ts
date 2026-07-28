@@ -493,8 +493,80 @@ export type AutomationRunListResponse = z.infer<typeof AutomationRunListResponse
 // Auth
 // ---------------------------------------------------------------------------
 
+/**
+ * The login name an install starts with.
+ *
+ * A default rather than a required choice, because the first credential a fresh
+ * install needs is a *password* — asking for a username in the same breath adds
+ * a second thing to invent at the one moment the operator has least context. It
+ * is exported so the sign-in form can prefill it and the CLI can name it in
+ * help text; changing it is done from the same form that changes the password.
+ */
+export const DEFAULT_USERNAME = 'ghost';
+
+/** Bounds on the login name. */
+export const USERNAME_MIN_LENGTH = 1;
+export const USERNAME_MAX_LENGTH = 64;
+
+/**
+ * Bounds on the password.
+ *
+ * Twelve rather than the eight a login form usually settles for, because what
+ * sits behind this one is not an account on a website: it is an agent that can
+ * read files and run commands on the host. The upper bound is not a strength
+ * ceiling but a work ceiling — argon2id will happily chew through a megabyte of
+ * input, and an unauthenticated caller must not be able to ask it to.
+ */
+export const PASSWORD_MIN_LENGTH = 12;
+export const PASSWORD_MAX_LENGTH = 256;
+
+/**
+ * A login name, as it is compared.
+ *
+ * Trimmed and lower-cased by the schema rather than by each caller, so the
+ * value that reaches storage is the value that reaches a comparison. A name
+ * that matched on the way in and failed on the way back — because one path
+ * folded case and the other did not — is a lockout with no error message.
+ *
+ * The character class is narrow on purpose. This is a single local account, not
+ * a directory, and every character it does not accept is one that cannot turn
+ * up in a log line, a shell completion or a URL as something other than itself.
+ */
+export const UsernameSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(USERNAME_MIN_LENGTH)
+  .max(USERNAME_MAX_LENGTH)
+  .regex(
+    /^[a-z0-9][a-z0-9._-]*$/,
+    'Use letters, digits, dots, dashes and underscores, starting with a letter or digit.',
+  );
+
+/**
+ * A new password, as it is accepted.
+ *
+ * Deliberately not trimmed. A leading or trailing space is a character the
+ * person chose, and silently removing it here would mean storing a digest of
+ * something they never typed — after which the password manager that replays it
+ * verbatim can never sign in.
+ */
+export const NewPasswordSchema = z.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH);
+
+/**
+ * A password being *presented*, which is a different schema from one being set.
+ *
+ * The bounds a new password must clear are a policy, and applying a policy to an
+ * attempt would turn the login into an oracle: a 422 for "too short" and a 401
+ * for "wrong" tell an attacker which guesses are not worth making. Only the
+ * upper bound survives, and only because it caps the work an anonymous caller
+ * can ask argon2id to do.
+ */
+export const PresentedPasswordSchema = z.string().min(1).max(PASSWORD_MAX_LENGTH);
+
 export const LoginRequestSchema = z.object({
-  password: z.string().min(1),
+  username: UsernameSchema,
+  password: PresentedPasswordSchema,
 });
 export type LoginRequest = z.infer<typeof LoginRequestSchema>;
 
@@ -522,6 +594,16 @@ export const AuthSessionResponseSchema = z.object({
   authenticated: z.boolean(),
   authEnabled: z.boolean(),
   expiresAtMs: z.number().int().nonnegative().optional(),
+  /**
+   * Who the caller is signed in as.
+   *
+   * Only on an authenticated response, and that is the whole reason it is not
+   * on `SetupStatusResponse` instead: the sign-in form would like to prefill it,
+   * but a public route that answered "the account here is called `admin`" would
+   * be handing out half of the credential to anyone who asked. The form prefills
+   * `DEFAULT_USERNAME` and is wrong only on installs that changed it.
+   */
+  username: z.string().optional(),
 });
 export type AuthSessionResponse = z.infer<typeof AuthSessionResponseSchema>;
 
@@ -557,7 +639,34 @@ export const SetupClaimRequestSchema = z.object({
 });
 export type SetupClaimRequest = z.infer<typeof SetupClaimRequestSchema>;
 
+/**
+ * Setting the password, and — the same request, later in an install's life —
+ * changing it.
+ *
+ * One route for both because they are one operation with one precondition that
+ * differs: a claim has no current password to prove, and a rotation does.
+ * Splitting them would mean two handlers, two rate limits and two chances for
+ * the one that skips the proof to be reachable when it should not be.
+ *
+ * `currentPassword` is optional *in the schema* and mandatory *in the handler*
+ * whenever a password already exists. Encoding that here would need a
+ * cross-field refinement, which cannot be represented in the generated OpenAPI
+ * document — and a document that describes the field as always-optional is
+ * closer to the truth than one that describes it as always-required.
+ */
 export const SetupPasswordRequestSchema = z.object({
-  password: z.string().min(1),
+  password: NewPasswordSchema,
+  /**
+   * Proof that the caller knows the password they are replacing.
+   *
+   * A session alone is not enough for a rotation. The session cookie is
+   * `httpOnly`, but this application renders markdown a language model wrote,
+   * and the failure mode being closed here is an injection that changes the
+   * password and locks the operator out of their own agent. Knowing the old one
+   * is the thing a stolen session does not confer.
+   */
+  currentPassword: PresentedPasswordSchema.optional(),
+  /** Absent leaves the login name alone. */
+  username: UsernameSchema.optional(),
 });
 export type SetupPasswordRequest = z.infer<typeof SetupPasswordRequestSchema>;

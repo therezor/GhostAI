@@ -34,6 +34,7 @@ import { createRequire } from 'node:module';
 import { assistantMessage, saveConfig, silentLogger, userMessage } from '@ghostai/core';
 import {
   ConfigSchema,
+  DEFAULT_USERNAME,
   type Config,
   type ConfigPatch,
   type SetCredentialRequest,
@@ -59,6 +60,16 @@ const HASHER = {
 };
 
 export const PASSWORD = 'e2e-password';
+
+/**
+ * The login name the harness signs in with.
+ *
+ * The default rather than a chosen one, because that is what an install the
+ * harness never reconfigured actually has — a constant here that disagreed with
+ * `DEFAULT_USERNAME` would be a test suite proving a login that no fresh install
+ * can perform.
+ */
+export const USERNAME = DEFAULT_USERNAME;
 
 /** The workspace the file browser and `list_dir` both see. */
 const FIXTURE_FILES: Readonly<Record<string, string>> = {

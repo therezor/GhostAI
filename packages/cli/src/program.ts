@@ -65,6 +65,7 @@ interface ServeCliOptions {
   readonly port?: string;
   readonly workspace?: string;
   readonly password?: string;
+  readonly username?: string;
   readonly ui?: string;
 }
 
@@ -198,6 +199,10 @@ export function buildProgram(deps: CliDeps = {}): Command {
     .option('-P, --port <port>', 'port, overriding the configured default')
     .option('-w, --workspace <dir>', 'workspace root, overriding the configured default')
     .option('--password <password>', 'set or rotate the login password (or GHOSTAI_PASSWORD)')
+    .option(
+      '--username <username>',
+      'set the login name alongside --password (or GHOSTAI_USERNAME)',
+    )
     .option('--ui <dir>', 'a built UI to serve, instead of the bundled one')
     .action(async (options: ServeCliOptions, command: Command) => {
       const globals = command.parent?.opts<GlobalOptions>() ?? { color: true };
@@ -205,12 +210,14 @@ export function buildProgram(deps: CliDeps = {}): Command {
       // The environment is read here rather than in `serveCommand`, which then
       // stays testable without anyone mutating `process.env`.
       const password = options.password ?? env.GHOSTAI_PASSWORD;
+      const username = options.username ?? env.GHOSTAI_USERNAME;
 
       const code = await runServe({
         ...(options.host === undefined ? {} : { host: options.host }),
         ...(resolvePort(options.port) === undefined ? {} : { port: resolvePort(options.port) }),
         ...(options.workspace === undefined ? {} : { workspace: options.workspace }),
         ...(password === undefined || password === '' ? {} : { password }),
+        ...(username === undefined || username === '' ? {} : { username }),
         ...(options.ui === undefined ? {} : { ui: options.ui }),
         ...(globals.home === undefined ? {} : { home: globals.home }),
         // A server is a long-running process, and `warn` on one is a process

@@ -32,7 +32,7 @@ import { chromium, type Browser, type Page } from '@playwright/test';
 import pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
 
-import { startHarness, PASSWORD, type Harness } from '../harness/server.js';
+import { startHarness, PASSWORD, USERNAME, type Harness } from '../harness/server.js';
 import { VIEWPORT } from '../viewport.js';
 import { DEFAULT_ORIGINAL_ROOT, referenceAvailable, serveReference } from './original.js';
 
@@ -100,7 +100,9 @@ async function captureReplacement(
   const context = await browser.newContext({ colorScheme: 'dark', viewport: VIEWPORT });
   try {
     const page = await context.newPage();
-    await page.request.post(`${harness.url}/api/auth/login`, { data: { password: PASSWORD } });
+    await page.request.post(`${harness.url}/api/auth/login`, {
+      data: { username: USERNAME, password: PASSWORD },
+    });
     await page.goto(`${harness.url}${screen.route}`);
     await page.getByRole('complementary', { name: 'Sidebar' }).waitFor();
     // The fonts, or the first screen is measured mid-swap against a fallback.

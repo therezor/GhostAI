@@ -96,7 +96,9 @@ describe('findCredential', () => {
   });
 
   it('treats an empty variable as absent rather than as an empty key', () => {
-    expect(findCredential(instance('openai'), paths, { OPENAI_API_KEY: '' }, false)).toBeUndefined();
+    expect(
+      findCredential(instance('openai'), paths, { OPENAI_API_KEY: '' }, false),
+    ).toBeUndefined();
   });
 
   it('reads an env key for a local provider that declares one', () => {

@@ -99,6 +99,19 @@ export function notFound(message: string): HttpError {
 }
 
 /**
+ * Too many attempts at a credential.
+ *
+ * The same status `@fastify/rate-limit` produces, from a different mechanism:
+ * that plugin counts requests per address in a window, and this is the login
+ * throttle deciding a caller has to wait. A client cannot tell them apart and
+ * should not have to — both mean "come back later", and the `Retry-After`
+ * header the caller sets says when.
+ */
+export function tooManyRequests(message: string): HttpError {
+  return new HttpError(429, 'rate_limited', 'rate_limited', message);
+}
+
+/**
  * The request was legal and the current state refuses it.
  *
  * Distinct from `badRequest`, and the distinction is what a client does next: a

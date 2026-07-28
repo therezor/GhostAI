@@ -162,6 +162,13 @@ export const PROTOCOL_SCHEMAS = {
   NotificationListResponse: rest.NotificationListResponseSchema,
   AutomationJobListResponse: rest.AutomationJobListResponseSchema,
   AutomationRunListResponse: rest.AutomationRunListResponseSchema,
+  // The three credential leaves are registered like anything else, and the
+  // document is better for it: `Username` carries its character rule and
+  // `NewPassword` its minimum, so a client generated from the spec enforces the
+  // same bounds the server does instead of discovering them from a 422.
+  Username: rest.UsernameSchema,
+  NewPassword: rest.NewPasswordSchema,
+  PresentedPassword: rest.PresentedPasswordSchema,
   LoginRequest: rest.LoginRequestSchema,
   LoginResponse: rest.LoginResponseSchema,
   AuthSessionResponse: rest.AuthSessionResponseSchema,

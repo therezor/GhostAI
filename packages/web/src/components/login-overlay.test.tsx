@@ -15,7 +15,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { renderWithProviders, stubFetch, urlOf } from '@/test/render.js';
+import { renderWithProviders, stubApi, stubFetch, urlOf } from '@/test/render.js';
 
 describe('the login overlay', () => {
   it('stays out of the way when the caller is authenticated', async () => {
@@ -113,9 +113,37 @@ describe('the login overlay', () => {
     await user.type(await screen.findByLabelText('Password'), 'guess');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Too many attempts. Wait a minute and try again.',
-    );
+    // The server's own text, verbatim: it names the number of seconds to wait,
+    // and a written-in-the-client "wait a minute" would be wrong in both
+    // directions once the throttle escalates.
+    expect(await screen.findByRole('alert')).toHaveTextContent('Slow down');
+  });
+
+  it('sends the username beside the password', async () => {
+    const user = userEvent.setup();
+    const calls = stubApi({
+      '/api/auth/me': [401, { error: { code: 'unauthorized', message: 'No session' } }],
+      '/api/setup': [200, { required: false }],
+      'POST /api/auth/login': [200, { ok: true, expiresAtMs: 99 }],
+    });
+
+    renderWithProviders(<main>The app behind it</main>);
+
+    // Prefilled with the default, so the common case is one field to fill.
+    const username = await screen.findByLabelText('Username');
+    expect(username).toHaveValue('ghost');
+
+    await user.clear(username);
+    await user.type(username, 'operator');
+    await user.type(screen.getByLabelText('Password'), 'a good password');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    await waitFor(() => {
+      expect(calls.find((call) => call.path === '/api/auth/login')?.body).toEqual({
+        username: 'operator',
+        password: 'a good password',
+      });
+    });
   });
 
   it('refuses to submit an empty password rather than spending an attempt', async () => {

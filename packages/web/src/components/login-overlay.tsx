@@ -20,6 +20,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type JSX, type SyntheticEvent } from 'react';
 
+import { DEFAULT_USERNAME } from '@ghostai/protocol';
+
 import { ApiError, api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
 import { Button } from './ui/button.js';
@@ -28,6 +30,11 @@ import { Wordmark } from './wordmark.js';
 
 export function LoginOverlay(): JSX.Element | null {
   const queryClient = useQueryClient();
+  // Prefilled with the default, which is right on every install that never
+  // changed it and one keystroke away from right on the rest. The server will
+  // not say what the name actually is before a session exists — that would be
+  // handing out half the credential — so a good guess is the best available.
+  const [username, setUsername] = useState(DEFAULT_USERNAME);
   const [password, setPassword] = useState('');
 
   const me = useQuery({
@@ -41,7 +48,8 @@ export function LoginOverlay(): JSX.Element | null {
   });
 
   const login = useMutation({
-    mutationFn: (secret: string) => api.login(secret),
+    mutationFn: (credentials: { name: string; secret: string }) =>
+      api.login(credentials.name, credentials.secret),
     onSuccess: async () => {
       setPassword('');
       // Everything fetched while unauthenticated is a 401 in the cache.
@@ -58,7 +66,7 @@ export function LoginOverlay(): JSX.Element | null {
 
   const submit = (event: SyntheticEvent): void => {
     event.preventDefault();
-    login.mutate(password);
+    login.mutate({ name: username, secret: password });
   };
 
   return (
@@ -74,12 +82,25 @@ export function LoginOverlay(): JSX.Element | null {
         </div>
 
         <Field
+          label="Username"
+          name="username"
+          // `username` rather than nothing, so a password manager files the two
+          // fields as one credential and offers to fill both.
+          autoComplete="username"
+          spellCheck={false}
+          value={username}
+          onChange={(event) => {
+            setUsername(event.target.value);
+          }}
+        />
+
+        <Field
           label="Password"
           type="password"
           name="password"
           autoComplete="current-password"
-          // The one place an autofocus is right: the overlay covers everything,
-          // and the field is the only thing to interact with.
+          // The autofocus is on the password rather than the username, because
+          // the username is already filled with the answer most installs want.
           autoFocus
           value={password}
           onChange={(event) => {
@@ -88,7 +109,11 @@ export function LoginOverlay(): JSX.Element | null {
           error={errorMessageOf(login.error)}
         />
 
-        <Button type="submit" variant="primary" disabled={login.isPending || password === ''}>
+        <Button
+          type="submit"
+          variant="primary"
+          disabled={login.isPending || password === '' || username.trim() === ''}
+        >
           {login.isPending ? 'Signing in…' : 'Sign in'}
         </Button>
       </form>
@@ -97,14 +122,22 @@ export function LoginOverlay(): JSX.Element | null {
 }
 
 /**
- * A wrong password and a rate limit are different messages. Anything else is
+ * A wrong credential and a rate limit are different messages. Anything else is
  * reported verbatim rather than flattened to "login failed" — an operator
  * debugging a reverse proxy needs the actual status.
+ *
+ * The 401 says "username or password" and not which, because the server does
+ * not know which either — it deliberately gives one answer for both so that a
+ * failed login cannot be used to confirm an account name.
+ *
+ * The 429 is shown verbatim: the server's message names the number of seconds,
+ * and "wait a minute" would be wrong in both directions once the throttle
+ * escalates.
  */
 function errorMessageOf(error: unknown): string | undefined {
   if (error === null || error === undefined) return undefined;
   if (!(error instanceof ApiError)) return 'Could not reach the server.';
-  if (error.status === 401) return 'Incorrect password.';
-  if (error.status === 429) return 'Too many attempts. Wait a minute and try again.';
+  if (error.status === 401) return 'Incorrect username or password.';
+  if (error.status === 429) return error.message;
   return error.message;
 }

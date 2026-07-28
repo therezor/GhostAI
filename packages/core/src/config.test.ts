@@ -143,7 +143,9 @@ describe('loadConfig', () => {
 
   it('rewrites an older provider block, on disk as well as in memory', () => {
     const root = tempHome();
-    const file = writeConfig(root, { providers: { ollama: { apiBase: 'http://gpu.lan:11434/v1' } } });
+    const file = writeConfig(root, {
+      providers: { ollama: { apiBase: 'http://gpu.lan:11434/v1' } },
+    });
 
     const loaded = loadConfig({ root });
     expect(loaded.migrated).toBe(true);

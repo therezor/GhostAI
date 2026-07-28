@@ -33,12 +33,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, KeyRound, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useId, useState, type JSX } from 'react';
 
-import type {
-  Config,
-  ModelsResponse,
-  ProviderInfo,
-  ProviderInstanceInfo,
-} from '@ghostai/protocol';
+import type { Config, ModelsResponse, ProviderInfo, ProviderInstanceInfo } from '@ghostai/protocol';
 
 import { cn } from '@/lib/cn.js';
 import { api } from '@/lib/api.js';
@@ -226,11 +221,7 @@ function ProviderRow({
   );
 }
 
-function CredentialField({
-  instance,
-}: {
-  readonly instance: ProviderInstanceInfo;
-}): JSX.Element {
+function CredentialField({ instance }: { readonly instance: ProviderInstanceInfo }): JSX.Element {
   const [value, setValue] = useState('');
   const { save, saving } = useSaveCredential();
   const id = useId();
@@ -300,7 +291,9 @@ function ConnectionForm({
   readonly instance: ProviderInstanceInfo;
   readonly config: Config;
 }): JSX.Element {
-  const [form, setForm] = useState<ProviderForm>(() => toProviderForm(config.providers[instance.id]));
+  const [form, setForm] = useState<ProviderForm>(() =>
+    toProviderForm(config.providers[instance.id]),
+  );
   const [dirty, setDirty] = useState(false);
   const { save, saving } = useSaveSettings();
   const remove = useRemoveProvider();

@@ -57,9 +57,35 @@ First run. Open the URL above and enter this one-time code:
   It works once, and stops working as soon as you set a password.
 ```
 
-Open the URL, paste the code, and the wizard walks through a password, a provider and a model. The provider step fetches the model list from the endpoint itself, so on a machine running `ollama serve` the model question is a list rather than a text box.
+Open the URL, paste the code, and the wizard walks through a username, a password, a provider and a model. The username is prefilled with `ghost` and the password has to be at least 12 characters — what sits behind it is an agent that can read files and run commands on the host. The provider step fetches the model list from the endpoint itself, so on a machine running `ollama serve` the model question is a list rather than a text box.
 
 Everything after the password is skippable. An install with no model still serves files, workspaces, settings and notifications — only chat is unavailable, and the composer says so and links to the panel that fixes it.
+
+### Signing in
+
+The login takes a username and a password. The username defaults to `ghost`; both are
+changed together from **Settings → Account**, which asks for the current password
+first — a session on its own is not enough to rotate the credential it was minted
+from. Changing either revokes every other session, which is the point.
+
+Guessing at it is throttled in two scopes at once, and they are asymmetric on purpose:
+
+| Scope                                       | After      | Backoff         | Caps at    |
+| ------------------------------------------- | ---------- | --------------- | ---------- |
+| One address                                 | 4 failures | doubles from 1s | 15 minutes |
+| The account, wherever the attempt came from | 4 failures | doubles from 1s | 30 seconds |
+
+The per-address scope handles one host hammering the form. The account scope is the
+one a botnet cannot spread out of: every guess lands in the same bucket regardless of
+origin, which caps the aggregate rate at roughly two a minute no matter how many
+addresses are in play. It caps _low_ deliberately — on a single-account server an
+unbounded lockout is a denial of service an attacker can trigger on purpose, so the
+operator's worst case is half a minute while the attacker's throughput is dead either
+way. Counters live in `ghost.db`, so a restart does not clear them.
+
+A wrong username and a wrong password give the same answer, in the same time: the
+password hash is verified on every attempt, against a decoy when the username does not
+match, so a failed login cannot be used to confirm an account name.
 
 ### First run, from a terminal
 
@@ -74,21 +100,22 @@ ghost chat      # talk to it
 
 Everything is under `~/.ghostai`, or `$GHOSTAI_HOME` if that is set:
 
-| Path | What |
-| ---- | ---- |
-| `config.json` | The settings tree. Safe to commit — credentials are never in it. |
-| `ghost.db` | Sessions, messages, auth and notifications. One SQLite file. |
+| Path                       | What                                                                                    |
+| -------------------------- | --------------------------------------------------------------------------------------- |
+| `config.json`              | The settings tree. Safe to commit — credentials are never in it.                        |
+| `ghost.db`                 | Sessions, messages, auth, login throttling and notifications. One SQLite file.          |
 | `vault.json` + `vault.key` | The encrypted credential vault. The key moves to the OS keychain when one is available. |
-| `workspace/` | The only directory the agent's file tools can reach. |
+| `workspace/`               | The only directory the agent's file tools can reach.                                    |
 
 ### Useful flags
 
-| Flag | Does |
-| ---- | ---- |
-| `--host` / `--port` | Override the bind. A non-loopback host with `server.auth.enabled: false` refuses to start. |
-| `--password` | Set or rotate the login password without the wizard. Also read from `GHOSTAI_PASSWORD`. |
-| `--home <dir>` | Use a different root, the same as `GHOSTAI_HOME`. Handy for a throwaway install. |
-| `--ui <dir>` | Serve a UI built somewhere else. |
+| Flag                | Does                                                                                                     |
+| ------------------- | -------------------------------------------------------------------------------------------------------- |
+| `--host` / `--port` | Override the bind. A non-loopback host with `server.auth.enabled: false` refuses to start.               |
+| `--password`        | Set or rotate the login password without the wizard. Also read from `GHOSTAI_PASSWORD`.                  |
+| `--username`        | Set the login name, only alongside `--password`. Also read from `GHOSTAI_USERNAME`. Defaults to `ghost`. |
+| `--home <dir>`      | Use a different root, the same as `GHOSTAI_HOME`. Handy for a throwaway install.                         |
+| `--ui <dir>`        | Serve a UI built somewhere else.                                                                         |
 
 **Restart `ghost serve` after a UI build** — see [Working on the UI](#working-on-the-ui) for why.
 

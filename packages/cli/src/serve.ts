@@ -67,6 +67,14 @@ export interface ServeOptions {
    * mutating `process.env`.
    */
   readonly password?: string | undefined;
+  /**
+   * Sets the login name, and only together with `password`.
+   *
+   * `--username` and `GHOSTAI_USERNAME`. On its own it is refused rather than
+   * ignored — see `ServerOptions.username` for why a name cannot move without
+   * the sessions minted under the old credential moving with it.
+   */
+  readonly username?: string | undefined;
   /** A built SPA to serve. Absent looks for `@ghostai/web`, then serves the API alone. */
   readonly ui?: string | undefined;
   /** Registered before the pumps start. Empty until Telegram lands in Phase 3. */
@@ -198,6 +206,7 @@ export async function startServer(options: ServeOptions = {}): Promise<RunningSe
       database,
       logger,
       ...(options.password === undefined ? {} : { password: options.password }),
+      ...(options.username === undefined ? {} : { username: options.username }),
       ...(ui === undefined ? {} : { ui: { root: ui } }),
     });
 

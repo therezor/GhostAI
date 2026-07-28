@@ -25,7 +25,7 @@ import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import swagger from '@fastify/swagger';
 import websocket from '@fastify/websocket';
-import { silentLogger, systemClock, type Clock, type Logger } from '@ghostai/core';
+import { GhostError, silentLogger, systemClock, type Clock, type Logger } from '@ghostai/core';
 import type { Config } from '@ghostai/protocol';
 import type { RandomSource } from '@ghostai/security';
 import Fastify, {
@@ -40,6 +40,7 @@ import { SESSION_COOKIE, createAuthHook, createSignedHook } from './auth.js';
 import { assertBootPolicy } from './boot.js';
 import { HttpError, registerErrorHandler } from './errors.js';
 import type { SessionHub } from './hub.js';
+import { LoginThrottle } from './login-throttle.js';
 import { ROUTE_MANIFEST } from './manifest.js';
 import { NotificationStore } from './notifications.js';
 import type { ServerRuntime } from './runtime.js';
@@ -111,6 +112,15 @@ export interface ServerOptions {
    * itself would be untestable without mutating `process.env`.
    */
   readonly password?: string;
+  /**
+   * Sets the login name, and only in the same breath as `password`.
+   *
+   * This is `--username` and `GHOSTAI_USERNAME`. Alone it is a configuration
+   * error rather than a no-op: rotating a name without a password would leave
+   * sessions minted under the old credential alive, and silently ignoring the
+   * flag would leave an operator convinced they had changed something.
+   */
+  readonly username?: string;
   /** Injected by tests; argon2id is ~50 ms per call by design. */
   readonly hasher?: PasswordHasher;
 }
@@ -201,7 +211,21 @@ export async function createServer(options: ServerOptions): Promise<GhostServer>
     ...(options.hasher === undefined ? {} : { hasher: options.hasher }),
   });
 
-  if (options.password !== undefined) await auth.setPassword(options.password);
+  if (options.password !== undefined) {
+    await auth.setPassword(
+      options.password,
+      ...(options.username === undefined ? [] : [options.username]),
+    );
+  } else if (options.username !== undefined) {
+    // A username with no password is refused rather than half-applied. Changing
+    // the login name is changing a credential, and `setPassword` is the only
+    // method that does it — deliberately, so a name can never move without the
+    // sessions minted under the old one being revoked with it.
+    throw new GhostError(
+      'config',
+      'A username can only be set alongside a password. Pass --password as well.',
+    );
+  }
   assertBootPolicy({ config });
   // A process that was down past a token's expiry comes back with dead rows and
   // no request that would ever look them up again.
@@ -299,6 +323,13 @@ export async function createServer(options: ServerOptions): Promise<GhostServer>
     ...(options.clock === undefined ? {} : { clock: options.clock }),
   });
 
+  // On the same connection as the sessions it guards, so a restart does not
+  // hand an attacker a fresh counter — see `login-throttle.ts`.
+  const loginThrottle = new LoginThrottle({
+    database,
+    ...(options.clock === undefined ? {} : { clock: options.clock }),
+  });
+
   const authenticate = createAuthHook({ config, auth });
   const verifySignature = createSignedHook({
     auth,
@@ -310,6 +341,7 @@ export async function createServer(options: ServerOptions): Promise<GhostServer>
     runtime: options.runtime,
     hub: options.hub,
     auth,
+    loginThrottle,
     notifications,
     database,
     openapiDocument: () => app.swagger(),

@@ -33,19 +33,8 @@
 import { createInterface, type Interface } from 'node:readline/promises';
 
 import { ConfigSchema, type Config, type ProviderConfig } from '@ghostai/protocol';
-import {
-  GhostError,
-  ensureDir,
-  loadConfig,
-  saveConfig,
-  type LoadedConfig,
-} from '@ghostai/core';
-import {
-  PROVIDERS,
-  createProvider,
-  nextInstanceId,
-  type ProviderSpec,
-} from '@ghostai/providers';
+import { GhostError, ensureDir, loadConfig, saveConfig, type LoadedConfig } from '@ghostai/core';
+import { PROVIDERS, createProvider, nextInstanceId, type ProviderSpec } from '@ghostai/providers';
 import { PROVIDER_CREDENTIAL_NAMESPACE, openVault } from '@ghostai/runtime';
 import pc from 'picocolors';
 
@@ -136,7 +125,9 @@ function createAsk(rl: Interface, out: NodeJS.WritableStream, colors: boolean | 
         if (Number.isInteger(index) && index >= 0 && index < options.length) return index;
         // By name as well as by number: an operator who types `ollama` has
         // answered the question, and refusing it would be pedantry.
-        const named = options.findIndex((option) => option.toLowerCase().startsWith(answer.toLowerCase()));
+        const named = options.findIndex((option) =>
+          option.toLowerCase().startsWith(answer.toLowerCase()),
+        );
         if (answer !== '' && named >= 0) return named;
         out.write(c.yellow(`  Enter a number between 1 and ${String(options.length)}.\n`));
       }
@@ -158,7 +149,11 @@ function createAsk(rl: Interface, out: NodeJS.WritableStream, colors: boolean | 
  * usually means the server is not running yet — and the question falls back to
  * typing a model id rather than ending the wizard.
  */
-async function fetchModels(spec: ProviderSpec, apiBase: string, apiKey?: string): Promise<string[]> {
+async function fetchModels(
+  spec: ProviderSpec,
+  apiBase: string,
+  apiKey?: string,
+): Promise<string[]> {
   if (spec.supportsModelListing !== true) return [];
   const provider = createProvider({
     provider: spec,
@@ -230,7 +225,9 @@ export async function initCommand(options: InitOptions = {}): Promise<number> {
     out.write(`  ${c.dim('Provider')}   ${answers.instanceId}\n`);
     out.write(`  ${c.dim('Model')}      ${answers.model}\n`);
     out.write(`  ${c.dim('Workspace')}  ${answers.workspace}\n\n`);
-    out.write(`Run ${c.cyan('ghost chat')} to talk to it, or ${c.cyan('ghost serve')} for the UI.\n`);
+    out.write(
+      `Run ${c.cyan('ghost chat')} to talk to it, or ${c.cyan('ghost serve')} for the UI.\n`,
+    );
     return 0;
   } catch (error) {
     // Ctrl-C and Ctrl-D both arrive here, and neither is a failure worth a

@@ -16,12 +16,7 @@
 
 import type { ProviderConfig, ProviderInstanceInfo, ProvidersConfig } from '@ghostai/protocol';
 
-import {
-  findProvider,
-  findGateway,
-  findProviderByModel,
-  type ProviderSpec,
-} from './registry.js';
+import { findProvider, findGateway, findProviderByModel, type ProviderSpec } from './registry.js';
 
 /** One configured endpoint, with its type resolved. */
 export interface ProviderInstance {
@@ -146,9 +141,7 @@ export interface ResolveInstanceOptions {
  * switch that still resolved would not be a switch.
  */
 export function resolveInstance(options: ResolveInstanceOptions): ProviderInstance | null {
-  const enabled = listInstances(options.providers).filter(
-    (instance) => instance.config.enabled,
-  );
+  const enabled = listInstances(options.providers).filter((instance) => instance.config.enabled);
   const named = options.provider;
 
   if (named !== undefined && named !== '' && named !== 'auto') {

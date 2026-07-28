@@ -28,6 +28,12 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 
 import { GhostError, systemClock, type Clock } from '@ghostai/core';
+import {
+  DEFAULT_USERNAME,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  UsernameSchema,
+} from '@ghostai/protocol';
 import { systemRandom, type RandomSource } from '@ghostai/security';
 import type { Algorithm as Argon2Algorithm } from '@node-rs/argon2';
 
@@ -67,6 +73,22 @@ CREATE INDEX IF NOT EXISTS auth_sessions_expiry ON auth_sessions(expires_at_ms);
 `;
 
 const PASSWORD_SECRET = 'password';
+
+/**
+ * The login name, stored beside the digest it goes with.
+ *
+ * Absent until someone changes it, and `DEFAULT_USERNAME` stands in — which is
+ * what makes a fresh install signable-into with a name nobody had to choose.
+ * Storing the default eagerly would work equally well right up until the
+ * default changed, at which point every install that never touched it would be
+ * pinned to the old one for no reason it could explain.
+ *
+ * Unlike the password this is stored in the clear, because it is not a secret:
+ * it is half of a credential whose other half is the thing under argon2id. What
+ * it buys is that guessing the password is not enough — an attacker who reads
+ * the database has both anyway, and one who does not has neither.
+ */
+const USERNAME_SECRET = 'username';
 
 /**
  * The one-time code that claims an install with no password.
@@ -182,12 +204,53 @@ function readText(value: unknown): string {
   throw new GhostError('storage', 'Expected a text column in auth_sessions');
 }
 
+/**
+ * String equality that does not stop at the first differing byte.
+ *
+ * The length is compared first and answers early, which is unavoidable —
+ * `timingSafeEqual` throws on a length mismatch rather than returning false.
+ * That leaks the length of the username, which is not the secret; its content
+ * is, and that is what stays constant-time.
+ */
+function equalsConstantTime(left: string, right: string): boolean {
+  const a = Buffer.from(left, 'utf8');
+  const b = Buffer.from(right, 'utf8');
+  if (a.byteLength !== b.byteLength) return false;
+  return timingSafeEqual(a, b);
+}
+
+/**
+ * The bounds a new password must clear, in the one place both callers reach.
+ *
+ * The HTTP body is parsed with `NewPasswordSchema`, which says the same thing —
+ * but `--password` and `GHOSTAI_PASSWORD` come in through `createServer` and
+ * never touch a Zod schema, and a policy that the CLI can walk around is a
+ * policy that describes the UI rather than the install.
+ */
+function assertPasswordPolicy(password: string): void {
+  if (password.length < PASSWORD_MIN_LENGTH) {
+    throw new GhostError(
+      'invalid_input',
+      `Password must be at least ${String(PASSWORD_MIN_LENGTH)} characters. ` +
+        'What is behind it is an agent that can read files and run commands on this host.',
+    );
+  }
+  if (password.length > PASSWORD_MAX_LENGTH) {
+    throw new GhostError(
+      'invalid_input',
+      `Password must be at most ${String(PASSWORD_MAX_LENGTH)} characters`,
+    );
+  }
+}
+
 export class AuthStore {
   readonly #db: DatabaseSync;
   readonly #clock: Clock;
   readonly #random: RandomSource;
   readonly #hasher: PasswordHasher;
   readonly #ttlMs: number;
+  /** The in-flight or settled promise, so the decoy is hashed at most once. */
+  #decoyDigest: Promise<string> | undefined;
 
   constructor(options: AuthStoreOptions) {
     this.#db = options.database;
@@ -202,24 +265,56 @@ export class AuthStore {
     return this.#readSecret(PASSWORD_SECRET) !== undefined;
   }
 
+  /** The login name in force, which is `DEFAULT_USERNAME` until one is set. */
+  username(): string {
+    return this.#readSecret(USERNAME_SECRET) ?? DEFAULT_USERNAME;
+  }
+
   /**
-   * Sets or rotates the password.
+   * Sets or rotates the password, and optionally the login name with it.
+   *
+   * One method for both because they share the consequence below, and because a
+   * separate `setUsername` would be a way to change half a credential without
+   * proving knowledge of the other half — which is exactly the thing the route
+   * above it asks for a current password to prevent.
    *
    * Every existing session is revoked, because the reason to change a password
    * is that the old one may be known — and a token minted under it outliving
    * the rotation makes the rotation cosmetic.
    */
-  async setPassword(password: string): Promise<void> {
-    if (password === '') {
-      throw new GhostError('invalid_input', 'Password must not be empty');
+  async setPassword(password: string, username?: string): Promise<void> {
+    assertPasswordPolicy(password);
+    const now = this.#clock.now();
+
+    // Validated before anything is written. The schema is the same one the
+    // route body is parsed with, so a name the HTTP layer would have refused
+    // cannot arrive through `--username` instead.
+    let normalisedName: string | undefined;
+    if (username !== undefined) {
+      const parsed = UsernameSchema.safeParse(username);
+      if (!parsed.success) {
+        throw new GhostError(
+          'invalid_input',
+          `Invalid username: ${parsed.error.issues[0]?.message ?? 'does not meet the rules'}`,
+        );
+      }
+      normalisedName = parsed.data;
+      if (normalisedName === password.trim().toLowerCase()) {
+        // Not a strength heuristic — those belong in a password manager, not
+        // here. This is the one case where a "password" is a value the operator
+        // has already typed into a field that is not masked and may be in a log.
+        throw new GhostError('invalid_input', 'The password must not be the username');
+      }
     }
+
     const digest = await this.#hasher.hash(password);
-    this.#db
-      .prepare(
-        `INSERT INTO auth_secrets (name, value, updated_at_ms) VALUES (?, ?, ?)
-         ON CONFLICT(name) DO UPDATE SET value = excluded.value, updated_at_ms = excluded.updated_at_ms`,
-      )
-      .run(PASSWORD_SECRET, digest, this.#clock.now());
+    const write = this.#db.prepare(
+      `INSERT INTO auth_secrets (name, value, updated_at_ms) VALUES (?, ?, ?)
+       ON CONFLICT(name) DO UPDATE SET value = excluded.value, updated_at_ms = excluded.updated_at_ms`,
+    );
+    write.run(PASSWORD_SECRET, digest, now);
+    if (normalisedName !== undefined) write.run(USERNAME_SECRET, normalisedName, now);
+
     // The setup code is a stand-in for a password that does not exist yet. The
     // moment one does, an outstanding code is a second way in that nobody is
     // watching — and it was printed to a terminal whose scrollback outlives it.
@@ -288,10 +383,57 @@ export class AuthStore {
     return true;
   }
 
+  /**
+   * The password alone, for the one caller that already knows who it is talking
+   * to: the rotation route proving that the holder of a session also knows the
+   * password they are replacing. A login must use `verifyLogin` instead.
+   */
   async verifyPassword(password: string): Promise<boolean> {
     const digest = this.#readSecret(PASSWORD_SECRET);
     if (digest === undefined) return false;
     return await this.#hasher.verify(digest, password);
+  }
+
+  /**
+   * Both halves, in time that does not depend on which half was wrong.
+   *
+   * The obvious implementation returns early when the username does not match,
+   * and that early return is a username oracle: a wrong name answers in under a
+   * millisecond and a wrong password answers in fifty, so an attacker learns the
+   * account name for free and has only the password left to guess. So the KDF
+   * runs on every attempt — against the stored digest when there is one and
+   * against a decoy when there is not — and the two answers are combined only
+   * once both exist.
+   *
+   * `&&` on the last line rather than `&`, and it does not matter: both operands
+   * were computed before it is reached. The comparison itself is
+   * `timingSafeEqual`, so the *name* does not leak a matching prefix either.
+   */
+  async verifyLogin(username: string, password: string): Promise<boolean> {
+    const digest = this.#readSecret(PASSWORD_SECRET);
+    const nameMatches = equalsConstantTime(
+      this.username(),
+      UsernameSchema.catch('').parse(username),
+    );
+    // Deliberately not short-circuited on `nameMatches`, and deliberately not
+    // skipped when no password is set: an unclaimed install must not answer
+    // faster than a claimed one.
+    const passwordMatches = await this.#hasher.verify(digest ?? (await this.#decoy()), password);
+    return digest !== undefined && nameMatches && passwordMatches;
+  }
+
+  /**
+   * An argon2 encoding of a value nobody knows, hashed once and kept.
+   *
+   * It exists so that "no password is set" costs the same as "the password is
+   * wrong". Computed lazily rather than in the constructor because every server
+   * builds an `AuthStore` and almost none of them ever see a login against an
+   * unclaimed install — paying 50 ms at every boot to cover that case would be
+   * the more expensive mistake.
+   */
+  async #decoy(): Promise<string> {
+    this.#decoyDigest ??= this.#hasher.hash(this.#random(TOKEN_SECRET_BYTES).toString('base64url'));
+    return await this.#decoyDigest;
   }
 
   /**
@@ -330,9 +472,13 @@ export class AuthStore {
    * whatever asked for a signing key.
    */
   ensureSecret(name: string): string {
-    if (name === PASSWORD_SECRET || name === SETUP_CODE_SECRET) {
-      // Both are stored as one-way digests. A caller that got one back here
-      // would be handing a hash to whatever asked for a signing key.
+    if (name === PASSWORD_SECRET || name === SETUP_CODE_SECRET || name === USERNAME_SECRET) {
+      // The first two are stored as one-way digests, and a caller that got one
+      // back here would be handing a hash to whatever asked for a signing key.
+      // The username is refused for the opposite reason: it is *not* a secret,
+      // and worse, this method generates what it does not find — asking for it
+      // on an install that never changed it would replace the login name with
+      // 32 random bytes.
       throw new GhostError('invalid_input', `${name} is not a readable secret`);
     }
     const existing = this.#readSecret(name);

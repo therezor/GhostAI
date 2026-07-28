@@ -246,6 +246,23 @@ describe('ghost serve', () => {
     expect(run.calls[0]?.password).toBeUndefined();
   });
 
+  it('passes the username through, from the flag or the environment', async () => {
+    const flag = await serve(['serve', '--password', 'hunter2hunter2', '--username', 'operator']);
+    expect(flag.calls[0]?.username).toBe('operator');
+
+    const env = await serve(['serve'], {
+      GHOSTAI_PASSWORD: 'hunter2hunter2',
+      GHOSTAI_USERNAME: 'operator',
+    });
+    expect(env.calls[0]?.username).toBe('operator');
+  });
+
+  it('leaves the username unset rather than passing an empty one', async () => {
+    const run = await serve(['serve'], { GHOSTAI_USERNAME: '' });
+
+    expect(run.calls[0]?.username).toBeUndefined();
+  });
+
   it('refuses a port that is not one, before anything binds', async () => {
     const run = await serve(['serve', '--port', 'http']);
 

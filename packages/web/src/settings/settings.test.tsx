@@ -469,3 +469,100 @@ describe('a panel whose system lands in a later phase', () => {
     expect(router.state.location.searchStr).toContain('panel=automation');
   });
 });
+
+/**
+ * The Account panel.
+ *
+ * Not a settings form, and the cases below are the three ways that shows: it
+ * posts to the credential route rather than to `PATCH /api/settings`, it will
+ * not submit without the current password, and it sends the username only when
+ * the username actually changed.
+ */
+describe('the account panel', () => {
+  const ACCOUNT_ROUTES: Record<string, StubRoute> = {
+    '/api/auth/me': [200, { authenticated: true, authEnabled: true, username: 'ghost' }],
+    'POST /api/setup/password': [200, { ok: true, expiresAtMs: 99 }],
+  };
+
+  it('changes the password without touching the settings tree', async () => {
+    const { user, calls } = mount('/settings?panel=account', ACCOUNT_ROUTES);
+
+    await user.type(await screen.findByLabelText('Current password'), 'the old password');
+    await user.type(screen.getByLabelText('New password'), 'the new password');
+    await user.type(screen.getByLabelText('Confirm new password'), 'the new password');
+    await user.click(screen.getByRole('button', { name: 'Change password' }));
+
+    await waitFor(() => {
+      expect(calls.find((call) => call.path === '/api/setup/password')?.body).toEqual({
+        currentPassword: 'the old password',
+        password: 'the new password',
+      });
+    });
+    // The username is absent because it did not change — sending it back
+    // unchanged would be a rotation of a credential nobody asked to rotate.
+    expect(patchesOf(calls)).toEqual([]);
+  });
+
+  it('sends the username when it is the thing that changed', async () => {
+    const { user, calls } = mount('/settings?panel=account', ACCOUNT_ROUTES);
+
+    const username = await screen.findByLabelText('Username');
+    await waitFor(() => {
+      expect(username).toHaveValue('ghost');
+    });
+    await user.clear(username);
+    await user.type(username, 'operator');
+    await user.type(screen.getByLabelText('Current password'), 'the old password');
+    await user.type(screen.getByLabelText('New password'), 'the new password');
+    await user.type(screen.getByLabelText('Confirm new password'), 'the new password');
+    await user.click(screen.getByRole('button', { name: 'Change password' }));
+
+    await waitFor(() => {
+      expect(calls.find((call) => call.path === '/api/setup/password')?.body).toEqual({
+        username: 'operator',
+        currentPassword: 'the old password',
+        password: 'the new password',
+      });
+    });
+  });
+
+  // A session is not enough to change the credential it was minted from, and
+  // the form says so before spending a request finding out.
+  it('will not submit without the current password', async () => {
+    const { user } = mount('/settings?panel=account', ACCOUNT_ROUTES);
+
+    await user.type(await screen.findByLabelText('New password'), 'the new password');
+    await user.type(screen.getByLabelText('Confirm new password'), 'the new password');
+
+    expect(screen.getByRole('button', { name: 'Change password' })).toBeDisabled();
+  });
+
+  it('refuses two new passwords that differ, without asking the server', async () => {
+    const { user, calls } = mount('/settings?panel=account', ACCOUNT_ROUTES);
+
+    await user.type(await screen.findByLabelText('Current password'), 'the old password');
+    await user.type(screen.getByLabelText('New password'), 'the new password');
+    await user.type(screen.getByLabelText('Confirm new password'), 'a different one');
+    await user.click(screen.getByRole('button', { name: 'Change password' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('do not match');
+    expect(calls.some((call) => call.path === '/api/setup/password')).toBe(false);
+  });
+
+  it('says the current password was wrong rather than reporting a generic failure', async () => {
+    const { user } = mount('/settings?panel=account', {
+      ...ACCOUNT_ROUTES,
+      'POST /api/setup/password': [
+        401,
+        { error: { code: 'unauthorized', message: 'Incorrect current password' } },
+      ],
+    });
+
+    await user.type(await screen.findByLabelText('Current password'), 'not the old one');
+    await user.type(screen.getByLabelText('New password'), 'the new password');
+    await user.type(screen.getByLabelText('Confirm new password'), 'the new password');
+    await user.click(screen.getByRole('button', { name: 'Change password' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('not the current password');
+  });
+});

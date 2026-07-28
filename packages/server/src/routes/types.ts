@@ -16,6 +16,7 @@ import type { FastifyReply, FastifyRequest, FastifySchema } from 'fastify';
 
 import type { AuthStore } from '../auth-store.js';
 import type { SessionHub } from '../hub.js';
+import type { LoginThrottle } from '../login-throttle.js';
 import type { RouteId } from '../manifest.js';
 import type { NotificationStore } from '../notifications.js';
 import type { ServerRuntime } from '../runtime.js';
@@ -89,6 +90,15 @@ export interface RouteDeps {
    */
   readonly hub: SessionHub;
   readonly auth: AuthStore;
+  /**
+   * The brute-force throttle the credential routes share.
+   *
+   * One instance, and shared rather than one per route, because the account
+   * scope is only meaningful if every guess at the account lands in it — a
+   * login and a setup code are two credentials for the same single account, and
+   * two throttles would give an attacker two budgets.
+   */
+  readonly loginThrottle: LoginThrottle;
   readonly notifications: NotificationStore;
   /** Pinged by the health check, which is the only honest liveness signal. */
   readonly database: DatabaseSync;

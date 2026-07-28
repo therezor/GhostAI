@@ -34,7 +34,9 @@ describe('assertBootPolicy', () => {
   it('names the host and port it refused, and what to change', () => {
     let message = '';
     try {
-      assertBootPolicy({ config: config({ host: '0.0.0.0', port: 8080, auth: { enabled: false } }) });
+      assertBootPolicy({
+        config: config({ host: '0.0.0.0', port: 8080, auth: { enabled: false } }),
+      });
     } catch (error) {
       message = (error as Error).message;
     }
@@ -65,7 +67,9 @@ describe('assertBootPolicy', () => {
 
   it('carries the host and port as structured detail, not only in the message', () => {
     try {
-      assertBootPolicy({ config: config({ host: '0.0.0.0', port: 8080, auth: { enabled: false } }) });
+      assertBootPolicy({
+        config: config({ host: '0.0.0.0', port: 8080, auth: { enabled: false } }),
+      });
       expect.unreachable('should have refused');
     } catch (error) {
       expect((error as { details: Record<string, unknown> }).details).toEqual({

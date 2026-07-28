@@ -95,7 +95,14 @@ describe('resolveConnection', () => {
     // A settings panel that saves an emptied text box must not produce a
     // provider that cannot resolve its own endpoint.
     expect(
-      resolveConnection(ollama, { type: 'ollama', label: '', apiBase: '   ', extraHeaders: {}, models: [], enabled: true }).apiBase,
+      resolveConnection(ollama, {
+        type: 'ollama',
+        label: '',
+        apiBase: '   ',
+        extraHeaders: {},
+        models: [],
+        enabled: true,
+      }).apiBase,
     ).toBe('http://127.0.0.1:11434/v1');
   });
 

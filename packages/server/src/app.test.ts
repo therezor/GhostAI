@@ -10,6 +10,7 @@ import { SERVER_VERSION, createServer, type GhostServer } from './app.js';
 import type { PasswordHasher } from './auth-store.js';
 import { SESSION_COOKIE } from './auth.js';
 import type { SessionHub } from './hub.js';
+import { LoginThrottle } from './login-throttle.js';
 import { ROUTE_MANIFEST, type RouteSpec } from './manifest.js';
 import { NotificationStore } from './notifications.js';
 import { createRoutes } from './routes.js';
@@ -17,6 +18,7 @@ import { createTestHub } from './testkit/hub.js';
 import { createFakeRuntime } from './testkit/runtime.js';
 
 const PASSWORD = 'a-test-password';
+const USERNAME = 'ghost';
 
 /** argon2id is ~50 ms a call by design; a matrix that logs in 25 times cannot pay it. */
 const fakeHasher: PasswordHasher = {
@@ -126,9 +128,9 @@ function headersFor(state: StateName, token: string): Record<string, string> {
  * validator would be indistinguishable from a rejection by the auth hook.
  */
 const PAYLOADS: Readonly<Record<string, Record<string, unknown>>> = {
-  'auth.login': { password: PASSWORD },
+  'auth.login': { username: USERNAME, password: PASSWORD },
   'setup.claim': { code: 'AAAA-BBBB-CCCC' },
-  'setup.password': { password: 'set-from-the-matrix' },
+  'setup.password': { password: 'set-from-the-matrix', currentPassword: PASSWORD },
   'settings.patch': { agents: { defaults: { temperature: 0.5 } } },
   'settings.credential': { namespace: 'providers', key: 'openai', value: 'sk-test' },
   'sessions.create': { title: 'from the matrix' },
@@ -251,6 +253,7 @@ describe('auth matrix', () => {
         runtime,
         hub,
         auth: server.auth,
+        loginThrottle: new LoginThrottle({ database }),
         notifications: new NotificationStore({ database }),
         database,
         openapiDocument: () => ({}),
@@ -388,6 +391,74 @@ describe('setup', () => {
     expect(stale.statusCode).toBe(401);
   });
 
+  /**
+   * A session is not enough to rotate the credential it was minted from.
+   *
+   * The cookie is `httpOnly`, but this application renders markdown a language
+   * model wrote, and the failure being closed here is an injection that changes
+   * the password and locks the operator out of their own agent.
+   */
+  it('demands the current password once one exists', async () => {
+    const server = await start();
+    const token = server.auth.issue('test').token;
+
+    const missing = await server.app.inject({
+      method: 'POST',
+      url: '/api/setup/password',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { password: 'chosen-in-the-panel' },
+    });
+    expect(missing.statusCode).toBe(400);
+    expect(missing.json().error.message).toMatch(/current password/);
+
+    const wrong = await server.app.inject({
+      method: 'POST',
+      url: '/api/setup/password',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { password: 'chosen-in-the-panel', currentPassword: 'not-the-old-one' },
+    });
+    expect(wrong.statusCode).toBe(401);
+
+    // The old password still works, because neither refusal wrote anything.
+    expect(await server.auth.verifyLogin('ghost', PASSWORD)).toBe(true);
+  });
+
+  it('rotates the password and the username together', async () => {
+    const server = await start();
+    const token = server.auth.issue('test').token;
+
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/setup/password',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        username: 'Operator',
+        password: 'chosen-in-the-panel',
+        currentPassword: PASSWORD,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(server.auth.username()).toBe('operator');
+    expect(await server.auth.verifyLogin('operator', 'chosen-in-the-panel')).toBe(true);
+    expect(await server.auth.verifyLogin('ghost', 'chosen-in-the-panel')).toBe(false);
+  });
+
+  it('refuses a password below the minimum before it reaches the store', async () => {
+    const server = await start();
+    const token = server.auth.issue('test').token;
+
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/setup/password',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { password: 'short', currentPassword: PASSWORD },
+    });
+
+    expect(response.statusCode).toBe(422);
+    expect(Object.keys(response.json().error.details)).toEqual(['/password']);
+  });
+
   it('closes setup once the password is set', async () => {
     const server = await start({ password: null });
     const code = server.auth.issueSetupCode();
@@ -420,7 +491,7 @@ describe('login', () => {
     const response = await server.app.inject({
       method: 'POST',
       url: '/api/auth/login',
-      payload: { password: PASSWORD },
+      payload: { username: USERNAME, password: PASSWORD },
     });
 
     expect(response.statusCode).toBe(200);
@@ -439,7 +510,7 @@ describe('login', () => {
     const response = await server.app.inject({
       method: 'POST',
       url: '/api/auth/login',
-      payload: { password: PASSWORD },
+      payload: { username: USERNAME, password: PASSWORD },
     });
     const token = response.cookies.find((entry) => entry.name === SESSION_COOKIE)?.value;
 
@@ -453,7 +524,7 @@ describe('login', () => {
     const login = await server.app.inject({
       method: 'POST',
       url: '/api/auth/login',
-      payload: { password: PASSWORD },
+      payload: { username: USERNAME, password: PASSWORD },
     });
     const token = login.cookies.find((entry) => entry.name === SESSION_COOKIE)?.value ?? '';
 
@@ -467,6 +538,7 @@ describe('login', () => {
       authenticated: true,
       authEnabled: true,
       expiresAtMs: expect.any(Number),
+      username: 'ghost',
     });
   });
 
@@ -475,7 +547,7 @@ describe('login', () => {
     const response = await server.app.inject({
       method: 'POST',
       url: '/api/auth/login',
-      payload: { password: 'wrong' },
+      payload: { username: USERNAME, password: 'wrong' },
     });
 
     expect(response.statusCode).toBe(401);
@@ -488,7 +560,7 @@ describe('login', () => {
     const response = await server.app.inject({
       method: 'POST',
       url: '/api/auth/login',
-      payload: { password: 42 },
+      payload: { username: USERNAME, password: 42 },
     });
 
     expect(response.statusCode).toBe(422);
@@ -501,7 +573,7 @@ describe('login', () => {
     const response = await server.app.inject({
       method: 'POST',
       url: '/api/auth/login',
-      payload: { password: PASSWORD },
+      payload: { username: USERNAME, password: PASSWORD },
     });
 
     expect(response.statusCode).toBe(400);
@@ -534,36 +606,100 @@ describe('login', () => {
 // ---------------------------------------------------------------------------
 
 describe('rate limiting', () => {
-  async function hammer(server: GhostServer, url: string, times: number): Promise<number[]> {
+  async function hammer(
+    server: GhostServer,
+    url: string,
+    times: number,
+    password = 'wrong',
+  ): Promise<number[]> {
     const codes: number[] = [];
     for (let i = 0; i < times; i += 1) {
       const response = await server.app.inject({
         method: url.endsWith('login') ? 'POST' : 'GET',
         url,
-        payload: { password: 'wrong' },
+        payload: { username: USERNAME, password },
       });
       codes.push(response.statusCode);
     }
     return codes;
   }
 
-  // The general limit protects the process from load; this one protects a
-  // single password from being guessed, and it is not the same setting.
+  /**
+   * The throttle bites long before the per-minute limiter does, and that
+   * ordering is the point: ten guesses a minute is 14,400 a day, and the
+   * throttle turns the fifth wrong answer into a wait.
+   */
+  it('stops guessing at the fifth attempt, well inside the per-minute limit', async () => {
+    const server = await start({ config: config({ auth: { rateLimitPerMinute: 0 } }) });
+    const codes = await hammer(server, '/api/auth/login', 6);
+
+    expect(codes.slice(0, 4)).toEqual([401, 401, 401, 401]);
+    expect(codes.slice(4)).toEqual([429, 429]);
+  });
+
+  it('says how long to wait, in the header and in the body', async () => {
+    const server = await start();
+    await hammer(server, '/api/auth/login', 5);
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { username: USERNAME, password: 'wrong' },
+    });
+
+    expect(response.statusCode).toBe(429);
+    expect(response.headers['retry-after']).toBe('1');
+    expect(response.json()).toEqual({
+      error: { code: 'rate_limited', message: expect.stringContaining('1s') },
+    });
+  });
+
+  /**
+   * The distributed case, which is the whole reason the throttle exists beside
+   * the per-address limiter. `inject` reports every request as coming from
+   * `127.0.0.1`, so this cannot vary the address — what it can show is that the
+   * refusal is in force for a caller whose *own* bucket is still empty, which is
+   * what the account scope contributes. `login-throttle.test.ts` covers the
+   * scope split directly.
+   */
+  it('refuses a caller once the account is throttled, on a route it never touched', async () => {
+    // Unclaimed, so the setup code is the live credential and the login is the
+    // route that has seen no attempts at all.
+    const server = await start({ password: null });
+    for (let i = 0; i < 5; i += 1) {
+      await server.app.inject({
+        method: 'POST',
+        url: '/api/setup/claim',
+        payload: { code: 'AAAA-BBBB-CCCC' },
+      });
+    }
+
+    const login = await server.app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { username: USERNAME, password: 'wrong' },
+    });
+    expect(login.statusCode).toBe(429);
+  });
+
+  // The general limit protects the process from load; the login's own limit
+  // protects a single password from being guessed, and it is not the same
+  // setting. A correct password does not trip the throttle, so this is what
+  // reaches the plugin's own counter.
   it('limits login attempts even with the global limit disabled', async () => {
     const server = await start({ config: config({ auth: { rateLimitPerMinute: 0 } }) });
-    const codes = await hammer(server, '/api/auth/login', 11);
+    const codes = await hammer(server, '/api/auth/login', 11, PASSWORD);
 
-    expect(codes.slice(0, 10).every((code) => code === 401)).toBe(true);
+    expect(codes.slice(0, 10).every((code) => code === 200)).toBe(true);
     expect(codes.at(-1)).toBe(429);
   });
 
   it('answers a rate-limited request in the standard error envelope', async () => {
     const server = await start();
-    await hammer(server, '/api/auth/login', 10);
+    await hammer(server, '/api/auth/login', 10, PASSWORD);
     const response = await server.app.inject({
       method: 'POST',
       url: '/api/auth/login',
-      payload: { password: 'wrong' },
+      payload: { username: USERNAME, password: PASSWORD },
     });
 
     expect(response.statusCode).toBe(429);
@@ -707,7 +843,7 @@ describe('boot', () => {
     const response = await second.app.inject({
       method: 'POST',
       url: '/api/auth/login',
-      payload: { password: PASSWORD },
+      payload: { username: USERNAME, password: PASSWORD },
     });
     expect(response.statusCode).toBe(200);
   });
@@ -783,7 +919,7 @@ describe('the generated document', () => {
     const schema =
       doc.paths['/api/auth/login']?.post?.requestBody.content['application/json']?.schema;
 
-    expect(schema).toMatchObject({ type: 'object', required: ['password'] });
+    expect(schema).toMatchObject({ type: 'object', required: ['username', 'password'] });
   });
 
   it('marks the authenticated routes as authenticated', async () => {

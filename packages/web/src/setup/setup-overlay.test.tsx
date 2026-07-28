@@ -51,7 +51,10 @@ function mount(overrides: Record<string, StubRoute> = {}): { readonly calls: Rec
     '/api/providers': [200, PROVIDERS],
     'PATCH /api/settings': [200, { config: {}, credentialsPresent: {} }],
     'PUT /api/settings/credentials': [204, null],
-    'POST /api/models/refresh': [200, { models: [{ id: 'qwen3:8b', providerId: 'ollama' }], errors: {} }],
+    'POST /api/models/refresh': [
+      200,
+      { models: [{ id: 'qwen3:8b', providerId: 'ollama' }], errors: {} },
+    ],
     ...overrides,
   });
 
@@ -66,7 +69,9 @@ describe('an unclaimed install', () => {
   it('asks for the code rather than for a password nobody has set', async () => {
     mount();
 
-    expect(await screen.findByRole('heading', { name: 'Enter the setup code' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Enter the setup code' }),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText('Setup code')).toHaveFocus();
     // The login overlay is mounted too — both render on a 401 — and this one
     // has to be the one the user is looking at.
@@ -90,17 +95,61 @@ describe('an unclaimed install', () => {
     await user.type(await screen.findByLabelText('Setup code'), 'aaaa-bbbb-cccc');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
-    await user.type(await screen.findByLabelText('Password'), 'a-good-password');
+    // The username is prefilled with the default, so a first run is a password
+    // and nothing else unless the operator wants otherwise.
+    expect(await screen.findByLabelText('Username')).toHaveValue('ghost');
+    await user.type(screen.getByLabelText('Password'), 'a-good-password');
     await user.type(screen.getByLabelText('Confirm password'), 'a-good-password');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
-    expect(await screen.findByRole('heading', { name: 'Add a model provider' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Add a model provider' }),
+    ).toBeInTheDocument();
 
     const claim = calls.find((call) => call.path === '/api/setup/claim');
     expect(claim?.body).toEqual({ code: 'aaaa-bbbb-cccc' });
     expect(calls.find((call) => call.path === '/api/setup/password')?.body).toEqual({
+      username: 'ghost',
       password: 'a-good-password',
     });
+  });
+
+  it('takes a username other than the default when one is typed', async () => {
+    const user = userEvent.setup();
+    const { calls } = mount();
+
+    await user.type(await screen.findByLabelText('Setup code'), 'aaaa-bbbb-cccc');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+
+    const username = await screen.findByLabelText('Username');
+    await user.clear(username);
+    await user.type(username, 'operator');
+    await user.type(screen.getByLabelText('Password'), 'a-good-password');
+    await user.type(screen.getByLabelText('Confirm password'), 'a-good-password');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+
+    await waitFor(() => {
+      expect(calls.find((call) => call.path === '/api/setup/password')?.body).toEqual({
+        username: 'operator',
+        password: 'a-good-password',
+      });
+    });
+  });
+
+  // The bound is checked in the browser as well as on the server, so the wizard
+  // answers instantly rather than round-tripping to be told the rule.
+  it('will not submit a password below the minimum length', async () => {
+    const user = userEvent.setup();
+    const { calls } = mount();
+
+    await user.type(await screen.findByLabelText('Setup code'), 'aaaa-bbbb-cccc');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+
+    await user.type(await screen.findByLabelText('Password'), 'short');
+    await user.type(screen.getByLabelText('Confirm password'), 'short');
+
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    expect(calls.some((call) => call.path === '/api/setup/password')).toBe(false);
   });
 
   it('refuses to submit two passwords that differ, without asking the server', async () => {
@@ -110,8 +159,8 @@ describe('an unclaimed install', () => {
     await user.type(await screen.findByLabelText('Setup code'), 'aaaa-bbbb-cccc');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
-    await user.type(await screen.findByLabelText('Password'), 'one');
-    await user.type(screen.getByLabelText('Confirm password'), 'another');
+    await user.type(await screen.findByLabelText('Password'), 'one that is long enough');
+    await user.type(screen.getByLabelText('Confirm password'), 'another that is long enough');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('do not match');
@@ -156,7 +205,9 @@ describe('a claimed install with no model', () => {
       ],
     });
 
-    expect(await screen.findByRole('heading', { name: 'Add a model provider' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Add a model provider' }),
+    ).toBeInTheDocument();
     // And it may be skipped: an install with no model still serves everything
     // but a turn.
     expect(screen.getByRole('button', { name: 'Skip' })).toBeInTheDocument();

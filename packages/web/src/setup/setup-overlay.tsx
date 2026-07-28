@@ -22,7 +22,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type JSX, type SyntheticEvent } from 'react';
 
-import type { ProviderInfo } from '@ghostai/protocol';
+import { DEFAULT_USERNAME, PASSWORD_MIN_LENGTH, type ProviderInfo } from '@ghostai/protocol';
 
 import { ApiError, api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
@@ -184,10 +184,15 @@ function CodeStep({ onDone }: { readonly onDone: () => void }): JSX.Element {
 }
 
 function PasswordStep({ onDone }: { readonly onDone: () => void }): JSX.Element {
+  // Prefilled and editable rather than asked for. Naming the account is not a
+  // decision a first run should have to stop for, and an empty field here would
+  // make it one — but the field is present so that an operator who wants a name
+  // other than the default never has to find out where it is changed later.
+  const [username, setUsername] = useState(DEFAULT_USERNAME);
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const set = useMutation({
-    mutationFn: (value: string) => api.setSetupPassword(value),
+    mutationFn: (value: { username: string; password: string }) => api.setSetupPassword(value),
     onSuccess: onDone,
   });
 
@@ -202,21 +207,33 @@ function PasswordStep({ onDone }: { readonly onDone: () => void }): JSX.Element 
       return;
     }
     setMismatch(false);
-    set.mutate(password);
+    set.mutate({ username: username.trim(), password });
   };
 
   return (
     <form onSubmit={submit} className="stack setup-card__body">
       <Field
+        label="Username"
+        name="username"
+        autoComplete="username"
+        spellCheck={false}
+        autoFocus
+        value={username}
+        onChange={(event) => {
+          setUsername(event.target.value);
+        }}
+        hint="Signing in takes this and the password below."
+      />
+      <Field
         label="Password"
         type="password"
         name="new-password"
         autoComplete="new-password"
-        autoFocus
         value={password}
         onChange={(event) => {
           setPassword(event.target.value);
         }}
+        hint={`At least ${String(PASSWORD_MIN_LENGTH)} characters. Behind it is an agent that can read files and run commands on this machine.`}
       />
       <Field
         label="Confirm password"
@@ -233,7 +250,13 @@ function PasswordStep({ onDone }: { readonly onDone: () => void }): JSX.Element 
             : messageOf(set.error, 'Could not set the password.')
         }
       />
-      <Button type="submit" variant="primary" disabled={set.isPending || password === ''}>
+      <Button
+        type="submit"
+        variant="primary"
+        // The length is checked here as well as on the server, so the wizard
+        // answers instantly instead of round-tripping to be told the rule.
+        disabled={set.isPending || password.length < PASSWORD_MIN_LENGTH || username.trim() === ''}
+      >
         {set.isPending ? 'Saving…' : 'Continue'}
       </Button>
     </form>

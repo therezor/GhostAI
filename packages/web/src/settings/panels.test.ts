@@ -24,9 +24,9 @@ describe('the settings panels', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('ship the three the phase builds', () => {
+  it('ship the four the phase builds', () => {
     const built = SETTINGS_PANELS.filter((panel) => !isPlanned(panel)).map((panel) => panel.id);
-    expect(built).toEqual(['agent', 'providers', 'tools']);
+    expect(built).toEqual(['agent', 'providers', 'tools', 'account']);
   });
 
   it('give every unbuilt panel a list of what lands in it', () => {

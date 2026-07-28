@@ -29,6 +29,9 @@ test.describe('an unclaimed install', () => {
     await page.getByRole('button', { name: 'Continue' }).click();
 
     await expect(page.getByRole('heading', { name: 'Choose a password' })).toBeVisible();
+    // Prefilled with the default, so a first run is a password and nothing else
+    // unless the operator wants otherwise.
+    await expect(page.getByLabel('Username')).toHaveValue('ghost');
     await page.getByLabel('Password', { exact: true }).fill('chosen-in-the-wizard');
     await page.getByLabel('Confirm password').fill('chosen-in-the-wizard');
     await page.getByRole('button', { name: 'Continue' }).click();
