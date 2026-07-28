@@ -1,0 +1,100 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  SETUP_STEPS,
+  initialStep,
+  isSkippable,
+  nextStep,
+  previousStep,
+  progressOf,
+  titleOf,
+  type SetupStep,
+} from './setup-steps.js';
+
+describe('the order', () => {
+  it('runs access first, then configuration', () => {
+    expect(SETUP_STEPS).toEqual(['code', 'password', 'provider', 'model', 'done']);
+  });
+
+  it('walks to done and stays there', () => {
+    // A double-submit past the last step should be a no-op, not a crash in an
+    // overlay the user cannot leave.
+    let step: SetupStep = 'code';
+    for (let n = 0; n < 10; n += 1) step = nextStep(step);
+    expect(step).toBe('done');
+  });
+});
+
+describe('isSkippable', () => {
+  it('lets configuration be skipped and access not', () => {
+    // An unclaimed server is a shell-capable agent with no password; an
+    // unconfigured one merely cannot chat yet.
+    expect(isSkippable('code')).toBe(false);
+    expect(isSkippable('password')).toBe(false);
+    expect(isSkippable('provider')).toBe(true);
+    expect(isSkippable('model')).toBe(true);
+  });
+});
+
+describe('previousStep', () => {
+  it('offers no way back from either credential step', () => {
+    // `code` is the first step; `password` cannot return to it because the code
+    // was single-use and has already been spent, and a button that leads to a
+    // form nothing will accept is worse than no button.
+    expect(previousStep('code')).toBeNull();
+    expect(previousStep('password')).toBeNull();
+  });
+
+  it('goes back within configuration', () => {
+    expect(previousStep('model')).toBe('provider');
+    expect(previousStep('provider')).toBe('password');
+  });
+
+  it('will not lead behind the step the wizard opened on', () => {
+    // A claimed install with no model starts at `provider`. A Back there would
+    // offer to rotate a password nobody came here to change.
+    expect(previousStep('provider', 'provider')).toBeNull();
+    expect(previousStep('model', 'provider')).toBe('provider');
+  });
+});
+
+describe('progressOf', () => {
+  it('counts the four real steps and does not make done a fifth', () => {
+    expect(progressOf('code')).toEqual({ current: 1, total: 4 });
+    expect(progressOf('model')).toEqual({ current: 4, total: 4 });
+    expect(progressOf('done')).toEqual({ current: 4, total: 4 });
+  });
+});
+
+describe('initialStep', () => {
+  it('starts at the code on an unclaimed install', () => {
+    expect(initialStep({ setupRequired: true, configured: false })).toBe('code');
+  });
+
+  it('does not open at all on a claimed, configured install', () => {
+    expect(initialStep({ setupRequired: false, configured: true })).toBeNull();
+  });
+
+  it('stays shut while the model question is unanswerable', () => {
+    // `/api/status` needs a session, so a signed-out browser never learns this.
+    // Treating unknown as "not configured" would pop the wizard open in front
+    // of the login form for anyone whose session had merely expired.
+    expect(initialStep({ setupRequired: false, configured: undefined })).toBeNull();
+  });
+
+  it('skips the credential steps for a claimed install with no model', () => {
+    // The tab was closed after the password step. Asking for a code that no
+    // longer exists would be a dead end on an install that is already claimed.
+    expect(initialStep({ setupRequired: false, configured: false })).toBe('provider');
+  });
+});
+
+describe('titleOf', () => {
+  it('says something for every step', () => {
+    for (const step of SETUP_STEPS) {
+      const { title, note } = titleOf(step);
+      expect(title).not.toBe('');
+      expect(note).not.toBe('');
+    }
+  });
+});
