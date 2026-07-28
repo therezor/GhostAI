@@ -17,12 +17,7 @@ import {
   type ToolsConfig,
 } from '@ghostai/protocol';
 import { ProviderError, type ChatRequest } from '@ghostai/providers';
-import {
-  WorkspaceJail,
-  singleJail,
-  toolOutputTag,
-  type JailResolver,
-} from '@ghostai/security';
+import { WorkspaceJail, singleJail, toolOutputTag, type JailResolver } from '@ghostai/security';
 import { DEFAULT_TOOLS_CONFIG, ToolRegistry, defineTool, type AnyTool } from '@ghostai/tools';
 
 import {
@@ -1377,7 +1372,10 @@ function jailProbe(): { readonly tool: AnyTool; readonly roots: readonly string[
 
 describe('AgentLoop workspaces', () => {
   /** A resolver over `<base>/workspace` and `<base>/workspace/<id>`. */
-  function resolver(base: string): { readonly jails: JailResolver; rootOf: (id: string) => string } {
+  function resolver(base: string): {
+    readonly jails: JailResolver;
+    rootOf: (id: string) => string;
+  } {
     const made = new Map<string, WorkspaceJail>();
     const jailFor = (id: string): WorkspaceJail => {
       const cached = made.get(id);
@@ -1388,12 +1386,19 @@ describe('AgentLoop workspaces', () => {
       return jail;
     };
     return {
-      jails: { forWorkspace: jailFor, get default() { return jailFor('default'); } },
+      jails: {
+        forWorkspace: jailFor,
+        get default() {
+          return jailFor('default');
+        },
+      },
       rootOf: (id) => jailFor(id).root,
     };
   }
 
-  function workspaceHarness(options: HarnessOptions = {}): Harness & { rootOf: (id: string) => string } {
+  function workspaceHarness(
+    options: HarnessOptions = {},
+  ): Harness & { rootOf: (id: string) => string } {
     const base = realpathSync(mkdtempSync(join(tmpdir(), 'ghostai-ws-')));
     cleanups.push(() => {
       rmSync(base, { recursive: true, force: true });
@@ -1406,7 +1411,10 @@ describe('AgentLoop workspaces', () => {
     const probe = jailProbe();
     const { loop, rootOf } = workspaceHarness({
       tools: [probe.tool],
-      turns: [{ toolCalls: [{ id: 'c1', name: 'where', argumentsJson: '{}' }] }, { deltas: ['ok'] }],
+      turns: [
+        { toolCalls: [{ id: 'c1', name: 'where', argumentsJson: '{}' }] },
+        { deltas: ['ok'] },
+      ],
     });
 
     await runTurn(loop, { sessionKey: 's1', content: 'go', workspaceId: 'acme' });
@@ -1421,7 +1429,10 @@ describe('AgentLoop workspaces', () => {
     const probe = jailProbe();
     const { loop, store, rootOf } = workspaceHarness({
       tools: [probe.tool],
-      turns: [{ toolCalls: [{ id: 'c1', name: 'where', argumentsJson: '{}' }] }, { deltas: ['ok'] }],
+      turns: [
+        { toolCalls: [{ id: 'c1', name: 'where', argumentsJson: '{}' }] },
+        { deltas: ['ok'] },
+      ],
     });
     store.ensureSession('s1', { workspaceId: 'acme' });
 
@@ -1453,7 +1464,10 @@ describe('AgentLoop workspaces', () => {
     const probe = jailProbe();
     const { loop, rootOf } = workspaceHarness({
       tools: [probe.tool],
-      turns: [{ toolCalls: [{ id: 'c1', name: 'where', argumentsJson: '{}' }] }, { deltas: ['ok'] }],
+      turns: [
+        { toolCalls: [{ id: 'c1', name: 'where', argumentsJson: '{}' }] },
+        { deltas: ['ok'] },
+      ],
     });
 
     await runTurn(loop, { sessionKey: 's1', content: 'go' });

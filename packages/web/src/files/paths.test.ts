@@ -109,10 +109,7 @@ describe('isImage', () => {
 });
 
 describe('sortEntries', () => {
-  const entry = (
-    name: string,
-    overrides: Partial<FileEntry> = {},
-  ): FileEntry => ({
+  const entry = (name: string, overrides: Partial<FileEntry> = {}): FileEntry => ({
     path: name,
     name,
     isDirectory: false,
@@ -144,11 +141,7 @@ describe('sortEntries', () => {
   });
 
   it('sorts by size and by time within the files', () => {
-    expect(names({ key: 'size', descending: true }).slice(2)).toEqual([
-      'big.log',
-      'm.md',
-      'a.txt',
-    ]);
+    expect(names({ key: 'size', descending: true }).slice(2)).toEqual(['big.log', 'm.md', 'a.txt']);
     expect(names({ key: 'modified', descending: true }).slice(2)).toEqual([
       'a.txt',
       'm.md',

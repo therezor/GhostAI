@@ -108,7 +108,7 @@ describe('opening', () => {
     open(undefined);
     deliver({
       type: 'connected',
-    workspaceId: 'default',
+      workspaceId: 'default',
       protocolVersion: 1,
       sessionKey: 'web:minted',
       serverTimeMs: 0,
@@ -152,7 +152,7 @@ describe('switching', () => {
     open(undefined);
     deliver({
       type: 'connected',
-    workspaceId: 'default',
+      workspaceId: 'default',
       protocolVersion: 1,
       sessionKey: 'web:minted',
       serverTimeMs: 0,
@@ -261,10 +261,20 @@ describe('listening', () => {
   it('writes the cursor on every frame, because a reload arrives without warning', () => {
     open('web:1');
 
-    deliver({ type: 'session.status',
-    workspaceId: 'default', sessionKey: 'web:1', busy: true, queueDepth: 0 });
-    deliver({ type: 'session.status',
-    workspaceId: 'default', sessionKey: 'web:1', busy: false, queueDepth: 0 });
+    deliver({
+      type: 'session.status',
+      workspaceId: 'default',
+      sessionKey: 'web:1',
+      busy: true,
+      queueDepth: 0,
+    });
+    deliver({
+      type: 'session.status',
+      workspaceId: 'default',
+      sessionKey: 'web:1',
+      busy: false,
+      queueDepth: 0,
+    });
 
     expect(readCursor('web:1')).toBe(2);
   });

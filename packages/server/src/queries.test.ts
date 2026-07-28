@@ -78,7 +78,10 @@ describe('NotificationListQuerySchema', () => {
 describe('path queries', () => {
   it('requires a path where one is the subject of the request', () => {
     expect(PathQuerySchema.safeParse({}).success).toBe(false);
-    expect(PathQuerySchema.parse({ path: 'notes/todo.md' })).toEqual({ path: 'notes/todo.md', workspace: 'default' });
+    expect(PathQuerySchema.parse({ path: 'notes/todo.md' })).toEqual({
+      path: 'notes/todo.md',
+      workspace: 'default',
+    });
   });
 
   it('defaults a listing to the workspace root', () => {

@@ -33,9 +33,11 @@ const ADD_WORKSPACE = `ALTER TABLE sessions ADD COLUMN workspace_id TEXT NOT NUL
 function legacyDatabase(): DatabaseSync {
   const db = new DatabaseSync(':memory:');
   db.exec(SCHEMA_BEFORE_WORKSPACES);
-  db.prepare(
-    'INSERT INTO sessions (key, created_at_ms, updated_at_ms) VALUES (?, ?, ?)',
-  ).run('web-1', 1, 1);
+  db.prepare('INSERT INTO sessions (key, created_at_ms, updated_at_ms) VALUES (?, ?, ?)').run(
+    'web-1',
+    1,
+    1,
+  );
   return db;
 }
 
@@ -47,8 +49,7 @@ const columns = (db: DatabaseSync): string[] =>
 
 const versionOf = (db: DatabaseSync, name: string): number | undefined => {
   const row = db.prepare('SELECT version FROM schema_versions WHERE name = ?').get(name) as
-    | { readonly version: number }
-    | undefined;
+    { readonly version: number } | undefined;
   return row?.version;
 };
 

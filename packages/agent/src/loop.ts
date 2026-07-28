@@ -444,8 +444,7 @@ export class AgentLoop {
     // would describe a prompt no turn on it will ever carry.
     const stored = this.#store.getSession(input.sessionKey);
     const workspaceId = stored?.workspaceId ?? DEFAULT_WORKSPACE_ID;
-    const jail =
-      stored === undefined ? this.#jails.default : this.#jails.forWorkspace(workspaceId);
+    const jail = stored === undefined ? this.#jails.default : this.#jails.forWorkspace(workspaceId);
 
     const context: StaticPromptContext = {
       workspaceRoot: jail.root,

@@ -109,8 +109,7 @@ export interface JailAccept {
 }
 
 export type JailCheck =
-  | JailAccept
-  | { readonly ok: false; readonly rejection: JailRejection; readonly message: string };
+  JailAccept | { readonly ok: false; readonly rejection: JailRejection; readonly message: string };
 
 export interface WorkspaceJailOptions {
   readonly root: string;

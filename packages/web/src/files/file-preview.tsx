@@ -103,7 +103,11 @@ export function FilePreview({ entry, workspace, onDirtyChange }: FilePreviewProp
             </span>
           </p>
         ) : (
-          <FileEditor entry={entry} workspace={workspace} {...(onDirtyChange ? { onDirtyChange } : {})} />
+          <FileEditor
+            entry={entry}
+            workspace={workspace}
+            {...(onDirtyChange ? { onDirtyChange } : {})}
+          />
         ))}
 
       <div className="cluster">

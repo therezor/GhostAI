@@ -105,10 +105,7 @@ export function notFound(message: string): HttpError {
  * 400 means "fix the request", a 409 means "look again and decide". Saving a
  * file the agent rewrote since it was loaded is the second, not the first.
  */
-export function conflict(
-  message: string,
-  details?: Readonly<Record<string, unknown>>,
-): HttpError {
+export function conflict(message: string, details?: Readonly<Record<string, unknown>>): HttpError {
   return new HttpError(409, 'bad_request', 'conflict', message, details);
 }
 

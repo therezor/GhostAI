@@ -194,9 +194,9 @@ export function FileEditor({ entry, workspace, onDirtyChange }: FileEditorProps)
         <p role="alert" className="notice notice--danger">
           <FileWarning />
           <span>
-            This file changed on disk since it was opened — most likely the agent wrote to it.
-            Your edits are still here. Reload to take the version on disk and lose them, or copy
-            what you need out first.
+            This file changed on disk since it was opened — most likely the agent wrote to it. Your
+            edits are still here. Reload to take the version on disk and lose them, or copy what you
+            need out first.
           </span>
         </p>
       )}

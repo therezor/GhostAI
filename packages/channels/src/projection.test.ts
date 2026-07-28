@@ -203,7 +203,7 @@ describe('TurnProjection', () => {
     const drafts = run(new TurnProjection(), [
       event({
         type: 'connected',
-      workspaceId: 'default',
+        workspaceId: 'default',
         protocolVersion: 1,
         sessionKey: 's',
         serverTimeMs: 0,
@@ -211,8 +211,13 @@ describe('TurnProjection', () => {
       }),
       event({ type: 'pong', serverTimeMs: 0 }),
       event({ type: 'message.ack', sessionKey: 's', messageId: 'm1' }),
-      event({ type: 'session.status',
-      workspaceId: 'default', sessionKey: 's', busy: true, queueDepth: 0 }),
+      event({
+        type: 'session.status',
+        workspaceId: 'default',
+        sessionKey: 's',
+        busy: true,
+        queueDepth: 0,
+      }),
       event({ type: 'session.replay', sessionKey: 's', messages: [], complete: true }),
       event({ type: 'session.reset', sessionKey: 's' }),
       event({ type: 'steer', sessionKey: 's', content: 'actually…' }),

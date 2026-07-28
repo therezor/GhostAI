@@ -163,7 +163,9 @@ export function FilesRoute(): JSX.Element {
       // An empty file rather than a placeholder line: what the reader asked for
       // is a name to start typing under, and anything written into it is
       // content they did not write.
-      return kind === 'file' ? api.writeText(workspace, target, '') : api.createDirectory(workspace, target);
+      return kind === 'file'
+        ? api.writeText(workspace, target, '')
+        : api.createDirectory(workspace, target);
     },
     onSuccess: (entry, { kind }) => {
       setCreating(undefined);
@@ -352,7 +354,10 @@ export function FilesRoute(): JSX.Element {
                         onClick={() => {
                           if (entry.isDirectory) {
                             setFilter('');
-                            void navigate({ to: '/files', search: { path: entry.path, workspace } });
+                            void navigate({
+                              to: '/files',
+                              search: { path: entry.path, workspace },
+                            });
                           } else {
                             setPreview(entry);
                           }
@@ -472,10 +477,7 @@ export function FilesRoute(): JSX.Element {
               different questions, and only one of them is the one being asked. */}
           {pendingDelete?.isDirectory === true && pendingContents.isSuccess && (
             <p
-              className={cn(
-                'notice',
-                pendingContents.data.entries.length > 0 && 'notice--danger',
-              )}
+              className={cn('notice', pendingContents.data.entries.length > 0 && 'notice--danger')}
             >
               <Trash2 />
               <span>

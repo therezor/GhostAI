@@ -63,7 +63,12 @@ import {
   resolveProvider,
   type ProviderSpec,
 } from '@ghostai/providers';
-import type { CredentialVault, FetchImplementation, JailResolver, WorkspaceJail } from '@ghostai/security';
+import type {
+  CredentialVault,
+  FetchImplementation,
+  JailResolver,
+  WorkspaceJail,
+} from '@ghostai/security';
 import { ToolRegistry, registerBuiltins } from '@ghostai/tools';
 
 import { findCredential } from './credentials.js';
@@ -359,9 +364,7 @@ class Runtime implements GhostRuntime {
     // workspace throws *here* — before any of the mutations below — which is
     // what keeps `reconfigure` all-or-nothing.
     const jails =
-      previous?.paths.workspace === paths.workspace
-        ? previous.jails
-        : new JailCache({ paths });
+      previous?.paths.workspace === paths.workspace ? previous.jails : new JailCache({ paths });
 
     // Past here nothing throws, so the mutations below cannot leave the
     // registry describing a runtime that failed to build.

@@ -50,8 +50,7 @@ export function migrate(db: DatabaseSync, name: string, migrations: readonly str
   db.exec(LEDGER);
 
   const row = db.prepare('SELECT version FROM schema_versions WHERE name = ?').get(name) as
-    | { readonly version: number }
-    | undefined;
+    { readonly version: number } | undefined;
   const current = row?.version ?? 0;
   if (current >= migrations.length) return;
 

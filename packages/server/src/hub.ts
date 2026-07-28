@@ -793,9 +793,7 @@ export class SessionHub {
    */
   #workspaceOf(connection: Connection): string {
     return (
-      this.#storedWorkspace(connection.sessionKey) ??
-      connection.workspaceId ??
-      DEFAULT_WORKSPACE_ID
+      this.#storedWorkspace(connection.sessionKey) ?? connection.workspaceId ?? DEFAULT_WORKSPACE_ID
     );
   }
 

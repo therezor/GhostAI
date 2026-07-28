@@ -265,7 +265,8 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
       schema: { body: FileWriteRequestSchema, response: { 200: FileEntrySchema } },
       bodyLimit: MAX_TEXT_BODY_BYTES,
       handler: (request): FileEntry => {
-        const { path, content, expectedModifiedAtMs, workspaceId } = request.body as FileWriteRequest;
+        const { path, content, expectedModifiedAtMs, workspaceId } =
+          request.body as FileWriteRequest;
         const jail = jailFor(workspaceId ?? DEFAULT_WORKSPACE_ID);
         const absolute = jail.resolve(path);
         const before = statOrUndefined(absolute);

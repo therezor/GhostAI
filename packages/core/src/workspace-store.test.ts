@@ -223,11 +223,19 @@ describe('WorkspaceStore', () => {
   });
 
   it('refuses to delete the default', () => {
-    expect(kindOf(() => { store.delete(DEFAULT_WORKSPACE_ID); })).toBe('conflict');
+    expect(
+      kindOf(() => {
+        store.delete(DEFAULT_WORKSPACE_ID);
+      }),
+    ).toBe('conflict');
   });
 
   it('refuses to delete something that is not there', () => {
-    expect(kindOf(() => { store.delete('ghost'); })).toBe('not_found');
+    expect(
+      kindOf(() => {
+        store.delete('ghost');
+      }),
+    ).toBe('not_found');
   });
 
   it('round-trips metadata', () => {
@@ -265,10 +273,12 @@ describe('sessions and workspaces', () => {
     sessions.ensureSession('a-2', { workspaceId: 'acme' });
     sessions.ensureSession('d-1');
 
-    expect(sessions.listSessions({ workspaceId: 'acme' }).map((row) => row.key).sort()).toEqual([
-      'a-1',
-      'a-2',
-    ]);
+    expect(
+      sessions
+        .listSessions({ workspaceId: 'acme' })
+        .map((row) => row.key)
+        .sort(),
+    ).toEqual(['a-1', 'a-2']);
     expect(sessions.listSessions().map((row) => row.key)).toHaveLength(3);
   });
 

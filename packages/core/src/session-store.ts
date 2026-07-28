@@ -475,9 +475,10 @@ export class SessionStore {
    */
   reassignWorkspace(from: string, to: string): number {
     this.#assertOpen();
-    const result = this.#stmt(
-      'UPDATE sessions SET workspace_id = ? WHERE workspace_id = ?',
-    ).run(to, from);
+    const result = this.#stmt('UPDATE sessions SET workspace_id = ? WHERE workspace_id = ?').run(
+      to,
+      from,
+    );
     return Number(result.changes);
   }
 

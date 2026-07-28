@@ -262,7 +262,9 @@ describe('the file browser', () => {
     await screen.findByRole('button', { name: 'notes.md' });
 
     await user.click(screen.getByRole('button', { name: 'Delete notes.md' }));
-    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }));
+    await user.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }),
+    );
 
     await waitFor(() => {
       expect(calls.some((call) => call.method === 'DELETE')).toBe(true);

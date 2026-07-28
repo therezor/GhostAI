@@ -71,13 +71,9 @@ export const readFileTool: AnyTool = defineTool({
     try {
       const stats = await handle.stat();
       if (stats.isDirectory()) {
-        throw new GhostError(
-          'invalid_input',
-          `${where} is a directory. Use list_dir instead.`,
-          {
-            details: { path: where },
-          },
-        );
+        throw new GhostError('invalid_input', `${where} is a directory. Use list_dir instead.`, {
+          details: { path: where },
+        });
       }
       if (stats.size === 0) return `${where} is empty.`;
 

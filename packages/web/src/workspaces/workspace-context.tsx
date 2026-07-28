@@ -79,7 +79,11 @@ export function WorkspaceProvider({ children }: { readonly children: ReactNode }
     });
   }, []);
 
-  return <WorkspaceContext value={{ workspaceId, select: move, adopt: move }}>{children}</WorkspaceContext>;
+  return (
+    <WorkspaceContext value={{ workspaceId, select: move, adopt: move }}>
+      {children}
+    </WorkspaceContext>
+  );
 }
 
 /**

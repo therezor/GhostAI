@@ -111,10 +111,7 @@ export function WorkspaceSwitcher({
         </p>
       )}
 
-      <WorkspaceManager
-        open={managing}
-        onOpenChange={setManaging}
-      />
+      <WorkspaceManager open={managing} onOpenChange={setManaging} />
     </div>
   );
 }

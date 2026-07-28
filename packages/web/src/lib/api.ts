@@ -266,11 +266,7 @@ export const api = {
    * answers for the source files the MIME table does not know — `.py`, `.ts`,
    * `.css` — which the media route serves as attachments.
    */
-  readText: (
-    workspace: string,
-    path: string,
-    signal?: AbortSignal,
-  ): Promise<FileTextResponse> =>
+  readText: (workspace: string, path: string, signal?: AbortSignal): Promise<FileTextResponse> =>
     request('/api/files/text', FileTextResponseSchema, {
       query: { path, workspace },
       ...(signal ? { signal } : {}),

@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -23,7 +31,10 @@ afterEach(() => {
 });
 
 /** Counts constructions, so a cache hit is observable rather than inferred. */
-function counting(): { readonly create: (root: string) => WorkspaceJail; readonly roots: string[] } {
+function counting(): {
+  readonly create: (root: string) => WorkspaceJail;
+  readonly roots: string[];
+} {
   const roots: string[] = [];
   return {
     create: (root) => {

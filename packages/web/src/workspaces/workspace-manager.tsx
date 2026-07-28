@@ -127,7 +127,11 @@ export function WorkspaceManager({
       remove.mutate(workspace);
     },
     onError: (error: Error) => {
-      toast({ role: 'danger', title: 'Could not move the conversations', description: error.message });
+      toast({
+        role: 'danger',
+        title: 'Could not move the conversations',
+        description: error.message,
+      });
     },
   });
 

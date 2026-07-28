@@ -240,7 +240,7 @@ describe('SessionHub', () => {
       expect(client.frames).toEqual([
         {
           type: 'connected',
-        workspaceId: 'default',
+          workspaceId: 'default',
           protocolVersion: PROTOCOL_VERSION,
           sessionKey: SESSION,
           serverTimeMs: expect.any(Number) as number,

@@ -108,7 +108,12 @@ describe('clamping', () => {
       segments: ['.ssh', 'id_ed25519'],
       rewrites: ['home_prefix'],
     },
-    { name: 'a tilde with a backslash', input: '~\\.ssh', segments: ['.ssh'], rewrites: ['home_prefix'] },
+    {
+      name: 'a tilde with a backslash',
+      input: '~\\.ssh',
+      segments: ['.ssh'],
+      rewrites: ['home_prefix'],
+    },
     {
       name: 'a POSIX absolute path',
       input: '/etc/passwd',
@@ -127,7 +132,12 @@ describe('clamping', () => {
       segments: ['Windows', 'System32'],
       rewrites: ['drive'],
     },
-    { name: 'a lowercase drive letter', input: 'c:/windows', segments: ['windows'], rewrites: ['drive'] },
+    {
+      name: 'a lowercase drive letter',
+      input: 'c:/windows',
+      segments: ['windows'],
+      rewrites: ['drive'],
+    },
     {
       name: 'a UNC path',
       input: '\\\\server\\share\\file',
@@ -140,7 +150,12 @@ describe('clamping', () => {
       segments: ['server', 'share', 'file'],
       rewrites: ['unc'],
     },
-    { name: 'a traversal', input: '../secret.txt', segments: ['secret.txt'], rewrites: ['traversal'] },
+    {
+      name: 'a traversal',
+      input: '../secret.txt',
+      segments: ['secret.txt'],
+      rewrites: ['traversal'],
+    },
     {
       name: 'a deep traversal',
       input: 'a/b/../../../etc/passwd',

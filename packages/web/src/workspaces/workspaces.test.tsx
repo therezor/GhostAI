@@ -48,7 +48,9 @@ beforeEach(() => {
     get length() {
       return entries.size;
     },
-    clear: () => { entries.clear(); },
+    clear: () => {
+      entries.clear();
+    },
     getItem: (key: string) => entries.get(key) ?? null,
     key: (index: number) => [...entries.keys()][index] ?? null,
     removeItem: (key: string) => entries.delete(key),
@@ -117,7 +119,9 @@ describe('the workspace switcher', () => {
     first.unmount();
 
     renderWithProviders(<WorkspaceSwitcher />);
-    expect(await screen.findByRole('button', { name: /Workspace: Client Acme/ })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('button', { name: /Workspace: Client Acme/ }),
+    ).toBeInTheDocument();
   });
 });
 
@@ -174,7 +178,9 @@ describe('the workspace manager', () => {
 
     // The 409 is a question, not a failure: the count it carries is what the
     // offer is made out of.
-    expect(await screen.findByText(/2 conversations still belong to Client Acme/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/2 conversations still belong to Client Acme/),
+    ).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Move and remove' }));
 

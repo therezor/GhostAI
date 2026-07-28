@@ -92,8 +92,10 @@ test.describe('workspaces', () => {
     const refused = await app.request.delete(`${harness.url}/api/workspaces/acme`);
     expect(refused.status()).toBe(409);
     // The count is what the dialog turns into its offer.
-    expect(((await refused.json()) as { error: { details: { sessionCount: number } } }).error.details
-      .sessionCount).toBe(1);
+    expect(
+      ((await refused.json()) as { error: { details: { sessionCount: number } } }).error.details
+        .sessionCount,
+    ).toBe(1);
 
     const moved = await app.request.post(`${harness.url}/api/workspaces/acme/sessions/move`, {
       data: { to: 'default' },

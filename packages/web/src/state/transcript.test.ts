@@ -446,11 +446,22 @@ describe('session frames', () => {
   it('ignores the frames that are not transcript events', () => {
     const items = play(
       START,
-      { type: 'connected',
-    workspaceId: 'default', protocolVersion: 1, sessionKey: 'web:1', serverTimeMs: 0, lastSeq: 0 },
+      {
+        type: 'connected',
+        workspaceId: 'default',
+        protocolVersion: 1,
+        sessionKey: 'web:1',
+        serverTimeMs: 0,
+        lastSeq: 0,
+      },
       { type: 'pong', serverTimeMs: 0 },
-      { type: 'session.status',
-    workspaceId: 'default', sessionKey: 'web:1', busy: true, queueDepth: 0 },
+      {
+        type: 'session.status',
+        workspaceId: 'default',
+        sessionKey: 'web:1',
+        busy: true,
+        queueDepth: 0,
+      },
       { type: 'message.queued', sessionKey: 'web:1', queueDepth: 1 },
       { type: 'transcribe.result', text: 'x' },
       { type: 'tools.changed', tools: [] },

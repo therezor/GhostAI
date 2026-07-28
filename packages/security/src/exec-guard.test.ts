@@ -339,7 +339,8 @@ describe('property: the chroot change did not widen the exec surface', () => {
     const segments = input.split(OLD_SEPARATORS);
     if (segments[0]?.startsWith('~') === true) return true;
     if (input.startsWith('\\\\') || input.startsWith('//')) return true;
-    if (input.startsWith('/') || input.startsWith('\\') || OLD_DRIVE_LETTER.test(input)) return true;
+    if (input.startsWith('/') || input.startsWith('\\') || OLD_DRIVE_LETTER.test(input))
+      return true;
     return segments.includes('..');
   }
 

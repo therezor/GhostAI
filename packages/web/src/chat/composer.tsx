@@ -163,8 +163,8 @@ export function Composer({
     // Cleared so picking the same file twice in a row still fires `change`.
     event.target.value = '';
     // The workspace the conversation is in, so an attachment lands beside
-      // the files the turn can already see rather than in the default tree.
-      for (const file of picked) void stage(file, workspaceId, setFiles);
+    // the files the turn can already see rather than in the default tree.
+    for (const file of picked) void stage(file, workspaceId, setFiles);
   };
 
   return (

@@ -16,7 +16,12 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 
-import { ConfigSchema, type FileEntry, type FileTextResponse, type SignedUrl } from '@ghostai/protocol';
+import {
+  ConfigSchema,
+  type FileEntry,
+  type FileTextResponse,
+  type SignedUrl,
+} from '@ghostai/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { MEDIA_SECRET_NAME, mediaUrl, signMediaToken } from './signing.js';
@@ -337,7 +342,10 @@ describe('DELETE /api/files', () => {
 // ---------------------------------------------------------------------------
 
 describe('GET /api/files/text', () => {
-  async function read(test: TestServer, path: string): Promise<Awaited<ReturnType<TestServer['server']['app']['inject']>>> {
+  async function read(
+    test: TestServer,
+    path: string,
+  ): Promise<Awaited<ReturnType<TestServer['server']['app']['inject']>>> {
     return await test.server.app.inject({
       method: 'GET',
       url: `/api/files/text?path=${encodeURIComponent(path)}`,
