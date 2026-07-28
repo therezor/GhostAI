@@ -41,6 +41,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { AgentEvent, TurnInput, TurnResult } from '@ghostai/agent';
 import {
+  DEFAULT_WORKSPACE_ID,
   isAbortError,
   silentLogger,
   systemClock,
@@ -141,6 +142,15 @@ export interface ConnectOptions {
   readonly channel?: string;
   /** Default profile for turns from this connection; a frame may override it. */
   readonly profileId?: string;
+  /**
+   * The workspace a session *created* by this connection lands in.
+   *
+   * Never applied to a session that already exists — the loop reads the stored
+   * row and ignores this. A tab connects before it has sent anything, and the
+   * store holds no row until the first message lands, so this is what carries
+   * the user's chosen workspace across that gap.
+   */
+  readonly workspaceId?: string;
 }
 
 export interface HubClient {
@@ -189,6 +199,8 @@ interface Connection {
   readonly send: (message: ServerMessage) => void;
   readonly channel: string;
   readonly profileId: string | undefined;
+  /** Mutable: a `session.new` naming a workspace re-points the connection. */
+  workspaceId: string | undefined;
   sessionKey: string;
   closed: boolean;
 }
@@ -200,6 +212,8 @@ interface QueuedTurn {
   readonly content: string | readonly ContentPart[];
   readonly profileId: string | undefined;
   readonly channel: string;
+  /** Only ever creates; an existing session keeps the workspace it was born in. */
+  readonly workspaceId: string | undefined;
   /** Parsed at submit time, so a queued message is not reparsed to run it. */
   readonly mentions: ParsedMentions;
 }
@@ -313,6 +327,7 @@ export class SessionHub {
       send: options.send,
       channel: options.channel ?? 'web',
       profileId: options.profileId,
+      workspaceId: options.workspaceId,
       sessionKey: options.sessionKey ?? this.#newId(),
       closed: false,
     };
@@ -330,6 +345,7 @@ export class SessionHub {
       sessionKey: connection.sessionKey,
       serverTimeMs: this.#clock.now(),
       lastSeq: state.seq,
+      workspaceId: this.#workspaceOf(connection),
     });
 
     return {
@@ -431,6 +447,10 @@ export class SessionHub {
       }
 
       case 'session.new':
+        // A `session.new` naming a workspace re-points this connection, so the
+        // conversation it is about to start lands there rather than in whatever
+        // the tab was opened with.
+        if (message.workspaceId !== undefined) connection.workspaceId = message.workspaceId;
         this.#move(connection, message.sessionKey ?? this.#newId());
         return;
 
@@ -518,6 +538,7 @@ export class SessionHub {
       content: toContent(message.content, message.attachments),
       profileId: message.profileId ?? connection.profileId,
       channel: connection.channel,
+      workspaceId: connection.workspaceId,
       // Here, and only here. Parsing mentions in the WebSocket handler would
       // make `@kb:` a browser feature: a channel bridging through this hub
       // sends the same frame and would get none of it. The text is never
@@ -591,6 +612,7 @@ export class SessionHub {
         channel: turn.channel,
         turnId: turn.id,
         mentions: turn.mentions,
+        ...(turn.workspaceId === undefined ? {} : { workspaceId: turn.workspaceId }),
         ...(turn.profileId === undefined ? {} : { profileId: turn.profileId }),
       });
 
@@ -751,8 +773,30 @@ export class SessionHub {
       sessionKey: state.key,
       busy: state.running !== undefined,
       queueDepth: state.queue.length,
+      workspaceId: this.#storedWorkspace(state.key) ?? DEFAULT_WORKSPACE_ID,
       ...(state.running === undefined ? {} : { turnId: state.running.turnId }),
     });
+  }
+
+  /** The workspace a session is bound to, or `undefined` before its first turn. */
+  #storedWorkspace(sessionKey: string): string | undefined {
+    return this.#store.getSession(sessionKey)?.workspaceId;
+  }
+
+  /**
+   * What to tell a connection its workspace is.
+   *
+   * The stored row wins — switching to someone else's session moves you to
+   * *its* workspace, and saying so is what stops the UI's idea of the current
+   * workspace from drifting from the session's. Before a session has a row,
+   * the answer is what this connection would create it in.
+   */
+  #workspaceOf(connection: Connection): string {
+    return (
+      this.#storedWorkspace(connection.sessionKey) ??
+      connection.workspaceId ??
+      DEFAULT_WORKSPACE_ID
+    );
   }
 
   // -------------------------------------------------------------------------

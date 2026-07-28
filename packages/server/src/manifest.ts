@@ -79,6 +79,18 @@ const MANIFEST = [
   { id: 'files.sign', method: 'POST', url: '/api/files/signed-url', auth: 'required' },
   { id: 'media.get', method: 'GET', url: '/api/media/:token', auth: 'signed' },
 
+  // Workspaces
+  { id: 'workspaces.list', method: 'GET', url: '/api/workspaces', auth: 'required' },
+  { id: 'workspaces.create', method: 'POST', url: '/api/workspaces', auth: 'required' },
+  { id: 'workspaces.update', method: 'PATCH', url: '/api/workspaces/:id', auth: 'required' },
+  { id: 'workspaces.delete', method: 'DELETE', url: '/api/workspaces/:id', auth: 'required' },
+  {
+    id: 'workspaces.moveSessions',
+    method: 'POST',
+    url: '/api/workspaces/:id/sessions/move',
+    auth: 'required',
+  },
+
   // Notifications
   { id: 'notifications.list', method: 'GET', url: '/api/notifications', auth: 'required' },
   { id: 'notifications.readAll', method: 'POST', url: '/api/notifications/read', auth: 'required' },

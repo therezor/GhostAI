@@ -18,7 +18,7 @@ import {
   type ChatStreamEvent,
   type ProviderSpec,
 } from '@ghostai/providers';
-import { WorkspaceJail } from '@ghostai/security';
+import { WorkspaceJail, singleJail } from '@ghostai/security';
 import { HubApprovalGate, SessionHub } from '@ghostai/server';
 import { ToolRegistry } from '@ghostai/tools';
 
@@ -93,7 +93,7 @@ async function stack(answer = 'Hello from the agent.'): Promise<Stack> {
     provider: fixedProvider(answer),
     tools: new ToolRegistry(),
     store,
-    jail: new WorkspaceJail({ root: join(base, 'workspace') }),
+    jails: singleJail(new WorkspaceJail({ root: join(base, 'workspace') })),
     config: { ...AgentDefaultsSchema.parse({}), model: 'test-model' },
     model: 'test-model',
   });

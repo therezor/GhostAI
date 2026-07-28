@@ -20,7 +20,7 @@ import { join } from 'node:path';
 import { z } from 'zod';
 
 import { assertNotAborted, defineTool, type AnyTool } from '../define.js';
-import { formatBytes, fsFailure } from './shared.js';
+import { clampNote, formatBytes, fsFailure } from './shared.js';
 
 const DEFAULT_MAX_ENTRIES = 500;
 
@@ -28,7 +28,7 @@ const schema = z.strictObject({
   path: z
     .string()
     .default('.')
-    .describe('Directory to list, relative to the workspace root. Defaults to the root itself.'),
+    .describe('Directory to list. Rooted at the workspace. Defaults to the root itself.'),
   recursive: z.boolean().default(false).describe('Walk subdirectories as well.'),
   maxEntries: z.coerce
     .number()
@@ -41,19 +41,22 @@ const schema = z.strictObject({
 export const listDirTool: AnyTool = defineTool({
   name: 'list_dir',
   description:
-    'List the contents of a workspace directory. Directories are marked with a trailing slash and files show their size. Nothing is hidden; use maxEntries to bound a large tree.',
+    'List the contents of a workspace directory. The workspace is the root: "/x" and "../x" both resolve inside it, never outside. Directories are marked with a trailing slash and files show their size. Nothing is hidden; use maxEntries to bound a large tree.',
   schema,
   risk: 'safe',
   annotations: { title: 'List directory', readOnlyHint: true, idempotentHint: true },
   async execute(args, context) {
     assertNotAborted(context.signal, 'list_dir');
-    const resolved = context.jail.resolve(args.path);
+    const accepted = context.jail.accept(args.path);
+    const resolved = accepted.path;
+    const where = accepted.relative === '' ? '.' : accepted.relative;
+    const note = clampNote(args.path, accepted);
 
     let entries: Dirent[];
     try {
       entries = await readdir(resolved, { withFileTypes: true, recursive: args.recursive });
     } catch (error) {
-      throw fsFailure(error, args.path);
+      throw fsFailure(error, where, note);
     }
 
     // Directories first, then name — the order someone reading a listing
@@ -90,13 +93,14 @@ export const listDirTool: AnyTool = defineTool({
       lines.push(`${entry.name} (${size})`);
     }
 
-    if (lines.length === 0) return `${args.path} is empty.`;
+    if (lines.length === 0) return `${where} is empty.${note}`;
     const omitted = sorted.length - shown.length;
     if (omitted > 0) {
       lines.push(
         `… ${String(omitted)} more entries not shown (maxEntries=${String(args.maxEntries)}).`,
       );
     }
+    if (note !== '') lines.push(`[list_dir:${note}]`);
     return lines.join('\n');
   },
 });

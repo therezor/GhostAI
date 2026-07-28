@@ -25,6 +25,7 @@
  * to point at.
  */
 
+import { DEFAULT_WORKSPACE_ID } from '@ghostai/core';
 import { z } from 'zod';
 
 /** The bounds the protocol's `PaginationQuery` states, restated once. */
@@ -47,11 +48,14 @@ export const PageQuerySchema: z.ZodType<PageQuery> = z.object(pageShape);
 export interface SessionListQuery extends PageQuery {
   /** `web`, `telegram`, `automation`, a plugin id. Absent means every origin. */
   readonly origin?: string | undefined;
+  /** Absent means every workspace, which is what the unscoped sidebar asks for. */
+  readonly workspace?: string | undefined;
 }
 
 export const SessionListQuerySchema: z.ZodType<SessionListQuery> = z.object({
   ...pageShape,
   origin: z.string().min(1).optional(),
+  workspace: z.string().min(1).optional(),
 });
 
 export interface NotificationListQuery extends PageQuery {
@@ -86,6 +90,21 @@ export const WsQuerySchema: z.ZodType<WsQuery> = z.object({
 
 export interface PathQuery {
   readonly path: string;
+  /**
+   * Which workspace the path is relative to.
+   *
+   * A query parameter rather than a header or a `/api/workspaces/:id/files`
+   * prefix. A header would be invisible in the generated OpenAPI document and
+   * in a pasted `curl`, and would need a `Vary`; a path prefix would double the
+   * file surface and rewrite every URL for no gain over a parameter the
+   * document already describes.
+   *
+   * It is authorised, not authorising. There is one principal here and it can
+   * already reach the whole tree, so naming a workspace is not a privilege
+   * decision — what the routes must do with it is refuse an id with no registry
+   * row, so a crafted value cannot bring a directory into existence.
+   */
+  readonly workspace: string;
 }
 
 /**
@@ -97,11 +116,13 @@ export interface PathQuery {
  */
 export const PathQuerySchema: z.ZodType<PathQuery> = z.object({
   path: z.string().min(1),
+  workspace: z.string().min(1).default(DEFAULT_WORKSPACE_ID),
 });
 
 /** The directory listing's path, where absent means the workspace root. */
 export const OptionalPathQuerySchema: z.ZodType<PathQuery> = z.object({
   path: z.string().default('.'),
+  workspace: z.string().min(1).default(DEFAULT_WORKSPACE_ID),
 });
 
 export interface DeleteQuery extends PathQuery {
@@ -123,6 +144,7 @@ export interface DeleteQuery extends PathQuery {
  */
 export const DeleteQuerySchema: z.ZodType<DeleteQuery> = z.object({
   path: z.string().min(1),
+  workspace: z.string().min(1).default(DEFAULT_WORKSPACE_ID),
   recursive: z
     .enum(['true', 'false'])
     .transform((value) => value === 'true')

@@ -22,19 +22,34 @@ import { ApiError } from './api.js';
 export const queryKeys = {
   me: ['auth', 'me'] as const,
   status: ['status'] as const,
-  sessions: ['sessions'] as const,
+  workspaces: ['workspaces'] as const,
+  /**
+   * Scoped by workspace, because a session list is per workspace now.
+   *
+   * A function rather than a constant so the unscoped form stays expressible:
+   * `['sessions']` is still the prefix every scoped key starts with, so one
+   * invalidation after a turn still refreshes whichever workspace is showing.
+   */
+  sessions: (workspaceId?: string) =>
+    workspaceId === undefined ? (['sessions'] as const) : (['sessions', { workspaceId }] as const),
   messages: (key: string) => ['sessions', key, 'messages'] as const,
   notifications: ['notifications'] as const,
   settings: ['settings'] as const,
   providers: ['providers'] as const,
   models: ['models'] as const,
   tools: ['tools'] as const,
-  files: (path: string) => ['files', path] as const,
+  // The workspace comes *second*, before the path, and that placement is the
+  // point. Two workspaces both contain `notes.md`, so a key of `['files', path]`
+  // would serve one workspace's listing for the other the instant the switcher
+  // moved — the single most likely bug in this half of the feature. Putting it
+  // at index 1 also keeps `invalidateQueries({ queryKey: ['files', workspace] })`
+  // meaningful.
+  files: (workspace: string, path: string) => ['files', workspace, path] as const,
   // Their own roots rather than `['files', 'text', …]`: invalidation matches by
   // prefix, so nesting them under `files` would make refreshing a directory
   // that happens to be named `text` drop every open file's buffer.
-  fileText: (path: string) => ['file-text', path] as const,
-  fileUrl: (path: string) => ['file-url', path] as const,
+  fileText: (workspace: string, path: string) => ['file-text', workspace, path] as const,
+  fileUrl: (workspace: string, path: string) => ['file-url', workspace, path] as const,
   context: (key: string) => ['sessions', key, 'context'] as const,
 };
 

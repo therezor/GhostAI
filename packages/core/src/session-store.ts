@@ -29,7 +29,9 @@ import type { z } from 'zod';
 import { systemClock, type Clock } from './clock.js';
 import { GhostError } from './errors.js';
 import { historyForLLM, type HistoryForLLMOptions } from './history.js';
+import { migrate } from './migrate.js';
 import { ensureDir } from './paths.js';
+import { DEFAULT_WORKSPACE_ID } from './workspace-id.js';
 
 /**
  * What a caller may hand to `append`.
@@ -46,6 +48,14 @@ export interface SessionRecord {
   readonly title: string;
   /** Channel that owns it — `web`, `telegram`, `automation`, a plugin id. */
   readonly origin: string;
+  /**
+   * The workspace this session's tools run inside.
+   *
+   * Set once, at creation, and never moved: a turn resolves its jail from
+   * *this* value rather than from whatever the request said, which is what
+   * makes switching workspaces in the UI safe while a turn is still running.
+   */
+  readonly workspaceId: string;
   readonly profileId: string | undefined;
   readonly createdAtMs: number;
   readonly updatedAtMs: number;
@@ -114,6 +124,8 @@ export interface AppendOptions {
 export interface CreateSessionOptions {
   readonly title?: string;
   readonly origin?: string;
+  /** Defaults to `default`. Honoured only when the row is actually created. */
+  readonly workspaceId?: string;
   readonly profileId?: string;
   readonly metadata?: Readonly<Record<string, unknown>>;
 }
@@ -130,6 +142,8 @@ export interface ListSessionsOptions {
   readonly limit?: number;
   readonly offset?: number;
   readonly origin?: string;
+  /** Restricts the listing to one workspace. */
+  readonly workspaceId?: string;
   /**
    * Keyset cursor: the `(updatedAtMs, key)` of the last row already seen.
    *
@@ -192,6 +206,25 @@ CREATE INDEX IF NOT EXISTS messages_turn ON messages(session_key, turn_id);
 CREATE INDEX IF NOT EXISTS sessions_updated ON sessions(updated_at_ms DESC);
 `;
 
+/**
+ * Append-only. The list's length is the schema version; see `migrate`.
+ *
+ * `workspace_id` is not in `SCHEMA` above, deliberately: leaving it to the
+ * ledger means a fresh database and a database from before workspaces existed
+ * run the *same* statement, so there is one code path rather than a "new
+ * install" path that no upgrade ever exercises.
+ *
+ * There is no `REFERENCES workspaces(id)`. SQLite cannot attach a foreign key
+ * through `ADD COLUMN`, and the two tables are created by two different stores
+ * in an order nothing guarantees. The relationship is held in code instead —
+ * and holding it there is what lets a *detached* workspace's sessions keep
+ * resolving to their own files rather than falling into another workspace's.
+ */
+const SESSION_MIGRATIONS: readonly string[] = [
+  `ALTER TABLE sessions ADD COLUMN workspace_id TEXT NOT NULL DEFAULT '${DEFAULT_WORKSPACE_ID}';
+   CREATE INDEX IF NOT EXISTS sessions_workspace ON sessions(workspace_id, updated_at_ms DESC);`,
+];
+
 type Row = Record<string, SQLOutputValue>;
 
 function readInt(row: Row, column: string): number {
@@ -238,6 +271,7 @@ function rowToSession(row: Row): SessionRecord {
     key: readString(row, 'key'),
     title: readString(row, 'title'),
     origin: readString(row, 'origin'),
+    workspaceId: readString(row, 'workspace_id'),
     profileId: readOptionalString(row, 'profile_id'),
     createdAtMs: readInt(row, 'created_at_ms'),
     updatedAtMs: readInt(row, 'updated_at_ms'),
@@ -282,6 +316,20 @@ export class SessionStore {
     // SQLite defaults foreign keys *off* for backwards compatibility.
     this.#db.exec('PRAGMA foreign_keys = ON');
     this.#db.exec(SCHEMA);
+    migrate(this.#db, 'sessions', SESSION_MIGRATIONS);
+  }
+
+  /**
+   * The connection this store is using, so a sibling store can share it.
+   *
+   * `WorkspaceStore` has a cross-table invariant with `sessions` — a workspace
+   * cannot be detached while sessions still name it — and two stores holding
+   * separate connections to the same file could not read each other's
+   * uncommitted work. Closing it is not the borrower's business; `close()`
+   * here still only closes a connection this store opened.
+   */
+  get database(): DatabaseSync {
+    return this.#db;
   }
 
   /** Prepared once and reused; re-preparing per call dominates append cost. */
@@ -340,12 +388,16 @@ export class SessionStore {
     const now = this.#clock.now();
     this.#stmt(
       `INSERT OR IGNORE INTO sessions
-         (key, title, origin, profile_id, created_at_ms, updated_at_ms, metadata_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         (key, title, origin, workspace_id, profile_id, created_at_ms, updated_at_ms, metadata_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       key,
       options.title ?? '',
       options.origin ?? 'web',
+      // `OR IGNORE`, so this only lands when the row is created. A session's
+      // workspace is fixed at birth: a turn arriving with a different one must
+      // not move a conversation's files out from under it.
+      options.workspaceId ?? DEFAULT_WORKSPACE_ID,
       options.profileId ?? null,
       now,
       now,
@@ -363,7 +415,7 @@ export class SessionStore {
 
   listSessions(options: ListSessionsOptions = {}): SessionSummaryRecord[] {
     this.#assertOpen();
-    const { limit = 50, offset = 0, origin, after } = options;
+    const { limit = 50, offset = 0, origin, workspaceId, after } = options;
 
     // The predicate is the sort order written as a comparison: strictly older,
     // or the same instant and a key that sorts later. Bound as `?` twice each
@@ -372,6 +424,7 @@ export class SessionStore {
       `SELECT s.*, (SELECT COUNT(*) FROM messages m WHERE m.session_key = s.key) AS message_count
          FROM sessions s
         WHERE (? IS NULL OR s.origin = ?)
+          AND (? IS NULL OR s.workspace_id = ?)
           AND (? IS NULL
                OR s.updated_at_ms < ?
                OR (s.updated_at_ms = ? AND s.key > ?))
@@ -380,6 +433,8 @@ export class SessionStore {
     ).all(
       origin ?? null,
       origin ?? null,
+      workspaceId ?? null,
+      workspaceId ?? null,
       after?.updatedAtMs ?? null,
       after?.updatedAtMs ?? null,
       after?.updatedAtMs ?? null,
@@ -392,6 +447,38 @@ export class SessionStore {
       ...rowToSession(row),
       messageCount: readInt(row, 'message_count'),
     }));
+  }
+
+  /**
+   * How many sessions name a workspace.
+   *
+   * Lives here rather than on `WorkspaceStore` because this table is this
+   * store's, and a registry reaching across to count rows it does not own is
+   * how two stores end up with two ideas of the same schema. Detaching a
+   * workspace is refused while this is non-zero.
+   */
+  countByWorkspace(workspaceId: string): number {
+    this.#assertOpen();
+    const row = this.#stmt('SELECT COUNT(*) AS n FROM sessions WHERE workspace_id = ?').get(
+      workspaceId,
+    );
+    return row === undefined ? 0 : readInt(row, 'n');
+  }
+
+  /**
+   * Moves every session in one workspace to another, and reports how many.
+   *
+   * The escape hatch behind the delete refusal: an operator who wants a
+   * workspace gone anyway moves its conversations to the default first. It
+   * deliberately does not touch `updated_at_ms` — reassigning is bookkeeping,
+   * not activity, and bumping every row would reorder the session list.
+   */
+  reassignWorkspace(from: string, to: string): number {
+    this.#assertOpen();
+    const result = this.#stmt(
+      'UPDATE sessions SET workspace_id = ? WHERE workspace_id = ?',
+    ).run(to, from);
+    return Number(result.changes);
   }
 
   messageCount(sessionKey: string): number {

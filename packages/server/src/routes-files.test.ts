@@ -94,14 +94,37 @@ describe('GET /api/files', () => {
     ]);
   });
 
-  // The jail's verdict, surfaced as a 403 by the error table. Never a 404:
-  // telling a caller apart "no such file" from "not allowed" lets them map the
-  // filesystem by probing for the difference.
-  it.each(['../outside', '/etc', '~/secrets'])('refuses %s', async (path) => {
+  // The workspace is a chroot, so none of these escapes — each names the
+  // workspace root itself. The response echoes the path the jail agreed to, so
+  // a client that re-sends it addresses the same directory.
+  it.each(['..', '../..', '/', '~'])('clamps %s to the workspace root', async (path) => {
     const test = await start();
+    write(test, 'inside.txt', 'x');
+    writeFileSync(join(test.workspace, '..', 'outside-the-jail.txt'), 'x');
+
     const response = await test.server.app.inject({
       method: 'GET',
       url: `/api/files?path=${encodeURIComponent(path)}`,
+      headers: test.headers,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const names = (response.json().entries as { name: string }[]).map((entry) => entry.name);
+    expect(names).toContain('inside.txt');
+    expect(names).not.toContain('outside-the-jail.txt');
+  });
+
+  it('still refuses a symlink that leads out of the workspace', async () => {
+    // The one escape clamping cannot see, and the reason the realpath check
+    // survives the chroot change. A 403 rather than a 404: telling "no such
+    // file" apart from "not allowed" lets a caller map the filesystem by
+    // probing for the difference.
+    const test = await start();
+    symlinkSync(join(test.workspace, '..'), join(test.workspace, 'escape'));
+
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: '/api/files?path=escape',
       headers: test.headers,
     });
 
@@ -191,7 +214,7 @@ describe('POST /api/files/upload', () => {
     expect(response.statusCode).toBe(400);
   });
 
-  it('refuses a path that leaves the workspace', async () => {
+  it('clamps an upload that tried to escape, and says where it landed', async () => {
     const test = await start();
     const response = await test.server.app.inject({
       method: 'POST',
@@ -200,7 +223,12 @@ describe('POST /api/files/upload', () => {
       payload: Buffer.from('nope'),
     });
 
-    expect(response.statusCode).toBe(403);
+    expect(response.statusCode).toBe(201);
+    // The response echoes the clamped path, so the client is told where its
+    // bytes went rather than being left to assume.
+    expect(response.json().path).toBe('escaped.txt');
+    expect(existsSync(join(test.workspace, 'escaped.txt'))).toBe(true);
+    expect(existsSync(join(test.workspace, '..', 'escaped.txt'))).toBe(false);
   });
 });
 
@@ -274,8 +302,11 @@ describe('DELETE /api/files', () => {
     expect(existsSync(join(test.workspace, 'notes'))).toBe(false);
   });
 
-  it('refuses a directory outside the workspace even with the flag', async () => {
+  it('clamps a recursive delete to the workspace rather than reaching above it', async () => {
     const test = await start();
+    write(test, 'kept.txt', 'x');
+    const outside = join(test.workspace, '..', 'must-survive.txt');
+    writeFileSync(outside, 'x');
 
     const response = await test.server.app.inject({
       method: 'DELETE',
@@ -283,7 +314,10 @@ describe('DELETE /api/files', () => {
       headers: test.headers,
     });
 
-    expect(response.statusCode).toBe(403);
+    // `../` names the workspace root, so this empties the workspace — which is
+    // what the caller asked for — and cannot touch its parent.
+    expect(response.statusCode).toBe(204);
+    expect(existsSync(outside)).toBe(true);
   });
 
   it('answers 404 for a file that is not there', async () => {
@@ -366,12 +400,13 @@ describe('GET /api/files/text', () => {
     expect(body.content.length).toBeLessThan(body.sizeBytes);
   });
 
-  it('refuses a directory, and a path that leaves the workspace', async () => {
+  it('refuses a directory, and clamps a path that tried to leave', async () => {
     const test = await start();
     mkdirSync(join(test.workspace, 'notes'));
 
     expect((await read(test, 'notes')).statusCode).toBe(400);
-    expect((await read(test, '../outside')).statusCode).toBe(403);
+    // Clamped to `outside` inside the workspace, which is simply not there.
+    expect((await read(test, '../outside')).statusCode).toBe(404);
     expect((await read(test, 'gone.txt')).statusCode).toBe(404);
   });
 });
@@ -469,12 +504,14 @@ describe('PUT /api/files/text', () => {
     expect(readFileSync(join(test.workspace, 'note.md'), 'utf8')).toBe('clobbered');
   });
 
-  it('refuses a directory, and a path that leaves the workspace', async () => {
+  it('refuses a directory, and clamps a path that tried to leave', async () => {
     const test = await start();
     mkdirSync(join(test.workspace, 'notes'));
 
     expect((await save(test, { path: 'notes', content: 'x' })).statusCode).toBe(400);
-    expect((await save(test, { path: '../escaped.txt', content: 'x' })).statusCode).toBe(403);
+    expect((await save(test, { path: '../escaped.txt', content: 'x' })).statusCode).toBe(200);
+    expect(existsSync(join(test.workspace, 'escaped.txt'))).toBe(true);
+    expect(existsSync(join(test.workspace, '..', 'escaped.txt'))).toBe(false);
   });
 });
 
@@ -513,9 +550,11 @@ describe('POST /api/files/directory', () => {
     expect((await create(test, 'drafts')).statusCode).toBe(409);
   });
 
-  it('refuses a path that leaves the workspace', async () => {
+  it('clamps a directory that tried to be created outside the workspace', async () => {
     const test = await start();
-    expect((await create(test, '../escaped')).statusCode).toBe(403);
+    expect((await create(test, '../escaped')).statusCode).toBe(201);
+    expect(existsSync(join(test.workspace, 'escaped'))).toBe(true);
+    expect(existsSync(join(test.workspace, '..', 'escaped'))).toBe(false);
   });
 });
 
@@ -604,6 +643,7 @@ describe('signed media', () => {
 
     const token = signMediaToken('a-different-key', {
       path: 'photo.png',
+      workspaceId: 'default',
       expiresAtMs: Date.now() + 60_000,
     });
     const response = await test.server.app.inject({ method: 'GET', url: mediaUrl(token) });
@@ -680,5 +720,122 @@ describe('signed media', () => {
     // The secret is stable across reads — an image loaded after a reload must
     // not need a fresh URL.
     expect(test.server.auth.ensureSecret(MEDIA_SECRET_NAME)).toBe(secret);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Workspaces
+// ---------------------------------------------------------------------------
+
+describe('the file routes are workspace-scoped', () => {
+  async function makeWorkspace(test: TestServer, id: string): Promise<void> {
+    const response = await test.server.app.inject({
+      method: 'POST',
+      url: '/api/workspaces',
+      headers: test.headers,
+      payload: { name: id, id },
+    });
+    expect(response.statusCode).toBe(201);
+  }
+
+  it('lists only the workspace that was asked for', async () => {
+    const test = await start();
+    await makeWorkspace(test, 'acme');
+    await makeWorkspace(test, 'research');
+    writeFileSync(join(test.workspace, 'acme', 'secret.md'), 'a');
+    writeFileSync(join(test.workspace, 'research', 'other.md'), 'b');
+
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: '/api/files?path=.&workspace=research',
+      headers: test.headers,
+    });
+
+    const names = (response.json().entries as { name: string }[]).map((entry) => entry.name);
+    expect(names).toEqual(['other.md']);
+  });
+
+  it('cannot reach a sibling workspace with a traversal', async () => {
+    const test = await start();
+    await makeWorkspace(test, 'acme');
+    await makeWorkspace(test, 'research');
+    writeFileSync(join(test.workspace, 'acme', 'secret.md'), 'a');
+
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: `/api/files/text?path=${encodeURIComponent('../acme/secret.md')}&workspace=research`,
+      headers: test.headers,
+    });
+
+    // `..` clamps at `research`'s own root, so this names `acme/secret.md`
+    // *inside* research — which is not there.
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('writes into the workspace the request named', async () => {
+    const test = await start();
+    await makeWorkspace(test, 'acme');
+
+    const response = await test.server.app.inject({
+      method: 'PUT',
+      url: '/api/files/text',
+      headers: test.headers,
+      payload: { path: 'note.md', content: 'hello', workspaceId: 'acme' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(existsSync(join(test.workspace, 'acme', 'note.md'))).toBe(true);
+    expect(existsSync(join(test.workspace, 'note.md'))).toBe(false);
+  });
+
+  it('404s for a workspace with no registry row, without creating it', async () => {
+    const test = await start();
+
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: '/api/files?path=.&workspace=never-registered',
+      headers: test.headers,
+    });
+
+    expect(response.statusCode).toBe(404);
+    // `workspaceDirFor` would have resolved the slug happily — that is what
+    // keeps a detached workspace's sessions working — so the registry lookup
+    // in the route is the thing that stops a crafted id becoming a directory.
+    expect(existsSync(join(test.workspace, 'never-registered'))).toBe(false);
+  });
+
+  it('defaults to the default workspace when no workspace is named', async () => {
+    const test = await start();
+    write(test, 'root-level.md', 'x');
+
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: '/api/files?path=.',
+      headers: test.headers,
+    });
+
+    const names = (response.json().entries as { name: string }[]).map((entry) => entry.name);
+    expect(names).toContain('root-level.md');
+  });
+
+  it('signs a URL against the workspace it was minted for, and no other', async () => {
+    const test = await start();
+    await makeWorkspace(test, 'acme');
+    await makeWorkspace(test, 'research');
+    writeFileSync(join(test.workspace, 'acme', 'photo.png'), 'a-pixels');
+    writeFileSync(join(test.workspace, 'research', 'photo.png'), 'r-pixels');
+
+    const signed = await test.server.app.inject({
+      method: 'POST',
+      url: '/api/files/signed-url',
+      headers: test.headers,
+      payload: { path: 'photo.png', workspaceId: 'acme' },
+    });
+    const { url } = signed.json();
+
+    const served = await test.server.app.inject({ method: 'GET', url });
+    // Both workspaces contain `photo.png`. The workspace is inside the
+    // signature, so the token can only ever fetch the one it was minted for.
+    expect(served.body).toBe('a-pixels');
   });
 });

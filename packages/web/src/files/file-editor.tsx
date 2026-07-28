@@ -38,11 +38,13 @@ import { languageForFile, parentOf } from './paths.js';
 
 export interface FileEditorProps {
   readonly entry: FileEntry;
+  /** Which workspace `entry.path` is relative to. */
+  readonly workspace: string;
   /** Raised whenever the buffer differs from what was loaded, so the dialog can guard the close. */
   readonly onDirtyChange?: (dirty: boolean) => void;
 }
 
-export function FileEditor({ entry, onDirtyChange }: FileEditorProps): JSX.Element {
+export function FileEditor({ entry, workspace, onDirtyChange }: FileEditorProps): JSX.Element {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<string | undefined>(undefined);
   const [editing, setEditing] = useState(false);
@@ -50,8 +52,8 @@ export function FileEditor({ entry, onDirtyChange }: FileEditorProps): JSX.Eleme
   const textarea = useRef<HTMLTextAreaElement>(null);
 
   const file = useQuery({
-    queryKey: queryKeys.fileText(entry.path),
-    queryFn: ({ signal }) => api.readText(entry.path, signal),
+    queryKey: queryKeys.fileText(workspace, entry.path),
+    queryFn: ({ signal }) => api.readText(workspace, entry.path, signal),
     // Always the file as it is now, never as it was when the dialog last
     // opened: a stale buffer is what the conflict check exists to catch, and
     // serving one from cache would manufacture the conflict it then reports.
@@ -70,7 +72,7 @@ export function FileEditor({ entry, onDirtyChange }: FileEditorProps): JSX.Eleme
   const save = useMutation({
     mutationFn: async (text: string) => {
       if (loaded === undefined) throw new Error('The file is not loaded yet');
-      return await api.writeText(entry.path, text, loaded.modifiedAtMs);
+      return await api.writeText(workspace, entry.path, text, loaded.modifiedAtMs);
     },
     onSuccess: (written) => {
       setConflict(false);
@@ -78,8 +80,10 @@ export function FileEditor({ entry, onDirtyChange }: FileEditorProps): JSX.Eleme
       setEditing(false);
       // Both: the text query holds the new `modifiedAtMs` the next save has to
       // match, and the listing holds the size and time in the row behind this.
-      void queryClient.invalidateQueries({ queryKey: queryKeys.fileText(entry.path) });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.files(parentOf(entry.path)) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.fileText(workspace, entry.path) });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.files(workspace, parentOf(entry.path)),
+      });
       toast.success(`Saved ${entry.name}`, formatBytes(written.sizeBytes));
     },
     onError: (error: Error) => {
@@ -98,7 +102,7 @@ export function FileEditor({ entry, onDirtyChange }: FileEditorProps): JSX.Eleme
     setDraft(undefined);
     setConflict(false);
     setEditing(false);
-    void queryClient.invalidateQueries({ queryKey: queryKeys.fileText(entry.path) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.fileText(workspace, entry.path) });
   };
 
   if (file.isPending) return <p className="file-preview__note">Reading…</p>;

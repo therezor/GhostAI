@@ -63,6 +63,7 @@ describe('sessions CRUD', () => {
       createdAtMs: expect.any(Number),
       updatedAtMs: expect.any(Number),
       origin: 'web',
+      workspaceId: 'default',
     });
   });
 

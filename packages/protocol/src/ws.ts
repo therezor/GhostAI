@@ -85,9 +85,24 @@ export const NewSessionMessageSchema = z.object({
   type: z.literal('session.new'),
   /** Server generates one when absent. */
   sessionKey: z.string().optional(),
+  /**
+   * Which workspace to create the conversation in. Defaults to `default`.
+   *
+   * Only ever *creates*: a session that already exists keeps the workspace it
+   * was born in, whatever this says.
+   */
+  workspaceId: z.string().min(1).optional(),
   profileId: z.string().optional(),
 });
 
+/**
+ * Deliberately carries no workspace.
+ *
+ * Switching to an existing session moves you to *its* workspace, and the hub
+ * reports which one on the `session.status` that follows. Letting a client name
+ * one here would let the UI's idea of the current workspace and the session's
+ * own disagree, with the files on screen belonging to neither.
+ */
 export const SwitchSessionMessageSchema = z.object({
   type: z.literal('session.switch'),
   sessionKey: z.string().min(1),
@@ -154,6 +169,14 @@ export const ConnectedEventSchema = z.object({
   serverTimeMs: z.number().int().nonnegative(),
   /** Last `seq` the server has emitted, so a fresh client knows where it is. */
   lastSeq: seq,
+  /**
+   * The workspace this connection landed in.
+   *
+   * Here so a reconnecting tab — or one opening a link to someone else's
+   * session — learns which workspace it is looking at without a REST round
+   * trip, and can move its own switcher to match.
+   */
+  workspaceId: z.string().min(1).default('default'),
 });
 
 export const PongEventSchema = z.object({
@@ -317,6 +340,8 @@ export const SessionStatusEventSchema = z.object({
   sessionKey: z.string().min(1),
   busy: z.boolean(),
   queueDepth: z.number().int().nonnegative().default(0),
+  /** The session's workspace, restated on every switch. */
+  workspaceId: z.string().min(1).default('default'),
   turnId: z.string().optional(),
 });
 

@@ -38,6 +38,7 @@
 /* Screens: one file per region of the app. */
 @import './screens/shell.css';
 @import './screens/sidebar.css';
+@import './screens/workspaces.css';
 @import './screens/chat.css';
 @import './screens/markdown.css';
 @import './screens/files.css';

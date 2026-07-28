@@ -17,6 +17,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
 import { queryKeys } from '@/lib/query.js';
+import { useTurnStore } from '@/state/turn.js';
 import {
   closeConnection,
   onServerMessage,
@@ -24,9 +25,21 @@ import {
   switchSession,
 } from '@/lib/connection.js';
 import { toast } from '@/components/ui/toast.js';
+import { useWorkspace } from '@/workspaces/workspace-context.js';
 
 export function useConnection(sessionKey: string | undefined): void {
   const queryClient = useQueryClient();
+  const { adopt } = useWorkspace();
+
+  // The server is the authority on which workspace a session is in, and it says
+  // so on `connected` and on every `session.status`. Following it is what keeps
+  // the switcher from claiming one workspace while the conversation on screen
+  // runs in another — which is exactly what opening a link to someone else's
+  // session would otherwise do.
+  const reported = useTurnStore((state) => state.workspaceId);
+  useEffect(() => {
+    if (reported !== undefined) adopt(reported);
+  }, [reported, adopt]);
 
   // The session the first render asked for, held in a ref so the effect below
   // can use it without listing it as a dependency — a change to `sessionKey` is
@@ -49,7 +62,9 @@ export function useConnection(sessionKey: string | undefined): void {
       onServerMessage((message) => {
         switch (message.type) {
           case 'turn.end':
-            void queryClient.invalidateQueries({ queryKey: queryKeys.sessions });
+            // Unscoped: `['sessions']` is the prefix every workspace-scoped key
+            // starts with, so one invalidation refreshes whichever is showing.
+            void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
             return;
 
           case 'notification':

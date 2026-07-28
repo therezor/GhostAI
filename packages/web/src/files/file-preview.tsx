@@ -36,16 +36,18 @@ import { FileEditor } from './file-editor.js';
 import { isImage } from './paths.js';
 
 export interface FilePreviewProps {
+  /** Which workspace `entry.path` is relative to. */
+  readonly workspace: string;
   readonly entry: FileEntry;
   readonly onDirtyChange?: (dirty: boolean) => void;
 }
 
-export function FilePreview({ entry, onDirtyChange }: FilePreviewProps): JSX.Element {
+export function FilePreview({ entry, workspace, onDirtyChange }: FilePreviewProps): JSX.Element {
   const image = isImage(entry.mimeType);
 
   const signed = useQuery({
-    queryKey: queryKeys.fileUrl(entry.path),
-    queryFn: ({ signal }) => api.signUrl(entry.path, signal),
+    queryKey: queryKeys.fileUrl(workspace, entry.path),
+    queryFn: ({ signal }) => api.signUrl(workspace, entry.path, signal),
     // A URL that expired while the dialog was open is not a cached answer worth
     // keeping: the next open mints a fresh one.
     gcTime: 0,
@@ -59,8 +61,8 @@ export function FilePreview({ entry, onDirtyChange }: FilePreviewProps): JSX.Ele
    * render and read there for its content.
    */
   const text = useQuery({
-    queryKey: queryKeys.fileText(entry.path),
-    queryFn: ({ signal }) => api.readText(entry.path, signal),
+    queryKey: queryKeys.fileText(workspace, entry.path),
+    queryFn: ({ signal }) => api.readText(workspace, entry.path, signal),
     enabled: !image,
     staleTime: 0,
     gcTime: 0,
@@ -101,7 +103,7 @@ export function FilePreview({ entry, onDirtyChange }: FilePreviewProps): JSX.Ele
             </span>
           </p>
         ) : (
-          <FileEditor entry={entry} {...(onDirtyChange ? { onDirtyChange } : {})} />
+          <FileEditor entry={entry} workspace={workspace} {...(onDirtyChange ? { onDirtyChange } : {})} />
         ))}
 
       <div className="cluster">

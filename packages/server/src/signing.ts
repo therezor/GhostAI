@@ -33,11 +33,20 @@ export const MEDIA_SECRET_NAME = 'media_signing_key';
 export interface MediaClaim {
   /** Workspace-relative, as it was when signed. */
   readonly path: string;
+  /**
+   * Which workspace the path is relative to.
+   *
+   * Inside the signature for exactly the reason the path is: two workspaces both
+   * contain `notes.md`, so a token that authorised "this path" without saying
+   * where would be a token for that filename in every workspace at once.
+   */
+  readonly workspaceId: string;
   readonly expiresAtMs: number;
 }
 
 interface Payload {
   readonly p: string;
+  readonly w: string;
   readonly e: number;
 }
 
@@ -52,7 +61,7 @@ function mac(secret: string, payload: string): Buffer {
  * path would make the signature the thing that authorised it.
  */
 export function signMediaToken(secret: string, claim: MediaClaim): string {
-  const payload: Payload = { p: claim.path, e: claim.expiresAtMs };
+  const payload: Payload = { p: claim.path, w: claim.workspaceId, e: claim.expiresAtMs };
   const encoded = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
   return `${encoded}.${mac(secret, encoded).toString('base64url')}`;
 }
@@ -90,11 +99,16 @@ export function verifyMediaToken(
   }
   if (typeof payload !== 'object' || payload === null) return undefined;
 
-  const { p, e } = payload as Partial<Payload>;
+  const { p, w, e } = payload as Partial<Payload>;
   if (typeof p !== 'string' || p === '' || typeof e !== 'number') return undefined;
+  // A workspace-less payload is refused rather than defaulted to `default`.
+  // Defaulting would let a token minted before workspaces existed — or one
+  // whose `w` an attacker stripped — be replayed against the default
+  // workspace, which is the one that contains all the others.
+  if (typeof w !== 'string' || w === '') return undefined;
   if (e <= nowMs) return undefined;
 
-  return { path: p, expiresAtMs: e };
+  return { path: p, workspaceId: w, expiresAtMs: e };
 }
 
 /** The URL a client puts in `<img src>`. Relative, so it survives a reverse proxy. */

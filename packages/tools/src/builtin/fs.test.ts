@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -111,10 +111,28 @@ describe('read_file', () => {
     );
   });
 
-  it('rejects traversal, absolute paths and home prefixes', async () => {
-    for (const path of ['../secret', '/etc/passwd', '~/.ssh/id_rsa']) {
-      expect((await failure(readFileTool, { path })).kind).toBe('jail_escape');
-    }
+  it.each([
+    ['a traversal', '../secret', 'secret'],
+    ['an absolute path', '/etc/passwd', 'etc/passwd'],
+    ['a home prefix', '~/.ssh/id_rsa', '.ssh/id_rsa'],
+  ])('clamps %s into the workspace and says where it looked', async (_name, path, landed) => {
+    // The workspace is a chroot, so none of these is a refusal — each names a
+    // file inside the workspace that happens not to exist. What matters is that
+    // the model is told so: an unexplained ENOENT on `/etc/passwd` reads as
+    // "the host has no passwd file", which is a lie in the other direction.
+    const error = await failure(readFileTool, { path });
+    expect(error.kind).toBe('not_found');
+    expect(error.message).toContain(landed);
+    expect(error.message).toContain('The workspace is the root');
+  });
+
+  it('says where it read from when a clamped path does exist', async () => {
+    writeFileSync(join(root, 'passwd'), 'not the real one');
+    const result = await text(readFileTool, { path: '/passwd' });
+    expect(result).toContain('not the real one');
+    // The success path needs the note as much as the failure path: content came
+    // back, and without this the model believes it holds the host's file.
+    expect(result).toContain('"/passwd" was resolved to "passwd"');
   });
 
   it('rejects a symlink pointing out of the workspace', async () => {
@@ -150,10 +168,39 @@ describe('write_file', () => {
     );
   });
 
-  it('refuses to write outside the workspace', async () => {
-    expect((await failure(writeFileTool, { path: '../escape.txt', content: 'x' })).kind).toBe(
+  it('clamps a write that tried to escape, and lands it inside the workspace', async () => {
+    const result = toToolResult(
+      await writeFileTool.run({ path: '../escape.txt', content: 'x' }, context),
+    );
+
+    expect(readFileSync(join(root, 'escape.txt'), 'utf8')).toBe('x');
+    expect(existsSync(join(root, '..', 'escape.txt'))).toBe(false);
+    expect(result.content).toContain('"../escape.txt" was resolved to "escape.txt"');
+  });
+
+  it('still refuses a symlink that leads out of the workspace', async () => {
+    // Clamping is lexical; this is the escape it cannot see, and the reason the
+    // realpath check has to survive the chroot change.
+    const outside = join(root, '..', 'target.txt');
+    writeFileSync(outside, 'stolen');
+    symlinkSync(outside, join(root, 'link.txt'));
+    expect((await failure(writeFileTool, { path: 'link.txt', content: 'x' })).kind).toBe(
       'jail_escape',
     );
+    expect(readFileSync(outside, 'utf8')).toBe('stolen');
+  });
+
+  it('refuses a dangling symlink rather than creating its target outside', async () => {
+    // The bug the lstat guard closes: `realpath` reports ENOENT for a broken
+    // link exactly as it does for an absent name, so the boundary walk used to
+    // hand back a contained path that `writeFile` then followed straight out.
+    const outside = join(root, '..', 'planted.txt');
+    symlinkSync(outside, join(root, 'decoy.txt'));
+
+    expect((await failure(writeFileTool, { path: 'decoy.txt', content: 'x' })).kind).toBe(
+      'jail_escape',
+    );
+    expect(existsSync(outside)).toBe(false);
   });
 
   it('carries the byte count for the audit log', async () => {
@@ -308,8 +355,14 @@ describe('list_dir', () => {
     expect((await failure(listDirTool, { path: 'nope' })).kind).toBe('not_found');
   });
 
-  it('refuses to list outside the workspace', async () => {
-    expect((await failure(listDirTool, { path: '..' })).kind).toBe('jail_escape');
+  it('clamps a listing that tried to escape back to the workspace root', async () => {
+    writeFileSync(join(root, 'inside.txt'), 'x');
+    writeFileSync(join(root, '..', 'outside-the-jail.txt'), 'x');
+
+    const listing = await text(listDirTool, { path: '..' });
+    expect(listing).toContain('inside.txt');
+    expect(listing).not.toContain('outside-the-jail.txt');
+    expect(listing).toContain('[list_dir:');
   });
 
   it('marks an unreadable entry rather than failing the whole listing', async () => {

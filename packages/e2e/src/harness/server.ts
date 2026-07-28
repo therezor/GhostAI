@@ -275,11 +275,13 @@ function harnessRuntime(runtime: GhostRuntime, configFile: string): ServerRuntim
     },
 
     store: runtime.store,
+    workspaces: runtime.workspaces,
 
     agent: (): AgentView => ({
       provider: runtime.spec.id,
       model: runtime.model,
       jail: runtime.jail,
+      jailFor: (workspaceId) => runtime.jails.forWorkspace(workspaceId),
       tools: runtime.tools.definitions(),
       systemPrompt: async (input) => await runtime.loop.previewPrompt(input),
     }),

@@ -48,6 +48,7 @@ import { AgentLoop, SteeringQueue, type ApprovalGate } from '@ghostai/agent';
 import {
   GhostError,
   SessionStore,
+  WorkspaceStore,
   loadConfig,
   resolveGhostPaths,
   silentLogger,
@@ -62,10 +63,11 @@ import {
   resolveProvider,
   type ProviderSpec,
 } from '@ghostai/providers';
-import { WorkspaceJail, type CredentialVault, type FetchImplementation } from '@ghostai/security';
+import type { CredentialVault, FetchImplementation, JailResolver, WorkspaceJail } from '@ghostai/security';
 import { ToolRegistry, registerBuiltins } from '@ghostai/tools';
 
 import { findCredential } from './credentials.js';
+import { JailCache } from './jail-cache.js';
 import { mergeConfigPatch } from './merge.js';
 import { ProviderCache } from './provider-cache.js';
 
@@ -121,7 +123,17 @@ export interface GhostRuntime {
   readonly tools: ToolRegistry;
   /** Survives a reconfigure, so a steer queued mid-turn is not dropped. */
   readonly steering: SteeringQueue;
+  /**
+   * The default workspace's jail — the banner, and the file routes' fallback.
+   *
+   * Kept alongside `jails` rather than replaced by it because most callers want
+   * "the workspace" and only the ones that are workspace-aware want a resolver.
+   */
   readonly jail: WorkspaceJail;
+  /** Every workspace's jail, keyed by id. Rebuilt only when the root moves. */
+  readonly jails: JailResolver;
+  /** The registry: listing, naming and detaching. Never a path. */
+  readonly workspaces: WorkspaceStore;
   /** Rebuilt by `reconfigure`; a running turn keeps the one it started on. */
   readonly loop: AgentLoop;
   readonly spec: ProviderSpec;
@@ -147,7 +159,7 @@ export interface GhostRuntime {
 interface Resolved {
   readonly config: Config;
   readonly paths: GhostPaths;
-  readonly jail: WorkspaceJail;
+  readonly jails: JailCache;
   readonly loop: AgentLoop;
   readonly spec: ProviderSpec;
   readonly model: string;
@@ -197,6 +209,7 @@ function pathsFor(config: Config, options: RuntimeOptions): GhostPaths {
 
 class Runtime implements GhostRuntime {
   readonly store: SessionStore;
+  readonly workspaces: WorkspaceStore;
   readonly tools: ToolRegistry;
   readonly steering: SteeringQueue;
   readonly file: string;
@@ -231,6 +244,16 @@ class Runtime implements GhostRuntime {
       ...(options.database === undefined ? {} : { database: options.database }),
       ...(options.clock === undefined ? {} : { clock: options.clock }),
     });
+    // Over the store's own connection, so the registry and the sessions that
+    // reference it are in one WAL — a workspace cannot be detached while
+    // sessions still name it, and that invariant is unenforceable across two
+    // connections. It survives a reconfigure: only the paths moving would
+    // invalidate it, and `paths.workspace` moving is a restart-shaped change.
+    this.workspaces = new WorkspaceStore({
+      database: this.store.database,
+      paths: loaded.paths,
+      ...(options.clock === undefined ? {} : { clock: options.clock }),
+    });
     this.tools = new ToolRegistry({
       timeoutMs: loaded.config.agents.defaults.toolTimeoutMs,
       logger: this.#logger,
@@ -255,7 +278,11 @@ class Runtime implements GhostRuntime {
   }
 
   get jail(): WorkspaceJail {
-    return this.#current.jail;
+    return this.#current.jails.default;
+  }
+
+  get jails(): JailResolver {
+    return this.#current.jails;
   }
 
   get loop(): AgentLoop {
@@ -323,10 +350,18 @@ class Runtime implements GhostRuntime {
       fetchImpl: this.#options.fetchImpl,
     });
 
-    // `WorkspaceJail` canonicalises through `realpath` and creates the root, so
-    // rebuilding one that has not moved is filesystem work for no change.
-    const unmoved = previous?.paths.workspace === paths.workspace ? previous.jail : undefined;
-    const jail = unmoved ?? new WorkspaceJail({ root: paths.workspace });
+    // A jail canonicalises through `realpath` and creates its root, so keeping
+    // the cache when nothing moved saves that work on every workspace already
+    // in use. A moved root invalidates all of them at once: every cached jail
+    // was derived from the old one.
+    //
+    // `JailCache` builds the default in its constructor, so an unusable
+    // workspace throws *here* — before any of the mutations below — which is
+    // what keeps `reconfigure` all-or-nothing.
+    const jails =
+      previous?.paths.workspace === paths.workspace
+        ? previous.jails
+        : new JailCache({ paths });
 
     // Past here nothing throws, so the mutations below cannot leave the
     // registry describing a runtime that failed to build.
@@ -341,7 +376,7 @@ class Runtime implements GhostRuntime {
       provider,
       tools: this.tools,
       store: this.store,
-      jail,
+      jails,
       config: defaults,
       toolsConfig: config.tools,
       model,
@@ -352,7 +387,7 @@ class Runtime implements GhostRuntime {
       ...(this.#options.clock === undefined ? {} : { clock: this.#options.clock }),
     });
 
-    return { config, paths, jail, loop, spec, model, hasCredential: apiKey !== undefined };
+    return { config, paths, jails, loop, spec, model, hasCredential: apiKey !== undefined };
   }
 }
 

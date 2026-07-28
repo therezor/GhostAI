@@ -31,9 +31,27 @@ export {
   expandHome,
   resolveGhostPaths,
   resolvePath,
+  workspaceDirFor,
   type GhostPaths,
   type ResolveGhostPathsOptions,
 } from './paths.js';
+
+export {
+  DEFAULT_WORKSPACE_ID,
+  RESERVED_WORKSPACE_IDS,
+  WORKSPACE_ID_PATTERN,
+  deriveSlug,
+  isWorkspaceId,
+} from './workspace-id.js';
+
+export {
+  WorkspaceStore,
+  type CreateWorkspaceOptions,
+  type WorkspaceRecord,
+  type WorkspaceStoreOptions,
+} from './workspace-store.js';
+
+export { migrate } from './migrate.js';
 
 export {
   loadConfig,

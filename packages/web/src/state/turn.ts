@@ -37,6 +37,14 @@ export type { ConnectionStatus };
 export interface TurnState {
   /** The session the socket is attached to, or `undefined` before the first. */
   readonly sessionKey: string | undefined;
+  /**
+   * The workspace the server says this session is in.
+   *
+   * Reported rather than requested: switching to an existing session moves you
+   * to *its* workspace, and this is how the UI finds out. `undefined` until the
+   * first frame — the switcher shows its own choice in the meantime.
+   */
+  readonly workspaceId: string | undefined;
   readonly connection: ConnectionStatus;
   /** True between `turn.start` and `turn.end` — what drives send ⇄ stop. */
   readonly busy: boolean;
@@ -68,6 +76,7 @@ export interface TurnState {
 
 const INITIAL = {
   sessionKey: undefined,
+  workspaceId: undefined,
   connection: 'closed' as ConnectionStatus,
   busy: false,
   queueDepth: 0,
@@ -120,10 +129,15 @@ export const useTurnStore = create<TurnState>((set) => ({
           // The server names the session when the client did not — a fresh tab
           // gets its key here and nowhere else.
           next.sessionKey = message.sessionKey;
+          next.workspaceId = message.workspaceId;
           break;
         case 'session.status':
           next.busy = message.busy;
           next.queueDepth = message.queueDepth;
+          // Restated on every switch, which is the point: opening someone
+          // else's session moves the UI to that session's workspace rather
+          // than showing its transcript beside another workspace's files.
+          next.workspaceId = message.workspaceId;
           break;
         case 'turn.start':
           next.busy = true;

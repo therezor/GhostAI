@@ -1,3 +1,5 @@
+import { createHmac } from 'node:crypto';
+
 import { describe, expect, it } from 'vitest';
 
 import { assertSigningKey, mediaUrl, signMediaToken, verifyMediaToken } from './signing.js';
@@ -5,9 +7,12 @@ import { assertSigningKey, mediaUrl, signMediaToken, verifyMediaToken } from './
 const KEY = 'a-signing-key';
 const NOW = 1_700_000_000_000;
 
-function token(overrides: { path?: string; expiresAtMs?: number } = {}): string {
+function token(
+  overrides: { path?: string; workspaceId?: string; expiresAtMs?: number } = {},
+): string {
   return signMediaToken(KEY, {
     path: overrides.path ?? 'notes/photo.png',
+    workspaceId: overrides.workspaceId ?? 'default',
     expiresAtMs: overrides.expiresAtMs ?? NOW + 60_000,
   });
 }
@@ -16,6 +21,7 @@ describe('media tokens', () => {
   it('verifies a token it signed', () => {
     expect(verifyMediaToken(KEY, token(), NOW)).toEqual({
       path: 'notes/photo.png',
+      workspaceId: 'default',
       expiresAtMs: NOW + 60_000,
     });
   });
@@ -78,5 +84,41 @@ describe('media tokens', () => {
     expect(() => {
       assertSigningKey(KEY);
     }).not.toThrow();
+  });
+});
+
+describe('media tokens: the workspace claim', () => {
+  it('is inside the signature, so a token for one workspace is not one for another', () => {
+    // Two workspaces both contain `notes.md`. A token that authorised a path
+    // without saying where would be a token for that filename everywhere.
+    const claim = verifyMediaToken(KEY, token({ workspaceId: 'acme' }), NOW);
+    expect(claim?.workspaceId).toBe('acme');
+    expect(verifyMediaToken(KEY, token({ workspaceId: 'acme' }), NOW)).not.toEqual(
+      verifyMediaToken(KEY, token({ workspaceId: 'research' }), NOW),
+    );
+  });
+
+  it('refuses a payload with no workspace rather than defaulting it', () => {
+    // Defaulting would let a token minted before workspaces existed — or one an
+    // attacker stripped `w` from — be replayed against `default`, which is the
+    // workspace that contains all the others.
+    const legacy = Buffer.from(
+      JSON.stringify({ p: 'notes/photo.png', e: NOW + 60_000 }),
+      'utf8',
+    ).toString('base64url');
+    const mac = createHmac('sha256', KEY).update(legacy, 'utf8').digest('base64url');
+
+    expect(verifyMediaToken(KEY, `${legacy}.${mac}`, NOW)).toBeUndefined();
+  });
+
+  it('refuses a tampered workspace, because the MAC covers it', () => {
+    const forged = Buffer.from(
+      JSON.stringify({ p: 'notes/photo.png', w: 'acme', e: NOW + 60_000 }),
+      'utf8',
+    ).toString('base64url');
+    // The signature from a *different* payload, which is what tampering leaves.
+    const stale = token({ workspaceId: 'research' }).split('.')[1] ?? '';
+
+    expect(verifyMediaToken(KEY, `${forged}.${stale}`, NOW)).toBeUndefined();
   });
 });

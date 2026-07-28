@@ -34,7 +34,10 @@ import {
   SessionListResponseSchema,
   SessionMessagesResponseSchema,
   SettingsResponseSchema,
+  MoveSessionsResponseSchema,
   SignedUrlSchema,
+  WorkspaceListResponseSchema,
+  WorkspaceSummarySchema,
   StatusResponseSchema,
   ToolListResponseSchema,
   UploadResponseSchema,
@@ -53,7 +56,10 @@ import {
   type SessionMessagesResponse,
   type SetCredentialRequest,
   type SettingsResponse,
+  type MoveSessionsResponse,
   type SignedUrl,
+  type WorkspaceListResponse,
+  type WorkspaceSummary,
   type StatusResponse,
   type ToolListResponse,
   type UploadResponse,
@@ -149,8 +155,12 @@ export const api = {
   status: (signal?: AbortSignal): Promise<StatusResponse> =>
     request('/api/status', StatusResponseSchema, { ...(signal ? { signal } : {}) }),
 
-  sessions: (signal?: AbortSignal): Promise<SessionListResponse> =>
-    request('/api/sessions', SessionListResponseSchema, { ...(signal ? { signal } : {}) }),
+  /** Every session, or only the ones in one workspace. */
+  sessions: (workspaceId?: string, signal?: AbortSignal): Promise<SessionListResponse> =>
+    request('/api/sessions', SessionListResponseSchema, {
+      ...(workspaceId === undefined ? {} : { query: { workspace: workspaceId } }),
+      ...(signal ? { signal } : {}),
+    }),
 
   messages: (key: string, signal?: AbortSignal): Promise<SessionMessagesResponse> =>
     request(`/api/sessions/${encodeURIComponent(key)}/messages`, SessionMessagesResponseSchema, {
@@ -206,9 +216,9 @@ export const api = {
       ...(signal ? { signal } : {}),
     }),
 
-  files: (path: string, signal?: AbortSignal): Promise<FileListResponse> =>
+  files: (workspace: string, path: string, signal?: AbortSignal): Promise<FileListResponse> =>
     request('/api/files', FileListResponseSchema, {
-      query: { path },
+      query: { path, workspace },
       ...(signal ? { signal } : {}),
     }),
 
@@ -220,10 +230,10 @@ export const api = {
    * and refuses a full one — so emptying a tree is never something a request
    * happens to do.
    */
-  deleteFile: (path: string, recursive = false): Promise<void> =>
+  deleteFile: (workspace: string, path: string, recursive = false): Promise<void> =>
     requestVoid('/api/files', {
       method: 'DELETE',
-      query: { path, ...(recursive ? { recursive: 'true' } : {}) },
+      query: { path, workspace, ...(recursive ? { recursive: 'true' } : {}) },
     }),
 
   /**
@@ -234,10 +244,15 @@ export const api = {
    * a base64 or multipart wrapper would inflate every upload to describe what
    * `Content-Type` already says.
    */
-  upload: (path: string, file: Blob, signal?: AbortSignal): Promise<UploadResponse> =>
+  upload: (
+    workspace: string,
+    path: string,
+    file: Blob,
+    signal?: AbortSignal,
+  ): Promise<UploadResponse> =>
     request('/api/files/upload', UploadResponseSchema, {
       method: 'POST',
-      query: { path },
+      query: { path, workspace },
       body: file,
       ...(signal ? { signal } : {}),
     }),
@@ -251,9 +266,13 @@ export const api = {
    * answers for the source files the MIME table does not know — `.py`, `.ts`,
    * `.css` — which the media route serves as attachments.
    */
-  readText: (path: string, signal?: AbortSignal): Promise<FileTextResponse> =>
+  readText: (
+    workspace: string,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<FileTextResponse> =>
     request('/api/files/text', FileTextResponseSchema, {
-      query: { path },
+      query: { path, workspace },
       ...(signal ? { signal } : {}),
     }),
 
@@ -264,25 +283,65 @@ export const api = {
    * how a new file is created — there is nothing yet to conflict with.
    */
   writeText: (
+    workspaceId: string,
     path: string,
     content: string,
     expectedModifiedAtMs?: number,
   ): Promise<FileEntry> =>
     request('/api/files/text', FileEntrySchema, {
       method: 'PUT',
-      body: { path, content, ...(expectedModifiedAtMs === undefined ? {} : { expectedModifiedAtMs }) },
+      body: {
+        path,
+        content,
+        workspaceId,
+        ...(expectedModifiedAtMs === undefined ? {} : { expectedModifiedAtMs }),
+      },
     }),
 
-  createDirectory: (path: string): Promise<FileEntry> =>
-    request('/api/files/directory', FileEntrySchema, { method: 'POST', body: { path } }),
+  createDirectory: (workspaceId: string, path: string): Promise<FileEntry> =>
+    request('/api/files/directory', FileEntrySchema, {
+      method: 'POST',
+      body: { path, workspaceId },
+    }),
 
   /** A short-lived signed URL for a workspace path an `<img>` will load. */
-  signUrl: (path: string, signal?: AbortSignal): Promise<SignedUrl> =>
+  signUrl: (workspaceId: string, path: string, signal?: AbortSignal): Promise<SignedUrl> =>
     request('/api/files/signed-url', SignedUrlSchema, {
       method: 'POST',
-      body: { path },
+      body: { path, workspaceId },
       ...(signal ? { signal } : {}),
     }),
+
+  // -------------------------------------------------------------------------
+  // Workspaces
+  // -------------------------------------------------------------------------
+
+  workspaces: (signal?: AbortSignal): Promise<WorkspaceListResponse> =>
+    request('/api/workspaces', WorkspaceListResponseSchema, { ...(signal ? { signal } : {}) }),
+
+  /** The id is derived from the name unless one is given. Never a path. */
+  createWorkspace: (name: string, id?: string): Promise<WorkspaceSummary> =>
+    request('/api/workspaces', WorkspaceSummarySchema, {
+      method: 'POST',
+      body: { name, ...(id === undefined ? {} : { id }) },
+    }),
+
+  renameWorkspace: (id: string, name: string): Promise<WorkspaceSummary> =>
+    request(`/api/workspaces/${encodeURIComponent(id)}`, WorkspaceSummarySchema, {
+      method: 'PATCH',
+      body: { name },
+    }),
+
+  /** Detaches it. The folder and everything in it stays on disk. */
+  deleteWorkspace: (id: string): Promise<void> =>
+    requestVoid(`/api/workspaces/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  moveWorkspaceSessions: (from: string, to: string): Promise<MoveSessionsResponse> =>
+    request(
+      `/api/workspaces/${encodeURIComponent(from)}/sessions/move`,
+      MoveSessionsResponseSchema,
+      { method: 'POST', body: { to } },
+    ),
 };
 
 async function send(path: string, options: RequestOptions): Promise<Response> {

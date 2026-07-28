@@ -78,7 +78,11 @@ describe('startServer', () => {
 
     expect(health.status).toBe(200);
     expect(body).toMatchObject({ provider: 'ollama', model: 'test-model', authEnabled: true });
-    expect(body.workspace).toContain(root);
+    // The id, never the path: `/api/status` stopped reporting an absolute host
+    // path when workspaces landed. The banner still prints one — a terminal on
+    // the host is not a network boundary.
+    expect(body.workspaceId).toBe('default');
+    expect(JSON.stringify(body)).not.toContain(root);
   });
 
   it('refuses an unauthenticated request, and the whole UI is still reachable', async () => {

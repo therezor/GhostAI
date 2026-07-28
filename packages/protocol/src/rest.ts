@@ -52,7 +52,17 @@ export const StatusResponseSchema = z.object({
   /** Resolved, not configured — reflects what a turn would actually use now. */
   model: z.string(),
   provider: z.string(),
-  workspace: z.string(),
+  /**
+   * The default workspace's id, never its path.
+   *
+   * `workspace` used to carry `jail.root` — an absolute host path, so every
+   * authenticated client learned the operator's username and directory layout,
+   * which is the one string that turns a blind traversal attempt into a
+   * targeted one. Absolute paths do not cross this boundary in either
+   * direction.
+   */
+  workspaceId: z.string().min(1),
+  workspaceCount: z.number().int().positive(),
   authEnabled: z.boolean(),
   toolCount: z.number().int().nonnegative(),
   mcpServersConnected: z.number().int().nonnegative(),
@@ -157,6 +167,8 @@ export const SessionSummarySchema = z.object({
   updatedAtMs: z.number().int().nonnegative(),
   /** Channel that owns it — `web`, `telegram`, `automation`, a plugin id. */
   origin: z.string().default('web'),
+  /** Fixed when the session was created; see `SessionRecord.workspaceId`. */
+  workspaceId: z.string().min(1).default('default'),
   profileId: z.string().optional(),
   totalUsage: UsageSchema.optional(),
 });
@@ -178,6 +190,8 @@ export type SessionMessagesResponse = z.infer<typeof SessionMessagesResponseSche
 export const CreateSessionRequestSchema = z.object({
   key: z.string().min(1).optional(),
   title: z.string().optional(),
+  /** Which workspace to open the conversation in. Defaults to `default`. */
+  workspaceId: z.string().min(1).optional(),
   profileId: z.string().optional(),
 });
 export type CreateSessionRequest = z.infer<typeof CreateSessionRequestSchema>;
@@ -258,6 +272,8 @@ export type SignedUrl = z.infer<typeof SignedUrlSchema>;
 export const SignedUrlRequestSchema = z.object({
   /** Workspace-relative, like every other path that crosses this boundary. */
   path: z.string().min(1),
+  /** Which workspace the path is relative to. Defaults to `default`. */
+  workspaceId: z.string().min(1).optional(),
 });
 export type SignedUrlRequest = z.infer<typeof SignedUrlRequestSchema>;
 
@@ -319,6 +335,8 @@ export type FileTextResponse = z.infer<typeof FileTextResponseSchema>;
 export const FileWriteRequestSchema = z.object({
   path: z.string().min(1),
   content: z.string(),
+  /** Which workspace the path is relative to. Defaults to `default`. */
+  workspaceId: z.string().min(1).optional(),
   expectedModifiedAtMs: z.number().int().nonnegative().optional(),
 });
 export type FileWriteRequest = z.infer<typeof FileWriteRequestSchema>;
@@ -326,8 +344,63 @@ export type FileWriteRequest = z.infer<typeof FileWriteRequestSchema>;
 export const CreateDirectoryRequestSchema = z.object({
   /** Workspace-relative, like every other path that crosses this boundary. */
   path: z.string().min(1),
+  /** Which workspace the path is relative to. Defaults to `default`. */
+  workspaceId: z.string().min(1).optional(),
 });
 export type CreateDirectoryRequest = z.infer<typeof CreateDirectoryRequestSchema>;
+
+// ---------------------------------------------------------------------------
+// Workspaces
+// ---------------------------------------------------------------------------
+
+/**
+ * A workspace as the switcher and the manager see it.
+ *
+ * **No path field, anywhere in this section.** A workspace is
+ * `<root>/workspace/<id>` and the id is the only thing that crosses the wire;
+ * accepting a directory would turn "managed directories only" from a fact into
+ * a convention, and the first client to send `/` would have handed an
+ * authenticated caller the whole filesystem.
+ */
+export const WorkspaceSummarySchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  /** True for exactly one, which cannot be deleted and contains all the others. */
+  isDefault: z.boolean(),
+  createdAtMs: z.number().int().nonnegative(),
+  updatedAtMs: z.number().int().nonnegative(),
+  /** What a delete would have to move first. */
+  sessionCount: z.number().int().nonnegative(),
+});
+export type WorkspaceSummary = z.infer<typeof WorkspaceSummarySchema>;
+
+export const WorkspaceListResponseSchema = z.object({
+  workspaces: z.array(WorkspaceSummarySchema),
+});
+export type WorkspaceListResponse = z.infer<typeof WorkspaceListResponseSchema>;
+
+export const CreateWorkspaceRequestSchema = z.object({
+  name: z.string().min(1).max(60),
+  /** Derived from the name when absent. Lowercase; also the folder name. */
+  id: z.string().min(1).max(40).optional(),
+});
+export type CreateWorkspaceRequest = z.infer<typeof CreateWorkspaceRequestSchema>;
+
+export const UpdateWorkspaceRequestSchema = z.object({
+  name: z.string().min(1).max(60),
+});
+export type UpdateWorkspaceRequest = z.infer<typeof UpdateWorkspaceRequestSchema>;
+
+/** The way through a delete that was refused for having sessions. */
+export const MoveSessionsRequestSchema = z.object({
+  to: z.string().min(1),
+});
+export type MoveSessionsRequest = z.infer<typeof MoveSessionsRequestSchema>;
+
+export const MoveSessionsResponseSchema = z.object({
+  moved: z.number().int().nonnegative(),
+});
+export type MoveSessionsResponse = z.infer<typeof MoveSessionsResponseSchema>;
 
 // ---------------------------------------------------------------------------
 // Notifications

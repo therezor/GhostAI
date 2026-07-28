@@ -17,7 +17,7 @@ import {
   type HealthResponse,
   type StatusResponse,
 } from '@ghostai/protocol';
-import { systemClock } from '@ghostai/core';
+import { DEFAULT_WORKSPACE_ID, systemClock } from '@ghostai/core';
 
 import { SERVER_VERSION } from '../version.js';
 import type { RouteDeps, RouteGroup } from './types.js';
@@ -75,7 +75,14 @@ export function systemRoutes(deps: RouteDeps): RouteGroup<SystemRouteId> {
           uptimeMs: Math.max(0, Math.round(clock.monotonic() - deps.startedAt)),
           model: agent.model,
           provider: agent.provider,
-          workspace: agent.jail.root,
+          // The id, never the path. `agent.jail.root` used to be reported here
+          // — an absolute host path handed to every authenticated client,
+          // naming the operator's account and directory layout, which is the
+          // one string that turns a blind traversal attempt into a targeted
+          // one. The banner on the terminal still prints it; a terminal on the
+          // host is not a network boundary.
+          workspaceId: DEFAULT_WORKSPACE_ID,
+          workspaceCount: deps.runtime.workspaces.list().length,
           // From the boot config, not the live one: this reports whether the
           // running listener authenticates, and that is not something a settings
           // save can change under an already-authenticated session.

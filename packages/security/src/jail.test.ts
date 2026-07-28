@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { isGhostError } from '@ghostai/core';
 
-import { WorkspaceJail } from './jail.js';
+import { WorkspaceJail, pathShapes, singleJail } from './jail.js';
 
 let base: string;
 let root: string;
@@ -87,7 +87,136 @@ describe('resolve', () => {
   });
 });
 
-describe('rejections', () => {
+describe('clamping', () => {
+  /**
+   * The workspace is a root in the `chroot` sense, so none of these is a
+   * refusal any more: each one *addresses* something inside the workspace. What
+   * used to be the rejection is now the `rewrites` entry, which exists so a
+   * caller can tell the model what happened rather than leaving it to believe
+   * it read the host's file.
+   */
+  const cases: readonly {
+    readonly name: string;
+    readonly input: string;
+    readonly segments: readonly string[];
+    readonly rewrites: readonly string[];
+  }[] = [
+    { name: 'a bare tilde', input: '~', segments: [], rewrites: ['home_prefix'] },
+    {
+      name: 'a tilde path',
+      input: '~/.ssh/id_ed25519',
+      segments: ['.ssh', 'id_ed25519'],
+      rewrites: ['home_prefix'],
+    },
+    { name: 'a tilde with a backslash', input: '~\\.ssh', segments: ['.ssh'], rewrites: ['home_prefix'] },
+    {
+      name: 'a POSIX absolute path',
+      input: '/etc/passwd',
+      segments: ['etc', 'passwd'],
+      rewrites: ['absolute'],
+    },
+    {
+      name: 'a backslash absolute path',
+      input: '\\Windows\\System32',
+      segments: ['Windows', 'System32'],
+      rewrites: ['absolute'],
+    },
+    {
+      name: 'a drive letter',
+      input: 'C:\\Windows\\System32',
+      segments: ['Windows', 'System32'],
+      rewrites: ['drive'],
+    },
+    { name: 'a lowercase drive letter', input: 'c:/windows', segments: ['windows'], rewrites: ['drive'] },
+    {
+      name: 'a UNC path',
+      input: '\\\\server\\share\\file',
+      segments: ['server', 'share', 'file'],
+      rewrites: ['unc'],
+    },
+    {
+      name: 'a slash-form UNC path',
+      input: '//server/share/file',
+      segments: ['server', 'share', 'file'],
+      rewrites: ['unc'],
+    },
+    { name: 'a traversal', input: '../secret.txt', segments: ['secret.txt'], rewrites: ['traversal'] },
+    {
+      name: 'a deep traversal',
+      input: 'a/b/../../../etc/passwd',
+      segments: ['etc', 'passwd'],
+      rewrites: ['traversal'],
+    },
+    {
+      name: 'a traversal that lands back inside',
+      input: 'a/../notes.md',
+      segments: ['notes.md'],
+      rewrites: ['traversal'],
+    },
+    {
+      name: 'a backslash traversal',
+      input: 'a\\..\\..\\outside',
+      segments: ['outside'],
+      rewrites: ['traversal'],
+    },
+    {
+      name: 'a drive letter with no separator after it',
+      input: 'C:Windows',
+      segments: ['Windows'],
+      rewrites: ['drive'],
+    },
+    {
+      name: 'a root that is only separators',
+      input: '///',
+      segments: [],
+      rewrites: ['unc'],
+    },
+  ];
+
+  for (const { name, input, segments, rewrites } of cases) {
+    it(`clamps ${name} into the workspace`, () => {
+      const verdict = jail.check(input);
+      expect(verdict.ok).toBe(true);
+      if (!verdict.ok) return;
+      expect(verdict.path).toBe(join(root, ...segments));
+      expect(verdict.relative).toBe(segments.join(sep));
+      expect(verdict.rewrites).toEqual(rewrites);
+    });
+  }
+
+  it('leaves a plain relative path alone and reports no rewrite', () => {
+    const verdict = jail.check('a/b.txt');
+    expect(verdict.ok).toBe(true);
+    if (!verdict.ok) return;
+    expect(verdict.relative).toBe(join('a', 'b.txt'));
+    expect(verdict.rewrites).toEqual([]);
+  });
+
+  it('keeps a root marker that is not the first segment as a literal name', () => {
+    // `a/C:/b` names a directory called `C:`; only a leading segment can carry
+    // a root. Same for `~`.
+    expect(jail.check('a/~/b').ok).toBe(true);
+    expect(jail.resolve('a/~/b')).toBe(join(root, 'a', '~', 'b'));
+  });
+
+  it('accept() throws nothing for a clamped path and hands back the rewrite', () => {
+    expect(jail.accept('/etc/passwd').rewrites).toEqual(['absolute']);
+  });
+
+  it('re-folds after stripping a root marker, so stripping cannot create a traversal', () => {
+    // Found by the idempotence property. `./c:..` folds to the single segment
+    // `c:..`; taking the drive prefix off it leaves a bare `..`, which — if the
+    // output were trusted at that point — would join to the workspace's parent
+    // and leave containment resting entirely on what `realpath` said.
+    const verdict = jail.check('./c:..');
+    expect(verdict.ok).toBe(true);
+    if (!verdict.ok) return;
+    expect(verdict.path).toBe(root);
+    expect(verdict.relative).toBe('');
+  });
+});
+
+describe('refusals', () => {
   const cases: readonly {
     readonly name: string;
     readonly input: string;
@@ -96,23 +225,6 @@ describe('rejections', () => {
     { name: 'an empty path', input: '', rejection: 'empty' },
     { name: 'a NUL byte', input: 'notes\0.md', rejection: 'nul_byte' },
     { name: 'a NUL used to truncate an extension', input: 'ok.txt\0.png', rejection: 'nul_byte' },
-    { name: 'a bare tilde', input: '~', rejection: 'home_prefix' },
-    { name: 'a tilde path', input: '~/.ssh/id_ed25519', rejection: 'home_prefix' },
-    { name: 'a tilde with a backslash', input: '~\\.ssh', rejection: 'home_prefix' },
-    { name: 'a POSIX absolute path', input: '/etc/passwd', rejection: 'absolute' },
-    { name: 'a backslash absolute path', input: '\\Windows\\System32', rejection: 'absolute' },
-    { name: 'a drive letter', input: 'C:\\Windows\\System32', rejection: 'absolute' },
-    { name: 'a lowercase drive letter', input: 'c:/windows', rejection: 'absolute' },
-    { name: 'a UNC path', input: '\\\\server\\share\\file', rejection: 'unc' },
-    { name: 'a slash-form UNC path', input: '//server/share/file', rejection: 'unc' },
-    { name: 'a traversal', input: '../secret.txt', rejection: 'traversal' },
-    { name: 'a deep traversal', input: 'a/b/../../../etc/passwd', rejection: 'traversal' },
-    {
-      name: 'a traversal that would land back inside',
-      input: 'a/../notes.md',
-      rejection: 'traversal',
-    },
-    { name: 'a backslash traversal', input: 'a\\..\\..\\outside', rejection: 'traversal' },
     { name: 'a name too long to verify', input: 'x'.repeat(4096), rejection: 'unverifiable' },
   ];
 
@@ -143,6 +255,22 @@ describe('rejections', () => {
     expect(jail.check('alias.txt').ok).toBe(false);
   });
 
+  it('rejects a dangling symlink instead of reading it as a path that does not exist yet', () => {
+    // The bug this closes: `realpathSync` answers ENOENT for a broken link just
+    // as it does for an absent name, so the boundary walk used to pop the link,
+    // re-append its name, and hand back a contained path — which `write_file`
+    // then followed straight out of the workspace, creating the target outside.
+    symlinkSync(join(base, 'vault.json'), join(root, 'vault'));
+    const verdict = jail.check('vault');
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.rejection).toBe('unverifiable');
+  });
+
+  it('rejects a path underneath a dangling symlink', () => {
+    symlinkSync(join(base, 'gone'), join(root, 'link'));
+    expect(jail.check('link/child.txt').ok).toBe(false);
+  });
+
   it('reports a deleted workspace root as unverifiable rather than allowing the path', () => {
     rmSync(root, { recursive: true, force: true });
     const verdict = jail.check('notes.md');
@@ -151,15 +279,18 @@ describe('rejections', () => {
   });
 
   it('throws jail_escape from resolve, with the rejection in the details', () => {
+    // A symlink escape, because that is the only thing left that a well-formed
+    // path can be refused for.
+    symlinkSync(outside, join(root, 'escape'));
     try {
-      jail.resolve('../secret.txt');
+      jail.resolve('escape/secret.txt');
       expect.unreachable('should have thrown');
     } catch (error) {
       expect(isGhostError(error)).toBe(true);
       if (!isGhostError(error)) return;
       expect(error.kind).toBe('jail_escape');
       expect(error.retryable).toBe(false);
-      expect(error.details).toMatchObject({ rejection: 'traversal' });
+      expect(error.details).toMatchObject({ rejection: 'outside_root' });
     }
   });
 
@@ -170,6 +301,45 @@ describe('rejections', () => {
     } catch (error) {
       expect(isGhostError(error) && error.kind).toBe('invalid_input');
     }
+  });
+});
+
+describe('pathShapes', () => {
+  it('classifies without resolving, which is what the exec guard needs', () => {
+    expect(pathShapes('/etc/passwd')).toEqual(['absolute']);
+    expect(pathShapes('~/.ssh/id_ed25519')).toEqual(['home_prefix']);
+    expect(pathShapes('//server/share')).toEqual(['unc']);
+    expect(pathShapes('C:\\Windows')).toEqual(['drive']);
+    expect(pathShapes('../x')).toEqual(['traversal']);
+  });
+
+  it('reports a traversal even when it would land back inside', () => {
+    // The old syntactic rule refused any `..` segment, and the exec guard still
+    // has to, or `git log a/../../etc` reads outside the workspace.
+    expect(pathShapes('a/../b')).toEqual(['traversal']);
+  });
+
+  it('is empty for a contained relative path, a flag and a URL', () => {
+    expect(pathShapes('src/index.ts')).toEqual([]);
+    expect(pathShapes('./script.js')).toEqual([]);
+    expect(pathShapes('--format=json')).toEqual([]);
+    expect(pathShapes('https://example.com/a/b')).toEqual([]);
+  });
+
+  it('agrees with what check() reports having rewritten', () => {
+    for (const input of ['/etc/passwd', '~/x', '../x', 'a/../b', 'src/a.ts', 'C:\\x']) {
+      const verdict = jail.check(input);
+      expect(verdict.ok).toBe(true);
+      if (verdict.ok) expect(verdict.rewrites).toEqual(pathShapes(input));
+    }
+  });
+});
+
+describe('singleJail', () => {
+  it('answers with the same jail for every workspace', () => {
+    const resolver = singleJail(jail);
+    expect(resolver.default).toBe(jail);
+    expect(resolver.forWorkspace('anything')).toBe(jail);
   });
 });
 
@@ -271,13 +441,53 @@ describe('property: nothing escapes', () => {
     );
   });
 
-  it('never accepts a path containing a traversal segment', () => {
+  it('clamps every traversal into the workspace instead of refusing it', () => {
     fc.assert(
       fc.property(
         fc.array(fc.constantFrom('a', 'b', '..'), { minLength: 1, maxLength: 6 }),
         (segments) => {
           fc.pre(segments.includes('..'));
-          expect(jail.check(segments.join('/')).ok).toBe(false);
+          const verdict = jail.check(segments.join('/'));
+          expect(verdict.ok).toBe(true);
+          if (!verdict.ok) return;
+          expect(verdict.path === root || verdict.path.startsWith(root + sep)).toBe(true);
+          expect(verdict.rewrites).toContain('traversal');
+        },
+      ),
+    );
+  });
+
+  /**
+   * Clamping has to be a projection, and that is a correctness requirement
+   * rather than an aesthetic one: the REST layer echoes `jail.relative(...)`
+   * back to clients, which then send it again. A normalisation that moved on
+   * the second pass would walk a path somewhere new on every round trip.
+   */
+  it('is idempotent: re-checking the clamped form lands in the same place', () => {
+    fc.assert(
+      fc.property(fc.array(escapeFragments, { minLength: 1, maxLength: 8 }), (fragments) => {
+        const first = jail.check(fragments.join(''));
+        if (!first.ok) return;
+        const again = jail.check(first.relative === '' ? '.' : first.relative);
+        expect(again.ok).toBe(true);
+        if (again.ok) expect(again.path).toBe(first.path);
+      }),
+      { numRuns: 2000 },
+    );
+  });
+
+  it('preserves segments that only look like traversal', () => {
+    // An over-eager normaliser eats `..foo`, `.hidden` or a trailing dot.
+    fc.assert(
+      fc.property(
+        fc.array(fc.constantFrom('..foo', '.hidden', 'a..b', 'x.', 'plain'), {
+          minLength: 1,
+          maxLength: 5,
+        }),
+        (segments) => {
+          const verdict = jail.check(segments.join('/'));
+          expect(verdict.ok).toBe(true);
+          if (verdict.ok) expect(verdict.relative).toBe(segments.join(sep));
         },
       ),
     );

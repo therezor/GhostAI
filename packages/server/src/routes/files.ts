@@ -45,7 +45,7 @@ import {
   type SignedUrlRequest,
   type UploadResponse,
 } from '@ghostai/protocol';
-import { ensureDir, systemClock } from '@ghostai/core';
+import { DEFAULT_WORKSPACE_ID, ensureDir, systemClock } from '@ghostai/core';
 import type { WorkspaceJail } from '@ghostai/security';
 import type { FastifyReply } from 'fastify';
 
@@ -120,11 +120,29 @@ function statOrUndefined(absolutePath: string): Stats | undefined {
 
 export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
   const clock = deps.clock ?? systemClock;
-  const jail = (): WorkspaceJail => deps.runtime.agent().jail;
 
-  function sign(path: string): SignedUrl {
+  /**
+   * The jail for one workspace, refusing an id that names no workspace.
+   *
+   * The registry lookup is what stops a crafted id from bringing a directory
+   * into existence: `workspaceDirFor` would happily resolve any legal slug —
+   * that is deliberate, so a *detached* workspace's sessions keep working — so
+   * the boundary that decides "a user can still see this one" belongs here.
+   */
+  const jailFor = (workspaceId: string): WorkspaceJail => {
+    if (deps.runtime.workspaces.get(workspaceId) === undefined) {
+      throw notFound(`No such workspace: ${workspaceId}`);
+    }
+    return deps.runtime.agent().jailFor(workspaceId);
+  };
+
+  function sign(path: string, workspaceId: string): SignedUrl {
     const expiresAtMs = clock.now() + deps.runtime.config().server.auth.signedUrlTtlMs;
-    const token = signMediaToken(deps.auth.ensureSecret(MEDIA_SECRET_NAME), { path, expiresAtMs });
+    const token = signMediaToken(deps.auth.ensureSecret(MEDIA_SECRET_NAME), {
+      path,
+      workspaceId,
+      expiresAtMs,
+    });
     return { url: mediaUrl(token), expiresAtMs };
   }
 
@@ -136,8 +154,9 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
         response: { 200: FileListResponseSchema },
       },
       handler: (request): FileListResponse => {
-        const { path } = request.query as PathQuery;
-        const absolute = jail().resolve(path);
+        const { path, workspace } = request.query as PathQuery;
+        const jail = jailFor(workspace);
+        const absolute = jail.resolve(path);
         const stats = statOr404(absolute, path);
         if (!stats.isDirectory()) throw badRequest(`Not a directory: ${path}`);
 
@@ -145,8 +164,8 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
           // Echo the *relative* path the jail agreed to, not the input: `./a/`
           // and `a` are the same directory and a client keying on the response
           // should see one answer for both.
-          path: jail().relative(absolute),
-          entries: listDirectory(jail(), absolute),
+          path: jail.relative(absolute),
+          entries: listDirectory(jail, absolute),
         };
       },
     },
@@ -155,8 +174,8 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
       summary: 'Delete one workspace file or directory',
       schema: { querystring: DeleteQuerySchema },
       handler: (request, reply): FastifyReply => {
-        const { path, recursive } = request.query as DeleteQuery;
-        const absolute = jail().resolve(path);
+        const { path, workspace, recursive } = request.query as DeleteQuery;
+        const absolute = jailFor(workspace).resolve(path);
         const stats = statOr404(absolute, path);
 
         if (!stats.isDirectory()) {
@@ -187,7 +206,8 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
       schema: { querystring: PathQuerySchema, response: { 201: UploadResponseSchema } },
       bodyLimit: MAX_UPLOAD_BYTES,
       handler: (request, reply): UploadResponse => {
-        const { path } = request.query as PathQuery;
+        const { path, workspace } = request.query as PathQuery;
+        const jail = jailFor(workspace);
         const body = request.body;
         if (!Buffer.isBuffer(body)) {
           // A JSON content type reached the JSON parser and produced an object.
@@ -196,11 +216,11 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
         }
         if (body.byteLength === 0) throw badRequest('Upload body is empty');
 
-        const absolute = jail().resolve(path);
+        const absolute = jail.resolve(path);
         ensureDir(dirname(absolute));
         writeFileSync(absolute, body);
 
-        const relative = jail().relative(absolute);
+        const relative = jail.relative(absolute);
         void reply.status(201);
         return {
           path: relative,
@@ -208,7 +228,7 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
           mimeType: mimeTypeFor(relative),
           // Returned with the upload so a UI can render what it just sent
           // without a second round trip to ask permission to look at it.
-          signedUrl: sign(relative),
+          signedUrl: sign(relative, workspace),
         };
       },
     },
@@ -217,8 +237,9 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
       summary: 'One workspace file, as text',
       schema: { querystring: PathQuerySchema, response: { 200: FileTextResponseSchema } },
       handler: (request): FileTextResponse => {
-        const { path } = request.query as PathQuery;
-        const absolute = jail().resolve(path);
+        const { path, workspace } = request.query as PathQuery;
+        const jail = jailFor(workspace);
+        const absolute = jail.resolve(path);
         const stats = statOr404(absolute, path);
         if (stats.isDirectory()) throw badRequest(`Not a file: ${path}`);
 
@@ -230,7 +251,7 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
         if (text === undefined) throw badRequest(`Not a text file: ${path}`);
 
         return {
-          path: jail().relative(absolute),
+          path: jail.relative(absolute),
           content: text.content,
           sizeBytes: stats.size,
           modifiedAtMs: Math.floor(stats.mtimeMs),
@@ -244,8 +265,9 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
       schema: { body: FileWriteRequestSchema, response: { 200: FileEntrySchema } },
       bodyLimit: MAX_TEXT_BODY_BYTES,
       handler: (request): FileEntry => {
-        const { path, content, expectedModifiedAtMs } = request.body as FileWriteRequest;
-        const absolute = jail().resolve(path);
+        const { path, content, expectedModifiedAtMs, workspaceId } = request.body as FileWriteRequest;
+        const jail = jailFor(workspaceId ?? DEFAULT_WORKSPACE_ID);
+        const absolute = jail.resolve(path);
         const before = statOrUndefined(absolute);
         if (before?.isDirectory() === true) throw badRequest(`Not a file: ${path}`);
 
@@ -272,7 +294,7 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
         // Stat again rather than computing the entry from `content`: the size
         // on disk is the byte length after UTF-8 encoding, and `modifiedAtMs`
         // is the value the next save has to match.
-        return entryAt(jail(), absolute, statSync(absolute));
+        return entryAt(jail, absolute, statSync(absolute));
       },
     },
 
@@ -280,8 +302,9 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
       summary: 'Create a workspace directory',
       schema: { body: CreateDirectoryRequestSchema, response: { 201: FileEntrySchema } },
       handler: (request, reply): FileEntry => {
-        const { path } = request.body as CreateDirectoryRequest;
-        const absolute = jail().resolve(path);
+        const { path, workspaceId } = request.body as CreateDirectoryRequest;
+        const jail = jailFor(workspaceId ?? DEFAULT_WORKSPACE_ID);
+        const absolute = jail.resolve(path);
         // Not idempotent, deliberately: "New folder" that quietly returns an
         // existing one is how two things end up sharing a directory nobody
         // meant to share.
@@ -289,7 +312,7 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
 
         mkdirSync(absolute, { recursive: true });
         void reply.status(201);
-        return entryAt(jail(), absolute, statSync(absolute));
+        return entryAt(jail, absolute, statSync(absolute));
       },
     },
 
@@ -297,12 +320,14 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
       summary: 'Mint a short-lived URL an <img> can load',
       schema: { body: SignedUrlRequestSchema, response: { 200: SignedUrlSchema } },
       handler: (request): SignedUrl => {
-        const { path } = request.body as SignedUrlRequest;
-        const absolute = jail().resolve(path);
+        const { path, workspaceId } = request.body as SignedUrlRequest;
+        const workspace = workspaceId ?? DEFAULT_WORKSPACE_ID;
+        const jail = jailFor(workspace);
+        const absolute = jail.resolve(path);
         // Signed after the file is known to exist: a URL that 404s later is a
         // worse answer than a 404 now, and the client is holding the path.
         statOr404(absolute, path);
-        return sign(jail().relative(absolute));
+        return sign(jail.relative(absolute), workspace);
       },
     },
 
@@ -320,7 +345,12 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
         // without canonicalising, so it would happily serve a file that became
         // a symlink to `/etc/passwd` after the URL was minted. A signature says
         // who asked, not what the filesystem looks like now.
-        const absolute = resolveWithin(jail(), claim.path);
+        // The claim's workspace, not the default: the token names one, and the
+        // whole point of signing it is that this is the workspace the URL was
+        // authorised against. It deliberately does *not* consult the registry —
+        // a live token against a workspace detached a minute ago keeps working
+        // until it expires, which is consistent with detaching keeping files.
+        const absolute = resolveWithin(deps.runtime.agent().jailFor(claim.workspaceId), claim.path);
         if (absolute === undefined) throw notFound('No such media');
         const stats = statOr404(absolute, claim.path);
         if (stats.isDirectory()) throw notFound('No such media');

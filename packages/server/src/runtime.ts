@@ -15,7 +15,7 @@
  * Everything that a settings save can move is read through a function.
  */
 
-import type { SessionStore } from '@ghostai/core';
+import type { SessionStore, WorkspaceStore } from '@ghostai/core';
 import type {
   Config,
   ConfigPatch,
@@ -36,8 +36,16 @@ import type { PromptPreviewInput } from '@ghostai/agent';
 export interface AgentView {
   readonly provider: string;
   readonly model: string;
-  /** The one tree the file routes may reach, and the prompt's workspace root. */
+  /** The default workspace's tree — the one a request that names none gets. */
   readonly jail: WorkspaceJail;
+  /**
+   * The tree one workspace owns.
+   *
+   * Resolves any legal slug, registry row or not: a *detached* workspace's
+   * sessions must keep reaching their own files. Deciding whether a workspace
+   * is one the caller may still name is the route's job, not this one's.
+   */
+  jailFor(workspaceId: string): WorkspaceJail;
   /** Sorted by name, as the model is offered them. */
   readonly tools: readonly ToolDefinition[];
   /**
@@ -89,6 +97,14 @@ export interface ServerRuntime {
   loadError?(): string | undefined;
 
   readonly store: SessionStore;
+
+  /**
+   * The workspace registry.
+   *
+   * Concrete, like `store`: this port is narrow about *behaviour* — the things
+   * a settings save can move are read through a function — not about types.
+   */
+  readonly workspaces: WorkspaceStore;
 
   agent(): AgentView;
 

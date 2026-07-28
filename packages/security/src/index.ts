@@ -16,8 +16,9 @@
  *
  * The five guards, and the class of attack each one closes:
  *
- *  - `WorkspaceJail` — path traversal and symlink escape, by canonicalising
- *    through `realpath` before deciding containment.
+ *  - `WorkspaceJail` — path traversal and symlink escape, by normalising every
+ *    input into the workspace root lexically and then canonicalising through
+ *    `realpath` before deciding containment.
  *  - `wrapToolOutput` — prompt injection, by fencing untrusted output inside a
  *    per-turn random delimiter. Detection is non-destructive: content passes
  *    through byte-for-byte and a `notice` raises the badge.
@@ -33,8 +34,13 @@
 
 export {
   WorkspaceJail,
+  pathShapes,
+  singleJail,
+  type JailAccept,
   type JailCheck,
   type JailRejection,
+  type JailResolver,
+  type PathShape,
   type WorkspaceJailOptions,
 } from './jail.js';
 

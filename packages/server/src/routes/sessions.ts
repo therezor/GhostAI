@@ -74,6 +74,7 @@ function toSummary(record: SessionSummaryRecord): SessionSummary {
     createdAtMs: record.createdAtMs,
     updatedAtMs: record.updatedAtMs,
     origin: record.origin,
+    workspaceId: record.workspaceId,
     ...(record.profileId === undefined ? {} : { profileId: record.profileId }),
   };
 }
@@ -106,6 +107,7 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
           // cursor is issued, and it is dropped rather than returned.
           limit: query.limit + 1,
           ...(query.origin === undefined ? {} : { origin: query.origin }),
+          ...(query.workspace === undefined ? {} : { workspaceId: query.workspace }),
           ...(query.cursor === undefined ? {} : { after: decodeSessionCursor(query.cursor) }),
         });
 
@@ -128,9 +130,21 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
         // `ensureSession` is idempotent, so a client that retries a create it
         // never saw the response to gets its session rather than a 409 about a
         // session it already owns.
+        // The workspace has to exist before a session can be opened in one:
+        // `ensureSession` would happily store any string, and a conversation
+        // bound to a workspace the manager cannot list is one the UI can never
+        // show the files for.
+        if (
+          body.workspaceId !== undefined &&
+          deps.runtime.workspaces.get(body.workspaceId) === undefined
+        ) {
+          throw notFound(`No such workspace: ${body.workspaceId}`);
+        }
+
         const record = store.ensureSession(body.key ?? `web-${randomUUID()}`, {
           origin: 'web',
           ...(body.title === undefined ? {} : { title: body.title }),
+          ...(body.workspaceId === undefined ? {} : { workspaceId: body.workspaceId }),
           ...(body.profileId === undefined ? {} : { profileId: body.profileId }),
         });
         void reply.status(201);

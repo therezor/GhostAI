@@ -282,7 +282,7 @@ describe('the file browser', () => {
     // is written to every access log between here and the server.
     const signing = calls.find((call) => call.path === '/api/files/signed-url');
     expect(signing?.method).toBe('POST');
-    expect(signing?.body).toEqual({ path: 'shot.png' });
+    expect(signing?.body).toEqual({ path: 'shot.png', workspaceId: 'default' });
   });
 
   it('reads a text file into the page rather than framing it', async () => {
@@ -345,6 +345,7 @@ describe('the file editor', () => {
     expect(calls.find((call) => call.method === 'PUT')?.body).toEqual({
       path: 'notes.md',
       content: 'edits',
+      workspaceId: 'default',
       expectedModifiedAtMs: LOADED_AT,
     });
   });
@@ -479,6 +480,7 @@ describe('creating entries', () => {
     // The full destination, not a name the server would have to place.
     expect(calls.find((call) => call.path === '/api/files/directory')?.body).toEqual({
       path: 'notes/drafts',
+      workspaceId: 'default',
     });
   });
 
@@ -498,7 +500,7 @@ describe('creating entries', () => {
 
     // Empty, and with no timestamp: there is nothing yet to conflict with, and
     // a placeholder line would be content the reader did not write.
-    expect(write?.body).toEqual({ path: 'notes.md', content: '' });
+    expect(write?.body).toEqual({ path: 'notes.md', content: '', workspaceId: 'default' });
     expect(await screen.findByRole('textbox', { name: 'Contents of notes.md' })).toBeVisible();
   });
 });

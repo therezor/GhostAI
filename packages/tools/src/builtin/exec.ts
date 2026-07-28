@@ -68,7 +68,7 @@ interface ExecOutcome {
 export const execTool: AnyTool = defineTool({
   name: 'exec',
   description:
-    'Run a program in the workspace root and return its output. Arguments are passed as an argv array and are not interpreted by a shell. Path-like arguments must stay inside the workspace.',
+    'Run a program in the workspace root and return its output. Arguments are passed as an argv array and are not interpreted by a shell. Unlike the file tools, an argument pointing outside the workspace is refused rather than resolved inside it — the child process runs on the real filesystem and is not confined to the workspace, so "/etc/passwd" and "../x" are errors here.',
   schema,
   risk: 'exec',
   annotations: {

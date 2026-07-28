@@ -61,6 +61,7 @@ import {
 import { Input } from '@/components/ui/field.js';
 import { toast } from '@/components/ui/toast.js';
 import { FilePreview } from '@/files/file-preview.js';
+import { useWorkspace } from '@/workspaces/workspace-context.js';
 import {
   breadcrumbs,
   DEFAULT_SORT,
@@ -77,7 +78,12 @@ import {
 type NewKind = 'file' | 'directory';
 
 export function FilesRoute(): JSX.Element {
-  const { path } = useSearch({ from: '/files' });
+  const { path, workspace: fromUrl } = useSearch({ from: '/files' });
+  const { workspaceId } = useWorkspace();
+  // The URL wins when it has one, so a link to a file is complete and
+  // shareable — this page's own doctrine is that its location lives in the
+  // address bar. The context is what the parameter defaults to.
+  const workspace = fromUrl ?? workspaceId;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -93,14 +99,15 @@ export function FilesRoute(): JSX.Element {
   const fileInput = useRef<HTMLInputElement>(null);
 
   const listing = useQuery({
-    queryKey: queryKeys.files(directory),
+    queryKey: queryKeys.files(workspace, directory),
     // `.` rather than `''` for the root: the query parameter's default only
     // applies when it is absent, so an empty string would reach the jail as one.
-    queryFn: ({ signal }) => api.files(directory === ROOT_PATH ? '.' : directory, signal),
+    queryFn: ({ signal }) =>
+      api.files(workspace, directory === ROOT_PATH ? '.' : directory, signal),
   });
 
   const refresh = (): void => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.files(directory) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.files(workspace, directory) });
   };
 
   const upload = useMutation({
@@ -109,7 +116,7 @@ export function FilesRoute(): JSX.Element {
       // per request and the workspace is a filesystem, so ten parallel writes
       // buy nothing and make a partial failure harder to report.
       for (const file of files) {
-        await api.upload(joinPath(directory, file.name), file);
+        await api.upload(workspace, joinPath(directory, file.name), file);
       }
       return files.length;
     },
@@ -126,7 +133,7 @@ export function FilesRoute(): JSX.Element {
     // A directory always goes recursively, because the dialog behind this has
     // already said so and counted what it holds. The flag exists to stop a
     // *stray request* from recursing, not to make the UI ask twice.
-    mutationFn: (entry: FileEntry) => api.deleteFile(entry.path, entry.isDirectory),
+    mutationFn: (entry: FileEntry) => api.deleteFile(workspace, entry.path, entry.isDirectory),
     onSuccess: (_result, entry) => {
       toast.success(`Deleted ${entry.name}`);
       setPendingDelete(undefined);
@@ -145,8 +152,8 @@ export function FilesRoute(): JSX.Element {
    * per row would be one request per directory on every listing.
    */
   const pendingContents = useQuery({
-    queryKey: queryKeys.files(pendingDelete?.path ?? ''),
-    queryFn: ({ signal }) => api.files(pendingDelete?.path ?? '.', signal),
+    queryKey: queryKeys.files(workspace, pendingDelete?.path ?? ''),
+    queryFn: ({ signal }) => api.files(workspace, pendingDelete?.path ?? '.', signal),
     enabled: pendingDelete?.isDirectory === true,
   });
 
@@ -156,7 +163,7 @@ export function FilesRoute(): JSX.Element {
       // An empty file rather than a placeholder line: what the reader asked for
       // is a name to start typing under, and anything written into it is
       // content they did not write.
-      return kind === 'file' ? api.writeText(target, '') : api.createDirectory(target);
+      return kind === 'file' ? api.writeText(workspace, target, '') : api.createDirectory(workspace, target);
     },
     onSuccess: (entry, { kind }) => {
       setCreating(undefined);
@@ -260,7 +267,13 @@ export function FilesRoute(): JSX.Element {
           path={directory}
           onNavigate={(next) => {
             setFilter('');
-            void navigate({ to: '/files', search: next === ROOT_PATH ? {} : { path: next } });
+            void navigate({
+              to: '/files',
+              search: {
+                ...(next === ROOT_PATH ? {} : { path: next }),
+                workspace,
+              },
+            });
           }}
         />
         <span className="spacer" />
@@ -339,7 +352,7 @@ export function FilesRoute(): JSX.Element {
                         onClick={() => {
                           if (entry.isDirectory) {
                             setFilter('');
-                            void navigate({ to: '/files', search: { path: entry.path } });
+                            void navigate({ to: '/files', search: { path: entry.path, workspace } });
                           } else {
                             setPreview(entry);
                           }
@@ -392,7 +405,7 @@ export function FilesRoute(): JSX.Element {
             <DialogSubheading>{preview?.path ?? ''}</DialogSubheading>
           </DialogHeader>
           {preview !== undefined && (
-            <FilePreview entry={preview} onDirtyChange={handleDirtyChange} />
+            <FilePreview entry={preview} workspace={workspace} onDirtyChange={handleDirtyChange} />
           )}
         </DialogContent>
       </Dialog>

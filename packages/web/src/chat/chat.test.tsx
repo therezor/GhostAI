@@ -93,6 +93,7 @@ async function connect(lastSeq = 0): Promise<void> {
   });
   deliver({
     type: 'connected',
+    workspaceId: 'default',
     protocolVersion: 1,
     sessionKey: SESSION,
     serverTimeMs: 0,
@@ -157,7 +158,8 @@ describe('a turn with tool calls', () => {
 
     deliver(
       START,
-      { type: 'session.status', sessionKey: SESSION, busy: true, queueDepth: 0, turnId: 't1' },
+      { type: 'session.status',
+    workspaceId: 'default', sessionKey: SESSION, busy: true, queueDepth: 0, turnId: 't1' },
       { type: 'assistant.delta', turnId: 't1', text: 'Let me check **two** things.' },
       {
         type: 'tool.call',
@@ -201,7 +203,8 @@ describe('a turn with tool calls', () => {
         iterations: 3,
         usage: { promptTokens: 100, completionTokens: 20, totalTokens: 120 },
       },
-      { type: 'session.status', sessionKey: SESSION, busy: false, queueDepth: 0 },
+      { type: 'session.status',
+    workspaceId: 'default', sessionKey: SESSION, busy: false, queueDepth: 0 },
     );
 
     // Markdown, not the source: the emphasis is an element.
@@ -409,7 +412,8 @@ describe('stopping', () => {
 
     deliver(
       START,
-      { type: 'session.status', sessionKey: SESSION, busy: true, queueDepth: 0, turnId: 't1' },
+      { type: 'session.status',
+    workspaceId: 'default', sessionKey: SESSION, busy: true, queueDepth: 0, turnId: 't1' },
       {
         type: 'tool.call',
         turnId: 't1',
@@ -438,7 +442,8 @@ describe('stopping', () => {
         durationMs: 15_100,
       },
       { type: 'turn.end', turnId: 't1', stopReason: 'aborted', iterations: 1 },
-      { type: 'session.status', sessionKey: SESSION, busy: false, queueDepth: 0 },
+      { type: 'session.status',
+    workspaceId: 'default', sessionKey: SESSION, busy: false, queueDepth: 0 },
     );
 
     // A turn that stopped short says so; a turn that finished does not need to.
@@ -450,7 +455,8 @@ describe('stopping', () => {
 describe('the approval gate', () => {
   const gated = [
     START,
-    { type: 'session.status', sessionKey: SESSION, busy: true, queueDepth: 0, turnId: 't1' },
+    { type: 'session.status',
+    workspaceId: 'default', sessionKey: SESSION, busy: true, queueDepth: 0, turnId: 't1' },
     {
       type: 'tool.call',
       turnId: 't1',
@@ -549,7 +555,8 @@ describe('a mid-stream reload', () => {
 
     deliver(
       START,
-      { type: 'session.status', sessionKey: SESSION, busy: true, queueDepth: 0, turnId: 't1' },
+      { type: 'session.status',
+    workspaceId: 'default', sessionKey: SESSION, busy: true, queueDepth: 0, turnId: 't1' },
       { type: 'assistant.delta', turnId: 't1', text: 'Half an answer' },
     );
     expect(await screen.findByText(/Half an answer/)).toBeInTheDocument();
@@ -587,6 +594,7 @@ describe('a mid-stream reload', () => {
     deliver(
       {
         type: 'connected',
+    workspaceId: 'default',
         protocolVersion: 1,
         sessionKey: SESSION,
         serverTimeMs: 0,
@@ -625,6 +633,7 @@ describe('a mid-stream reload', () => {
     deliver(
       {
         type: 'connected',
+    workspaceId: 'default',
         protocolVersion: 1,
         sessionKey: SESSION,
         serverTimeMs: 0,

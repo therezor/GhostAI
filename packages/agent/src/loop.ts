@@ -47,6 +47,7 @@ import { randomUUID } from 'node:crypto';
 
 import {
   DEFAULT_MAX_TOOL_RESULT_CHARS,
+  DEFAULT_WORKSPACE_ID,
   GhostError,
   assistantMessage,
   isAbortError,
@@ -87,8 +88,8 @@ import {
   describeInjectionFindings,
   systemRandom,
   wrapToolOutput,
+  type JailResolver,
   type RandomSource,
-  type WorkspaceJail,
 } from '@ghostai/security';
 import {
   DEFAULT_TOOLS_CONFIG,
@@ -268,8 +269,14 @@ export interface AgentLoopOptions {
   readonly provider: ChatProvider;
   readonly tools: ToolRegistry;
   readonly store: SessionStore;
-  /** Supplies the workspace root for the prompt and the jail for every tool. */
-  readonly jail: WorkspaceJail;
+  /**
+   * Supplies the jail for a turn, keyed by its session's workspace.
+   *
+   * A resolver rather than one jail, because a session records which workspace
+   * it belongs to and two sessions in one process can be in different ones.
+   * `singleJail(jail)` is the adapter for a caller that has only one.
+   */
+  readonly jails: JailResolver;
   /** Defaults to the schema's defaults, so a caller without a config file works. */
   readonly config?: AgentDefaults;
   readonly toolsConfig?: ToolsConfig;
@@ -310,6 +317,14 @@ export interface TurnInput {
   /** Where the message came from. Recorded as the session's origin. */
   readonly channel?: string;
   readonly profileId?: string;
+  /**
+   * The workspace to create the session in, if it does not exist yet.
+   *
+   * Ignored for a session that already exists — see `run`. A transport that
+   * mints a session key passes what the user picked; the loop never trusts it
+   * over the stored row.
+   */
+  readonly workspaceId?: string;
   /** Supplied by the caller when it has already told a client the id. */
   readonly turnId?: string;
   /**
@@ -352,7 +367,7 @@ export class AgentLoop {
   readonly #provider: ChatProvider;
   readonly #tools: ToolRegistry;
   readonly #store: SessionStore;
-  readonly #jail: WorkspaceJail;
+  readonly #jails: JailResolver;
   readonly #config: AgentDefaults;
   readonly #toolsConfig: ToolsConfig;
   readonly #model: string;
@@ -371,7 +386,7 @@ export class AgentLoop {
     this.#provider = options.provider;
     this.#tools = options.tools;
     this.#store = options.store;
-    this.#jail = options.jail;
+    this.#jails = options.jails;
     this.#config = options.config ?? AgentDefaultsSchema.parse({});
     this.#toolsConfig = options.toolsConfig ?? DEFAULT_TOOLS_CONFIG;
     this.#contributors = options.contributors ?? [];
@@ -424,8 +439,17 @@ export class AgentLoop {
    * that was never used.
    */
   async previewPrompt(input: PromptPreviewInput): Promise<string> {
+    // The stored session decides, exactly as it does in `run`. A preview that
+    // reported the default workspace's root for a session bound to another one
+    // would describe a prompt no turn on it will ever carry.
+    const stored = this.#store.getSession(input.sessionKey);
+    const workspaceId = stored?.workspaceId ?? DEFAULT_WORKSPACE_ID;
+    const jail =
+      stored === undefined ? this.#jails.default : this.#jails.forWorkspace(workspaceId);
+
     const context: StaticPromptContext = {
-      workspaceRoot: this.#jail.root,
+      workspaceRoot: jail.root,
+      workspaceId,
       sessionKey: input.sessionKey,
       profileId: input.profileId,
       channel: input.channel ?? 'web',
@@ -476,17 +500,30 @@ export class AgentLoop {
     const nonce = createToolOutputNonce(this.#random);
     const toolDefinitions = this.#tools.definitions();
 
+    // Ensure first, then read what came back. `input.workspaceId` can only ever
+    // *create* a session in a workspace — `ensureSession` ignores it for a row
+    // that already exists — so the workspace a turn runs in is the one the
+    // conversation was born in, never the one this request happens to claim.
+    // That is what makes switching workspaces in the UI safe while a turn is
+    // running, and what stops a crafted frame from pointing an existing
+    // session's tools at another workspace's files.
+    const session = this.#store.ensureSession(sessionKey, {
+      origin: channel,
+      ...(input.workspaceId === undefined ? {} : { workspaceId: input.workspaceId }),
+      ...(input.profileId === undefined ? {} : { profileId: input.profileId }),
+    });
+    // Captured once, for the life of the turn: every tool call below closes
+    // over this jail, so a workspace switch mid-turn cannot move it.
+    const jail = this.#jails.forWorkspace(session.workspaceId);
+
     const promptContext: StaticPromptContext = {
-      workspaceRoot: this.#jail.root,
+      workspaceRoot: jail.root,
+      workspaceId: session.workspaceId,
       sessionKey,
       profileId: input.profileId,
       channel,
     };
 
-    this.#store.ensureSession(sessionKey, {
-      origin: channel,
-      ...(input.profileId === undefined ? {} : { profileId: input.profileId }),
-    });
     this.#store.append(sessionKey, userMessage(input.content), { turnId });
 
     const staticPrompt = await buildStaticPrompt({
@@ -495,7 +532,7 @@ export class AgentLoop {
     });
 
     const toolContext: ToolContext = {
-      jail: this.#jail,
+      jail,
       signal,
       config: this.#toolsConfig,
       clock: this.#clock,

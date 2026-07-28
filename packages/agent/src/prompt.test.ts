@@ -14,6 +14,7 @@ import {
 
 const CONTEXT: StaticPromptContext = {
   workspaceRoot: '/home/u/.ghostai/workspace',
+  workspaceId: 'default',
   sessionKey: 'web:1',
   profileId: undefined,
   channel: 'cli',
@@ -27,11 +28,31 @@ const RUNTIME: RuntimePromptContext = {
 };
 
 describe('buildStaticPrompt', () => {
-  it('states the workspace root and that paths are relative to it', async () => {
+  it('names the workspace and states that paths resolve into it', async () => {
     const prompt = await buildStaticPrompt({ context: CONTEXT, platform: 'linux' });
 
     expect(prompt).toContain('/home/u/.ghostai/workspace');
-    expect(prompt).toContain('relative to that root');
+    expect(prompt).toContain('`default` workspace');
+    expect(prompt).toContain('That directory is your root');
+  });
+
+  it('states the exec exception, because the two layers disagree on purpose', async () => {
+    // The file tools resolve an outside path inside the workspace; exec refuses
+    // it, since the child runs on the real filesystem. A model told only the
+    // first rule reads the second one's error as a malfunction.
+    const prompt = await buildStaticPrompt({ context: CONTEXT, platform: 'linux' });
+
+    expect(prompt).toContain('`exec` is the exception');
+    expect(prompt).toContain('confined to the workspace');
+  });
+
+  it('names the workspace the session is bound to, not always the default', async () => {
+    const prompt = await buildStaticPrompt({
+      context: { ...CONTEXT, workspaceId: 'client-acme' },
+      platform: 'linux',
+    });
+
+    expect(prompt).toContain('`client-acme` workspace');
   });
 
   it('carries nothing that changes during a session', async () => {

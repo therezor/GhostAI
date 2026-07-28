@@ -26,13 +26,13 @@ import { GhostError } from '@ghostai/core';
 import { z } from 'zod';
 
 import { assertNotAborted, defineTool, type AnyTool } from '../define.js';
-import { fsFailure } from './shared.js';
+import { clampNote, fsFailure } from './shared.js';
 
 /** UTF-8's worst case, so the byte budget can never cut short the char budget. */
 const BYTES_PER_CHAR = 4;
 
 const schema = z.strictObject({
-  path: z.string().min(1).describe('File to read, relative to the workspace root.'),
+  path: z.string().min(1).describe('File to read. Rooted at the workspace.'),
   offset: z.coerce
     .number()
     .int()
@@ -50,30 +50,36 @@ const schema = z.strictObject({
 export const readFileTool: AnyTool = defineTool({
   name: 'read_file',
   description:
-    'Read a UTF-8 text file from the workspace. Paths are relative to the workspace root; absolute paths and ".." are rejected. Use offset/limit to page through a large file.',
+    'Read a UTF-8 text file from the workspace. The workspace is the root: "/x" and "../x" both resolve inside it, never outside. Use offset/limit to page through a large file.',
   schema,
   risk: 'safe',
   annotations: { title: 'Read file', readOnlyHint: true, idempotentHint: true },
   async execute(args, context) {
     assertNotAborted(context.signal, 'read_file');
-    const resolved = context.jail.resolve(args.path);
+    const accepted = context.jail.accept(args.path);
+    const resolved = accepted.path;
+    // Report where the read actually happened, not what was asked for: they
+    // differ whenever the path was clamped, and naming the request would teach
+    // the model that `/etc/hosts` is a path this workspace has.
+    const where = accepted.relative;
+    const note = clampNote(args.path, accepted);
     const budget = context.config.maxOutputChars * BYTES_PER_CHAR;
 
     const handle = await open(resolved, 'r').catch((error: unknown) => {
-      throw fsFailure(error, args.path);
+      throw fsFailure(error, where, note);
     });
     try {
       const stats = await handle.stat();
       if (stats.isDirectory()) {
         throw new GhostError(
           'invalid_input',
-          `${args.path} is a directory. Use list_dir instead.`,
+          `${where} is a directory. Use list_dir instead.`,
           {
-            details: { path: args.path },
+            details: { path: where },
           },
         );
       }
-      if (stats.size === 0) return `${args.path} is empty.`;
+      if (stats.size === 0) return `${where} is empty.`;
 
       // One byte past the budget is enough to know the file was longer without
       // reading any more of it than the answer needs.
@@ -85,8 +91,8 @@ export const readFileTool: AnyTool = defineTool({
       if (bytes.includes(0)) {
         throw new GhostError(
           'invalid_input',
-          `${args.path} looks like a binary file (${String(stats.size)} bytes) and was not read.`,
-          { details: { path: args.path, size: stats.size } },
+          `${where} looks like a binary file (${String(stats.size)} bytes) and was not read.`,
+          { details: { path: where, size: stats.size } },
         );
       }
 
@@ -98,15 +104,19 @@ export const readFileTool: AnyTool = defineTool({
         const from = (args.offset ?? 1) - 1;
         const to = args.limit === undefined ? lines.length : from + args.limit;
         if (from >= lines.length) {
-          return `${args.path} has ${String(lines.length)} lines; offset ${String(args.offset ?? 1)} is past the end.`;
+          return `${where} has ${String(lines.length)} lines; offset ${String(args.offset ?? 1)} is past the end.`;
         }
         text = lines.slice(from, to).join('\n');
       }
 
       assertNotAborted(context.signal, 'read_file');
-      return clipped
-        ? `${text}\n\n[read_file: showing the first ${String(budget)} of ${String(stats.size)} bytes. Use offset/limit for the rest.]`
-        : text;
+      const clip = clipped
+        ? `\n\n[read_file: showing the first ${String(budget)} of ${String(stats.size)} bytes. Use offset/limit for the rest.]`
+        : '';
+      // A successful read of a clamped path needs the note as much as a failed
+      // one: content came back, and without this the model believes it is
+      // holding the host's file.
+      return `${text}${clip}${note === '' ? '' : `\n\n[read_file:${note}]`}`;
     } finally {
       await handle.close();
     }

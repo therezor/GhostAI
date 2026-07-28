@@ -85,6 +85,8 @@ export interface ChannelHubConnectOptions {
   readonly sessionKey?: string;
   /** Recorded as the session's origin, so a bridged turn is not labelled `web`. */
   readonly channel?: string;
+  /** The workspace a session created by this connection lands in. */
+  readonly workspaceId?: string;
 }
 
 export interface ChannelHub {
@@ -119,6 +121,18 @@ export interface ChannelManagerOptions {
   readonly logger?: Logger;
   readonly clock?: Clock;
   readonly maxSessions?: number;
+  /**
+   * The workspace bridged conversations are created in.
+   *
+   * Defaults to `default`, which is the right answer for a chat app: a person
+   * messaging a bot has no way to pick a workspace, and the default is the one
+   * that can see every other. An operator who wants a channel confined to its
+   * own workspace sets this and gets exactly that.
+   *
+   * Only ever creates — a session that already exists keeps the workspace it
+   * was born in, so changing this does not move existing conversations.
+   */
+  readonly workspaceId?: string;
 }
 
 /** One `(channel, session)` pair: its hub connection and its turn state. */
@@ -193,6 +207,7 @@ export class ChannelManager {
   readonly #logger: Logger;
   readonly #clock: Clock;
   readonly #maxSessions: number;
+  readonly #workspaceId: string | undefined;
   readonly #factories = new Map<string, ChannelFactory>();
   readonly #channels = new Map<string, Channel>();
   /** Delivery chains, one per channel — see the module header. */
@@ -214,6 +229,7 @@ export class ChannelManager {
     this.#logger = options.logger ?? silentLogger;
     this.#clock = options.clock ?? systemClock;
     this.#maxSessions = options.maxSessions ?? DEFAULT_MAX_CHANNEL_SESSIONS;
+    this.#workspaceId = options.workspaceId;
     for (const factory of options.factories ?? []) this.register(factory);
   }
 
@@ -396,6 +412,7 @@ export class ChannelManager {
       connection: this.#hub.connect({
         sessionKey,
         channel: message.channelId,
+        ...(this.#workspaceId === undefined ? {} : { workspaceId: this.#workspaceId }),
         send: (event) => {
           this.#fromHub(key, event);
         },

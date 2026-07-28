@@ -21,6 +21,7 @@ import { settingsRoutes } from './routes/settings.js';
 import { systemRoutes } from './routes/system.js';
 import { toolRoutes } from './routes/tools.js';
 import type { RouteDefinition, RouteDeps } from './routes/types.js';
+import { workspaceRoutes } from './routes/workspaces.js';
 import { wsRoutes } from './routes/ws.js';
 import type { RouteId } from './manifest.js';
 
@@ -39,6 +40,7 @@ export function createRoutes(deps: RouteDeps): Record<RouteId, RouteDefinition> 
     ...sessionRoutes(deps),
     ...toolRoutes(deps),
     ...fileRoutes(deps),
+    ...workspaceRoutes(deps),
     ...notificationRoutes(deps),
   };
 }

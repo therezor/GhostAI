@@ -38,6 +38,7 @@ import type { Attachment } from '@ghostai/protocol';
 
 import { cn } from '@/lib/cn.js';
 import { api } from '@/lib/api.js';
+import { useWorkspace } from '@/workspaces/workspace-context.js';
 import { formatBytes } from '@/lib/format.js';
 import { Button } from '@/components/ui/button.js';
 import { toast } from '@/components/ui/toast.js';
@@ -85,6 +86,7 @@ export function Composer({
   onSend,
   onStop,
 }: ComposerProps): JSX.Element {
+  const { workspaceId } = useWorkspace();
   const [text, setText] = useState(initialText ?? '');
   const [files, setFiles] = useState<readonly StagedFile[]>([]);
   const [highlight, setHighlight] = useState(0);
@@ -160,7 +162,9 @@ export function Composer({
     const picked = [...(event.target.files ?? [])];
     // Cleared so picking the same file twice in a row still fires `change`.
     event.target.value = '';
-    for (const file of picked) void stage(file, setFiles);
+    // The workspace the conversation is in, so an attachment lands beside
+      // the files the turn can already see rather than in the default tree.
+      for (const file of picked) void stage(file, workspaceId, setFiles);
   };
 
   return (
@@ -330,6 +334,7 @@ export function Composer({
  */
 async function stage(
   file: File,
+  workspace: string,
   setFiles: (update: (current: readonly StagedFile[]) => readonly StagedFile[]) => void,
 ): Promise<void> {
   const id = crypto.randomUUID();
@@ -345,7 +350,7 @@ async function stage(
 
   try {
     const path = `uploads/${id.slice(0, 8)}-${safeName(file.name)}`;
-    const uploaded = await api.upload(path, file);
+    const uploaded = await api.upload(workspace, path, file);
 
     setFiles((current) =>
       current.map((staged) =>

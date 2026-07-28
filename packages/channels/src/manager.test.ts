@@ -378,6 +378,7 @@ describe('ChannelManager', () => {
     await flush();
     hub.only().emit({
       type: 'session.status',
+      workspaceId: 'default',
       seq: 1,
       sessionKey: 'loopback:a',
       busy: true,
@@ -393,6 +394,7 @@ describe('ChannelManager', () => {
 
     hub.connections[0]?.emit({
       type: 'session.status',
+      workspaceId: 'default',
       seq: 2,
       sessionKey: 'loopback:a',
       busy: false,

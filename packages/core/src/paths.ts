@@ -17,6 +17,9 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, resolve, sep } from 'node:path';
 import { mkdirSync } from 'node:fs';
 
+import { GhostError } from './errors.js';
+import { DEFAULT_WORKSPACE_ID, isWorkspaceId } from './workspace-id.js';
+
 /** Overrides the root for tests, CI, and multi-instance installs. */
 export const HOME_ENV_VAR = 'GHOSTAI_HOME';
 
@@ -55,7 +58,15 @@ export function resolvePath(inputPath: string, base: string = process.cwd()): st
 export interface GhostPaths {
   /** `~/.ghostai` unless overridden. Everything below is derived from it. */
   readonly root: string;
-  /** The only tree the agent's filesystem tools may reach. */
+  /**
+   * The default workspace, and the parent of every named one.
+   *
+   * A turn in `default` therefore reaches every other workspace's files, which
+   * is the deliberate shape: `default` is the broad view and a named workspace
+   * is a subtree of it. Named workspaces are isolated from *each other* —
+   * `<workspace>/a/link → ../b` resolves outside `a`'s root and the jail
+   * refuses it.
+   */
   readonly workspace: string;
   readonly configFile: string;
   /** One SQLite file: sessions, messages, jobs, runs, auth, KB vectors. */
@@ -103,6 +114,29 @@ export function resolveGhostPaths(options: ResolveGhostPathsOptions = {}): Ghost
     vaultFile: join(root, 'vault.json'),
     keyFile: join(root, 'vault.key'),
   };
+}
+
+/**
+ * The directory one workspace owns.
+ *
+ * The **only** place an id becomes a path, which is why it re-validates rather
+ * than trusting its caller: ids reach this from a request body, from a query
+ * string and from a `workspace_id` column that a determined operator can edit
+ * by hand, and a single unchecked call site is the whole containment argument
+ * gone. It deliberately does not consult the registry — a workspace that was
+ * detached still has sessions, and they must keep resolving to their own files
+ * rather than silently falling into someone else's.
+ *
+ * `default` maps to `paths.workspace` itself. That one special case is the
+ * price of "the default workspace is the folder that holds the others", and it
+ * is confined to this function.
+ */
+export function workspaceDirFor(paths: GhostPaths, id: string): string {
+  if (id === DEFAULT_WORKSPACE_ID) return paths.workspace;
+  if (!isWorkspaceId(id)) {
+    throw new GhostError('invalid_input', `Not a workspace id: ${id}`, { details: { id } });
+  }
+  return join(paths.workspace, id);
 }
 
 /**

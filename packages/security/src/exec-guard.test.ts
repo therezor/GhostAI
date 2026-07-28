@@ -309,6 +309,109 @@ describe('guardExec: path arguments', () => {
       'jail_escape',
     );
   });
+
+  it('refuses what the jail clamps, which is the one place the two layers differ', () => {
+    // The jail is a chroot: `/etc/passwd` addresses a file inside the workspace.
+    // The guard cannot follow it there, because the child it is about to spawn
+    // resolves that string against the real filesystem.
+    expect(jail.check('/etc/passwd').ok).toBe(true);
+    expect(kindOf(() => guardExec(['cat', '/etc/passwd'], { jail }))).toBe('jail_escape');
+  });
+});
+
+/**
+ * The acceptance criterion for splitting classification out of resolution.
+ *
+ * `WorkspaceJail.check` stopped refusing shapes when the workspace became a
+ * chroot, so `guardExec` had to grow its own classifier. The risk in that move
+ * is silent widening: an argument the old code refused now sailing through to a
+ * child process. `refusedBefore` is the pre-chroot syntactic rule written out
+ * again from the old source — an independent oracle, not a call into the code
+ * under test — and the guard must agree with it on every generated argument.
+ */
+describe('property: the chroot change did not widen the exec surface', () => {
+  const OLD_SEPARATORS = /[\\/]+/;
+  const OLD_DRIVE_LETTER = /^[A-Za-z]:/;
+
+  function refusedBefore(input: string): boolean {
+    if (input === '') return true;
+    if (input.includes('\0')) return true;
+    const segments = input.split(OLD_SEPARATORS);
+    if (segments[0]?.startsWith('~') === true) return true;
+    if (input.startsWith('\\\\') || input.startsWith('//')) return true;
+    if (input.startsWith('/') || input.startsWith('\\') || OLD_DRIVE_LETTER.test(input)) return true;
+    return segments.includes('..');
+  }
+
+  /** `pathCandidate`, restated for the same reason `refusedBefore` is. */
+  function candidateOf(argument: string): string {
+    if (!argument.startsWith('-')) return argument;
+    const equals = argument.indexOf('=');
+    return equals === -1 ? '' : argument.slice(equals + 1);
+  }
+
+  // No NUL and nothing long enough to reach ENAMETOOLONG: those two refusals
+  // are about the filesystem and about argv scanning, not about path shape, and
+  // the oracle deliberately says nothing about them.
+  const fragments = fc.constantFrom(
+    '..',
+    '../',
+    '..\\',
+    '/',
+    '\\',
+    '//',
+    '~',
+    '~/',
+    'C:',
+    'c:',
+    '.',
+    './',
+    'src',
+    'a.ts',
+    'plain',
+    '--out=',
+    '-m',
+  );
+
+  it('accepts an argument exactly when the pre-chroot rule would have', () => {
+    fc.assert(
+      fc.property(fc.array(fragments, { minLength: 1, maxLength: 6 }), (parts) => {
+        const argument = parts.join('');
+        const candidate = candidateOf(argument);
+        const expected = candidate !== '' && refusedBefore(candidate);
+
+        let refused = false;
+        try {
+          guardExec(['git', argument], { jail });
+        } catch {
+          refused = true;
+        }
+        expect(refused).toBe(expected);
+      }),
+      { numRuns: 3000 },
+    );
+  });
+
+  it('holds for a program path as well as for an argument', () => {
+    fc.assert(
+      fc.property(fc.array(fragments, { minLength: 1, maxLength: 4 }), (parts) => {
+        const argv0 = parts.join('');
+        // A bare name goes to PATH and an absolute one is a system binary; only
+        // the workspace-relative shape is the jail's business.
+        fc.pre(argv0 !== '' && !argv0.startsWith('/') && !OLD_DRIVE_LETTER.test(argv0));
+        fc.pre(argv0.includes('/') || argv0.includes('\\') || argv0.startsWith('~'));
+
+        let refused = false;
+        try {
+          guardExec([argv0], { jail });
+        } catch (error) {
+          refused = isGhostError(error) && error.kind === 'jail_escape';
+        }
+        expect(refused).toBe(refusedBefore(argv0));
+      }),
+      { numRuns: 2000 },
+    );
+  });
 });
 
 describe('createOutputCap', () => {

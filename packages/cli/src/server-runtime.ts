@@ -88,11 +88,13 @@ export function createServerRuntime(
     },
 
     store: runtime.store,
+    workspaces: runtime.workspaces,
 
     agent: (): AgentView => ({
       provider: runtime.spec.id,
       model: runtime.model,
       jail: runtime.jail,
+      jailFor: (workspaceId) => runtime.jails.forWorkspace(workspaceId),
       tools: runtime.tools.definitions(),
       // The loop's own composition, not a second assembly of it: memory,
       // skills and profiles arrive as contributors attached to that object,

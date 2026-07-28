@@ -15,6 +15,7 @@ import { LoginOverlay } from '@/components/login-overlay.js';
 import { Toaster } from '@/components/ui/toast.js';
 import { TooltipProvider } from '@/components/ui/tooltip.js';
 import { ThemeProvider } from '@/theme/theme-context.js';
+import { WorkspaceProvider } from '@/workspaces/workspace-context.js';
 
 export function Providers({
   children,
@@ -34,13 +35,18 @@ export function Providers({
       {/* One copy of the theme state for the whole tree. Two would mean the
           toggle repaints and the code blocks do not. */}
       <ThemeProvider>
-        {/* One provider, one shared delay timer — so a row of icon buttons
-            behaves like a control strip rather than eight separate waits. */}
-        <TooltipProvider delayDuration={400} skipDelayDuration={300}>
-          {children}
-          <LoginOverlay />
-          <Toaster />
-        </TooltipProvider>
+        {/* Which workspace the UI is showing. Above the router because the
+            sidebar, the Files page and the socket all read it, and two copies
+            would let the switcher and the file listing disagree. */}
+        <WorkspaceProvider>
+          {/* One provider, one shared delay timer — so a row of icon buttons
+              behaves like a control strip rather than eight separate waits. */}
+          <TooltipProvider delayDuration={400} skipDelayDuration={300}>
+            {children}
+            <LoginOverlay />
+            <Toaster />
+          </TooltipProvider>
+        </WorkspaceProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

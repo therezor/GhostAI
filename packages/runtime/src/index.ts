@@ -16,6 +16,8 @@ export { PROVIDER_CREDENTIAL_NAMESPACE, findCredential, openVault } from './cred
 
 export { mergeConfigPatch } from './merge.js';
 
+export { JailCache, MAX_CACHED_JAILS, type JailCacheOptions } from './jail-cache.js';
+
 export {
   MAX_CACHED_PROVIDERS,
   ProviderCache,

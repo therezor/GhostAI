@@ -59,7 +59,8 @@ describe('GET /api/status', () => {
       uptimeMs: expect.any(Number),
       model: 'claude-sonnet-4',
       provider: 'anthropic',
-      workspace: expect.any(String),
+      workspaceId: 'default',
+      workspaceCount: 1,
       authEnabled: true,
       toolCount: 1,
       mcpServersConnected: 0,
@@ -316,5 +317,24 @@ describe('GET /api/tools', () => {
     const response = await server.app.inject({ method: 'GET', url: '/api/tools', headers });
 
     expect(response.json()).toEqual({ tools: [] });
+  });
+});
+
+describe('GET /api/status: the workspace', () => {
+  it('reports an id and a count, never a host path', async () => {
+    // `workspace: jail.root` used to be here — an absolute path handed to every
+    // authenticated client, naming the operator's account and directory layout.
+    // That is the one string that turns a blind traversal attempt into a
+    // targeted one, so nothing absolute crosses this boundary any more.
+    const { server, headers } = await start({});
+
+    const response = await server.app.inject({ method: 'GET', url: '/api/status', headers });
+    const body = response.json();
+
+    expect(body.workspaceId).toBe('default');
+    expect(body).not.toHaveProperty('workspace');
+    for (const value of Object.values(body)) {
+      if (typeof value === 'string') expect(value.startsWith('/')).toBe(false);
+    }
   });
 });

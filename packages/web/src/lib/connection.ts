@@ -174,9 +174,18 @@ function attachWithCursor(sessionKey: string): number {
   return useTurnStore.getState().lastSeq;
 }
 
-/** Starts a fresh conversation, letting the server name it. */
-export function newSession(): void {
-  socket?.send({ type: 'session.new' });
+/**
+ * Starts a fresh conversation, letting the server name it.
+ *
+ * `workspaceId` is where the new conversation lands. It only ever *creates* —
+ * the loop reads the stored row for a session that already exists — so this
+ * cannot move an existing conversation's files.
+ */
+export function newSession(workspaceId?: string): void {
+  socket?.send({
+    type: 'session.new',
+    ...(workspaceId === undefined ? {} : { workspaceId }),
+  });
 }
 
 export function sendUserMessage(text: string, attachments: readonly Attachment[] = []): void {

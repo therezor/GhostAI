@@ -11,7 +11,14 @@
  * make "a runtime whose settings save goes nowhere" part of the public API.
  */
 
-import { SessionStore, type Clock } from '@ghostai/core';
+import {
+  DEFAULT_WORKSPACE_ID,
+  SessionStore,
+  WorkspaceStore,
+  resolveGhostPaths,
+  workspaceDirFor,
+  type Clock,
+} from '@ghostai/core';
 import {
   ConfigSchema,
   type Config,
@@ -62,7 +69,17 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
     database: options.database,
     ...(options.clock === undefined ? {} : { clock: options.clock }),
   });
-  const jail = new WorkspaceJail({ root: options.workspace });
+  const paths = resolveGhostPaths({ root: options.workspace, workspace: options.workspace });
+  const jails = new Map<string, WorkspaceJail>();
+  const jailFor = (workspaceId: string): WorkspaceJail => {
+    const cached = jails.get(workspaceId);
+    if (cached !== undefined) return cached;
+    const made = new WorkspaceJail({ root: workspaceDirFor(paths, workspaceId) });
+    jails.set(workspaceId, made);
+    return made;
+  };
+  const jail = jailFor(DEFAULT_WORKSPACE_ID);
+  const workspaces = new WorkspaceStore({ database: options.database, paths });
   const patches: ConfigPatch[] = [];
   const credentialWrites: { namespace: string; key: string; value: string | null }[] = [];
 
@@ -73,6 +90,7 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
     provider: options.provider ?? 'openai',
     model: options.model ?? 'gpt-test',
     jail,
+    jailFor,
     tools: options.tools ?? [],
     systemPrompt: async ({ sessionKey }) =>
       options.systemPrompt ?? `# GhostAI\n\nSession: ${sessionKey}`,
@@ -81,6 +99,7 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
   return {
     patches,
     credentialWrites,
+    workspaces,
     config: () => config,
     applySettings: (patch) => {
       patches.push(patch);

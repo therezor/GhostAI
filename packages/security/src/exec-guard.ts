@@ -27,6 +27,15 @@
  * stays exactly as the model wrote it, because the child's working directory is
  * the workspace root and substituting an absolute path would corrupt any
  * argument that only looked like a path — `git log a/b`, a regex, a URL.
+ *
+ * That is also why this is the one place in GhostAI where a path outside the
+ * workspace is **refused instead of clamped**. `WorkspaceJail` resolves
+ * `/etc/passwd` to `<workspace>/etc/passwd`, but clamping is a property of
+ * *its* resolution and a spawned child does not honour it: handing `/etc/passwd`
+ * to `cat` with `cwd` at the workspace root reads the real file. So every
+ * argument is classified with `pathShapes` — the jail's own lexical rules,
+ * reported rather than applied — and a non-empty result stops the command
+ * before any filesystem work happens.
  */
 
 import { basename, extname } from 'node:path';
@@ -34,7 +43,7 @@ import { basename, extname } from 'node:path';
 import { GhostError } from '@ghostai/core';
 import { type ExecToolConfig, ExecToolConfigSchema } from '@ghostai/protocol';
 
-import type { JailRejection, WorkspaceJail } from './jail.js';
+import { pathShapes, type JailRejection, type PathShape, type WorkspaceJail } from './jail.js';
 
 /**
  * Binaries whose whole purpose is to interpret a string as a program.
@@ -157,6 +166,24 @@ function isFatalRejection(rejection: JailRejection, candidate: string): boolean 
   return rejection !== 'unverifiable' || isPathShaped(candidate);
 }
 
+/**
+ * Refuses a string whose shape addresses something outside the workspace.
+ *
+ * Checked before `jail.check`, which would clamp it and answer `ok` — and
+ * cheaper, since it touches no filesystem.
+ */
+function assertInsideByShape(
+  candidate: string,
+  describe: (shapes: readonly PathShape[]) => string,
+  details: Readonly<Record<string, unknown>>,
+): void {
+  const shapes = pathShapes(candidate);
+  if (shapes.length === 0) return;
+  throw new GhostError('jail_escape', describe(shapes), {
+    details: { ...details, path: candidate, shapes },
+  });
+}
+
 function buildEnv(
   config: ExecToolConfig,
   source: Readonly<Record<string, string | undefined>>,
@@ -230,6 +257,11 @@ export function guardExec(argv: readonly string[], options: ExecGuardOptions): E
   // allow/deny lists have already ruled on.
   let file = argv0;
   if (isPathShaped(argv0) && !argv0.startsWith('/') && !DRIVE_LETTER.test(argv0)) {
+    assertInsideByShape(
+      argv0,
+      (shapes) => `Program path points outside the workspace (${shapes.join(', ')}): ${argv0}`,
+      {},
+    );
     const verdict = jail.check(argv0);
     if (!verdict.ok) {
       throw new GhostError(
@@ -247,6 +279,11 @@ export function guardExec(argv: readonly string[], options: ExecGuardOptions): E
   for (const argument of argv.slice(1)) {
     const candidate = pathCandidate(argument);
     if (candidate === null) continue;
+    assertInsideByShape(
+      candidate,
+      (shapes) => `Argument points outside the workspace (${shapes.join(', ')}): ${candidate}`,
+      { argument },
+    );
     const verdict = jail.check(candidate);
     if (!verdict.ok) {
       if (!isFatalRejection(verdict.rejection, candidate)) continue;

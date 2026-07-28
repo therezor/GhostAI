@@ -21,10 +21,10 @@ import { GhostError } from '@ghostai/core';
 import { z } from 'zod';
 
 import { assertNotAborted, defineTool, type AnyTool } from '../define.js';
-import { fsFailure } from './shared.js';
+import { clampNote, fsFailure } from './shared.js';
 
 const schema = z.strictObject({
-  path: z.string().min(1).describe('File to edit, relative to the workspace root.'),
+  path: z.string().min(1).describe('File to edit. Rooted at the workspace.'),
   oldText: z
     .string()
     .min(1)
@@ -45,7 +45,7 @@ const schema = z.strictObject({
 export const editFileTool: AnyTool = defineTool({
   name: 'edit_file',
   description:
-    'Replace an exact string in an existing workspace file. oldText must appear exactly once unless replaceAll is set, so read the file first and include enough surrounding context to be unambiguous.',
+    'Replace an exact string in an existing workspace file. The workspace is the root: "/x" and "../x" both resolve inside it, never outside. oldText must appear exactly once unless replaceAll is set, so read the file first and include enough surrounding context to be unambiguous.',
   schema,
   risk: 'write',
   annotations: { title: 'Edit file', readOnlyHint: false, idempotentHint: false },
@@ -56,28 +56,31 @@ export const editFileTool: AnyTool = defineTool({
         details: { path: args.path },
       });
     }
-    const resolved = context.jail.resolve(args.path);
+    const accepted = context.jail.accept(args.path);
+    const resolved = accepted.path;
+    const where = accepted.relative;
+    const note = clampNote(args.path, accepted);
 
     let original: string;
     try {
       original = await readFile(resolved, 'utf8');
     } catch (error) {
-      throw fsFailure(error, args.path);
+      throw fsFailure(error, where, note);
     }
 
     const occurrences = original.split(args.oldText).length - 1;
     if (occurrences === 0) {
       throw new GhostError(
         'not_found',
-        `oldText was not found in ${args.path}. Read the file and copy the text exactly, including indentation.`,
-        { details: { path: args.path } },
+        `oldText was not found in ${where}. Read the file and copy the text exactly, including indentation.`,
+        { details: { path: where } },
       );
     }
     if (occurrences > 1 && !args.replaceAll) {
       throw new GhostError(
         'conflict',
-        `oldText occurs ${String(occurrences)} times in ${args.path}. Include more surrounding context to make it unique, or set replaceAll.`,
-        { details: { path: args.path, occurrences } },
+        `oldText occurs ${String(occurrences)} times in ${where}. Include more surrounding context to make it unique, or set replaceAll.`,
+        { details: { path: where, occurrences } },
       );
     }
 
@@ -93,13 +96,13 @@ export const editFileTool: AnyTool = defineTool({
     try {
       await writeFile(resolved, updated, { encoding: 'utf8', signal: context.signal });
     } catch (error) {
-      throw fsFailure(error, args.path);
+      throw fsFailure(error, where, note);
     }
 
     const delta = updated.length - original.length;
     return {
-      content: `Replaced ${String(occurrences)} occurrence${occurrences === 1 ? '' : 's'} in ${args.path} (${delta >= 0 ? '+' : ''}${String(delta)} characters).`,
-      details: { path: args.path, occurrences, delta },
+      content: `Replaced ${String(occurrences)} occurrence${occurrences === 1 ? '' : 's'} in ${where} (${delta >= 0 ? '+' : ''}${String(delta)} characters).${note}`,
+      details: { path: where, occurrences, delta },
     };
   },
 });

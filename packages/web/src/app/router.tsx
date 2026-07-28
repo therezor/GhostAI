@@ -57,7 +57,17 @@ const chatRoute = createRoute({
  * whole state of the screen, so a reload, a link and the Back button all work
  * without a store to keep in step with them.
  */
-const filesSearchSchema = z.object({ path: z.string().optional() });
+const filesSearchSchema = z.object({
+  path: z.string().optional(),
+  /**
+   * Which workspace the path is in.
+   *
+   * In the URL rather than only in the workspace context, so a link to a file
+   * is complete: half an address in someone else's `localStorage` is not a
+   * shareable link. Absent means "whatever the switcher is on".
+   */
+  workspace: z.string().optional(),
+});
 const settingsSearchSchema = z.object({ panel: z.string().optional() });
 
 const filesRoute = createRoute({

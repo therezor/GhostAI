@@ -17,6 +17,8 @@ import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
 import { Badge } from '@/components/ui/badge.js';
 import { ScrollArea } from '@/components/ui/scroll-area.js';
+import { WorkspaceSwitcher } from '@/workspaces/workspace-switcher.js';
+import { useWorkspace } from '@/workspaces/workspace-context.js';
 
 interface NavItem {
   readonly to: string;
@@ -34,10 +36,14 @@ const NAV: readonly NavItem[] = [
 
 export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): JSX.Element {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const { workspaceId } = useWorkspace();
 
+  // Scoped to the workspace: a session list mixing three workspaces' worth of
+  // conversations, with no way to tell which is which, is a list nobody can
+  // navigate. The switcher sits directly above it for the same reason.
   const sessions = useQuery({
-    queryKey: queryKeys.sessions,
-    queryFn: ({ signal }) => api.sessions(signal),
+    queryKey: queryKeys.sessions(workspaceId),
+    queryFn: ({ signal }) => api.sessions(workspaceId, signal),
   });
 
   const unread = useQuery({
@@ -49,6 +55,8 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
 
   return (
     <div className="stack sidebar">
+      <WorkspaceSwitcher {...(onNavigate === undefined ? {} : { onNavigate })} />
+
       <nav aria-label="Sections" className="stack sidebar__nav">
         {NAV.map(({ to, label, icon: Icon }) => (
           <Link

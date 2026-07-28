@@ -34,8 +34,17 @@ export const SECTION_SEPARATOR = '\n\n---\n\n';
 
 /** What a contributor is told about the session. Stable for its lifetime. */
 export interface StaticPromptContext {
-  /** Absolute, canonical. Every tool path is relative to it. */
+  /** Absolute, canonical. Every tool path resolves inside it. */
   readonly workspaceRoot: string;
+  /**
+   * Which workspace the session is bound to.
+   *
+   * Beside `workspaceRoot` rather than derived from it, because a contributor
+   * that wants to scope memory or skills per workspace needs the id, not a
+   * path — and adding the field to this interface once Phase 3's contributors
+   * exist would break every one of them.
+   */
+  readonly workspaceId: string;
   readonly sessionKey: string;
   readonly profileId: string | undefined;
   /** The channel the turn arrived on — `cli`, `web`, `telegram`, a plugin id. */
@@ -139,7 +148,12 @@ const GUIDELINES = `## Guidelines
 - Ask when a request is ambiguous rather than guessing which reading was meant.
 - Answer in the conversation. Tools are for acting on the world, not for talking.`;
 
-function identity(workspaceRoot: string, platform: NodeJS.Platform, runtimeLabel: string): string {
+function identity(
+  workspaceRoot: string,
+  workspaceId: string,
+  platform: NodeJS.Platform,
+  runtimeLabel: string,
+): string {
   return `# GhostAI
 
 You are GhostAI, a self-hosted agent running on your user's own machine, with
@@ -151,11 +165,18 @@ ${runtimeLabel}
 
 ## Workspace
 
-Root: ${workspaceRoot}
+You are working in the \`${workspaceId}\` workspace, at ${workspaceRoot}.
 
-Every path you pass to a tool is interpreted relative to that root. Absolute
-paths, \`~\` and \`..\` are rejected — not silently corrected — so say
-\`notes/todo.md\`, never \`${workspaceRoot}/notes/todo.md\`.
+That directory is your root. \`/notes/todo.md\`, \`notes/todo.md\` and
+\`../notes/todo.md\` all name the same file inside it, and no path you can write
+reaches outside it — paths are resolved into the workspace, not rejected. Prefer
+the plain relative form: say \`notes/todo.md\`.
+
+\`exec\` is the exception, and the difference matters. The program you run is a
+real process on the real filesystem, so it is *not* confined to the workspace —
+which is why an argument pointing outside it (\`/etc/passwd\`, \`../secrets\`)
+is refused there rather than resolved inside. Pass workspace-relative arguments
+to \`exec\`; its working directory is already the root.
 
 ${platformPolicy(platform)}
 
@@ -174,7 +195,9 @@ export async function buildStaticPrompt(options: BuildStaticPromptOptions): Prom
   const runtimeLabel =
     options.runtimeLabel ?? `${osLabel(platform)} ${arch}, Node ${versions.node}`;
 
-  const sections: string[] = [identity(options.context.workspaceRoot, platform, runtimeLabel)];
+  const sections: string[] = [
+    identity(options.context.workspaceRoot, options.context.workspaceId, platform, runtimeLabel),
+  ];
 
   for (const contributor of options.contributors ?? []) {
     const section = await contributor.staticSection?.(options.context);

@@ -17,7 +17,12 @@ import {
   type ToolsConfig,
 } from '@ghostai/protocol';
 import { ProviderError, type ChatRequest } from '@ghostai/providers';
-import { WorkspaceJail, toolOutputTag } from '@ghostai/security';
+import {
+  WorkspaceJail,
+  singleJail,
+  toolOutputTag,
+  type JailResolver,
+} from '@ghostai/security';
 import { DEFAULT_TOOLS_CONFIG, ToolRegistry, defineTool, type AnyTool } from '@ghostai/tools';
 
 import {
@@ -104,7 +109,7 @@ function harness(options: HarnessOptions = {}): Harness {
     provider,
     tools: registry,
     store,
-    jail,
+    jails: singleJail(jail),
     config,
     clock,
     steering,
@@ -1346,5 +1351,130 @@ describe('AgentLoop.previewPrompt', () => {
   it('reports the provider a turn would reach', () => {
     const { loop, provider } = harness();
     expect(loop.provider).toBe(provider.id);
+  });
+});
+
+/**
+ * A tool that reports the workspace root it was handed.
+ *
+ * The whole of what per-session binding has to get right is *which jail reaches
+ * `ToolContext`*, so a tool that answers exactly that is a sharper assertion
+ * than one that writes a file and then inspects the disk.
+ */
+function jailProbe(): { readonly tool: AnyTool; readonly roots: readonly string[] } {
+  const roots: string[] = [];
+  const tool = defineTool({
+    name: 'where',
+    description: 'Reports the workspace root.',
+    schema: z.strictObject({}),
+    execute: (_args, context) => {
+      roots.push(context.jail.root);
+      return context.jail.root;
+    },
+  });
+  return { tool, roots };
+}
+
+describe('AgentLoop workspaces', () => {
+  /** A resolver over `<base>/workspace` and `<base>/workspace/<id>`. */
+  function resolver(base: string): { readonly jails: JailResolver; rootOf: (id: string) => string } {
+    const made = new Map<string, WorkspaceJail>();
+    const jailFor = (id: string): WorkspaceJail => {
+      const cached = made.get(id);
+      if (cached !== undefined) return cached;
+      const root = id === 'default' ? join(base, 'workspace') : join(base, 'workspace', id);
+      const jail = new WorkspaceJail({ root });
+      made.set(id, jail);
+      return jail;
+    };
+    return {
+      jails: { forWorkspace: jailFor, get default() { return jailFor('default'); } },
+      rootOf: (id) => jailFor(id).root,
+    };
+  }
+
+  function workspaceHarness(options: HarnessOptions = {}): Harness & { rootOf: (id: string) => string } {
+    const base = realpathSync(mkdtempSync(join(tmpdir(), 'ghostai-ws-')));
+    cleanups.push(() => {
+      rmSync(base, { recursive: true, force: true });
+    });
+    const { jails, rootOf } = resolver(base);
+    return { ...harness({ ...options, loop: { ...options.loop, jails } }), rootOf };
+  }
+
+  it('runs a turn in the workspace its session was created in', async () => {
+    const probe = jailProbe();
+    const { loop, rootOf } = workspaceHarness({
+      tools: [probe.tool],
+      turns: [{ toolCalls: [{ id: 'c1', name: 'where', argumentsJson: '{}' }] }, { deltas: ['ok'] }],
+    });
+
+    await runTurn(loop, { sessionKey: 's1', content: 'go', workspaceId: 'acme' });
+
+    expect(probe.roots).toEqual([rootOf('acme')]);
+  });
+
+  it('uses the stored workspace even when the turn claims another one', async () => {
+    // The rule that makes a workspace switch safe, and the one that stops a
+    // crafted frame from pointing an existing conversation's tools somewhere
+    // else: `workspaceId` on the input can only ever *create*.
+    const probe = jailProbe();
+    const { loop, store, rootOf } = workspaceHarness({
+      tools: [probe.tool],
+      turns: [{ toolCalls: [{ id: 'c1', name: 'where', argumentsJson: '{}' }] }, { deltas: ['ok'] }],
+    });
+    store.ensureSession('s1', { workspaceId: 'acme' });
+
+    await runTurn(loop, { sessionKey: 's1', content: 'go', workspaceId: 'research' });
+
+    expect(probe.roots).toEqual([rootOf('acme')]);
+    expect(store.getSession('s1')?.workspaceId).toBe('acme');
+  });
+
+  it('keeps two sessions in two workspaces apart', async () => {
+    const probe = jailProbe();
+    const { loop, rootOf } = workspaceHarness({
+      tools: [probe.tool],
+      turns: [
+        { toolCalls: [{ id: 'c1', name: 'where', argumentsJson: '{}' }] },
+        { deltas: ['ok'] },
+        { toolCalls: [{ id: 'c2', name: 'where', argumentsJson: '{}' }] },
+        { deltas: ['ok'] },
+      ],
+    });
+
+    await runTurn(loop, { sessionKey: 'a', content: 'go', workspaceId: 'acme' });
+    await runTurn(loop, { sessionKey: 'b', content: 'go', workspaceId: 'research' });
+
+    expect(probe.roots).toEqual([rootOf('acme'), rootOf('research')]);
+  });
+
+  it('defaults a session with no workspace to the default one', async () => {
+    const probe = jailProbe();
+    const { loop, rootOf } = workspaceHarness({
+      tools: [probe.tool],
+      turns: [{ toolCalls: [{ id: 'c1', name: 'where', argumentsJson: '{}' }] }, { deltas: ['ok'] }],
+    });
+
+    await runTurn(loop, { sessionKey: 's1', content: 'go' });
+
+    expect(probe.roots).toEqual([rootOf('default')]);
+  });
+
+  it('names the session workspace in the prompt, not the default', async () => {
+    const { loop, store, provider } = workspaceHarness({ turns: [{ deltas: ['ok'] }] });
+    store.ensureSession('s1', { workspaceId: 'acme' });
+
+    await runTurn(loop, { sessionKey: 's1', content: 'go' });
+
+    expect(systemPromptOf(provider.requests[0]!)).toContain('`acme` workspace');
+  });
+
+  it('previews the prompt for the session workspace, and the default when there is no session', async () => {
+    const { loop, store, rootOf } = workspaceHarness();
+    store.ensureSession('s1', { workspaceId: 'acme' });
+
+    expect(await loop.previewPrompt({ sessionKey: 's1' })).toContain(rootOf('acme'));
+    expect(await loop.previewPrompt({ sessionKey: 'never-seen' })).toContain(rootOf('default'));
   });
 });
