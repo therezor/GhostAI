@@ -174,6 +174,12 @@ export class TurnProjection {
       // Everything a chat transport has no way to render, and nothing it loses
       // by not seeing: the reasoning stream, the connection handshake, and the
       // bookkeeping a browser uses to reconcile its own optimistic state.
+      //
+      // `session.truncated` belongs here for a reason worth stating: a
+      // regenerate or edit driven from another client rewrites a transcript,
+      // and a chat transport has none — the messages it already delivered are
+      // in someone's message history, where nothing can recall them. The retry
+      // simply arrives as another answer.
       case 'reasoning.delta':
       case 'tool.progress':
       case 'connected':
@@ -182,6 +188,7 @@ export class TurnProjection {
       case 'session.status':
       case 'session.reset':
       case 'session.replay':
+      case 'session.truncated':
       case 'notification':
       case 'transcribe.result':
       case 'tools.changed':

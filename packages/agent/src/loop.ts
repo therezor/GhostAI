@@ -50,6 +50,7 @@ import {
   DEFAULT_WORKSPACE_ID,
   GhostError,
   assistantMessage,
+  deriveSessionTitle,
   isAbortError,
   silentLogger,
   systemClock,
@@ -64,6 +65,7 @@ import {
   type Logger,
   type SessionStore,
   type TimerHandle,
+  type TurnStatsRecord,
 } from '@ghostai/core';
 import {
   AgentDefaultsSchema,
@@ -342,7 +344,7 @@ export interface TurnInput {
 /** What the context inspector knows about the session it is inspecting. */
 export interface PromptPreviewInput {
   readonly sessionKey: string;
-  /** Defaults to `web`: nothing previews a prompt from a terminal. */
+  /** Defaults to `web`. The CLI's `/context` passes `cli`. */
   readonly channel?: string;
   readonly profileId?: string;
 }
@@ -478,6 +480,30 @@ export class AgentLoop {
   }
 
   /**
+   * Records what the turn cost, and never lets that fail the turn.
+   *
+   * The only defensive write in this file, and the asymmetry is the point: an
+   * append is load-bearing — a missing one is a provider 400 on the next
+   * request — whereas a stats row is a number on an info popover. Throwing here
+   * would take down a turn that has already completed and already been
+   * persisted, which is strictly worse than a conversation with one gap in its
+   * accounting.
+   *
+   * An abandoned iterator records nothing, and also yields no `turn.end`. The
+   * two agree, and neither is a turn that finished.
+   */
+  #recordStats(stats: TurnStatsRecord): void {
+    try {
+      this.#store.recordTurnStats(stats);
+    } catch (error) {
+      this.#logger.warn(
+        { err: error, sessionKey: stats.sessionKey, turnId: stats.turnId },
+        'failed to record turn stats',
+      );
+    }
+  }
+
+  /**
    * Runs one turn, emitting events as they happen.
    *
    * The generator's return value carries the outcome; the events carry
@@ -523,7 +549,24 @@ export class AgentLoop {
       channel,
     };
 
-    this.#store.append(sessionKey, userMessage(input.content), { turnId });
+    const opening = this.#store.append(sessionKey, userMessage(input.content), { turnId });
+    const firstSeq = opening.seq;
+    let lastSeq = opening.seq;
+
+    // A conversation nobody has named yet takes its name from the first thing
+    // said in it. Guarded on the *stored* title, so this can only ever fire
+    // once: a session that has one — derived here on an earlier turn, or typed
+    // by a user through the rename route — never re-enters the branch. That
+    // makes "a manual rename is never clobbered" a property of the code rather
+    // than a convention someone has to remember.
+    //
+    // Here rather than in the hub because the hub is the web's door only. The
+    // CLI and every channel run this same loop, and a title derived in one of
+    // them is a title all of them show.
+    if (session.title === '') {
+      const title = deriveSessionTitle(textOf(userMessage(input.content)));
+      if (title !== '') this.#store.updateSession(sessionKey, { title });
+    }
 
     const staticPrompt = await buildStaticPrompt({
       context: promptContext,
@@ -540,6 +583,11 @@ export class AgentLoop {
     };
 
     const startedAt = this.#clock.monotonic();
+    // Both clocks, deliberately. The monotonic one caps the wall timeout and
+    // must stay monotonic — an NTP step backwards through a `now()`-based cap
+    // would end a turn that had barely started. This one is what a human reads,
+    // and is only ever subtracted from another reading of itself.
+    const startedAtMs = this.#clock.now();
     let iteration = 0;
     let elapsedMs = 0;
     let stopReason: StopReason | undefined;
@@ -657,7 +705,7 @@ export class AgentLoop {
         usage = accumulateUsage(usage, result.usage);
 
         if (result.message.toolCalls.length === 0) {
-          this.#store.append(sessionKey, result.message, { turnId });
+          lastSeq = this.#store.append(sessionKey, result.message, { turnId }).seq;
           finalText = textOf(result.message);
           // The correction arrived while this answer was being composed. Keep
           // going so it is answered, rather than ending a turn the user has
@@ -667,14 +715,15 @@ export class AgentLoop {
           break;
         }
 
-        const cancelled = yield* this.#runToolCalls(result, {
+        const tools = yield* this.#runToolCalls(result, {
           sessionKey,
           turnId,
           nonce,
           signal,
           toolContext,
         });
-        if (cancelled) {
+        lastSeq = tools.lastSeq;
+        if (tools.cancelled) {
           stopReason = 'aborted';
           break;
         }
@@ -695,11 +744,33 @@ export class AgentLoop {
         stopReason === 'max_iterations'
           ? maxIterationsText(maxIterations)
           : wallTimeoutText(elapsedMs, wallTimeoutMs);
-      this.#store.append(sessionKey, assistantMessage(finalText), { turnId });
+      lastSeq = this.#store.append(sessionKey, assistantMessage(finalText), { turnId }).seq;
       yield { type: 'assistant.delta', turnId, text: finalText };
     }
 
-    yield { type: 'turn.end', turnId, stopReason, usage, iterations: iteration };
+    const endedAtMs = this.#clock.now();
+    this.#recordStats({
+      turnId,
+      sessionKey,
+      provider: this.#provider.id,
+      model: this.#model,
+      startedAtMs,
+      endedAtMs,
+      iterations: iteration,
+      stopReason,
+      usage,
+    });
+
+    yield {
+      type: 'turn.end',
+      turnId,
+      stopReason,
+      usage,
+      iterations: iteration,
+      elapsedMs: endedAtMs - startedAtMs,
+      firstSeq,
+      lastSeq,
+    };
 
     return { turnId, stopReason, iterations: iteration, usage, text: finalText };
   }
@@ -723,7 +794,7 @@ export class AgentLoop {
       signal: AbortSignal;
       toolContext: ToolContext;
     },
-  ): AsyncGenerator<AgentEvent, boolean> {
+  ): AsyncGenerator<AgentEvent, { cancelled: boolean; lastSeq: number }> {
     const pending: ChatMessageInput[] = [result.message];
     let cancelled = turn.signal.aborted;
 
@@ -797,8 +868,8 @@ export class AgentLoop {
       }
     }
 
-    this.#store.appendMany(turn.sessionKey, pending, { turnId: turn.turnId });
-    return cancelled;
+    const written = this.#store.appendMany(turn.sessionKey, pending, { turnId: turn.turnId });
+    return { cancelled, lastSeq: written.at(-1)?.seq ?? 0 };
   }
 
   /**

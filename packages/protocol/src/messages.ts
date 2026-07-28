@@ -118,6 +118,16 @@ export type ToolMessage = z.infer<typeof ToolMessageSchema>;
 export const StoredMessageSchema = z.object({
   id: z.string().min(1),
   sessionKey: z.string().min(1),
+  /**
+   * Storage's per-session ordering, and the only stable way to *address* a
+   * message.
+   *
+   * On the wire rather than internal because a client needs it: editing,
+   * regenerating and branching all name a point in the conversation, and an id
+   * cannot express "and everything after this". It is already the REST
+   * pagination cursor, so publishing it reveals nothing new.
+   */
+  seq: z.number().int().positive(),
   createdAtMs: z.number().int().nonnegative(),
   /** Groups every message produced by one user turn, including tool traffic. */
   turnId: z.string().optional(),
@@ -135,6 +145,23 @@ export const UsageSchema = z.object({
   reasoningTokens: z.number().int().nonnegative().optional(),
 });
 export type Usage = z.infer<typeof UsageSchema>;
+
+/**
+ * Completion tokens per second, or `undefined` when the figure would be a lie.
+ *
+ * Here, in the one package both UIs can import, rather than beside the stored
+ * record it describes: `@ghostai/core` opens `node:sqlite`, so the browser
+ * cannot reach it, and a second copy in the web bundle is a second copy that
+ * can disagree with the terminal's.
+ *
+ * Zero elapsed or zero completion tokens returns nothing rather than zero or
+ * infinity. A turn that produced no tokens has no rate, and a turn measured at
+ * zero milliseconds was not measured.
+ */
+export function tokensPerSecond(usage: Usage, elapsedMs: number): number | undefined {
+  if (elapsedMs <= 0 || usage.completionTokens <= 0) return undefined;
+  return (usage.completionTokens * 1000) / elapsedMs;
+}
 
 /** Why a turn stopped. Every value is terminal. */
 export const StopReasonSchema = z.enum([

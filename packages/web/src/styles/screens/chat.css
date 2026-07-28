@@ -645,11 +645,42 @@
     color: var(--fg-3);
   }
 
+  /* The hint on the left, whatever the route put beside it on the right.
+   *
+   * One row rather than two: both are ambient state about the box above them,
+   * and stacking them would push the composer up by a line to say nothing more.
+   * `space-between` rather than a spacer element, because with only the hint
+   * present there is nothing to push against. */
+  .composer__meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    min-height: var(--space-4);
+  }
+
+  /* Two rows on a narrow screen. Side by side, the hint is the thing that
+   * gives — it wraps to two lines while the budget keeps its full width beside
+   * it, which reads as a broken sentence next to an intact number. Stacking
+   * puts each on a line of its own instead, and costs one line of height on the
+   * screens that can afford it least only because the alternative costs two.
+   *
+   * `max-width` rather than a `min-width` on the other side: the row is the
+   * normal case and this is the exception, so the exception is what carries the
+   * query. Matches the breakpoint the header uses to shed its own labels. */
+  @media (max-width: 40rem) {
+    .composer__meta {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--space-1);
+    }
+  }
+
   .composer__hint {
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    min-height: var(--space-4);
+    min-width: 0;
     font-size: var(--text-sm);
     color: var(--fg-3);
   }
@@ -763,5 +794,98 @@
   .welcome__prompt:hover {
     background-color: var(--hover);
     color: var(--fg-1);
+  }
+
+  /* ── Message actions ───────────────────────────────────────── *
+   *
+   * Revealed on hover, and on `:focus-within` — which is the half that matters.
+   * `display: none` or `visibility: hidden` would take the buttons out of the
+   * tab order, so a keyboard user, who has no pointer to hover with, could
+   * never reach them at all.
+   */
+
+  .message-actions {
+    --gap: var(--space-0-5);
+
+    align-items: center;
+    opacity: 0;
+    transition: opacity var(--duration-fast) var(--ease-out-quint);
+  }
+
+  .transcript__item:hover .message-actions,
+  .transcript__item:focus-within .message-actions {
+    opacity: 1;
+  }
+
+  /* A touch pointer cannot hover, so there is nothing to reveal with. */
+  @media (hover: none) {
+    .message-actions {
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .message-actions {
+      transition: none;
+    }
+  }
+
+  /* Right-aligned, to sit under the bubble it belongs to rather than under the
+   * column the bubble is right-aligned inside. */
+  .message-user__actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .message-user__editor {
+    --gap: var(--space-2);
+
+    width: 100%;
+  }
+
+  .message-user__editor-actions {
+    --gap: var(--space-2);
+
+    justify-content: flex-end;
+  }
+
+  .turn__actions {
+    flex-shrink: 0;
+  }
+
+  /* ── Turn details ──────────────────────────────────────────── */
+
+  .popover--turn-info {
+    width: 18rem;
+    padding: var(--space-3);
+  }
+
+  .turn-info__row {
+    display: flex;
+    gap: var(--space-3);
+    align-items: baseline;
+  }
+
+  .turn-info__label {
+    flex: 0 0 5rem;
+    font-size: var(--text-2xs);
+    line-height: var(--leading-2xs);
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    color: var(--fg-3);
+  }
+
+  .turn-info__value {
+    /* Read character by character — a token count and a rate are identifiers,
+     * not prose. */
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
+    color: var(--fg-1);
+  }
+
+  .turn-info__empty {
+    font-size: var(--text-sm);
+    color: var(--fg-3);
   }
 }

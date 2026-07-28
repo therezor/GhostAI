@@ -20,7 +20,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { AlertTriangle, Bell, CheckCheck, CircleAlert, Info, Trash2 } from 'lucide-react';
+import { Bell, CheckCheck, Trash2 } from 'lucide-react';
 import type { JSX } from 'react';
 
 import type { Notification, NotificationListResponse } from '@ghostai/protocol';
@@ -31,20 +31,7 @@ import { formatRelativeTime } from '@/lib/format.js';
 import { queryKeys } from '@/lib/query.js';
 import { Button } from '@/components/ui/button.js';
 import { toast } from '@/components/ui/toast.js';
-
-const LEVEL_ICONS = {
-  info: Info,
-  success: CheckCheck,
-  warning: AlertTriangle,
-  error: CircleAlert,
-} as const;
-
-const LEVEL_CLASSES = {
-  info: 'notification__icon--info',
-  success: 'notification__icon--success',
-  warning: 'notification__icon--warning',
-  error: 'notification__icon--error',
-} as const;
+import { LEVEL_CLASSES, LEVEL_ICONS } from '@/notifications/levels.js';
 
 export function NotificationsRoute(): JSX.Element {
   const queryClient = useQueryClient();

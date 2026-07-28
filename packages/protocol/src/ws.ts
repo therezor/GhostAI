@@ -141,9 +141,45 @@ export const SteerMessageSchema = z.object({
   content: z.string().min(1),
 });
 
+/**
+ * Re-run a turn, discarding the answer it produced.
+ *
+ * Over the socket rather than REST because it *starts a turn*, and every turn
+ * goes through the hub so that the one-at-a-time rule, the FIFO queue, the
+ * approval gate and the event stream all apply. A REST endpoint that started a
+ * turn would be a second door into the loop, and would have to return before
+ * anything it started had streamed.
+ */
+export const RegenerateMessageSchema = z.object({
+  type: z.literal('turn.regenerate'),
+  sessionKey: z.string().min(1),
+  /** The user message to re-run from. Absent means the most recent turn. */
+  seq: z.number().int().positive().optional(),
+});
+
+/**
+ * Replace a message and re-run from it.
+ *
+ * One frame rather than a truncate call followed by `user.message`: the two
+ * halves are a single user intent, and splitting them leaves a window in which
+ * another tab's queued message lands in the gap between them.
+ */
+export const EditMessageSchema = z.object({
+  type: z.literal('user.edit'),
+  sessionKey: z.string().min(1),
+  /** Must address a `user` message; the hub refuses anything else. */
+  seq: z.number().int().positive(),
+  content: z.string(),
+  attachments: z.array(AttachmentSchema).default([]),
+  profileId: z.string().optional(),
+  clientMessageId: z.string().optional(),
+});
+
 export const ClientMessageSchema = z.discriminatedUnion('type', [
   PingMessageSchema,
   UserMessageRequestSchema,
+  RegenerateMessageSchema,
+  EditMessageSchema,
   StopTurnMessageSchema,
   NewSessionMessageSchema,
   SwitchSessionMessageSchema,
@@ -340,6 +376,19 @@ export const TurnEndEventSchema = z.object({
   stopReason: StopReasonSchema,
   usage: UsageSchema.optional(),
   iterations: z.number().int().nonnegative().default(0),
+  /** Wall time from the first append to this event — the divisor for tokens/s. */
+  elapsedMs: z.number().int().nonnegative().optional(),
+  /**
+   * The `seq` of the user message that started this turn, and of the last
+   * message it appended.
+   *
+   * `firstSeq` is what regenerate and edit address, so reporting it here is
+   * what lets a message become editable the instant its turn ends — without it
+   * the client would have to refetch history to learn the seq of something it
+   * just watched being written.
+   */
+  firstSeq: z.number().int().positive().optional(),
+  lastSeq: z.number().int().positive().optional(),
 });
 
 export const SessionStatusEventSchema = z.object({
@@ -370,6 +419,25 @@ export const SessionReplayEventSchema = z.object({
   messages: z.array(StoredMessageSchema),
   /** False when `lastSeq` fell outside the ring buffer and history was trimmed. */
   complete: z.boolean().default(true),
+});
+
+/**
+ * A suffix of the conversation was dropped — by a regenerate, an edit, or a
+ * truncation from another client.
+ *
+ * Carries the stored tail rather than only the cut point, so a client rebuilds
+ * from one frame instead of racing a refetch against the turn that is about to
+ * start. Sequenced, so it reaches every attached tab and enters the replay
+ * ring: a second window watching the same conversation corrects itself with no
+ * code of its own.
+ */
+export const SessionTruncatedEventSchema = z.object({
+  type: z.literal('session.truncated'),
+  seq,
+  sessionKey: z.string().min(1),
+  /** Everything after this `seq` is gone. */
+  upToSeq: z.number().int().nonnegative(),
+  messages: z.array(StoredMessageSchema),
 });
 
 export const NotificationEventSchema = z.object({
@@ -424,6 +492,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   SessionStatusEventSchema,
   SessionResetEventSchema,
   SessionReplayEventSchema,
+  SessionTruncatedEventSchema,
   NotificationEventSchema,
   TranscribeResultEventSchema,
   ToolsChangedEventSchema,

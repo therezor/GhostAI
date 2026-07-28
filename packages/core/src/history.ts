@@ -1,8 +1,10 @@
 /**
  * Turning stored history into a legal provider request.
  *
- * Stored history is append-only and never edited — that is what keeps a
- * provider's prompt cache warm across a turn. But the slice of it that goes to
+ * Stored history is append-only, and no row is ever rewritten — that is what
+ * keeps a provider's prompt cache warm across a turn. (A *suffix* can be
+ * dropped, by regenerate and edit; see `SessionStore.truncateAfter` for why
+ * that leaves the cache intact.) But the slice of it that goes to
  * the model is a fixed-size window, and a naive window cuts through the middle
  * of a tool exchange: the `assistant` message that declared `tool_calls` falls
  * off the front while the `tool` results that answer it remain. Every major
@@ -64,6 +66,69 @@ export function hasOrphanedToolResult(messages: readonly ChatMessage[]): boolean
     }
   }
   return false;
+}
+
+/**
+ * The number of leading messages that form a tool-complete prefix.
+ *
+ * The mirror of `findLegalStart`: that one finds where a window may *begin*,
+ * this one finds where it may *end*. They exist for opposite defects. A window
+ * that opens too early strands a `tool` result whose `assistant` fell off the
+ * front; a history truncated at an arbitrary point strands the other half —
+ * an `assistant` still declaring `tool_calls` whose answers were just deleted.
+ * Providers reject both, and until truncation existed only the first could
+ * happen.
+ *
+ * The `answered` set is cleared whenever the cut point moves, for the same
+ * reason `findLegalStart` clears `declared`: the `tool` messages that answered
+ * those calls sit *after* the new end and are about to be dropped with it, so
+ * continuing to count them as answers would leave a genuine orphan in front of
+ * the cut. Clearing makes the scan conservative — it can return an index before
+ * a repairable boundary, never one that leaves a call unanswered.
+ *
+ * Runs in a single backward pass, and returns `messages.length` when the whole
+ * list is already complete.
+ */
+export function findLegalEnd(messages: readonly ChatMessage[]): number {
+  const answered = new Set<string>();
+  let end = messages.length;
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message === undefined) continue;
+
+    if (message.role === 'tool') {
+      answered.add(message.toolCallId);
+    } else if (
+      message.role === 'assistant' &&
+      message.toolCalls.some((call) => !answered.has(call.id))
+    ) {
+      end = index;
+      answered.clear();
+    }
+  }
+
+  return end;
+}
+
+/**
+ * Whether any `assistant` message declares a `toolCall` that no later `tool`
+ * message answers.
+ *
+ * The invariant `findLegalEnd` exists to establish, stated independently so it
+ * can be asserted rather than assumed — the counterpart to
+ * `hasOrphanedToolResult`, and checked against `findLegalEnd` by property test.
+ */
+export function hasUnansweredToolCall(messages: readonly ChatMessage[]): boolean {
+  const pending = new Set<string>();
+  for (const message of messages) {
+    if (message.role === 'assistant') {
+      for (const call of message.toolCalls) pending.add(call.id);
+    } else if (message.role === 'tool') {
+      pending.delete(message.toolCallId);
+    }
+  }
+  return pending.size > 0;
 }
 
 export interface TruncationResult {

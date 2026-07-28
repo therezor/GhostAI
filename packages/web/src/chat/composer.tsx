@@ -32,6 +32,7 @@ import {
   type ChangeEvent,
   type JSX,
   type KeyboardEvent,
+  type ReactNode,
 } from 'react';
 
 import type { Attachment } from '@ghostai/protocol';
@@ -59,6 +60,8 @@ export interface ComposerProps {
    * a plain `useState` initialiser the whole implementation.
    */
   readonly initialText?: string | undefined;
+  /** Rendered on the right of the hint line. The context strip, in the app. */
+  readonly meta?: ReactNode;
   readonly busy: boolean;
   readonly queueDepth: number;
   /** False while the socket is down — Send would only buffer. */
@@ -88,6 +91,7 @@ interface StagedFile {
 
 export function Composer({
   initialText,
+  meta,
   busy,
   queueDepth,
   connected,
@@ -320,24 +324,32 @@ export function Composer({
           )}
         </div>
 
-        <p className="composer__hint">
-          {configured && !connected && (
-            <span className="composer__hint--offline">
-              Offline — messages will be sent when the connection returns.
-            </span>
-          )}
-          {configured && connected && busy && (
-            <span>A turn is running. Enter queues your message.</span>
-          )}
-          {queueDepth > 0 && (
-            <span>
-              {queueDepth} message{queueDepth === 1 ? '' : 's'} waiting.
-            </span>
-          )}
-          {configured && connected && !busy && queueDepth === 0 && (
-            <span>Enter to send · Shift+Enter for a new line · @ to scope the turn</span>
-          )}
-        </p>
+        <div className="composer__meta">
+          <p className="composer__hint">
+            {configured && !connected && (
+              <span className="composer__hint--offline">
+                Offline — messages will be sent when the connection returns.
+              </span>
+            )}
+            {configured && connected && busy && (
+              <span>A turn is running. Enter queues your message.</span>
+            )}
+            {queueDepth > 0 && (
+              <span>
+                {queueDepth} message{queueDepth === 1 ? '' : 's'} waiting.
+              </span>
+            )}
+            {configured && connected && !busy && queueDepth === 0 && (
+              <span>Enter to send · Shift+Enter for a new line · @ to scope the turn</span>
+            )}
+          </p>
+
+          {/* Whatever the route wants beside the hint — in practice the context
+              budget. It arrives as a node rather than being built here because
+              it needs the Query client and a session key, and this component is
+              a leaf that its own tests mount without either. */}
+          {meta}
+        </div>
       </div>
     </div>
   );

@@ -29,11 +29,12 @@
 import { createInterface } from 'node:readline/promises';
 
 import type { AgentLoop } from '@ghostai/agent';
-import { createLogger, isAbortError, type LogLevel, type SessionStore } from '@ghostai/core';
-import type { StopReason } from '@ghostai/protocol';
+import { createLogger, isAbortError, type LogLevel } from '@ghostai/core';
+import type { ContentPart, StopReason } from '@ghostai/protocol';
 
+import { runSlashCommand } from './commands.js';
 import { TurnRenderer } from './render.js';
-import { createChatRuntime, type RuntimeOptions } from './runtime.js';
+import { createChatRuntime, type ChatRuntime, type RuntimeOptions } from './runtime.js';
 
 /** Conventional exit code for "terminated by SIGINT". */
 export const SIGINT_EXIT_CODE = 130;
@@ -47,6 +48,16 @@ export interface ChatOptions extends RuntimeOptions {
   /** Present for one-shot mode; absent reads stdin or opens the REPL. */
   readonly message?: string | undefined;
   readonly sessionKey?: string;
+  /**
+   * Which workspace a conversation *created* by this run lands in.
+   *
+   * Distinct from `RuntimeOptions.workspace`, which is a directory and moves
+   * the whole tree. A workspace is an id in the registry whose directory is
+   * derived — see `workspace-store.ts` on why it holds no path — so accepting
+   * either on one flag and telling them apart by whether the string happens to
+   * exist on disk would turn a typo'd id into a path.
+   */
+  readonly workspaceId?: string;
   /** Drop the session's history before the first turn. */
   readonly fresh?: boolean;
   readonly colors?: boolean | undefined;
@@ -73,7 +84,16 @@ export interface TurnOutcome {
 export interface RunTurnDeps {
   readonly loop: AgentLoop;
   readonly renderer: TurnRenderer;
+  /**
+   * A plain string, read once per call.
+   *
+   * The REPL's attachment moves — `/new`, `/session` and `/branch` all change
+   * it — but that is the caller's problem: the closure in `chatCommand` reads
+   * its holder at call time, so this stays the tested unit it was.
+   */
   readonly sessionKey: string;
+  /** Where a session *created* by this turn lands. Never moves an existing one. */
+  readonly workspaceId?: string | undefined;
   readonly signal: AbortSignal;
   /** Raw event JSON instead of prose, for scripts consuming the stream. */
   readonly json?: NodeJS.WritableStream | undefined;
@@ -86,7 +106,10 @@ export interface RunTurnDeps {
  * with the event stream, and a test can hand it a loop and a string buffer
  * without a terminal, a database or a provider.
  */
-export async function runTurn(deps: RunTurnDeps, content: string): Promise<TurnOutcome> {
+export async function runTurn(
+  deps: RunTurnDeps,
+  content: string | readonly ContentPart[],
+): Promise<TurnOutcome> {
   const { renderer } = deps;
   let failed = false;
   // The generator's return value is unreachable from `for await`, so the
@@ -99,6 +122,7 @@ export async function runTurn(deps: RunTurnDeps, content: string): Promise<TurnO
     content,
     signal: deps.signal,
     channel: 'cli',
+    ...(deps.workspaceId === undefined ? {} : { workspaceId: deps.workspaceId }),
   });
 
   try {
@@ -126,39 +150,6 @@ export async function runTurn(deps: RunTurnDeps, content: string): Promise<TurnO
   };
 }
 
-const HELP = `/help            this list
-  /clear           forget this session's history
-  /session         session key and message count
-  /exit, /quit     leave`;
-
-/** Returns `true` when the REPL should stop. */
-function runSlashCommand(
-  input: string,
-  renderer: TurnRenderer,
-  store: SessionStore,
-  sessionKey: string,
-): boolean {
-  const word = input.split(/\s+/u)[0] ?? input;
-  switch (word.slice(1)) {
-    case 'exit':
-    case 'quit':
-      return true;
-    case 'clear':
-      store.clearMessages(sessionKey);
-      renderer.note('history cleared');
-      return false;
-    case 'session':
-      renderer.note(`${sessionKey} · ${String(store.messageCount(sessionKey))} messages`);
-      return false;
-    case 'help':
-      renderer.note(HELP);
-      return false;
-    default:
-      renderer.warn(`unknown command: ${word}`);
-      return false;
-  }
-}
-
 /** Everything piped in, for `ghost chat < prompt.txt`. */
 async function readAll(input: NodeJS.ReadableStream): Promise<string> {
   const chunks: string[] = [];
@@ -170,7 +161,11 @@ async function readAll(input: NodeJS.ReadableStream): Promise<string> {
 export async function chatCommand(options: ChatOptions = {}): Promise<number> {
   const out = options.out ?? process.stdout;
   const input = options.input ?? process.stdin;
-  const sessionKey = options.sessionKey ?? DEFAULT_SESSION_KEY;
+  // Holders, not constants: `/new`, `/session <key>` and `/branch` all move the
+  // prompt to another conversation, and `/workspace` moves where the next new
+  // one lands. The closures below read them at call time.
+  let sessionKey = options.sessionKey ?? DEFAULT_SESSION_KEY;
+  let workspaceId = options.workspaceId;
   const json = options.json === true ? out : undefined;
 
   const renderer = new TurnRenderer({
@@ -202,7 +197,7 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
   };
   if (options.handleSignals !== false) process.on('SIGINT', onInterrupt);
 
-  const turn = async (content: string): Promise<TurnOutcome> => {
+  const turn = async (content: string | readonly ContentPart[]): Promise<TurnOutcome> => {
     const controller = new AbortController();
     active = controller;
     try {
@@ -211,7 +206,14 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
         // runtime with no loop so that `ghost serve` can come up, and this is
         // the one caller that genuinely cannot proceed without one. The message
         // it throws names what to set.
-        { loop: runtime.requireLoop(), renderer, sessionKey, signal: controller.signal, json },
+        {
+          loop: runtime.requireLoop(),
+          renderer,
+          sessionKey,
+          signal: controller.signal,
+          json,
+          ...(workspaceId === undefined ? {} : { workspaceId }),
+        },
         content,
       );
     } finally {
@@ -235,15 +237,26 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
       renderer.note(
         `ghost · ${runtime.model} @ ${runtime.spec?.displayName ?? 'no provider'} · ${runtime.paths.workspace}`,
       );
-      renderer.note(`${sessionKey} · /help for commands`);
+      const opened = runtime.store.getSession(sessionKey);
+      const title = opened === undefined || opened.title === '' ? sessionKey : opened.title;
+      renderer.note(`${title} · /help for commands`);
     }
 
     return await repl({
       input,
       out,
       renderer,
-      store: runtime.store,
-      sessionKey,
+      runtime,
+      session: () => sessionKey,
+      attach: (key) => {
+        sessionKey = key;
+        runtime.store.ensureSession(key, { origin: 'cli' });
+        renderer.note(`attached to ${key}`);
+      },
+      workspace: () => workspaceId,
+      setWorkspace: (id) => {
+        workspaceId = id;
+      },
       turn,
       hasActiveTurn: () => active !== null,
       abortActive: onInterrupt,
@@ -258,9 +271,13 @@ interface ReplDeps {
   readonly input: InputStream;
   readonly out: NodeJS.WritableStream;
   readonly renderer: TurnRenderer;
-  readonly store: SessionStore;
-  readonly sessionKey: string;
-  readonly turn: (content: string) => Promise<TurnOutcome>;
+  readonly runtime: ChatRuntime;
+  /** The conversation the prompt is on, read fresh — it moves. */
+  readonly session: () => string;
+  readonly attach: (sessionKey: string) => void;
+  readonly workspace: () => string | undefined;
+  readonly setWorkspace: (id: string | undefined) => void;
+  readonly turn: (content: string | readonly ContentPart[]) => Promise<TurnOutcome>;
   readonly hasActiveTurn: () => boolean;
   readonly abortActive: () => void;
 }
@@ -303,7 +320,26 @@ async function repl(deps: ReplDeps): Promise<number> {
       const content = line.trim();
       if (content === '') continue;
       if (content.startsWith('/')) {
-        if (runSlashCommand(content, deps.renderer, deps.store, deps.sessionKey)) return 0;
+        const result = await runSlashCommand(content, {
+          renderer: deps.renderer,
+          runtime: deps.runtime,
+          sessionKey: deps.session(),
+          workspaceId: deps.workspace(),
+          setWorkspace: deps.setWorkspace,
+        });
+
+        if (result.kind === 'exit') return 0;
+        if (result.kind === 'attach') {
+          deps.attach(result.sessionKey);
+          continue;
+        }
+        // `/edit` and `/regenerate` truncated, and handed the content back
+        // rather than running it — so a re-run takes the same path a typed
+        // message does, with the same renderer and the same Ctrl-C.
+        if (result.kind === 'continue') continue;
+
+        const rerun = await deps.turn(result.content);
+        if (rerun.aborted) deps.renderer.note('interrupted — the prompt is yours again');
         continue;
       }
 

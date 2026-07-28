@@ -48,7 +48,7 @@ test.describe('with every foreign origin blocked', () => {
 
     // A full turn, including the syntax highlighter — 38 lazy chunks that are
     // all local, and would be the second thing to reach for a CDN.
-    await page.getByLabel('Message').fill('stream a long answer');
+    await page.getByRole('textbox', { name: 'Message' }).fill('stream a long answer');
     await page.getByRole('button', { name: 'Send' }).click();
     await expect(page.getByTestId('transcript').locator('pre code')).toContainText('const note =');
 

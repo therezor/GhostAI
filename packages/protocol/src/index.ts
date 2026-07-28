@@ -6,10 +6,12 @@
  * tool definitions comes from `z.toJSONSchema`, and the HTTP layer's OpenAPI
  * document is generated from these same objects — never hand-maintained.
  *
- * No logic and no I/O beyond two pure functions that must behave identically
+ * No logic and no I/O beyond three pure functions that must behave identically
  * everywhere they run: `parseMentions` (every channel must resolve `@kb:` the
- * same way) and `isLoopbackHost` (the server and the CLI must agree on what
- * counts as a remote bind before refusing to start without auth).
+ * same way), `isLoopbackHost` (the server and the CLI must agree on what
+ * counts as a remote bind before refusing to start without auth), and
+ * `tokensPerSecond` (the terminal and the browser must report the same rate for
+ * the same turn, and the browser cannot import the package that stores it).
  *
  * Runtime dependencies: `zod`, and nothing else — ever.
  */

@@ -33,6 +33,8 @@ import {
   ProvidersResponseSchema,
   SessionListResponseSchema,
   SessionMessagesResponseSchema,
+  SessionSummarySchema,
+  TurnStatsResponseSchema,
   SettingsResponseSchema,
   SetupStatusResponseSchema,
   MoveSessionsResponseSchema,
@@ -55,6 +57,8 @@ import {
   type ProvidersResponse,
   type SessionListResponse,
   type SessionMessagesResponse,
+  type SessionSummary,
+  type TurnStatsResponse,
   type SetCredentialRequest,
   type SettingsResponse,
   type SetupStatusResponse,
@@ -137,8 +141,8 @@ export async function requestVoid(path: string, options: RequestOptions = {}): P
  * Still not a client for all thirty routes: a wrapper written before its caller
  * is a wrapper written to the wrong shape, and an untested one, since nothing
  * exercises it. Everything here has a caller, and the routes that do not appear
- * — session rename, session delete, the automation surface — are the ones whose
- * panels arrive in a later phase.
+ * — the automation surface — are the ones whose panels arrive in a later
+ * phase.
  *
  * One rule holds across the whole object and is the reason `setCredential`
  * returns `void`: **no response body ever carries a credential.** The vault is
@@ -191,6 +195,34 @@ export const api = {
 
   messages: (key: string, signal?: AbortSignal): Promise<SessionMessagesResponse> =>
     request(`/api/sessions/${encodeURIComponent(key)}/messages`, SessionMessagesResponseSchema, {
+      ...(signal ? { signal } : {}),
+    }),
+
+  renameSession: (key: string, title: string): Promise<SessionSummary> =>
+    request(`/api/sessions/${encodeURIComponent(key)}`, SessionSummarySchema, {
+      method: 'PATCH',
+      body: { title },
+    }),
+
+  deleteSession: (key: string): Promise<void> =>
+    requestVoid(`/api/sessions/${encodeURIComponent(key)}`, { method: 'DELETE' }),
+
+  /** Forks the conversation at `seq` into a new one, which the caller opens. */
+  branchSession: (key: string, seq: number, title?: string): Promise<SessionSummary> =>
+    request(`/api/sessions/${encodeURIComponent(key)}/branch`, SessionSummarySchema, {
+      method: 'POST',
+      body: { seq, ...(title === undefined ? {} : { title }) },
+    }),
+
+  /**
+   * What each turn in a conversation cost.
+   *
+   * For turns nobody watched happen: a live turn carries its own numbers on
+   * `turn.end`, and asking the server for figures the client just measured
+   * would be a round trip to learn what it already knows.
+   */
+  turns: (key: string, signal?: AbortSignal): Promise<TurnStatsResponse> =>
+    request(`/api/sessions/${encodeURIComponent(key)}/turns`, TurnStatsResponseSchema, {
       ...(signal ? { signal } : {}),
     }),
 

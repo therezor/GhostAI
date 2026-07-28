@@ -15,27 +15,26 @@
  */
 
 import {
+  BranchSessionRequestSchema,
   ContextResponseSchema,
   CreateSessionRequestSchema,
   SessionListResponseSchema,
   SessionMessagesResponseSchema,
   SessionSummarySchema,
+  TurnStatsResponseSchema,
   UpdateSessionRequestSchema,
+  type BranchSessionRequest,
   type ContextResponse,
   type CreateSessionRequest,
   type SessionListResponse,
   type SessionMessagesResponse,
   type SessionSummary,
-  type StoredMessage,
+  type TurnStatsResponse,
   type UpdateSessionRequest,
+  type Usage,
 } from '@ghostai/protocol';
-import {
-  historyForLLM,
-  toStoredMessage,
-  type SessionSummaryRecord,
-  type StoredMessageRecord,
-} from '@ghostai/core';
-import { estimateTokens } from '@ghostai/providers';
+import { toStoredMessage, type SessionSummaryRecord } from '@ghostai/core';
+import { describeContext } from '@ghostai/agent';
 import type { FastifyReply } from 'fastify';
 import { randomUUID } from 'node:crypto';
 
@@ -45,14 +44,16 @@ import {
   encodeMessageCursor,
   encodeSessionCursor,
 } from '../cursor.js';
-import { notFound } from '../errors.js';
+import { conflict, notFound } from '../errors.js';
 import {
   PageQuerySchema,
   SessionListQuerySchema,
   SessionParamsSchema,
+  TurnsQuerySchema,
   type PageQuery,
   type SessionListQuery,
   type SessionParams,
+  type TurnsQuery,
 } from '../queries.js';
 import type { RouteDeps, RouteGroup } from './types.js';
 
@@ -64,9 +65,17 @@ type SessionRouteId =
   | 'sessions.delete'
   | 'sessions.messages'
   | 'sessions.clear'
-  | 'sessions.context';
+  | 'sessions.context'
+  | 'sessions.branch'
+  | 'sessions.turns';
 
-function toSummary(record: SessionSummaryRecord): SessionSummary {
+/**
+ * `totalUsage` is omitted rather than zeroed when there is none.
+ *
+ * A conversation whose turns predate the `turn_stats` table has no total, and
+ * reporting `0` would claim it cost nothing rather than that nobody counted.
+ */
+function toSummary(record: SessionSummaryRecord, totalUsage?: Usage): SessionSummary {
   return {
     key: record.key,
     title: record.title,
@@ -76,6 +85,7 @@ function toSummary(record: SessionSummaryRecord): SessionSummary {
     origin: record.origin,
     workspaceId: record.workspaceId,
     ...(record.profileId === undefined ? {} : { profileId: record.profileId }),
+    ...(totalUsage === undefined ? {} : { totalUsage }),
   };
 }
 
@@ -113,8 +123,11 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
 
         const page = rows.slice(0, query.limit);
         const last = page.at(-1);
+        // One statement for the whole page. A per-row lookup here is the
+        // difference between a listing and fifty of them.
+        const usage = store.sessionUsage(page.map((record) => record.key));
         return {
-          sessions: page.map(toSummary),
+          sessions: page.map((record) => toSummary(record, usage.get(record.key))),
           ...(rows.length > query.limit && last !== undefined
             ? { nextCursor: encodeSessionCursor({ updatedAtMs: last.updatedAtMs, key: last.key }) }
             : {}),
@@ -155,7 +168,10 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
     'sessions.get': {
       summary: 'One session',
       schema: { params: SessionParamsSchema, response: { 200: SessionSummarySchema } },
-      handler: (request): SessionSummary => toSummary(requireSession(params(request).key)),
+      handler: (request): SessionSummary => {
+        const record = requireSession(params(request).key);
+        return toSummary(record, store.sessionUsage([record.key]).get(record.key));
+      },
     },
 
     'sessions.update': {
@@ -233,52 +249,78 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
       schema: { params: SessionParamsSchema, response: { 200: ContextResponseSchema } },
       handler: async (request): Promise<ContextResponse> => {
         const { key } = params(request);
-        const session = requireSession(key);
+        requireSession(key);
         const agent = deps.runtime.agent();
 
-        // Read the same window the loop reads — everything past the
-        // consolidation marker — and hand it to the same function, so what is
-        // shown is what would be sent rather than an approximation of it.
-        const records = store.messages(key, { afterSeq: session.lastConsolidatedSeq });
-        const byMessage = new Map<unknown, StoredMessageRecord>(
-          records.map((record) => [record.message, record]),
-        );
-        // `maxToolResultChars: 0` disables truncation, which is what makes the
-        // returned messages the *same objects* that went in — and that identity
-        // is how each one is matched back to the stored row carrying its id.
-        const window = historyForLLM(
-          records.map((record) => record.message),
-          { maxToolResultChars: 0 },
-        );
-
-        const messages: StoredMessage[] = [];
-        for (const message of window) {
-          const record = byMessage.get(message);
-          if (record !== undefined) messages.push(toStoredMessage(record));
-        }
-
-        const systemPrompt = await agent.systemPrompt({ sessionKey: key, channel: 'web' });
-        const promptTokens = estimateTokens(systemPrompt);
-        const toolTokens = estimateTokens(JSON.stringify(agent.tools));
-        const messageTokens = window.reduce(
-          (total, message) => total + estimateTokens(JSON.stringify(message)),
-          0,
-        );
+        // The measurement itself lives in `@ghostai/agent`, so the CLI's
+        // `/context` reports the same numbers from the same code rather than a
+        // second implementation of the windowing rules.
+        const report = await describeContext({
+          store,
+          loop: { previewPrompt: (input) => agent.systemPrompt(input) },
+          tools: agent.tools,
+          sessionKey: key,
+          channel: 'web',
+          contextWindowTokens: deps.runtime.config().agents.defaults.contextWindowTokens,
+        });
+        if (report === undefined) throw notFound(`No session "${key}"`);
 
         return {
-          sessionKey: key,
-          systemPrompt,
-          messages,
-          estimatedTokens: promptTokens + toolTokens + messageTokens,
-          contextWindowTokens: deps.runtime.config().agents.defaults.contextWindowTokens,
-          // Named sections rather than a single number, because the question
-          // this panel exists to answer is *which* block got too big.
-          breakdown: {
-            systemPrompt: promptTokens,
-            tools: toolTokens,
-            messages: messageTokens,
-          },
+          sessionKey: report.sessionKey,
+          systemPrompt: report.systemPrompt,
+          messages: report.messages.map(toStoredMessage),
+          estimatedTokens: report.estimatedTokens,
+          contextWindowTokens: report.contextWindowTokens,
+          breakdown: { ...report.breakdown },
         };
+      },
+    },
+
+    'sessions.branch': {
+      summary: 'Fork a conversation at a point into a new session',
+      schema: {
+        params: SessionParamsSchema,
+        body: BranchSessionRequestSchema,
+        response: { 201: SessionSummarySchema },
+      },
+      handler: (request, reply): SessionSummary => {
+        const { key } = params(request);
+        requireSession(key);
+        const body = request.body as BranchSessionRequest;
+
+        // Forking mid-turn would copy a question whose answer has not been
+        // written yet: the loop appends an assistant turn and all of its tool
+        // traffic in one transaction at the end, so a branch taken now starts
+        // with an unanswered question and no way to tell that it did.
+        if (deps.hub.busy(key)) {
+          throw conflict('A turn is running on this conversation. Stop it, then branch.');
+        }
+
+        const fork = store.forkSession(key, body.seq, {
+          ...(body.key === undefined ? {} : { key: body.key }),
+          ...(body.title === undefined ? {} : { title: body.title }),
+        });
+
+        void reply.status(201);
+        return toSummary(
+          { ...fork.session, messageCount: fork.copied },
+          store.sessionUsage([fork.session.key]).get(fork.session.key),
+        );
+      },
+    },
+
+    'sessions.turns': {
+      summary: 'What each turn in this session cost',
+      schema: {
+        params: SessionParamsSchema,
+        querystring: TurnsQuerySchema,
+        response: { 200: TurnStatsResponseSchema },
+      },
+      handler: (request): TurnStatsResponse => {
+        const { key } = params(request);
+        requireSession(key);
+        const query = request.query as TurnsQuery;
+        return { sessionKey: key, turns: store.turnStats(key, { limit: query.limit }) };
       },
     },
   };

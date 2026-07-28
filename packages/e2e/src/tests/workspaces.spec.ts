@@ -103,4 +103,49 @@ test.describe('workspaces', () => {
     expect(moved.ok()).toBe(true);
     expect((await app.request.delete(`${harness.url}/api/workspaces/acme`)).status()).toBe(204);
   });
+
+  test('is not sitting under the drawer close button on a phone', async ({ app }) => {
+    await app.setViewportSize({ width: 420, height: 840 });
+    await app.getByRole('button', { name: 'Open menu' }).click();
+
+    const drawer = app.getByRole('dialog');
+    await expect(drawer).toBeVisible();
+
+    const close = drawer.getByRole('button', { name: 'Close' });
+    const picker = drawer.getByRole('button', { name: /^Workspace:/u });
+
+    const closeBox = await close.boundingBox();
+    const pickerBox = await picker.boundingBox();
+    if (closeBox === null || pickerBox === null) throw new Error('no layout to measure');
+
+    // The drawer is a dialog with no padding of its own, so its absolutely
+    // positioned close button landed squarely on the first control in the
+    // column. Two rectangles that do not overlap is the whole assertion.
+    const overlaps =
+      closeBox.x < pickerBox.x + pickerBox.width &&
+      closeBox.x + closeBox.width > pickerBox.x &&
+      closeBox.y < pickerBox.y + pickerBox.height &&
+      closeBox.y + closeBox.height > pickerBox.y;
+    expect(overlaps, 'the close button overlaps the workspace picker').toBe(false);
+  });
+
+  test('reads as a labelled picker rather than another nav row', async ({ app }) => {
+    const sidebar = app.getByRole('complementary', { name: 'Sidebar' });
+
+    // The label names the group the way the session list's does, so the control
+    // under it does not have to name itself with an icon.
+    await expect(sidebar.getByText('Workspace', { exact: true })).toBeVisible();
+
+    const trigger = sidebar.getByRole('button', { name: /^Workspace:/u });
+    await expect(trigger).toBeVisible();
+
+    // The same box as the rows beneath it — it wore a bordered surface for a
+    // while and was the loudest thing in a column whose subject is elsewhere.
+    // The chevron is what says it opens something.
+    const [triggerBox, rowBox] = await Promise.all([
+      trigger.evaluate((el) => getComputedStyle(el).height),
+      sidebar.getByRole('link', { name: 'Files' }).evaluate((el) => getComputedStyle(el).height),
+    ]);
+    expect(triggerBox).toBe(rowBox);
+  });
 });

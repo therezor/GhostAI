@@ -232,8 +232,8 @@ describe('session replay', () => {
       seq: 1,
       sessionKey: 's',
       messages: [
-        { id: 'm1', sessionKey: 's', createdAtMs: 1, message: assistant },
-        { id: 'm2', sessionKey: 's', createdAtMs: 2, message: tool },
+        { id: 'm1', sessionKey: 's', seq: 1, createdAtMs: 1, message: assistant },
+        { id: 'm2', sessionKey: 's', seq: 2, createdAtMs: 2, message: tool },
       ],
     });
 
@@ -242,5 +242,115 @@ describe('session replay', () => {
     const [first, second] = parsed.messages;
     expect(first!.message.role === 'assistant' && first!.message.toolCalls[0]?.id).toBe('call_1');
     expect(second!.message.role === 'tool' && second!.message.toolCallId).toBe('call_1');
+  });
+});
+
+describe('regenerate and edit', () => {
+  it('accepts a regenerate that names no message', () => {
+    const parsed = ClientMessageSchema.parse({ type: 'turn.regenerate', sessionKey: 's' });
+    expect(parsed.type).toBe('turn.regenerate');
+    if (parsed.type !== 'turn.regenerate') throw new Error('unreachable');
+    expect(parsed.seq).toBeUndefined();
+  });
+
+  it('accepts a regenerate that names one', () => {
+    const parsed = ClientMessageSchema.parse({
+      type: 'turn.regenerate',
+      sessionKey: 's',
+      seq: 7,
+    });
+    if (parsed.type !== 'turn.regenerate') throw new Error('unreachable');
+    expect(parsed.seq).toBe(7);
+  });
+
+  it('rejects a seq that cannot address a message', () => {
+    expect(() =>
+      ClientMessageSchema.parse({ type: 'turn.regenerate', sessionKey: 's', seq: 0 }),
+    ).toThrow();
+  });
+
+  it('defaults an edit to no attachments', () => {
+    const parsed = ClientMessageSchema.parse({
+      type: 'user.edit',
+      sessionKey: 's',
+      seq: 3,
+      content: 'rewritten',
+    });
+    if (parsed.type !== 'user.edit') throw new Error('unreachable');
+    expect(parsed.attachments).toEqual([]);
+    expect(parsed.content).toBe('rewritten');
+  });
+
+  it('requires an edit to name the message it replaces', () => {
+    expect(() =>
+      ClientMessageSchema.parse({ type: 'user.edit', sessionKey: 's', content: 'x' }),
+    ).toThrow();
+  });
+});
+
+describe('session.truncated', () => {
+  const frame = {
+    type: 'session.truncated' as const,
+    seq: 4,
+    sessionKey: 's',
+    upToSeq: 2,
+    messages: [
+      {
+        id: 'm1',
+        sessionKey: 's',
+        seq: 1,
+        createdAtMs: 1,
+        message: { role: 'user' as const, content: [{ type: 'text' as const, text: 'hi' }] },
+      },
+    ],
+  };
+
+  it('carries the surviving tail', () => {
+    const parsed = ServerMessageSchema.parse(frame);
+    if (parsed.type !== 'session.truncated') throw new Error('unreachable');
+    expect(parsed.upToSeq).toBe(2);
+    expect(parsed.messages).toHaveLength(1);
+  });
+
+  it('accepts a cut to zero', () => {
+    const parsed = ServerMessageSchema.parse({ ...frame, upToSeq: 0, messages: [] });
+    if (parsed.type !== 'session.truncated') throw new Error('unreachable');
+    expect(parsed.upToSeq).toBe(0);
+  });
+
+  it('is sequenced, so it replays to a reconnecting tab', () => {
+    expect(isSequencedServerMessage(ServerMessageSchema.parse(frame))).toBe(true);
+  });
+});
+
+describe('turn.end reporting', () => {
+  it('carries timing and the seqs the turn spanned', () => {
+    const parsed = ServerMessageSchema.parse({
+      type: 'turn.end',
+      seq: 9,
+      turnId: 't1',
+      stopReason: 'complete',
+      usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+      iterations: 2,
+      elapsedMs: 1200,
+      firstSeq: 3,
+      lastSeq: 6,
+    });
+    if (parsed.type !== 'turn.end') throw new Error('unreachable');
+    expect(parsed.elapsedMs).toBe(1200);
+    expect(parsed.firstSeq).toBe(3);
+    expect(parsed.lastSeq).toBe(6);
+  });
+
+  it('keeps all three optional, so an older server still parses', () => {
+    const parsed = ServerMessageSchema.parse({
+      type: 'turn.end',
+      seq: 9,
+      turnId: 't1',
+      stopReason: 'complete',
+    });
+    if (parsed.type !== 'turn.end') throw new Error('unreachable');
+    expect(parsed.elapsedMs).toBeUndefined();
+    expect(parsed.firstSeq).toBeUndefined();
   });
 });

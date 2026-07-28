@@ -13,7 +13,7 @@ import { expect, test } from '../fixtures.js';
 
 test.describe('a turn', () => {
   test('streams an answer, its reasoning and its code block', async ({ app }) => {
-    await app.getByLabel('Message').fill('stream a long answer');
+    await app.getByRole('textbox', { name: 'Message' }).fill('stream a long answer');
     await app.getByRole('button', { name: 'Send' }).click();
 
     const transcript = app.getByTestId('transcript');
@@ -36,7 +36,7 @@ test.describe('a turn', () => {
   });
 
   test('renders a tool card for a call that needs no approval', async ({ app }) => {
-    await app.getByLabel('Message').fill('list the workspace');
+    await app.getByRole('textbox', { name: 'Message' }).fill('list the workspace');
     await app.getByRole('button', { name: 'Send' }).click();
 
     const card = app.getByRole('region', { name: 'Tool call: list_dir' });
@@ -53,7 +53,7 @@ test.describe('a turn', () => {
   });
 
   test('Stop aborts a turn while a tool is still running', async ({ app }) => {
-    await app.getByLabel('Message').fill('wait for me');
+    await app.getByRole('textbox', { name: 'Message' }).fill('wait for me');
     await app.getByRole('button', { name: 'Send' }).click();
 
     // The tool is running and will not finish on its own for a minute, so
@@ -74,18 +74,116 @@ test.describe('a turn', () => {
   });
 
   test('a queued message says so rather than disabling the composer', async ({ app }) => {
-    await app.getByLabel('Message').fill('stall here');
+    await app.getByRole('textbox', { name: 'Message' }).fill('stall here');
     await app.getByRole('button', { name: 'Send' }).click();
     await expect(app.getByRole('button', { name: 'Stop the current turn' })).toBeVisible();
 
     // Enter still sends while a turn runs: the hub queues it. A composer that
     // disabled itself would lose whatever the user was mid-way through typing.
-    const message = app.getByLabel('Message');
+    const message = app.getByRole('textbox', { name: 'Message' });
     await expect(message).toBeEditable();
     await message.fill('stall again');
     await message.press('Enter');
 
     await expect(app.getByText(/message waiting|messages waiting/)).toBeVisible();
     await app.getByRole('button', { name: 'Stop the current turn' }).click();
+  });
+});
+
+/**
+ * Reworking what is already on screen.
+ *
+ * Both of these are truncate-then-re-run: the server drops the messages after a
+ * point and starts a turn from it. What that looks like from the outside is an
+ * answer being *replaced* rather than a second one appearing underneath, and
+ * that distinction is the whole point — a transcript that grew a second answer
+ * every time you asked for one would be a transcript nobody could read back.
+ */
+/**
+ * The line under the composer, on a screen too narrow to hold it.
+ *
+ * A media query is the one kind of change a unit test cannot see — jsdom has no
+ * layout, so `flex-direction: column` is a string in a stylesheet until a real
+ * browser resolves it. The assertion is geometric on purpose: the hint and the
+ * budget occupy different rows, which is the actual claim.
+ */
+test.describe('the composer on a narrow screen', () => {
+  test('puts the hint and the context budget on separate rows', async ({ app }) => {
+    // Resized here rather than through `test.use`: the `app` fixture waits for
+    // the inline sidebar, which below the shell's `md` breakpoint is a drawer
+    // and never appears. Boot wide, then narrow.
+    await app.setViewportSize({ width: 480, height: 900 });
+
+    await app.getByRole('textbox', { name: 'Message' }).fill('stream a long answer');
+    await app.getByRole('button', { name: 'Send' }).click();
+    await expect(app.getByTestId('transcript').getByText('Here is what I found.')).toBeVisible({
+      timeout: 15_000,
+    });
+
+    const hint = app.getByText('Enter to send', { exact: false });
+    const budget = app.getByRole('button', { name: /of .* tokens|of [\d,]+ ·/u });
+    await expect(budget).toBeVisible({ timeout: 15_000 });
+
+    const hintBox = await hint.boundingBox();
+    const budgetBox = await budget.boundingBox();
+    if (hintBox === null || budgetBox === null) throw new Error('no layout to measure');
+
+    // Stacked: the budget starts below the hint ends, rather than beside it.
+    expect(budgetBox.y).toBeGreaterThanOrEqual(hintBox.y + hintBox.height);
+  });
+});
+
+test.describe('reworking a turn', () => {
+  test('regenerate replaces the answer rather than appending one', async ({ app }) => {
+    await app.getByRole('textbox', { name: 'Message' }).fill('stream a long answer');
+    await app.getByRole('button', { name: 'Send' }).click();
+
+    const answer = app.getByTestId('transcript').getByText('Here is what I found.');
+    await expect(answer).toBeVisible({ timeout: 15_000 });
+
+    await app.getByRole('button', { name: 'Regenerate the answer' }).click();
+
+    // Still exactly one. The scripted provider says the same thing again, so a
+    // second copy would be the transcript growing rather than being rebuilt.
+    await expect(answer).toHaveCount(1, { timeout: 15_000 });
+    await expect(app.getByRole('button', { name: 'Send' })).toBeVisible({ timeout: 15_000 });
+  });
+
+  test('the info button opens what the turn cost', async ({ app }) => {
+    await app.getByRole('textbox', { name: 'Message' }).fill('stream a long answer');
+    await app.getByRole('button', { name: 'Send' }).click();
+    await expect(app.getByTestId('transcript').getByText('Here is what I found.')).toBeVisible({
+      timeout: 15_000,
+    });
+
+    await app.getByRole('button', { name: 'Turn details' }).click();
+
+    // The scripted provider reports this usage, so the figure proves the panel
+    // is reading the turn rather than rendering an empty shell.
+    const details = app.getByRole('dialog');
+    await expect(details.getByText('412')).toBeVisible();
+    await expect(details.getByText('Model')).toBeVisible();
+  });
+
+  test('editing a message re-runs the turn from the new wording', async ({ app }) => {
+    await app.getByRole('textbox', { name: 'Message' }).fill('stream a long answer');
+    await app.getByRole('button', { name: 'Send' }).click();
+    await expect(app.getByTestId('transcript').getByText('Here is what I found.')).toBeVisible({
+      timeout: 15_000,
+    });
+
+    await app.getByRole('button', { name: 'Edit this message' }).click();
+
+    const editor = app.getByRole('textbox', { name: 'Edit message' });
+    await editor.fill('list the workspace');
+    await app.getByRole('button', { name: 'Save' }).click();
+
+    // The new wording ran: `list the workspace` is a different scripted route,
+    // so its tool card is proof the edit reached the model rather than only the
+    // transcript.
+    await expect(app.getByRole('region', { name: 'Tool call: list_dir' })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(app.getByTestId('transcript').getByText('Here is what I found.')).toHaveCount(0);
   });
 });

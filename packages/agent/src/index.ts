@@ -59,6 +59,13 @@ export {
 } from './steering.js';
 
 export {
+  describeContext,
+  type ContextBreakdown,
+  type ContextReport,
+  type DescribeContextInput,
+} from './context.js';
+
+export {
   AgentLoop,
   CANCELLED_TOOL_RESULT,
   TOOL_HEARTBEAT_MS,

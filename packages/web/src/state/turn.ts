@@ -27,6 +27,7 @@ import {
   applyServerMessage,
   markApprovalAnswered,
   mergeStoredHistory,
+  truncateTranscriptAfter,
   EMPTY_TRANSCRIPT,
   type Transcript,
 } from './transcript.js';
@@ -66,6 +67,13 @@ export interface TurnState {
     readonly text: string;
     readonly attachments?: readonly { readonly type: string; readonly url: string }[];
   }) => void;
+  /**
+   * Drops everything after `seq`, while a regenerate or edit is in flight.
+   *
+   * Optimistic only. `session.truncated` rebuilds the transcript from the
+   * stored tail a moment later, and that frame — not this — is the truth.
+   */
+  readonly truncateAfter: (seq: number) => void;
   /** This tab answered an approval prompt; the buttons go now, not on the echo. */
   readonly answerApproval: (callId: string, answered: 'approved' | 'denied') => void;
   /** Puts a fetched history under whatever the socket has already built. */
@@ -155,6 +163,10 @@ export const useTurnStore = create<TurnState>((set) => ({
 
   appendPending: (input) => {
     set((state) => ({ transcript: appendPendingUserMessage(state.transcript, input) }));
+  },
+
+  truncateAfter: (seq) => {
+    set((state) => ({ transcript: truncateTranscriptAfter(state.transcript, seq) }));
   },
 
   answerApproval: (callId, answered) => {

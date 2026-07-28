@@ -43,6 +43,8 @@ export interface TestServerOptions {
   readonly clock?: Clock;
   /** What the scripted turn behind the socket answers with. */
   readonly answer?: string;
+  /** A runner to use instead of the instant one — see `hangingRunner`. */
+  readonly runner?: FakeRunner;
   /** A built UI to serve, with the SPA fallback that goes with it. */
   readonly ui?: UiOptions;
 }
@@ -80,7 +82,7 @@ export async function startTestServer(options: TestServerOptions = {}): Promise<
       : { credentialsPresent: options.credentialsPresent }),
   });
 
-  const { hub, runner } = createTestHub(runtime.store, config, options.answer);
+  const { hub, runner } = createTestHub(runtime.store, config, options.answer, options.runner);
 
   const server = await createServer({
     config,

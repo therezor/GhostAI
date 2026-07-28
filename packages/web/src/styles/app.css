@@ -26,6 +26,7 @@
 @import './components/dialog.css';
 @import './components/menu.css';
 @import './components/popover.css';
+@import './components/notification-bell.css';
 @import './components/select.css';
 @import './components/switch.css';
 @import './components/tabs.css';

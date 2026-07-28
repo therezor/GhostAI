@@ -169,9 +169,16 @@ describe('the type scale', () => {
     // A paragraph at 0.6875rem is a paragraph nobody reads. `2xs` is for
     // uppercase micro-labels and badge text; anything with prose in it belongs
     // at `sm` or above.
+    //
+    // The budget was 12 and is 14. The two additions are the turn-details
+    // definition list and the context strip's figure — an uppercase micro-label
+    // ramp and an ambient mono readout, which is precisely what this step is
+    // for. Raising it is not free and should not become routine: the assertion
+    // below, not this number, is what actually keeps prose out of 2xs, but the
+    // cap is what keeps the step from spreading by default.
     const tiny = fontSizes.filter((rule) => rule.token === '--text-2xs');
 
-    expect(tiny.length).toBeLessThanOrEqual(12);
+    expect(tiny.length).toBeLessThanOrEqual(14);
     for (const rule of tiny) {
       expect(
         /--tracking-caps|text-transform: uppercase|font-variant-numeric|^\.badge$/.test(

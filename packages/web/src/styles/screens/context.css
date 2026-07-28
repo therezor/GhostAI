@@ -150,4 +150,55 @@
     color: var(--fg-2);
     white-space: pre-wrap;
   }
+
+  /* ── The strip under the composer ──────────────────────────── *
+   *
+   * The one-line version of everything above, sitting where the question is
+   * asked. It shares `.context-fill--*` with the dialog deliberately: a bar
+   * whose blue meant "system prompt" in one place and something else in the
+   * other would be worse than no colour at all.
+   */
+
+  /* Inline, on the right of the composer's hint line. It was a full-width row
+   * under the composer first, which put a horizontal rule's worth of weight
+   * under the thing the eye is meant to be on — the box you type into. */
+  .context-strip {
+    display: flex;
+    flex-shrink: 0;
+    gap: var(--space-2);
+    align-items: center;
+    color: var(--fg-3);
+    transition: color var(--duration-fast) var(--ease-out-quint);
+  }
+
+  .context-strip:hover {
+    color: var(--fg-2);
+  }
+
+  /* Deliberately slighter than the dialog's bar. This is a glance, and a
+   * full-height meter under the composer would compete with the answer above
+   * it — status here is ambient, not the loudest thing on screen. */
+  .context-strip__bar {
+    display: flex;
+    flex: 0 0 auto;
+    width: 4rem;
+    height: var(--space-1);
+    overflow: hidden;
+    background-color: var(--surface-3);
+    border-radius: var(--radius-full);
+  }
+
+  .context-strip__fill {
+    height: 100%;
+  }
+
+  .context-strip__label {
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
+    line-height: var(--leading-2xs);
+  }
+
+  .context-strip__over {
+    color: var(--warning-fg);
+  }
 }

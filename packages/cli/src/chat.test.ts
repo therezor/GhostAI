@@ -111,6 +111,52 @@ function streamSink(): { stream: PassThrough; text: () => string } {
 }
 
 /** Polls rather than sleeping a fixed amount: the REPL answers when it answers. */
+/**
+ * Writes one line and waits for the prompt to come back.
+ *
+ * Waiting only for a command's *output* is a race: the renderer writes it from
+ * inside the dispatcher, several ticks before the REPL loops round to
+ * `rl.question` again — and a line written into that gap is dropped by readline
+ * rather than queued. Counting the prompt is what makes a sequence of commands
+ * deterministic.
+ */
+async function send(
+  input: { write: (chunk: string) => unknown },
+  out: { text: () => string },
+  line: string,
+  expected: string,
+): Promise<void> {
+  input.write(`${line}\n`);
+  // Both halves are needed, in this order. The text says the command ran; the
+  // settle says the REPL is back at its prompt. Waiting only for the text
+  // writes the next line into the gap before `rl.question` is called again,
+  // where readline drops it rather than queueing it — and a dropped line looks
+  // exactly like a command that did nothing. Settling *first* is no good
+  // either: a turn's output pauses between SSE frames, and a mid-turn lull
+  // reads as idle.
+  await waitFor(() => out.text().includes(expected), 20_000);
+  await quiet(out);
+}
+
+/** Resolves once the output has stopped changing — the REPL is back at a prompt. */
+async function quiet(out: { text: () => string }, stillMs = 40): Promise<void> {
+  let last = '';
+  let since = Date.now();
+  const deadline = Date.now() + 20_000;
+
+  for (;;) {
+    const current = out.text();
+    if (current !== last) {
+      last = current;
+      since = Date.now();
+    } else if (Date.now() - since >= stillMs) {
+      return;
+    }
+    if (Date.now() > deadline) throw new Error('the prompt never went quiet');
+    await new Promise((done) => setTimeout(done, 5));
+  }
+}
+
 async function waitFor(check: () => boolean, timeoutMs = 5000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (!check()) {
@@ -500,6 +546,152 @@ describe('chatCommand', () => {
     input.write('/exit\n');
     expect(await pending).toBe(0);
   });
+
+  it('manages sessions, messages and workspaces from the prompt', async () => {
+    const home = tempHome();
+    const { fetchImpl } = transport(sse(textFrame('An answer.'), finishFrame('stop'), USAGE));
+    const out = streamSink();
+    const input = Object.assign(new PassThrough(), { isTTY: true });
+
+    const pending = chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: out.stream,
+      colors: false,
+      input,
+    });
+    await waitFor(() => out.text().includes('› '));
+    await quiet(out);
+
+    // A conversation, so there is something to name, list and rework.
+    await send(input, out, 'the first question', 'An answer.');
+    // The usage line, not the rate: a turn this fast can measure 0 ms, and
+    // `formatRate` reports nothing rather than dividing by it. That rule is
+    // asserted in `render.test.ts`, where the elapsed time is a parameter
+    // rather than however long the machine took.
+    expect(out.text()).toContain('in / ');
+
+    // Derived by the agent loop, which is why the CLI needed no code for it.
+    await send(input, out, '/session', 'workspace default');
+    expect(out.text()).toContain('the first question');
+    expect(out.text()).toContain('workspace default');
+
+    await send(input, out, '/messages', '2  assistant');
+    expect(out.text()).toContain('1  user');
+    expect(out.text()).toContain('2  assistant');
+
+    await send(input, out, '/rename Renamed by hand', 'renamed to');
+    expect(out.text()).toContain('renamed to Renamed by hand');
+
+    await send(input, out, '/sessions', 'Renamed by hand  ·');
+    expect(out.text()).toContain('Renamed by hand');
+
+    await send(input, out, '/stats', 'test-model ·');
+    expect(out.text()).toContain('test-model');
+
+    await send(input, out, '/branch', 'attached to');
+    expect(out.text()).toContain('branched at');
+    // A branch attaches to the fork, so the next turn continues down it.
+    expect(out.text()).toContain('attached to');
+
+    await send(input, out, '/new a second conversation', 'attached to');
+    await send(input, out, '/session', 'a second conversation');
+
+    await send(input, out, '/workspaces', 'conversations');
+    expect(out.text()).toContain('conversations');
+
+    await send(input, out, '/workspace nope', 'No workspace nope');
+    expect(out.text()).toContain('No workspace nope');
+
+    input.write('/exit\n');
+    expect(await pending).toBe(0);
+  }, 30_000);
+
+  it('re-runs a turn after editing what started it', async () => {
+    const home = tempHome();
+    // Three scripted turns, each saying something different: the original, the
+    // edit's re-run, and the regenerate's. Distinct answers are what make each
+    // wait unambiguous — the terminal echoes the typed line, so waiting on
+    // anything the user wrote matches before the command has run. The queue is
+    // one-shot, so a missing response surfaces as `unscripted request` rather
+    // than as a silently repeated answer.
+    const { fetchImpl } = transport(
+      sse(textFrame('An answer.'), finishFrame('stop'), USAGE),
+      sse(textFrame('A second answer.'), finishFrame('stop'), USAGE),
+      sse(textFrame('A third answer.'), finishFrame('stop'), USAGE),
+    );
+    const out = streamSink();
+    const input = Object.assign(new PassThrough(), { isTTY: true });
+
+    const pending = chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: out.stream,
+      colors: false,
+      input,
+    });
+    await waitFor(() => out.text().includes('› '));
+    await quiet(out);
+
+    await send(input, out, 'the first question', 'An answer.');
+
+    // Truncates, then hands the content back — so the re-run goes through the
+    // same path a typed message does rather than a second copy of it.
+    await send(input, out, '/edit -1 a better question', 'A second answer.');
+
+    await send(input, out, '/regenerate', 'A third answer.');
+
+    // Each rework replaced the exchange rather than appending one: the
+    // conversation still holds a single question, and it is the edited wording.
+    //
+    // The seqs are *not* 1 and 2. `truncateAfter` deliberately leaves
+    // `next_seq` alone — reusing sequence numbers would make a stale cursor
+    // held by a reconnecting client address a different message — so two
+    // rewrites leave a gap, and that gap is the design rather than a defect.
+    await send(input, out, '/messages', 'a better question');
+    expect(out.text()).toContain('user  a better question');
+    expect(out.text()).toContain('assistant  A third answer.');
+
+    input.write('/exit\n');
+    expect(await pending).toBe(0);
+  }, 30_000);
+
+  it('refuses to rework a message that is not one of yours', async () => {
+    const home = tempHome();
+    const { fetchImpl } = transport(sse(textFrame('An answer.'), finishFrame('stop'), USAGE));
+    const out = streamSink();
+    const input = Object.assign(new PassThrough(), { isTTY: true });
+
+    const pending = chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: out.stream,
+      colors: false,
+      input,
+    });
+    await waitFor(() => out.text().includes('› '));
+    await quiet(out);
+
+    await send(input, out, 'the first question', 'An answer.');
+
+    // seq 2 is the assistant's answer.
+    await send(input, out, '/edit 2 nope', 'is not one of yours');
+    expect(out.text()).toContain('is not one of yours');
+
+    await send(input, out, '/edit 99 nope', 'No message 99');
+    expect(out.text()).toContain('No message 99');
+
+    // A refused command leaves the conversation exactly as it was.
+    await send(input, out, '/messages', 'the first question');
+    expect(out.text()).toContain('1  user  the first question');
+    expect(out.text()).toContain('2  assistant  An answer.');
+
+    input.write('/exit\n');
+    expect(await pending).toBe(0);
+  }, 30_000);
 
   it('emits raw events in --json mode instead of prose', async () => {
     const home = tempHome();

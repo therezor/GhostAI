@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest';
 import { Providers } from './providers.js';
 import { createAppRouter } from './router.js';
 import { useTurnStore } from '@/state/turn.js';
-import { stubFetch, testQueryClient } from '@/test/render.js';
+import { stubApi, testQueryClient, type RecordedRequest } from '@/test/render.js';
 
 const STATUS = {
   version: '0.0.0',
@@ -52,6 +52,7 @@ const MESSAGES = {
     {
       id: 'm1',
       sessionKey: 'web:7',
+      seq: 1,
       createdAtMs: 1,
       turnId: 't1',
       message: { role: 'user', content: [{ type: 'text', text: 'a stored question' }] },
@@ -59,15 +60,34 @@ const MESSAGES = {
   ],
 };
 
-function renderApp(initial = '/'): { readonly user: ReturnType<typeof userEvent.setup> } {
-  stubFetch({
+function renderApp(initial = '/'): {
+  readonly user: ReturnType<typeof userEvent.setup>;
+  readonly calls: RecordedRequest[];
+} {
+  // `stubApi` rather than `stubFetch` for its request log: "New session writes
+  // nothing" is an assertion about what was *not* sent.
+  const calls = stubApi({
     '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
     // Claimed: the setup overlay mounts above the login one and would
     // otherwise be deciding whether to open on an unstubbed request.
     '/api/setup': [200, { required: false }],
     '/api/status': [200, STATUS],
     '/api/sessions': [200, SESSIONS],
-    '/api/notifications': [200, { notifications: [], unreadCount: 3 }],
+    '/api/notifications': [
+      200,
+      {
+        notifications: [
+          {
+            id: 'n1',
+            title: 'A turn failed',
+            body: 'The provider rate limited the request.',
+            level: 'error',
+            createdAtMs: Date.now(),
+          },
+        ],
+        unreadCount: 3,
+      },
+    ],
     '/api/sessions/web%3A7/messages': [200, MESSAGES],
   });
 
@@ -80,7 +100,7 @@ function renderApp(initial = '/'): { readonly user: ReturnType<typeof userEvent.
     </Providers>,
   );
 
-  return { user: userEvent.setup() };
+  return { user: userEvent.setup(), calls };
 }
 
 describe('the shell', () => {
@@ -91,19 +111,59 @@ describe('the shell', () => {
     expect(await screen.findByRole('heading', { name: 'Ready when you are.' })).toBeInTheDocument();
     expect(await screen.findByText('ollama · test-model')).toBeInTheDocument();
 
+    // "New session" replaced the Chat nav link, which navigated nowhere: it
+    // dropped `?session=` from a route that reads the store rather than the
+    // URL, and the next message put the key straight back.
     const sidebar = screen.getByRole('complementary', { name: 'Sidebar' });
-    expect(within(sidebar).getByRole('link', { name: /Chat/ })).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
+    expect(within(sidebar).getByRole('button', { name: 'New session' })).toBeInTheDocument();
+    expect(within(sidebar).queryByRole('link', { name: /^Chat$/ })).not.toBeInTheDocument();
   });
 
-  it('lists sessions and unread notifications from the server', async () => {
+  it('lists sessions in the sidebar and unread notifications in the header', async () => {
     renderApp();
 
     expect(await screen.findByText('First conversation')).toBeInTheDocument();
+    // The count is in the bell's accessible name rather than drawn as a badge:
+    // "3" beside an icon is not a sentence a screen reader can use.
+    expect(
+      await screen.findByRole('button', { name: 'Notifications, 3 unread' }),
+    ).toBeInTheDocument();
+  });
+
+  it('opens recent notifications from the header, with a way to the full list', async () => {
+    const { user } = renderApp();
+
+    await user.click(await screen.findByRole('button', { name: /^Notifications/ }));
+
+    expect(await screen.findByText('A turn failed')).toBeInTheDocument();
+    // The glance is not a replacement for the archive.
+    expect(screen.getByRole('link', { name: 'See all' })).toHaveAttribute('href', '/notifications');
+  });
+
+  it('starts a conversation without saving an empty one', async () => {
+    const { user, calls } = renderApp();
+
+    const sidebar = await screen.findByRole('complementary', { name: 'Sidebar' });
+    const before = calls.length;
+    await user.click(within(sidebar).getByRole('button', { name: 'New session' }));
+
+    // The URL moves to a key minted on the client, so the click can navigate to
+    // it — but nothing is written. A row created on the press is a row that
+    // survives someone changing their mind, and the sidebar fills with empty
+    // conversations. The agent loop creates it when the first message lands.
+    await waitFor(() => {
+      expect(useTurnStore.getState().sessionKey).toMatch(/^web-/u);
+    });
+    expect(calls.slice(before).filter((call) => call.method === 'POST')).toEqual([]);
+  });
+
+  it('names a conversation rather than showing its key', async () => {
+    renderApp();
+
+    expect(await screen.findByText('First conversation')).toBeInTheDocument();
+    // The complaint this fixes: a list of uuids is not a list of conversations.
     const sidebar = screen.getByRole('complementary', { name: 'Sidebar' });
-    expect(within(sidebar).getByText('3')).toBeInTheDocument();
+    expect(within(sidebar).queryByText('web:1')).not.toBeInTheDocument();
   });
 
   it('navigates without unmounting the shell around it', async () => {

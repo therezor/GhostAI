@@ -21,7 +21,7 @@ import type { ApprovalScope } from '@ghostai/protocol';
 
 import { Button } from '@/components/ui/button.js';
 import type { Transcript } from '@/state/transcript.js';
-import { Message } from './message.js';
+import { Message, type MessageAction } from './message.js';
 
 /** How close to the bottom still counts as "at the bottom", in CSS pixels. */
 const PIN_THRESHOLD = 48;
@@ -29,10 +29,19 @@ const PIN_THRESHOLD = 48;
 export interface TranscriptViewProps {
   readonly transcript: Transcript;
   readonly busy: boolean;
+  /** Which conversation this is, for the turn-details lookup. */
+  readonly sessionKey: string | undefined;
   readonly onApprove: (callId: string, approved: boolean, scope: ApprovalScope) => void;
+  readonly onAction: (action: MessageAction) => void;
 }
 
-export function TranscriptView({ transcript, busy, onApprove }: TranscriptViewProps): JSX.Element {
+export function TranscriptView({
+  transcript,
+  busy,
+  sessionKey,
+  onApprove,
+  onAction,
+}: TranscriptViewProps): JSX.Element {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [pinned, setPinned] = useState(true);
 
@@ -72,7 +81,14 @@ export function TranscriptView({ transcript, busy, onApprove }: TranscriptViewPr
         <ol className="stack transcript__list">
           {transcript.map((item) => (
             <li key={item.id} className="transcript__item">
-              <Message item={item} streaming={busy && item === lastTurn} onApprove={onApprove} />
+              <Message
+                item={item}
+                streaming={busy && item === lastTurn}
+                busy={busy}
+                sessionKey={sessionKey}
+                onApprove={onApprove}
+                onAction={onAction}
+              />
             </li>
           ))}
         </ol>

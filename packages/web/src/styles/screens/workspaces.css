@@ -22,15 +22,28 @@
     gap: var(--gap);
   }
 
-  /* Full width and left-aligned: it names a place, and a centred label in a
-     column of left-aligned rows is the one that looks misplaced. */
+  /* A row, plus the one thing that makes it a picker.
+   *
+   * The shape — height, padding, radius, hover — arrives as `rowClassName` from
+   * whoever renders this, so it is literally the same rule the rows beneath it
+   * use rather than a copy that agrees today. It wore a bordered surface for a
+   * while and that was wrong in the way boxes usually are: it was the loudest
+   * thing in the column, and what it names is context rather than an action.
+   *
+   * What is left here is the chevron and the space that pushes the value away
+   * from it. */
   .workspace-switcher__trigger {
-    justify-content: flex-start;
-    width: 100%;
-    min-height: var(--size-control-md);
-    padding: var(--space-2) var(--space-3);
-    gap: var(--space-3);
-    color: var(--fg-1);
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+
+  /* The whole of the affordance. Muted, because a caret is a hint about what
+     the row does rather than something to look at. */
+  .workspace-switcher__caret {
+    flex-shrink: 0;
+    width: var(--size-icon-sm);
+    height: var(--size-icon-sm);
+    color: var(--fg-3);
   }
 
   .workspace-switcher__name {

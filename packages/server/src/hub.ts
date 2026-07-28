@@ -45,11 +45,13 @@ import {
   isAbortError,
   silentLogger,
   systemClock,
+  textOf,
   textPart,
   toStoredMessage,
   type Clock,
   type Logger,
   type SessionStore,
+  type StoredMessageRecord,
 } from '@ghostai/core';
 import {
   ClientMessageSchema,
@@ -98,6 +100,17 @@ export const DEFAULT_MAX_SESSIONS = 64;
  * the common case, not a replacement for the route.
  */
 export const RESUME_MESSAGE_LIMIT = 200;
+
+/**
+ * What an install with no model says, in the one place that says it.
+ *
+ * Two paths report it: a turn that reached the runner and found none, and a
+ * regenerate that checks *before* truncating. Both must say the same thing, or
+ * the same install describes itself two ways.
+ */
+export const NO_MODEL_MESSAGE: string =
+  'No model is configured. Add a provider and choose a model in Settings, ' +
+  'or run `ghost init` from a terminal.';
 
 /**
  * Idempotency keys remembered per session.
@@ -420,6 +433,14 @@ export class SessionHub {
         this.#submit(connection, message);
         return;
 
+      case 'turn.regenerate':
+        this.#regenerate(connection, message);
+        return;
+
+      case 'user.edit':
+        this.#edit(connection, message);
+        return;
+
       case 'turn.stop': {
         const state = this.#sessions.get(message.sessionKey);
         // A stop with nothing running is the user clicking as the turn ends.
@@ -525,6 +546,36 @@ export class SessionHub {
       return;
     }
 
+    this.#enqueue(connection, state, {
+      content: toContent(message.content, message.attachments),
+      // Here, and only here. Parsing mentions in the WebSocket handler would
+      // make `@kb:` a browser feature: a channel bridging through this hub
+      // sends the same frame and would get none of it. The text is never
+      // modified — the model sees exactly what the user typed.
+      mentions: parseMentions(message.content),
+      ...(clientMessageId === undefined ? {} : { clientMessageId }),
+      ...(message.profileId === undefined ? {} : { profileId: message.profileId }),
+    });
+  }
+
+  /**
+   * The queue rules, in the one place that has them.
+   *
+   * `#submit`, `#regenerate` and `#edit` all end here. Three callers is exactly
+   * why this is a method: the depth cap, the ack and the drain/queue decision
+   * are the contract a client renders against, and three copies of it would be
+   * three chances for a retry path to behave unlike the path it retries.
+   */
+  #enqueue(
+    connection: Connection,
+    state: SessionState,
+    turn: {
+      readonly content: string | readonly ContentPart[];
+      readonly mentions: ParsedMentions;
+      readonly clientMessageId?: string;
+      readonly profileId?: string;
+    },
+  ): void {
     if (state.queue.length >= this.#maxQueueDepth) {
       this.#error(
         connection,
@@ -536,26 +587,22 @@ export class SessionHub {
     }
 
     const id = this.#newId();
-    if (clientMessageId !== undefined) this.#remember(state, clientMessageId, id);
+    if (turn.clientMessageId !== undefined) this.#remember(state, turn.clientMessageId, id);
 
     state.queue.push({
       id,
-      content: toContent(message.content, message.attachments),
-      profileId: message.profileId ?? connection.profileId,
+      content: turn.content,
+      profileId: turn.profileId ?? connection.profileId,
       channel: connection.channel,
       workspaceId: connection.workspaceId,
-      // Here, and only here. Parsing mentions in the WebSocket handler would
-      // make `@kb:` a browser feature: a channel bridging through this hub
-      // sends the same frame and would get none of it. The text is never
-      // modified — the model sees exactly what the user typed.
-      mentions: parseMentions(message.content),
+      mentions: turn.mentions,
     });
 
     this.#emit(state, {
       type: 'message.ack',
       sessionKey: state.key,
       messageId: id,
-      ...(clientMessageId === undefined ? {} : { clientMessageId }),
+      ...(turn.clientMessageId === undefined ? {} : { clientMessageId: turn.clientMessageId }),
     });
 
     if (state.running !== undefined) {
@@ -569,6 +616,139 @@ export class SessionHub {
     }
 
     this.#drain(state);
+  }
+
+  /**
+   * Re-runs a turn, discarding the answer it produced.
+   *
+   * The guard order is the design, not decoration. **The unconfigured check
+   * comes before the truncation**: discovering there is no model *after*
+   * deleting the answer would destroy what the user had and give nothing back,
+   * and it is the one ordering mistake here that is not recoverable.
+   */
+  #regenerate(
+    connection: Connection,
+    message: Extract<ClientMessage, { type: 'turn.regenerate' }>,
+  ): void {
+    const state = this.#session(message.sessionKey);
+
+    if (this.#loop() === null) {
+      this.#error(connection, 'not_configured', NO_MODEL_MESSAGE, false);
+      return;
+    }
+
+    // A queued message would otherwise run against a history that is about to
+    // change underneath it.
+    if (state.running !== undefined || state.queue.length > 0) {
+      this.#error(
+        connection,
+        'session_busy',
+        'A turn is running on this conversation. Stop it, then try again.',
+        true,
+      );
+      return;
+    }
+
+    const target =
+      message.seq === undefined
+        ? this.#lastQuestion(state.key)
+        : this.#userMessageAt(state.key, message.seq);
+    if (target === undefined) {
+      this.#error(
+        connection,
+        'bad_request',
+        'There is nothing to regenerate on this conversation.',
+      );
+      return;
+    }
+
+    // Read before the delete, because the delete is what removes it.
+    const content = target.message.role === 'user' ? target.message.content : [];
+    this.#rewind(state, target.seq);
+    this.#enqueue(connection, state, { content, mentions: parseMentions(textOf(target.message)) });
+  }
+
+  /** Replaces a message and re-runs from it. Same guards as `#regenerate`. */
+  #edit(connection: Connection, message: Extract<ClientMessage, { type: 'user.edit' }>): void {
+    const state = this.#session(message.sessionKey);
+
+    if (this.#loop() === null) {
+      this.#error(connection, 'not_configured', NO_MODEL_MESSAGE, false);
+      return;
+    }
+
+    if (state.running !== undefined || state.queue.length > 0) {
+      this.#error(
+        connection,
+        'session_busy',
+        'A turn is running on this conversation. Stop it, then try again.',
+        true,
+      );
+      return;
+    }
+
+    if (this.#userMessageAt(state.key, message.seq) === undefined) {
+      this.#error(connection, 'bad_request', 'That message cannot be edited.');
+      return;
+    }
+
+    if (message.content === '' && message.attachments.length === 0) {
+      this.#error(connection, 'bad_request', 'Message is empty');
+      return;
+    }
+
+    this.#rewind(state, message.seq);
+    this.#enqueue(connection, state, {
+      content: toContent(message.content, message.attachments),
+      mentions: parseMentions(message.content),
+      ...(message.clientMessageId === undefined
+        ? {}
+        : { clientMessageId: message.clientMessageId }),
+      ...(message.profileId === undefined ? {} : { profileId: message.profileId }),
+    });
+  }
+
+  /**
+   * Drops the question at `seq` and everything after it, then says so.
+   *
+   * **Minus one is load-bearing.** `AgentLoop.run` appends the user message
+   * unconditionally at the top of every turn, so truncating *to* `seq` and then
+   * re-running would write the same question twice — once from history and once
+   * from the loop. The question is deleted here and rewritten there.
+   */
+  #rewind(state: SessionState, seq: number): void {
+    const result = this.#store.truncateAfter(state.key, seq - 1);
+    this.#emit(state, {
+      type: 'session.truncated',
+      sessionKey: state.key,
+      upToSeq: result.seq,
+      // The surviving tail, so a client rebuilds from this frame rather than
+      // racing a refetch against the turn that is about to start. Sequenced, so
+      // every other attached tab corrects itself with no code of its own.
+      messages: this.#store
+        .messages(state.key, { limit: RESUME_MESSAGE_LIMIT, fromEnd: true })
+        .map(toStoredMessage),
+    });
+  }
+
+  /** The stored row at `seq`, if it is a message the user wrote. */
+  #userMessageAt(sessionKey: string, seq: number): StoredMessageRecord | undefined {
+    const [record] = this.#store.messages(sessionKey, { afterSeq: seq - 1, beforeSeq: seq + 1 });
+    return record?.message.role === 'user' ? record : undefined;
+  }
+
+  /**
+   * The question that started the most recent turn.
+   *
+   * The *earliest* user row of that turn, not the latest: steering appends user
+   * rows mid-turn under the same turn id, and the last of those is a correction
+   * to the answer rather than the question that asked for it.
+   */
+  #lastQuestion(sessionKey: string): StoredMessageRecord | undefined {
+    const tail = this.#store.messages(sessionKey, { limit: RESUME_MESSAGE_LIMIT, fromEnd: true });
+    const turnId = tail.at(-1)?.turnId;
+    if (turnId === undefined) return undefined;
+    return tail.find((record) => record.turnId === turnId && record.message.role === 'user');
   }
 
   #remember(state: SessionState, clientMessageId: string, messageId: string): void {
@@ -614,9 +794,7 @@ export class SessionHub {
         this.#broadcast(state, {
           type: 'error',
           code: 'not_configured',
-          message:
-            'No model is configured. Add a provider and choose a model in Settings, ' +
-            'or run `ghost init` from a terminal.',
+          message: NO_MODEL_MESSAGE,
           retryable: false,
           turnId: turn.id,
         });

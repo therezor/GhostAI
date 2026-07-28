@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { Clock } from './clock.js';
 import { GhostError, isGhostError } from './errors.js';
 import { hasOrphanedToolResult } from './history.js';
-import { assistantMessage, toolMessage, userMessage } from './messages.js';
+import { assistantMessage, textOf, toolMessage, userMessage } from './messages.js';
 import { SessionStore, toStoredMessage } from './session-store.js';
 
 const NOW = 1_700_000_000_000;
@@ -389,6 +389,7 @@ describe('reading messages', () => {
     expect(toStoredMessage(record)).toEqual({
       id: 'm1',
       sessionKey: 's',
+      seq: 1,
       createdAtMs: NOW,
       turnId: 't1',
       message: userMessage('hi'),
@@ -533,6 +534,358 @@ describe('clearing', () => {
     // Sequences never rewind: a reconnecting client's stale cursor must not
     // start addressing different messages.
     expect(store.append('s', userMessage('three')).seq).toBe(3);
+    store.close();
+  });
+});
+
+describe('truncating', () => {
+  it('drops everything after the cut and reports how much', () => {
+    const store = makeStore();
+    for (const text of ['one', 'two', 'three', 'four']) store.append('s', userMessage(text));
+
+    expect(store.truncateAfter('s', 2)).toEqual({ seq: 2, deleted: 2 });
+    expect(store.messages('s').map((record) => record.seq)).toEqual([1, 2]);
+    store.close();
+  });
+
+  it('leaves next_seq alone, so sequences never rewind', () => {
+    const store = makeStore();
+    for (const text of ['one', 'two', 'three']) store.append('s', userMessage(text));
+
+    store.truncateAfter('s', 1);
+
+    // The load-bearing property: the gap is deliberate. A reconnecting client
+    // holding `afterSeq: 2` must not have it start addressing a new message.
+    expect(store.append('s', userMessage('next')).seq).toBe(4);
+    store.close();
+  });
+
+  it('clamps both markers to the cut', () => {
+    const store = makeStore();
+    for (const text of ['one', 'two', 'three', 'four']) store.append('s', userMessage(text));
+    store.updateSession('s', { lastConsolidatedSeq: 3, lastLearnedSeq: 4 });
+
+    store.truncateAfter('s', 2);
+
+    const session = store.getSession('s');
+    expect(session?.lastConsolidatedSeq).toBe(2);
+    expect(session?.lastLearnedSeq).toBe(2);
+    store.close();
+  });
+
+  it('leaves a marker below the cut where it is', () => {
+    const store = makeStore();
+    for (const text of ['one', 'two', 'three']) store.append('s', userMessage(text));
+    store.updateSession('s', { lastConsolidatedSeq: 1 });
+
+    store.truncateAfter('s', 2);
+
+    expect(store.getSession('s')?.lastConsolidatedSeq).toBe(1);
+    store.close();
+  });
+
+  it('snaps back past an assistant whose tool calls would be stranded', () => {
+    const store = makeStore();
+    store.append('s', userMessage('read it'));
+    store.append('s', assistantMessage('', { toolCalls: [call('a')] }));
+    store.append('s', toolMessage('a', 'read_file', 'contents'));
+    store.append('s', assistantMessage('done'));
+
+    // Asking to keep seq 1..2 would leave the assistant declaring `a` with no
+    // answer — a provider 400 on the next turn.
+    const result = store.truncateAfter('s', 2);
+
+    expect(result.seq).toBe(1);
+    expect(store.messages('s').map((record) => record.seq)).toEqual([1]);
+    store.close();
+  });
+
+  it('does not snap a cut that is already legal', () => {
+    const store = makeStore();
+    store.append('s', userMessage('read it'));
+    store.append('s', assistantMessage('', { toolCalls: [call('a')] }));
+    store.append('s', toolMessage('a', 'read_file', 'contents'));
+    store.append('s', assistantMessage('done'));
+
+    expect(store.truncateAfter('s', 3).seq).toBe(3);
+    store.close();
+  });
+
+  it('is a no-op past the end, and does not bump the session', () => {
+    const store = makeStore();
+    store.append('s', userMessage('one'));
+    const before = store.getSession('s')?.updatedAtMs;
+
+    expect(store.truncateAfter('s', 99)).toEqual({ seq: 99, deleted: 0 });
+    expect(store.messageCount('s')).toBe(1);
+    expect(store.getSession('s')?.updatedAtMs).toBe(before);
+    store.close();
+  });
+
+  it('clears a session when cut at zero', () => {
+    const store = makeStore();
+    store.append('s', userMessage('one'));
+    store.append('s', userMessage('two'));
+
+    expect(store.truncateAfter('s', 0).deleted).toBe(2);
+    expect(store.messageCount('s')).toBe(0);
+    store.close();
+  });
+
+  it('rejects an unknown session', () => {
+    const store = makeStore();
+    expect(() => store.truncateAfter('nope', 1)).toThrow(GhostError);
+    store.close();
+  });
+
+  it('leaves history readable — no orphaned tool result survives', () => {
+    const store = makeStore();
+    store.append('s', userMessage('read it'));
+    store.append('s', assistantMessage('', { toolCalls: [call('a')] }));
+    store.append('s', toolMessage('a', 'read_file', 'contents'));
+
+    store.truncateAfter('s', 2);
+
+    expect(hasOrphanedToolResult(store.history('s'))).toBe(false);
+    store.close();
+  });
+});
+
+describe('forking', () => {
+  it('copies the prefix into a new session and leaves the source alone', () => {
+    const store = makeStore();
+    for (const text of ['one', 'two', 'three']) store.append('s', userMessage(text));
+
+    const fork = store.forkSession('s', 2);
+
+    expect(fork.copied).toBe(2);
+    expect(fork.seq).toBe(2);
+    expect(store.messages(fork.session.key).map((r) => textOf(r.message))).toEqual(['one', 'two']);
+    expect(store.messageCount('s')).toBe(3);
+    store.close();
+  });
+
+  it('reseats sequences densely from one', () => {
+    const store = makeStore();
+    for (const text of ['one', 'two', 'three']) store.append('s', userMessage(text));
+    store.truncateAfter('s', 1);
+    store.append('s', userMessage('sparse'));
+
+    const fork = store.forkSession('s', 99);
+
+    // The source's seqs are 1 and 4; a fork is a new sequence space.
+    expect(store.messages(fork.session.key).map((r) => r.seq)).toEqual([1, 2]);
+    expect(store.append(fork.session.key, userMessage('next')).seq).toBe(3);
+    store.close();
+  });
+
+  it('mints new row ids but preserves turn ids and creation times', () => {
+    const store = makeStore();
+    const original = store.append('s', userMessage('one'), { turnId: 't1' });
+
+    const fork = store.forkSession('s', 1);
+    const copied = store.messages(fork.session.key)[0];
+
+    expect(copied?.id).not.toBe(original.id);
+    expect(copied?.turnId).toBe('t1');
+    expect(copied?.createdAtMs).toBe(original.createdAtMs);
+    store.close();
+  });
+
+  it('inherits workspace, origin and profile', () => {
+    const store = makeStore();
+    store.ensureSession('s', { origin: 'cli', workspaceId: 'w2', profileId: 'p1' });
+    store.append('s', userMessage('one'));
+
+    const fork = store.forkSession('s', 1);
+
+    expect(fork.session.origin).toBe('cli');
+    expect(fork.session.workspaceId).toBe('w2');
+    expect(fork.session.profileId).toBe('p1');
+    expect(fork.session.key.startsWith('cli-')).toBe(true);
+    store.close();
+  });
+
+  it('records where it came from', () => {
+    const store = makeStore();
+    store.append('s', userMessage('one'));
+
+    const fork = store.forkSession('s', 1);
+
+    expect(fork.session.metadata.forkedFrom).toEqual({ key: 's', seq: 1, atMs: NOW });
+    store.close();
+  });
+
+  it('carries the source title, and derives one when the source has none', () => {
+    const store = makeStore();
+    store.append('s', userMessage('why does the login throw'));
+    store.ensureSession('titled', { title: 'Named already' });
+    store.append('titled', userMessage('anything'));
+
+    expect(store.forkSession('s', 1).session.title).toBe('why does the login throw');
+    expect(store.forkSession('titled', 1).session.title).toBe('Named already');
+    store.close();
+  });
+
+  it('remaps the consolidation markers by count', () => {
+    const store = makeStore();
+    for (const text of ['one', 'two', 'three', 'four']) store.append('s', userMessage(text));
+    store.updateSession('s', { lastConsolidatedSeq: 2, lastLearnedSeq: 3 });
+
+    const fork = store.forkSession('s', 4);
+
+    expect(fork.session.lastConsolidatedSeq).toBe(2);
+    expect(fork.session.lastLearnedSeq).toBe(3);
+    store.close();
+  });
+
+  it('snaps to a legal boundary', () => {
+    const store = makeStore();
+    store.append('s', userMessage('read it'));
+    store.append('s', assistantMessage('', { toolCalls: [call('a')] }));
+    store.append('s', toolMessage('a', 'read_file', 'contents'));
+
+    const fork = store.forkSession('s', 2);
+
+    expect(fork.seq).toBe(1);
+    expect(fork.copied).toBe(1);
+    store.close();
+  });
+
+  it('forks an empty session at seq zero', () => {
+    const store = makeStore();
+    store.append('s', userMessage('one'));
+
+    const fork = store.forkSession('s', 0);
+
+    expect(fork.copied).toBe(0);
+    expect(store.append(fork.session.key, userMessage('first')).seq).toBe(1);
+    store.close();
+  });
+
+  it('honours an explicit key and refuses to overwrite one', () => {
+    const store = makeStore();
+    store.append('s', userMessage('one'));
+
+    expect(store.forkSession('s', 1, { key: 'chosen' }).session.key).toBe('chosen');
+    expect(() => store.forkSession('s', 1, { key: 'chosen' })).toThrow(GhostError);
+    store.close();
+  });
+
+  it('rejects an unknown source', () => {
+    const store = makeStore();
+    expect(() => store.forkSession('nope', 1)).toThrow(GhostError);
+    store.close();
+  });
+});
+
+describe('turn stats', () => {
+  const stats = (turnId: string, overrides: Record<string, unknown> = {}) => ({
+    turnId,
+    sessionKey: 's',
+    provider: 'anthropic',
+    model: 'claude-opus-5',
+    startedAtMs: NOW,
+    endedAtMs: NOW + 1000,
+    iterations: 2,
+    stopReason: 'complete' as const,
+    usage: { promptTokens: 100, completionTokens: 20, totalTokens: 120 },
+    ...overrides,
+  });
+
+  it('records and reads back a turn', () => {
+    const store = makeStore();
+    store.ensureSession('s');
+    store.recordTurnStats(stats('t1'));
+
+    expect(store.turnStats('s')).toEqual([stats('t1')]);
+    store.close();
+  });
+
+  it('upserts rather than throwing when a turn ends twice', () => {
+    const store = makeStore();
+    store.ensureSession('s');
+    store.recordTurnStats(stats('t1'));
+    store.recordTurnStats(stats('t1', { iterations: 5 }));
+
+    expect(store.turnStats('s')).toHaveLength(1);
+    expect(store.turnStats('s')[0]?.iterations).toBe(5);
+    store.close();
+  });
+
+  it('returns the most recent turn first, and honours a limit', () => {
+    const store = makeStore();
+    store.ensureSession('s');
+    store.recordTurnStats(stats('t1', { endedAtMs: NOW + 1 }));
+    store.recordTurnStats(stats('t2', { endedAtMs: NOW + 2 }));
+    store.recordTurnStats(stats('t3', { endedAtMs: NOW + 3 }));
+
+    expect(store.turnStats('s').map((row) => row.turnId)).toEqual(['t3', 't2', 't1']);
+    expect(store.turnStats('s', { limit: 2 }).map((row) => row.turnId)).toEqual(['t3', 't2']);
+    store.close();
+  });
+
+  it('keeps the optional usage fields optional', () => {
+    const store = makeStore();
+    store.ensureSession('s');
+    store.recordTurnStats(
+      stats('t1', { usage: { promptTokens: 1, completionTokens: 2, totalTokens: 3 } }),
+    );
+    store.recordTurnStats(
+      stats('t2', {
+        usage: { promptTokens: 1, completionTokens: 2, totalTokens: 3, cachedTokens: 9 },
+      }),
+    );
+
+    const rows = store.turnStats('s');
+    expect(rows.find((row) => row.turnId === 't1')?.usage.cachedTokens).toBeUndefined();
+    expect(rows.find((row) => row.turnId === 't2')?.usage.cachedTokens).toBe(9);
+    store.close();
+  });
+
+  it('sums usage per session in one query', () => {
+    const store = makeStore();
+    store.ensureSession('s');
+    store.ensureSession('other');
+    store.recordTurnStats(stats('t1'));
+    store.recordTurnStats(
+      stats('t2', { usage: { promptTokens: 5, completionTokens: 5, totalTokens: 10 } }),
+    );
+    store.recordTurnStats(stats('t3', { sessionKey: 'other' }));
+
+    const totals = store.sessionUsage(['s', 'other', 'missing']);
+
+    expect(totals.get('s')).toEqual({ promptTokens: 105, completionTokens: 25, totalTokens: 130 });
+    expect(totals.get('other')?.totalTokens).toBe(120);
+    // A session with no recorded turns is absent rather than zeroed — the
+    // honest answer for a conversation whose turns predate this table.
+    expect(totals.has('missing')).toBe(false);
+    store.close();
+  });
+
+  it('reports no cached total when no turn reported one', () => {
+    const store = makeStore();
+    store.ensureSession('s');
+    store.recordTurnStats(stats('t1'));
+
+    expect(store.sessionUsage(['s']).get('s')?.cachedTokens).toBeUndefined();
+    store.close();
+  });
+
+  it('returns an empty map for an empty page', () => {
+    const store = makeStore();
+    expect(store.sessionUsage([]).size).toBe(0);
+    store.close();
+  });
+
+  it('goes away with the session', () => {
+    const store = makeStore();
+    store.ensureSession('s');
+    store.recordTurnStats(stats('t1'));
+
+    store.deleteSession('s');
+
+    expect(store.turnStats('s')).toEqual([]);
     store.close();
   });
 });

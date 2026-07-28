@@ -89,13 +89,17 @@ export {
 export {
   DEFAULT_MAX_HISTORY_MESSAGES,
   DEFAULT_MAX_TOOL_RESULT_CHARS,
+  findLegalEnd,
   findLegalStart,
   hasOrphanedToolResult,
+  hasUnansweredToolCall,
   historyForLLM,
   truncateHeadTail,
   type HistoryForLLMOptions,
   type TruncationResult,
 } from './history.js';
+
+export { MAX_TITLE_CHARS, deriveSessionTitle } from './session-title.js';
 
 export {
   SessionStore,
@@ -110,7 +114,11 @@ export {
   type SessionStoreOptions,
   type SessionSummaryRecord,
   type StoredMessageRecord,
+  type TruncateResult,
+  type TurnStatsRecord,
   type UpdateSessionOptions,
+  type ForkResult,
+  type ForkSessionOptions,
 } from './session-store.js';
 
 export {

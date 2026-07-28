@@ -175,17 +175,29 @@ function attachWithCursor(sessionKey: string): number {
 }
 
 /**
- * Starts a fresh conversation, letting the server name it.
+ * Starts a conversation, and hands back the key it will have.
  *
- * `workspaceId` is where the new conversation lands. It only ever *creates* —
- * the loop reads the stored row for a session that already exists — so this
- * cannot move an existing conversation's files.
+ * **Nothing is persisted here, and that is the point.** A row created the
+ * moment someone presses New session is a row that survives them changing their
+ * mind, so a sidebar fills with empty conversations nobody had. The hub only
+ * moves this connection; `AgentLoop.run` calls `ensureSession` when the first
+ * message lands, which is the first moment there is a conversation to save.
+ *
+ * The key is minted here rather than by the server because the click has to
+ * navigate to it, and `session.new` answers asynchronously. The frame still
+ * carries it so the hub attaches the connection — and carries the workspace,
+ * which is the one thing this frame can do that `session.switch` cannot: it
+ * re-points `connection.workspaceId`, and that is what decides where the
+ * conversation is created when it finally is.
  */
-export function newSession(workspaceId?: string): void {
+export function newSession(workspaceId?: string): string {
+  const sessionKey = `web-${crypto.randomUUID()}`;
   socket?.send({
     type: 'session.new',
+    sessionKey,
     ...(workspaceId === undefined ? {} : { workspaceId }),
   });
+  return sessionKey;
 }
 
 export function sendUserMessage(text: string, attachments: readonly Attachment[] = []): void {
@@ -218,6 +230,50 @@ export function steerTurn(content: string): void {
   const sessionKey = useTurnStore.getState().sessionKey;
   if (sessionKey === undefined) return;
   socket?.send({ type: 'turn.steer', sessionKey, content });
+}
+
+/**
+ * Re-runs a turn, discarding the answer it produced.
+ *
+ * The local truncation is a flicker guard and nothing more. `session.truncated`
+ * arrives a moment later carrying the stored tail and rebuilds the transcript
+ * from it — this only stops the answer being thrown away from sitting on screen
+ * while the replacement is being asked for.
+ *
+ * It cuts *at* `seq` rather than below it, keeping the question visible: the
+ * server deletes and re-appends that row, and a bubble that vanished and came
+ * back would read as the message having been lost.
+ */
+export function regenerateTurn(seq?: number): void {
+  const sessionKey = useTurnStore.getState().sessionKey;
+  if (sessionKey === undefined) return;
+  if (seq !== undefined) useTurnStore.getState().truncateAfter(seq);
+  socket?.send({ type: 'turn.regenerate', sessionKey, ...(seq === undefined ? {} : { seq }) });
+}
+
+/** Replaces a message and re-runs from it. */
+export function editMessage(
+  seq: number,
+  text: string,
+  attachments: readonly Attachment[] = [],
+): void {
+  const store = useTurnStore.getState();
+  const sessionKey = store.sessionKey;
+  if (sessionKey === undefined || socket === undefined) return;
+
+  const clientMessageId = crypto.randomUUID();
+  // Below the edited message, because the replacement is appended next: cutting
+  // at `seq` would leave the old wording above the new one.
+  store.truncateAfter(seq - 1);
+  store.appendPending({ clientMessageId, text, attachments });
+  socket.send({
+    type: 'user.edit',
+    sessionKey,
+    seq,
+    content: text,
+    attachments: [...attachments],
+    clientMessageId,
+  });
 }
 
 export function approveTool(callId: string, approved: boolean, scope: ApprovalScope): void {

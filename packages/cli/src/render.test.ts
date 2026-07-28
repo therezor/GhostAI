@@ -8,6 +8,7 @@ import {
   formatDuration,
   summariseArgs,
   type RenderTarget,
+  formatRate,
 } from './render.js';
 
 function buffer(): RenderTarget & { text: string } {
@@ -314,5 +315,27 @@ describe('TurnRenderer', () => {
     renderer.note('a note');
     renderer.warn('a warning');
     expect(out.text).toBe('mid-line\na note\n⚠ a warning\n');
+  });
+});
+
+describe('formatRate', () => {
+  const usage = { promptTokens: 100, completionTokens: 250, totalTokens: 350 };
+
+  it('reports completion tokens per second', () => {
+    expect(formatRate(usage, 1000)).toBe('250.0 tok/s');
+  });
+
+  it('reports nothing rather than dividing by an unmeasured turn', () => {
+    // A turn that finished inside one millisecond is common on a scripted
+    // provider and on a fast local model. A rate derived from that zero is a
+    // number that looks measured and is not.
+    expect(formatRate(usage, 0)).toBeUndefined();
+    expect(formatRate(usage, undefined)).toBeUndefined();
+  });
+
+  it('reports nothing for a turn that produced no tokens', () => {
+    expect(
+      formatRate({ promptTokens: 10, completionTokens: 0, totalTokens: 10 }, 500),
+    ).toBeUndefined();
   });
 });

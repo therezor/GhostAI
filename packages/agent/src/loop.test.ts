@@ -1492,3 +1492,111 @@ describe('AgentLoop workspaces', () => {
     expect(await loop.previewPrompt({ sessionKey: 'never-seen' })).toContain(rootOf('default'));
   });
 });
+
+const USAGE = { promptTokens: 100, completionTokens: 20, totalTokens: 120 };
+
+describe('turn stats', () => {
+  it('records what the turn cost, keyed by turn id', async () => {
+    const { loop, store, clock } = harness({ turns: [{ deltas: ['ok'], usage: USAGE }] });
+
+    await runTurn(loop, { sessionKey: SESSION, content: 'hello' });
+
+    const [row] = store.turnStats(SESSION);
+    expect(row).toMatchObject({
+      turnId: 'turn-1',
+      sessionKey: SESSION,
+      model: 'test-model',
+      stopReason: 'complete',
+      iterations: 1,
+      usage: USAGE,
+    });
+    // Wall clock, not the monotonic reading the timeout cap uses.
+    expect(row?.startedAtMs).toBe(clock.now());
+    expect(row?.endedAtMs).toBeGreaterThanOrEqual(row?.startedAtMs ?? 0);
+  });
+
+  it('reports the timing and the seqs the turn spanned', async () => {
+    const { loop } = harness({ turns: [{ deltas: ['ok'], usage: USAGE }] });
+
+    const { events } = await runTurn(loop, { sessionKey: SESSION, content: 'hello' });
+    const end = events.find((event) => event.type === 'turn.end');
+
+    // seq 1 is the user message, seq 2 the answer.
+    expect(end).toMatchObject({ firstSeq: 1, lastSeq: 2 });
+    expect(end?.type === 'turn.end' && end.elapsedMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('spans the tool traffic a turn wrote', async () => {
+    const { loop } = harness({
+      tools: [echoTool],
+      turns: [{ toolCalls: [toolCall('c1', 'echo', { text: 'x' })] }, { deltas: ['done'] }],
+    });
+
+    const { events } = await runTurn(loop, { sessionKey: SESSION, content: 'use it' });
+    const end = events.find((event) => event.type === 'turn.end');
+
+    // The question, the assistant turn that called the tool, its result, and
+    // the final answer — the span covers all four.
+    expect(end).toMatchObject({ firstSeq: 1, lastSeq: 4 });
+  });
+
+  it('does not fail a completed turn when the stats write throws', async () => {
+    const { loop, store } = harness({ turns: [{ deltas: ['ok'] }] });
+    store.recordTurnStats = () => {
+      throw new Error('disk full');
+    };
+
+    const { result, events } = await runTurn(loop, { sessionKey: SESSION, content: 'hello' });
+
+    // The turn is what matters; the metrics row is not.
+    expect(result.stopReason).toBe('complete');
+    expect(typesOf(events)).toContain('turn.end');
+  });
+
+  it('records nothing for a turn nobody finished', async () => {
+    const { loop, store } = harness({ turns: [{ deltas: ['a', 'b'] }] });
+
+    // Abandoning the iterator yields no `turn.end` either — the two agree.
+    const iterator = loop.run({ sessionKey: SESSION, content: 'hello' });
+    await iterator.next();
+    await iterator.return(undefined as never);
+
+    expect(store.turnStats(SESSION)).toEqual([]);
+  });
+});
+
+describe('session titles', () => {
+  it('names an unnamed conversation after its first message', async () => {
+    const { loop, store } = harness();
+
+    await runTurn(loop, { sessionKey: SESSION, content: 'why does the login throw' });
+
+    expect(store.getSession(SESSION)?.title).toBe('why does the login throw');
+  });
+
+  it('does not rename on a later turn', async () => {
+    const { loop, store } = harness({ turns: [{ deltas: ['a'] }, { deltas: ['b'] }] });
+
+    await runTurn(loop, { sessionKey: SESSION, content: 'first question' });
+    await runTurn(loop, { sessionKey: SESSION, content: 'a completely different second one' });
+
+    expect(store.getSession(SESSION)?.title).toBe('first question');
+  });
+
+  it('never clobbers a title someone chose', async () => {
+    const { loop, store } = harness();
+    store.ensureSession(SESSION, { title: 'Renamed by hand' });
+
+    await runTurn(loop, { sessionKey: SESSION, content: 'anything at all' });
+
+    expect(store.getSession(SESSION)?.title).toBe('Renamed by hand');
+  });
+
+  it('leaves the title empty when there is nothing to name it after', async () => {
+    const { loop, store } = harness();
+
+    await runTurn(loop, { sessionKey: SESSION, content: [{ type: 'text', text: '   ' }] });
+
+    expect(store.getSession(SESSION)?.title).toBe('');
+  });
+});

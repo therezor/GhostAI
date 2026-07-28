@@ -151,6 +151,23 @@ export const DeleteQuerySchema: z.ZodType<DeleteQuery> = z.object({
     .optional(),
 });
 
+export interface TurnsQuery {
+  readonly limit: number;
+}
+
+/**
+ * Deliberately not `PageQuerySchema`.
+ *
+ * There is no turn cursor — `turn_stats` is read newest-first off one index and
+ * a conversation has orders of magnitude fewer turns than messages. Accepting a
+ * `cursor` that is then ignored would put a parameter in the OpenAPI document
+ * that the server does not honour, which is a lie the document cannot recover
+ * from.
+ */
+export const TurnsQuerySchema: z.ZodType<TurnsQuery> = z.object({
+  limit: z.coerce.number().int().positive().max(MAX_PAGE_LIMIT).default(DEFAULT_PAGE_LIMIT),
+});
+
 export interface SessionParams {
   readonly key: string;
 }

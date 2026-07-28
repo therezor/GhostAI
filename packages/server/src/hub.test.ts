@@ -913,3 +913,222 @@ describe('SessionHub', () => {
     });
   });
 });
+
+describe('regenerating a turn', () => {
+  /** A completed exchange: the question at seq 1, the answer at seq 2. */
+  function seeded(h: Harness): void {
+    h.store.append(SESSION, userMessage('the original question'), { turnId: 't1' });
+    h.store.append(SESSION, assistantMessage('the first answer'), { turnId: 't1' });
+  }
+
+  it('drops the old answer and re-runs the question', async () => {
+    const h = harness();
+    seeded(h);
+    const client = h.connect({ sessionKey: SESSION });
+
+    client.receive({ type: 'turn.regenerate', sessionKey: SESSION });
+    await flush();
+
+    // Both rows are gone: the loop re-appends the question itself, so leaving
+    // it behind would write it twice.
+    expect(h.store.messageCount(SESSION)).toBe(0);
+    expect(h.runner.turns).toHaveLength(1);
+    expect(h.runner.turn(0).input.content).toEqual([
+      { type: 'text', text: 'the original question' },
+    ]);
+  });
+
+  it('tells every attached tab what survived', async () => {
+    const h = harness();
+    seeded(h);
+    const client = h.connect({ sessionKey: SESSION });
+    const second = h.connect({ sessionKey: SESSION });
+
+    client.receive({ type: 'turn.regenerate', sessionKey: SESSION });
+    await flush();
+
+    for (const tab of [client, second]) {
+      const [frame] = tab.of('session.truncated');
+      expect(frame?.upToSeq).toBe(0);
+      expect(frame?.messages).toEqual([]);
+    }
+  });
+
+  it('re-runs an earlier question when one is named', async () => {
+    const h = harness();
+    seeded(h);
+    h.store.append(SESSION, userMessage('a second question'), { turnId: 't2' });
+    h.store.append(SESSION, assistantMessage('a second answer'), { turnId: 't2' });
+    const client = h.connect({ sessionKey: SESSION });
+
+    client.receive({ type: 'turn.regenerate', sessionKey: SESSION, seq: 1 });
+    await flush();
+
+    expect(h.store.messageCount(SESSION)).toBe(0);
+    expect(h.runner.turn(0).input.content).toEqual([
+      { type: 'text', text: 'the original question' },
+    ]);
+  });
+
+  it('picks the question, not a steer that landed during the turn', async () => {
+    const h = harness();
+    h.store.append(SESSION, userMessage('the real question'), { turnId: 't1' });
+    // Steering appends a user row mid-turn under the same turn id.
+    h.store.append(SESSION, userMessage('actually, focus on the parser'), { turnId: 't1' });
+    h.store.append(SESSION, assistantMessage('an answer'), { turnId: 't1' });
+    const client = h.connect({ sessionKey: SESSION });
+
+    client.receive({ type: 'turn.regenerate', sessionKey: SESSION });
+    await flush();
+
+    expect(h.runner.turn(0).input.content).toEqual([{ type: 'text', text: 'the real question' }]);
+  });
+
+  it('refuses when there is nothing to re-run', async () => {
+    const h = harness();
+    const client = h.connect({ sessionKey: SESSION });
+
+    client.receive({ type: 'turn.regenerate', sessionKey: SESSION });
+    await flush();
+
+    expect(client.of('error')[0]?.code).toBe('bad_request');
+    expect(h.runner.turns).toHaveLength(0);
+  });
+
+  it('refuses while a turn is running', async () => {
+    const h = harness();
+    seeded(h);
+    const client = h.connect({ sessionKey: SESSION });
+    client.receive({ type: 'user.message', sessionKey: SESSION, content: 'hello' });
+    await flush();
+    client.reset();
+
+    client.receive({ type: 'turn.regenerate', sessionKey: SESSION });
+    await flush();
+
+    expect(client.of('error')[0]?.code).toBe('session_busy');
+    // The history it would have rewritten is untouched.
+    expect(h.store.messageCount(SESSION)).toBeGreaterThan(0);
+  });
+
+  it('checks for a model before it deletes anything', async () => {
+    const h = harness({ loop: () => null });
+    seeded(h);
+    const client = h.connect({ sessionKey: SESSION });
+
+    client.receive({ type: 'turn.regenerate', sessionKey: SESSION });
+    await flush();
+
+    expect(client.of('error')[0]?.code).toBe('not_configured');
+    // The point of the ordering: truncating first would have destroyed the
+    // answer and returned nothing in its place.
+    expect(h.store.messageCount(SESSION)).toBe(2);
+  });
+});
+
+describe('editing a message', () => {
+  function seeded(h: Harness): void {
+    h.store.append(SESSION, userMessage('the original question'), { turnId: 't1' });
+    h.store.append(SESSION, assistantMessage('the first answer'), { turnId: 't1' });
+  }
+
+  it('replaces the message and re-runs from it', async () => {
+    const h = harness();
+    seeded(h);
+    const client = h.connect({ sessionKey: SESSION });
+
+    client.receive({
+      type: 'user.edit',
+      sessionKey: SESSION,
+      seq: 1,
+      content: 'a better question',
+    });
+    await flush();
+
+    expect(h.store.messageCount(SESSION)).toBe(0);
+    // A plain string, exactly as `user.message` produces for text with no
+    // attachments — an edit takes the same path a first send does.
+    expect(h.runner.turn(0).input.content).toBe('a better question');
+  });
+
+  it('keeps later turns when an earlier message is edited', async () => {
+    const h = harness();
+    seeded(h);
+    h.store.append(SESSION, userMessage('a second question'), { turnId: 't2' });
+    const client = h.connect({ sessionKey: SESSION });
+
+    client.receive({ type: 'user.edit', sessionKey: SESSION, seq: 3, content: 'rewritten' });
+    await flush();
+
+    // Everything before the edited message survives.
+    expect(h.store.messages(SESSION).map((record) => record.seq)).toEqual([1, 2]);
+  });
+
+  it('refuses a seq that is not a message the user wrote', async () => {
+    const h = harness();
+    seeded(h);
+    const client = h.connect({ sessionKey: SESSION });
+
+    // seq 2 is the assistant's answer.
+    client.receive({ type: 'user.edit', sessionKey: SESSION, seq: 2, content: 'nope' });
+    await flush();
+
+    expect(client.of('error')[0]?.code).toBe('bad_request');
+    expect(h.store.messageCount(SESSION)).toBe(2);
+  });
+
+  it('refuses an empty replacement', async () => {
+    const h = harness();
+    seeded(h);
+    const client = h.connect({ sessionKey: SESSION });
+
+    client.receive({ type: 'user.edit', sessionKey: SESSION, seq: 1, content: '' });
+    await flush();
+
+    expect(client.of('error')[0]?.code).toBe('bad_request');
+    expect(h.store.messageCount(SESSION)).toBe(2);
+  });
+
+  it('checks for a model before it deletes anything', async () => {
+    const h = harness({ loop: () => null });
+    seeded(h);
+    const client = h.connect({ sessionKey: SESSION });
+
+    client.receive({ type: 'user.edit', sessionKey: SESSION, seq: 1, content: 'rewritten' });
+    await flush();
+
+    expect(client.of('error')[0]?.code).toBe('not_configured');
+    expect(h.store.messageCount(SESSION)).toBe(2);
+  });
+
+  it('refuses while a turn is running', async () => {
+    const h = harness();
+    seeded(h);
+    const client = h.connect({ sessionKey: SESSION });
+    client.receive({ type: 'user.message', sessionKey: SESSION, content: 'hello' });
+    await flush();
+    client.reset();
+
+    client.receive({ type: 'user.edit', sessionKey: SESSION, seq: 1, content: 'rewritten' });
+    await flush();
+
+    expect(client.of('error')[0]?.code).toBe('session_busy');
+  });
+
+  it('acks with the client id, so the optimistic bubble reconciles', async () => {
+    const h = harness();
+    seeded(h);
+    const client = h.connect({ sessionKey: SESSION });
+
+    client.receive({
+      type: 'user.edit',
+      sessionKey: SESSION,
+      seq: 1,
+      content: 'a better question',
+      clientMessageId: 'c1',
+    });
+    await flush();
+
+    expect(client.of('message.ack')[0]?.clientMessageId).toBe('c1');
+  });
+});

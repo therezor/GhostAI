@@ -19,6 +19,7 @@ import {
   fromStoredMessages,
   markApprovalAnswered,
   mergeStoredHistory,
+  truncateTranscriptAfter,
   unwrapToolOutput,
   type ToolPart,
   type Transcript,
@@ -723,16 +724,157 @@ describe('merging a fetched history', () => {
   });
 });
 
+/**
+ * `seq` defaults to a monotonic counter rather than a constant.
+ *
+ * Storage hands out increasing sequence numbers, and turn spans are derived
+ * from them — fixtures that all shared one seq would collapse every turn's
+ * span onto the same number and make the derivation untestable. Only the
+ * ordering matters here, so the absolute values are left to the counter and
+ * spelled out only where a test asserts one.
+ */
+let nextSeq = 1;
+
 function stored(
   id: string,
   turnId: string | undefined,
   message: StoredMessage['message'],
+  seq: number = nextSeq++,
 ): StoredMessage {
   return {
     id,
     sessionKey: 'web:1',
+    seq,
     createdAtMs: 0,
     ...(turnId === undefined ? {} : { turnId }),
     message,
   };
 }
+
+describe('truncation', () => {
+  it('rebuilds from the tail a session.truncated carries', () => {
+    const before = fromStoredMessages([
+      stored('m1', 't1', { role: 'user', content: [{ type: 'text', text: 'first' }] }, 1),
+      stored(
+        'm2',
+        't1',
+        { role: 'assistant', content: [{ type: 'text', text: 'answer' }], toolCalls: [] },
+        2,
+      ),
+    ]);
+
+    const after = applyServerMessage(before, {
+      type: 'session.truncated',
+      seq: 9,
+      sessionKey: 'web:1',
+      upToSeq: 1,
+      messages: [
+        stored('m1', 't1', { role: 'user', content: [{ type: 'text', text: 'first' }] }, 1),
+      ],
+    });
+
+    // A rebuild, not a splice: the frame is the surviving history.
+    expect(after).toHaveLength(1);
+    expect(after[0]?.kind).toBe('user');
+  });
+
+  it('empties the transcript when everything was cut', () => {
+    const before = fromStoredMessages([
+      stored('m1', 't1', { role: 'user', content: [{ type: 'text', text: 'first' }] }, 1),
+    ]);
+
+    expect(
+      applyServerMessage(before, {
+        type: 'session.truncated',
+        seq: 9,
+        sessionKey: 'web:1',
+        upToSeq: 0,
+        messages: [],
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe('truncateTranscriptAfter', () => {
+  const items = fromStoredMessages([
+    stored('m1', 't1', { role: 'user', content: [{ type: 'text', text: 'one' }] }, 1),
+    stored(
+      'm2',
+      't1',
+      { role: 'assistant', content: [{ type: 'text', text: 'answer' }], toolCalls: [] },
+      2,
+    ),
+    stored('m3', 't2', { role: 'user', content: [{ type: 'text', text: 'two' }] }, 3),
+  ]);
+
+  it('keeps everything at or below the cut', () => {
+    expect(truncateTranscriptAfter(items, 2)).toHaveLength(2);
+  });
+
+  it('is a no-op past the end', () => {
+    expect(truncateTranscriptAfter(items, 99)).toEqual(items);
+  });
+
+  it('drops everything when cut at zero', () => {
+    expect(truncateTranscriptAfter(items, 0)).toEqual([]);
+  });
+
+  it('stops at the first item it cannot address', () => {
+    // An optimistic bubble has no seq, so nothing after it can be shown to be
+    // on the surviving side of a cut.
+    const withPending = appendPendingUserMessage(items, { clientMessageId: 'c1', text: 'three' });
+    expect(truncateTranscriptAfter(withPending, 99)).toHaveLength(4);
+    expect(truncateTranscriptAfter(withPending, 2)).toHaveLength(2);
+  });
+});
+
+describe('turn.end reporting', () => {
+  it('records the timing and the seqs the turn spanned', () => {
+    const started = applyServerMessage([], {
+      type: 'turn.start',
+      seq: 1,
+      sessionKey: 'web:1',
+      turnId: 't1',
+      model: 'm',
+      provider: 'p',
+    });
+
+    const [turn] = applyServerMessage(started, {
+      type: 'turn.end',
+      seq: 2,
+      turnId: 't1',
+      stopReason: 'complete',
+      iterations: 1,
+      elapsedMs: 1200,
+      firstSeq: 3,
+      lastSeq: 6,
+    });
+
+    expect(turn).toMatchObject({ kind: 'turn', elapsedMs: 1200, firstSeq: 3, lastSeq: 6 });
+  });
+
+  it('gives the message that started the turn its storage address', () => {
+    // The reason `firstSeq` is on the wire: without it, a bubble this tab drew
+    // optimistically could not be edited or branched until a refetch — and a
+    // refetch would also replace the live turn's tool timings.
+    const sent = appendPendingUserMessage([], { clientMessageId: 'c1', text: 'hello' });
+    const acked = applyServerMessage(sent, {
+      type: 'message.ack',
+      seq: 1,
+      sessionKey: 'web:1',
+      messageId: 't1',
+      clientMessageId: 'c1',
+    });
+
+    const after = applyServerMessage(acked, {
+      type: 'turn.end',
+      seq: 2,
+      turnId: 't1',
+      stopReason: 'complete',
+      iterations: 1,
+      firstSeq: 4,
+    });
+
+    expect(after[0]).toMatchObject({ kind: 'user', seq: 4 });
+  });
+});

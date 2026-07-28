@@ -65,7 +65,7 @@ test.describe('at 200% font size', () => {
 
     // Visible *and* hit-testable: an element pushed under another one is
     // `toBeVisible` and useless, and `click` is what tells them apart.
-    const message = app.getByLabel('Message');
+    const message = app.getByRole('textbox', { name: 'Message' });
     await expect(message).toBeVisible();
     await message.click();
     await message.fill('stream a long answer');
@@ -194,6 +194,37 @@ test.describe('keyboard', () => {
     await expect(dialog).toBeHidden();
     // Back to the button that opened it, rather than to the top of the page.
     await expect(trigger).toBeFocused();
+  });
+
+  test('the notification bell states its count and returns focus', async ({ app }) => {
+    // The count is drawn as a dot, so the button's name is the only place a
+    // screen reader can learn there is anything to look at.
+    const bell = app.getByRole('button', { name: /^Notifications/u });
+    await bell.click();
+
+    await expect(app.getByRole('link', { name: 'See all' })).toBeVisible();
+
+    await app.keyboard.press('Escape');
+    await expect(app.getByRole('link', { name: 'See all' })).toBeHidden();
+    await expect(bell).toBeFocused();
+  });
+
+  test('every message action is reachable and named', async ({ app }) => {
+    await app.getByRole('textbox', { name: 'Message' }).fill('stream a long answer');
+    await app.getByRole('button', { name: 'Send' }).click();
+    await expect(app.getByTestId('transcript').getByText('Here is what I found.')).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // Revealed with `opacity` and `:focus-within` rather than `display: none`,
+    // so they keep their place in the tab order — which is the whole reason a
+    // keyboard user can reach them at all.
+    for (const name of ['Copy message', 'Regenerate the answer', 'Turn details']) {
+      const action = app.getByRole('button', { name }).first();
+      await expect(action).toBeVisible();
+      await action.focus();
+      await expect(action).toBeFocused();
+    }
   });
 });
 

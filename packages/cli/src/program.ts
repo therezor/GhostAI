@@ -74,6 +74,7 @@ interface ChatCliOptions {
   readonly model?: string;
   readonly provider?: string;
   readonly workspace?: string;
+  readonly workspaceId?: string;
   readonly new: boolean;
   readonly json: boolean;
   readonly reasoning: boolean;
@@ -145,7 +146,12 @@ export function buildProgram(deps: CliDeps = {}): Command {
     .option('-s, --session <key>', 'session to continue', 'cli:default')
     .option('-m, --model <id>', 'model id, overriding the configured default')
     .option('-p, --provider <id>', 'provider id, overriding the configured default')
+    // Two different things, deliberately spelled differently. `-w` moves the
+    // whole tree; `-W` picks a workspace inside it. Accepting either on one flag
+    // and guessing by whether the string exists on disk is how a typo'd id
+    // silently becomes a path.
     .option('-w, --workspace <dir>', 'workspace root, overriding the configured default')
+    .option('-W, --workspace-id <id>', 'workspace new conversations land in')
     .option('--new', 'clear the session before this turn', false)
     .option('--json', 'emit one agent event per line as JSON', false)
     .option('--no-reasoning', 'hide the model’s reasoning stream')
@@ -161,6 +167,7 @@ export function buildProgram(deps: CliDeps = {}): Command {
         ...(options.model === undefined ? {} : { model: options.model }),
         ...(options.provider === undefined ? {} : { provider: options.provider }),
         ...(options.workspace === undefined ? {} : { workspace: options.workspace }),
+        ...(options.workspaceId === undefined ? {} : { workspaceId: options.workspaceId }),
         ...(globals.home === undefined ? {} : { home: globals.home }),
         fresh: options.new,
         json: options.json,

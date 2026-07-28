@@ -12,7 +12,8 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
-import { ContextInspector } from './context-inspector.js';
+import { ContextBody } from './context-inspector.js';
+import { ContextStrip } from './context-strip.js';
 import { renderWithProviders, stubApi, type StubRoute } from '@/test/render.js';
 
 const CONTEXT = {
@@ -22,6 +23,7 @@ const CONTEXT = {
     {
       id: 'm1',
       sessionKey: 'web:1',
+      seq: 1,
       createdAtMs: 1,
       message: { role: 'user', content: [{ type: 'text', text: 'hello' }] },
     },
@@ -31,24 +33,57 @@ const CONTEXT = {
   breakdown: { systemPrompt: 1000, tools: 1000, messages: 3000 },
 };
 
+/**
+ * The strip is the trigger now, so it is what the tests mount. The panel's own
+ * assertions are unchanged — they run after opening it, which is the only thing
+ * that moved.
+ */
 function mount(routes: Record<string, StubRoute> = {}): ReturnType<typeof userEvent.setup> {
   stubApi({ '/api/sessions/web%3A1/context': [200, CONTEXT], ...routes });
-  renderWithProviders(<ContextInspector sessionKey="web:1" />);
+  renderWithProviders(<ContextStrip sessionKey="web:1" />);
   return userEvent.setup();
 }
 
-describe('the context inspector', () => {
-  it('has nothing to inspect before a conversation exists', () => {
-    stubApi({});
-    renderWithProviders(<ContextInspector sessionKey={undefined} />);
+/** Opens the panel from the strip under the composer. */
+async function open(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(await screen.findByRole('button', { name: /of 10,000/ }));
+}
 
-    // Asking for the context of a session the server never minted is a 404.
-    expect(screen.getByRole('button', { name: 'Inspect context' })).toBeDisabled();
+describe('the context strip', () => {
+  it('shows the budget without being opened', async () => {
+    mount();
+
+    // The whole point of moving it here: the number is readable at a glance,
+    // rather than behind a button nobody presses.
+    expect(
+      await screen.findByRole('button', { name: /5,000 of 10,000 · 50%/ }),
+    ).toBeInTheDocument();
   });
 
+  it('renders nothing before a conversation exists', () => {
+    stubApi({});
+    const { container } = renderWithProviders(<ContextStrip sessionKey={undefined} />);
+
+    // A fresh tab holds a key the socket minted with no stored row behind it,
+    // so the request would 404 — and an error under the composer of a
+    // conversation that simply has not started answers a question nobody asked.
+    expect(container.querySelector('.context-strip')).toBeNull();
+  });
+
+  it('renders nothing when the conversation has not started', async () => {
+    stubApi({ '/api/sessions/web%3A1/context': [404, { error: { code: 'not_found' } }] });
+    const { container } = renderWithProviders(<ContextStrip sessionKey="web:1" />);
+
+    await waitFor(() => {
+      expect(container.querySelector('.context-strip')).toBeNull();
+    });
+  });
+});
+
+describe('the context inspector', () => {
   it('measures the budget against the window and says it in words', async () => {
     const user = mount();
-    await user.click(screen.getByRole('button', { name: 'Inspect context' }));
+    await open(user);
 
     expect(await screen.findByText('5,000')).toBeInTheDocument();
     expect(screen.getByText(/of 10,000 tokens · 50%/)).toBeInTheDocument();
@@ -57,7 +92,7 @@ describe('the context inspector', () => {
 
   it('breaks the total down by section, in a table and not only in a bar', async () => {
     const user = mount();
-    await user.click(screen.getByRole('button', { name: 'Inspect context' }));
+    await open(user);
 
     const table = await screen.findByRole('table', { name: 'Token usage by section' });
     const rows = [...table.querySelectorAll('tbody tr')].map((row) => row.textContent);
@@ -71,7 +106,7 @@ describe('the context inspector', () => {
 
   it('shows the prompt that would actually be sent', async () => {
     const user = mount();
-    await user.click(screen.getByRole('button', { name: 'Inspect context' }));
+    await open(user);
 
     expect(await screen.findByText(/You are GhostAI, a helpful agent\./)).toBeInTheDocument();
     expect(screen.getByText('1 messages in the window')).toBeInTheDocument();
@@ -81,38 +116,46 @@ describe('the context inspector', () => {
     const user = mount({
       '/api/sessions/web%3A1/context': [200, { ...CONTEXT, estimatedTokens: 12_000 }],
     });
-    await user.click(screen.getByRole('button', { name: 'Inspect context' }));
+    await user.click(await screen.findByRole('button', { name: /over the window/ }));
 
     // The distinction the panel exists for: "exactly full" and "twice over" are
-    // the same picture, and only one of them explains a dropped turn.
-    expect(await screen.findByText('over the window')).toBeInTheDocument();
+    // the same picture, and only one of them explains a dropped turn. The strip
+    // says it too, so there are two of them once the dialog is open.
+    expect(await screen.findAllByText('over the window')).not.toHaveLength(0);
     expect(screen.queryByText(/free/)).not.toBeInTheDocument();
   });
 
+  /**
+   * The next two mount the body rather than opening it from the strip, because
+   * the strip hides itself on an error and so cannot reach either state. The
+   * panel still handles both: it shares a query key with the strip, and a cache
+   * eviction between the strip rendering and the dialog opening puts the fetch
+   * back on the wire where it can fail again.
+   */
   it('does not treat a conversation that has not started as a failure', async () => {
     // The socket mints a session key the moment a tab connects; the store holds
     // no row for it until the first message lands. A red error there answers a
     // question nobody asked.
-    const user = mount({
+    stubApi({
       '/api/sessions/web%3A1/context': [
         404,
         { error: { code: 'not_found', message: 'No session "web:1"' } },
       ],
     });
-    await user.click(screen.getByRole('button', { name: 'Inspect context' }));
+    renderWithProviders(<ContextBody sessionKey="web:1" />);
 
     expect(await screen.findByText(/this conversation has not started/i)).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('reports a real failure instead of an empty panel', async () => {
-    const user = mount({
+    stubApi({
       '/api/sessions/web%3A1/context': [
         500,
         { error: { code: 'internal', message: 'the prompt could not be built' } },
       ],
     });
-    await user.click(screen.getByRole('button', { name: 'Inspect context' }));
+    renderWithProviders(<ContextBody sessionKey="web:1" />);
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('the prompt could not be built');

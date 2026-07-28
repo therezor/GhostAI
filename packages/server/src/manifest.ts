@@ -76,6 +76,8 @@ const MANIFEST = [
   { id: 'sessions.messages', method: 'GET', url: '/api/sessions/:key/messages', auth: 'required' },
   { id: 'sessions.clear', method: 'DELETE', url: '/api/sessions/:key/messages', auth: 'required' },
   { id: 'sessions.context', method: 'GET', url: '/api/sessions/:key/context', auth: 'required' },
+  { id: 'sessions.branch', method: 'POST', url: '/api/sessions/:key/branch', auth: 'required' },
+  { id: 'sessions.turns', method: 'GET', url: '/api/sessions/:key/turns', auth: 'required' },
 
   // Tools
   { id: 'tools.list', method: 'GET', url: '/api/tools', auth: 'required' },

@@ -5,8 +5,10 @@ import type { ChatMessage } from '@ghostai/protocol';
 
 import {
   DEFAULT_MAX_TOOL_RESULT_CHARS,
+  findLegalEnd,
   findLegalStart,
   hasOrphanedToolResult,
+  hasUnansweredToolCall,
   historyForLLM,
   truncateHeadTail,
 } from './history.js';
@@ -155,6 +157,144 @@ describe('findLegalStart properties', () => {
     fc.assert(
       fc.property(historyArb, fc.integer({ min: 0, max: 24 }), (messages, maxMessages) => {
         expect(hasOrphanedToolResult(historyForLLM(messages, { maxMessages }))).toBe(false);
+      }),
+    );
+  });
+});
+
+describe('findLegalEnd', () => {
+  it('accepts an empty history', () => {
+    expect(findLegalEnd([])).toBe(0);
+  });
+
+  it('accepts a history with no tool traffic', () => {
+    expect(findLegalEnd([userMessage('hi'), assistantMessage('hello')])).toBe(2);
+  });
+
+  it('accepts a well-paired exchange', () => {
+    const messages = [
+      userMessage('read it'),
+      assistantCalling('a'),
+      toolMessage('a', 'read_file', 'contents'),
+      assistantMessage('done'),
+    ];
+    expect(findLegalEnd(messages)).toBe(4);
+  });
+
+  it('cuts before an assistant whose calls were never answered', () => {
+    // The shape a naive truncation leaves behind: the `tool` rows that answered
+    // `a` were deleted, and the assistant declaring it is now the last message.
+    const messages = [userMessage('read it'), assistantCalling('a')];
+    expect(findLegalEnd(messages)).toBe(1);
+  });
+
+  it('cuts before the assistant when only some of its calls were answered', () => {
+    const messages = [assistantCalling('a', 'b'), toolMessage('a', 'read_file', 'contents')];
+    expect(findLegalEnd(messages)).toBe(0);
+  });
+
+  it('keeps an earlier well-paired exchange when cutting a later one', () => {
+    const messages = [
+      userMessage('first'),
+      assistantCalling('a'),
+      toolMessage('a', 'read_file', 'x'),
+      userMessage('second'),
+      assistantCalling('b'),
+    ];
+    expect(findLegalEnd(messages)).toBe(4);
+  });
+
+  it('discards answers that sit past the cut', () => {
+    // `b` is answered, but only after the unanswered `a` — so the answer is
+    // dropped along with the cut and cannot rescue the assistant declaring it.
+    const messages = [
+      assistantCalling('a'),
+      assistantCalling('b'),
+      toolMessage('b', 'read_file', 'y'),
+    ];
+    expect(findLegalEnd(messages)).toBe(0);
+  });
+
+  it('pairs each of several parallel tool calls', () => {
+    const messages = [
+      assistantCalling('a', 'b', 'c'),
+      toolMessage('a', 'read_file', 'x'),
+      toolMessage('b', 'read_file', 'y'),
+      toolMessage('c', 'read_file', 'z'),
+    ];
+    expect(findLegalEnd(messages)).toBe(4);
+  });
+});
+
+describe('hasUnansweredToolCall', () => {
+  it('is false for an empty history', () => {
+    expect(hasUnansweredToolCall([])).toBe(false);
+  });
+
+  it('is false for a well-paired exchange', () => {
+    expect(hasUnansweredToolCall([assistantCalling('a'), toolMessage('a', 'read_file', 'x')])).toBe(
+      false,
+    );
+  });
+
+  it('is true when an answer never arrives', () => {
+    expect(hasUnansweredToolCall([assistantCalling('a')])).toBe(true);
+  });
+
+  it('is true when the answer precedes the call', () => {
+    // Order matters: a `tool` row before its `assistant` answers nothing.
+    expect(hasUnansweredToolCall([toolMessage('a', 'read_file', 'x'), assistantCalling('a')])).toBe(
+      true,
+    );
+  });
+});
+
+describe('findLegalEnd properties', () => {
+  const idArb = fc.constantFrom('a', 'b', 'c', 'd');
+
+  const messageArb: fc.Arbitrary<ChatMessage> = fc.oneof(
+    fc.constant(userMessage('hi')),
+    fc.constant(assistantMessage('plain answer')),
+    fc.constant(systemMessage('you are a ghost')),
+    fc.uniqueArray(idArb, { minLength: 1, maxLength: 3 }).map((ids) => assistantCalling(...ids)),
+    idArb.map((id) => toolMessage(id, 'read_file', 'result')),
+  );
+
+  const historyArb = fc.array(messageArb, { maxLength: 24 });
+
+  it('never leaves an unanswered tool call behind', () => {
+    fc.assert(
+      fc.property(historyArb, (messages) => {
+        const kept = messages.slice(0, findLegalEnd(messages));
+        expect(hasUnansweredToolCall(kept)).toBe(false);
+      }),
+    );
+  });
+
+  it('returns an index within the array', () => {
+    fc.assert(
+      fc.property(historyArb, (messages) => {
+        const end = findLegalEnd(messages);
+        expect(end).toBeGreaterThanOrEqual(0);
+        expect(end).toBeLessThanOrEqual(messages.length);
+      }),
+    );
+  });
+
+  it('is a no-op on histories that were already complete', () => {
+    fc.assert(
+      fc.property(historyArb, (messages) => {
+        fc.pre(!hasUnansweredToolCall(messages));
+        expect(findLegalEnd(messages)).toBe(messages.length);
+      }),
+    );
+  });
+
+  it('is idempotent — re-cutting a cut prefix changes nothing', () => {
+    fc.assert(
+      fc.property(historyArb, (messages) => {
+        const kept = messages.slice(0, findLegalEnd(messages));
+        expect(findLegalEnd(kept)).toBe(kept.length);
       }),
     );
   });

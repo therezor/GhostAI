@@ -684,6 +684,7 @@ describe('a mid-stream reload', () => {
           {
             id: 'm1',
             sessionKey: SESSION,
+            seq: 1,
             createdAtMs: 1,
             turnId: 't1',
             message: { role: 'user', content: [{ type: 'text', text: 'the original question' }] },
@@ -696,5 +697,142 @@ describe('a mid-stream reload', () => {
     // stored tail replaces the transcript rather than being appended to it.
     expect(await screen.findByText('the original question')).toBeInTheDocument();
     expect(screen.queryByText(/lost text/)).not.toBeInTheDocument();
+  });
+});
+
+describe('reworking a conversation', () => {
+  /** A finished exchange, with the seqs storage would have given it. */
+  async function seeded(): Promise<void> {
+    mount();
+    await connect();
+    deliver(
+      START,
+      { type: 'assistant.delta', turnId: 't1', text: 'the first answer' },
+      {
+        type: 'turn.end',
+        turnId: 't1',
+        stopReason: 'complete',
+        iterations: 1,
+        firstSeq: 1,
+        lastSeq: 2,
+      },
+      // The hub clears `busy` with a status frame, and until it does every
+      // action that would start a second turn is correctly disabled.
+      {
+        type: 'session.status',
+        workspaceId: 'default',
+        sessionKey: SESSION,
+        busy: false,
+        queueDepth: 0,
+      },
+    );
+    await screen.findByText('the first answer');
+  }
+
+  it('regenerates the answer under a turn', async () => {
+    const user = userEvent.setup();
+    await seeded();
+
+    await user.click(screen.getByRole('button', { name: 'Regenerate the answer' }));
+
+    // `firstSeq` is what makes this addressable without a refetch.
+    expect(framesOf('turn.regenerate')).toEqual([
+      { type: 'turn.regenerate', sessionKey: SESSION, seq: 1 },
+    ]);
+  });
+
+  it('opens the turn details, with what the turn cost', async () => {
+    const user = userEvent.setup();
+    mount();
+    await connect();
+    deliver(
+      START,
+      { type: 'assistant.delta', turnId: 't1', text: 'the first answer' },
+      {
+        type: 'turn.end',
+        turnId: 't1',
+        stopReason: 'complete',
+        iterations: 2,
+        usage: { promptTokens: 1284, completionTokens: 412, totalTokens: 1696 },
+        elapsedMs: 10_800,
+        firstSeq: 1,
+        lastSeq: 2,
+      },
+      {
+        type: 'session.status',
+        workspaceId: 'default',
+        sessionKey: SESSION,
+        busy: false,
+        queueDepth: 0,
+      },
+    );
+    await screen.findByText('the first answer');
+
+    // The regression this exists for: the trigger was a component that took no
+    // props, so `PopoverTrigger asChild` cloned it and every injected handler
+    // went nowhere. It rendered perfectly and opened nothing.
+    await user.click(screen.getByRole('button', { name: 'Turn details' }));
+
+    // Scoped to the popover: the turn's own footer names the model too, and an
+    // unscoped query would pass whether or not this opened.
+    const details = await screen.findByRole('dialog');
+    expect(within(details).getByText('1,284')).toBeInTheDocument();
+    // Reported by the turn itself, so no request is made for numbers this tab
+    // just watched being measured.
+    expect(within(details).getByText('38.1 tok/s')).toBeInTheDocument();
+    expect(within(details).getByText('test-model')).toBeInTheDocument();
+  });
+
+  it('rebuilds the transcript when the server says what survived', async () => {
+    await seeded();
+
+    deliver({
+      type: 'session.truncated',
+      sessionKey: SESSION,
+      upToSeq: 0,
+      messages: [],
+    });
+
+    // The answer being replaced goes now, rather than lingering under the one
+    // that replaces it.
+    await waitFor(() => {
+      expect(screen.queryByText('the first answer')).not.toBeInTheDocument();
+    });
+  });
+
+  it('edits a message and re-runs from it', async () => {
+    const user = userEvent.setup();
+    mount();
+    await connect();
+
+    deliver({
+      type: 'session.replay',
+      sessionKey: SESSION,
+      complete: false,
+      messages: [
+        {
+          id: 'm1',
+          sessionKey: SESSION,
+          seq: 1,
+          createdAtMs: 1,
+          turnId: 't1',
+          message: { role: 'user', content: [{ type: 'text', text: 'the first question' }] },
+        },
+      ],
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Edit this message' }));
+
+    const editor = screen.getByRole('textbox', { name: 'Edit message' });
+    await user.clear(editor);
+    await user.type(editor, 'a better question');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(framesOf('user.edit')[0]).toMatchObject({
+      type: 'user.edit',
+      sessionKey: SESSION,
+      seq: 1,
+      content: 'a better question',
+    });
   });
 });

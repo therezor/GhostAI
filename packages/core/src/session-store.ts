@@ -9,6 +9,15 @@
  * (`last_consolidated_seq`) rather than rewriting what it summarised, and the
  * summaries live in the memory files instead.
  *
+ * **`truncateAfter` does not break that rule, and it is worth being precise
+ * about why.** The rule forbids *rewriting* — an `UPDATE` on a `messages` row,
+ * which changes a prefix the provider has already cached and invalidates
+ * everything after it. Dropping a *suffix* changes no prefix: every retained
+ * row is byte-identical, so the cached prefix stays warm and the conversation
+ * simply re-diverges from the cut. That is the case a prompt cache is built
+ * for. Regenerate and edit are therefore expressible; "change what the model
+ * was told three turns ago and keep the answers" still is not.
+ *
  * Rows rather than a JSONL file per session: appending a row satisfies the same
  * append-only constraint while giving pagination, listing, and transactions for
  * free — and removes the mtime-cache bookkeeping a file-per-session store needs
@@ -23,14 +32,22 @@ import { DatabaseSync, type SQLOutputValue, type StatementSync } from 'node:sqli
 import { randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 
-import { ChatMessageSchema, type ChatMessage, type StoredMessage } from '@ghostai/protocol';
+import {
+  ChatMessageSchema,
+  type ChatMessage,
+  type StopReason,
+  type StoredMessage,
+  type Usage,
+} from '@ghostai/protocol';
 import type { z } from 'zod';
 
 import { systemClock, type Clock } from './clock.js';
 import { GhostError } from './errors.js';
-import { historyForLLM, type HistoryForLLMOptions } from './history.js';
+import { findLegalEnd, historyForLLM, type HistoryForLLMOptions } from './history.js';
+import { textOf } from './messages.js';
 import { migrate } from './migrate.js';
 import { ensureDir } from './paths.js';
+import { deriveSessionTitle } from './session-title.js';
 import { DEFAULT_WORKSPACE_ID } from './workspace-id.js';
 
 /**
@@ -93,6 +110,7 @@ export function toStoredMessage(record: StoredMessageRecord): StoredMessage {
   return {
     id: record.id,
     sessionKey: record.sessionKey,
+    seq: record.seq,
     createdAtMs: record.createdAtMs,
     ...(record.turnId === undefined ? {} : { turnId: record.turnId }),
     message: record.message,
@@ -177,6 +195,41 @@ export interface ReadMessagesOptions {
   readonly fromEnd?: boolean;
 }
 
+export interface TruncateResult {
+  /** Where the cut actually landed, after snapping to a legal boundary. */
+  readonly seq: number;
+  readonly deleted: number;
+}
+
+export interface ForkSessionOptions {
+  /** Defaults to `<origin>-<uuid>`, matching what the REST create route mints. */
+  readonly key?: string;
+  readonly title?: string;
+  readonly workspaceId?: string;
+  readonly profileId?: string;
+  readonly origin?: string;
+}
+
+export interface ForkResult {
+  readonly session: SessionRecord;
+  readonly copied: number;
+  /** Where the fork actually cut, after snapping. */
+  readonly seq: number;
+}
+
+/** What one turn cost, recorded when it ends. */
+export interface TurnStatsRecord {
+  readonly turnId: string;
+  readonly sessionKey: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly startedAtMs: number;
+  readonly endedAtMs: number;
+  readonly iterations: number;
+  readonly stopReason: StopReason;
+  readonly usage: Usage;
+}
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
   key                   TEXT    PRIMARY KEY,
@@ -201,9 +254,37 @@ CREATE TABLE IF NOT EXISTS messages (
   payload_json  TEXT    NOT NULL
 ) STRICT;
 
+-- What a turn cost, keyed by the id that groups its messages.
+--
+-- Here rather than in the migration ledger because the ledger is only for
+-- altering tables that already exist; a new table is created by the store that
+-- owns it. That is also what lets this one carry a real foreign key, which
+-- ADD COLUMN cannot express -- so deleting a session takes its stats with it.
+--
+-- Usage is five integer columns rather than a JSON blob so that a session's
+-- total is one SUM(...) GROUP BY session_key over a page of keys instead of a
+-- query per row. SUM over all-NULL returns NULL, which is exactly what the two
+-- optional usage fields mean.
+CREATE TABLE IF NOT EXISTS turn_stats (
+  turn_id           TEXT    PRIMARY KEY,
+  session_key       TEXT    NOT NULL REFERENCES sessions(key) ON DELETE CASCADE,
+  provider          TEXT    NOT NULL DEFAULT '',
+  model             TEXT    NOT NULL DEFAULT '',
+  started_at_ms     INTEGER NOT NULL,
+  ended_at_ms       INTEGER NOT NULL,
+  iterations        INTEGER NOT NULL DEFAULT 0,
+  stop_reason       TEXT    NOT NULL DEFAULT '',
+  prompt_tokens     INTEGER NOT NULL DEFAULT 0,
+  completion_tokens INTEGER NOT NULL DEFAULT 0,
+  total_tokens      INTEGER NOT NULL DEFAULT 0,
+  cached_tokens     INTEGER,
+  reasoning_tokens  INTEGER
+) STRICT;
+
 CREATE UNIQUE INDEX IF NOT EXISTS messages_session_seq ON messages(session_key, seq);
 CREATE INDEX IF NOT EXISTS messages_turn ON messages(session_key, turn_id);
 CREATE INDEX IF NOT EXISTS sessions_updated ON sessions(updated_at_ms DESC);
+CREATE INDEX IF NOT EXISTS turn_stats_session ON turn_stats(session_key, ended_at_ms DESC);
 `;
 
 /**
@@ -245,6 +326,46 @@ function readString(row: Row, column: string): string {
 function readOptionalString(row: Row, column: string): string | undefined {
   const value = row[column];
   return typeof value === 'string' ? value : undefined;
+}
+
+/**
+ * An integer column that may be `NULL`.
+ *
+ * `SUM` over a column of all-`NULL` returns `NULL` rather than `0`, which is
+ * exactly the distinction the two optional usage fields carry: a provider that
+ * never reported cached tokens is not a provider that reported zero.
+ */
+function readOptionalInt(row: Row, column: string): number | undefined {
+  const value = row[column];
+  if (typeof value === 'number') return value;
+  if (typeof value === 'bigint') return Number(value);
+  return undefined;
+}
+
+function readUsage(row: Row): Usage {
+  const cachedTokens = readOptionalInt(row, 'cached_tokens');
+  const reasoningTokens = readOptionalInt(row, 'reasoning_tokens');
+  return {
+    promptTokens: readOptionalInt(row, 'prompt_tokens') ?? 0,
+    completionTokens: readOptionalInt(row, 'completion_tokens') ?? 0,
+    totalTokens: readOptionalInt(row, 'total_tokens') ?? 0,
+    ...(cachedTokens === undefined ? {} : { cachedTokens }),
+    ...(reasoningTokens === undefined ? {} : { reasoningTokens }),
+  };
+}
+
+function rowToTurnStats(row: Row): TurnStatsRecord {
+  return {
+    turnId: readString(row, 'turn_id'),
+    sessionKey: readString(row, 'session_key'),
+    provider: readString(row, 'provider'),
+    model: readString(row, 'model'),
+    startedAtMs: readInt(row, 'started_at_ms'),
+    endedAtMs: readInt(row, 'ended_at_ms'),
+    iterations: readInt(row, 'iterations'),
+    stopReason: readString(row, 'stop_reason') as StopReason,
+    usage: readUsage(row),
+  };
 }
 
 /**
@@ -703,7 +824,290 @@ export class SessionStore {
     });
   }
 
-  /** Deletes the session and, by cascade, its messages. */
+  /**
+   * The largest cut at or below `seq` that leaves no tool call unanswered.
+   *
+   * A cut through the middle of a tool exchange strands the `assistant` that
+   * declared the calls, which every provider rejects with a 400 — the mirror of
+   * the defect `findLegalStart` repairs at the other end of the window. Only the
+   * *unconsolidated* tail is examined, because everything at or below
+   * `last_consolidated_seq` is represented by the memory files rather than
+   * replayed, so pairing across that boundary is not a thing a provider ever
+   * sees.
+   */
+  #legalSeq(session: SessionRecord, seq: number): number {
+    const floor = Math.min(session.lastConsolidatedSeq, seq);
+    const records = this.messages(session.key, { afterSeq: floor, beforeSeq: seq + 1 });
+    const end = findLegalEnd(records.map((record) => record.message));
+
+    if (end === records.length) return seq;
+    if (end === 0) return floor;
+    return records[end - 1]?.seq ?? floor;
+  }
+
+  /**
+   * Drops every message after `seq`, and reports where the cut actually landed.
+   *
+   * This is what regenerate and edit are built on: re-running a turn means
+   * forgetting the answers that followed the question. See the module header for
+   * why removing a suffix is compatible with the append-only rule that forbids
+   * rewriting a row.
+   *
+   * The cut is always snapped to a legal tool boundary. The caller has no
+   * information this store lacks with which to decide otherwise, and an
+   * unsnapped cut does not fail here — it fails as a provider 400 on the next
+   * turn, a long way from the code that caused it.
+   *
+   * `next_seq` is deliberately left alone, for the reason `clearMessages` gives:
+   * a stale `afterSeq` cursor held by a reconnecting client must never come back
+   * to address a different message. Sequences go sparse after a truncation, and
+   * the gap is the point.
+   *
+   * **Concurrency is the caller's problem**, because it has to be: this store
+   * cannot know a turn is running, and truncating under one would race the
+   * loop's own append. The hub guards with `busy()`; the CLI's REPL only reaches
+   * this at an idle prompt.
+   */
+  truncateAfter(sessionKey: string, seq: number): TruncateResult {
+    this.#assertOpen();
+
+    return this.#transaction(() => {
+      const session = this.getSession(sessionKey);
+      if (session === undefined) {
+        throw new GhostError('not_found', `No such session: ${sessionKey}`, {
+          details: { sessionKey },
+        });
+      }
+
+      const cut = Math.max(0, this.#legalSeq(session, seq));
+      const deleted = Number(
+        this.#stmt('DELETE FROM messages WHERE session_key = ? AND seq > ?').run(sessionKey, cut)
+          .changes,
+      );
+
+      // Nothing moved, so nothing should be bumped to the top of the session
+      // list — a no-op truncation is not activity.
+      if (deleted > 0) {
+        // Clamping is not housekeeping. A marker left above the highest
+        // surviving seq makes `history()` read `afterSeq: 100` on a session
+        // whose last message is 50, which is an empty prompt on a conversation
+        // that visibly has messages. It does not un-summarise the memory files;
+        // it restores `marker <= max(seq)`, and the rows it would have skipped
+        // are gone regardless.
+        this.#stmt(
+          `UPDATE sessions
+              SET last_consolidated_seq = MIN(last_consolidated_seq, ?),
+                  last_learned_seq      = MIN(last_learned_seq, ?),
+                  updated_at_ms         = ?
+            WHERE key = ?`,
+        ).run(cut, cut, this.#clock.now(), sessionKey);
+      }
+
+      return { seq: cut, deleted };
+    });
+  }
+
+  /**
+   * Copies a conversation up to `uptoSeq` into a new session.
+   *
+   * What "branch" means here. The alternative — a `parent_seq` column and a
+   * message tree — buys sibling navigation at the cost of teaching every reader
+   * of the flat log about branches, including the CLI and `historyForLLM`. A
+   * fork is a session, so it appears in the sidebar, opens in the CLI and is
+   * deleted like any other, and the code that reads it needs to know nothing.
+   *
+   * Two decisions carry the weight:
+   *
+   *  - **Seqs are reseated densely from 1.** A fork is a new sequence space;
+   *    preserving the source's numbering would start a fresh conversation at seq
+   *    4711 and leave the markers below pointing at rows that are not there.
+   *  - **`turn_id` and `created_at_ms` are preserved.** Up to the cut the fork
+   *    *is* the same conversation, so it renders identically and its turn stats
+   *    — which are keyed by turn id — still describe the run that produced it.
+   *
+   * Lineage goes in the metadata bag rather than a column: it costs no schema,
+   * no index and no query surface, and nothing needs to search by it.
+   */
+  forkSession(sourceKey: string, uptoSeq: number, options: ForkSessionOptions = {}): ForkResult {
+    this.#assertOpen();
+
+    return this.#transaction(() => {
+      const source = this.getSession(sourceKey);
+      if (source === undefined) {
+        throw new GhostError('not_found', `No such session: ${sourceKey}`, {
+          details: { sessionKey: sourceKey },
+        });
+      }
+
+      const cut = Math.max(0, this.#legalSeq(source, uptoSeq));
+      const records = this.messages(sourceKey, { beforeSeq: cut + 1 });
+      const now = this.#clock.now();
+      const origin = options.origin ?? source.origin;
+      const key = options.key ?? `${origin}-${this.#newId()}`;
+
+      if (this.getSession(key) !== undefined) {
+        throw new GhostError('conflict', `Session already exists: ${key}`, {
+          details: { sessionKey: key },
+        });
+      }
+
+      const firstUser = records.find((record) => record.message.role === 'user');
+      const title =
+        options.title ??
+        (source.title !== ''
+          ? source.title
+          : firstUser === undefined
+            ? ''
+            : deriveSessionTitle(textOf(firstUser.message)));
+
+      // Seqs are reseated by position, so translating a marker is a count of
+      // the copied rows it covered — exact rather than approximate.
+      const consolidated = records.filter(
+        (record) => record.seq <= source.lastConsolidatedSeq,
+      ).length;
+      const learned = records.filter((record) => record.seq <= source.lastLearnedSeq).length;
+
+      this.#stmt(
+        `INSERT INTO sessions
+           (key, title, origin, workspace_id, profile_id, created_at_ms, updated_at_ms,
+            metadata_json, last_consolidated_seq, last_learned_seq, next_seq)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        key,
+        title,
+        origin,
+        options.workspaceId ?? source.workspaceId,
+        options.profileId ?? source.profileId ?? null,
+        source.createdAtMs,
+        // Now, not the source's: a fork is something the user just did, and the
+        // session list is ordered by this.
+        now,
+        JSON.stringify({
+          ...source.metadata,
+          forkedFrom: { key: sourceKey, seq: cut, atMs: now },
+        }),
+        consolidated,
+        learned,
+        records.length + 1,
+      );
+
+      // `appendMany` cannot be reused: it stamps one `now` and one `turnId`
+      // across the block, and both are being preserved per row here.
+      const insert = this.#stmt(
+        `INSERT INTO messages (id, session_key, seq, created_at_ms, turn_id, role, payload_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const [index, record] of records.entries()) {
+        insert.run(
+          this.#newId(),
+          key,
+          index + 1,
+          record.createdAtMs,
+          record.turnId ?? null,
+          record.message.role,
+          // Re-serialised from the parsed object rather than re-validated:
+          // `messages()` already parsed it on the way out.
+          JSON.stringify(record.message),
+        );
+      }
+
+      const session = this.getSession(key);
+      if (session === undefined) {
+        throw new GhostError('storage', 'Fork vanished immediately after insert', {
+          details: { sessionKey: key },
+        });
+      }
+
+      return { session, copied: records.length, seq: cut };
+    });
+  }
+
+  /**
+   * Records what a turn cost.
+   *
+   * An upsert rather than a plain insert: a turn that ends twice — which the
+   * hub's own failure path can produce — must not throw on the primary key.
+   */
+  recordTurnStats(stats: TurnStatsRecord): void {
+    this.#assertOpen();
+    this.#stmt(
+      `INSERT INTO turn_stats
+         (turn_id, session_key, provider, model, started_at_ms, ended_at_ms, iterations,
+          stop_reason, prompt_tokens, completion_tokens, total_tokens, cached_tokens,
+          reasoning_tokens)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(turn_id) DO UPDATE SET
+         provider = excluded.provider, model = excluded.model,
+         started_at_ms = excluded.started_at_ms, ended_at_ms = excluded.ended_at_ms,
+         iterations = excluded.iterations, stop_reason = excluded.stop_reason,
+         prompt_tokens = excluded.prompt_tokens,
+         completion_tokens = excluded.completion_tokens,
+         total_tokens = excluded.total_tokens, cached_tokens = excluded.cached_tokens,
+         reasoning_tokens = excluded.reasoning_tokens`,
+    ).run(
+      stats.turnId,
+      stats.sessionKey,
+      stats.provider,
+      stats.model,
+      stats.startedAtMs,
+      stats.endedAtMs,
+      stats.iterations,
+      stats.stopReason,
+      stats.usage.promptTokens,
+      stats.usage.completionTokens,
+      stats.usage.totalTokens,
+      stats.usage.cachedTokens ?? null,
+      stats.usage.reasoningTokens ?? null,
+    );
+  }
+
+  /** A session's turns, most recent first. */
+  turnStats(sessionKey: string, options: { readonly limit?: number } = {}): TurnStatsRecord[] {
+    this.#assertOpen();
+    const rows = this.#stmt(
+      `SELECT * FROM turn_stats
+        WHERE session_key = ?
+        ORDER BY ended_at_ms DESC, turn_id ASC
+        LIMIT ?`,
+    ).all(sessionKey, options.limit ?? -1);
+    return rows.map(rowToTurnStats);
+  }
+
+  /**
+   * Total usage per session, for a page of keys.
+   *
+   * One statement for the whole page rather than one per row — the session list
+   * reports this for every conversation it shows, and a query per row is the
+   * difference between a listing and fifty of them. The placeholder list varies
+   * with the page size, so a page of 50 and a page of 51 prepare two statements;
+   * that is a handful of shapes and is not a reason to concatenate values into
+   * the SQL.
+   */
+  sessionUsage(sessionKeys: readonly string[]): Map<string, Usage> {
+    this.#assertOpen();
+    const totals = new Map<string, Usage>();
+    if (sessionKeys.length === 0) return totals;
+
+    const placeholders = sessionKeys.map(() => '?').join(', ');
+    const rows = this.#stmt(
+      `SELECT session_key,
+              SUM(prompt_tokens)     AS prompt_tokens,
+              SUM(completion_tokens) AS completion_tokens,
+              SUM(total_tokens)      AS total_tokens,
+              SUM(cached_tokens)     AS cached_tokens,
+              SUM(reasoning_tokens)  AS reasoning_tokens
+         FROM turn_stats
+        WHERE session_key IN (${placeholders})
+        GROUP BY session_key`,
+    ).all(...sessionKeys);
+
+    for (const row of rows) {
+      totals.set(readString(row, 'session_key'), readUsage(row));
+    }
+    return totals;
+  }
+
+  /** Deletes the session and, by cascade, its messages and turn stats. */
   deleteSession(sessionKey: string): boolean {
     this.#assertOpen();
     return this.#stmt('DELETE FROM sessions WHERE key = ?').run(sessionKey).changes > 0;

@@ -23,6 +23,41 @@ export interface FakeRunner extends TurnRunner {
   readonly steers: { sessionKey: string; content: string }[];
 }
 
+/**
+ * A turn that starts and never ends.
+ *
+ * For the guards that only exist while a session is busy — branching mid-turn,
+ * regenerating under a running answer. The instant runner above cannot express
+ * those: it is finished before the assertion runs.
+ */
+export function hangingRunner(): FakeRunner {
+  const inputs: TurnInput[] = [];
+  const steers: { sessionKey: string; content: string }[] = [];
+
+  return {
+    inputs,
+    steers,
+    run: async function* (input: TurnInput): AsyncGenerator<AgentEvent, TurnResult> {
+      inputs.push(input);
+      const turnId = input.turnId ?? 'turn-1';
+      yield {
+        type: 'turn.start',
+        sessionKey: input.sessionKey,
+        turnId,
+        model: 'test-model',
+        provider: 'test',
+      };
+      await new Promise<void>(() => {
+        // Never resolves; the harness closes the hub in its cleanup.
+      });
+      throw new Error('unreachable');
+    },
+    steer(sessionKey: string, content: string): void {
+      steers.push({ sessionKey, content });
+    },
+  };
+}
+
 /** A turn that says one thing and ends. */
 export function fakeRunner(answer = 'ok'): FakeRunner {
   const inputs: TurnInput[] = [];
@@ -62,8 +97,13 @@ export interface TestHub {
   readonly runner: FakeRunner;
 }
 
-export function createTestHub(store: SessionStore, config?: Config, answer?: string): TestHub {
-  const runner = fakeRunner(answer);
+export function createTestHub(
+  store: SessionStore,
+  config?: Config,
+  answer?: string,
+  supplied?: FakeRunner,
+): TestHub {
+  const runner = supplied ?? fakeRunner(answer);
   const hub = new SessionHub({
     config: config ?? ConfigSchema.parse({}),
     loop: () => runner,

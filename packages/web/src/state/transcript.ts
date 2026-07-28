@@ -70,6 +70,15 @@ export interface UserItem {
    * sending shows the message twice.
    */
   readonly turnId: string | undefined;
+  /**
+   * Storage's address for this message, once it has one.
+   *
+   * What Edit, Regenerate and Branch name. `undefined` on an optimistic bubble
+   * that storage has not answered for yet, which is exactly when those actions
+   * must stay disabled — and `turn.end` fills it in the moment the turn
+   * finishes, so a message becomes editable without a refetch.
+   */
+  readonly seq: number | undefined;
   readonly text: string;
   readonly attachments: readonly Attachment[];
   /** True until the ack lands — the bubble that has not been accepted yet. */
@@ -148,6 +157,15 @@ export interface TurnItem {
   readonly stopReason: StopReason | undefined;
   readonly usage: Usage | undefined;
   readonly iterations: number;
+  /** Wall time for the whole turn — the divisor behind the tokens/s figure. */
+  readonly elapsedMs: number | undefined;
+  /**
+   * The seqs this turn spans: the user message that started it, and the last
+   * message it wrote. `firstSeq` is what Regenerate re-runs from and what
+   * Branch forks at.
+   */
+  readonly firstSeq: number | undefined;
+  readonly lastSeq: number | undefined;
   /** False while the turn is streaming — what drives the caret and the spinner. */
   readonly done: boolean;
   readonly failure: TurnFailure | undefined;
@@ -199,6 +217,7 @@ export function appendPendingUserMessage(
       id: input.clientMessageId,
       clientMessageId: input.clientMessageId,
       turnId: undefined,
+      seq: undefined,
       text: input.text,
       attachments: input.attachments ?? [],
       pending: true,
@@ -243,6 +262,9 @@ export function applyServerMessage(items: Transcript, message: ServerMessage): T
               stopReason: undefined,
               usage: undefined,
               iterations: 0,
+              elapsedMs: undefined,
+              firstSeq: undefined,
+              lastSeq: undefined,
               done: false,
               failure: undefined,
             },
@@ -311,14 +333,32 @@ export function applyServerMessage(items: Transcript, message: ServerMessage): T
     case 'notice':
       return applyNotice(items, message);
 
-    case 'turn.end':
-      return updateTurn(items, message.turnId, (turn) => ({
+    case 'turn.end': {
+      const ended = updateTurn(items, message.turnId, (turn) => ({
         ...turn,
         done: true,
         stopReason: message.stopReason,
         usage: message.usage,
         iterations: message.iterations,
+        elapsedMs: message.elapsedMs,
+        firstSeq: message.firstSeq,
+        lastSeq: message.lastSeq,
       }));
+
+      // The second half of the job, and the reason `firstSeq` is on the wire at
+      // all: the bubble this tab drew optimistically has no storage address, so
+      // until the turn ends it cannot be edited, regenerated or branched. One
+      // number here is what a refetch would otherwise have to supply — and a
+      // refetch would also replace the live turn's tool timings with stored
+      // rows that do not carry them.
+      if (message.firstSeq === undefined) return ended;
+      const seq = message.firstSeq;
+      return ended.map((item) =>
+        item.kind === 'user' && item.turnId === message.turnId && item.seq === undefined
+          ? { ...item, seq }
+          : item,
+      );
+    }
 
     case 'error':
       // A connection-scoped error is not a transcript entry — `connection.ts`
@@ -349,6 +389,12 @@ export function applyServerMessage(items: Transcript, message: ServerMessage): T
       // the frames themselves follow, so there is nothing to rebuild. Past it:
       // the stored tail is the transcript, and the live frames resume on top.
       return message.complete ? items : fromStoredMessages(message.messages);
+
+    case 'session.truncated':
+      // The frame carries the surviving tail, so this is a rebuild rather than
+      // a splice — and it is the same rebuild `session.replay` does past the
+      // ring. A tab that did not initiate the regenerate corrects itself here.
+      return fromStoredMessages(message.messages);
 
     case 'connected':
     case 'pong':
@@ -536,6 +582,22 @@ function withLiveRiskBands(base: Transcript, existing: Transcript): Transcript {
 export function fromStoredMessages(messages: readonly StoredMessage[]): Transcript {
   const items: TranscriptItem[] = [];
 
+  // The seqs each turn spans, keyed the same way `openTurn` keys the turn
+  // itself. Collected up front because a turn's first seq belongs to the *user*
+  // message that started it, which the loop below has already passed by the
+  // time it opens the turn.
+  const spans = new Map<string, { first: number; last: number }>();
+  for (const stored of messages) {
+    const key = stored.turnId ?? stored.id;
+    const span = spans.get(key);
+    spans.set(
+      key,
+      span === undefined
+        ? { first: stored.seq, last: stored.seq }
+        : { first: Math.min(span.first, stored.seq), last: Math.max(span.last, stored.seq) },
+    );
+  }
+
   for (const stored of messages) {
     const { message } = stored;
 
@@ -550,6 +612,7 @@ export function fromStoredMessages(messages: readonly StoredMessage[]): Transcri
           id: stored.id,
           clientMessageId: undefined,
           turnId: stored.turnId,
+          seq: stored.seq,
           text: textOf(message.content),
           attachments: attachmentsOf(message.content),
           pending: false,
@@ -627,7 +690,36 @@ export function fromStoredMessages(messages: readonly StoredMessage[]): Transcri
     }
   }
 
-  return items;
+  return items.map((item) =>
+    item.kind === 'turn'
+      ? { ...item, firstSeq: spans.get(item.id)?.first, lastSeq: spans.get(item.id)?.last }
+      : item,
+  );
+}
+
+/**
+ * Drops every item after `seq`, for the moment between asking and being told.
+ *
+ * Purely a flicker guard. The `session.truncated` frame that follows a
+ * regenerate or an edit is the truth and rebuilds the transcript from the
+ * stored tail a few milliseconds later; without this, the answer being
+ * discarded stays on screen until it does.
+ *
+ * Items with no seq — an optimistic bubble, a steer, a connection notice — are
+ * kept only while they precede the cut, because an item that has no address
+ * cannot be shown to be on the surviving side of one.
+ */
+export function truncateTranscriptAfter(items: Transcript, seq: number): Transcript {
+  const kept: TranscriptItem[] = [];
+
+  for (const item of items) {
+    const address =
+      item.kind === 'user' ? item.seq : item.kind === 'turn' ? item.firstSeq : undefined;
+    if (address !== undefined && address > seq) break;
+    kept.push(item);
+  }
+
+  return kept;
 }
 
 // ---------------------------------------------------------------------------
@@ -812,6 +904,9 @@ function orphanTurn(turnId: string): TurnItem {
     stopReason: undefined,
     usage: undefined,
     iterations: 0,
+    elapsedMs: undefined,
+    firstSeq: undefined,
+    lastSeq: undefined,
     done: false,
     failure: undefined,
   };

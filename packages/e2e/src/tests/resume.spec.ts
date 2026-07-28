@@ -15,7 +15,7 @@
 import { expect, test } from '../fixtures.js';
 
 test('a reload rebuilds an in-flight turn from the replay buffer', async ({ app }) => {
-  await app.getByLabel('Message').fill('wait for me');
+  await app.getByRole('textbox', { name: 'Message' }).fill('wait for me');
   await app.getByRole('button', { name: 'Send' }).click();
 
   const card = app.getByRole('region', { name: 'Tool call: e2e_wait' });

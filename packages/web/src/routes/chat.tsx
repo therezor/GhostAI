@@ -22,15 +22,24 @@
  * and back — see `chat/use-connection.ts`.
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { useEffect, useState, type JSX } from 'react';
 
 import { api } from '@/lib/api.js';
-import { approveTool, sendUserMessage, stopTurn } from '@/lib/connection.js';
+import {
+  approveTool,
+  editMessage,
+  regenerateTurn,
+  sendUserMessage,
+  stopTurn,
+} from '@/lib/connection.js';
 import { queryKeys } from '@/lib/query.js';
 import { useTurnStore } from '@/state/turn.js';
+import { toast } from '@/components/ui/toast.js';
 import { Composer } from '@/chat/composer.js';
+import type { MessageAction } from '@/chat/message.js';
+import { ContextStrip } from '@/context/context-strip.js';
 import { TranscriptView } from '@/chat/transcript-view.js';
 import { Welcome } from '@/chat/welcome.js';
 
@@ -47,6 +56,40 @@ export function ChatRoute(): JSX.Element {
   // A prompt picked on the welcome screen, handed to the composer to be edited
   // rather than sent — the user chose a starting point, not a message.
   const [draft, setDraft] = useState<string | undefined>(undefined);
+  const queryClient = useQueryClient();
+
+  /**
+   * Branch is the one action that is a request rather than a frame.
+   *
+   * It creates a session and starts no turn, so it needs an answer — the key of
+   * the fork, which is where the user is then taken. Regenerate and edit go
+   * over the socket instead, because both *start a turn* and every turn belongs
+   * to the hub's queue.
+   */
+  const branch = useMutation({
+    mutationFn: ({ key, seq }: { key: string; seq: number }) => api.branchSession(key, seq),
+    onSuccess: (fork) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
+      void navigate({ to: '/', search: { session: fork.key } });
+    },
+    onError: (error: Error) => {
+      toast.error('Could not branch the conversation', error.message);
+    },
+  });
+
+  function runAction(action: MessageAction): void {
+    switch (action.kind) {
+      case 'edit':
+        editMessage(action.seq, action.text);
+        return;
+      case 'regenerate':
+        regenerateTurn(action.seq);
+        return;
+      case 'branch':
+        if (sessionKey !== undefined) branch.mutate({ key: sessionKey, seq: action.seq });
+        return;
+    }
+  }
 
   // Whether a turn can run at all. The shell reads this too, so on a working
   // install it is already in the cache and costs nothing here.
@@ -61,6 +104,10 @@ export function ChatRoute(): JSX.Element {
     queryKey: queryKeys.messages(session ?? ''),
     queryFn: ({ signal }) => api.messages(session ?? '', signal),
     enabled: session !== undefined,
+    // A conversation that has not been spoken in has no stored row, so this is
+    // a 404 until the first turn lands — an expected answer rather than a
+    // failure worth three exponential backoffs.
+    retry: false,
   });
 
   useEffect(() => {
@@ -87,7 +134,13 @@ export function ChatRoute(): JSX.Element {
           <Welcome onPick={setDraft} />
         </div>
       ) : (
-        <TranscriptView transcript={transcript} busy={busy} onApprove={approveTool} />
+        <TranscriptView
+          transcript={transcript}
+          busy={busy}
+          sessionKey={sessionKey}
+          onApprove={approveTool}
+          onAction={runAction}
+        />
       )}
 
       {/* Above the composer rather than inside it: the pointer is a link, and
@@ -106,6 +159,9 @@ export function ChatRoute(): JSX.Element {
       <Composer
         key={draft}
         initialText={draft}
+        // Beside the hint rather than under the whole composer: it is one more
+        // piece of ambient state about the box above it, not a second row.
+        meta={<ContextStrip sessionKey={sessionKey} />}
         busy={busy}
         queueDepth={queueDepth}
         connected={connection === 'open'}

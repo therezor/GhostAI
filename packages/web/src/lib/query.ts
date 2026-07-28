@@ -34,6 +34,12 @@ export const queryKeys = {
   sessions: (workspaceId?: string) =>
     workspaceId === undefined ? (['sessions'] as const) : (['sessions', { workspaceId }] as const),
   messages: (key: string) => ['sessions', key, 'messages'] as const,
+  /**
+   * Under the `['sessions']` prefix on purpose: `use-connection.ts` already
+   * invalidates that after every turn, so a conversation's costs refresh as it
+   * grows without a second subscription.
+   */
+  turns: (key: string) => ['sessions', key, 'turns'] as const,
   notifications: ['notifications'] as const,
   settings: ['settings'] as const,
   providers: ['providers'] as const,

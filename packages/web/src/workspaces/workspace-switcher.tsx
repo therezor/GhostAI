@@ -20,7 +20,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { Check, FolderTree, Settings2 } from 'lucide-react';
+import { Check, ChevronDown, Settings2 } from 'lucide-react';
 import { useState, type JSX } from 'react';
 
 import { Button } from '@/components/ui/button.js';
@@ -34,14 +34,25 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu.js';
 import { api } from '@/lib/api.js';
+import { cn } from '@/lib/cn.js';
 import { queryKeys } from '@/lib/query.js';
 import { WorkspaceManager } from './workspace-manager.js';
 import { DEFAULT_WORKSPACE_ID, useWorkspace } from './workspace-context.js';
 
 export function WorkspaceSwitcher({
   onNavigate,
+  rowClassName,
 }: {
   readonly onNavigate?: () => void;
+  /**
+   * The host's own row treatment, applied to the trigger.
+   *
+   * Passed in rather than reproduced here: the switcher is only ever rendered
+   * in the sidebar, and it is meant to look like exactly the rows beneath it.
+   * Two stylesheets agreeing about what a row looks like is two stylesheets
+   * that eventually will not.
+   */
+  readonly rowClassName?: string;
 }): JSX.Element {
   const { workspaceId, select } = useWorkspace();
   const [managing, setManaging] = useState(false);
@@ -63,13 +74,17 @@ export function WorkspaceSwitcher({
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
-            className="workspace-switcher__trigger"
+            className={cn('workspace-switcher__trigger', rowClassName)}
             aria-label={`Workspace: ${current?.name ?? workspaceId}`}
           >
-            <FolderTree />
             <span className="workspace-switcher__name truncate">
               {current?.name ?? workspaceId}
             </span>
+            {/* The chevron is the affordance. The leading folder icon that used
+                to be here was saying what the label above now says, and a
+                control with an icon at both ends reads as a button rather than
+                as the picker it is. */}
+            <ChevronDown className="workspace-switcher__caret" aria-hidden="true" />
           </Button>
         </DropdownMenuTrigger>
 

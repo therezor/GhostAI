@@ -19,22 +19,19 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { Gauge } from 'lucide-react';
-import { useState, type JSX } from 'react';
+import type { JSX } from 'react';
 
 import { api, ApiError } from '@/lib/api.js';
 import { formatTokens } from '@/lib/format.js';
 import { queryKeys } from '@/lib/query.js';
 import { cn } from '@/lib/cn.js';
 import { Badge } from '@/components/ui/badge.js';
-import { Button } from '@/components/ui/button.js';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogHeading,
   DialogSubheading,
-  DialogTrigger,
 } from '@/components/ui/dialog.js';
 import { summariseContext, type ContextSegment } from './breakdown.js';
 
@@ -48,28 +45,25 @@ const SEGMENT_FILLS: Readonly<Record<string, string>> = {
 
 const FALLBACK_FILL = 'context-fill--fallback';
 
-export function ContextInspector({
+/**
+ * The full breakdown, opened from the strip under the composer.
+ *
+ * The trigger is not here any more. It used to be a `Gauge` button in the
+ * header, which put the measurement about as far from the composer as the
+ * layout allows — see `context-strip.tsx`, which is both the trigger and the
+ * one-line version of this.
+ */
+export function ContextDialog({
   sessionKey,
+  open,
+  onOpenChange,
 }: {
   readonly sessionKey: string | undefined;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
 }): JSX.Element {
-  const [open, setOpen] = useState(false);
-
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Inspect context"
-          // Nothing to inspect before a conversation exists, and asking for the
-          // context of a session the server has never minted is a 404.
-          disabled={sessionKey === undefined}
-        >
-          <Gauge />
-        </Button>
-      </DialogTrigger>
-
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="dialog--context">
         <DialogHeader>
           <DialogHeading>Context</DialogHeading>
@@ -84,14 +78,17 @@ export function ContextInspector({
   );
 }
 
-function ContextBody({ sessionKey }: { readonly sessionKey: string }): JSX.Element {
+export function ContextBody({ sessionKey }: { readonly sessionKey: string }): JSX.Element {
   const context = useQuery({
     queryKey: queryKeys.context(sessionKey),
     queryFn: ({ signal }) => api.context(sessionKey, signal),
-    // Every open re-measures. The whole value of the panel is that the number
-    // is current, and a cached one from four turns ago is worse than a spinner.
-    staleTime: 0,
-    gcTime: 0,
+    // No zero stale time any more, and the reason changed rather than the
+    // requirement. This used to be fetched only when a button was pressed, so
+    // re-measuring on every open was the only way to be current. The strip
+    // under the composer is always mounted, and `queryKeys.context` sits under
+    // the `['sessions']` prefix that `use-connection.ts` invalidates on every
+    // `turn.end` — so the number is refreshed by the thing that changes it,
+    // rather than by rebuilding the whole system prompt on a timer.
   });
 
   if (context.isPending) return <p className="page__note">Measuring…</p>;

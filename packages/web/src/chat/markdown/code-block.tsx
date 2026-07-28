@@ -24,6 +24,7 @@ import { useEffect, useState, type JSX } from 'react';
 
 import { cn } from '@/lib/cn.js';
 import { onIdle } from '@/lib/idle.js';
+import { useCopy } from '@/components/use-copy.js';
 import { useAppTheme } from '@/theme/theme-context.js';
 import type { HighlightedLines } from './highlight.js';
 
@@ -99,52 +100,22 @@ export function CodeBlock({ code, lang, complete }: CodeBlockProps): JSX.Element
 /**
  * Copy, with the confirmation on the button rather than in a toast.
  *
- * A toast for "copied" is a notification about something the user just did and
- * is already looking at. The check mark is where their eye already is.
+ * The behaviour is `useCopy`, shared with the message action bar; the
+ * appearance is this file's, because a text-and-icon button in a code block's
+ * corner and an icon in a row of five are not the same control.
  */
 function CopyButton({ text }: { readonly text: string }): JSX.Element {
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    if (!copied) return undefined;
-    const timer = setTimeout(() => {
-      setCopied(false);
-    }, 1500);
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [copied]);
+  const { copied, copy } = useCopy(text);
 
   return (
     <button
       type="button"
       aria-label={copied ? 'Copied' : 'Copy code'}
-      onClick={() => {
-        void copyToClipboard(text).then((ok) => {
-          if (ok) setCopied(true);
-        });
-      }}
+      onClick={copy}
       className={cn('code-block__copy', copied && 'code-block__copy--done')}
     >
       {copied ? <Check /> : <Copy />}
       {copied ? 'Copied' : 'Copy'}
     </button>
   );
-}
-
-/**
- * Copies, and says whether it worked.
- *
- * `navigator.clipboard` is typed as always present and is absent on an insecure
- * origin and in jsdom, where reading `.writeText` off it throws synchronously —
- * so the whole call is inside the `try`, not just the promise. A refusal is a
- * button that does not claim success, not an error the user has to dismiss.
- */
-async function copyToClipboard(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
 }

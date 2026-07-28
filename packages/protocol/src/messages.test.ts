@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { ChatMessageSchema, StoredMessageSchema, UsageSchema } from './messages.js';
+import {
+  ChatMessageSchema,
+  StoredMessageSchema,
+  UsageSchema,
+  tokensPerSecond,
+} from './messages.js';
 
 describe('ChatMessageSchema', () => {
   it('parses a system message', () => {
@@ -92,6 +97,7 @@ describe('StoredMessageSchema', () => {
     const parsed = StoredMessageSchema.parse({
       id: 'm1',
       sessionKey: 'web:abc',
+      seq: 1,
       createdAtMs: 1_700_000_000_000,
       turnId: 't1',
       message: { role: 'system', content: 'x' },
@@ -104,6 +110,7 @@ describe('StoredMessageSchema', () => {
     const parsed = StoredMessageSchema.parse({
       id: 'm1',
       sessionKey: 's',
+      seq: 1,
       createdAtMs: 0,
       message: { role: 'system', content: 'x' },
     });
@@ -139,5 +146,25 @@ describe('UsageSchema', () => {
 
   it('rejects negative counts', () => {
     expect(UsageSchema.safeParse({ promptTokens: -5 }).success).toBe(false);
+  });
+});
+
+describe('tokensPerSecond', () => {
+  const usage = { promptTokens: 100, completionTokens: 250, totalTokens: 350 };
+
+  it('divides completion tokens by wall time', () => {
+    expect(tokensPerSecond(usage, 1000)).toBe(250);
+    expect(tokensPerSecond(usage, 2000)).toBe(125);
+  });
+
+  it('reports nothing rather than infinity for an unmeasured turn', () => {
+    expect(tokensPerSecond(usage, 0)).toBeUndefined();
+    expect(tokensPerSecond(usage, -1)).toBeUndefined();
+  });
+
+  it('reports nothing rather than zero for a turn that produced nothing', () => {
+    expect(
+      tokensPerSecond({ promptTokens: 10, completionTokens: 0, totalTokens: 10 }, 1000),
+    ).toBeUndefined();
   });
 });

@@ -12,7 +12,7 @@
 import { z } from 'zod';
 
 import { ConfigSchema } from './config.js';
-import { StoredMessageSchema, UsageSchema } from './messages.js';
+import { StopReasonSchema, StoredMessageSchema, UsageSchema } from './messages.js';
 import { ToolDefinitionSchema } from './tools.js';
 import { AutomationJobSchema, AutomationRunSchema } from './automation.js';
 
@@ -265,6 +265,49 @@ export const ContextResponseSchema = z.object({
   breakdown: z.record(z.string(), z.number()).default({}),
 });
 export type ContextResponse = z.infer<typeof ContextResponseSchema>;
+
+/**
+ * What one turn cost, recorded when it ended.
+ *
+ * Fetched rather than streamed, because a conversation you did not watch happen
+ * has no live events to have carried it — which was the whole reason the info
+ * button showed nothing after a reload. The live path still rides on `turn.end`
+ * rather than making the client ask for numbers it just watched being measured.
+ */
+export const TurnStatsSchema = z.object({
+  turnId: z.string().min(1),
+  sessionKey: z.string().min(1),
+  provider: z.string(),
+  model: z.string(),
+  startedAtMs: z.number().int().nonnegative(),
+  endedAtMs: z.number().int().nonnegative(),
+  iterations: z.number().int().nonnegative().default(0),
+  stopReason: StopReasonSchema,
+  usage: UsageSchema,
+});
+export type TurnStats = z.infer<typeof TurnStatsSchema>;
+
+export const TurnStatsResponseSchema = z.object({
+  sessionKey: z.string().min(1),
+  turns: z.array(TurnStatsSchema),
+});
+export type TurnStatsResponse = z.infer<typeof TurnStatsResponseSchema>;
+
+/**
+ * Fork a conversation at a point.
+ *
+ * REST rather than a socket frame, unlike regenerate and edit: this creates a
+ * resource and starts no turn, and the caller needs the new key back to
+ * navigate to it. The protocol has no request/response correlation anywhere,
+ * and should not grow one for a call that maps onto a POST exactly.
+ */
+export const BranchSessionRequestSchema = z.object({
+  /** Copy everything at or below this `seq`. `0` forks an empty conversation. */
+  seq: z.number().int().nonnegative(),
+  key: z.string().min(1).optional(),
+  title: z.string().optional(),
+});
+export type BranchSessionRequest = z.infer<typeof BranchSessionRequestSchema>;
 
 // ---------------------------------------------------------------------------
 // Tools

@@ -13,10 +13,13 @@ import type {
   ContextResponse,
   SessionListResponse,
   SessionMessagesResponse,
+  SessionSummary,
+  TurnStatsResponse,
 } from '@ghostai/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { manualClock } from './testkit/clock.js';
+import { hangingRunner } from './testkit/hub.js';
 import { startTestServer, type TestServer } from './testkit/server.js';
 
 const running: TestServer[] = [];
@@ -401,5 +404,199 @@ describe('GET /api/sessions/:key/context', () => {
     });
 
     expect(texts(response.json<ContextResponse>().messages)).toEqual(['still here']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Branching
+// ---------------------------------------------------------------------------
+
+describe('branching a session', () => {
+  it('forks the prefix into a new session and leaves the source alone', async () => {
+    const test = await start();
+    test.runtime.store.append('web-1', userMessage('one'));
+    test.runtime.store.append('web-1', assistantMessage('two'));
+    test.runtime.store.append('web-1', userMessage('three'));
+
+    const response = await test.server.app.inject({
+      method: 'POST',
+      url: '/api/sessions/web-1/branch',
+      headers: test.headers,
+      payload: { seq: 2 },
+    });
+
+    expect(response.statusCode).toBe(201);
+    const fork = response.json<SessionSummary>();
+    expect(fork.messageCount).toBe(2);
+    expect(fork.key).not.toBe('web-1');
+    expect(texts(test.runtime.store.messages(fork.key))).toEqual(['one', 'two']);
+    expect(test.runtime.store.messageCount('web-1')).toBe(3);
+  });
+
+  it('honours a title and a key', async () => {
+    const test = await start();
+    test.runtime.store.append('web-1', userMessage('one'));
+
+    const response = await test.server.app.inject({
+      method: 'POST',
+      url: '/api/sessions/web-1/branch',
+      headers: test.headers,
+      payload: { seq: 1, key: 'chosen', title: 'A fork' },
+    });
+
+    expect(response.json<SessionSummary>()).toMatchObject({ key: 'chosen', title: 'A fork' });
+  });
+
+  it('reports a cut that had to snap to a legal boundary', async () => {
+    const test = await start();
+    test.runtime.store.append('web-1', userMessage('read it'));
+    test.runtime.store.append('web-1', {
+      role: 'assistant',
+      content: [],
+      toolCalls: [{ id: 'a', name: 'read_file', argumentsJson: '{}' }],
+    });
+    test.runtime.store.append('web-1', {
+      role: 'tool',
+      toolCallId: 'a',
+      name: 'read_file',
+      content: 'contents',
+    });
+
+    // Cutting at 2 would strand the assistant's unanswered call.
+    const response = await test.server.app.inject({
+      method: 'POST',
+      url: '/api/sessions/web-1/branch',
+      headers: test.headers,
+      payload: { seq: 2 },
+    });
+
+    expect(response.json<SessionSummary>().messageCount).toBe(1);
+  });
+
+  it('404s for a session that does not exist', async () => {
+    const test = await start();
+    const response = await test.server.app.inject({
+      method: 'POST',
+      url: '/api/sessions/nope/branch',
+      headers: test.headers,
+      payload: { seq: 1 },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('409s while a turn is running on the source', async () => {
+    const test = await start({ runner: hangingRunner() });
+    test.runtime.store.append('web-1', userMessage('one'));
+
+    const client = test.hub.connect({ send: () => undefined, sessionKey: 'web-1' });
+    client.receive({ type: 'user.message', sessionKey: 'web-1', content: 'go' });
+
+    const response = await test.server.app.inject({
+      method: 'POST',
+      url: '/api/sessions/web-1/branch',
+      headers: test.headers,
+      payload: { seq: 1 },
+    });
+
+    // The loop appends a turn's whole output at the end, so a fork taken now
+    // would start with a question nothing has answered.
+    expect(response.statusCode).toBe(409);
+    client.close();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Turn stats
+// ---------------------------------------------------------------------------
+
+describe('turn stats', () => {
+  const stats = (turnId: string, endedAtMs: number) => ({
+    turnId,
+    sessionKey: 'web-1',
+    provider: 'anthropic',
+    model: 'claude-opus-5',
+    startedAtMs: 1000,
+    endedAtMs,
+    iterations: 2,
+    stopReason: 'complete' as const,
+    usage: { promptTokens: 100, completionTokens: 20, totalTokens: 120 },
+  });
+
+  it('returns an empty list for a conversation with no recorded turns', async () => {
+    const test = await start();
+    test.runtime.store.ensureSession('web-1');
+
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: '/api/sessions/web-1/turns',
+      headers: test.headers,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json<TurnStatsResponse>()).toEqual({ sessionKey: 'web-1', turns: [] });
+  });
+
+  it('returns the recorded turns, newest first', async () => {
+    const test = await start();
+    test.runtime.store.ensureSession('web-1');
+    test.runtime.store.recordTurnStats(stats('t1', 2000));
+    test.runtime.store.recordTurnStats(stats('t2', 3000));
+
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: '/api/sessions/web-1/turns',
+      headers: test.headers,
+    });
+
+    const body = response.json<TurnStatsResponse>();
+    expect(body.turns.map((turn) => turn.turnId)).toEqual(['t2', 't1']);
+    expect(body.turns[0]?.usage.totalTokens).toBe(120);
+  });
+
+  it('404s for a session that does not exist', async () => {
+    const test = await start();
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: '/api/sessions/nope/turns',
+      headers: test.headers,
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('reports a session total the listing can show', async () => {
+    const test = await start();
+    test.runtime.store.ensureSession('web-1');
+    test.runtime.store.recordTurnStats(stats('t1', 2000));
+    test.runtime.store.recordTurnStats(stats('t2', 3000));
+
+    const listed = await test.server.app.inject({
+      method: 'GET',
+      url: '/api/sessions',
+      headers: test.headers,
+    });
+    const one = await test.server.app.inject({
+      method: 'GET',
+      url: '/api/sessions/web-1',
+      headers: test.headers,
+    });
+
+    expect(listed.json<SessionListResponse>().sessions[0]?.totalUsage?.totalTokens).toBe(240);
+    expect(one.json<SessionSummary>().totalUsage?.totalTokens).toBe(240);
+  });
+
+  it('omits the total for a conversation whose turns predate the table', async () => {
+    const test = await start();
+    test.runtime.store.append('web-1', userMessage('hello'));
+
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: '/api/sessions/web-1',
+      headers: test.headers,
+    });
+
+    // Absent rather than zero: nobody counted, which is not the same as free.
+    expect(response.json<SessionSummary>().totalUsage).toBeUndefined();
   });
 });

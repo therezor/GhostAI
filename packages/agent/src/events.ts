@@ -151,6 +151,18 @@ export interface TurnEndEvent {
   readonly stopReason: StopReason;
   readonly usage?: Usage;
   readonly iterations: number;
+  /** Wall time across the whole turn — the divisor behind a tokens/s figure. */
+  readonly elapsedMs?: number;
+  /**
+   * The seqs this turn spans in storage.
+   *
+   * `firstSeq` is the user message that started it, which is what a regenerate
+   * re-runs from and what a branch forks at — reporting it here is what lets a
+   * client offer those actions on a message it just watched being sent, rather
+   * than after a refetch.
+   */
+  readonly firstSeq?: number;
+  readonly lastSeq?: number;
 }
 
 export type AgentEvent =

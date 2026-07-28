@@ -12,7 +12,7 @@ import { expect, test } from '../fixtures.js';
 
 test.describe('a tool that needs approval', () => {
   test('runs after approval and reports its output', async ({ app }) => {
-    await app.getByLabel('Message').fill('run the version command');
+    await app.getByRole('textbox', { name: 'Message' }).fill('run the version command');
     await app.getByRole('button', { name: 'Send' }).click();
 
     const card = app.getByRole('region', { name: 'Tool call: exec' });
@@ -36,7 +36,7 @@ test.describe('a tool that needs approval', () => {
   });
 
   test('is refused after a denial, and the turn continues', async ({ app }) => {
-    await app.getByLabel('Message').fill('run the version command');
+    await app.getByRole('textbox', { name: 'Message' }).fill('run the version command');
     await app.getByRole('button', { name: 'Send' }).click();
 
     const card = app.getByRole('region', { name: 'Tool call: exec' });
@@ -69,7 +69,7 @@ test.describe('with exec allowed', () => {
   test.use({ harnessOptions: { config: { tools: { approvals: { exec: 'allow' } } } } });
 
   test('runs unattended', async ({ app }) => {
-    await app.getByLabel('Message').fill('run the version command');
+    await app.getByRole('textbox', { name: 'Message' }).fill('run the version command');
     await app.getByRole('button', { name: 'Send' }).click();
 
     const card = app.getByRole('region', { name: 'Tool call: exec' });

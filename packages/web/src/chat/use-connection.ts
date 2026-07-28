@@ -78,6 +78,16 @@ export function useConnection(sessionKey: string | undefined): void {
             });
             return;
 
+          case 'session.truncated':
+            // The one invalidation that is not a nicety: `mergeStoredHistory`
+            // puts a fetched history *underneath* the live transcript, so a
+            // cached response holding the deleted rows would resurrect them.
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.messages(message.sessionKey),
+            });
+            void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
+            return;
+
           case 'tools.changed':
             void queryClient.invalidateQueries({ queryKey: queryKeys.tools });
             return;

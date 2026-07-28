@@ -31,7 +31,8 @@
  */
 
 import type { AgentEvent } from '@ghostai/agent';
-import type { ToolRisk, Usage } from '@ghostai/protocol';
+import type { TurnStatsRecord } from '@ghostai/core';
+import { tokensPerSecond, type ToolRisk, type Usage } from '@ghostai/protocol';
 import pc from 'picocolors';
 
 /** Anything that takes a string. `process.stdout` satisfies it; so does a test. */
@@ -114,7 +115,20 @@ export function formatCount(value: number): string {
   return value < 1000 ? String(value) : `${(value / 1000).toFixed(1)}k`;
 }
 
-function formatUsage(usage: Usage): string {
+/**
+ * Completion tokens per second, as a phrase, or nothing.
+ *
+ * `tokensPerSecond` reports `undefined` for a turn that produced no tokens or
+ * was measured at zero milliseconds, and both stay unreported here: a rate
+ * derived from a zero is a number that looks measured and is not.
+ */
+export function formatRate(usage: Usage, elapsedMs: number | undefined): string | undefined {
+  if (elapsedMs === undefined) return undefined;
+  const rate = tokensPerSecond(usage, elapsedMs);
+  return rate === undefined ? undefined : `${rate.toFixed(1)} tok/s`;
+}
+
+export function formatUsage(usage: Usage): string {
   const parts = [
     `${formatCount(usage.promptTokens)} in`,
     `${formatCount(usage.completionTokens)} out`,
@@ -208,7 +222,7 @@ export class TurnRenderer {
         this.#error(event.code, event.message, event.retryable);
         return;
       case 'turn.end':
-        this.#turnEnd(event.stopReason, event.iterations, event.usage);
+        this.#turnEnd(event.stopReason, event.iterations, event.usage, event.elapsedMs);
         return;
     }
   }
@@ -272,7 +286,12 @@ export class TurnRenderer {
     this.#line(this.#c.dim(`  ${code}${retryable ? ' · retryable' : ''}`));
   }
 
-  #turnEnd(stopReason: string, iterations: number, usage: Usage | undefined): void {
+  #turnEnd(
+    stopReason: string,
+    iterations: number,
+    usage: Usage | undefined,
+    elapsedMs: number | undefined,
+  ): void {
     this.#break();
     this.#mode = 'idle';
 
@@ -282,7 +301,32 @@ export class TurnRenderer {
 
     const parts = [`${String(iterations)} ${iterations === 1 ? 'step' : 'steps'}`];
     if (usage !== undefined && usage.totalTokens > 0) parts.push(formatUsage(usage));
+    if (elapsedMs !== undefined) parts.push(formatDuration(elapsedMs));
+    const rate = usage === undefined ? undefined : formatRate(usage, elapsedMs);
+    if (rate !== undefined) parts.push(rate);
     this.#line(this.#c.dim(`  · ${parts.join(' · ')}`));
+  }
+
+  /**
+   * What past turns cost, one line each.
+   *
+   * Through the renderer rather than written straight to the stream, like every
+   * other output: this object owns `#atLineStart`, and a command that wrote
+   * around it would put the next prompt on the end of a line.
+   */
+  stats(rows: readonly TurnStatsRecord[]): void {
+    for (const row of rows) {
+      const elapsedMs = Math.max(0, row.endedAtMs - row.startedAtMs);
+      const parts = [
+        row.model === '' ? 'unknown model' : row.model,
+        `${String(row.iterations)} ${row.iterations === 1 ? 'step' : 'steps'}`,
+        formatUsage(row.usage),
+        formatDuration(elapsedMs),
+      ];
+      const rate = formatRate(row.usage, elapsedMs);
+      if (rate !== undefined) parts.push(rate);
+      this.#line(this.#c.dim(`  · ${parts.join(' · ')}`));
+    }
   }
 
   #line(text: string): void {

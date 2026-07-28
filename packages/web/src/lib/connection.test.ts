@@ -19,7 +19,8 @@ import { readCursor, writeCursor } from './cursor.js';
 import {
   approveTool,
   closeConnection,
-  newSession,
+  regenerateTurn,
+  editMessage,
   onServerMessage,
   openConnection,
   sendUserMessage,
@@ -205,17 +206,45 @@ describe('speaking', () => {
     expect(useTurnStore.getState().transcript).toEqual([]);
   });
 
-  it('stops, steers and starts a new conversation', () => {
+  it('stops and steers the running turn', () => {
     open('web:1');
 
     stopTurn();
     steerTurn('be brief');
-    newSession();
 
     expect(socket().sent).toEqual([
       { type: 'turn.stop', sessionKey: 'web:1' },
       { type: 'turn.steer', sessionKey: 'web:1', content: 'be brief' },
-      { type: 'session.new' },
+    ]);
+  });
+
+  it('regenerates the last turn, or one that is named', () => {
+    open('web:1');
+
+    regenerateTurn();
+    regenerateTurn(3);
+
+    expect(socket().sent).toEqual([
+      { type: 'turn.regenerate', sessionKey: 'web:1' },
+      { type: 'turn.regenerate', sessionKey: 'web:1', seq: 3 },
+    ]);
+  });
+
+  it('edits a message and shows the replacement before the server answers', () => {
+    open('web:1');
+
+    editMessage(3, 'a better question');
+
+    const [frame] = socket().sent;
+    expect(frame).toMatchObject({
+      type: 'user.edit',
+      sessionKey: 'web:1',
+      seq: 3,
+      content: 'a better question',
+    });
+    // The optimistic bubble, so the composer clearing is not the only feedback.
+    expect(useTurnStore.getState().transcript).toMatchObject([
+      { kind: 'user', text: 'a better question', pending: true },
     ]);
   });
 

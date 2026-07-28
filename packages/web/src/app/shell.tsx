@@ -27,9 +27,9 @@ import { useTurnStore } from '@/state/turn.js';
 import { useConnection } from '@/chat/use-connection.js';
 import { Button } from '@/components/ui/button.js';
 import { Dialog, DialogContent, DialogHeading, DialogTrigger } from '@/components/ui/dialog.js';
+import { NotificationBell } from '@/notifications/notification-bell.js';
 import { ThemeSwitcher } from '@/components/theme-switcher.js';
 import { Wordmark } from '@/components/wordmark.js';
-import { ContextInspector } from '@/context/context-inspector.js';
 import { Sidebar } from './sidebar.js';
 
 export function Shell({ children }: { readonly children: ReactNode }): JSX.Element {
@@ -71,7 +71,6 @@ function Header({
   const connection = useTurnStore((state) => state.connection);
   // The header, not the chat route: the inspector measures the session the
   // socket is on, and that outlives a trip to Settings and back.
-  const sessionKey = useTurnStore((state) => state.sessionKey);
 
   return (
     <header className="app-header">
@@ -107,7 +106,7 @@ function Header({
       <div className="spacer" />
 
       <ConnectionBadge connection={connection} />
-      <ContextInspector sessionKey={sessionKey} />
+      <NotificationBell />
       <ThemeSwitcher />
     </header>
   );
