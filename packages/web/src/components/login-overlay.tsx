@@ -13,13 +13,13 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Lock } from 'lucide-react';
 import { useState, type JSX, type SyntheticEvent } from 'react';
 
 import { ApiError, api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
 import { Button } from './ui/button.js';
 import { Field } from './ui/field.js';
+import { Wordmark } from './wordmark.js';
 
 export function LoginOverlay(): JSX.Element | null {
   const queryClient = useQueryClient();
@@ -53,10 +53,7 @@ export function LoginOverlay(): JSX.Element | null {
     <div role="dialog" aria-modal="true" aria-labelledby="login-title" className="login-overlay">
       <form onSubmit={submit} className="stack login-card">
         <div className="stack login-card__header">
-          <div className="row login-card__eyebrow">
-            <Lock />
-            <span>GhostAI</span>
-          </div>
+          <Wordmark className="login-card__eyebrow" />
           <h1 id="login-title" className="login-card__title">
             Sign in
           </h1>

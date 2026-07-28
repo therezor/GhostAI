@@ -12,7 +12,7 @@
   .login-overlay {
     position: fixed;
     inset: 0;
-    z-index: var(--z-modal);
+    z-index: var(--z-overlay);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -27,25 +27,22 @@
     padding: var(--space-6);
     background-color: var(--surface-2);
     border: var(--hairline) solid var(--line);
-    border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-lg);
+    border-radius: var(--radius-md);
   }
 
   .login-card__header {
     --gap: var(--space-1);
   }
 
+  /* The brand lockup, set as a micro-label. It sizes its own mark in `em`, so
+   * the mark comes down with the type rather than needing a rule here — which
+   * is what the icon override that used to live below was. */
   .login-card__eyebrow {
     color: var(--accent-fg);
     font-size: var(--text-2xs);
     font-weight: var(--weight-semibold);
     letter-spacing: var(--tracking-caps);
     text-transform: uppercase;
-  }
-
-  .login-card__eyebrow > svg {
-    width: var(--size-icon-md);
-    height: var(--size-icon-md);
   }
 
   .login-card__title {

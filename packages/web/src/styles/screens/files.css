@@ -30,7 +30,7 @@
   }
 
   .file-table td {
-    padding-block: var(--space-1-5);
+    padding-block: var(--space-2);
   }
 
   .file-table tbody tr {

@@ -9,12 +9,12 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
+import { Skull } from 'lucide-react';
 import type { JSX } from 'react';
 
 import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
 import { Badge } from '@/components/ui/badge.js';
-import { Skull } from '@/components/skull.js';
 
 const PROMPTS: readonly string[] = [
   'Summarise the files in this workspace.',

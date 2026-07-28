@@ -32,6 +32,7 @@
 @import './components/toast.css';
 @import './components/tooltip.css';
 @import './components/scroll-area.css';
+@import './components/wordmark.css';
 @import './components/spinner.css';
 
 /* Screens: one file per region of the app. */

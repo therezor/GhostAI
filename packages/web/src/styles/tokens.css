@@ -25,7 +25,7 @@
  *    fill that composites over whatever is underneath, which is what makes one
  *    token work on a card, a popover and a sidebar row.
  *  - **Fill uses `--accent`; text, icons and strokes use `--accent-fg`.** They
- *    are identical in dark and diverge in light, where the brand gold on a
+ *    are identical in dark and diverge in light, where the brand green on a
  *    white card is a 2:1 pairing as text and fine as a fill. The rule is
  *    therefore invisible in the theme most people develop in — which is exactly
  *    the kind of thing that rots without a lint gate.
@@ -41,66 +41,85 @@
 /* ------------------------------------------------------------------ *
  * Seeds — dark
  *
- * The surface ramp and the accent are measured off the product this UI
- * replaces, converted to OKLCH. The text ramp is not: its two lower stops are
- * lighter here, because the originals sit at 4.0:1 and 2.9:1 against the page
- * and this sheet holds every text token to AA. That is the one deliberate
- * divergence in the palette, and `contrast.test.ts` is why.
+ * The surface ramp is measured off the product this UI replaces, converted to
+ * OKLCH. The text ramp is not: its two lower stops are lighter here, because
+ * the originals sit at 4.0:1 and 2.9:1 against the page and this sheet holds
+ * every text token to AA. That is the one deliberate divergence in the palette,
+ * and `contrast.test.ts` is why.
  * ------------------------------------------------------------------ */
 
 :root {
   color-scheme: dark;
 
-  --seed-accent-l: 0.763; /* the brand gold, measured in OKLCH */
-  --seed-accent-c: 0.155;
-  --seed-accent-h: 77.3;
+  /* The brand green: a pale phosphor mint, high in lightness and low in chroma.
+   *
+   * Pastel is a position on two axes at once — up in L, down in C — and both
+   * halves are load-bearing. Lightness alone would give a washed-out version of
+   * the same loud green; chroma alone would give a grey-green sludge. At
+   * L 0.85 / C 0.09 it is a colour that can be a large fill without shouting,
+   * which is what an accent on a dense tool is for.
+   *
+   * It sits four degrees from `--success` below, and the two are now told apart
+   * by *softness* rather than by loudness: the accent is the paler, quieter of
+   * the two greens, where the semantic one is fully saturated at a lower L. An
+   * accent has always shared a neighbourhood with a semantic role here — it was
+   * a gold half a degree from `--warning` before it was a green — and the roles
+   * are separated by where they appear as much as by hue: a fill, a focus ring
+   * and the wordmark on one side, a badge on a finished tool call on the other. */
+  --seed-accent-l: 0.8;
+  --seed-accent-c: 0.16;
+  --seed-accent-h: 132;
 
-  /* Accent as *text*. Identical to the fill in dark and darker in light — and
-   * chroma has to come along, because sRGB holds far less of it at L 0.50 than
-   * at L 0.763. A gold that stayed at C 0.155 while its L dropped would be
-   * outside the gamut, which is to say clipped to a colour nobody chose. */
-  --seed-accent-fg-l: 0.763;
-  --seed-accent-fg-c: 0.155;
+  /* Accent as *text*. Identical to the fill in dark, and much darker in light,
+   * where a mint at L 0.85 on a white card is a 1.5:1 pairing — legible as a
+   * fill and not at all as type. Chroma comes down with it, because sRGB holds
+   * far less at L 0.48 than at L 0.85. */
+  --seed-accent-fg-l: 0.8;
+  --seed-accent-fg-c: 0.16;
 
-  --seed-surface-0: 0.148; /* page     */
-  --seed-surface-1: 0.174; /* sunken   */
-  --seed-surface-2: 0.199; /* card     */
-  --seed-surface-3: 0.242; /* elevated */
+  --seed-surface-0: 0.11; /* page     */
+  --seed-surface-1: 0.145; /* sunken   */
+  --seed-surface-2: 0.17; /* card     */
+  --seed-surface-3: 0.22; /* elevated */
 
   --seed-overlay-rgb: 255 255 255; /* borders, hover, every alpha fill */
   --seed-hover-a: 0.05;
-  --seed-active-a: 0.09;
 
   --seed-text-1: 0.925;
-  --seed-text-2: 0.685;
-  /* The floor, not a preference: `--fg-3` on `--surface-3` is the tightest
-   * pairing in the sheet, and AA there resolves to L 0.63. This is that number
-   * with enough headroom that a surface tweak does not silently break it. */
-  --seed-text-3: 0.65;
+  --seed-text-2: 0.78;
+  /* Well clear of the floor, deliberately. `--fg-3` on `--surface-3` is the
+   * tightest pairing in the sheet and AA there now resolves to L 0.61, so this
+   * could sit six points lower and still pass — but "passes AA" and "is
+   * comfortable to read" are different bars, and the muted tier carries
+   * timestamps, token counts and tool arguments that people actually read
+   * rather than glance at. At L 0.72 the worst pairing in the sheet is 7.0:1
+   * against a 4.5 requirement, which is the headroom this tier should have had
+   * all along. */
+  --seed-text-3: 0.72;
 
   /* One L and one C for all four semantic hues, rather than four hand-picked
    * colours. Equal OKLCH L and C is what makes four badges read as equally
    * loud; the chroma is the largest that is in gamut for the *tightest* hue at
    * these lightnesses (blue at L 0.75), so no role is silently clipped. */
   --seed-semantic-l: 0.75;
-  --seed-semantic-c: 0.127;
+  --seed-semantic-c: 0.095;
   --seed-semantic-fg-l: 0.75;
-  --seed-semantic-fg-c: 0.127;
+  --seed-semantic-fg-c: 0.095;
 
   /* Text *on* an accent or semantic fill. Both fills are light in dark and in
-   * light — a gold button does not invert — so this one is near-black in both
+   * light — a green button does not invert — so this one is near-black in both
    * themes rather than following the surface ramp. */
   --seed-on-fill-l: 0.19;
 
   /* The neutral axis is not grey: surfaces and text carry a trace of the accent
-   * hue, which is what keeps a gold accent from looking pasted onto a slate UI.
-   * It goes to zero in light, where the top surface is pure white and any
+   * hue, which is what keeps a green accent from looking pasted onto a slate
+   * UI. It goes to zero in light, where the top surface is pure white and any
    * chroma at L 1.0 is by definition outside the gamut. */
   --seed-neutral-c: 0.005;
-  --seed-neutral-h: 77.3;
+  --seed-neutral-h: 132;
 
-  --seed-line-a: 0.07;
-  --seed-line-strong-a: 0.16;
+  --seed-line-a: 0.14;
+  --seed-line-strong-a: 0.26;
   --seed-soft-a: 0.16;
 }
 
@@ -116,37 +135,52 @@
  *
  * `:not([data-theme='dark'])` is what makes the override work in *both*
  * directions: a system-light browser with the theme forced to dark keeps dark.
+ *
+ * **The surface ramp runs the other way here, and that is not a mistake.** In
+ * dark it climbs — the page is the darkest thing and each step up is lighter, so
+ * "elevated" is literally brighter. Light has nowhere to climb to: the page is
+ * white because that is what makes text on it as readable as the theme can
+ * manage, and there is no lighter white to raise a panel into. So depth in light
+ * is *recession*. A card sits below the page at 0.975 and a sunken band — the
+ * header, the sidebar — further below at 0.955, and `--surface-3` is white again
+ * because a menu floating over the page is white with a stroke around it rather
+ * than a shade of anything.
+ *
+ * That is why `--surface-0` and `--surface-3` share a value here while being
+ * three steps apart in dark, and why the pair should not be "tidied up" into one
+ * token: they are the same colour in one theme and the two ends of the ramp in
+ * the other. The stroke does the work `--surface-3` cannot — see the
+ * `--line-strong` borders on the floating surfaces in `components/menu.css`.
  * ------------------------------------------------------------------ */
 
 @media (prefers-color-scheme: light) {
   :root:not([data-theme='dark']) {
     color-scheme: light;
 
-    --seed-accent-fg-l: 0.5;
-    --seed-accent-fg-c: 0.098;
+    --seed-accent-fg-l: 0.48;
+    --seed-accent-fg-c: 0.1;
 
-    --seed-surface-0: 0.975;
-    --seed-surface-1: 0.945;
-    --seed-surface-2: 0.995;
+    --seed-surface-0: 1;
+    --seed-surface-1: 0.955;
+    --seed-surface-2: 0.975;
     --seed-surface-3: 1;
 
     --seed-overlay-rgb: 0 0 0;
     --seed-hover-a: 0.05;
-    --seed-active-a: 0.09;
 
     --seed-text-1: 0.235;
-    --seed-text-2: 0.47;
-    --seed-text-3: 0.52;
+    --seed-text-2: 0.4;
+    --seed-text-3: 0.46;
 
     --seed-semantic-l: 0.7;
-    --seed-semantic-c: 0.138;
-    --seed-semantic-fg-l: 0.49;
-    --seed-semantic-fg-c: 0.098;
+    --seed-semantic-c: 0.1;
+    --seed-semantic-fg-l: 0.47;
+    --seed-semantic-fg-c: 0.07;
 
     --seed-neutral-c: 0;
 
-    --seed-line-a: 0.12;
-    --seed-line-strong-a: 0.22;
+    --seed-line-a: 0.16;
+    --seed-line-strong-a: 0.3;
     --seed-soft-a: 0.12;
   }
 }
@@ -154,31 +188,30 @@
 :root[data-theme='light'] {
   color-scheme: light;
 
-  --seed-accent-fg-l: 0.5;
-  --seed-accent-fg-c: 0.098;
+  --seed-accent-fg-l: 0.48;
+  --seed-accent-fg-c: 0.1;
 
-  --seed-surface-0: 0.975;
-  --seed-surface-1: 0.945;
-  --seed-surface-2: 0.995;
+  --seed-surface-0: 1;
+  --seed-surface-1: 0.955;
+  --seed-surface-2: 0.975;
   --seed-surface-3: 1;
 
   --seed-overlay-rgb: 0 0 0;
   --seed-hover-a: 0.05;
-  --seed-active-a: 0.09;
 
   --seed-text-1: 0.235;
-  --seed-text-2: 0.47;
-  --seed-text-3: 0.52;
+  --seed-text-2: 0.4;
+  --seed-text-3: 0.46;
 
   --seed-semantic-l: 0.7;
-  --seed-semantic-c: 0.138;
-  --seed-semantic-fg-l: 0.49;
-  --seed-semantic-fg-c: 0.098;
+  --seed-semantic-c: 0.1;
+  --seed-semantic-fg-l: 0.47;
+  --seed-semantic-fg-c: 0.07;
 
   --seed-neutral-c: 0;
 
-  --seed-line-a: 0.12;
-  --seed-line-strong-a: 0.22;
+  --seed-line-a: 0.16;
+  --seed-line-strong-a: 0.3;
   --seed-soft-a: 0.12;
 }
 
@@ -200,7 +233,6 @@
   --fg-3: oklch(var(--seed-text-3) var(--seed-neutral-c) var(--seed-neutral-h));
 
   --hover: rgb(var(--seed-overlay-rgb) / var(--seed-hover-a));
-  --active: rgb(var(--seed-overlay-rgb) / var(--seed-active-a));
   --line: rgb(var(--seed-overlay-rgb) / var(--seed-line-a));
   --line-strong: rgb(var(--seed-overlay-rgb) / var(--seed-line-strong-a));
 
@@ -249,8 +281,15 @@
 /* ------------------------------------------------------------------ *
  * Typography
  *
- * A base of 0.875rem — 14px at a default root — with a 1.6 leading, which is
- * the type size and rhythm of the product being replaced.
+ * A base of 0.9375rem — 15px at a default root — with a 1.6 leading.
+ *
+ * The base was 0.875rem, matching the product being replaced, and every step
+ * moved up one 0.0625rem notch together. A scale is a set of *ratios*, so the
+ * steps move as a block or they stop being a scale: bumping the base alone
+ * would have left the headings sitting a hair above body text and the micro
+ * labels indistinguishable from the captions above them. The control heights
+ * and icon sizes below moved with it for the same reason — type that grew
+ * inside chrome that did not is type that looks cramped rather than larger.
  *
  * **The root font size is never set.** Not in px, and not in rem either: `rem`
  * on `:root` resolves against the browser's default, so `html { font-size: 1rem }`
@@ -261,6 +300,12 @@
  * `--text-base` on top of it, and `styles/tokens.test.ts` fails if any
  * stylesheet ever gives `html` or `:root` a `font-size` at all.
  *
+ * **Six steps, not eight.** `xs` and `2xl` are gone: `xs` sat an eighth of a rem
+ * from `sm` and was chosen by coin-flip at every call site, and `2xl` was two
+ * page titles wide of `xl`. A step that nobody can tell apart from its neighbour
+ * is not a step, it is a decision the scale failed to make — so the survivors
+ * absorbed them, and `xl` moved up to cover the range `2xl` used to.
+ *
  * **What each step is for.** `--text-base` is the default and is declared
  * exactly once, on `body` in `base.css`; everything that is body text or a
  * control's own label simply inherits it rather than restating it. That is the
@@ -270,10 +315,9 @@
  *
  *   base   body text, controls, menu rows, table cells — inherited, not set
  *   md     an assistant's answer, one step up because it *is* the content
- *   sm     hints, captions, metadata, monospace, dense tables
- *   xs     annotations that sit beside something else
+ *   sm     hints, captions, metadata, monospace, annotations, dense tables
  *   2xs    uppercase micro-labels and badges, nothing that forms a sentence
- *   lg+    headings
+ *   lg,xl  headings
  *
  * Every step is a rem, so a browser set to 200% doubles the whole scale rather
  * than leaving fixed chrome around doubled prose.
@@ -286,28 +330,23 @@
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', 'Menlo', monospace;
 
-  --text-2xs: 0.6875rem;
-  --text-xs: 0.75rem;
-  --text-sm: 0.8125rem;
-  --text-base: 0.875rem;
-  --text-md: 0.9375rem;
-  --text-lg: 1.0625rem;
-  --text-xl: 1.25rem;
-  --text-2xl: 1.5rem;
+  --text-2xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 0.9375rem;
+  --text-md: 1rem;
+  --text-lg: 1.1875rem;
+  --text-xl: 1.5rem;
 
-  --leading-2xs: 1rem;
-  --leading-xs: 1.125rem;
-  --leading-sm: 1.25rem;
-  --leading-base: 1.4rem;
-  --leading-md: 1.5rem;
-  --leading-lg: 1.625rem;
-  --leading-xl: 1.75rem;
-  --leading-2xl: 2rem;
+  --leading-2xs: 1.125rem;
+  --leading-sm: 1.375rem;
+  --leading-base: 1.5rem;
+  --leading-md: 1.625rem;
+  --leading-lg: 1.75rem;
+  --leading-xl: 2rem;
 
   --weight-normal: 400;
   --weight-medium: 500;
   --weight-semibold: 600;
-  --weight-bold: 700;
 
   /* The one tracking value in the sheet, for the uppercase section labels the
    * sidebar and the settings panels share. Uppercase without it sets too
@@ -321,52 +360,81 @@
  * A 0.25rem grid — 4px at a default root. Named steps rather than arbitrary
  * values, so that "the gap inside a control" is one decision made once rather
  * than forty made separately.
+ *
+ * **The grid did not move when the type scale did**, and that is deliberate.
+ * The step names encode their own multiple — `--space-3` *is* three quarters of
+ * a rem — so rescaling the ramp would leave every name in the sheet lying about
+ * its value. What moved instead is which step each component reaches for: the
+ * places that were tight at the smaller type went up a notch, and the rest were
+ * already right. A grid is a set of legal positions, not a density; density is
+ * chosen per component, which is where it can actually be judged.
+ *
+ * **Nine steps, not sixteen.** Every half-step is gone — `1-5`, `2-5`, `3-5`,
+ * and the odd `5`, `7`, `10` — along with `px`. A ramp with a stop every eighth
+ * of a rem is not a grid, it is a number line: `--space-2-5` and `--space-3`
+ * differ by two device pixels, which is below the threshold at which anyone can
+ * choose between them for a reason. Sixteen options also meant sixteen chances
+ * for two adjacent components to land on different ones, which is precisely the
+ * drift a scale exists to prevent. What is left doubles roughly every step, so
+ * picking a value is picking an order of magnitude rather than splitting hairs.
  * ------------------------------------------------------------------ */
 
 :root {
-  --space-px: 0.0625rem;
   --space-0-5: 0.125rem;
   --space-1: 0.25rem;
-  --space-1-5: 0.375rem;
   --space-2: 0.5rem;
-  --space-2-5: 0.625rem;
   --space-3: 0.75rem;
-  --space-3-5: 0.875rem;
   --space-4: 1rem;
-  --space-5: 1.25rem;
   --space-6: 1.5rem;
-  --space-7: 1.75rem;
   --space-8: 2rem;
-  --space-10: 2.5rem;
   --space-12: 3rem;
   --space-16: 4rem;
 
-  /* Four stops and nothing else, matching the reference's discipline. A fifth
-   * radius is how a UI ends up with three subtly different card corners. */
-  --radius-sm: 0.25rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
+  /* Two stops and a pill.
+   *
+   * There were four, one notch apart, and at the tight end of the range they had
+   * stopped being distinguishable: a panel at 0.75rem and a card at 0.5rem read
+   * as the same corner, so the ramp was spending three names on one decision.
+   * `sm` is for things that sit inside something else — an input, a badge, a
+   * code block — and `md` is for everything that is itself a surface. Nothing
+   * needs a third.
+   *
+   * Both are deliberately tight. A large radius reads as *soft*, and softness
+   * fights a dense tool built for people reading logs and diffs; at 0.25rem the
+   * corner is a chamfer that keeps the box a box. `--radius-full` is not a stop
+   * on that ramp — it means "a pill", and a pill does not get less round. */
+  --radius-sm: 0.1875rem;
+  --radius-md: 0.375rem;
   --radius-full: 999rem;
 
-  /* Control heights. `md` is the default everywhere; `sm` is for controls that
-   * sit inside a row of text, and `lg` for the one primary action on a form. */
-  --size-control-sm: 1.75rem;
-  --size-control-md: 2.25rem;
-  --size-control-lg: 2.75rem;
+  /* Two control heights, not three. `md` is the default everywhere, and `sm` is
+   * for controls that sit inside a row of text. The third was for "the one
+   * primary action on a form", used exactly once — a size variant with a single
+   * caller is a special case wearing a scale's clothes.
+   *
+   * `md` is 40px at a default root: the touch-target floor every guideline
+   * agrees on, and the one the old default missed by four. */
+  --size-control-sm: 2rem;
+  --size-control-md: 2.5rem;
 
-  --size-icon-sm: 0.875rem;
-  --size-icon-md: 1rem;
-  --size-icon-lg: 1.25rem;
+  /* Likewise two: `sm` for an icon inside dense text, `md` for everything else. */
+  --size-icon-sm: 1rem;
+  --size-icon-md: 1.125rem;
 
   /* The shell's three load-bearing dimensions, named rather than spelled at
    * each of the six places that need them — these are the numbers the fidelity
-   * gate measures, and the numbers that had drifted. At a default root they are
-   * the reference's 272, 56 and 860 exactly. */
-  --layout-sidebar: 17rem;
-  --layout-header: 3.5rem;
-  --layout-chat: 53.75rem;
-  --layout-drawer: 20rem;
+   * gate measures, and the numbers that had drifted.
+   *
+   * They no longer match the reference's 272, 56 and 860: the type scale grew,
+   * and chrome that stayed put around larger type is chrome that gets tighter,
+   * not chrome that stays correct. Each moved by roughly the same fraction as
+   * the type — the header by half a rem because it holds a row of `md`
+   * controls, and the chat measure to hold the same character count per line at
+   * the larger size, which is what a measure is actually for. */
+  --layout-sidebar: 18rem;
+  --layout-header: 4rem;
+  --layout-chat: 57.5rem;
+  --layout-drawer: 21rem;
 }
 
 /* ------------------------------------------------------------------ *
@@ -376,27 +444,27 @@
 :root {
   --duration-fast: 120ms;
   --duration-base: 180ms;
-  --duration-slow: 280ms;
 
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-in-out-quint: cubic-bezier(0.83, 0, 0.17, 1);
 
-  /* Shadows are the one place a raw colour is unavoidable: a shadow that
-   * inverted with the theme would be a glow. Black at low alpha reads as depth
-   * on a dark surface and as depth on a light one. */
-  --shadow-xs: 0 0.0625rem 0.125rem rgb(0 0 0 / 0.18);
-  --shadow-sm: 0 0.125rem 0.375rem rgb(0 0 0 / 0.22);
-  --shadow-md: 0 0.375rem 1rem rgb(0 0 0 / 0.26);
-  --shadow-lg: 0 1rem 2.5rem rgb(0 0 0 / 0.34);
+  /* There is no shadow scale, and that is the design rather than an omission.
+   *
+   * Elevation here is stated by *surface and stroke*: a floating thing is one
+   * stop up the surface ramp with a stronger line around it, which is a rule
+   * that works identically in both themes and needs no per-theme tuning. A drop
+   * shadow needed exactly that tuning to be visible at all — black at 18% over a
+   * page at L 0.148 is a 3-of-255 difference — and a token whose value has to
+   * quadruple between themes to mean the same thing is a token that was doing
+   * two jobs. `--line-strong` does the one job, everywhere. */
 
-  /* Semantic, so that "is the toast above the dialog?" is answered by reading
-   * two names rather than comparing two four-digit numbers at two call sites. */
-  --z-sticky: 10;
-  --z-dropdown: 20;
-  --z-overlay: 30;
-  --z-modal: 40;
-  --z-toast: 50;
-  --z-tooltip: 60;
+  /* Two steps. There were six, one per kind of floating thing, and five of them
+   * were answering a question the DOM already answers: everything that overlays
+   * the page is portalled to the end of `<body>`, so a dialog opened after a
+   * menu is painted after it regardless of z-index. What is left is the one
+   * ordering that is *not* mount order — a tooltip has to clear whatever it is
+   * explaining, including a dialog that opened before it. */
+  --z-overlay: 10;
+  --z-tooltip: 20;
 
   /* The one legitimate `px` in the codebase. A hairline is a device concept: a
    * rem border doubles at 200% zoom, where the intent is that it stays a line. */

@@ -16,7 +16,7 @@
     flex-shrink: 0;
     width: var(--size-icon-md);
     height: var(--size-icon-md);
-    border: var(--space-px) solid var(--line-strong);
+    border: var(--space-0-5) solid var(--line-strong);
     border-top-color: var(--accent-fg);
     border-radius: var(--radius-full);
     animation: spin 700ms linear infinite;
@@ -29,11 +29,11 @@
   }
 
   .thinking-dots > span {
-    width: var(--space-1-5);
-    height: var(--space-1-5);
+    width: var(--space-2);
+    height: var(--space-2);
     background-color: var(--accent-fg);
     border-radius: var(--radius-full);
-    animation: dot-bounce 1.4s var(--ease-in-out-quint) infinite;
+    animation: dot-bounce 1.4s var(--ease-out-quint) infinite;
   }
 
   .thinking-dots > span:nth-child(2) {

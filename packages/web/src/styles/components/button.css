@@ -1,12 +1,17 @@
 /**
  * Button.
  *
- * Five variants and four sizes, composed rather than multiplied: the variant
+ * Five variants and three sizes, composed rather than multiplied: the variant
  * decides colour, the size decides geometry, and neither knows about the other.
+ *
+ * There were four. `lg` had exactly one caller — the style guide showing off
+ * that `lg` existed — which is what a size variant looks like when the product
+ * never needed it. A gold accent is also long gone from the note below; the
+ * reasoning it records is about opacity, and that still stands.
  *
  * **The disabled rule is the interesting one.** It used to be `opacity: 0.7`
  * over a muted foreground, which is unreadable in the two places it matters
- * most: a muted grey label at 70% over a gold fill, and the same over a red
+ * most: a muted grey label at 70% over the accent fill, and the same over a red
  * one. Opacity is the wrong tool for a disabled state — it fades the text and
  * its background by the same factor, so a pairing that was 8:1 stays 8:1 only
  * if the two composite over an identical backdrop, which they never do. So
@@ -47,7 +52,7 @@
     --icon: var(--size-icon-sm);
 
     height: var(--size-control-sm);
-    padding-inline: var(--space-2-5);
+    padding-inline: var(--space-3);
     font-size: var(--text-sm);
   }
 
@@ -55,15 +60,7 @@
     --icon: var(--size-icon-md);
 
     height: var(--size-control-md);
-    padding-inline: var(--space-3-5);
-  }
-
-  .btn--lg {
-    --icon: var(--size-icon-lg);
-
-    height: var(--size-control-lg);
-    padding-inline: var(--space-5);
-    font-size: var(--text-md);
+    padding-inline: var(--space-4);
   }
 
   /* Square, so the glyph is centred rather than sitting in a pill. */

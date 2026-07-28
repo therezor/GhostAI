@@ -23,6 +23,15 @@
 
 @layer screens {
   .chat {
+    /* The measure, as a gutter. Declared here and read by the three things that
+     * have to share a left edge — the transcript, the empty state and the
+     * composer — because when the expression was written out at each of them,
+     * the empty state was centring itself inside a column the composer was not,
+     * and the two disagreed by about 170 device pixels. One expression, one
+     * edge. `100%` resolves against whichever of them is using it; all three are
+     * full-width children of this. */
+    --gutter: max(var(--space-4), calc((100% - var(--layout-chat)) / 2));
+
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -49,7 +58,7 @@
     --gap: var(--space-6);
 
     padding-block: var(--space-6);
-    padding-inline: max(var(--space-4), calc((100% - var(--layout-chat)) / 2));
+    padding-inline: var(--gutter);
   }
 
   .transcript__item {
@@ -63,7 +72,6 @@
     bottom: var(--space-3);
     left: 50%;
     translate: -50% 0;
-    box-shadow: var(--shadow-md);
   }
 
   /* ── Messages ──────────────────────────────────────────────── */
@@ -83,7 +91,7 @@
     padding: var(--space-2) var(--space-3);
     background-color: var(--surface-3);
     border: var(--hairline) solid var(--line);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-md);
     border-bottom-right-radius: var(--radius-sm);
     font-size: var(--text-md);
     line-height: var(--leading-md);
@@ -105,7 +113,7 @@
   }
 
   .message-user__pending {
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     color: var(--fg-3);
   }
 
@@ -127,7 +135,7 @@
     display: flex;
     align-items: flex-start;
     gap: var(--space-2);
-    padding: var(--space-1-5) var(--space-2-5);
+    padding: var(--space-2) var(--space-3);
     background-color: var(--danger-soft);
     border: var(--hairline) solid var(--danger-edge);
     border-radius: var(--radius-md);
@@ -149,8 +157,8 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-1) var(--space-3);
-    font-size: var(--text-xs);
-    line-height: var(--leading-xs);
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
     color: var(--fg-3);
   }
 
@@ -183,7 +191,7 @@
     display: flex;
     align-items: flex-start;
     gap: var(--space-2);
-    padding: var(--space-1-5) var(--space-2-5);
+    padding: var(--space-2) var(--space-3);
     background-color: var(--tone-fill);
     border: var(--hairline) solid var(--tone-edge);
     border-radius: var(--radius-md);
@@ -253,7 +261,7 @@
     width: 100%;
     align-items: center;
     gap: var(--space-2);
-    padding: var(--space-1-5) var(--space-2-5);
+    padding: var(--space-2) var(--space-3);
     font-size: var(--text-sm);
     color: var(--fg-3);
     text-align: left;
@@ -272,7 +280,7 @@
 
   .reasoning__live {
     margin-left: auto;
-    animation: pulse 2s var(--ease-in-out-quint) infinite;
+    animation: pulse 2s var(--ease-out-quint) infinite;
   }
 
   .reasoning__body {
@@ -318,7 +326,7 @@
     width: 100%;
     align-items: center;
     gap: var(--space-2);
-    padding: var(--space-1-5) var(--space-2-5);
+    padding: var(--space-2) var(--space-3);
     text-align: left;
   }
 
@@ -362,28 +370,28 @@
   .tool-card__summary {
     min-width: 0;
     font-family: var(--font-mono);
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     color: var(--fg-3);
   }
 
   .tool-card__timing {
     flex-shrink: 0;
     margin-left: auto;
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     font-variant-numeric: tabular-nums;
     color: var(--fg-3);
   }
 
   .tool-card__notices {
-    --gap: var(--space-1-5);
+    --gap: var(--space-2);
 
-    padding: var(--space-2) var(--space-2-5);
+    padding: var(--space-2) var(--space-3);
   }
 
   .tool-card__body {
     --gap: var(--space-2);
 
-    padding: var(--space-2-5);
+    padding: var(--space-3);
     border-top: var(--hairline) solid var(--line);
   }
 
@@ -405,7 +413,7 @@
     background-color: var(--surface-1);
     border-radius: var(--radius-sm);
     font-family: var(--font-mono);
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     color: var(--fg-2);
     overflow-x: auto;
   }
@@ -432,7 +440,7 @@
 
   .tool-card__note {
     margin-top: var(--space-1);
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     color: var(--fg-3);
   }
 
@@ -446,13 +454,13 @@
   .approval {
     --gap: var(--space-2);
 
-    padding: var(--space-2-5) var(--space-3);
+    padding: var(--space-3) var(--space-3);
     background-color: var(--warning-soft);
     border-top: var(--hairline) solid var(--line);
   }
 
   .approval__line {
-    --gap: var(--space-1-5);
+    --gap: var(--space-2);
 
     font-size: var(--text-sm);
     color: var(--fg-1);
@@ -472,11 +480,11 @@
   }
 
   .approval__actions {
-    --gap: var(--space-1-5);
+    --gap: var(--space-2);
   }
 
   .approval__resolved {
-    --gap: var(--space-1-5);
+    --gap: var(--space-2);
 
     padding: var(--space-2) var(--space-3);
     border-top: var(--hairline) solid var(--line);
@@ -501,26 +509,24 @@
   /* ── Composer ──────────────────────────────────────────────── */
 
   .composer {
-    padding: var(--space-2-5) var(--space-3);
+    padding-block: var(--space-3);
+    padding-inline: var(--gutter);
     background-color: var(--surface-1);
     border-top: var(--hairline) solid var(--line);
   }
 
   .composer__inner {
     --gap: var(--space-2);
-
-    max-width: var(--layout-chat);
-    margin-inline: auto;
   }
 
   .composer__files {
-    --gap: var(--space-1-5);
+    --gap: var(--space-2);
   }
 
   .composer__file {
     display: flex;
     align-items: center;
-    gap: var(--space-1-5);
+    gap: var(--space-2);
     padding: var(--space-1) var(--space-2);
     background-color: var(--surface-2);
     border: var(--hairline) solid var(--line);
@@ -538,7 +544,7 @@
   }
 
   .composer__file-state {
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     color: var(--fg-3);
   }
 
@@ -564,10 +570,10 @@
     display: flex;
     align-items: flex-end;
     gap: var(--space-2);
-    padding: var(--space-1-5);
+    padding: var(--space-2);
     background-color: var(--surface-2);
     border: var(--hairline) solid var(--line);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-md);
   }
 
   /* The grid is the auto-grow: the mirror sizes the cell and the textarea fills
@@ -584,7 +590,7 @@
   .composer__input {
     grid-column: 1;
     grid-row: 1;
-    padding: var(--space-1-5) var(--space-1);
+    padding: var(--space-2) var(--space-1);
     font-size: var(--text-md);
     line-height: var(--leading-md);
     overflow-wrap: break-word;
@@ -607,21 +613,20 @@
     position: absolute;
     bottom: 100%;
     left: 0;
-    z-index: var(--z-dropdown);
+    z-index: var(--z-overlay);
     width: 18rem;
     margin-bottom: var(--space-1);
     overflow: hidden;
     background-color: var(--surface-3);
     border: var(--hairline) solid var(--line);
     border-radius: var(--radius-md);
-    box-shadow: var(--shadow-md);
   }
 
   .composer__mention {
     display: flex;
     align-items: baseline;
     gap: var(--space-2);
-    padding: var(--space-1-5) var(--space-2-5);
+    padding: var(--space-2) var(--space-3);
     color: var(--fg-2);
     cursor: pointer;
   }
@@ -636,7 +641,7 @@
   }
 
   .composer__mention-hint {
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     color: var(--fg-3);
   }
 
@@ -645,7 +650,7 @@
     align-items: center;
     gap: var(--space-2);
     min-height: var(--space-4);
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     color: var(--fg-3);
   }
 
@@ -655,26 +660,30 @@
 
   /* ── Welcome ───────────────────────────────────────────────── */
 
+  /* Left-aligned, not centred, and that is the density decision on this screen.
+   * Centred text in a 42rem column inside a 57.5rem measure gave every line a
+   * different left edge and left the whole block floating in the middle of a
+   * very large void. Ranged left, the mark, the title, the note and the prompts
+   * share one edge, which is what makes four separate things read as one panel.
+   *
+   * The gaps are 2:1 rather than uniform: `--space-6` between the groups here,
+   * and `--space-2` inside each of them, so the grouping is what the eye sees
+   * first instead of an evenly-spaced list of five items. */
   .welcome {
-    --gap: var(--space-5);
+    --gap: var(--space-6);
 
-    align-items: center;
-    max-width: 42rem;
-    margin-inline: auto;
-    padding: var(--space-16) var(--space-4);
-    text-align: center;
+    padding-block: var(--space-12);
+    padding-inline: var(--gutter);
   }
 
   .welcome__mark {
-    width: var(--space-10);
-    height: var(--space-10);
+    width: var(--space-12);
+    height: var(--space-12);
     color: var(--fg-3);
   }
 
   .welcome__heading {
-    --gap: var(--space-1-5);
-
-    align-items: center;
+    --gap: var(--space-2);
   }
 
   .welcome__title {
@@ -684,9 +693,8 @@
   }
 
   .welcome__agent {
-    --gap: var(--space-1-5);
+    --gap: var(--space-2);
 
-    justify-content: center;
     color: var(--fg-2);
   }
 
@@ -703,29 +711,44 @@
     color: var(--fg-2);
   }
 
+  /* One ruled list, not three boxes. Three full-width filled cards holding one
+   * short sentence each is mostly empty card, and it reads as an unfinished
+   * layout — the boxes are doing no work the rows underneath them were not
+   * already doing. A shared top rule groups them and a hairline between each
+   * separates them, which is the whole of what a list needs. */
   .welcome__prompts {
-    --gap: var(--space-2);
+    --gap: 0;
 
     width: 100%;
+    max-width: 44rem;
+    border-top: var(--hairline) solid var(--line);
   }
 
   .welcome__prompt {
+    display: flex;
+    gap: var(--space-3);
     width: 100%;
-    padding: var(--space-2) var(--space-3);
-    background-color: var(--surface-2);
-    border: var(--hairline) solid var(--line);
-    border-radius: var(--radius-md);
+    padding: var(--space-3) var(--space-2);
+    border-bottom: var(--hairline) solid var(--line);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
     color: var(--fg-2);
     text-align: left;
     transition:
       background-color var(--duration-fast) var(--ease-out-quint),
-      border-color var(--duration-fast) var(--ease-out-quint),
       color var(--duration-fast) var(--ease-out-quint);
   }
 
+  /* The prompt glyph is generated rather than typed into each label, so the
+   * strings stay the sentences that get sent to the model. */
+  .welcome__prompt::before {
+    content: '\203A';
+    flex-shrink: 0;
+    color: var(--accent-fg);
+  }
+
   .welcome__prompt:hover {
-    border-color: var(--accent-edge);
+    background-color: var(--hover);
     color: var(--fg-1);
-    background-image: linear-gradient(var(--hover), var(--hover));
   }
 }

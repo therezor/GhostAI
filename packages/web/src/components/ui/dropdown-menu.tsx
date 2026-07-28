@@ -6,6 +6,7 @@
  * placement in a portal. The portal is also why most of a z-index scale can
  * retire — layering is a DOM-order question once everything overlaying the page
  * is a sibling at the end of `<body>`.
+ *
  */
 
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
@@ -44,6 +45,16 @@ export function DropdownMenuItem({
   return <DropdownMenuPrimitive.Item className={cn('menu__item', className)} {...props} />;
 }
 
+/**
+ * A row that reports whether it is the chosen one.
+ *
+ * The indicator is rendered *after* the children and sits at the trailing edge,
+ * which is the fix for what this used to be: a tick in a left-hand gutter, in
+ * the accent colour, at icon size — so on a row that also had its own icon the
+ * two collided, and the one green mark in the panel was the least important
+ * thing in it. Trailing and muted, the row reads label-first and the tick is
+ * confirmation rather than decoration. `menu.css` carries the rest.
+ */
 export function DropdownMenuRadioItem({
   className,
   children,
@@ -54,12 +65,12 @@ export function DropdownMenuRadioItem({
       className={cn('menu__item menu__item--checkable', className)}
       {...props}
     >
+      {children}
       <span className="menu__indicator">
         <DropdownMenuPrimitive.ItemIndicator>
           <Check />
         </DropdownMenuPrimitive.ItemIndicator>
       </span>
-      {children}
     </DropdownMenuPrimitive.RadioItem>
   );
 }

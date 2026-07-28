@@ -6,8 +6,9 @@
  * labels are gone and whose targets are too small, which is worse on a phone
  * than a button that opens the real thing.
  *
- * The header carries what the agent is doing rather than a logo: the resolved
- * model, the socket's state, and the theme control.
+ * The header carries the wordmark and then, in the space a hosted product would
+ * spend on navigation, what the agent is doing: the resolved model, the socket's
+ * state, and the theme control.
  *
  * The WebSocket hangs here, and here specifically: this is the router's root
  * component, so it is the only one that survives every navigation. A socket
@@ -24,10 +25,10 @@ import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
 import { useTurnStore } from '@/state/turn.js';
 import { useConnection } from '@/chat/use-connection.js';
-import { Badge } from '@/components/ui/badge.js';
 import { Button } from '@/components/ui/button.js';
 import { Dialog, DialogContent, DialogHeading, DialogTrigger } from '@/components/ui/dialog.js';
-import { ThemeToggle } from '@/components/theme-toggle.js';
+import { ThemeSwitcher } from '@/components/theme-switcher.js';
+import { Wordmark } from '@/components/wordmark.js';
 import { ContextInspector } from '@/context/context-inspector.js';
 import { Sidebar } from './sidebar.js';
 
@@ -90,7 +91,7 @@ function Header({
         </DialogContent>
       </Dialog>
 
-      <span className="app-header__brand">GhostAI</span>
+      <Wordmark className="app-header__brand" />
 
       {status.isSuccess && (
         <span className="app-header__agent truncate">
@@ -102,19 +103,28 @@ function Header({
 
       <ConnectionBadge connection={connection} />
       <ContextInspector sessionKey={sessionKey} />
-      <ThemeToggle />
+      <ThemeSwitcher />
     </header>
   );
 }
 
 const CONNECTION_LABELS = {
-  connecting: { label: 'Connecting', tone: 'warning' },
-  open: { label: 'Connected', tone: 'success' },
-  reconnecting: { label: 'Reconnecting', tone: 'warning' },
-  closed: { label: 'Offline', tone: 'neutral' },
+  connecting: 'Connecting',
+  open: 'Connected',
+  reconnecting: 'Reconnecting',
+  closed: 'Offline',
 } as const;
 
 /**
+ * A dot and a word, not a filled pill.
+ *
+ * It was a `warning`-toned badge, and on a screen with one accent that made the
+ * loudest element in the header a *transient* one: a socket reconnecting for
+ * two seconds outranked the product's own name and everything the agent had
+ * said. Status is ambient information — it needs to be readable when looked
+ * for, not to compete when it is not. The dot carries the colour, which is as
+ * much colour as a four-state indicator needs.
+ *
  * Live-region, because it is the one piece of the header that changes without
  * anyone acting: a socket that dropped has to announce itself to a user who is
  * not looking at the top-right corner.
@@ -124,11 +134,10 @@ function ConnectionBadge({
 }: {
   readonly connection: keyof typeof CONNECTION_LABELS;
 }): JSX.Element {
-  const { label, tone } = CONNECTION_LABELS[connection];
-
   return (
-    <span role="status" aria-live="polite">
-      <Badge tone={tone}>{label}</Badge>
+    <span role="status" aria-live="polite" className="conn" data-connection={connection}>
+      <span className="conn__dot" aria-hidden="true" />
+      <span className="conn__label">{CONNECTION_LABELS[connection]}</span>
     </span>
   );
 }

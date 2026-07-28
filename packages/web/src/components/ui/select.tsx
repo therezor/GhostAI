@@ -69,12 +69,15 @@ export function SelectItem({
 }: ComponentProps<typeof SelectPrimitive.Item>): JSX.Element {
   return (
     <SelectPrimitive.Item className={cn('menu__item menu__item--checkable', className)} {...props}>
+      {/* Label first, tick last — the same order as the dropdown's radio row,
+          so a listbox and a menu do not mark their selection in two different
+          places. See `menu.css`. */}
+      <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
       <span className="menu__indicator">
         <SelectPrimitive.ItemIndicator>
           <Check />
         </SelectPrimitive.ItemIndicator>
       </span>
-      <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
     </SelectPrimitive.Item>
   );
 }

@@ -126,7 +126,18 @@ describe('sizing', () => {
   it('covers every scale', () => {
     // Guards the list above: a scale renamed out from under these prefixes
     // would otherwise make the assertion below vacuously pass.
-    expect(sizes.length).toBeGreaterThan(40);
+    //
+    // Per prefix rather than a floor on the total, which is what this used to
+    // be. A total is the wrong shape for the claim: it conflates "a scale went
+    // missing" — the thing worth catching — with "a scale got shorter", which
+    // is a design decision and has since been made deliberately in every one of
+    // these ramps. A count of 40 would now fail on a sheet that is *better*
+    // than the one it was written against.
+    const missing = PREFIXES.filter(
+      (prefix) => !sizes.some((declaration) => declaration.property.startsWith(prefix)),
+    );
+
+    expect(missing).toEqual([]);
   });
 
   it('is expressed in rem, so the UI honours the browser font size', () => {

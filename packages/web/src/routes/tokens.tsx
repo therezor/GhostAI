@@ -47,11 +47,10 @@ import { toast } from '@/components/ui/toast.js';
 
 const SURFACES = ['surface-0', 'surface-1', 'surface-2', 'surface-3'] as const;
 const TEXT = ['fg-1', 'fg-2', 'fg-3'] as const;
-const OVERLAYS = ['hover', 'active', 'line', 'line-strong'] as const;
+const OVERLAYS = ['hover', 'line', 'line-strong'] as const;
 const ROLES = ['accent', 'success', 'warning', 'danger', 'info'] as const;
-const SIZES = ['2xs', 'xs', 'sm', 'base', 'md', 'lg', 'xl', '2xl'] as const;
-const RADII = ['sm', 'md', 'lg', 'xl', 'full'] as const;
-const SHADOWS = ['xs', 'sm', 'md', 'lg'] as const;
+const SIZES = ['2xs', 'sm', 'base', 'md', 'lg', 'xl'] as const;
+const RADII = ['sm', 'md', 'full'] as const;
 const ROLE_VARIANTS = ['soft', 'solid', 'outline'] as const;
 const BUTTON_VARIANTS = ['primary', 'secondary', 'ghost', 'danger', 'link'] as const;
 
@@ -185,7 +184,10 @@ export function TokensRoute(): JSX.Element {
         </div>
       </Section>
 
-      <Section title="Radius and elevation">
+      <Section
+        title="Radius"
+        hint="Two stops and a pill. Elevation is a surface and a stroke, not a shadow — there is no shadow scale."
+      >
         <div className="cluster style-guide__chips">
           {RADII.map((radius) => (
             <div key={radius} className="stack style-guide__chip">
@@ -194,17 +196,6 @@ export function TokensRoute(): JSX.Element {
                 style={swatch({ '--swatch-radius': `var(--radius-${radius})` })}
               />
               <Label>{radius}</Label>
-            </div>
-          ))}
-        </div>
-        <div className="cluster style-guide__chips--wide">
-          {SHADOWS.map((shadow) => (
-            <div key={shadow} className="stack style-guide__chip">
-              <div
-                className="style-guide__shadow-box"
-                style={swatch({ '--swatch-shadow': `var(--shadow-${shadow})` })}
-              />
-              <Label>{shadow}</Label>
             </div>
           ))}
         </div>
@@ -221,9 +212,6 @@ export function TokensRoute(): JSX.Element {
                 {variant} sm
               </Button>
               <Button variant={variant}>{variant} md</Button>
-              <Button variant={variant} size="lg">
-                {variant} lg
-              </Button>
               <Button variant={variant} disabled>
                 disabled
               </Button>

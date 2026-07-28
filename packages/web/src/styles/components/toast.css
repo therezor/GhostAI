@@ -15,7 +15,7 @@
     position: fixed;
     right: 0;
     bottom: 0;
-    z-index: var(--z-toast);
+    z-index: var(--z-overlay);
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
@@ -35,10 +35,9 @@
     gap: var(--space-3);
     padding: var(--space-3);
     background-color: var(--surface-3);
-    border: var(--hairline) solid var(--line);
+    border: var(--hairline) solid var(--line-strong);
     border-left: var(--space-0-5) solid var(--tone-fg);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-lg);
+    border-radius: var(--radius-md);
     pointer-events: auto;
   }
 
@@ -94,7 +93,7 @@
     flex-shrink: 0;
     padding: var(--space-1) var(--space-2);
     border-radius: var(--radius-md);
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     font-weight: var(--weight-medium);
     color: var(--accent-fg);
   }

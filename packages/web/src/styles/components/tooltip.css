@@ -12,12 +12,11 @@
     z-index: var(--z-tooltip);
     padding: var(--space-1) var(--space-2);
     background-color: var(--surface-3);
-    border: var(--hairline) solid var(--line);
+    border: var(--hairline) solid var(--line-strong);
     border-radius: var(--radius-md);
     font-size: var(--text-sm);
     line-height: var(--leading-sm);
     color: var(--fg-1);
-    box-shadow: var(--shadow-md);
   }
 
   .tooltip[data-state='delayed-open'] {

@@ -45,21 +45,37 @@ import { referenceAvailable, serveReference, DEFAULT_ORIGINAL_ROOT } from '../fi
 import { expect, test } from '../fixtures.js';
 
 /**
- * How far each measurement may be from the reference, and why.
+ * The shell is deliberately no longer the reference's size.
  *
- * Zero on the three dimensions *and* on the base font size: a column that is
- * sixteen pixels narrower is not a rounding difference, it is a different
- * layout, and naming those three as tokens was what stopped it happening
- * silently. All four are exact — 272, 56, 860 and 14 — which is why the
- * tolerance is zero rather than "small". A tolerance wide enough to absorb a
- * value that already matches is a tolerance that would absorb a regression too.
+ * It used to be, exactly: 272, 56, 860 and a 14px base, asserted with a zero
+ * tolerance because a column sixteen pixels narrower is not a rounding
+ * difference, it is a different layout. That gate did its job — it is what
+ * stopped those numbers drifting silently — and then the product asked for a
+ * larger UI, which is a decision the gate has no standing to veto. The tokens
+ * now read 18rem, 4rem, 57.5rem and 0.9375rem: bigger on every axis, by
+ * between six and fifteen percent.
+ *
+ * So the four dimension checks became a bracket rather than an equality. This
+ * is the ceiling on that bracket, and the floor is "larger than the reference"
+ * — together they say the thing actually worth asserting, which is that the
+ * divergence is the one somebody chose rather than one that crept in.
+ */
+const SCALE_CEILING = 1.2;
+
+/**
+ * How far each *colour* measurement may be from the reference, and why.
  *
  * The channel tolerance is the one documented deviation, stated as a number.
- * The replacement's neutral axis carries a small warm chroma — surfaces and
- * text hold a trace of the accent hue, which is what keeps a gold accent from
+ * The replacement's neutral axis carries a small chroma — surfaces and text
+ * hold a trace of the accent hue, which is what keeps a green accent from
  * looking pasted onto a slate UI — so a grey the reference paints as (13,13,13)
- * is painted here as (12,10,8). Five of 255 on the blue channel, and nothing on
+ * is painted here as (9,11,10). Four of 255 on the red channel, and nothing on
  * the perceived lightness: the muted-text luminance below lands within one.
+ *
+ * The accent itself is not compared, and cannot be: it is a green where the
+ * reference's is a gold, which is the one place this UI deliberately stops
+ * matching the product it replaces. The neutral axis follows the accent's hue,
+ * which is why a *grey* shows up in a tolerance at all.
  *
  * Everything else the ramp used to differ on is gone. The surface stops and the
  * text tiers are now the reference's own values converted to OKLCH, with one
@@ -68,9 +84,7 @@ import { expect, test } from '../fixtures.js';
  * holds every text token to AA.
  */
 const TOLERANCE = {
-  dimension: 0,
-  fontSize: 0,
-  /** sRGB, 0–255. The warm neutral axis, and nothing else. */
+  /** sRGB, 0–255. The neutral axis's trace of the accent hue, and nothing else. */
   channel: 6,
   /** Relative luminance, 0–255. Currently within one. */
   luminance: 3,
@@ -110,16 +124,23 @@ test.describe('fidelity', () => {
     // products size to the same rule — the transcript's column follows it.
     const actual = await measure(app, REPLACEMENT_LAYOUT);
 
+    // The four measurements that deliberately no longer match. Each is asserted
+    // as a *direction and a bound* rather than as a target in pixels: the
+    // targets live in `tokens.css`, and a test that restated them here would
+    // pass by agreeing with a number it copied rather than by measuring
+    // anything. Bracketed, it still catches both failures worth catching — a
+    // token quietly reverted to the reference's density, and a scale that ran
+    // away — without pretending to check arithmetic it cannot see.
     for (const [name, mine, theirs] of [
       ['sidebar width', actual.sidebarWidth, expected.sidebarWidth],
       ['header height', actual.headerHeight, expected.headerHeight],
       ['chat measure', actual.chatWidth, expected.chatWidth],
+      ['base font size', actual.baseFontSize, expected.baseFontSize],
     ] as const) {
-      expect.soft(Math.abs(mine - theirs), name).toBeLessThanOrEqual(TOLERANCE.dimension);
+      const ratio = mine / theirs;
+      expect.soft(ratio, `${name} is larger than the reference's`).toBeGreaterThan(1);
+      expect.soft(ratio, `${name} is within the intended scale`).toBeLessThanOrEqual(SCALE_CEILING);
     }
-    expect
-      .soft(Math.abs(actual.baseFontSize - expected.baseFontSize), 'base font size')
-      .toBeLessThanOrEqual(TOLERANCE.fontSize);
 
     for (const [name, mine, theirs] of [
       ['the page surface', actual.surface0, expected.surface0],
