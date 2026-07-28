@@ -33,6 +33,7 @@ const STATUS = {
   uptimeMs: 10,
   model: 'test-model',
   provider: 'ollama',
+  configured: true,
   workspaceId: 'default',
   workspaceCount: 1,
   authEnabled: true,

@@ -49,9 +49,21 @@ export const StatusResponseSchema = z.object({
   version: z.string(),
   protocolVersion: z.number().int().positive(),
   uptimeMs: z.number().int().nonnegative(),
-  /** Resolved, not configured — reflects what a turn would actually use now. */
+  /**
+   * Resolved, not configured — reflects what a turn would actually use now.
+   * Both are empty when nothing is configured yet; `configured` is the flag to
+   * branch on, so a client never has to read meaning into an empty string.
+   */
   model: z.string(),
   provider: z.string(),
+  /**
+   * Whether a turn can run at all.
+   *
+   * `false` on a fresh install: the server, the files, the settings and the
+   * socket are all up, and only chat is unavailable until a provider and a
+   * model exist.
+   */
+  configured: z.boolean(),
   /**
    * The default workspace's id, never its path.
    *
@@ -94,7 +106,7 @@ export type HealthResponse = z.infer<typeof HealthResponseSchema>;
  */
 export const SettingsResponseSchema = z.object({
   config: ConfigSchema,
-  /** Provider id → whether a usable key or OAuth token exists in the vault. */
+  /** Provider *instance* id → whether a usable key exists in the vault. */
   credentialsPresent: z.record(z.string(), z.boolean()),
   /** Set when the file on disk failed to parse and defaults are in use. */
   loadError: z.string().optional(),
@@ -115,8 +127,12 @@ export type SetCredentialRequest = z.infer<typeof SetCredentialRequestSchema>;
 // ---------------------------------------------------------------------------
 
 /**
- * A provider as advertised to the settings UI, projected from the `PROVIDERS`
- * table in `@ghostai/providers`.
+ * A provider *type*, projected from the `PROVIDERS` table in
+ * `@ghostai/providers`. The catalogue an operator adds an endpoint from.
+ *
+ * It carries no credential flag. A credential belongs to a configured
+ * instance — two Ollama entries can have different tokens — so the boolean
+ * lives on `ProviderInstanceInfo` and nowhere else.
  */
 export const ProviderInfoSchema = z.object({
   id: z.string().min(1),
@@ -128,18 +144,51 @@ export const ProviderInfoSchema = z.object({
   isOAuth: z.boolean(),
   defaultApiBase: z.string().optional(),
   envKey: z.string().optional(),
-  credentialsPresent: z.boolean(),
+  /** The endpoint can be asked for its own model list. */
+  supportsModelListing: z.boolean(),
 });
 export type ProviderInfo = z.infer<typeof ProviderInfoSchema>;
 
+/**
+ * One configured endpoint.
+ *
+ * `type` names the `ProviderInfo` it was created from; `id` is the operator's
+ * key for this particular endpoint, and is what `agents.defaults.provider`
+ * names and what the vault stores its credential under.
+ */
+export const ProviderInstanceInfoSchema = z.object({
+  id: z.string().min(1),
+  type: z.string().min(1),
+  /** Resolved for display: the instance's label, or the type's name. */
+  displayName: z.string(),
+  /** Effective, not configured — the default is folded in. */
+  apiBase: z.string(),
+  isLocal: z.boolean(),
+  isGateway: z.boolean(),
+  isOAuth: z.boolean(),
+  envKey: z.string().optional(),
+  enabled: z.boolean(),
+  supportsModelListing: z.boolean(),
+  credentialsPresent: z.boolean(),
+});
+export type ProviderInstanceInfo = z.infer<typeof ProviderInstanceInfoSchema>;
+
+/**
+ * Both lists, because the panel needs both: `types` is what an "Add provider"
+ * control offers, `instances` is what the list below it renders.
+ */
 export const ProvidersResponseSchema = z.object({
-  providers: z.array(ProviderInfoSchema),
+  types: z.array(ProviderInfoSchema),
+  instances: z.array(ProviderInstanceInfoSchema),
 });
 export type ProvidersResponse = z.infer<typeof ProvidersResponseSchema>;
 
 export const ModelInfoSchema = z.object({
   id: z.string().min(1),
+  /** The provider *instance* this model was offered by. */
   providerId: z.string().min(1),
+  /** The instance's type, for grouping and labelling. Absent on a bare list. */
+  providerType: z.string().optional(),
   displayName: z.string().optional(),
   contextWindowTokens: z.number().int().positive().optional(),
   supportsTools: z.boolean().optional(),
@@ -150,7 +199,7 @@ export type ModelInfo = z.infer<typeof ModelInfoSchema>;
 
 export const ModelsResponseSchema = z.object({
   models: z.array(ModelInfoSchema),
-  /** Providers whose model list could not be fetched, id → reason. */
+  /** Instances whose model list could not be fetched, id → reason. */
   errors: z.record(z.string(), z.string()).default({}),
 });
 export type ModelsResponse = z.infer<typeof ModelsResponseSchema>;
@@ -475,3 +524,40 @@ export const AuthSessionResponseSchema = z.object({
   expiresAtMs: z.number().int().nonnegative().optional(),
 });
 export type AuthSessionResponse = z.infer<typeof AuthSessionResponseSchema>;
+
+// ---------------------------------------------------------------------------
+// First-run setup
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether this install still has to be claimed.
+ *
+ * Public, and deliberately says nothing else. An unauthenticated caller learns
+ * one bit — that no password has been set — which they would learn anyway by
+ * watching every login fail. Anything more (the workspace, the provider list,
+ * whether a code is outstanding) would be describing an unclaimed agent to
+ * whoever asked first.
+ */
+export const SetupStatusResponseSchema = z.object({
+  required: z.boolean(),
+});
+export type SetupStatusResponse = z.infer<typeof SetupStatusResponseSchema>;
+
+/**
+ * The one-time code printed to the console on first launch.
+ *
+ * It exists because the alternative was worse in both directions: the server
+ * used to refuse to start without a password, so the UI that would set one was
+ * unreachable — and a server that simply started unauthenticated would be a
+ * shell-capable agent answering to whoever reached the port first. A code that
+ * only the operator's own terminal can see closes that gap without either.
+ */
+export const SetupClaimRequestSchema = z.object({
+  code: z.string().min(1),
+});
+export type SetupClaimRequest = z.infer<typeof SetupClaimRequestSchema>;
+
+export const SetupPasswordRequestSchema = z.object({
+  password: z.string().min(1),
+});
+export type SetupPasswordRequest = z.infer<typeof SetupPasswordRequestSchema>;

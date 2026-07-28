@@ -133,6 +133,7 @@ export const PROTOCOL_SCHEMAS = {
   SettingsResponse: rest.SettingsResponseSchema,
   SetCredentialRequest: rest.SetCredentialRequestSchema,
   ProviderInfo: rest.ProviderInfoSchema,
+  ProviderInstanceInfo: rest.ProviderInstanceInfoSchema,
   ProvidersResponse: rest.ProvidersResponseSchema,
   ModelInfo: rest.ModelInfoSchema,
   ModelsResponse: rest.ModelsResponseSchema,
@@ -164,6 +165,9 @@ export const PROTOCOL_SCHEMAS = {
   LoginRequest: rest.LoginRequestSchema,
   LoginResponse: rest.LoginResponseSchema,
   AuthSessionResponse: rest.AuthSessionResponseSchema,
+  SetupStatusResponse: rest.SetupStatusResponseSchema,
+  SetupClaimRequest: rest.SetupClaimRequestSchema,
+  SetupPasswordRequest: rest.SetupPasswordRequestSchema,
 } satisfies Record<string, z.ZodType>;
 
 export type ProtocolSchemaName = keyof typeof PROTOCOL_SCHEMAS;

@@ -34,8 +34,12 @@ import type { PromptPreviewInput } from '@ghostai/agent';
  * off in the settings panel or an MCP server connects.
  */
 export interface AgentView {
+  /** The provider *instance* id, or empty when nothing is configured. */
   readonly provider: string;
+  /** Empty when no model is configured. */
   readonly model: string;
+  /** Whether a turn can run. False on a fresh install; every other route works. */
+  readonly configured: boolean;
   /** The default workspace's tree — the one a request that names none gets. */
   readonly jail: WorkspaceJail;
   /**
@@ -109,14 +113,18 @@ export interface ServerRuntime {
   agent(): AgentView;
 
   /**
-   * The models to offer, when something can enumerate them.
+   * The models to offer, fetched from the endpoints that can list them.
    *
-   * Absent by default: listing a provider's catalogue means a network call per
-   * provider, and no adapter in `@ghostai/providers` makes one yet. The routes
+   * Still optional, because a route test has no business opening a socket and
+   * an adapter-free runtime has nothing to ask. When it is absent the routes
    * fall back to what the settings tree names, which is honest — a model an
    * operator typed into `providers.<id>.models` is a model they intend to use.
+   *
+   * `refresh` discards whatever the implementation cached. A page load must not
+   * reach every configured endpoint on every render, and an operator who has
+   * just pulled a new model must not have to wait out a TTL to see it.
    */
-  models?(): Promise<ModelsResponse>;
+  models?(options?: { readonly refresh?: boolean }): Promise<ModelsResponse>;
 
   /** Zero for both until `@ghostai/mcp` and `@ghostai/plugin-host` exist. */
   extensions?(): ExtensionCounts;

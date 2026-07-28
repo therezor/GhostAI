@@ -130,6 +130,9 @@ beforeEach(() => {
 
   stubFetch({
     '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
+    // Claimed: the setup overlay mounts above the login one and would
+    // otherwise be deciding whether to open on an unstubbed request.
+    '/api/setup': [200, { required: false }],
     '/api/status': [
       200,
       {

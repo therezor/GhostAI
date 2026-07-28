@@ -119,13 +119,30 @@ describe('keychainStore', () => {
   });
 
   it('writes to the macOS keychain with the secret on stdin, never in argv', () => {
-    const run = vi.fn<CommandRunner>().mockReturnValue(ok());
+    const encoded = KEY.toString('base64');
+    // The write, then the read-back that proves it took.
+    const run = vi.fn<CommandRunner>().mockReturnValueOnce(ok()).mockReturnValueOnce(ok(encoded));
+
     expect(keychainStore({ platform: 'darwin', run }).save(KEY)).toBe(true);
+
     const [, args, input] = run.mock.calls[0] ?? [];
     // argv is readable via `ps` for the life of the process.
-    expect(args).not.toContain(KEY.toString('base64'));
+    expect(args).not.toContain(encoded);
     expect(args).toContain('-U');
-    expect(input).toBe(KEY.toString('base64'));
+    // **Twice.** `security ... -w` prompts for the password and then prompts
+    // again to confirm it. Sending it once satisfies the first prompt and gives
+    // EOF to the second, at which point the two "do not match", an *empty*
+    // password is stored, and the command still exits 0 — so every vault
+    // written on a Mac was encrypted with a key that could never be read back.
+    expect(input).toBe(`${encoded}\n${encoded}\n`);
+  });
+
+  it('refuses to claim a macOS write it cannot read back', () => {
+    // The exit code is not evidence: it was 0 for the empty-password failure
+    // above. A store that reports success it cannot demonstrate keeps
+    // `resolveVaultKey` from falling through to the keyfile that would work.
+    const run = vi.fn<CommandRunner>().mockReturnValueOnce(ok()).mockReturnValueOnce(ok(''));
+    expect(keychainStore({ platform: 'darwin', run }).save(KEY)).toBe(false);
   });
 
   it('reads and writes the Linux secret service', () => {

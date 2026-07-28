@@ -95,16 +95,19 @@ describe('resolveConnection', () => {
     // A settings panel that saves an emptied text box must not produce a
     // provider that cannot resolve its own endpoint.
     expect(
-      resolveConnection(ollama, { apiBase: '   ', extraHeaders: {}, models: [] }).apiBase,
+      resolveConnection(ollama, { type: 'ollama', label: '', apiBase: '   ', extraHeaders: {}, models: [], enabled: true }).apiBase,
     ).toBe('http://127.0.0.1:11434/v1');
   });
 
   it('lets configuration override the default', () => {
     expect(
       resolveConnection(ollama, {
+        type: 'ollama',
+        label: '',
         apiBase: 'http://gpu.local:11434/v1',
         extraHeaders: {},
         models: [],
+        enabled: true,
       }).apiBase,
     ).toBe('http://gpu.local:11434/v1');
   });
@@ -112,8 +115,11 @@ describe('resolveConnection', () => {
   it('layers configured headers over the table headers', () => {
     expect(
       resolveConnection(openrouter, {
+        type: 'openrouter',
+        label: '',
         extraHeaders: { 'x-mine': '1', 'X-Title': 'Mine' },
         models: [],
+        enabled: true,
       }).extraHeaders,
     ).toEqual({ 'X-Title': 'Mine', 'x-mine': '1' });
   });

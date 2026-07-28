@@ -280,3 +280,83 @@ describe('the shared connection', () => {
     expect(second.verify(issued.token)).toBeDefined();
   });
 });
+
+describe('setup codes', () => {
+  it('mints a grouped, transcribable code and reports one is outstanding', () => {
+    const { store } = build();
+    expect(store.hasSetupCode()).toBe(false);
+
+    const code = store.issueSetupCode();
+
+    // Grouped for someone reading it off a terminal and typing it into a
+    // browser, which is the entire use case.
+    expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){2}$/);
+    expect(store.hasSetupCode()).toBe(true);
+  });
+
+  it('accepts the code however it was transcribed', () => {
+    const { store } = build();
+    const code = store.issueSetupCode();
+
+    // The dashes and the case are presentation. Someone who pasted it without
+    // the grouping has entered the right code.
+    expect(store.consumeSetupCode(code.replaceAll('-', '').toLowerCase())).toBe(true);
+  });
+
+  it('is single use', () => {
+    const { store } = build();
+    const code = store.issueSetupCode();
+
+    expect(store.consumeSetupCode(code)).toBe(true);
+    expect(store.consumeSetupCode(code)).toBe(false);
+    expect(store.hasSetupCode()).toBe(false);
+  });
+
+  it('leaves the real code alone when a wrong one is tried', () => {
+    // A typo must not lock the operator out of their own install.
+    const { store } = build();
+    const code = store.issueSetupCode();
+
+    expect(store.consumeSetupCode('ZZZZ-ZZZZ-ZZZZ')).toBe(false);
+    expect(store.consumeSetupCode(code)).toBe(true);
+  });
+
+  it('replaces an outstanding code rather than keeping both', () => {
+    const { store } = build();
+    const first = store.issueSetupCode();
+    const second = store.issueSetupCode();
+
+    expect(store.consumeSetupCode(first)).toBe(false);
+    expect(store.consumeSetupCode(second)).toBe(true);
+  });
+
+  it('is invalidated by setting a password', async () => {
+    // Once a password exists the code is a second way in that nobody is
+    // watching — and it was printed to a terminal whose scrollback outlives it.
+    const { store } = build();
+    const code = store.issueSetupCode();
+
+    await store.setPassword('chosen-in-the-wizard');
+
+    expect(store.hasSetupCode()).toBe(false);
+    expect(store.consumeSetupCode(code)).toBe(false);
+  });
+
+  it('refuses to mint one for an install that already has a password', async () => {
+    const { store } = build();
+    await store.setPassword('already-claimed');
+
+    expect(() => store.issueSetupCode()).toThrow(/already set/);
+  });
+
+  it('reports no code on an install that never had one', () => {
+    const { store } = build();
+    expect(store.consumeSetupCode('ANYT-HING-HERE')).toBe(false);
+  });
+
+  it('is not readable back through ensureSecret', () => {
+    const { store } = build();
+    store.issueSetupCode();
+    expect(() => store.ensureSecret('setup_code')).toThrow(/not a readable secret/);
+  });
+});

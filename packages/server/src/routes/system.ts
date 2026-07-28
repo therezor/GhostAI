@@ -75,6 +75,7 @@ export function systemRoutes(deps: RouteDeps): RouteGroup<SystemRouteId> {
           uptimeMs: Math.max(0, Math.round(clock.monotonic() - deps.startedAt)),
           model: agent.model,
           provider: agent.provider,
+          configured: agent.configured,
           // The id, never the path. `agent.jail.root` used to be reported here
           // — an absolute host path handed to every authenticated client,
           // naming the operator's account and directory layout, which is the

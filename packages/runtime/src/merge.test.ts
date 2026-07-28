@@ -41,7 +41,7 @@ describe('mergeConfigPatch', () => {
 
   it('replaces extraHeaders wholesale, so a header can be deleted', () => {
     const withHeaders = mergeConfigPatch(base, {
-      providers: { openai: { extraHeaders: { 'X-One': '1', 'X-Two': '2' } } },
+      providers: { openai: { type: 'openai', extraHeaders: { 'X-One': '1', 'X-Two': '2' } } },
     });
     const replaced = mergeConfigPatch(withHeaders, {
       providers: { openai: { extraHeaders: { 'X-One': '1' } } },
@@ -50,12 +50,42 @@ describe('mergeConfigPatch', () => {
     expect(replaced.providers.openai?.extraHeaders).toEqual({ 'X-One': '1' });
   });
 
-  it('merges the providers record per id', () => {
-    const first = mergeConfigPatch(base, { providers: { ollama: { apiBase: 'http://a/v1' } } });
-    const second = mergeConfigPatch(first, { providers: { openai: { apiBase: 'http://b/v1' } } });
+  it('merges the providers record per instance id', () => {
+    const first = mergeConfigPatch(base, {
+      providers: { ollama: { type: 'ollama', apiBase: 'http://a/v1' } },
+    });
+    const second = mergeConfigPatch(first, {
+      providers: { openai: { type: 'openai', apiBase: 'http://b/v1' } },
+    });
 
     expect(second.providers.ollama?.apiBase).toBe('http://a/v1');
     expect(second.providers.openai?.apiBase).toBe('http://b/v1');
+  });
+
+  it('deletes a provider instance on an explicit null', () => {
+    // The one token available for "remove this": `undefined` means "not
+    // mentioned" and cannot survive JSON, so without this there is no way to
+    // take back a provider an operator added.
+    const two = mergeConfigPatch(base, {
+      providers: {
+        laptop: { type: 'ollama' },
+        gpu: { type: 'ollama', apiBase: 'http://gpu.lan:11434/v1' },
+      },
+    });
+    const one = mergeConfigPatch(two, { providers: { gpu: null } });
+
+    expect(Object.keys(one.providers)).toEqual(['laptop']);
+  });
+
+  it('ignores a null on a path where deletion is not meaningful', () => {
+    // A `null` that punched a hole in a struct would drop a setting and fail
+    // the re-parse — or, worse, silently revert it to a default.
+    expect(() =>
+      mergeConfigPatch(base, {
+        // Deliberately outside `DELETE_BY_NULL`; the schema is what refuses it.
+        agents: { defaults: { model: null as unknown as string } },
+      }),
+    ).toThrow(/invalid settings/);
   });
 
   it('treats an explicit undefined as "not mentioned"', () => {

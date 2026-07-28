@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { resolveGhostPaths } from '@ghostai/core';
-import { findProvider } from '@ghostai/providers';
+import { findProvider, type ProviderInstance } from '@ghostai/providers';
 import { CredentialVault } from '@ghostai/security';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -31,10 +31,15 @@ function build(...args: Parameters<typeof createChatRuntime>): ChatRuntime {
   return runtime;
 }
 
-function spec(id: string) {
-  const found = findProvider(id);
-  if (found === null) throw new Error(`no such provider: ${id}`);
-  return found;
+/** An instance of `type`, named `id` — which defaults to the type, as a migrated config would. */
+function instance(type: string, id = type): ProviderInstance {
+  const found = findProvider(type);
+  if (found === null) throw new Error(`no such provider: ${type}`);
+  return {
+    id,
+    spec: found,
+    config: { type, label: '', extraHeaders: {}, models: [], enabled: true },
+  };
 }
 
 afterEach(() => {
@@ -48,10 +53,10 @@ afterEach(() => {
 describe('findCredential', () => {
   const paths = resolveGhostPaths({ root: '/nowhere', env: {} });
 
-  it('skips the vault entirely for a local server that needs no key', () => {
+  it('does not open a vault that does not exist yet', () => {
     // The point: `resolveVaultKey` writes a key to the OS keychain the first
     // time it runs, and `ghost chat` against Ollama must not create one.
-    expect(findCredential(spec('ollama'), paths, {}, undefined)).toBeUndefined();
+    expect(findCredential(instance('ollama'), paths, {}, undefined)).toBeUndefined();
   });
 
   it('prefers the vault over an exported environment variable', () => {
@@ -62,7 +67,7 @@ describe('findCredential', () => {
     });
     vault.set(PROVIDER_CREDENTIAL_NAMESPACE, 'openai', 'from-vault');
 
-    const found = findCredential(spec('openai'), paths, { OPENAI_API_KEY: 'from-env' }, vault);
+    const found = findCredential(instance('openai'), paths, { OPENAI_API_KEY: 'from-env' }, vault);
     expect(found).toBe('from-vault');
   });
 
@@ -70,13 +75,13 @@ describe('findCredential', () => {
     const dir = tempHome();
     const vault = new CredentialVault({ file: join(dir, 'vault.json'), key: Buffer.alloc(32, 7) });
 
-    expect(findCredential(spec('openai'), paths, { OPENAI_API_KEY: 'from-env' }, vault)).toBe(
+    expect(findCredential(instance('openai'), paths, { OPENAI_API_KEY: 'from-env' }, vault)).toBe(
       'from-env',
     );
   });
 
   it('treats an empty variable as absent rather than as an empty key', () => {
-    expect(findCredential(spec('openai'), paths, { OPENAI_API_KEY: '' }, false)).toBeUndefined();
+    expect(findCredential(instance('openai'), paths, { OPENAI_API_KEY: '' }, false)).toBeUndefined();
   });
 });
 
@@ -89,9 +94,9 @@ describe('createChatRuntime', () => {
       vault: false,
     });
 
-    expect(runtime.spec.id).toBe('ollama');
+    expect(runtime.spec?.id).toBe('ollama');
     expect(runtime.model).toBe('qwen3:8b');
-    expect(runtime.loop.model).toBe('qwen3:8b');
+    expect(runtime.requireLoop().model).toBe('qwen3:8b');
     expect(runtime.hasCredential).toBe(false);
   });
 
@@ -99,17 +104,21 @@ describe('createChatRuntime', () => {
     const home = tempHome({ agents: { defaults: { provider: 'ollama', model: 'llama3' } } });
     const runtime = build({ home, vault: false, env: {} });
 
-    expect(runtime.spec.id).toBe('ollama');
+    expect(runtime.spec?.id).toBe('ollama');
     expect(runtime.model).toBe('llama3');
   });
 
-  it('refuses to guess when nothing names a provider', () => {
-    // `resolveProvider` returns null rather than picking one, and a request
+  it('refuses the turn, not the runtime, when nothing names a provider', () => {
+    // `resolveInstance` returns null rather than picking one, and a request
     // landing at an endpoint nobody chose fails as a 401 from somewhere
-    // unexpected — so the CLI stops here and says what to set.
+    // unexpected — so the turn stops and says what to set. The runtime itself
+    // still builds, because `ghost serve` shares it and has to come up.
     const home = tempHome();
-    expect(() => build({ home, vault: false, env: {} })).toThrow(/No provider could be resolved/);
-    expect(() => build({ home, vault: false, env: {} })).toThrow(/--provider/);
+    const runtime = build({ home, vault: false, env: {} });
+
+    expect(runtime.configured).toBe(false);
+    expect(() => runtime.requireLoop()).toThrow(/No provider could be resolved/);
+    expect(() => runtime.requireLoop()).toThrow(/ghost init/);
   });
 
   it('takes an exported API key as the operator naming a provider', () => {
@@ -120,16 +129,16 @@ describe('createChatRuntime', () => {
       env: { OPENAI_API_KEY: 'sk-test' },
     });
 
-    expect(runtime.spec.id).toBe('openai');
+    expect(runtime.spec?.id).toBe('openai');
     expect(runtime.hasCredential).toBe(true);
   });
 
   it('names the file to edit when a provider resolves but a model does not', () => {
     const home = tempHome();
-    expect(() => build({ home, provider: 'ollama', vault: false, env: {} })).toThrow(
-      /No model configured/,
-    );
-    expect(() => build({ home, provider: 'ollama', vault: false, env: {} })).toThrow(
+    const runtime = build({ home, provider: 'ollama', vault: false, env: {} });
+
+    expect(() => runtime.requireLoop()).toThrow(/No model configured/);
+    expect(() => runtime.requireLoop()).toThrow(
       new RegExp(join(home, 'config.json').replaceAll('\\', '\\\\')),
     );
   });

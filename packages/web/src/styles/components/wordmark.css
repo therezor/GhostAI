@@ -37,6 +37,20 @@
     letter-spacing: 0.015em;
   }
 
+  /* The lockup as a micro-label, above the title of a full-screen card.
+   *
+   * A component rule rather than one per screen because the login card and the
+   * setup card are the same header in two situations, and two copies of it is
+   * how they drift — one of them was going to gain a hover state or lose the
+   * tracking. It sizes the mark with it, because the mark is in `em`. */
+  .eyebrow {
+    color: var(--accent-fg);
+    font-size: var(--text-2xs);
+    font-weight: var(--weight-semibold);
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+  }
+
   /* 1.3em, not 1em. The mark is a filled silhouette with knockouts cut out of
    * it, so it carries less ink than a run of semibold letters of the same
    * height and reads smaller than it measures. Matching the cap height exactly

@@ -36,6 +36,8 @@ export interface TestServerOptions {
   readonly credentialsPresent?: Readonly<Record<string, boolean>>;
   readonly provider?: string;
   readonly model?: string;
+  /** `false` drives the routes as a fresh install with no provider or model. */
+  readonly configured?: boolean;
   readonly systemPrompt?: string;
   /** Drives the store, the signer and the session TTL together. */
   readonly clock?: Clock;
@@ -70,6 +72,7 @@ export async function startTestServer(options: TestServerOptions = {}): Promise<
     ...(options.tools === undefined ? {} : { tools: options.tools }),
     ...(options.provider === undefined ? {} : { provider: options.provider }),
     ...(options.model === undefined ? {} : { model: options.model }),
+    ...(options.configured === undefined ? {} : { configured: options.configured }),
     ...(options.systemPrompt === undefined ? {} : { systemPrompt: options.systemPrompt }),
     ...(options.clock === undefined ? {} : { clock: options.clock }),
     ...(options.credentialsPresent === undefined

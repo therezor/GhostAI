@@ -150,7 +150,7 @@ interface Harness {
 
 interface HarnessOptions {
   readonly config?: Partial<Config['server']>;
-  readonly loop?: () => TurnRunner;
+  readonly loop?: () => TurnRunner | null;
   readonly maxQueueDepth?: number;
   readonly maxSessions?: number;
 }
@@ -314,6 +314,57 @@ describe('SessionHub', () => {
 
       expect(broken.types()).toEqual([]);
       expect(healthy.types()).toContain('message.ack');
+    });
+  });
+
+  describe('turns with nothing configured', () => {
+    it('answers not_configured and never opens a turn', async () => {
+      // The socket stays up and every other frame keeps working — only a turn
+      // is refused, because the client's answer to this is to offer setup
+      // rather than to reconnect.
+      const h = harness({ loop: () => null });
+      const client = h.connect();
+      client.reset();
+
+      await send(client, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'hello',
+        clientMessageId: 'c-1',
+      });
+
+      expect(client.of('error')[0]).toMatchObject({
+        code: 'not_configured',
+        retryable: false,
+      });
+      // No `turn.end`: no turn ever started, and a client that saw one close
+      // would render an empty assistant message for a request nothing ran.
+      expect(client.types()).not.toContain('turn.end');
+      expect(client.types()).not.toContain('turn.start');
+    });
+
+    it('leaves the session idle and able to run once a provider arrives', async () => {
+      let runner: TurnRunner | null = null;
+      const h = harness({ loop: () => runner });
+      const client = h.connect();
+
+      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'too early' });
+
+      runner = h.runner;
+      client.reset();
+      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'now' });
+
+      expect(h.runner.turn(0).input).toMatchObject({ content: 'now' });
+    });
+
+    it('still answers a ping', async () => {
+      const h = harness({ loop: () => null });
+      const client = h.connect();
+      client.reset();
+
+      await send(client, { type: 'ping' });
+
+      expect(client.types()).toEqual(['pong']);
     });
   });
 

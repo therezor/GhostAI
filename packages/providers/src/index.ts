@@ -51,9 +51,19 @@ export {
   type ProviderId,
   type ProviderSpec,
   type ResolveProviderOptions,
-  type TypedProvidersConfig,
   type WireProtocol,
 } from './registry.js';
+
+export {
+  describeInstance,
+  findInstance,
+  instanceLabel,
+  listInstances,
+  nextInstanceId,
+  resolveInstance,
+  type ProviderInstance,
+  type ResolveInstanceOptions,
+} from './instances.js';
 
 export {
   PROVIDER_ERROR_REASONS,

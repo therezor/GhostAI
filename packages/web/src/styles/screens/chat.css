@@ -658,6 +658,19 @@
     color: var(--warning-fg);
   }
 
+  /* The one thing between the transcript and the composer on a fresh install.
+   *
+   * A line of text on the page rather than a filled banner: nothing is wrong,
+   * setup is merely unfinished, and a loud strip above the composer would be
+   * the noisiest thing on a screen whose subject is the conversation. It reads
+   * as an aside because it is one. */
+  .chat__setup-notice {
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--text-sm);
+    color: var(--fg-2);
+    text-align: center;
+  }
+
   /* ── Welcome ───────────────────────────────────────────────── */
 
   /* Left-aligned, not centred, and that is the density decision on this screen.

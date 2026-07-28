@@ -80,6 +80,14 @@ export interface HarnessOptions {
   readonly sessions?: readonly SeedSession[];
   /** Notifications the centre should already be holding. */
   readonly notifications?: readonly SeedNotification[];
+  /**
+   * `null` starts the server unclaimed, as a first run.
+   *
+   * The default sets one, because every other spec wants to be past the door.
+   * A spec about the setup wizard wants the state the wizard exists for: no
+   * password, and a one-time code on `Harness.setupCode`.
+   */
+  readonly password?: string | null;
 }
 
 export interface SeedSession {
@@ -105,6 +113,8 @@ export interface Harness {
   readonly hub: SessionHub;
   /** The jail root, for a spec that wants to look at what a tool wrote. */
   readonly workspace: string;
+  /** The one-time code, on an unclaimed harness. `undefined` once claimed. */
+  readonly setupCode: string | undefined;
   close(): Promise<void>;
 }
 
@@ -200,9 +210,13 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
     database,
     logger: silentLogger,
     hasher: HASHER,
-    password: PASSWORD,
+    ...(options.password === null ? {} : { password: options.password ?? PASSWORD }),
     ui: { root: uiRoot() },
   });
+
+  // The same condition `ghost serve` mints on, so a spec sees the code the
+  // terminal would have printed.
+  const setupCode = server.auth.hasPassword() ? undefined : server.auth.issueSetupCode();
 
   for (const session of options.sessions ?? []) seedSession(runtime, session);
   for (const notification of options.notifications ?? []) server.notifications.create(notification);
@@ -212,6 +226,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
   return {
     url,
     token: server.auth.issue('e2e').token,
+    setupCode,
     server,
     runtime,
     hub,
@@ -278,12 +293,18 @@ function harnessRuntime(runtime: GhostRuntime, configFile: string): ServerRuntim
     workspaces: runtime.workspaces,
 
     agent: (): AgentView => ({
-      provider: runtime.spec.id,
-      model: runtime.model,
+      // The instance id, and empty when nothing resolved — the same shape the
+      // real adapter reports, so a spec about the unconfigured state sees what
+      // a browser would.
+      provider: runtime.instance?.id ?? '',
+      model: runtime.configured ? runtime.model : '',
+      configured: runtime.configured,
       jail: runtime.jail,
       jailFor: (workspaceId) => runtime.jails.forWorkspace(workspaceId),
       tools: runtime.tools.definitions(),
-      systemPrompt: async (input) => await runtime.loop.previewPrompt(input),
+      systemPrompt: async (input) =>
+        (await runtime.loop?.previewPrompt(input)) ??
+        'No model is configured, so no system prompt has been assembled yet.',
     }),
   };
 }

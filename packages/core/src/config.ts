@@ -54,6 +54,52 @@ export interface LoadedConfig {
   readonly file: string;
   /** `false` when no file existed and the schema's defaults were used. */
   readonly fromFile: boolean;
+  /** The file was in an older shape and has been rewritten in the current one. */
+  readonly migrated: boolean;
+}
+
+/**
+ * Brings an older `config.json` up to the current shape.
+ *
+ * One migration so far, and it is a rename of meaning rather than of keys.
+ * `providers` used to be keyed by provider id with no `type` field; it is now
+ * keyed by an arbitrary *instance* id and `type` names the provider. An old
+ * file's key already *is* a provider id, so the migration is `type` = the key
+ * — which is also why nothing in the credential vault has to move: an old
+ * instance's id is the string its key was already stored under.
+ *
+ * It lives here rather than in `@ghostai/providers` because it needs no
+ * registry lookup. A key that was never a real provider id produces
+ * `type: "typo"` and fails at resolution with the same message it would have
+ * failed with before, which is better than this function silently discarding
+ * an entry it did not recognise.
+ *
+ * Runs on the raw JSON, before validation, because the new schema *requires*
+ * `type` — an old file would not survive `ConfigSchema.safeParse` to be
+ * migrated afterwards. It is idempotent: an entry that already has a `type`
+ * is not touched, so a file written by this version migrates to itself.
+ */
+export function migrateConfigShape(raw: unknown): { value: unknown; changed: boolean } {
+  if (!isRecord(raw)) return { value: raw, changed: false };
+  const providers = raw.providers;
+  if (!isRecord(providers)) return { value: raw, changed: false };
+
+  let changed = false;
+  const next: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(providers)) {
+    if (!isRecord(entry) || typeof entry.type === 'string') {
+      next[key] = entry;
+      continue;
+    }
+    next[key] = { ...entry, type: key };
+    changed = true;
+  }
+
+  return changed ? { value: { ...raw, providers: next }, changed: true } : { value: raw, changed };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /** Only the two errno values that mean "there is no config file here". */
@@ -71,8 +117,17 @@ function errnoOf(error: unknown): string | undefined {
  * Separate from the file read so that a config arriving over the wire — the
  * settings panel's preview in Phase 2 — is validated by exactly the same code
  * that validates the file, rather than by a second implementation that drifts.
+ *
+ * Migration runs here rather than in `loadConfig` for that same reason: an old
+ * config pasted into a preview has to become a valid one, not an error about a
+ * missing `type` the operator never wrote.
  */
 export function parseConfig(text: string, file: string): Config {
+  return parseUpgraded(text, file).config;
+}
+
+/** `parseConfig`, plus whether the text needed migrating. */
+function parseUpgraded(text: string, file: string): { config: Config; migrated: boolean } {
   let raw: unknown;
   try {
     raw = JSON.parse(text) as unknown;
@@ -83,7 +138,8 @@ export function parseConfig(text: string, file: string): Config {
     });
   }
 
-  const result = ConfigSchema.safeParse(raw);
+  const upgraded = migrateConfigShape(raw);
+  const result = ConfigSchema.safeParse(upgraded.value);
   if (!result.success) {
     const issues = result.error.issues.map(
       (issue) => `  ${issue.path.length === 0 ? '(root)' : issue.path.join('.')}: ${issue.message}`,
@@ -93,7 +149,7 @@ export function parseConfig(text: string, file: string): Config {
       details: { file, issues },
     });
   }
-  return result.data;
+  return { config: result.data, migrated: upgraded.changed };
 }
 
 function describeJsonError(error: unknown): string {
@@ -171,7 +227,19 @@ export function loadConfig(options: LoadConfigOptions = {}): LoadedConfig {
     }
   }
 
-  const config = text === undefined ? ConfigSchema.parse({}) : parseConfig(text, file);
+  const parsed =
+    text === undefined
+      ? { config: ConfigSchema.parse({}), migrated: false }
+      : parseUpgraded(text, file);
+  const config = parsed.config;
+
+  // Written back rather than only migrated in memory, so the operator's file
+  // and the running settings say the same thing — otherwise every save from
+  // the settings panel would look like it rewrote a section nobody touched.
+  // Only when a file was actually read: a fresh install has nothing to upgrade
+  // and must not have a config.json created for it as a side effect of a load.
+  if (parsed.migrated && text !== undefined) saveConfig(file, config);
+
   const configured = config.agents.defaults.workspace;
   const workspace = options.workspace ?? (configured === '' ? undefined : configured);
 
@@ -183,5 +251,6 @@ export function loadConfig(options: LoadConfigOptions = {}): LoadedConfig {
     }),
     file,
     fromFile: text !== undefined,
+    migrated: parsed.migrated,
   };
 }

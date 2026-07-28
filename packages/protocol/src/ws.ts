@@ -197,6 +197,14 @@ export const ErrorCodeSchema = z.enum([
   'provider_error',
   'tool_error',
   'config_invalid',
+  /**
+   * No provider and model are configured, so no turn can run.
+   *
+   * Distinct from `config_invalid`: nothing is wrong with the settings, they
+   * are merely incomplete, and the client's response is to offer setup rather
+   * than to report a fault. Every other route works in this state.
+   */
+  'not_configured',
   'session_busy',
   'internal',
 ]);

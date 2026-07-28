@@ -52,9 +52,9 @@ describe('createRuntime', () => {
   it('wires a loop from the config file', () => {
     const runtime = ollama();
 
-    expect(runtime.spec.id).toBe('ollama');
+    expect(runtime.spec?.id).toBe('ollama');
     expect(runtime.model).toBe('qwen3:8b');
-    expect(runtime.loop.model).toBe('qwen3:8b');
+    expect(runtime.requireLoop().model).toBe('qwen3:8b');
     expect(runtime.hasCredential).toBe(false);
     expect(runtime.tools.has('read_file')).toBe(true);
   });
@@ -69,11 +69,60 @@ describe('createRuntime', () => {
     expect(ollama({}, { tools: false }).tools.size).toBe(0);
   });
 
-  it('refuses to guess when nothing names a provider', () => {
-    // `resolveProvider` returns null rather than picking one, and a request
+  it('builds unconfigured when nothing names a provider, and refuses only the turn', () => {
+    // Everything but the loop is useful without a model, and refusing to
+    // construct is what used to make `ghost serve` unable to come up on a bare
+    // machine — leaving the settings UI that would fix it unreachable.
+    const runtime = build({ home: tempHome() });
+
+    expect(runtime.configured).toBe(false);
+    expect(runtime.loop).toBeNull();
+    expect(runtime.spec).toBeNull();
+    expect(runtime.tools.has('read_file')).toBe(true);
+    expect(runtime.jail.root).not.toBe('');
+
+    // `resolveInstance` returns null rather than picking one, and a request
     // landing at an endpoint nobody chose fails as a 401 from somewhere
-    // unexpected — so it stops here and says what to set.
-    expect(() => build({ home: tempHome() })).toThrow(/No provider could be resolved/);
+    // unexpected — so the turn stops and says what to set.
+    expect(() => runtime.requireLoop()).toThrow(/No provider could be resolved/);
+  });
+
+  it('reports a provider with no model as unconfigured, naming the provider', () => {
+    const home = tempHome({ agents: { defaults: { provider: 'ollama' } } });
+    const runtime = build({ home });
+
+    expect(runtime.configured).toBe(false);
+    expect(runtime.instance?.id).toBe('ollama');
+    expect(() => runtime.requireLoop()).toThrow(/No model configured for Ollama/);
+  });
+
+  it('becomes configured when a reconfigure supplies what was missing', () => {
+    const runtime = build({ home: tempHome() });
+    expect(runtime.configured).toBe(false);
+
+    runtime.reconfigure({
+      providers: { 'ollama-gpu': { type: 'ollama', apiBase: 'http://gpu.lan:11434/v1' } },
+      agents: { defaults: { provider: 'ollama-gpu', model: 'qwen3:8b' } },
+    });
+
+    expect(runtime.configured).toBe(true);
+    expect(runtime.instance?.id).toBe('ollama-gpu');
+    expect(runtime.requireLoop().model).toBe('qwen3:8b');
+  });
+
+  it('resolves one of two instances of the same provider type', () => {
+    const home = tempHome({
+      providers: {
+        laptop: { type: 'ollama', apiBase: 'http://127.0.0.1:11434/v1' },
+        gpu: { type: 'ollama', label: 'GPU box', apiBase: 'http://gpu.lan:11434/v1' },
+      },
+      agents: { defaults: { provider: 'gpu', model: 'qwen3:8b' } },
+    });
+    const runtime = build({ home });
+
+    expect(runtime.instance?.id).toBe('gpu');
+    expect(runtime.instance?.config.apiBase).toBe('http://gpu.lan:11434/v1');
+    expect(runtime.spec?.id).toBe('ollama');
   });
 
   it('takes an exported API key as the operator naming a provider', () => {
@@ -83,7 +132,7 @@ describe('createRuntime', () => {
       env: { OPENAI_API_KEY: 'sk-test' },
     });
 
-    expect(runtime.spec.id).toBe('openai');
+    expect(runtime.spec?.id).toBe('openai');
     expect(runtime.hasCredential).toBe(true);
   });
 
@@ -150,7 +199,7 @@ describe('reconfigure', () => {
 
     expect(config.agents.defaults.model).toBe('llama3');
     expect(runtime.model).toBe('llama3');
-    expect(runtime.loop.model).toBe('llama3');
+    expect(runtime.requireLoop().model).toBe('llama3');
     expect(runtime.loop).not.toBe(before);
     expect(runtime.store).toBe(store);
   });
@@ -204,11 +253,11 @@ describe('reconfigure', () => {
 
   it('keeps the steering queue, so a correction queued mid-turn survives', () => {
     const runtime = ollama();
-    runtime.loop.steer('s1', 'actually, use TypeScript');
+    runtime.requireLoop().steer('s1', 'actually, use TypeScript');
 
     runtime.reconfigure({ agents: { defaults: { temperature: 0.2 } } });
 
-    expect(runtime.loop.steering).toBe(runtime.steering);
+    expect(runtime.requireLoop().steering).toBe(runtime.steering);
     expect(runtime.steering.drain('s1')).toHaveLength(1);
   });
 
@@ -233,7 +282,9 @@ describe('reconfigure', () => {
     runtime.reconfigure({ agents: { defaults: { temperature: 0.4 } } });
     expect(providers.size).toBe(1);
 
-    runtime.reconfigure({ providers: { ollama: { apiBase: 'http://127.0.0.1:9999/v1' } } });
+    runtime.reconfigure({
+      providers: { ollama: { type: 'ollama', apiBase: 'http://127.0.0.1:9999/v1' } },
+    });
     expect(providers.size).toBe(2);
   });
 
@@ -255,7 +306,7 @@ describe('reconfigure', () => {
     );
 
     expect(runtime.loop).toBe(before);
-    expect(runtime.spec.id).toBe('ollama');
+    expect(runtime.spec?.id).toBe('ollama');
     expect(runtime.config.agents.defaults.provider).toBe('ollama');
     expect(runtime.tools.has('read_file')).toBe(true);
   });
@@ -268,11 +319,18 @@ describe('reconfigure', () => {
     expect(runtime.config.agents.defaults.temperature).toBe(0.1);
   });
 
-  it('surfaces a model cleared out of the config as a config error', () => {
+  it('goes back to unconfigured when the model is cleared out of the config', () => {
+    // A settings save that empties the model is not a failed reconfigure — it
+    // is an install that is no longer able to run a turn, and the server has to
+    // keep serving everything else while the operator picks a new one.
     const runtime = ollama();
-    expect(() => runtime.reconfigure({ agents: { defaults: { model: '' } } })).toThrow(
-      /No model configured/,
-    );
+    expect(runtime.configured).toBe(true);
+
+    runtime.reconfigure({ agents: { defaults: { model: '' } } });
+
+    expect(runtime.configured).toBe(false);
+    expect(runtime.loop).toBeNull();
+    expect(() => runtime.requireLoop()).toThrow(/No model configured/);
   });
 
   it('picks up a credential saved since the runtime was built', () => {

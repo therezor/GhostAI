@@ -63,6 +63,14 @@ export interface ComposerProps {
   readonly queueDepth: number;
   /** False while the socket is down — Send would only buffer. */
   readonly connected: boolean;
+  /**
+   * False until a provider and a model exist.
+   *
+   * Disabling the composer rather than hiding the route: every other screen
+   * works on a fresh install, and a nav that changes shape underneath the user
+   * is a worse answer than a control that says why it is off and where to go.
+   */
+  readonly configured: boolean;
   readonly onSend: (text: string, attachments: readonly Attachment[]) => void;
   readonly onStop: () => void;
 }
@@ -83,6 +91,7 @@ export function Composer({
   busy,
   queueDepth,
   connected,
+  configured,
   onSend,
   onStop,
 }: ComposerProps): JSX.Element {
@@ -102,7 +111,7 @@ export function Composer({
 
   const ready = files.every((file) => file.attachment !== undefined || file.failed);
   const attachments = files.flatMap((file) => (file.attachment ? [file.attachment] : []));
-  const canSend = ready && (text.trim() !== '' || attachments.length > 0);
+  const canSend = configured && ready && (text.trim() !== '' || attachments.length > 0);
 
   const submit = useCallback(() => {
     if (!canSend) return;
@@ -263,7 +272,14 @@ export function Composer({
                 setHighlight(0);
               }}
               onKeyDown={onKeyDown}
-              placeholder={busy ? 'Queue another message…' : 'Send a message…'}
+              disabled={!configured}
+              placeholder={
+                configured
+                  ? busy
+                    ? 'Queue another message…'
+                    : 'Send a message…'
+                  : 'No model configured yet'
+              }
               aria-label="Message"
               // `aria-expanded` and `aria-activedescendant`, but deliberately
               // *not* `role="combobox"`. The role would have to be present
@@ -305,18 +321,18 @@ export function Composer({
         </div>
 
         <p className="composer__hint">
-          {!connected && (
+          {configured && !connected && (
             <span className="composer__hint--offline">
               Offline — messages will be sent when the connection returns.
             </span>
           )}
-          {connected && busy && <span>A turn is running. Enter queues your message.</span>}
+          {configured && connected && busy && <span>A turn is running. Enter queues your message.</span>}
           {queueDepth > 0 && (
             <span>
               {queueDepth} message{queueDepth === 1 ? '' : 's'} waiting.
             </span>
           )}
-          {connected && !busy && queueDepth === 0 && (
+          {configured && connected && !busy && queueDepth === 0 && (
             <span>Enter to send · Shift+Enter for a new line · @ to scope the turn</span>
           )}
         </p>

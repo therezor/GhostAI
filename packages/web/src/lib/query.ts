@@ -21,6 +21,7 @@ import { ApiError } from './api.js';
 
 export const queryKeys = {
   me: ['auth', 'me'] as const,
+  setup: ['setup'] as const,
   status: ['status'] as const,
   workspaces: ['workspaces'] as const,
   /**

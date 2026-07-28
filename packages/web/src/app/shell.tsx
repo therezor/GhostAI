@@ -95,7 +95,12 @@ function Header({
 
       {status.isSuccess && (
         <span className="app-header__agent truncate">
-          {status.data.provider} · {status.data.model}
+          {/* The separator belongs to the pair, not to the provider: an
+              unconfigured install has an endpoint and no model, and
+              "ollama · " reads as a value that failed to load. */}
+          {status.data.configured
+            ? `${status.data.provider} · ${status.data.model}`
+            : 'no model configured'}
         </span>
       )}
 

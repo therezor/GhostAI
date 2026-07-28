@@ -10,16 +10,13 @@ function config(server: Record<string, unknown>): Config {
 describe('assertBootPolicy', () => {
   it('allows the default: loopback with authentication on', () => {
     expect(() => {
-      assertBootPolicy({ config: config({}), hasPassword: true });
+      assertBootPolicy({ config: config({}) });
     }).not.toThrow();
   });
 
   it('allows authentication off on loopback', () => {
     expect(() => {
-      assertBootPolicy({
-        config: config({ host: '127.0.0.1', auth: { enabled: false } }),
-        hasPassword: false,
-      });
+      assertBootPolicy({ config: config({ host: '127.0.0.1', auth: { enabled: false } }) });
     }).not.toThrow();
   });
 
@@ -29,10 +26,7 @@ describe('assertBootPolicy', () => {
     'refuses to serve %s without authentication',
     (host) => {
       expect(() => {
-        assertBootPolicy({
-          config: config({ host, auth: { enabled: false } }),
-          hasPassword: false,
-        });
+        assertBootPolicy({ config: config({ host, auth: { enabled: false } }) });
       }).toThrow(/Refusing to start/);
     },
   );
@@ -40,10 +34,7 @@ describe('assertBootPolicy', () => {
   it('names the host and port it refused, and what to change', () => {
     let message = '';
     try {
-      assertBootPolicy({
-        config: config({ host: '0.0.0.0', port: 8080, auth: { enabled: false } }),
-        hasPassword: false,
-      });
+      assertBootPolicy({ config: config({ host: '0.0.0.0', port: 8080, auth: { enabled: false } }) });
     } catch (error) {
       message = (error as Error).message;
     }
@@ -57,29 +48,24 @@ describe('assertBootPolicy', () => {
     'treats %s as loopback',
     (host) => {
       expect(() => {
-        assertBootPolicy({
-          config: config({ host, auth: { enabled: false } }),
-          hasPassword: false,
-        });
+        assertBootPolicy({ config: config({ host, auth: { enabled: false } }) });
       }).not.toThrow();
     },
   );
 
-  // Starting anyway produces a server whose login can never succeed and whose
-  // every route answers 401, which reads as a broken UI rather than as setup
-  // that was never finished.
-  it('refuses to start with authentication on and no password set', () => {
+  // This used to be a refusal, and removing it is what the one-time setup code
+  // exists for: the interface that sets a password was the one thing an install
+  // without a password could not reach. Startup now mints a single-use code
+  // instead, so an unclaimed install is serveable and still not open.
+  it('starts with authentication on and no password, leaving the claim to the setup code', () => {
     expect(() => {
-      assertBootPolicy({ config: config({}), hasPassword: false });
-    }).toThrow(/no password has been set/);
+      assertBootPolicy({ config: config({}) });
+    }).not.toThrow();
   });
 
   it('carries the host and port as structured detail, not only in the message', () => {
     try {
-      assertBootPolicy({
-        config: config({ host: '0.0.0.0', port: 8080, auth: { enabled: false } }),
-        hasPassword: false,
-      });
+      assertBootPolicy({ config: config({ host: '0.0.0.0', port: 8080, auth: { enabled: false } }) });
       expect.unreachable('should have refused');
     } catch (error) {
       expect((error as { details: Record<string, unknown> }).details).toEqual({

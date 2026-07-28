@@ -47,7 +47,13 @@ export const AgentDefaultsSchema = z.object({
   workspace: z.string().default(''),
   /** Empty means "resolve from whichever provider has credentials". */
   model: z.string().default(''),
-  /** `auto` runs the registry's resolution order; otherwise a provider id. */
+  /**
+   * `auto` runs the resolution order; otherwise a provider *instance* id.
+   *
+   * A bare provider type is still accepted and means "any instance of that
+   * type, or a default one if none is configured" — which is what keeps
+   * `ghost chat --provider ollama` working on a machine with no config file.
+   */
   provider: z.string().min(1).default('auto'),
   maxTokens: z.number().int().positive().default(8192),
   contextWindowTokens: z.number().int().positive().default(65_536),
@@ -80,27 +86,47 @@ export type AgentsConfig = z.infer<typeof AgentsConfigSchema>;
 // ---------------------------------------------------------------------------
 
 /**
- * Per-provider connection settings. API keys are deliberately absent: they live
- * in the encrypted `CredentialVault` under the `providers` namespace, so a
- * `config.json` is safe to commit or paste into a bug report.
+ * One configured endpoint. API keys are deliberately absent: they live in the
+ * encrypted `CredentialVault` under the `providers` namespace, keyed by the
+ * *instance* id, so a `config.json` is safe to commit or paste into a bug
+ * report.
+ *
+ * `type` is what makes an instance distinct from a provider. Two Ollama servers
+ * — a laptop and a GPU box — are two entries with the same `type` and different
+ * `apiBase`, which the previous shape (one entry per provider id) could not
+ * express at all. It is validated against the registry table by
+ * `@ghostai/providers`, not here: this package sits upstream of that table and
+ * cannot see it, which is the same reason `ProvidersConfig` is a record rather
+ * than one named field per provider.
  */
 export const ProviderConfigSchema = z.object({
+  /** A `@ghostai/providers` registry id — `ollama`, `openai`, `custom`. */
+  type: z.string().min(1),
+  /** Shown in the UI. Empty falls back to the type's display name. */
+  label: z.string().default(''),
   apiBase: z.string().optional(),
   extraHeaders: z.record(z.string(), z.string()).default({}),
-  /** Overrides the registry's model list for OpenAI-compatible endpoints. */
+  /**
+   * Models to offer for this instance.
+   *
+   * A fallback rather than the catalogue: an endpoint that answers `GET /models`
+   * is enumerated live, and this is what an operator typed for one that does
+   * not — or what is offered while a server is unreachable.
+   */
   models: z.array(z.string()).default([]),
+  /** A disabled instance is kept, and skipped by resolution and model listing. */
+  enabled: z.boolean().default(true),
 });
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;
 
 /**
- * Keyed by provider id — a record, not one named field per provider.
+ * Keyed by *instance* id, which is an operator's label rather than a provider id.
  *
- * Hand-listing every provider here would mean keeping this file in sync with the
- * provider registry by discipline. The registry lives in `@ghostai/providers`,
- * which is downstream of this package, so protocol states the generic shape and
- * `@ghostai/providers` narrows it to `Record<ProviderId, ProviderConfig>` off
- * its own `PROVIDERS` table. Adding a provider stays a one-line table entry and
- * drift becomes a type error there rather than a silent gap here.
+ * It used to be keyed by provider id, which capped the tree at one endpoint per
+ * provider. The two are deliberately compatible: an old file's keys *are*
+ * provider ids, so the migration in `@ghostai/core` only has to write
+ * `type` = the key, and every credential already in the vault keeps resolving
+ * under the same string.
  */
 export const ProvidersConfigSchema = z.record(z.string(), ProviderConfigSchema).default({});
 export type ProvidersConfig = z.infer<typeof ProvidersConfigSchema>;
@@ -417,7 +443,19 @@ function patchOf<S extends z.ZodRawShape>(schema: z.ZodObject<S>): z.ZodObject<P
  */
 export const ConfigPatchSchema = z.object({
   agents: z.object({ defaults: patchOf(AgentDefaultsSchema).optional() }).optional(),
-  providers: z.record(z.string(), patchOf(ProviderConfigSchema)).optional(),
+  /**
+   * `null` deletes the instance; an object creates or updates one.
+   *
+   * Deletion needs a syntax of its own because the merge treats an absent key
+   * as "not mentioned" — there is otherwise no way to remove a provider the
+   * operator added. `mergeConfigPatch` honours the null only under the paths in
+   * its `DELETE_BY_NULL` list, so it cannot be used to punch a hole in a struct.
+   *
+   * `patchOf` makes `type` optional, which is right for editing an instance
+   * that already has one. Creating an instance without naming a type fails the
+   * merged tree's re-parse, which is a 400 saying exactly that.
+   */
+  providers: z.record(z.string(), patchOf(ProviderConfigSchema).nullable()).optional(),
   server: patchOf(ServerConfigSchema)
     .extend({ auth: patchOf(AuthConfigSchema).optional() })
     .optional(),

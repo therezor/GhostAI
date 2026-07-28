@@ -202,7 +202,7 @@ export async function createServer(options: ServerOptions): Promise<GhostServer>
   });
 
   if (options.password !== undefined) await auth.setPassword(options.password);
-  assertBootPolicy({ config, hasPassword: auth.hasPassword() });
+  assertBootPolicy({ config });
   // A process that was down past a token's expiry comes back with dead rows and
   // no request that would ever look them up again.
   auth.purgeExpired();

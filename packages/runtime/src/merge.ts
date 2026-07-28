@@ -14,6 +14,11 @@
  *  - **A record of values edited as a unit replaces too** — see
  *    `REPLACE_WHOLESALE`. Merging `extraHeaders` key-by-key would make deleting
  *    a header impossible, since the patch has no syntax for "absent".
+ *  - **`null` deletes, but only where deletion is meaningful** — see
+ *    `DELETE_BY_NULL`. A record whose *entries* an operator creates and removes
+ *    — provider instances, MCP servers — needs a way to say "remove this one",
+ *    and the alternative was a bespoke delete method on every port that touches
+ *    settings.
  *
  * The merged tree is re-parsed through `ConfigSchema` rather than cast. A patch
  * validates field by field, but only the full schema knows the result is a
@@ -33,8 +38,19 @@ import { ConfigSchema, type Config, type ConfigPatch } from '@ghostai/protocol';
  */
 const REPLACE_WHOLESALE: readonly string[] = ['providers.*.extraHeaders'];
 
-function matchesReplacePath(path: readonly string[]): boolean {
-  return REPLACE_WHOLESALE.some((pattern) => {
+/**
+ * Dotted paths where a `null` removes the key rather than merging into it.
+ *
+ * Deliberately a list rather than a blanket rule. `null` anywhere else is a
+ * value the schema either accepts or rejects, and letting it delete would mean
+ * a patch could punch a hole in a struct — dropping `agents.defaults.model` and
+ * failing the re-parse at best, silently reverting it at worst. Every entry
+ * here names a *record whose entries an operator adds and removes*.
+ */
+const DELETE_BY_NULL: readonly string[] = ['providers.*', 'tools.mcpServers.*'];
+
+function matchesPath(patterns: readonly string[], path: readonly string[]): boolean {
+  return patterns.some((pattern) => {
     const segments = pattern.split('.');
     if (segments.length !== path.length) return false;
     return segments.every((segment, index) => segment === '*' || segment === path[index]);
@@ -47,8 +63,12 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function mergeValue(base: unknown, patch: unknown, path: readonly string[]): unknown {
   if (!isPlainObject(base) || !isPlainObject(patch)) return patch;
-  if (matchesReplacePath(path)) return patch;
+  if (matchesPath(REPLACE_WHOLESALE, path)) return patch;
 
+  // Collected and applied at the end rather than deleted in place: a dynamic
+  // `delete` on an object literal is what the lint rule is about, and rebuilding
+  // once is both cheaper and easier to read than mutating mid-walk.
+  const deleted = new Set<string>();
   const merged: Record<string, unknown> = { ...base };
   for (const [key, value] of Object.entries(patch)) {
     // `undefined` is "not mentioned", not "set to nothing". JSON cannot carry
@@ -56,9 +76,20 @@ function mergeValue(base: unknown, patch: unknown, path: readonly string[]): unk
     // optional field — and treating that as a deletion would silently drop a
     // setting the caller never meant to name.
     if (value === undefined) continue;
-    merged[key] = mergeValue(base[key], value, [...path, key]);
+
+    const childPath = [...path, key];
+    // `null` is different: it can only arrive from a caller that wrote it, and
+    // it survives JSON, so it is the one token available to mean "remove this".
+    if (value === null && matchesPath(DELETE_BY_NULL, childPath)) {
+      deleted.add(key);
+      continue;
+    }
+
+    merged[key] = mergeValue(base[key], value, childPath);
   }
-  return merged;
+
+  if (deleted.size === 0) return merged;
+  return Object.fromEntries(Object.entries(merged).filter(([key]) => !deleted.has(key)));
 }
 
 /**

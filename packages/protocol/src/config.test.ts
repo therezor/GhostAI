@@ -46,12 +46,33 @@ describe('ConfigSchema', () => {
     expect(config.channels.telegram).toEqual({ token: 'x', allowlist: ['1|me'] });
   });
 
-  it('keys providers by id rather than a fixed field list', () => {
+  it('keys providers by instance id rather than a fixed field list', () => {
     const config = ConfigSchema.parse({
-      providers: { ollama: { apiBase: 'http://localhost:11434' }, anthropic: {} },
+      providers: {
+        laptop: { type: 'ollama', apiBase: 'http://localhost:11434' },
+        anthropic: { type: 'anthropic' },
+      },
     });
-    expect(config.providers.ollama?.apiBase).toBe('http://localhost:11434');
+    expect(config.providers.laptop?.apiBase).toBe('http://localhost:11434');
     expect(config.providers.anthropic?.extraHeaders).toEqual({});
+  });
+
+  it('accepts two instances of one provider type', () => {
+    // The shape this replaced was keyed by provider id, which capped the tree
+    // at one endpoint per provider — two Ollama servers were inexpressible.
+    const config = ConfigSchema.parse({
+      providers: {
+        ollama: { type: 'ollama' },
+        'ollama-gpu': { type: 'ollama', label: 'GPU box', apiBase: 'http://gpu.lan:11434/v1' },
+      },
+    });
+    expect(Object.keys(config.providers)).toEqual(['ollama', 'ollama-gpu']);
+    expect(config.providers['ollama-gpu']?.label).toBe('GPU box');
+    expect(config.providers.ollama?.enabled).toBe(true);
+  });
+
+  it('refuses an instance that does not name a type', () => {
+    expect(ConfigSchema.safeParse({ providers: { ollama: {} } }).success).toBe(false);
   });
 
   it('rejects an out-of-range port', () => {

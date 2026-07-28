@@ -196,28 +196,47 @@ export function keychainStore(options: KeychainStoreOptions = {}): KeyStore {
   };
 
   if (platform === 'darwin') {
+    const load = (): Buffer | null => {
+      const result = run('security', [
+        'find-generic-password',
+        '-s',
+        service,
+        '-a',
+        account,
+        '-w',
+      ]);
+      return result.status === 0 ? decode(result.stdout) : null;
+    };
+
     return {
       name: 'keychain:darwin',
-      load(): Buffer | null {
-        const result = run('security', [
-          'find-generic-password',
-          '-s',
-          service,
-          '-a',
-          account,
-          '-w',
-        ]);
-        return result.status === 0 ? decode(result.stdout) : null;
-      },
+      load,
       save(key): boolean {
-        // `-U` updates in place; without it a second run fails with "item
-        // already exists" and the key would silently stop being persisted.
+        const encoded = key.toString('base64');
+        // **Twice**, and this is the whole subtlety of this store.
+        //
+        // `security ... -w` with no value in argv prompts for the password and
+        // then prompts again to confirm it. Sending the key once satisfies the
+        // first prompt and gives EOF to the second, so the two "do not match" —
+        // at which point `security` stores an *empty* password and still exits
+        // 0. Every vault written on a Mac was then encrypted with a key that
+        // could never be loaded back, and the failure surfaced later and
+        // somewhere else, as a vault that would not decrypt.
+        //
+        // The value stays out of argv either way, which is the point of using
+        // the prompt at all: argv is readable through `ps` for as long as the
+        // process lives, and "the key was visible for 40 ms" is still a leak.
         const result = run(
           'security',
           ['add-generic-password', '-U', '-s', service, '-a', account, '-w'],
-          key.toString('base64'),
+          `${encoded}\n${encoded}\n`,
         );
-        return result.status === 0;
+        if (result.status !== 0) return false;
+        // An exit code is not evidence here — it was 0 for the failure above.
+        // Reading it back is, and a store that reports success it cannot
+        // demonstrate is worse than one that declines and lets the keyfile take
+        // over.
+        return load()?.equals(key) === true;
       },
     };
   }

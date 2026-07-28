@@ -37,6 +37,8 @@ export interface FakeRuntimeOptions {
   readonly config?: Config;
   readonly provider?: string;
   readonly model?: string;
+  /** `false` drives the routes as a fresh install with no provider or model. */
+  readonly configured?: boolean;
   readonly tools?: readonly ToolDefinition[];
   readonly credentialsPresent?: Readonly<Record<string, boolean>>;
   readonly systemPrompt?: string;
@@ -89,6 +91,9 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
   const agent: AgentView = {
     provider: options.provider ?? 'openai',
     model: options.model ?? 'gpt-test',
+    // A route test is about the route, and a fixture that defaulted to
+    // unconfigured would make every one of them assert around a setup banner.
+    configured: options.configured ?? true,
     jail,
     jailFor,
     tools: options.tools ?? [],

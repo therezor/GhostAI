@@ -46,6 +46,7 @@ describe('GET /api/status', () => {
   it('reports what a turn would use right now', async () => {
     const { server, headers } = await start({
       provider: 'anthropic',
+      configured: true,
       model: 'claude-sonnet-4',
       tools: [READ_FILE],
     });
@@ -59,6 +60,7 @@ describe('GET /api/status', () => {
       uptimeMs: expect.any(Number),
       model: 'claude-sonnet-4',
       provider: 'anthropic',
+      configured: true,
       workspaceId: 'default',
       workspaceCount: 1,
       authEnabled: true,
@@ -66,6 +68,16 @@ describe('GET /api/status', () => {
       mcpServersConnected: 0,
       pluginsLoaded: 0,
     });
+  });
+
+  it('reports a fresh install as unconfigured, without failing', async () => {
+    // The whole point of the state: everything but a turn works, so the client
+    // can render the app and point at setup rather than at an error page.
+    const { server, headers } = await start({ configured: false, provider: '', model: '' });
+    const response = await server.app.inject({ method: 'GET', url: '/api/status', headers });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ configured: false, provider: '', model: '' });
   });
 
   // The model is read through the runtime rather than snapshotted at boot, so a
@@ -237,20 +249,47 @@ describe('PUT /api/settings/credentials', () => {
 // ---------------------------------------------------------------------------
 
 describe('GET /api/providers', () => {
-  it('describes every provider in the registry', async () => {
-    const { server, headers } = await start({ credentialsPresent: { openai: true } });
+  it('describes every provider type in the registry', async () => {
+    const { server, headers } = await start();
     const response = await server.app.inject({ method: 'GET', url: '/api/providers', headers });
 
-    const providers = response.json<ProvidersResponse>().providers;
-    expect(providers).toHaveLength(PROVIDERS.length);
-    expect(providers.find((provider) => provider.id === 'openai')).toMatchObject({
+    const { types } = response.json<ProvidersResponse>();
+    expect(types).toHaveLength(PROVIDERS.length);
+    expect(types.find((type) => type.id === 'openai')).toMatchObject({
       displayName: 'OpenAI',
       wire: 'openai-chat',
-      credentialsPresent: true,
+      supportsModelListing: true,
     });
-    expect(providers.find((provider) => provider.id === 'ollama')).toMatchObject({
-      isLocal: true,
+    // The catalogue carries no credential flag: a credential belongs to a
+    // configured endpoint, and two instances of one type can differ.
+    expect(types.find((type) => type.id === 'openai')).not.toHaveProperty('credentialsPresent');
+  });
+
+  it('lists the configured instances, with a credential flag each', async () => {
+    const { server, headers } = await start({
+      credentialsPresent: { 'ollama-gpu': true },
+      config: ConfigSchema.parse({
+        providers: {
+          ollama: { type: 'ollama' },
+          'ollama-gpu': { type: 'ollama', label: 'GPU box', apiBase: 'http://gpu.lan:11434/v1' },
+        },
+      }),
+    });
+    const response = await server.app.inject({ method: 'GET', url: '/api/providers', headers });
+
+    const { instances } = response.json<ProvidersResponse>();
+    expect(instances.map((instance) => instance.id)).toEqual(['ollama', 'ollama-gpu']);
+    expect(instances[0]).toMatchObject({
+      type: 'ollama',
+      displayName: 'Ollama',
+      // The effective endpoint, with the type's default folded in.
+      apiBase: 'http://127.0.0.1:11434/v1',
       credentialsPresent: false,
+    });
+    expect(instances[1]).toMatchObject({
+      displayName: 'GPU box',
+      apiBase: 'http://gpu.lan:11434/v1',
+      credentialsPresent: true,
     });
   });
 });
@@ -261,7 +300,7 @@ describe('GET /api/models', () => {
       provider: 'ollama',
       model: 'qwen3',
       config: ConfigSchema.parse({
-        providers: { openai: { models: ['gpt-5', 'gpt-5-mini'] } },
+        providers: { openai: { type: 'openai', models: ['gpt-5', 'gpt-5-mini'] } },
       }),
     });
 
@@ -272,8 +311,8 @@ describe('GET /api/models', () => {
       // list rather than one that reorders when a model is added.
       models: [
         { id: 'qwen3', providerId: 'ollama' },
-        { id: 'gpt-5', providerId: 'openai' },
-        { id: 'gpt-5-mini', providerId: 'openai' },
+        { id: 'gpt-5', providerId: 'openai', providerType: 'openai' },
+        { id: 'gpt-5-mini', providerId: 'openai', providerType: 'openai' },
       ],
       // Empty rather than one "not fetched" entry per provider: `errors` is for
       // a list that was attempted and failed.
@@ -281,8 +320,16 @@ describe('GET /api/models', () => {
     });
   });
 
-  it('prefers a runtime that can enumerate them', async () => {
-    const { server, headers, runtime } = await start();
+  it('merges an enumerated catalogue over the configured one', async () => {
+    // The union, not either alone: a fetch that failed must leave whatever the
+    // operator typed, or the picker empties itself the moment a laptop closes.
+    const { server, headers, runtime } = await start({
+      provider: 'ollama',
+      model: 'qwen3',
+      config: ConfigSchema.parse({
+        providers: { openai: { type: 'openai', models: ['typed-by-hand'] } },
+      }),
+    });
     Object.assign(runtime, {
       models: async () => ({
         models: [{ id: 'from-the-provider', providerId: 'openai' }],
@@ -293,9 +340,35 @@ describe('GET /api/models', () => {
     const response = await server.app.inject({ method: 'GET', url: '/api/models', headers });
 
     expect(response.json()).toEqual({
-      models: [{ id: 'from-the-provider', providerId: 'openai' }],
+      models: [
+        { id: 'qwen3', providerId: 'ollama' },
+        { id: 'from-the-provider', providerId: 'openai' },
+        { id: 'typed-by-hand', providerId: 'openai', providerType: 'openai' },
+      ],
       errors: { groq: 'connection refused' },
     });
+  });
+
+  it('offers nothing for the agent when no model is configured', async () => {
+    const { server, headers } = await start({ configured: false, provider: '', model: '' });
+    const response = await server.app.inject({ method: 'GET', url: '/api/models', headers });
+    expect(response.json()).toEqual({ models: [], errors: {} });
+  });
+
+  it('asks the runtime to bypass its cache on refresh', async () => {
+    const { server, headers, runtime } = await start();
+    const asked: (boolean | undefined)[] = [];
+    Object.assign(runtime, {
+      models: async (options?: { refresh?: boolean }) => {
+        asked.push(options?.refresh);
+        return { models: [], errors: {} };
+      },
+    });
+
+    await server.app.inject({ method: 'GET', url: '/api/models', headers });
+    await server.app.inject({ method: 'POST', url: '/api/models/refresh', headers });
+
+    expect(asked).toEqual([false, true]);
   });
 });
 

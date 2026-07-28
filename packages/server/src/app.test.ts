@@ -127,6 +127,8 @@ function headersFor(state: StateName, token: string): Record<string, string> {
  */
 const PAYLOADS: Readonly<Record<string, Record<string, unknown>>> = {
   'auth.login': { password: PASSWORD },
+  'setup.claim': { code: 'AAAA-BBBB-CCCC' },
+  'setup.password': { password: 'set-from-the-matrix' },
   'settings.patch': { agents: { defaults: { temperature: 0.5 } } },
   'settings.credential': { namespace: 'providers', key: 'openai', value: 'sk-test' },
   'sessions.create': { title: 'from the matrix' },
@@ -257,6 +259,154 @@ describe('auth matrix', () => {
     );
 
     expect(ids.sort()).toEqual(ROUTE_MANIFEST.map((spec) => spec.id).sort());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// First-run setup
+// ---------------------------------------------------------------------------
+
+describe('setup', () => {
+  it('reports an install with no password as needing to be claimed', async () => {
+    const server = await start({ password: null });
+    const response = await server.app.inject({ method: 'GET', url: '/api/setup' });
+
+    expect(response.statusCode).toBe(200);
+    // One bit and nothing else. An unauthenticated caller learns this anyway by
+    // watching every login fail; describing an unclaimed agent any further
+    // would be telling whoever asked first what they had found.
+    expect(response.json()).toEqual({ required: true });
+  });
+
+  it('reports a claimed install as not needing setup', async () => {
+    const server = await start();
+    const response = await server.app.inject({ method: 'GET', url: '/api/setup' });
+    expect(response.json()).toEqual({ required: false });
+  });
+
+  it('reports no setup needed when authentication is off', async () => {
+    // There is nothing to claim: the server is reachable without a credential
+    // by design, and asking for a password that would never be checked is
+    // security theatre with a login form.
+    const server = await start({ config: config({ auth: { enabled: false } }), password: null });
+    const response = await server.app.inject({ method: 'GET', url: '/api/setup' });
+    expect(response.json()).toEqual({ required: false });
+  });
+
+  it('exchanges the one-time code for a session that works', async () => {
+    const server = await start({ password: null });
+    const code = server.auth.issueSetupCode();
+
+    const claim = await server.app.inject({
+      method: 'POST',
+      url: '/api/setup/claim',
+      payload: { code },
+    });
+
+    expect(claim.statusCode).toBe(200);
+    const token = claim.cookies.find((entry) => entry.name === SESSION_COOKIE)?.value ?? '';
+    expect(token).not.toBe('');
+    // The code is a login, so it gets the same cookie treatment: a token in the
+    // body is a token an injected script can read.
+    expect(claim.payload).not.toContain(token);
+    expect(claim.payload).not.toContain(code);
+
+    const me = await server.app.inject({
+      method: 'GET',
+      url: '/api/auth/me',
+      headers: { cookie: `${SESSION_COOKIE}=${token}` },
+    });
+    expect(me.statusCode).toBe(200);
+  });
+
+  it('refuses a wrong code with a 401 and no cookie', async () => {
+    const server = await start({ password: null });
+    server.auth.issueSetupCode();
+
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/setup/claim',
+      payload: { code: 'ZZZZ-ZZZZ-ZZZZ' },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.cookies).toHaveLength(0);
+  });
+
+  it('refuses to claim an install that already has a password', async () => {
+    const server = await start();
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/setup/claim',
+      payload: { code: 'AAAA-BBBB-CCCC' },
+    });
+
+    // Not a 401: the code is not wrong, the install is claimed and the caller
+    // should be signing in with the password.
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toMatch(/already has a password/);
+  });
+
+  it('sets the password and keeps the caller signed in', async () => {
+    const server = await start({ password: null });
+    const code = server.auth.issueSetupCode();
+    const claim = await server.app.inject({
+      method: 'POST',
+      url: '/api/setup/claim',
+      payload: { code },
+    });
+    const claimed = claim.cookies.find((entry) => entry.name === SESSION_COOKIE)?.value ?? '';
+
+    const set = await server.app.inject({
+      method: 'POST',
+      url: '/api/setup/password',
+      headers: { cookie: `${SESSION_COOKIE}=${claimed}` },
+      payload: { password: 'chosen-in-the-wizard' },
+    });
+
+    expect(set.statusCode).toBe(200);
+    // `setPassword` revokes every session including the caller's own, so
+    // without a re-issue the browser is signed out mid-wizard with the code it
+    // would need to get back in already spent.
+    const reissued = set.cookies.find((entry) => entry.name === SESSION_COOKIE)?.value ?? '';
+    expect(reissued).not.toBe('');
+    expect(reissued).not.toBe(claimed);
+
+    const me = await server.app.inject({
+      method: 'GET',
+      url: '/api/auth/me',
+      headers: { cookie: `${SESSION_COOKIE}=${reissued}` },
+    });
+    expect(me.statusCode).toBe(200);
+
+    // And the old one is genuinely dead.
+    const stale = await server.app.inject({
+      method: 'GET',
+      url: '/api/auth/me',
+      headers: { cookie: `${SESSION_COOKIE}=${claimed}` },
+    });
+    expect(stale.statusCode).toBe(401);
+  });
+
+  it('closes setup once the password is set', async () => {
+    const server = await start({ password: null });
+    const code = server.auth.issueSetupCode();
+    const claim = await server.app.inject({
+      method: 'POST',
+      url: '/api/setup/claim',
+      payload: { code },
+    });
+    const claimed = claim.cookies.find((entry) => entry.name === SESSION_COOKIE)?.value ?? '';
+
+    await server.app.inject({
+      method: 'POST',
+      url: '/api/setup/password',
+      headers: { cookie: `${SESSION_COOKIE}=${claimed}` },
+      payload: { password: 'chosen-in-the-wizard' },
+    });
+
+    const status = await server.app.inject({ method: 'GET', url: '/api/setup' });
+    expect(status.json()).toEqual({ required: false });
   });
 });
 
@@ -510,18 +660,27 @@ describe('boot', () => {
     ).rejects.toThrow(/Refusing to start/);
   });
 
-  it('refuses to start with authentication on and no password', async () => {
+  it('starts with authentication on and no password, and refuses every session route', async () => {
+    // It used to refuse, which left the one interface that could set a password
+    // unreachable on a fresh machine. It now starts unclaimed: `setup.status`
+    // says so, and everything that needs a session is still a 401 until the
+    // one-time code is spent.
     const database = new DatabaseSync(':memory:');
     opened.push(database);
 
-    await expect(
-      createServer({
-        config: config(),
-        ...collaborators(database),
-        database,
-        hasher: fakeHasher,
-      }),
-    ).rejects.toThrow(/no password has been set/);
+    const server = await createServer({
+      config: config(),
+      ...collaborators(database),
+      database,
+      hasher: fakeHasher,
+    });
+    started.push(server);
+
+    const setup = await server.app.inject({ method: 'GET', url: '/api/setup' });
+    expect(setup.json()).toEqual({ required: true });
+
+    const status = await server.app.inject({ method: 'GET', url: '/api/status' });
+    expect(status.statusCode).toBe(401);
   });
 
   it('accepts a password that was already set on a previous boot', async () => {

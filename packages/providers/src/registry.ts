@@ -7,18 +7,20 @@
  * adding a provider is a table entry, not a class.
  *
  * The table is declared `as const`, which is what makes that claim structural
- * rather than aspirational: `ProviderId` is derived from it, so the settings
- * tree's `Record<string, ProviderConfig>` narrows to the ids that actually exist
- * (see `TypedProvidersConfig`). A configuration schema that hand-lists one field
- * per provider is kept in sync by discipline; deriving it makes drift a type
- * error instead.
+ * rather than aspirational: `ProviderId` is derived from it, so nothing
+ * downstream can name a provider that does not exist without a type error.
+ *
+ * What this file describes is a provider *type*. What an operator configures is
+ * an *instance* of one — see `instances.ts`. The two were the same thing while
+ * the settings tree allowed one endpoint per provider; they are not, and the
+ * distinction is why `providers.<key>` now carries a `type` field.
  *
  * Order matters. The table is scanned in declaration order by `findGateway`, so
  * gateways come first: a key beginning `sk-or-` is OpenRouter's whoever else
  * might accept it, and detection must reach that entry before a generic one.
  */
 
-import type { ProviderConfig, ProviderInfo } from '@ghostai/protocol';
+import type { ProviderInfo } from '@ghostai/protocol';
 
 /**
  * The request/response shape a provider speaks.
@@ -78,6 +80,17 @@ export interface ProviderSpec {
   readonly defaultHeaders?: Readonly<Record<string, string>>;
   readonly modelOverrides?: readonly ModelOverride[];
   readonly supportsPromptCaching?: boolean;
+  /**
+   * The endpoint answers `GET /models` with a catalogue.
+   *
+   * True for the whole OpenAI-compatible range, including every local server —
+   * Ollama, LM Studio, llama.cpp and vLLM all implement it, which is what makes
+   * an automatic model list possible where the settings panel used to say
+   * "nothing enumerates a local server's models". Declared per entry rather
+   * than inferred from `wire`, because the native wires landing later have
+   * their own catalogue endpoints on their own paths.
+   */
+  readonly supportsModelListing?: boolean;
 }
 
 /**
@@ -105,6 +118,7 @@ const PROVIDER_TABLE = [
     // OpenRouter ranks callers by attribution header; it is not authentication.
     defaultHeaders: { 'X-Title': 'GhostAI' },
     supportsPromptCaching: true,
+    supportsModelListing: true,
   },
   {
     id: 'ollama',
@@ -114,6 +128,7 @@ const PROVIDER_TABLE = [
     defaultApiBase: 'http://127.0.0.1:11434/v1',
     isLocal: true,
     detectByBaseKeyword: '11434',
+    supportsModelListing: true,
   },
   {
     id: 'lmstudio',
@@ -123,6 +138,7 @@ const PROVIDER_TABLE = [
     defaultApiBase: 'http://127.0.0.1:1234/v1',
     isLocal: true,
     detectByBaseKeyword: '1234',
+    supportsModelListing: true,
   },
   {
     id: 'llamacpp',
@@ -131,6 +147,7 @@ const PROVIDER_TABLE = [
     keywords: ['llamacpp', 'llama-cpp'],
     defaultApiBase: 'http://127.0.0.1:8080/v1',
     isLocal: true,
+    supportsModelListing: true,
   },
   {
     id: 'vllm',
@@ -140,6 +157,7 @@ const PROVIDER_TABLE = [
     envKey: 'VLLM_API_KEY',
     defaultApiBase: 'http://127.0.0.1:8000/v1',
     isLocal: true,
+    supportsModelListing: true,
   },
   {
     id: 'openai',
@@ -152,6 +170,7 @@ const PROVIDER_TABLE = [
     // being ignored, and the replacement is accepted by the rest of the range.
     maxTokensParam: 'max_completion_tokens',
     supportsPromptCaching: true,
+    supportsModelListing: true,
   },
   {
     id: 'anthropic',
@@ -174,6 +193,7 @@ const PROVIDER_TABLE = [
     keywords: ['gemini'],
     envKey: 'GEMINI_API_KEY',
     defaultApiBase: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    supportsModelListing: true,
   },
   {
     id: 'deepseek',
@@ -183,6 +203,7 @@ const PROVIDER_TABLE = [
     envKey: 'DEEPSEEK_API_KEY',
     defaultApiBase: 'https://api.deepseek.com/v1',
     supportsPromptCaching: true,
+    supportsModelListing: true,
   },
   {
     id: 'groq',
@@ -192,6 +213,7 @@ const PROVIDER_TABLE = [
     envKey: 'GROQ_API_KEY',
     defaultApiBase: 'https://api.groq.com/openai/v1',
     detectByKeyPrefix: 'gsk_',
+    supportsModelListing: true,
   },
   {
     id: 'xai',
@@ -200,6 +222,7 @@ const PROVIDER_TABLE = [
     keywords: ['grok', 'xai'],
     envKey: 'XAI_API_KEY',
     defaultApiBase: 'https://api.x.ai/v1',
+    supportsModelListing: true,
   },
   {
     id: 'custom',
@@ -209,6 +232,7 @@ const PROVIDER_TABLE = [
     wire: 'openai-chat',
     keywords: [],
     envKey: 'OPENAI_API_KEY',
+    supportsModelListing: true,
   },
 ] as const;
 
@@ -236,16 +260,6 @@ export type ProviderId = (typeof PROVIDER_TABLE)[number]['id'];
 export const PROVIDERS: readonly ProviderSpec[] = PROVIDER_TABLE;
 
 export const PROVIDER_IDS: readonly ProviderId[] = PROVIDER_TABLE.map((spec) => spec.id);
-
-/**
- * The settings tree's `providers` block, narrowed to real ids.
- *
- * `@ghostai/protocol` types it as `Record<string, ProviderConfig>` because it
- * sits upstream of this table and cannot see it. Partial rather than total: an
- * unconfigured provider is the normal case, and requiring an entry per id would
- * make `{}` invalid.
- */
-export type TypedProvidersConfig = Partial<Record<ProviderId, ProviderConfig>>;
 
 export function isProviderId(value: string): value is ProviderId {
   return PROVIDERS.some((spec) => spec.id === value);
@@ -385,14 +399,15 @@ export function resolveModelId(spec: ProviderSpec, model: string): string {
 }
 
 /**
- * A table entry as the settings UI sees it.
+ * A table entry as the settings UI sees it — the catalogue, not a configured
+ * endpoint.
  *
  * The projection lives here rather than in the HTTP layer so that adding a
- * provider stays a one-line table entry: the route maps over `PROVIDERS` and
- * supplies only what the table cannot know — whether a credential exists, which
- * is the vault's business and is never sent back out of it.
+ * provider stays a one-line table entry rather than a table entry plus a route
+ * change. It carries no credential flag: a credential belongs to an instance,
+ * and `describeInstance` is where that boolean is supplied.
  */
-export function describeProvider(spec: ProviderSpec, credentialsPresent: boolean): ProviderInfo {
+export function describeProvider(spec: ProviderSpec): ProviderInfo {
   return {
     id: spec.id,
     displayName: spec.displayName,
@@ -402,7 +417,7 @@ export function describeProvider(spec: ProviderSpec, credentialsPresent: boolean
     isOAuth: spec.isOAuth ?? false,
     defaultApiBase: spec.defaultApiBase,
     envKey: spec.envKey,
-    credentialsPresent,
+    supportsModelListing: spec.supportsModelListing ?? false,
   };
 }
 

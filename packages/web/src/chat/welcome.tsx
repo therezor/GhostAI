@@ -34,7 +34,7 @@ export function Welcome({ onPick }: { readonly onPick: (prompt: string) => void 
 
       <div className="stack welcome__heading">
         <h1 className="welcome__title">Ready when you are.</h1>
-        {status.isSuccess && (
+        {status.isSuccess && status.data.configured && (
           <p className="cluster welcome__agent">
             <Badge tone="neutral">{status.data.provider}</Badge>
             <span className="welcome__model">{status.data.model}</span>

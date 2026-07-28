@@ -55,6 +55,7 @@ export { migrate } from './migrate.js';
 
 export {
   loadConfig,
+  migrateConfigShape,
   parseConfig,
   saveConfig,
   type LoadConfigOptions,

@@ -34,6 +34,7 @@ import {
   SessionListResponseSchema,
   SessionMessagesResponseSchema,
   SettingsResponseSchema,
+  SetupStatusResponseSchema,
   MoveSessionsResponseSchema,
   SignedUrlSchema,
   WorkspaceListResponseSchema,
@@ -56,6 +57,7 @@ import {
   type SessionMessagesResponse,
   type SetCredentialRequest,
   type SettingsResponse,
+  type SetupStatusResponse,
   type MoveSessionsResponse,
   type SignedUrl,
   type WorkspaceListResponse,
@@ -152,6 +154,18 @@ export const api = {
   login: (password: string): Promise<LoginResponse> =>
     request('/api/auth/login', LoginResponseSchema, { method: 'POST', body: { password } }),
 
+  /** Public, and the one request the app makes before it knows anything else. */
+  setupStatus: (signal?: AbortSignal): Promise<SetupStatusResponse> =>
+    request('/api/setup', SetupStatusResponseSchema, { ...(signal ? { signal } : {}) }),
+
+  /** Spends the one-time code printed to the console on a first launch. */
+  claimSetup: (code: string): Promise<LoginResponse> =>
+    request('/api/setup/claim', LoginResponseSchema, { method: 'POST', body: { code } }),
+
+  /** Sets the password and re-issues the session `setPassword` just revoked. */
+  setSetupPassword: (password: string): Promise<LoginResponse> =>
+    request('/api/setup/password', LoginResponseSchema, { method: 'POST', body: { password } }),
+
   status: (signal?: AbortSignal): Promise<StatusResponse> =>
     request('/api/status', StatusResponseSchema, { ...(signal ? { signal } : {}) }),
 
@@ -209,6 +223,16 @@ export const api = {
 
   models: (signal?: AbortSignal): Promise<ModelsResponse> =>
     request('/api/models', ModelsResponseSchema, { ...(signal ? { signal } : {}) }),
+
+  /**
+   * Re-asks every configured endpoint, past both caches.
+   *
+   * A POST because it has an effect on the server, and separate from `models`
+   * so a render cannot trigger it: a GET that always reached out would turn a
+   * re-render loop into a flood of requests at somebody's local model server.
+   */
+  refreshModels: (): Promise<ModelsResponse> =>
+    request('/api/models/refresh', ModelsResponseSchema, { method: 'POST' }),
 
   /** What a turn on this session would actually send, for the context inspector. */
   context: (key: string, signal?: AbortSignal): Promise<ContextResponse> =>

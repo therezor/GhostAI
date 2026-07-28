@@ -44,6 +44,7 @@ import {
   type LogLevel,
   type Logger,
 } from '@ghostai/core';
+import { instanceLabel } from '@ghostai/providers';
 import { createRuntime, type GhostRuntime } from '@ghostai/runtime';
 import { HubApprovalGate, SessionHub, createServer, type GhostServer } from '@ghostai/server';
 import pc from 'picocolors';
@@ -85,6 +86,16 @@ export interface RunningServer {
   readonly channels: ChannelManager;
   /** The directory the SPA is served from, or `undefined` for API-only. */
   readonly ui: string | undefined;
+  /**
+   * The one-time code that claims an install with no password.
+   *
+   * Present only on a first run. It exists here rather than only inside the
+   * server because the terminal is the one place it can safely appear: it is
+   * printed to whoever started the process and nowhere else, which is the
+   * property that lets the server come up unclaimed instead of refusing to
+   * start and leaving the UI that would set a password unreachable.
+   */
+  readonly setupCode: string | undefined;
   /** Idempotent, and safe to call from a signal handler. */
   close(): Promise<void>;
 }
@@ -198,6 +209,14 @@ export async function startServer(options: ServeOptions = {}): Promise<RunningSe
     });
     await channels.start();
 
+    // After `createServer`, which is where `--password` is applied: minting a
+    // code for an install that was just given a password would print a
+    // credential nobody needs.
+    const setupCode =
+      built.config.server.auth.enabled && !server.auth.hasPassword()
+        ? server.auth.issueSetupCode()
+        : undefined;
+
     const url = await server.listen(options.port === undefined ? {} : { port: options.port });
 
     let closed = false;
@@ -211,6 +230,7 @@ export async function startServer(options: ServeOptions = {}): Promise<RunningSe
       hub: sessions,
       channels: bridge,
       ui,
+      setupCode,
       close: async (): Promise<void> => {
         if (closed) return;
         closed = true;
@@ -253,6 +273,7 @@ export function banner(running: RunningServer, colors: boolean | undefined): str
   const c = pc.createColors(colors);
   const authEnabled = running.server.config.server.auth.enabled;
   const host = running.server.config.server.host;
+  const instance = running.runtime.instance;
 
   const rows: [string, string][] = [
     ['URL', c.cyan(running.url)],
@@ -265,7 +286,12 @@ export function banner(running: RunningServer, colors: boolean | undefined): str
           // that anyone with an account on this machine can drive.
           c.yellow(`disabled — anything that can reach ${host} can drive this agent`),
     ],
-    ['Agent', `${running.runtime.spec.displayName} · ${running.runtime.model}`],
+    [
+      'Agent',
+      running.runtime.configured && instance !== null
+        ? `${instanceLabel(instance)} · ${running.runtime.model}`
+        : c.yellow('not configured — add a provider in the UI, or run `ghost init`'),
+    ],
     ['Workspace', running.runtime.jail.root],
     ['UI', running.ui ?? c.dim('not built — serving the API only (build @ghostai/web to add it)')],
   ];
@@ -275,7 +301,21 @@ export function banner(running: RunningServer, colors: boolean | undefined): str
 
   const width = Math.max(...rows.map(([label]) => label.length));
   const lines = rows.map(([label, value]) => `  ${c.dim(label.padEnd(width))}  ${value}`);
-  return `${c.bold('GhostAI is listening.')}\n\n${lines.join('\n')}\n\n${c.dim('Press Ctrl-C to stop.')}\n`;
+  const body = `${c.bold('GhostAI is listening.')}\n\n${lines.join('\n')}\n`;
+
+  // Below the table rather than in it, because it is the one thing the operator
+  // has to *act* on and a row in a list of five reads as another status line.
+  // This is the whole reason the server starts unclaimed instead of refusing:
+  // the code is the only way in, and the terminal printing it is the only place
+  // it will ever appear.
+  const setup =
+    running.setupCode === undefined
+      ? ''
+      : `\n${c.bold('First run.')} Open the URL above and enter this one-time code:\n\n` +
+        `      ${c.cyan(c.bold(running.setupCode))}\n\n` +
+        `  ${c.dim('It works once, and stops working as soon as you set a password.')}\n`;
+
+  return `${body}${setup}\n${c.dim('Press Ctrl-C to stop.')}\n`;
 }
 
 /**

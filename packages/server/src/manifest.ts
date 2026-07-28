@@ -47,6 +47,16 @@ const MANIFEST = [
   { id: 'auth.logout', method: 'POST', url: '/api/auth/logout', auth: 'required' },
   { id: 'auth.me', method: 'GET', url: '/api/auth/me', auth: 'required' },
 
+  // First-run setup. Two of the three are `public`, which is deliberate and is
+  // the only widening of the public surface since it was two routes:
+  // `setup.status` answers one bit an attacker learns anyway by watching every
+  // login fail, and `setup.claim` is the login for an install that has no
+  // password yet — it spends a single-use code that only the operator's own
+  // terminal ever saw. Both stop existing the moment a password is set.
+  { id: 'setup.status', method: 'GET', url: '/api/setup', auth: 'public' },
+  { id: 'setup.claim', method: 'POST', url: '/api/setup/claim', auth: 'public' },
+  { id: 'setup.password', method: 'POST', url: '/api/setup/password', auth: 'required' },
+
   // Settings and credentials
   { id: 'settings.get', method: 'GET', url: '/api/settings', auth: 'required' },
   { id: 'settings.patch', method: 'PATCH', url: '/api/settings', auth: 'required' },
@@ -55,6 +65,7 @@ const MANIFEST = [
   // Providers and models
   { id: 'providers.list', method: 'GET', url: '/api/providers', auth: 'required' },
   { id: 'models.list', method: 'GET', url: '/api/models', auth: 'required' },
+  { id: 'models.refresh', method: 'POST', url: '/api/models/refresh', auth: 'required' },
 
   // Sessions, messages, context
   { id: 'sessions.list', method: 'GET', url: '/api/sessions', auth: 'required' },

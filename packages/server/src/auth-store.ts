@@ -69,6 +69,36 @@ CREATE INDEX IF NOT EXISTS auth_sessions_expiry ON auth_sessions(expires_at_ms);
 const PASSWORD_SECRET = 'password';
 
 /**
+ * The one-time code that claims an install with no password.
+ *
+ * Stored in the same table as the password and hashed the same way a session
+ * token is — SHA-256, not argon2id. It is 20 characters of `randomBytes`
+ * entropy, so there is nothing to guess and a KDF would buy nothing; what
+ * matters is that a copy of the database does not yield a usable code.
+ */
+const SETUP_CODE_SECRET = 'setup_code';
+
+/** Bytes behind a setup code. 12 bytes → 20 base32 characters. */
+const SETUP_CODE_BYTES = 12;
+
+/**
+ * Crockford base32 without `I`, `L`, `O` and `U`: the characters a person
+ * mistypes when copying a code out of a terminal, and the one that forms words.
+ */
+const CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+
+/**
+ * What is hashed, on both sides.
+ *
+ * The dashes and the case are presentation. Someone who pastes the code
+ * without its grouping, or types it in lower case, has entered the right code,
+ * and a comparison that said otherwise would be rejecting a correct answer.
+ */
+function normaliseCode(code: string): string {
+  return code.replace(/[^0-9a-zA-Z]/g, '').toUpperCase();
+}
+
+/**
  * The hashing half, injected.
  *
  * argon2id is deliberately expensive — around 50 ms per call — which is correct
@@ -190,7 +220,72 @@ export class AuthStore {
          ON CONFLICT(name) DO UPDATE SET value = excluded.value, updated_at_ms = excluded.updated_at_ms`,
       )
       .run(PASSWORD_SECRET, digest, this.#clock.now());
+    // The setup code is a stand-in for a password that does not exist yet. The
+    // moment one does, an outstanding code is a second way in that nobody is
+    // watching — and it was printed to a terminal whose scrollback outlives it.
+    this.#db.prepare('DELETE FROM auth_secrets WHERE name = ?').run(SETUP_CODE_SECRET);
     this.revokeAll();
+  }
+
+  /**
+   * Mints the one-time code that claims an unclaimed install, replacing any
+   * outstanding one.
+   *
+   * Replacing rather than reusing: a restarted server prints a fresh code, and
+   * the one in the previous run's scrollback stops working. That is the weaker
+   * of the two properties — the stronger one is that the code exists at all,
+   * which is what lets `ghost serve` come up on a bare machine instead of
+   * refusing to start and leaving the UI that would set a password unreachable.
+   *
+   * Refuses once a password exists, because there is nothing left to claim and
+   * an alternative credential would only widen the ways in.
+   */
+  issueSetupCode(): string {
+    if (this.hasPassword()) {
+      throw new GhostError('invalid_input', 'A password is already set; there is nothing to claim');
+    }
+
+    const bytes = this.#random(SETUP_CODE_BYTES);
+    let code = '';
+    for (const [index, byte] of bytes.entries()) {
+      // Grouped for transcription, not for entropy: a person reading this off a
+      // terminal and typing it into a browser is the whole use case.
+      if (index > 0 && index % 4 === 0) code += '-';
+      code += CODE_ALPHABET[byte % CODE_ALPHABET.length] ?? '0';
+    }
+
+    this.#db
+      .prepare(
+        `INSERT INTO auth_secrets (name, value, updated_at_ms) VALUES (?, ?, ?)
+         ON CONFLICT(name) DO UPDATE SET value = excluded.value, updated_at_ms = excluded.updated_at_ms`,
+      )
+      .run(SETUP_CODE_SECRET, sha256(normaliseCode(code)).toString('base64'), this.#clock.now());
+    return code;
+  }
+
+  /** Whether an unspent code is outstanding — never the code itself. */
+  hasSetupCode(): boolean {
+    return this.#readSecret(SETUP_CODE_SECRET) !== undefined;
+  }
+
+  /**
+   * Spends the code, if it is the right one. Single use either way it is read:
+   * a correct code is deleted here, and a wrong one leaves the real code alone
+   * so a typo does not lock the operator out of their own install.
+   */
+  consumeSetupCode(code: string): boolean {
+    const stored = this.#readSecret(SETUP_CODE_SECRET);
+    if (stored === undefined) return false;
+
+    const expected = Buffer.from(stored, 'base64');
+    const presented = sha256(normaliseCode(code));
+    // `timingSafeEqual` throws on a length mismatch rather than returning
+    // false, and a corrupt row must not turn a bad code into a 500.
+    if (expected.byteLength !== presented.byteLength) return false;
+    if (!timingSafeEqual(expected, presented)) return false;
+
+    this.#db.prepare('DELETE FROM auth_secrets WHERE name = ?').run(SETUP_CODE_SECRET);
+    return true;
   }
 
   async verifyPassword(password: string): Promise<boolean> {
@@ -235,8 +330,10 @@ export class AuthStore {
    * whatever asked for a signing key.
    */
   ensureSecret(name: string): string {
-    if (name === PASSWORD_SECRET) {
-      throw new GhostError('invalid_input', 'The password is not a readable secret');
+    if (name === PASSWORD_SECRET || name === SETUP_CODE_SECRET) {
+      // Both are stored as one-way digests. A caller that got one back here
+      // would be handing a hash to whatever asked for a signing key.
+      throw new GhostError('invalid_input', `${name} is not a readable secret`);
     }
     const existing = this.#readSecret(name);
     if (existing !== undefined) return existing;

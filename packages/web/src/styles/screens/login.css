@@ -34,24 +34,9 @@
     --gap: var(--space-1);
   }
 
-  /* The brand lockup, set as a micro-label. It sizes its own mark in `em`, so
-   * the mark comes down with the type rather than needing a rule here — which
-   * is what the icon override that used to live below was. */
-  .login-card__eyebrow {
-    color: var(--accent-fg);
-    font-size: var(--text-2xs);
-    font-weight: var(--weight-semibold);
-    letter-spacing: var(--tracking-caps);
-    text-transform: uppercase;
-  }
-
   .login-card__title {
     font-size: var(--text-lg);
     line-height: var(--leading-lg);
     font-weight: var(--weight-medium);
-  }
-
-  .login-card__note {
-    color: var(--fg-2);
   }
 }

@@ -29,6 +29,91 @@ pnpm check      # typecheck + lint + test
 pnpm build
 ```
 
+## Running it
+
+`pnpm build` produces the `ghost` binary at `packages/cli/dist/index.js`. Link it (`pnpm --filter @ghostai/cli link --global`) or call it directly — the examples below use `ghost`.
+
+### First run, from a browser
+
+```bash
+ghost serve
+```
+
+It starts even though nothing is configured, and prints a **one-time setup code**:
+
+```
+GhostAI is listening.
+
+  URL        http://127.0.0.1:3000
+  Auth       enabled
+  Agent      not configured — add a provider in the UI, or run `ghost init`
+  Workspace  /Users/you/.ghostai/workspace
+  UI         /path/to/packages/web/dist
+
+First run. Open the URL above and enter this one-time code:
+
+      K7QF-2M9X-BW4T
+
+  It works once, and stops working as soon as you set a password.
+```
+
+Open the URL, paste the code, and the wizard walks through a password, a provider and a model. The provider step fetches the model list from the endpoint itself, so on a machine running `ollama serve` the model question is a list rather than a text box.
+
+Everything after the password is skippable. An install with no model still serves files, workspaces, settings and notifications — only chat is unavailable, and the composer says so and links to the panel that fixes it.
+
+### First run, from a terminal
+
+```bash
+ghost init      # workspace, provider, model — same questions, no browser
+ghost chat      # talk to it
+```
+
+`ghost init` needs a terminal; it refuses a pipe rather than reading EOF as an answer. Nothing is written until every question is answered.
+
+### Where things live
+
+Everything is under `~/.ghostai`, or `$GHOSTAI_HOME` if that is set:
+
+| Path | What |
+| ---- | ---- |
+| `config.json` | The settings tree. Safe to commit — credentials are never in it. |
+| `ghost.db` | Sessions, messages, auth and notifications. One SQLite file. |
+| `vault.json` + `vault.key` | The encrypted credential vault. The key moves to the OS keychain when one is available. |
+| `workspace/` | The only directory the agent's file tools can reach. |
+
+### Useful flags
+
+| Flag | Does |
+| ---- | ---- |
+| `--host` / `--port` | Override the bind. A non-loopback host with `server.auth.enabled: false` refuses to start. |
+| `--password` | Set or rotate the login password without the wizard. Also read from `GHOSTAI_PASSWORD`. |
+| `--home <dir>` | Use a different root, the same as `GHOSTAI_HOME`. Handy for a throwaway install. |
+| `--ui <dir>` | Serve a UI built somewhere else. |
+
+**Restart `ghost serve` after a UI build** — see [Working on the UI](#working-on-the-ui) for why.
+
+### Providers
+
+`config.providers` is keyed by an **instance id** you choose, with `type` naming one of the providers in the registry. The same type can appear more than once, which is how two Ollama servers are configured:
+
+```json
+{
+  "agents": { "defaults": { "provider": "ollama-gpu", "model": "qwen3:8b" } },
+  "providers": {
+    "ollama": { "type": "ollama" },
+    "ollama-gpu": {
+      "type": "ollama",
+      "label": "GPU box",
+      "apiBase": "http://gpu.lan:11434/v1"
+    }
+  }
+}
+```
+
+`agents.defaults.provider` names an instance, or `auto` to resolve one. API keys are not in this file — they go to the vault, keyed by the same instance id, so the two Ollama entries above can hold different tokens. A local endpoint may carry one too, for a model server behind an authenticating proxy.
+
+A `config.json` written before instances existed is migrated on load and rewritten in place: each key keeps its name and gains the matching `type`, so credentials already in the vault keep resolving.
+
 ## Commands
 
 | Command                               | Does                                                                               |

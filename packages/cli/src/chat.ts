@@ -207,7 +207,11 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
     active = controller;
     try {
       return await runTurn(
-        { loop: runtime.loop, renderer, sessionKey, signal: controller.signal, json },
+        // `requireLoop` rather than `loop`: an unconfigured install builds a
+        // runtime with no loop so that `ghost serve` can come up, and this is
+        // the one caller that genuinely cannot proceed without one. The message
+        // it throws names what to set.
+        { loop: runtime.requireLoop(), renderer, sessionKey, signal: controller.signal, json },
         content,
       );
     } finally {
@@ -229,7 +233,7 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
 
     if (json === undefined) {
       renderer.note(
-        `ghost · ${runtime.model} @ ${runtime.spec.displayName} · ${runtime.paths.workspace}`,
+        `ghost · ${runtime.model} @ ${runtime.spec?.displayName ?? 'no provider'} · ${runtime.paths.workspace}`,
       );
       renderer.note(`${sessionKey} · /help for commands`);
     }

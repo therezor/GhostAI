@@ -74,12 +74,18 @@ export function AgentPanel({ config }: { readonly config: Config }): JSX.Element
     setDirty(false);
   };
 
+  // The configured *endpoints*, not the registry catalogue: two Ollama servers
+  // are two entries here, and picking between them is the whole point of the
+  // instance id. Disabled ones are left out — resolution ignores them, so
+  // offering one would be offering a setting that silently does not take.
   const providerOptions = [
     { value: 'auto', label: 'Automatic — whichever has a credential' },
-    ...(providers.data?.providers ?? []).map((provider) => ({
-      value: provider.id,
-      label: provider.credentialsPresent ? `${provider.displayName} ✓` : provider.displayName,
-    })),
+    ...(providers.data?.instances ?? [])
+      .filter((instance) => instance.enabled)
+      .map((instance) => ({
+        value: instance.id,
+        label: instance.credentialsPresent ? `${instance.displayName} ✓` : instance.displayName,
+      })),
   ];
 
   const available = modelOptions(models.data?.models ?? [], form.provider, form.model);
@@ -110,7 +116,7 @@ export function AgentPanel({ config }: { readonly config: Config }): JSX.Element
               onValueChange={(value) => {
                 update('model', value);
               }}
-              hint="From this provider's configured list."
+              hint="Listed by the endpoint itself where it can be, plus anything configured by hand."
             />
           ) : (
             <TextField
@@ -120,7 +126,7 @@ export function AgentPanel({ config }: { readonly config: Config }): JSX.Element
               onValueChange={(value) => {
                 update('model', value);
               }}
-              hint="No models are listed for this provider. Add some under Providers, or type one."
+              hint="Nothing is listed for this provider yet. Check for models under Providers, or type one."
             />
           )}
         </FieldGrid>

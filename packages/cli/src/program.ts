@@ -26,6 +26,7 @@ import { Command, CommanderError } from 'commander';
 import type { LogLevel } from '@ghostai/core';
 
 import type { ChatOptions } from './chat.js';
+import type { InitOptions } from './init.js';
 import type { ServeCommandOptions } from './serve.js';
 
 /**
@@ -47,6 +48,9 @@ export interface CliDeps {
   readonly runChat?: (options: ChatOptions) => Promise<number>;
   /** Injected so a test can drive the parser without binding a port. */
   readonly runServe?: (options: ServeCommandOptions) => Promise<number>;
+  /** Injected so a test can drive the parser without a terminal. */
+  readonly runInit?: (options: InitOptions) => Promise<number>;
+  readonly input?: NodeJS.ReadableStream & { isTTY?: boolean };
   readonly env?: Readonly<Record<string, string | undefined>>;
 }
 
@@ -87,6 +91,12 @@ async function defaultRunServe(options: ServeCommandOptions): Promise<number> {
   return await serveCommand(options);
 }
 
+/** And `initCommand`, which pulls the provider adapters and the vault. */
+async function defaultRunInit(options: InitOptions): Promise<number> {
+  const { initCommand } = await import('./init.js');
+  return await initCommand(options);
+}
+
 /** A port from the command line, refused before anything binds. */
 function resolvePort(value: string | undefined): number | undefined {
   if (value === undefined) return undefined;
@@ -111,6 +121,7 @@ export function buildProgram(deps: CliDeps = {}): Command {
   const env = deps.env ?? process.env;
   const runChat = deps.runChat ?? defaultRunChat;
   const runServe = deps.runServe ?? defaultRunServe;
+  const runInit = deps.runInit ?? defaultRunInit;
 
   const program = new Command('ghost')
     .description('A self-hosted agent that runs where your files are.')
@@ -160,6 +171,22 @@ export function buildProgram(deps: CliDeps = {}): Command {
         out,
         errOut,
         ...(level === undefined ? {} : { logLevel: level }),
+      });
+      command.setOptionValue('exitCode', code);
+    });
+
+  program
+    .command('init')
+    .description('Configure this install: a workspace, a provider and a model.')
+    .action(async (_options: unknown, command: Command) => {
+      const globals = command.parent?.opts<GlobalOptions>() ?? { color: true };
+      const code = await runInit({
+        ...(globals.home === undefined ? {} : { home: globals.home }),
+        colors: globals.color,
+        out,
+        errOut,
+        env,
+        ...(deps.input === undefined ? {} : { input: deps.input }),
       });
       command.setOptionValue('exitCode', code);
     });

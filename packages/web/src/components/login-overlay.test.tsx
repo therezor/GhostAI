@@ -19,7 +19,10 @@ import { renderWithProviders, stubFetch, urlOf } from '@/test/render.js';
 
 describe('the login overlay', () => {
   it('stays out of the way when the caller is authenticated', async () => {
-    stubFetch({ '/api/auth/me': [200, { authenticated: true, authEnabled: true }] });
+    stubFetch({
+      '/api/auth/me': [200, { authenticated: true, authEnabled: true }],
+      '/api/setup': [200, { required: false }],
+    });
     renderWithProviders(<main>The app behind it</main>);
 
     await waitFor(() => {
@@ -28,7 +31,10 @@ describe('the login overlay', () => {
   });
 
   it('stays out of the way when authentication is disabled', async () => {
-    stubFetch({ '/api/auth/me': [200, { authenticated: true, authEnabled: false }] });
+    stubFetch({
+      '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
+      '/api/setup': [200, { required: false }],
+    });
     renderWithProviders(<main>The app behind it</main>);
 
     await waitFor(() => {
@@ -43,6 +49,15 @@ describe('the login overlay', () => {
       if (url === '/api/auth/login') {
         return Promise.resolve(
           new Response(JSON.stringify({ ok: true, expiresAtMs: 99 }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+        );
+      }
+      // Claimed, so the overlay does not defer to the setup wizard.
+      if (url === '/api/setup') {
+        return Promise.resolve(
+          new Response(JSON.stringify({ required: false }), {
             status: 200,
             headers: { 'content-type': 'application/json' },
           }),
@@ -87,6 +102,9 @@ describe('the login overlay', () => {
     const user = userEvent.setup();
     stubFetch({
       '/api/auth/me': [401, { error: { code: 'unauthorized', message: 'No session' } }],
+      // Claimed: the setup overlay mounts above the login one and would
+      // otherwise be deciding whether to open on an unstubbed request.
+      '/api/setup': [200, { required: false }],
       '/api/auth/login': [429, { error: { code: 'rate_limited', message: 'Slow down' } }],
     });
 
@@ -101,7 +119,10 @@ describe('the login overlay', () => {
   });
 
   it('refuses to submit an empty password rather than spending an attempt', async () => {
-    stubFetch({ '/api/auth/me': [401, { error: { code: 'unauthorized', message: 'no' } }] });
+    stubFetch({
+      '/api/auth/me': [401, { error: { code: 'unauthorized', message: 'no' } }],
+      '/api/setup': [200, { required: false }],
+    });
     renderWithProviders(<main>The app behind it</main>);
 
     expect(await screen.findByRole('button', { name: 'Sign in' })).toBeDisabled();
@@ -111,6 +132,14 @@ describe('the login overlay', () => {
     const user = userEvent.setup();
     vi.stubGlobal('fetch', (input: RequestInfo | URL) => {
       if (urlOf(input) === '/api/auth/login') return Promise.reject(new TypeError('offline'));
+      if (urlOf(input) === '/api/setup') {
+        return Promise.resolve(
+          new Response(JSON.stringify({ required: false }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+        );
+      }
       return Promise.resolve(
         new Response(JSON.stringify({ error: { code: 'unauthorized', message: 'no' } }), {
           status: 401,

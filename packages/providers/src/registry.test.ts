@@ -191,7 +191,7 @@ describe('describeProvider', () => {
   it('projects a table entry onto the settings DTO', () => {
     const spec = findProvider('ollama');
     expect(spec).not.toBeNull();
-    expect(describeProvider(spec!, false)).toEqual({
+    expect(describeProvider(spec!)).toEqual({
       id: 'ollama',
       displayName: 'Ollama',
       wire: 'openai-chat',
@@ -200,11 +200,11 @@ describe('describeProvider', () => {
       isOAuth: false,
       defaultApiBase: 'http://127.0.0.1:11434/v1',
       envKey: undefined,
-      credentialsPresent: false,
+      supportsModelListing: true,
     });
   });
 
   it('reports every provider without throwing', () => {
-    expect(PROVIDERS.map((spec) => describeProvider(spec, true))).toHaveLength(PROVIDERS.length);
+    expect(PROVIDERS.map((spec) => describeProvider(spec))).toHaveLength(PROVIDERS.length);
   });
 });

@@ -14,6 +14,7 @@ import { createQueryClient } from '@/lib/query.js';
 import { LoginOverlay } from '@/components/login-overlay.js';
 import { Toaster } from '@/components/ui/toast.js';
 import { TooltipProvider } from '@/components/ui/tooltip.js';
+import { SetupOverlay } from '@/setup/setup-overlay.js';
 import { ThemeProvider } from '@/theme/theme-context.js';
 import { WorkspaceProvider } from '@/workspaces/workspace-context.js';
 
@@ -44,6 +45,12 @@ export function Providers({
           <TooltipProvider delayDuration={400} skipDelayDuration={300}>
             {children}
             <LoginOverlay />
+            {/* Above the login overlay in the tree, because on an unclaimed
+                install `/api/auth/me` also 401s and both would otherwise be
+                showing — and this is the one that can actually get the user
+                in. It renders itself only when the server says setup is
+                needed, so a claimed install never sees it. */}
+            <SetupOverlay />
             <Toaster />
           </TooltipProvider>
         </WorkspaceProvider>

@@ -23,7 +23,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate, useSearch } from '@tanstack/react-router';
+import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { useEffect, useState, type JSX } from 'react';
 
 import { api } from '@/lib/api.js';
@@ -47,6 +47,13 @@ export function ChatRoute(): JSX.Element {
   // A prompt picked on the welcome screen, handed to the composer to be edited
   // rather than sent — the user chose a starting point, not a message.
   const [draft, setDraft] = useState<string | undefined>(undefined);
+
+  // Whether a turn can run at all. The shell reads this too, so on a working
+  // install it is already in the cache and costs nothing here.
+  const status = useQuery({
+    queryKey: queryKeys.status,
+    queryFn: ({ signal }) => api.status(signal),
+  });
 
   // Only for a session the URL named. A key the *server* minted has no history
   // by definition, and asking for it is a 404 on every fresh tab.
@@ -83,12 +90,29 @@ export function ChatRoute(): JSX.Element {
         <TranscriptView transcript={transcript} busy={busy} onApprove={approveTool} />
       )}
 
+      {/* Above the composer rather than inside it: the pointer is a link, and
+          the composer is a leaf that is rendered outside a router by its own
+          tests. The route is where a route knows how to be navigated to. */}
+      {status.data?.configured === false && (
+        <p role="status" className="chat__setup-notice">
+          No model is configured yet.{' '}
+          <Link to="/settings" search={{ panel: 'providers' }}>
+            Add a provider
+          </Link>{' '}
+          to start a conversation.
+        </p>
+      )}
+
       <Composer
         key={draft}
         initialText={draft}
         busy={busy}
         queueDepth={queueDepth}
         connected={connection === 'open'}
+        // Absent while the status query is in flight; treated as configured so
+        // the composer does not flash a setup pointer on every page load of a
+        // working install.
+        configured={status.data?.configured ?? true}
         onStop={stopTurn}
         onSend={(text, attachments) => {
           sendUserMessage(text, attachments);

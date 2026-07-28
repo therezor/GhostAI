@@ -31,6 +31,7 @@ function counting(): { created: number; closed: string[]; create: () => ChatProv
 
 function request(overrides: Partial<ProviderRequest> = {}): ProviderRequest {
   return {
+    instanceId: 'openai',
     spec: spec('openai'),
     model: 'gpt-4o',
     apiBase: 'https://api.openai.com/v1',

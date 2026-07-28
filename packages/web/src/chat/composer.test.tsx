@@ -33,6 +33,7 @@ function mount(overrides: Partial<React.ComponentProps<typeof Composer>> = {}): 
       busy={false}
       queueDepth={0}
       connected
+      configured
       onSend={(text, attachments) => sent.push({ text, attachments })}
       onStop={() => stops.push(1)}
       {...overrides}
@@ -240,5 +241,23 @@ describe('the file picker', () => {
     await user.click(screen.getByRole('button', { name: 'Attach a file' }));
 
     expect(click).toHaveBeenCalledOnce();
+  });
+});
+
+describe('with no model configured', () => {
+  it('says what is missing rather than failing on send', () => {
+    // Chat stays in the nav and the route still renders: everything else on a
+    // fresh install works, and a nav that changes shape underneath the user is
+    // a worse answer than a control that says why it is off.
+    mount({ configured: false });
+
+    expect(box()).toBeDisabled();
+    expect(box()).toHaveAttribute('placeholder', 'No model configured yet');
+  });
+
+  it('cannot send, however the text got there', () => {
+    const { sent } = mount({ configured: false });
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    expect(sent).toHaveLength(0);
   });
 });

@@ -10,6 +10,11 @@
  * It renders only when the server says authentication is on *and* the caller is
  * not authenticated — `/api/auth/me` answers both questions in one request, and
  * a 401 from it is the normal state of a fresh browser rather than an error.
+ *
+ * One more condition, and it is the one that is easy to miss: an install with
+ * no password set also 401s, and a sign-in form there is a form that can never
+ * succeed. `/api/setup` is the question that distinguishes "you are signed out"
+ * from "nobody has claimed this yet", and the setup overlay handles the second.
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -30,6 +35,11 @@ export function LoginOverlay(): JSX.Element | null {
     queryFn: ({ signal }) => api.me(signal),
   });
 
+  const setup = useQuery({
+    queryKey: queryKeys.setup,
+    queryFn: ({ signal }) => api.setupStatus(signal),
+  });
+
   const login = useMutation({
     mutationFn: (secret: string) => api.login(secret),
     onSuccess: async () => {
@@ -41,6 +51,10 @@ export function LoginOverlay(): JSX.Element | null {
 
   const unauthenticated = me.error instanceof ApiError && me.error.isUnauthenticated;
   if (!unauthenticated) return null;
+  // Undefined while the question is still in flight: showing a login for a
+  // second and then replacing it with a wizard is a flash of the wrong screen
+  // on the one page load where the user has least idea what to expect.
+  if (setup.data?.required !== false) return null;
 
   const submit = (event: SyntheticEvent): void => {
     event.preventDefault();
@@ -53,11 +67,10 @@ export function LoginOverlay(): JSX.Element | null {
     <div role="dialog" aria-modal="true" aria-labelledby="login-title" className="login-overlay">
       <form onSubmit={submit} className="stack login-card">
         <div className="stack login-card__header">
-          <Wordmark className="login-card__eyebrow" />
+          <Wordmark className="eyebrow" />
           <h1 id="login-title" className="login-card__title">
             Sign in
           </h1>
-          <p className="login-card__note">This agent can read and write files and run commands.</p>
         </div>
 
         <Field

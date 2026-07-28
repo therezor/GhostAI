@@ -7,7 +7,7 @@
  * and it lives here because `ghost serve` is where the two halves are wired
  * together in the first place.
  *
- * It is not a pass-through. Three things the port promises are implemented
+ * It is not a pass-through. Five things the port promises are implemented
  * *here* rather than in the runtime:
  *
  *  - **A settings save persists.** `GhostRuntime.reconfigure` deliberately does
@@ -15,6 +15,10 @@
  *    operations — so `applySettings` is reconfigure-then-write. The write runs
  *    after the rebuild, so a patch that cannot be built leaves both the running
  *    server and the file on the settings that worked.
+ *  - **Deleting a provider instance takes its credential with it.** The config
+ *    is only half of an instance; the other half is a vault entry keyed by the
+ *    same id, and leaving it behind means the next instance to reuse that id
+ *    silently inherits somebody else's key.
  *  - **A credential written over HTTP is usable on the next turn.** The vault
  *    is written and then the runtime is rebuilt with an empty patch, which
  *    re-reads it: the provider adapter is keyed on a digest of the key, so a
@@ -24,22 +28,56 @@
  *    runs, and an install that talks to a local model and never stores a
  *    credential should not acquire one because someone opened the settings
  *    panel.
+ *  - **Model lists come from the endpoints themselves.** Every OpenAI-compatible
+ *    server answers `GET /models`, which is most of them and all of the local
+ *    ones — so the settings panel and the setup wizard can offer a real
+ *    catalogue instead of a text box.
  */
 
 import { existsSync } from 'node:fs';
 
 import { saveConfig } from '@ghostai/core';
-import type { Config, ConfigPatch, SetCredentialRequest } from '@ghostai/protocol';
-import { PROVIDERS } from '@ghostai/providers';
+import type {
+  Config,
+  ConfigPatch,
+  ModelInfo,
+  ModelsResponse,
+  SetCredentialRequest,
+} from '@ghostai/protocol';
+import { createProvider, listInstances, resolveConnection } from '@ghostai/providers';
 import { openVault, type GhostRuntime } from '@ghostai/runtime';
 import type { AgentView, ServerRuntime } from '@ghostai/server';
-import type { CredentialVault } from '@ghostai/security';
+import type { CredentialVault, FetchImplementation } from '@ghostai/security';
+
+/**
+ * How long a fetched catalogue is served before the endpoints are asked again.
+ *
+ * Long enough that opening the settings panel twice does not reach a local
+ * model server twice; short enough that pulling a new model and coming back is
+ * not a puzzle. `POST /api/models/refresh` bypasses it outright, which is what
+ * the refresh button in the UI is for.
+ */
+const MODEL_CACHE_TTL_MS = 60_000;
+
+/**
+ * How long one endpoint gets to answer before it is reported as unreachable.
+ *
+ * Short on purpose: the whole list is only as fast as its slowest member, and a
+ * laptop that has closed since the config was written must not make the
+ * settings panel look hung. A timeout lands in `errors` beside a real refusal,
+ * which is the honest place for it.
+ */
+const MODEL_FETCH_TIMEOUT_MS = 5000;
 
 export interface ServerRuntimeOptions {
   /** Defaults to `process.env`; the presence flags read provider key variables. */
   readonly env?: Readonly<Record<string, string | undefined>>;
   /** Replaces the on-disk vault. Injected by tests, which have no keychain. */
   readonly vault?: CredentialVault;
+  /** Injected by tests so nothing here opens a socket. */
+  readonly fetchImpl?: FetchImplementation;
+  /** Injected so a test does not wait out a real timeout. */
+  readonly modelTimeoutMs?: number;
 }
 
 export function createServerRuntime(
@@ -48,6 +86,7 @@ export function createServerRuntime(
 ): ServerRuntime {
   const env = options.env ?? process.env;
   let vault: CredentialVault | undefined = options.vault;
+  let cached: { atMs: number; response: ModelsResponse } | undefined;
 
   /** `create` is what separates reading presence from storing a key. */
   const openIfUseful = (create: boolean): CredentialVault | undefined => {
@@ -57,21 +96,88 @@ export function createServerRuntime(
     return vault;
   };
 
+  /**
+   * One instance's catalogue, as a result rather than a rejection.
+   *
+   * A provider that cannot be reached is a normal state — a laptop is closed, a
+   * key expired — and one of them must not fail the whole list. The reason is
+   * carried through to `errors` so the panel can say which endpoint went quiet
+   * rather than silently showing a shorter list.
+   */
+  const fetchModels = async (
+    instanceId: string,
+  ): Promise<{ models: ModelInfo[] } | { error: string }> => {
+    const config = runtime.config.providers[instanceId];
+    const instance = listInstances(runtime.config.providers).find((i) => i.id === instanceId);
+    if (config === undefined || instance === undefined) return { models: [] };
+
+    const signal = AbortSignal.timeout(options.modelTimeoutMs ?? MODEL_FETCH_TIMEOUT_MS);
+    try {
+      // Deliberately not through the runtime's `ProviderCache`: that cache is
+      // keyed by model as well as connection, and listing a catalogue has no
+      // model. Building a bare adapter for the call keeps a settings-panel
+      // refresh from evicting the adapter the next turn is going to want.
+      const provider = createProvider({
+        provider: instance.spec,
+        apiKey: readCredential(instanceId, instance.spec.envKey),
+        ...resolveConnection(instance.spec, config),
+        ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+        // Retries and degradation are for a turn. A catalogue that does not
+        // answer promptly should say so, not spend fifteen seconds insisting.
+        resilience: false,
+      });
+      const models = await provider.listModels(signal);
+      await provider.close();
+      return {
+        models: models.map((model) => ({
+          ...model,
+          providerId: instance.id,
+          providerType: instance.spec.id,
+        })),
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : String(error) };
+    }
+  };
+
+  const readCredential = (instanceId: string, envKey: string | undefined): string | undefined => {
+    const stored = openIfUseful(false)?.get('providers', instanceId);
+    if (stored !== undefined && stored !== '') return stored;
+    const fromEnv = envKey === undefined ? undefined : env[envKey];
+    return fromEnv === '' ? undefined : fromEnv;
+  };
+
   return {
     config: () => runtime.config,
 
     applySettings: (patch: ConfigPatch): Config => {
+      const before = new Set(Object.keys(runtime.config.providers));
       const merged = runtime.reconfigure(patch);
+
+      // After the rebuild, so a patch that could not be built has not already
+      // destroyed a credential on its way to failing.
+      const removed = [...before].filter((id) => !(id in merged.providers));
+      if (removed.length > 0) {
+        const store = openIfUseful(false);
+        for (const id of removed) store?.delete('providers', id);
+        // The catalogue named instances that no longer exist.
+        cached = undefined;
+      }
+
       return saveConfig(runtime.file, merged);
     },
 
     credentialsPresent: (): Readonly<Record<string, boolean>> => {
       const stored = openIfUseful(false);
       const present: Record<string, boolean> = {};
-      for (const spec of PROVIDERS) {
-        const fromEnv = spec.envKey === undefined ? undefined : env[spec.envKey];
-        present[spec.id] =
-          (fromEnv !== undefined && fromEnv !== '') || stored?.has('providers', spec.id) === true;
+      // By instance, not by provider type: two endpoints of one type can hold
+      // different keys, and reporting the type would light both up for one.
+      for (const instance of listInstances(runtime.config.providers)) {
+        const envKey = instance.spec.envKey;
+        const fromEnv = envKey === undefined ? undefined : env[envKey];
+        present[instance.id] =
+          (fromEnv !== undefined && fromEnv !== '') ||
+          stored?.has('providers', instance.id) === true;
       }
       return present;
     },
@@ -85,21 +191,70 @@ export function createServerRuntime(
       // without it the loop keeps the provider it was built with — so a key
       // saved in the UI would not take effect until a restart.
       runtime.reconfigure({});
+      // A key is often what stood between an endpoint and its catalogue.
+      cached = undefined;
     },
 
     store: runtime.store,
     workspaces: runtime.workspaces,
 
     agent: (): AgentView => ({
-      provider: runtime.spec.id,
-      model: runtime.model,
+      // Empty rather than a sentinel on an unconfigured install: `configured`
+      // is the flag to branch on, so nothing has to read meaning into a string.
+      provider: runtime.instance?.id ?? '',
+      model: runtime.configured ? runtime.model : '',
+      configured: runtime.configured,
       jail: runtime.jail,
       jailFor: (workspaceId) => runtime.jails.forWorkspace(workspaceId),
       tools: runtime.tools.definitions(),
       // The loop's own composition, not a second assembly of it: memory,
       // skills and profiles arrive as contributors attached to that object,
       // and a reimplementation here could not see them.
-      systemPrompt: async (input) => await runtime.loop.previewPrompt(input),
+      systemPrompt: async (input) => {
+        const loop = runtime.loop;
+        if (loop === null) {
+          // The context route asks for this to show what a turn would carry.
+          // With no model there is no turn and no prompt, and throwing would
+          // make one unconfigured panel break a screen that otherwise works.
+          return 'No model is configured, so no system prompt has been assembled yet.';
+        }
+        return await loop.previewPrompt(input);
+      },
     }),
+
+    models: async (modelOptions): Promise<ModelsResponse> => {
+      const now = Date.now();
+      if (
+        modelOptions?.refresh !== true &&
+        cached !== undefined &&
+        now - cached.atMs < MODEL_CACHE_TTL_MS
+      ) {
+        return cached.response;
+      }
+
+      const listable = listInstances(runtime.config.providers).filter(
+        (instance) => instance.config.enabled && instance.spec.supportsModelListing === true,
+      );
+
+      // All at once: the list is as slow as its slowest endpoint either way,
+      // and in sequence it would be as slow as their sum.
+      const results = await Promise.all(
+        listable.map(async (instance) => ({
+          id: instance.id,
+          result: await fetchModels(instance.id),
+        })),
+      );
+
+      const models: ModelInfo[] = [];
+      const errors: Record<string, string> = {};
+      for (const { id, result } of results) {
+        if ('error' in result) errors[id] = result.error;
+        else models.push(...result.models);
+      }
+
+      const response: ModelsResponse = { models, errors };
+      cached = { atMs: now, response };
+      return response;
+    },
   };
 }

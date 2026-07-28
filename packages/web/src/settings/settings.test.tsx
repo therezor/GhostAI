@@ -28,13 +28,22 @@ import { stubApi, testQueryClient, type RecordedRequest, type StubRoute } from '
 
 const CONFIG = ConfigSchema.parse({
   agents: { defaults: { model: 'llama3', provider: 'ollama', maxTokens: 4096 } },
-  providers: { ollama: { apiBase: 'http://127.0.0.1:11434/v1', models: ['llama3'] } },
+  providers: {
+    ollama: { type: 'ollama', apiBase: 'http://127.0.0.1:11434/v1', models: ['llama3'] },
+    openai: { type: 'openai' },
+  },
 });
 
 const SETTINGS = { config: CONFIG, credentialsPresent: { ollama: false, openai: true } };
 
+/**
+ * Both halves of the response: the registry catalogue an endpoint is added
+ * from, and the endpoints that have been. They are different lists now — the
+ * panel used to render one row per registry entry, and renders one per
+ * configured endpoint instead.
+ */
 const PROVIDERS = {
-  providers: [
+  types: [
     {
       id: 'ollama',
       displayName: 'Ollama',
@@ -43,7 +52,7 @@ const PROVIDERS = {
       isGateway: false,
       isOAuth: false,
       defaultApiBase: 'http://127.0.0.1:11434/v1',
-      credentialsPresent: false,
+      supportsModelListing: true,
     },
     {
       id: 'openai',
@@ -53,6 +62,33 @@ const PROVIDERS = {
       isGateway: false,
       isOAuth: false,
       envKey: 'OPENAI_API_KEY',
+      supportsModelListing: true,
+    },
+  ],
+  instances: [
+    {
+      id: 'ollama',
+      type: 'ollama',
+      displayName: 'Ollama',
+      apiBase: 'http://127.0.0.1:11434/v1',
+      isLocal: true,
+      isGateway: false,
+      isOAuth: false,
+      enabled: true,
+      supportsModelListing: true,
+      credentialsPresent: false,
+    },
+    {
+      id: 'openai',
+      type: 'openai',
+      displayName: 'OpenAI',
+      apiBase: 'https://api.openai.com/v1',
+      isLocal: false,
+      isGateway: false,
+      isOAuth: false,
+      envKey: 'OPENAI_API_KEY',
+      enabled: true,
+      supportsModelListing: true,
       credentialsPresent: true,
     },
   ],
@@ -73,6 +109,9 @@ const TOOLS = {
 
 const SHELL_ROUTES: Record<string, StubRoute> = {
   '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
+  // Claimed: the setup overlay mounts above the login one and would
+  // otherwise be deciding whether to open on an unstubbed request.
+  '/api/setup': [200, { required: false }],
   '/api/status': [
     200,
     {
@@ -268,7 +307,7 @@ describe('the providers panel', () => {
     // clear a key is the button that says so.
     expect(screen.getByRole('button', { name: 'Save key' })).toBeDisabled();
 
-    await user.click(screen.getByRole('button', { name: 'Remove' }));
+    await user.click(screen.getByRole('button', { name: 'Remove key' }));
 
     await waitFor(() => {
       expect(calls.filter((call) => call.method === 'PUT')).toHaveLength(1);
@@ -280,15 +319,16 @@ describe('the providers panel', () => {
     });
   });
 
-  it('offers no key field for a local provider whose credential is never read', async () => {
+  it('offers an optional token for a local endpoint, which used to be refused', async () => {
     const { user } = mount('/settings?panel=providers');
 
     await user.click(await screen.findByRole('button', { name: /Ollama/ }));
 
-    // `findCredential` does not open the vault for a local provider with no
-    // environment key, so a field here would accept a key nothing would read.
-    expect(await screen.findByText('This provider takes no key.')).toBeInTheDocument();
-    expect(screen.queryByLabelText('API key')).not.toBeInTheDocument();
+    // The field used to be a sentence saying the provider took no key, which
+    // was true of the lookup and not of the deployment: a LAN model server
+    // behind an authenticating proxy is a real configuration, and
+    // `findCredential` now reads the vault for one.
+    expect(await screen.findByLabelText('API token (optional)')).toBeInTheDocument();
     expect(screen.getByLabelText('API base')).toBeInTheDocument();
   });
 
@@ -297,8 +337,9 @@ describe('the providers panel', () => {
       '/api/providers': [
         200,
         {
-          providers: PROVIDERS.providers.map((provider) => ({
-            ...provider,
+          types: PROVIDERS.types,
+          instances: PROVIDERS.instances.map((instance) => ({
+            ...instance,
             credentialsPresent: false,
           })),
         },
@@ -307,10 +348,12 @@ describe('the providers panel', () => {
 
     await user.click(await screen.findByRole('button', { name: /OpenAI/ }));
     await screen.findByLabelText('API key');
-    expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument();
+    // The endpoint's own Remove is still there; the *key's* is not, because
+    // there is no key to take back.
+    expect(screen.queryByRole('button', { name: 'Remove key' })).not.toBeInTheDocument();
   });
 
-  it('saves one provider’s connection without touching another’s', async () => {
+  it('saves one endpoint’s connection without touching another’s', async () => {
     const { user, calls } = mount('/settings?panel=providers');
 
     await user.click(await screen.findByRole('button', { name: /Ollama/ }));
@@ -323,8 +366,39 @@ describe('the providers panel', () => {
       expect(patchesOf(calls)).toHaveLength(1);
     });
     expect(patchesOf(calls)[0]?.providers).toEqual({
-      ollama: { apiBase: 'http://elsewhere/v1', models: ['llama3'] },
+      // No `type`: an endpoint cannot change protocol by being edited.
+      ollama: { label: '', apiBase: 'http://elsewhere/v1', models: ['llama3'], enabled: true },
     });
+  });
+
+  it('adds a second endpoint of a type that already has one', async () => {
+    // The whole point of instances: two Ollama servers, and the second gets a
+    // free id rather than merging into the first.
+    const { user, calls } = mount('/settings?panel=providers');
+
+    await user.click(await screen.findByRole('combobox', { name: 'Add a provider' }));
+    await user.click(await screen.findByRole('option', { name: 'Ollama' }));
+    await user.type(screen.getByLabelText('Name'), 'GPU box');
+    await user.click(screen.getByRole('button', { name: 'Add provider' }));
+
+    await waitFor(() => {
+      expect(patchesOf(calls)).toHaveLength(1);
+    });
+    expect(patchesOf(calls)[0]?.providers).toEqual({
+      'ollama-2': { type: 'ollama', label: 'GPU box', enabled: true },
+    });
+  });
+
+  it('removes an endpoint with a null, which is the merge’s deletion syntax', async () => {
+    const { user, calls } = mount('/settings?panel=providers');
+
+    await user.click(await screen.findByRole('button', { name: /OpenAI/ }));
+    await user.click(await screen.findByRole('button', { name: 'Remove provider' }));
+
+    await waitFor(() => {
+      expect(patchesOf(calls)).toHaveLength(1);
+    });
+    expect(patchesOf(calls)[0]?.providers).toEqual({ openai: null });
   });
 });
 

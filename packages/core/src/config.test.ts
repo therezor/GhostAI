@@ -2,9 +2,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
+import fc from 'fast-check';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { loadConfig, parseConfig, saveConfig } from './config.js';
+import { loadConfig, migrateConfigShape, parseConfig, saveConfig } from './config.js';
 import { isGhostError } from './errors.js';
 
 const tempDirs: string[] = [];
@@ -26,6 +27,51 @@ afterEach(() => {
     const dir = tempDirs.pop();
     if (dir !== undefined) rmSync(dir, { recursive: true, force: true });
   }
+});
+
+describe('migrateConfigShape', () => {
+  it('names each old provider entry with the key it was already stored under', () => {
+    const { value, changed } = migrateConfigShape({
+      providers: { ollama: { apiBase: 'http://gpu.lan:11434/v1' } },
+    });
+    expect(changed).toBe(true);
+    expect(value).toEqual({
+      providers: { ollama: { apiBase: 'http://gpu.lan:11434/v1', type: 'ollama' } },
+    });
+  });
+
+  it('leaves an entry that already names a type alone', () => {
+    const current = { providers: { 'ollama-gpu': { type: 'ollama' } } };
+    const { value, changed } = migrateConfigShape(current);
+    expect(changed).toBe(false);
+    expect(value).toBe(current);
+  });
+
+  it('does not invent a providers block, or reject a config without one', () => {
+    expect(migrateConfigShape({ server: { port: 4242 } })).toEqual({
+      value: { server: { port: 4242 } },
+      changed: false,
+    });
+  });
+
+  it('keeps a key that is not a real provider id, rather than dropping the entry', () => {
+    // The registry is downstream of this package and cannot be consulted here.
+    // A typo has to survive to fail at resolution, where the message can name
+    // it — silently discarding the entry would look like the file was ignored.
+    const { value } = migrateConfigShape({ providers: { ollamaa: {} } });
+    expect(value).toEqual({ providers: { ollamaa: { type: 'ollamaa' } } });
+  });
+
+  it('is idempotent for any shape', () => {
+    fc.assert(
+      fc.property(fc.jsonValue(), (raw) => {
+        const once = migrateConfigShape(raw);
+        const twice = migrateConfigShape(once.value);
+        expect(twice.changed).toBe(false);
+        expect(twice.value).toEqual(once.value);
+      }),
+    );
+  });
 });
 
 describe('parseConfig', () => {
@@ -93,6 +139,30 @@ describe('loadConfig', () => {
     expect(loaded.fromFile).toBe(true);
     expect(loaded.config.agents.defaults.model).toBe('qwen3:8b');
     expect(loaded.config.agents.defaults.provider).toBe('ollama');
+  });
+
+  it('rewrites an older provider block, on disk as well as in memory', () => {
+    const root = tempHome();
+    const file = writeConfig(root, { providers: { ollama: { apiBase: 'http://gpu.lan:11434/v1' } } });
+
+    const loaded = loadConfig({ root });
+    expect(loaded.migrated).toBe(true);
+    expect(loaded.config.providers.ollama?.type).toBe('ollama');
+
+    // On disk too: otherwise the operator's file and the running settings
+    // disagree, and the next save from the settings panel looks like it
+    // rewrote a section nobody touched.
+    const written: unknown = JSON.parse(readFileSync(file, 'utf8'));
+    expect(written).toMatchObject({ providers: { ollama: { type: 'ollama' } } });
+
+    expect(loadConfig({ root }).migrated).toBe(false);
+  });
+
+  it('does not write a config file for an install that has none', () => {
+    const root = tempHome();
+    const loaded = loadConfig({ root });
+    expect(loaded.migrated).toBe(false);
+    expect(existsSync(join(root, 'config.json'))).toBe(false);
   });
 
   it('keeps the workspace under the root when the config names none', () => {

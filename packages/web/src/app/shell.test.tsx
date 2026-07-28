@@ -24,6 +24,7 @@ const STATUS = {
   uptimeMs: 1,
   model: 'test-model',
   provider: 'ollama',
+  configured: true,
   workspaceId: 'default',
   workspaceCount: 1,
   authEnabled: false,
@@ -61,6 +62,9 @@ const MESSAGES = {
 function renderApp(initial = '/'): { readonly user: ReturnType<typeof userEvent.setup> } {
   stubFetch({
     '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
+    // Claimed: the setup overlay mounts above the login one and would
+    // otherwise be deciding whether to open on an unstubbed request.
+    '/api/setup': [200, { required: false }],
     '/api/status': [200, STATUS],
     '/api/sessions': [200, SESSIONS],
     '/api/notifications': [200, { notifications: [], unreadCount: 3 }],

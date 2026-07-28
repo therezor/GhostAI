@@ -173,8 +173,13 @@ export interface SessionHubOptions {
    * a settings save has to move the *next* turn onto the new provider, and the
    * running one has to keep the loop it started on — its request is in flight
    * and its tool definitions are already in the model's context.
+   *
+   * `null` when no provider and model are configured. The socket stays open and
+   * every other frame keeps working — only a turn is refused, with
+   * `not_configured`, because the client's answer to that is to offer setup
+   * rather than to reconnect.
    */
-  readonly loop: () => TurnRunner;
+  readonly loop: () => TurnRunner | null;
   /** Read only to rebuild a transcript a replay could not cover. */
   readonly store: SessionStore;
   /**
@@ -282,7 +287,7 @@ function describeParseFailure(issues: readonly { path: PropertyKey[]; message: s
 
 export class SessionHub {
   readonly #config: Config;
-  readonly #loop: () => TurnRunner;
+  readonly #loop: () => TurnRunner | null;
   readonly #store: SessionStore;
   readonly #approvals: HubApprovalGate;
   readonly #clock: Clock;
@@ -601,6 +606,22 @@ export class SessionHub {
     const controller = new AbortController();
     try {
       const runner = this.#loop();
+      if (runner === null) {
+        // Not a failure of this turn so much as of the install. It is reported
+        // where the turn would have been, and `turn.end` is *not* emitted,
+        // because no turn ever started — a client that saw one close would
+        // render an empty assistant message for a request nothing ran.
+        this.#broadcast(state, {
+          type: 'error',
+          code: 'not_configured',
+          message:
+            'No model is configured. Add a provider and choose a model in Settings, ' +
+            'or run `ghost init` from a terminal.',
+          retryable: false,
+          turnId: turn.id,
+        });
+        return;
+      }
       state.running = { turnId: turn.id, controller, runner };
       state.touchedAtMs = this.#clock.now();
       this.#status(state);

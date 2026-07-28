@@ -45,7 +45,7 @@ type SettingsRouteId = 'settings.get' | 'settings.patch' | 'settings.credential'
  * merge implementation that disagrees with the real one in some corner is worse
  * than a narrow one that cannot.
  */
-function assertServable(current: Config, patch: ConfigPatch, hasPassword: boolean): void {
+function assertServable(current: Config, patch: ConfigPatch): void {
   const server = {
     ...current.server,
     host: patch.server?.host ?? current.server.host,
@@ -56,7 +56,7 @@ function assertServable(current: Config, patch: ConfigPatch, hasPassword: boolea
     },
   };
   try {
-    assertBootPolicy({ config: { ...current, server }, hasPassword });
+    assertBootPolicy({ config: { ...current, server } });
   } catch (error) {
     // A `config` GhostError is a 500 through the kind table, which is the right
     // answer for a config file the operator wrote and the wrong one for a body
@@ -90,7 +90,7 @@ export function settingsRoutes(deps: RouteDeps): RouteGroup<SettingsRouteId> {
       schema: { body: ConfigPatchSchema, response: { 200: SettingsResponseSchema } },
       handler: (request): SettingsResponse => {
         const patch = request.body as ConfigPatch;
-        assertServable(deps.runtime.config(), patch, deps.auth.hasPassword());
+        assertServable(deps.runtime.config(), patch);
         deps.runtime.applySettings(patch);
         return settingsResponse(deps);
       },

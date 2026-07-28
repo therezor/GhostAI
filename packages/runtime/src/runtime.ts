@@ -15,13 +15,23 @@
  * The decisions here that are not obvious:
  *
  *  - **Provider resolution is `@ghostai/providers`' order, not a second one.**
- *    `resolveProvider` runs explicit id → gateway/local detection → model name,
- *    and returns `null` rather than guessing. Exactly one step follows that
- *    null: a provider whose `envKey` is set in the environment. An exported
- *    credential is an operator saying which provider they mean, and
+ *    `resolveInstance` runs explicit instance → provider type → the `auto`
+ *    order, and returns `null` rather than guessing. Exactly one step follows
+ *    that null: a provider whose `envKey` is set in the environment. An
+ *    exported credential is an operator saying which provider they mean, and
  *    `OPENAI_API_KEY=… ghost chat` should not need a config file to work. What
  *    it will not do is fall back to *some* provider, because a request landing
  *    at an endpoint nobody chose fails as a 401 from somewhere unexpected.
+ *
+ *  - **An unconfigured install is a state, not an error.** A runtime with no
+ *    resolvable provider, or none with a model, builds anyway: `loop` is
+ *    `null`, `configured` is false, and everything that does not need a model —
+ *    the store, the workspaces, the tool registry, every HTTP route but the
+ *    turn — works. This is what lets `ghost serve` come up on a bare machine
+ *    and serve the settings UI that fixes it; refusing to construct meant the
+ *    only cure for a missing config was to hand-write one. `requireLoop()` is
+ *    where the refusal moved to, so a terminal turn still fails with the same
+ *    message it always did.
  *
  *  - **`close()` closes the store, and the store decides what that means.** A
  *    `SessionStore` given a `database` does not close it — whoever opened the
@@ -42,6 +52,7 @@
  *    flight and its tool definitions are already in the model's context.
  */
 
+import { existsSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
 
 import { AgentLoop, SteeringQueue, type ApprovalGate } from '@ghostai/agent';
@@ -60,7 +71,8 @@ import type { AgentDefaults, Config, ConfigPatch } from '@ghostai/protocol';
 import {
   PROVIDERS,
   resolveConnection,
-  resolveProvider,
+  resolveInstance,
+  type ProviderInstance,
   type ProviderSpec,
 } from '@ghostai/providers';
 import type {
@@ -71,7 +83,7 @@ import type {
 } from '@ghostai/security';
 import { ToolRegistry, registerBuiltins } from '@ghostai/tools';
 
-import { findCredential } from './credentials.js';
+import { PROVIDER_CREDENTIAL_NAMESPACE, findCredential, openVault } from './credentials.js';
 import { JailCache } from './jail-cache.js';
 import { mergeConfigPatch } from './merge.js';
 import { ProviderCache } from './provider-cache.js';
@@ -139,12 +151,33 @@ export interface GhostRuntime {
   readonly jails: JailResolver;
   /** The registry: listing, naming and detaching. Never a path. */
   readonly workspaces: WorkspaceStore;
-  /** Rebuilt by `reconfigure`; a running turn keeps the one it started on. */
-  readonly loop: AgentLoop;
-  readonly spec: ProviderSpec;
+  /**
+   * Rebuilt by `reconfigure`; a running turn keeps the one it started on.
+   *
+   * `null` when nothing is configured. Read it through `requireLoop()` unless
+   * the caller genuinely has something to do with its absence — the server
+   * does, and reports it as a `not_configured` error on the one frame that
+   * needs a model rather than failing every route.
+   */
+  readonly loop: AgentLoop | null;
+  /** The endpoint a turn would use, or `null` on an unconfigured install. */
+  readonly instance: ProviderInstance | null;
+  /** The provider type behind `instance`. Derived, and `null` for the same reason. */
+  readonly spec: ProviderSpec | null;
+  /** Empty when no model is configured. */
   readonly model: string;
+  /** Whether a turn can run at all: a provider and a model both resolved. */
+  readonly configured: boolean;
   /** Whether a credential was found, without saying what it was. */
   readonly hasCredential: boolean;
+  /**
+   * The loop, or the `config` error explaining what is missing.
+   *
+   * The refusal that used to happen in the constructor, moved to the one call
+   * that cannot proceed without an answer. A terminal turn gets the message it
+   * always got; a server gets to start.
+   */
+  requireLoop(): AgentLoop;
   /**
    * Applies a settings patch and rebuilds what depends on it.
    *
@@ -160,26 +193,43 @@ export interface GhostRuntime {
   close(): void;
 }
 
-/** Everything a config produces. Replaced as a unit, so a failure changes none of it. */
+/**
+ * Everything a config produces. Replaced as a unit, so a failure changes none
+ * of it — and `loop`/`instance` are null together, never one without the other.
+ */
 interface Resolved {
   readonly config: Config;
   readonly paths: GhostPaths;
   readonly jails: JailCache;
-  readonly loop: AgentLoop;
-  readonly spec: ProviderSpec;
+  readonly loop: AgentLoop | null;
+  readonly instance: ProviderInstance | null;
   readonly model: string;
   readonly hasCredential: boolean;
+  /** The error `requireLoop` throws, prepared where the reason is still known. */
+  readonly unconfigured: GhostError | null;
 }
 
 /**
- * A provider whose `envKey` is exported, used only after `resolveProvider`
+ * A provider whose `envKey` is exported, used only after `resolveInstance`
  * returns `null`. Table order decides ties, which puts gateways first — the
  * same precedence `findGateway` applies.
+ *
+ * Returned as a synthetic instance rather than a bare spec: everything past
+ * resolution now speaks in instances, and this one's id matches its provider
+ * id, which is where a pre-instance install's vault entry already lives.
  */
-function providerFromEnv(env: Readonly<Record<string, string | undefined>>): ProviderSpec | null {
+function instanceFromEnv(
+  env: Readonly<Record<string, string | undefined>>,
+): ProviderInstance | null {
   for (const spec of PROVIDERS) {
     const key = spec.envKey;
-    if (key !== undefined && (env[key] ?? '') !== '') return spec;
+    if (key !== undefined && (env[key] ?? '') !== '') {
+      return {
+        id: spec.id,
+        spec,
+        config: { type: spec.id, label: '', extraHeaders: {}, models: [], enabled: true },
+      };
+    }
   }
   return null;
 }
@@ -189,9 +239,18 @@ function noProviderError(configFile: string): GhostError {
   return new GhostError(
     'config',
     'No provider could be resolved.\n' +
-      "  Pass --provider <id> --model <model>, export the provider's API key variable,\n" +
-      `  or set agents.defaults in ${configFile}.\n` +
+      '  Run `ghost init` to configure one interactively, pass --provider <id> --model <model>,\n' +
+      `  export the provider's API key variable, or set agents.defaults in ${configFile}.\n` +
       `  Known providers: ${ids}`,
+  );
+}
+
+function noModelError(instance: ProviderInstance, configFile: string): GhostError {
+  return new GhostError(
+    'config',
+    `No model configured for ${instance.spec.displayName}.\n` +
+      '  Run `ghost init`, pass --model <model>, or set agents.defaults.model in ' +
+      `${configFile}.`,
   );
 }
 
@@ -290,20 +349,36 @@ class Runtime implements GhostRuntime {
     return this.#current.jails;
   }
 
-  get loop(): AgentLoop {
+  get loop(): AgentLoop | null {
     return this.#current.loop;
   }
 
-  get spec(): ProviderSpec {
-    return this.#current.spec;
+  get instance(): ProviderInstance | null {
+    return this.#current.instance;
+  }
+
+  get spec(): ProviderSpec | null {
+    return this.#current.instance?.spec ?? null;
   }
 
   get model(): string {
     return this.#current.model;
   }
 
+  get configured(): boolean {
+    return this.#current.loop !== null;
+  }
+
   get hasCredential(): boolean {
     return this.#current.hasCredential;
+  }
+
+  requireLoop(): AgentLoop {
+    const loop = this.#current.loop;
+    if (loop !== null) return loop;
+    // Prepared during `#build`, where it is still known *which* half is
+    // missing. Reconstructing it here would have to re-derive that.
+    throw this.#current.unconfigured ?? noProviderError(this.file);
   }
 
   reconfigure(patch: ConfigPatch): Config {
@@ -321,39 +396,53 @@ class Runtime implements GhostRuntime {
    * Config in, everything derived from it out.
    *
    * Ordered so that everything able to fail happens before anything mutates:
-   * an unknown provider or an unusable workspace throws while the tool registry
-   * still holds the built-ins that were working a moment ago.
+   * an unusable workspace throws while the tool registry still holds the
+   * built-ins that were working a moment ago.
+   *
+   * A missing provider or model is *not* one of those failures. It produces a
+   * runtime with a null loop, because everything else this builds — the jails,
+   * the tool registry, the paths — is useful without a model, and refusing to
+   * build them is what used to make an unconfigured install unserveable.
    */
   #build(config: Config, previous: Resolved | undefined): Resolved {
     const defaults: AgentDefaults = config.agents.defaults;
     const model = this.#options.model ?? defaults.model;
     const providerId = this.#options.provider ?? defaults.provider;
 
-    const spec = resolveProvider({ provider: providerId, model }) ?? providerFromEnv(this.#env);
-    if (spec === null) throw noProviderError(this.file);
+    const instance =
+      resolveInstance({
+        providers: config.providers,
+        provider: providerId,
+        model,
+        hasCredential: (id) => this.#hasStoredCredential(config, id),
+      }) ?? instanceFromEnv(this.#env);
 
-    if (model === '') {
-      throw new GhostError(
-        'config',
-        `No model configured for ${spec.displayName}.\n` +
-          `  Pass --model <model>, or set agents.defaults.model in ${this.file}.`,
-      );
-    }
+    const unconfigured =
+      instance === null
+        ? noProviderError(this.file)
+        : model === ''
+          ? noModelError(instance, this.file)
+          : null;
 
     const paths = pathsFor(config, this.#options);
-    const connection = resolveConnection(spec, config.providers[spec.id]);
     // Re-read on every build rather than cached: a key saved in the settings UI
     // has to be usable on the next turn, and the vault is the store it landed in.
-    const apiKey = findCredential(spec, paths, this.#env, this.#options.vault);
+    const apiKey =
+      instance === null
+        ? undefined
+        : findCredential(instance, paths, this.#env, this.#options.vault);
 
-    const provider = this.#providers.get({
-      spec,
-      model,
-      apiBase: connection.apiBase,
-      extraHeaders: connection.extraHeaders,
-      apiKey,
-      fetchImpl: this.#options.fetchImpl,
-    });
+    const provider =
+      instance === null || unconfigured !== null
+        ? null
+        : this.#providers.get({
+            instanceId: instance.id,
+            spec: instance.spec,
+            model,
+            ...resolveConnection(instance.spec, instance.config),
+            apiKey,
+            fetchImpl: this.#options.fetchImpl,
+          });
 
     // A jail canonicalises through `realpath` and creates its root, so keeping
     // the cache when nothing moved saves that work on every workspace already
@@ -375,22 +464,61 @@ class Runtime implements GhostRuntime {
     this.tools.unregisterBySource('builtin');
     if (this.#options.tools !== false) registerBuiltins(this.tools, config.tools);
 
-    const loop = new AgentLoop({
-      provider,
-      tools: this.tools,
-      store: this.store,
-      jails,
-      config: defaults,
-      toolsConfig: config.tools,
-      model,
-      logger: this.#logger,
-      steering: this.steering,
-      env: this.#env,
-      ...(this.#options.approvals === undefined ? {} : { approvals: this.#options.approvals }),
-      ...(this.#options.clock === undefined ? {} : { clock: this.#options.clock }),
-    });
+    const loop =
+      provider === null
+        ? null
+        : new AgentLoop({
+            provider,
+            tools: this.tools,
+            store: this.store,
+            jails,
+            config: defaults,
+            toolsConfig: config.tools,
+            model,
+            logger: this.#logger,
+            steering: this.steering,
+            env: this.#env,
+            ...(this.#options.approvals === undefined
+              ? {}
+              : { approvals: this.#options.approvals }),
+            ...(this.#options.clock === undefined ? {} : { clock: this.#options.clock }),
+          });
 
-    return { config, paths, jails, loop, spec, model, hasCredential: apiKey !== undefined };
+    return {
+      config,
+      paths,
+      jails,
+      loop,
+      instance,
+      model,
+      hasCredential: apiKey !== undefined,
+      unconfigured,
+    };
+  }
+
+  /**
+   * Whether an instance holds a credential, for `auto`'s tie-break only.
+   *
+   * Reads the vault at most once per build and never throws: resolution is
+   * choosing between endpoints, and a vault that will not open is a problem for
+   * the chosen one to report — with the message that names it — rather than a
+   * reason to fail before anything has been chosen.
+   */
+  #hasStoredCredential(config: Config, instanceId: string): boolean {
+    const entry = config.providers[instanceId];
+    if (entry === undefined) return false;
+    const envKey = PROVIDERS.find((spec) => spec.id === entry.type)?.envKey;
+    if (envKey !== undefined && (this.#env[envKey] ?? '') !== '') return true;
+
+    const vault = this.#options.vault;
+    if (vault === false) return false;
+    try {
+      const paths = pathsFor(config, this.#options);
+      if (vault === undefined && !existsSync(paths.vaultFile)) return false;
+      return (vault ?? openVault(paths)).has(PROVIDER_CREDENTIAL_NAMESPACE, instanceId);
+    } catch {
+      return false;
+    }
   }
 }
 
