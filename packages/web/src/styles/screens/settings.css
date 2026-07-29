@@ -124,10 +124,6 @@
     --gap: var(--space-4);
   }
 
-  .settings-list {
-    --gap: var(--space-2);
-  }
-
   /** A list whose rows are separated by a rule rather than by a gap. */
   .settings-divided-list {
     display: flex;
@@ -217,49 +213,67 @@
     padding-block: var(--space-3);
   }
 
-  /* ── Provider rows ─────────────────────────────────────────── */
+  /* ── Providers ─────────────────────────────────────────────── */
 
-  .provider-row {
-    background-color: var(--surface-2);
-    border: var(--hairline) solid var(--line);
-    border-radius: var(--radius-md);
+  /*
+   * The disclosure row this section used to dress is gone. A provider is a row
+   * in a `data-table` that links to an editor of its own, the same way an agent
+   * is — so there is no expanded body, no chevron, and no key input pinned
+   * beside a button of its own.
+   */
+
+  /* Mono, like every other endpoint and model readout: it is an identifier, and
+     proportional type makes two similar URLs hard to tell apart. */
+  .providers__endpoint {
+    font-family: var(--font-mono);
   }
 
-  .provider-row__header {
+  /**
+   * What the endpoint answered with.
+   *
+   * Wraps rather than scrolls, and stays out of the way: it is evidence that
+   * the fetch worked, not a picker. Choosing a model happens on the agent that
+   * will use it, which is the screen that knows which agent that is.
+   */
+  .provider-catalogue {
     display: flex;
-    width: 100%;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-3) var(--space-3);
-    border-radius: var(--radius-md);
-    text-align: left;
-  }
-
-  .provider-row__header:hover {
-    background-color: var(--hover);
-  }
-
-  .provider-row__chevron {
-    flex-shrink: 0;
-    width: var(--size-icon-md);
-    height: var(--size-icon-md);
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-3);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
     color: var(--fg-3);
   }
 
-  .provider-row__name {
-    font-weight: var(--weight-medium);
-    color: var(--fg-1);
+  /**
+   * The connection check's verdict.
+   *
+   * A line of text with an icon, not a filled banner. An endpoint that is not
+   * answering is the ordinary state of this screen — it is what the operator
+   * came here to fix — and a status that will be stale in a minute must not be
+   * the loudest thing in the panel. The colour is a second signal on top of the
+   * sentence, never the only one.
+   */
+  .provider-row__probe {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
+    color: var(--fg-3);
   }
 
-  .provider-row__body {
-    --gap: var(--space-4);
-
-    padding: var(--space-4) var(--space-3);
-    border-top: var(--hairline) solid var(--line);
+  .provider-row__probe > svg {
+    flex-shrink: 0;
+    width: var(--size-icon-md);
+    height: var(--size-icon-md);
   }
 
-  .provider-row__key-input {
-    flex: 1 1 auto;
-    min-width: 12rem;
+  .provider-row__probe--ok {
+    color: var(--success-fg);
+  }
+
+  .provider-row__probe--bad {
+    color: var(--warning-fg);
   }
 }

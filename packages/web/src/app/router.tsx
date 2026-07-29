@@ -24,6 +24,7 @@ import { Shell } from './shell.js';
 import { ChatRoute } from '@/routes/chat.js';
 import { AgentEditorRoute } from '@/agents/agent-editor.js';
 import { AgentsRoute } from '@/agents/agents-page.js';
+import { ProviderEditorRoute } from '@/settings/provider-editor.js';
 import { FilesRoute } from '@/routes/files.js';
 import { WorkspacesRoute } from '@/routes/workspaces.js';
 import { NotificationsRoute } from '@/routes/notifications.js';
@@ -116,6 +117,19 @@ const agentEditorRoute = createRoute({
   component: AgentEditorRoute,
 });
 
+/**
+ * Under `/settings` rather than at the top level, because that is where the
+ * list it belongs to lives — the back link returns to `?panel=providers`. A
+ * sibling of `/settings` rather than a child route, exactly as the agent editor
+ * is a sibling of `/agents`: the panel has a search schema this page does not
+ * share, and nesting would make an endpoint's URL carry the list's tab.
+ */
+const providerEditorRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings/providers/$instanceId',
+  component: ProviderEditorRoute,
+});
+
 const tokensRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/tokens',
@@ -130,6 +144,7 @@ const routeTree = rootRoute.addChildren([
   filesRoute,
   notificationsRoute,
   settingsRoute,
+  providerEditorRoute,
   tokensRoute,
 ]);
 

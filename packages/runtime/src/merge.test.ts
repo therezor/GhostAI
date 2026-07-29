@@ -130,6 +130,28 @@ describe('mergeConfigPatch', () => {
     expect(lifted.agents.list.reviewer?.tools).toEqual({ allow: [], deny: [] });
   });
 
+  it('clears an optional default on an explicit null', () => {
+    // The reported bug: emptying the temperature box, saving, reloading, and
+    // finding the old value still there. `agents.defaults` merges per field, so
+    // the patch that omitted the key preserved it — `null` is the only token
+    // that can say "remove this", and these two are safe to remove because both
+    // are optional in the schema and a config without them still parses.
+    const warm = mergeConfigPatch(base, {
+      agents: { defaults: { temperature: 0.1, reasoningEffort: 'high' } },
+    });
+    expect(warm.agents.defaults.temperature).toBe(0.1);
+
+    const cleared = mergeConfigPatch(warm, {
+      agents: { defaults: { temperature: null, reasoningEffort: null } },
+    });
+
+    expect(cleared.agents.defaults.temperature).toBeUndefined();
+    expect(cleared.agents.defaults.reasoningEffort).toBeUndefined();
+    // The neighbouring fields are untouched — this is a deletion, not a reset.
+    expect(cleared.agents.defaults.model).toBe(base.agents.defaults.model);
+    expect(cleared.agents.defaults.maxTokens).toBe(base.agents.defaults.maxTokens);
+  });
+
   it('ignores a null on a path where deletion is not meaningful', () => {
     // A `null` that punched a hole in a struct would drop a setting and fail
     // the re-parse — or, worse, silently revert it to a default.

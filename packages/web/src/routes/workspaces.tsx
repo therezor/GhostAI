@@ -22,7 +22,7 @@
  * still point at it cannot be detached — the server answers 409 and says how
  * many — so the second dialog turns that number into the offer that resolves
  * it: move them to Default, then delete. Two explicit steps rather than one
- * cascading delete, because "remove this workspace" and "move seven
+ * cascading delete, because "delete this workspace" and "move seven
  * conversations somewhere else" are different decisions.
  */
 
@@ -125,7 +125,7 @@ export function WorkspacesRoute(): JSX.Element {
       setPendingDelete(undefined);
       setBlocked(undefined);
       refresh();
-      toast.success(`Removed ${workspace.name}`, 'Its folder and files are still on disk.');
+      toast.success(`Deleted ${workspace.name}`, 'Its folder and files are still on disk.');
     },
     onError: (error: Error, workspace) => {
       // The 409 is not a failure to report, it is a question to ask.
@@ -135,7 +135,7 @@ export function WorkspacesRoute(): JSX.Element {
         setBlocked({ workspace, sessionCount });
         return;
       }
-      toast.error('Could not remove it', error.message);
+      toast.error('Could not delete it', error.message);
     },
   });
 
@@ -264,7 +264,7 @@ export function WorkspacesRoute(): JSX.Element {
                           }}
                         >
                           <Trash2 />
-                          Remove
+                          Delete
                         </DropdownMenuItem>
                       )}
                     </RowActions>
@@ -309,9 +309,9 @@ export function WorkspacesRoute(): JSX.Element {
         onOpenChange={(open) => {
           if (!open) setPendingDelete(undefined);
         }}
-        title="Remove this workspace?"
+        title="Delete this workspace?"
         description={`${pendingDelete?.name ?? ''} is detached from GhostAI. Its folder and everything in it stays on disk, and recreating it with the same name adopts the folder again.`}
-        confirmLabel="Remove"
+        confirmLabel="Delete"
         pending={remove.isPending}
         onConfirm={() => {
           if (pendingDelete !== undefined) remove.mutate(pendingDelete);
@@ -331,7 +331,7 @@ export function WorkspacesRoute(): JSX.Element {
                 blocked.sessionCount === 1 ? '' : 's'
               } still belong to ${blocked.workspace.name}. Moving them to Default keeps their history; the files stay where they are either way.`
         }
-        confirmLabel="Move and remove"
+        confirmLabel="Move and delete"
         tone="primary"
         pending={move.isPending || remove.isPending}
         onConfirm={() => {

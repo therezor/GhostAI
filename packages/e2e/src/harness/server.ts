@@ -279,14 +279,47 @@ function seedSession(runtime: GhostRuntime, session: SeedSession): void {
  * — are the parts reproduced exactly. What is not reproduced is `openVault`,
  * for the reason at the top of this file.
  */
+/**
+ * The `Map` stands in for a namespaced vault, so its keys carry both parts.
+ *
+ * `\0` as an escape rather than the raw byte it used to be written as. The
+ * character is the same one — it is the separator precisely because no
+ * namespace or credential id can contain it — but a source file holding an
+ * actual NUL reads as *binary* to `grep`, which then silently matches nothing
+ * in it. Two of these keys are built and one is parsed, and building a third by
+ * hand with a space in it is a bug that costs an afternoon: it compiles, it
+ * type-checks, and it deletes nothing.
+ */
+const CREDENTIAL_SEPARATOR = '\0';
+
+const credentialKey = (namespace: string, key: string): string =>
+  `${namespace}${CREDENTIAL_SEPARATOR}${key}`;
+
 function harnessRuntime(runtime: GhostRuntime, configFile: string): ServerRuntime {
   const credentials = new Map<string, string>();
 
   return {
     config: () => runtime.config,
 
-    applySettings: (patch: ConfigPatch): Config =>
-      saveConfig(configFile, runtime.reconfigure(patch)),
+    applySettings: (patch: ConfigPatch): Config => {
+      const before = new Set(Object.keys(runtime.config.providers));
+      const merged = runtime.reconfigure(patch);
+
+      // Deleting an instance takes its credential with it, exactly as the real
+      // adapter does. A `Map` instead of the vault is the one substitution this
+      // harness makes; *when* an entry is dropped is behaviour a browser can
+      // observe through `credentialsPresent`, so it is reproduced rather than
+      // approximated. Without it, a credential outliving its provider — which
+      // would hand it to whatever next reuses the id — is invisible to e2e.
+      //
+      // After the rebuild, so a patch that could not be built has not already
+      // destroyed a credential on its way to failing.
+      for (const id of before) {
+        if (!(id in merged.providers)) credentials.delete(credentialKey('providers', id));
+      }
+
+      return saveConfig(configFile, merged);
+    },
 
     // No write back, exactly as the real adapter does not: the file is the
     // source here, and saving what was just read would turn a reload into a
@@ -297,14 +330,14 @@ function harnessRuntime(runtime: GhostRuntime, configFile: string): ServerRuntim
     credentialsPresent: (): Readonly<Record<string, boolean>> => {
       const present: Record<string, boolean> = {};
       for (const key of credentials.keys()) {
-        const [namespace, name] = key.split(' ');
+        const [namespace, name] = key.split(CREDENTIAL_SEPARATOR);
         if (namespace === 'providers' && name !== undefined) present[name] = true;
       }
       return present;
     },
 
     setCredential: (request: SetCredentialRequest): void => {
-      const key = `${request.namespace} ${request.key}`;
+      const key = credentialKey(request.namespace, request.key);
       if (request.value === null) credentials.delete(key);
       else credentials.set(key, request.value);
       // The same empty-patch rebuild the real adapter does. It re-reads the

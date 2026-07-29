@@ -20,6 +20,8 @@ import type {
   Config,
   ConfigPatch,
   ModelsResponse,
+  ProviderTestRequest,
+  ProviderTestResponse,
   SetCredentialRequest,
   ToolDefinition,
 } from '@ghostai/protocol';
@@ -177,6 +179,17 @@ export interface ServerRuntime {
    * just pulled a new model must not have to wait out a TTL to see it.
    */
   models?(options?: { readonly refresh?: boolean }): Promise<ModelsResponse>;
+
+  /**
+   * Whether one connection can be reached, and with which models.
+   *
+   * Optional for the same reason `models` is, and answers rather than throws
+   * for a different one: every outcome here is a *result*. "The key was
+   * rejected" and "nothing is listening there" are the two things the operator
+   * came to find out, so they travel as a `reason` on a 200 rather than as an
+   * error envelope the client would have to unpick to tell them apart.
+   */
+  testProvider?(request: ProviderTestRequest): Promise<ProviderTestResponse>;
 
   /** Zero for both until `@ghostai/mcp` and `@ghostai/plugin-host` exist. */
   extensions?(): ExtensionCounts;

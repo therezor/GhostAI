@@ -42,9 +42,19 @@ import type {
   ConfigPatch,
   ModelInfo,
   ModelsResponse,
+  ProviderTestRequest,
+  ProviderTestResponse,
   SetCredentialRequest,
 } from '@ghostai/protocol';
-import { createProvider, listInstances, resolveConnection } from '@ghostai/providers';
+import {
+  createProvider,
+  findProvider,
+  isProviderError,
+  listInstances,
+  resolveConnection,
+  type ChatProvider,
+  type ProviderSpec,
+} from '@ghostai/providers';
 import { openVault, resolveAgent, type GhostRuntime } from '@ghostai/runtime';
 import type { AgentSummary, AgentView, ServerRuntime } from '@ghostai/server';
 import type { CredentialVault, FetchImplementation } from '@ghostai/security';
@@ -97,6 +107,76 @@ export function createServerRuntime(
   };
 
   /**
+   * Why a probe did not produce a catalogue, keeping the classification.
+   *
+   * `reason` is the whole value of this: `auth` means the endpoint answered and
+   * refused the key, `transport` means nothing answered at all, and those send
+   * an operator to two entirely different places. `errors.ts` classifies from
+   * the status and the socket code, never from message text, so this passes the
+   * verdict along rather than re-deriving one.
+   *
+   * A throw that is not a `ProviderError` came from `createProvider` before any
+   * socket was opened — `assertUsableApiBase` refusing a base URL, or refusing
+   * to put a key on plain HTTP to a public host. That is the submitted
+   * connection being invalid, not the endpoint being unwell.
+   */
+  const describeFailure = (error: unknown): { reason: string; message: string } => {
+    const message = error instanceof Error ? error.message : String(error);
+    return { reason: isProviderError(error) ? error.reason : 'invalid_request', message };
+  };
+
+  /**
+   * One connection, asked for its catalogue. The only place here that dials out.
+   *
+   * Takes a resolved connection rather than an instance id, because the two
+   * callers want different things from it: `models` asks about something the
+   * config names, and `testProvider` asks about something an operator has typed
+   * and not saved yet.
+   */
+  const probeConnection = async (probe: {
+    readonly spec: ProviderSpec;
+    readonly apiBase: string;
+    readonly extraHeaders: Readonly<Record<string, string>>;
+    readonly apiKey: string | undefined;
+  }): Promise<{ models: ModelInfo[] } | { reason: string; message: string }> => {
+    if (probe.spec.supportsModelListing !== true) {
+      return {
+        reason: 'unsupported',
+        message: `${probe.spec.displayName} does not publish a model list, so there is nothing to ask it.`,
+      };
+    }
+
+    let provider: ChatProvider;
+    try {
+      // Deliberately not through the runtime's `ProviderCache`: that cache is
+      // keyed by model as well as connection, and listing a catalogue has no
+      // model. Building a bare adapter for the call keeps a settings-panel
+      // refresh from evicting the adapter the next turn is going to want.
+      provider = createProvider({
+        provider: probe.spec,
+        apiKey: probe.apiKey,
+        apiBase: probe.apiBase,
+        extraHeaders: probe.extraHeaders,
+        ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+        // Retries and degradation are for a turn. A catalogue that does not
+        // answer promptly should say so, not spend fifteen seconds insisting.
+        resilience: false,
+      });
+    } catch (error) {
+      return describeFailure(error);
+    }
+
+    const signal = AbortSignal.timeout(options.modelTimeoutMs ?? MODEL_FETCH_TIMEOUT_MS);
+    try {
+      return { models: await provider.listModels(signal) };
+    } catch (error) {
+      return describeFailure(error);
+    } finally {
+      await provider.close();
+    }
+  };
+
+  /**
    * One instance's catalogue, as a result rather than a rejection.
    *
    * A provider that cannot be reached is a normal state — a laptop is closed, a
@@ -111,33 +191,23 @@ export function createServerRuntime(
     const instance = listInstances(runtime.config.providers).find((i) => i.id === instanceId);
     if (config === undefined || instance === undefined) return { models: [] };
 
-    const signal = AbortSignal.timeout(options.modelTimeoutMs ?? MODEL_FETCH_TIMEOUT_MS);
-    try {
-      // Deliberately not through the runtime's `ProviderCache`: that cache is
-      // keyed by model as well as connection, and listing a catalogue has no
-      // model. Building a bare adapter for the call keeps a settings-panel
-      // refresh from evicting the adapter the next turn is going to want.
-      const provider = createProvider({
-        provider: instance.spec,
-        apiKey: readCredential(instanceId, instance.spec.envKey),
-        ...resolveConnection(instance.spec, config),
-        ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
-        // Retries and degradation are for a turn. A catalogue that does not
-        // answer promptly should say so, not spend fifteen seconds insisting.
-        resilience: false,
-      });
-      const models = await provider.listModels(signal);
-      await provider.close();
-      return {
-        models: models.map((model) => ({
-          ...model,
-          providerId: instance.id,
-          providerType: instance.spec.id,
-        })),
-      };
-    } catch (error) {
-      return { error: error instanceof Error ? error.message : String(error) };
-    }
+    const result = await probeConnection({
+      spec: instance.spec,
+      ...resolveConnection(instance.spec, config),
+      apiKey: readCredential(instanceId, instance.spec.envKey),
+    });
+    // `errors` is a map of prose, so the reason is dropped here rather than
+    // carried: `ModelsResponse` reports a list that came up short, and the
+    // question "why exactly" is what `providers.test` exists to answer.
+    if ('reason' in result) return { error: result.message };
+
+    return {
+      models: result.models.map((model) => ({
+        ...model,
+        providerId: instance.id,
+        providerType: instance.spec.id,
+      })),
+    };
   };
 
   const readCredential = (instanceId: string, envKey: string | undefined): string | undefined => {
@@ -291,6 +361,56 @@ export function createServerRuntime(
       const response: ModelsResponse = { models, errors };
       cached = { atMs: now, response };
       return response;
+    },
+
+    testProvider: async (request: ProviderTestRequest): Promise<ProviderTestResponse> => {
+      const spec = findProvider(request.type);
+      if (spec === null) {
+        return {
+          ok: false,
+          models: [],
+          reason: 'unsupported',
+          message: `There is no provider type called “${request.type}”.`,
+        };
+      }
+
+      // An omitted key means "whatever is stored", which is how a saved row
+      // re-tests without the client having to hold the credential to do it. An
+      // *empty* one is a different question — "does this answer with no key at
+      // all" — and both are ones an operator asks, so they are not collapsed.
+      const apiKey =
+        request.apiKey ??
+        (request.instanceId === undefined
+          ? undefined
+          : readCredential(request.instanceId, spec.envKey));
+
+      const result = await probeConnection({
+        spec,
+        ...resolveConnection(spec, {
+          type: request.type,
+          label: '',
+          apiBase: request.apiBase,
+          extraHeaders: request.extraHeaders,
+          models: [],
+          enabled: true,
+        }),
+        apiKey: apiKey === '' ? undefined : apiKey,
+      });
+
+      if ('reason' in result) {
+        return { ok: false, models: [], reason: result.reason, message: result.message };
+      }
+
+      // A successful probe has just learned this endpoint's catalogue first
+      // hand, which makes the cached one out of date by definition. Dropping it
+      // is what turns "fetch this provider's models" into something the rest of
+      // the app sees: without it the Agent panel would go on offering a 60 s
+      // old list that predates the endpoint the operator just fixed.
+      cached = undefined;
+
+      // Ids only. The probe's job is "can this be reached, and what is on it" —
+      // the shaped catalogue is what `models.list` serves.
+      return { ok: true, models: result.models.map((model) => model.id) };
     },
   };
 }

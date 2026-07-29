@@ -7,13 +7,21 @@
  * operator's own action is what caused it and nothing they typed is wrong.
  */
 
-import { AgentDefaultsSchema, type AgentDefaults } from '@ghostai/protocol';
+import { AgentDefaultsSchema, ConfigPatchSchema, type AgentDefaults } from '@ghostai/protocol';
 import { describe, expect, it } from 'vitest';
 
-import { toAgentForm, toAgentPatch } from './agents-form.js';
+import { MODEL_REQUIRED, toAgentForm, toAgentPatch } from './agents-form.js';
 
+/**
+ * A model is set unless a case is about not having one.
+ *
+ * `AgentDefaultsSchema` defaults it to `''`, which is the unconfigured install
+ * rather than a setting — the runtime turns an empty model into `noModelError`
+ * — and the form now refuses to save one. A fixture without a model would make
+ * every case here fail on a field it is not about.
+ */
 const defaults = (overrides: Partial<AgentDefaults> = {}): AgentDefaults =>
-  AgentDefaultsSchema.parse(overrides);
+  AgentDefaultsSchema.parse({ model: 'llama3', ...overrides });
 
 describe('toAgentForm', () => {
   it('renders every value as the string an input holds', () => {
@@ -100,12 +108,47 @@ describe('toAgentPatch', () => {
     expect(result.errors.provider).toBe('Required');
   });
 
-  it('omits the reasoning effort when it is unset, rather than sending a blank', () => {
+  it('refuses an empty model, which leaves the whole install unconfigured', () => {
+    // The provider half of `agents.defaults` really is resolved from whichever
+    // instance has credentials. The model half never is — `runtime.configured`
+    // goes false and every turn is refused with `No model configured`.
+    const result = toAgentPatch({ ...toAgentForm(defaults()), model: '  ' });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.model).toBe(MODEL_REQUIRED);
+  });
+
+  it('sends null for an unset reasoning effort, which is what clears it', () => {
+    // Omitting it was the bug: `agents.defaults` merges per field, so a patch
+    // that never mentions the key preserves whatever is stored. `null` is the
+    // token `DELETE_BY_NULL` reads as a removal.
     const result = toAgentPatch({ ...toAgentForm(defaults()), reasoningEffort: '' });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    expect(result.patch.agents?.defaults).not.toHaveProperty('reasoningEffort');
+    expect(result.patch.agents?.defaults?.reasoningEffort).toBeNull();
+  });
+
+  it('sends null for an emptied temperature, so removing one takes effect', () => {
+    // The reported symptom: clearing the box, saving, reloading, and finding
+    // 0.1 still there — the save had gone out without mentioning the field.
+    const result = toAgentPatch({
+      ...toAgentForm(defaults({ temperature: 0.1 })),
+      temperature: '',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.patch.agents?.defaults?.temperature).toBeNull();
+    expect(ConfigPatchSchema.safeParse(result.patch).success).toBe(true);
+  });
+
+  it('still sends a temperature that is set, including zero', () => {
+    const result = toAgentPatch({ ...toAgentForm(defaults()), temperature: '0' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.patch.agents?.defaults?.temperature).toBe(0);
   });
 
   it('sends the reasoning effort when it is one the protocol knows', () => {
@@ -117,12 +160,14 @@ describe('toAgentPatch', () => {
   });
 
   it('produces a patch the protocol accepts', () => {
-    // The real guard: the server parses this through `ConfigPatchSchema`, and a
-    // field with the wrong name or unit is a 400 rather than a type error.
+    // Through `ConfigPatchSchema`, which is what the server actually parses,
+    // and not through `AgentDefaultsSchema`: the two differ now, because a
+    // patch may carry `temperature: null` to clear a field that the config
+    // itself can only hold as a number or not at all.
     const result = toAgentPatch(toAgentForm(defaults({ model: 'llama3' })));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    expect(() => AgentDefaultsSchema.parse(result.patch.agents?.defaults)).not.toThrow();
+    expect(ConfigPatchSchema.safeParse(result.patch).success).toBe(true);
   });
 });

@@ -184,152 +184,137 @@ describe('the settings screen', () => {
   });
 });
 
+/** The kebab on one row, then the item on it. */
+async function rowAction(
+  user: ReturnType<typeof userEvent.setup>,
+  row: string,
+  action: string,
+): Promise<void> {
+  await user.click(await screen.findByRole('button', { name: `Actions for ${row}` }));
+  await user.click(await screen.findByRole('menuitem', { name: action }));
+}
+
+/**
+ * The list only.
+ *
+ * Everything about *one* endpoint — its base URL, its key, its catalogue — is
+ * edited on a route of its own now, and is covered in `provider-editor.test.tsx`
+ * with the rest of that screen. What belongs here is what the list itself does:
+ * what it reports at a glance, and the three acts that need no form.
+ */
 describe('the providers panel', () => {
-  it('states whether each provider has a key, in words rather than in colour', async () => {
-    const { user } = mount('/settings?panel=providers');
+  it('reports each endpoint\u2019s key and status in words rather than in colour', async () => {
+    mount('/settings?panel=providers');
 
-    expect(await screen.findByRole('button', { name: /Ollama/ })).toHaveTextContent('no key');
-    expect(screen.getByRole('button', { name: /OpenAI/ })).toHaveTextContent('key saved');
-
-    await user.click(screen.getByRole('button', { name: /Ollama/ }));
-    expect(await screen.findByLabelText('API base')).toHaveValue('http://127.0.0.1:11434/v1');
+    const rows = within(await screen.findByRole('table')).getAllByRole('row');
+    // Header, then one per endpoint.
+    expect(rows).toHaveLength(3);
+    expect(rows[1]).toHaveTextContent('no key');
+    expect(rows[1]).toHaveTextContent('Enabled');
+    expect(rows[2]).toHaveTextContent('key saved');
   });
 
-  it('sends a key to the vault and keeps it out of everything else', async () => {
-    const secret = 'sk-test-abc123';
-    const { user, calls } = mount('/settings?panel=providers');
-
-    await user.click(await screen.findByRole('button', { name: /OpenAI/ }));
-
-    const field = await screen.findByLabelText('API key');
-    // Never populated — there is nothing to populate it from — and masked.
-    expect(field).toHaveValue('');
-    expect(field).toHaveAttribute('type', 'password');
-
-    await user.type(field, secret);
-    await user.click(screen.getByRole('button', { name: 'Save key' }));
-
-    await waitFor(() => {
-      expect(calls.some((call) => call.method === 'PUT')).toBe(true);
-    });
-
-    const puts = calls.filter((call) => call.method === 'PUT');
-    expect(puts).toHaveLength(1);
-    expect(puts[0]?.path).toBe('/api/settings/credentials');
-    expect(puts[0]?.body).toEqual({ namespace: 'providers', key: 'openai', value: secret });
-
-    // The one request that may carry it is the one that did. Nothing else — not
-    // the settings patch, not a refetch — has the key anywhere in it.
-    const elsewhere = calls
-      .filter((call) => call.method !== 'PUT')
-      .map((call) => JSON.stringify(call.body ?? ''));
-    expect(elsewhere.some((body) => body.includes(secret))).toBe(false);
-
-    // And it is gone from the page: not in the field, not in the DOM.
-    expect(field).toHaveValue('');
-    expect(document.body.textContent).not.toContain(secret);
-  });
-
-  it('removes a key with its own press, so an empty field cannot delete one', async () => {
-    const { user, calls } = mount('/settings?panel=providers');
-
-    await user.click(await screen.findByRole('button', { name: /OpenAI/ }));
-    // The save button is disabled while the field is empty, so the only way to
-    // clear a key is the button that says so.
-    expect(screen.getByRole('button', { name: 'Save key' })).toBeDisabled();
-
-    await user.click(screen.getByRole('button', { name: 'Remove key' }));
-
-    await waitFor(() => {
-      expect(calls.filter((call) => call.method === 'PUT')).toHaveLength(1);
-    });
-    expect(calls.find((call) => call.method === 'PUT')?.body).toEqual({
-      namespace: 'providers',
-      key: 'openai',
-      value: null,
-    });
-  });
-
-  it('offers an optional token for a local endpoint, which used to be refused', async () => {
-    const { user } = mount('/settings?panel=providers');
-
-    await user.click(await screen.findByRole('button', { name: /Ollama/ }));
-
-    // The field used to be a sentence saying the provider took no key, which
-    // was true of the lookup and not of the deployment: a LAN model server
-    // behind an authenticating proxy is a real configuration, and
-    // `findCredential` now reads the vault for one.
-    expect(await screen.findByLabelText('API token (optional)')).toBeInTheDocument();
-    expect(screen.getByLabelText('API base')).toBeInTheDocument();
-  });
-
-  it('offers no way to remove a key that is not there', async () => {
-    const { user } = mount('/settings?panel=providers', {
+  it('shows a disabled endpoint as disabled rather than hiding it', async () => {
+    mount('/settings?panel=providers', {
       '/api/providers': [
         200,
         {
           types: PROVIDERS.types,
-          instances: PROVIDERS.instances.map((instance) => ({
-            ...instance,
-            credentialsPresent: false,
-          })),
+          instances: [{ ...PROVIDERS.instances[0], enabled: false }, PROVIDERS.instances[1]],
         },
       ],
     });
 
-    await user.click(await screen.findByRole('button', { name: /OpenAI/ }));
-    await screen.findByLabelText('API key');
-    // The endpoint's own Remove is still there; the *key's* is not, because
-    // there is no key to take back.
-    expect(screen.queryByRole('button', { name: 'Remove key' })).not.toBeInTheDocument();
+    const rows = within(await screen.findByRole('table')).getAllByRole('row');
+    expect(rows[1]).toHaveTextContent('Disabled');
   });
 
-  it('saves one endpoint’s connection without touching another’s', async () => {
+  it('switches one off from the list, without asking', async () => {
+    // Reversible where Delete is not, so it is one press and no dialog \u2014 the
+    // same rule the agents list follows.
     const { user, calls } = mount('/settings?panel=providers');
 
-    await user.click(await screen.findByRole('button', { name: /Ollama/ }));
-    const apiBase = await screen.findByLabelText('API base');
-    await user.clear(apiBase);
-    await user.type(apiBase, 'http://elsewhere/v1');
-    await user.click(screen.getByRole('button', { name: 'Save connection' }));
+    await rowAction(user, 'Ollama', 'Disable');
 
     await waitFor(() => {
       expect(patchesOf(calls)).toHaveLength(1);
     });
-    expect(patchesOf(calls)[0]?.providers).toEqual({
-      // No `type`: an endpoint cannot change protocol by being edited.
-      ollama: { label: '', apiBase: 'http://elsewhere/v1', models: ['llama3'], enabled: true },
-    });
+    expect(patchesOf(calls)[0]?.providers).toEqual({ ollama: { enabled: false } });
   });
 
-  it('adds a second endpoint of a type that already has one', async () => {
-    // The whole point of instances: two Ollama servers, and the second gets a
-    // free id rather than merging into the first.
-    const { user, calls } = mount('/settings?panel=providers');
+  it('offers Enable on one that is already off', async () => {
+    const { user, calls } = mount('/settings?panel=providers', {
+      '/api/providers': [
+        200,
+        {
+          types: PROVIDERS.types,
+          instances: [{ ...PROVIDERS.instances[0], enabled: false }],
+        },
+      ],
+    });
 
-    await user.click(await screen.findByRole('combobox', { name: 'Add a provider' }));
+    await rowAction(user, 'Ollama', 'Enable');
+
+    await waitFor(() => {
+      expect(patchesOf(calls)).toHaveLength(1);
+    });
+    expect(patchesOf(calls)[0]?.providers).toEqual({ ollama: { enabled: true } });
+  });
+
+  it('creates an endpoint and opens its editor, the way New agent does', async () => {
+    // The type is the one question the editor cannot ask \u2014 it is fixed for the
+    // life of an instance \u2014 so it is the only one the dialog asks.
+    const { user, calls, router } = mount('/settings?panel=providers');
+
+    await user.click(await screen.findByRole('button', { name: 'New provider' }));
+    await user.click(await screen.findByRole('combobox', { name: 'Type' }));
     await user.click(await screen.findByRole('option', { name: 'Ollama' }));
-    await user.type(screen.getByLabelText('Name'), 'GPU box');
-    await user.click(screen.getByRole('button', { name: 'Add provider' }));
+
+    const dialog = within(screen.getByRole('dialog'));
+    await user.type(dialog.getByLabelText('Name'), 'GPU box');
+    await user.click(dialog.getByRole('button', { name: 'Create' }));
 
     await waitFor(() => {
       expect(patchesOf(calls)).toHaveLength(1);
     });
+    // A free id: a second Ollama is a second endpoint, not a merge into the
+    // first.
     expect(patchesOf(calls)[0]?.providers).toEqual({
-      'ollama-2': { type: 'ollama', label: 'GPU box', enabled: true },
+      'ollama-2': { type: 'ollama', label: 'GPU box', apiBase: '', models: [], enabled: true },
+    });
+
+    // On success, not on the press: navigating early lands the editor on a
+    // settings cache that has never seen the endpoint it was sent to.
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/settings/providers/ollama-2');
     });
   });
 
-  it('removes an endpoint with a null, which is the merge’s deletion syntax', async () => {
+  it('asks before deleting, because the key goes with it', async () => {
     const { user, calls } = mount('/settings?panel=providers');
 
-    await user.click(await screen.findByRole('button', { name: /OpenAI/ }));
-    await user.click(await screen.findByRole('button', { name: 'Remove provider' }));
+    await rowAction(user, 'OpenAI', 'Delete');
+    expect(await screen.findByRole('dialog')).toHaveTextContent('its saved key is deleted with it');
+    // Asking is not doing.
+    expect(patchesOf(calls)).toHaveLength(0);
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => {
       expect(patchesOf(calls)).toHaveLength(1);
     });
     expect(patchesOf(calls)[0]?.providers).toEqual({ openai: null });
+  });
+
+  it('has no way to ask every endpoint at once', async () => {
+    // It used to. One closed laptop made the whole action look broken, and
+    // fetching a catalogue is a thing you do *to an endpoint* \u2014 so it lives in
+    // that endpoint's editor.
+    mount('/settings?panel=providers');
+
+    await screen.findByRole('table');
+    expect(screen.queryByRole('button', { name: /Refresh model lists/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Check for models/ })).not.toBeInTheDocument();
   });
 });
 

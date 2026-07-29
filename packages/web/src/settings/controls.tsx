@@ -122,13 +122,18 @@ export interface SelectFieldOption {
  * `placeholder` is not decoration here.
  *
  * An empty `value` means *no* value to a Radix select, so a control whose state
- * is legitimately "nothing chosen" — a model left blank for the registry to
- * resolve — renders a blank trigger unless something is given to show instead.
- * A blank control reads as broken, which is worse than the setting it describes.
+ * is "nothing chosen yet" — a required model on an install that has not picked
+ * one — renders a blank trigger unless something is given to show instead. A
+ * blank control reads as broken, which is worse than the setting it describes.
+ *
+ * `error` mirrors `TextField`'s rather than being passed as a `hint`, which is
+ * what the agent editor used to do: a hint is not announced, does not mark the
+ * control invalid, and reads as advice at exactly the moment it is a refusal.
  */
 export function SelectField({
   label,
   hint,
+  error,
   value,
   options,
   onValueChange,
@@ -137,6 +142,7 @@ export function SelectField({
 }: {
   readonly label: ReactNode;
   readonly hint?: ReactNode;
+  readonly error?: string | undefined;
   readonly value: string;
   readonly options: readonly SelectFieldOption[];
   readonly onValueChange: (value: string) => void;
@@ -145,6 +151,13 @@ export function SelectField({
 }): JSX.Element {
   const id = useId();
   const hintId = `${id}-hint`;
+  const errorId = `${id}-error`;
+  const describedBy = [
+    hint === undefined ? undefined : hintId,
+    error === undefined ? undefined : errorId,
+  ]
+    .filter((value) => value !== undefined)
+    .join(' ');
 
   return (
     <div className="stack settings-field">
@@ -154,7 +167,11 @@ export function SelectField({
         onValueChange={onValueChange}
         {...(disabled === true ? { disabled } : {})}
       >
-        <SelectTrigger id={id} {...(hint === undefined ? {} : { 'aria-describedby': hintId })}>
+        <SelectTrigger
+          id={id}
+          aria-invalid={error !== undefined}
+          {...(describedBy === '' ? {} : { 'aria-describedby': describedBy })}
+        >
           <SelectValue {...(placeholder === undefined ? {} : { placeholder })} />
         </SelectTrigger>
         <SelectContent>
@@ -168,6 +185,11 @@ export function SelectField({
       {hint !== undefined && (
         <p id={hintId} className="settings-field__hint">
           {hint}
+        </p>
+      )}
+      {error !== undefined && (
+        <p id={errorId} role="alert" className="settings-field__error">
+          {error}
         </p>
       )}
     </div>

@@ -144,6 +144,8 @@ export const PROTOCOL_SCHEMAS = {
   ProvidersResponse: rest.ProvidersResponseSchema,
   ModelInfo: rest.ModelInfoSchema,
   ModelsResponse: rest.ModelsResponseSchema,
+  ProviderTestRequest: rest.ProviderTestRequestSchema,
+  ProviderTestResponse: rest.ProviderTestResponseSchema,
   SessionSummary: rest.SessionSummarySchema,
   SessionListResponse: rest.SessionListResponseSchema,
   SessionMessagesResponse: rest.SessionMessagesResponseSchema,

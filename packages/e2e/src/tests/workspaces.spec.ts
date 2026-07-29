@@ -78,7 +78,7 @@ test.describe('workspaces', () => {
     await expect(app.getByRole('cell', { name: 'acme-only.md', exact: true })).toBeVisible();
   });
 
-  test('a workspace with conversations cannot be removed until they move', async ({
+  test('a workspace with conversations cannot be deleted until they move', async ({
     app,
     harness,
   }) => {

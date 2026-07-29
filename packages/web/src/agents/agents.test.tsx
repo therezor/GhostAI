@@ -9,6 +9,13 @@
  *
  * The two additions are the ones the CRUD brought: the index lists an agent
  * that exists only by inheritance, and the default agent offers no delete.
+ *
+ * What is no longer asserted anywhere is inheritance *on the screen*. The
+ * config format still allows an absent field to fall through to
+ * `agents.defaults`, and `@ghostai/runtime` has the cases for it — but the
+ * editor fills every box from the defaults and writes them down, so the
+ * assertions here are that an agent shows its own settings rather than a blank
+ * where somebody else's would have been used.
  */
 
 import { RouterProvider, createMemoryHistory } from '@tanstack/react-router';
@@ -100,6 +107,44 @@ function mount(
 const patchesOf = (calls: readonly RecordedRequest[]): ConfigPatch[] =>
   calls.filter((call) => call.method === 'PATCH').map((call) => call.body as ConfigPatch);
 
+/**
+ * Settings routes that remember what was written to them.
+ *
+ * The flat stub answers every GET with the original config, which is fine for
+ * the cases that only assert what went over the wire — and wrong for the ones
+ * about what the screen does *after* a write, because the test client runs with
+ * `gcTime: 0`, so navigating away drops the settings query and the next screen
+ * refetches. Against a static stub that refetch undoes the save, and the case
+ * fails for a reason the product does not have.
+ *
+ * Shallow over `agents.list` is all these cases need; the real merge is
+ * `@ghostai/runtime`'s to prove, and `merge.test.ts` does.
+ */
+function statefulSettings(base = CONFIG): Record<string, StubRoute> {
+  let current = base;
+
+  const respond = (): [number, unknown] => [
+    200,
+    { config: current, credentialsPresent: { ollama: false } },
+  ];
+
+  return {
+    '/api/settings': respond,
+    'PATCH /api/settings': (request) => {
+      const patch = request.body as ConfigPatch;
+      const written = Object.entries(patch.agents?.list ?? {});
+      // `null` is the deletion token, so those ids are filtered out of the
+      // result rather than written into it.
+      const removed = new Set(written.filter(([, entry]) => entry === null).map(([id]) => id));
+      const list = Object.fromEntries(
+        [...Object.entries(current.agents.list), ...written].filter(([id]) => !removed.has(id)),
+      );
+      current = ConfigSchema.parse({ ...current, agents: { ...current.agents, list } });
+      return respond();
+    },
+  };
+}
+
 describe('the agents index', () => {
   it('lists the default even though nothing wrote it down', async () => {
     // Every unbound conversation runs on it, so a list of only the configured
@@ -171,7 +216,9 @@ describe('the agents index', () => {
     });
   });
 
-  it('offers no delete for the default, which every unbound conversation runs on', async () => {
+  it('offers no delete for the default, and no way to switch it off', async () => {
+    // Neither is a state anything downstream can serve: an install with no
+    // default agent is one where an unbound conversation cannot run at all.
     const { user } = mount();
 
     await user.click(await screen.findByRole('button', { name: 'Actions for default' }));
@@ -179,26 +226,149 @@ describe('the agents index', () => {
     expect(await screen.findByRole('menuitem', { name: 'Duplicate' })).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: 'Rename' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Disable' })).not.toBeInTheDocument();
   });
 
-  it('renames without dropping everything else the agent holds', async () => {
-    // `agents.list.*` is replaced wholesale, so a rename that sent only the
-    // label would silently clear the tool selection beside it.
+  it('says whether each agent is on, in a column of its own', async () => {
+    // It used to be an `off` badge beside the name and nothing at all when the
+    // agent was on — which reads as "no comment" rather than as "this runs".
+    mount('/agents', {
+      '/api/settings': [
+        200,
+        {
+          config: ConfigSchema.parse({
+            agents: {
+              defaults: { model: 'llama3', provider: 'ollama' },
+              list: { reviewer: { label: 'Reviewer', enabled: false } },
+            },
+          }),
+          credentialsPresent: {},
+        },
+      ],
+    });
+
+    const row = (await screen.findByRole('link', { name: 'Edit Reviewer' })).closest('tr');
+    expect(row).toHaveTextContent('Disabled');
+    expect(
+      (await screen.findByRole('link', { name: 'Edit default' })).closest('tr'),
+    ).toHaveTextContent('Enabled');
+  });
+
+  it('switches an agent off from the row menu, keeping everything it holds', async () => {
+    // The reversible half of Delete: `agents.list.*` is replaced wholesale, so
+    // a patch of `{ enabled: false }` alone would disable the agent by erasing
+    // its tool selection — and switching it back on would return an empty one.
     const { user, calls } = mount();
 
     await user.click(await screen.findByRole('button', { name: 'Actions for Reviewer' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Rename' }));
-
-    const field = await screen.findByLabelText('Name');
-    await user.clear(field);
-    await user.type(field, 'Second Reader{Enter}');
+    await user.click(await screen.findByRole('menuitem', { name: 'Disable' }));
 
     await waitFor(() => {
       expect(patchesOf(calls)).toHaveLength(1);
     });
     expect(patchesOf(calls)[0]?.agents?.list?.reviewer).toMatchObject({
-      label: 'Second Reader',
+      enabled: false,
       tools: { deny: ['exec'] },
+    });
+  });
+
+  it('offers Enable on one that is already off', async () => {
+    const { user } = mount('/agents', {
+      '/api/settings': [
+        200,
+        {
+          config: ConfigSchema.parse({
+            agents: { list: { reviewer: { label: 'Reviewer', enabled: false } } },
+          }),
+          credentialsPresent: {},
+        },
+      ],
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Reviewer' }));
+
+    expect(await screen.findByRole('menuitem', { name: 'Enable' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Disable' })).not.toBeInTheDocument();
+  });
+
+  it('sorts by status, and still keeps the default at the top', async () => {
+    const { user } = mount();
+
+    await user.click(await screen.findByRole('button', { name: 'Status' }));
+
+    const rows = await screen.findAllByRole('row');
+    expect(rows[1]?.textContent).toContain('default');
+    expect(screen.getByRole('columnheader', { name: /Status/ })).toHaveAttribute(
+      'aria-sort',
+      'ascending',
+    );
+  });
+
+  it('offers no Rename, because the name is a field in the editor', async () => {
+    // A second way to edit one field, with its own dialog and its own patch
+    // builder, was a shortcut that had to be kept correct twice.
+    const { user } = mount();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Reviewer' }));
+
+    expect(await screen.findByRole('menuitem', { name: 'Edit' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Rename' })).not.toBeInTheDocument();
+  });
+
+  it('opens the copy of the default in its editor, not on a stale link', async () => {
+    // The duplicate bug: `save` is fire-and-forget, and navigating on the next
+    // line took the editor to an agent the settings cache had never seen — so
+    // duplicating the default landed on "There is no agent called …" and read
+    // as a menu item that did nothing.
+    const { user, calls } = mount('/agents', statefulSettings());
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for default' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Duplicate' }));
+
+    await waitFor(() => {
+      expect(patchesOf(calls)).toHaveLength(1);
+    });
+    expect(patchesOf(calls)[0]?.agents?.list?.['default-copy']).toMatchObject({
+      label: 'default copy',
+      // Prepopulated from the defaults, since the default agent's own entry
+      // holds neither: this is the copy actually being a copy.
+      model: 'llama3',
+      maxTokens: 4096,
+    });
+
+    expect(await screen.findByRole('heading', { name: 'default copy' })).toBeInTheDocument();
+    expect(screen.queryByText(/no agent called/)).not.toBeInTheDocument();
+  });
+
+  it('does not silently do nothing when the obvious copy name is taken', async () => {
+    // `Reviewer copy` exists, so the next one has to be `Reviewer copy 2`. It
+    // used to return early and leave the operator pressing a dead menu item.
+    const { user, calls } = mount('/agents', {
+      '/api/settings': [
+        200,
+        {
+          config: ConfigSchema.parse({
+            agents: {
+              defaults: { model: 'llama3', provider: 'ollama' },
+              list: {
+                reviewer: { label: 'Reviewer' },
+                'reviewer-copy': { label: 'Reviewer copy' },
+              },
+            },
+          }),
+          credentialsPresent: {},
+        },
+      ],
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Reviewer' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Duplicate' }));
+
+    await waitFor(() => {
+      expect(patchesOf(calls)).toHaveLength(1);
+    });
+    expect(patchesOf(calls)[0]?.agents?.list?.['reviewer-copy-2']).toMatchObject({
+      label: 'Reviewer copy 2',
     });
   });
 
@@ -214,8 +384,8 @@ describe('the agents index', () => {
 
     await user.click(screen.getByRole('button', { name: 'Name' }));
 
-    // Reversed, but the default is what the others inherit from rather than a
-    // peer in the ordering.
+    // Reversed, but the default is the one the others were created from rather
+    // than a peer in the ordering.
     expect(await firstRow()).toContain('default');
     expect(screen.getByRole('columnheader', { name: /Name/ })).toHaveAttribute(
       'aria-sort',
@@ -224,46 +394,31 @@ describe('the agents index', () => {
   });
 });
 
-/**
- * Opens the Limits disclosure and returns the field inside it.
- *
- * The budget numbers moved behind a press because they are real settings that
- * nobody changes twice a year, and in the reading order they pushed the prompt
- * and the tools — the two things this screen is for — below the fold.
- */
-async function limitsField(
-  user: ReturnType<typeof userEvent.setup>,
-  label: string,
-): Promise<HTMLElement> {
-  await user.click(await screen.findByRole('button', { name: 'Show limits' }));
-  return await screen.findByLabelText(label);
-}
-
 describe('the default agent', () => {
   it('shows what the config says, not what the schema defaults to', async () => {
-    const { user } = mount('/agents/default');
+    mount('/agents/default');
 
-    expect(await limitsField(user, 'Max output tokens')).toHaveValue('4096');
+    expect(await screen.findByLabelText('Max output tokens')).toHaveValue('4096');
   });
 
-  it('keeps the budget out of the way until it is asked for', async () => {
-    const { user } = mount('/agents/default');
+  it('shows the budget without making it be asked for', async () => {
+    // It sat behind a "Show limits" press while the numbers were inherited and
+    // a blank box was the normal state. They are this agent's own now, and a
+    // setting an operator has to go looking for to read is not one they can be
+    // said to have chosen.
+    mount('/agents/default');
 
-    // The prompt and the tools are what this screen is for; five numbers above
-    // them meant scrolling past a tuning panel to reach the subject.
-    await screen.findByRole('button', { name: 'Show limits' });
-    expect(screen.queryByLabelText('Max output tokens')).not.toBeInTheDocument();
-
-    expect(await limitsField(user, 'Max output tokens')).toBeVisible();
+    expect(await screen.findByLabelText('Max output tokens')).toBeVisible();
+    expect(screen.queryByRole('button', { name: /limits/i })).not.toBeInTheDocument();
   });
 
   it('offers no way to move the workspace directory', async () => {
     // Repointing the agent's filesystem root is the one setting in this app
     // that moves the sandbox, and a browser form is not where that decision
     // belongs. It stays configurable by file, environment and `--workspace`.
-    const { user } = mount('/agents/default');
+    mount('/agents/default');
 
-    await limitsField(user, 'Max output tokens');
+    await screen.findByLabelText('Max output tokens');
     expect(screen.queryByLabelText('Workspace directory')).not.toBeInTheDocument();
   });
 
@@ -292,7 +447,7 @@ describe('the default agent', () => {
   it('saves the defaults subtree, and nothing outside agents', async () => {
     const { user, calls } = mount('/agents/default');
 
-    const maxTokens = await limitsField(user, 'Max output tokens');
+    const maxTokens = await screen.findByLabelText('Max output tokens');
     await user.clear(maxTokens);
     await user.type(maxTokens, '2048');
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
@@ -315,7 +470,7 @@ describe('the default agent', () => {
     // two are indistinguishable in a diff.
     const { user, calls } = mount('/agents/default');
 
-    const maxTokens = await limitsField(user, 'Max output tokens');
+    const maxTokens = await screen.findByLabelText('Max output tokens');
     await user.clear(maxTokens);
     await user.type(maxTokens, '2048');
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
@@ -327,8 +482,8 @@ describe('the default agent', () => {
   });
 
   it('writes its own prompt to its entry and its model to the defaults', async () => {
-    // The two halves of what the default agent is: `agents.defaults` is what
-    // every other agent inherits, `agents.list.default` is its own behaviour.
+    // The two halves of what the default agent is: `agents.defaults` is what a
+    // new agent is seeded from, `agents.list.default` is its own behaviour.
     const { user, calls } = mount('/agents/default');
 
     const prompt = await screen.findByLabelText(/^System prompt for/);
@@ -360,7 +515,7 @@ describe('the default agent', () => {
   it('reverts to what the server holds', async () => {
     const { user } = mount('/agents/default');
 
-    const maxTokens = await limitsField(user, 'Max output tokens');
+    const maxTokens = await screen.findByLabelText('Max output tokens');
     await user.clear(maxTokens);
     await user.type(maxTokens, '10');
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled();
@@ -373,9 +528,9 @@ describe('the default agent', () => {
   it('offers no way to delete itself, and no way to switch itself off', async () => {
     // An install with no default agent is not a state anything downstream can
     // serve, so neither control exists rather than existing and refusing.
-    const { user } = mount('/agents/default');
+    mount('/agents/default');
 
-    await limitsField(user, 'Max output tokens');
+    await screen.findByLabelText('Max output tokens');
     expect(screen.queryByRole('button', { name: /Actions for/ })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Enabled')).not.toBeInTheDocument();
   });
@@ -464,9 +619,25 @@ describe('choosing a provider', () => {
 
     await choose(user, 'Provider', /OpenAI/);
 
-    expect(screen.getByRole('combobox', { name: 'Model' })).toHaveTextContent(
-      'Resolved automatically',
-    );
+    // Cleared, and the placeholder asks for the choice rather than dressing the
+    // empty state up as "resolved automatically" — which it never was.
+    expect(screen.getByRole('combobox', { name: 'Model' })).toHaveTextContent('Choose a model');
+  });
+
+  it('refuses to save an agent left with no model', async () => {
+    // The clearing above is the way an operator most easily ends up here, and
+    // it used to save silently: `agents.defaults.model = ''` makes the runtime
+    // report `configured: false` and refuse every turn.
+    const { user, calls } = mount('/agents/default', TWO_PROVIDERS);
+
+    await choose(user, 'Provider', /Ollama/);
+    await choose(user, 'Model', /^llama3$/);
+    await choose(user, 'Provider', /OpenAI/);
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('cannot run a turn');
+    expect(screen.getByRole('combobox', { name: 'Model' })).toHaveAttribute('aria-invalid', 'true');
+    expect(patchesOf(calls)).toHaveLength(0);
   });
 
   it('keeps a model both providers offer', async () => {
@@ -498,18 +669,69 @@ describe('choosing a provider', () => {
 });
 
 describe('a named agent', () => {
-  it('says what it would inherit, rather than only implying it with grey text', async () => {
-    // A placeholder relies on the reader already knowing that an empty box
-    // means "inherited", which is the thing this screen used to fail to say.
-    const { user } = mount('/agents/reviewer');
+  it('shows the settings it runs on, not a blank box and a promise', async () => {
+    // The fixture's `reviewer` stores neither a model nor a budget. It used to
+    // render as "Inherit — llama3" and an empty number, which asked the reader
+    // to go and look up what this agent would actually do; the boxes now hold
+    // it, and the first save writes it down.
+    mount('/agents/reviewer');
 
-    expect(await screen.findByRole('combobox', { name: 'Model' })).toHaveTextContent(
-      'Inherit — llama3',
-    );
+    expect(await screen.findByRole('combobox', { name: 'Model' })).toHaveTextContent('llama3');
+    expect(screen.getByLabelText('Max output tokens')).toHaveValue('4096');
+    expect(screen.queryByText(/Inherit/)).not.toBeInTheDocument();
+  });
 
-    const maxTokens = await limitsField(user, 'Max output tokens');
-    expect(maxTokens).toHaveValue('');
-    expect(screen.getByText('Empty inherits 4096 from the default agent.')).toBeInTheDocument();
+  it('refreshes the agent list after the save, so a rename reaches the composer', async () => {
+    // The reported bug. `/api/agents` is what the composer's picker renders,
+    // and it is derived from the settings tree rather than part of it — so a
+    // save that renamed an agent left the picker on the old name. The editor
+    // did invalidate the query, but on the line *after* `save`, which is
+    // fire-and-forget: the refetch raced the PATCH, answered from the config
+    // still on the server, and nothing invalidated it again afterwards.
+    const { user, calls } = mount('/agents/reviewer', statefulSettings());
+
+    const name = await screen.findByLabelText('Name');
+    await user.clear(name);
+    await user.type(name, 'Second Reader');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => {
+      expect(patchesOf(calls)).toHaveLength(1);
+    });
+    expect(patchesOf(calls)[0]?.agents?.list?.reviewer).toMatchObject({
+      label: 'Second Reader',
+      // Wholesale replacement, so the rest of the agent has to ride along.
+      tools: { deny: ['exec'] },
+    });
+
+    // The assertion that would have caught it: the agents query is refetched,
+    // and only after the write it is meant to reflect.
+    await waitFor(() => {
+      const patchAt = calls.findIndex((call) => call.method === 'PATCH');
+      const refetched = calls.findIndex(
+        (call, index) => index > patchAt && call.method === 'GET' && call.path === '/api/agents',
+      );
+      expect(refetched).toBeGreaterThan(patchAt);
+    });
+  });
+
+  it('writes the filled-in settings down on the first save', async () => {
+    // The point of prepopulating: after this, a change to `agents.defaults`
+    // does not silently move this agent. The edit is to an unrelated field —
+    // saving *anything* is what commits the settings the form was filled with.
+    const { user, calls } = mount('/agents/reviewer');
+
+    await user.type(await screen.findByLabelText('Name'), '!');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => {
+      expect(patchesOf(calls)).toHaveLength(1);
+    });
+    expect(patchesOf(calls)[0]?.agents?.list?.reviewer).toMatchObject({
+      model: 'llama3',
+      provider: 'ollama',
+      maxTokens: 4096,
+    });
   });
 
   it('saves only its own entry', async () => {

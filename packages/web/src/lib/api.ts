@@ -30,6 +30,7 @@ import {
   ModelsResponseSchema,
   NotificationListResponseSchema,
   NotificationSchema,
+  ProviderTestResponseSchema,
   ProvidersResponseSchema,
   SessionListResponseSchema,
   SessionMessagesResponseSchema,
@@ -55,6 +56,8 @@ import {
   type ModelsResponse,
   type Notification,
   type NotificationListResponse,
+  type ProviderTestRequest,
+  type ProviderTestResponse,
   type ProvidersResponse,
   type SessionListResponse,
   type SessionMessagesResponse,
@@ -310,6 +313,17 @@ export const api = {
 
   providers: (signal?: AbortSignal): Promise<ProvidersResponse> =>
     request('/api/providers', ProvidersResponseSchema, { ...(signal ? { signal } : {}) }),
+
+  /**
+   * Asks one connection whether it answers. Writes nothing.
+   *
+   * The body carries a connection rather than an instance id so the
+   * Add-provider dialog can check what has been typed before it is saved —
+   * which is the moment the answer is most use. A key sent here goes the same
+   * way a key sent to the vault does: out, and never back.
+   */
+  testProvider: (body: ProviderTestRequest): Promise<ProviderTestResponse> =>
+    request('/api/providers/test', ProviderTestResponseSchema, { method: 'POST', body }),
 
   models: (signal?: AbortSignal): Promise<ModelsResponse> =>
     request('/api/models', ModelsResponseSchema, { ...(signal ? { signal } : {}) }),

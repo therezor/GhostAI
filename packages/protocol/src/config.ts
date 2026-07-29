@@ -88,7 +88,18 @@ export const AgentDefaultsSchema = z.object({
    * root, never against the process working directory.
    */
   workspace: z.string().default(''),
-  /** Empty means "resolve from whichever provider has credentials". */
+  /**
+   * Empty means *unconfigured*, not "pick one for me".
+   *
+   * The distinction is worth stating because the neighbouring `provider` field
+   * genuinely does resolve itself, and this one was documented as though it did
+   * too — which put a "Resolved automatically" option in the agent editor that
+   * saved an agent nothing could run. There is no model-picking code anywhere:
+   * `Runtime#resolveProvider` turns an empty model into `noModelError` and
+   * hands the loop a `null` provider, so `runtime.configured` goes false and
+   * every turn is refused. It is the fresh-install state — the setup wizard's
+   * model step is skippable — and the UI treats it as a question to answer.
+   */
   model: z.string().default(''),
   /**
    * `auto` runs the resolution order; otherwise a provider *instance* id.
@@ -552,7 +563,29 @@ export type Config = z.infer<typeof ConfigSchema>;
 export const ConfigPatchSchema = z.object({
   agents: z
     .object({
-      defaults: patchOf(AgentDefaultsSchema).optional(),
+      /**
+       * Two fields accept `null`, and only two.
+       *
+       * `agents.defaults` is a struct that merges per field, so an absent key
+       * means "not mentioned" and preserves what is there. That is right for
+       * every field with a default — and wrong for the two that are genuinely
+       * *optional*, because it left them impossible to clear: emptying the
+       * temperature box produced a patch that simply did not mention it, and
+       * the stored value survived a save that appeared to remove it.
+       *
+       * `null` is the one token the merge reads as a deletion (see
+       * `DELETE_BY_NULL` in `@ghostai/runtime`). It is safe on exactly these
+       * two because both are `.optional()` in `AgentDefaultsSchema`, so a
+       * config with the key gone still re-parses. Doing the same to `model` or
+       * `maxTokens` would punch a hole in the struct and fail that re-parse,
+       * which is why this is a two-field exception rather than a rule.
+       */
+      defaults: patchOf(AgentDefaultsSchema)
+        .extend({
+          temperature: AgentDefaultsSchema.shape.temperature.nullable(),
+          reasoningEffort: AgentDefaultsSchema.shape.reasoningEffort.nullable(),
+        })
+        .optional(),
       /**
        * `null` deletes the agent; an object creates or updates one. Same
        * reasoning as `providers` below — an absent key means "not mentioned",

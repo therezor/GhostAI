@@ -201,6 +201,46 @@
     --gap: var(--space-1);
   }
 
+  /**
+   * The chrome an editor page opens with: the way back, the name, the note.
+   *
+   * Shared rather than per screen. These were `.agents__back`,
+   * `.agent-editor__head` and `.agent-editor__title` while the agent editor was
+   * the only page of this shape; a second one — the provider editor — made the
+   * choice either "copy three rules under a second prefix" or "say it once".
+   * Two names for one shape is how the two drift, and the drift shows up as an
+   * editor whose back link sits a different distance from its title.
+   */
+  .editor__head {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .editor__title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .page__back {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--fg-3);
+    font-size: var(--text-sm);
+    text-decoration: none;
+  }
+
+  .page__back:hover {
+    color: var(--fg-1);
+  }
+
+  .page__back > svg {
+    width: var(--size-icon-sm);
+    height: var(--size-icon-sm);
+  }
+
   .page__title {
     font-size: var(--text-xl);
     line-height: var(--leading-xl);

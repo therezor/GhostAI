@@ -43,16 +43,15 @@ documents what the other eight shipped.
 
 ### Step 1 — The UI/UX pass
 
-**What.** Not a redesign. A sweep of the states the existing screens do not
-have, in the order of how often they are hit.
+**What.** Not a redesign. Three things: the session list, a policy for content
+too large to render, and the account surface that is missing outright.
 
 **Why first.** These are defects that are individually too small to schedule and
 collectively the whole impression of the product. They are also the ones that
 compound: the session list gets a search box in Step 2, slash commands in Step
 3, a task list in Step 7 — each of those inherits whatever this system's answer
-is to "nothing here yet", "that failed", "you are offline", "this is 4 MB of
-text". Right now there is no single answer to any of them, so each new screen
-invents one.
+is to "nothing here yet" and "this is 4 MB of text". Right now there is no single
+answer to either, so each new screen invents one.
 
 Everything here obeys `.claude/skills/ghostai-design/SKILL.md`: no new token
 without deleting one, no `px` outside `tokens.css`, no raw colour, every text
@@ -60,61 +59,118 @@ pairing measured in both themes, native elements first. Run
 `pnpm --filter @ghostai/web exec tsx src/tokens/run-gates.ts` — it is a CI job
 and `pnpm check` does not call it.
 
+**What came out of this step, and where it went.** The transcript, composer,
+approval and connection sub-steps this section used to carry are gone, because
+most of what they described has since shipped: `transcript-view.tsx` has
+jump-to-latest, `approval.tsx` counts down against the server's `expiresAtMs`
+and offers allow-for-the-session, `connection.ts` distinguishes a reconnect's
+gap from a page load's, and `message.tsx` says when a failed turn is retryable.
+Two things those sub-steps owned did **not** ship, and neither is orphaned:
+
+- **The per-message DOM anchor.** `transcript-view.tsx` keys rows and addresses
+  nothing; there is no `id` to scroll to. Step 2 needs it to open a search
+  result at the matching message, so Step 2 now builds it.
+- **The trigger character only opening a popover at the start of the message.**
+  `mentions.ts` still anchors `@` at any word boundary, so typing a path opens
+  the mention popover mid-word. Step 3 needs the same rule for `/`, so Step 3
+  now establishes it for both.
+
+Paste-and-drop image upload, the "new messages" divider and the mobile/a11y
+audit are **dropped**, not deferred: they are worth doing and none of them
+blocks another step, so they go in as ordinary work rather than as a gate on
+Phase 3.
+
 **1a — The session list.** Date grouping (Today / Yesterday / Earlier); a
 running-turn indicator on a row whose turn is streaming in the background;
 `confirm-dialog.tsx` wired into delete, which today deletes on a menu click with
 no confirmation and no undo; a visible Cancel on the inline rename, which today
 is Escape-only and therefore undiscoverable; roving arrow-key navigation.
 
-**1b — The transcript.** A jump-to-latest control when scrolled away from the
-bottom, and a "new messages" divider; scroll anchoring that survives a streaming
-delta (the common bug: the view creeps as tokens arrive); a retry affordance on
-a failed turn; **the composer text restored when a send fails**, which today is
-lost; a per-message anchor, so a search result (Step 2) and a `/branch` have
-something to address.
-
-**1c — The composer.** Paste-an-image and drag-and-drop, both landing in the
-same upload path as the file picker; a size cap with the refusal _before_ the
-upload starts; popover repositioning near the viewport edge; and — the rule Step
-3 will depend on — **a trigger character only opens a popover at the start of
-the message**, so typing `src/foo` does not open one mid-path. The `@` popover
-needs this today and does not have it.
-
-**1d — Approvals.** A visible countdown against `approvals.timeoutMs` — a prompt
-that will silently deny in four minutes must say so; a document-title badge when
-a prompt is waiting in a backgrounded tab; and an "allow for this session"
-option, which is the difference between a policy an operator keeps and one they
-switch off entirely after the fifteenth prompt.
-
-**1e — Connection and replay.** The offline banner gains a retry-now button. And
-the case nothing currently handles: `server.replayBufferSize` is 512, so a tab
-gone longer than that reconnects into a **gap**. The UI must say "some events
-were missed — reload to catch up" rather than rendering a transcript with a hole
-in it, silently.
-
-**1f — Long content.** A 5 MB tool result, a 3 000-line file in the editor, a
+**1b — Long content.** A 5 MB tool result, a 3 000-line file in the editor, a
 turn with 200 tool calls. Each needs a threshold above which the card collapses
 to a summary with an explicit expand, and the transcript needs a virtualisation
 decision made once rather than per component.
 
-**1g — The audit.** Every route gets its loading, empty and error state checked;
-`placeholder.tsx` and `planned-panel.tsx` mark the screens that are still stubs,
-and each either gets built or gets honest copy about when it will be. Every
-screen renders in both colour schemes in `packages/e2e` (the scheme is a
-Playwright project, so this is free) and passes `a11y.spec.ts`. Mobile: the
-chat header, the context strip and the tool cards at 360px, and tap targets.
+**1c — Account settings: the session, its timeout, and the way out.**
 
-**Touches.** `packages/web/src/app/sidebar.tsx`,
-`packages/web/src/chat/**` (transcript, composer, approval, tool-card),
-`packages/web/src/lib/connection.ts` and `socket.ts` (the replay gap),
-`packages/web/src/components/**`, `packages/web/src/styles/**`,
-`packages/e2e/src/tests/**`.
+The Account panel today changes a password and nothing else. Two things are
+missing from it, and the second one is a hole rather than a nicety.
 
-**Done when.** Each of 1a–1g has landed with a component test for the state it
-adds, the token gates pass, and the e2e additions assert only durable states.
+- **A sign-out button.** `POST /api/auth/logout` exists, revokes the presented
+  session by id, clears the cookie and answers 204 — and **nothing in the web
+  app calls it.** There is no `logout` on `api`; the only caller of that URL in
+  the repo is `api.test.ts`. So the only way out of a signed-in browser today is
+  to delete a cookie by hand or rotate the password, and rotating the password
+  to leave a shared machine is the kind of workaround that ends with the
+  password written down.
+- **The session lifetime.** `server.auth.sessionTtlMs` defaults to 30 days and
+  is editable in exactly one place: `config.json`, by hand. It is already
+  accepted by `ConfigPatchSchema` (`server.auth` is a `patchOf(AuthConfigSchema)`),
+  so the write path needs nothing new — this is a field and a label, not a
+  feature.
 
-**Edge cases.** They are the content of this step; the ones deferred rather than
-fixed get a line in this file saying so.
+**The one thing that has to change on the server.** `AuthStore` takes
+`sessionTtlMs` in its constructor (`app.ts`) and holds it in a `readonly #ttlMs`,
+so a saved change does nothing at all until the process restarts — a settings
+field that silently no-ops is worse than no field. `AuthStore` takes a getter
+rather than a number and reads it at mint time, which is the smallest change
+that makes the save real and keeps the store ignorant of the config tree.
+Sessions already issued keep the `expires_at_ms` they were minted with, and the
+cookie's `Max-Age` is derived from that same value, so the two cannot disagree;
+the panel's copy has to say that shortening the timeout applies to the next
+sign-in, because the obvious reading is that it applies now.
+
+**And one schema hole to close while here.** `sessionTtlMs` is
+`z.number().int().positive()` — which accepts `1`, and a one-millisecond session
+TTL is an install nobody can sign into. It gains a floor (5 minutes) and a
+ceiling (a year), enforced in the schema rather than in the input, because the
+CLI and a hand-edited `config.json` reach the same field.
+
+The panel presents it in minutes/hours/days, never raw milliseconds, and shows
+when the current session expires — `/api/auth/me` already returns `expiresAtMs`
+and nothing renders it.
+
+**Touches.** `packages/web/src/app/sidebar.tsx` and
+`packages/web/src/styles/screens/sidebar.css` (1a), `packages/web/src/chat/**`
+and `packages/web/src/files/**` (1b), `packages/protocol/src/config.ts`
+(the TTL bounds), `packages/server/src/app.ts` and
+`packages/server/src/auth-store.ts` (the live TTL read),
+`packages/web/src/lib/api.ts` (`logout`),
+`packages/web/src/settings/account-panel.tsx`,
+`packages/web/src/settings/settings.test.tsx`,
+`packages/e2e/src/tests/sessions.spec.ts` and `setup.spec.ts`.
+
+This is an auth change, so `CLAUDE.md`'s list applies: the credential surface
+spans further than it looks. Nothing here adds a DTO — logout has no body and
+the TTL rides the existing settings patch — so `rest.ts` and `schemas.ts` stay
+put, and the e2e harness only matters if a test pins a non-default TTL.
+
+**Done when.** The session list groups by date, confirms a delete and can be
+driven from the keyboard; a tool result and a file above the threshold collapse
+to a summary with an explicit expand; the Account panel shows when this session
+expires, changes the timeout with the new value applying to the next sign-in,
+and signs out to the login overlay with the query cache cleared; the token gates
+pass; and the e2e additions assert only durable states.
+
+**Edge cases.**
+
+- **Signing out must clear the React Query cache.** Otherwise the next sign-in —
+  possibly as a different account on a shared machine — paints the previous
+  session's conversations, workspaces and settings from cache before any request
+  answers.
+- **`auth.enabled: false`.** On a loopback dev install there is no session to
+  revoke and no login overlay to land on. The button is disabled with the reason
+  rather than present and inert; `/api/auth/me` already returns `authEnabled`.
+- **Signing out while a turn is streaming.** The socket closes with the session;
+  say so on the button rather than dropping a turn silently.
+- **A TTL edit that is really a lockout.** The floor covers the accidental
+  version. There is no defence against a deliberate 5-minute TTL, and none is
+  wanted.
+- **The date grouping's boundaries are local midnight**, not 24-hour windows, and
+  a tab left open overnight recomputes them rather than captioning yesterday's
+  conversations as Today.
+- The remaining edge cases are the content of 1b; the ones deferred rather than
+  fixed get a line in this file saying so.
 
 ---
 
@@ -151,7 +207,11 @@ conversation by how it opened and never by what it turned into.
 - `SessionStore.searchSessions({ query, workspaceId, limit, after })` returns
   `SessionSummaryRecord` plus `{ matchSeq, snippet }` — the seq is what makes a
   result clickable _into the message_ rather than to the top of a conversation.
-  It lands on the per-message anchor from Step 1b.
+- **The per-message anchor is built here**, because this is the first thing that
+  needs it. `transcript-view.tsx` keys its rows and gives them no `id`, so there
+  is nothing for a link to address. A stable `id` per message seq, and a
+  scroll-into-view that respects the transcript's own bottom-anchoring rather
+  than fighting it. `/branch` gets it for free.
 - **Search pagination does not use the list cursor.** The list is ordered
   `updated_at_ms DESC, key ASC`, which is a stable keyset; search is ordered by
   rank, which is not a column a reader can be positioned in. Search pages with
@@ -163,7 +223,8 @@ query), `packages/protocol/src/rest.ts` (`SessionSearchResponseSchema`,
 `SessionSearchResultSchema`) and `schemas.ts` (registration — a test enforces
 it), `packages/server/src/queries.ts` (`q` on `SessionListQuery`),
 `packages/server/src/routes/sessions.ts`, `packages/web/src/lib/api.ts`,
-`packages/web/src/app/sidebar.tsx`, `packages/web/src/styles/screens/sidebar.css`.
+`packages/web/src/app/sidebar.tsx`, `packages/web/src/styles/screens/sidebar.css`,
+`packages/web/src/chat/transcript-view.tsx` (the per-message anchor).
 
 **Done when.** Typing in the sidebar's search box narrows the list to matching
 conversations with a highlighted snippet; clicking a result opens that
@@ -222,6 +283,7 @@ browser reuses the hub's one turn-running path exactly as the CLI reuses its own
 **Touches.** `packages/protocol/src/commands.ts` (new) and `index.ts`,
 `packages/cli/src/commands.ts`, `packages/web/src/chat/commands.ts` (new,
 parsing and dispatch), `packages/web/src/chat/composer.tsx`,
+`packages/web/src/chat/mentions.ts` (the shared position-0 predicate),
 `packages/web/src/styles/screens/chat.css`.
 
 **Done when.** `/` at the start of an empty composer opens a filtered listbox;
@@ -231,9 +293,12 @@ passes.
 
 **Edge cases.**
 
-- **`/` only opens the menu at position 0**, which is the rule Step 1c
-  establishes for `@` as well. Without it, typing `src/foo` opens a command
-  palette mid-path.
+- **`/` only opens the menu at position 0**, and **this step establishes that
+  rule for `@` too.** `mentions.ts` currently anchors at any word boundary — its
+  own comment concedes it "does not anchor, but every real mention in practice
+  starts a word" — so typing `src/foo` would open a command palette mid-path and
+  typing an email address already opens the mention popover. One predicate, both
+  triggers, tested once.
 - **Sending a literal leading slash.** `//` escapes to a single `/`. Without an
   escape, "…/usr/bin is on PATH" typed as the first word is unsendable.
 - **An unknown command is not sent as a message.** It shows an inline notice and
@@ -510,11 +575,29 @@ as a tool error it can act on.
 file and decides whether anything needs doing. Full CRUD from the web UI and,
 per Step 5's rule, from a `/tasks` slash command rather than a `ghost` subcommand.
 
-**Why now.** The vocabulary already exists and nothing implements it:
-`packages/protocol/src/automation.ts` has jobs, schedules, payloads, runs and
-their create/update DTOs; `rest.ts` already exports the two list responses; and
-`SchedulerConfig` / `HeartbeatConfig` are already in the settings tree with
-defaults. What is missing is a package, three tables, a timer and two screens.
+**Why now.** The vocabulary already exists and nothing implements it. Rechecked
+against the tree, what is built is:
+
+- `packages/protocol/src/automation.ts` — schedules (`at` / `every` / `cron`),
+  both payload kinds, the delivery block, `AutomationJob`, `AutomationJobState`,
+  `AutomationRun`, `RunStatus` and the create/update DTOs. All sixteen are
+  registered in `schemas.ts`, so the OpenAPI document already describes an API
+  that does not exist.
+- `rest.ts` — `AutomationJobListResponse` and `AutomationRunListResponse`, both
+  registered, neither served by a route.
+- `config.ts` — `SchedulerConfig` (`enabled`, `concurrency: 2`,
+  `catchUpOnBoot`) and `HeartbeatConfig` (`enabled`, `intervalMin: 30`, `model`,
+  `sessionKey`, `file: 'TASK.md'`, `targets`, `agentId`), both in the settings
+  tree and both already reachable through `ConfigPatchSchema`.
+- The seams downstream: `NotificationEventSchema.jobId` is documented as "set
+  when raised by an automation run", and `sessions.origin` — a persisted column —
+  already lists `automation` as one of its values in `SessionListQuery`.
+
+What is missing is everything that runs: no `packages/scheduler`, no tables, no
+timer, no cron evaluator, no `routes/tasks.ts`, no `/tasks` route in the web app,
+no `api.*` methods (the header comment in `packages/web/src/lib/api.ts` says so
+in as many words), and no CLI commands. So this step writes code against a
+vocabulary that is already fixed, which is the cheap half of the work.
 
 **One word for it: `task`.** The wire DTOs are `Automation*` and the UI would
 call them Tasks, which is two names for one concept and the reason a doc and a
@@ -545,6 +628,27 @@ graph — the README's layout already reserves the slot.
   Every outcome writes a run row, including `skipped` — a heartbeat that leaves no
   trace when it decides nothing is exactly the one you cannot debug.
 
+**The heartbeat is specified twice today, and this step collapses it to once.**
+`scheduler.heartbeat` in the settings tree describes one install-wide heartbeat
+with its own `intervalMin`, `sessionKey`, `file`, `model`, `agentId` and
+`targets`; `HeartbeatPayloadSchema` describes a heartbeat as a job payload, with
+its own `file` and `model` and whatever schedule the job carries. Built as
+written, those are two runtimes that can both be passing over `TASK.md` on
+different intervals with neither aware of the other, and an operator who turns
+one off and watches the other keep going.
+
+So: **the config block seeds a job, it does not run anything.** At boot the
+scheduler ensures one built-in task with the reserved id `heartbeat`, whose
+schedule is `{ kind: 'every', everyMs: intervalMin * 60_000 }` and whose payload
+is the `heartbeat` payload the config describes. There is exactly one execution
+path — the scheduler — and `scheduler.heartbeat` is the settings _for that one
+job_. It follows that the built-in job is not deletable from the Tasks screen
+(disabling it is `scheduler.heartbeat.enabled: false`, which is where an
+operator will look), and that editing its schedule in the UI writes the config
+rather than the row, or the next boot overwrites it. A second, hand-made
+heartbeat job is still allowed — it is just an ordinary task with a heartbeat
+payload, and it is visible in the same list as everything else.
+
 **REST.** `GET|POST /api/tasks`, `GET|PATCH|DELETE /api/tasks/:id`,
 `POST /api/tasks/:id/run` (run now, ignoring the schedule),
 `GET /api/tasks/:id/runs` (cursor-paged, like every other listing here).
@@ -556,11 +660,41 @@ runs list while any job is running and relies on the existing notification centr
 for completion. Written down so the next person does not read the polling as an
 oversight.
 
-**Web.** A `/tasks` route: a table of name, schedule (in words, not cron), next
-run, last status, an enable switch and a run-now button; a run-history drawer;
-and an editor dialog whose schedule builder **previews the next three fire
-times**. That preview is the single most effective defence against a wrong cron
-expression, and it is cheap because the evaluator is already pure.
+**Web, and it is two surfaces, not one.** The split is the same one Providers
+and Agents already draw: settings live in a settings panel, records live on a
+page.
+
+- **`/tasks`** holds the records. A table of name, schedule (in words, not
+  cron), next run, last status, an enable switch and a run-now button; a
+  run-history drawer; and an editor dialog whose schedule builder **previews the
+  next three fire times**. That preview is the single most effective defence
+  against a wrong cron expression, and it is cheap because the evaluator is
+  already pure.
+- **Settings → Automation** holds the settings, and it is a placeholder today:
+  `scheduler.enabled`, `scheduler.concurrency`, `scheduler.catchUpOnBoot`, and
+  the built-in heartbeat's own block. Nothing in it is a job. Saying so here
+  because the panel is named "Automation" and the obvious thing to build inside
+  it is the job list, which would then exist in two places.
+
+**The panel is also lying about when it arrives, and the test does not catch
+it.** `packages/web/src/settings/panels.ts` marks Automation as **Phase 5** and
+lists "Scheduled jobs" and "Heartbeat" as Phase 5 systems; this plan builds them
+in Phase 3, here. The other two placeholders are wrong in the same direction:
+Extensions says Phase 3 for MCP, skills, channels and OAuth, which this plan puts
+in Phase 4, and Knowledge says Phase 5 for RAG, which is Phase 4. `panels.test.ts`
+asserts only that the numbers are internally consistent — that a planned panel
+lists something, and that no system is promised earlier than its panel — so all
+six can be wrong together and stay green.
+
+The fix has two halves. Automation loses its `phase` outright, because this step
+builds it — and that half is already guarded: `panels.test.ts` asserts the built
+list is exactly `['providers', 'tools', 'account']`, so the suite goes red until
+someone updates it deliberately. Extensions becomes 4 and Knowledge becomes 4,
+with the per-system numbers under `PLANNED_SYSTEMS` moved to match, and each one
+gains the plan reference in a comment — a number with no citation is a number
+nobody can check. What is _not_ worth building is a test that parses this
+document; the numbers change once per phase, and the cheap guard for a wrong one
+is that it is written next to the sentence that explains it.
 
 **Terminal.** `/tasks` lists with next run and last status; `/task <id>` shows
 one with its recent runs; `/task run <id>` fires it now; `/task on|off <id>`
@@ -573,15 +707,18 @@ the Tasks screen — for the same reason creating an agent is.
 `packages/server/src/routes/tasks.ts` (new) and `routes.ts`,
 `packages/server/src/boot.ts` (start/stop with the process),
 `packages/web/src/routes/tasks.tsx` + `packages/web/src/tasks/**` +
-`styles/screens/tasks.css`, `packages/cli/src/commands.ts`,
-`packages/e2e/src/tests/tasks.spec.ts`.
+`styles/screens/tasks.css`, `packages/web/src/settings/automation-panel.tsx`
+(new) with `panels.ts` and `panels.test.ts` (the phase correction),
+`packages/cli/src/commands.ts`, `packages/e2e/src/tests/tasks.spec.ts`.
 
 **Done when.** A task created in the UI fires on its schedule under a fake clock
 in tests and under a real one in a manual run; its runs appear in the history with
 status and output; `deliver: false` still records the run and notifies without
-interrupting; the heartbeat skips with a reason on an unchanged `TASK.md`;
-`/tasks` lists the same rows the screen does; and coverage stays above the
-scheduler package's gate.
+interrupting; the heartbeat skips with a reason on an unchanged `TASK.md` and
+runs as one job in the same list as every other, not as a second timer;
+`/tasks` lists the same rows the screen does; Settings → Automation is a form
+rather than a placeholder and no panel still names a phase this plan disagrees
+with; and coverage stays above the scheduler package's gate.
 
 **Edge cases.** This is the step where they _are_ the work:
 
@@ -613,6 +750,14 @@ scheduler package's gate.
 - **Run output size.** A run that produced 4 MB of text is truncated on the way
   into `task_runs` with the truncation marked, or the database grows without
   bound.
+- **The reserved `heartbeat` id.** A task the operator creates may not claim it,
+  and the seeded row is reconciled with the config on every boot rather than
+  inserted once — otherwise changing `intervalMin` edits a file nothing reads
+  again.
+- **`scheduler.enabled: false` with jobs due.** Nothing fires and nothing
+  accumulates a backlog; the screen says the scheduler is off rather than
+  showing next-run times that will not happen. Turning it back on recomputes
+  from now, which is the same coalescing rule the sleeping laptop gets.
 
 ---
 

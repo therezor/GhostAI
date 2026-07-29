@@ -56,10 +56,26 @@ const REPLACE_WHOLESALE: readonly string[] = [
  * Deliberately a list rather than a blanket rule. `null` anywhere else is a
  * value the schema either accepts or rejects, and letting it delete would mean
  * a patch could punch a hole in a struct — dropping `agents.defaults.model` and
- * failing the re-parse at best, silently reverting it at worst. Every entry
- * here names a *record whose entries an operator adds and removes*.
+ * failing the re-parse at best, silently reverting it at worst. Most entries
+ * here name a *record whose entries an operator adds and removes*.
+ *
+ * The last two are the exception, and they are leaves rather than records.
+ * `agents.defaults` merges per field, so an absent key preserves what is
+ * stored — which is correct for every field that has a default and was wrong
+ * for the only two that are genuinely optional. Emptying the temperature box
+ * sent a patch that did not mention it, and the old value survived a save that
+ * looked like it had removed one. They are safe to delete for the reason
+ * `model` is not: both are `.optional()` in `AgentDefaultsSchema`, so a config
+ * without them still parses. "Unset" is a real state for these two — it means
+ * the request carries no such parameter at all — so it needs a way to be said.
  */
-const DELETE_BY_NULL: readonly string[] = ['providers.*', 'tools.mcpServers.*', 'agents.list.*'];
+const DELETE_BY_NULL: readonly string[] = [
+  'providers.*',
+  'tools.mcpServers.*',
+  'agents.list.*',
+  'agents.defaults.temperature',
+  'agents.defaults.reasoningEffort',
+];
 
 function matchesPath(patterns: readonly string[], path: readonly string[]): boolean {
   return patterns.some((pattern) => {

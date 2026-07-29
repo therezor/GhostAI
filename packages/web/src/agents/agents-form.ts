@@ -13,28 +13,36 @@
  * and was still being written into every patch after the field it came from had
  * been reasoned about, because the two halves were never read side by side.
  *
- * What genuinely differs between them is inheritance, and that is why there are
- * still two form types rather than one:
+ * **Every agent holds its own settings. Nothing on this screen inherits.** The
+ * config format still allows an absent field to fall through to
+ * `agents.defaults` — that is what makes a hand-written `config.json` short,
+ * and `@ghostai/runtime` still resolves it that way — but the editor no longer
+ * *expresses* inheritance, because an empty box that silently means "whatever
+ * the other screen says" is a setting you cannot read off the screen it is on.
+ * So a form opened on an agent that stored nothing is filled from the defaults,
+ * and saving writes those values down. A new agent is created the same way:
+ * prepopulated from the default agent, then its own from that moment.
  *
- *  - `AgentForm` edits `agents.defaults`, where every field has a value. Two
- *    states: set, or set to something else.
- *  - `AgentEntryForm` edits `agents.list.<id>`, where nearly every field is an
- *    *override*. An empty box means "inherit", not "set to empty", so it has
- *    three states where the other has two: set, cleared, and never touched.
+ * There are still two form types, because the two subtrees differ in what they
+ * are allowed to say:
  *
- * The three-state case works because the merge replaces an agent wholesale
- * rather than field by field — see `REPLACE_WHOLESALE` in `@ghostai/runtime`.
- * The patch this builds *is* the agent, so a field left out of it is a field
- * cleared, and an empty box means "inherit" all the way through to the stored
- * config. Under a per-field merge, emptying a box would silently keep the value
- * that was just deleted.
+ *  - `AgentForm` edits `agents.defaults` — what a fresh agent is seeded from,
+ *    and what an install with no named agents runs as.
+ *  - `AgentEntryForm` edits `agents.list.<id>`.
  *
- * One asymmetry is deliberate and is a property of the patch format rather than
- * of this file. `reasoningEffort` and `temperature` are optional in the config
- * and a patch has no way to say "remove this key" — an absent field means "not
- * mentioned", never "delete". So the form can set either and cannot unset it,
- * and the screen says so rather than offering a control that silently does
- * nothing.
+ * The patch this builds *is* the agent: `agents.list.*` is in the merge's
+ * `REPLACE_WHOLESALE` list, so a field left out of it is a field cleared. That
+ * is why `toAgentEntryPatch` takes the stored entry as well as the form — the
+ * settings this screen does not render (the sandbox, the memory scope, the exec
+ * allow-list) have to be carried through by hand, or saving the prompt would
+ * quietly delete them.
+ *
+ * One asymmetry is a property of the patch format rather than of this file.
+ * `reasoningEffort` and `temperature` are optional in the config, and the two
+ * are genuinely unset rather than defaulted: unset means the request carries no
+ * such parameter, which is the only thing that works for a model that rejects
+ * it. Wholesale replacement is what lets the form express that — omitting the
+ * key *is* clearing it.
  */
 
 import {
@@ -50,15 +58,30 @@ import { msToSeconds, parseNumber, secondsToMs, type PatchResult } from '@/setti
 export type { PatchResult };
 
 /**
- * The value an "inherit" option carries.
+ * The value the "leave this unset" option carries.
  *
  * Not the empty string, which is what the form holds: an empty `value` means
  * *no* value to a Radix select, so the option would select nothing and the
  * trigger would render blank — a control that looks broken while working.
  */
-export const INHERIT_VALUE = '__inherit__';
+export const UNSET_VALUE = '__unset__';
 
-/** `agents.defaults` — the values every agent inherits. */
+/**
+ * Why a model is required rather than merely encouraged.
+ *
+ * The screen used to offer "Resolved automatically" for it, on the reading of
+ * `AgentDefaultsSchema`'s "empty means resolve from whichever provider has
+ * credentials". That sentence is about the **provider**: `resolveInstance` uses
+ * the model as a hint when picking an endpoint. The model itself is never
+ * invented — `GhostRuntime` turns an empty one into `noModelError`, hands the
+ * loop a `null` provider, and the agent cannot run a turn at all.
+ *
+ * So the option was offering an unconfigured install as though it were a
+ * setting. Blank is now a state the form refuses rather than one it saves.
+ */
+export const MODEL_REQUIRED = 'Choose a model — an agent with none cannot run a turn.';
+
+/** `agents.defaults` — what an install runs as, and what a new agent is seeded from. */
 export interface AgentForm {
   readonly provider: string;
   readonly model: string;
@@ -128,6 +151,8 @@ export function toAgentPatch(form: AgentForm): PatchResult {
   collect('learningInterval', learningInterval);
 
   if (form.provider.trim() === '') errors.provider = 'Required';
+  // An empty model is not "resolve one for me" — see `MODEL_REQUIRED`.
+  if (form.model.trim() === '') errors.model = MODEL_REQUIRED;
 
   if (
     !maxTokens.ok ||
@@ -147,8 +172,6 @@ export function toAgentPatch(form: AgentForm): PatchResult {
       agents: {
         defaults: {
           provider: form.provider.trim(),
-          // Trimmed, and empty is meaningful: an empty model asks the registry
-          // to resolve one.
           model: form.model.trim(),
           // `workspace` is deliberately absent, and its absence is load-bearing.
           // The browser no longer offers a control for the agent's filesystem
@@ -166,10 +189,14 @@ export function toAgentPatch(form: AgentForm): PatchResult {
           loopWallTimeoutMs: secondsToMs(loopWallTimeout.value),
           learningEnabled: form.learningEnabled,
           learningInterval: learningInterval.value,
-          ...(temperature?.ok === true ? { temperature: temperature.value } : {}),
-          ...(isReasoningEffort(form.reasoningEffort)
-            ? { reasoningEffort: form.reasoningEffort }
-            : {}),
+          // `null` when blank rather than omitted, and that is the whole of
+          // being able to clear these two. `agents.defaults` merges per field,
+          // so an omitted key preserves what is stored — emptying the
+          // temperature box used to send a patch that never mentioned it, and
+          // the old value came straight back on the next load. `null` is the
+          // token `DELETE_BY_NULL` reads as "remove this key".
+          temperature: temperature?.ok === true ? temperature.value : null,
+          reasoningEffort: isReasoningEffort(form.reasoningEffort) ? form.reasoningEffort : null,
         },
       },
     },
@@ -180,18 +207,19 @@ export interface AgentEntryForm {
   readonly label: string;
   readonly systemPrompt: string;
   readonly enabled: boolean;
-  /** Empty inherits from `agents.defaults`. */
   readonly provider: string;
+  /** Empty asks the registry to resolve one — a value, not an absence. */
   readonly model: string;
   readonly maxTokens: string;
   readonly contextWindowTokens: string;
+  /** Empty sends no temperature at all, so the provider applies its own. */
   readonly temperature: string;
   readonly reasoningEffort: string;
   readonly toolTimeoutSeconds: string;
   /** Comma-separated tool names. Empty means "everything not denied". */
   readonly allowTools: string;
   readonly denyTools: string;
-  /** Risk band → policy, empty inheriting the global `tools.approvals`. */
+  /** Risk band → policy, empty leaving the band to the global `tools.approvals`. */
   readonly approveExec: string;
   readonly approveNetwork: string;
   readonly approveWrite: string;
@@ -199,23 +227,32 @@ export interface AgentEntryForm {
 
 export const APPROVAL_POLICIES: readonly string[] = ['allow', 'ask', 'deny'];
 
-/** A number the agent overrode, or empty when it inherits. */
-function optionalNumber(value: number | undefined): string {
-  return value === undefined ? '' : String(value);
-}
+/**
+ * One agent's stored settings, with the defaults filled in where it stored none.
+ *
+ * The fallback is the whole of "nothing inherits on this screen": an agent that
+ * predates the change — or one written by hand — has most of these fields
+ * absent, and rendering them as empty boxes would show an operator nothing
+ * about what the agent actually runs on. They arrive as the values a turn would
+ * use, and the first save writes them down.
+ */
+export function toAgentEntryForm(entry: AgentEntry, defaults: AgentDefaults): AgentEntryForm {
+  const temperature = entry.temperature ?? defaults.temperature;
+  const toolTimeoutMs = entry.toolTimeoutMs ?? defaults.toolTimeoutMs;
 
-export function toAgentEntryForm(entry: AgentEntry): AgentEntryForm {
   return {
     label: entry.label,
     systemPrompt: entry.systemPrompt,
     enabled: entry.enabled,
-    provider: entry.provider ?? '',
-    model: entry.model ?? '',
-    maxTokens: optionalNumber(entry.maxTokens),
-    contextWindowTokens: optionalNumber(entry.contextWindowTokens),
-    temperature: optionalNumber(entry.temperature),
-    reasoningEffort: entry.reasoningEffort ?? '',
-    toolTimeoutSeconds: entry.toolTimeoutMs === undefined ? '' : msToSeconds(entry.toolTimeoutMs),
+    provider: entry.provider ?? defaults.provider,
+    model: entry.model ?? defaults.model,
+    maxTokens: String(entry.maxTokens ?? defaults.maxTokens),
+    contextWindowTokens: String(entry.contextWindowTokens ?? defaults.contextWindowTokens),
+    // Not `?? ''` on the whole expression: `0` is a temperature, and a falsy
+    // check here would render it as "the provider's own".
+    temperature: temperature === undefined ? '' : String(temperature),
+    reasoningEffort: entry.reasoningEffort ?? defaults.reasoningEffort ?? '',
+    toolTimeoutSeconds: msToSeconds(toolTimeoutMs),
     allowTools: entry.tools.allow.join(', '),
     denyTools: entry.tools.deny.join(', '),
     approveExec: entry.approvals?.exec ?? '',
@@ -245,44 +282,45 @@ function isPolicy(value: string): value is 'allow' | 'ask' | 'deny' {
 }
 
 /**
- * One agent's form into a patch under `agents.list.<id>`.
+ * The half of an agent that is the same whichever agent it is.
  *
- * Every numeric field is checked and *all* failures are returned rather than
- * the first, matching `toAgentPatch`: a form that reports one error per press
- * makes the operator find them one press at a time.
+ * Its prompt, its name, its tool selection, its approval bands — plus every
+ * setting this screen does not render, carried straight through from the stored
+ * entry. That carry-through is not defensive: `agents.list.*` is replaced
+ * wholesale, so an entry rebuilt from the form alone loses its sandbox, its
+ * memory scope and its exec allow-list every time the prompt is saved.
  *
- * An empty numeric box is not an error — it is the inherit case, and is simply
- * left out of the patch.
+ * The model and the budget are deliberately *not* here. They differ between the
+ * default agent — whose are `agents.defaults` — and every other, so they are
+ * added by the caller that knows which subtree it is writing.
  */
-export function toAgentEntryPatch(id: string, form: AgentEntryForm): AgentPatchResult {
-  const errors: Record<string, string> = {};
+type AgentOwnFields = Omit<
+  AgentEntry,
+  | 'provider'
+  | 'model'
+  | 'maxTokens'
+  | 'contextWindowTokens'
+  | 'temperature'
+  | 'reasoningEffort'
+  | 'toolTimeoutMs'
+>;
 
-  if (id.trim() === '') errors.id = 'Required';
-
-  /** Parses only when the box has something in it. */
-  const optional = (
-    field: string,
-    value: string,
-    options: Parameters<typeof parseNumber>[1],
-  ): number | undefined => {
-    if (value.trim() === '') return undefined;
-    const result = parseNumber(value, options);
-    if (!result.ok) {
-      errors[field] = result.error;
-      return undefined;
-    }
-    return result.value;
-  };
-
-  const maxTokens = optional('maxTokens', form.maxTokens, { integer: true, min: 1 });
-  const contextWindowTokens = optional('contextWindowTokens', form.contextWindowTokens, {
-    integer: true,
-    min: 1,
-  });
-  const temperature = optional('temperature', form.temperature, { min: 0, max: 2 });
-  const toolTimeout = optional('toolTimeoutSeconds', form.toolTimeoutSeconds, { min: 0 });
-
-  if (Object.keys(errors).length > 0) return { ok: false, errors };
+function ownFields(form: AgentEntryForm, entry: AgentEntry): AgentOwnFields {
+  // Dropped rather than spread: each is either replaced below or, in the case
+  // of the model and budget, written by the caller. Leaving a stale one in
+  // would make an unset field impossible to express, since omitting a key is
+  // the only way this patch format can clear one.
+  const {
+    provider: _provider,
+    model: _model,
+    maxTokens: _maxTokens,
+    contextWindowTokens: _contextWindowTokens,
+    temperature: _temperature,
+    reasoningEffort: _reasoningEffort,
+    toolTimeoutMs: _toolTimeoutMs,
+    approvals: _approvals,
+    ...carried
+  } = entry;
 
   const approvals = {
     ...(isPolicy(form.approveExec) ? { exec: form.approveExec } : {}),
@@ -291,29 +329,96 @@ export function toAgentEntryPatch(id: string, form: AgentEntryForm): AgentPatchR
   };
 
   return {
+    ...carried,
+    label: form.label.trim(),
+    systemPrompt: form.systemPrompt,
+    enabled: form.enabled,
+    tools: { allow: parseToolList(form.allowTools), deny: parseToolList(form.denyTools) },
+    ...(Object.keys(approvals).length === 0 ? {} : { approvals }),
+  };
+}
+
+/**
+ * One agent's form into a patch under `agents.list.<id>`.
+ *
+ * Every numeric field is checked and *all* failures are returned rather than
+ * the first, matching `toAgentPatch`: a form that reports one error per press
+ * makes the operator find them one press at a time.
+ *
+ * An empty box is an error for the fields that must have a value, because they
+ * no longer have anywhere to fall back to — the form arrives holding the
+ * default agent's numbers, so a blank one is something the operator deleted
+ * rather than something they never set. The two that *can* be unset,
+ * `temperature` and `reasoningEffort`, are left out of the patch when blank,
+ * which is what clears them.
+ */
+export function toAgentEntryPatch(
+  id: string,
+  form: AgentEntryForm,
+  entry: AgentEntry,
+): AgentPatchResult {
+  const errors: Record<string, string> = {};
+
+  if (id.trim() === '') errors.id = 'Required';
+  if (form.provider.trim() === '') errors.provider = 'Required';
+  if (form.model.trim() === '') errors.model = MODEL_REQUIRED;
+
+  const required = (
+    field: string,
+    value: string,
+    options: Parameters<typeof parseNumber>[1],
+  ): number | undefined => {
+    const result = parseNumber(value, options);
+    if (!result.ok) {
+      errors[field] = result.error;
+      return undefined;
+    }
+    return result.value;
+  };
+
+  /** Parses only when the box has something in it — blank is a value here. */
+  const optional = (
+    field: string,
+    value: string,
+    options: Parameters<typeof parseNumber>[1],
+  ): number | undefined => {
+    if (value.trim() === '') return undefined;
+    return required(field, value, options);
+  };
+
+  const maxTokens = required('maxTokens', form.maxTokens, { integer: true, min: 1 });
+  const contextWindowTokens = required('contextWindowTokens', form.contextWindowTokens, {
+    integer: true,
+    min: 1,
+  });
+  const toolTimeout = required('toolTimeoutSeconds', form.toolTimeoutSeconds, { min: 0 });
+  const temperature = optional('temperature', form.temperature, { min: 0, max: 2 });
+
+  if (
+    maxTokens === undefined ||
+    contextWindowTokens === undefined ||
+    toolTimeout === undefined ||
+    Object.keys(errors).length > 0
+  ) {
+    return { ok: false, errors };
+  }
+
+  return {
     ok: true,
     patch: {
       agents: {
         list: {
           [id]: {
-            label: form.label.trim(),
-            systemPrompt: form.systemPrompt,
-            enabled: form.enabled,
-            // Omitted when empty rather than sent as `''`: an absent override
-            // is what inheriting looks like in the stored config. `provider`
-            // could not be sent empty in any case — the schema requires one
-            // character, because `auto` is the value that means "resolve".
-            ...(form.provider.trim() === '' ? {} : { provider: form.provider.trim() }),
-            ...(form.model.trim() === '' ? {} : { model: form.model.trim() }),
-            tools: { allow: parseToolList(form.allowTools), deny: parseToolList(form.denyTools) },
-            ...(maxTokens === undefined ? {} : { maxTokens }),
-            ...(contextWindowTokens === undefined ? {} : { contextWindowTokens }),
+            ...ownFields(form, entry),
+            provider: form.provider.trim(),
+            model: form.model.trim(),
+            maxTokens,
+            contextWindowTokens,
+            toolTimeoutMs: secondsToMs(toolTimeout),
             ...(temperature === undefined ? {} : { temperature }),
-            ...(toolTimeout === undefined ? {} : { toolTimeoutMs: secondsToMs(toolTimeout) }),
             ...(isReasoningEffort(form.reasoningEffort)
               ? { reasoningEffort: form.reasoningEffort }
               : {}),
-            ...(Object.keys(approvals).length === 0 ? {} : { approvals }),
           },
         },
       },
@@ -324,56 +429,61 @@ export function toAgentEntryPatch(id: string, form: AgentEntryForm): AgentPatchR
 /**
  * The default agent, which is two things at once.
  *
- * Its model and budget are `agents.defaults` — the values every other agent
- * inherits — while its prompt, tools and permissions are its own entry under
- * `agents.list.default`. That split is why editing it produces one patch
- * touching both, and it is the reason there is no separate "Agent" panel in
- * Settings any more: there was never a second thing to configure, only the
- * default agent described in another room.
+ * Its model and budget are `agents.defaults` — the values a new agent is seeded
+ * from, and what an install with no named agents runs as — while its prompt,
+ * tools and permissions are its own entry under `agents.list.default`. That
+ * split is why editing it produces one patch touching both, and it is the
+ * reason there is no separate "Agent" panel in Settings any more: there was
+ * never a second thing to configure, only the default agent described in
+ * another room.
  *
- * The entry half deliberately carries no model or budget overrides. Its boxes
- * are not rendered for the default agent, so they arrive blank, and blank means
- * absent — which leaves it inheriting the `agents.defaults` this same patch is
- * setting. An override here would pin the default agent against its own
- * defaults, which is a contradiction rather than a setting.
+ * The entry half carries no model or budget, and `ownFields` is what makes that
+ * structural rather than a matter of which boxes happened to be blank. Writing
+ * one here would pin the default agent against its own defaults, which is a
+ * contradiction rather than a setting.
  */
-export function toDefaultAgentPatch(defaults: AgentForm, entry: AgentEntryForm): AgentPatchResult {
+export function toDefaultAgentPatch(
+  defaults: AgentForm,
+  form: AgentEntryForm,
+  entry: AgentEntry,
+): AgentPatchResult {
   const base = toAgentPatch(defaults);
-  const own = toAgentEntryPatch(DEFAULT_AGENT_ID, entry);
-
-  if (!base.ok || !own.ok) {
-    return {
-      ok: false,
-      errors: { ...(base.ok ? {} : base.errors), ...(own.ok ? {} : own.errors) },
-    };
-  }
+  if (!base.ok) return { ok: false, errors: base.errors };
 
   return {
     ok: true,
     patch: {
       agents: {
         ...base.patch.agents,
-        ...own.patch.agents,
+        list: { [DEFAULT_AGENT_ID]: ownFields(form, entry) },
       },
     },
   };
 }
 
 /**
- * A new agent, started from the default one.
+ * A new agent, prepopulated from the one it was started from.
  *
- * The default agent is the template, and *which* of its settings are copied is
- * the whole decision. Only the fields an agent owns — the prompt, the tool
- * selection, the approval and exec overrides, the sandbox, the memory scope.
- * The `AgentDefaults` half is deliberately left unset, because those fields are
- * already inherited from `agents.defaults`: copying them would pin the new
- * agent to today's model and temperature and silently stop it following a later
- * change to the defaults, which is the opposite of what inheritance is for.
+ * Everything is copied: the prompt, the tool selection, the approvals, the
+ * sandbox, the memory scope — *and* the model and the budget, which used to be
+ * left out so the new agent would keep inheriting them. It no longer inherits
+ * anything, so leaving them out would produce an agent whose model the editor
+ * had to describe as somebody else's.
  *
- * So a new agent starts as a copy of how the default *behaves* and keeps
- * following it on what it *runs on*.
+ * The template is an `agents.list` entry, and the default agent's has no model
+ * or budget in it — those live in `agents.defaults`. Hence the `??`: whichever
+ * agent is being copied, what lands here is what a turn on it would actually
+ * have used.
  */
-export function toNewAgentPatch(id: string, label: string, template: AgentEntry): ConfigPatch {
+export function toNewAgentPatch(
+  id: string,
+  label: string,
+  template: AgentEntry,
+  defaults: AgentDefaults,
+): ConfigPatch {
+  const temperature = template.temperature ?? defaults.temperature;
+  const reasoningEffort = template.reasoningEffort ?? defaults.reasoningEffort;
+
   return {
     agents: {
       list: {
@@ -384,6 +494,13 @@ export function toNewAgentPatch(id: string, label: string, template: AgentEntry)
           tools: { allow: [...template.tools.allow], deny: [...template.tools.deny] },
           sandbox: { ...template.sandbox },
           memory: { ...template.memory },
+          provider: template.provider ?? defaults.provider,
+          model: template.model ?? defaults.model,
+          maxTokens: template.maxTokens ?? defaults.maxTokens,
+          contextWindowTokens: template.contextWindowTokens ?? defaults.contextWindowTokens,
+          toolTimeoutMs: template.toolTimeoutMs ?? defaults.toolTimeoutMs,
+          ...(temperature === undefined ? {} : { temperature }),
+          ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
           ...(template.approvals === undefined ? {} : { approvals: { ...template.approvals } }),
           ...(template.exec === undefined ? {} : { exec: { ...template.exec } }),
         },
@@ -393,18 +510,19 @@ export function toNewAgentPatch(id: string, label: string, template: AgentEntry)
 }
 
 /**
- * Changing an agent's display name and nothing else.
+ * Switching an agent on or off from the list, without opening it.
  *
- * **The whole entry goes back, not just the label**, and that is not
- * belt-and-braces — `agents.list.*` is in the merge's `REPLACE_WHOLESALE` list,
- * so the patch *is* the agent and every field left out of it is a field
- * deleted. A rename that sent `{ label }` alone would quietly clear the agent's
- * prompt, its tool selection, its approval overrides and any model it had
- * pinned. The id is untouched, so every conversation bound to this agent keeps
- * resolving.
+ * The whole entry goes back for the same reason a rename sends one: the merge
+ * replaces `agents.list.*` wholesale, so `{ enabled: false }` alone would
+ * disable the agent by deleting everything else about it.
+ *
+ * A disabled agent is kept rather than removed — `listAgents` skips it and
+ * `resolveAgent` refuses it, but its prompt and permissions are still there
+ * when it is switched back on. That is the difference between this and Delete,
+ * and it is why both are in the row menu.
  */
-export function toRenameAgentPatch(id: string, label: string, entry: AgentEntry): ConfigPatch {
-  return { agents: { list: { [id]: { ...entry, label: label.trim() } } } };
+export function toAgentEnabledPatch(id: string, entry: AgentEntry, enabled: boolean): ConfigPatch {
+  return { agents: { list: { [id]: { ...entry, enabled } } } };
 }
 
 /**

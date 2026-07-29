@@ -204,6 +204,51 @@ export const ModelsResponseSchema = z.object({
 });
 export type ModelsResponse = z.infer<typeof ModelsResponseSchema>;
 
+/**
+ * "Can this endpoint be talked to?", asked of a connection rather than of a
+ * stored instance.
+ *
+ * A *connection*, because the panel needs the answer before there is anything
+ * to store: the Add-provider dialog probes what the operator has typed, and a
+ * request that could only name an existing instance would force a save first —
+ * which is the thing the check exists to happen before.
+ */
+export const ProviderTestRequestSchema = z.object({
+  /** A `@ghostai/providers` registry id. */
+  type: z.string().min(1),
+  /** Empty means the type's own default endpoint. */
+  apiBase: z.string().default(''),
+  extraHeaders: z.record(z.string(), z.string()).default({}),
+  /**
+   * The key to probe *with*. Omitted means "whatever is already stored for
+   * `instanceId`" — which is how a saved row re-tests without the client ever
+   * having held the credential. It is never echoed back.
+   */
+  apiKey: z.string().optional(),
+  /** The instance being tested, when one exists. Only used to find a key. */
+  instanceId: z.string().optional(),
+});
+export type ProviderTestRequest = z.infer<typeof ProviderTestRequestSchema>;
+
+/**
+ * The result of one probe.
+ *
+ * `reason` is a `ProviderErrorReason`, and it is the field that matters: the
+ * difference between `auth` (it answered and rejected the key) and `transport`
+ * (nothing is listening) is the difference between two completely different
+ * things for an operator to go and fix. A client that had only `message` would
+ * be reduced to matching on prose.
+ */
+export const ProviderTestResponseSchema = z.object({
+  ok: z.boolean(),
+  /** Model ids the endpoint listed. Empty when `ok` is false. */
+  models: z.array(z.string()).default([]),
+  /** A `ProviderErrorReason`, or `unsupported` when nothing could be asked. */
+  reason: z.string().optional(),
+  message: z.string().optional(),
+});
+export type ProviderTestResponse = z.infer<typeof ProviderTestResponseSchema>;
+
 // ---------------------------------------------------------------------------
 // Sessions
 // ---------------------------------------------------------------------------

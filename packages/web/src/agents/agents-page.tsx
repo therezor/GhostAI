@@ -22,9 +22,9 @@
  * where the choice is actually made; this page is for keeping the list.
  */
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { BrainCircuit, Copy, Pencil, Plus, Trash2 } from 'lucide-react';
+import { BrainCircuit, Copy, Pencil, Plus, Power, PowerOff, Trash2 } from 'lucide-react';
 import { useMemo, useState, type JSX } from 'react';
 
 import {
@@ -52,7 +52,7 @@ import {
 import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
 import { useSaveSettings, useSettings } from '@/settings/use-settings.js';
-import { toAgentDeletePatch, toNewAgentPatch, toRenameAgentPatch } from './agents-form.js';
+import { toAgentDeletePatch, toAgentEnabledPatch, toNewAgentPatch } from './agents-form.js';
 import { useAgent } from './agent-context.js';
 
 /** One row of the table, with everything it renders already resolved. */
@@ -60,18 +60,33 @@ interface AgentRow {
   readonly id: string;
   readonly label: string;
   readonly model: string;
+  readonly enabled: boolean;
   readonly entry: AgentEntry;
   readonly isDefault: boolean;
 }
 
-type SortKey = 'name' | 'model';
+type SortKey = 'name' | 'model' | 'status';
 
-/** Both columns are text, so both read from A. */
-const ASCENDING_FIRST: readonly SortKey[] = ['name', 'model'];
+/** Every column is text, so all three read from A. */
+const ASCENDING_FIRST: readonly SortKey[] = ['name', 'model', 'status'];
+
+/**
+ * What the Status column says.
+ *
+ * A word rather than the absence of one. The state used to be an `off` badge
+ * beside the name and nothing at all when the agent was on, which reads as "we
+ * had nothing to say about this row" rather than as "this one runs".
+ */
+function statusLabel(row: AgentRow): string {
+  return row.enabled ? 'Enabled' : 'Disabled';
+}
 
 const COMPARE: Comparators<AgentRow, SortKey> = {
   name: (a, b) => a.label.localeCompare(b.label),
   model: (a, b) => a.model.localeCompare(b.model),
+  // Compared as the label rather than as the boolean, so the column sorts the
+  // way it reads: ascending is Disabled before Enabled, which is D before E.
+  status: (a, b) => statusLabel(a).localeCompare(statusLabel(b)),
 };
 
 /** What an agent is offering, in one line, without opening it. */
@@ -81,20 +96,18 @@ function summarise(entry: AgentEntry): string {
   if (entry.tools.allow.length > 0) parts.push(`only ${entry.tools.allow.join(', ')}`);
   if (entry.approvals?.exec === 'deny') parts.push('cannot run commands');
   if (entry.systemPrompt.trim() !== '') parts.push('own prompt');
-  return parts.length === 0 ? 'Every tool, inherited settings' : parts.join(' · ');
+  return parts.length === 0 ? 'Every tool, no restrictions' : parts.join(' · ');
 }
 
 export function AgentsRoute(): JSX.Element {
   const settings = useSettings();
   const { save, saving } = useSaveSettings();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { agentId: active, select } = useAgent();
 
   const [filter, setFilter] = useState('');
   const [sort, setSort] = useState<SortOrder<SortKey>>({ key: 'name', descending: false });
   const [creating, setCreating] = useState(false);
-  const [renaming, setRenaming] = useState<AgentRow | undefined>(undefined);
   const [pendingDelete, setPendingDelete] = useState<AgentRow | undefined>(undefined);
 
   const agents = useQuery({
@@ -103,6 +116,7 @@ export function AgentsRoute(): JSX.Element {
   });
 
   const list = settings.data?.config.agents.list ?? {};
+  const defaults = settings.data?.config.agents.defaults;
 
   /**
    * The default first, then the operator's order.
@@ -123,13 +137,21 @@ export function AgentsRoute(): JSX.Element {
     const resolved = agents.data?.agents ?? [];
     return ids.map((id) => {
       const entry = list[id] ?? AgentEntrySchema.parse({});
-      const model = resolved.find((agent) => agent.id === id)?.model ?? '';
+      // `/api/agents` reports the model a turn would actually use, but it omits
+      // the disabled ones entirely — so the stored value is the fallback, or a
+      // switched-off agent would show a dash where its model is.
+      const model = resolved.find((agent) => agent.id === id)?.model ?? entry.model ?? '';
+      const isDefault = id === DEFAULT_AGENT_ID;
       return {
         id,
         label: entry.label === '' ? id : entry.label,
         model: model === '' ? '—' : model,
+        // The default agent's own flag is ignored by the resolver — an install
+        // with no agent at all is not a state anything downstream can serve —
+        // so the column reports what is true rather than what is stored.
+        enabled: isDefault || entry.enabled,
         entry,
-        isDefault: id === DEFAULT_AGENT_ID,
+        isDefault,
       };
     });
   }, [ids, list, agents.data]);
@@ -141,8 +163,9 @@ export function AgentsRoute(): JSX.Element {
         sort,
         COMPARE,
         {
-          // The default is what every other agent inherits from, so it heads the
-          // list in both directions rather than sorting among its own children.
+          // The default is the agent every other one was created as a copy of,
+          // so it heads the list in both directions rather than sorting among
+          // the agents it seeded.
           group: (row) => (row.isDefault ? 0 : 1),
           tiebreak: (a, b) => a.label.localeCompare(b.label),
         },
@@ -156,34 +179,70 @@ export function AgentsRoute(): JSX.Element {
     void navigate({ to: '/agents/$agentId', params: { agentId: id } });
   };
 
-  const refreshAgents = (): void => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.agents });
+  /**
+   * Opens the editor once the agent it names actually exists.
+   *
+   * **On success, not on the next line.** `save` is fire-and-forget, so
+   * navigating straight after it took the editor to an agent the settings cache
+   * had never seen — which is the "There is no agent called …" path, and is why
+   * duplicating one appeared to do nothing at all.
+   */
+  const createThenOpen = (id: string, patch: ReturnType<typeof toNewAgentPatch>): void => {
+    save(patch, {
+      onSuccess: () => {
+        open(id);
+      },
+    });
   };
 
   const create = (name: string): void => {
     const proposed = deriveAgentId(name);
-    if (proposed === '' || taken.has(proposed)) return;
-    save(toNewAgentPatch(proposed, name, entryFor(DEFAULT_AGENT_ID)));
-    setCreating(false);
-    refreshAgents();
+    // A new agent is a copy of the defaults, so there is nothing to copy until
+    // they have arrived. The dialog is reachable while the query is in flight.
+    if (proposed === '' || taken.has(proposed) || defaults === undefined) return;
     // Straight into the editor: creating one is the first half of setting it
     // up, and a list that has merely grown a row leaves the other half to be
     // found.
-    open(proposed);
+    createThenOpen(proposed, toNewAgentPatch(proposed, name, entryFor(DEFAULT_AGENT_ID), defaults));
+    setCreating(false);
   };
 
+  /**
+   * A copy, under a name that does not collide.
+   *
+   * The suffix is counted rather than fixed: "Reviewer copy" is taken the
+   * second time, and a duplicate that silently did nothing because of it was
+   * indistinguishable from one that was broken.
+   */
   const duplicate = (row: AgentRow): void => {
-    const label = `${row.label} copy`;
-    const copyId = deriveAgentId(label);
-    if (taken.has(copyId)) return;
-    save(toNewAgentPatch(copyId, label, row.entry));
-    refreshAgents();
-    open(copyId);
+    if (defaults === undefined) return;
+
+    let label = `${row.label} copy`;
+    let copyId = deriveAgentId(label);
+    for (let n = 2; taken.has(copyId); n += 1) {
+      label = `${row.label} copy ${String(n)}`;
+      copyId = deriveAgentId(label);
+    }
+
+    createThenOpen(copyId, toNewAgentPatch(copyId, label, row.entry, defaults));
+  };
+
+  /**
+   * Switching one off, which is the reversible half of deleting it.
+   *
+   * Its prompt, tools and permissions stay in the settings; it simply stops
+   * being something a turn can run on, and stops being offered in the composer.
+   */
+  const toggleEnabled = (row: AgentRow): void => {
+    save(toAgentEnabledPatch(row.id, row.entry, !row.enabled));
+    // Same reason a delete moves the selection: an agent that has just been
+    // switched off is one the server will refuse, so nothing may stay pointed
+    // at it.
+    if (row.enabled && active === row.id) select(DEFAULT_AGENT_ID);
   };
 
   const remove = (row: AgentRow): void => {
     save(toAgentDeletePatch(row.id));
-    refreshAgents();
     setPendingDelete(undefined);
     // Anything pointed at the agent that just went has to move, or the next
     // conversation would name one the server will refuse.
@@ -211,8 +270,8 @@ export function AgentsRoute(): JSX.Element {
 
       <div className="cluster list-toolbar">
         <p className="page__note">
-          Each has its own prompt, model, permissions and memory, and inherits from the default
-          unless it says otherwise.
+          Each holds its own prompt, model, permissions and memory. A new one is created as a copy
+          of the default agent’s.
         </p>
         <span className="spacer" />
         <SearchFilter value={filter} label="Filter agents by name" onValueChange={setFilter} />
@@ -234,6 +293,7 @@ export function AgentsRoute(): JSX.Element {
               <tr>
                 <SortHeader label="Name" sortKey="name" sort={sort} onSort={toggleSort} />
                 <SortHeader label="Model" sortKey="model" sort={sort} onSort={toggleSort} />
+                <SortHeader label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
                 <th scope="col" className="data-table__actions">
                   <span className="sr-only">Actions</span>
                 </th>
@@ -254,13 +314,15 @@ export function AgentsRoute(): JSX.Element {
                         <span className="agents__name-row">
                           <span className="truncate">{row.label}</span>
                           {row.isDefault && <Badge>default</Badge>}
-                          {!row.entry.enabled && <Badge tone="warning">off</Badge>}
                         </span>
                         <span className="agents__summary truncate">{summarise(row.entry)}</span>
                       </span>
                     </Link>
                   </td>
                   <td className="data-table__meta agents__model">{row.model}</td>
+                  <td className="data-table__meta">
+                    <Badge tone={row.enabled ? 'success' : 'neutral'}>{statusLabel(row)}</Badge>
+                  </td>
                   <td className="data-table__actions">
                     <RowActions label={row.label}>
                       <DropdownMenuItem
@@ -282,14 +344,23 @@ export function AgentsRoute(): JSX.Element {
                         <Copy />
                         Duplicate
                       </DropdownMenuItem>
+                      {/* No Rename. The name is a field in the editor, which is
+                          one press away and is where every other thing about
+                          an agent is changed — a second way to edit one field,
+                          with its own dialog and its own patch builder, was a
+                          shortcut that had to be kept correct twice. */}
+                      {/* Reversible where Delete is not: a disabled agent keeps
+                          its prompt and permissions and simply stops being
+                          something a turn can run on. No confirmation, for the
+                          same reason — switching it back on is the same click. */}
                       {!row.isDefault && (
                         <DropdownMenuItem
                           onSelect={() => {
-                            setRenaming(row);
+                            toggleEnabled(row);
                           }}
                         >
-                          <Pencil />
-                          Rename
+                          {row.enabled ? <PowerOff /> : <Power />}
+                          {row.enabled ? 'Disable' : 'Enable'}
                         </DropdownMenuItem>
                       )}
                       {/* Switching the default off would leave an install with
@@ -318,7 +389,7 @@ export function AgentsRoute(): JSX.Element {
         open={creating}
         onOpenChange={setCreating}
         title="New agent"
-        description="It starts as a copy of the default agent’s prompt and permissions, and keeps inheriting its model."
+        description="It starts as a copy of the default agent — its model, budget, prompt and permissions — and is its own from there."
         fieldLabel="Name"
         placeholder="Code Reviewer"
         pending={saving}
@@ -331,25 +402,6 @@ export function AgentsRoute(): JSX.Element {
           return { ok: true, hint: `Creates “${proposed}”.` };
         }}
         onSubmit={create}
-      />
-
-      <NameDialog
-        open={renaming !== undefined}
-        onOpenChange={(open) => {
-          if (!open) setRenaming(undefined);
-        }}
-        title="Rename agent"
-        description="Only the display name changes. The id stays as it is, so every conversation bound to this agent keeps working."
-        fieldLabel="Name"
-        initialValue={renaming?.label ?? ''}
-        submitLabel="Save"
-        pending={saving}
-        onSubmit={(name) => {
-          if (renaming === undefined) return;
-          save(toRenameAgentPatch(renaming.id, name, renaming.entry));
-          setRenaming(undefined);
-          refreshAgents();
-        }}
       />
 
       <ConfirmDialog

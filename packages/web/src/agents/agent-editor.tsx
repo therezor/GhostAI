@@ -7,18 +7,24 @@
  * list picks; this edits; the back link returns.
  *
  * **The default agent is edited here too, and it is the reason Settings has no
- * "Agent" panel.** Its model and budget *are* `agents.defaults` — the values
- * every other agent inherits — so editing them is editing that subtree, and a
- * second screen for the same fields was two doors into one room.
+ * "Agent" panel.** Its model and budget *are* `agents.defaults` — what a new
+ * agent is seeded from — so editing them is editing that subtree, and a second
+ * screen for the same fields was two doors into one room.
  *
  * **It is also the same screen, field for field.** It did not use to be: the
  * default agent got sections called "Model", "Budget" and "Workspace" while
  * every other agent got one called "Model and budget", with different labels,
  * different hints and a different shape. Two layouts for one concept meant an
  * operator learned the screen twice and could not tell which settings an agent
- * actually had. The difference between them is real but it is *about
- * inheritance*, not about layout — so it lives in one `bindings` record here
- * and in `onSave`, and every control below is written once.
+ * actually had. The only remaining difference is *which subtree a control
+ * writes to*, which lives in one `bind` function here and in `onSave`.
+ *
+ * **Nothing on this screen inherits.** Every box holds this agent's own value,
+ * and one opened on an agent that stored none is filled from the defaults so
+ * that saving writes them down — see the note at the top of `agents-form.ts`.
+ * There is no "Inherit — …" option and no empty box that means "ask the other
+ * screen": a setting you cannot read off the screen it is on is a setting an
+ * operator has to go and derive.
  *
  * **The system prompt is last.** It is the tallest thing on the screen by a
  * wide margin — a full editor holding a page of text — and in the middle it
@@ -28,7 +34,7 @@
  * as it likes without pushing anything.
  */
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { ArrowLeft, RotateCcw, Trash2 } from 'lucide-react';
 import { useMemo, useState, type JSX } from 'react';
@@ -64,8 +70,8 @@ import { modelOptions } from '@/settings/fields.js';
 import { useSaveSettings, useSettings } from '@/settings/use-settings.js';
 import {
   APPROVAL_POLICIES,
-  INHERIT_VALUE,
   REASONING_EFFORTS,
+  UNSET_VALUE,
   parseToolList,
   toAgentDeletePatch,
   toAgentEntryForm,
@@ -96,47 +102,43 @@ type StringField = {
 interface Bound {
   readonly value: string;
   readonly set: (value: string) => void;
-  /**
-   * What the box would use if it were left empty, as a sentence fragment.
-   *
-   * Present only for an agent that inherits. It is shown as a *hint* rather
-   * than only as a grey placeholder, because a placeholder relies on the reader
-   * already knowing that an empty box means "inherited" — which is exactly the
-   * thing this screen used to fail to say.
-   */
-  readonly inherited?: string;
 }
 
-function InheritSelect({
+/**
+ * A select whose blank is a real answer.
+ *
+ * `reasoningEffort` unset means the request carries no such parameter; an
+ * approval band left blank is governed by `tools.approvals` rather than by this
+ * agent. Neither is "no value chosen", so neither may render as a blank
+ * trigger — `unsetLabel` is the sentence that says what the blank does.
+ */
+function OptionalSelect({
   label,
   bound,
   options,
-  ownLabel,
+  unsetLabel,
 }: {
   readonly label: string;
   readonly bound: Bound;
   readonly options: readonly string[];
-  /** What an empty value means when this agent has nothing to inherit from. */
-  readonly ownLabel: string;
+  readonly unsetLabel: string;
 }): JSX.Element {
-  const inheritLabel = bound.inherited === undefined ? ownLabel : `Inherit — ${bound.inherited}`;
-
   return (
     <SelectField
       label={label}
-      value={bound.value === '' ? INHERIT_VALUE : bound.value}
+      value={bound.value === '' ? UNSET_VALUE : bound.value}
       options={[
-        { value: INHERIT_VALUE, label: inheritLabel },
+        { value: UNSET_VALUE, label: unsetLabel },
         ...options.map((option) => ({ value: option, label: option })),
       ]}
       onValueChange={(next) => {
-        bound.set(next === INHERIT_VALUE ? '' : next);
+        bound.set(next === UNSET_VALUE ? '' : next);
       }}
     />
   );
 }
 
-/** A text field that says what it would inherit, rather than only implying it. */
+/** A text field over whichever subtree this agent keeps the setting in. */
 function BoundField({
   label,
   bound,
@@ -152,17 +154,12 @@ function BoundField({
   readonly inputMode?: 'numeric' | 'decimal';
   readonly placeholder?: string;
 }): JSX.Element {
-  const inheritHint =
-    bound.inherited === undefined
-      ? hint
-      : `Empty inherits ${bound.inherited} from the default agent.`;
-
   return (
     <TextField
       label={label}
       value={bound.value}
       {...(error === undefined ? {} : { error })}
-      {...(inheritHint === undefined ? {} : { hint: inheritHint })}
+      {...(hint === undefined ? {} : { hint })}
       {...(inputMode === undefined ? {} : { inputMode })}
       {...(placeholder === undefined ? {} : { placeholder })}
       onValueChange={bound.set}
@@ -196,7 +193,7 @@ export function AgentEditorRoute(): JSX.Element {
         <p role="alert" className="page__error">
           There is no agent called “{agentId}”.
         </p>
-        <Link to="/agents" className="agents__back">
+        <Link to="/agents" className="page__back">
           <ArrowLeft aria-hidden="true" />
           Back to agents
         </Link>
@@ -227,15 +224,13 @@ function Editor({
 }): JSX.Element {
   const isDefault = agentId === DEFAULT_AGENT_ID;
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { agentId: active, select } = useAgent();
   const { save, saving } = useSaveSettings();
 
-  const [form, setForm] = useState<AgentEntryForm>(() => toAgentEntryForm(entry));
+  const [form, setForm] = useState<AgentEntryForm>(() => toAgentEntryForm(entry, defaults));
   const [base, setBase] = useState<AgentForm>(() => toAgentForm(defaults));
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   const [dirty, setDirty] = useState(false);
-  const [advanced, setAdvanced] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const agents = useQuery({
@@ -270,10 +265,11 @@ function Editor({
    * Where each field lives for *this* agent.
    *
    * The default agent's model and budget are `agents.defaults`; every other
-   * agent's are overrides on its own entry, and an empty one inherits. Deciding
-   * that once, here, is what lets the form below be written a single time.
+   * agent's are on its own entry. That is the only difference left between the
+   * two screens, and deciding it once here is what lets the form below be
+   * written a single time.
    */
-  const bind = (key: StringField, inherited: string): Bound =>
+  const bind = (key: StringField): Bound =>
     isDefault
       ? {
           value: base[key],
@@ -286,20 +282,16 @@ function Editor({
           set: (value) => {
             update(key, value);
           },
-          inherited,
         };
 
   const fields = {
-    provider: bind('provider', defaults.provider),
-    model: bind('model', defaults.model === '' ? 'an automatic choice' : defaults.model),
-    temperature: bind(
-      'temperature',
-      defaults.temperature === undefined ? 'the provider’s own' : String(defaults.temperature),
-    ),
-    reasoningEffort: bind('reasoningEffort', defaults.reasoningEffort ?? 'the provider’s own'),
-    maxTokens: bind('maxTokens', String(defaults.maxTokens)),
-    contextWindowTokens: bind('contextWindowTokens', String(defaults.contextWindowTokens)),
-    toolTimeoutSeconds: bind('toolTimeoutSeconds', String(defaults.toolTimeoutMs / 1000)),
+    provider: bind('provider'),
+    model: bind('model'),
+    temperature: bind('temperature'),
+    reasoningEffort: bind('reasoningEffort'),
+    maxTokens: bind('maxTokens'),
+    contextWindowTokens: bind('contextWindowTokens'),
+    toolTimeoutSeconds: bind('toolTimeoutSeconds'),
   } satisfies Record<string, Bound>;
 
   // ── The system prompt ────────────────────────────────────────────────────
@@ -389,13 +381,8 @@ function Editor({
    * provider stopped listing, survives being looked at.
    */
   const modelChoices = useMemo(
-    () =>
-      modelOptions(
-        models.data?.models ?? [],
-        fields.provider.value === '' ? defaults.provider : fields.provider.value,
-        fields.model.value,
-      ),
-    [models.data, fields.provider.value, fields.model.value, defaults.provider],
+    () => modelOptions(models.data?.models ?? [], fields.provider.value, fields.model.value),
+    [models.data, fields.provider.value, fields.model.value],
   );
 
   /**
@@ -426,39 +413,44 @@ function Editor({
     const catalogue = models.data?.models ?? [];
     if (catalogue.length === 0) return;
 
-    const nextProvider = value === '' ? defaults.provider : value;
-    if (nextProvider === 'auto') return;
+    if (value === 'auto') return;
 
     // `current` empty, so this is what the new provider actually offers rather
     // than that plus the value being judged.
-    if (!modelOptions(catalogue, nextProvider, '').includes(pinned)) {
+    if (!modelOptions(catalogue, value, '').includes(pinned)) {
       fields.model.set('');
     }
   };
 
   const onDelete = (): void => {
     save(toAgentDeletePatch(agentId));
-    void queryClient.invalidateQueries({ queryKey: queryKeys.agents });
     // Anything pointed at the agent that just went has to move, or the next
     // conversation would name one the server will refuse.
     if (active === agentId) select(DEFAULT_AGENT_ID);
+    // Leaving immediately is safe in this direction: the list this returns to
+    // does not depend on the agent that is going away.
     void navigate({ to: '/agents' });
   };
 
   const onSave = (): void => {
-    const result = isDefault ? toDefaultAgentPatch(base, form) : toAgentEntryPatch(agentId, form);
+    const result = isDefault
+      ? toDefaultAgentPatch(base, form, entry)
+      : toAgentEntryPatch(agentId, form, entry);
     if (!result.ok) {
       setErrors(result.errors);
       return;
     }
     setErrors({});
+    // No invalidation here any more: `useSaveSettings` refreshes the agents
+    // query once the write has landed. Doing it on this line fired it *before*
+    // the PATCH resolved, so the refetch answered from the old config and a
+    // rename never reached the composer's picker.
     save(result.patch);
-    void queryClient.invalidateQueries({ queryKey: queryKeys.agents });
     setDirty(false);
   };
 
   const onRevert = (): void => {
-    setForm(toAgentEntryForm(entry));
+    setForm(toAgentEntryForm(entry, defaults));
     setBase(toAgentForm(defaults));
     // Or a revert would leave the box holding the stored (empty) prompt while
     // still claiming the agent owns one.
@@ -471,13 +463,13 @@ function Editor({
 
   return (
     <div className="stack page page--wide agent-editor">
-      <div className="agent-editor__head">
-        <Link to="/agents" className="agents__back">
+      <div className="editor__head">
+        <Link to="/agents" className="page__back">
           <ArrowLeft aria-hidden="true" />
           Agents
         </Link>
 
-        <div className="cluster agent-editor__title">
+        <div className="cluster editor__title">
           <h1 className="page__title">{name}</h1>
           {isDefault && <Badge>default</Badge>}
           <span className="spacer" />
@@ -501,8 +493,8 @@ function Editor({
 
         <p className="page__note">
           {isDefault
-            ? 'Every conversation that names no agent runs on this one, and every other agent inherits its model and budget.'
-            : `Runs on ${resolved?.model === '' || resolved === undefined ? 'the inherited model' : resolved.model}.`}
+            ? 'Every conversation that names no agent runs on this one, and a new agent starts as a copy of it.'
+            : `Runs on ${resolved?.model === '' || resolved === undefined ? 'no model yet — it cannot take a turn until one is chosen' : resolved.model}.`}
         </p>
       </div>
 
@@ -534,46 +526,36 @@ function Editor({
         title="Model"
         description={
           isDefault
-            ? 'What every agent runs on unless it overrides it.'
-            : 'Anything left empty follows the default agent.'
+            ? 'What this agent runs on, and what a new agent is created holding.'
+            : 'What this agent runs on.'
         }
       >
         <FieldGrid>
           <SelectField
             label="Provider"
-            value={fields.provider.value === '' ? INHERIT_VALUE : fields.provider.value}
-            options={
-              isDefault
-                ? providerOptions
-                : [
-                    { value: INHERIT_VALUE, label: `Inherit — ${defaults.provider}` },
-                    ...providerOptions,
-                  ]
-            }
-            onValueChange={(value) => {
-              onProviderChange(value === INHERIT_VALUE ? '' : value);
-            }}
-            {...(errors.provider === undefined ? {} : { hint: errors.provider })}
+            value={fields.provider.value}
+            options={providerOptions}
+            onValueChange={onProviderChange}
+            error={errors.provider}
           />
+          {/* No "resolved automatically" option, because there is no such
+              resolution: an empty model is `noModelError` and a `null` provider
+              in the runtime, so offering it here dressed an unconfigured
+              install up as a choice. Blank is a placeholder now — a question
+              the form asks — and saving without answering it is refused. */}
           <SelectField
             label="Model"
-            value={fields.model.value === '' ? INHERIT_VALUE : fields.model.value}
-            options={[
-              {
-                value: INHERIT_VALUE,
-                label: isDefault
-                  ? 'Resolved automatically'
-                  : `Inherit — ${defaults.model === '' ? 'resolved automatically' : defaults.model}`,
-              },
-              ...modelChoices.map((model) => ({ value: model, label: model })),
-            ]}
-            onValueChange={(value) => {
-              fields.model.set(value === INHERIT_VALUE ? '' : value);
-            }}
+            value={fields.model.value}
+            placeholder={modelChoices.length === 0 ? 'No models to choose from' : 'Choose a model'}
+            options={modelChoices.map((model) => ({ value: model, label: model }))}
+            onValueChange={fields.model.set}
+            error={errors.model}
             hint={
-              models.isError
-                ? 'The model lists could not be fetched. Anything already pinned is still offered.'
-                : 'Endpoints that list their own models are enumerated live.'
+              modelChoices.length === 0
+                ? 'Nothing could be listed. Add an endpoint and its credentials in Settings → Providers.'
+                : models.isError
+                  ? 'The model lists could not be fetched. Anything already pinned is still offered.'
+                  : 'Endpoints that list their own models are enumerated live.'
             }
           />
           <BoundField
@@ -584,11 +566,11 @@ function Editor({
             placeholder="The provider’s own"
             hint="Leave empty to send none at all — which is the only thing that works for models that reject it."
           />
-          <InheritSelect
+          <OptionalSelect
             label="Reasoning effort"
             bound={fields.reasoningEffort}
             options={REASONING_EFFORTS}
-            ownLabel="The provider’s own"
+            unsetLabel="The provider’s own"
           />
         </FieldGrid>
       </Section>
@@ -638,7 +620,11 @@ function Editor({
         )}
 
         <FieldGrid>
-          <InheritSelect
+          {/* These three are the one place a blank still defers to another
+              screen — the global `tools.approvals`, which is a policy for the
+              whole install rather than a setting this agent could hold a
+              private copy of. */}
+          <OptionalSelect
             label="Run commands"
             bound={{
               value: form.approveExec,
@@ -647,9 +633,9 @@ function Editor({
               },
             }}
             options={APPROVAL_POLICIES}
-            ownLabel="Inherit from Settings → Tools"
+            unsetLabel="The global policy — Settings → Tools"
           />
-          <InheritSelect
+          <OptionalSelect
             label="Reach the network"
             bound={{
               value: form.approveNetwork,
@@ -658,9 +644,9 @@ function Editor({
               },
             }}
             options={APPROVAL_POLICIES}
-            ownLabel="Inherit from Settings → Tools"
+            unsetLabel="The global policy — Settings → Tools"
           />
-          <InheritSelect
+          <OptionalSelect
             label="Write files"
             bound={{
               value: form.approveWrite,
@@ -669,70 +655,61 @@ function Editor({
               },
             }}
             options={APPROVAL_POLICIES}
-            ownLabel="Inherit from Settings → Tools"
+            unsetLabel="The global policy — Settings → Tools"
           />
         </FieldGrid>
       </Section>
 
-      {/* Real numbers with real consequences, but ones nobody changes twice a
-          year. In the reading order they pushed the prompt and the tools — the
-          two things this screen is actually for — below the fold. */}
+      {/* Below the tools and above the prompt, in plain sight. It sat behind a
+          "Show limits" press on the theory that nobody changes a budget twice a
+          year — but the numbers are now this agent's own rather than inherited,
+          and a setting an operator has to go looking for to find out what it
+          says is not one they can be said to have chosen. */}
       <Section title="Limits" description="The budget a turn runs inside.">
-        <Button
-          variant="ghost"
-          aria-expanded={advanced}
-          onClick={() => {
-            setAdvanced((current) => !current);
-          }}
-        >
-          {advanced ? 'Hide' : 'Show'} limits
-        </Button>
-
-        {advanced && (
-          <FieldGrid>
-            <BoundField
-              label="Max output tokens"
-              bound={fields.maxTokens}
+        <FieldGrid>
+          <BoundField
+            label="Max output tokens"
+            bound={fields.maxTokens}
+            inputMode="numeric"
+            error={errors.maxTokens}
+          />
+          <BoundField
+            label="Context window (tokens)"
+            bound={fields.contextWindowTokens}
+            inputMode="numeric"
+            error={errors.contextWindowTokens}
+          />
+          <BoundField
+            label="Tool timeout (seconds)"
+            bound={fields.toolTimeoutSeconds}
+            inputMode="numeric"
+            error={errors.toolTimeoutSeconds}
+            hint="0 disables the limit."
+          />
+          {isDefault && (
+            <TextField
+              label="Max tool iterations"
               inputMode="numeric"
-              error={errors.maxTokens}
+              value={base.maxToolIterations}
+              error={errors.maxToolIterations}
+              onValueChange={(value) => {
+                updateBase('maxToolIterations', value);
+              }}
             />
-            <BoundField
-              label="Context window (tokens)"
-              bound={fields.contextWindowTokens}
+          )}
+          {isDefault && (
+            <TextField
+              label="Turn timeout (seconds)"
               inputMode="numeric"
-              error={errors.contextWindowTokens}
+              value={base.loopWallTimeoutSeconds}
+              error={errors.loopWallTimeoutSeconds}
+              onValueChange={(value) => {
+                updateBase('loopWallTimeoutSeconds', value);
+              }}
+              hint="0 disables the limit."
             />
-            <BoundField
-              label="Tool timeout (seconds)"
-              bound={fields.toolTimeoutSeconds}
-              inputMode="numeric"
-              error={errors.toolTimeoutSeconds}
-            />
-            {isDefault && (
-              <TextField
-                label="Max tool iterations"
-                inputMode="numeric"
-                value={base.maxToolIterations}
-                error={errors.maxToolIterations}
-                onValueChange={(value) => {
-                  updateBase('maxToolIterations', value);
-                }}
-              />
-            )}
-            {isDefault && (
-              <TextField
-                label="Turn timeout (seconds)"
-                inputMode="numeric"
-                value={base.loopWallTimeoutSeconds}
-                error={errors.loopWallTimeoutSeconds}
-                onValueChange={(value) => {
-                  updateBase('loopWallTimeoutSeconds', value);
-                }}
-                hint="0 disables the limit."
-              />
-            )}
-          </FieldGrid>
-        )}
+          )}
+        </FieldGrid>
       </Section>
 
       <Section

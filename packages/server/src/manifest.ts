@@ -69,6 +69,11 @@ const MANIFEST = [
 
   // Providers and models
   { id: 'providers.list', method: 'GET', url: '/api/providers', auth: 'required' },
+  // A POST because it opens a socket to somewhere else, and not
+  // `/api/providers/:id/test` because the thing most worth testing is a
+  // connection that has not been saved yet — an id-shaped route would force a
+  // write before the check the check exists to precede.
+  { id: 'providers.test', method: 'POST', url: '/api/providers/test', auth: 'required' },
   { id: 'models.list', method: 'GET', url: '/api/models', auth: 'required' },
   { id: 'models.refresh', method: 'POST', url: '/api/models/refresh', auth: 'required' },
 

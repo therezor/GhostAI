@@ -50,6 +50,7 @@ import {
   classifyStatus,
   parseRetryAfter,
   toProviderError,
+  type TransportContext,
   type WireErrorBody,
 } from './errors.js';
 import {
@@ -404,7 +405,10 @@ export function createOpenAIChatProvider(options: OpenAIChatOptions): ChatProvid
     try {
       response = await doFetch(url, init);
     } catch (error) {
-      throw toProviderError(error, spec.id);
+      // The URL and the display name, so the message can say *which* endpoint
+      // did not answer — "fetch failed" is the same six characters whether the
+      // model server was never started or the host name is gone.
+      throw toProviderError(error, spec.id, { url, label: spec.displayName });
     }
     if (!response.ok) throw await failure(response, url);
     return response;
@@ -419,7 +423,10 @@ export function createOpenAIChatProvider(options: OpenAIChatOptions): ChatProvid
     // A body that fails mid-download is a transport failure, not a bad response;
     // `toProviderError` is what makes the difference visible to the caller.
     const text = await response.text().catch((error: unknown) => {
-      throw toProviderError(error, spec.id);
+      throw toProviderError(error, spec.id, {
+        url: joinPath(base, 'chat/completions'),
+        label: spec.displayName,
+      });
     });
     const body = asRecord(parseJson(text));
     const choices = arrayField(body, 'choices');
@@ -468,6 +475,7 @@ export function createOpenAIChatProvider(options: OpenAIChatOptions): ChatProvid
     for await (const event of withProviderErrors(
       parseSse(readByteStream(response.body), { providerId: spec.id }),
       spec.id,
+      { url: joinPath(base, 'chat/completions'), label: spec.displayName },
     )) {
       if (event.data === '[DONE]') break;
 
@@ -546,7 +554,7 @@ export function createOpenAIChatProvider(options: OpenAIChatOptions): ChatProvid
         ...(signal === undefined ? {} : { signal }),
       });
     } catch (error) {
-      throw toProviderError(error, spec.id);
+      throw toProviderError(error, spec.id, { url, label: spec.displayName });
     }
     if (!response.ok) throw await failure(response, url);
 
@@ -575,11 +583,12 @@ export function createOpenAIChatProvider(options: OpenAIChatOptions): ChatProvid
 async function* withProviderErrors<T>(
   source: AsyncIterable<T>,
   providerId: string,
+  context: TransportContext,
 ): AsyncGenerator<T, void, undefined> {
   try {
     for await (const value of source) yield value;
   } catch (error) {
-    throw toProviderError(error, providerId);
+    throw toProviderError(error, providerId, context);
   }
 }
 

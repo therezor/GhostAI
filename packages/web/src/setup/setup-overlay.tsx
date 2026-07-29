@@ -30,7 +30,7 @@ import { Button } from '@/components/ui/button.js';
 import { Field } from '@/components/ui/field.js';
 import { Wordmark } from '@/components/wordmark.js';
 import { SelectField, TextField } from '@/settings/controls.js';
-import { toCreateProviderPatch } from '@/settings/provider-form.js';
+import { EMPTY_PROVIDER_FORM, toCreateProviderPatch } from '@/settings/provider-form.js';
 import {
   initialStep,
   isSkippable,
@@ -279,12 +279,12 @@ function ProviderStep({ onDone }: { readonly onDone: (instanceId: string) => voi
       // install, so nothing is taken. Adding a second of the same type from the
       // settings panel is where the `-2` suffix comes in.
       const id = chosen.id;
-      const patch = toCreateProviderPatch(id, chosen.id, '');
-      const trimmedBase = apiBase.trim();
+      // Through the same builder the settings dialog uses, on the same form
+      // shape: the wizard asks for a subset of the fields, not for a different
+      // patch. An empty `apiBase` is read as "unset" and falls back to the
+      // registry's default.
       await api.patchSettings(
-        trimmedBase === ''
-          ? patch
-          : { providers: { [id]: { ...patch.providers?.[id], apiBase: trimmedBase } } },
+        toCreateProviderPatch(id, { ...EMPTY_PROVIDER_FORM, type: chosen.id, apiBase }),
       );
       // After the instance exists, because the vault is keyed by instance id.
       const trimmedKey = key.trim();

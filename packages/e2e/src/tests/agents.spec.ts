@@ -70,10 +70,6 @@ test.describe('agents', () => {
     await expect(app.getByRole('link', { name: 'Edit default' })).toBeVisible();
 
     await app.getByRole('link', { name: 'Edit default' }).click();
-    // The budget lives behind a disclosure now — real settings, but ones
-    // nobody changes twice a year, and above the prompt they pushed the
-    // subject of the screen below the fold.
-    await app.getByRole('button', { name: 'Show limits' }).click();
     await expect(app.getByLabel('Max output tokens')).toBeVisible();
     // No row menu at all on the default: the only thing in it would be a
     // delete this agent cannot have.
@@ -94,7 +90,6 @@ test.describe('agents', () => {
     await expect(app.getByRole('tab', { name: 'Agent' })).toHaveCount(0);
 
     await app.goto(`${harness.url}/agents/default`);
-    await app.getByRole('button', { name: 'Show limits' }).click();
     const maxTokens = app.getByLabel('Max output tokens');
     await maxTokens.fill('2048');
     await app.getByRole('button', { name: 'Save changes' }).click();
@@ -110,14 +105,14 @@ test.describe('agents', () => {
       .toBe(2048);
   });
 
-  test('a new agent copies the default’s behaviour but keeps inheriting its model', async ({
-    app,
-    harness,
-  }) => {
-    // Give the default agent something worth copying.
+  test('a new agent is created holding the default’s settings', async ({ app, harness }) => {
+    // Give the default agent something worth copying, on both halves of what it
+    // is: `agents.defaults` for the model and budget, its own entry for the
+    // prompt and the tools.
     await app.request.patch(`${harness.url}/api/settings`, {
       data: {
         agents: {
+          defaults: { maxTokens: 1234 },
           list: {
             default: {
               systemPrompt: 'House style: be terse.',
@@ -133,6 +128,9 @@ test.describe('agents', () => {
     await app.getByLabel('Name', { exact: true }).fill('Reviewer');
     await app.getByRole('button', { name: 'Create' }).click();
 
+    // Nothing inherits any more, so what a new agent runs on has to be written
+    // into its own entry — otherwise the editor would have to describe this
+    // agent's model as somebody else's.
     await expect
       .poll(async () => {
         const response = await app.request.get(`${harness.url}/api/settings`);
@@ -141,22 +139,87 @@ test.describe('agents', () => {
             agents: {
               list: Record<
                 string,
-                { systemPrompt: string; tools: { deny: string[] }; model?: string }
+                { systemPrompt: string; tools: { deny: string[] }; maxTokens?: number }
               >;
             };
           };
         };
         return body.config.agents.list.reviewer;
       })
-      .toMatchObject({ systemPrompt: 'House style: be terse.', tools: { deny: ['exec'] } });
+      .toMatchObject({
+        systemPrompt: 'House style: be terse.',
+        tools: { deny: ['exec'] },
+        maxTokens: 1234,
+      });
+  });
 
-    const response = await app.request.get(`${harness.url}/api/settings`);
-    const body = (await response.json()) as {
-      config: { agents: { list: Record<string, { model?: string }> } };
-    };
-    // The model is *not* copied: it stays inherited, so a later change to the
-    // defaults still moves this agent. Copying it would pin it to today's.
-    expect(body.config.agents.list.reviewer).not.toHaveProperty('model');
+  test('a rename in the editor reaches the composer’s picker', async ({ app, harness }) => {
+    // The reported bug, end to end. `/api/agents` is what the picker renders and
+    // it is derived from the settings tree rather than part of it, so a save
+    // that renamed an agent left the picker on the old name until a reload.
+    await app.request.patch(`${harness.url}/api/settings`, {
+      data: { agents: { list: { reviewer: { label: 'Reviewer' } } } },
+    });
+
+    await app.goto(`${harness.url}/agents/reviewer`);
+    await app.getByLabel('Name', { exact: true }).fill('Second Reader');
+    await app.getByRole('button', { name: 'Save changes' }).click();
+
+    // Durable state on both sides: the stored label, and the name the picker
+    // renders on a screen that was never told about the edit.
+    await expect
+      .poll(async () => {
+        const response = await app.request.get(`${harness.url}/api/agents`);
+        const body = (await response.json()) as { agents: { id: string; label: string }[] };
+        return body.agents.find((agent) => agent.id === 'reviewer')?.label;
+      })
+      .toBe('Second Reader');
+
+    await app.getByRole('link', { name: 'Agents' }).first().click();
+    await expect(app.getByRole('link', { name: 'Edit Second Reader' })).toBeVisible();
+  });
+
+  test('an agent switched off from the list stops being one a turn can run on', async ({
+    app,
+    harness,
+  }) => {
+    await app.request.patch(`${harness.url}/api/settings`, {
+      data: { agents: { list: { reviewer: { label: 'Reviewer', tools: { deny: ['exec'] } } } } },
+    });
+
+    await app.goto(`${harness.url}/agents`);
+    await app.getByRole('button', { name: 'Actions for Reviewer' }).click();
+    await app.getByRole('menuitem', { name: 'Disable' }).click();
+
+    // The durable result, in two places: the stored entry keeps everything it
+    // held and is merely off, and the list of runnable agents no longer has it.
+    await expect
+      .poll(async () => {
+        const response = await app.request.get(`${harness.url}/api/settings`);
+        const body = (await response.json()) as {
+          config: {
+            agents: { list: Record<string, { enabled: boolean; tools: { deny: string[] } }> };
+          };
+        };
+        return body.config.agents.list.reviewer;
+      })
+      .toMatchObject({ enabled: false, tools: { deny: ['exec'] } });
+
+    const agents = await app.request.get(`${harness.url}/api/agents`);
+    const listed = (await agents.json()) as { agents: { id: string }[] };
+    expect(listed.agents.map((agent) => agent.id)).toEqual(['default']);
+
+    // And back on from the same menu, with what it held still there.
+    await app.getByRole('button', { name: 'Actions for Reviewer' }).click();
+    await app.getByRole('menuitem', { name: 'Enable' }).click();
+
+    await expect
+      .poll(async () => {
+        const response = await app.request.get(`${harness.url}/api/agents`);
+        const body = (await response.json()) as { agents: { id: string }[] };
+        return body.agents.map((agent) => agent.id);
+      })
+      .toEqual(['default', 'reviewer']);
   });
 
   test('an agent created on the page is one the server will run a turn on', async ({

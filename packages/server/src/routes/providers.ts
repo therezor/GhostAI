@@ -13,16 +13,20 @@
 
 import {
   ModelsResponseSchema,
+  ProviderTestRequestSchema,
+  ProviderTestResponseSchema,
   ProvidersResponseSchema,
   type ModelInfo,
   type ModelsResponse,
+  type ProviderTestRequest,
+  type ProviderTestResponse,
   type ProvidersResponse,
 } from '@ghostai/protocol';
 import { PROVIDERS, describeInstance, describeProvider, listInstances } from '@ghostai/providers';
 
 import type { RouteDeps, RouteGroup } from './types.js';
 
-type ProviderRouteId = 'providers.list' | 'models.list' | 'models.refresh';
+type ProviderRouteId = 'providers.list' | 'providers.test' | 'models.list' | 'models.refresh';
 
 /**
  * The models the settings tree names, with no endpoint asked.
@@ -94,6 +98,32 @@ export function providerRoutes(deps: RouteDeps): RouteGroup<ProviderRouteId> {
             describeInstance(instance, present[instance.id] ?? false),
           ),
         };
+      },
+    },
+
+    // Degrades rather than 501s when the runtime cannot probe, for the same
+    // reason `models.list` falls back to the configured catalogue: `ok: false`
+    // with a reason *is* the answer to "can this be reached", and a client that
+    // had to branch on the transport to find out would render an error where
+    // there is only an absence.
+    'providers.test': {
+      summary: 'Ask one provider connection whether it answers, and with what',
+      schema: {
+        body: ProviderTestRequestSchema,
+        response: { 200: ProviderTestResponseSchema },
+      },
+      handler: async (request): Promise<ProviderTestResponse> => {
+        // Called through the runtime rather than off a detached reference, so
+        // an implementation that reaches for its own state still has it.
+        if (deps.runtime.testProvider === undefined) {
+          return {
+            ok: false,
+            models: [],
+            reason: 'unsupported',
+            message: 'This server cannot test provider connections.',
+          };
+        }
+        return await deps.runtime.testProvider(request.body as ProviderTestRequest);
       },
     },
 

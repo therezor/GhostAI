@@ -348,6 +348,76 @@ describe('GET /api/providers', () => {
   });
 });
 
+describe('POST /api/providers/test', () => {
+  it('passes the connection through and answers with the verdict', async () => {
+    const { server, headers, runtime } = await start();
+    const asked: unknown[] = [];
+    Object.assign(runtime, {
+      testProvider: async (request: unknown) => {
+        asked.push(request);
+        return { ok: true, models: ['llama3'] };
+      },
+    });
+
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/providers/test',
+      headers,
+      payload: { type: 'ollama', apiBase: 'http://gpu.lan:11434/v1' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ ok: true, models: ['llama3'] });
+    expect(asked).toEqual([
+      // The schema's defaults arrive filled in, so the runtime never has to ask
+      // whether an absent `extraHeaders` meant none or meant the spec's.
+      { type: 'ollama', apiBase: 'http://gpu.lan:11434/v1', extraHeaders: {} },
+    ]);
+  });
+
+  it('reports a rejected key as a result, not as an error envelope', async () => {
+    // The distinction the whole route exists for: "it answered and refused the
+    // key" is an answer to the question asked, and a 4xx would make the client
+    // unpick an error to find it.
+    const { server, headers, runtime } = await start();
+    Object.assign(runtime, {
+      testProvider: async () => ({
+        ok: false,
+        models: [],
+        reason: 'auth',
+        message: 'the key was rejected',
+      }),
+    });
+
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/providers/test',
+      headers,
+      payload: { type: 'openai' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ ok: false, reason: 'auth' });
+  });
+
+  it('degrades rather than failing when the runtime cannot probe', async () => {
+    // A route test has no business opening a socket, so `testProvider` is
+    // optional on the port — and an install without one gets an honest "cannot
+    // be checked" instead of a 501 the panel would render as a fault.
+    const { server, headers } = await start();
+
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/providers/test',
+      headers,
+      payload: { type: 'openai' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ ok: false, reason: 'unsupported' });
+  });
+});
+
 describe('GET /api/models', () => {
   it('lists what the settings name, plus the model in use', async () => {
     const { server, headers } = await start({

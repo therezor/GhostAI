@@ -223,24 +223,24 @@ describe('the workspaces page', () => {
     });
   });
 
-  it('cannot remove the default, because it is the parent of the others', async () => {
+  it('cannot delete the default, because it is the parent of the others', async () => {
     stubApi({ 'GET /api/workspaces': [200, TWO] });
     renderWithProviders(<WorkspacesRoute />);
 
     await openActions('Default');
 
     expect(await screen.findByRole('menuitem', { name: 'Rename' })).toBeInTheDocument();
-    expect(screen.queryByRole('menuitem', { name: 'Remove' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument();
   });
 
-  it('asks before removing, and sends nothing until the answer is yes', async () => {
+  it('asks before deleting, and sends nothing until the answer is yes', async () => {
     // The behaviour the dialog never had: a delete used to fire on the single
     // click of an icon sitting next to Rename.
     const calls = stubApi({ 'GET /api/workspaces': [200, TWO] });
     renderWithProviders(<WorkspacesRoute />);
 
     await openActions('Client Acme');
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Remove' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
 
     expect(await screen.findByText(/Its folder and everything in it stays on disk/)).toBeVisible();
     expect(calls.some((call) => call.method === 'DELETE')).toBe(false);
@@ -275,8 +275,8 @@ describe('the workspaces page', () => {
     renderWithProviders(<WorkspacesRoute />);
 
     await openActions('Client Acme');
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Remove' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Remove' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete' }));
 
     // The 409 is a question, not a failure: the count it carries is what the
     // offer is made out of.
@@ -284,7 +284,7 @@ describe('the workspaces page', () => {
       await screen.findByText(/2 conversations still belong to Client Acme/),
     ).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Move and remove' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Move and delete' }));
 
     await waitFor(() => {
       expect(calls.filter((call) => call.method === 'DELETE')).toHaveLength(2);
