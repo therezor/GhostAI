@@ -536,6 +536,31 @@ export const PluginsConfigSchema = z.object({
 });
 export type PluginsConfig = z.infer<typeof PluginsConfigSchema>;
 
+/**
+ * What the install looks and reads like, for both surfaces.
+ *
+ * Its own section rather than a field on `server`, because nothing here is
+ * transport: `server` is ports, hosts and auth, and a locale is neither. Theme
+ * is the natural next occupant.
+ *
+ * `locale` is a bare `z.string()` on purpose. An enum would have to enumerate
+ * the shipped languages, which would give `protocol` a dependency on
+ * `@ghostai/i18n` for a value that changes every time a translation lands — and
+ * would turn a config naming a language this build does not carry into a parse
+ * failure that takes the whole file down. `resolveLocale` narrows an unknown tag
+ * to the nearest match and ultimately to English, so an unrecognised value costs
+ * a fallback rather than a broken install.
+ *
+ * `assertBootPolicy` reads only the `server` subtree, so nothing here is boot
+ * policy — and `settings.reload` already exists, which is what makes a language
+ * change take effect without a restart.
+ */
+export const UiConfigSchema = z.object({
+  /** A BCP-47 tag. Unknown values fall back rather than failing to parse. */
+  locale: z.string().default('en'),
+});
+export type UiConfig = z.infer<typeof UiConfigSchema>;
+
 // ---------------------------------------------------------------------------
 // Root
 // ---------------------------------------------------------------------------
@@ -550,6 +575,7 @@ export const ConfigSchema = z.object({
   rag: RagConfigSchema.prefault({}),
   scheduler: SchedulerConfigSchema.prefault({}),
   plugins: PluginsConfigSchema.prefault({}),
+  ui: UiConfigSchema.prefault({}),
 });
 export type Config = z.infer<typeof ConfigSchema>;
 
@@ -651,5 +677,6 @@ export const ConfigPatchSchema = z.object({
     .extend({ heartbeat: patchOf(HeartbeatConfigSchema).optional() })
     .optional(),
   plugins: patchOf(PluginsConfigSchema).optional(),
+  ui: patchOf(UiConfigSchema).optional(),
 });
 export type ConfigPatch = z.infer<typeof ConfigPatchSchema>;

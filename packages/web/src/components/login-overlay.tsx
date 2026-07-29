@@ -19,6 +19,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type JSX, type SyntheticEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { DEFAULT_USERNAME } from '@ghostai/protocol';
 
@@ -29,6 +30,7 @@ import { Field } from './ui/field.js';
 import { Wordmark } from './wordmark.js';
 
 export function LoginOverlay(): JSX.Element | null {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   // Prefilled with the default, which is right on every install that never
   // changed it and one keystroke away from right on the rest. The server will
@@ -77,12 +79,12 @@ export function LoginOverlay(): JSX.Element | null {
         <div className="stack login-card__header">
           <Wordmark className="eyebrow" />
           <h1 id="login-title" className="login-card__title">
-            Sign in
+            {t('account.signInTitle')}
           </h1>
         </div>
 
         <Field
-          label="Username"
+          label={t('account.usernameLabel')}
           name="username"
           // `username` rather than nothing, so a password manager files the two
           // fields as one credential and offers to fill both.
@@ -95,7 +97,7 @@ export function LoginOverlay(): JSX.Element | null {
         />
 
         <Field
-          label="Password"
+          label={t('account.passwordLabel')}
           type="password"
           name="password"
           autoComplete="current-password"

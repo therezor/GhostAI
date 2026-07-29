@@ -18,6 +18,7 @@
  */
 
 import { memo, type JSX, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Token, Tokens } from 'marked';
 
 import { cn } from '@/lib/cn.js';
@@ -283,6 +284,7 @@ function InlineLink({ token }: { readonly token: Tokens.Link }): ReactNode {
 }
 
 function InlineImage({ token }: { readonly token: Tokens.Image }): ReactNode {
+  const { t } = useTranslation();
   const href = safeHref(token.href);
   if (href === undefined) return <>{token.text}</>;
 
@@ -296,7 +298,7 @@ function InlineImage({ token }: { readonly token: Tokens.Image }): ReactNode {
         href={href}
         target="_blank"
         rel="noopener noreferrer nofollow"
-        title="External image — opens in a new tab rather than loading here"
+        title={t('chat.externalImage')}
       >
         {token.text === '' ? href : token.text}
       </a>

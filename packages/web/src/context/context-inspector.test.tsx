@@ -109,7 +109,10 @@ describe('the context inspector', () => {
     await open(user);
 
     expect(await screen.findByText(/You are GhostAI, a helpful agent\./)).toBeInTheDocument();
-    expect(screen.getByText('1 messages in the window')).toBeInTheDocument();
+    // Was `1 messages in the window`. The count is one, and the sentence now
+    // agrees with it — this line asserted the bug rather than the behaviour,
+    // which is what an inflection hand-rolled at the call site buys you.
+    expect(screen.getByText('1 message in the window')).toBeInTheDocument();
   });
 
   it('says a budget is over the window rather than rendering it as full', async () => {

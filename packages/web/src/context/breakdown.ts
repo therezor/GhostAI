@@ -22,14 +22,18 @@
  *    silently normalised values that make an overflowing budget look full.
  */
 
+import type { TFunction } from 'i18next';
+
+import type { WebKey } from '@/i18n/keys.js';
+
 /** The order the three sections the server reports are always shown in. */
 const KNOWN_ORDER: readonly string[] = ['systemPrompt', 'tools', 'messages'];
 
-const LABELS: Readonly<Record<string, string>> = {
-  systemPrompt: 'System prompt',
-  tools: 'Tool definitions',
-  messages: 'Conversation',
-  other: 'Unattributed',
+const LABELS: Readonly<Record<string, WebKey>> = {
+  systemPrompt: 'context.labels.systemPrompt',
+  tools: 'context.labels.tools',
+  messages: 'context.labels.messages',
+  other: 'context.labels.other',
 };
 
 export interface ContextSegment {
@@ -57,11 +61,10 @@ export interface ContextInput {
   readonly contextWindowTokens: number;
 }
 
-export function summariseContext({
-  breakdown,
-  estimatedTokens,
-  contextWindowTokens,
-}: ContextInput): ContextBudget {
+export function summariseContext(
+  { breakdown, estimatedTokens, contextWindowTokens }: ContextInput,
+  t: TFunction,
+): ContextBudget {
   const windowTokens = contextWindowTokens > 0 ? contextWindowTokens : 0;
   const percentOf = (tokens: number): number =>
     windowTokens === 0 ? 0 : (tokens / windowTokens) * 100;
@@ -77,7 +80,7 @@ export function summariseContext({
   return {
     segments: sections.map(({ key, tokens }) => ({
       key,
-      label: labelFor(key),
+      label: labelFor(key, t),
       tokens,
       percent: percentOf(tokens),
     })),
@@ -104,9 +107,16 @@ function compareSections(a: { key: string }, b: { key: string }): number {
  * never heard of, so a section the server adds tomorrow reads as "Knowledge
  * base" rather than `knowledge_base`.
  */
-function labelFor(key: string): string {
+/**
+ * The four sections the server reports have translations; anything else does
+ * not, and cannot. A newer server may name a section this build has never heard
+ * of, and there is no key to look up for it — so the fallback below derives
+ * something readable from the identifier rather than rendering a missing key.
+ * That is the one place in the UI where English leaks through by design.
+ */
+function labelFor(key: string, t: TFunction): string {
   const known = LABELS[key];
-  if (known !== undefined) return known;
+  if (known !== undefined) return t(known);
 
   const words = key
     .replace(/[_-]+/g, ' ')

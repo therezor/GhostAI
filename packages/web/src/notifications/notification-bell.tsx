@@ -22,12 +22,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Bell } from 'lucide-react';
 import { useState, type JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { Notification } from '@ghostai/protocol';
 
 import { cn } from '@/lib/cn.js';
 import { api } from '@/lib/api.js';
-import { formatRelativeTime } from '@/lib/format.js';
+import { useFormat } from '@/lib/use-format.js';
 import { queryKeys } from '@/lib/query.js';
 import { Button } from '@/components/ui/button.js';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover.js';
@@ -43,6 +44,7 @@ import { LEVEL_CLASSES, LEVEL_ICONS } from '@/notifications/levels.js';
 const PREVIEW_ROWS = 6;
 
 export function NotificationBell(): JSX.Element {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
 
@@ -85,7 +87,7 @@ export function NotificationBell(): JSX.Element {
 
       <PopoverContent align="end" className="stack popover--notifications">
         <div className="row notification-bell__header">
-          <h2 className="notification-bell__title">Notifications</h2>
+          <h2 className="notification-bell__title">{t('notifications.title')}</h2>
           <span className="spacer" />
           {unreadCount > 0 && (
             <Button
@@ -96,7 +98,7 @@ export function NotificationBell(): JSX.Element {
                 markAll.mutate();
               }}
             >
-              Mark all read
+              {t('common.markAllRead')}
             </Button>
           )}
         </div>
@@ -115,10 +117,10 @@ export function NotificationBell(): JSX.Element {
           ))}
 
           {notifications.isSuccess && rows.length === 0 && (
-            <li className="notification-bell__empty">Nothing here yet.</li>
+            <li className="notification-bell__empty">{t('common.nothingHere')}</li>
           )}
           {notifications.isError && (
-            <li className="notification-bell__empty">Could not load notifications.</li>
+            <li className="notification-bell__empty">{t('notifications.loadFailed')}</li>
           )}
         </ul>
 
@@ -129,7 +131,7 @@ export function NotificationBell(): JSX.Element {
             setOpen(false);
           }}
         >
-          See all
+          {t('common.seeAll')}
         </Link>
       </PopoverContent>
     </Popover>
@@ -145,6 +147,7 @@ function NotificationRow({
   readonly now: number;
   readonly onOpen: () => void;
 }): JSX.Element {
+  const fmt = useFormat();
   const Icon = LEVEL_ICONS[notification.level];
 
   const body = (
@@ -153,7 +156,7 @@ function NotificationRow({
       <span className="notification-mini__text">
         <span className="notification-mini__title truncate">{notification.title}</span>
         <span className="notification-mini__time">
-          {formatRelativeTime(notification.createdAtMs, now)}
+          {fmt.relativeTime(notification.createdAtMs, now)}
         </span>
       </span>
     </>

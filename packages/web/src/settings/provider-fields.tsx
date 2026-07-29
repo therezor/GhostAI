@@ -10,6 +10,7 @@
 
 import { CircleAlert, CircleCheck } from 'lucide-react';
 import type { JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { ProviderTestResponse } from '@ghostai/protocol';
 
@@ -83,11 +84,13 @@ export function ProbeLine({
   /** Prefixes the failure with "Saved — but", so the write is not in doubt. */
   readonly saved: boolean;
 }): JSX.Element | null {
+  const { t } = useTranslation();
+
   if (probing) {
     return (
       <p className="provider-row__probe" role="status">
         <span className="spinner" />
-        Checking the connection…
+        {t('providers.checking')}
       </p>
     );
   }
@@ -100,7 +103,7 @@ export function ProbeLine({
       role={result.ok ? 'status' : 'alert'}
     >
       {result.ok ? <CircleCheck /> : <CircleAlert />}
-      {describeProbe(result, saved)}
+      {describeProbe(result, saved, t)}
     </p>
   );
 }

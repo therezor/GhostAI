@@ -45,6 +45,8 @@
  * key *is* clearing it.
  */
 
+import type { TFunction } from 'i18next';
+
 import {
   DEFAULT_AGENT_ID,
   type AgentDefaults,
@@ -124,20 +126,22 @@ export function toAgentForm(defaults: AgentDefaults): AgentForm {
  * refuses an out-of-range patch either way — so being one off here shows a
  * message a moment early, not a wrong setting.
  */
-export function toAgentPatch(form: AgentForm): PatchResult {
+export function toAgentPatch(form: AgentForm, t: TFunction): PatchResult {
   const errors: Record<string, string> = {};
 
-  const maxTokens = parseNumber(form.maxTokens, { integer: true, min: 1 });
-  const contextWindowTokens = parseNumber(form.contextWindowTokens, { integer: true, min: 1 });
+  const maxTokens = parseNumber(form.maxTokens, t, { integer: true, min: 1 });
+  const contextWindowTokens = parseNumber(form.contextWindowTokens, t, { integer: true, min: 1 });
   // Blank is a value here, not a mistake: it means "send no temperature and
   // let the provider apply its own", which is the only thing that works for a
   // model that rejects the parameter.
   const temperature =
-    form.temperature.trim() === '' ? undefined : parseNumber(form.temperature, { min: 0, max: 2 });
-  const maxToolIterations = parseNumber(form.maxToolIterations, { integer: true, min: 1 });
-  const toolTimeout = parseNumber(form.toolTimeoutSeconds, { min: 0 });
-  const loopWallTimeout = parseNumber(form.loopWallTimeoutSeconds, { min: 0 });
-  const learningInterval = parseNumber(form.learningInterval, { integer: true, min: 1 });
+    form.temperature.trim() === ''
+      ? undefined
+      : parseNumber(form.temperature, t, { min: 0, max: 2 });
+  const maxToolIterations = parseNumber(form.maxToolIterations, t, { integer: true, min: 1 });
+  const toolTimeout = parseNumber(form.toolTimeoutSeconds, t, { min: 0 });
+  const loopWallTimeout = parseNumber(form.loopWallTimeoutSeconds, t, { min: 0 });
+  const learningInterval = parseNumber(form.learningInterval, t, { integer: true, min: 1 });
 
   const collect = (field: string, result: ReturnType<typeof parseNumber>): void => {
     if (!result.ok) errors[field] = result.error;
@@ -356,6 +360,7 @@ export function toAgentEntryPatch(
   id: string,
   form: AgentEntryForm,
   entry: AgentEntry,
+  t: TFunction,
 ): AgentPatchResult {
   const errors: Record<string, string> = {};
 
@@ -366,9 +371,9 @@ export function toAgentEntryPatch(
   const required = (
     field: string,
     value: string,
-    options: Parameters<typeof parseNumber>[1],
+    options: Parameters<typeof parseNumber>[2],
   ): number | undefined => {
-    const result = parseNumber(value, options);
+    const result = parseNumber(value, t, options);
     if (!result.ok) {
       errors[field] = result.error;
       return undefined;
@@ -380,7 +385,7 @@ export function toAgentEntryPatch(
   const optional = (
     field: string,
     value: string,
-    options: Parameters<typeof parseNumber>[1],
+    options: Parameters<typeof parseNumber>[2],
   ): number | undefined => {
     if (value.trim() === '') return undefined;
     return required(field, value, options);
@@ -446,8 +451,9 @@ export function toDefaultAgentPatch(
   defaults: AgentForm,
   form: AgentEntryForm,
   entry: AgentEntry,
+  t: TFunction,
 ): AgentPatchResult {
-  const base = toAgentPatch(defaults);
+  const base = toAgentPatch(defaults, t);
   if (!base.ok) return { ok: false, errors: base.errors };
 
   return {

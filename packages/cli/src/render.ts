@@ -35,6 +35,10 @@ import type { TurnStatsRecord } from '@ghostai/core';
 import { tokensPerSecond, type ToolRisk, type Usage } from '@ghostai/protocol';
 import pc from 'picocolors';
 
+import { DEFAULT_LOCALE } from '@ghostai/i18n';
+
+import { translations, type CliKey, type CliT } from './i18n.js';
+
 /** Anything that takes a string. `process.stdout` satisfies it; so does a test. */
 export interface RenderTarget {
   write(text: string): void;
@@ -50,6 +54,14 @@ export interface TurnRendererOptions {
   readonly showUsage?: boolean;
   /** Lines of a tool result to preview. `0` prints none. Default `6`. */
   readonly toolResultLines?: number;
+  /**
+   * The terminal's `t`. Defaults to English.
+   *
+   * Injected the same way and for the same reason as `colors`: a default that
+   * behaves means a test constructs this with two fields rather than five, and
+   * `chatCommand` passes the install's own locale in exactly one place.
+   */
+  readonly t?: CliT;
 }
 
 const DEFAULT_TOOL_RESULT_LINES = 6;
@@ -103,12 +115,30 @@ export function summariseArgs(args: unknown, max: number = 96): string {
   return clip(entries.map(([key, value]) => `${key}=${formatValue(value)}`).join(' '), max);
 }
 
+/**
+ * A duration, in the terminal's denser wording.
+ *
+ * The hour branch is not symmetry with the web's `formatDuration` for its own
+ * sake: without it a three-hour turn rendered as `180m 00s`, which is a number a
+ * reader has to divide before it means anything.
+ *
+ * The sub-minute form stays one decimal all the way to sixty seconds, where the
+ * web drops the decimal above ten. That divergence is deliberate and is the same
+ * one that makes this file render `1.2k` where the web renders `8,192`: a
+ * terminal line is read at a glance and a settings panel is read on purpose.
+ */
 export function formatDuration(ms: number): string {
   if (ms < 1000) return `${String(Math.round(ms))}ms`;
   if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-  const minutes = Math.floor(ms / 60_000);
-  const seconds = Math.round((ms % 60_000) / 1000);
-  return `${String(minutes)}m ${String(seconds).padStart(2, '0')}s`;
+
+  const totalMinutes = Math.floor(ms / 60_000);
+  if (totalMinutes < 60) {
+    const seconds = Math.round((ms % 60_000) / 1000);
+    return `${String(totalMinutes)}m ${String(seconds).padStart(2, '0')}s`;
+  }
+
+  const hours = Math.floor(totalMinutes / 60);
+  return `${String(hours)}h ${String(totalMinutes % 60).padStart(2, '0')}m`;
 }
 
 export function formatCount(value: number): string {
@@ -148,11 +178,11 @@ export function formatUsage(usage: Usage): string {
  * `complete` is absent on purpose: the answer is already on screen, and
  * announcing that it finished normally is noise on every single turn.
  */
-const STOP_REASONS: Partial<Record<string, string>> = {
-  max_iterations: 'stopped at the tool-iteration cap',
-  wall_timeout: 'stopped at the turn time cap',
-  aborted: 'interrupted',
-  error: 'failed',
+const STOP_REASONS: Partial<Record<string, CliKey>> = {
+  max_iterations: 'render.stopReasons.max_iterations',
+  wall_timeout: 'render.stopReasons.wall_timeout',
+  aborted: 'render.stopReasons.aborted',
+  error: 'render.stopReasons.error',
 };
 
 type Palette = ReturnType<typeof pc.createColors>;
@@ -176,6 +206,7 @@ export class TurnRenderer {
   readonly #showReasoning: boolean;
   readonly #showUsage: boolean;
   readonly #toolResultLines: number;
+  readonly #t: CliT;
   /** Call id → tool name, so a result can label itself without re-reading. */
   readonly #calls = new Map<string, string>();
 
@@ -187,6 +218,7 @@ export class TurnRenderer {
     this.#c = pc.createColors(options.colors);
     this.#showReasoning = options.showReasoning ?? true;
     this.#showUsage = options.showUsage ?? true;
+    this.#t = options.t ?? translations(DEFAULT_LOCALE).t;
     this.#toolResultLines = options.toolResultLines ?? DEFAULT_TOOL_RESULT_LINES;
   }
 
@@ -295,11 +327,13 @@ export class TurnRenderer {
     this.#break();
     this.#mode = 'idle';
 
-    const reason = STOP_REASONS[stopReason];
-    if (reason !== undefined) this.#line(this.#c.yellow(`  ${reason}`));
+    // `complete` is deliberately absent from the map, so an unlisted reason
+    // stays `undefined` and prints nothing rather than resolving a missing key.
+    const reasonKey = STOP_REASONS[stopReason];
+    if (reasonKey !== undefined) this.#line(this.#c.yellow(`  ${this.#t(reasonKey)}`));
     if (!this.#showUsage) return;
 
-    const parts = [`${String(iterations)} ${iterations === 1 ? 'step' : 'steps'}`];
+    const parts = [this.#t('render.steps', { count: iterations })];
     if (usage !== undefined && usage.totalTokens > 0) parts.push(formatUsage(usage));
     if (elapsedMs !== undefined) parts.push(formatDuration(elapsedMs));
     const rate = usage === undefined ? undefined : formatRate(usage, elapsedMs);
@@ -319,7 +353,7 @@ export class TurnRenderer {
       const elapsedMs = Math.max(0, row.endedAtMs - row.startedAtMs);
       const parts = [
         row.model === '' ? 'unknown model' : row.model,
-        `${String(row.iterations)} ${row.iterations === 1 ? 'step' : 'steps'}`,
+        this.#t('render.steps', { count: row.iterations }),
         formatUsage(row.usage),
         formatDuration(elapsedMs),
       ];

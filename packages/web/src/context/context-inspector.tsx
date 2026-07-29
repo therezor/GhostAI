@@ -20,9 +20,10 @@
 
 import { useQuery } from '@tanstack/react-query';
 import type { JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { api, ApiError } from '@/lib/api.js';
-import { formatTokens } from '@/lib/format.js';
+import { useFormat } from '@/lib/use-format.js';
 import { queryKeys } from '@/lib/query.js';
 import { cn } from '@/lib/cn.js';
 import { Badge } from '@/components/ui/badge.js';
@@ -62,14 +63,13 @@ export function ContextDialog({
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
 }): JSX.Element {
+  const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="dialog--context">
         <DialogHeader>
-          <DialogHeading>Context</DialogHeading>
-          <DialogSubheading>
-            What a turn on this conversation would send to the model right now.
-          </DialogSubheading>
+          <DialogHeading>{t('context.title')}</DialogHeading>
+          <DialogSubheading>{t('context.intro')}</DialogSubheading>
         </DialogHeader>
 
         {open && sessionKey !== undefined && <ContextBody sessionKey={sessionKey} />}
@@ -79,6 +79,8 @@ export function ContextDialog({
 }
 
 export function ContextBody({ sessionKey }: { readonly sessionKey: string }): JSX.Element {
+  const { t } = useTranslation();
+  const fmt = useFormat();
   const context = useQuery({
     queryKey: queryKeys.context(sessionKey),
     queryFn: ({ signal }) => api.context(sessionKey, signal),
@@ -91,7 +93,7 @@ export function ContextBody({ sessionKey }: { readonly sessionKey: string }): JS
     // rather than by rebuilding the whole system prompt on a timer.
   });
 
-  if (context.isPending) return <p className="page__note">Measuring…</p>;
+  if (context.isPending) return <p className="page__note">{t('context.measuring')}</p>;
   if (context.isError) {
     // A 404 here is not a failure. The socket mints a session key the moment a
     // tab connects, and the store does not hold a row for it until the first
@@ -99,12 +101,7 @@ export function ContextBody({ sessionKey }: { readonly sessionKey: string }): JS
     // exist yet, and answering that with a red error is answering the wrong
     // question.
     if (context.error instanceof ApiError && context.error.status === 404) {
-      return (
-        <p className="page__note">
-          Nothing to measure yet — this conversation has not started. Send a message and the budget
-          appears here.
-        </p>
-      );
+      return <p className="page__note">{t('context.nothingYet')}</p>;
     }
 
     return (
@@ -114,7 +111,7 @@ export function ContextBody({ sessionKey }: { readonly sessionKey: string }): JS
     );
   }
 
-  const budget = summariseContext(context.data);
+  const budget = summariseContext(context.data, t);
   // Past the window the segments are scaled to the bar so none is clipped; the
   // overflow is then said in words rather than drawn.
   const scale = budget.over && budget.usedPercent > 0 ? 100 / budget.usedPercent : 1;
@@ -122,15 +119,15 @@ export function ContextBody({ sessionKey }: { readonly sessionKey: string }): JS
   return (
     <div className="stack context">
       <div className="cluster context__headline">
-        <span className="context__used">{formatTokens(budget.usedTokens)}</span>
+        <span className="context__used">{fmt.tokens(budget.usedTokens)}</span>
         <span className="context__of">
-          of {formatTokens(budget.windowTokens)} tokens · {budget.usedPercent.toFixed(0)}%
+          of {fmt.tokens(budget.windowTokens)} tokens · {budget.usedPercent.toFixed(0)}%
         </span>
         <span className="spacer" />
         {budget.over ? (
           <Badge tone="danger">over the window</Badge>
         ) : (
-          <Badge tone="neutral">{formatTokens(budget.freeTokens)} free</Badge>
+          <Badge tone="neutral">{fmt.tokens(budget.freeTokens)} free</Badge>
         )}
       </div>
 
@@ -148,12 +145,12 @@ export function ContextBody({ sessionKey }: { readonly sessionKey: string }): JS
       </div>
 
       <table className="context__table">
-        <caption className="sr-only">Token usage by section</caption>
+        <caption className="sr-only">{t('context.usageBySection')}</caption>
         <thead>
           <tr>
-            <th scope="col">Section</th>
-            <th scope="col">Tokens</th>
-            <th scope="col">Share</th>
+            <th scope="col">{t('context.section')}</th>
+            <th scope="col">{t('context.tokens')}</th>
+            <th scope="col">{t('context.share')}</th>
           </tr>
         </thead>
         <tbody>
@@ -164,12 +161,12 @@ export function ContextBody({ sessionKey }: { readonly sessionKey: string }): JS
       </table>
 
       <div className="cluster context__meta">
-        <span>{context.data.messages.length} messages in the window</span>
+        <span>{t('context.messagesInWindow', { count: context.data.messages.length })}</span>
         <span>{sessionKey}</span>
       </div>
 
       <details className="context__prompt">
-        <summary>System prompt</summary>
+        <summary>{t('context.systemPrompt')}</summary>
         <pre>{context.data.systemPrompt}</pre>
       </details>
     </div>
@@ -177,6 +174,8 @@ export function ContextBody({ sessionKey }: { readonly sessionKey: string }): JS
 }
 
 function SegmentRow({ segment }: { readonly segment: ContextSegment }): JSX.Element {
+  const fmt = useFormat();
+
   return (
     <tr>
       <th scope="row">
@@ -188,7 +187,7 @@ function SegmentRow({ segment }: { readonly segment: ContextSegment }): JSX.Elem
           {segment.label}
         </span>
       </th>
-      <td className="context__tokens">{formatTokens(segment.tokens)}</td>
+      <td className="context__tokens">{fmt.tokens(segment.tokens)}</td>
       <td className="context__share">{segment.percent.toFixed(1)}%</td>
     </tr>
   );

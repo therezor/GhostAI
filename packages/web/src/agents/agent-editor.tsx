@@ -38,6 +38,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { ArrowLeft, RotateCcw, Trash2 } from 'lucide-react';
 import { useMemo, useState, type JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   AgentEntrySchema,
@@ -168,10 +169,11 @@ function BoundField({
 }
 
 export function AgentEditorRoute(): JSX.Element {
+  const { t } = useTranslation();
   const { agentId } = useParams({ from: '/agents/$agentId' });
   const settings = useSettings();
 
-  if (settings.isPending) return <p className="page__note">Loading agent…</p>;
+  if (settings.isPending) return <p className="page__note">{t('agents.loading')}</p>;
   if (settings.isError) {
     return (
       <p role="alert" className="page__error">
@@ -195,7 +197,7 @@ export function AgentEditorRoute(): JSX.Element {
         </p>
         <Link to="/agents" className="page__back">
           <ArrowLeft aria-hidden="true" />
-          Back to agents
+          {t('agents.backToAgents')}
         </Link>
       </div>
     );
@@ -222,6 +224,7 @@ function Editor({
   readonly entry: AgentEntry;
   readonly defaults: AgentDefaults;
 }): JSX.Element {
+  const { t } = useTranslation();
   const isDefault = agentId === DEFAULT_AGENT_ID;
   const navigate = useNavigate();
   const { agentId: active, select } = useAgent();
@@ -434,8 +437,8 @@ function Editor({
 
   const onSave = (): void => {
     const result = isDefault
-      ? toDefaultAgentPatch(base, form, entry)
-      : toAgentEntryPatch(agentId, form, entry);
+      ? toDefaultAgentPatch(base, form, entry, t)
+      : toAgentEntryPatch(agentId, form, entry, t);
     if (!result.ok) {
       setErrors(result.errors);
       return;
@@ -485,7 +488,7 @@ function Editor({
                 }}
               >
                 <Trash2 />
-                Delete this agent
+                {t('agents.deleteAgent')}
               </DropdownMenuItem>
             </RowActions>
           )}
@@ -498,10 +501,10 @@ function Editor({
         </p>
       </div>
 
-      <Section title="Identity" description="What this agent is called.">
+      <Section title={t('agents.identity')} description={t('agents.identityDesc')}>
         <FieldGrid>
           <TextField
-            label="Name"
+            label={t('common.name')}
             value={form.label}
             placeholder={agentId}
             onValueChange={(value) => {
@@ -511,7 +514,7 @@ function Editor({
           />
           {!isDefault && (
             <SwitchRow
-              label="Enabled"
+              label={t('agents.enabled')}
               hint="A disabled agent cannot run a turn and is hidden from the picker."
               checked={form.enabled}
               onCheckedChange={(checked) => {
@@ -523,7 +526,7 @@ function Editor({
       </Section>
 
       <Section
-        title="Model"
+        title={t('agents.modelSection')}
         description={
           isDefault
             ? 'What this agent runs on, and what a new agent is created holding.'
@@ -532,7 +535,7 @@ function Editor({
       >
         <FieldGrid>
           <SelectField
-            label="Provider"
+            label={t('agents.provider')}
             value={fields.provider.value}
             options={providerOptions}
             onValueChange={onProviderChange}
@@ -544,7 +547,7 @@ function Editor({
               install up as a choice. Blank is a placeholder now — a question
               the form asks — and saving without answering it is refused. */}
           <SelectField
-            label="Model"
+            label={t('agents.model')}
             value={fields.model.value}
             placeholder={modelChoices.length === 0 ? 'No models to choose from' : 'Choose a model'}
             options={modelChoices.map((model) => ({ value: model, label: model }))}
@@ -559,15 +562,15 @@ function Editor({
             }
           />
           <BoundField
-            label="Temperature"
+            label={t('agents.temperature')}
             bound={fields.temperature}
             inputMode="decimal"
             error={errors.temperature}
-            placeholder="The provider’s own"
+            placeholder={t('agents.providerDefault')}
             hint="Leave empty to send none at all — which is the only thing that works for models that reject it."
           />
           <OptionalSelect
-            label="Reasoning effort"
+            label={t('agents.reasoningEffort')}
             bound={fields.reasoningEffort}
             options={REASONING_EFFORTS}
             unsetLabel="The provider’s own"
@@ -575,12 +578,9 @@ function Editor({
         </FieldGrid>
       </Section>
 
-      <Section
-        title="Tools"
-        description="Which tools this agent may call, and what it has to ask about first."
-      >
+      <Section title={t('agents.toolsSection')} description={t('agents.toolsDesc')}>
         <SwitchRow
-          label="Only the tools I pick"
+          label={t('agents.onlyPicked')}
           hint={
             onlyListed
               ? 'Anything unchecked is not offered to the model at all.'
@@ -590,7 +590,7 @@ function Editor({
           onCheckedChange={setOnlyListed}
         />
 
-        {tools.isPending && <p className="page__note">Loading tools…</p>}
+        {tools.isPending && <p className="page__note">{t('agents.loadingTools')}</p>}
         {toolNames.length > 0 && (
           <ul className="stack agent-editor__tools">
             {toolNames.map((tool) => {
@@ -625,7 +625,7 @@ function Editor({
               whole install rather than a setting this agent could hold a
               private copy of. */}
           <OptionalSelect
-            label="Run commands"
+            label={t('agents.runCommands')}
             bound={{
               value: form.approveExec,
               set: (value) => {
@@ -636,7 +636,7 @@ function Editor({
             unsetLabel="The global policy — Settings → Tools"
           />
           <OptionalSelect
-            label="Reach the network"
+            label={t('agents.reachNetwork')}
             bound={{
               value: form.approveNetwork,
               set: (value) => {
@@ -647,7 +647,7 @@ function Editor({
             unsetLabel="The global policy — Settings → Tools"
           />
           <OptionalSelect
-            label="Write files"
+            label={t('agents.writeFiles')}
             bound={{
               value: form.approveWrite,
               set: (value) => {
@@ -665,22 +665,22 @@ function Editor({
           year — but the numbers are now this agent's own rather than inherited,
           and a setting an operator has to go looking for to find out what it
           says is not one they can be said to have chosen. */}
-      <Section title="Limits" description="The budget a turn runs inside.">
+      <Section title={t('agents.limits')} description={t('agents.limitsDesc')}>
         <FieldGrid>
           <BoundField
-            label="Max output tokens"
+            label={t('agents.maxOutputTokens')}
             bound={fields.maxTokens}
             inputMode="numeric"
             error={errors.maxTokens}
           />
           <BoundField
-            label="Context window (tokens)"
+            label={t('agents.contextWindow')}
             bound={fields.contextWindowTokens}
             inputMode="numeric"
             error={errors.contextWindowTokens}
           />
           <BoundField
-            label="Tool timeout (seconds)"
+            label={t('agents.toolTimeout')}
             bound={fields.toolTimeoutSeconds}
             inputMode="numeric"
             error={errors.toolTimeoutSeconds}
@@ -688,7 +688,7 @@ function Editor({
           />
           {isDefault && (
             <TextField
-              label="Max tool iterations"
+              label={t('agents.maxToolIterations')}
               inputMode="numeric"
               value={base.maxToolIterations}
               error={errors.maxToolIterations}
@@ -699,7 +699,7 @@ function Editor({
           )}
           {isDefault && (
             <TextField
-              label="Turn timeout (seconds)"
+              label={t('agents.turnTimeout')}
               inputMode="numeric"
               value={base.loopWallTimeoutSeconds}
               error={errors.loopWallTimeoutSeconds}
@@ -712,10 +712,7 @@ function Editor({
         </FieldGrid>
       </Section>
 
-      <Section
-        title="System prompt"
-        description="Everything this agent is told before a conversation starts. It is yours to rewrite — the workspace jail and the tool approvals are enforced in code and do not read a word of it."
-      >
+      <Section title={t('agents.systemPrompt')} description={t('agents.promptDesc')}>
         <div className="cluster agent-editor__prompt-bar">
           <span className="micro-label">
             {promptOwned ? 'This agent’s own prompt' : 'The built-in prompt'}
@@ -731,7 +728,7 @@ function Editor({
               }}
             >
               <RotateCcw aria-hidden="true" />
-              Reset to the built-in
+              {t('agents.resetBuiltin')}
             </Button>
           )}
         </div>
@@ -775,7 +772,7 @@ function Editor({
       <ConfirmDialog
         open={confirmingDelete}
         onOpenChange={setConfirmingDelete}
-        title="Delete this agent?"
+        title={t('agents.deleteTitle')}
         description={`${name} is removed from the settings. Its conversations keep their history and fall back to the default agent.`}
         confirmLabel="Delete"
         pending={saving}

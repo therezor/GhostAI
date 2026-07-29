@@ -16,6 +16,7 @@
 
 import { ArrowDown } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { ApprovalScope } from '@ghostai/protocol';
 
@@ -42,6 +43,7 @@ export function TranscriptView({
   onApprove,
   onAction,
 }: TranscriptViewProps): JSX.Element {
+  const { t } = useTranslation();
   const viewportRef = useRef<HTMLDivElement>(null);
   const [pinned, setPinned] = useState(true);
 
@@ -105,7 +107,7 @@ export function TranscriptView({
           }}
         >
           <ArrowDown />
-          Jump to latest
+          {t('chat.jumpToLatest')}
         </Button>
       )}
     </div>

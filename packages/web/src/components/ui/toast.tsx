@@ -17,6 +17,7 @@
 import * as ToastPrimitive from '@radix-ui/react-toast';
 import { AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
 import type { JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 import { create } from 'zustand';
 
 import { cn } from '@/lib/cn.js';
@@ -98,6 +99,7 @@ function durationOf({ role = 'info', durationMs }: ToastInput): number {
 
 /** Mounted once, in `providers.tsx`. */
 export function Toaster(): JSX.Element {
+  const { t } = useTranslation();
   const toasts = useToastStore((state) => state.toasts);
   const dismiss = useToastStore((state) => state.dismiss);
 
@@ -137,7 +139,7 @@ export function Toaster(): JSX.Element {
               </ToastPrimitive.Action>
             )}
 
-            <ToastPrimitive.Close aria-label="Dismiss" className="toast__close">
+            <ToastPrimitive.Close aria-label={t('common.dismiss')} className="toast__close">
               <X />
             </ToastPrimitive.Close>
           </ToastPrimitive.Root>

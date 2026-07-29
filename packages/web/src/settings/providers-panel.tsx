@@ -22,6 +22,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Pencil, Plug, Plus, Power, PowerOff, Trash2 } from 'lucide-react';
 import { useState, type JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Link, useNavigate } from '@tanstack/react-router';
 import type { Config, ProviderInstanceInfo } from '@ghostai/protocol';
@@ -40,6 +41,7 @@ import { useRemoveProvider } from './use-provider.js';
 import { useSaveSettings } from './use-settings.js';
 
 export function ProvidersPanel({ config }: { readonly config: Config }): JSX.Element {
+  const { t } = useTranslation();
   const [adding, setAdding] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ProviderInstanceInfo | undefined>(undefined);
   const { save, saving } = useSaveSettings();
@@ -52,7 +54,7 @@ export function ProvidersPanel({ config }: { readonly config: Config }): JSX.Ele
   });
 
   if (providers.isPending) {
-    return <p className="page__note">Loading providers…</p>;
+    return <p className="page__note">{t('providers.loading')}</p>;
   }
   if (providers.isError) {
     return (
@@ -65,10 +67,7 @@ export function ProvidersPanel({ config }: { readonly config: Config }): JSX.Ele
   const { types, instances } = providers.data;
 
   return (
-    <Section
-      title="Providers"
-      description="Each row is one endpoint. Add the same type more than once to run against two servers — they keep separate keys, and a key is written to the encrypted vault and never returned by the API."
-    >
+    <Section title={t('providers.title')} description={t('providers.panelDesc')}>
       {/* Trailing and in the default variant, like "New agent" and "New
           workspace". A primary fill on the one control that opens a dialog made
           the create the loudest thing in a panel whose subject is the list. */}
@@ -80,24 +79,22 @@ export function ProvidersPanel({ config }: { readonly config: Config }): JSX.Ele
           }}
         >
           <Plus />
-          New provider
+          {t('providers.newProvider')}
         </Button>
       </div>
 
       {instances.length === 0 ? (
-        <p className="page__note">
-          No providers yet. Add one, then choose a model on the agent that will use it.
-        </p>
+        <p className="page__note">{t('providers.none')}</p>
       ) : (
         <table className="data-table">
           <thead>
             <tr>
-              <th scope="col">Name</th>
-              <th scope="col">Endpoint</th>
+              <th scope="col">{t('common.name')}</th>
+              <th scope="col">{t('providers.endpoint')}</th>
               <th scope="col">Key</th>
-              <th scope="col">Status</th>
+              <th scope="col">{t('common.status')}</th>
               <th scope="col" className="data-table__actions">
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{t('common.actions')}</span>
               </th>
             </tr>
           </thead>
@@ -187,8 +184,8 @@ export function ProvidersPanel({ config }: { readonly config: Config }): JSX.Ele
         onOpenChange={(open) => {
           if (!open) setPendingDelete(undefined);
         }}
-        title="Delete this provider?"
-        description={`${pendingDelete?.displayName ?? ''} is removed from the settings, and its saved key is deleted with it. Re-adding an endpoint with the same name does not bring the key back.`}
+        title={t('providers.deleteTitle')}
+        description={t('providers.deleteHint', { name: pendingDelete?.displayName ?? '' })}
         confirmLabel="Delete"
         pending={removing}
         onConfirm={() => {

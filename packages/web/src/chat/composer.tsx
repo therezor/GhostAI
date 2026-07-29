@@ -25,6 +25,8 @@
  */
 
 import { ArrowUp, Paperclip, Square, X } from 'lucide-react';
+import type { TFunction } from 'i18next';
+import { useTranslation } from 'react-i18next';
 import {
   useCallback,
   useRef,
@@ -97,6 +99,7 @@ export function Composer({
   onSend,
   onStop,
 }: ComposerProps): JSX.Element {
+  const { t } = useTranslation();
   const { workspaceId } = useWorkspace();
   const [text, setText] = useState('');
   const [files, setFiles] = useState<readonly StagedFile[]>([]);
@@ -185,7 +188,7 @@ export function Composer({
    * line at all, and a `<p>` with nothing in it still takes the row's height
    * and still announces itself as a live region on every state change.
    */
-  const status = composerStatus({ configured, connected, busy, queueDepth });
+  const status = composerStatus({ configured, connected, busy, queueDepth, t });
 
   return (
     <div className="composer">
@@ -222,7 +225,12 @@ export function Composer({
 
         <div className="composer__box">
           {open && (
-            <ul id={listboxId} role="listbox" aria-label="Mentions" className="composer__mentions">
+            <ul
+              id={listboxId}
+              role="listbox"
+              aria-label={t('chat.mentions')}
+              className="composer__mentions"
+            >
               {suggestions.map((suggestion, index) => (
                 <li
                   key={suggestion.insert}
@@ -250,7 +258,7 @@ export function Composer({
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Attach a file"
+            aria-label={t('chat.attachFile')}
             onClick={() => {
               fileInputRef.current?.click();
             }}
@@ -289,9 +297,9 @@ export function Composer({
                   ? busy
                     ? 'Queue another message…'
                     : 'Send a message…'
-                  : 'No model configured yet'
+                  : t('chat.noModel')
               }
-              aria-label="Message"
+              aria-label={t('chat.message')}
               // `aria-expanded` and `aria-activedescendant`, but deliberately
               // *not* `role="combobox"`. The role would have to be present
               // whether the popover is open or not — a control whose role
@@ -310,19 +318,14 @@ export function Composer({
           </div>
 
           {busy ? (
-            <Button
-              variant="danger"
-              size="icon"
-              aria-label="Stop the current turn"
-              onClick={onStop}
-            >
+            <Button variant="danger" size="icon" aria-label={t('chat.stopTurn')} onClick={onStop}>
               <Square />
             </Button>
           ) : (
             <Button
               variant="primary"
               size="icon"
-              aria-label="Send"
+              aria-label={t('chat.send')}
               disabled={!canSend}
               onClick={submit}
             >
@@ -376,7 +379,9 @@ function composerStatus({
   connected,
   busy,
   queueDepth,
+  t,
 }: {
+  readonly t: TFunction;
   readonly configured: boolean;
   readonly connected: boolean;
   readonly busy: boolean;
@@ -387,19 +392,15 @@ function composerStatus({
   if (configured && !connected) {
     parts.push(
       <span key="offline" className="composer__hint--offline">
-        Offline — messages will be sent when the connection returns.
+        {t('chat.offline')}
       </span>,
     );
   } else if (configured && busy) {
-    parts.push(<span key="busy">A turn is running. Enter queues your message.</span>);
+    parts.push(<span key="busy">{t('chat.turnRunning')}</span>);
   }
 
   if (queueDepth > 0) {
-    parts.push(
-      <span key="queued">
-        {queueDepth} message{queueDepth === 1 ? '' : 's'} waiting.
-      </span>,
-    );
+    parts.push(<span key="queued">{t('chat.queued', { count: queueDepth })}</span>);
   }
 
   return parts.length === 0 ? undefined : parts;

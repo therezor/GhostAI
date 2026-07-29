@@ -42,6 +42,13 @@ jobs:
       - name: Format check
         run: pnpm format:check
 
+      # The other half of the translation gate. `pnpm test` runs the source
+      # sweep that finds copy which never became a key; this finds keys that
+      # were used and never reached the bundle a translator reads. Neither
+      # substitutes for the other — see `i18next-parser.base.js`.
+      - name: Translations are in step
+        run: pnpm i18n:check
+
       - name: Test
         run: pnpm test
 

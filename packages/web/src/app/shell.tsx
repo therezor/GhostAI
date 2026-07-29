@@ -25,6 +25,8 @@
 import { useSearch } from '@tanstack/react-router';
 import { Menu, RotateCw } from 'lucide-react';
 import { useState, type JSX, type ReactNode } from 'react';
+import type { TFunction } from 'i18next';
+import { useTranslation } from 'react-i18next';
 
 import { api } from '@/lib/api.js';
 import { useTurnStore } from '@/state/turn.js';
@@ -46,6 +48,7 @@ import { Wordmark } from '@/components/wordmark.js';
 import { Sidebar } from './sidebar.js';
 
 export function Shell({ children }: { readonly children: ReactNode }): JSX.Element {
+  const { t } = useTranslation();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   // `strict: false` because the shell is above every route and only one of them
@@ -59,7 +62,7 @@ export function Shell({ children }: { readonly children: ReactNode }): JSX.Eleme
       <Header onOpenDrawer={setDrawerOpen} drawerOpen={drawerOpen} />
 
       <div className="shell__body">
-        <aside aria-label="Sidebar" className="shell__sidebar">
+        <aside aria-label={t('shell.sidebar')} className="shell__sidebar">
           <Sidebar />
         </aside>
 
@@ -76,6 +79,7 @@ function Header({
   readonly drawerOpen: boolean;
   readonly onOpenDrawer: (open: boolean) => void;
 }): JSX.Element {
+  const { t } = useTranslation();
   const connection = useTurnStore((state) => state.connection);
   // The header, not the chat route: the inspector measures the session the
   // socket is on, and that outlives a trip to Settings and back.
@@ -84,12 +88,17 @@ function Header({
     <header className="app-header">
       <Dialog open={drawerOpen} onOpenChange={onOpenDrawer}>
         <DialogTrigger asChild>
-          <Button variant="ghost" size="icon" className="shell__menu-button" aria-label="Open menu">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shell__menu-button"
+            aria-label={t('shell.openMenu')}
+          >
             <Menu />
           </Button>
         </DialogTrigger>
         <DialogContent className="dialog--drawer">
-          <DialogHeading className="sr-only">Navigation</DialogHeading>
+          <DialogHeading className="sr-only">{t('common.navigation')}</DialogHeading>
           <Sidebar
             onNavigate={() => {
               onOpenDrawer(false);
@@ -109,11 +118,16 @@ function Header({
   );
 }
 
+/**
+ * Keyed rather than worded, so the map stays the exhaustive list of socket
+ * states it already was — `keyof typeof` below is what makes an unhandled state
+ * a compile error — while the words themselves live with the rest of the copy.
+ */
 const CONNECTION_LABELS = {
-  connecting: 'Connecting',
-  open: 'Connected',
-  reconnecting: 'Reconnecting',
-  closed: 'Offline',
+  connecting: 'connection.connecting',
+  open: 'connection.open',
+  reconnecting: 'connection.reconnecting',
+  closed: 'connection.closed',
 } as const;
 
 /**
@@ -130,13 +144,13 @@ const CONNECTION_LABELS = {
  * cache, the transcript has a store, and the built assets may be older than the
  * ones on disk — a navigation is the one thing that clears all three.
  */
-async function reloadApp(): Promise<void> {
+async function reloadApp(t: TFunction): Promise<void> {
   try {
     await api.reloadSettings();
   } catch (error) {
     toast.error(
-      'Could not reload',
-      error instanceof Error ? error.message : 'The server did not answer.',
+      t('shell.reloadFailed'),
+      error instanceof Error ? error.message : t('shell.serverSilent'),
     );
     return;
   }
@@ -171,7 +185,8 @@ function ConnectionBadge({
 }: {
   readonly connection: keyof typeof CONNECTION_LABELS;
 }): JSX.Element {
-  const label = CONNECTION_LABELS[connection];
+  const { t } = useTranslation();
+  const label = t(CONNECTION_LABELS[connection]);
 
   return (
     <span role="status" aria-live="polite" className="conn" data-connection={connection}>
@@ -192,11 +207,11 @@ function ConnectionBadge({
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onSelect={() => {
-              void reloadApp();
+              void reloadApp(t);
             }}
           >
             <RotateCw />
-            Reload app
+            {t('shell.reload')}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

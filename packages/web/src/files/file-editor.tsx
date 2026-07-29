@@ -22,9 +22,11 @@
  *    here, and `Escape` and the overlay both do it by one keypress.
  */
 
+import type { TFunction } from 'i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, FileWarning, Pencil, RotateCw, Save } from 'lucide-react';
 import { useEffect, useRef, useState, type JSX, type KeyboardEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { FileEntry } from '@ghostai/protocol';
 
@@ -45,6 +47,7 @@ export interface FileEditorProps {
 }
 
 export function FileEditor({ entry, workspace, onDirtyChange }: FileEditorProps): JSX.Element {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<string | undefined>(undefined);
   const [editing, setEditing] = useState(false);
@@ -105,7 +108,7 @@ export function FileEditor({ entry, workspace, onDirtyChange }: FileEditorProps)
     void queryClient.invalidateQueries({ queryKey: queryKeys.fileText(workspace, entry.path) });
   };
 
-  if (file.isPending) return <p className="file-preview__note">Reading…</p>;
+  if (file.isPending) return <p className="file-preview__note">{t('files.reading')}</p>;
   if (file.isError) {
     return (
       <p role="alert" className="page__error">
@@ -183,21 +186,14 @@ export function FileEditor({ entry, workspace, onDirtyChange }: FileEditorProps)
       {truncated && (
         <p className="notice notice--warning">
           <FileWarning />
-          <span>
-            This file is {formatBytes(entry.sizeBytes)} and only the first part was read. Saving
-            would delete the rest, so it cannot be edited here — download it instead.
-          </span>
+          <span>{t('files.tooBig', { size: formatBytes(entry.sizeBytes) })}</span>
         </p>
       )}
 
       {conflict && (
         <p role="alert" className="notice notice--danger">
           <FileWarning />
-          <span>
-            This file changed on disk since it was opened — most likely the agent wrote to it. Your
-            edits are still here. Reload to take the version on disk and lose them, or copy what you
-            need out first.
-          </span>
+          <span>{t('files.conflict')}</span>
         </p>
       )}
 
@@ -213,7 +209,7 @@ export function FileEditor({ entry, workspace, onDirtyChange }: FileEditorProps)
 
       <p className="micro-label">
         {languageForFile(entry.name) === '' ? 'plain text' : languageForFile(entry.name)} ·{' '}
-        {lineLabel(content)}
+        {lineLabel(content, t)}
         {truncated ? ` of ${formatBytes(entry.sizeBytes)}` : ''}
       </p>
     </div>
@@ -221,7 +217,6 @@ export function FileEditor({ entry, workspace, onDirtyChange }: FileEditorProps)
 }
 
 /** "1 line" / "412 lines", for the footer under the editor. */
-function lineLabel(content: string): string {
-  const lines = content.split('\n').length;
-  return `${String(lines)} line${lines === 1 ? '' : 's'}`;
+function lineLabel(content: string, t: TFunction): string {
+  return t('files.lines', { count: content.split('\n').length });
 }

@@ -8,13 +8,27 @@
  * operator at a sign-in form whose password does not exist yet.
  */
 
+import type { Page } from '@playwright/test';
+
 import { expect, test } from '../fixtures.js';
 
 test.describe('an unclaimed install', () => {
   test.use({ harnessOptions: { password: null } });
 
+  /**
+   * The wizard opens on the language question, which every one of these walks
+   * past. Skipping rather than choosing: the browser's language is already
+   * applied — Playwright pins it to `en-US` — so `Skip` means "yes, that one",
+   * and it is the click a first run actually makes.
+   */
+  const pastLanguage = async (page: Page): Promise<void> => {
+    await expect(page.getByRole('heading', { name: 'Choose a language' })).toBeVisible();
+    await page.getByRole('button', { name: 'Skip' }).click();
+  };
+
   test('takes the one-time code and lands in the app', async ({ page, harness }) => {
     await page.goto(harness.url);
+    await pastLanguage(page);
 
     await expect(page.getByRole('heading', { name: 'Enter the setup code' })).toBeVisible();
     // The login overlay must not also be up: its password does not exist yet.
@@ -48,6 +62,7 @@ test.describe('an unclaimed install', () => {
 
   test('refuses a wrong code and stays on the step', async ({ page, harness }) => {
     await page.goto(harness.url);
+    await pastLanguage(page);
 
     await page.getByRole('textbox', { name: 'Setup code' }).fill('ZZZZ-ZZZZ-ZZZZ');
     await page.getByRole('button', { name: 'Continue' }).click();
@@ -58,12 +73,15 @@ test.describe('an unclaimed install', () => {
 
   test('offers no way past the credential steps', async ({ page, harness }) => {
     await page.goto(harness.url);
+    await pastLanguage(page);
     await expect(page.getByRole('heading', { name: 'Enter the setup code' })).toBeVisible();
 
     // Skipping here would leave a shell-capable agent with no password, which
     // is the state the whole flow exists to end.
     await expect(page.getByRole('button', { name: 'Skip' })).toBeHidden();
-    await expect(page.getByRole('button', { name: 'Back' })).toBeHidden();
+    // `Back` is offered, and leads to the language question rather than to
+    // anything spent. The password step is the one with neither.
+    await expect(page.getByRole('button', { name: 'Back' })).toBeVisible();
   });
 });
 

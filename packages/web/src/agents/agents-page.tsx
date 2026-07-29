@@ -26,6 +26,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { BrainCircuit, Copy, Pencil, Plus, Power, PowerOff, Trash2 } from 'lucide-react';
 import { useMemo, useState, type JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   AgentEntrySchema,
@@ -100,6 +101,7 @@ function summarise(entry: AgentEntry): string {
 }
 
 export function AgentsRoute(): JSX.Element {
+  const { t } = useTranslation();
   const settings = useSettings();
   const { save, saving } = useSaveSettings();
   const navigate = useNavigate();
@@ -256,7 +258,7 @@ export function AgentsRoute(): JSX.Element {
   return (
     <div className="stack page page--wide">
       <div className="cluster page__header">
-        <h1 className="page__title">Agents</h1>
+        <h1 className="page__title">{t('agents.title')}</h1>
         <span className="spacer" />
         <Button
           onClick={() => {
@@ -264,20 +266,17 @@ export function AgentsRoute(): JSX.Element {
           }}
         >
           <Plus />
-          New agent
+          {t('agents.newAgent')}
         </Button>
       </div>
 
       <div className="cluster list-toolbar">
-        <p className="page__note">
-          Each holds its own prompt, model, permissions and memory. A new one is created as a copy
-          of the default agent’s.
-        </p>
+        <p className="page__note">{t('agents.note')}</p>
         <span className="spacer" />
-        <SearchFilter value={filter} label="Filter agents by name" onValueChange={setFilter} />
+        <SearchFilter value={filter} label={t('agents.filter')} onValueChange={setFilter} />
       </div>
 
-      {settings.isPending && <p className="page__note">Loading…</p>}
+      {settings.isPending && <p className="page__note">{t('common.loading')}</p>}
       {settings.isError && (
         <p role="alert" className="page__error">
           Could not load agents: {settings.error.message}
@@ -291,11 +290,26 @@ export function AgentsRoute(): JSX.Element {
           <table className="data-table">
             <thead>
               <tr>
-                <SortHeader label="Name" sortKey="name" sort={sort} onSort={toggleSort} />
-                <SortHeader label="Model" sortKey="model" sort={sort} onSort={toggleSort} />
-                <SortHeader label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
+                <SortHeader
+                  label={t('common.name')}
+                  sortKey="name"
+                  sort={sort}
+                  onSort={toggleSort}
+                />
+                <SortHeader
+                  label={t('agents.model')}
+                  sortKey="model"
+                  sort={sort}
+                  onSort={toggleSort}
+                />
+                <SortHeader
+                  label={t('common.status')}
+                  sortKey="status"
+                  sort={sort}
+                  onSort={toggleSort}
+                />
                 <th scope="col" className="data-table__actions">
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">{t('common.actions')}</span>
                 </th>
               </tr>
             </thead>
@@ -388,10 +402,10 @@ export function AgentsRoute(): JSX.Element {
       <NameDialog
         open={creating}
         onOpenChange={setCreating}
-        title="New agent"
-        description="It starts as a copy of the default agent — its model, budget, prompt and permissions — and is its own from there."
+        title={t('agents.newTitle')}
+        description={t('agents.newHint')}
         fieldLabel="Name"
-        placeholder="Code Reviewer"
+        placeholder={t('agents.namePlaceholder')}
         pending={saving}
         validate={(value) => {
           const proposed = value.trim() === '' ? '' : deriveAgentId(value);
@@ -409,7 +423,7 @@ export function AgentsRoute(): JSX.Element {
         onOpenChange={(open) => {
           if (!open) setPendingDelete(undefined);
         }}
-        title="Delete this agent?"
+        title={t('agents.deleteTitle')}
         description={`${pendingDelete?.label ?? ''} is removed from the settings. Its conversations keep their history and fall back to the default agent.`}
         confirmLabel="Delete"
         pending={saving}

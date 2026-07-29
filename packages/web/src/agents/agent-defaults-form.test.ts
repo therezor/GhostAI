@@ -9,6 +9,10 @@
 
 import { AgentDefaultsSchema, ConfigPatchSchema, type AgentDefaults } from '@ghostai/protocol';
 import { describe, expect, it } from 'vitest';
+import { createWebI18n } from '@ghostai/i18n/web';
+
+/** English, resolved: these assertions compare the message a user would read. */
+const t = createWebI18n('en').getFixedT(null, 'web');
 
 import { MODEL_REQUIRED, toAgentForm, toAgentPatch } from './agents-form.js';
 
@@ -48,7 +52,7 @@ describe('toAgentPatch', () => {
       loopWallTimeoutMs: 0,
     });
 
-    const result = toAgentPatch(toAgentForm(config));
+    const result = toAgentPatch(toAgentForm(config), t);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
@@ -68,7 +72,7 @@ describe('toAgentPatch', () => {
     // so an omitted key preserves what the config file or `--workspace` set —
     // but a form that still emitted `workspace: ''` would look correct in a
     // diff and would reset a configured root on every unrelated save.
-    const result = toAgentPatch(toAgentForm(defaults({ workspace: '/tmp/w' })));
+    const result = toAgentPatch(toAgentForm(defaults({ workspace: '/tmp/w' })), t);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
@@ -76,7 +80,7 @@ describe('toAgentPatch', () => {
   });
 
   it('patches only the agent subtree, so the other panels are untouched', () => {
-    const result = toAgentPatch(toAgentForm(defaults()));
+    const result = toAgentPatch(toAgentForm(defaults()), t);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
@@ -84,12 +88,15 @@ describe('toAgentPatch', () => {
   });
 
   it('reports every bad field at once, not the first one', () => {
-    const result = toAgentPatch({
-      ...toAgentForm(defaults()),
-      maxTokens: '',
-      temperature: '9',
-      learningInterval: 'x',
-    });
+    const result = toAgentPatch(
+      {
+        ...toAgentForm(defaults()),
+        maxTokens: '',
+        temperature: '9',
+        learningInterval: 'x',
+      },
+      t,
+    );
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -102,7 +109,7 @@ describe('toAgentPatch', () => {
   });
 
   it('refuses an empty provider, which would resolve to nothing', () => {
-    const result = toAgentPatch({ ...toAgentForm(defaults()), provider: '  ' });
+    const result = toAgentPatch({ ...toAgentForm(defaults()), provider: '  ' }, t);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.errors.provider).toBe('Required');
@@ -112,7 +119,7 @@ describe('toAgentPatch', () => {
     // The provider half of `agents.defaults` really is resolved from whichever
     // instance has credentials. The model half never is — `runtime.configured`
     // goes false and every turn is refused with `No model configured`.
-    const result = toAgentPatch({ ...toAgentForm(defaults()), model: '  ' });
+    const result = toAgentPatch({ ...toAgentForm(defaults()), model: '  ' }, t);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.errors.model).toBe(MODEL_REQUIRED);
@@ -122,7 +129,7 @@ describe('toAgentPatch', () => {
     // Omitting it was the bug: `agents.defaults` merges per field, so a patch
     // that never mentions the key preserves whatever is stored. `null` is the
     // token `DELETE_BY_NULL` reads as a removal.
-    const result = toAgentPatch({ ...toAgentForm(defaults()), reasoningEffort: '' });
+    const result = toAgentPatch({ ...toAgentForm(defaults()), reasoningEffort: '' }, t);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
@@ -132,10 +139,13 @@ describe('toAgentPatch', () => {
   it('sends null for an emptied temperature, so removing one takes effect', () => {
     // The reported symptom: clearing the box, saving, reloading, and finding
     // 0.1 still there — the save had gone out without mentioning the field.
-    const result = toAgentPatch({
-      ...toAgentForm(defaults({ temperature: 0.1 })),
-      temperature: '',
-    });
+    const result = toAgentPatch(
+      {
+        ...toAgentForm(defaults({ temperature: 0.1 })),
+        temperature: '',
+      },
+      t,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
@@ -144,7 +154,7 @@ describe('toAgentPatch', () => {
   });
 
   it('still sends a temperature that is set, including zero', () => {
-    const result = toAgentPatch({ ...toAgentForm(defaults()), temperature: '0' });
+    const result = toAgentPatch({ ...toAgentForm(defaults()), temperature: '0' }, t);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
@@ -152,7 +162,7 @@ describe('toAgentPatch', () => {
   });
 
   it('sends the reasoning effort when it is one the protocol knows', () => {
-    const result = toAgentPatch({ ...toAgentForm(defaults()), reasoningEffort: 'high' });
+    const result = toAgentPatch({ ...toAgentForm(defaults()), reasoningEffort: 'high' }, t);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
@@ -164,7 +174,7 @@ describe('toAgentPatch', () => {
     // and not through `AgentDefaultsSchema`: the two differ now, because a
     // patch may carry `temperature: null` to clear a field that the config
     // itself can only hold as a number or not at all.
-    const result = toAgentPatch(toAgentForm(defaults({ model: 'llama3' })));
+    const result = toAgentPatch(toAgentForm(defaults({ model: 'llama3' })), t);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 

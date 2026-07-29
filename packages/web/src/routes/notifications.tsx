@@ -22,18 +22,20 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Bell, CheckCheck, Trash2 } from 'lucide-react';
 import type { JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { Notification, NotificationListResponse } from '@ghostai/protocol';
 
 import { cn } from '@/lib/cn.js';
 import { api } from '@/lib/api.js';
-import { formatRelativeTime } from '@/lib/format.js';
+import { useFormat } from '@/lib/use-format.js';
 import { queryKeys } from '@/lib/query.js';
 import { Button } from '@/components/ui/button.js';
 import { toast } from '@/components/ui/toast.js';
 import { LEVEL_CLASSES, LEVEL_ICONS } from '@/notifications/levels.js';
 
 export function NotificationsRoute(): JSX.Element {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
 
   const notifications = useQuery({
@@ -84,7 +86,7 @@ export function NotificationsRoute(): JSX.Element {
   return (
     <div className="stack page page--reading">
       <div className="cluster page__header">
-        <h1 className="page__title">Notifications</h1>
+        <h1 className="page__title">{t('notifications.title')}</h1>
         <span className="page__note">
           {unreadCount === 0 ? 'All caught up' : `${String(unreadCount)} unread`}
         </span>
@@ -97,11 +99,11 @@ export function NotificationsRoute(): JSX.Element {
           }}
         >
           <CheckCheck />
-          Mark all read
+          {t('common.markAllRead')}
         </Button>
       </div>
 
-      {notifications.isPending && <p className="page__note">Loading…</p>}
+      {notifications.isPending && <p className="page__note">{t('common.loading')}</p>}
       {notifications.isError && (
         <p role="alert" className="page__error">
           Could not load notifications: {notifications.error.message}
@@ -112,10 +114,8 @@ export function NotificationsRoute(): JSX.Element {
         (rows.length === 0 ? (
           <div className="stack page__empty">
             <Bell />
-            <p className="page__empty-title">Nothing here yet.</p>
-            <p className="page__empty-note">
-              Automation runs and expired approvals report themselves here.
-            </p>
+            <p className="page__empty-title">{t('common.nothingHere')}</p>
+            <p className="page__empty-note">{t('notifications.empty')}</p>
           </div>
         ) : (
           <ul className="stack notification-list">
@@ -150,6 +150,8 @@ function NotificationRow({
   readonly onRead: () => void;
   readonly onDelete: () => void;
 }): JSX.Element {
+  const { t } = useTranslation();
+  const fmt = useFormat();
   const unread = notification.readAtMs === undefined;
   const Icon = LEVEL_ICONS[notification.level];
 
@@ -167,7 +169,7 @@ function NotificationRow({
             dateTime={new Date(notification.createdAtMs).toISOString()}
             className="notification__time"
           >
-            {formatRelativeTime(notification.createdAtMs, now)}
+            {fmt.relativeTime(notification.createdAtMs, now)}
           </time>
         </div>
 
@@ -180,12 +182,12 @@ function NotificationRow({
               search={{ session: notification.sessionKey }}
               className="notification__link"
             >
-              Open the conversation
+              {t('notifications.openConversation')}
             </Link>
           )}
           {unread && (
             <Button variant="ghost" size="sm" onClick={onRead}>
-              Mark read
+              {t('common.markRead')}
             </Button>
           )}
         </div>

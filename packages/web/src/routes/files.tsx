@@ -41,12 +41,14 @@ import {
   Upload,
 } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState, type DragEvent, type JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { FileEntry } from '@ghostai/protocol';
 
 import { cn } from '@/lib/cn.js';
 import { api } from '@/lib/api.js';
-import { formatBytes, formatRelativeTime } from '@/lib/format.js';
+import { formatBytes } from '@/lib/format.js';
+import { useFormat } from '@/lib/use-format.js';
 import { queryKeys } from '@/lib/query.js';
 import { Button } from '@/components/ui/button.js';
 import {
@@ -86,6 +88,8 @@ const ASCENDING_FIRST: readonly SortKey[] = ['name'];
 type NewKind = 'file' | 'directory';
 
 export function FilesRoute(): JSX.Element {
+  const { t } = useTranslation();
+  const fmt = useFormat();
   const { path, workspace: fromUrl } = useSearch({ from: '/files' });
   const { workspaceId } = useWorkspace();
   // The URL wins when it has one, so a link to a file is complete and
@@ -130,7 +134,7 @@ export function FilesRoute(): JSX.Element {
       return files.length;
     },
     onSuccess: (count) => {
-      toast.success(`Uploaded ${String(count)} file${count === 1 ? '' : 's'}`);
+      toast.success(t('files.uploaded', { count }));
       refresh();
     },
     onError: (error: Error) => {
@@ -246,7 +250,7 @@ export function FilesRoute(): JSX.Element {
   return (
     <div className="stack page page--wide">
       <div className="cluster page__header">
-        <h1 className="page__title">Files</h1>
+        <h1 className="page__title">{t('files.title')}</h1>
         <span className="spacer" />
         <Button
           variant="ghost"
@@ -255,7 +259,7 @@ export function FilesRoute(): JSX.Element {
           }}
         >
           <FilePlus />
-          New file
+          {t('common.newFile')}
         </Button>
         <Button
           variant="ghost"
@@ -264,7 +268,7 @@ export function FilesRoute(): JSX.Element {
           }}
         >
           <FolderPlus />
-          New folder
+          {t('common.newFolder')}
         </Button>
         <Button
           disabled={upload.isPending}
@@ -279,7 +283,7 @@ export function FilesRoute(): JSX.Element {
           ref={fileInput}
           type="file"
           multiple
-          aria-label="Upload files"
+          aria-label={t('files.upload')}
           className="sr-only"
           onChange={(event) => {
             const files = [...(event.target.files ?? [])];
@@ -306,10 +310,10 @@ export function FilesRoute(): JSX.Element {
           }}
         />
         <span className="spacer" />
-        <SearchFilter value={filter} label="Filter by name" onValueChange={setFilter} />
+        <SearchFilter value={filter} label={t('files.filter')} onValueChange={setFilter} />
       </div>
 
-      {listing.isPending && <p className="page__note">Loading…</p>}
+      {listing.isPending && <p className="page__note">{t('common.loading')}</p>}
       {listing.isError && (
         <p role="alert" className="page__error">
           Could not list this directory: {listing.error.message}
@@ -334,7 +338,7 @@ export function FilesRoute(): JSX.Element {
           onDrop={onDrop}
         >
           {total === 0 ? (
-            <p className="page__note">This directory is empty. Drop a file here to upload it.</p>
+            <p className="page__note">{t('files.empty')}</p>
           ) : entries.length === 0 ? (
             <p className="page__note">
               Nothing here matches “{filter}”. {String(total)} entries are hidden.
@@ -343,17 +347,27 @@ export function FilesRoute(): JSX.Element {
             <table className="data-table">
               <thead>
                 <tr>
-                  <SortHeader label="Name" sortKey="name" sort={sort} onSort={toggleSort} />
-                  <SortHeader label="Size" sortKey="size" sort={sort} onSort={toggleSort} />
                   <SortHeader
-                    label="Modified"
+                    label={t('common.name')}
+                    sortKey="name"
+                    sort={sort}
+                    onSort={toggleSort}
+                  />
+                  <SortHeader
+                    label={t('files.size')}
+                    sortKey="size"
+                    sort={sort}
+                    onSort={toggleSort}
+                  />
+                  <SortHeader
+                    label={t('files.modified')}
                     sortKey="modified"
                     sort={sort}
                     onSort={toggleSort}
                     className="data-table__modified"
                   />
                   <th scope="col">
-                    <span className="sr-only">Actions</span>
+                    <span className="sr-only">{t('common.actions')}</span>
                   </th>
                 </tr>
               </thead>
@@ -387,7 +401,7 @@ export function FilesRoute(): JSX.Element {
                       {entry.isDirectory ? '—' : formatBytes(entry.sizeBytes)}
                     </td>
                     <td className="data-table__meta data-table__modified">
-                      {formatRelativeTime(entry.modifiedAtMs, now)}
+                      {fmt.relativeTime(entry.modifiedAtMs, now)}
                     </td>
                     <td className="data-table__actions">
                       <RowActions label={entry.name}>
@@ -461,7 +475,7 @@ export function FilesRoute(): JSX.Element {
         onOpenChange={(open) => {
           if (!open) setDiscarding(false);
         }}
-        title="Discard your edits?"
+        title={t('files.discardTitle')}
         description={`${preview?.path ?? ''} has changes that were never saved. Closing loses them.`}
         cancelLabel="Keep editing"
         confirmLabel="Discard"
@@ -527,10 +541,8 @@ export function FilesRoute(): JSX.Element {
             <Trash2 />
             <span>
               {pendingContents.data.entries.length === 0
-                ? 'This folder is empty.'
-                : `Everything inside goes with it — ${String(
-                    pendingContents.data.entries.length,
-                  )} item${pendingContents.data.entries.length === 1 ? '' : 's'}.`}
+                ? t('files.folderEmpty')
+                : t('files.folderContents', { count: pendingContents.data.entries.length })}
             </span>
           </p>
         )}
@@ -546,10 +558,11 @@ function Breadcrumbs({
   readonly path: string;
   readonly onNavigate: (path: string) => void;
 }): JSX.Element {
+  const { t } = useTranslation();
   const crumbs = breadcrumbs(path);
 
   return (
-    <nav aria-label="Breadcrumb">
+    <nav aria-label={t('files.breadcrumb')}>
       <ol className="breadcrumbs">
         {crumbs.map((crumb, index) => {
           const last = index === crumbs.length - 1;

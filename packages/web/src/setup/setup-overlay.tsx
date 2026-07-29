@@ -21,6 +21,11 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type JSX, type SyntheticEvent } from 'react';
+import { useTranslation } from 'react-i18next';
+import { SUPPORTED_LOCALES } from '@ghostai/i18n';
+
+import { useAppLocale } from '@/i18n/i18n-context.js';
+import { useSaveSettings } from '@/settings/use-settings.js';
 
 import { DEFAULT_USERNAME, PASSWORD_MIN_LENGTH, type ProviderInfo } from '@ghostai/protocol';
 
@@ -45,8 +50,14 @@ export function SetupOverlay(): JSX.Element | null {
   const queryClient = useQueryClient();
   const [step, setStep] = useState<SetupStep | null>(null);
   // Where this run opened, so Back cannot lead behind it.
-  const [from, setFrom] = useState<SetupStep>('code');
+  const [from, setFrom] = useState<SetupStep>('language');
+  // Held rather than saved: `config.ui.locale` needs a session, and the language
+  // is chosen before there is one. Written once `password` authenticates.
+  const [pendingLocale, setPendingLocale] = useState<string | undefined>(undefined);
   const [instanceId, setInstanceId] = useState('');
+  const locale = useAppLocale();
+  const { t } = useTranslation();
+  const { save } = useSaveSettings();
 
   // Public, so it answers on a browser with no session — which is the only
   // state an unclaimed install has.
@@ -90,7 +101,7 @@ export function SetupOverlay(): JSX.Element | null {
     else setStep(next);
   };
 
-  const { title, note } = titleOf(step);
+  const { title, note } = titleOf(step, t);
   const progress = progressOf(step);
   const back = previousStep(step, from);
 
@@ -102,7 +113,7 @@ export function SetupOverlay(): JSX.Element | null {
         <div className="stack setup-card__header">
           <Wordmark className="eyebrow" />
           <p className="setup-card__progress">
-            Step {progress.current} of {progress.total}
+            {t('setup.progress', { current: progress.current, total: progress.total })}
           </p>
           <h1 id="setup-title" className="setup-card__title">
             {title}
@@ -110,8 +121,33 @@ export function SetupOverlay(): JSX.Element | null {
           <p className="setup-card__note">{note}</p>
         </div>
 
+        {step === 'language' && (
+          <LanguageStep
+            value={locale.resolved}
+            onChange={(next) => {
+              setPendingLocale(next);
+              // Applied now, saved later: the wizard has to *become* the chosen
+              // language immediately or the choice cannot be verified by the
+              // person making it.
+              locale.setPreference(next);
+            }}
+            onDone={advance}
+          />
+        )}
         {step === 'code' && <CodeStep onDone={advance} />}
-        {step === 'password' && <PasswordStep onDone={advance} />}
+        {step === 'password' && (
+          <PasswordStep
+            onDone={() => {
+              // The first moment a config write is possible. Fire-and-forget:
+              // the language is already applied in the browser, so a refused
+              // patch costs the *persistence* of the choice, not the choice —
+              // and blocking the wizard on it would strand a claimed install
+              // behind a settings write.
+              if (pendingLocale !== undefined) save({ ui: { locale: pendingLocale } });
+              advance();
+            }}
+          />
+        )}
         {step === 'provider' && (
           <ProviderStep
             onDone={(id) => {
@@ -130,13 +166,13 @@ export function SetupOverlay(): JSX.Element | null {
                 setStep(back);
               }}
             >
-              Back
+              {t('setup.back')}
             </Button>
           )}
           <span className="spacer" />
           {isSkippable(step) && (
             <Button variant="ghost" onClick={advance}>
-              Skip
+              {t('setup.skip')}
             </Button>
           )}
         </div>
@@ -145,7 +181,56 @@ export function SetupOverlay(): JSX.Element | null {
   );
 }
 
+/**
+ * The first question, and the only one answered before there is a session.
+ *
+ * Applied immediately as a browser preference so the rest of the wizard renders
+ * in it — that is the entire reason this step is first. It is *not* written to
+ * `config.ui.locale` here: that needs auth, and nobody has a password yet. The
+ * overlay holds the choice and PATCHes it once the password step has
+ * authenticated.
+ */
+function LanguageStep({
+  value,
+  onChange,
+  onDone,
+}: {
+  readonly value: string;
+  readonly onChange: (locale: string) => void;
+  readonly onDone: () => void;
+}): JSX.Element {
+  const { t } = useTranslation();
+
+  return (
+    <form
+      className="stack setup-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onDone();
+      }}
+    >
+      <SelectField
+        label={t('setup.language')}
+        value={value}
+        options={SUPPORTED_LOCALES.map((tag) => ({ value: tag, label: nameOf(tag) }))}
+        onValueChange={onChange}
+      />
+      <Button type="submit">{t('setup.continue')}</Button>
+    </form>
+  );
+}
+
+/** A language named in its own language — see the note in `appearance-panel.tsx`. */
+function nameOf(locale: string): string {
+  try {
+    return new Intl.DisplayNames([locale], { type: 'language' }).of(locale) ?? locale;
+  } catch {
+    return locale;
+  }
+}
+
 function CodeStep({ onDone }: { readonly onDone: () => void }): JSX.Element {
+  const { t } = useTranslation();
   const [code, setCode] = useState('');
   const claim = useMutation({
     mutationFn: (value: string) => api.claimSetup(value),
@@ -160,7 +245,7 @@ function CodeStep({ onDone }: { readonly onDone: () => void }): JSX.Element {
   return (
     <form onSubmit={submit} className="stack setup-card__body">
       <Field
-        label="Setup code"
+        label={t('setup.setupCode')}
         name="code"
         // The one place an autofocus is right: the overlay covers everything,
         // and this field is the only thing to interact with.
@@ -168,7 +253,7 @@ function CodeStep({ onDone }: { readonly onDone: () => void }): JSX.Element {
         autoComplete="one-time-code"
         spellCheck={false}
         className="setup-card__code"
-        placeholder="XXXX-XXXX-XXXX"
+        placeholder={t('setup.codePlaceholder')}
         value={code}
         onChange={(event) => {
           setCode(event.target.value);
@@ -184,6 +269,7 @@ function CodeStep({ onDone }: { readonly onDone: () => void }): JSX.Element {
 }
 
 function PasswordStep({ onDone }: { readonly onDone: () => void }): JSX.Element {
+  const { t } = useTranslation();
   // Prefilled and editable rather than asked for. Naming the account is not a
   // decision a first run should have to stop for, and an empty field here would
   // make it one — but the field is present so that an operator who wants a name
@@ -213,7 +299,7 @@ function PasswordStep({ onDone }: { readonly onDone: () => void }): JSX.Element 
   return (
     <form onSubmit={submit} className="stack setup-card__body">
       <Field
-        label="Username"
+        label={t('setup.username')}
         name="username"
         autoComplete="username"
         spellCheck={false}
@@ -225,7 +311,7 @@ function PasswordStep({ onDone }: { readonly onDone: () => void }): JSX.Element 
         hint="Signing in takes this and the password below."
       />
       <Field
-        label="Password"
+        label={t('setup.password')}
         type="password"
         name="new-password"
         autoComplete="new-password"
@@ -236,7 +322,7 @@ function PasswordStep({ onDone }: { readonly onDone: () => void }): JSX.Element 
         hint={`At least ${String(PASSWORD_MIN_LENGTH)} characters. Behind it is an agent that can read files and run commands on this machine.`}
       />
       <Field
-        label="Confirm password"
+        label={t('setup.confirmPassword')}
         type="password"
         name="confirm-password"
         autoComplete="new-password"
@@ -264,6 +350,7 @@ function PasswordStep({ onDone }: { readonly onDone: () => void }): JSX.Element 
 }
 
 function ProviderStep({ onDone }: { readonly onDone: (instanceId: string) => void }): JSX.Element {
+  const { t } = useTranslation();
   const [type, setType] = useState('');
   const [apiBase, setApiBase] = useState('');
   const [key, setKey] = useState('');
@@ -301,9 +388,9 @@ function ProviderStep({ onDone }: { readonly onDone: (instanceId: string) => voi
   return (
     <div className="stack setup-card__body">
       <SelectField
-        label="Provider"
+        label={t('setup.provider')}
         value={type}
-        placeholder="Choose one"
+        placeholder={t('setup.chooseOne')}
         options={(providers.data?.types ?? []).map((candidate) => ({
           value: candidate.id,
           label: candidate.displayName,
@@ -321,7 +408,7 @@ function ProviderStep({ onDone }: { readonly onDone: (instanceId: string) => voi
       {chosen !== undefined && (
         <>
           <TextField
-            label="API base"
+            label={t('setup.apiBase')}
             value={apiBase}
             placeholder={chosen.defaultApiBase ?? 'Required for this provider'}
             spellCheck={false}
@@ -369,6 +456,7 @@ function ModelStep({
   readonly instanceId: string;
   readonly onDone: () => void;
 }): JSX.Element {
+  const { t } = useTranslation();
   const [model, setModel] = useState('');
 
   // The refresh route rather than the cached GET: the provider was added
@@ -396,21 +484,21 @@ function ModelStep({
   return (
     <div className="stack setup-card__body">
       {models.isPending ? (
-        <p className="setup-card__note">Asking the provider what it has…</p>
+        <p className="setup-card__note">{t('setup.asking')}</p>
       ) : offered.length > 0 ? (
         <SelectField
-          label="Model"
+          label={t('setup.model')}
           value={model}
-          placeholder="Choose one"
+          placeholder={t('setup.chooseOne')}
           options={offered.map((id) => ({ value: id, label: id }))}
           onValueChange={setModel}
         />
       ) : (
         <TextField
-          label="Model"
+          label={t('setup.model')}
           value={model}
           spellCheck={false}
-          placeholder="qwen3:8b"
+          placeholder={t('setup.modelPlaceholder')}
           onValueChange={setModel}
           hint={
             failure === undefined

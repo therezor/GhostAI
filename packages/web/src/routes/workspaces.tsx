@@ -29,6 +29,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { useMemo, useState, type JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { WorkspaceSummary } from '@ghostai/protocol';
 
@@ -49,7 +50,7 @@ import {
   type SortOrder,
 } from '@/components/crud/sort.js';
 import { ApiError, api } from '@/lib/api.js';
-import { formatRelativeTime } from '@/lib/format.js';
+import { useFormat } from '@/lib/use-format.js';
 import { queryKeys } from '@/lib/query.js';
 import { DEFAULT_WORKSPACE_ID, useWorkspace } from '@/workspaces/workspace-context.js';
 
@@ -71,6 +72,8 @@ interface Blocked {
 }
 
 export function WorkspacesRoute(): JSX.Element {
+  const { t } = useTranslation();
+  const fmt = useFormat();
   const queryClient = useQueryClient();
   const { workspaceId, select } = useWorkspace();
 
@@ -177,7 +180,7 @@ export function WorkspacesRoute(): JSX.Element {
   return (
     <div className="stack page page--wide">
       <div className="cluster page__header">
-        <h1 className="page__title">Workspaces</h1>
+        <h1 className="page__title">{t('workspaces.title')}</h1>
         <span className="spacer" />
         <Button
           onClick={() => {
@@ -188,20 +191,17 @@ export function WorkspacesRoute(): JSX.Element {
               folder said "add a folder", which is the implementation — what the
               button does is add a workspace, and the label already says so. */}
           <Plus />
-          New workspace
+          {t('workspaces.new')}
         </Button>
       </div>
 
       <div className="cluster list-toolbar">
-        <p className="page__note">
-          A workspace is a folder the agent works in. Default holds all the others, so it can reach
-          their files; the named ones cannot reach each other.
-        </p>
+        <p className="page__note">{t('workspaces.note')}</p>
         <span className="spacer" />
-        <SearchFilter value={filter} label="Filter workspaces by name" onValueChange={setFilter} />
+        <SearchFilter value={filter} label={t('workspaces.filter')} onValueChange={setFilter} />
       </div>
 
-      {workspaces.isPending && <p className="page__note">Loading…</p>}
+      {workspaces.isPending && <p className="page__note">{t('common.loading')}</p>}
       {workspaces.isError && (
         <p role="alert" className="page__error">
           Could not load workspaces: {workspaces.error.message}
@@ -210,24 +210,32 @@ export function WorkspacesRoute(): JSX.Element {
 
       {workspaces.isSuccess &&
         (rows.length === 0 ? (
-          <p className="page__note">
-            Nothing here matches “{filter}”. {String(all.length)} hidden.
-          </p>
+          <p className="page__note">{t('common.noMatches', { filter, count: all.length })}</p>
         ) : (
           <table className="data-table">
             <thead>
               <tr>
-                <SortHeader label="Name" sortKey="name" sort={sort} onSort={toggleSort} />
-                <SortHeader label="Chats" sortKey="sessions" sort={sort} onSort={toggleSort} />
                 <SortHeader
-                  label="Updated"
+                  label={t('common.name')}
+                  sortKey="name"
+                  sort={sort}
+                  onSort={toggleSort}
+                />
+                <SortHeader
+                  label={t('workspaces.chats')}
+                  sortKey="sessions"
+                  sort={sort}
+                  onSort={toggleSort}
+                />
+                <SortHeader
+                  label={t('workspaces.updated')}
                   sortKey="updated"
                   sort={sort}
                   onSort={toggleSort}
                   className="data-table__modified"
                 />
                 <th scope="col" className="data-table__actions">
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">{t('common.actions')}</span>
                 </th>
               </tr>
             </thead>
@@ -242,7 +250,7 @@ export function WorkspacesRoute(): JSX.Element {
                   </td>
                   <td className="data-table__meta">{workspace.sessionCount}</td>
                   <td className="data-table__meta data-table__modified">
-                    {formatRelativeTime(workspace.updatedAtMs, now)}
+                    {fmt.relativeTime(workspace.updatedAtMs, now)}
                   </td>
                   <td className="data-table__actions">
                     <RowActions label={workspace.name}>
@@ -278,10 +286,10 @@ export function WorkspacesRoute(): JSX.Element {
       <NameDialog
         open={creating}
         onOpenChange={setCreating}
-        title="New workspace"
-        description="A name, not a path. The folder is created inside the workspace root and the id comes from the name."
+        title={t('workspaces.newTitle')}
+        description={t('workspaces.newHint')}
         fieldLabel="Name"
-        placeholder="Client Acme"
+        placeholder={t('workspaces.namePlaceholder')}
         pending={create.isPending}
         onSubmit={(name) => {
           create.mutate(name);
@@ -293,8 +301,8 @@ export function WorkspacesRoute(): JSX.Element {
         onOpenChange={(open) => {
           if (!open) setRenaming(undefined);
         }}
-        title="Rename workspace"
-        description="The folder on disk keeps its own name — only the label changes."
+        title={t('workspaces.renameTitle')}
+        description={t('workspaces.renameHint')}
         fieldLabel="Name"
         initialValue={renaming?.name ?? ''}
         submitLabel="Save"
@@ -309,7 +317,7 @@ export function WorkspacesRoute(): JSX.Element {
         onOpenChange={(open) => {
           if (!open) setPendingDelete(undefined);
         }}
-        title="Delete this workspace?"
+        title={t('workspaces.deleteTitle')}
         description={`${pendingDelete?.name ?? ''} is detached from GhostAI. Its folder and everything in it stays on disk, and recreating it with the same name adopts the folder again.`}
         confirmLabel="Delete"
         pending={remove.isPending}
@@ -323,13 +331,14 @@ export function WorkspacesRoute(): JSX.Element {
         onOpenChange={(open) => {
           if (!open) setBlocked(undefined);
         }}
-        title="Move the conversations first?"
+        title={t('workspaces.moveTitle')}
         description={
           blocked === undefined
             ? ''
-            : `${String(blocked.sessionCount)} conversation${
-                blocked.sessionCount === 1 ? '' : 's'
-              } still belong to ${blocked.workspace.name}. Moving them to Default keeps their history; the files stay where they are either way.`
+            : t('workspaces.blocked', {
+                count: blocked.sessionCount,
+                workspace: blocked.workspace.name,
+              })
         }
         confirmLabel="Move and delete"
         tone="primary"

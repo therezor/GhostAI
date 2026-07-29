@@ -6,6 +6,12 @@
       "dependsOn": ["^build"],
       "inputs": [
         "src/**",
+        // The translation resources live beside `src` rather than inside it, so
+        // that the web token gates never scan them. Without this line turbo
+        // cannot see them change: an edit to a bundle replays a cached build,
+        // and the app ships the previous wording while every test that imports
+        // the JSON directly passes. That failure is invisible until e2e runs.
+        "locales/**",
         "index.html",
         "tsconfig.json",
         "tsup.config.ts",

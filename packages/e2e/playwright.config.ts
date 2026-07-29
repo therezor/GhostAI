@@ -31,6 +31,12 @@ export default defineConfig({
   use: {
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    // Every locator in this suite matches on English text, and the browser's
+    // `Accept-Language` is what the pre-paint script resolves from when nobody
+    // has chosen yet. Left to the runner, the suite would pass on CI and fail on
+    // a laptop set to German — so it is pinned here rather than discovered.
+    // Both projects inherit it; a per-project `use` merges over this one.
+    locale: 'en-US',
   },
   projects: [
     // The viewport is set *after* the device spread in each project, not once

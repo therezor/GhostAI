@@ -10,6 +10,15 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { createWebI18n } from '@ghostai/i18n/web';
+
+/**
+ * A real instance rather than `(key) => key`: these assertions compare the
+ * rendered label text, so a stub would prove the keys are wired and say nothing
+ * about whether they resolve.
+ */
+const t = createWebI18n('en').getFixedT(null, 'web');
+
 import { summariseContext } from './breakdown.js';
 
 const input = {
@@ -21,7 +30,7 @@ const input = {
 describe('summariseContext', () => {
   it('orders the known sections regardless of the key order it received', () => {
     // JSON preserves insertion order, and the server's is not the reading order.
-    expect(summariseContext(input).segments.map((segment) => segment.key)).toEqual([
+    expect(summariseContext(input, t).segments.map((segment) => segment.key)).toEqual([
       'systemPrompt',
       'tools',
       'messages',
@@ -29,7 +38,7 @@ describe('summariseContext', () => {
   });
 
   it('measures each section against the window', () => {
-    const { segments, usedPercent, freeTokens, over } = summariseContext(input);
+    const { segments, usedPercent, freeTokens, over } = summariseContext(input, t);
 
     expect(segments.map((segment) => segment.percent)).toEqual([10, 10, 30]);
     expect(usedPercent).toBe(50);
@@ -38,7 +47,7 @@ describe('summariseContext', () => {
   });
 
   it('labels the sections in words', () => {
-    expect(summariseContext(input).segments.map((segment) => segment.label)).toEqual([
+    expect(summariseContext(input, t).segments.map((segment) => segment.label)).toEqual([
       'System prompt',
       'Tool definitions',
       'Conversation',
@@ -48,7 +57,7 @@ describe('summariseContext', () => {
   it('accounts for whatever the sections do not add up to', () => {
     // The server's total is authoritative; a bar that does not sum to the number
     // printed above it is a bar nobody trusts twice.
-    const budget = summariseContext({ ...input, estimatedTokens: 6000 });
+    const budget = summariseContext({ ...input, estimatedTokens: 6000 }, t);
     const other = budget.segments.at(-1);
 
     expect(other?.key).toBe('other');
@@ -57,11 +66,11 @@ describe('summariseContext', () => {
   });
 
   it('adds no remainder when the sections already add up', () => {
-    expect(summariseContext(input).segments.map((s) => s.key)).not.toContain('other');
+    expect(summariseContext(input, t).segments.map((s) => s.key)).not.toContain('other');
   });
 
   it('reports a budget past the window rather than clamping it', () => {
-    const budget = summariseContext({ ...input, estimatedTokens: 12_000 });
+    const budget = summariseContext({ ...input, estimatedTokens: 12_000 }, t);
 
     expect(budget.over).toBe(true);
     expect(budget.usedPercent).toBe(120);
@@ -70,11 +79,14 @@ describe('summariseContext', () => {
   });
 
   it('sorts a section it has never seen after the known ones, and names it', () => {
-    const budget = summariseContext({
-      ...input,
-      breakdown: { ...input.breakdown, knowledge_base: 500, memory: 200 },
-      estimatedTokens: 5700,
-    });
+    const budget = summariseContext(
+      {
+        ...input,
+        breakdown: { ...input.breakdown, knowledge_base: 500, memory: 200 },
+        estimatedTokens: 5700,
+      },
+      t,
+    );
 
     expect(budget.segments.map((segment) => segment.key)).toEqual([
       'systemPrompt',
@@ -87,18 +99,21 @@ describe('summariseContext', () => {
   });
 
   it('survives a window of zero rather than dividing by it', () => {
-    const budget = summariseContext({ ...input, contextWindowTokens: 0 });
+    const budget = summariseContext({ ...input, contextWindowTokens: 0 }, t);
 
     expect(budget.segments.every((segment) => segment.percent === 0)).toBe(true);
     expect(budget.usedPercent).toBe(0);
   });
 
   it('treats an empty breakdown as one unattributed block', () => {
-    const budget = summariseContext({
-      breakdown: {},
-      estimatedTokens: 400,
-      contextWindowTokens: 800,
-    });
+    const budget = summariseContext(
+      {
+        breakdown: {},
+        estimatedTokens: 400,
+        contextWindowTokens: 800,
+      },
+      t,
+    );
 
     expect(budget.segments).toEqual([
       { key: 'other', label: 'Unattributed', tokens: 400, percent: 50 },

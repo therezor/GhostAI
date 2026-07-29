@@ -7,16 +7,18 @@
 
 import { Link } from '@tanstack/react-router';
 import type { JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { buttonVariants } from '@/components/ui/button.js';
 
 export function NotFoundRoute(): JSX.Element {
+  const { t } = useTranslation();
   return (
     <div className="stack page page--reading">
-      <h1 className="page__title">Not found</h1>
-      <p className="page__note">There is nothing at this address.</p>
+      <h1 className="page__title">{t('common.notFound')}</h1>
+      <p className="page__note">{t('common.notFoundBody')}</p>
       <Link to="/" className={buttonVariants({ variant: 'secondary' })}>
-        Back to chat
+        {t('common.backToChat')}
       </Link>
     </div>
   );

@@ -32,8 +32,10 @@ import { randomUUID } from 'node:crypto';
 
 import { describeContext, type ContextReport } from '@ghostai/agent';
 import { GhostError, isGhostError, textOf, type SessionStore } from '@ghostai/core';
+import { formatNumber } from '@ghostai/i18n';
 import type { ContentPart } from '@ghostai/protocol';
 
+import type { CliKey, CliT } from './i18n.js';
 import { recentMessages, resolveSeq, DEFAULT_MESSAGE_LINES } from './messages.js';
 import type { TurnRenderer } from './render.js';
 import type { ChatRuntime } from './runtime.js';
@@ -52,6 +54,10 @@ const CONTINUE: SlashOutcome = { kind: 'continue' };
 export interface SlashContext {
   readonly renderer: TurnRenderer;
   readonly runtime: ChatRuntime;
+  /** The terminal's `t`, scoped to the `cli` bundle. */
+  readonly t: CliT;
+  /** The resolved locale, for the numbers `t` does not format. */
+  readonly locale: string;
   /** Read at call time: the REPL's attachment moves. */
   readonly sessionKey: string;
   /** Where a *new* conversation lands. `undefined` means the default. */
@@ -59,37 +65,106 @@ export interface SlashContext {
   readonly setWorkspace: (id: string | undefined) => void;
 }
 
-export const HELP = `/help                       this list
-  /messages [n]               the last n messages, with their seq numbers
-  /clear                      forget this session's history
-  /exit, /quit                leave
+/**
+ * One row of `/help`: what you type, and what it does.
+ *
+ * The two halves are kept apart because only one of them is language.
+ * `/workspace move <from> <to>` is *syntax* — it is what the parser above
+ * matches on, so translating it would print a command that does not exist. The
+ * description beside it is prose and belongs in the resources.
+ */
+interface HelpRow {
+  /** Typed by the user, so never translated. */
+  readonly syntax: string;
+  /** Absent for a variant row that the row above it already described. */
+  readonly key?: CliKey;
+}
 
-  sessions
-  /sessions [n]               conversations in this workspace, newest first
-  /new [title]                start a fresh conversation and attach to it
-  /session [key]              show this session, or attach to another
-  /rename <title>             rename this conversation
-  /delete [key]               delete one, defaulting to this one
-  /branch [ref]               fork up to <ref> and attach to the fork
+interface HelpSection {
+  /** Absent for the opening rows, which sit above the first heading. */
+  readonly heading?: CliKey;
+  readonly rows: readonly HelpRow[];
+}
 
-  messages
-  /edit <ref> <text>          replace a message and re-run from there
-  /regenerate [ref]           re-run the last turn, or the one <ref> started
+const HELP_LAYOUT: readonly HelpSection[] = [
+  {
+    rows: [
+      { syntax: '/help', key: 'slash.help.help' },
+      { syntax: '/messages [n]', key: 'slash.help.messages' },
+      { syntax: '/clear', key: 'slash.help.clear' },
+      { syntax: '/exit, /quit', key: 'slash.help.exit' },
+    ],
+  },
+  {
+    heading: 'slash.sections.sessions',
+    rows: [
+      { syntax: '/sessions [n]', key: 'slash.help.sessions' },
+      { syntax: '/new [title]', key: 'slash.help.new' },
+      { syntax: '/session [key]', key: 'slash.help.session' },
+      { syntax: '/rename <title>', key: 'slash.help.rename' },
+      { syntax: '/delete [key]', key: 'slash.help.delete' },
+      { syntax: '/branch [ref]', key: 'slash.help.branch' },
+    ],
+  },
+  {
+    heading: 'slash.sections.messages',
+    rows: [
+      { syntax: '/edit <ref> <text>', key: 'slash.help.edit' },
+      { syntax: '/regenerate [ref]', key: 'slash.help.regenerate' },
+    ],
+  },
+  {
+    heading: 'slash.sections.context',
+    rows: [
+      { syntax: '/context', key: 'slash.help.context' },
+      { syntax: '/stats [n]', key: 'slash.help.stats' },
+    ],
+  },
+  {
+    heading: 'slash.sections.workspaces',
+    rows: [
+      { syntax: '/workspaces', key: 'slash.help.workspaces' },
+      { syntax: '/workspace <id>', key: 'slash.help.workspace' },
+      { syntax: '/workspace new <name>' },
+      { syntax: '/workspace rename <id> <name>' },
+      { syntax: '/workspace rm <id>', key: 'slash.help.workspaceRm' },
+      { syntax: '/workspace move <from> <to>', key: 'slash.help.workspaceMove' },
+    ],
+  },
+];
 
-  context and cost
-  /context                    what the next turn would send to the model
-  /stats [n]                  the last n turns: model, tokens, tokens/s, time
+/**
+ * The `/help` listing, measured rather than typed out.
+ *
+ * This replaced a 31-line template literal whose description column was a run of
+ * spaces someone counted by hand. That held only while every description was
+ * English — the first German string would have pushed its own row out and left
+ * the other twenty where they were — and it was already two characters out on
+ * the opening row before any of this. `serve.ts`'s banner has derived its column
+ * from the longest label all along, for the same reason.
+ *
+ * The width is measured over the rows that *have* a description, so the two
+ * variant rows that carry none cannot push the column right for everybody else.
+ */
+export function helpText(t: CliT): string {
+  const width = Math.max(
+    ...HELP_LAYOUT.flatMap((section) =>
+      section.rows.filter((row) => row.key !== undefined).map((row) => row.syntax.length),
+    ),
+  );
 
-  workspaces
-  /workspaces                 list them, marking the current one
-  /workspace <id>             show or switch where new conversations land
-  /workspace new <name>
-  /workspace rename <id> <name>
-  /workspace rm <id>          detach; refuses while conversations name it
-  /workspace move <from> <to> move conversations between workspaces
+  const blocks = HELP_LAYOUT.map((section) => {
+    const rows = section.rows
+      .map((row) =>
+        row.key === undefined ? `  ${row.syntax}` : `  ${row.syntax.padEnd(width)}  ${t(row.key)}`,
+      )
+      .join('\n');
 
-  A <ref> is a seq number from /messages, or a negative offset over your own
-  messages: -1 is the last thing you said. It defaults to -1.`;
+    return section.heading === undefined ? rows : `  ${t(section.heading)}\n${rows}`;
+  });
+
+  return `${blocks.join('\n\n')}\n\n  ${t('slash.refNote')}`;
+}
 
 /**
  * Runs one slash command.
@@ -121,7 +196,7 @@ async function dispatch(
   tail: string,
   ctx: SlashContext,
 ): Promise<SlashOutcome> {
-  const { renderer, runtime } = ctx;
+  const { renderer, runtime, t } = ctx;
   const store = runtime.store;
 
   switch (name) {
@@ -130,19 +205,19 @@ async function dispatch(
       return { kind: 'exit' };
 
     case 'help':
-      renderer.note(HELP);
+      renderer.note(helpText(ctx.t));
       return CONTINUE;
 
     case 'clear':
       store.clearMessages(ctx.sessionKey);
-      renderer.note('history cleared');
+      renderer.note(t('slash.notes.historyCleared'));
       return CONTINUE;
 
     case 'messages': {
       const count = positiveCount(argv[0]) ?? DEFAULT_MESSAGE_LINES;
       const rows = recentMessages(store, ctx.sessionKey, count);
       if (rows.length === 0) {
-        renderer.note('nothing said in this conversation yet');
+        renderer.note(t('slash.notes.nothingSaid'));
         return CONTINUE;
       }
       renderer.note(
@@ -161,7 +236,7 @@ async function dispatch(
         ...(workspaceId === undefined ? {} : { workspaceId }),
       });
       if (rows.length === 0) {
-        renderer.note('no conversations yet');
+        renderer.note(t('slash.notes.noConversations'));
         return CONTINUE;
       }
       renderer.note(
@@ -205,18 +280,18 @@ async function dispatch(
     }
 
     case 'rename': {
-      if (tail === '') throw new GhostError('invalid_input', 'usage: /rename <title>');
+      if (tail === '') throw new GhostError('invalid_input', t('slash.errors.usageRename'));
       store.updateSession(ctx.sessionKey, { title: tail });
-      renderer.note(`renamed to ${tail}`);
+      renderer.note(t('slash.notes.renamedTo', { title: tail }));
       return CONTINUE;
     }
 
     case 'delete': {
       const key = argv[0] ?? ctx.sessionKey;
       if (!store.deleteSession(key)) {
-        throw new GhostError('not_found', `No conversation ${key}`);
+        throw new GhostError('not_found', t('slash.errors.noConversation', { key }));
       }
-      renderer.note(`deleted ${key}`);
+      renderer.note(t('slash.notes.deleted', { key }));
       if (key !== ctx.sessionKey) return CONTINUE;
       // The one it was attached to is gone, so it needs somewhere to be.
       const next = `cli-${randomKey()}`;
@@ -239,9 +314,14 @@ async function dispatch(
       const ref = argv[0];
       const text = tail.slice(ref?.length ?? 0).trim();
       if (ref === undefined || text === '') {
-        throw new GhostError('invalid_input', 'usage: /edit <ref> <text>');
+        throw new GhostError('invalid_input', t('slash.errors.usageEdit'));
       }
-      const seq = requireUserMessage(store, ctx.sessionKey, resolveSeq(store, ctx.sessionKey, ref));
+      const seq = requireUserMessage(
+        store,
+        ctx.sessionKey,
+        resolveSeq(store, ctx.sessionKey, ref),
+        t,
+      );
       // Below the edited message: the loop appends the replacement itself, so
       // cutting *at* it would leave the old wording above the new one.
       store.truncateAfter(ctx.sessionKey, seq - 1);
@@ -253,9 +333,10 @@ async function dispatch(
         store,
         ctx.sessionKey,
         resolveSeq(store, ctx.sessionKey, argv[0]),
+        t,
       );
       const [record] = store.messages(ctx.sessionKey, { afterSeq: seq - 1, beforeSeq: seq + 1 });
-      if (record === undefined) throw new GhostError('not_found', 'That message is gone');
+      if (record === undefined) throw new GhostError('not_found', t('slash.errors.messageGone'));
       const content = textOf(record.message);
       // Minus one, and for the same reason as the hub's: `AgentLoop.run`
       // appends the question unconditionally, so truncating *to* `seq` and
@@ -277,10 +358,10 @@ async function dispatch(
         contextWindowTokens: runtime.config.agents.defaults.contextWindowTokens,
       });
       if (report === undefined) {
-        renderer.note('nothing to measure yet — this conversation has not started');
+        renderer.note(t('slash.notes.nothingToMeasure'));
         return CONTINUE;
       }
-      renderer.note(formatContext(report));
+      renderer.note(formatContext(report, ctx.locale));
       return CONTINUE;
     }
 
@@ -288,7 +369,7 @@ async function dispatch(
       const limit = positiveCount(argv[0]) ?? 10;
       const rows = store.turnStats(ctx.sessionKey, { limit });
       if (rows.length === 0) {
-        renderer.note('no turns recorded for this conversation yet');
+        renderer.note(t('slash.notes.noTurns'));
         return CONTINUE;
       }
       renderer.stats(rows);
@@ -316,27 +397,27 @@ async function dispatch(
       return workspaceCommand(argv, ctx);
 
     default:
-      renderer.warn(`unknown command: /${name}`);
+      renderer.warn(t('slash.notes.unknownCommand', { name }));
       return CONTINUE;
   }
 }
 
 function workspaceCommand(argv: readonly string[], ctx: SlashContext): SlashOutcome {
-  const { renderer, runtime } = ctx;
+  const { renderer, runtime, t } = ctx;
   const [verb, ...rest] = argv;
 
   switch (verb) {
     case undefined: {
       const pending = ctx.workspaceId ?? 'default';
-      renderer.note(`new conversations land in ${pending}`);
+      renderer.note(t('slash.notes.landIn', { workspace: pending }));
       return CONTINUE;
     }
 
     case 'new': {
       const name = rest.join(' ').trim();
-      if (name === '') throw new GhostError('invalid_input', 'usage: /workspace new <name>');
+      if (name === '') throw new GhostError('invalid_input', t('slash.errors.usageWorkspaceNew'));
       const created = runtime.workspaces.create({ name });
-      renderer.note(`created ${created.id}`);
+      renderer.note(t('slash.notes.created', { id: created.id }));
       return CONTINUE;
     }
 
@@ -344,28 +425,26 @@ function workspaceCommand(argv: readonly string[], ctx: SlashContext): SlashOutc
       const [id, ...words] = rest;
       const name = words.join(' ').trim();
       if (id === undefined || name === '') {
-        throw new GhostError('invalid_input', 'usage: /workspace rename <id> <name>');
+        throw new GhostError('invalid_input', t('slash.errors.usageWorkspaceRename'));
       }
       runtime.workspaces.rename(id, name);
-      renderer.note(`renamed ${id} to ${name}`);
+      renderer.note(t('slash.notes.renamedWorkspace', { id, name }));
       return CONTINUE;
     }
 
     case 'rm': {
       const id = rest[0];
-      if (id === undefined) throw new GhostError('invalid_input', 'usage: /workspace rm <id>');
+      if (id === undefined)
+        throw new GhostError('invalid_input', t('slash.errors.usageWorkspaceRm'));
       // The same refusal the web manager makes, and for the same reason: a
       // detached workspace whose conversations still name it would leave them
       // resolving to files nothing lists. Two explicit steps, not one silent one.
       const count = runtime.store.countByWorkspace(id);
       if (count > 0) {
-        throw new GhostError(
-          'conflict',
-          `${String(count)} conversations are still in ${id}. Move them first: /workspace move ${id} default`,
-        );
+        throw new GhostError('conflict', t('slash.errors.workspaceInUse', { count, id }));
       }
       runtime.workspaces.delete(id);
-      renderer.note(`detached ${id}`);
+      renderer.note(t('slash.notes.detached', { id }));
       if (ctx.workspaceId === id) ctx.setWorkspace(undefined);
       return CONTINUE;
     }
@@ -373,50 +452,61 @@ function workspaceCommand(argv: readonly string[], ctx: SlashContext): SlashOutc
     case 'move': {
       const [from, to] = rest;
       if (from === undefined || to === undefined) {
-        throw new GhostError('invalid_input', 'usage: /workspace move <from> <to>');
+        throw new GhostError('invalid_input', t('slash.errors.usageWorkspaceMove'));
       }
       if (runtime.workspaces.get(to) === undefined) {
-        throw new GhostError('not_found', `No workspace ${to}`);
+        throw new GhostError('not_found', t('slash.errors.noWorkspace', { id: to }));
       }
       const moved = runtime.store.reassignWorkspace(from, to);
-      renderer.note(`moved ${String(moved)} conversations from ${from} to ${to}`);
+      renderer.note(t('slash.notes.moved', { count: moved, from, to }));
       return CONTINUE;
     }
 
     default: {
       // Not a verb, so it is an id: `/workspace <id>` switches.
       if (runtime.workspaces.get(verb) === undefined) {
-        throw new GhostError('not_found', `No workspace ${verb}`);
+        throw new GhostError('not_found', t('slash.errors.noWorkspace', { id: verb }));
       }
       ctx.setWorkspace(verb);
       // Worth stating rather than leaving to be discovered: a session's
       // workspace is fixed at birth, so this moves nothing that exists.
-      renderer.note(`new conversations will land in ${verb}`);
+      renderer.note(t('slash.notes.willLandIn', { workspace: verb }));
       return CONTINUE;
     }
   }
 }
 
 /** Only a message the user wrote can be edited or re-run. */
-function requireUserMessage(store: SessionStore, sessionKey: string, seq: number): number {
+function requireUserMessage(store: SessionStore, sessionKey: string, seq: number, t: CliT): number {
   const [record] = store.messages(sessionKey, { afterSeq: seq - 1, beforeSeq: seq + 1 });
   if (record?.message.role !== 'user') {
-    throw new GhostError('invalid_input', `Message ${String(seq)} is not one of yours`);
+    throw new GhostError('invalid_input', t('slash.errors.notYours', { seq }));
   }
   return seq;
 }
 
-function formatContext(report: ContextReport): string {
+/**
+ * The `/context` breakdown.
+ *
+ * `formatNumber` with the locale passed in, rather than the bare
+ * `toLocaleString()` this used to call. That was the mirror image of the bug the
+ * web's `formatTokens` was working around: the web hand-rolled its grouping to
+ * escape the machine's locale, and this one simply inherited it — so `/context`
+ * already printed `8.192` on a machine set to `de-DE` while the same number in
+ * the browser printed `8,192`. One install, two answers.
+ */
+function formatContext(report: ContextReport, locale: string): string {
   const percent = Math.round((report.estimatedTokens / report.contextWindowTokens) * 100);
+  const n = (value: number): string => formatNumber(value, locale);
   // Named rather than iterated: the three sections are a fixed set with a
   // meaningful order, and `Object.entries` would print them in whatever order
   // the object happens to hold while typing each value as `any`.
   const { systemPrompt, tools, messages } = report.breakdown;
   return [
-    `${report.estimatedTokens.toLocaleString()} of ${report.contextWindowTokens.toLocaleString()} tokens · ${String(percent)}%`,
-    `  ${'system'.padEnd(10)}${systemPrompt.toLocaleString()}`,
-    `  ${'tools'.padEnd(10)}${tools.toLocaleString()}`,
-    `  ${'messages'.padEnd(10)}${messages.toLocaleString()}`,
+    `${n(report.estimatedTokens)} of ${n(report.contextWindowTokens)} tokens · ${String(percent)}%`,
+    `  ${'system'.padEnd(10)}${n(systemPrompt)}`,
+    `  ${'tools'.padEnd(10)}${n(tools)}`,
+    `  ${'messages'.padEnd(10)}${n(messages)}`,
     `  ${'in window'.padEnd(10)}${String(report.messages.length)} messages`,
   ].join('\n');
 }

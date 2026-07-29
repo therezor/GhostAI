@@ -11,6 +11,10 @@
 
 import { ConfigPatchSchema, ToolsConfigSchema, type ToolsConfig } from '@ghostai/protocol';
 import { describe, expect, it } from 'vitest';
+import { createWebI18n } from '@ghostai/i18n/web';
+
+/** English, resolved: these assertions compare the message a user would read. */
+const t = createWebI18n('en').getFixedT(null, 'web');
 
 import { toToolsForm, toToolsPatch } from './tools-form.js';
 
@@ -34,7 +38,7 @@ describe('toToolsForm', () => {
 
 describe('toToolsPatch', () => {
   it('round-trips the config it was built from', () => {
-    const result = toToolsPatch(toToolsForm(config()));
+    const result = toToolsPatch(toToolsForm(config()), t);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
@@ -50,7 +54,7 @@ describe('toToolsPatch', () => {
 
   it('carries a changed policy', () => {
     const form = toToolsForm(config());
-    const result = toToolsPatch({ ...form, approvals: { ...form.approvals, exec: 'deny' } });
+    const result = toToolsPatch({ ...form, approvals: { ...form.approvals, exec: 'deny' } }, t);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -58,7 +62,7 @@ describe('toToolsPatch', () => {
   });
 
   it('refuses an approval timeout of zero, unlike every other duration here', () => {
-    const result = toToolsPatch({ ...toToolsForm(config()), approvalTimeoutSeconds: '0' });
+    const result = toToolsPatch({ ...toToolsForm(config()), approvalTimeoutSeconds: '0' }, t);
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -66,7 +70,7 @@ describe('toToolsPatch', () => {
   });
 
   it('allows an exec timeout of zero, where zero does mean no limit', () => {
-    const result = toToolsPatch({ ...toToolsForm(config()), execTimeoutSeconds: '0' });
+    const result = toToolsPatch({ ...toToolsForm(config()), execTimeoutSeconds: '0' }, t);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -74,11 +78,14 @@ describe('toToolsPatch', () => {
   });
 
   it('reports both bad byte counts at once', () => {
-    const result = toToolsPatch({
-      ...toToolsForm(config()),
-      execMaxOutputBytes: '0',
-      maxOutputChars: '',
-    });
+    const result = toToolsPatch(
+      {
+        ...toToolsForm(config()),
+        execMaxOutputBytes: '0',
+        maxOutputChars: '',
+      },
+      t,
+    );
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -89,7 +96,7 @@ describe('toToolsPatch', () => {
   });
 
   it('produces a patch the protocol accepts', () => {
-    const result = toToolsPatch(toToolsForm(config()));
+    const result = toToolsPatch(toToolsForm(config()), t);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 

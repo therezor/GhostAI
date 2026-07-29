@@ -18,10 +18,11 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useState, type JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { api } from '@/lib/api.js';
 import { cn } from '@/lib/cn.js';
-import { formatTokens } from '@/lib/format.js';
+import { useFormat } from '@/lib/use-format.js';
 import { queryKeys } from '@/lib/query.js';
 import { summariseContext } from './breakdown.js';
 import { ContextDialog } from './context-inspector.js';
@@ -41,6 +42,8 @@ export function ContextStrip({
 }: {
   readonly sessionKey: string | undefined;
 }): JSX.Element | null {
+  const { t } = useTranslation();
+  const fmt = useFormat();
   const [open, setOpen] = useState(false);
 
   const context = useQuery({
@@ -54,7 +57,7 @@ export function ContextStrip({
 
   if (sessionKey === undefined || !context.isSuccess) return null;
 
-  const budget = summariseContext(context.data);
+  const budget = summariseContext(context.data, t);
   // Past the window the segments are scaled to the bar so none is clipped, and
   // the overflow is said in words — the same rule the dialog follows.
   const scale = budget.over && budget.usedPercent > 0 ? 100 / budget.usedPercent : 1;
@@ -79,7 +82,7 @@ export function ContextStrip({
         </span>
 
         <span className="context-strip__label">
-          {formatTokens(budget.usedTokens)} of {formatTokens(budget.windowTokens)} ·{' '}
+          {fmt.tokens(budget.usedTokens)} of {fmt.tokens(budget.windowTokens)} ·{' '}
           {budget.over ? (
             <span className="context-strip__over">over the window</span>
           ) : (

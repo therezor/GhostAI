@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import { createWebI18n } from '@ghostai/i18n/web';
+
+/** English, resolved: the copy assertions below compare what a user reads. */
+const t = createWebI18n('en').getFixedT(null, 'web');
+
 import {
   SETUP_STEPS,
   initialStep,
@@ -13,7 +18,7 @@ import {
 
 describe('the order', () => {
   it('runs access first, then configuration', () => {
-    expect(SETUP_STEPS).toEqual(['code', 'password', 'provider', 'model', 'done']);
+    expect(SETUP_STEPS).toEqual(['language', 'code', 'password', 'provider', 'model', 'done']);
   });
 
   it('walks to done and stays there', () => {
@@ -31,18 +36,25 @@ describe('isSkippable', () => {
     // unconfigured one merely cannot chat yet.
     expect(isSkippable('code')).toBe(false);
     expect(isSkippable('password')).toBe(false);
+    expect(isSkippable('language')).toBe(true);
     expect(isSkippable('provider')).toBe(true);
     expect(isSkippable('model')).toBe(true);
   });
 });
 
 describe('previousStep', () => {
-  it('offers no way back from either credential step', () => {
-    // `code` is the first step; `password` cannot return to it because the code
-    // was single-use and has already been spent, and a button that leads to a
-    // form nothing will accept is worse than no button.
-    expect(previousStep('code')).toBeNull();
+  it('offers no way back from the password step, and one from the code step', () => {
+    // `password` cannot return to `code` because the code was single-use and has
+    // already been spent, and a button that leads to a form nothing will accept
+    // is worse than no button.
     expect(previousStep('password')).toBeNull();
+    // `code` can, because the step before it is the language question and
+    // nothing has been spent there — and picking the wrong language is the
+    // mistake a user is most likely to want to undo the moment they see it.
+    expect(previousStep('code')).toBe('language');
+    // The first step has nowhere to go, which falls out of `step === from`
+    // rather than being stated twice.
+    expect(previousStep('language')).toBeNull();
   });
 
   it('goes back within configuration', () => {
@@ -59,16 +71,17 @@ describe('previousStep', () => {
 });
 
 describe('progressOf', () => {
-  it('counts the four real steps and does not make done a fifth', () => {
-    expect(progressOf('code')).toEqual({ current: 1, total: 4 });
-    expect(progressOf('model')).toEqual({ current: 4, total: 4 });
-    expect(progressOf('done')).toEqual({ current: 4, total: 4 });
+  it('counts the five real steps and does not make done a sixth', () => {
+    expect(progressOf('language')).toEqual({ current: 1, total: 5 });
+    expect(progressOf('code')).toEqual({ current: 2, total: 5 });
+    expect(progressOf('model')).toEqual({ current: 5, total: 5 });
+    expect(progressOf('done')).toEqual({ current: 5, total: 5 });
   });
 });
 
 describe('initialStep', () => {
-  it('starts at the code on an unclaimed install', () => {
-    expect(initialStep({ setupRequired: true, configured: false })).toBe('code');
+  it('starts at the language on an unclaimed install', () => {
+    expect(initialStep({ setupRequired: true, configured: false })).toBe('language');
   });
 
   it('does not open at all on a claimed, configured install', () => {
@@ -92,7 +105,7 @@ describe('initialStep', () => {
 describe('titleOf', () => {
   it('says something for every step', () => {
     for (const step of SETUP_STEPS) {
-      const { title, note } = titleOf(step);
+      const { title, note } = titleOf(step, t);
       expect(title).not.toBe('');
       expect(note).not.toBe('');
     }

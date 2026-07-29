@@ -16,6 +16,7 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import type { ComponentProps, JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/cn.js';
 
@@ -31,13 +32,14 @@ export function DialogContent({
   showClose = true,
   ...props
 }: ComponentProps<typeof DialogPrimitive.Content> & { readonly showClose?: boolean }): JSX.Element {
+  const { t } = useTranslation();
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay className="dialog-overlay" />
       <DialogPrimitive.Content className={cn('dialog', className)} {...props}>
         {children}
         {showClose && (
-          <DialogPrimitive.Close aria-label="Close" className="dialog__close">
+          <DialogPrimitive.Close aria-label={t('common.close')} className="dialog__close">
             <X />
           </DialogPrimitive.Close>
         )}

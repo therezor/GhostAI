@@ -7,6 +7,11 @@ import {
 } from '@ghostai/protocol';
 import { describe, expect, it } from 'vitest';
 
+import { createWebI18n } from '@ghostai/i18n/web';
+
+/** English, resolved: these assertions compare the message a user would read. */
+const t = createWebI18n('en').getFixedT(null, 'web');
+
 import {
   MODEL_REQUIRED,
   parseToolList,
@@ -98,7 +103,7 @@ describe('toAgentEntryPatch', () => {
   it('writes the settings down, so the agent stops depending on the defaults', () => {
     // The form was filled from `agents.defaults`; the point of saving it is
     // that a later change to those defaults no longer moves this agent.
-    const entry = parsed(toAgentEntryPatch('reviewer', form(), EMPTY));
+    const entry = parsed(toAgentEntryPatch('reviewer', form(), EMPTY, t));
 
     expect(entry).toMatchObject({
       provider: 'ollama',
@@ -111,7 +116,7 @@ describe('toAgentEntryPatch', () => {
   it('leaves temperature and reasoning effort out when they are blank', () => {
     // The two that can genuinely be unset. Omitting the key is what clears it,
     // because `agents.list.*` is replaced wholesale.
-    const entry = parsed(toAgentEntryPatch('reviewer', form(), EMPTY));
+    const entry = parsed(toAgentEntryPatch('reviewer', form(), EMPTY, t));
 
     expect(entry).not.toHaveProperty('temperature');
     expect(entry).not.toHaveProperty('reasoningEffort');
@@ -120,7 +125,7 @@ describe('toAgentEntryPatch', () => {
   it('refuses a required box the operator emptied', () => {
     // It arrived holding a number. A blank one is a deletion, not an unset —
     // and there is nothing left for it to fall through to.
-    const result = toAgentEntryPatch('reviewer', form({ maxTokens: '' }), EMPTY);
+    const result = toAgentEntryPatch('reviewer', form({ maxTokens: '' }), EMPTY, t);
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('unreachable');
@@ -133,6 +138,7 @@ describe('toAgentEntryPatch', () => {
         'reviewer',
         form({ model: 'qwen3:32b', temperature: '0', reasoningEffort: 'high' }),
         EMPTY,
+        t,
       ),
     );
 
@@ -148,7 +154,7 @@ describe('toAgentEntryPatch', () => {
       exec: { allowedBinaries: ['git'] },
     });
 
-    const entry = parsed(toAgentEntryPatch('reviewer', form(), stored));
+    const entry = parsed(toAgentEntryPatch('reviewer', form(), stored, t));
 
     expect(entry).toMatchObject({
       sandbox: { kind: 'docker', image: 'ghost:latest' },
@@ -161,6 +167,7 @@ describe('toAgentEntryPatch', () => {
       'reviewer',
       form({ maxTokens: 'lots', temperature: '9', contextWindowTokens: '-1' }),
       EMPTY,
+      t,
     );
 
     expect(result.ok).toBe(false);
@@ -173,7 +180,7 @@ describe('toAgentEntryPatch', () => {
   });
 
   it('refuses an empty id', () => {
-    const result = toAgentEntryPatch('  ', form(), EMPTY);
+    const result = toAgentEntryPatch('  ', form(), EMPTY, t);
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('unreachable');
@@ -181,7 +188,7 @@ describe('toAgentEntryPatch', () => {
   });
 
   it('refuses an empty provider, which would resolve to nothing', () => {
-    const result = toAgentEntryPatch('reviewer', form({ provider: '  ' }), EMPTY);
+    const result = toAgentEntryPatch('reviewer', form({ provider: '  ' }), EMPTY, t);
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('unreachable');
@@ -193,7 +200,7 @@ describe('toAgentEntryPatch', () => {
     // the registry to resolve one. It does not: `Runtime#resolveProvider` turns
     // an empty model into `noModelError` and hands the loop a `null` provider,
     // so what the form was writing down was an agent with no way to take a turn.
-    const result = toAgentEntryPatch('reviewer', form({ model: '  ' }), EMPTY);
+    const result = toAgentEntryPatch('reviewer', form({ model: '  ' }), EMPTY, t);
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('unreachable');
@@ -201,20 +208,22 @@ describe('toAgentEntryPatch', () => {
   });
 
   it('converts seconds to milliseconds, matching the defaults form', () => {
-    const entry = parsed(toAgentEntryPatch('reviewer', form({ toolTimeoutSeconds: '45' }), EMPTY));
+    const entry = parsed(
+      toAgentEntryPatch('reviewer', form({ toolTimeoutSeconds: '45' }), EMPTY, t),
+    );
     expect(entry).toMatchObject({ toolTimeoutMs: 45_000 });
   });
 
   it('ignores a reasoning effort that is not one of the four', () => {
     const entry = parsed(
-      toAgentEntryPatch('reviewer', form({ reasoningEffort: 'extreme' }), EMPTY),
+      toAgentEntryPatch('reviewer', form({ reasoningEffort: 'extreme' }), EMPTY, t),
     );
     expect(entry).not.toHaveProperty('reasoningEffort');
   });
 
   it('sends only the approval bands that were set', () => {
     const entry = parsed(
-      toAgentEntryPatch('reviewer', form({ approveExec: 'deny', approveNetwork: '' }), EMPTY),
+      toAgentEntryPatch('reviewer', form({ approveExec: 'deny', approveNetwork: '' }), EMPTY, t),
     );
 
     expect(entry).toMatchObject({ approvals: { exec: 'deny' } });
@@ -225,14 +234,14 @@ describe('toAgentEntryPatch', () => {
   });
 
   it('omits approvals altogether when no band was set', () => {
-    expect(parsed(toAgentEntryPatch('reviewer', form(), EMPTY))).not.toHaveProperty('approvals');
+    expect(parsed(toAgentEntryPatch('reviewer', form(), EMPTY, t))).not.toHaveProperty('approvals');
   });
 
   it('clears a stored approval the operator blanked', () => {
     // The stored entry is carried through wholesale, so a band dropped from it
     // has to be dropped explicitly or blanking one would do nothing at all.
     const stored = AgentEntrySchema.parse({ approvals: { exec: 'deny' } });
-    const entry = parsed(toAgentEntryPatch('reviewer', form({ approveExec: '' }), stored));
+    const entry = parsed(toAgentEntryPatch('reviewer', form({ approveExec: '' }), stored, t));
 
     expect(entry).not.toHaveProperty('approvals');
   });
@@ -241,7 +250,7 @@ describe('toAgentEntryPatch', () => {
     // The merge replaces this object wholesale; omitting it would make
     // "clear this agent's tool restrictions" impossible to express.
     const entry = parsed(
-      toAgentEntryPatch('reviewer', form({ allowTools: '', denyTools: '' }), EMPTY),
+      toAgentEntryPatch('reviewer', form({ allowTools: '', denyTools: '' }), EMPTY, t),
     );
     expect(entry).toMatchObject({ tools: { allow: [], deny: [] } });
   });
@@ -251,6 +260,7 @@ describe('toAgentEntryPatch', () => {
       'reviewer',
       form({ label: 'Reviewer', model: 'qwen3:32b', denyTools: 'exec' }),
       EMPTY,
+      t,
     );
 
     expect(result.ok).toBe(true);
@@ -261,7 +271,7 @@ describe('toAgentEntryPatch', () => {
 
 describe('toDefaultAgentPatch', () => {
   it('writes the model and budget to the defaults, and nothing else there', () => {
-    const result = toDefaultAgentPatch(toAgentForm(DEFAULTS), form(), EMPTY);
+    const result = toDefaultAgentPatch(toAgentForm(DEFAULTS), form(), EMPTY, t);
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('unreachable');
@@ -272,7 +282,7 @@ describe('toDefaultAgentPatch', () => {
     // Its entry holds the prompt and the permissions; the model and the budget
     // are `agents.defaults`. An override here would be a contradiction, and one
     // that would silently stop the Model section on this screen from working.
-    const result = toDefaultAgentPatch(toAgentForm(DEFAULTS), form(), EMPTY);
+    const result = toDefaultAgentPatch(toAgentForm(DEFAULTS), form(), EMPTY, t);
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('unreachable');
@@ -286,7 +296,12 @@ describe('toDefaultAgentPatch', () => {
   });
 
   it('reports the defaults’ own errors rather than saving half of it', () => {
-    const result = toDefaultAgentPatch({ ...toAgentForm(DEFAULTS), maxTokens: '' }, form(), EMPTY);
+    const result = toDefaultAgentPatch(
+      { ...toAgentForm(DEFAULTS), maxTokens: '' },
+      form(),
+      EMPTY,
+      t,
+    );
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('unreachable');

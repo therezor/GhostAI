@@ -16,11 +16,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { Info } from 'lucide-react';
 import type { JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { tokensPerSecond, type StopReason, type Usage } from '@ghostai/protocol';
 
 import { api } from '@/lib/api.js';
-import { formatDuration, formatTokens } from '@/lib/format.js';
+import { formatDuration } from '@/lib/format.js';
+import { useFormat } from '@/lib/use-format.js';
 import { queryKeys } from '@/lib/query.js';
 import { Button } from '@/components/ui/button.js';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover.js';
@@ -33,6 +35,7 @@ export function TurnInfo({
   readonly turn: TurnItem;
   readonly sessionKey: string | undefined;
 }): JSX.Element {
+  const { t } = useTranslation();
   return (
     <Popover>
       {/* The `<Button>` is written out here rather than wrapped in a component
@@ -41,7 +44,7 @@ export function TurnInfo({
           props swallows every one of them — which is a trigger that renders
           perfectly and opens nothing. */}
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Turn details">
+        <Button variant="ghost" size="icon" aria-label={t('turn.details')}>
           <Info />
         </Button>
       </PopoverTrigger>
@@ -59,6 +62,9 @@ function TurnInfoBody({
   readonly turn: TurnItem;
   readonly sessionKey: string | undefined;
 }): JSX.Element {
+  const { t } = useTranslation();
+  const fmt = useFormat();
+
   // Only for a turn the live stream did not describe. A conversation the user
   // is sitting in front of never reaches this.
   const stored = useQuery({
@@ -80,30 +86,34 @@ function TurnInfoBody({
     (row === undefined ? undefined : Math.max(0, row.endedAtMs - row.startedAtMs));
 
   if (usage === undefined) {
-    return <p className="turn-info__empty">No figures were recorded for this turn.</p>;
+    return <p className="turn-info__empty">{t('turn.none')}</p>;
   }
 
   const rate = elapsedMs === undefined ? undefined : tokensPerSecond(usage, elapsedMs);
 
   return (
     <dl className="turn-info">
-      <Row label="Model" value={model === '' ? '—' : model} />
-      <Row label="Provider" value={provider === '' ? '—' : provider} />
-      <Row label="In" value={formatTokens(usage.promptTokens)} />
-      <Row label="Out" value={formatTokens(usage.completionTokens)} />
+      <Row label={t('turn.model')} value={model === '' ? '—' : model} />
+      <Row label={t('turn.provider')} value={provider === '' ? '—' : provider} />
+      <Row label={t('turn.in')} value={fmt.tokens(usage.promptTokens)} />
+      <Row label={t('turn.out')} value={fmt.tokens(usage.completionTokens)} />
       {usage.cachedTokens !== undefined && (
-        <Row label="Cached" value={formatTokens(usage.cachedTokens)} />
+        <Row label={t('turn.cached')} value={fmt.tokens(usage.cachedTokens)} />
       )}
       {usage.reasoningTokens !== undefined && (
-        <Row label="Reasoning" value={formatTokens(usage.reasoningTokens)} />
+        <Row label={t('turn.reasoning')} value={fmt.tokens(usage.reasoningTokens)} />
       )}
-      {elapsedMs !== undefined && <Row label="Elapsed" value={formatDuration(elapsedMs)} />}
+      {elapsedMs !== undefined && (
+        <Row label={t('turn.elapsed')} value={formatDuration(elapsedMs)} />
+      )}
       {/* Absent rather than zero when there is nothing to divide: a turn that
           produced no tokens has no rate, and one measured at zero milliseconds
           was not measured. */}
-      {rate !== undefined && <Row label="Rate" value={`${rate.toFixed(1)} tok/s`} />}
-      <Row label="Steps" value={String(iterations)} />
-      {stopReason !== undefined && <Row label="Stopped" value={stopReason.replace('_', ' ')} />}
+      {rate !== undefined && <Row label={t('turn.rate')} value={`${rate.toFixed(1)} tok/s`} />}
+      <Row label={t('turn.steps')} value={String(iterations)} />
+      {stopReason !== undefined && (
+        <Row label={t('turn.stopped')} value={stopReason.replace('_', ' ')} />
+      )}
     </dl>
   );
 }

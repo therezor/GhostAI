@@ -26,6 +26,7 @@
 
 import { AlertCircle, CheckCircle2, ChevronRight, Loader2, Terminal, Wrench } from 'lucide-react';
 import { useEffect, useId, useState, type JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { ApprovalScope, ToolRisk } from '@ghostai/protocol';
 
@@ -56,6 +57,7 @@ export interface ToolCardProps {
 }
 
 export function ToolCard({ tool, onApprove }: ToolCardProps): JSX.Element {
+  const { t } = useTranslation();
   // Open by default while a decision is needed: an approval prompt inside a
   // collapsed card is a turn that has silently stopped.
   const [open, setOpen] = useState(tool.status === 'awaiting-approval');
@@ -131,7 +133,7 @@ export function ToolCard({ tool, onApprove }: ToolCardProps): JSX.Element {
       {open && (
         <div id={bodyId} className="stack tool-card__body">
           {summary !== '' && (
-            <Labelled label="Arguments">
+            <Labelled label={t('tool.arguments')}>
               <pre className="tool-card__pre">{formatArgs(tool.args)}</pre>
             </Labelled>
           )}
@@ -139,17 +141,12 @@ export function ToolCard({ tool, onApprove }: ToolCardProps): JSX.Element {
           {tool.content !== undefined && (
             <Labelled label={tool.status === 'error' ? 'Error' : 'Output'}>
               <Output content={tool.content} terminal={tool.name === 'exec'} />
-              {tool.truncated && (
-                <p className="tool-card__note">
-                  Output was truncated in the middle to fit the tool-output budget. The model saw
-                  the same thing.
-                </p>
-              )}
+              {tool.truncated && <p className="tool-card__note">{t('tool.truncated')}</p>}
             </Labelled>
           )}
 
           {tool.content === undefined && tool.status === 'running' && (
-            <p className="tool-card__running">Running…</p>
+            <p className="tool-card__running">{t('tool.running')}</p>
           )}
         </div>
       )}
@@ -190,25 +187,35 @@ function Output({
 }
 
 function StatusIcon({ status }: { readonly status: ToolPart['status'] }): JSX.Element {
+  const { t } = useTranslation();
   switch (status) {
     case 'running':
       return (
-        <Loader2 className="tool-card__status tool-card__status--running" aria-label="Running" />
+        <Loader2
+          className="tool-card__status tool-card__status--running"
+          aria-label={t('tool.runningLabel')}
+        />
       );
     case 'awaiting-approval':
       return (
         <Terminal
           className="tool-card__status tool-card__status--awaiting"
-          aria-label="Needs approval"
+          aria-label={t('tool.needsApproval')}
         />
       );
     case 'ok':
       return (
-        <CheckCircle2 className="tool-card__status tool-card__status--ok" aria-label="Succeeded" />
+        <CheckCircle2
+          className="tool-card__status tool-card__status--ok"
+          aria-label={t('tool.succeeded')}
+        />
       );
     case 'error':
       return (
-        <AlertCircle className="tool-card__status tool-card__status--error" aria-label="Failed" />
+        <AlertCircle
+          className="tool-card__status tool-card__status--error"
+          aria-label={t('tool.failed')}
+        />
       );
     default:
       return <Wrench className="tool-card__status" />;

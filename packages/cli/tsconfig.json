@@ -11,6 +11,9 @@
       "path": "../protocol/tsconfig.json"
     },
     {
+      "path": "../i18n/tsconfig.json"
+    },
+    {
       "path": "../core/tsconfig.json"
     },
     {

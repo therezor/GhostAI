@@ -16,6 +16,7 @@
 
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useState, type JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { ProviderInfo } from '@ghostai/protocol';
 
@@ -44,6 +45,7 @@ export function AddProviderDialog({
   /** The ids already in the config, so the proposed one is free. */
   readonly taken: readonly string[];
 }): JSX.Element {
+  const { t } = useTranslation();
   const [type, setType] = useState('');
   const [label, setLabel] = useState('');
   const { save, saving } = useSaveSettings();
@@ -89,18 +91,15 @@ export function AddProviderDialog({
           }}
         >
           <DialogHeader>
-            <DialogHeading>New provider</DialogHeading>
-            <DialogSubheading>
-              One endpoint. The type is fixed once it exists — add the same type twice to run
-              against two servers, and they keep separate keys.
-            </DialogSubheading>
+            <DialogHeading>{t('providers.newTitle')}</DialogHeading>
+            <DialogSubheading>{t('providers.newHint')}</DialogSubheading>
           </DialogHeader>
 
           <div className="stack settings-panel">
             <SelectField
-              label="Type"
+              label={t('common.type')}
               value={type}
-              placeholder="Choose a type"
+              placeholder={t('providers.chooseType')}
               options={types.map((candidate) => ({
                 value: candidate.id,
                 label: candidate.displayName,
@@ -116,7 +115,7 @@ export function AddProviderDialog({
             />
 
             <TextField
-              label="Name"
+              label={t('common.name')}
               value={label}
               placeholder={chosen?.displayName ?? 'Optional'}
               onValueChange={setLabel}

@@ -11,6 +11,7 @@ import type { JSX, ReactNode } from 'react';
 import { useState } from 'react';
 
 import { createQueryClient } from '@/lib/query.js';
+import { I18nProvider } from '@/i18n/i18n-context.js';
 import { LoginOverlay } from '@/components/login-overlay.js';
 import { Toaster } from '@/components/ui/toast.js';
 import { TooltipProvider } from '@/components/ui/tooltip.js';
@@ -37,29 +38,35 @@ export function Providers({
       {/* One copy of the theme state for the whole tree. Two would mean the
           toggle repaints and the code blocks do not. */}
       <ThemeProvider>
-        {/* Which workspace the UI is showing. Above the router because the
-            sidebar, the Files page and the socket all read it, and two copies
-            would let the switcher and the file listing disagree. */}
-        <WorkspaceProvider>
-          {/* Which agent the *next* conversation starts on. Beside the
-              workspace because the two answer the pair of questions a
-              conversation is opened with: where it works and who does it. */}
-          <AgentProvider>
-            {/* One provider, one shared delay timer — so a row of icon buttons
-                behaves like a control strip rather than eight separate waits. */}
-            <TooltipProvider delayDuration={400} skipDelayDuration={300}>
-              {children}
-              <LoginOverlay />
-              {/* Above the login overlay in the tree, because on an unclaimed
-                  install `/api/auth/me` also 401s and both would otherwise be
-                  showing — and this is the one that can actually get the user
-                  in. It renders itself only when the server says setup is
-                  needed, so a claimed install never sees it. */}
-              <SetupOverlay />
-              <Toaster />
-            </TooltipProvider>
-          </AgentProvider>
-        </WorkspaceProvider>
+        {/* Inside the theme for the same reason the theme is inside the query
+            client: it is a preference with the same shape, and the half of it
+            that is *not* a preference — `config.ui.locale` — arrives as a
+            query. Above everything that renders copy, which is everything. */}
+        <I18nProvider>
+          {/* Which workspace the UI is showing. Above the router because the
+              sidebar, the Files page and the socket all read it, and two copies
+              would let the switcher and the file listing disagree. */}
+          <WorkspaceProvider>
+            {/* Which agent the *next* conversation starts on. Beside the
+                workspace because the two answer the pair of questions a
+                conversation is opened with: where it works and who does it. */}
+            <AgentProvider>
+              {/* One provider, one shared delay timer — so a row of icon buttons
+                  behaves like a control strip rather than eight separate waits. */}
+              <TooltipProvider delayDuration={400} skipDelayDuration={300}>
+                {children}
+                <LoginOverlay />
+                {/* Above the login overlay in the tree, because on an unclaimed
+                    install `/api/auth/me` also 401s and both would otherwise be
+                    showing — and this is the one that can actually get the user
+                    in. It renders itself only when the server says setup is
+                    needed, so a claimed install never sees it. */}
+                <SetupOverlay />
+                <Toaster />
+              </TooltipProvider>
+            </AgentProvider>
+          </WorkspaceProvider>
+        </I18nProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

@@ -49,6 +49,8 @@ import { createRuntime, type GhostRuntime } from '@ghostai/runtime';
 import { HubApprovalGate, SessionHub, createServer, type GhostServer } from '@ghostai/server';
 import pc from 'picocolors';
 
+import { translationsFor, type CliT } from './i18n.js';
+
 import { createServerRuntime } from './server-runtime.js';
 
 export interface ServeOptions {
@@ -278,39 +280,39 @@ export interface ServeCommandOptions extends ServeOptions {
 }
 
 /** What an operator needs to know in the second after it starts. */
-export function banner(running: RunningServer, colors: boolean | undefined): string {
+export function banner(running: RunningServer, colors: boolean | undefined, t: CliT): string {
   const c = pc.createColors(colors);
   const authEnabled = running.server.config.server.auth.enabled;
   const host = running.server.config.server.host;
   const instance = running.runtime.instance;
 
   const rows: [string, string][] = [
-    ['URL', c.cyan(running.url)],
+    [t('serve.url'), c.cyan(running.url)],
     [
-      'Auth',
+      t('serve.auth'),
       authEnabled
-        ? c.green('enabled')
+        ? c.green(t('serve.authEnabled'))
         : // Not a warning for its own sake: `assertBootPolicy` already refused
           // the dangerous version of this, so what is left is a loopback bind
           // that anyone with an account on this machine can drive.
-          c.yellow(`disabled — anything that can reach ${host} can drive this agent`),
+          c.yellow(t('serve.authDisabled', { host })),
     ],
     [
-      'Agent',
+      t('serve.agent'),
       running.runtime.configured && instance !== null
         ? `${instanceLabel(instance)} · ${running.runtime.model}`
-        : c.yellow('not configured — add a provider in the UI, or run `ghost init`'),
+        : c.yellow(t('serve.agentUnconfigured')),
     ],
-    ['Workspace', running.runtime.jail.root],
-    ['UI', running.ui ?? c.dim('not built — serving the API only (build @ghostai/web to add it)')],
+    [t('serve.workspace'), running.runtime.jail.root],
+    [t('serve.ui'), running.ui ?? c.dim(t('serve.uiUnbuilt'))],
   ];
 
   const channels = running.channels.channels.map((channel) => channel.id);
-  if (channels.length > 0) rows.push(['Channels', channels.join(', ')]);
+  if (channels.length > 0) rows.push([t('serve.channels'), channels.join(', ')]);
 
   const width = Math.max(...rows.map(([label]) => label.length));
   const lines = rows.map(([label, value]) => `  ${c.dim(label.padEnd(width))}  ${value}`);
-  const body = `${c.bold('GhostAI is listening.')}\n\n${lines.join('\n')}\n`;
+  const body = `${c.bold(t('serve.listening'))}\n\n${lines.join('\n')}\n`;
 
   // Below the table rather than in it, because it is the one thing the operator
   // has to *act* on and a row in a list of five reads as another status line.
@@ -320,11 +322,11 @@ export function banner(running: RunningServer, colors: boolean | undefined): str
   const setup =
     running.setupCode === undefined
       ? ''
-      : `\n${c.bold('First run.')} Open the URL above and enter this one-time code:\n\n` +
+      : `\n${c.bold(t('serve.firstRun'))} ${t('serve.firstRunBody')}\n\n` +
         `      ${c.cyan(c.bold(running.setupCode))}\n\n` +
-        `  ${c.dim('It works once, and stops working as soon as you set a password.')}\n`;
+        `  ${c.dim(t('serve.codeOnce'))}\n`;
 
-  return `${body}${setup}\n${c.dim('Press Ctrl-C to stop.')}\n`;
+  return `${body}${setup}\n${c.dim(t('serve.pressCtrlC'))}\n`;
 }
 
 /**
@@ -337,7 +339,10 @@ export function banner(running: RunningServer, colors: boolean | undefined): str
 export async function serveCommand(options: ServeCommandOptions = {}): Promise<number> {
   const out = options.out ?? process.stdout;
   const running = await startServer(options);
-  out.write(banner(running, options.colors));
+  // After the server, so the install's own `ui.locale` is available — the same
+  // order `chatCommand` uses and for the same reason.
+  const { t } = translationsFor(options.env ?? process.env, running.runtime.config.ui.locale);
+  out.write(banner(running, options.colors, t));
 
   await new Promise<void>((finish) => {
     let done = false;
@@ -372,6 +377,6 @@ export async function serveCommand(options: ServeCommandOptions = {}): Promise<n
   });
 
   await running.close();
-  out.write('Stopped.\n');
+  out.write(`${t('serve.stopped')}\n`);
   return 0;
 }

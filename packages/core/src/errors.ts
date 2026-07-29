@@ -12,7 +12,15 @@
  * `setup()` — and come back out of a `catch` still identifiable. `toGhostError`
  * is the funnel: every `catch` block normalises through it, so an `unknown` from
  * anywhere becomes a typed value exactly once, at the boundary.
+ *
+ * The `@ghostai/i18n` import is **type-only and must stay that way**. It is
+ * erased under `verbatimModuleSyntax`, so `core` gains no runtime dependency on
+ * i18next and there is no cycle — `i18n` is a leaf that depends on nothing here.
+ * A value import would put the whole translation layer in front of every package
+ * that throws.
  */
+
+import type { SharedMessageKey } from '@ghostai/i18n';
 
 export const ERROR_KINDS = [
   /** Malformed or unloadable configuration. */
@@ -79,6 +87,22 @@ export interface GhostErrorOptions {
    */
   readonly details?: Readonly<Record<string, unknown>>;
   readonly cause?: unknown;
+  /**
+   * The same sentence as `message`, addressed as a resource key.
+   *
+   * `message` stays authoritative and is never replaced: logs, pipes and `curl`
+   * want the English original, and a consumer that does not localise keeps
+   * working unchanged. This is the *second* channel, read only where a person
+   * is being addressed in a known locale — the CLI's `describeError` and the
+   * web's error renderers.
+   *
+   * Typed against the `shared` bundle through a type-only import, so a `throw`
+   * in `@ghostai/runtime` cannot name a string that lives in the browser's
+   * bundle or one that does not exist at all.
+   */
+  readonly messageKey?: SharedMessageKey;
+  /** Interpolation values for `messageKey` — i18next's `{{name}}` slots. */
+  readonly messageParams?: Readonly<Record<string, string | number>>;
 }
 
 export class GhostError extends Error {
@@ -89,12 +113,19 @@ export class GhostError extends Error {
   readonly kind: ErrorKind;
   readonly retryable: boolean;
   readonly details: Readonly<Record<string, unknown>>;
+  // Declared as `| undefined` rather than optional (`?:`) because
+  // `exactOptionalPropertyTypes` is on: an optional property may not be
+  // *assigned* `undefined`, which is exactly what an unkeyed error does.
+  readonly messageKey: SharedMessageKey | undefined;
+  readonly messageParams: Readonly<Record<string, string | number>> | undefined;
 
   constructor(kind: ErrorKind, message: string, options: GhostErrorOptions = {}) {
     super(message, options.cause === undefined ? undefined : { cause: options.cause });
     this.kind = kind;
     this.retryable = options.retryable ?? RETRYABLE_BY_KIND[kind];
     this.details = options.details ?? {};
+    this.messageKey = options.messageKey;
+    this.messageParams = options.messageParams;
   }
 }
 

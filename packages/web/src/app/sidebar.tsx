@@ -33,6 +33,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useState, type JSX, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { WebKey } from '@/i18n/keys.js';
 
 import { cn } from '@/lib/cn.js';
 import { api } from '@/lib/api.js';
@@ -55,16 +57,16 @@ import { useWorkspace } from '@/workspaces/workspace-context.js';
 
 interface NavItem {
   readonly to: string;
-  readonly label: string;
+  readonly label: WebKey;
   readonly icon: typeof FolderOpen;
 }
 
 const NAV: readonly NavItem[] = [
-  { to: '/agents', label: 'Agents', icon: BrainCircuit },
-  { to: '/workspaces', label: 'Workspaces', icon: Boxes },
-  { to: '/files', label: 'Files', icon: FolderOpen },
-  { to: '/settings', label: 'Settings', icon: Settings },
-  { to: '/tokens', label: 'Tokens', icon: Palette },
+  { to: '/agents', label: 'nav.agents', icon: BrainCircuit },
+  { to: '/workspaces', label: 'nav.workspaces', icon: Boxes },
+  { to: '/files', label: 'nav.files', icon: FolderOpen },
+  { to: '/settings', label: 'nav.settings', icon: Settings },
+  { to: '/tokens', label: 'nav.tokens', icon: Palette },
 ];
 
 /**
@@ -75,9 +77,10 @@ const NAV: readonly NavItem[] = [
  * and a uuid is not a name for those, it is an admission that nothing named
  * them.
  */
-const UNTITLED = 'New conversation';
+const UNTITLED = 'sessions.untitled';
 
 export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): JSX.Element {
+  const { t } = useTranslation();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const { workspaceId } = useWorkspace();
   const { agentId } = useAgent();
@@ -140,7 +143,7 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
       refreshSessions();
     },
     onError: () => {
-      toast.error('Could not rename the conversation');
+      toast.error(t('sessions.renameFailed'));
     },
   });
 
@@ -153,7 +156,7 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
       if (key === attached) void navigate({ to: '/', search: {} });
     },
     onError: () => {
-      toast.error('Could not delete the conversation');
+      toast.error(t('sessions.deleteFailed'));
     },
   });
 
@@ -163,7 +166,7 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
         {/* Labelled the same way the session list is, by the same component: it
             is a named group in this column, and the label is what makes the
             control below it self-describing rather than an icon and a word. */}
-        <Section title="Workspace">
+        <Section title={t('sessions.workspaceHeading')}>
           <WorkspaceSwitcher
             rowClassName="sidebar__link"
             {...(onNavigate === undefined ? {} : { onNavigate })}
@@ -171,7 +174,7 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
         </Section>
       </div>
 
-      <nav aria-label="Sections" className="stack sidebar__nav">
+      <nav aria-label={t('shell.sections')} className="stack sidebar__nav">
         {/* A row in this list rather than a button above it. It goes to the
             same place the rows below it go — a screen — and giving it a
             different shape said it was a different *kind* of thing, which it
@@ -184,7 +187,7 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
           onClick={startChat}
         >
           <Plus />
-          <span className="sidebar__link-label truncate">New session</span>
+          <span className="sidebar__link-label truncate">{t('sessions.newSession')}</span>
         </button>
 
         {NAV.map(({ to, label, icon: Icon }) => (
@@ -198,16 +201,16 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
             {...(isActive(pathname, to) ? { 'aria-current': 'page' as const } : {})}
           >
             <Icon />
-            <span className="sidebar__link-label truncate">{label}</span>
+            <span className="sidebar__link-label truncate">{t(label)}</span>
           </Link>
         ))}
       </nav>
 
-      <Section title="Sessions">
+      <Section title={t('sessions.heading')}>
         <ScrollArea className="sidebar__sessions">
           <ul className="stack sidebar__session-list">
             {rows.map((session) => {
-              const title = session.title === '' ? UNTITLED : session.title;
+              const title = session.title === '' ? t(UNTITLED) : session.title;
               const current = session.key === attached;
 
               if (renaming === session.key) {
@@ -261,7 +264,7 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
                         variant="ghost"
                         size="icon"
                         className="sidebar__session-actions"
-                        aria-label={`Actions for ${title}`}
+                        aria-label={t('sessions.actionsFor', { title })}
                       >
                         <MoreHorizontal />
                       </Button>
@@ -290,10 +293,10 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
             })}
 
             {sessions.isSuccess && rows.length === 0 && (
-              <li className="sidebar__note">No conversations yet.</li>
+              <li className="sidebar__note">{t('sessions.none')}</li>
             )}
             {sessions.isError && (
-              <li className="sidebar__note sidebar__note--error">Could not load sessions.</li>
+              <li className="sidebar__note sidebar__note--error">{t('sessions.loadFailed')}</li>
             )}
           </ul>
         </ScrollArea>

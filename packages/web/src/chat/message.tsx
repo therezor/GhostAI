@@ -15,11 +15,14 @@
  */
 
 import { AlertCircle } from 'lucide-react';
+import type { WebKey } from '@/i18n/keys.js';
 import { useState, type JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { ApprovalScope } from '@ghostai/protocol';
 
 import { cn } from '@/lib/cn.js';
+import { useFormat } from '@/lib/use-format.js';
 import { Badge } from '@/components/ui/badge.js';
 import { Button } from '@/components/ui/button.js';
 import { AutoGrowTextarea } from '@/components/auto-grow-textarea.js';
@@ -93,6 +96,7 @@ function UserMessage({
   readonly busy: boolean;
   readonly onAction: (action: MessageAction) => void;
 }): JSX.Element {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(item.text);
 
@@ -114,7 +118,7 @@ function UserMessage({
           }}
         >
           <AutoGrowTextarea
-            aria-label="Edit message"
+            aria-label={t('chat.editMessage')}
             value={draft}
             autoFocus
             onChange={(event) => {
@@ -283,11 +287,11 @@ function TurnMessage({
  * stops short of what was asked, and the user is otherwise left to infer it
  * from an answer that simply ends.
  */
-const STOP_REASONS: Record<string, string> = {
-  aborted: 'Stopped.',
-  max_iterations: 'Stopped after reaching the iteration limit for one turn.',
-  wall_timeout: 'Stopped after reaching the time limit for one turn.',
-  error: 'The turn ended with an error.',
+const STOP_REASONS: Record<string, WebKey> = {
+  aborted: 'chat.stopReasons.aborted',
+  max_iterations: 'chat.stopReasons.max_iterations',
+  wall_timeout: 'chat.stopReasons.wall_timeout',
+  error: 'chat.stopReasons.error',
 };
 
 function TurnFooter({
@@ -301,12 +305,21 @@ function TurnFooter({
   readonly sessionKey: string | undefined;
   readonly onAction: (action: MessageAction) => void;
 }): JSX.Element | null {
+  // Before the `return null` below: a hook may not be called conditionally, and
+  // this component has an early exit.
+  const { t } = useTranslation();
+  const fmt = useFormat();
+
   // The footer now always renders on a finished turn, because it carries the
   // action bar. It is still one footer rather than two — a row of buttons under
   // a row of metadata would be two things saying "this turn is over".
   if (!turn.done) return null;
 
-  const reason = turn.stopReason === undefined ? undefined : STOP_REASONS[turn.stopReason];
+  // The key, then the sentence. `complete` is absent from the map on purpose,
+  // so an unlisted reason stays `undefined` and renders no footer line at all
+  // rather than resolving to a missing key.
+  const reasonKey = turn.stopReason === undefined ? undefined : STOP_REASONS[turn.stopReason];
+  const reason = reasonKey === undefined ? undefined : t(reasonKey);
   const usage = turn.usage;
   // Narrowed here rather than asserted inside the callbacks below: a `!` in a
   // closure is a claim the compiler cannot check at the point it runs.
@@ -321,10 +334,10 @@ function TurnFooter({
       {reason !== undefined && <span className="turn__stop-reason">{reason}</span>}
       {usage !== undefined && (
         <span className="turn__usage">
-          {usage.promptTokens.toLocaleString()} in · {usage.completionTokens.toLocaleString()} out
+          {fmt.tokens(usage.promptTokens)} in · {fmt.tokens(usage.completionTokens)} out
           {usage.cachedTokens !== undefined &&
             usage.cachedTokens > 0 &&
-            ` · ${usage.cachedTokens.toLocaleString()} cached`}
+            ` · ${fmt.tokens(usage.cachedTokens)} cached`}
         </span>
       )}
       {turn.iterations > 1 && <span>{turn.iterations} iterations</span>}

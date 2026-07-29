@@ -1,13 +1,17 @@
 /**
  * The first-run wizard, as a state machine with no DOM in it.
  *
- * Four steps, and the split between the first two and the last two is the only
- * structural idea here. **Access is mandatory and configuration is not.** A
- * server that nobody has claimed is a shell-capable agent with no password, so
- * `code` and `password` have to complete. A server with no model is merely an
- * install that cannot chat yet — files, settings, workspaces and notifications
- * all work — so `provider` and `model` are skippable, and skipping them lands
- * the operator in a working app rather than in a dead end.
+ * Five steps, and the split between the credential pair and everything else is
+ * the only structural idea here. **Access is mandatory and configuration is
+ * not.** A server that nobody has claimed is a shell-capable agent with no
+ * password, so `code` and `password` have to complete. A server with no model is
+ * merely an install that cannot chat yet — files, settings, workspaces and
+ * notifications all work — so `provider` and `model` are skippable, and skipping
+ * them lands the operator in a working app rather than in a dead end.
+ *
+ * `language` sits ahead of all of it because every screen after it is prose: a
+ * wizard that asked for a password first would have asked in a language the
+ * operator may not read.
  *
  * Kept as a module of pure functions rather than as state inside the overlay so
  * that the ordering, the skip rules and the "what does Back mean here" question
@@ -15,7 +19,9 @@
  * owns which question comes next.
  */
 
-export const SETUP_STEPS = ['code', 'password', 'provider', 'model', 'done'] as const;
+import type { TFunction } from 'i18next';
+
+export const SETUP_STEPS = ['language', 'code', 'password', 'provider', 'model', 'done'] as const;
 export type SetupStep = (typeof SETUP_STEPS)[number];
 
 /**
@@ -23,8 +29,13 @@ export type SetupStep = (typeof SETUP_STEPS)[number];
  *
  * `code` and `password` are absent deliberately: skipping them would leave the
  * agent unclaimed, which is the state the wizard exists to end.
+ *
+ * `language` is skippable because it is the one step that has already answered
+ * itself: the browser asked for a language, the wizard is rendering in it, and
+ * skipping means "yes, that one". A first step that *had* to be answered would
+ * be a toll gate in front of the install.
  */
-const SKIPPABLE: ReadonlySet<SetupStep> = new Set<SetupStep>(['provider', 'model']);
+const SKIPPABLE: ReadonlySet<SetupStep> = new Set<SetupStep>(['language', 'provider', 'model']);
 
 export function isSkippable(step: SetupStep): boolean {
   return SKIPPABLE.has(step);
@@ -54,8 +65,12 @@ export function nextStep(step: SetupStep): SetupStep {
  * starts at `provider`, and a Back to `password` there would be offering to
  * rotate a password nobody came here to change.
  */
-export function previousStep(step: SetupStep, from: SetupStep = 'code'): SetupStep | null {
-  if (step === 'code' || step === 'password' || step === 'done') return null;
+export function previousStep(step: SetupStep, from: SetupStep = 'language'): SetupStep | null {
+  // `password` still cannot go back to `code` — the code was single-use and is
+  // already spent. `code` *can* go back to `language`, because nothing has been
+  // spent at that point and the language is the one answer a user is most
+  // likely to want to correct on sight.
+  if (step === 'password' || step === 'done') return null;
   if (step === from) return null;
   const index = SETUP_STEPS.indexOf(step);
   return SETUP_STEPS[index - 1] ?? null;
@@ -92,7 +107,7 @@ export function initialStep(input: {
   readonly setupRequired: boolean;
   readonly configured: boolean | undefined;
 }): SetupStep | null {
-  if (input.setupRequired) return 'code';
+  if (input.setupRequired) return 'language';
   // Not "assume the worst": an unanswerable question is not a fresh install.
   if (input.configured === undefined) return null;
   // Nothing to do: a claimed, configured install is just the app.
@@ -105,30 +120,26 @@ export interface SetupTitle {
   readonly note: string;
 }
 
-/** What each step says about itself. Here so the copy is testable and in one place. */
-export function titleOf(step: SetupStep): SetupTitle {
+/**
+ * What each step says about itself. Here so the copy is testable and in one place.
+ *
+ * `t` is a parameter rather than a hook because this is a pure function the
+ * state-machine tests drive without rendering anything — which is the property
+ * the whole module exists to have.
+ */
+export function titleOf(step: SetupStep, t: TFunction): SetupTitle {
   switch (step) {
+    case 'language':
+      return { title: t('setup.languageTitle'), note: t('setup.languageNote') };
     case 'code':
-      return {
-        title: 'Enter the setup code',
-        note: 'It was printed in the terminal that started this server. It works once.',
-      };
+      return { title: t('setup.codeTitle'), note: t('setup.codeNote') };
     case 'password':
-      return {
-        title: 'Choose a password',
-        note: 'This agent can read and write files and run commands. Pick something you would use for a login.',
-      };
+      return { title: t('setup.passwordTitle'), note: t('setup.passwordNote') };
     case 'provider':
-      return {
-        title: 'Add a model provider',
-        note: 'A local server like Ollama, or a cloud provider. You can add more later, including a second one of the same type.',
-      };
+      return { title: t('setup.providerTitle'), note: t('setup.providerNote') };
     case 'model':
-      return {
-        title: 'Choose a model',
-        note: 'Listed by the provider itself where it can be asked. Anything else can be typed in.',
-      };
+      return { title: t('setup.modelTitle'), note: t('setup.modelNote') };
     case 'done':
-      return { title: 'Ready', note: 'Everything else lives in Settings.' };
+      return { title: t('setup.doneTitle'), note: t('setup.doneNote') };
   }
 }

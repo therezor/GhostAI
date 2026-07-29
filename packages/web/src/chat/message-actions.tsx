@@ -26,6 +26,7 @@
 
 import { Check, Copy, GitBranch, Pencil, RefreshCw } from 'lucide-react';
 import type { JSX, ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button.js';
 import { useCopy } from '@/components/use-copy.js';
@@ -50,6 +51,7 @@ export function MessageActions({
   info,
   busy,
 }: MessageActionsProps): JSX.Element {
+  const { t } = useTranslation();
   const { copied, copy } = useCopy(text);
 
   return (
@@ -67,7 +69,7 @@ export function MessageActions({
         <Button
           variant="ghost"
           size="icon"
-          aria-label="Edit this message"
+          aria-label={t('chat.editThis')}
           disabled={busy}
           onClick={onEdit}
         >
@@ -79,7 +81,7 @@ export function MessageActions({
         <Button
           variant="ghost"
           size="icon"
-          aria-label="Regenerate the answer"
+          aria-label={t('chat.regenerate')}
           disabled={busy}
           onClick={onRegenerate}
         >
@@ -91,7 +93,7 @@ export function MessageActions({
         <Button
           variant="ghost"
           size="icon"
-          aria-label="Branch from here"
+          aria-label={t('chat.branchHere')}
           disabled={busy}
           onClick={onBranch}
         >

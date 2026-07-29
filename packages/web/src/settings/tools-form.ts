@@ -11,6 +11,7 @@
  */
 
 import type { ToolApprovalPolicy, ToolRisk, ToolsConfig } from '@ghostai/protocol';
+import type { TFunction } from 'i18next';
 
 import { msToSeconds, parseNumber, secondsToMs } from './fields.js';
 import type { PatchResult } from './fields.js';
@@ -45,14 +46,14 @@ export function toToolsForm(tools: ToolsConfig): ToolsForm {
   };
 }
 
-export function toToolsPatch(form: ToolsForm): PatchResult {
+export function toToolsPatch(form: ToolsForm, t: TFunction): PatchResult {
   const errors: Record<string, string> = {};
 
   // `min: 1` second, not zero — see the note at the top of the file.
-  const approvalTimeout = parseNumber(form.approvalTimeoutSeconds, { min: 1 });
-  const execTimeout = parseNumber(form.execTimeoutSeconds, { min: 0 });
-  const execMaxOutputBytes = parseNumber(form.execMaxOutputBytes, { integer: true, min: 1 });
-  const maxOutputChars = parseNumber(form.maxOutputChars, { integer: true, min: 1 });
+  const approvalTimeout = parseNumber(form.approvalTimeoutSeconds, t, { min: 1 });
+  const execTimeout = parseNumber(form.execTimeoutSeconds, t, { min: 0 });
+  const execMaxOutputBytes = parseNumber(form.execMaxOutputBytes, t, { integer: true, min: 1 });
+  const maxOutputChars = parseNumber(form.maxOutputChars, t, { integer: true, min: 1 });
 
   if (!approvalTimeout.ok) errors.approvalTimeoutSeconds = approvalTimeout.error;
   if (!execTimeout.ok) errors.execTimeoutSeconds = execTimeout.error;

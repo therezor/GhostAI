@@ -38,6 +38,19 @@ import { PROVIDERS, createProvider, nextInstanceId, type ProviderSpec } from '@g
 import { PROVIDER_CREDENTIAL_NAMESPACE, openVault } from '@ghostai/runtime';
 import pc from 'picocolors';
 
+import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from '@ghostai/i18n';
+
+import { translationsFor, type CliT } from './i18n.js';
+
+/** A language named in its own language, so the person who needs it can read it. */
+function nameOfLocale(locale: string): string {
+  try {
+    return new Intl.DisplayNames([locale], { type: 'language' }).of(locale) ?? locale;
+  } catch {
+    return locale;
+  }
+}
+
 /** How long the model list gets before the question falls back to typing. */
 const MODEL_FETCH_TIMEOUT_MS = 5000;
 
@@ -66,7 +79,12 @@ interface Ask {
   confirm(question: string, fallback: boolean): Promise<boolean>;
 }
 
-function createAsk(rl: Interface, out: NodeJS.WritableStream, colors: boolean | undefined): Ask {
+function createAsk(
+  rl: Interface,
+  out: NodeJS.WritableStream,
+  colors: boolean | undefined,
+  t: CliT,
+): Ask {
   const c = pc.createColors(colors);
 
   const text = async (question: string, fallback?: string): Promise<string> => {
@@ -129,14 +147,32 @@ function createAsk(rl: Interface, out: NodeJS.WritableStream, colors: boolean | 
           option.toLowerCase().startsWith(answer.toLowerCase()),
         );
         if (answer !== '' && named >= 0) return named;
-        out.write(c.yellow(`  Enter a number between 1 and ${String(options.length)}.\n`));
+        out.write(c.yellow(`  ${t('init.enterNumber', { max: options.length })}\n`));
       }
     },
 
+    /**
+     * Yes or no, in the operator's language *and* in English.
+     *
+     * The literal `y`/`n` this used to test is an English accident: a German
+     * operator types `j` for ja, and a prompt that reads `J/n` and then ignores
+     * `j` is worse than one that never offered the choice. The localised letters
+     * come from the bundle.
+     *
+     * English stays accepted alongside them rather than being replaced. A
+     * terminal is a place people type from muscle memory, `y` is what a decade
+     * of other tools trained, and there is no locale where accepting it costs
+     * anything — no language's negative begins with `y`, and the localised
+     * letter is tested first regardless.
+     */
     confirm: async (question: string, fallback: boolean): Promise<boolean> => {
-      const answer = (await text(question, fallback ? 'Y/n' : 'y/N')).toLowerCase();
-      if (answer.startsWith('y')) return true;
-      if (answer.startsWith('n')) return false;
+      const hint = fallback ? t('prompt.yesNoDefaultYes') : t('prompt.yesNoDefaultNo');
+      const answer = (await text(question, hint)).toLowerCase();
+      const yes = t('prompt.yes').toLowerCase();
+      const no = t('prompt.no').toLowerCase();
+
+      if (answer.startsWith(yes) || answer.startsWith('y')) return true;
+      if (answer.startsWith(no) || answer.startsWith('n')) return false;
       return fallback;
     },
   };
@@ -175,6 +211,8 @@ async function fetchModels(
 
 /** What the wizard collected, before anything is written. */
 interface Answers {
+  /** A BCP-47 tag, written to `ui.locale` — the same field the web UI reads. */
+  readonly locale: string;
   readonly workspace: string;
   readonly instanceId: string;
   readonly instance: ProviderConfig;
@@ -194,6 +232,7 @@ export async function initCommand(options: InitOptions = {}): Promise<number> {
   const input = options.input ?? process.stdin;
   const c = pc.createColors(options.colors);
   const listModels = options.listModels ?? fetchModels;
+  const { t } = translationsFor(options.env ?? process.env);
 
   const loaded: LoadedConfig = loadConfig({
     ...(options.home === undefined ? {} : { root: options.home }),
@@ -211,20 +250,20 @@ export async function initCommand(options: InitOptions = {}): Promise<number> {
   }
 
   const rl = createInterface({ input, output: out, terminal: true });
-  const ask = createAsk(rl, out, options.colors);
+  const ask = createAsk(rl, out, options.colors, t);
 
   try {
-    out.write(`${c.bold('Setting up GhostAI.')}\n\n`);
-    out.write(`  ${c.dim('Config')}  ${loaded.file}\n`);
+    out.write(`${c.bold(t('init.heading'))}\n\n`);
+    out.write(`  ${c.dim(t('init.config'))}  ${loaded.file}\n`);
     out.write(`  ${c.dim('Home')}    ${loaded.paths.root}\n\n`);
 
-    const answers = await collect(ask, out, loaded, listModels, c);
+    const answers = await collect(ask, out, loaded, listModels, c, t);
     write(answers, loaded, options);
 
-    out.write(`\n${c.bold('Done.')}\n\n`);
-    out.write(`  ${c.dim('Provider')}   ${answers.instanceId}\n`);
-    out.write(`  ${c.dim('Model')}      ${answers.model}\n`);
-    out.write(`  ${c.dim('Workspace')}  ${answers.workspace}\n\n`);
+    out.write(`\n${c.bold(t('init.done'))}\n\n`);
+    out.write(`  ${c.dim(t('init.provider'))}   ${answers.instanceId}\n`);
+    out.write(`  ${c.dim(t('init.model'))}      ${answers.model}\n`);
+    out.write(`  ${c.dim(t('init.workspace'))}  ${answers.workspace}\n\n`);
     out.write(
       `Run ${c.cyan('ghost chat')} to talk to it, or ${c.cyan('ghost serve')} for the UI.\n`,
     );
@@ -250,28 +289,43 @@ async function collect(
   loaded: LoadedConfig,
   listModels: NonNullable<InitOptions['listModels']>,
   c: ReturnType<typeof pc.createColors>,
+  t: CliT,
 ): Promise<Answers> {
-  const workspace = await ask.text('Workspace directory', loaded.paths.workspace);
+  // First, and for the same reason the browser wizard asks first: every
+  // question after this one is prose. Only offered when there is a choice —
+  // a build shipping one language would be asking which of one.
+  const locale =
+    SUPPORTED_LOCALES.length > 1
+      ? (SUPPORTED_LOCALES[
+          await ask.choose(
+            t('init.language'),
+            SUPPORTED_LOCALES.map((tag) => nameOfLocale(tag)),
+            Math.max(0, SUPPORTED_LOCALES.indexOf(loaded.config.ui.locale)),
+          )
+        ] ?? DEFAULT_LOCALE)
+      : loaded.config.ui.locale;
 
-  out.write('\nWhich provider?\n');
+  const workspace = await ask.text(t('init.workspaceDir'), loaded.paths.workspace);
+
+  out.write(`\n${t('init.whichProvider')}\n`);
   const specs = PROVIDERS;
   const chosenIndex = await ask.choose(
-    'Provider',
-    specs.map((spec) => `${spec.displayName}${spec.isLocal === true ? c.dim(' (local)') : ''}`),
+    t('init.provider'),
+    specs.map(
+      (spec) => `${spec.displayName}${spec.isLocal === true ? c.dim(t('init.local')) : ''}`,
+    ),
     specs.findIndex((spec) => spec.id === 'ollama'),
   );
   const spec = specs[chosenIndex];
   if (spec === undefined) throw new GhostError('config', 'No provider chosen');
 
-  const label = await ask.text(`Name for this endpoint`, spec.displayName);
-  const apiBase = await ask.text('API base', spec.defaultApiBase ?? '');
+  const label = await ask.text(t('init.endpointName'), spec.displayName);
+  const apiBase = await ask.text(t('init.apiBase'), spec.defaultApiBase ?? '');
 
   // Offered for local providers too: a LAN model server behind an
   // authenticating proxy is a real configuration, and the credential lookup
   // reads the vault for one now.
-  const apiKey = await ask.secret(
-    spec.isLocal === true ? 'API token (optional, blank to skip)' : 'API key',
-  );
+  const apiKey = await ask.secret(spec.isLocal === true ? t('init.apiToken') : t('init.apiKey'));
 
   const instanceId = nextInstanceId(spec.id, Object.keys(loaded.config.providers));
 
@@ -280,14 +334,15 @@ async function collect(
   let model: string;
   if (offered.length > 0) {
     out.write(`${String(offered.length)} models available.\n`);
-    const index = await ask.choose('Model', offered);
+    const index = await ask.choose(t('init.model'), offered);
     model = offered[index] ?? '';
   } else {
-    out.write(c.dim('Could not list models from this endpoint — type one instead.\n'));
-    model = await ask.text('Model');
+    out.write(c.dim(t('init.listFailed')));
+    model = await ask.text(t('init.model'));
   }
 
   return {
+    locale,
     workspace,
     instanceId,
     instance: {
@@ -317,6 +372,7 @@ function write(answers: Answers, loaded: LoadedConfig, options: InitOptions): vo
       },
     },
     providers: { ...loaded.config.providers, [answers.instanceId]: answers.instance },
+    ui: { ...loaded.config.ui, locale: answers.locale },
   });
 
   ensureDir(loaded.paths.root);

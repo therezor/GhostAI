@@ -24,6 +24,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type JSX, type SyntheticEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { DEFAULT_USERNAME, PASSWORD_MIN_LENGTH } from '@ghostai/protocol';
 
@@ -34,6 +35,7 @@ import { toast } from '@/components/ui/toast.js';
 import { Section, TextField } from './controls.js';
 
 export function AccountPanel(): JSX.Element {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
 
   // The name in force, which is the only place in the UI it can be read from —
@@ -86,12 +88,9 @@ export function AccountPanel(): JSX.Element {
 
   return (
     <form onSubmit={submit} className="stack">
-      <Section
-        title="Sign-in"
-        description="The username and password this server is reached with. Changing either signs out every other session, which is the point: the reason to rotate a credential is that the old one may be known."
-      >
+      <Section title={t('account.signIn')} description={t('account.desc')}>
         <TextField
-          label="Username"
+          label={t('account.username')}
           name="username"
           autoComplete="username"
           spellCheck={false}
@@ -101,7 +100,7 @@ export function AccountPanel(): JSX.Element {
         />
 
         <TextField
-          label="Current password"
+          label={t('account.currentPassword')}
           type="password"
           name="current-password"
           autoComplete="current-password"
@@ -112,7 +111,7 @@ export function AccountPanel(): JSX.Element {
         />
 
         <TextField
-          label="New password"
+          label={t('account.newPassword')}
           type="password"
           name="new-password"
           autoComplete="new-password"
@@ -123,7 +122,7 @@ export function AccountPanel(): JSX.Element {
         />
 
         <TextField
-          label="Confirm new password"
+          label={t('account.confirmNewPassword')}
           type="password"
           name="confirm-password"
           autoComplete="new-password"

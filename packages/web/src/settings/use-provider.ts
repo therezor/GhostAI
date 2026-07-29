@@ -17,6 +17,7 @@
  * unusable for exactly the case it is most needed in.
  */
 
+import type { TFunction } from 'i18next';
 import { useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { ConfigPatch, ProviderTestRequest, ProviderTestResponse } from '@ghostai/protocol';
@@ -233,14 +234,12 @@ export function useRemoveProvider(): {
  * for a transport fault it is already a full sentence naming the host and the
  * fault, so it is used as-is.
  */
-export function describeProbe(result: ProviderTestResponse, saved: boolean): string {
+export function describeProbe(result: ProviderTestResponse, saved: boolean, t: TFunction): string {
   const prefix = saved ? 'Saved — but ' : '';
 
   if (result.ok) {
     const count = result.models.length;
-    return count === 0
-      ? 'Reachable, though it listed no models.'
-      : `Reachable — ${String(count)} model${count === 1 ? '' : 's'} listed.`;
+    return count === 0 ? t('providers.reachableNoModels') : t('providers.reachable', { count });
   }
 
   switch (result.reason) {

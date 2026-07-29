@@ -30,6 +30,7 @@
     "@ghostai/agent": "workspace:*",
     "@ghostai/channels": "workspace:*",
     "@ghostai/core": "workspace:*",
+    "@ghostai/i18n": "workspace:*",
     "@ghostai/protocol": "workspace:*",
     "@ghostai/providers": "workspace:*",
     "@ghostai/runtime": "workspace:*",
@@ -38,6 +39,7 @@
     "@ghostai/tools": "workspace:*",
     "@ghostai/web": "workspace:*",
     "commander": "^13.0.0",
+    "i18next": "^26.3.6",
     "picocolors": "^1.1.0"
   },
   "devDependencies": {

@@ -8,6 +8,10 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { createWebI18n } from '@ghostai/i18n/web';
+
+/** English, resolved: these assertions compare the message a user would read. */
+const t = createWebI18n('en').getFixedT(null, 'web');
 
 import {
   formatList,
@@ -21,30 +25,30 @@ import {
 
 describe('parseNumber', () => {
   it('reads a number, trimming what a paste brings with it', () => {
-    expect(parseNumber(' 8192 ')).toEqual({ ok: true, value: 8192 });
+    expect(parseNumber(' 8192 ', t)).toEqual({ ok: true, value: 8192 });
   });
 
   it('refuses an empty field rather than reading it as zero', () => {
     // `Number('')` is 0, and 0 is a *meaningful* value for every duration in
     // the tree — it disables the limit. A cleared field must not silently do
     // that.
-    expect(parseNumber('')).toEqual({ ok: false, error: 'Required' });
-    expect(parseNumber('   ')).toEqual({ ok: false, error: 'Required' });
+    expect(parseNumber('', t)).toEqual({ ok: false, error: 'Required' });
+    expect(parseNumber('   ', t)).toEqual({ ok: false, error: 'Required' });
   });
 
   it('refuses text and infinities', () => {
-    expect(parseNumber('abc')).toEqual({ ok: false, error: 'Must be a number' });
-    expect(parseNumber('Infinity')).toEqual({ ok: false, error: 'Must be a number' });
+    expect(parseNumber('abc', t)).toEqual({ ok: false, error: 'Must be a number' });
+    expect(parseNumber('Infinity', t)).toEqual({ ok: false, error: 'Must be a number' });
   });
 
   it('enforces the bounds it is given', () => {
-    expect(parseNumber('0', { min: 1 })).toEqual({ ok: false, error: 'Must be at least 1' });
-    expect(parseNumber('3', { max: 2 })).toEqual({ ok: false, error: 'Must be at most 2' });
-    expect(parseNumber('1.5', { integer: true })).toEqual({
+    expect(parseNumber('0', t, { min: 1 })).toEqual({ ok: false, error: 'Must be at least 1' });
+    expect(parseNumber('3', t, { max: 2 })).toEqual({ ok: false, error: 'Must be at most 2' });
+    expect(parseNumber('1.5', t, { integer: true })).toEqual({
       ok: false,
       error: 'Must be a whole number',
     });
-    expect(parseNumber('1.5', { min: 0, max: 2 })).toEqual({ ok: true, value: 1.5 });
+    expect(parseNumber('1.5', t, { min: 0, max: 2 })).toEqual({ ok: true, value: 1.5 });
   });
 });
 

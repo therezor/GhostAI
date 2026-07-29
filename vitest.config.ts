@@ -22,6 +22,13 @@ const THRESHOLDS: Record<string, { lines: number; branches: number }> = {
   // Only the `.ts` half is measured — the components are `.tsx`, and Step 19's
   // Playwright run is what covers those.
   web: { lines: 85, branches: 80 },
+  // Above the default because the package is small and almost entirely pure
+  // decision logic: `locale.ts` is a negotiation with a fallback chain and
+  // `format.ts` is a set of `Intl` wrappers with threshold branches. Both are
+  // the kind of code where an untested branch is a language silently resolving
+  // to the wrong bundle rather than a crash — and there is no I/O here to make
+  // the bar expensive to hold.
+  i18n: { lines: 90, branches: 90 },
   providers: { lines: 80, branches: 75 },
   tools: { lines: 80, branches: 75 },
   mcp: { lines: 80, branches: 75 },

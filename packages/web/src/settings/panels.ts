@@ -14,50 +14,63 @@
  * the plan does not have, or from being built and still advertising one.
  */
 
+import type { WebKey } from '@/i18n/keys.js';
+
 export interface SettingsPanel {
   /** Also the tab value and the `?panel=` search parameter. */
   readonly id: string;
-  readonly label: string;
+  /**
+   * Resource keys rather than words, because this table is read as data — the
+   * tab strip, the heading and `panels.test.ts` all index into it. A `string`
+   * here would widen the literal on the way in and hand `t()` something it
+   * cannot check, which is precisely the mistake this layer exists to catch.
+   */
+  readonly label: WebKey;
   /** One line under the heading, saying what the panel governs. */
-  readonly summary: string;
+  readonly summary: WebKey;
   /** The phase that builds it. Absent means it is built now. */
   readonly phase?: number;
 }
 
 const PROVIDERS_PANEL: SettingsPanel = {
   id: 'providers',
-  label: 'Providers',
-  summary: 'Endpoints and API keys. Keys are written to the vault and never read back.',
+  label: 'settings.panels.providers.label',
+  summary: 'settings.panels.providers.summary',
 };
 
 export const SETTINGS_PANELS: readonly SettingsPanel[] = [
   PROVIDERS_PANEL,
   {
     id: 'tools',
-    label: 'Tools',
-    summary: 'What the agent may do on its own, and what it has to ask about first.',
+    label: 'settings.panels.tools.label',
+    summary: 'settings.panels.tools.summary',
   },
   {
     id: 'account',
-    label: 'Account',
-    summary: 'The username and password this server is signed into with.',
+    label: 'settings.panels.account.label',
+    summary: 'settings.panels.account.summary',
+  },
+  {
+    id: 'appearance',
+    label: 'settings.panels.appearance.label',
+    summary: 'settings.panels.appearance.summary',
   },
   {
     id: 'extensions',
-    label: 'Extensions',
-    summary: 'MCP servers, skills, channels and plugins.',
+    label: 'settings.panels.extensions.label',
+    summary: 'settings.panels.extensions.summary',
     phase: 3,
   },
   {
     id: 'automation',
-    label: 'Automation',
-    summary: 'Scheduled jobs and the heartbeat that runs them unattended.',
+    label: 'settings.panels.automation.label',
+    summary: 'settings.panels.automation.summary',
     phase: 5,
   },
   {
     id: 'knowledge',
-    label: 'Knowledge',
-    summary: 'The retrieval index behind `@kb:` mentions.',
+    label: 'settings.panels.knowledge.label',
+    summary: 'settings.panels.knowledge.summary',
     phase: 5,
   },
 ];
@@ -66,8 +79,8 @@ export const DEFAULT_PANEL_ID: string = PROVIDERS_PANEL.id;
 
 /** One unbuilt system, listed inside the panel that will hold it. */
 export interface PlannedSystem {
-  readonly name: string;
-  readonly detail: string;
+  readonly name: WebKey;
+  readonly detail: WebKey;
   readonly phase: number;
 }
 
@@ -80,18 +93,38 @@ export interface PlannedSystem {
  */
 export const PLANNED_SYSTEMS: Readonly<Record<string, readonly PlannedSystem[]>> = {
   extensions: [
-    { name: 'MCP servers', detail: 'Connect tool servers over stdio, SSE or HTTP.', phase: 3 },
-    { name: 'Skills', detail: 'Reusable instructions an agent can pin.', phase: 3 },
-    { name: 'OAuth connections', detail: 'Authorise a provider without pasting a key.', phase: 3 },
-    { name: 'Channels', detail: 'Reach the same agent from Telegram.', phase: 3 },
-    { name: 'Plugins', detail: 'Install and remove capabilities from the UI.', phase: 4 },
+    {
+      name: 'settings.planned.mcpServers.name',
+      detail: 'settings.planned.mcpServers.detail',
+      phase: 3,
+    },
+    { name: 'settings.planned.skills.name', detail: 'settings.planned.skills.detail', phase: 3 },
+    { name: 'settings.planned.oauth.name', detail: 'settings.planned.oauth.detail', phase: 3 },
+    {
+      name: 'settings.planned.channels.name',
+      detail: 'settings.planned.channels.detail',
+      phase: 3,
+    },
+    { name: 'settings.planned.plugins.name', detail: 'settings.planned.plugins.detail', phase: 4 },
   ],
   automation: [
-    { name: 'Scheduled jobs', detail: 'Cron and one-shot runs against a session.', phase: 5 },
-    { name: 'Heartbeat', detail: 'A recurring pass over the workspace task file.', phase: 5 },
+    {
+      name: 'settings.planned.scheduledJobs.name',
+      detail: 'settings.planned.scheduledJobs.detail',
+      phase: 5,
+    },
+    {
+      name: 'settings.planned.heartbeat.name',
+      detail: 'settings.planned.heartbeat.detail',
+      phase: 5,
+    },
   ],
   knowledge: [
-    { name: 'Knowledge base', detail: 'Ingest documents and search them from a turn.', phase: 5 },
+    {
+      name: 'settings.planned.knowledgeBase.name',
+      detail: 'settings.planned.knowledgeBase.detail',
+      phase: 5,
+    },
   ],
 };
 

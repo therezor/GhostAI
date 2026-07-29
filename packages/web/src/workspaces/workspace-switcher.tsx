@@ -25,6 +25,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ChevronDown, Settings2 } from 'lucide-react';
 import type { JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button.js';
 import {
@@ -56,6 +57,7 @@ export function WorkspaceSwitcher({
    */
   readonly rowClassName?: string;
 }): JSX.Element {
+  const { t } = useTranslation();
   const { workspaceId, select } = useWorkspace();
 
   const workspaces = useQuery({
@@ -114,7 +116,7 @@ export function WorkspaceSwitcher({
           <DropdownMenuItem asChild>
             <Link to="/workspaces" onClick={onNavigate}>
               <Settings2 />
-              Manage workspaces…
+              {t('providers.manage')}
             </Link>
           </DropdownMenuItem>
         </DropdownMenuContent>

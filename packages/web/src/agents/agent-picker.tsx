@@ -27,6 +27,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { BrainCircuit, ChevronDown, Settings2 } from 'lucide-react';
 import type { JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { DEFAULT_AGENT_ID } from '@ghostai/protocol';
 
@@ -47,6 +48,7 @@ import { toast } from '@/components/ui/toast.js';
 import { useAgent } from './agent-context.js';
 
 export function AgentPicker({ sessionKey }: { readonly sessionKey?: string }): JSX.Element {
+  const { t } = useTranslation();
   const { agentId: preferred, select, adopt } = useAgent();
   const queryClient = useQueryClient();
 
@@ -128,7 +130,7 @@ export function AgentPicker({ sessionKey }: { readonly sessionKey?: string }): J
         <DropdownMenuItem asChild>
           <Link to="/agents">
             <Settings2 />
-            Manage agents…
+            {t('agents.manage')}
           </Link>
         </DropdownMenuItem>
       </DropdownMenuContent>

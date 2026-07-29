@@ -16,6 +16,11 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { translations } from './i18n.js';
+
+/** English, resolved: the banner assertions compare the text an operator reads. */
+const { t } = translations('en');
+
 import type { ChannelFactory } from '@ghostai/channels';
 import type { Config, StatusResponse } from '@ghostai/protocol';
 import { WebSocket } from 'ws';
@@ -223,7 +228,7 @@ describe('the banner', () => {
   it('says where it is, what it is running, and whether auth is on', async () => {
     const server = await start(home());
 
-    const text = banner(server, false);
+    const text = banner(server, false, t);
 
     expect(text).toContain(server.url);
     expect(text).toContain('enabled');
@@ -237,7 +242,7 @@ describe('the banner', () => {
   it('warns when anything that can reach the port can drive the agent', async () => {
     const server = await start(home({ auth: { enabled: false } }), { password: undefined });
 
-    expect(banner(server, false)).toContain('can drive this agent');
+    expect(banner(server, false, t)).toContain('can drive this agent');
   });
 });
 

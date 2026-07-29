@@ -1,0 +1,407 @@
+{
+  "account": {
+    "confirmNewPassword": "Confirm new password",
+    "currentPassword": "Current password",
+    "desc": "The username and password this server is reached with. Changing either signs out every other session, which is the point: the reason to rotate a credential is that the old one may be known.",
+    "newPassword": "New password",
+    "passwordLabel": "Password",
+    "signIn": "Sign-in",
+    "signInTitle": "Sign in",
+    "username": "Username",
+    "usernameLabel": "Username"
+  },
+  "agents": {
+    "backToAgents": "Back to agents",
+    "contextWindow": "Context window (tokens)",
+    "deleteAgent": "Delete this agent",
+    "deleteTitle": "Delete this agent?",
+    "enabled": "Enabled",
+    "filter": "Filter agents by name",
+    "identity": "Identity",
+    "identityDesc": "What this agent is called.",
+    "limits": "Limits",
+    "limitsDesc": "The budget a turn runs inside.",
+    "loading": "Loading agent…",
+    "loadingTools": "Loading tools…",
+    "manage": "Manage agents…",
+    "maxOutputTokens": "Max output tokens",
+    "maxToolIterations": "Max tool iterations",
+    "model": "Model",
+    "modelSection": "Model",
+    "namePlaceholder": "Code Reviewer",
+    "newAgent": "New agent",
+    "newHint": "It starts as a copy of the default agent — its model, budget, prompt and permissions — and is its own from there.",
+    "newTitle": "New agent",
+    "note": "Each holds its own prompt, model, permissions and memory. A new one is created as a copy of the default agent’s.",
+    "onlyPicked": "Only the tools I pick",
+    "promptDesc": "Everything this agent is told before a conversation starts. It is yours to rewrite — the workspace jail and the tool approvals are enforced in code and do not read a word of it.",
+    "provider": "Provider",
+    "providerDefault": "The provider’s own",
+    "reachNetwork": "Reach the network",
+    "reasoningEffort": "Reasoning effort",
+    "resetBuiltin": "Reset to the built-in",
+    "runCommands": "Run commands",
+    "systemPrompt": "System prompt",
+    "temperature": "Temperature",
+    "title": "Agents",
+    "toolsDesc": "Which tools this agent may call, and what it has to ask about first.",
+    "toolsSection": "Tools",
+    "toolTimeout": "Tool timeout (seconds)",
+    "turnTimeout": "Turn timeout (seconds)",
+    "writeFiles": "Write files"
+  },
+  "chat": {
+    "approvalClosed": "The approval window closed. The call was refused.",
+    "attachFile": "Attach a file",
+    "branchHere": "Branch from here",
+    "editMessage": "Edit message",
+    "editThis": "Edit this message",
+    "externalImage": "External image — opens in a new tab rather than loading here",
+    "jumpToLatest": "Jump to latest",
+    "mentions": "Mentions",
+    "message": "Message",
+    "noModel": "No model configured yet",
+    "notices": {
+      "approval_denied": "Denied",
+      "degraded": "Degraded request",
+      "prompt_injection": "Possible prompt injection",
+      "provider_fallback": "Provider fallback",
+      "truncated_history": "History trimmed"
+    },
+    "offline": "Offline — messages will be sent when the connection returns.",
+    "queued_one": "{{count}} message waiting.",
+    "queued_other": "{{count}} messages waiting.",
+    "ready": "Ready when you are.",
+    "reasoning": "Reasoning",
+    "regenerate": "Regenerate the answer",
+    "send": "Send",
+    "stopReasons": {
+      "aborted": "Stopped.",
+      "error": "The turn ended with an error.",
+      "max_iterations": "Stopped after reaching the iteration limit for one turn.",
+      "wall_timeout": "Stopped after reaching the time limit for one turn."
+    },
+    "stopTurn": "Stop the current turn",
+    "turnRunning": "A turn is running. Enter queues your message.",
+    "welcomeHint": "Enter to send · Shift+Enter for a new line · @ to scope the turn",
+    "welcomeNote": "The agent reads and writes inside its workspace, and asks before it runs a command or reaches the network. Every tool call shows up in the transcript with its arguments and its output."
+  },
+  "common": {
+    "actions": "Actions",
+    "backToChat": "Back to chat",
+    "close": "Close",
+    "dismiss": "Dismiss",
+    "loading": "Loading…",
+    "markAllRead": "Mark all read",
+    "markRead": "Mark read",
+    "name": "Name",
+    "navigation": "Navigation",
+    "newFile": "New file",
+    "newFolder": "New folder",
+    "noMatches": "Nothing here matches “{{filter}}”. {{count}} hidden.",
+    "noMatches_one": "",
+    "noMatches_other": "",
+    "notFound": "Not found",
+    "notFoundBody": "There is nothing at this address.",
+    "nothingHere": "Nothing here yet.",
+    "seeAll": "See all",
+    "status": "Status",
+    "type": "Type"
+  },
+  "connection": {
+    "closed": "Offline",
+    "connecting": "Connecting",
+    "open": "Connected",
+    "reconnecting": "Reconnecting"
+  },
+  "context": {
+    "intro": "What a turn on this conversation would send to the model right now.",
+    "labels": {
+      "messages": "Conversation",
+      "other": "Unattributed",
+      "systemPrompt": "System prompt",
+      "tools": "Tool definitions"
+    },
+    "measuring": "Measuring…",
+    "messagesInWindow_one": "{{count}} message in the window",
+    "messagesInWindow_other": "{{count}} messages in the window",
+    "nothingYet": "Nothing to measure yet — this conversation has not started. Send a message and the budget appears here.",
+    "section": "Section",
+    "share": "Share",
+    "systemPrompt": "System prompt",
+    "title": "Context",
+    "tokens": "Tokens",
+    "usageBySection": "Token usage by section"
+  },
+  "files": {
+    "breadcrumb": "Breadcrumb",
+    "conflict": "This file changed on disk since it was opened — most likely the agent wrote to it. Your edits are still here. Reload to take the version on disk and lose them, or copy what you need out first.",
+    "discardTitle": "Discard your edits?",
+    "empty": "This directory is empty. Drop a file here to upload it.",
+    "filter": "Filter by name",
+    "folderContents_one": "Everything inside goes with it — {{count}} item.",
+    "folderContents_other": "Everything inside goes with it — {{count}} items.",
+    "folderEmpty": "This folder is empty.",
+    "lines_one": "{{count}} line",
+    "lines_other": "{{count}} lines",
+    "modified": "Modified",
+    "notText": "This file is not text, so there is nothing to show or edit here. Download it to open it in something that understands it.",
+    "preparingLink": "Preparing a link…",
+    "reading": "Reading…",
+    "size": "Size",
+    "title": "Files",
+    "tooBig": "This file is {{size}} and only the first part was read. Saving would delete the rest, so it cannot be edited here — download it instead.",
+    "upload": "Upload files",
+    "uploaded_one": "Uploaded {{count}} file",
+    "uploaded_other": "Uploaded {{count}} files"
+  },
+  "nav": {
+    "agents": "Agents",
+    "files": "Files",
+    "settings": "Settings",
+    "tokens": "Tokens",
+    "workspaces": "Workspaces"
+  },
+  "notifications": {
+    "empty": "Automation runs and expired approvals report themselves here.",
+    "loadFailed": "Could not load notifications.",
+    "openConversation": "Open the conversation",
+    "title": "Notifications"
+  },
+  "providers": {
+    "apiBase": "API base",
+    "backToProviders": "Back to providers",
+    "checking": "Checking the connection…",
+    "chooseType": "Choose a type",
+    "connection": "Connection",
+    "connectionDesc": "Where to reach it, and what to open it with. Keys go to the encrypted vault and are never returned by the API.",
+    "deleteHint": "{{name}} is removed from the settings, and its saved key is deleted with it. Re-adding an endpoint with the same name does not bring the key back.",
+    "deleteProvider": "Delete this provider",
+    "deleteTitle": "Delete this provider?",
+    "enabled": "Enabled",
+    "endpoint": "Endpoint",
+    "identity": "Identity",
+    "identityDesc": "What this endpoint is called in the list.",
+    "loading": "Loading providers…",
+    "loadingOne": "Loading provider…",
+    "manage": "Manage workspaces…",
+    "models": "Models",
+    "modelsPlaceholder": "one model id per line",
+    "newHint": "One endpoint. The type is fixed once it exists — add the same type twice to run against two servers, and they keep separate keys.",
+    "newProvider": "New provider",
+    "newTitle": "New provider",
+    "none": "No providers yet. Add one, then choose a model on the agent that will use it.",
+    "panelDesc": "Each row is one endpoint. Add the same type more than once to run against two servers — they keep separate keys, and a key is written to the encrypted vault and never returned by the API.",
+    "reachable_one": "Reachable — {{count}} model listed.",
+    "reachable_other": "Reachable — {{count}} models listed.",
+    "reachableNoModels": "Reachable, though it listed no models.",
+    "title": "Providers"
+  },
+  "sessions": {
+    "actionsFor": "Actions for {{title}}",
+    "chat": "Chat",
+    "deleteFailed": "Could not delete the conversation",
+    "heading": "Sessions",
+    "loadFailed": "Could not load sessions.",
+    "newSession": "New session",
+    "none": "No conversations yet.",
+    "renameFailed": "Could not rename the conversation",
+    "untitled": "New conversation",
+    "workspaceHeading": "Workspace"
+  },
+  "settings": {
+    "appearance": {
+      "dark": "Dark",
+      "language": "Language",
+      "languageDesc": "What this install speaks. It applies to the web UI and to `ghost chat` on this server, not only to this browser.",
+      "languageHint": "`System` follows your browser until someone chooses otherwise.",
+      "languageTitle": "Language",
+      "light": "Light",
+      "system": "System",
+      "theme": "Colour scheme",
+      "themeDesc": "Whether the interface is light or dark. This one is yours alone — it is stored in this browser and never written to the config.",
+      "themeTitle": "Theme"
+    },
+    "fields": {
+      "mustBeAtLeast": "Must be at least {{min}}",
+      "mustBeAtMost": "Must be at most {{max}}",
+      "mustBeNumber": "Must be a number",
+      "mustBeWhole": "Must be a whole number",
+      "required": "Required"
+    },
+    "loadError": "The settings file could not be read and defaults are in use. Saving here overwrites it. ({{error}})",
+    "loading": "Loading settings…",
+    "panels": {
+      "account": {
+        "label": "Account",
+        "summary": "The username and password this server is signed into with."
+      },
+      "appearance": {
+        "label": "Appearance",
+        "summary": "The language this install speaks, and whether it is light or dark."
+      },
+      "automation": {
+        "label": "Automation",
+        "summary": "Scheduled jobs and the heartbeat that runs them unattended."
+      },
+      "extensions": {
+        "label": "Extensions",
+        "summary": "MCP servers, skills, channels and plugins."
+      },
+      "knowledge": {
+        "label": "Knowledge",
+        "summary": "The retrieval index behind `@kb:` mentions."
+      },
+      "providers": {
+        "label": "Providers",
+        "summary": "Endpoints and API keys. Keys are written to the vault and never read back."
+      },
+      "tools": {
+        "label": "Tools",
+        "summary": "What the agent may do on its own, and what it has to ask about first."
+      }
+    },
+    "planned": {
+      "channels": {
+        "detail": "Reach the same agent from Telegram.",
+        "name": "Channels"
+      },
+      "heartbeat": {
+        "detail": "A recurring pass over the workspace task file.",
+        "name": "Heartbeat"
+      },
+      "knowledgeBase": {
+        "detail": "Ingest documents and search them from a turn.",
+        "name": "Knowledge base"
+      },
+      "mcpServers": {
+        "detail": "Connect tool servers over stdio, SSE or HTTP.",
+        "name": "MCP servers"
+      },
+      "oauth": {
+        "detail": "Authorise a provider without pasting a key.",
+        "name": "OAuth connections"
+      },
+      "plugins": {
+        "detail": "Install and remove capabilities from the UI.",
+        "name": "Plugins"
+      },
+      "scheduledJobs": {
+        "detail": "Cron and one-shot runs against a session.",
+        "name": "Scheduled jobs"
+      },
+      "skills": {
+        "detail": "Reusable instructions an agent can pin.",
+        "name": "Skills"
+      }
+    },
+    "title": "Settings",
+    "tools": {
+      "approvalDesc": "Applies to every channel, not only this browser. With no one connected to approve, an “ask” from a channel is denied when it expires.",
+      "approvalTimeout": "Approval timeout (seconds)",
+      "approvalTitle": "Approval policy",
+      "commandTimeout": "Command timeout (seconds)",
+      "enableExec": "Enable the exec tool",
+      "executionDesc": "The exec tool, and what it may produce.",
+      "executionTitle": "Execution",
+      "maxChars": "Max characters per tool result",
+      "maxOutputBytes": "Max output (bytes)",
+      "policies": {
+        "allow": "Run it",
+        "ask": "Ask first",
+        "deny": "Refuse"
+      },
+      "policy": "Policy",
+      "registeredDesc": "What the model is offered right now, and what the matrix above does to each one.",
+      "registeredTitle": "Registered tools",
+      "restrictFiles": "Restrict file tools to the workspace",
+      "resultsDesc": "What comes back from a tool, and from where.",
+      "resultsTitle": "Results",
+      "risk": "Risk"
+    }
+  },
+  "setup": {
+    "apiBase": "API base",
+    "asking": "Asking the provider what it has…",
+    "back": "Back",
+    "chooseOne": "Choose one",
+    "codeNote": "It was printed in the terminal that started this server. It works once.",
+    "codePlaceholder": "XXXX-XXXX-XXXX",
+    "codeTitle": "Enter the setup code",
+    "confirmPassword": "Confirm password",
+    "continue": "Continue",
+    "doneNote": "Everything else lives in Settings.",
+    "doneTitle": "Ready",
+    "language": "Language",
+    "languageNote": "The rest of this wizard, and the app afterwards, will be in it. You can change it later in Settings.",
+    "languageTitle": "Choose a language",
+    "model": "Model",
+    "modelNote": "Listed by the provider itself where it can be asked. Anything else can be typed in.",
+    "modelPlaceholder": "qwen3:8b",
+    "modelTitle": "Choose a model",
+    "password": "Password",
+    "passwordNote": "This agent can read and write files and run commands. Pick something you would use for a login.",
+    "passwordTitle": "Choose a password",
+    "progress": "Step {{current}} of {{total}}",
+    "provider": "Provider",
+    "providerNote": "A local server like Ollama, or a cloud provider. You can add more later, including a second one of the same type.",
+    "providerTitle": "Add a model provider",
+    "setupCode": "Setup code",
+    "skip": "Skip",
+    "username": "Username"
+  },
+  "shell": {
+    "openMenu": "Open menu",
+    "reload": "Reload app",
+    "reloadFailed": "Could not reload",
+    "sections": "Sections",
+    "serverSilent": "The server did not answer.",
+    "sidebar": "Sidebar"
+  },
+  "time": {
+    "daysAgo": "{{count}}d ago",
+    "hoursAgo": "{{count}}h ago",
+    "justNow": "just now",
+    "minutesAgo": "{{count}}m ago"
+  },
+  "tool": {
+    "arguments": "Arguments",
+    "failed": "Failed",
+    "needsApproval": "Needs approval",
+    "running": "Running…",
+    "runningLabel": "Running",
+    "succeeded": "Succeeded",
+    "truncated": "Output was truncated in the middle to fit the tool-output budget. The model saw the same thing."
+  },
+  "turn": {
+    "cached": "Cached",
+    "details": "Turn details",
+    "elapsed": "Elapsed",
+    "in": "In",
+    "model": "Model",
+    "none": "No figures were recorded for this turn.",
+    "out": "Out",
+    "provider": "Provider",
+    "rate": "Rate",
+    "reasoning": "Reasoning",
+    "steps": "Steps",
+    "stopped": "Stopped"
+  },
+  "workspaces": {
+    "blocked_one": "{{count}} conversation still belongs to {{workspace}}. Moving them to Default keeps their history; the files stay where they are either way.",
+    "blocked_other": "{{count}} conversations still belong to {{workspace}}. Moving them to Default keeps their history; the files stay where they are either way.",
+    "chats": "Chats",
+    "deleteTitle": "Delete this workspace?",
+    "filter": "Filter workspaces by name",
+    "moveTitle": "Move the conversations first?",
+    "namePlaceholder": "Client Acme",
+    "new": "New workspace",
+    "newHint": "A name, not a path. The folder is created inside the workspace root and the id comes from the name.",
+    "newTitle": "New workspace",
+    "note": "A workspace is a folder the agent works in. Default holds all the others, so it can reach their files; the named ones cannot reach each other.",
+    "renameHint": "The folder on disk keeps its own name — only the label changes.",
+    "renameTitle": "Rename workspace",
+    "title": "Workspaces",
+    "updated": "Updated"
+  }
+}

@@ -22,6 +22,7 @@
 
 import { Check, ShieldAlert, X } from 'lucide-react';
 import { useEffect, useState, type JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { ApprovalScope } from '@ghostai/protocol';
 
@@ -60,6 +61,7 @@ export function ApprovalPrompt({
   approval,
   onAnswer,
 }: ApprovalPromptProps): JSX.Element | null {
+  const { t } = useTranslation();
   const remainingMs = useCountdown(approval.expiresAtMs);
   const answered = approval.answered;
 
@@ -78,9 +80,7 @@ export function ApprovalPrompt({
   }
 
   if (remainingMs <= 0) {
-    return (
-      <p className="row approval__resolved">The approval window closed. The call was refused.</p>
-    );
+    return <p className="row approval__resolved">{t('chat.approvalClosed')}</p>;
   }
 
   return (

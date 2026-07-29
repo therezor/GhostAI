@@ -8,6 +8,7 @@
  * the sort of thing nobody notices because it looks deliberate.
  */
 
+import { createWebI18n } from '@ghostai/i18n/web';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -18,19 +19,31 @@ import {
   SETTINGS_PANELS,
 } from './panels.js';
 
+/**
+ * The table holds keys now, so every assertion about *wording* has to resolve
+ * one. A real English instance rather than a stub: "gives every panel a
+ * summary" is worth nothing if it only proves the key string is non-empty —
+ * the failure it guards against is a panel whose summary was never written.
+ */
+const t = createWebI18n('en').getFixedT(null, 'web');
+
 describe('the settings panels', () => {
   it('have unique ids', () => {
     const ids = SETTINGS_PANELS.map((panel) => panel.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('ship the three the phase builds', () => {
+  it('ship the four the phase builds', () => {
     // No `agent` panel: the settings it held *are* the default agent's, so they
     // are edited on that agent rather than in a second room describing the same
     // subtree. Agents are a page of their own, and picking one happens in the
     // composer.
+    //
+    // `appearance` joined them with the translation layer. It is the natural
+    // home for the theme too, which until then lived only in the header — a
+    // preference with no page you could point someone at.
     const built = SETTINGS_PANELS.filter((panel) => !isPlanned(panel)).map((panel) => panel.id);
-    expect(built).toEqual(['providers', 'tools', 'account']);
+    expect(built).toEqual(['providers', 'tools', 'account', 'appearance']);
   });
 
   it('no longer advertise profiles as unbuilt, now that agents ship', () => {
@@ -38,7 +51,7 @@ describe('the settings panels', () => {
     // for something that is already on the screen next to it.
     const planned = Object.values(PLANNED_SYSTEMS)
       .flat()
-      .map((system) => system.name.toLowerCase());
+      .map((system) => t(system.name).toLowerCase());
     expect(planned.some((name) => name.includes('profile'))).toBe(false);
   });
 
@@ -66,15 +79,19 @@ describe('the settings panels', () => {
 
   it('gives every panel a summary, which is the line under the heading', () => {
     for (const panel of SETTINGS_PANELS) {
-      expect(panel.summary.length).toBeGreaterThan(0);
-      expect(panel.label.length).toBeGreaterThan(0);
+      // Resolved, so a key that exists in the table but not in the bundle
+      // fails here rather than rendering as `settings.panels.x.summary`.
+      expect(t(panel.summary).length).toBeGreaterThan(0);
+      expect(t(panel.summary)).not.toBe(panel.summary);
+      expect(t(panel.label).length).toBeGreaterThan(0);
+      expect(t(panel.label)).not.toBe(panel.label);
     }
   });
 });
 
 describe('panelById', () => {
   it('finds a panel by its id', () => {
-    expect(panelById('tools').label).toBe('Tools');
+    expect(t(panelById('tools').label)).toBe('Tools');
   });
 
   it('falls back rather than 404ing on a stale bookmark', () => {

@@ -15,6 +15,7 @@
 
 import { Brain, ChevronRight } from 'lucide-react';
 import { useEffect, useId, useState, type JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/cn.js';
 
@@ -25,6 +26,7 @@ export interface ReasoningBlockProps {
 }
 
 export function ReasoningBlock({ text, live = false }: ReasoningBlockProps): JSX.Element {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(live);
   const [pinned, setPinned] = useState(false);
   const bodyId = useId();
@@ -49,7 +51,7 @@ export function ReasoningBlock({ text, live = false }: ReasoningBlockProps): JSX
       >
         <ChevronRight className={cn('disclosure-chevron', open && 'disclosure-chevron--open')} />
         <Brain />
-        <span>Reasoning</span>
+        <span>{t('chat.reasoning')}</span>
         {live && <span className="reasoning__live">thinking…</span>}
       </button>
 

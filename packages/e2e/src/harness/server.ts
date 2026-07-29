@@ -180,6 +180,11 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
     // port is not: `0` means "ask the OS", which the schema cannot express, so
     // it belongs to `listen` exactly as it does in `ghost serve`.
     server: { ...(options.config?.server ?? {}), host: '127.0.0.1' },
+    // The install's own answer, pinned for the same reason the browser's is:
+    // once a session exists, `config.ui.locale` outranks `Accept-Language`, so
+    // leaving it to the schema default would make the language the suite asserts
+    // in depend on which side of sign-in a spec happens to be.
+    ui: { ...(options.config?.ui ?? {}), locale: 'en' },
   });
   const configFile = join(home, 'config.json');
   mkdirSync(home, { recursive: true });

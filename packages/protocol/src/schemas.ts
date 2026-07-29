@@ -70,6 +70,7 @@ export const PROTOCOL_SCHEMAS = {
   SchedulerConfig: config.SchedulerConfigSchema,
   ChannelsConfig: config.ChannelsConfigSchema,
   PluginsConfig: config.PluginsConfigSchema,
+  UiConfig: config.UiConfigSchema,
   Config: config.ConfigSchema,
   ConfigPatch: config.ConfigPatchSchema,
 

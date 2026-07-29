@@ -15,6 +15,7 @@
  */
 
 import type { ConfigPatch, ToolApprovalPolicy, ToolRisk } from '@ghostai/protocol';
+import type { TFunction } from 'i18next';
 
 export interface NumberConstraint {
   readonly min?: number;
@@ -38,23 +39,27 @@ export type ParseResult<T> =
  * internals, and a wrong bound here is a message shown a moment before the
  * server refuses the save anyway. This is the courtesy check, not the guard.
  */
-export function parseNumber(raw: string, constraint: NumberConstraint = {}): ParseResult<number> {
+export function parseNumber(
+  raw: string,
+  t: TFunction,
+  constraint: NumberConstraint = {},
+): ParseResult<number> {
   const trimmed = raw.trim();
-  if (trimmed === '') return { ok: false, error: 'Required' };
+  if (trimmed === '') return { ok: false, error: t('settings.fields.required') };
 
   const value = Number(trimmed);
   // `Number('')` is 0 and `Number(' ')` is 0, both already handled above;
   // what is left that `Number` accepts and this must not is `Infinity`.
-  if (!Number.isFinite(value)) return { ok: false, error: 'Must be a number' };
+  if (!Number.isFinite(value)) return { ok: false, error: t('settings.fields.mustBeNumber') };
 
   if (constraint.integer === true && !Number.isInteger(value)) {
-    return { ok: false, error: 'Must be a whole number' };
+    return { ok: false, error: t('settings.fields.mustBeWhole') };
   }
   if (constraint.min !== undefined && value < constraint.min) {
-    return { ok: false, error: `Must be at least ${String(constraint.min)}` };
+    return { ok: false, error: t('settings.fields.mustBeAtLeast', { min: constraint.min }) };
   }
   if (constraint.max !== undefined && value > constraint.max) {
-    return { ok: false, error: `Must be at most ${String(constraint.max)}` };
+    return { ok: false, error: t('settings.fields.mustBeAtMost', { max: constraint.max }) };
   }
 
   return { ok: true, value };

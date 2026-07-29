@@ -16,6 +16,8 @@
 
 import { AlertTriangle, Info, ShieldAlert, Scissors, ShieldX } from 'lucide-react';
 import type { JSX } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { WebKey } from '@/i18n/keys.js';
 
 import type { NoticeKind } from '@ghostai/protocol';
 
@@ -25,16 +27,16 @@ import type { BadgeProps } from '@/components/ui/badge.js';
 const NOTICES: Record<
   NoticeKind,
   {
-    readonly label: string;
+    readonly label: WebKey;
     readonly tone: NonNullable<BadgeProps['tone']>;
     readonly icon: typeof Info;
   }
 > = {
-  prompt_injection: { label: 'Possible prompt injection', tone: 'danger', icon: ShieldAlert },
-  approval_denied: { label: 'Denied', tone: 'danger', icon: ShieldX },
-  degraded: { label: 'Degraded request', tone: 'warning', icon: AlertTriangle },
-  truncated_history: { label: 'History trimmed', tone: 'warning', icon: Scissors },
-  provider_fallback: { label: 'Provider fallback', tone: 'info', icon: Info },
+  prompt_injection: { label: 'chat.notices.prompt_injection', tone: 'danger', icon: ShieldAlert },
+  approval_denied: { label: 'chat.notices.approval_denied', tone: 'danger', icon: ShieldX },
+  degraded: { label: 'chat.notices.degraded', tone: 'warning', icon: AlertTriangle },
+  truncated_history: { label: 'chat.notices.truncated_history', tone: 'warning', icon: Scissors },
+  provider_fallback: { label: 'chat.notices.provider_fallback', tone: 'info', icon: Info },
 };
 
 /** Neutral is the base rule in `chat.css`, so it needs no modifier. */
@@ -56,7 +58,9 @@ export function Notice({
   readonly message: string;
   readonly className?: string;
 }): JSX.Element {
+  const { t } = useTranslation();
   const { label, tone, icon: Icon } = NOTICES[kind];
+  const text = t(label);
 
   return (
     <div
@@ -67,7 +71,7 @@ export function Notice({
     >
       <Icon />
       <span>
-        <span className="notice__label">{label}.</span>{' '}
+        <span className="notice__label">{text}.</span>{' '}
         <span className="notice__message">{message}</span>
       </span>
     </div>

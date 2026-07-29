@@ -18,6 +18,8 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useState, type JSX } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { WebKey } from '@/i18n/keys.js';
 
 import type { Config, ToolApprovalPolicy, ToolRisk } from '@ghostai/protocol';
 
@@ -49,6 +51,7 @@ const POLICY_TONE: Readonly<Record<ToolApprovalPolicy, BadgeProps['tone']>> = {
 };
 
 export function ToolsPanel({ config }: { readonly config: Config }): JSX.Element {
+  const { t } = useTranslation();
   const [form, setForm] = useState<ToolsForm>(() => toToolsForm(config.tools));
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   const [dirty, setDirty] = useState(false);
@@ -70,7 +73,7 @@ export function ToolsPanel({ config }: { readonly config: Config }): JSX.Element
   };
 
   const onSave = (): void => {
-    const result = toToolsPatch(form);
+    const result = toToolsPatch(form, t);
     if (!result.ok) {
       setErrors(result.errors);
       return;
@@ -83,14 +86,14 @@ export function ToolsPanel({ config }: { readonly config: Config }): JSX.Element
   return (
     <div className="stack settings-panel">
       <Section
-        title="Approval policy"
-        description="Applies to every channel, not only this browser. With no one connected to approve, an “ask” from a channel is denied when it expires."
+        title={t('settings.tools.approvalTitle')}
+        description={t('settings.tools.approvalDesc')}
       >
         <table className="approval-matrix">
           <thead>
             <tr>
-              <th scope="col">Risk</th>
-              <th scope="col">Policy</th>
+              <th scope="col">{t('settings.tools.risk')}</th>
+              <th scope="col">{t('settings.tools.policy')}</th>
             </tr>
           </thead>
           <tbody>
@@ -106,7 +109,7 @@ export function ToolsPanel({ config }: { readonly config: Config }): JSX.Element
                     value={form.approvals[risk]}
                     options={APPROVAL_POLICIES.map((policy) => ({
                       value: policy,
-                      label: POLICY_LABELS[policy],
+                      label: t(POLICY_LABELS[policy]),
                     }))}
                     onValueChange={(value) => {
                       setPolicy(risk, value as ToolApprovalPolicy);
@@ -119,7 +122,7 @@ export function ToolsPanel({ config }: { readonly config: Config }): JSX.Element
         </table>
 
         <TextField
-          label="Approval timeout (seconds)"
+          label={t('settings.tools.approvalTimeout')}
           inputMode="decimal"
           value={form.approvalTimeoutSeconds}
           error={errors.approvalTimeoutSeconds}
@@ -130,9 +133,12 @@ export function ToolsPanel({ config }: { readonly config: Config }): JSX.Element
         />
       </Section>
 
-      <Section title="Execution" description="The exec tool, and what it may produce.">
+      <Section
+        title={t('settings.tools.executionTitle')}
+        description={t('settings.tools.executionDesc')}
+      >
         <SwitchRow
-          label="Enable the exec tool"
+          label={t('settings.tools.enableExec')}
           hint="Switching this off removes it from the definitions the model is offered, rather than refusing it after the fact."
           checked={form.execEnabled}
           onCheckedChange={(checked) => {
@@ -141,7 +147,7 @@ export function ToolsPanel({ config }: { readonly config: Config }): JSX.Element
         />
         <FieldGrid>
           <TextField
-            label="Command timeout (seconds)"
+            label={t('settings.tools.commandTimeout')}
             inputMode="decimal"
             value={form.execTimeoutSeconds}
             error={errors.execTimeoutSeconds}
@@ -152,7 +158,7 @@ export function ToolsPanel({ config }: { readonly config: Config }): JSX.Element
             hint="0 for no timeout."
           />
           <TextField
-            label="Max output (bytes)"
+            label={t('settings.tools.maxOutputBytes')}
             inputMode="numeric"
             value={form.execMaxOutputBytes}
             error={errors.execMaxOutputBytes}
@@ -164,9 +170,12 @@ export function ToolsPanel({ config }: { readonly config: Config }): JSX.Element
         </FieldGrid>
       </Section>
 
-      <Section title="Results" description="What comes back from a tool, and from where.">
+      <Section
+        title={t('settings.tools.resultsTitle')}
+        description={t('settings.tools.resultsDesc')}
+      >
         <SwitchRow
-          label="Restrict file tools to the workspace"
+          label={t('settings.tools.restrictFiles')}
           hint="The jail. Switching this off lets the agent read and write anywhere this process can."
           checked={form.restrictToWorkspace}
           onCheckedChange={(checked) => {
@@ -174,7 +183,7 @@ export function ToolsPanel({ config }: { readonly config: Config }): JSX.Element
           }}
         />
         <TextField
-          label="Max characters per tool result"
+          label={t('settings.tools.maxChars')}
           inputMode="numeric"
           value={form.maxOutputChars}
           error={errors.maxOutputChars}
@@ -197,8 +206,8 @@ export function ToolsPanel({ config }: { readonly config: Config }): JSX.Element
       />
 
       <Section
-        title="Registered tools"
-        description="What the model is offered right now, and what the matrix above does to each one."
+        title={t('settings.tools.registeredTitle')}
+        description={t('settings.tools.registeredDesc')}
       >
         {tools.isSuccess && tools.data.tools.length > 0 ? (
           <ul className="settings-divided-list">
@@ -215,7 +224,7 @@ export function ToolsPanel({ config }: { readonly config: Config }): JSX.Element
                     </span>
                   </div>
                   <Badge tone="neutral">{tool.risk}</Badge>
-                  <Badge tone={POLICY_TONE[policy]}>{POLICY_LABELS[policy]}</Badge>
+                  <Badge tone={POLICY_TONE[policy]}>{t(POLICY_LABELS[policy])}</Badge>
                 </li>
               );
             })}
@@ -230,8 +239,8 @@ export function ToolsPanel({ config }: { readonly config: Config }): JSX.Element
   );
 }
 
-const POLICY_LABELS: Readonly<Record<ToolApprovalPolicy, string>> = {
-  allow: 'Run it',
-  ask: 'Ask first',
-  deny: 'Refuse',
+const POLICY_LABELS: Readonly<Record<ToolApprovalPolicy, WebKey>> = {
+  allow: 'settings.tools.policies.allow',
+  ask: 'settings.tools.policies.ask',
+  deny: 'settings.tools.policies.deny',
 };

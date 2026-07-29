@@ -25,6 +25,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Download, FileWarning } from 'lucide-react';
 import type { JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { FileEntry } from '@ghostai/protocol';
 
@@ -43,6 +44,7 @@ export interface FilePreviewProps {
 }
 
 export function FilePreview({ entry, workspace, onDirtyChange }: FilePreviewProps): JSX.Element {
+  const { t } = useTranslation();
   const image = isImage(entry.mimeType);
 
   const signed = useQuery({
@@ -70,7 +72,7 @@ export function FilePreview({ entry, workspace, onDirtyChange }: FilePreviewProp
     retry: false,
   });
 
-  if (signed.isPending) return <p className="file-preview__note">Preparing a link…</p>;
+  if (signed.isPending) return <p className="file-preview__note">{t('files.preparingLink')}</p>;
   if (signed.isError) {
     return (
       <p role="alert" className="page__error">
@@ -97,10 +99,7 @@ export function FilePreview({ entry, workspace, onDirtyChange }: FilePreviewProp
         (notText ? (
           <p className="notice">
             <FileWarning />
-            <span>
-              This file is not text, so there is nothing to show or edit here. Download it to open
-              it in something that understands it.
-            </span>
+            <span>{t('files.notText')}</span>
           </p>
         ) : (
           <FileEditor

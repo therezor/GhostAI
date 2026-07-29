@@ -33,6 +33,7 @@ import { createLogger, isAbortError, type LogLevel } from '@ghostai/core';
 import type { ContentPart, StopReason } from '@ghostai/protocol';
 
 import { runSlashCommand } from './commands.js';
+import { translationsFor, type CliT, type Env } from './i18n.js';
 import { TurnRenderer } from './render.js';
 import { createChatRuntime, type ChatRuntime, type RuntimeOptions } from './runtime.js';
 
@@ -72,6 +73,14 @@ export interface ChatOptions extends RuntimeOptions {
   readonly input?: InputStream;
   /** Installs the Ctrl-C handler. `false` in tests, which own the signal. */
   readonly handleSignals?: boolean;
+  /**
+   * The environment the locale is read from, injected rather than read.
+   *
+   * The same reasoning as `InitOptions.env` and `ServeOptions.env`: a test that
+   * has to mutate `process.env` to pick a language is a test that cannot run
+   * beside another one.
+   */
+  readonly env?: Env;
 }
 
 export interface TurnOutcome {
@@ -168,8 +177,12 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
   let workspaceId = options.workspaceId;
   const json = options.json === true ? out : undefined;
 
+  // Before the runtime, so `--help`-speed paths never build one; the locale it
+  // renders in is refined below once the config can be read.
+  const envLang = translationsFor(options.env ?? process.env);
   const renderer = new TurnRenderer({
     out,
+    t: envLang.t,
     ...(options.colors === undefined ? {} : { colors: options.colors }),
     ...(options.showReasoning === undefined ? {} : { showReasoning: options.showReasoning }),
   });
@@ -187,6 +200,11 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
 
   const runtime = createChatRuntime({ ...options, logger });
   if (options.fresh === true) runtime.store.clearMessages(sessionKey);
+
+  // After the runtime, because this is the first point the install's own answer
+  // exists — `config.ui.locale` sits under `GHOSTAI_LANG` and above the shell's
+  // `LANG` in the order `resolveCliLocale` applies.
+  const lang = translationsFor(options.env ?? process.env, runtime.config.ui.locale);
 
   // One controller per turn, replaced each time: an `AbortController` cannot be
   // reset, so reusing an aborted one would make every later turn stop before its
@@ -235,11 +253,15 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
 
     if (json === undefined) {
       renderer.note(
-        `ghost · ${runtime.model} @ ${runtime.spec?.displayName ?? 'no provider'} · ${runtime.paths.workspace}`,
+        lang.t('chat.banner', {
+          model: runtime.model,
+          provider: runtime.spec?.displayName ?? lang.t('chat.noProvider'),
+          workspace: runtime.paths.workspace,
+        }),
       );
       const opened = runtime.store.getSession(sessionKey);
       const title = opened === undefined || opened.title === '' ? sessionKey : opened.title;
-      renderer.note(`${title} · /help for commands`);
+      renderer.note(lang.t('chat.helpHint', { title }));
     }
 
     return await repl({
@@ -247,11 +269,13 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
       out,
       renderer,
       runtime,
+      t: lang.t,
+      locale: lang.locale,
       session: () => sessionKey,
       attach: (key) => {
         sessionKey = key;
         runtime.store.ensureSession(key, { origin: 'cli' });
-        renderer.note(`attached to ${key}`);
+        renderer.note(lang.t('chat.attachedTo', { key }));
       },
       workspace: () => workspaceId,
       setWorkspace: (id) => {
@@ -272,6 +296,8 @@ interface ReplDeps {
   readonly out: NodeJS.WritableStream;
   readonly renderer: TurnRenderer;
   readonly runtime: ChatRuntime;
+  readonly t: CliT;
+  readonly locale: string;
   /** The conversation the prompt is on, read fresh — it moves. */
   readonly session: () => string;
   readonly attach: (sessionKey: string) => void;
@@ -323,6 +349,8 @@ async function repl(deps: ReplDeps): Promise<number> {
         const result = await runSlashCommand(content, {
           renderer: deps.renderer,
           runtime: deps.runtime,
+          t: deps.t,
+          locale: deps.locale,
           sessionKey: deps.session(),
           workspaceId: deps.workspace(),
           setWorkspace: deps.setWorkspace,
@@ -339,12 +367,12 @@ async function repl(deps: ReplDeps): Promise<number> {
         if (result.kind === 'continue') continue;
 
         const rerun = await deps.turn(result.content);
-        if (rerun.aborted) deps.renderer.note('interrupted — the prompt is yours again');
+        if (rerun.aborted) deps.renderer.note(deps.t('chat.interrupted'));
         continue;
       }
 
       const outcome = await deps.turn(content);
-      if (outcome.aborted) deps.renderer.note('interrupted — the prompt is yours again');
+      if (outcome.aborted) deps.renderer.note(deps.t('chat.interrupted'));
     }
   } finally {
     rl.off('SIGINT', onSigint);

@@ -23,12 +23,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { Skull } from 'lucide-react';
 import type { JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
 import { Badge } from '@/components/ui/badge.js';
 
 export function Welcome(): JSX.Element {
+  const { t } = useTranslation();
   const status = useQuery({
     queryKey: queryKeys.status,
     queryFn: ({ signal }) => api.status(signal),
@@ -39,7 +41,7 @@ export function Welcome(): JSX.Element {
       <Skull className="welcome__mark" aria-hidden="true" />
 
       <div className="stack welcome__heading">
-        <h1 className="welcome__title">Ready when you are.</h1>
+        <h1 className="welcome__title">{t('chat.ready')}</h1>
         {status.isSuccess && status.data.configured && (
           <p className="cluster welcome__agent">
             <Badge tone="neutral">{status.data.provider}</Badge>
@@ -48,15 +50,9 @@ export function Welcome(): JSX.Element {
         )}
       </div>
 
-      <p className="welcome__note">
-        The agent reads and writes inside its workspace, and asks before it runs a command or
-        reaches the network. Every tool call shows up in the transcript with its arguments and its
-        output.
-      </p>
+      <p className="welcome__note">{t('chat.welcomeNote')}</p>
 
-      <p className="welcome__hint">
-        Enter to send · Shift+Enter for a new line · @ to scope the turn
-      </p>
+      <p className="welcome__hint">{t('chat.welcomeHint')}</p>
     </div>
   );
 }

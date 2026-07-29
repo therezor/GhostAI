@@ -65,9 +65,22 @@ function mount(overrides: Record<string, StubRoute> = {}): { readonly calls: Rec
   return { calls };
 }
 
+/**
+ * Past the language step, which every unclaimed install now opens on.
+ *
+ * Skipping rather than choosing: the browser's language is already applied, so
+ * `Skip` is the answer "yes, that one" — and it is what the majority of first
+ * runs will click. The step has its own test below.
+ */
+async function pastLanguage(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(await screen.findByRole('button', { name: 'Skip' }));
+}
+
 describe('an unclaimed install', () => {
   it('asks for the code rather than for a password nobody has set', async () => {
+    const user = userEvent.setup();
     mount();
+    await pastLanguage(user);
 
     expect(
       await screen.findByRole('heading', { name: 'Enter the setup code' }),
@@ -79,18 +92,24 @@ describe('an unclaimed install', () => {
   });
 
   it('offers no way to skip the two credential steps', async () => {
+    const user = userEvent.setup();
     mount();
+    await pastLanguage(user);
     await screen.findByRole('heading', { name: 'Enter the setup code' });
 
     // Skipping would leave a shell-capable agent with no password, which is the
     // state the wizard exists to end.
     expect(screen.queryByRole('button', { name: 'Skip' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
+    // `Back` *is* offered here, and only here among the credential steps: it
+    // leads to the language question, where nothing has been spent yet. The
+    // password step still has none — the code is single-use by then.
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
   });
 
   it('spends the code, then sets a password, then offers a provider', async () => {
     const user = userEvent.setup();
     const { calls } = mount();
+    await pastLanguage(user);
 
     await user.type(await screen.findByLabelText('Setup code'), 'aaaa-bbbb-cccc');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
@@ -117,6 +136,7 @@ describe('an unclaimed install', () => {
   it('takes a username other than the default when one is typed', async () => {
     const user = userEvent.setup();
     const { calls } = mount();
+    await pastLanguage(user);
 
     await user.type(await screen.findByLabelText('Setup code'), 'aaaa-bbbb-cccc');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
@@ -141,6 +161,7 @@ describe('an unclaimed install', () => {
   it('will not submit a password below the minimum length', async () => {
     const user = userEvent.setup();
     const { calls } = mount();
+    await pastLanguage(user);
 
     await user.type(await screen.findByLabelText('Setup code'), 'aaaa-bbbb-cccc');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
@@ -155,6 +176,7 @@ describe('an unclaimed install', () => {
   it('refuses to submit two passwords that differ, without asking the server', async () => {
     const user = userEvent.setup();
     const { calls } = mount();
+    await pastLanguage(user);
 
     await user.type(await screen.findByLabelText('Setup code'), 'aaaa-bbbb-cccc');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
@@ -170,6 +192,7 @@ describe('an unclaimed install', () => {
   it('says the code was wrong rather than leaving the field looking accepted', async () => {
     const user = userEvent.setup();
     mount({ 'POST /api/setup/claim': UNAUTHENTICATED });
+    await pastLanguage(user);
 
     await user.type(await screen.findByLabelText('Setup code'), 'zzzz-zzzz-zzzz');
     await user.click(screen.getByRole('button', { name: 'Continue' }));

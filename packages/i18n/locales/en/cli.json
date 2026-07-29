@@ -1,0 +1,163 @@
+{
+  "chat": {
+    "argument": "a single turn to run, instead of the prompt",
+    "attachedTo": "attached to {{key}}",
+    "banner": "ghost · {{model}} @ {{provider}} · {{workspace}}",
+    "description": "Talk to the agent. With no message, opens a prompt.",
+    "helpHint": "{{title}} · /help for commands",
+    "interrupted": "interrupted — the prompt is yours again",
+    "noProvider": "no provider",
+    "options": {
+      "json": "emit one agent event per line as JSON",
+      "model": "model id, overriding the configured default",
+      "new": "clear the session before this turn",
+      "noReasoning": "hide the model’s reasoning stream",
+      "noTools": "run the turn with no tools registered",
+      "provider": "provider id, overriding the configured default",
+      "session": "session to continue",
+      "workspace": "workspace root, overriding the configured default",
+      "workspaceId": "workspace new conversations land in"
+    }
+  },
+  "help": {
+    "arguments": "Arguments:",
+    "commands": "Commands:",
+    "displayHelp": "display help for command",
+    "globalOptions": "Global Options:",
+    "options": "Options:",
+    "outputVersion": "output the version number",
+    "usage": "Usage:"
+  },
+  "init": {
+    "apiBase": "API base",
+    "apiKey": "API key",
+    "apiToken": "API token (optional, blank to skip)",
+    "config": "Config",
+    "description": "Configure this install: a workspace, a provider and a model.",
+    "done": "Done.",
+    "endpointName": "Name for this endpoint",
+    "enterNumber": "Enter a number between 1 and {{max}}.",
+    "heading": "Setting up GhostAI.",
+    "language": "Language",
+    "listFailed": "Could not list models from this endpoint — type one instead.\n",
+    "local": " (local)",
+    "model": "Model",
+    "provider": "Provider",
+    "whichProvider": "Which provider?",
+    "workspace": "Workspace",
+    "workspaceDir": "Workspace directory"
+  },
+  "program": {
+    "description": "A self-hosted agent that runs where your files are.",
+    "notAPort": "\"{{value}}\" is not a port number",
+    "options": {
+      "home": "GhostAI home directory (default: $GHOSTAI_HOME or ~/.ghostai)",
+      "logLevel": "one of {{levels}} (default: warn)",
+      "noColor": "disable colour output"
+    },
+    "unknownLogLevel": "Unknown log level \"{{value}}\""
+  },
+  "prompt": {
+    "no": "n",
+    "yes": "y",
+    "yesNoDefaultNo": "y/N",
+    "yesNoDefaultYes": "Y/n"
+  },
+  "render": {
+    "steps_one": "{{count}} step",
+    "steps_other": "{{count}} steps",
+    "stopReasons": {
+      "aborted": "interrupted",
+      "error": "failed",
+      "max_iterations": "stopped at the tool-iteration cap",
+      "wall_timeout": "stopped at the turn time cap"
+    }
+  },
+  "serve": {
+    "agent": "Agent",
+    "agentUnconfigured": "not configured — add a provider in the UI, or run `ghost init`",
+    "auth": "Auth",
+    "authDisabled": "disabled — anything that can reach {{host}} can drive this agent",
+    "authEnabled": "enabled",
+    "channels": "Channels",
+    "codeOnce": "It works once, and stops working as soon as you set a password.",
+    "description": "Serve the web UI and the API on one port.",
+    "firstRun": "First run.",
+    "firstRunBody": "Open the URL above and enter this one-time code:",
+    "listening": "GhostAI is listening.",
+    "options": {
+      "host": "bind address, overriding the configured default",
+      "password": "set or rotate the login password (or GHOSTAI_PASSWORD)",
+      "port": "port, overriding the configured default",
+      "ui": "a built UI to serve, instead of the bundled one",
+      "username": "set the login name alongside --password (or GHOSTAI_USERNAME)",
+      "workspace": "workspace root, overriding the configured default"
+    },
+    "pressCtrlC": "Press Ctrl-C to stop.",
+    "stopped": "Stopped.",
+    "ui": "UI",
+    "uiUnbuilt": "not built — serving the API only (build @ghostai/web to add it)",
+    "url": "URL",
+    "workspace": "Workspace"
+  },
+  "slash": {
+    "errors": {
+      "messageGone": "That message is gone",
+      "noConversation": "No conversation {{key}}",
+      "notYours": "Message {{seq}} is not one of yours",
+      "noWorkspace": "No workspace {{id}}",
+      "usageEdit": "usage: /edit <ref> <text>",
+      "usageRename": "usage: /rename <title>",
+      "usageWorkspaceMove": "usage: /workspace move <from> <to>",
+      "usageWorkspaceNew": "usage: /workspace new <name>",
+      "usageWorkspaceRename": "usage: /workspace rename <id> <name>",
+      "usageWorkspaceRm": "usage: /workspace rm <id>",
+      "workspaceInUse_one": "{{count}} conversation is still in {{id}}. Move it first: /workspace move {{id}} default",
+      "workspaceInUse_other": "{{count}} conversations are still in {{id}}. Move them first: /workspace move {{id}} default"
+    },
+    "help": {
+      "branch": "fork up to <ref> and attach to the fork",
+      "clear": "forget this session's history",
+      "context": "what the next turn would send to the model",
+      "delete": "delete one, defaulting to this one",
+      "edit": "replace a message and re-run from there",
+      "exit": "leave",
+      "help": "this list",
+      "messages": "the last n messages, with their seq numbers",
+      "new": "start a fresh conversation and attach to it",
+      "regenerate": "re-run the last turn, or the one <ref> started",
+      "rename": "rename this conversation",
+      "session": "show this session, or attach to another",
+      "sessions": "conversations in this workspace, newest first",
+      "stats": "the last n turns: model, tokens, tokens/s, time",
+      "workspace": "show or switch where new conversations land",
+      "workspaceMove": "move conversations between workspaces",
+      "workspaceRm": "detach; refuses while conversations name it",
+      "workspaces": "list them, marking the current one"
+    },
+    "notes": {
+      "created": "created {{id}}",
+      "deleted": "deleted {{key}}",
+      "detached": "detached {{id}}",
+      "historyCleared": "history cleared",
+      "landIn": "new conversations land in {{workspace}}",
+      "moved_one": "moved {{count}} conversation from {{from}} to {{to}}",
+      "moved_other": "moved {{count}} conversations from {{from}} to {{to}}",
+      "noConversations": "no conversations yet",
+      "nothingSaid": "nothing said in this conversation yet",
+      "nothingToMeasure": "nothing to measure yet — this conversation has not started",
+      "noTurns": "no turns recorded for this conversation yet",
+      "renamedTo": "renamed to {{title}}",
+      "renamedWorkspace": "renamed {{id}} to {{name}}",
+      "unknownCommand": "unknown command: /{{name}}",
+      "willLandIn": "new conversations will land in {{workspace}}"
+    },
+    "refNote": "A <ref> is a seq number from /messages, or a negative offset over your own\n  messages: -1 is the last thing you said. It defaults to -1.",
+    "sections": {
+      "context": "context and cost",
+      "messages": "messages",
+      "sessions": "sessions",
+      "workspaces": "workspaces"
+    }
+  }
+}

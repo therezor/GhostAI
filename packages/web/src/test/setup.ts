@@ -11,12 +11,30 @@
 
 import '@testing-library/jest-dom/vitest';
 
+import { createWebI18n } from '@ghostai/i18n/web';
+import { setI18n } from 'react-i18next';
+
 import { cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, vi } from 'vitest';
 
 import { resetToasts } from '@/components/ui/toast.js';
 import { resetConnection } from '@/lib/connection.js';
 import { useTurnStore } from '@/state/turn.js';
+
+/**
+ * A default instance for components rendered without the provider.
+ *
+ * `renderWithProviders` mounts the real `Providers` stack, so most tests get
+ * their `t` from `I18nProvider`. The primitives in `components/ui` are
+ * deliberately tested *bare* — that is the point of `primitives.test.tsx` — and
+ * `useTranslation` outside a provider falls back to react-i18next's global,
+ * which is unset by default and makes `t` return the key. Setting it here means
+ * a bare `<Dialog>` still renders `Close` rather than `common.close`, without
+ * the primitive tests having to mount an app to prove a close button exists.
+ *
+ * Production never relies on this: `I18nProvider` sits above the whole tree.
+ */
+setI18n(createWebI18n('en'));
 
 /** A no-op observer. Nothing is being laid out, so there is nothing to report. */
 class NoopResizeObserver {
@@ -106,6 +124,22 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', NoopResizeObserver);
   vi.stubGlobal('WebSocket', InertWebSocket);
   vi.stubGlobal('sessionStorage', new MemoryStorage());
+  // Pinned, not inherited. Every assertion in this suite matches on English,
+  // and `navigator.languages` is jsdom's reading of the machine — so without
+  // this the suite passes here and fails on a laptop set to German, which is
+  // the least useful moment to find out. The same reason `localStorage` above
+  // is a fresh `MemoryStorage`: a preference must not survive into the next
+  // test and silently pick the language for it.
+  vi.stubGlobal('localStorage', new MemoryStorage());
+  // Defined onto the real `navigator` rather than stubbed over it: replacing the
+  // whole object would drop `userAgent` and everything else jsdom puts there,
+  // and these two are the only properties that decide a language.
+  for (const [property, value] of [
+    ['languages', ['en']],
+    ['language', 'en'],
+  ] as const) {
+    Object.defineProperty(globalThis.navigator, property, { value, configurable: true });
+  }
   // The router scrolls to the top on every navigation; jsdom logs a
   // "Not implemented" line for each one.
   vi.stubGlobal('scrollTo', () => undefined);

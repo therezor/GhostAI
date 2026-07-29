@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "packages/protocol" },
+    { "path": "packages/i18n" },
     { "path": "packages/core" },
     { "path": "packages/security" },
     { "path": "packages/providers" },

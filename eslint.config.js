@@ -35,7 +35,18 @@ const crossPackageImportRule = {
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', '**/*.tsbuildinfo'],
+    ignores: [
+      '**/dist/**',
+      '**/node_modules/**',
+      '**/coverage/**',
+      '**/*.tsbuildinfo',
+      // Config for `i18next-parser`, which loads them itself. They are outside
+      // every package's `tsconfig`, so the type-aware rules have no project to
+      // resolve them against — and adding a tsconfig for three declarative
+      // objects would cost more than it checks.
+      'i18next-parser.*.js',
+      'i18next-parser.base.js',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.strictTypeChecked,

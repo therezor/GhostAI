@@ -24,6 +24,7 @@
     "lint": "eslint src"
   },
   "dependencies": {
+    "@ghostai/i18n": "workspace:*",
     "@ghostai/protocol": "workspace:*",
     "pino": "^9.5.0",
     "zod": "^4.0.0"

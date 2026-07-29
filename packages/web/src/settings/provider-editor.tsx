@@ -30,6 +30,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { ArrowLeft, RefreshCw, Trash2 } from 'lucide-react';
 import { useId, useState, type JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { ProviderInstanceInfo } from '@ghostai/protocol';
 
@@ -55,6 +56,7 @@ import { useRemoveProvider, useSaveProvider, useTestProvider } from './use-provi
 import { useSettings } from './use-settings.js';
 
 export function ProviderEditorRoute(): JSX.Element {
+  const { t } = useTranslation();
   const { instanceId } = useParams({ from: '/settings/providers/$instanceId' });
   const settings = useSettings();
   const providers = useQuery({
@@ -63,7 +65,7 @@ export function ProviderEditorRoute(): JSX.Element {
   });
 
   if (settings.isPending || providers.isPending) {
-    return <p className="page__note">Loading provider…</p>;
+    return <p className="page__note">{t('providers.loadingOne')}</p>;
   }
   if (settings.isError || providers.isError) {
     return (
@@ -85,7 +87,7 @@ export function ProviderEditorRoute(): JSX.Element {
         </p>
         <Link to="/settings" search={{ panel: 'providers' }} className="page__back">
           <ArrowLeft aria-hidden="true" />
-          Back to providers
+          {t('providers.backToProviders')}
         </Link>
       </div>
     );
@@ -112,6 +114,7 @@ function Editor({
   readonly form: ProviderForm;
   readonly extraHeaders: Readonly<Record<string, string>>;
 }): JSX.Element {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const modelsId = useId();
 
@@ -205,7 +208,7 @@ function Editor({
               }}
             >
               <Trash2 />
-              Delete this provider
+              {t('providers.deleteProvider')}
             </DropdownMenuItem>
           </RowActions>
         </div>
@@ -216,10 +219,10 @@ function Editor({
         </p>
       </div>
 
-      <Section title="Identity" description="What this endpoint is called in the list.">
+      <Section title={t('providers.identity')} description={t('providers.identityDesc')}>
         <FieldGrid>
           <TextField
-            label="Name"
+            label={t('common.name')}
             value={form.label}
             placeholder={instance.type}
             onValueChange={(value) => {
@@ -228,7 +231,7 @@ function Editor({
             hint="Blank uses the provider type's own name."
           />
           <SwitchRow
-            label="Enabled"
+            label={t('providers.enabled')}
             hint="A disabled endpoint stays configured but is offered to no agent and asked for no models."
             checked={form.enabled}
             onCheckedChange={(checked) => {
@@ -238,12 +241,9 @@ function Editor({
         </FieldGrid>
       </Section>
 
-      <Section
-        title="Connection"
-        description="Where to reach it, and what to open it with. Keys go to the encrypted vault and are never returned by the API."
-      >
+      <Section title={t('providers.connection')} description={t('providers.connectionDesc')}>
         <TextField
-          label="API base"
+          label={t('providers.apiBase')}
           value={form.apiBase}
           placeholder={instance.apiBase}
           spellCheck={false}
@@ -268,7 +268,7 @@ function Editor({
       </Section>
 
       <Section
-        title="Models"
+        title={t('providers.models')}
         description={
           instance.supportsModelListing
             ? 'This endpoint lists its own models. Fetching asks it — which is also how you find out whether it can be reached at all.'
@@ -315,7 +315,7 @@ function Editor({
             id={modelsId}
             value={form.models}
             spellCheck={false}
-            placeholder="one model id per line"
+            placeholder={t('providers.modelsPlaceholder')}
             onChange={(event) => {
               update('models', event.target.value);
             }}
@@ -344,7 +344,7 @@ function Editor({
       <ConfirmDialog
         open={confirmingDelete}
         onOpenChange={setConfirmingDelete}
-        title="Delete this provider?"
+        title={t('providers.deleteTitle')}
         description={`${instance.displayName} is removed from the settings, and its saved key is deleted with it. Re-adding an endpoint with the same name does not bring the key back.`}
         confirmLabel="Delete"
         pending={removing}

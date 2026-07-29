@@ -21,8 +21,10 @@
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { AlertTriangle } from 'lucide-react';
 import type { JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.js';
+import { AppearancePanel } from '@/settings/appearance-panel.js';
 import { AccountPanel } from '@/settings/account-panel.js';
 import { PlannedPanel } from '@/settings/planned-panel.js';
 import { ProvidersPanel } from '@/settings/providers-panel.js';
@@ -31,6 +33,7 @@ import { isPlanned, panelById, SETTINGS_PANELS } from '@/settings/panels.js';
 import { useSettings } from '@/settings/use-settings.js';
 
 export function SettingsRoute(): JSX.Element {
+  const { t } = useTranslation();
   const { panel: requested } = useSearch({ from: '/settings' });
   const navigate = useNavigate();
   const settings = useSettings();
@@ -39,17 +42,14 @@ export function SettingsRoute(): JSX.Element {
   return (
     <div className="stack page page--wide">
       <div className="stack page__heading">
-        <h1 className="page__title">Settings</h1>
-        <p className="page__note">{panel.summary}</p>
+        <h1 className="page__title">{t('settings.title')}</h1>
+        <p className="page__note">{t(panel.summary)}</p>
       </div>
 
       {settings.data?.loadError !== undefined && (
         <p role="alert" className="settings-load-error">
           <AlertTriangle />
-          <span>
-            The settings file could not be read and defaults are in use. Saving here overwrites it.
-            ({settings.data.loadError})
-          </span>
+          <span>{t('settings.loadError', { error: settings.data.loadError })}</span>
         </p>
       )}
 
@@ -66,7 +66,7 @@ export function SettingsRoute(): JSX.Element {
         <TabsList className="settings-tabs">
           {SETTINGS_PANELS.map((entry) => (
             <TabsTrigger key={entry.id} value={entry.id}>
-              {entry.label}
+              {t(entry.label)}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -84,6 +84,7 @@ export function SettingsRoute(): JSX.Element {
  * ladder of ternaries nested inside JSX, which is where a missing branch hides.
  */
 function PanelBody({ panelId }: { readonly panelId: string }): JSX.Element {
+  const { t } = useTranslation();
   const settings = useSettings();
   const panel = panelById(panelId);
 
@@ -95,7 +96,13 @@ function PanelBody({ panelId }: { readonly panelId: string }): JSX.Element {
   // owner may be trying to fix their password.
   if (panel.id === 'account') return <AccountPanel />;
 
-  if (settings.isPending) return <p className="page__note">Loading settings…</p>;
+  // Beside `account`, and before the settings gate, for half a reason rather
+  // than the whole one: the theme half of this panel needs nothing from the
+  // server, and an install whose settings request is failing is one whose owner
+  // may well want to turn the lights on while they read the error.
+  if (panel.id === 'appearance') return <AppearancePanel />;
+
+  if (settings.isPending) return <p className="page__note">{t('settings.loading')}</p>;
   if (settings.isError) {
     return (
       <p role="alert" className="page__error">

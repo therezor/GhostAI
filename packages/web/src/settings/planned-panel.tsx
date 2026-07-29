@@ -9,22 +9,24 @@
  */
 
 import type { JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Badge } from '@/components/ui/badge.js';
 import { Section } from './controls.js';
 import { PLANNED_SYSTEMS, type SettingsPanel } from './panels.js';
 
 export function PlannedPanel({ panel }: { readonly panel: SettingsPanel }): JSX.Element {
+  const { t } = useTranslation();
   const systems = PLANNED_SYSTEMS[panel.id] ?? [];
 
   return (
-    <Section title={panel.label} description={panel.summary}>
+    <Section title={t(panel.label)} description={t(panel.summary)}>
       <ul className="settings-divided-list">
         {systems.map((system) => (
           <li key={system.name}>
             <div className="settings-divided-list__text">
-              <span className="settings-divided-list__name">{system.name}</span>
-              <span className="settings-divided-list__detail">{system.detail}</span>
+              <span className="settings-divided-list__name">{t(system.name)}</span>
+              <span className="settings-divided-list__detail">{t(system.detail)}</span>
             </div>
             <Badge tone="info">Phase {system.phase}</Badge>
           </li>
