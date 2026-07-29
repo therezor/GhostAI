@@ -24,7 +24,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { useEffect, useState, type JSX } from 'react';
+import { useEffect, type JSX } from 'react';
 
 import { api } from '@/lib/api.js';
 import {
@@ -37,6 +37,8 @@ import {
 import { queryKeys } from '@/lib/query.js';
 import { useTurnStore } from '@/state/turn.js';
 import { toast } from '@/components/ui/toast.js';
+import { AgentPicker } from '@/agents/agent-picker.js';
+import { useAgent } from '@/agents/agent-context.js';
 import { Composer } from '@/chat/composer.js';
 import type { MessageAction } from '@/chat/message.js';
 import { ContextStrip } from '@/context/context-strip.js';
@@ -46,6 +48,9 @@ import { Welcome } from '@/chat/welcome.js';
 export function ChatRoute(): JSX.Element {
   const { session } = useSearch({ from: '/' });
   const navigate = useNavigate();
+  // What the picker in the composer is showing. Carried on the message so a
+  // conversation that has no row yet is created bound to it.
+  const { agentId } = useAgent();
 
   const transcript = useTurnStore((state) => state.transcript);
   const busy = useTurnStore((state) => state.busy);
@@ -53,9 +58,6 @@ export function ChatRoute(): JSX.Element {
   const connection = useTurnStore((state) => state.connection);
   const sessionKey = useTurnStore((state) => state.sessionKey);
 
-  // A prompt picked on the welcome screen, handed to the composer to be edited
-  // rather than sent — the user chose a starting point, not a message.
-  const [draft, setDraft] = useState<string | undefined>(undefined);
   const queryClient = useQueryClient();
 
   /**
@@ -131,7 +133,7 @@ export function ChatRoute(): JSX.Element {
     <div className="chat">
       {empty ? (
         <div className="transcript__viewport">
-          <Welcome onPick={setDraft} />
+          <Welcome />
         </div>
       ) : (
         <TranscriptView
@@ -157,10 +159,12 @@ export function ChatRoute(): JSX.Element {
       )}
 
       <Composer
-        key={draft}
-        initialText={draft}
-        // Beside the hint rather than under the whole composer: it is one more
-        // piece of ambient state about the box above it, not a second row.
+        // Which agent the next turn runs on. In the conversation rather than
+        // the sidebar: choosing one is part of asking the question.
+        lead={<AgentPicker {...(sessionKey === undefined ? {} : { sessionKey })} />}
+        // The line under the box is the budget's now: it is the one thing there
+        // that changes, and it used to share the row with a keyboard hint that
+        // never did. See `composer.tsx`.
         meta={<ContextStrip sessionKey={sessionKey} />}
         busy={busy}
         queueDepth={queueDepth}
@@ -171,8 +175,7 @@ export function ChatRoute(): JSX.Element {
         configured={status.data?.configured ?? true}
         onStop={stopTurn}
         onSend={(text, attachments) => {
-          sendUserMessage(text, attachments);
-          setDraft(undefined);
+          sendUserMessage(text, attachments, agentId);
           // The URL catches up with the session the server named, so a reload
           // or a shared link lands on the same conversation. `replace`, because
           // sending a message is not a navigation the back button should undo.

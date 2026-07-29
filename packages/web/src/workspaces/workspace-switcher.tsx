@@ -13,15 +13,18 @@
  * listbox cannot carry either. The radio group is what makes the current
  * workspace announce as selected rather than as one of several buttons.
  *
- * The note about `default` is not decoration. `default` is the folder that
- * *contains* every other workspace, so a turn in it can read and write all of
- * them. A user who has not been told that will reasonably assume the workspaces
- * are isolated from each other, which is only true between the named ones.
+ * What `default` means — the folder that *contains* every other workspace, so a
+ * turn in it can reach all of them — is explained once, on the `/workspaces`
+ * page this menu links to. It used to be repeated as a note under the trigger,
+ * which put a standing paragraph in the sidebar restating the most ordinary
+ * state in the app on every render. One explanation, where someone is already
+ * reading about workspaces.
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { Check, ChevronDown, Settings2 } from 'lucide-react';
-import { useState, type JSX } from 'react';
+import { Link } from '@tanstack/react-router';
+import { ChevronDown, Settings2 } from 'lucide-react';
+import type { JSX } from 'react';
 
 import { Button } from '@/components/ui/button.js';
 import {
@@ -36,8 +39,7 @@ import {
 import { api } from '@/lib/api.js';
 import { cn } from '@/lib/cn.js';
 import { queryKeys } from '@/lib/query.js';
-import { WorkspaceManager } from './workspace-manager.js';
-import { DEFAULT_WORKSPACE_ID, useWorkspace } from './workspace-context.js';
+import { useWorkspace } from './workspace-context.js';
 
 export function WorkspaceSwitcher({
   onNavigate,
@@ -55,7 +57,6 @@ export function WorkspaceSwitcher({
   readonly rowClassName?: string;
 }): JSX.Element {
   const { workspaceId, select } = useWorkspace();
-  const [managing, setManaging] = useState(false);
 
   const workspaces = useQuery({
     queryKey: queryKeys.workspaces,
@@ -108,25 +109,16 @@ export function WorkspaceSwitcher({
 
           <DropdownMenuSeparator />
 
-          <DropdownMenuItem
-            onSelect={() => {
-              setManaging(true);
-            }}
-          >
-            <Settings2 />
-            Manage workspaces…
+          {/* A link, not a dialog trigger. Managing workspaces is a screen now,
+              for the same reason managing files and agents is one. */}
+          <DropdownMenuItem asChild>
+            <Link to="/workspaces" onClick={onNavigate}>
+              <Settings2 />
+              Manage workspaces…
+            </Link>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-
-      {workspaceId === DEFAULT_WORKSPACE_ID && rows.length > 1 && (
-        <p className="workspace-switcher__note">
-          <Check aria-hidden="true" />
-          Default holds every other workspace, so it can reach their files too.
-        </p>
-      )}
-
-      <WorkspaceManager open={managing} onOpenChange={setManaging} />
     </div>
   );
 }

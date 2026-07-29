@@ -104,11 +104,16 @@ test.describe('a turn', () => {
  *
  * A media query is the one kind of change a unit test cannot see — jsdom has no
  * layout, so `flex-direction: column` is a string in a stylesheet until a real
- * browser resolves it. The assertion is geometric on purpose: the hint and the
- * budget occupy different rows, which is the actual claim.
+ * browser resolves it. The assertion is geometric on purpose: the two things in
+ * that row occupy different rows here, which is the actual claim.
+ *
+ * It used to measure the keyboard hint against the budget. The hint has moved
+ * to the welcome screen — it never changed, and it was taking the width from
+ * the one thing in this row that does — so the pair being measured is now the
+ * agent picker and the budget.
  */
 test.describe('the composer on a narrow screen', () => {
-  test('puts the hint and the context budget on separate rows', async ({ app }) => {
+  test('puts the agent picker and the context budget on separate rows', async ({ app }) => {
     // Resized here rather than through `test.use`: the `app` fixture waits for
     // the inline sidebar, which below the shell's `md` breakpoint is a drawer
     // and never appears. Boot wide, then narrow.
@@ -120,16 +125,32 @@ test.describe('the composer on a narrow screen', () => {
       timeout: 15_000,
     });
 
-    const hint = app.getByText('Enter to send', { exact: false });
+    const picker = app.getByRole('button', { name: /^Agent: / });
     const budget = app.getByRole('button', { name: /of .* tokens|of [\d,]+ ·/u });
     await expect(budget).toBeVisible({ timeout: 15_000 });
 
-    const hintBox = await hint.boundingBox();
+    const pickerBox = await picker.boundingBox();
     const budgetBox = await budget.boundingBox();
-    if (hintBox === null || budgetBox === null) throw new Error('no layout to measure');
+    if (pickerBox === null || budgetBox === null) throw new Error('no layout to measure');
 
-    // Stacked: the budget starts below the hint ends, rather than beside it.
-    expect(budgetBox.y).toBeGreaterThanOrEqual(hintBox.y + hintBox.height);
+    // Stacked: the budget starts below the picker ends, rather than beside it.
+    expect(budgetBox.y).toBeGreaterThanOrEqual(pickerBox.y + pickerBox.height);
+  });
+
+  test('shows the keyboard hint where a first-time reader is already looking', async ({ app }) => {
+    // On the welcome screen, once, rather than under the box on every render
+    // for the life of the install.
+    await expect(app.getByText('Enter to send', { exact: false })).toBeVisible();
+
+    await app.getByRole('textbox', { name: 'Message' }).fill('hello');
+    await app.getByRole('button', { name: 'Send' }).click();
+    await expect(app.getByTestId('transcript').getByText('hello')).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // And gone once there is a conversation, because the row under the box is
+    // the budget's now.
+    await expect(app.getByText('Enter to send', { exact: false })).toHaveCount(0);
   });
 });
 

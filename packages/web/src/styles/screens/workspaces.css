@@ -1,5 +1,5 @@
 /**
- * The workspace switcher and its manager.
+ * The workspace switcher, and what little the workspaces page needs of its own.
  *
  * No new tokens. The switcher is a sidebar row that happens to open a menu, so
  * it borrows the nav row's geometry — the same control height, radius and
@@ -15,11 +15,8 @@
 
 @layer screens {
   .workspace-switcher {
-    --gap: var(--space-2);
-
     display: flex;
     flex-direction: column;
-    gap: var(--gap);
   }
 
   /* A row, plus the one thing that makes it a picker.
@@ -50,8 +47,8 @@
     font-weight: var(--weight-medium);
   }
 
-  /* `sm`, matching `.sidebar__session-count` and `.workspace-row__count`: this
-     is secondary metadata beside a name, which is the same job those do. The
+  /* `sm`, matching `.sidebar__session-count` and `.data-table__meta`: this is
+     secondary metadata beside a name, which is the same job those do. The
      `2xs` step is budgeted for uppercase micro-labels and badge text, and
      `stylesheets.test.ts` caps how many rules may spend it. */
   .workspace-switcher__hint {
@@ -62,83 +59,21 @@
     color: var(--fg-3);
   }
 
-  .workspace-switcher__note {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-2);
-    padding-inline: var(--space-3);
-    font-size: var(--text-sm);
-    line-height: var(--leading-sm);
-    color: var(--fg-3);
-  }
-
-  .workspace-switcher__note > svg {
-    flex-shrink: 0;
-    width: var(--size-icon-sm);
-    height: var(--size-icon-sm);
-    /* Aligns the glyph to the first line's cap height rather than its box. */
-    margin-block-start: var(--space-0-5);
-  }
-
   /* ----------------------------------------------------------------------- */
-  /* The manager                                                             */
+  /* The list                                                                */
   /* ----------------------------------------------------------------------- */
 
-  .workspace-list {
-    --gap: var(--space-1);
-  }
-
-  .workspace-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    min-height: var(--size-control-md);
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-md);
-  }
-
-  .workspace-row:hover {
-    background-color: var(--hover);
-  }
-
+  /* Everything the manager dialog used to declare — its own row geometry, an
+   * inline rename form, a create form pinned to the bottom — is gone with it.
+   * `/workspaces` is a `data-table` like Files and Agents, so the shared chrome
+   * in `components/data-table.css` is the whole of its layout.
+   *
+   * This is all that is left: a name and the badge that may follow it, spaced
+   * closer than the table's default so the pair reads as one label rather than
+   * as two columns. */
   .workspace-row__name {
-    color: var(--fg-1);
-  }
-
-  .workspace-row__count {
-    font-size: var(--text-sm);
-    line-height: var(--leading-sm);
-    color: var(--fg-3);
-  }
-
-  .workspace-row__rename {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    width: 100%;
-  }
-
-  .workspace-row__rename > input {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .workspace-create {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding-block-start: var(--space-4);
-    border-block-start: var(--hairline) solid var(--line);
-  }
-
-  .workspace-create__row {
     --gap: var(--space-2);
 
-    align-items: center;
-  }
-
-  .workspace-create__row > input {
-    flex: 1;
-    min-width: 0;
+    color: var(--fg-1);
   }
 }

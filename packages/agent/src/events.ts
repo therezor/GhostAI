@@ -29,6 +29,8 @@ export interface TurnStartEvent {
   readonly type: 'turn.start';
   readonly sessionKey: string;
   readonly turnId: string;
+  /** Which agent is running the turn. `default` on an install that named none. */
+  readonly agentId: string;
   readonly model: string;
   readonly provider: string;
 }

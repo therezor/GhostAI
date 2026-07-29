@@ -52,15 +52,13 @@ import {
 
 export interface ComposerProps {
   /**
-   * A starting point, not a message.
+   * A control at the start of the meta row — in practice the agent picker.
    *
-   * The welcome screen's prompts fill the composer rather than sending, because
-   * the useful version of "Run the test suite" almost always has a clause added
-   * to it. The route remounts this component on a new value, which is what makes
-   * a plain `useState` initialiser the whole implementation.
+   * Separate from `meta` because it is a *control* rather than a readout: what
+   * the turn will run on is chosen, and what it will cost is only read.
    */
-  readonly initialText?: string | undefined;
-  /** Rendered on the right of the hint line. The context strip, in the app. */
+  readonly lead?: ReactNode;
+  /** The readout at the end of the meta row. The context budget, in the app. */
   readonly meta?: ReactNode;
   readonly busy: boolean;
   readonly queueDepth: number;
@@ -90,7 +88,7 @@ interface StagedFile {
 }
 
 export function Composer({
-  initialText,
+  lead,
   meta,
   busy,
   queueDepth,
@@ -100,7 +98,7 @@ export function Composer({
   onStop,
 }: ComposerProps): JSX.Element {
   const { workspaceId } = useWorkspace();
-  const [text, setText] = useState(initialText ?? '');
+  const [text, setText] = useState('');
   const [files, setFiles] = useState<readonly StagedFile[]>([]);
   const [highlight, setHighlight] = useState(0);
   const [dismissed, setDismissed] = useState(false);
@@ -179,6 +177,15 @@ export function Composer({
     // the files the turn can already see rather than in the default tree.
     for (const file of picked) void stage(file, workspaceId, setFiles);
   };
+
+  /**
+   * What is happening to this conversation right now, or nothing.
+   *
+   * `undefined` rather than an empty element: an idle composer should render no
+   * line at all, and a `<p>` with nothing in it still takes the row's height
+   * and still announces itself as a live region on every state change.
+   */
+  const status = composerStatus({ configured, connected, busy, queueDepth });
 
   return (
     <div className="composer">
@@ -324,35 +331,78 @@ export function Composer({
           )}
         </div>
 
-        <div className="composer__meta">
-          <p className="composer__hint">
-            {configured && !connected && (
-              <span className="composer__hint--offline">
-                Offline — messages will be sent when the connection returns.
-              </span>
-            )}
-            {configured && connected && busy && (
-              <span>A turn is running. Enter queues your message.</span>
-            )}
-            {queueDepth > 0 && (
-              <span>
-                {queueDepth} message{queueDepth === 1 ? '' : 's'} waiting.
-              </span>
-            )}
-            {configured && connected && !busy && queueDepth === 0 && (
-              <span>Enter to send · Shift+Enter for a new line · @ to scope the turn</span>
-            )}
-          </p>
+        {/* The row under the box: what the turn runs on, anything happening to
+            it right now, and what it will cost.
 
-          {/* Whatever the route wants beside the hint — in practice the context
-              budget. It arrives as a node rather than being built here because
-              it needs the Query client and a session key, and this component is
-              a leaf that its own tests mount without either. */}
+            **The keyboard hint is not here.** "Enter to send · Shift+Enter for a
+            new line" is true forever and worth reading once, and it sat in the
+            most valuable line of the screen — directly under the box being
+            typed into — pushing the context budget to a corner. It is on the
+            welcome screen now, where somebody who has never sent a message is
+            already reading. What is left in this row is state that changes:
+            offline, a turn running, messages queued. */}
+        <div className="composer__meta">
+          {lead}
+
+          {/* No `role="status"`. The header's connection badge is already the
+              live region for the socket, and a second one repeating it
+              announces the same fact twice on every reconnect. */}
+          {status !== undefined && <p className="composer__hint">{status}</p>}
+
+          {/* The context budget. It arrives as a node rather than being built
+              here because it needs the Query client and a session key, and this
+              component is a leaf that its own tests mount without either. */}
           {meta}
         </div>
       </div>
     </div>
   );
+}
+
+/**
+ * The one sentence the meta row has to say, if there is one.
+ *
+ * Only *transient* state qualifies. The rule this row is now written to: if a
+ * line would be identical on every render for the life of the install, it is
+ * documentation and belongs where somebody reads documentation — not under the
+ * box, where it costs the width that the thing which actually changes needs.
+ *
+ * Offline comes first because it is the one that changes what pressing Send
+ * does. A queue depth is appended to whatever else is true, since "a turn is
+ * running" and "two messages are waiting" are both worth knowing at once.
+ */
+function composerStatus({
+  configured,
+  connected,
+  busy,
+  queueDepth,
+}: {
+  readonly configured: boolean;
+  readonly connected: boolean;
+  readonly busy: boolean;
+  readonly queueDepth: number;
+}): ReactNode | undefined {
+  const parts: ReactNode[] = [];
+
+  if (configured && !connected) {
+    parts.push(
+      <span key="offline" className="composer__hint--offline">
+        Offline — messages will be sent when the connection returns.
+      </span>,
+    );
+  } else if (configured && busy) {
+    parts.push(<span key="busy">A turn is running. Enter queues your message.</span>);
+  }
+
+  if (queueDepth > 0) {
+    parts.push(
+      <span key="queued">
+        {queueDepth} message{queueDepth === 1 ? '' : 's'} waiting.
+      </span>,
+    );
+  }
+
+  return parts.length === 0 ? undefined : parts;
 }
 
 /**

@@ -79,7 +79,9 @@ const MANIFEST = [
   { id: 'sessions.branch', method: 'POST', url: '/api/sessions/:key/branch', auth: 'required' },
   { id: 'sessions.turns', method: 'GET', url: '/api/sessions/:key/turns', auth: 'required' },
 
-  // Tools
+  // Agents and tools. Both read-only: an agent is a subtree of the settings
+  // tree, so it is created and edited through `settings.patch`.
+  { id: 'agents.list', method: 'GET', url: '/api/agents', auth: 'required' },
   { id: 'tools.list', method: 'GET', url: '/api/tools', auth: 'required' },
 
   // Files, upload and signed media
@@ -89,6 +91,7 @@ const MANIFEST = [
   { id: 'files.read', method: 'GET', url: '/api/files/text', auth: 'required' },
   { id: 'files.write', method: 'PUT', url: '/api/files/text', auth: 'required' },
   { id: 'files.mkdir', method: 'POST', url: '/api/files/directory', auth: 'required' },
+  { id: 'files.move', method: 'POST', url: '/api/files/move', auth: 'required' },
   { id: 'files.sign', method: 'POST', url: '/api/files/signed-url', auth: 'required' },
   { id: 'media.get', method: 'GET', url: '/api/media/:token', auth: 'signed' },
 

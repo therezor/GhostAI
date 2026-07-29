@@ -10,9 +10,13 @@
  *    vault on every provider build, so that write is the whole of "usable on the
  *    next turn with no restart" from this side of the wire.
  *  - **A panel saves its own section and nothing else.** `ConfigPatch` is a
- *    deep-partial precisely so that saving the Agent panel does not rewrite the
- *    tool approvals, and the assertion is on what went over the wire rather than
- *    on what the screen says afterwards.
+ *    deep-partial precisely so that saving one panel does not rewrite another's
+ *    fields, and the assertion is on what went over the wire rather than on
+ *    what the screen says afterwards.
+ *
+ * The agent cases used to live here. They moved to `agents/agents.test.tsx`
+ * with the panel: the model and budget it edited are the default agent's, and
+ * they are edited on that agent now.
  */
 
 import { RouterProvider, createMemoryHistory } from '@tanstack/react-router';
@@ -170,80 +174,7 @@ beforeEach(() => {
   // installed per mount so each case owns its own routes.
 });
 
-describe('the agent panel', () => {
-  it('shows what the config says, not what the schema defaults to', async () => {
-    mount();
-
-    const maxTokens = await screen.findByLabelText('Max output tokens');
-    expect(maxTokens).toHaveValue('4096');
-    expect(screen.getByLabelText('Workspace directory')).toHaveValue('');
-  });
-
-  it('labels an unset reasoning effort rather than rendering a blank control', async () => {
-    // An empty `value` means *no* value to a Radix select, so the option would
-    // select nothing and the trigger would render blank — a control that looks
-    // broken while working perfectly.
-    mount();
-
-    expect(await screen.findByRole('combobox', { name: 'Reasoning effort' })).toHaveTextContent(
-      "The provider's default",
-    );
-  });
-
-  it('says what an unset model means, in the control itself', async () => {
-    const withoutModel = ConfigSchema.parse({ agents: { defaults: { provider: 'ollama' } } });
-    mount('/settings', { '/api/settings': [200, { ...SETTINGS, config: withoutModel }] });
-
-    expect(await screen.findByRole('combobox', { name: 'Model' })).toHaveTextContent(
-      'Resolved automatically',
-    );
-  });
-
-  it('saves only the agent subtree', async () => {
-    const { user, calls } = mount();
-
-    const maxTokens = await screen.findByLabelText('Max output tokens');
-    await user.clear(maxTokens);
-    await user.type(maxTokens, '2048');
-    await user.click(screen.getByRole('button', { name: 'Save changes' }));
-
-    await waitFor(() => {
-      expect(patchesOf(calls)).toHaveLength(1);
-    });
-
-    const [patch] = patchesOf(calls);
-    expect(patch?.agents?.defaults?.maxTokens).toBe(2048);
-    // The whole point of a deep-partial: the tool approvals this panel never
-    // showed must not be rewritten to their defaults by saving it.
-    expect(Object.keys(patch ?? {})).toEqual(['agents']);
-  });
-
-  it('refuses to send a patch it knows is invalid, and says which field', async () => {
-    const { user, calls } = mount();
-
-    const temperature = await screen.findByLabelText('Temperature');
-    await user.clear(temperature);
-    await user.type(temperature, '9');
-    await user.click(screen.getByRole('button', { name: 'Save changes' }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('Must be at most 2');
-    expect(temperature).toHaveAttribute('aria-invalid', 'true');
-    expect(patchesOf(calls)).toHaveLength(0);
-  });
-
-  it('reverts to what the server holds', async () => {
-    const { user } = mount();
-
-    const maxTokens = await screen.findByLabelText('Max output tokens');
-    await user.clear(maxTokens);
-    await user.type(maxTokens, '10');
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled();
-
-    await user.click(screen.getByRole('button', { name: 'Revert' }));
-    expect(maxTokens).toHaveValue('4096');
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
-  });
-
+describe('the settings screen', () => {
   it('warns when the settings file failed to parse and defaults are in use', async () => {
     mount('/settings', {
       '/api/settings': [200, { ...SETTINGS, loadError: 'Unexpected token }' }],

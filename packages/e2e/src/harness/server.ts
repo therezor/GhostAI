@@ -31,7 +31,13 @@ import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { createRequire } from 'node:module';
 
-import { assistantMessage, saveConfig, silentLogger, userMessage } from '@ghostai/core';
+import {
+  DEFAULT_AGENT_ID,
+  assistantMessage,
+  saveConfig,
+  silentLogger,
+  userMessage,
+} from '@ghostai/core';
 import {
   ConfigSchema,
   DEFAULT_USERNAME,
@@ -40,11 +46,12 @@ import {
   type SetCredentialRequest,
 } from '@ghostai/protocol';
 import type { ChatProvider, CreateProviderOptions } from '@ghostai/providers';
-import { ProviderCache, createRuntime, type GhostRuntime } from '@ghostai/runtime';
+import { ProviderCache, createRuntime, resolveAgent, type GhostRuntime } from '@ghostai/runtime';
 import {
   HubApprovalGate,
   SessionHub,
   createServer,
+  type AgentSummary,
   type AgentView,
   type GhostServer,
   type ServerRuntime,
@@ -303,19 +310,38 @@ function harnessRuntime(runtime: GhostRuntime, configFile: string): ServerRuntim
     store: runtime.store,
     workspaces: runtime.workspaces,
 
-    agent: (): AgentView => ({
-      // The instance id, and empty when nothing resolved — the same shape the
-      // real adapter reports, so a spec about the unconfigured state sees what
-      // a browser would.
-      provider: runtime.instance?.id ?? '',
-      model: runtime.configured ? runtime.model : '',
-      configured: runtime.configured,
-      jail: runtime.jail,
-      jailFor: (workspaceId) => runtime.jails.forWorkspace(workspaceId),
-      tools: runtime.tools.definitions(),
-      systemPrompt: async (input) =>
-        (await runtime.loop?.previewPrompt(input)) ??
-        'No model is configured, so no system prompt has been assembled yet.',
-    }),
+    agent: (agentId?: string): AgentView => {
+      // Through the real resolver, like the real adapter: a spec that
+      // configures a second agent has to see the same inheritance a browser
+      // would, not a fixture's approximation of it.
+      const agent = resolveAgent(runtime.config, agentId);
+      const loop = runtime.loopFor(agentId);
+
+      return {
+        id: agent.id,
+        label: agent.label,
+        // The instance id, and empty when nothing resolved — the same shape the
+        // real adapter reports, so a spec about the unconfigured state sees what
+        // a browser would.
+        provider: runtime.instance?.id ?? '',
+        model: loop?.model ?? (runtime.configured ? runtime.model : ''),
+        configured: agent.id === DEFAULT_AGENT_ID ? runtime.configured : loop !== null,
+        jail: runtime.jail,
+        jailFor: (workspaceId) => runtime.jails.forWorkspace(workspaceId),
+        tools: runtime.tools.select(agent.tools).definitions(),
+        contextWindowTokens: agent.defaults.contextWindowTokens,
+        systemPrompt: async (input) =>
+          (await loop?.previewPrompt(input)) ??
+          'No model is configured, so no system prompt has been assembled yet.',
+      };
+    },
+
+    agents: (): readonly AgentSummary[] =>
+      runtime.agents.map((agent) => ({
+        id: agent.id,
+        label: agent.label,
+        model: runtime.loopFor(agent.id)?.model ?? agent.defaults.model,
+        provider: runtime.instance?.id ?? '',
+      })),
   };
 }

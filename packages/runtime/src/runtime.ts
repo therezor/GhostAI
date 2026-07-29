@@ -57,6 +57,7 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import { AgentLoop, SteeringQueue, type ApprovalGate } from '@ghostai/agent';
 import {
+  DEFAULT_AGENT_ID,
   GhostError,
   SessionStore,
   WorkspaceStore,
@@ -67,11 +68,12 @@ import {
   type GhostPaths,
   type Logger,
 } from '@ghostai/core';
-import type { AgentDefaults, Config, ConfigPatch } from '@ghostai/protocol';
+import type { Config, ConfigPatch } from '@ghostai/protocol';
 import {
   PROVIDERS,
   resolveConnection,
   resolveInstance,
+  type ChatProvider,
   type ProviderInstance,
   type ProviderSpec,
 } from '@ghostai/providers';
@@ -83,8 +85,10 @@ import type {
 } from '@ghostai/security';
 import { ToolRegistry, registerBuiltins } from '@ghostai/tools';
 
+import { listAgents, resolveAgent, type EffectiveAgent } from './agents.js';
 import { PROVIDER_CREDENTIAL_NAMESPACE, findCredential, openVault } from './credentials.js';
 import { JailCache } from './jail-cache.js';
+import { LoopCache } from './loop-cache.js';
 import { mergeConfigPatch } from './merge.js';
 import { ProviderCache } from './provider-cache.js';
 
@@ -160,6 +164,13 @@ export interface GhostRuntime {
    * needs a model rather than failing every route.
    */
   readonly loop: AgentLoop | null;
+  /**
+   * Every agent that can run a turn, the default one first.
+   *
+   * Resolved — each entry's inherited fields are already folded in — so a
+   * caller listing agents for a picker never has to know the inheritance rule.
+   */
+  readonly agents: readonly EffectiveAgent[];
   /** The endpoint a turn would use, or `null` on an unconfigured install. */
   readonly instance: ProviderInstance | null;
   /** The provider type behind `instance`. Derived, and `null` for the same reason. */
@@ -178,6 +189,16 @@ export interface GhostRuntime {
    * always got; a server gets to start.
    */
   requireLoop(): AgentLoop;
+  /**
+   * The loop for one agent, built on first use and cached.
+   *
+   * `undefined` is the default agent, which is what a turn from a session
+   * nobody has bound carries. Throws for an id that names nothing runnable —
+   * ask `hasAgent` first if the id came off the wire.
+   */
+  loopFor(agentId: string | undefined): AgentLoop | null;
+  /** `loopFor`, with the same refusal `requireLoop` makes. */
+  requireLoopFor(agentId: string | undefined): AgentLoop;
   /**
    * Applies a settings patch and rebuilds what depends on it.
    *
@@ -199,8 +220,12 @@ export interface GhostRuntime {
  */
 interface Resolved {
   readonly config: Config;
+  /** Every enabled agent, resolved. Rebuilt with the config it came from. */
+  readonly agents: readonly EffectiveAgent[];
   readonly paths: GhostPaths;
   readonly jails: JailCache;
+  /** One loop per agent, built on first use. Dropped whole on a reconfigure. */
+  readonly loops: LoopCache;
   readonly loop: AgentLoop | null;
   readonly instance: ProviderInstance | null;
   readonly model: string;
@@ -353,6 +378,25 @@ class Runtime implements GhostRuntime {
     return this.#current.loop;
   }
 
+  get agents(): readonly EffectiveAgent[] {
+    return this.#current.agents;
+  }
+
+  loopFor(agentId: string | undefined): AgentLoop | null {
+    if (agentId === undefined || agentId === '' || agentId === DEFAULT_AGENT_ID) {
+      return this.#current.loop;
+    }
+    // Throws for an unknown or disabled id, which is the caller's to catch —
+    // the hub turns it into an error on one frame rather than a dead socket.
+    return this.#current.loops.get(agentId);
+  }
+
+  requireLoopFor(agentId: string | undefined): AgentLoop {
+    const loop = this.loopFor(agentId);
+    if (loop !== null) return loop;
+    throw this.#current.unconfigured ?? noProviderError(this.file);
+  }
+
   get instance(): ProviderInstance | null {
     return this.#current.instance;
   }
@@ -405,9 +449,84 @@ class Runtime implements GhostRuntime {
    * build them is what used to make an unconfigured install unserveable.
    */
   #build(config: Config, previous: Resolved | undefined): Resolved {
-    const defaults: AgentDefaults = config.agents.defaults;
-    const model = this.#options.model ?? defaults.model;
-    const providerId = this.#options.provider ?? defaults.provider;
+    // Every enabled agent, resolved. This is where an entry naming a sandbox
+    // with no backend, or settings that will not merge, throws — before
+    // anything below mutates, so a bad save leaves the runtime exactly as it
+    // was. Only the *default* agent's loop is constructed here; the rest are
+    // built on first use, because an install with six agents and one in use
+    // should not open six provider connections at boot.
+    const agents = listAgents(config);
+    const paths = pathsFor(config, this.#options);
+
+    const resolved = this.#resolveProvider(config, resolveAgent(config, DEFAULT_AGENT_ID), paths);
+
+    // A jail canonicalises through `realpath` and creates its root, so keeping
+    // the cache when nothing moved saves that work on every workspace already
+    // in use. A moved root invalidates all of them at once: every cached jail
+    // was derived from the old one.
+    //
+    // `JailCache` builds the default in its constructor, so an unusable
+    // workspace throws *here* — before any of the mutations below — which is
+    // what keeps `reconfigure` all-or-nothing.
+    const jails =
+      previous?.paths.workspace === paths.workspace ? previous.jails : new JailCache({ paths });
+
+    // Past here nothing throws, so the mutations below cannot leave the
+    // registry describing a runtime that failed to build.
+    this.tools.timeoutMs = resolved.agent.defaults.toolTimeoutMs;
+    // Exact by source: an `exec` switched off in the settings panel has to
+    // disappear from the definitions the model sees, and MCP and plugin tools
+    // registered on this same registry must survive that.
+    this.tools.unregisterBySource('builtin');
+    if (this.#options.tools !== false) registerBuiltins(this.tools, config.tools);
+
+    // A fresh cache per build: every loop in the old one was derived from the
+    // settings that just changed. A turn already running keeps the loop it
+    // started on, because it holds the object rather than looking it up again.
+    const loops = new LoopCache({
+      create: (agentId) => this.#createLoop(config, agentId, paths, jails),
+    });
+    const loop = loops.get(DEFAULT_AGENT_ID);
+
+    return {
+      config,
+      agents,
+      paths,
+      jails,
+      loops,
+      loop,
+      instance: resolved.instance,
+      model: resolved.model,
+      hasCredential: resolved.hasCredential,
+      unconfigured: resolved.unconfigured,
+    };
+  }
+
+  /**
+   * One agent's endpoint, model and credential.
+   *
+   * Split out of `#build` because two callers need it and they must not answer
+   * differently: the default agent, whose answer *is* `configured`/`model`/
+   * `instance` on the runtime, and every other agent on first use.
+   *
+   * A construction-time `--provider` / `--model` pin wins for every agent, not
+   * just the default. `ghost chat --model x` is a statement about this process,
+   * and an agent that quietly ignored it would be the more surprising rule.
+   */
+  #resolveProvider(
+    config: Config,
+    agent: EffectiveAgent,
+    paths: GhostPaths,
+  ): {
+    readonly agent: EffectiveAgent;
+    readonly provider: ChatProvider | null;
+    readonly instance: ProviderInstance | null;
+    readonly model: string;
+    readonly hasCredential: boolean;
+    readonly unconfigured: GhostError | null;
+  } {
+    const model = this.#options.model ?? agent.defaults.model;
+    const providerId = this.#options.provider ?? agent.defaults.provider;
 
     const instance =
       resolveInstance({
@@ -424,7 +543,6 @@ class Runtime implements GhostRuntime {
           ? noModelError(instance, this.file)
           : null;
 
-    const paths = pathsFor(config, this.#options);
     // Re-read on every build rather than cached: a key saved in the settings UI
     // has to be usable on the next turn, and the vault is the store it landed in.
     const apiKey =
@@ -444,56 +562,37 @@ class Runtime implements GhostRuntime {
             fetchImpl: this.#options.fetchImpl,
           });
 
-    // A jail canonicalises through `realpath` and creates its root, so keeping
-    // the cache when nothing moved saves that work on every workspace already
-    // in use. A moved root invalidates all of them at once: every cached jail
-    // was derived from the old one.
-    //
-    // `JailCache` builds the default in its constructor, so an unusable
-    // workspace throws *here* — before any of the mutations below — which is
-    // what keeps `reconfigure` all-or-nothing.
-    const jails =
-      previous?.paths.workspace === paths.workspace ? previous.jails : new JailCache({ paths });
+    return { agent, provider, instance, model, hasCredential: apiKey !== undefined, unconfigured };
+  }
 
-    // Past here nothing throws, so the mutations below cannot leave the
-    // registry describing a runtime that failed to build.
-    this.tools.timeoutMs = defaults.toolTimeoutMs;
-    // Exact by source: an `exec` switched off in the settings panel has to
-    // disappear from the definitions the model sees, and MCP and plugin tools
-    // registered on this same registry must survive that.
-    this.tools.unregisterBySource('builtin');
-    if (this.#options.tools !== false) registerBuiltins(this.tools, config.tools);
+  /** The loop for one agent, or `null` when nothing can run a turn. */
+  #createLoop(
+    config: Config,
+    agentId: string,
+    paths: GhostPaths,
+    jails: JailCache,
+  ): AgentLoop | null {
+    const agent = resolveAgent(config, agentId);
+    const { provider, model } = this.#resolveProvider(config, agent, paths);
+    if (provider === null) return null;
 
-    const loop =
-      provider === null
-        ? null
-        : new AgentLoop({
-            provider,
-            tools: this.tools,
-            store: this.store,
-            jails,
-            config: defaults,
-            toolsConfig: config.tools,
-            model,
-            logger: this.#logger,
-            steering: this.steering,
-            env: this.#env,
-            ...(this.#options.approvals === undefined
-              ? {}
-              : { approvals: this.#options.approvals }),
-            ...(this.#options.clock === undefined ? {} : { clock: this.#options.clock }),
-          });
-
-    return {
-      config,
-      paths,
+    return new AgentLoop({
+      provider,
+      // A view of the one shared registry, not a registry of its own: an MCP
+      // server is one connection however many agents are configured.
+      tools: this.tools.select(agent.tools),
+      store: this.store,
       jails,
-      loop,
-      instance,
+      config: agent.defaults,
+      toolsConfig: agent.toolsConfig,
       model,
-      hasCredential: apiKey !== undefined,
-      unconfigured,
-    };
+      agent: { id: agent.id, label: agent.label, systemPrompt: agent.systemPrompt },
+      logger: this.#logger,
+      steering: this.steering,
+      env: this.#env,
+      ...(this.#options.approvals === undefined ? {} : { approvals: this.#options.approvals }),
+      ...(this.#options.clock === undefined ? {} : { clock: this.#options.clock }),
+    });
   }
 
   /**

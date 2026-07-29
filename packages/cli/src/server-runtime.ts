@@ -36,7 +36,7 @@
 
 import { existsSync } from 'node:fs';
 
-import { saveConfig } from '@ghostai/core';
+import { DEFAULT_AGENT_ID, saveConfig } from '@ghostai/core';
 import type {
   Config,
   ConfigPatch,
@@ -45,8 +45,8 @@ import type {
   SetCredentialRequest,
 } from '@ghostai/protocol';
 import { createProvider, listInstances, resolveConnection } from '@ghostai/providers';
-import { openVault, type GhostRuntime } from '@ghostai/runtime';
-import type { AgentView, ServerRuntime } from '@ghostai/server';
+import { openVault, resolveAgent, type GhostRuntime } from '@ghostai/runtime';
+import type { AgentSummary, AgentView, ServerRuntime } from '@ghostai/server';
 import type { CredentialVault, FetchImplementation } from '@ghostai/security';
 
 /**
@@ -198,29 +198,52 @@ export function createServerRuntime(
     store: runtime.store,
     workspaces: runtime.workspaces,
 
-    agent: (): AgentView => ({
-      // Empty rather than a sentinel on an unconfigured install: `configured`
-      // is the flag to branch on, so nothing has to read meaning into a string.
-      provider: runtime.instance?.id ?? '',
-      model: runtime.configured ? runtime.model : '',
-      configured: runtime.configured,
-      jail: runtime.jail,
-      jailFor: (workspaceId) => runtime.jails.forWorkspace(workspaceId),
-      tools: runtime.tools.definitions(),
-      // The loop's own composition, not a second assembly of it: memory,
-      // skills and profiles arrive as contributors attached to that object,
-      // and a reimplementation here could not see them.
-      systemPrompt: async (input) => {
-        const loop = runtime.loop;
-        if (loop === null) {
-          // The context route asks for this to show what a turn would carry.
-          // With no model there is no turn and no prompt, and throwing would
-          // make one unconfigured panel break a screen that otherwise works.
-          return 'No model is configured, so no system prompt has been assembled yet.';
-        }
-        return await loop.previewPrompt(input);
-      },
-    }),
+    agent: (agentId?: string): AgentView => {
+      // Resolution throws for an id naming nothing runnable, which the route
+      // turns into a 404 — the alternative, silently describing the default,
+      // would report tools and a prompt for an agent nobody asked about.
+      const agent = resolveAgent(runtime.config, agentId);
+      const loop = runtime.loopFor(agentId);
+      const isDefault = agent.id === DEFAULT_AGENT_ID;
+
+      return {
+        id: agent.id,
+        label: agent.label,
+        // Empty rather than a sentinel on an unconfigured install: `configured`
+        // is the flag to branch on, so nothing has to read meaning into a string.
+        provider: runtime.instance?.id ?? '',
+        model: loop?.model ?? (runtime.configured ? runtime.model : ''),
+        configured: isDefault ? runtime.configured : loop !== null,
+        jail: runtime.jail,
+        jailFor: (workspaceId) => runtime.jails.forWorkspace(workspaceId),
+        // This agent's tools, not the registry's — an agent with a subset must
+        // not be described by a list of tools it cannot call.
+        tools: runtime.tools.select(agent.tools).definitions(),
+        contextWindowTokens: agent.defaults.contextWindowTokens,
+        // The loop's own composition, not a second assembly of it: memory and
+        // skills arrive as contributors attached to that object, and a
+        // reimplementation here could not see them.
+        systemPrompt: async (input) => {
+          if (loop === null) {
+            // The context route asks for this to show what a turn would carry.
+            // With no model there is no turn and no prompt, and throwing would
+            // make one unconfigured panel break a screen that otherwise works.
+            return 'No model is configured, so no system prompt has been assembled yet.';
+          }
+          return await loop.previewPrompt(input);
+        },
+      };
+    },
+
+    agents: (): readonly AgentSummary[] =>
+      runtime.agents.map((agent) => ({
+        id: agent.id,
+        label: agent.label,
+        // After inheritance, and after any process-wide pin, so a picker shows
+        // what a turn would actually use rather than what the file says.
+        model: runtime.loopFor(agent.id)?.model ?? agent.defaults.model,
+        provider: runtime.instance?.id ?? '',
+      })),
 
     models: async (modelOptions): Promise<ModelsResponse> => {
       const now = Date.now();

@@ -9,37 +9,29 @@
  * containing `$HOME`, a grep for a pipe) while blocking nothing at all. With no
  * string, there is no parser, and nothing for a metacharacter to mean.
  *
- * The decisions this tool actually owns, given `guardExec` has already ruled on
- * the binary, the arguments and the environment:
+ * Three parties, and the split between them is the point. `guardExec` decides
+ * **whether** a command may run, and with what arguments and environment. A
+ * `CommandRunner` decides **where** — a host child process today, a container
+ * once there is a backend for one. What is left, and what this file owns:
  *
- *  - **`spawn`, not `execFile`.** They are the same call underneath and both run
- *    with `shell: false`; what differs is the overflow behaviour. `execFile`'s
- *    `maxBuffer` kills the child and discards *everything* it wrote, so a build
- *    that logs 2 MB returns nothing rather than its first megabyte. Streaming
- *    into `createOutputCap` — which `@ghostai/security` exports for exactly this
- *    — keeps the head of the output and lets the command finish.
+ *  - **Reconciling the two timeouts.** The model may ask for less time than the
+ *    operator allows, never more, and `0` means unlimited on both sides — so it
+ *    is not a plain `min`. See `effectiveTimeout`.
  *
  *  - **A non-zero exit is a result, not a failure.** `grep` finding nothing
  *    exits 1, and `tsc` failing is the answer the model asked for. Both come
  *    back as `isError` with the output intact, so the model can read the
  *    compiler errors rather than a wrapper's opinion of them.
  *
- *  - **The signal reaches the child.** One `AbortSignal` runs from the WebSocket
- *    disconnect through the loop and the registry to `child.kill()` here, which
- *    is the end of the chain and the only place cancellation becomes a real
- *    process going away.
+ *  - **How an outcome reads.** `renderOutcome` is what the model sees, and
+ *    `details` is what an approval prompt and the audit log see.
  */
 
-import { spawn } from 'node:child_process';
-
-import { GhostError, abortedError, systemClock } from '@ghostai/core';
-import { createOutputCap, guardExec, type ExecPlan } from '@ghostai/security';
+import { guardExec, type ExecPlan } from '@ghostai/security';
 import { z } from 'zod';
 
-import { assertNotAborted, defineTool, type AnyTool, type ToolContext } from '../define.js';
-
-/** Grace between asking a child to stop and insisting. */
-const KILL_GRACE_MS = 2_000;
+import { assertNotAborted, defineTool, type AnyTool } from '../define.js';
+import { localRunner, type RunOutcome } from '../runner.js';
 
 const schema = z.strictObject({
   argv: z
@@ -55,15 +47,6 @@ const schema = z.strictObject({
     .optional()
     .describe('Kill the process after this many milliseconds. Capped by the operator setting.'),
 });
-
-interface ExecOutcome {
-  readonly stdout: string;
-  readonly stderr: string;
-  readonly truncated: boolean;
-  readonly code: number | null;
-  readonly signal: NodeJS.Signals | null;
-  readonly timedOut: boolean;
-}
 
 export const execTool: AnyTool = defineTool({
   name: 'exec',
@@ -88,7 +71,14 @@ export const execTool: AnyTool = defineTool({
       ...(context.env === undefined ? {} : { env: context.env }),
     });
 
-    const outcome = await runChild(plan, effectiveTimeout(plan, args.timeoutMs), context);
+    // Where it runs is the context's to decide; whether it may run was settled
+    // above. `localRunner` is the host child process this tool has always been.
+    const outcome = await (context.runner ?? localRunner).run({
+      plan,
+      timeoutMs: effectiveTimeout(plan, args.timeoutMs),
+      signal: context.signal,
+      ...(context.clock === undefined ? {} : { clock: context.clock }),
+    });
     return renderOutcome(args.argv, plan, outcome);
   },
 });
@@ -106,104 +96,10 @@ function effectiveTimeout(plan: ExecPlan, requested: number | undefined): number
   return Math.min(requested, plan.timeoutMs);
 }
 
-function runChild(plan: ExecPlan, timeoutMs: number, context: ToolContext): Promise<ExecOutcome> {
-  const clock = context.clock ?? systemClock;
-  const stdout = createOutputCap(plan.maxOutputBytes);
-  const stderr = createOutputCap(plan.maxOutputBytes);
-
-  return new Promise<ExecOutcome>((resolve, reject) => {
-    const child = spawn(plan.file, [...plan.args], {
-      cwd: plan.cwd,
-      env: { ...plan.env },
-      shell: false,
-      windowsHide: true,
-    });
-
-    let timedOut = false;
-    let settled = false;
-
-    const stop = (): void => {
-      child.kill('SIGTERM');
-      // A child that ignores SIGTERM — an editor, a REPL, anything holding the
-      // terminal — would otherwise keep the turn's promise alive forever.
-      const escalation = clock.setTimeout(() => {
-        child.kill('SIGKILL');
-      }, KILL_GRACE_MS);
-      child.once('close', () => {
-        clock.clearTimeout(escalation);
-      });
-    };
-
-    const onAbort = (): void => {
-      stop();
-    };
-    context.signal.addEventListener('abort', onAbort, { once: true });
-
-    const timer =
-      timeoutMs > 0
-        ? clock.setTimeout(() => {
-            timedOut = true;
-            stop();
-          }, timeoutMs)
-        : undefined;
-
-    const cleanup = (): void => {
-      context.signal.removeEventListener('abort', onAbort);
-      if (timer !== undefined) clock.clearTimeout(timer);
-    };
-
-    // Closing the pipe once the budget is spent is the point of the cap's
-    // boolean return: a command that has already written more than the model
-    // can be shown gets the same treatment `head` would give it, rather than
-    // being read to the end so its output can be thrown away.
-    child.stdout.on('data', (chunk: Buffer) => {
-      if (!stdout.push(chunk)) child.stdout.destroy();
-    });
-    child.stderr.on('data', (chunk: Buffer) => {
-      if (!stderr.push(chunk)) child.stderr.destroy();
-    });
-
-    child.on('error', (error) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(
-        new GhostError('tool', `Could not run ${plan.file}: ${error.message}`, {
-          cause: error,
-          details: { file: plan.file },
-        }),
-      );
-    });
-
-    // `close`, not `exit`: `exit` fires when the process ends, which can be
-    // before its pipes have flushed, and the last lines of a compiler's output
-    // are exactly the ones worth having.
-    child.on('close', (code, signal) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      if (context.signal.aborted && !timedOut) {
-        reject(abortedError('exec'));
-        return;
-      }
-      const out = stdout.done();
-      const err = stderr.done();
-      resolve({
-        stdout: out.text,
-        stderr: err.text,
-        truncated: out.truncated || err.truncated,
-        code,
-        signal,
-        timedOut,
-      });
-    });
-  });
-}
-
 function renderOutcome(
   argv: readonly string[],
   plan: ExecPlan,
-  outcome: ExecOutcome,
+  outcome: RunOutcome,
 ): { content: string; isError: boolean; details: Readonly<Record<string, unknown>> } {
   const sections: string[] = [];
   if (outcome.stdout !== '') sections.push(outcome.stdout.trimEnd());

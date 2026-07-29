@@ -61,6 +61,7 @@ export class ScriptedConnection implements ChannelHubConnection {
     const turnId = `turn-${String(this.#turns)}`;
     this.emit({
       type: 'turn.start',
+      agentId: 'default',
       seq: 0,
       sessionKey: this.sessionKey,
       turnId,

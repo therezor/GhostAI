@@ -1,0 +1,313 @@
+/**
+ * Multiple agents, in a browser, against the real stack.
+ *
+ * The unit suites already prove the pieces: the resolver inherits field by
+ * field, the loop cache builds one loop per agent, the tool scope hides a
+ * denied tool, the hub picks a loop per turn. What only a browser can show is
+ * that they are wired to each other — that an agent created in the settings
+ * panel becomes an agent the API will actually run a turn on, with the tools
+ * and the prompt that agent was given rather than the default's.
+ *
+ * Every assertion here is on **durable** state: a settings tree that came back
+ * from the server, a context response, a stored session row. Nothing waits on a
+ * line that exists only between two frames — that is what put `approvals.spec`
+ * red in CI four runs while green on a laptop every time.
+ */
+
+import { expect, test } from '../fixtures.js';
+
+test.describe('agents', () => {
+  test('the picker is in the composer, where the question is asked', async ({ app, harness }) => {
+    await app.request.patch(`${harness.url}/api/settings`, {
+      data: { agents: { list: { reviewer: { label: 'Reviewer' } } } },
+    });
+
+    await app.goto(`${harness.url}/`);
+
+    // Beside the composer's hint, not three columns away in the sidebar.
+    await app.getByRole('button', { name: /^Agent: / }).click();
+    await expect(app.getByRole('menuitemradio', { name: /Reviewer/ })).toBeVisible();
+
+    await app.getByRole('menuitem', { name: 'Manage agents…' }).click();
+    await expect(app.getByRole('heading', { name: 'Agents' })).toBeVisible();
+  });
+
+  test('picking one before the first message binds the conversation to it', async ({
+    app,
+    harness,
+  }) => {
+    await app.request.patch(`${harness.url}/api/settings`, {
+      data: { agents: { list: { reviewer: { label: 'Reviewer' } } } },
+    });
+
+    await app.goto(`${harness.url}/`);
+    await app.getByRole('button', { name: /^Agent: / }).click();
+    await app.getByRole('menuitemradio', { name: /Reviewer/ }).click();
+
+    await app.getByRole('textbox', { name: /message/i }).fill('hello');
+    await app.getByRole('button', { name: 'Send' }).click();
+
+    // The durable result: the stored row names the agent that was picked.
+    await expect
+      .poll(async () => {
+        const response = await app.request.get(`${harness.url}/api/sessions`);
+        const body = (await response.json()) as { sessions: { agentId?: string }[] };
+        return body.sessions[0]?.agentId;
+      })
+      .toBe('reviewer');
+  });
+
+  test('the default agent is listed and cannot be deleted', async ({ app, harness }) => {
+    await app.request.patch(`${harness.url}/api/settings`, {
+      data: { agents: { list: { reviewer: { label: 'Reviewer' } } } },
+    });
+
+    await app.goto(`${harness.url}/agents`);
+
+    // It is there even though nothing wrote it down: every unbound session
+    // runs on it, and a list that only showed the written-down ones would hide
+    // the one actually in use.
+    await expect(app.getByRole('link', { name: 'Edit default' })).toBeVisible();
+
+    await app.getByRole('link', { name: 'Edit default' }).click();
+    // The budget lives behind a disclosure now — real settings, but ones
+    // nobody changes twice a year, and above the prompt they pushed the
+    // subject of the screen below the fold.
+    await app.getByRole('button', { name: 'Show limits' }).click();
+    await expect(app.getByLabel('Max output tokens')).toBeVisible();
+    // No row menu at all on the default: the only thing in it would be a
+    // delete this agent cannot have.
+    await expect(app.getByRole('button', { name: /^Actions for/ })).toHaveCount(0);
+
+    // A named agent does offer one.
+    await app.goto(`${harness.url}/agents/reviewer`);
+    await app.getByRole('button', { name: 'Actions for Reviewer' }).click();
+    await expect(app.getByRole('menuitem', { name: 'Delete this agent' })).toBeVisible();
+  });
+
+  test('the model and budget live on the default agent, not in Settings', async ({
+    app,
+    harness,
+  }) => {
+    await app.goto(`${harness.url}/settings`);
+    // The Agent panel is gone: what it edited *is* the default agent's.
+    await expect(app.getByRole('tab', { name: 'Agent' })).toHaveCount(0);
+
+    await app.goto(`${harness.url}/agents/default`);
+    await app.getByRole('button', { name: 'Show limits' }).click();
+    const maxTokens = app.getByLabel('Max output tokens');
+    await maxTokens.fill('2048');
+    await app.getByRole('button', { name: 'Save changes' }).click();
+
+    await expect
+      .poll(async () => {
+        const response = await app.request.get(`${harness.url}/api/settings`);
+        const body = (await response.json()) as {
+          config: { agents: { defaults: { maxTokens: number } } };
+        };
+        return body.config.agents.defaults.maxTokens;
+      })
+      .toBe(2048);
+  });
+
+  test('a new agent copies the default’s behaviour but keeps inheriting its model', async ({
+    app,
+    harness,
+  }) => {
+    // Give the default agent something worth copying.
+    await app.request.patch(`${harness.url}/api/settings`, {
+      data: {
+        agents: {
+          list: {
+            default: {
+              systemPrompt: 'House style: be terse.',
+              tools: { allow: [], deny: ['exec'] },
+            },
+          },
+        },
+      },
+    });
+
+    await app.goto(`${harness.url}/agents`);
+    await app.getByRole('button', { name: 'New agent' }).click();
+    await app.getByLabel('Name', { exact: true }).fill('Reviewer');
+    await app.getByRole('button', { name: 'Create' }).click();
+
+    await expect
+      .poll(async () => {
+        const response = await app.request.get(`${harness.url}/api/settings`);
+        const body = (await response.json()) as {
+          config: {
+            agents: {
+              list: Record<
+                string,
+                { systemPrompt: string; tools: { deny: string[] }; model?: string }
+              >;
+            };
+          };
+        };
+        return body.config.agents.list.reviewer;
+      })
+      .toMatchObject({ systemPrompt: 'House style: be terse.', tools: { deny: ['exec'] } });
+
+    const response = await app.request.get(`${harness.url}/api/settings`);
+    const body = (await response.json()) as {
+      config: { agents: { list: Record<string, { model?: string }> } };
+    };
+    // The model is *not* copied: it stays inherited, so a later change to the
+    // defaults still moves this agent. Copying it would pin it to today's.
+    expect(body.config.agents.list.reviewer).not.toHaveProperty('model');
+  });
+
+  test('an agent created on the page is one the server will run a turn on', async ({
+    app,
+    harness,
+  }) => {
+    await app.goto(`${harness.url}/agents`);
+
+    await app.getByRole('button', { name: 'New agent' }).click();
+    await app.getByLabel('Name', { exact: true }).fill('Code Reviewer');
+    await app.getByRole('button', { name: 'Create' }).click();
+
+    // The durable result: the settings tree the server sends back names it.
+    await expect
+      .poll(async () => {
+        const response = await app.request.get(`${harness.url}/api/settings`);
+        const body = (await response.json()) as {
+          config: { agents: { list: Record<string, { label: string }> } };
+        };
+        return body.config.agents.list['code-reviewer']?.label;
+      })
+      .toBe('Code Reviewer');
+
+    // And it is offered as something a turn can run on.
+    const agents = await app.request.get(`${harness.url}/api/agents`);
+    const listed = (await agents.json()) as { agents: { id: string; label: string }[] };
+    expect(listed.agents.map((agent) => agent.id)).toEqual(['default', 'code-reviewer']);
+  });
+
+  test('a session bound to an agent carries that agent’s whole prompt', async ({
+    app,
+    harness,
+  }) => {
+    // Configured through the settings route the screen uses, so the spec proves
+    // the same path a browser takes rather than a seeded fixture.
+    const saved = await app.request.patch(`${harness.url}/api/settings`, {
+      data: {
+        agents: {
+          list: {
+            reviewer: {
+              label: 'Reviewer',
+              systemPrompt: '# {{name}}\n\nOnly ever read. Never write.',
+              tools: { allow: [], deny: ['exec'] },
+            },
+          },
+        },
+      },
+    });
+    expect(saved.ok(), 'saving the agent should succeed').toBe(true);
+
+    const created = await app.request.post(`${harness.url}/api/sessions`, {
+      data: { key: 'web-reviewer', agentId: 'reviewer' },
+    });
+    expect(created.ok(), 'creating the session should succeed').toBe(true);
+
+    // The context inspector reports what a turn on this session would carry —
+    // assembled by that agent's own loop, not by a second implementation.
+    const context = await app.request.get(`${harness.url}/api/sessions/web-reviewer/context`);
+    const body = (await context.json()) as { systemPrompt: string };
+
+    // The placeholder is filled from the agent's label, at turn time, because
+    // the same stored template runs in every workspace and on every platform.
+    expect(body.systemPrompt).toContain('# Reviewer');
+    expect(body.systemPrompt).toContain('Only ever read. Never write.');
+    // And nothing else. A stored prompt *is* the static half now rather than an
+    // `## Instructions` section appended below a fixed one — which is the whole
+    // of "the system prompt belongs to the agent".
+    expect(body.systemPrompt).not.toContain('That directory is your root');
+    expect(body.systemPrompt).not.toContain('## Guidelines');
+  });
+
+  test('an agent that stores no prompt still gets the built-in one', async ({ app, harness }) => {
+    // The other half of the contract: empty means "the built-in", so an install
+    // that never customised a prompt keeps receiving improvements to it.
+    await app.request.patch(`${harness.url}/api/settings`, {
+      data: { agents: { list: { plain: { label: 'Plain' } } } },
+    });
+    await app.request.post(`${harness.url}/api/sessions`, {
+      data: { key: 'web-plain-prompt', agentId: 'plain' },
+    });
+
+    const context = await app.request.get(`${harness.url}/api/sessions/web-plain-prompt/context`);
+    const body = (await context.json()) as { systemPrompt: string };
+
+    expect(body.systemPrompt).toContain('# Plain');
+    expect(body.systemPrompt).toContain('That directory is your root');
+    expect(body.systemPrompt).toContain('## Guidelines');
+  });
+
+  test('a denied tool is not offered to the agent that denied it', async ({ app, harness }) => {
+    await app.request.patch(`${harness.url}/api/settings`, {
+      data: {
+        agents: {
+          list: {
+            reader: { label: 'Reader', tools: { allow: ['read_file'], deny: ['exec'] } },
+          },
+        },
+      },
+    });
+    await app.request.post(`${harness.url}/api/sessions`, {
+      data: { key: 'web-reader', agentId: 'reader' },
+    });
+    await app.request.post(`${harness.url}/api/sessions`, { data: { key: 'web-plain' } });
+
+    /** What the tool definitions cost this session, as the inspector measures it. */
+    const toolBudget = async (key: string): Promise<number> => {
+      const response = await app.request.get(`${harness.url}/api/sessions/${key}/context`);
+      expect(response.ok(), `${key} should have a context`).toBe(true);
+      const body = (await response.json()) as { breakdown: Record<string, number> };
+      return body.breakdown.tools ?? 0;
+    };
+
+    const restricted = await toolBudget('web-reader');
+    const unrestricted = await toolBudget('web-plain');
+
+    // The measurement is the assertion: the inspector is fed the *agent's*
+    // tool scope, so an agent holding one tool cannot cost the same as one
+    // holding five. A context panel that reported the registry's list would
+    // describe tools this agent can never call.
+    expect(restricted).toBeGreaterThan(0);
+    expect(restricted).toBeLessThan(unrestricted);
+
+    // And the registry itself is untouched — the denial is a view, not a removal.
+    const tools = await app.request.get(`${harness.url}/api/tools`);
+    const names = ((await tools.json()) as { tools: { name: string }[] }).tools.map((t) => t.name);
+    expect(names).toContain('exec');
+  });
+
+  test('the picker survives a reload, because the binding is on the session row', async ({
+    app,
+    harness,
+  }) => {
+    await app.request.patch(`${harness.url}/api/settings`, {
+      data: { agents: { list: { writer: { label: 'Writer' } } } },
+    });
+    await app.request.post(`${harness.url}/api/sessions`, {
+      data: { key: 'web-bound', agentId: 'writer' },
+    });
+
+    const read = async (): Promise<string | undefined> => {
+      const response = await app.request.get(`${harness.url}/api/sessions/web-bound`);
+      return ((await response.json()) as { agentId?: string }).agentId;
+    };
+
+    expect(await read()).toBe('writer');
+
+    // Moving it is an explicit update, not something a frame can do.
+    const moved = await app.request.patch(`${harness.url}/api/sessions/web-bound`, {
+      data: { agentId: 'default' },
+    });
+    expect(moved.ok()).toBe(true);
+    expect(await read()).toBe('default');
+  });
+});

@@ -180,6 +180,7 @@ describe('runTurn', () => {
     const loop = fakeLoop(async function* () {
       yield {
         type: 'turn.start',
+        agentId: 'default',
         sessionKey: 's',
         turnId: 't1',
         model: 'm',
@@ -232,6 +233,7 @@ describe('runTurn', () => {
     const loop = fakeLoop(async function* (input) {
       yield {
         type: 'turn.start',
+        agentId: 'default',
         sessionKey: 's',
         turnId: 't1',
         model: 'm',
@@ -271,6 +273,7 @@ describe('runTurn', () => {
     const loop = fakeLoop(async function* () {
       yield {
         type: 'turn.start',
+        agentId: 'default',
         sessionKey: 's',
         turnId: 't1',
         model: 'm',
@@ -295,6 +298,7 @@ describe('runTurn', () => {
     const loop = fakeLoop(async function* () {
       yield {
         type: 'turn.start',
+        agentId: 'default',
         sessionKey: 's',
         turnId: 't1',
         model: 'm',

@@ -78,6 +78,7 @@ export function wsRoutes(deps: RouteDeps): RouteGroup<WsRouteId> {
             socket.send(JSON.stringify(message));
           },
           ...(query.session === undefined ? {} : { sessionKey: query.session }),
+          ...(query.agent === undefined ? {} : { agentId: query.agent }),
           channel: 'web',
         });
 

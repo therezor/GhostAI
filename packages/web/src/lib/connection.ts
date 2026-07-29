@@ -189,18 +189,36 @@ function attachWithCursor(sessionKey: string): number {
  * which is the one thing this frame can do that `session.switch` cannot: it
  * re-points `connection.workspaceId`, and that is what decides where the
  * conversation is created when it finally is.
+ *
+ * The agent rides along for the same reason and with the same timing: a session
+ * is bound to one when it is created, and after that the binding is the stored
+ * row's — moving it is an explicit `PATCH /api/sessions/:key`, not a frame.
  */
-export function newSession(workspaceId?: string): string {
+export function newSession(workspaceId?: string, agentId?: string): string {
   const sessionKey = `web-${crypto.randomUUID()}`;
   socket?.send({
     type: 'session.new',
     sessionKey,
     ...(workspaceId === undefined ? {} : { workspaceId }),
+    ...(agentId === undefined ? {} : { agentId }),
   });
   return sessionKey;
 }
 
-export function sendUserMessage(text: string, attachments: readonly Attachment[] = []): void {
+/**
+ * Sends a message, and says which agent it should run on.
+ *
+ * The agent is carried on every message rather than only on the first, because
+ * the socket may have minted this session key without a `session.new` frame —
+ * a fresh tab attaches and the user simply types. Sending it always is safe:
+ * the server ignores it for a session that already has a row, deliberately, so
+ * a history cannot drift onto another agent's prompt and tools by accident.
+ */
+export function sendUserMessage(
+  text: string,
+  attachments: readonly Attachment[] = [],
+  agentId?: string,
+): void {
   const store = useTurnStore.getState();
   const sessionKey = store.sessionKey;
   if (sessionKey === undefined || socket === undefined) return;
@@ -217,6 +235,7 @@ export function sendUserMessage(text: string, attachments: readonly Attachment[]
     content: text,
     attachments: [...attachments],
     clientMessageId,
+    ...(agentId === undefined ? {} : { agentId }),
   });
 }
 

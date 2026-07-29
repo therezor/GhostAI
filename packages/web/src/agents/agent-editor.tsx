@@ -1,0 +1,809 @@
+/**
+ * Editing one agent.
+ *
+ * A route of its own rather than a panel beside a list, because an agent has
+ * several sections' worth of settings and a master/detail that put both on one
+ * screen made the list a narrow column of nothing and the form a scroll. The
+ * list picks; this edits; the back link returns.
+ *
+ * **The default agent is edited here too, and it is the reason Settings has no
+ * "Agent" panel.** Its model and budget *are* `agents.defaults` — the values
+ * every other agent inherits — so editing them is editing that subtree, and a
+ * second screen for the same fields was two doors into one room.
+ *
+ * **It is also the same screen, field for field.** It did not use to be: the
+ * default agent got sections called "Model", "Budget" and "Workspace" while
+ * every other agent got one called "Model and budget", with different labels,
+ * different hints and a different shape. Two layouts for one concept meant an
+ * operator learned the screen twice and could not tell which settings an agent
+ * actually had. The difference between them is real but it is *about
+ * inheritance*, not about layout — so it lives in one `bindings` record here
+ * and in `onSave`, and every control below is written once.
+ *
+ * **The system prompt is last.** It is the tallest thing on the screen by a
+ * wide margin — a full editor holding a page of text — and in the middle it
+ * split the short settings into a group above and a group below, so reaching
+ * the tools meant scrolling past a document. Everything that fits on a line
+ * comes first; the one thing that does not comes after, where it can be as tall
+ * as it likes without pushing anything.
+ */
+
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, useNavigate, useParams } from '@tanstack/react-router';
+import { ArrowLeft, RotateCcw, Trash2 } from 'lucide-react';
+import { useMemo, useState, type JSX } from 'react';
+
+import {
+  AgentEntrySchema,
+  DEFAULT_AGENT_ID,
+  DEFAULT_SYSTEM_PROMPT_TEMPLATE,
+  PROMPT_PLACEHOLDERS,
+  unknownPlaceholders,
+  type AgentDefaults,
+  type AgentEntry,
+} from '@ghostai/protocol';
+
+import { Badge } from '@/components/ui/badge.js';
+import { Button } from '@/components/ui/button.js';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu.js';
+import { Switch } from '@/components/ui/switch.js';
+import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';
+import { RowActions } from '@/components/crud/row-actions.js';
+import { CodeEditor } from '@/files/code-editor.js';
+import { api } from '@/lib/api.js';
+import { queryKeys } from '@/lib/query.js';
+import {
+  FieldGrid,
+  SaveBar,
+  Section,
+  SelectField,
+  SwitchRow,
+  TextField,
+} from '@/settings/controls.js';
+import { modelOptions } from '@/settings/fields.js';
+import { useSaveSettings, useSettings } from '@/settings/use-settings.js';
+import {
+  APPROVAL_POLICIES,
+  INHERIT_VALUE,
+  REASONING_EFFORTS,
+  parseToolList,
+  toAgentDeletePatch,
+  toAgentEntryForm,
+  toAgentEntryPatch,
+  toAgentForm,
+  toDefaultAgentPatch,
+  type AgentEntryForm,
+  type AgentForm,
+} from './agents-form.js';
+import { useAgent } from './agent-context.js';
+
+/**
+ * The fields both halves of the form hold as strings under the same name.
+ *
+ * Intersecting the two keeps `bind` honest: a field that exists on only one of
+ * them — `learningEnabled`, `allowTools` — cannot be bound this way, and trying
+ * is a compile error rather than a control that silently edits nothing.
+ */
+type StringField = {
+  [K in keyof AgentForm & keyof AgentEntryForm]: AgentForm[K] extends string
+    ? AgentEntryForm[K] extends string
+      ? K
+      : never
+    : never;
+}[keyof AgentForm & keyof AgentEntryForm];
+
+/** One field, wherever this agent happens to keep it. */
+interface Bound {
+  readonly value: string;
+  readonly set: (value: string) => void;
+  /**
+   * What the box would use if it were left empty, as a sentence fragment.
+   *
+   * Present only for an agent that inherits. It is shown as a *hint* rather
+   * than only as a grey placeholder, because a placeholder relies on the reader
+   * already knowing that an empty box means "inherited" — which is exactly the
+   * thing this screen used to fail to say.
+   */
+  readonly inherited?: string;
+}
+
+function InheritSelect({
+  label,
+  bound,
+  options,
+  ownLabel,
+}: {
+  readonly label: string;
+  readonly bound: Bound;
+  readonly options: readonly string[];
+  /** What an empty value means when this agent has nothing to inherit from. */
+  readonly ownLabel: string;
+}): JSX.Element {
+  const inheritLabel = bound.inherited === undefined ? ownLabel : `Inherit — ${bound.inherited}`;
+
+  return (
+    <SelectField
+      label={label}
+      value={bound.value === '' ? INHERIT_VALUE : bound.value}
+      options={[
+        { value: INHERIT_VALUE, label: inheritLabel },
+        ...options.map((option) => ({ value: option, label: option })),
+      ]}
+      onValueChange={(next) => {
+        bound.set(next === INHERIT_VALUE ? '' : next);
+      }}
+    />
+  );
+}
+
+/** A text field that says what it would inherit, rather than only implying it. */
+function BoundField({
+  label,
+  bound,
+  error,
+  hint,
+  inputMode,
+  placeholder,
+}: {
+  readonly label: string;
+  readonly bound: Bound;
+  readonly error?: string | undefined;
+  readonly hint?: string;
+  readonly inputMode?: 'numeric' | 'decimal';
+  readonly placeholder?: string;
+}): JSX.Element {
+  const inheritHint =
+    bound.inherited === undefined
+      ? hint
+      : `Empty inherits ${bound.inherited} from the default agent.`;
+
+  return (
+    <TextField
+      label={label}
+      value={bound.value}
+      {...(error === undefined ? {} : { error })}
+      {...(inheritHint === undefined ? {} : { hint: inheritHint })}
+      {...(inputMode === undefined ? {} : { inputMode })}
+      {...(placeholder === undefined ? {} : { placeholder })}
+      onValueChange={bound.set}
+    />
+  );
+}
+
+export function AgentEditorRoute(): JSX.Element {
+  const { agentId } = useParams({ from: '/agents/$agentId' });
+  const settings = useSettings();
+
+  if (settings.isPending) return <p className="page__note">Loading agent…</p>;
+  if (settings.isError) {
+    return (
+      <p role="alert" className="page__error">
+        Could not load the agent: {settings.error.message}
+      </p>
+    );
+  }
+
+  const { config } = settings.data;
+  const isDefault = agentId === DEFAULT_AGENT_ID;
+  const entry = config.agents.list[agentId];
+
+  // A named agent that is not in the settings is a stale link — a bookmark to
+  // one that was deleted, or a hand-typed id. Saying so beats an empty form
+  // that silently creates it on the first save.
+  if (entry === undefined && !isDefault) {
+    return (
+      <div className="stack page page--wide">
+        <p role="alert" className="page__error">
+          There is no agent called “{agentId}”.
+        </p>
+        <Link to="/agents" className="agents__back">
+          <ArrowLeft aria-hidden="true" />
+          Back to agents
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <Editor
+      // Remounts on a change of agent, so one agent's edits cannot survive into
+      // the next one's boxes.
+      key={agentId}
+      agentId={agentId}
+      entry={entry ?? AgentEntrySchema.parse({})}
+      defaults={config.agents.defaults}
+    />
+  );
+}
+
+function Editor({
+  agentId,
+  entry,
+  defaults,
+}: {
+  readonly agentId: string;
+  readonly entry: AgentEntry;
+  readonly defaults: AgentDefaults;
+}): JSX.Element {
+  const isDefault = agentId === DEFAULT_AGENT_ID;
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { agentId: active, select } = useAgent();
+  const { save, saving } = useSaveSettings();
+
+  const [form, setForm] = useState<AgentEntryForm>(() => toAgentEntryForm(entry));
+  const [base, setBase] = useState<AgentForm>(() => toAgentForm(defaults));
+  const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
+  const [dirty, setDirty] = useState(false);
+  const [advanced, setAdvanced] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  const agents = useQuery({
+    queryKey: queryKeys.agents,
+    queryFn: ({ signal }) => api.agents(signal),
+  });
+  const providers = useQuery({
+    queryKey: queryKeys.providers,
+    queryFn: ({ signal }) => api.providers(signal),
+  });
+  const models = useQuery({
+    queryKey: queryKeys.models,
+    queryFn: ({ signal }) => api.models(signal),
+  });
+  const tools = useQuery({
+    queryKey: queryKeys.tools,
+    queryFn: ({ signal }) => api.tools(signal),
+  });
+
+  const resolved = agents.data?.agents.find((agent) => agent.id === agentId);
+
+  const update = <K extends keyof AgentEntryForm>(key: K, value: AgentEntryForm[K]): void => {
+    setForm((current) => ({ ...current, [key]: value }));
+    setDirty(true);
+  };
+  const updateBase = <K extends keyof AgentForm>(key: K, value: AgentForm[K]): void => {
+    setBase((current) => ({ ...current, [key]: value }));
+    setDirty(true);
+  };
+
+  /**
+   * Where each field lives for *this* agent.
+   *
+   * The default agent's model and budget are `agents.defaults`; every other
+   * agent's are overrides on its own entry, and an empty one inherits. Deciding
+   * that once, here, is what lets the form below be written a single time.
+   */
+  const bind = (key: StringField, inherited: string): Bound =>
+    isDefault
+      ? {
+          value: base[key],
+          set: (value) => {
+            updateBase(key, value);
+          },
+        }
+      : {
+          value: form[key],
+          set: (value) => {
+            update(key, value);
+          },
+          inherited,
+        };
+
+  const fields = {
+    provider: bind('provider', defaults.provider),
+    model: bind('model', defaults.model === '' ? 'an automatic choice' : defaults.model),
+    temperature: bind(
+      'temperature',
+      defaults.temperature === undefined ? 'the provider’s own' : String(defaults.temperature),
+    ),
+    reasoningEffort: bind('reasoningEffort', defaults.reasoningEffort ?? 'the provider’s own'),
+    maxTokens: bind('maxTokens', String(defaults.maxTokens)),
+    contextWindowTokens: bind('contextWindowTokens', String(defaults.contextWindowTokens)),
+    toolTimeoutSeconds: bind('toolTimeoutSeconds', String(defaults.toolTimeoutMs / 1000)),
+  } satisfies Record<string, Bound>;
+
+  // ── The system prompt ────────────────────────────────────────────────────
+  //
+  // Empty means "use the built-in", so the box shows the built-in and typing
+  // into it is what makes the prompt this agent's own. That is the whole of the
+  // discoverability problem: an operator cannot choose to edit something they
+  // have never been shown.
+  //
+  // **Ownership is state, not `systemPrompt !== ''`.** Deriving it made the box
+  // fight the person typing in it: selecting all and deleting — the obvious way
+  // to start a short prompt from scratch — emptied the field, which flipped it
+  // back to "not owned", which refilled the box with the built-in template. The
+  // next keystroke then landed at the end of a page of text nobody asked for.
+  const [promptOwned, setPromptOwned] = useState(() => entry.systemPrompt.trim() !== '');
+  const promptText = promptOwned ? form.systemPrompt : DEFAULT_SYSTEM_PROMPT_TEMPLATE;
+  const strayPlaceholders = useMemo(() => unknownPlaceholders(promptText), [promptText]);
+
+  // ── Tools ────────────────────────────────────────────────────────────────
+  const allow = useMemo(() => parseToolList(form.allowTools), [form.allowTools]);
+  const deny = useMemo(() => parseToolList(form.denyTools), [form.denyTools]);
+  const onlyListed = allow.length > 0;
+
+  /**
+   * Every tool this agent could name, registered or not.
+   *
+   * The union matters because `agents.list.*` is replaced wholesale on save: a
+   * checkbox list built only from the live registry would silently drop a tool
+   * this agent denies but whose MCP server happens to be down, and the denial
+   * would be gone the next time anything on this screen was saved.
+   */
+  const toolNames = useMemo(() => {
+    const names = new Set<string>((tools.data?.tools ?? []).map((tool) => tool.name));
+    for (const name of [...allow, ...deny]) names.add(name);
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [tools.data, allow, deny]);
+
+  const registered = useMemo(
+    () => new Set((tools.data?.tools ?? []).map((tool) => tool.name)),
+    [tools.data],
+  );
+
+  const setToolChecked = (name: string, checked: boolean): void => {
+    if (onlyListed) {
+      const next = checked ? [...allow, name] : allow.filter((tool) => tool !== name);
+      update('allowTools', next.join(', '));
+      return;
+    }
+    // "Everything except": a *checked* box is a tool the agent may call, so
+    // unchecking one adds it to the deny list.
+    const next = checked ? deny.filter((tool) => tool !== name) : [...deny, name];
+    update('denyTools', next.join(', '));
+  };
+
+  const setOnlyListed = (next: boolean): void => {
+    // Carry the choice across rather than resetting it: the tools that were
+    // reachable a moment ago are the obvious starting point for the other mode.
+    const reachable = toolNames.filter(
+      (name) => (onlyListed ? allow : deny).includes(name) === onlyListed,
+    );
+    if (next) {
+      update('allowTools', reachable.join(', '));
+      update('denyTools', '');
+    } else {
+      update('allowTools', '');
+      update('denyTools', toolNames.filter((name) => !reachable.includes(name)).join(', '));
+    }
+  };
+
+  const providerOptions = useMemo(() => {
+    const instances = (providers.data?.instances ?? []).filter((instance) => instance.enabled);
+    return [
+      { value: 'auto', label: 'auto — resolve from whichever has credentials' },
+      ...instances.map((instance) => ({
+        value: instance.id,
+        label: instance.displayName === '' ? instance.id : instance.displayName,
+      })),
+    ];
+  }, [providers.data]);
+
+  /**
+   * The catalogue for the chosen provider, plus whatever is already pinned.
+   *
+   * `modelOptions` in `settings/fields.ts` already holds both rules that matter
+   * — `auto` offers everything, and the current model is always in the list
+   * even when no endpoint advertises it — so a model pinned by hand, or one a
+   * provider stopped listing, survives being looked at.
+   */
+  const modelChoices = useMemo(
+    () =>
+      modelOptions(
+        models.data?.models ?? [],
+        fields.provider.value === '' ? defaults.provider : fields.provider.value,
+        fields.model.value,
+      ),
+    [models.data, fields.provider.value, fields.model.value, defaults.provider],
+  );
+
+  /**
+   * Changing the provider, and dropping the model when the new one cannot serve it.
+   *
+   * The model list is per provider, so switching endpoints leaves a pin that
+   * may name nothing on the other side — and because `modelOptions` always
+   * keeps the current value in the list (so a hand-typed or temporarily
+   * unlisted model survives being looked at), the stale pin would go on
+   * *looking* valid in the select right up until a turn failed on it.
+   *
+   * Two cases deliberately do **not** clear it, because in both the honest
+   * answer is "unknown" rather than "no":
+   *
+   *  - **`auto`**, which is not an endpoint but an instruction to resolve one,
+   *    so every model is still on the table.
+   *  - **An empty catalogue** — the query is still in flight, or every endpoint
+   *    is unreachable. Clearing on that would unpin a working model because a
+   *    server was briefly down, which is the failure this guard exists to avoid
+   *    causing.
+   */
+  const onProviderChange = (value: string): void => {
+    fields.provider.set(value);
+
+    const pinned = fields.model.value;
+    if (pinned === '') return;
+
+    const catalogue = models.data?.models ?? [];
+    if (catalogue.length === 0) return;
+
+    const nextProvider = value === '' ? defaults.provider : value;
+    if (nextProvider === 'auto') return;
+
+    // `current` empty, so this is what the new provider actually offers rather
+    // than that plus the value being judged.
+    if (!modelOptions(catalogue, nextProvider, '').includes(pinned)) {
+      fields.model.set('');
+    }
+  };
+
+  const onDelete = (): void => {
+    save(toAgentDeletePatch(agentId));
+    void queryClient.invalidateQueries({ queryKey: queryKeys.agents });
+    // Anything pointed at the agent that just went has to move, or the next
+    // conversation would name one the server will refuse.
+    if (active === agentId) select(DEFAULT_AGENT_ID);
+    void navigate({ to: '/agents' });
+  };
+
+  const onSave = (): void => {
+    const result = isDefault ? toDefaultAgentPatch(base, form) : toAgentEntryPatch(agentId, form);
+    if (!result.ok) {
+      setErrors(result.errors);
+      return;
+    }
+    setErrors({});
+    save(result.patch);
+    void queryClient.invalidateQueries({ queryKey: queryKeys.agents });
+    setDirty(false);
+  };
+
+  const onRevert = (): void => {
+    setForm(toAgentEntryForm(entry));
+    setBase(toAgentForm(defaults));
+    // Or a revert would leave the box holding the stored (empty) prompt while
+    // still claiming the agent owns one.
+    setPromptOwned(entry.systemPrompt.trim() !== '');
+    setErrors({});
+    setDirty(false);
+  };
+
+  const name = form.label === '' ? agentId : form.label;
+
+  return (
+    <div className="stack page page--wide agent-editor">
+      <div className="agent-editor__head">
+        <Link to="/agents" className="agents__back">
+          <ArrowLeft aria-hidden="true" />
+          Agents
+        </Link>
+
+        <div className="cluster agent-editor__title">
+          <h1 className="page__title">{name}</h1>
+          {isDefault && <Badge>default</Badge>}
+          <span className="spacer" />
+          {/* Not a section at the bottom of the form any more. A destructive
+              action does not belong in the reading order of the settings it
+              would destroy, and it used to fire without asking. */}
+          {!isDefault && (
+            <RowActions label={name}>
+              <DropdownMenuItem
+                className="menu__item--danger"
+                onSelect={() => {
+                  setConfirmingDelete(true);
+                }}
+              >
+                <Trash2 />
+                Delete this agent
+              </DropdownMenuItem>
+            </RowActions>
+          )}
+        </div>
+
+        <p className="page__note">
+          {isDefault
+            ? 'Every conversation that names no agent runs on this one, and every other agent inherits its model and budget.'
+            : `Runs on ${resolved?.model === '' || resolved === undefined ? 'the inherited model' : resolved.model}.`}
+        </p>
+      </div>
+
+      <Section title="Identity" description="What this agent is called.">
+        <FieldGrid>
+          <TextField
+            label="Name"
+            value={form.label}
+            placeholder={agentId}
+            onValueChange={(value) => {
+              update('label', value);
+            }}
+            hint="Fills {{name}} in the system prompt."
+          />
+          {!isDefault && (
+            <SwitchRow
+              label="Enabled"
+              hint="A disabled agent cannot run a turn and is hidden from the picker."
+              checked={form.enabled}
+              onCheckedChange={(checked) => {
+                update('enabled', checked);
+              }}
+            />
+          )}
+        </FieldGrid>
+      </Section>
+
+      <Section
+        title="Model"
+        description={
+          isDefault
+            ? 'What every agent runs on unless it overrides it.'
+            : 'Anything left empty follows the default agent.'
+        }
+      >
+        <FieldGrid>
+          <SelectField
+            label="Provider"
+            value={fields.provider.value === '' ? INHERIT_VALUE : fields.provider.value}
+            options={
+              isDefault
+                ? providerOptions
+                : [
+                    { value: INHERIT_VALUE, label: `Inherit — ${defaults.provider}` },
+                    ...providerOptions,
+                  ]
+            }
+            onValueChange={(value) => {
+              onProviderChange(value === INHERIT_VALUE ? '' : value);
+            }}
+            {...(errors.provider === undefined ? {} : { hint: errors.provider })}
+          />
+          <SelectField
+            label="Model"
+            value={fields.model.value === '' ? INHERIT_VALUE : fields.model.value}
+            options={[
+              {
+                value: INHERIT_VALUE,
+                label: isDefault
+                  ? 'Resolved automatically'
+                  : `Inherit — ${defaults.model === '' ? 'resolved automatically' : defaults.model}`,
+              },
+              ...modelChoices.map((model) => ({ value: model, label: model })),
+            ]}
+            onValueChange={(value) => {
+              fields.model.set(value === INHERIT_VALUE ? '' : value);
+            }}
+            hint={
+              models.isError
+                ? 'The model lists could not be fetched. Anything already pinned is still offered.'
+                : 'Endpoints that list their own models are enumerated live.'
+            }
+          />
+          <BoundField
+            label="Temperature"
+            bound={fields.temperature}
+            inputMode="decimal"
+            error={errors.temperature}
+            placeholder="The provider’s own"
+            hint="Leave empty to send none at all — which is the only thing that works for models that reject it."
+          />
+          <InheritSelect
+            label="Reasoning effort"
+            bound={fields.reasoningEffort}
+            options={REASONING_EFFORTS}
+            ownLabel="The provider’s own"
+          />
+        </FieldGrid>
+      </Section>
+
+      <Section
+        title="Tools"
+        description="Which tools this agent may call, and what it has to ask about first."
+      >
+        <SwitchRow
+          label="Only the tools I pick"
+          hint={
+            onlyListed
+              ? 'Anything unchecked is not offered to the model at all.'
+              : 'Every tool this install has, except the ones you uncheck.'
+          }
+          checked={onlyListed}
+          onCheckedChange={setOnlyListed}
+        />
+
+        {tools.isPending && <p className="page__note">Loading tools…</p>}
+        {toolNames.length > 0 && (
+          <ul className="stack agent-editor__tools">
+            {toolNames.map((tool) => {
+              const checked = onlyListed ? allow.includes(tool) : !deny.includes(tool);
+              return (
+                <li key={tool} className="row agent-editor__tool">
+                  <Switch
+                    id={`tool-${tool}`}
+                    checked={checked}
+                    onCheckedChange={(next) => {
+                      setToolChecked(tool, next);
+                    }}
+                  />
+                  <label htmlFor={`tool-${tool}`} className="agent-editor__tool-name truncate">
+                    {tool}
+                  </label>
+                  {!registered.has(tool) && (
+                    // Named in the config but not registered right now — an MCP
+                    // server that is down, or a tool that was removed. It stays
+                    // on the list so a save cannot drop it.
+                    <Badge tone="warning">not installed</Badge>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        <FieldGrid>
+          <InheritSelect
+            label="Run commands"
+            bound={{
+              value: form.approveExec,
+              set: (value) => {
+                update('approveExec', value);
+              },
+            }}
+            options={APPROVAL_POLICIES}
+            ownLabel="Inherit from Settings → Tools"
+          />
+          <InheritSelect
+            label="Reach the network"
+            bound={{
+              value: form.approveNetwork,
+              set: (value) => {
+                update('approveNetwork', value);
+              },
+            }}
+            options={APPROVAL_POLICIES}
+            ownLabel="Inherit from Settings → Tools"
+          />
+          <InheritSelect
+            label="Write files"
+            bound={{
+              value: form.approveWrite,
+              set: (value) => {
+                update('approveWrite', value);
+              },
+            }}
+            options={APPROVAL_POLICIES}
+            ownLabel="Inherit from Settings → Tools"
+          />
+        </FieldGrid>
+      </Section>
+
+      {/* Real numbers with real consequences, but ones nobody changes twice a
+          year. In the reading order they pushed the prompt and the tools — the
+          two things this screen is actually for — below the fold. */}
+      <Section title="Limits" description="The budget a turn runs inside.">
+        <Button
+          variant="ghost"
+          aria-expanded={advanced}
+          onClick={() => {
+            setAdvanced((current) => !current);
+          }}
+        >
+          {advanced ? 'Hide' : 'Show'} limits
+        </Button>
+
+        {advanced && (
+          <FieldGrid>
+            <BoundField
+              label="Max output tokens"
+              bound={fields.maxTokens}
+              inputMode="numeric"
+              error={errors.maxTokens}
+            />
+            <BoundField
+              label="Context window (tokens)"
+              bound={fields.contextWindowTokens}
+              inputMode="numeric"
+              error={errors.contextWindowTokens}
+            />
+            <BoundField
+              label="Tool timeout (seconds)"
+              bound={fields.toolTimeoutSeconds}
+              inputMode="numeric"
+              error={errors.toolTimeoutSeconds}
+            />
+            {isDefault && (
+              <TextField
+                label="Max tool iterations"
+                inputMode="numeric"
+                value={base.maxToolIterations}
+                error={errors.maxToolIterations}
+                onValueChange={(value) => {
+                  updateBase('maxToolIterations', value);
+                }}
+              />
+            )}
+            {isDefault && (
+              <TextField
+                label="Turn timeout (seconds)"
+                inputMode="numeric"
+                value={base.loopWallTimeoutSeconds}
+                error={errors.loopWallTimeoutSeconds}
+                onValueChange={(value) => {
+                  updateBase('loopWallTimeoutSeconds', value);
+                }}
+                hint="0 disables the limit."
+              />
+            )}
+          </FieldGrid>
+        )}
+      </Section>
+
+      <Section
+        title="System prompt"
+        description="Everything this agent is told before a conversation starts. It is yours to rewrite — the workspace jail and the tool approvals are enforced in code and do not read a word of it."
+      >
+        <div className="cluster agent-editor__prompt-bar">
+          <span className="micro-label">
+            {promptOwned ? 'This agent’s own prompt' : 'The built-in prompt'}
+          </span>
+          <span className="spacer" />
+          {promptOwned && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setPromptOwned(false);
+                update('systemPrompt', '');
+              }}
+            >
+              <RotateCcw aria-hidden="true" />
+              Reset to the built-in
+            </Button>
+          )}
+        </div>
+
+        <div className="stack agent-editor__prompt">
+          {/* The real editor, not an input. This is the one field here that
+              holds prose, and a one-line box is the control that makes people
+              write one sentence and stop. */}
+          <CodeEditor
+            value={promptText}
+            readOnly={false}
+            language="markdown"
+            label={`System prompt for ${name}`}
+            onChange={(value) => {
+              // The first keystroke is the decision: from here the text is this
+              // agent's, including when it is emptied.
+              setPromptOwned(true);
+              update('systemPrompt', value);
+            }}
+          />
+          <p className="agent-editor__hint">
+            {promptOwned
+              ? 'Placeholders:'
+              : 'Editing this makes it this agent’s own; until then it follows the built-in prompt and improves with each release. Placeholders:'}{' '}
+            {PROMPT_PLACEHOLDERS.map((placeholder) => `{{${placeholder}}}`).join(', ')}.
+          </p>
+          {strayPlaceholders.length > 0 && (
+            <p role="alert" className="notice notice--warning">
+              <span>
+                Nothing will fill{' '}
+                {strayPlaceholders.map((placeholder) => `{{${placeholder}}}`).join(', ')} — it will
+                appear in the prompt exactly as written.
+              </span>
+            </p>
+          )}
+        </div>
+      </Section>
+
+      <SaveBar dirty={dirty} saving={saving} onSave={onSave} onRevert={onRevert} />
+
+      <ConfirmDialog
+        open={confirmingDelete}
+        onOpenChange={setConfirmingDelete}
+        title="Delete this agent?"
+        description={`${name} is removed from the settings. Its conversations keep their history and fall back to the default agent.`}
+        confirmLabel="Delete"
+        pending={saving}
+        onConfirm={onDelete}
+      />
+    </div>
+  );
+}

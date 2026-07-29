@@ -31,13 +31,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import {
-  ArrowDown,
-  ArrowUp,
   File as FileIcon,
   FilePlus,
   Folder,
+  FolderOpen,
   FolderPlus,
-  Search,
+  Pencil,
   Trash2,
   Upload,
 } from 'lucide-react';
@@ -53,13 +52,18 @@ import { Button } from '@/components/ui/button.js';
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
   DialogHeading,
   DialogSubheading,
 } from '@/components/ui/dialog.js';
-import { Input } from '@/components/ui/field.js';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu.js';
+import { SearchFilter } from '@/components/ui/search-filter.js';
 import { toast } from '@/components/ui/toast.js';
+import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';
+import { NameDialog } from '@/components/crud/name-dialog.js';
+import { RowActions } from '@/components/crud/row-actions.js';
+import { SortHeader } from '@/components/crud/sort-header.js';
+import { nextSort } from '@/components/crud/sort.js';
 import { FilePreview } from '@/files/file-preview.js';
 import { useWorkspace } from '@/workspaces/workspace-context.js';
 import {
@@ -68,11 +72,15 @@ import {
   filterEntries,
   joinPath,
   normalisePath,
+  parentOf,
   ROOT_PATH,
   sortEntries,
   type SortKey,
   type SortOrder,
 } from '@/files/paths.js';
+
+/** A name reads from A; a size and a time are asked "which is biggest / newest". */
+const ASCENDING_FIRST: readonly SortKey[] = ['name'];
 
 /** What "New…" is being asked for. `undefined` means the dialog is closed. */
 type NewKind = 'file' | 'directory';
@@ -92,6 +100,7 @@ export function FilesRoute(): JSX.Element {
   const [previewDirty, setPreviewDirty] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<FileEntry | undefined>(undefined);
+  const [renaming, setRenaming] = useState<FileEntry | undefined>(undefined);
   const [creating, setCreating] = useState<NewKind | undefined>(undefined);
   const [filter, setFilter] = useState('');
   const [sort, setSort] = useState<SortOrder>(DEFAULT_SORT);
@@ -179,6 +188,31 @@ export function FilesRoute(): JSX.Element {
     },
   });
 
+  /**
+   * Renaming, which is a move whose destination shares a parent.
+   *
+   * The new name is joined to the entry's *own* parent rather than to the
+   * directory on screen. They are the same today, but a rename that silently
+   * relocated a row would be a bug that only appeared once anything could show
+   * an entry from somewhere else — and the cost of being right about it now is
+   * one function call.
+   */
+  const rename = useMutation({
+    mutationFn: ({ entry, name }: { readonly entry: FileEntry; readonly name: string }) =>
+      api.moveFile(workspace, entry.path, joinPath(parentOf(entry.path), name.trim())),
+    onSuccess: (entry, { entry: previous }) => {
+      setRenaming(undefined);
+      refresh();
+      toast.success(`Renamed to ${entry.name}`);
+      // An open preview is now pointing at a path that no longer exists, so it
+      // follows the file rather than silently 404ing on the next save.
+      setPreview((current) => (current?.path === previous.path ? entry : current));
+    },
+    onError: (error: Error) => {
+      toast.error('Could not rename it', error.message);
+    },
+  });
+
   /** Stable, so the editor's `useEffect` does not re-fire on every render here. */
   const handleDirtyChange = useCallback((dirty: boolean) => {
     setPreviewDirty(dirty);
@@ -196,14 +230,7 @@ export function FilesRoute(): JSX.Element {
   );
 
   const toggleSort = (key: SortKey): void => {
-    setSort((current) =>
-      current.key === key
-        ? { key, descending: !current.descending }
-        : // A new column starts in the order that column is usually read: names
-          // from A, but sizes and times largest and newest first, because
-          // "what is big" and "what just changed" are the questions being asked.
-          { key, descending: key !== 'name' },
-    );
+    setSort((current) => nextSort(current, key, ASCENDING_FIRST));
   };
 
   const onDrop = (event: DragEvent<HTMLDivElement>): void => {
@@ -264,7 +291,7 @@ export function FilesRoute(): JSX.Element {
         />
       </div>
 
-      <div className="cluster file-toolbar">
+      <div className="cluster list-toolbar">
         <Breadcrumbs
           path={directory}
           onNavigate={(next) => {
@@ -279,18 +306,7 @@ export function FilesRoute(): JSX.Element {
           }}
         />
         <span className="spacer" />
-        <div className="row file-filter">
-          <Search />
-          <Input
-            type="search"
-            value={filter}
-            aria-label="Filter by name"
-            placeholder="Filter"
-            onChange={(event) => {
-              setFilter(event.target.value);
-            }}
-          />
-        </div>
+        <SearchFilter value={filter} label="Filter by name" onValueChange={setFilter} />
       </div>
 
       {listing.isPending && <p className="page__note">Loading…</p>}
@@ -324,7 +340,7 @@ export function FilesRoute(): JSX.Element {
               Nothing here matches “{filter}”. {String(total)} entries are hidden.
             </p>
           ) : (
-            <table className="file-table">
+            <table className="data-table">
               <thead>
                 <tr>
                   <SortHeader label="Name" sortKey="name" sort={sort} onSort={toggleSort} />
@@ -334,7 +350,7 @@ export function FilesRoute(): JSX.Element {
                     sortKey="modified"
                     sort={sort}
                     onSort={toggleSort}
-                    className="file-table__modified"
+                    className="data-table__modified"
                   />
                   <th scope="col">
                     <span className="sr-only">Actions</span>
@@ -348,8 +364,8 @@ export function FilesRoute(): JSX.Element {
                       <button
                         type="button"
                         className={cn(
-                          'file-table__open',
-                          entry.isDirectory && 'file-table__open--directory',
+                          'data-table__open',
+                          entry.isDirectory && 'data-table__open--directory',
                         )}
                         onClick={() => {
                           if (entry.isDirectory) {
@@ -367,23 +383,48 @@ export function FilesRoute(): JSX.Element {
                         <span className="truncate">{entry.name}</span>
                       </button>
                     </td>
-                    <td className="file-table__meta">
+                    <td className="data-table__meta">
                       {entry.isDirectory ? '—' : formatBytes(entry.sizeBytes)}
                     </td>
-                    <td className="file-table__meta file-table__modified">
+                    <td className="data-table__meta data-table__modified">
                       {formatRelativeTime(entry.modifiedAtMs, now)}
                     </td>
-                    <td className="file-table__actions">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Delete ${entry.name}`}
-                        onClick={() => {
-                          setPendingDelete(entry);
-                        }}
-                      >
-                        <Trash2 />
-                      </Button>
+                    <td className="data-table__actions">
+                      <RowActions label={entry.name}>
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            if (entry.isDirectory) {
+                              setFilter('');
+                              void navigate({
+                                to: '/files',
+                                search: { path: entry.path, workspace },
+                              });
+                            } else {
+                              setPreview(entry);
+                            }
+                          }}
+                        >
+                          {entry.isDirectory ? <FolderOpen /> : <FileIcon />}
+                          {entry.isDirectory ? 'Open' : 'Edit'}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            setRenaming(entry);
+                          }}
+                        >
+                          <Pencil />
+                          Rename
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="menu__item--danger"
+                          onSelect={() => {
+                            setPendingDelete(entry);
+                          }}
+                        >
+                          <Trash2 />
+                          Delete
+                        </DropdownMenuItem>
+                      </RowActions>
                     </td>
                   </tr>
                 ))}
@@ -415,218 +456,86 @@ export function FilesRoute(): JSX.Element {
         </DialogContent>
       </Dialog>
 
-      <Dialog
+      <ConfirmDialog
         open={discarding}
         onOpenChange={(open) => {
           if (!open) setDiscarding(false);
         }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogHeading>Discard your edits?</DialogHeading>
-            <DialogSubheading>
-              {preview?.path ?? ''} has changes that were never saved. Closing loses them.
-            </DialogSubheading>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setDiscarding(false);
-              }}
-            >
-              Keep editing
-            </Button>
-            <Button variant="danger" onClick={closePreview}>
-              Discard
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        title="Discard your edits?"
+        description={`${preview?.path ?? ''} has changes that were never saved. Closing loses them.`}
+        cancelLabel="Keep editing"
+        confirmLabel="Discard"
+        onConfirm={closePreview}
+      />
 
-      <NewEntryDialog
-        kind={creating}
-        directory={directory}
-        pending={create.isPending}
-        onCancel={() => {
-          setCreating(undefined);
+      <NameDialog
+        open={creating !== undefined}
+        onOpenChange={(open) => {
+          if (!open) setCreating(undefined);
         }}
-        onCreate={(name) => {
+        title={creating === 'directory' ? 'New folder' : 'New file'}
+        description={`Created in ${directory === ROOT_PATH ? 'the workspace root' : directory}.`}
+        // Nothing here validates the name: a separator or a traversal in it is
+        // the jail's call, on the server, and the error comes back as the toast
+        // any other refusal would.
+        fieldLabel={creating === 'directory' ? 'Folder name' : 'File name'}
+        placeholder={creating === 'directory' ? 'drafts' : 'notes.md'}
+        pending={create.isPending}
+        onSubmit={(name) => {
           if (creating !== undefined) create.mutate({ kind: creating, name });
         }}
       />
 
-      <Dialog
+      <NameDialog
+        open={renaming !== undefined}
+        onOpenChange={(open) => {
+          if (!open) setRenaming(undefined);
+        }}
+        title={renaming?.isDirectory === true ? 'Rename folder' : 'Rename file'}
+        description={
+          renaming?.isDirectory === true
+            ? 'Everything inside moves with it. Nothing is copied.'
+            : 'The file keeps its contents and its history on disk.'
+        }
+        fieldLabel="New name"
+        initialValue={renaming?.name ?? ''}
+        submitLabel="Rename"
+        pending={rename.isPending}
+        onSubmit={(name) => {
+          if (renaming !== undefined) rename.mutate({ entry: renaming, name });
+        }}
+      />
+
+      <ConfirmDialog
         open={pendingDelete !== undefined}
         onOpenChange={(open) => {
           if (!open) setPendingDelete(undefined);
         }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogHeading>
-              {pendingDelete?.isDirectory === true ? 'Delete this folder?' : 'Delete this file?'}
-            </DialogHeading>
-            <DialogSubheading>
-              {pendingDelete?.path ?? ''} is removed from the workspace. There is no undo.
-            </DialogSubheading>
-          </DialogHeader>
-
-          {/* The count is what makes this a decision rather than a reflex:
-              "Delete drafts?" and "Delete drafts and the 47 things in it?" are
-              different questions, and only one of them is the one being asked. */}
-          {pendingDelete?.isDirectory === true && pendingContents.isSuccess && (
-            <p
-              className={cn('notice', pendingContents.data.entries.length > 0 && 'notice--danger')}
-            >
-              <Trash2 />
-              <span>
-                {pendingContents.data.entries.length === 0
-                  ? 'This folder is empty.'
-                  : `Everything inside goes with it — ${String(
-                      pendingContents.data.entries.length,
-                    )} item${pendingContents.data.entries.length === 1 ? '' : 's'}.`}
-              </span>
-            </p>
-          )}
-
-          <DialogFooter>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setPendingDelete(undefined);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              disabled={remove.isPending}
-              onClick={() => {
-                if (pendingDelete !== undefined) remove.mutate(pendingDelete);
-              }}
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
-
-/**
- * A column heading that is also the control that sorts by it.
- *
- * `aria-sort` on the `<th>` and a real `<button>` inside it, rather than a
- * click handler on the cell: the sort state has to be announced, and a heading
- * that sorts on click but not on `Enter` is a control a keyboard cannot reach.
- */
-function SortHeader({
-  label,
-  sortKey,
-  sort,
-  onSort,
-  className,
-}: {
-  readonly label: string;
-  readonly sortKey: SortKey;
-  readonly sort: SortOrder;
-  readonly onSort: (key: SortKey) => void;
-  readonly className?: string;
-}): JSX.Element {
-  const active = sort.key === sortKey;
-
-  return (
-    <th
-      scope="col"
-      className={className}
-      aria-sort={active ? (sort.descending ? 'descending' : 'ascending') : 'none'}
-    >
-      <button
-        type="button"
-        className="file-table__sort"
-        onClick={() => {
-          onSort(sortKey);
+        title={pendingDelete?.isDirectory === true ? 'Delete this folder?' : 'Delete this file?'}
+        description={`${pendingDelete?.path ?? ''} is removed from the workspace. There is no undo.`}
+        confirmLabel="Delete"
+        pending={remove.isPending}
+        onConfirm={() => {
+          if (pendingDelete !== undefined) remove.mutate(pendingDelete);
         }}
       >
-        {label}
-        {active && (sort.descending ? <ArrowDown /> : <ArrowUp />)}
-      </button>
-    </th>
-  );
-}
-
-/**
- * Naming a new file or directory.
- *
- * A `<form>`, so `Enter` submits — which is the only interaction anybody wants
- * from a one-field dialog. Nothing here validates the name: a separator or a
- * traversal in it is the jail's call, on the server, and the error comes back
- * as the toast any other refusal would.
- */
-function NewEntryDialog({
-  kind,
-  directory,
-  pending,
-  onCancel,
-  onCreate,
-}: {
-  readonly kind: NewKind | undefined;
-  readonly directory: string;
-  readonly pending: boolean;
-  readonly onCancel: () => void;
-  readonly onCreate: (name: string) => void;
-}): JSX.Element {
-  const [name, setName] = useState('');
-  const isFile = kind === 'file';
-
-  return (
-    <Dialog
-      open={kind !== undefined}
-      onOpenChange={(open) => {
-        if (!open) {
-          setName('');
-          onCancel();
-        }
-      }}
-    >
-      <DialogContent>
-        <form
-          className="stack"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (name.trim() !== '') onCreate(name);
-          }}
-        >
-          <DialogHeader>
-            <DialogHeading>{isFile ? 'New file' : 'New folder'}</DialogHeading>
-            <DialogSubheading>
-              Created in {directory === ROOT_PATH ? 'the workspace root' : directory}.
-            </DialogSubheading>
-          </DialogHeader>
-
-          <Input
-            autoFocus
-            value={name}
-            aria-label={isFile ? 'File name' : 'Folder name'}
-            placeholder={isFile ? 'notes.md' : 'drafts'}
-            onChange={(event) => {
-              setName(event.target.value);
-            }}
-          />
-
-          <DialogFooter>
-            <Button variant="ghost" type="button" onClick={onCancel}>
-              Cancel
-            </Button>
-            <Button variant="primary" type="submit" disabled={pending || name.trim() === ''}>
-              Create
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        {/* The count is what makes this a decision rather than a reflex:
+            "Delete drafts?" and "Delete drafts and the 47 things in it?" are
+            different questions, and only one of them is the one being asked. */}
+        {pendingDelete?.isDirectory === true && pendingContents.isSuccess && (
+          <p className={cn('notice', pendingContents.data.entries.length > 0 && 'notice--danger')}>
+            <Trash2 />
+            <span>
+              {pendingContents.data.entries.length === 0
+                ? 'This folder is empty.'
+                : `Everything inside goes with it — ${String(
+                    pendingContents.data.entries.length,
+                  )} item${pendingContents.data.entries.length === 1 ? '' : 's'}.`}
+            </span>
+          </p>
+        )}
+      </ConfirmDialog>
+    </div>
   );
 }
 

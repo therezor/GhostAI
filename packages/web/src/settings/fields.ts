@@ -14,7 +14,7 @@
  * cleared field unrepresentable, so the input fights the user as they type.
  */
 
-import type { ToolApprovalPolicy, ToolRisk } from '@ghostai/protocol';
+import type { ConfigPatch, ToolApprovalPolicy, ToolRisk } from '@ghostai/protocol';
 
 export interface NumberConstraint {
   readonly min?: number;
@@ -144,3 +144,16 @@ export function policyFor(
 ): ToolApprovalPolicy {
   return approvals[risk];
 }
+
+/**
+ * What every form on this surface returns: a patch, or the reasons there isn't
+ * one.
+ *
+ * Here rather than in one of the forms because two of them produce it and
+ * neither owns it. It lived on the agent form and the tools form imported it
+ * across, which made deleting the agent form a compile error in a module that
+ * has nothing to do with agents.
+ */
+export type PatchResult =
+  | { readonly ok: true; readonly patch: ConfigPatch }
+  | { readonly ok: false; readonly errors: Readonly<Record<string, string>> };

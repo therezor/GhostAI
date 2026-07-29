@@ -55,6 +55,7 @@ class FakeConnection implements ChannelHubConnection {
   turn(text: string, turnId = 't1'): void {
     this.emit({
       type: 'turn.start',
+      agentId: 'default',
       seq: 1,
       sessionKey: this.sessionKey,
       turnId,
@@ -296,6 +297,7 @@ describe('ChannelManager', () => {
     const connection = quiet.hub.only();
     connection.emit({
       type: 'turn.start',
+      agentId: 'default',
       seq: 1,
       sessionKey: connection.sessionKey,
       turnId: 't1',
@@ -327,6 +329,7 @@ describe('ChannelManager', () => {
     const connection = loud.hub.only();
     connection.emit({
       type: 'turn.start',
+      agentId: 'default',
       seq: 1,
       sessionKey: connection.sessionKey,
       turnId: 't1',

@@ -53,6 +53,7 @@ function manualClock(): ManualClock {
 
 interface RequestOptions {
   readonly sessionKey?: string;
+  readonly agentId?: string;
   readonly callId?: string;
   readonly name?: string;
   readonly signal?: AbortSignal;
@@ -62,6 +63,7 @@ interface RequestOptions {
 function approvalRequest(options: RequestOptions = {}): ApprovalRequest {
   return {
     sessionKey: options.sessionKey ?? 'web:1',
+    agentId: options.agentId ?? 'default',
     turnId: 'turn-1',
     callId: options.callId ?? 'call-1',
     name: options.name ?? 'exec',
@@ -229,6 +231,53 @@ describe('HubApprovalGate', () => {
 
     gate.clearSession('web:1');
     void gate.request(approvalRequest({ callId: 'c', sessionKey: 'web:1' }));
+    expect(gate.pendingCount).toBe(1);
+  });
+});
+
+describe('HubApprovalGate across agents', () => {
+  it('does not let one agent’s standing answer pre-approve another’s call', async () => {
+    // Two agents are configured with deliberately different permissions. An
+    // "always allow" granted while using the permissive one must not silently
+    // undo the restriction on the locked-down one.
+    const gate = new HubApprovalGate({ clock: manualClock() });
+
+    const granted = gate.request(approvalRequest({ agentId: 'writer', callId: 'c1' }));
+    gate.resolve('c1', true, 'always');
+    await expect(granted).resolves.toMatchObject({ approved: true });
+
+    // Same tool, same session, different agent: still has to ask.
+    const pending = gate.request(approvalRequest({ agentId: 'reviewer', callId: 'c2' }));
+    expect(gate.pendingCount).toBe(1);
+
+    gate.resolve('c2', false, 'once');
+    await expect(pending).resolves.toMatchObject({ approved: false });
+  });
+
+  it('remembers a standing answer for the agent it was given to', async () => {
+    const gate = new HubApprovalGate({ clock: manualClock() });
+
+    const first = gate.request(approvalRequest({ agentId: 'writer', callId: 'c1' }));
+    gate.resolve('c1', true, 'always');
+    await first;
+
+    // A different session, the same agent: answered from memory, nothing parks.
+    await expect(
+      gate.request(approvalRequest({ agentId: 'writer', sessionKey: 'web:2', callId: 'c2' })),
+    ).resolves.toMatchObject({ approved: true, scope: 'always' });
+    expect(gate.pendingCount).toBe(0);
+  });
+
+  it('keeps a session-scoped answer to that session, whoever runs it', async () => {
+    const gate = new HubApprovalGate({ clock: manualClock() });
+
+    const first = gate.request(approvalRequest({ agentId: 'writer', callId: 'c1' }));
+    gate.resolve('c1', true, 'session');
+    await first;
+
+    // A session is bound to one agent, so the session scope needs no agent
+    // dimension — but it must not reach a different session.
+    void gate.request(approvalRequest({ sessionKey: 'web:2', agentId: 'writer', callId: 'c2' }));
     expect(gate.pendingCount).toBe(1);
   });
 });

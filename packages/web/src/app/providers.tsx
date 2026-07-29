@@ -17,6 +17,7 @@ import { TooltipProvider } from '@/components/ui/tooltip.js';
 import { SetupOverlay } from '@/setup/setup-overlay.js';
 import { ThemeProvider } from '@/theme/theme-context.js';
 import { WorkspaceProvider } from '@/workspaces/workspace-context.js';
+import { AgentProvider } from '@/agents/agent-context.js';
 
 export function Providers({
   children,
@@ -40,19 +41,24 @@ export function Providers({
             sidebar, the Files page and the socket all read it, and two copies
             would let the switcher and the file listing disagree. */}
         <WorkspaceProvider>
-          {/* One provider, one shared delay timer — so a row of icon buttons
-              behaves like a control strip rather than eight separate waits. */}
-          <TooltipProvider delayDuration={400} skipDelayDuration={300}>
-            {children}
-            <LoginOverlay />
-            {/* Above the login overlay in the tree, because on an unclaimed
-                install `/api/auth/me` also 401s and both would otherwise be
-                showing — and this is the one that can actually get the user
-                in. It renders itself only when the server says setup is
-                needed, so a claimed install never sees it. */}
-            <SetupOverlay />
-            <Toaster />
-          </TooltipProvider>
+          {/* Which agent the *next* conversation starts on. Beside the
+              workspace because the two answer the pair of questions a
+              conversation is opened with: where it works and who does it. */}
+          <AgentProvider>
+            {/* One provider, one shared delay timer — so a row of icon buttons
+                behaves like a control strip rather than eight separate waits. */}
+            <TooltipProvider delayDuration={400} skipDelayDuration={300}>
+              {children}
+              <LoginOverlay />
+              {/* Above the login overlay in the tree, because on an unclaimed
+                  install `/api/auth/me` also 401s and both would otherwise be
+                  showing — and this is the one that can actually get the user
+                  in. It renders itself only when the server says setup is
+                  needed, so a claimed install never sees it. */}
+              <SetupOverlay />
+              <Toaster />
+            </TooltipProvider>
+          </AgentProvider>
         </WorkspaceProvider>
       </ThemeProvider>
     </QueryClientProvider>

@@ -393,6 +393,64 @@ describe('GET /api/tools', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Agents
+// ---------------------------------------------------------------------------
+
+describe('GET /api/agents', () => {
+  it('lists the default agent on an install that named none', async () => {
+    const { server, headers } = await start({ provider: 'ollama', model: 'qwen3:8b' });
+    const response = await server.app.inject({ method: 'GET', url: '/api/agents', headers });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      agents: [{ id: 'default', label: 'default', model: 'qwen3:8b', provider: 'ollama' }],
+    });
+  });
+
+  it('lists the operator’s agents after the default', async () => {
+    const { server, headers } = await start({
+      provider: 'ollama',
+      model: 'qwen3:8b',
+      config: ConfigSchema.parse({
+        agents: { list: { reviewer: { label: 'Reviewer', model: 'qwen3:32b' } } },
+      }),
+    });
+
+    const response = await server.app.inject({ method: 'GET', url: '/api/agents', headers });
+
+    expect(response.json()).toEqual({
+      agents: [
+        { id: 'default', label: 'default', model: 'qwen3:8b', provider: 'ollama' },
+        { id: 'reviewer', label: 'Reviewer', model: 'qwen3:32b', provider: 'ollama' },
+      ],
+    });
+  });
+
+  it('omits a disabled agent', async () => {
+    const { server, headers } = await start({
+      config: ConfigSchema.parse({
+        agents: { list: { reviewer: { enabled: false } } },
+      }),
+    });
+
+    const response = await server.app.inject({ method: 'GET', url: '/api/agents', headers });
+    expect(response.json<{ agents: { id: string }[] }>().agents.map((a) => a.id)).toEqual([
+      'default',
+    ]);
+  });
+
+  it('falls back to the id when an agent has no label', async () => {
+    const { server, headers } = await start({
+      config: ConfigSchema.parse({ agents: { list: { reviewer: {} } } }),
+    });
+
+    const response = await server.app.inject({ method: 'GET', url: '/api/agents', headers });
+    const agents = response.json<{ agents: { id: string; label: string }[] }>().agents;
+    expect(agents.find((a) => a.id === 'reviewer')?.label).toBe('reviewer');
+  });
+});
+
 describe('GET /api/status: the workspace', () => {
   it('reports an id and a count, never a host path', async () => {
     // `workspace: jail.root` used to be here — an absolute path handed to every

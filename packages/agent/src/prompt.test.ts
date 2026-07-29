@@ -16,7 +16,7 @@ const CONTEXT: StaticPromptContext = {
   workspaceRoot: '/home/u/.ghostai/workspace',
   workspaceId: 'default',
   sessionKey: 'web:1',
-  profileId: undefined,
+  agentId: undefined,
   channel: 'cli',
 };
 
@@ -113,6 +113,120 @@ describe('buildStaticPrompt', () => {
     expect(prompt.indexOf('# GhostAI')).toBeLessThan(prompt.indexOf('# Memory'));
     expect(prompt.indexOf('# Memory')).toBeLessThan(prompt.indexOf('# Skills'));
     expect(prompt.split(SECTION_SEPARATOR)).toHaveLength(3);
+  });
+
+  it('keeps the built-in identity when no agent is named', async () => {
+    const prompt = await buildStaticPrompt({ context: CONTEXT, platform: 'linux' });
+
+    expect(prompt).toContain('# GhostAI');
+    expect(prompt).toContain('You are GhostAI, a self-hosted agent');
+    expect(prompt).not.toContain('## Instructions');
+  });
+
+  it("takes a named agent's label as the identity", async () => {
+    const prompt = await buildStaticPrompt({
+      context: CONTEXT,
+      platform: 'linux',
+      agent: { label: 'Code Reviewer', systemPrompt: '' },
+    });
+
+    expect(prompt).toContain('# Code Reviewer');
+    expect(prompt).toContain('You are Code Reviewer, a self-hosted agent');
+    expect(prompt).not.toContain('GhostAI');
+  });
+
+  it('falls back to GhostAI for an agent with no label', async () => {
+    const prompt = await buildStaticPrompt({
+      context: CONTEXT,
+      platform: 'linux',
+      agent: { label: '', systemPrompt: '' },
+    });
+
+    expect(prompt).toContain('# GhostAI');
+  });
+
+  it('uses the built-in template for an agent that stores no prompt of its own', async () => {
+    // Empty means "the built-in", which is what keeps an install that never
+    // customised a prompt receiving improvements to it on upgrade.
+    const prompt = await buildStaticPrompt({
+      context: CONTEXT,
+      platform: 'win32',
+      agent: { label: 'Reviewer', systemPrompt: '' },
+    });
+
+    expect(prompt).toContain('That directory is your root');
+    expect(prompt).toContain('`exec` is the exception');
+    expect(prompt).toContain('## Platform policy (Windows)');
+    expect(prompt).toContain('## Guidelines');
+  });
+
+  it("replaces the whole identity with the agent's own prompt", async () => {
+    // The decision this file was reorganised around: a stored prompt *is* the
+    // static half, not an `## Instructions` section appended below a fixed one.
+    const prompt = await buildStaticPrompt({
+      context: CONTEXT,
+      platform: 'linux',
+      agent: { label: 'Reviewer', systemPrompt: '# {{name}}\n\nOnly ever read. Never write.' },
+    });
+
+    expect(prompt).toContain('# Reviewer');
+    expect(prompt).toContain('Only ever read. Never write.');
+    // None of the built-in text survives — that is what "fully editable" means.
+    expect(prompt).not.toContain('That directory is your root');
+    expect(prompt).not.toContain('## Guidelines');
+    expect(prompt).not.toContain('## Instructions');
+  });
+
+  it('fills every placeholder a stored prompt names', async () => {
+    const prompt = await buildStaticPrompt({
+      context: CONTEXT,
+      platform: 'win32',
+      runtimeLabel: 'Windows x64, Node 22.0.0',
+      agent: {
+        label: 'Reviewer',
+        systemPrompt:
+          '{{name}} | {{workspaceId}} | {{workspaceRoot}} | {{runtime}}\n\n{{platformPolicy}}',
+      },
+    });
+
+    expect(prompt).toContain(
+      `Reviewer | ${CONTEXT.workspaceId} | ${CONTEXT.workspaceRoot} | Windows x64, Node 22.0.0`,
+    );
+    expect(prompt).toContain('## Platform policy (Windows)');
+  });
+
+  it('treats a whitespace-only prompt as no prompt at all', async () => {
+    const prompt = await buildStaticPrompt({
+      context: CONTEXT,
+      platform: 'linux',
+      agent: { label: 'Reviewer', systemPrompt: '   \n  ' },
+    });
+
+    // Not an agent with an empty identity — a template of three newlines is not
+    // a decision anybody made, so the built-in stands.
+    expect(prompt).toContain('# Reviewer');
+    expect(prompt).toContain('## Guidelines');
+    expect(prompt.split(SECTION_SEPARATOR)).toHaveLength(1);
+  });
+
+  it("puts the agent's identity before anything a contributor adds", async () => {
+    const prompt = await buildStaticPrompt({
+      context: CONTEXT,
+      platform: 'linux',
+      agent: { label: 'Reviewer', systemPrompt: '# {{name}}\n\nOnly ever read.' },
+      contributors: [{ name: 'memory', staticSection: () => '# Memory\n\nmetric units' }],
+    });
+
+    expect(prompt.indexOf('# Reviewer')).toBeLessThan(prompt.indexOf('# Memory'));
+    expect(prompt.split(SECTION_SEPARATOR)).toHaveLength(2);
+  });
+
+  it('is still byte-identical across calls, so the cached prefix holds', async () => {
+    const agent = { label: 'Reviewer', systemPrompt: 'Be terse.' };
+    const first = await buildStaticPrompt({ context: CONTEXT, platform: 'linux', agent });
+    const second = await buildStaticPrompt({ context: CONTEXT, platform: 'linux', agent });
+
+    expect(first).toBe(second);
   });
 
   it('skips a contributor with nothing to say', async () => {

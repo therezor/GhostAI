@@ -12,7 +12,9 @@
  */
 
 import {
+  DEFAULT_AGENT_ID,
   DEFAULT_WORKSPACE_ID,
+  GhostError,
   SessionStore,
   WorkspaceStore,
   resolveGhostPaths,
@@ -28,7 +30,7 @@ import {
 import { WorkspaceJail } from '@ghostai/security';
 import type { DatabaseSync } from 'node:sqlite';
 
-import type { AgentView, ServerRuntime } from '../runtime.js';
+import type { AgentSummary, AgentView, ServerRuntime } from '../runtime.js';
 
 export interface FakeRuntimeOptions {
   readonly database: DatabaseSync;
@@ -89,6 +91,8 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
   const credentials: Record<string, boolean> = { ...options.credentialsPresent };
 
   const agent: AgentView = {
+    id: DEFAULT_AGENT_ID,
+    label: DEFAULT_AGENT_ID,
     provider: options.provider ?? 'openai',
     model: options.model ?? 'gpt-test',
     // A route test is about the route, and a fixture that defaulted to
@@ -97,9 +101,29 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
     jail,
     jailFor,
     tools: options.tools ?? [],
+    contextWindowTokens: config.agents.defaults.contextWindowTokens,
     systemPrompt: async ({ sessionKey }) =>
       options.systemPrompt ?? `# GhostAI\n\nSession: ${sessionKey}`,
   };
+
+  /**
+   * The named agents this fake knows about, beyond the default.
+   *
+   * Driven by `config.agents.list` so a route test that wants a second agent
+   * sets one the same way an operator would, rather than through a second
+   * fixture knob that could disagree with the settings tree.
+   */
+  const agentsFor = (): readonly AgentSummary[] => [
+    { id: DEFAULT_AGENT_ID, label: DEFAULT_AGENT_ID, model: agent.model, provider: agent.provider },
+    ...Object.entries(config.agents.list)
+      .filter(([id, entry]) => id !== DEFAULT_AGENT_ID && entry.enabled)
+      .map(([id, entry]) => ({
+        id,
+        label: entry.label === '' ? id : entry.label,
+        model: entry.model ?? agent.model,
+        provider: agent.provider,
+      })),
+  ];
 
   return {
     patches,
@@ -122,6 +146,13 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
       }
     },
     store,
-    agent: () => agent,
+    agent: (agentId?: string) => {
+      if (agentId === undefined || agentId === DEFAULT_AGENT_ID) return agent;
+      const named = agentsFor().find((candidate) => candidate.id === agentId);
+      if (named === undefined) throw new GhostError('not_found', `No agent named "${agentId}"`);
+      return { ...agent, id: named.id, label: named.label, model: named.model };
+    },
+
+    agents: agentsFor,
   };
 }

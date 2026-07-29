@@ -73,7 +73,7 @@ export interface SessionRecord {
    * makes switching workspaces in the UI safe while a turn is still running.
    */
   readonly workspaceId: string;
-  readonly profileId: string | undefined;
+  readonly agentId: string | undefined;
   readonly createdAtMs: number;
   readonly updatedAtMs: number;
   readonly metadata: Readonly<Record<string, unknown>>;
@@ -144,13 +144,13 @@ export interface CreateSessionOptions {
   readonly origin?: string;
   /** Defaults to `default`. Honoured only when the row is actually created. */
   readonly workspaceId?: string;
-  readonly profileId?: string;
+  readonly agentId?: string;
   readonly metadata?: Readonly<Record<string, unknown>>;
 }
 
 export interface UpdateSessionOptions {
   readonly title?: string;
-  readonly profileId?: string | null;
+  readonly agentId?: string | null;
   readonly metadata?: Readonly<Record<string, unknown>>;
   readonly lastConsolidatedSeq?: number;
   readonly lastLearnedSeq?: number;
@@ -206,7 +206,7 @@ export interface ForkSessionOptions {
   readonly key?: string;
   readonly title?: string;
   readonly workspaceId?: string;
-  readonly profileId?: string;
+  readonly agentId?: string;
   readonly origin?: string;
 }
 
@@ -221,6 +221,8 @@ export interface ForkResult {
 export interface TurnStatsRecord {
   readonly turnId: string;
   readonly sessionKey: string;
+  /** Which agent ran the turn. Empty on a turn recorded before agents existed. */
+  readonly agentId: string;
   readonly provider: string;
   readonly model: string;
   readonly startedAtMs: number;
@@ -235,7 +237,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   key                   TEXT    PRIMARY KEY,
   title                 TEXT    NOT NULL DEFAULT '',
   origin                TEXT    NOT NULL DEFAULT 'web',
-  profile_id            TEXT,
+  agent_id              TEXT,
   created_at_ms         INTEGER NOT NULL,
   updated_at_ms         INTEGER NOT NULL,
   metadata_json         TEXT    NOT NULL DEFAULT '{}',
@@ -265,9 +267,14 @@ CREATE TABLE IF NOT EXISTS messages (
 -- total is one SUM(...) GROUP BY session_key over a page of keys instead of a
 -- query per row. SUM over all-NULL returns NULL, which is exactly what the two
 -- optional usage fields mean.
+--
+-- The agent is recorded per turn rather than read from the session because a
+-- session can be moved to another agent, and a transcript that then reported
+-- every past turn as the new agent's work would be a lie about what ran.
 CREATE TABLE IF NOT EXISTS turn_stats (
   turn_id           TEXT    PRIMARY KEY,
   session_key       TEXT    NOT NULL REFERENCES sessions(key) ON DELETE CASCADE,
+  agent_id          TEXT    NOT NULL DEFAULT '',
   provider          TEXT    NOT NULL DEFAULT '',
   model             TEXT    NOT NULL DEFAULT '',
   started_at_ms     INTEGER NOT NULL,
@@ -358,6 +365,7 @@ function rowToTurnStats(row: Row): TurnStatsRecord {
   return {
     turnId: readString(row, 'turn_id'),
     sessionKey: readString(row, 'session_key'),
+    agentId: readString(row, 'agent_id'),
     provider: readString(row, 'provider'),
     model: readString(row, 'model'),
     startedAtMs: readInt(row, 'started_at_ms'),
@@ -393,7 +401,7 @@ function rowToSession(row: Row): SessionRecord {
     title: readString(row, 'title'),
     origin: readString(row, 'origin'),
     workspaceId: readString(row, 'workspace_id'),
-    profileId: readOptionalString(row, 'profile_id'),
+    agentId: readOptionalString(row, 'agent_id'),
     createdAtMs: readInt(row, 'created_at_ms'),
     updatedAtMs: readInt(row, 'updated_at_ms'),
     metadata: parseMetadata(readString(row, 'metadata_json')),
@@ -509,7 +517,7 @@ export class SessionStore {
     const now = this.#clock.now();
     this.#stmt(
       `INSERT OR IGNORE INTO sessions
-         (key, title, origin, workspace_id, profile_id, created_at_ms, updated_at_ms, metadata_json)
+         (key, title, origin, workspace_id, agent_id, created_at_ms, updated_at_ms, metadata_json)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       key,
@@ -519,7 +527,7 @@ export class SessionStore {
       // workspace is fixed at birth: a turn arriving with a different one must
       // not move a conversation's files out from under it.
       options.workspaceId ?? DEFAULT_WORKSPACE_ID,
-      options.profileId ?? null,
+      options.agentId ?? null,
       now,
       now,
       JSON.stringify(options.metadata ?? {}),
@@ -778,11 +786,10 @@ export class SessionStore {
 
     const next = {
       title: patch.title ?? existing.title,
-      // `null` clears the profile, `undefined` leaves it alone — the two have
-      // to stay distinguishable, or unsetting a profile becomes impossible
+      // `null` clears the agent, `undefined` leaves it alone — the two have
+      // to stay distinguishable, or unsetting an agent becomes impossible
       // through a patch that also touches any other field.
-      profileId:
-        patch.profileId === undefined ? existing.profileId : (patch.profileId ?? undefined),
+      agentId: patch.agentId === undefined ? existing.agentId : (patch.agentId ?? undefined),
       metadata: patch.metadata ?? existing.metadata,
       lastConsolidatedSeq: patch.lastConsolidatedSeq ?? existing.lastConsolidatedSeq,
       lastLearnedSeq: patch.lastLearnedSeq ?? existing.lastLearnedSeq,
@@ -790,12 +797,12 @@ export class SessionStore {
 
     this.#stmt(
       `UPDATE sessions
-          SET title = ?, profile_id = ?, metadata_json = ?,
+          SET title = ?, agent_id = ?, metadata_json = ?,
               last_consolidated_seq = ?, last_learned_seq = ?, updated_at_ms = ?
         WHERE key = ?`,
     ).run(
       next.title,
-      next.profileId ?? null,
+      next.agentId ?? null,
       JSON.stringify(next.metadata),
       next.lastConsolidatedSeq,
       next.lastLearnedSeq,
@@ -969,7 +976,7 @@ export class SessionStore {
 
       this.#stmt(
         `INSERT INTO sessions
-           (key, title, origin, workspace_id, profile_id, created_at_ms, updated_at_ms,
+           (key, title, origin, workspace_id, agent_id, created_at_ms, updated_at_ms,
             metadata_json, last_consolidated_seq, last_learned_seq, next_seq)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
@@ -977,7 +984,7 @@ export class SessionStore {
         title,
         origin,
         options.workspaceId ?? source.workspaceId,
-        options.profileId ?? source.profileId ?? null,
+        options.agentId ?? source.agentId ?? null,
         source.createdAtMs,
         // Now, not the source's: a fork is something the user just did, and the
         // session list is ordered by this.
@@ -1032,11 +1039,12 @@ export class SessionStore {
     this.#assertOpen();
     this.#stmt(
       `INSERT INTO turn_stats
-         (turn_id, session_key, provider, model, started_at_ms, ended_at_ms, iterations,
-          stop_reason, prompt_tokens, completion_tokens, total_tokens, cached_tokens,
-          reasoning_tokens)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         (turn_id, session_key, agent_id, provider, model, started_at_ms, ended_at_ms,
+          iterations, stop_reason, prompt_tokens, completion_tokens, total_tokens,
+          cached_tokens, reasoning_tokens)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(turn_id) DO UPDATE SET
+         agent_id = excluded.agent_id,
          provider = excluded.provider, model = excluded.model,
          started_at_ms = excluded.started_at_ms, ended_at_ms = excluded.ended_at_ms,
          iterations = excluded.iterations, stop_reason = excluded.stop_reason,
@@ -1047,6 +1055,7 @@ export class SessionStore {
     ).run(
       stats.turnId,
       stats.sessionKey,
+      stats.agentId,
       stats.provider,
       stats.model,
       stats.startedAtMs,

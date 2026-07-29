@@ -4,7 +4,15 @@ import { join, resolve } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { HOME_ENV_VAR, ensureDir, expandHome, resolveGhostPaths, resolvePath } from './paths.js';
+import {
+  HOME_ENV_VAR,
+  agentDirFor,
+  ensureDir,
+  expandHome,
+  resolveGhostPaths,
+  resolvePath,
+  sharedDirFor,
+} from './paths.js';
 
 const HOME = '/home/ghost';
 
@@ -74,6 +82,8 @@ describe('resolveGhostPaths', () => {
     expect(paths).toEqual({
       root,
       workspace: join(root, 'workspace'),
+      agentsDir: join(root, 'agents'),
+      sharedDir: join(root, 'shared'),
       configFile: join(root, 'config.json'),
       dbFile: join(root, 'ghost.db'),
       logsDir: join(root, 'logs'),
@@ -140,5 +150,47 @@ describe('ensureDir', () => {
     // The vault keyfile and every session transcript live under directories
     // created this way; the default umask would leave them world-readable.
     expect(statSync(target).mode & 0o077).toBe(0);
+  });
+});
+
+describe('agentDirFor', () => {
+  const paths = resolveGhostPaths({ home: HOME, env: {} });
+
+  it('gives each agent a directory of its own', () => {
+    expect(agentDirFor(paths, 'reviewer')).toBe(join(paths.agentsDir, 'reviewer'));
+  });
+
+  it('gives the default one too, rather than the parent', () => {
+    // Unlike a workspace, `default` is not the parent of the others — an agent
+    // whose memory sat one level up would see every other agent's.
+    expect(agentDirFor(paths, 'default')).toBe(join(paths.agentsDir, 'default'));
+  });
+
+  it('keeps every agent out of the workspace the tools can reach', () => {
+    // The jail root is the workspace, so memory kept inside it would be
+    // writable by `write_file` — prompt injection as a way to rewrite the
+    // agent's own system prompt.
+    expect(agentDirFor(paths, 'reviewer').startsWith(paths.workspace)).toBe(false);
+  });
+
+  it.each(['..', 'a/b', 'Reviewer', '', '~evil'])('refuses %j', (id) => {
+    expect(() => agentDirFor(paths, id)).toThrow(/Not an agent id/);
+  });
+});
+
+describe('sharedDirFor', () => {
+  const paths = resolveGhostPaths({ home: HOME, env: {} });
+
+  it('keys the shared layer by workspace, not by agent', () => {
+    expect(sharedDirFor(paths, 'default')).toBe(join(paths.sharedDir, 'default'));
+    expect(sharedDirFor(paths, 'client-acme')).toBe(join(paths.sharedDir, 'client-acme'));
+  });
+
+  it('stays outside the workspace too', () => {
+    expect(sharedDirFor(paths, 'default').startsWith(paths.workspace)).toBe(false);
+  });
+
+  it.each(['..', 'a/b', 'Work', ''])('refuses %j', (id) => {
+    expect(() => sharedDirFor(paths, id)).toThrow(/Not a workspace id/);
   });
 });

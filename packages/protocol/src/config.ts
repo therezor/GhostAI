@@ -28,8 +28,51 @@ const OptionalDurationMs = z.number().int().nonnegative();
 export const ReasoningEffortSchema = z.enum(['minimal', 'low', 'medium', 'high']);
 export type ReasoningEffort = z.infer<typeof ReasoningEffortSchema>;
 
+/**
+ * Strips a `.default()` / `.prefault()` wrapper, leaving the schema underneath.
+ *
+ * Unconstrained on purpose: a `ZodRawShape`'s values are typed as the internal
+ * `$ZodType`, so constraining to the public `z.ZodType` makes every mapped-type
+ * application fail its own constraint check.
+ */
+type Unwrapped<T> =
+  T extends z.ZodDefault<infer Inner> ? Inner : T extends z.ZodPrefault<infer Inner> ? Inner : T;
+
+type PatchShape<S extends z.ZodRawShape> = {
+  [K in keyof S]: Unwrapped<S[K]> extends z.ZodType ? z.ZodOptional<Unwrapped<S[K]>> : never;
+};
+
+/**
+ * Turns a config schema into a true patch schema: every field optional **and
+ * stripped of its default**.
+ *
+ * `.partial()` alone is not enough and is actively wrong here. It marks keys
+ * optional but leaves the inner `ZodDefault` in place, so parsing `{}` returns
+ * every default rather than an empty object — and since a patch is deep-merged
+ * into the live config, saving one settings panel would silently rewrite every
+ * field the client never mentioned back to its default.
+ *
+ * It is up here with the other helpers rather than beside `ConfigPatchSchema`
+ * because an agent's own settings are a patch over `agents.defaults` — the
+ * inherit-unless-set shape is not only a wire concern.
+ */
+function patchOf<S extends z.ZodRawShape>(schema: z.ZodObject<S>): z.ZodObject<PatchShape<S>> {
+  const shape: Record<string, z.ZodType> = {};
+  const fields = schema.shape as unknown as Record<string, z.ZodType>;
+  for (const [key, field] of Object.entries(fields)) {
+    const type = field.def.type;
+    const base =
+      type === 'default' || type === 'prefault'
+        ? (field as z.ZodDefault<z.ZodType>).unwrap()
+        : field;
+    shape[key] = base.optional();
+  }
+  // The mapped type above states the result precisely; the loop cannot express it.
+  return z.object(shape) as unknown as z.ZodObject<PatchShape<S>>;
+}
+
 // ---------------------------------------------------------------------------
-// Agent
+// Agent defaults
 // ---------------------------------------------------------------------------
 
 export const AgentDefaultsSchema = z.object({
@@ -57,7 +100,18 @@ export const AgentDefaultsSchema = z.object({
   provider: z.string().min(1).default('auto'),
   maxTokens: z.number().int().positive().default(8192),
   contextWindowTokens: z.number().int().positive().default(65_536),
-  temperature: z.number().min(0).max(2).default(0.1),
+  /**
+   * Optional, and unset is not the same as `0`.
+   *
+   * Unset means the request carries no `temperature` at all and the provider
+   * applies its own — which is the only correct answer for the models that
+   * reject the parameter outright, and the honest one for the rest, since a
+   * default here is this project's guess at someone else's tuning. The range is
+   * also not universal: most providers cap at 2, some at 1, and a few reasoning
+   * models accept nothing but their own. So the setting is "say nothing unless
+   * you mean it", exactly like `reasoningEffort` beside it.
+   */
+  temperature: z.number().min(0).max(2).optional(),
   maxToolIterations: z.number().int().positive().default(40),
   toolTimeoutMs: OptionalDurationMs.default(0),
   /** Wall-clock cap on one turn, checked at the top of each loop iteration. */
@@ -76,10 +130,8 @@ export const AgentDefaultsSchema = z.object({
 });
 export type AgentDefaults = z.infer<typeof AgentDefaultsSchema>;
 
-export const AgentsConfigSchema = z.object({
-  defaults: AgentDefaultsSchema.prefault({}),
-});
-export type AgentsConfig = z.infer<typeof AgentsConfigSchema>;
+// The named agents that inherit from those defaults live further down, after
+// the tool schemas they override — see "Agents".
 
 // ---------------------------------------------------------------------------
 // Providers
@@ -299,6 +351,101 @@ export const ToolsConfigSchema = z.object({
 export type ToolsConfig = z.infer<typeof ToolsConfigSchema>;
 
 // ---------------------------------------------------------------------------
+// Agents
+// ---------------------------------------------------------------------------
+//
+// Below the tool schemas rather than beside `AgentDefaults`, because an agent
+// overrides them: this is the one place in the tree where the dependency runs
+// from an agent to the tools rather than the other way round.
+
+/**
+ * Which tools an agent may call.
+ *
+ * Empty `allow` means "everything not denied", matching `ExecToolConfig`'s
+ * allow-list convention — the alternative, empty meaning "nothing", turns a
+ * newly created agent into one that cannot do anything and looks broken.
+ * `deny` wins over `allow`, so a blanket allow-list cannot resurrect a tool an
+ * operator switched off.
+ */
+export const AgentToolsSelectionSchema = z.object({
+  allow: z.array(z.string()).default([]),
+  deny: z.array(z.string()).default([]),
+});
+export type AgentToolsSelection = z.infer<typeof AgentToolsSelectionSchema>;
+
+/**
+ * Where an agent's `exec` calls run.
+ *
+ * `host` is the behaviour that has always existed: a child process on the
+ * machine running GhostAI, inside the workspace jail. `docker` is accepted by
+ * the schema but has no backend yet, and is refused when the runtime resolves
+ * the agent — a config that parses and then fails a turn much later would be
+ * worse than one that fails the save.
+ */
+export const AgentSandboxSchema = z.object({
+  kind: z.enum(['host', 'docker']).default('host'),
+  image: z.string().default(''),
+  /** Where the workspace is mounted inside the container. */
+  workdir: z.string().default('/workspace'),
+  network: z.boolean().default(false),
+});
+export type AgentSandbox = z.infer<typeof AgentSandboxSchema>;
+
+export const AgentMemoryScopeSchema = z.object({
+  /** Also read the layer shared by every agent working in this folder. */
+  shared: z.boolean().default(true),
+});
+export type AgentMemoryScope = z.infer<typeof AgentMemoryScopeSchema>;
+
+/**
+ * One named agent.
+ *
+ * Built on `patchOf(AgentDefaultsSchema)` rather than restating the fields, so
+ * every knob is inherit-unless-set and a field added to `AgentDefaults` later
+ * becomes per-agent overridable without touching this schema.
+ *
+ * `workspace` is omitted deliberately. The working folder is a property of the
+ * session, shared by every agent that opens it; an agent able to pin its own
+ * would break the one thing this feature is built around — several agents, one
+ * folder, separate identities.
+ */
+export const AgentEntrySchema = patchOf(AgentDefaultsSchema)
+  .omit({ workspace: true })
+  .extend({
+    /** Shown in the UI. Empty falls back to the id. */
+    label: z.string().default(''),
+    /**
+     * This agent's whole static system prompt, as a template.
+     *
+     * Not an addition to a built-in block — it replaces one. Empty means the
+     * built-in `DEFAULT_SYSTEM_PROMPT_TEMPLATE`, which is what keeps an install
+     * that never customised a prompt receiving improvements to it on upgrade.
+     * See `prompt.ts` for the placeholder set and the substitution rules.
+     */
+    systemPrompt: z.string().default(''),
+    enabled: z.boolean().default(true),
+    tools: AgentToolsSelectionSchema.prefault({}),
+    /** Risk-band policy for this agent only; merged over `tools.approvals`. */
+    approvals: patchOf(ToolApprovalsConfigSchema).optional(),
+    /** Merged over `tools.exec`, so one agent can hold a tighter allow-list. */
+    exec: patchOf(ExecToolConfigSchema).optional(),
+    sandbox: AgentSandboxSchema.prefault({}),
+    memory: AgentMemoryScopeSchema.prefault({}),
+  });
+export type AgentEntry = z.infer<typeof AgentEntrySchema>;
+
+/**
+ * `defaults` is what every agent inherits and what an install with no named
+ * agents runs as. `list` is keyed by an id the operator chooses, which also
+ * names the agent's directory on disk — so it follows the workspace id rules.
+ */
+export const AgentsConfigSchema = z.object({
+  defaults: AgentDefaultsSchema.prefault({}),
+  list: z.record(z.string(), AgentEntrySchema).default({}),
+});
+export type AgentsConfig = z.infer<typeof AgentsConfigSchema>;
+
+// ---------------------------------------------------------------------------
 // Audio, RAG, scheduler, channels, plugins
 // ---------------------------------------------------------------------------
 
@@ -341,7 +488,7 @@ export const HeartbeatConfigSchema = z.object({
   file: z.string().min(1).default('TASK.md'),
   /** Channel id → destination address. */
   targets: z.record(z.string(), z.string()).default({}),
-  profileId: z.string().optional(),
+  agentId: z.string().optional(),
 });
 export type HeartbeatConfig = z.infer<typeof HeartbeatConfigSchema>;
 
@@ -396,45 +543,6 @@ export const ConfigSchema = z.object({
 export type Config = z.infer<typeof ConfigSchema>;
 
 /**
- * Strips a `.default()` / `.prefault()` wrapper, leaving the schema underneath.
- *
- * Unconstrained on purpose: a `ZodRawShape`'s values are typed as the internal
- * `$ZodType`, so constraining to the public `z.ZodType` makes every mapped-type
- * application fail its own constraint check.
- */
-type Unwrapped<T> =
-  T extends z.ZodDefault<infer Inner> ? Inner : T extends z.ZodPrefault<infer Inner> ? Inner : T;
-
-type PatchShape<S extends z.ZodRawShape> = {
-  [K in keyof S]: Unwrapped<S[K]> extends z.ZodType ? z.ZodOptional<Unwrapped<S[K]>> : never;
-};
-
-/**
- * Turns a config schema into a true patch schema: every field optional **and
- * stripped of its default**.
- *
- * `.partial()` alone is not enough and is actively wrong here. It marks keys
- * optional but leaves the inner `ZodDefault` in place, so parsing `{}` returns
- * every default rather than an empty object — and since a patch is deep-merged
- * into the live config, saving one settings panel would silently rewrite every
- * field the client never mentioned back to its default.
- */
-function patchOf<S extends z.ZodRawShape>(schema: z.ZodObject<S>): z.ZodObject<PatchShape<S>> {
-  const shape: Record<string, z.ZodType> = {};
-  const fields = schema.shape as unknown as Record<string, z.ZodType>;
-  for (const [key, field] of Object.entries(fields)) {
-    const type = field.def.type;
-    const base =
-      type === 'default' || type === 'prefault'
-        ? (field as z.ZodDefault<z.ZodType>).unwrap()
-        : field;
-    shape[key] = base.optional();
-  }
-  // The mapped type above states the result precisely; the loop cannot express it.
-  return z.object(shape) as unknown as z.ZodObject<PatchShape<S>>;
-}
-
-/**
  * A settings patch from the UI or CLI.
  *
  * Deep-partial rather than `ConfigSchema.partial()`: the settings panel saves
@@ -442,7 +550,33 @@ function patchOf<S extends z.ZodRawShape>(schema: z.ZodObject<S>): z.ZodObject<P
  * must validate without restating the sibling fields — and must not invent them.
  */
 export const ConfigPatchSchema = z.object({
-  agents: z.object({ defaults: patchOf(AgentDefaultsSchema).optional() }).optional(),
+  agents: z
+    .object({
+      defaults: patchOf(AgentDefaultsSchema).optional(),
+      /**
+       * `null` deletes the agent; an object creates or updates one. Same
+       * reasoning as `providers` below — an absent key means "not mentioned",
+       * so removing an agent needs a syntax the merge can tell apart.
+       *
+       * The nested blocks are restated as patches for the same reason `tools`
+       * is below: `patchOf` is not recursive, so without this an operator
+       * toggling `sandbox.network` would have to resend the image, the workdir
+       * and the kind alongside it.
+       */
+      list: z
+        .record(
+          z.string(),
+          patchOf(AgentEntrySchema)
+            .extend({
+              tools: patchOf(AgentToolsSelectionSchema).optional(),
+              sandbox: patchOf(AgentSandboxSchema).optional(),
+              memory: patchOf(AgentMemoryScopeSchema).optional(),
+            })
+            .nullable(),
+        )
+        .optional(),
+    })
+    .optional(),
   /**
    * `null` deletes the instance; an object creates or updates one.
    *

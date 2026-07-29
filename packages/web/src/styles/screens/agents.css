@@ -1,0 +1,167 @@
+/**
+ * The agent picker, and what the agents screens add to the shared list chrome.
+ *
+ * Most of the index is not here: the container, the header, the toolbar, the
+ * filter and the table all come from `page`, `cluster` and `data-table`, which
+ * Files uses too. What is left is the two-line name cell and the editor's own
+ * layout — the parts that are genuinely about agents rather than about lists.
+ */
+
+@layer screens {
+  /* ---------------------------------------------------------------------
+   * The picker, in the composer
+   * ------------------------------------------------------------------ */
+
+  /* Sits at the head of `.composer__meta`, before the hint. Muted and small:
+     it names what the turn will run on, which is context rather than an
+     action, and a primary-looking control there would compete with Send. */
+  .agent-picker__trigger {
+    gap: var(--space-2);
+    max-width: 14rem;
+    padding-inline: var(--space-2);
+    color: var(--fg-2);
+    font-size: var(--text-sm);
+  }
+
+  .agent-picker__caret {
+    flex-shrink: 0;
+    width: var(--size-icon-sm);
+    height: var(--size-icon-sm);
+    color: var(--fg-3);
+  }
+
+  .agent-picker__hint {
+    margin-inline-start: auto;
+    padding-inline-start: var(--space-3);
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
+    color: var(--fg-3);
+  }
+
+  /* ---------------------------------------------------------------------
+   * The index
+   * ------------------------------------------------------------------ */
+
+  /* Two lines in the name cell: what it is called, and what it does. The
+     second line is what stops the list being three columns of near-identical
+     rows that all have to be opened to tell apart. */
+  .agents__name {
+    gap: var(--space-0-5);
+    min-width: 0;
+  }
+
+  .agents__name-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    color: var(--fg-1);
+  }
+
+  .agents__summary {
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
+    color: var(--fg-3);
+  }
+
+  /* Mono, like every other model readout in the app: it is an identifier, and
+     proportional type makes two similar ids hard to tell apart. */
+  .agents__model {
+    font-family: var(--font-mono);
+  }
+
+  /* ---------------------------------------------------------------------
+   * The editor
+   * ------------------------------------------------------------------ */
+
+  .agent-editor__head {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .agent-editor__title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .agents__back {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--fg-3);
+    font-size: var(--text-sm);
+    text-decoration: none;
+  }
+
+  .agents__back:hover {
+    color: var(--fg-1);
+  }
+
+  .agents__back > svg {
+    width: var(--size-icon-sm);
+    height: var(--size-icon-sm);
+  }
+
+  .agent-editor__prompt {
+    gap: var(--space-2);
+  }
+
+  /* The row above the editor: what this prompt currently is, and the way back
+     to the built-in. */
+  .agent-editor__prompt-bar {
+    --gap: var(--space-2);
+  }
+
+  /* The "own prompt / built-in" marker is a `.micro-label`, the same ambient
+     treatment the file editor's unsaved marker uses. */
+
+  .agent-editor__hint {
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
+    color: var(--fg-3);
+  }
+
+  /* The prompt editor is a form field here, not a file viewer: 60vh of it
+     would push every setting below the fold. Taller than it was, because it now
+     holds the whole prompt rather than an appended paragraph. */
+  .agent-editor__prompt .code-editor {
+    height: 20rem;
+  }
+
+  /* ── The tool list ─────────────────────────────────────────── */
+
+  /* A column of switches rather than two comma-separated text boxes. The boxes
+     were the worst control on this screen: they asked an operator to remember
+     tool names exactly, offered no way to discover them, and turned a typo into
+     a permission that silently did nothing. */
+  .agent-editor__tools {
+    --gap: var(--space-1);
+
+    max-height: 18rem;
+    overflow-y: auto;
+    padding: var(--space-2);
+    background-color: var(--surface-1);
+    border: var(--hairline) solid var(--line);
+    border-radius: var(--radius-md);
+  }
+
+  .agent-editor__tool {
+    --gap: var(--space-3);
+
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-md);
+  }
+
+  .agent-editor__tool:hover {
+    background-color: var(--hover);
+  }
+
+  .agent-editor__tool-name {
+    flex: 1;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--fg-2);
+  }
+}

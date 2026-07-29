@@ -9,12 +9,11 @@
  *
  * So the prompt is assembled from a **static half** and a **runtime half**:
  *
- *  - The static half — identity, workspace, platform policy, guidelines, and
- *    whatever the contributors add — is byte-identical for the life of a
- *    session. It is the cached prefix, and everything that goes in it must be
- *    stable: a timestamp, an iteration counter or a per-turn nonce placed here
- *    invalidates the cache for the whole session, which is the exact cost this
- *    split exists to avoid.
+ *  - The static half — the agent's identity template plus whatever the
+ *    contributors add — is byte-identical for the life of a session. It is the
+ *    cached prefix, and everything that goes in it must be stable: a timestamp,
+ *    an iteration counter or a per-turn nonce placed here invalidates the cache
+ *    for the whole session, which is the exact cost this split exists to avoid.
  *  - The runtime half — live state and the turn's tool-output policy — is
  *    rewritten before every request. It sits at the end, so what it invalidates
  *    is only itself.
@@ -22,15 +21,33 @@
  * The loop rewrites `messages[0]` each iteration rather than appending a second
  * system message. Two system messages is a shape some providers reject and
  * others quietly reorder, and the ordering is what the cache depends on.
+ *
+ * **The identity text is not in this file.** It is a template in
+ * `@ghostai/protocol`, because an agent owns its whole system prompt and the
+ * browser edits it — so the wording and the substitution rules have to be one
+ * definition. This module owns the *facts* it is rendered with, which are the
+ * ones only the host knows: the platform, the architecture and the Node
+ * version. Protocol owns the shape; agent owns the values.
  */
 
 import { arch, platform as hostPlatform, versions } from 'node:process';
 
-import type { ParsedMentions } from '@ghostai/protocol';
+import {
+  DEFAULT_SYSTEM_PROMPT_TEMPLATE,
+  SECTION_SEPARATOR,
+  renderPromptTemplate,
+  type ParsedMentions,
+} from '@ghostai/protocol';
 import { toolOutputPolicy } from '@ghostai/security';
 
-/** The separator between top-level sections. Also joins the two halves. */
-export const SECTION_SEPARATOR = '\n\n---\n\n';
+/**
+ * The separator between top-level sections. Also joins the two halves.
+ *
+ * Re-exported rather than declared: it is defined beside the prompt template in
+ * `@ghostai/protocol`, because the config migration there has to reproduce this
+ * exact composition. Everything that imported it from this module still can.
+ */
+export { SECTION_SEPARATOR };
 
 /** What a contributor is told about the session. Stable for its lifetime. */
 export interface StaticPromptContext {
@@ -46,7 +63,7 @@ export interface StaticPromptContext {
    */
   readonly workspaceId: string;
   readonly sessionKey: string;
-  readonly profileId: string | undefined;
+  readonly agentId: string | undefined;
   /** The channel the turn arrived on — `cli`, `web`, `telegram`, a plugin id. */
   readonly channel: string;
 }
@@ -73,7 +90,7 @@ export interface RuntimePromptContext extends StaticPromptContext {
 /**
  * A source of prompt content the loop knows nothing about.
  *
- * This is the seam memory, skills and profiles arrive through in Phase 3. The
+ * This is the seam memory and skills arrive through in Phase 3. The
  * loop's job is to compose and cache; deciding that MEMORY.md belongs in the
  * prompt, and at what token budget, is a decision that would otherwise force the
  * agent package to depend on the memory package and every consumer of the loop
@@ -94,8 +111,30 @@ export interface ContextContributor {
   runtimeSection?(context: RuntimePromptContext): string | undefined;
 }
 
+/**
+ * Who the turn is being run by.
+ *
+ * Both fields come from the resolved agent, and both are stable for the life of
+ * a session — which is what lets them sit in the cached half of the prompt.
+ */
+export interface PromptAgent {
+  /** Empty falls back to `GhostAI`. Fills `{{name}}`. */
+  readonly label: string;
+  /**
+   * This agent's whole static prompt, as a template.
+   *
+   * Empty means the built-in `DEFAULT_SYSTEM_PROMPT_TEMPLATE` — which is what
+   * keeps an install that never customised one receiving improvements to it.
+   * It is not appended to anything: whatever is here *is* the identity half of
+   * the prompt.
+   */
+  readonly systemPrompt: string;
+}
+
 export interface BuildStaticPromptOptions {
   readonly context: StaticPromptContext;
+  /** Absent is the unnamed default agent: the built-in template, rendered as `GhostAI`. */
+  readonly agent?: PromptAgent;
   readonly contributors?: readonly ContextContributor[];
   /** Injected so the prompt is assertable without depending on the test host. */
   readonly platform?: NodeJS.Platform;
@@ -139,48 +178,49 @@ function platformPolicy(platform: NodeJS.Platform): string {
 - Prefer the file tools where they are simpler or more reliable than a command.`;
 }
 
-const GUIDELINES = `## Guidelines
-
-- State what you are about to do before calling a tool, but never describe a result you have not received yet.
-- Read a file before you modify it. Do not assume a file or directory exists.
-- After writing or editing a file, read it back when accuracy matters.
-- When a tool call fails, work out why from the error before trying a different approach.
-- Ask when a request is ambiguous rather than guessing which reading was meant.
-- Answer in the conversation. Tools are for acting on the world, not for talking.`;
-
+/**
+ * The identity section, rendered from whatever template this agent carries.
+ *
+ * The text itself lives in `@ghostai/protocol`, not here, and an agent that
+ * stores its own replaces it wholesale — heading, workspace rules, platform
+ * note, guidelines and all.
+ *
+ * **That is a reversal of an earlier decision, and worth stating plainly.**
+ * This function used to splice an operator's paragraph into a fixed block on
+ * the grounds that the chroot semantics and the guidelines were "not an
+ * operator's to replace by writing a persona". The objection does not survive
+ * contact with what those sentences actually are: prose telling the model what
+ * is true. The jail and the exec guard live in `@ghostai/security`, are
+ * enforced on every call, and have never read a word of this. An operator who
+ * deletes the workspace paragraph gets an agent that is less well informed
+ * about a sandbox that is exactly as tight as it was before — and in exchange,
+ * the prompt an install actually runs on is one they can read and edit rather
+ * than one compiled into the binary.
+ *
+ * What stays out of reach is in the runtime half: `toolOutputPolicy` carries
+ * the turn's nonce and is a mechanism, not a message.
+ */
 function identity(
   workspaceRoot: string,
   workspaceId: string,
   platform: NodeJS.Platform,
   runtimeLabel: string,
+  agent: PromptAgent | undefined,
 ): string {
-  return `# GhostAI
+  const label = agent?.label ?? '';
+  const stored = agent?.systemPrompt ?? '';
 
-You are GhostAI, a self-hosted agent running on your user's own machine, with
-their files and their shell. You work on their behalf and answer to them alone.
+  // Whitespace-only is empty. A template of three newlines is not a decision an
+  // operator made, and rendering it would give the agent no identity at all.
+  const template = stored.trim() === '' ? DEFAULT_SYSTEM_PROMPT_TEMPLATE : stored;
 
-## Runtime
-
-${runtimeLabel}
-
-## Workspace
-
-You are working in the \`${workspaceId}\` workspace, at ${workspaceRoot}.
-
-That directory is your root. \`/notes/todo.md\`, \`notes/todo.md\` and
-\`../notes/todo.md\` all name the same file inside it, and no path you can write
-reaches outside it — paths are resolved into the workspace, not rejected. Prefer
-the plain relative form: say \`notes/todo.md\`.
-
-\`exec\` is the exception, and the difference matters. The program you run is a
-real process on the real filesystem, so it is *not* confined to the workspace —
-which is why an argument pointing outside it (\`/etc/passwd\`, \`../secrets\`)
-is refused there rather than resolved inside. Pass workspace-relative arguments
-to \`exec\`; its working directory is already the root.
-
-${platformPolicy(platform)}
-
-${GUIDELINES}`;
+  return renderPromptTemplate(template, {
+    name: label === '' ? 'GhostAI' : label,
+    workspaceId,
+    workspaceRoot,
+    runtime: runtimeLabel,
+    platformPolicy: platformPolicy(platform),
+  });
 }
 
 /**
@@ -195,9 +235,19 @@ export async function buildStaticPrompt(options: BuildStaticPromptOptions): Prom
   const runtimeLabel =
     options.runtimeLabel ?? `${osLabel(platform)} ${arch}, Node ${versions.node}`;
 
-  const sections: string[] = [
-    identity(options.context.workspaceRoot, options.context.workspaceId, platform, runtimeLabel),
-  ];
+  // One section, not two. The operator's text used to arrive here as a separate
+  // `## Instructions` block appended below a fixed identity; it is now the
+  // identity itself, so there is nothing left to append it *to*. A template
+  // that renders to nothing contributes no section rather than an empty one.
+  const rendered = identity(
+    options.context.workspaceRoot,
+    options.context.workspaceId,
+    platform,
+    runtimeLabel,
+    options.agent,
+  ).trim();
+
+  const sections: string[] = rendered === '' ? [] : [rendered];
 
   for (const contributor of options.contributors ?? []) {
     const section = await contributor.staticSection?.(options.context);

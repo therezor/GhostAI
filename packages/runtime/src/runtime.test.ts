@@ -316,7 +316,7 @@ describe('reconfigure', () => {
     expect(() => runtime.reconfigure({ agents: { defaults: { temperature: 40 } } })).toThrow(
       /agents\.defaults\.temperature/,
     );
-    expect(runtime.config.agents.defaults.temperature).toBe(0.1);
+    expect(runtime.config.agents.defaults.temperature).toBeUndefined();
   });
 
   it('goes back to unconfigured when the model is cleared out of the config', () => {
@@ -354,5 +354,140 @@ describe('reconfigure', () => {
     vault.set('providers/openai', 'sk-typed-in-the-ui');
     runtime.reconfigure({ agents: { defaults: { temperature: 0.2 } } });
     expect(runtime.hasCredential).toBe(true);
+  });
+});
+
+describe('multiple agents', () => {
+  /** A runtime with one named agent beside the defaults. */
+  function withAgent(entry: Record<string, unknown>, id = 'reviewer'): GhostRuntime {
+    const home = tempHome({
+      agents: {
+        defaults: { provider: 'ollama', model: 'qwen3:8b', temperature: 0.1 },
+        list: { [id]: entry },
+      },
+    });
+    return build({ home });
+  }
+
+  it('lists the default agent on an install that named none', () => {
+    const runtime = ollama();
+
+    expect(runtime.agents.map((agent) => agent.id)).toEqual(['default']);
+    expect(runtime.loopFor(undefined)).toBe(runtime.loop);
+  });
+
+  it('gives a named agent its own loop, on its own model', () => {
+    const runtime = withAgent({ label: 'Reviewer', model: 'qwen3:32b' });
+
+    const reviewer = runtime.requireLoopFor('reviewer');
+    expect(reviewer.model).toBe('qwen3:32b');
+    // The default is untouched — this is a second loop, not a reconfigured one.
+    expect(runtime.requireLoop().model).toBe('qwen3:8b');
+    expect(reviewer).not.toBe(runtime.loop);
+  });
+
+  it('builds a named agent once and reuses it', () => {
+    const runtime = withAgent({ model: 'qwen3:32b' });
+
+    expect(runtime.loopFor('reviewer')).toBe(runtime.loopFor('reviewer'));
+  });
+
+  it('treats undefined, empty and "default" as the same agent', () => {
+    const runtime = withAgent({ model: 'qwen3:32b' });
+
+    expect(runtime.loopFor('')).toBe(runtime.loop);
+    expect(runtime.loopFor('default')).toBe(runtime.loop);
+    expect(runtime.loopFor(undefined)).toBe(runtime.loop);
+  });
+
+  it('refuses an id that names nothing runnable', () => {
+    const runtime = withAgent({});
+
+    expect(() => runtime.loopFor('nope')).toThrow(/No agent named "nope"/);
+  });
+
+  it('hides a disabled agent from the list and from resolution', () => {
+    const runtime = withAgent({ enabled: false });
+
+    expect(runtime.agents.map((agent) => agent.id)).toEqual(['default']);
+    expect(() => runtime.loopFor('reviewer')).toThrow(/disabled/);
+  });
+
+  it('shares one workspace between agents', () => {
+    // The whole point of the feature: separate identities, one working folder.
+    const runtime = withAgent({ model: 'qwen3:32b' });
+
+    expect(runtime.jails.forWorkspace('default').root).toBe(runtime.jail.root);
+    expect(runtime.agents.every((agent) => agent.defaults.workspace === '')).toBe(true);
+  });
+
+  it('narrows one agent’s tools without touching the shared registry', () => {
+    const runtime = withAgent({ tools: { deny: ['exec'] } });
+
+    const scope = runtime.tools.select(runtime.agents[1]?.tools);
+    expect(scope.definitions().map((definition) => definition.name)).not.toContain('exec');
+    // The registry itself still has it, for every other agent.
+    expect(runtime.tools.has('exec')).toBe(true);
+  });
+
+  it('refuses to build at all when an agent asks for a sandbox with no backend', () => {
+    const home = tempHome({
+      agents: {
+        defaults: { provider: 'ollama', model: 'qwen3:8b' },
+        list: { boxed: { sandbox: { kind: 'docker', image: 'node:22' } } },
+      },
+    });
+
+    expect(() => build({ home })).toThrow(/not implemented yet/);
+  });
+
+  it('leaves the runtime serving when a patch adds an unbuildable agent', () => {
+    // `reconfigure` is all-or-nothing, and agent resolution runs before
+    // anything mutates — so a bad save is a refusal, not a broken install.
+    const runtime = ollama();
+
+    expect(() =>
+      runtime.reconfigure({ agents: { list: { boxed: { sandbox: { kind: 'docker' } } } } }),
+    ).toThrow(/not implemented yet/);
+
+    expect(runtime.requireLoop().model).toBe('qwen3:8b');
+    expect(runtime.agents.map((agent) => agent.id)).toEqual(['default']);
+  });
+
+  it('drops cached loops on a reconfigure, so a settings save takes effect', () => {
+    const runtime = withAgent({ model: 'qwen3:32b' });
+    const before = runtime.requireLoopFor('reviewer');
+
+    runtime.reconfigure({ agents: { list: { reviewer: { model: 'llama3' } } } });
+    const after = runtime.requireLoopFor('reviewer');
+
+    expect(after).not.toBe(before);
+    expect(after.model).toBe('llama3');
+    // The turn that was already running still holds the loop it started on.
+    expect(before.model).toBe('qwen3:32b');
+  });
+
+  it('adds an agent added by a patch', () => {
+    const runtime = ollama();
+
+    runtime.reconfigure({ agents: { list: { writer: { label: 'Writer' } } } });
+
+    expect(runtime.agents.map((agent) => agent.id)).toEqual(['default', 'writer']);
+    expect(runtime.requireLoopFor('writer').model).toBe('qwen3:8b');
+  });
+
+  it('applies a process-wide model pin to every agent', () => {
+    // `ghost chat --model x` is a statement about this process; an agent that
+    // ignored it would be the more surprising rule.
+    const home = tempHome({
+      agents: {
+        defaults: { provider: 'ollama', model: 'qwen3:8b' },
+        list: { reviewer: { model: 'qwen3:32b' } },
+      },
+    });
+    const runtime = build({ home, model: 'pinned' });
+
+    expect(runtime.requireLoop().model).toBe('pinned');
+    expect(runtime.requireLoopFor('reviewer').model).toBe('pinned');
   });
 });

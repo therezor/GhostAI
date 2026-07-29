@@ -46,6 +46,7 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  DEFAULT_AGENT_ID,
   DEFAULT_MAX_TOOL_RESULT_CHARS,
   DEFAULT_WORKSPACE_ID,
   GhostError,
@@ -97,7 +98,7 @@ import {
   DEFAULT_TOOLS_CONFIG,
   type ToolContext,
   type ToolExecution,
-  type ToolRegistry,
+  type ToolScope,
 } from '@ghostai/tools';
 
 import {
@@ -113,6 +114,7 @@ import {
   buildStaticPrompt,
   composeSystemPrompt,
   type ContextContributor,
+  type PromptAgent,
   type StaticPromptContext,
 } from './prompt.js';
 import { SteeringQueue, steeringText } from './steering.js';
@@ -266,10 +268,30 @@ function watchAbort(signal: AbortSignal): AbortWatch {
   };
 }
 
+/**
+ * The agent a loop belongs to, as the loop needs it.
+ *
+ * `PromptAgent` plus the id, which is what `turn.start` reports and what the
+ * turn's stats row records. Deliberately not the whole `EffectiveAgent`: the
+ * model, the tools and the approvals have already been turned into the
+ * collaborators around this loop by the time it is constructed, and carrying
+ * them again would invite something below here to read the copy instead.
+ */
+export interface LoopAgent extends PromptAgent {
+  readonly id: string;
+}
+
 export interface AgentLoopOptions {
   /** Already wrapped in `withResilience` by `createProvider`. */
   readonly provider: ChatProvider;
-  readonly tools: ToolRegistry;
+  /**
+   * What this loop may call.
+   *
+   * A `ToolScope` rather than the registry itself, so an agent restricted to a
+   * subset is not a special case anywhere below here — `ToolRegistry` satisfies
+   * it, and `registry.select(...)` returns a view that also does.
+   */
+  readonly tools: ToolScope;
   readonly store: SessionStore;
   /**
    * Supplies the jail for a turn, keyed by its session's workspace.
@@ -284,6 +306,15 @@ export interface AgentLoopOptions {
   readonly toolsConfig?: ToolsConfig;
   /** Overrides `config.model`. One of the two must be non-empty. */
   readonly model?: string;
+  /**
+   * Which agent this loop is. Absent is the unnamed default.
+   *
+   * Constructor-bound, like the model and the tools, because it is the same
+   * kind of decision: a loop *is* one agent. The composition root builds one
+   * per agent rather than making every turn re-resolve who it belongs to, and
+   * a turn already running therefore keeps the agent it started under.
+   */
+  readonly agent?: LoopAgent;
   readonly contributors?: readonly ContextContributor[];
   /**
    * Who to ask before a tool whose risk band is set to `ask` runs.
@@ -318,7 +349,7 @@ export interface TurnInput {
   readonly signal?: AbortSignal;
   /** Where the message came from. Recorded as the session's origin. */
   readonly channel?: string;
-  readonly profileId?: string;
+  readonly agentId?: string;
   /**
    * The workspace to create the session in, if it does not exist yet.
    *
@@ -346,7 +377,7 @@ export interface PromptPreviewInput {
   readonly sessionKey: string;
   /** Defaults to `web`. The CLI's `/context` passes `cli`. */
   readonly channel?: string;
-  readonly profileId?: string;
+  readonly agentId?: string;
 }
 
 export interface TurnResult {
@@ -367,7 +398,9 @@ interface Tick {
 
 export class AgentLoop {
   readonly #provider: ChatProvider;
-  readonly #tools: ToolRegistry;
+  readonly #tools: ToolScope;
+  readonly #agent: LoopAgent | undefined;
+  readonly #agentId: string;
   readonly #store: SessionStore;
   readonly #jails: JailResolver;
   readonly #config: AgentDefaults;
@@ -391,6 +424,8 @@ export class AgentLoop {
     this.#jails = options.jails;
     this.#config = options.config ?? AgentDefaultsSchema.parse({});
     this.#toolsConfig = options.toolsConfig ?? DEFAULT_TOOLS_CONFIG;
+    this.#agent = options.agent;
+    this.#agentId = options.agent?.id ?? DEFAULT_AGENT_ID;
     this.#contributors = options.contributors ?? [];
     this.#approvals = options.approvals;
     this.#steering =
@@ -431,7 +466,7 @@ export class AgentLoop {
    *
    * This exists so the context inspector shows the prompt the agent actually
    * uses rather than a second assembly of it. Composing the two halves outside
-   * the loop would work today and quietly lie later: memory, skills and profiles
+   * the loop would work today and quietly lie later: memory and skills
    * arrive as `ContextContributor`s attached to *this* object, and a reimplementation
    * elsewhere cannot see them.
    *
@@ -452,12 +487,13 @@ export class AgentLoop {
       workspaceRoot: jail.root,
       workspaceId,
       sessionKey: input.sessionKey,
-      profileId: input.profileId,
+      agentId: input.agentId,
       channel: input.channel ?? 'web',
     };
 
     const staticPrompt = await buildStaticPrompt({
       context,
+      ...(this.#agent === undefined ? {} : { agent: this.#agent }),
       contributors: this.#contributors,
     });
     const runtimeBlock = buildRuntimeBlock({
@@ -535,17 +571,21 @@ export class AgentLoop {
     const session = this.#store.ensureSession(sessionKey, {
       origin: channel,
       ...(input.workspaceId === undefined ? {} : { workspaceId: input.workspaceId }),
-      ...(input.profileId === undefined ? {} : { profileId: input.profileId }),
+      ...(input.agentId === undefined ? {} : { agentId: input.agentId }),
     });
     // Captured once, for the life of the turn: every tool call below closes
     // over this jail, so a workspace switch mid-turn cannot move it.
     const jail = this.#jails.forWorkspace(session.workspaceId);
 
+    // The stored row wins, for the same reason the workspace does: a history
+    // built under one agent's prompt and tools must not silently continue under
+    // another's. `input.agentId` can only ever *create* a session's binding;
+    // moving an existing one is an explicit update, not a frame.
     const promptContext: StaticPromptContext = {
       workspaceRoot: jail.root,
       workspaceId: session.workspaceId,
       sessionKey,
-      profileId: input.profileId,
+      agentId: session.agentId,
       channel,
     };
 
@@ -570,6 +610,7 @@ export class AgentLoop {
 
     const staticPrompt = await buildStaticPrompt({
       context: promptContext,
+      ...(this.#agent === undefined ? {} : { agent: this.#agent }),
       contributors: this.#contributors,
     });
 
@@ -601,6 +642,7 @@ export class AgentLoop {
         type: 'turn.start',
         sessionKey,
         turnId,
+        agentId: this.#agentId,
         model: this.#model,
         provider: this.#provider.id,
       };
@@ -650,8 +692,16 @@ export class AgentLoop {
           ],
           ...(toolDefinitions.length === 0 ? {} : { tools: toolDefinitions }),
           maxTokens: this.#config.maxTokens,
-          temperature: this.#config.temperature,
-          reasoningEffort: this.#config.reasoningEffort,
+          // Both omitted rather than sent as `undefined` when unset: an adapter
+          // that spreads the request into a JSON body would otherwise emit
+          // `"temperature": null`, which is not the same as saying nothing, and
+          // is rejected by the providers that accept no temperature at all.
+          ...(this.#config.temperature === undefined
+            ? {}
+            : { temperature: this.#config.temperature }),
+          ...(this.#config.reasoningEffort === undefined
+            ? {}
+            : { reasoningEffort: this.#config.reasoningEffort }),
           signal,
         };
 
@@ -752,6 +802,7 @@ export class AgentLoop {
     this.#recordStats({
       turnId,
       sessionKey,
+      agentId: session.agentId ?? '',
       provider: this.#provider.id,
       model: this.#model,
       startedAtMs,
@@ -907,6 +958,7 @@ export class AgentLoop {
       const expiresAtMs = this.#clock.now() + approvals.timeoutMs;
       const request: ApprovalRequest = {
         sessionKey: turn.sessionKey,
+        agentId: this.#agentId,
         turnId: turn.turnId,
         callId: call.id,
         name: call.name,

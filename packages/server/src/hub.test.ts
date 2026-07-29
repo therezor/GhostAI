@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { AgentEvent, TurnInput, TurnResult } from '@ghostai/agent';
-import { SessionStore, assistantMessage, userMessage } from '@ghostai/core';
+import { GhostError, SessionStore, assistantMessage, userMessage } from '@ghostai/core';
 import {
   ConfigSchema,
   PROTOCOL_VERSION,
@@ -150,7 +150,7 @@ interface Harness {
 
 interface HarnessOptions {
   readonly config?: Partial<Config['server']>;
-  readonly loop?: () => TurnRunner | null;
+  readonly loop?: (agentId: string | undefined) => TurnRunner | null;
   readonly maxQueueDepth?: number;
   readonly maxSessions?: number;
 }
@@ -386,6 +386,7 @@ describe('SessionHub', () => {
 
       await turn.emit({
         type: 'turn.start',
+        agentId: 'default',
         sessionKey: SESSION,
         turnId: turn.turnId,
         model: 'm',
@@ -749,6 +750,7 @@ describe('SessionHub', () => {
       const turn = h.runner.turn(0);
       await turn.emit({
         type: 'turn.start',
+        agentId: 'default',
         sessionKey: SESSION,
         turnId: turn.turnId,
         model: 'm',
@@ -873,6 +875,7 @@ describe('SessionHub', () => {
       const controller = new AbortController();
       const decision = h.approvals.request({
         sessionKey: SESSION,
+        agentId: 'default',
         turnId: 'turn-1',
         callId: 'call-1',
         name: 'exec',
@@ -1130,5 +1133,93 @@ describe('editing a message', () => {
     await flush();
 
     expect(client.of('message.ack')[0]?.clientMessageId).toBe('c1');
+  });
+});
+
+describe('SessionHub agent routing', () => {
+  /** Records which agent each turn was resolved for. */
+  function tracking(): {
+    readonly asked: (string | undefined)[];
+    readonly loop: (agentId: string | undefined) => TurnRunner;
+    readonly runner: ScriptedRunner;
+  } {
+    const asked: (string | undefined)[] = [];
+    const runner = new ScriptedRunner();
+    return {
+      asked,
+      runner,
+      loop: (agentId) => {
+        asked.push(agentId);
+        return runner;
+      },
+    };
+  }
+
+  it('resolves the loop for the agent a frame names', async () => {
+    const tracked = tracking();
+    const h = harness({ loop: tracked.loop });
+    const client = h.connect();
+
+    await send(client, {
+      type: 'user.message',
+      sessionKey: SESSION,
+      content: 'hello',
+      agentId: 'reviewer',
+    });
+
+    expect(tracked.asked).toEqual(['reviewer']);
+  });
+
+  it('asks for the default when no frame names an agent', async () => {
+    const tracked = tracking();
+    const h = harness({ loop: tracked.loop });
+    const client = h.connect();
+
+    await send(client, { type: 'user.message', sessionKey: SESSION, content: 'hello' });
+
+    expect(tracked.asked).toEqual([undefined]);
+  });
+
+  it('lets the stored session win over a frame that names another agent', async () => {
+    // A history built under one agent's prompt, tools and permissions must not
+    // silently continue under another's.
+    const tracked = tracking();
+    const h = harness({ loop: tracked.loop });
+    h.store.ensureSession(SESSION, { agentId: 'reviewer' });
+    const client = h.connect();
+
+    await send(client, {
+      type: 'user.message',
+      sessionKey: SESSION,
+      content: 'hello',
+      agentId: 'writer',
+    });
+
+    expect(tracked.asked).toEqual(['reviewer']);
+  });
+
+  it('reports an unknown agent on the turn, and keeps the connection', async () => {
+    const runner = new ScriptedRunner();
+    const h = harness({
+      loop: (agentId) => {
+        if (agentId === 'ghost') throw new GhostError('not_found', 'No agent named "ghost"');
+        return runner;
+      },
+    });
+    const client = h.connect();
+
+    await send(client, {
+      type: 'user.message',
+      sessionKey: SESSION,
+      content: 'hello',
+      agentId: 'ghost',
+    });
+
+    expect(client.of('error')[0]).toMatchObject({ code: 'not_found' });
+    expect(runner.turns).toHaveLength(0);
+
+    // The socket is fine: the next turn reaches a runner as usual.
+    await send(client, { type: 'user.message', sessionKey: SESSION, content: 'hi' });
+    expect(runner.turns).toHaveLength(1);
   });
 });

@@ -24,7 +24,6 @@ import type { JSX } from 'react';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.js';
 import { AccountPanel } from '@/settings/account-panel.js';
-import { AgentPanel } from '@/settings/agent-panel.js';
 import { PlannedPanel } from '@/settings/planned-panel.js';
 import { ProvidersPanel } from '@/settings/providers-panel.js';
 import { ToolsPanel } from '@/settings/tools-panel.js';
@@ -106,7 +105,6 @@ function PanelBody({ panelId }: { readonly panelId: string }): JSX.Element {
   }
 
   const { config } = settings.data;
-  if (panel.id === 'providers') return <ProvidersPanel config={config} />;
   if (panel.id === 'tools') return <ToolsPanel config={config} />;
-  return <AgentPanel config={config} />;
+  return <ProvidersPanel config={config} />;
 }

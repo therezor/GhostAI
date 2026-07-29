@@ -117,6 +117,7 @@ const framesOf = (type: ClientMessage['type']): ClientMessage[] =>
 
 const START = {
   type: 'turn.start',
+  agentId: 'default',
   sessionKey: SESSION,
   turnId: 't1',
   model: 'test-model',

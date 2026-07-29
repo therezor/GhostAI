@@ -128,7 +128,7 @@ export function FileEditor({ entry, workspace, onDirtyChange }: FileEditorProps)
   return (
     <div className="stack file-editor">
       <div className="cluster file-editor__toolbar">
-        <span className="file-editor__state">
+        <span className="micro-label">
           {truncated
             ? 'Read-only — truncated'
             : dirty
@@ -211,7 +211,7 @@ export function FileEditor({ entry, workspace, onDirtyChange }: FileEditorProps)
         onKeyDown={handleKeyDown}
       />
 
-      <p className="file-editor__status">
+      <p className="micro-label">
         {languageForFile(entry.name) === '' ? 'plain text' : languageForFile(entry.name)} ·{' '}
         {lineLabel(content)}
         {truncated ? ` of ${formatBytes(entry.sizeBytes)}` : ''}

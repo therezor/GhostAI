@@ -33,6 +33,9 @@
 @import './components/toast.css';
 @import './components/tooltip.css';
 @import './components/scroll-area.css';
+@import './components/notice.css';
+@import './components/micro-label.css';
+@import './components/data-table.css';
 @import './components/wordmark.css';
 @import './components/spinner.css';
 
@@ -40,6 +43,7 @@
 @import './screens/shell.css';
 @import './screens/sidebar.css';
 @import './screens/workspaces.css';
+@import './screens/agents.css';
 @import './screens/chat.css';
 @import './screens/markdown.css';
 @import './screens/files.css';

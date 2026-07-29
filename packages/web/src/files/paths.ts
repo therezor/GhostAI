@@ -15,6 +15,13 @@
 
 import type { FileEntry } from '@ghostai/protocol';
 
+import {
+  filterRows,
+  sortRows,
+  type Comparators,
+  type SortOrder as GenericSortOrder,
+} from '@/components/crud/sort.js';
+
 /** The workspace root, in the one spelling this package uses. */
 export const ROOT_PATH = '';
 
@@ -132,20 +139,26 @@ export function languageForFile(name: string): string {
 
 export type SortKey = 'name' | 'size' | 'modified';
 
-export interface SortOrder {
-  readonly key: SortKey;
-  readonly descending: boolean;
-}
+export type SortOrder = GenericSortOrder<SortKey>;
 
 export const DEFAULT_SORT: SortOrder = { key: 'name', descending: false };
+
+/** Directories rank above files, which is what keeps them at the top in both directions. */
+function directoriesFirst(entry: FileEntry): number {
+  return entry.isDirectory ? 0 : 1;
+}
+
+const COMPARE: Comparators<FileEntry, SortKey> = {
+  name: (a, b) => a.name.localeCompare(b.name),
+  size: (a, b) => a.sizeBytes - b.sizeBytes,
+  modified: (a, b) => a.modifiedAtMs - b.modifiedAtMs,
+};
 
 /**
  * One directory's entries, ordered for reading.
  *
- * **Directories stay first in every order, including a reversed one.** They are
- * not big files or old files, they are the places to go next, and a "largest
- * first" that scattered them through the list would turn navigating into
- * searching. The chosen column orders within each group.
+ * **Directories stay first in every order, including a reversed one** — see
+ * `sortRows`, which is where that rule and the tie-breaking live now.
  *
  * The server already answers directories-first-then-name, so the default order
  * costs nothing and matches the listing exactly; this reorders only once a
@@ -155,37 +168,16 @@ export function sortEntries<T extends FileEntry>(
   entries: readonly T[],
   order: SortOrder,
 ): readonly T[] {
-  const direction = order.descending ? -1 : 1;
-
-  return [...entries].sort((a, b) => {
-    if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
-
-    switch (order.key) {
-      case 'size':
-        // Ties broken by name rather than left to the sort's stability, so the
-        // eight zero-byte files a turn just created do not shuffle on refetch.
-        return (a.sizeBytes - b.sizeBytes) * direction || a.name.localeCompare(b.name);
-      case 'modified':
-        return (a.modifiedAtMs - b.modifiedAtMs) * direction || a.name.localeCompare(b.name);
-      case 'name':
-        return a.name.localeCompare(b.name) * direction;
-    }
+  return sortRows(entries, order, COMPARE as Comparators<T, SortKey>, {
+    group: directoriesFirst,
+    tiebreak: (a, b) => a.name.localeCompare(b.name),
   });
 }
 
-/**
- * The entries whose name contains `query`, case-insensitively.
- *
- * A filter over the listing already loaded rather than a request, because the
- * listing is one directory and is already here. A search that *recursed* would
- * be a different feature needing the server; this is the one that makes a
- * directory of two hundred generated files usable.
- */
+/** The entries whose name contains `query`, case-insensitively. */
 export function filterEntries<T extends FileEntry>(
   entries: readonly T[],
   query: string,
 ): readonly T[] {
-  const needle = query.trim().toLowerCase();
-  if (needle === '') return entries;
-  return entries.filter((entry) => entry.name.toLowerCase().includes(needle));
+  return filterRows(entries, query, (entry) => entry.name);
 }

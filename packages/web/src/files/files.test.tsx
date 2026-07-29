@@ -154,6 +154,19 @@ function mount(
   return { user, calls, router };
 }
 
+/**
+ * Opens a row's kebab and picks Delete.
+ *
+ * Row actions moved behind a menu when Files, Agents and Workspaces were given
+ * one vocabulary: an agent row has four actions, and four ghost icon buttons in
+ * a table cell reads as a toolbar with a name attached. It also stopped Delete
+ * from sitting permanently one pixel away from a harmless neighbour.
+ */
+async function deleteFrom(user: ReturnType<typeof userEvent.setup>, name: string): Promise<void> {
+  await user.click(await screen.findByRole('button', { name: `Actions for ${name}` }));
+  await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+}
+
 describe('the file browser', () => {
   it('lists the workspace root and asks for it as `.`', async () => {
     const { calls } = mount();
@@ -214,7 +227,7 @@ describe('the file browser', () => {
     const { user, calls } = mount();
     await screen.findByRole('button', { name: 'notes.md' });
 
-    await user.click(screen.getByRole('button', { name: 'Delete notes.md' }));
+    await deleteFrom(user, 'notes.md');
     const dialog = await screen.findByRole('dialog');
     expect(dialog).toHaveTextContent('There is no undo');
 
@@ -226,7 +239,7 @@ describe('the file browser', () => {
     const { user, calls } = mount();
     await screen.findByRole('button', { name: 'notes.md' });
 
-    await user.click(screen.getByRole('button', { name: 'Delete notes.md' }));
+    await deleteFrom(user, 'notes.md');
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
 
@@ -240,7 +253,7 @@ describe('the file browser', () => {
     const { user, calls } = mount();
     await screen.findByRole('button', { name: 'notes.md' });
 
-    await user.click(screen.getByRole('button', { name: 'Delete notes' }));
+    await deleteFrom(user, 'notes');
     const dialog = await screen.findByRole('dialog');
 
     // "Delete drafts?" and "Delete drafts and the things in it?" are different
@@ -264,7 +277,7 @@ describe('the file browser', () => {
     const { user, calls } = mount();
     await screen.findByRole('button', { name: 'notes.md' });
 
-    await user.click(screen.getByRole('button', { name: 'Delete notes.md' }));
+    await deleteFrom(user, 'notes.md');
     await user.click(
       within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }),
     );
@@ -507,6 +520,94 @@ describe('creating entries', () => {
     // a placeholder line would be content the reader did not write.
     expect(write?.body).toEqual({ path: 'notes.md', content: '', workspaceId: 'default' });
     expect(await screen.findByRole('textbox', { name: 'Contents of notes.md' })).toBeVisible();
+  });
+});
+
+describe('renaming', () => {
+  /** Opens a row's kebab and picks Rename. */
+  async function renameFrom(user: ReturnType<typeof userEvent.setup>, name: string): Promise<void> {
+    await user.click(await screen.findByRole('button', { name: `Actions for ${name}` }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Rename' }));
+  }
+
+  it('renames a folder, sending both ends of the move', async () => {
+    const { user, calls } = mount('/files', {
+      'POST /api/files/move': [
+        200,
+        { path: 'archive', name: 'archive', isDirectory: true, sizeBytes: 0, modifiedAtMs: 1 },
+      ],
+    });
+
+    await renameFrom(user, 'notes');
+    const field = await screen.findByRole('textbox', { name: 'New name' });
+    // Prefilled, because a rename starts from the current name far more often
+    // than from nothing.
+    expect(field).toHaveValue('notes');
+
+    await user.clear(field);
+    await user.type(field, 'archive{Enter}');
+
+    await waitFor(() => {
+      expect(calls.some((call) => call.path === '/api/files/move')).toBe(true);
+    });
+    expect(calls.find((call) => call.path === '/api/files/move')?.body).toEqual({
+      from: 'notes',
+      to: 'archive',
+      workspaceId: 'default',
+    });
+  });
+
+  it('says what happens to a folder’s contents, which is the question', async () => {
+    const { user } = mount();
+
+    await renameFrom(user, 'notes');
+    expect(await screen.findByText(/Everything inside moves with it/)).toBeVisible();
+  });
+
+  it('keeps a renamed file in the parent it was already in', async () => {
+    // Joined to the entry's own parent rather than to the directory on screen.
+    // They agree today; a rename that quietly relocated a row would not be
+    // visible until something could list an entry from elsewhere.
+    const { user, calls } = mount('/files?path=notes', {
+      'POST /api/files/move': [
+        200,
+        { path: 'notes/b.txt', name: 'b.txt', isDirectory: false, sizeBytes: 1, modifiedAtMs: 1 },
+      ],
+    });
+
+    await renameFrom(user, 'a.txt');
+    const field = await screen.findByRole('textbox', { name: 'New name' });
+    await user.clear(field);
+    await user.type(field, 'b.txt{Enter}');
+
+    await waitFor(() => {
+      expect(calls.some((call) => call.path === '/api/files/move')).toBe(true);
+    });
+    expect(calls.find((call) => call.path === '/api/files/move')?.body).toMatchObject({
+      from: 'notes/a.txt',
+      to: 'notes/b.txt',
+    });
+  });
+
+  it('reports a refusal rather than pretending it worked', async () => {
+    const { user, calls } = mount('/files', {
+      'POST /api/files/move': [
+        409,
+        {
+          error: { code: 'conflict', message: 'Already exists: shot.png', retryable: false },
+        },
+      ],
+    });
+
+    await renameFrom(user, 'notes');
+    const field = await screen.findByRole('textbox', { name: 'New name' });
+    await user.clear(field);
+    await user.type(field, 'shot.png{Enter}');
+
+    await waitFor(() => {
+      expect(calls.some((call) => call.path === '/api/files/move')).toBe(true);
+    });
+    expect(await screen.findByText(/Could not rename it/)).toBeVisible();
   });
 });
 

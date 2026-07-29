@@ -64,7 +64,10 @@ describe('generated shapes', () => {
       properties: Record<string, { default?: unknown }>;
     };
     expect(json.properties.maxToolIterations?.default).toBe(40);
-    expect(json.properties.temperature?.default).toBe(0.1);
+    expect(json.properties.maxTokens?.default).toBe(8192);
+    // `temperature` deliberately has none: unset means the provider's own, and
+    // a default here would be this project guessing at someone else's tuning.
+    expect(json.properties.temperature).not.toHaveProperty('default');
   });
 
   it('marks defaulted fields optional in input mode and present in output mode', () => {

@@ -67,8 +67,17 @@ export class HubApprovalGate implements ApprovalGate {
   readonly #pending = new Map<string, PendingApproval>();
   /** `session` scope: session key → tool name → decision. */
   readonly #bySession = new Map<string, Map<string, RememberedDecision>>();
-  /** `always` scope: tool name → decision, for every session on this process. */
-  readonly #always = new Map<string, RememberedDecision>();
+  /**
+   * `always` scope: agent id → tool name → decision, across every session.
+   *
+   * Keyed by agent rather than by tool alone, and that is a security boundary
+   * rather than bookkeeping. Two agents can be configured with deliberately
+   * different tool sets and approval policies; a standing "always allow `exec`"
+   * granted while using a permissive agent would otherwise pre-approve it for a
+   * locked-down one, silently undoing the restriction an operator set up.
+   * "Always" means for this agent, on every session, until the process ends.
+   */
+  readonly #always = new Map<string, Map<string, RememberedDecision>>();
 
   constructor(options: HubApprovalGateOptions = {}) {
     this.#clock = options.clock ?? systemClock;
@@ -81,7 +90,7 @@ export class HubApprovalGate implements ApprovalGate {
   }
 
   async request(request: ApprovalRequest): Promise<ApprovalDecision> {
-    const remembered = this.#recall(request.sessionKey, request.name);
+    const remembered = this.#recall(request.sessionKey, request.agentId, request.name);
     if (remembered !== undefined) {
       this.#logger.debug(
         { sessionKey: request.sessionKey, tool: request.name, scope: remembered.scope },
@@ -146,7 +155,10 @@ export class HubApprovalGate implements ApprovalGate {
     const pending = this.#pending.get(callId);
     if (pending === undefined) return false;
 
-    this.#remember(pending.request.sessionKey, pending.request.name, { approved, scope });
+    this.#remember(pending.request.sessionKey, pending.request.agentId, pending.request.name, {
+      approved,
+      scope,
+    });
     this.#logger.info(
       { sessionKey: pending.request.sessionKey, tool: pending.request.name, approved, scope },
       'approval answered',
@@ -159,7 +171,8 @@ export class HubApprovalGate implements ApprovalGate {
    * Forgets a session: its remembered answers, and any prompt still parked.
    *
    * Called when the hub drops a session, which is the moment nothing can answer
-   * for it any more. `always` survives — it was never scoped to one session.
+   * for it any more. `always` survives — it was scoped to an agent, not to a
+   * session.
    */
   clearSession(sessionKey: string): void {
     this.#bySession.delete(sessionKey);
@@ -169,16 +182,19 @@ export class HubApprovalGate implements ApprovalGate {
     }
   }
 
-  #recall(sessionKey: string, tool: string): RememberedDecision | undefined {
+  #recall(sessionKey: string, agentId: string, tool: string): RememberedDecision | undefined {
     // The session's own answer wins over the standing one: it is the more
-    // specific of the two, and the more recently given.
-    return this.#bySession.get(sessionKey)?.get(tool) ?? this.#always.get(tool);
+    // specific of the two, and the more recently given. A session is bound to
+    // one agent, so the session-scoped map needs no agent dimension.
+    return this.#bySession.get(sessionKey)?.get(tool) ?? this.#always.get(agentId)?.get(tool);
   }
 
-  #remember(sessionKey: string, tool: string, decision: RememberedDecision): void {
+  #remember(sessionKey: string, agentId: string, tool: string, decision: RememberedDecision): void {
     if (decision.scope === 'once') return;
     if (decision.scope === 'always') {
-      this.#always.set(tool, decision);
+      const agent = this.#always.get(agentId) ?? new Map<string, RememberedDecision>();
+      agent.set(tool, decision);
+      this.#always.set(agentId, agent);
       return;
     }
     const session = this.#bySession.get(sessionKey) ?? new Map<string, RememberedDecision>();

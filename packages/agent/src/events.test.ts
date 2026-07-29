@@ -12,6 +12,7 @@ import type { AgentEvent, AgentEventType } from './events.js';
 const SAMPLES: Record<AgentEventType, AgentEvent> = {
   'turn.start': {
     type: 'turn.start',
+    agentId: 'default',
     sessionKey: 'web:1',
     turnId: 'turn-1',
     model: 'qwen3:8b',

@@ -52,6 +52,8 @@ import type {
 import { ToolsConfigSchema } from '@ghostai/protocol';
 import type { WorkspaceJail } from '@ghostai/security';
 
+import type { CommandRunner } from './runner.js';
+
 /**
  * The name shape every provider accepts.
  *
@@ -88,6 +90,14 @@ export interface ToolContext {
   readonly logger?: Logger;
   /** Source for the exec env allow-list. Defaults to `process.env`. */
   readonly env?: Readonly<Record<string, string | undefined>>;
+  /**
+   * Where a guarded command runs. Defaults to `localRunner` — a child process
+   * on this machine, which is what `exec` has always done.
+   *
+   * Optional so that nothing constructing a context has to know about it, and
+   * the seam an agent's `sandbox` setting reaches the tool layer through.
+   */
+  readonly runner?: CommandRunner;
 }
 
 /**

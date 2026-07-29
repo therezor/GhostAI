@@ -43,6 +43,7 @@ function play(...frames: readonly Unsequenced<ServerMessage>[]): Transcript {
 
 const START = {
   type: 'turn.start',
+  agentId: 'default',
   sessionKey: 'web:1',
   turnId: 't1',
   model: 'm',
@@ -832,6 +833,7 @@ describe('turn.end reporting', () => {
   it('records the timing and the seqs the turn spanned', () => {
     const started = applyServerMessage([], {
       type: 'turn.start',
+      agentId: 'default',
       seq: 1,
       sessionKey: 'web:1',
       turnId: 't1',

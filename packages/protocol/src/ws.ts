@@ -62,7 +62,7 @@ export const UserMessageRequestSchema = z.object({
   sessionKey: z.string().min(1),
   content: z.string(),
   attachments: z.array(AttachmentSchema).default([]),
-  profileId: z.string().optional(),
+  agentId: z.string().optional(),
   /**
    * Client-generated idempotency key. Lets a retry after a dropped socket avoid
    * appending the same user turn twice.
@@ -92,7 +92,7 @@ export const NewSessionMessageSchema = z.object({
    * was born in, whatever this says.
    */
   workspaceId: z.string().min(1).optional(),
-  profileId: z.string().optional(),
+  agentId: z.string().optional(),
 });
 
 /**
@@ -171,7 +171,7 @@ export const EditMessageSchema = z.object({
   seq: z.number().int().positive(),
   content: z.string(),
   attachments: z.array(AttachmentSchema).default([]),
-  profileId: z.string().optional(),
+  agentId: z.string().optional(),
   clientMessageId: z.string().optional(),
 });
 
@@ -276,6 +276,15 @@ export const TurnStartEventSchema = z.object({
   seq,
   sessionKey: z.string().min(1),
   turnId: z.string().min(1),
+  /**
+   * Which agent is running the turn.
+   *
+   * Reported per turn rather than looked up from the session, for the same
+   * reason `model` and `provider` are: a session can be moved to another agent,
+   * and a transcript that relabelled its history would be describing turns that
+   * never happened.
+   */
+  agentId: z.string(),
   model: z.string(),
   provider: z.string(),
 });

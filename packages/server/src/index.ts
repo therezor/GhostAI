@@ -26,7 +26,7 @@ export {
   type UiOptions,
 } from './app.js';
 
-export type { AgentView, ExtensionCounts, ServerRuntime } from './runtime.js';
+export type { AgentSummary, AgentView, ExtensionCounts, ServerRuntime } from './runtime.js';
 
 export {
   NotificationStore,

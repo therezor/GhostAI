@@ -1,0 +1,114 @@
+/**
+ * What may name a directory GhostAI creates from user input.
+ *
+ * Two things are named this way — a workspace and an agent — and both turn an
+ * id that arrived over HTTP into a path. The rules are identical because the
+ * reasons are identical, so they live here once rather than being copied and
+ * then drifting apart in exactly the case nobody tested.
+ *
+ * The rules, and why each is a rule rather than a preference:
+ *
+ *  - **One segment, `[a-z0-9-]`, no leading or trailing hyphen, 1–40 chars.**
+ *    `..`, `/`, `\`, `:`, NUL and a leading `~` are all unrepresentable, so a
+ *    crafted id cannot become a path outside the tree it belongs to. The jail
+ *    would catch it anyway; this catches it a layer earlier, where the error
+ *    can say something useful.
+ *  - **Lowercase only, and that is a security rule.** APFS and NTFS fold case,
+ *    so `Work` and `work` would be two rows sharing one directory — two things
+ *    that believe they are isolated and are not.
+ *  - **The Windows device names are reserved**, because `mkdir con` fails on
+ *    exactly one platform, and something that cannot be created on Windows is a
+ *    bug report from a user who did nothing wrong.
+ *
+ * What is *not* here is which ids a particular kind reserves beyond those, or
+ * what a name with nothing usable in it falls back to. Those differ between
+ * workspaces and agents, so callers pass them in.
+ *
+ * It lives in `@ghostai/protocol` rather than in `@ghostai/core` because both
+ * sides need it: the server turns an id into a path, and the browser *mints*
+ * one when an operator creates an agent. Two implementations of a rule whose
+ * whole job is that two things cannot collide is not a rule.
+ */
+
+/** 1–40 chars, lowercase alphanumerics and hyphens, no leading or trailing hyphen. */
+export const SLUG_ID_PATTERN: RegExp = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
+
+export const MAX_SLUG_ID_LENGTH = 40;
+
+/** Reserved on Windows whatever the id names. */
+export const RESERVED_DEVICE_NAMES: ReadonlySet<string> = new Set([
+  'con',
+  'prn',
+  'aux',
+  'nul',
+  ...Array.from({ length: 9 }, (_unused, index) => `com${String(index + 1)}`),
+  ...Array.from({ length: 9 }, (_unused, index) => `lpt${String(index + 1)}`),
+]);
+
+/** Whether a string may be resolved to a directory name. */
+export function isSlugId(value: string): boolean {
+  return SLUG_ID_PATTERN.test(value);
+}
+
+/**
+ * A display name reduced to a legal id.
+ *
+ * Lossy on purpose — the name is stored separately and is what the UI shows, so
+ * this only has to produce something legal, stable and recognisable. A name
+ * with nothing usable in it falls back rather than failing: the caller then
+ * disambiguates against the rows that already exist.
+ */
+export function slugify(
+  name: string,
+  options: { readonly reserved: ReadonlySet<string>; readonly fallback: string },
+): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, MAX_SLUG_ID_LENGTH)
+    .replace(/-+$/, '');
+
+  return slug === '' || options.reserved.has(slug) ? options.fallback : slug;
+}
+
+// ---------------------------------------------------------------------------
+// Agents
+// ---------------------------------------------------------------------------
+
+/**
+ * What may name an agent.
+ *
+ * An agent id names a directory — `<root>/agents/<id>`, holding that agent's
+ * memory and skills — and it arrives over HTTP on a session frame, so it gets
+ * the same treatment a workspace id gets. The character rules and their
+ * rationale are at the top of this file.
+ *
+ * What is specific to an agent: **`default` is reserved**, because it names the
+ * agent an install runs as before anyone has defined one — the settings under
+ * `agents.defaults`, with no entry in `agents.list` behind it. It is a legal id
+ * to *resolve*, and `agents.list.default` may be written to customise it; what
+ * it is not is a name the UI lets an operator mint a second agent under.
+ */
+
+/** The agent every install has, resolved from `agents.defaults`. */
+export const DEFAULT_AGENT_ID = 'default';
+
+/** 1–40 chars, lowercase alphanumerics and hyphens, no leading or trailing hyphen. */
+export const AGENT_ID_PATTERN: RegExp = SLUG_ID_PATTERN;
+
+/** Reserved as *names to create*. `default` is still a legal id to resolve. */
+export const RESERVED_AGENT_IDS: ReadonlySet<string> = new Set([
+  DEFAULT_AGENT_ID,
+  ...RESERVED_DEVICE_NAMES,
+]);
+
+/** Whether a string may be resolved to an agent directory. */
+export function isAgentId(value: string): boolean {
+  return isSlugId(value);
+}
+
+/** A display label reduced to a legal agent id. See `slugify`. */
+export function deriveAgentId(label: string): string {
+  return slugify(label, { reserved: RESERVED_AGENT_IDS, fallback: 'agent' });
+}

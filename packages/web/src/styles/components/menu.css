@@ -74,6 +74,18 @@
     color: var(--fg-3);
   }
 
+  /* The one destructive row in a menu, coloured so it is not found by reading.
+   * Text only — a filled danger row would be the loudest thing in a panel whose
+   * other rows are ordinary, and the point is to mark one row, not to shout. */
+  .menu__item--danger {
+    color: var(--danger-fg);
+  }
+
+  .menu__item--danger[data-highlighted] {
+    background-color: var(--danger-soft);
+    color: var(--danger-fg);
+  }
+
   /**
    * The chosen row, in the same terms the rest of the app states selection: the
    * full-strength text tier, where everything unchosen sits one tier down. The

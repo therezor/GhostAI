@@ -567,6 +567,118 @@ describe('POST /api/files/directory', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Moving and renaming
+// ---------------------------------------------------------------------------
+
+describe('POST /api/files/move', () => {
+  async function move(
+    test: TestServer,
+    from: string,
+    to: string,
+  ): Promise<Awaited<ReturnType<TestServer['server']['app']['inject']>>> {
+    return await test.server.app.inject({
+      method: 'POST',
+      url: '/api/files/move',
+      headers: test.headers,
+      payload: { from, to },
+    });
+  }
+
+  it('renames a file and answers with where it landed', async () => {
+    const test = await start();
+    write(test, 'notes.md', 'hello');
+
+    const response = await move(test, 'notes.md', 'todo.md');
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json<FileEntry>()).toMatchObject({ path: 'todo.md', name: 'todo.md' });
+    expect(readFileSync(join(test.workspace, 'todo.md'), 'utf8')).toBe('hello');
+    expect(existsSync(join(test.workspace, 'notes.md'))).toBe(false);
+  });
+
+  it('renames a directory and everything inside it goes along', async () => {
+    // The whole reason this is a filesystem move rather than a copy and a
+    // delete: the server never walks the tree, so a folder of ten thousand
+    // files renames in the same time one file does.
+    const test = await start();
+    mkdirSync(join(test.workspace, 'drafts'));
+    write(test, join('drafts', 'one.md'), 'first');
+
+    expect((await move(test, 'drafts', 'published')).statusCode).toBe(200);
+
+    expect(readFileSync(join(test.workspace, 'published', 'one.md'), 'utf8')).toBe('first');
+    expect(existsSync(join(test.workspace, 'drafts'))).toBe(false);
+  });
+
+  it('moves an entry into another directory, because a rename is a move', async () => {
+    const test = await start();
+    mkdirSync(join(test.workspace, 'archive'));
+    write(test, 'notes.md', 'hello');
+
+    expect((await move(test, 'notes.md', 'archive/notes.md')).statusCode).toBe(200);
+    expect(existsSync(join(test.workspace, 'archive', 'notes.md'))).toBe(true);
+  });
+
+  it('refuses to overwrite whatever is already at the target', async () => {
+    // `renameSync` would replace it silently, and a rename that destroys a file
+    // the operator did not name is a loss they cannot see afterwards.
+    const test = await start();
+    write(test, 'notes.md', 'keep me');
+    write(test, 'todo.md', 'and me');
+
+    expect((await move(test, 'notes.md', 'todo.md')).statusCode).toBe(409);
+    expect(readFileSync(join(test.workspace, 'todo.md'), 'utf8')).toBe('and me');
+    expect(existsSync(join(test.workspace, 'notes.md'))).toBe(true);
+  });
+
+  it('answers 404 for a source that is not there', async () => {
+    const test = await start();
+    expect((await move(test, 'gone.md', 'todo.md')).statusCode).toBe(404);
+  });
+
+  it('names the missing folder rather than reporting the file as missing', async () => {
+    // `renameSync` reports this as a bare ENOENT, which reads as "the file is
+    // gone" when what is actually absent is the directory it was aimed at.
+    const test = await start();
+    write(test, 'notes.md', 'hello');
+
+    const response = await move(test, 'notes.md', 'nowhere/notes.md');
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json<{ error: { message: string } }>().error.message).toContain('nowhere');
+  });
+
+  it('refuses to move a directory inside itself', async () => {
+    const test = await start();
+    mkdirSync(join(test.workspace, 'drafts'));
+
+    const response = await move(test, 'drafts', 'drafts/nested');
+
+    expect(response.statusCode).toBe(400);
+    expect(existsSync(join(test.workspace, 'drafts'))).toBe(true);
+  });
+
+  it('treats a move onto itself as the no-op it is', async () => {
+    const test = await start();
+    write(test, 'notes.md', 'hello');
+
+    expect((await move(test, 'notes.md', 'notes.md')).statusCode).toBe(200);
+    expect(readFileSync(join(test.workspace, 'notes.md'), 'utf8')).toBe('hello');
+  });
+
+  it('clamps both ends into the workspace', async () => {
+    // The target goes through the jail exactly like the source, so a `to` that
+    // climbs out lands inside instead of escaping.
+    const test = await start();
+    write(test, 'notes.md', 'hello');
+
+    expect((await move(test, 'notes.md', '../escaped.md')).statusCode).toBe(200);
+    expect(existsSync(join(test.workspace, 'escaped.md'))).toBe(true);
+    expect(existsSync(join(test.workspace, '..', 'escaped.md'))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Signed media
 // ---------------------------------------------------------------------------
 

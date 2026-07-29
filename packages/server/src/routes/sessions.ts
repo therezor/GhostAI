@@ -84,7 +84,7 @@ function toSummary(record: SessionSummaryRecord, totalUsage?: Usage): SessionSum
     updatedAtMs: record.updatedAtMs,
     origin: record.origin,
     workspaceId: record.workspaceId,
-    ...(record.profileId === undefined ? {} : { profileId: record.profileId }),
+    ...(record.agentId === undefined ? {} : { agentId: record.agentId }),
     ...(totalUsage === undefined ? {} : { totalUsage }),
   };
 }
@@ -158,7 +158,7 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
           origin: 'web',
           ...(body.title === undefined ? {} : { title: body.title }),
           ...(body.workspaceId === undefined ? {} : { workspaceId: body.workspaceId }),
-          ...(body.profileId === undefined ? {} : { profileId: body.profileId }),
+          ...(body.agentId === undefined ? {} : { agentId: body.agentId }),
         });
         void reply.status(201);
         return toSummary({ ...record, messageCount: store.messageCount(record.key) });
@@ -175,7 +175,7 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
     },
 
     'sessions.update': {
-      summary: 'Rename a session or move it to another profile',
+      summary: 'Rename a session or move it to another agent',
       schema: {
         params: SessionParamsSchema,
         body: UpdateSessionRequestSchema,
@@ -187,7 +187,7 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
         const body = request.body as UpdateSessionRequest;
         const updated = store.updateSession(key, {
           ...(body.title === undefined ? {} : { title: body.title }),
-          ...(body.profileId === undefined ? {} : { profileId: body.profileId }),
+          ...(body.agentId === undefined ? {} : { agentId: body.agentId }),
         });
         return toSummary({ ...updated, messageCount: store.messageCount(key) });
       },
@@ -249,8 +249,11 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
       schema: { params: SessionParamsSchema, response: { 200: ContextResponseSchema } },
       handler: async (request): Promise<ContextResponse> => {
         const { key } = params(request);
-        requireSession(key);
-        const agent = deps.runtime.agent();
+        const session = requireSession(key);
+        // The session's own agent, not the default: its tool list, its prompt
+        // and its context budget are what a turn here would actually carry, and
+        // a meter measured against another agent's window is simply wrong.
+        const agent = deps.runtime.agent(session.agentId);
 
         // The measurement itself lives in `@ghostai/agent`, so the CLI's
         // `/context` reports the same numbers from the same code rather than a
@@ -261,7 +264,8 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
           tools: agent.tools,
           sessionKey: key,
           channel: 'web',
-          contextWindowTokens: deps.runtime.config().agents.defaults.contextWindowTokens,
+          ...(session.agentId === undefined ? {} : { agentId: session.agentId }),
+          contextWindowTokens: agent.contextWindowTokens,
         });
         if (report === undefined) throw notFound(`No session "${key}"`);
 

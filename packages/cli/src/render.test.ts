@@ -33,6 +33,7 @@ function render(
 
 const START: AgentEvent = {
   type: 'turn.start',
+  agentId: 'default',
   sessionKey: 'cli:default',
   turnId: 't1',
   model: 'qwen3',

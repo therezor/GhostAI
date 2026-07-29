@@ -44,7 +44,18 @@ export {
   type ToolExecution,
   type ToolInvocation,
   type ToolRegistryOptions,
+  type ToolScope,
 } from './registry.js';
+
+export { isUnrestricted, selectionAllows, type ToolSelection } from './scope.js';
+
+export {
+  KILL_GRACE_MS,
+  localRunner,
+  type CommandRunner,
+  type RunOutcome,
+  type RunRequest,
+} from './runner.js';
 
 export {
   BUILTIN_TOOLS,

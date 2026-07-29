@@ -5,6 +5,8 @@ import { join, resolve } from 'node:path';
 import fc from 'fast-check';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { legacyInstructionsToTemplate } from '@ghostai/protocol';
+
 import { loadConfig, migrateConfigShape, parseConfig, saveConfig } from './config.js';
 import { isGhostError } from './errors.js';
 
@@ -71,6 +73,81 @@ describe('migrateConfigShape', () => {
         expect(twice.value).toEqual(once.value);
       }),
     );
+  });
+
+  describe("an agent's system prompt", () => {
+    /** The stored prompt for `reviewer`, whatever the migration made of it. */
+    const promptOf = (raw: unknown): unknown =>
+      (
+        (migrateConfigShape(raw).value as { agents: { list: Record<string, unknown> } }).agents.list
+          .reviewer as { systemPrompt?: unknown }
+      ).systemPrompt;
+
+    it('becomes the whole prompt, composed exactly as the old one was', () => {
+      // Byte-identical to what the old composer produced for this install: a
+      // migration that changes what an agent says changes how it behaves, and
+      // that gets discovered later and blamed on something else.
+      const migrated = promptOf({
+        agents: { list: { reviewer: { label: 'Reviewer', systemPrompt: 'Be terse.' } } },
+      });
+
+      expect(migrated).toBe(legacyInstructionsToTemplate('Be terse.'));
+      expect(migrated).toContain('That directory is your root');
+      expect(migrated).toContain('## Instructions\n\nBe terse.');
+    });
+
+    it('is left alone when it is empty, so the built-in keeps improving', () => {
+      const raw = { agents: { list: { reviewer: { systemPrompt: '' } } } };
+      const { value, changed } = migrateConfigShape(raw);
+
+      expect(changed).toBe(false);
+      expect(value).toBe(raw);
+    });
+
+    it('runs even when there is no providers block to migrate', () => {
+      // The shape bug this restructuring fixed: the provider step used to
+      // return early for a config with no `providers`, which would have skipped
+      // every migration added after it.
+      const { changed } = migrateConfigShape({
+        agents: { list: { reviewer: { systemPrompt: 'Be terse.' } } },
+      });
+
+      expect(changed).toBe(true);
+    });
+
+    it('migrates prompts and provider types in the same pass', () => {
+      const { value, changed } = migrateConfigShape({
+        providers: { ollama: {} },
+        agents: { list: { reviewer: { systemPrompt: 'Be terse.' } } },
+      });
+
+      expect(changed).toBe(true);
+      expect(value).toMatchObject({
+        providers: { ollama: { type: 'ollama' } },
+        agents: { list: { reviewer: { systemPrompt: legacyInstructionsToTemplate('Be terse.') } } },
+      });
+    });
+
+    it('does not touch an agent that has already been migrated', () => {
+      const raw = {
+        agents: { list: { reviewer: { systemPrompt: legacyInstructionsToTemplate('Be terse.') } } },
+      };
+
+      expect(migrateConfigShape(raw)).toEqual({ value: raw, changed: false });
+    });
+
+    it('leaves the other agents in the list untouched', () => {
+      const { value } = migrateConfigShape({
+        agents: {
+          defaults: { model: 'llama3' },
+          list: { reviewer: { systemPrompt: 'Be terse.' }, writer: { label: 'Writer' } },
+        },
+      });
+
+      expect(value).toMatchObject({
+        agents: { defaults: { model: 'llama3' }, list: { writer: { label: 'Writer' } } },
+      });
+    });
   });
 });
 

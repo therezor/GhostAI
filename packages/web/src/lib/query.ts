@@ -24,6 +24,7 @@ export const queryKeys = {
   setup: ['setup'] as const,
   status: ['status'] as const,
   workspaces: ['workspaces'] as const,
+  agents: ['agents'] as const,
   /**
    * Scoped by workspace, because a session list is per workspace now.
    *
@@ -33,6 +34,7 @@ export const queryKeys = {
    */
   sessions: (workspaceId?: string) =>
     workspaceId === undefined ? (['sessions'] as const) : (['sessions', { workspaceId }] as const),
+  session: (key: string) => ['sessions', key] as const,
   messages: (key: string) => ['sessions', key, 'messages'] as const,
   /**
    * Under the `['sessions']` prefix on purpose: `use-connection.ts` already

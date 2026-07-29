@@ -5,7 +5,19 @@
  * self-hosted agent needs to know is which model is about to answer them and
  * what it is allowed to do to their machine — the second of which is the thing
  * every hosted assistant leaves out, and the thing this one exists to make
- * explicit. The prompts below it are a way to start typing, not a feature list.
+ * explicit.
+ *
+ * **The suggested prompts are gone.** Three canned openers is a feature list
+ * wearing the clothes of a shortcut: nobody wants to summarise the files in
+ * this workspace, and an operator who did would type it faster than they could
+ * read three sentences to find it. They also cost the screen its shape, putting
+ * a list of buttons between the one paragraph that matters and the box.
+ *
+ * What is here instead is the keyboard hint, which used to live under the
+ * composer on every render for the life of the install. It is true forever and
+ * worth reading once, so it belongs on the screen somebody sees before they
+ * have sent anything — not in the line under the box, where it was crowding out
+ * the context budget.
  */
 
 import { useQuery } from '@tanstack/react-query';
@@ -16,13 +28,7 @@ import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
 import { Badge } from '@/components/ui/badge.js';
 
-const PROMPTS: readonly string[] = [
-  'Summarise the files in this workspace.',
-  'Read package.json and tell me what this project is.',
-  'Run the test suite and explain the first failure.',
-];
-
-export function Welcome({ onPick }: { readonly onPick: (prompt: string) => void }): JSX.Element {
+export function Welcome(): JSX.Element {
   const status = useQuery({
     queryKey: queryKeys.status,
     queryFn: ({ signal }) => api.status(signal),
@@ -48,21 +54,9 @@ export function Welcome({ onPick }: { readonly onPick: (prompt: string) => void 
         output.
       </p>
 
-      <ul className="stack welcome__prompts">
-        {PROMPTS.map((prompt) => (
-          <li key={prompt}>
-            <button
-              type="button"
-              onClick={() => {
-                onPick(prompt);
-              }}
-              className="welcome__prompt"
-            >
-              {prompt}
-            </button>
-          </li>
-        ))}
-      </ul>
+      <p className="welcome__hint">
+        Enter to send · Shift+Enter for a new line · @ to scope the turn
+      </p>
     </div>
   );
 }

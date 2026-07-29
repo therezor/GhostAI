@@ -60,7 +60,7 @@ const deliveryFields = {
    * default of "fresh session per run" is deliberate.
    */
   sessionKey: z.string().optional(),
-  profileId: z.string().optional(),
+  agentId: z.string().optional(),
   /** Additional channel id → address fan-out. */
   targets: z.record(z.string(), z.string()).default({}),
 };

@@ -38,6 +38,7 @@ import type { Clock, ErrorKind, Logger } from '@ghostai/core';
 import type { ToolDefinition, ToolSource } from '@ghostai/protocol';
 
 import { toToolResult, type AnyTool, type ToolContext, type ToolResult } from './define.js';
+import { isUnrestricted, selectionAllows, type ToolSelection } from './scope.js';
 
 export interface ToolRegistryOptions {
   /**
@@ -75,6 +76,61 @@ export interface ToolExecution {
 interface Registration {
   readonly tool: AnyTool;
   readonly source: ToolSource;
+}
+
+/**
+ * What the loop needs from a tool collection: what to advertise, what a name
+ * means, and how to call it.
+ *
+ * `ToolRegistry` implements it, and so does every restricted view of one. The
+ * loop takes this rather than the class so that an agent with a tool subset is
+ * not a special case anywhere in the turn.
+ */
+export interface ToolScope {
+  /** The definitions to send to the provider. Sorted, memoised, frozen. */
+  definitions(): readonly ToolDefinition[];
+  /** `undefined` for a name this scope cannot see, whoever else registered it. */
+  get(name: string): AnyTool | undefined;
+  execute(call: ToolInvocation, context: ToolContext): Promise<ToolExecution>;
+}
+
+/**
+ * A restricted view of one registry.
+ *
+ * Holds the registry rather than a snapshot of it: a plugin registering a tool
+ * after boot has to become visible to every agent whose selection admits it,
+ * and a view built once at agent-resolution time would never see it. The memo
+ * is keyed on the registry's revision for exactly that reason.
+ */
+class RegistryScope implements ToolScope {
+  #cached: readonly ToolDefinition[] | null = null;
+  #cachedRevision = -1;
+
+  constructor(
+    private readonly registry: ToolRegistry,
+    private readonly selection: ToolSelection,
+  ) {}
+
+  definitions(): readonly ToolDefinition[] {
+    if (this.#cached !== null && this.#cachedRevision === this.registry.revision) {
+      return this.#cached;
+    }
+    const definitions = this.registry
+      .definitions()
+      .filter((definition) => selectionAllows(this.selection, definition.name));
+    this.#cached = Object.freeze(definitions);
+    this.#cachedRevision = this.registry.revision;
+    return this.#cached;
+  }
+
+  get(name: string): AnyTool | undefined {
+    if (!selectionAllows(this.selection, name)) return undefined;
+    return this.registry.get(name);
+  }
+
+  execute(call: ToolInvocation, context: ToolContext): Promise<ToolExecution> {
+    return this.registry.execute(call, context, this.selection);
+  }
 }
 
 /**
@@ -127,6 +183,7 @@ export class ToolRegistry {
   private readonly clock: Clock;
   private readonly logger: Logger;
   private cachedDefinitions: readonly ToolDefinition[] | null = null;
+  private revisionCount = 0;
 
   constructor(options: ToolRegistryOptions = {}) {
     this.currentTimeoutMs = options.timeoutMs ?? 0;
@@ -136,6 +193,20 @@ export class ToolRegistry {
 
   get size(): number {
     return this.tools.size;
+  }
+
+  /**
+   * Bumped on every mutation. A scope memoising a filtered definition list keys
+   * on it, so a tool registered after the scope was built still shows up.
+   */
+  get revision(): number {
+    return this.revisionCount;
+  }
+
+  /** Every mutation goes through here, so no path can bump one and not the other. */
+  private invalidate(): void {
+    this.cachedDefinitions = null;
+    this.revisionCount += 1;
   }
 
   get timeoutMs(): number {
@@ -179,7 +250,7 @@ export class ToolRegistry {
       );
     }
     this.tools.set(tool.name, { tool, source });
-    this.cachedDefinitions = null;
+    this.invalidate();
   }
 
   /** Registers every tool from one source, rolling back if any name collides. */
@@ -192,14 +263,14 @@ export class ToolRegistry {
       }
     } catch (error) {
       for (const name of added) this.tools.delete(name);
-      this.cachedDefinitions = null;
+      this.invalidate();
       throw error;
     }
   }
 
   unregister(name: string): boolean {
     const removed = this.tools.delete(name);
-    if (removed) this.cachedDefinitions = null;
+    if (removed) this.invalidate();
     return removed;
   }
 
@@ -216,14 +287,14 @@ export class ToolRegistry {
       this.tools.delete(name);
       removed += 1;
     }
-    if (removed > 0) this.cachedDefinitions = null;
+    if (removed > 0) this.invalidate();
     return removed;
   }
 
   clear(): void {
     if (this.tools.size === 0) return;
     this.tools.clear();
-    this.cachedDefinitions = null;
+    this.invalidate();
   }
 
   has(name: string): boolean {
@@ -240,6 +311,18 @@ export class ToolRegistry {
 
   names(): readonly string[] {
     return [...this.tools.keys()].sort();
+  }
+
+  /**
+   * A view of this registry restricted to what one agent may call.
+   *
+   * Returns the registry itself when the selection restricts nothing, which is
+   * every agent that has not been given a tool list — so the common case pays
+   * for no wrapper and no second memo.
+   */
+  select(selection: ToolSelection | undefined): ToolScope {
+    if (isUnrestricted(selection)) return this;
+    return new RegistryScope(this, selection ?? {});
   }
 
   /** The definitions to send to the provider. Sorted, memoised, frozen. */
@@ -264,16 +347,25 @@ export class ToolRegistry {
    * JavaScript can — which is why every built-in also takes the signal and why
    * `exec` hands it to the child process.
    */
-  async execute(call: ToolInvocation, context: ToolContext): Promise<ToolExecution> {
+  async execute(
+    call: ToolInvocation,
+    context: ToolContext,
+    selection?: ToolSelection,
+  ): Promise<ToolExecution> {
     const startedAt = this.clock.monotonic();
     const registration = this.tools.get(call.name);
 
-    if (registration === undefined) {
+    // A tool the scope hides is indistinguishable from one that does not exist,
+    // deliberately: the model was never offered it, and an error that admitted
+    // it exists but is off-limits would invite the model to argue about it. The
+    // available list is the scope's, so the suggestion is actionable.
+    if (registration === undefined || !selectionAllows(selection, call.name)) {
+      const available = this.names().filter((name) => selectionAllows(selection, name));
       return this.failure(
         call.name,
         new GhostError(
           'not_found',
-          `No tool named ${call.name}. Available: ${this.names().join(', ')}`,
+          `No tool named ${call.name}. Available: ${available.join(', ')}`,
         ),
         startedAt,
         context,

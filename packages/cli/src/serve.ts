@@ -191,7 +191,7 @@ export async function startServer(options: ServeOptions = {}): Promise<RunningSe
       config: built.config,
       // A function, so a settings save moves the *next* turn onto the rebuilt
       // loop while the running one keeps the one it started on.
-      loop: () => built.loop,
+      loop: (agentId) => built.loopFor(agentId),
       store: built.store,
       approvals,
       logger,

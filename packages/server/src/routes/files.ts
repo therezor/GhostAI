@@ -19,6 +19,7 @@ import {
   createReadStream,
   mkdirSync,
   readdirSync,
+  renameSync,
   rmSync,
   statSync,
   unlinkSync,
@@ -33,6 +34,7 @@ import {
   FileListResponseSchema,
   FileTextResponseSchema,
   FileWriteRequestSchema,
+  MoveFileRequestSchema,
   SignedUrlRequestSchema,
   SignedUrlSchema,
   UploadResponseSchema,
@@ -41,6 +43,7 @@ import {
   type FileListResponse,
   type FileTextResponse,
   type FileWriteRequest,
+  type MoveFileRequest,
   type SignedUrl,
   type SignedUrlRequest,
   type UploadResponse,
@@ -77,6 +80,7 @@ type FileRouteId =
   | 'files.read'
   | 'files.write'
   | 'files.mkdir'
+  | 'files.move'
   | 'files.sign'
   | 'media.get';
 
@@ -116,6 +120,13 @@ function statOrUndefined(absolutePath: string): Stats | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** The `errno` string on a Node system error, if that is what this is. */
+function errnoOf(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null) return undefined;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' ? code : undefined;
 }
 
 export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
@@ -314,6 +325,57 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
         mkdirSync(absolute, { recursive: true });
         void reply.status(201);
         return entryAt(jail, absolute, statSync(absolute));
+      },
+    },
+
+    'files.move': {
+      summary: 'Rename or move a workspace entry',
+      schema: { body: MoveFileRequestSchema, response: { 200: FileEntrySchema } },
+      handler: (request): FileEntry => {
+        const { from, to, workspaceId } = request.body as MoveFileRequest;
+        const jail = jailFor(workspaceId ?? DEFAULT_WORKSPACE_ID);
+
+        // Both ends through the jail, and the canonical paths it returns are the
+        // ones used. A `to` that climbs out of the workspace is refused by the
+        // same code that refuses a `from` that does — which is the whole reason
+        // this is one resolve call per side rather than a join on the client's
+        // string.
+        const source = jail.resolve(from);
+        const target = jail.resolve(to);
+
+        const stats = statOr404(source, from);
+
+        if (source === target) {
+          // Not an error and not a write: renaming a thing to its own name is a
+          // no-op, and `renameSync` onto itself is a silent success anyway.
+          return entryAt(jail, source, stats);
+        }
+
+        // Refused rather than overwritten. `renameSync` will happily replace a
+        // file, and a rename that destroys whatever was already at the target is
+        // a data loss the operator did not ask for and cannot see afterwards.
+        if (statOrUndefined(target) !== undefined) throw conflict(`Already exists: ${to}`);
+
+        // A move into a folder that does not exist yet is a typo far more often
+        // than it is an intention, and `renameSync` reports it as a bare ENOENT
+        // that reads as "the file is missing" rather than "the folder is".
+        const parent = dirname(target);
+        if (statOrUndefined(parent) === undefined) {
+          throw badRequest(`No such directory: ${jail.relative(parent)}`);
+        }
+
+        try {
+          renameSync(source, target);
+        } catch (error) {
+          // The one case worth naming: a directory cannot be moved inside
+          // itself, and the errno alone tells the operator nothing.
+          if (errnoOf(error) === 'EINVAL') {
+            throw badRequest(`Cannot move ${from} inside itself`);
+          }
+          throw error;
+        }
+
+        return entryAt(jail, target, statSync(target));
       },
     },
 

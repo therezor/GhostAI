@@ -6,12 +6,15 @@
  * tool definitions comes from `z.toJSONSchema`, and the HTTP layer's OpenAPI
  * document is generated from these same objects — never hand-maintained.
  *
- * No logic and no I/O beyond three pure functions that must behave identically
+ * No logic and no I/O beyond four pure functions that must behave identically
  * everywhere they run: `parseMentions` (every channel must resolve `@kb:` the
  * same way), `isLoopbackHost` (the server and the CLI must agree on what
- * counts as a remote bind before refusing to start without auth), and
+ * counts as a remote bind before refusing to start without auth),
  * `tokensPerSecond` (the terminal and the browser must report the same rate for
- * the same turn, and the browser cannot import the package that stores it).
+ * the same turn, and the browser cannot import the package that stores it), and
+ * `renderPromptTemplate` (the agent composes an agent's system prompt and the
+ * browser edits it, so the template text and the substitution rules have to be
+ * one definition rather than two that agree until they do not).
  *
  * Runtime dependencies: `zod`, and nothing else — ever.
  */
@@ -27,6 +30,8 @@ export {
 
 export * from './messages.js';
 export * from './tools.js';
+export * from './ids.js';
+export * from './prompt.js';
 export * from './config.js';
 export * from './automation.js';
 export * from './ws.js';

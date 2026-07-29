@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   AgentDefaultsSchema,
+  AgentEntrySchema,
   ConfigPatchSchema,
   ConfigSchema,
   McpServerConfigSchema,
@@ -147,7 +148,102 @@ describe('McpServerConfigSchema', () => {
   });
 });
 
+describe('AgentEntrySchema', () => {
+  it('leaves every inherited field unset rather than defaulting it', () => {
+    // An agent that defaulted `model` would pin itself to the empty string and
+    // stop inheriting whatever `agents.defaults.model` later becomes.
+    const agent = AgentEntrySchema.parse({});
+
+    expect(agent).not.toHaveProperty('model');
+    expect(agent).not.toHaveProperty('temperature');
+    expect(agent).not.toHaveProperty('reasoningEffort');
+  });
+
+  it('defaults the fields that belong to the agent itself', () => {
+    const agent = AgentEntrySchema.parse({});
+
+    expect(agent.label).toBe('');
+    expect(agent.systemPrompt).toBe('');
+    expect(agent.enabled).toBe(true);
+    expect(agent.tools).toEqual({ allow: [], deny: [] });
+    expect(agent.sandbox).toEqual({
+      kind: 'host',
+      image: '',
+      workdir: '/workspace',
+      network: false,
+    });
+    expect(agent.memory).toEqual({ shared: true });
+  });
+
+  it('does not let an agent pin its own workspace', () => {
+    // The working folder is a session axis shared by every agent. Accepting it
+    // here would let one agent quietly work somewhere else.
+    const agent = AgentEntrySchema.parse({ workspace: '/tmp/elsewhere' });
+    expect(agent).not.toHaveProperty('workspace');
+  });
+
+  it('keeps overrides it is given', () => {
+    const agent = AgentEntrySchema.parse({
+      label: 'Code Reviewer',
+      model: 'claude-opus-5',
+      temperature: 0,
+      tools: { deny: ['exec'] },
+      approvals: { exec: 'deny' },
+    });
+
+    expect(agent.model).toBe('claude-opus-5');
+    expect(agent.temperature).toBe(0);
+    expect(agent.tools.deny).toEqual(['exec']);
+    expect(agent.approvals?.exec).toBe('deny');
+    // A partial approvals override must not invent the bands it did not name.
+    expect(agent.approvals).not.toHaveProperty('write');
+  });
+
+  it('still validates an inherited field it is given', () => {
+    expect(AgentEntrySchema.safeParse({ temperature: 9 }).success).toBe(false);
+    expect(AgentEntrySchema.safeParse({ reasoningEffort: 'nope' }).success).toBe(false);
+  });
+});
+
+describe('AgentsConfigSchema', () => {
+  it('starts with no named agents', () => {
+    const agents = ConfigSchema.parse({}).agents;
+    expect(agents.list).toEqual({});
+    expect(agents.defaults.provider).toBe('auto');
+  });
+
+  it('does not share mutable defaults between parses', () => {
+    const one = AgentEntrySchema.parse({});
+    const two = AgentEntrySchema.parse({});
+
+    expect(one.tools).not.toBe(two.tools);
+    expect(one.sandbox).not.toBe(two.sandbox);
+  });
+
+  it('keys agents by an id the operator chooses', () => {
+    const agents = ConfigSchema.parse({
+      agents: { list: { reviewer: { label: 'Reviewer' }, writer: {} } },
+    }).agents;
+
+    expect(Object.keys(agents.list)).toEqual(['reviewer', 'writer']);
+    expect(agents.list.reviewer?.label).toBe('Reviewer');
+  });
+});
+
 describe('ConfigPatchSchema', () => {
+  it('accepts a null to delete a named agent', () => {
+    const patch = ConfigPatchSchema.parse({ agents: { list: { reviewer: null } } });
+    expect(patch.agents?.list?.reviewer).toBeNull();
+  });
+
+  it('patches one agent without restating the others or its own siblings', () => {
+    const patch = ConfigPatchSchema.parse({ agents: { list: { reviewer: { temperature: 0 } } } });
+
+    expect(patch.agents?.list?.reviewer?.temperature).toBe(0);
+    expect(patch.agents?.list?.reviewer).not.toHaveProperty('label');
+    expect(patch.agents).not.toHaveProperty('defaults');
+  });
+
   it('accepts a single deeply nested field', () => {
     const patch = ConfigPatchSchema.parse({ agents: { defaults: { temperature: 0.5 } } });
     expect(patch.agents?.defaults?.temperature).toBe(0.5);

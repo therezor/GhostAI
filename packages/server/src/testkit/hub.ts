@@ -42,6 +42,7 @@ export function hangingRunner(): FakeRunner {
       const turnId = input.turnId ?? 'turn-1';
       yield {
         type: 'turn.start',
+        agentId: 'default',
         sessionKey: input.sessionKey,
         turnId,
         model: 'test-model',
@@ -71,6 +72,7 @@ export function fakeRunner(answer = 'ok'): FakeRunner {
       const turnId = input.turnId ?? 'turn-1';
       yield {
         type: 'turn.start',
+        agentId: 'default',
         sessionKey: input.sessionKey,
         turnId,
         model: 'test-model',

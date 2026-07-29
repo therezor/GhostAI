@@ -1,5 +1,5 @@
 /**
- * The Agent panel's validation, without the panel.
+ * The `agents.defaults` half of the agent form, without the screen.
  *
  * The round trip is the case worth having: config → form → patch has to leave
  * every value where it was. A settings screen that shifts a value simply by
@@ -10,7 +10,7 @@
 import { AgentDefaultsSchema, type AgentDefaults } from '@ghostai/protocol';
 import { describe, expect, it } from 'vitest';
 
-import { toAgentForm, toAgentPatch } from './agent-form.js';
+import { toAgentForm, toAgentPatch } from './agents-form.js';
 
 const defaults = (overrides: Partial<AgentDefaults> = {}): AgentDefaults =>
   AgentDefaultsSchema.parse(overrides);
@@ -35,7 +35,6 @@ describe('toAgentPatch', () => {
     const config = defaults({
       provider: 'ollama',
       model: 'llama3',
-      workspace: '/tmp/w',
       temperature: 0.7,
       toolTimeoutMs: 1500,
       loopWallTimeoutMs: 0,
@@ -48,12 +47,24 @@ describe('toAgentPatch', () => {
     expect(result.patch.agents?.defaults).toMatchObject({
       provider: 'ollama',
       model: 'llama3',
-      workspace: '/tmp/w',
       temperature: 0.7,
       // The one that would drift if seconds were rounded on the way out.
       toolTimeoutMs: 1500,
       loopWallTimeoutMs: 0,
     });
+  });
+
+  it('never mentions the workspace directory, so a save cannot move the sandbox', () => {
+    // The browser has no control for the agent's filesystem root, and this is
+    // the assertion that keeps it that way. `agents.defaults` merges per field,
+    // so an omitted key preserves what the config file or `--workspace` set —
+    // but a form that still emitted `workspace: ''` would look correct in a
+    // diff and would reset a configured root on every unrelated save.
+    const result = toAgentPatch(toAgentForm(defaults({ workspace: '/tmp/w' })));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.patch.agents?.defaults).not.toHaveProperty('workspace');
   });
 
   it('patches only the agent subtree, so the other panels are untouched', () => {

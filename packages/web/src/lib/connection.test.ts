@@ -250,7 +250,14 @@ describe('speaking', () => {
 
   it('records an approval answer locally before the round trip', () => {
     open('web:1');
-    deliver({ type: 'turn.start', sessionKey: 'web:1', turnId: 't1', model: 'm', provider: 'p' });
+    deliver({
+      type: 'turn.start',
+      sessionKey: 'web:1',
+      turnId: 't1',
+      agentId: 'default',
+      model: 'm',
+      provider: 'p',
+    });
     deliver({
       type: 'tool.call',
       turnId: 't1',
@@ -330,7 +337,14 @@ describe('listening', () => {
 
   it('says nothing about an error that belongs to a turn', () => {
     open('web:1');
-    deliver({ type: 'turn.start', sessionKey: 'web:1', turnId: 't1', model: 'm', provider: 'p' });
+    deliver({
+      type: 'turn.start',
+      sessionKey: 'web:1',
+      turnId: 't1',
+      agentId: 'default',
+      model: 'm',
+      provider: 'p',
+    });
 
     deliver({
       type: 'error',

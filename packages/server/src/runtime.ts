@@ -34,6 +34,10 @@ import type { PromptPreviewInput } from '@ghostai/agent';
  * off in the settings panel or an MCP server connects.
  */
 export interface AgentView {
+  /** Which agent this view describes. `default` unless one was asked for. */
+  readonly id: string;
+  /** Never empty: falls back to the id. */
+  readonly label: string;
   /** The provider *instance* id, or empty when nothing is configured. */
   readonly provider: string;
   /** Empty when no model is configured. */
@@ -50,8 +54,15 @@ export interface AgentView {
    * is one the caller may still name is the route's job, not this one's.
    */
   jailFor(workspaceId: string): WorkspaceJail;
-  /** Sorted by name, as the model is offered them. */
+  /**
+   * Sorted by name, as the model is offered them.
+   *
+   * This agent's, not the registry's: an agent with a tool subset must not be
+   * described by a context inspector that lists tools it cannot call.
+   */
   readonly tools: readonly ToolDefinition[];
+  /** This agent's budget, which is what the context meter is measured against. */
+  readonly contextWindowTokens: number;
   /**
    * The system prompt a turn on this session would carry.
    *
@@ -59,6 +70,21 @@ export interface AgentView {
    * `AgentLoop.previewPrompt`, and the reason it exists.
    */
   systemPrompt(input: PromptPreviewInput): Promise<string>;
+}
+
+/**
+ * One agent, as a picker and the settings screen need it.
+ *
+ * Deliberately not the whole resolved agent: the full settings tree already
+ * reaches the client through `GET /api/settings`, and a second, subtly
+ * different copy of it is how the two drift.
+ */
+export interface AgentSummary {
+  readonly id: string;
+  readonly label: string;
+  /** After inheritance, so a picker shows what a turn would actually use. */
+  readonly model: string;
+  readonly provider: string;
 }
 
 /** Counts `GET /api/status` reports for subsystems that land in later phases. */
@@ -110,7 +136,19 @@ export interface ServerRuntime {
    */
   readonly workspaces: WorkspaceStore;
 
-  agent(): AgentView;
+  /**
+   * One agent's view. `undefined` is the default agent.
+   *
+   * Takes an id because `tools`, `systemPrompt` and `contextWindowTokens` all
+   * differ per agent — a status panel describing the default while a session
+   * runs on another would be describing something that is not happening.
+   *
+   * Throws for an id that names nothing runnable, which is a 404 at the route.
+   */
+  agent(agentId?: string): AgentView;
+
+  /** Every agent that can run a turn, the default one first. */
+  agents(): readonly AgentSummary[];
 
   /**
    * The models to offer, fetched from the endpoints that can list them.

@@ -22,7 +22,10 @@ import { z } from 'zod';
 
 import { Shell } from './shell.js';
 import { ChatRoute } from '@/routes/chat.js';
+import { AgentEditorRoute } from '@/agents/agent-editor.js';
+import { AgentsRoute } from '@/agents/agents-page.js';
 import { FilesRoute } from '@/routes/files.js';
+import { WorkspacesRoute } from '@/routes/workspaces.js';
 import { NotificationsRoute } from '@/routes/notifications.js';
 import { SettingsRoute } from '@/routes/settings.js';
 import { TokensRoute } from '@/routes/tokens.js';
@@ -90,6 +93,29 @@ const settingsRoute = createRoute({
   component: SettingsRoute,
 });
 
+const agentsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/agents',
+  component: AgentsRoute,
+});
+
+/**
+ * No search schema: unlike Files, nothing about this page's location varies.
+ * The filter and the sort are how the list is being read rather than where the
+ * reader is, and there is no directory to be in.
+ */
+const workspacesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/workspaces',
+  component: WorkspacesRoute,
+});
+
+const agentEditorRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/agents/$agentId',
+  component: AgentEditorRoute,
+});
+
 const tokensRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/tokens',
@@ -98,6 +124,9 @@ const tokensRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   chatRoute,
+  agentsRoute,
+  agentEditorRoute,
+  workspacesRoute,
   filesRoute,
   notificationsRoute,
   settingsRoute,

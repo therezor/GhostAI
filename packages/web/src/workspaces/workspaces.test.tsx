@@ -1,5 +1,5 @@
 /**
- * The switcher, the manager and the query keys that keep them apart.
+ * The switcher, the workspaces page and the query keys that keep them apart.
  *
  * The cache test is the one that matters most: two workspaces both contain
  * `notes.md`, so a key that forgot the workspace would serve one workspace's
@@ -7,13 +7,21 @@
  * a browser.
  */
 
+import {
+  Outlet,
+  RouterProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from '@tanstack/react-router';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { queryKeys } from '@/lib/query.js';
+import { WorkspacesRoute } from '@/routes/workspaces.js';
 import { renderWithProviders, stubApi } from '@/test/render.js';
-import { WorkspaceManager } from './workspace-manager.js';
 import { WorkspaceSwitcher } from './workspace-switcher.js';
 import { DEFAULT_WORKSPACE_ID } from './workspace-context.js';
 
@@ -90,10 +98,40 @@ describe('query keys', () => {
   });
 });
 
+/**
+ * The switcher, over a router that is only as big as it needs to be.
+ *
+ * It carries a `<Link>` to `/workspaces` now — a real link rather than a
+ * dialog trigger, so middle-click and open-in-new-tab work — and a `Link`
+ * outside a router throws. Two routes is enough to give it one; mounting the
+ * whole application to assert that a menu lists two names would be testing the
+ * shell again, which `shell.test.tsx` already does.
+ */
+function renderSwitcher(): ReturnType<typeof renderWithProviders> {
+  const rootRoute = createRootRoute({ component: () => <Outlet /> });
+  const indexRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/',
+    component: () => <WorkspaceSwitcher />,
+  });
+  const workspacesRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/workspaces',
+    component: () => <p>workspaces</p>,
+  });
+
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([indexRoute, workspacesRoute]),
+    history: createMemoryHistory({ initialEntries: ['/'] }),
+  });
+
+  return renderWithProviders(<RouterProvider router={router as never} />);
+}
+
 describe('the workspace switcher', () => {
   it('names the current workspace and lists the others', async () => {
     stubApi({ 'GET /api/workspaces': [200, TWO] });
-    renderWithProviders(<WorkspaceSwitcher />);
+    renderSwitcher();
 
     await screen.findByRole('button', { name: /Workspace: Default/ });
     await userEvent.click(screen.getByRole('button', { name: /Workspace: Default/ }));
@@ -101,40 +139,62 @@ describe('the workspace switcher', () => {
     expect(await screen.findByRole('menuitemradio', { name: /Client Acme/ })).toBeInTheDocument();
   });
 
-  it('says that the default reaches every other workspace', async () => {
-    // Not decoration: `default` is the folder that contains the others, so a
-    // user who has not been told will assume an isolation that is not there.
+  it('does not repeat what the workspaces page already explains', async () => {
+    // `default` containing the others is explained once, on the page this menu
+    // links to. A standing paragraph under the trigger restated the most
+    // ordinary state in the app on every render of the sidebar.
     stubApi({ 'GET /api/workspaces': [200, TWO] });
-    renderWithProviders(<WorkspaceSwitcher />);
+    renderSwitcher();
 
-    expect(await screen.findByText(/reach their files/)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /^Workspace: / })).toBeInTheDocument();
+    expect(screen.queryByText(/reach their files/)).not.toBeInTheDocument();
+  });
+
+  it('sends you to the page rather than opening a dialog', async () => {
+    stubApi({ 'GET /api/workspaces': [200, TWO] });
+    renderSwitcher();
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Workspace: / }));
+
+    // A link, so it can be middle-clicked and opened in a new tab — which a
+    // `<button>` that set some state could never be.
+    expect(await screen.findByRole('menuitem', { name: /Manage workspaces/ })).toHaveAttribute(
+      'href',
+      '/workspaces',
+    );
   });
 
   it('remembers the choice across a remount', async () => {
     stubApi({ 'GET /api/workspaces': [200, TWO] });
-    const first = renderWithProviders(<WorkspaceSwitcher />);
+    const first = renderSwitcher();
 
     await userEvent.click(await screen.findByRole('button', { name: /Workspace: Default/ }));
     await userEvent.click(await screen.findByRole('menuitemradio', { name: /Client Acme/ }));
     first.unmount();
 
-    renderWithProviders(<WorkspaceSwitcher />);
+    renderSwitcher();
     expect(
       await screen.findByRole('button', { name: /Workspace: Client Acme/ }),
     ).toBeInTheDocument();
   });
 });
 
-describe('the workspace manager', () => {
+describe('the workspaces page', () => {
+  /** Opens the kebab for one row and returns nothing — the menu is on screen. */
+  async function openActions(name: string): Promise<void> {
+    await userEvent.click(await screen.findByRole('button', { name: `Actions for ${name}` }));
+  }
+
   it('creates one from a name, never a path', async () => {
     const calls = stubApi({
       'GET /api/workspaces': [200, TWO],
       'POST /api/workspaces': [201, workspace('research', 'Research')],
     });
-    renderWithProviders(<WorkspaceManager open onOpenChange={() => undefined} />);
+    renderWithProviders(<WorkspacesRoute />);
 
-    await userEvent.type(await screen.findByLabelText('New workspace'), 'Research');
-    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'New workspace' }));
+    await userEvent.type(await screen.findByLabelText('Name'), 'Research');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
 
     await waitFor(() => {
       expect(calls.some((call) => call.method === 'POST')).toBe(true);
@@ -142,11 +202,51 @@ describe('the workspace manager', () => {
     expect(calls.find((call) => call.method === 'POST')?.body).toEqual({ name: 'Research' });
   });
 
-  it('cannot remove the default', async () => {
-    stubApi({ 'GET /api/workspaces': [200, TWO] });
-    renderWithProviders(<WorkspaceManager open onOpenChange={() => undefined} />);
+  it('renames one from the row menu', async () => {
+    const calls = stubApi({
+      'GET /api/workspaces': [200, TWO],
+      'PATCH /api/workspaces/acme': [200, workspace('acme', 'Acme Ltd')],
+    });
+    renderWithProviders(<WorkspacesRoute />);
 
-    expect(await screen.findByRole('button', { name: 'Remove Default' })).toBeDisabled();
+    await openActions('Client Acme');
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
+
+    const field = await screen.findByLabelText('Name');
+    expect(field).toHaveValue('Client Acme');
+
+    await userEvent.clear(field);
+    await userEvent.type(field, 'Acme Ltd{Enter}');
+
+    await waitFor(() => {
+      expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({ name: 'Acme Ltd' });
+    });
+  });
+
+  it('cannot remove the default, because it is the parent of the others', async () => {
+    stubApi({ 'GET /api/workspaces': [200, TWO] });
+    renderWithProviders(<WorkspacesRoute />);
+
+    await openActions('Default');
+
+    expect(await screen.findByRole('menuitem', { name: 'Rename' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Remove' })).not.toBeInTheDocument();
+  });
+
+  it('asks before removing, and sends nothing until the answer is yes', async () => {
+    // The behaviour the dialog never had: a delete used to fire on the single
+    // click of an icon sitting next to Rename.
+    const calls = stubApi({ 'GET /api/workspaces': [200, TWO] });
+    renderWithProviders(<WorkspacesRoute />);
+
+    await openActions('Client Acme');
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Remove' }));
+
+    expect(await screen.findByText(/Its folder and everything in it stays on disk/)).toBeVisible();
+    expect(calls.some((call) => call.method === 'DELETE')).toBe(false);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(calls.some((call) => call.method === 'DELETE')).toBe(false);
   });
 
   it('offers to move the conversations when a delete is refused, then deletes', async () => {
@@ -172,9 +272,11 @@ describe('the workspace manager', () => {
         return [200, { moved: 2 }];
       },
     });
-    renderWithProviders(<WorkspaceManager open onOpenChange={() => undefined} />);
+    renderWithProviders(<WorkspacesRoute />);
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Remove Client Acme' }));
+    await openActions('Client Acme');
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Remove' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove' }));
 
     // The 409 is a question, not a failure: the count it carries is what the
     // offer is made out of.
@@ -190,11 +292,26 @@ describe('the workspace manager', () => {
     expect(calls.some((call) => call.path === '/api/workspaces/acme/sessions/move')).toBe(true);
   });
 
-  it('says the files survive a removal', async () => {
+  it('explains what a workspace is, once, where someone is reading about them', async () => {
     stubApi({ 'GET /api/workspaces': [200, TWO] });
-    renderWithProviders(<WorkspaceManager open onOpenChange={() => undefined} />);
+    renderWithProviders(<WorkspacesRoute />);
 
-    // Removing detaches. Saying so is what makes the button safe to press.
     expect(await screen.findByText(/cannot reach each other/)).toBeInTheDocument();
+  });
+
+  it('keeps the default at the top however the list is sorted', async () => {
+    stubApi({ 'GET /api/workspaces': [200, TWO] });
+    renderWithProviders(<WorkspacesRoute />);
+
+    const firstCell = async (): Promise<string> => {
+      const rows = await screen.findAllByRole('row');
+      // `rows[0]` is the header.
+      return rows[1]?.textContent ?? '';
+    };
+
+    expect(await firstCell()).toContain('Default');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Name' }));
+    expect(await firstCell()).toContain('Default');
   });
 });

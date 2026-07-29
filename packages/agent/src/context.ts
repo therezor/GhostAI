@@ -46,7 +46,7 @@ export interface DescribeContextInput {
   readonly tools: readonly ToolDefinition[];
   readonly sessionKey: string;
   readonly channel?: string;
-  readonly profileId?: string;
+  readonly agentId?: string;
   readonly contextWindowTokens: number;
 }
 
@@ -90,7 +90,7 @@ export async function describeContext(
   const systemPrompt = await input.loop.previewPrompt({
     sessionKey: input.sessionKey,
     ...(input.channel === undefined ? {} : { channel: input.channel }),
-    ...(input.profileId === undefined ? {} : { profileId: input.profileId }),
+    ...(input.agentId === undefined ? {} : { agentId: input.agentId }),
   });
 
   const promptTokens = estimateTokens(systemPrompt);

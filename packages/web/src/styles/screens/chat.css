@@ -181,72 +181,7 @@
     color: var(--fg-3);
   }
 
-  /* ── Notices ───────────────────────────────────────────────── */
-
-  .notice {
-    --tone-fill: var(--hover);
-    --tone-edge: var(--line-strong);
-    --tone-fg: var(--fg-2);
-
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    background-color: var(--tone-fill);
-    border: var(--hairline) solid var(--tone-edge);
-    border-radius: var(--radius-md);
-    font-size: var(--text-sm);
-    line-height: var(--leading-sm);
-    color: var(--tone-fg);
-  }
-
-  .notice--accent {
-    --tone-fill: var(--accent-soft);
-    --tone-edge: var(--accent-edge);
-    --tone-fg: var(--accent-fg);
-  }
-
-  .notice--success {
-    --tone-fill: var(--success-soft);
-    --tone-edge: var(--success-edge);
-    --tone-fg: var(--success-fg);
-  }
-
-  .notice--warning {
-    --tone-fill: var(--warning-soft);
-    --tone-edge: var(--warning-edge);
-    --tone-fg: var(--warning-fg);
-  }
-
-  .notice--danger {
-    --tone-fill: var(--danger-soft);
-    --tone-edge: var(--danger-edge);
-    --tone-fg: var(--danger-fg);
-  }
-
-  .notice--info {
-    --tone-fill: var(--info-soft);
-    --tone-edge: var(--info-edge);
-    --tone-fg: var(--info-fg);
-  }
-
-  .notice > svg {
-    flex-shrink: 0;
-    width: var(--size-icon-sm);
-    height: var(--size-icon-sm);
-    margin-top: var(--space-0-5);
-  }
-
-  .notice__label {
-    font-weight: var(--weight-medium);
-  }
-
-  /* The sentence goes back to body text: the tone colours the label and the
-   * edge, and a whole paragraph in a semantic hue is harder to read than the
-   * same paragraph in the foreground tier. */
-  .notice__message {
-    color: var(--fg-2);
-  }
+  /* Notices moved to `components/notice.css` — four screens use them. */
 
   /* ── Reasoning ─────────────────────────────────────────────── */
 
@@ -755,45 +690,21 @@
     color: var(--fg-2);
   }
 
-  /* One ruled list, not three boxes. Three full-width filled cards holding one
-   * short sentence each is mostly empty card, and it reads as an unfinished
-   * layout — the boxes are doing no work the rows underneath them were not
-   * already doing. A shared top rule groups them and a hairline between each
-   * separates them, which is the whole of what a list needs. */
-  .welcome__prompts {
-    --gap: 0;
-
+  /* The keyboard hint, which used to sit under the composer on every render.
+   *
+   * Mono because it names keys, and separated by a rule rather than by a gap:
+   * it is a different *kind* of sentence from the paragraph above it — that one
+   * is about what the agent may do, this one is about how to work the box — and
+   * a hairline says so more quietly than a heading would. */
+  .welcome__hint {
     width: 100%;
     max-width: 44rem;
+    padding-block-start: var(--space-4);
     border-top: var(--hairline) solid var(--line);
-  }
-
-  .welcome__prompt {
-    display: flex;
-    gap: var(--space-3);
-    width: 100%;
-    padding: var(--space-3) var(--space-2);
-    border-bottom: var(--hairline) solid var(--line);
     font-family: var(--font-mono);
     font-size: var(--text-sm);
-    color: var(--fg-2);
-    text-align: left;
-    transition:
-      background-color var(--duration-fast) var(--ease-out-quint),
-      color var(--duration-fast) var(--ease-out-quint);
-  }
-
-  /* The prompt glyph is generated rather than typed into each label, so the
-   * strings stay the sentences that get sent to the model. */
-  .welcome__prompt::before {
-    content: '\203A';
-    flex-shrink: 0;
-    color: var(--accent-fg);
-  }
-
-  .welcome__prompt:hover {
-    background-color: var(--hover);
-    color: var(--fg-1);
+    color: var(--fg-3);
+    text-align: center;
   }
 
   /* ── Message actions ───────────────────────────────────────── *

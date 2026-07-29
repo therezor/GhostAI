@@ -77,6 +77,59 @@ describe('mergeConfigPatch', () => {
     expect(Object.keys(one.providers)).toEqual(['laptop']);
   });
 
+  it('merges the agents record per id, leaving the other agents alone', () => {
+    const first = mergeConfigPatch(base, {
+      agents: { list: { reviewer: { label: 'Reviewer', temperature: 0 } } },
+    });
+    const second = mergeConfigPatch(first, {
+      agents: { list: { writer: { label: 'Writer' } } },
+    });
+
+    expect(second.agents.list.writer?.label).toBe('Writer');
+    expect(second.agents.list.reviewer?.label).toBe('Reviewer');
+    expect(second.agents.list.reviewer?.temperature).toBe(0);
+  });
+
+  it('replaces one agent wholesale, so clearing an override is expressible', () => {
+    // Almost every field on an agent is an override that may be absent. If the
+    // merge kept the fields a patch left out, emptying the model box in the
+    // editor would silently keep the model that was just deleted.
+    const pinned = mergeConfigPatch(base, {
+      agents: { list: { reviewer: { label: 'Reviewer', model: 'claude-opus-5', temperature: 0 } } },
+    });
+    const cleared = mergeConfigPatch(pinned, {
+      agents: { list: { reviewer: { label: 'Reviewer' } } },
+    });
+
+    expect(cleared.agents.list.reviewer?.label).toBe('Reviewer');
+    expect(cleared.agents.list.reviewer?.model).toBeUndefined();
+    expect(cleared.agents.list.reviewer?.temperature).toBeUndefined();
+    // And the other agents are untouched — the replacement is per id.
+    expect(cleared.agents.defaults).toEqual(base.agents.defaults);
+  });
+
+  it('deletes an agent on an explicit null', () => {
+    const two = mergeConfigPatch(base, {
+      agents: { list: { reviewer: {}, writer: {} } },
+    });
+    const one = mergeConfigPatch(two, { agents: { list: { writer: null } } });
+
+    expect(Object.keys(one.agents.list)).toEqual(['reviewer']);
+    // Deleting an agent must not disturb the defaults every other one inherits.
+    expect(one.agents.defaults).toEqual(base.agents.defaults);
+  });
+
+  it("lifts an agent's tool restriction when the editor sends an empty selection", () => {
+    const restricted = mergeConfigPatch(base, {
+      agents: { list: { reviewer: { tools: { allow: ['read_file'], deny: ['exec'] } } } },
+    });
+    const lifted = mergeConfigPatch(restricted, {
+      agents: { list: { reviewer: { tools: { allow: [], deny: [] } } } },
+    });
+
+    expect(lifted.agents.list.reviewer?.tools).toEqual({ allow: [], deny: [] });
+  });
+
   it('ignores a null on a path where deletion is not meaningful', () => {
     // A `null` that punched a hole in a struct would drop a setting and fail
     // the re-parse — or, worse, silently revert it to a default.

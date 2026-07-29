@@ -31,7 +31,12 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import { ConfigSchema, type Config } from '@ghostai/protocol';
+import {
+  ConfigSchema,
+  hasPlaceholder,
+  legacyInstructionsToTemplate,
+  type Config,
+} from '@ghostai/protocol';
 
 import { GhostError } from './errors.js';
 import {
@@ -61,28 +66,51 @@ export interface LoadedConfig {
 /**
  * Brings an older `config.json` up to the current shape.
  *
- * One migration so far, and it is a rename of meaning rather than of keys.
+ * Two migrations, and they are **independent steps over the same record**
+ * rather than a chain. That shape is deliberate: the first version of this
+ * function returned early when `providers` was not a record, which was correct
+ * while there was one migration and would have silently skipped the second one
+ * for every install that had agents and no configured providers.
+ *
+ * Both run on the raw JSON, before validation, because both fix shapes the
+ * current schema would either reject or misread. Both are idempotent, so a file
+ * written by this version migrates to itself.
+ */
+export function migrateConfigShape(raw: unknown): { value: unknown; changed: boolean } {
+  if (!isRecord(raw)) return { value: raw, changed: false };
+
+  let value: Record<string, unknown> = raw;
+  let changed = false;
+
+  for (const step of [migrateProviderTypes, migrateAgentPrompts]) {
+    const result = step(value);
+    if (result !== undefined) {
+      value = result;
+      changed = true;
+    }
+  }
+
+  return changed ? { value, changed: true } : { value: raw, changed: false };
+}
+
+/**
  * `providers` used to be keyed by provider id with no `type` field; it is now
  * keyed by an arbitrary *instance* id and `type` names the provider. An old
- * file's key already *is* a provider id, so the migration is `type` = the key
- * — which is also why nothing in the credential vault has to move: an old
+ * file's key already *is* a provider id, so the migration is `type` = the key —
+ * which is also why nothing in the credential vault has to move: an old
  * instance's id is the string its key was already stored under.
  *
  * It lives here rather than in `@ghostai/providers` because it needs no
  * registry lookup. A key that was never a real provider id produces
  * `type: "typo"` and fails at resolution with the same message it would have
- * failed with before, which is better than this function silently discarding
- * an entry it did not recognise.
+ * failed with before, which is better than this function silently discarding an
+ * entry it did not recognise.
  *
- * Runs on the raw JSON, before validation, because the new schema *requires*
- * `type` — an old file would not survive `ConfigSchema.safeParse` to be
- * migrated afterwards. It is idempotent: an entry that already has a `type`
- * is not touched, so a file written by this version migrates to itself.
+ * Returns `undefined` when there was nothing to do.
  */
-export function migrateConfigShape(raw: unknown): { value: unknown; changed: boolean } {
-  if (!isRecord(raw)) return { value: raw, changed: false };
+function migrateProviderTypes(raw: Record<string, unknown>): Record<string, unknown> | undefined {
   const providers = raw.providers;
-  if (!isRecord(providers)) return { value: raw, changed: false };
+  if (!isRecord(providers)) return undefined;
 
   let changed = false;
   const next: Record<string, unknown> = {};
@@ -95,7 +123,55 @@ export function migrateConfigShape(raw: unknown): { value: unknown; changed: boo
     changed = true;
   }
 
-  return changed ? { value: { ...raw, providers: next }, changed: true } : { value: raw, changed };
+  return changed ? { ...raw, providers: next } : undefined;
+}
+
+/**
+ * An agent's `systemPrompt` used to mean "append this below the built-in
+ * identity as an `## Instructions` section". It now *is* the whole static
+ * prompt, so a stored value written under the old meaning has to be rewritten
+ * as a full template or the agent silently loses its workspace rules,
+ * guidelines and heading.
+ *
+ * `legacyInstructionsToTemplate` reproduces the old composition byte for byte,
+ * so an install that migrates keeps the prompt it was already running on.
+ *
+ * Two properties worth stating because both are load-bearing:
+ *
+ *  - **An empty prompt is never touched.** Empty means "use the built-in", and
+ *    materialising the default into the file would freeze that install on
+ *    today's wording forever.
+ *  - **Idempotence is detected by the placeholders**, since every migrated
+ *    value contains the built-in template and therefore `{{name}}`. The one
+ *    thing this misreads is a legacy prompt that already contained a literal
+ *    `{{name}}`: it is treated as migrated and stays instructions-only, which
+ *    becomes that agent's whole prompt. A `configVersion` field would settle it
+ *    properly, and is the right answer the third time a migration needs one —
+ *    not for this one.
+ */
+function migrateAgentPrompts(raw: Record<string, unknown>): Record<string, unknown> | undefined {
+  const agents = raw.agents;
+  if (!isRecord(agents)) return undefined;
+  const list = agents.list;
+  if (!isRecord(list)) return undefined;
+
+  let changed = false;
+  const next: Record<string, unknown> = {};
+  for (const [id, entry] of Object.entries(list)) {
+    if (!isRecord(entry)) {
+      next[id] = entry;
+      continue;
+    }
+    const prompt = entry.systemPrompt;
+    if (typeof prompt !== 'string' || prompt.trim() === '' || hasPlaceholder(prompt)) {
+      next[id] = entry;
+      continue;
+    }
+    next[id] = { ...entry, systemPrompt: legacyInstructionsToTemplate(prompt) };
+    changed = true;
+  }
+
+  return changed ? { ...raw, agents: { ...agents, list: next } } : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

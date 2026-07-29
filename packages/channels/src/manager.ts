@@ -87,6 +87,14 @@ export interface ChannelHubConnectOptions {
   readonly channel?: string;
   /** The workspace a session created by this connection lands in. */
   readonly workspaceId?: string;
+  /**
+   * The agent a session created by this channel is bound to.
+   *
+   * Optional, like everything else here: this interface is structural so a
+   * channel needs no import of the hub, and a required field would break every
+   * implementation of it.
+   */
+  readonly agentId?: string;
 }
 
 export interface ChannelHub {

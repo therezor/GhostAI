@@ -111,10 +111,28 @@ describe('sending', () => {
     expect(screen.getByText(/Offline/)).toBeInTheDocument();
   });
 
-  it('starts from a prompt the welcome screen offered', () => {
-    mount({ initialText: 'Summarise the workspace.' });
+  it('says nothing at all when there is nothing happening', () => {
+    // The line under the box carries transient state only. A keyboard hint that
+    // is identical on every render for the life of the install is documentation,
+    // and it was taking the width the context budget needed — it lives on the
+    // welcome screen now.
+    mount();
 
-    expect(box()).toHaveValue('Summarise the workspace.');
+    expect(screen.queryByText(/Enter to send/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/A turn is running/)).not.toBeInTheDocument();
+  });
+
+  it('still says when a turn is running, because that changes what Enter does', () => {
+    mount({ busy: true });
+
+    expect(screen.getByText(/A turn is running/)).toBeInTheDocument();
+  });
+
+  it('counts what is queued alongside whatever else is true', () => {
+    mount({ busy: true, queueDepth: 2 });
+
+    expect(screen.getByText(/A turn is running/)).toBeInTheDocument();
+    expect(screen.getByText(/2 messages waiting/)).toBeInTheDocument();
   });
 });
 

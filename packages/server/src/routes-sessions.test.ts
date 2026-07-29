@@ -514,6 +514,7 @@ describe('turn stats', () => {
   const stats = (turnId: string, endedAtMs: number) => ({
     turnId,
     sessionKey: 'web-1',
+    agentId: 'default',
     provider: 'anthropic',
     model: 'claude-opus-5',
     startedAtMs: 1000,

@@ -24,9 +24,22 @@ describe('the settings panels', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('ship the four the phase builds', () => {
+  it('ship the three the phase builds', () => {
+    // No `agent` panel: the settings it held *are* the default agent's, so they
+    // are edited on that agent rather than in a second room describing the same
+    // subtree. Agents are a page of their own, and picking one happens in the
+    // composer.
     const built = SETTINGS_PANELS.filter((panel) => !isPlanned(panel)).map((panel) => panel.id);
-    expect(built).toEqual(['agent', 'providers', 'tools', 'account']);
+    expect(built).toEqual(['providers', 'tools', 'account']);
+  });
+
+  it('no longer advertise profiles as unbuilt, now that agents ship', () => {
+    // A built panel still listed as a planned system tells an operator to wait
+    // for something that is already on the screen next to it.
+    const planned = Object.values(PLANNED_SYSTEMS)
+      .flat()
+      .map((system) => system.name.toLowerCase());
+    expect(planned.some((name) => name.includes('profile'))).toBe(false);
   });
 
   it('give every unbuilt panel a list of what lands in it', () => {

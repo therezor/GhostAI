@@ -13,131 +13,14 @@
  */
 
 @layer screens {
-  .file-table {
-    width: 100%;
-  }
-
-  .file-table thead tr {
-    font-size: var(--text-2xs);
-    font-weight: var(--weight-semibold);
-    letter-spacing: var(--tracking-caps);
-    text-transform: uppercase;
-    color: var(--fg-3);
-    text-align: left;
-  }
-
-  .file-table th {
-    padding-bottom: var(--space-2);
-    font-weight: inherit;
-  }
-
-  /* The heading *is* the control, so it inherits the heading's type rather than
-   * carrying a second, louder one inside it. The arrow is the only thing that
-   * marks the active column: a bolder or brighter heading would be a second
-   * signal for one state, and it would fight the caps treatment above. */
-  .file-table__sort {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    font: inherit;
-    letter-spacing: inherit;
-    text-transform: inherit;
-    color: inherit;
-  }
-
-  .file-table__sort:hover {
-    color: var(--fg-1);
-  }
-
-  .file-table__sort > svg {
-    width: var(--size-icon-sm);
-    height: var(--size-icon-sm);
-  }
-
-  th[aria-sort='ascending'] .file-table__sort,
-  th[aria-sort='descending'] .file-table__sort {
-    color: var(--fg-1);
-  }
-
-  .file-table td {
-    padding-block: var(--space-2);
-  }
-
-  .file-table tbody tr {
-    border-top: var(--hairline) solid var(--line);
-  }
-
-  .file-table__meta {
-    font-size: var(--text-sm);
-    color: var(--fg-3);
-  }
-
-  .file-table__actions {
-    text-align: right;
-  }
-
-  .file-table__modified {
-    display: none;
-  }
-
-  @media (min-width: 40rem) {
-    .file-table__modified {
-      display: table-cell;
-    }
-  }
-
-  .file-table__open {
-    display: flex;
-    max-width: 100%;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-1);
-    border-radius: var(--radius-md);
-    text-align: left;
-  }
-
-  .file-table__open:hover {
-    background-color: var(--hover);
-  }
-
-  .file-table__open > svg {
-    flex-shrink: 0;
-    width: var(--size-icon-md);
-    height: var(--size-icon-md);
-    color: var(--fg-3);
-  }
-
   /* A directory is the one thing in this list worth the accent: it is the only
    * row whose click changes where you are rather than what you are looking at. */
-  .file-table__open--directory > svg {
+  .data-table__open--directory > svg {
     color: var(--accent-fg);
   }
 
-  /* ── Toolbar and drop target ───────────────────────────────── */
+  /* ── The drop target ───────────────────────────────────────── */
 
-  .file-toolbar {
-    --gap: var(--space-3);
-  }
-
-  .file-filter {
-    --gap: var(--space-2);
-
-    /* A measure, not a fixed control: the filter is one word most of the time,
-     * and a search box as wide as the table reads as the page's main input
-     * rather than as a way to narrow what is already on screen. */
-    width: min(16rem, 100%);
-  }
-
-  .file-filter > svg {
-    flex-shrink: 0;
-    width: var(--size-icon-sm);
-    height: var(--size-icon-sm);
-    color: var(--fg-3);
-  }
-
-  /* The whole listing is the drop target, including the empty state, which is
-   * the case where dropping is most useful and where a target sized to the
-   * rows would be a few pixels tall. */
   .file-drop {
     border: var(--hairline) dashed transparent;
     border-radius: var(--radius-md);
@@ -230,22 +113,9 @@
     --gap: var(--space-1);
   }
 
-  /* Ambient, not a banner. "Unsaved changes" is a state to notice while
-   * reading, and a filled amber pill for it would be the loudest thing in a
-   * dialog whose subject is the text underneath. */
-  .file-editor__state {
-    font-size: var(--text-2xs);
-    letter-spacing: var(--tracking-caps);
-    text-transform: uppercase;
-    color: var(--fg-3);
-  }
-
-  .file-editor__status {
-    font-size: var(--text-2xs);
-    letter-spacing: var(--tracking-caps);
-    text-transform: uppercase;
-    color: var(--fg-3);
-  }
+  /* The editor's two status words are `.micro-label` — see
+   * `components/micro-label.css`. They were two identical rules here, and the
+   * agent editor wanted a third. */
 
   /* ── The code surface ──────────────────────────────────────── */
 
@@ -262,6 +132,14 @@
   .code-editor {
     position: relative;
     display: flex;
+    /* `start`, not the default `stretch`. Stretch sizes a flex item to the
+     * *scroller's* height, and the text is taller than the scroller — so the
+     * layer stacked over the textarea ended one screenful down while the
+     * textarea itself, transparent, ran on to the end of the file. A long file
+     * scrolled into an empty rectangle. Sizing the columns to their content is
+     * what makes the two agree; `min-height: 100%` below keeps a short file
+     * filling the box. */
+    align-items: start;
     height: 60vh;
     overflow: auto;
     background-color: var(--surface-1);
@@ -288,6 +166,7 @@
     left: 0;
     z-index: 1;
     flex: none;
+    min-height: 100%;
     padding: var(--space-3) var(--space-2);
     background-color: var(--surface-1);
     border-right: var(--hairline) solid var(--line);
@@ -297,9 +176,25 @@
     user-select: none;
   }
 
+  /* One grid cell holding both layers, rather than one absolutely positioned
+   * over the other. Absolute positioning resolves against the *box*; a shared
+   * grid area resolves against whichever layer is bigger, so the colouring is
+   * the same size as the text it colours by construction rather than by two
+   * rules agreeing. `max-content` does the same for the horizontal axis, which
+   * `wrap="off"` makes just as real: a long line used to run out of colour past
+   * the right edge for the same reason. */
   .code-editor__code {
-    position: relative;
+    display: grid;
+    grid-template-areas: 'stack';
     flex: 1 1 auto;
+    min-width: 100%;
+    width: max-content;
+    min-height: 100%;
+  }
+
+  .code-editor__highlight,
+  .code-editor__input {
+    grid-area: stack;
   }
 
   .code-editor__highlight,
@@ -315,10 +210,11 @@
 
   .code-editor__input {
     display: block;
-    /* Grows to the text, so the box above is the only scroller. */
+    /* Grows to the text, so the box above is the only scroller. The grid cell
+     * takes its size from this, and the highlight layer is stretched to match. */
     field-sizing: content;
     width: 100%;
-    min-height: 100%;
+    min-width: 100%;
     overflow: hidden;
     background: none;
     border: 0;
@@ -335,9 +231,6 @@
   }
 
   .code-editor__highlight {
-    position: absolute;
-    inset: 0;
-    overflow: hidden;
     /* Clicks belong to the textarea; this layer is a picture of it. */
     pointer-events: none;
   }

@@ -26,6 +26,7 @@ function run(
 const start = (): ServerMessage =>
   event({
     type: 'turn.start',
+    agentId: 'default',
     sessionKey: 'telegram:1',
     turnId: TURN,
     model: 'm',

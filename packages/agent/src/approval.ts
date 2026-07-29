@@ -29,6 +29,16 @@ import type { ApprovalScope, ToolRisk } from '@ghostai/protocol';
 /** One call, waiting on a decision. Mirrors the `tool.approvalRequest` event. */
 export interface ApprovalRequest {
   readonly sessionKey: string;
+  /**
+   * Which agent is asking.
+   *
+   * A gate that remembers an answer beyond one call has to remember it *per
+   * agent*: two agents can be configured with deliberately different tool sets
+   * and approval policies, and a standing "always allow `exec`" given while
+   * using a permissive one must not silently pre-approve it for a locked-down
+   * one. The permission an operator granted was to that agent, not to a name.
+   */
+  readonly agentId: string;
   readonly turnId: string;
   readonly callId: string;
   readonly name: string;

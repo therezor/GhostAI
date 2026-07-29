@@ -21,7 +21,17 @@
 
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FolderOpen, MoreHorizontal, Palette, Pencil, Plus, Settings, Trash2 } from 'lucide-react';
+import {
+  Boxes,
+  BrainCircuit,
+  FolderOpen,
+  MoreHorizontal,
+  Palette,
+  Pencil,
+  Plus,
+  Settings,
+  Trash2,
+} from 'lucide-react';
 import { useState, type JSX, type ReactNode } from 'react';
 
 import { cn } from '@/lib/cn.js';
@@ -40,6 +50,7 @@ import { ScrollArea } from '@/components/ui/scroll-area.js';
 import { toast } from '@/components/ui/toast.js';
 import { useTurnStore } from '@/state/turn.js';
 import { WorkspaceSwitcher } from '@/workspaces/workspace-switcher.js';
+import { useAgent } from '@/agents/agent-context.js';
 import { useWorkspace } from '@/workspaces/workspace-context.js';
 
 interface NavItem {
@@ -49,6 +60,8 @@ interface NavItem {
 }
 
 const NAV: readonly NavItem[] = [
+  { to: '/agents', label: 'Agents', icon: BrainCircuit },
+  { to: '/workspaces', label: 'Workspaces', icon: Boxes },
   { to: '/files', label: 'Files', icon: FolderOpen },
   { to: '/settings', label: 'Settings', icon: Settings },
   { to: '/tokens', label: 'Tokens', icon: Palette },
@@ -67,6 +80,7 @@ const UNTITLED = 'New conversation';
 export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): JSX.Element {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const { workspaceId } = useWorkspace();
+  const { agentId } = useAgent();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -81,7 +95,9 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
     // Nothing is written yet: the row appears in the list below when the first
     // message lands, so pressing this and changing your mind leaves no trace.
     // See `newSession` for why the key is minted client-side.
-    const key = newSession(workspaceId);
+    // The agent goes with it: a session is bound when it is created, and after
+    // that the binding is the stored row's rather than the switcher's.
+    const key = newSession(workspaceId, agentId);
     onNavigate?.();
     void navigate({ to: '/', search: { session: key } });
   }

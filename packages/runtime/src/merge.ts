@@ -36,7 +36,19 @@ import { ConfigSchema, type Config, type ConfigPatch } from '@ghostai/protocol';
  * is a set of independently editable fields, and a *record* is one value the UI
  * edits as a whole. Everything here is the latter.
  */
-const REPLACE_WHOLESALE: readonly string[] = ['providers.*.extraHeaders'];
+const REPLACE_WHOLESALE: readonly string[] = [
+  'providers.*.extraHeaders',
+  // An agent is edited as a whole, and almost every field on it is an
+  // *override* that may be absent. Merging per field would make clearing one
+  // impossible to express: an absent key means "not mentioned", so an operator
+  // emptying the model box would silently keep the model they just deleted.
+  // Replacing means the patch is the agent — which is exactly what the editor
+  // sends, and what makes an empty box mean "inherit" all the way through.
+  //
+  // Unlike `providers.*`, which merges per instance: a provider's fields all
+  // have values, so none of them has a "cleared" state to express.
+  'agents.list.*',
+];
 
 /**
  * Dotted paths where a `null` removes the key rather than merging into it.
@@ -47,7 +59,7 @@ const REPLACE_WHOLESALE: readonly string[] = ['providers.*.extraHeaders'];
  * failing the re-parse at best, silently reverting it at worst. Every entry
  * here names a *record whose entries an operator adds and removes*.
  */
-const DELETE_BY_NULL: readonly string[] = ['providers.*', 'tools.mcpServers.*'];
+const DELETE_BY_NULL: readonly string[] = ['providers.*', 'tools.mcpServers.*', 'agents.list.*'];
 
 function matchesPath(patterns: readonly string[], path: readonly string[]): boolean {
   return patterns.some((pattern) => {

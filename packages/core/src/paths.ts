@@ -18,6 +18,7 @@ import { isAbsolute, join, resolve, sep } from 'node:path';
 import { mkdirSync } from 'node:fs';
 
 import { GhostError } from './errors.js';
+import { isAgentId } from './agent-id.js';
 import { DEFAULT_WORKSPACE_ID, isWorkspaceId } from './workspace-id.js';
 
 /** Overrides the root for tests, CI, and multi-instance installs. */
@@ -68,6 +69,25 @@ export interface GhostPaths {
    * refuses it.
    */
   readonly workspace: string;
+  /**
+   * The parent of every agent's own directory — its memory and its skills.
+   *
+   * Beside the workspace rather than inside it, and that is a security
+   * boundary rather than tidiness: the jail root *is* the workspace, so memory
+   * kept in there would be readable and **writable** by `write_file`, which
+   * turns prompt injection into a way of rewriting the agent's own system
+   * prompt. What an agent has learned is changed through memory tools or not
+   * at all.
+   */
+  readonly agentsDir: string;
+  /**
+   * The parent of the layer agents working in one folder share.
+   *
+   * Keyed by workspace, not by agent: this is where facts about a *working
+   * folder* live, which is the one thing several agents on one folder have a
+   * reason to pool. Outside the jail for the same reason as `agentsDir`.
+   */
+  readonly sharedDir: string;
   readonly configFile: string;
   /** One SQLite file: sessions, messages, jobs, runs, auth, KB vectors. */
   readonly dbFile: string;
@@ -107,6 +127,8 @@ export function resolveGhostPaths(options: ResolveGhostPathsOptions = {}): Ghost
       options.workspace === undefined
         ? join(root, 'workspace')
         : resolvePath(expandHome(options.workspace, home), root),
+    agentsDir: join(root, 'agents'),
+    sharedDir: join(root, 'shared'),
     configFile: join(root, 'config.json'),
     dbFile: join(root, 'ghost.db'),
     logsDir: join(root, 'logs'),
@@ -146,6 +168,40 @@ export function workspaceDirFor(paths: GhostPaths, id: string): string {
  * session transcripts, and whatever the agent has been told; the default
  * `0o777 & ~umask` leaves all of that world-readable on a shared host.
  */
+/**
+ * The directory one agent owns: its memory and its skills.
+ *
+ * The only place an agent id becomes a path, and it re-validates for the same
+ * reason `workspaceDirFor` does — the id reaches here from a WebSocket frame,
+ * a request body and an `agent_id` column an operator can edit by hand.
+ *
+ * Unlike a workspace, `default` gets a directory of its own rather than the
+ * parent: there is nothing for it to be the parent *of*, and an agent whose
+ * memory sat one level up would see every other agent's.
+ */
+export function agentDirFor(paths: GhostPaths, id: string): string {
+  if (!isAgentId(id)) {
+    throw new GhostError('invalid_input', `Not an agent id: ${id}`, { details: { id } });
+  }
+  return join(paths.agentsDir, id);
+}
+
+/**
+ * The directory holding what every agent in one workspace may share.
+ *
+ * Takes a *workspace* id, and validates it as one — the sharing axis is the
+ * working folder, so an agent id here would be a category error that happened
+ * to typecheck.
+ */
+export function sharedDirFor(paths: GhostPaths, workspaceId: string): string {
+  if (!isWorkspaceId(workspaceId)) {
+    throw new GhostError('invalid_input', `Not a workspace id: ${workspaceId}`, {
+      details: { id: workspaceId },
+    });
+  }
+  return join(paths.sharedDir, workspaceId);
+}
+
 export function ensureDir(dir: string): string {
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   return dir;

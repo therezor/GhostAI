@@ -42,6 +42,7 @@ import {
   WorkspaceListResponseSchema,
   WorkspaceSummarySchema,
   StatusResponseSchema,
+  AgentListResponseSchema,
   ToolListResponseSchema,
   UploadResponseSchema,
   type AuthSessionResponse,
@@ -67,6 +68,7 @@ import {
   type WorkspaceListResponse,
   type WorkspaceSummary,
   type StatusResponse,
+  type AgentListResponse,
   type ToolListResponse,
   type UploadResponse,
 } from '@ghostai/protocol';
@@ -204,6 +206,26 @@ export const api = {
       body: { title },
     }),
 
+  /** One conversation, or a 404 for a key nothing has been said in yet. */
+  session: (key: string, signal?: AbortSignal): Promise<SessionSummary> =>
+    request(`/api/sessions/${encodeURIComponent(key)}`, SessionSummarySchema, {
+      ...(signal ? { signal } : {}),
+    }),
+
+  /**
+   * Moves a conversation to another agent.
+   *
+   * The binding lives on the session row, so this is the only way to change it
+   * — a frame naming an agent is ignored for a session that already exists,
+   * deliberately, so a history cannot drift onto another agent's prompt and
+   * tools by accident.
+   */
+  moveSessionToAgent: (key: string, agentId: string): Promise<SessionSummary> =>
+    request(`/api/sessions/${encodeURIComponent(key)}`, SessionSummarySchema, {
+      method: 'PATCH',
+      body: { agentId },
+    }),
+
   deleteSession: (key: string): Promise<void> =>
     requestVoid(`/api/sessions/${encodeURIComponent(key)}`, { method: 'DELETE' }),
 
@@ -245,6 +267,17 @@ export const api = {
 
   tools: (signal?: AbortSignal): Promise<ToolListResponse> =>
     request('/api/tools', ToolListResponseSchema, { ...(signal ? { signal } : {}) }),
+
+  /**
+   * The agents a turn can run on, resolved.
+   *
+   * Separate from `settings()` even though the settings tree already carries
+   * `agents.list`: this reports the model each agent would *actually* use,
+   * after inheritance and after any process-wide pin, which the raw config
+   * cannot answer — most agents inherit their model and store it as empty.
+   */
+  agents: (signal?: AbortSignal): Promise<AgentListResponse> =>
+    request('/api/agents', AgentListResponseSchema, { ...(signal ? { signal } : {}) }),
 
   settings: (signal?: AbortSignal): Promise<SettingsResponse> =>
     request('/api/settings', SettingsResponseSchema, { ...(signal ? { signal } : {}) }),
@@ -367,6 +400,20 @@ export const api = {
     request('/api/files/directory', FileEntrySchema, {
       method: 'POST',
       body: { path, workspaceId },
+    }),
+
+  /**
+   * Renames or moves an entry within one workspace.
+   *
+   * Two full paths rather than a new name: a rename and a move are the same
+   * operation, and the caller that only wants to rename joins the old parent to
+   * the new last segment. Directories go the same way files do — the server does
+   * not recurse, it asks the filesystem to move the tree.
+   */
+  moveFile: (workspaceId: string, from: string, to: string): Promise<FileEntry> =>
+    request('/api/files/move', FileEntrySchema, {
+      method: 'POST',
+      body: { from, to, workspaceId },
     }),
 
   /** A short-lived signed URL for a workspace path an `<img>` will load. */

@@ -13,7 +13,7 @@
 import type { ToolApprovalPolicy, ToolRisk, ToolsConfig } from '@ghostai/protocol';
 
 import { msToSeconds, parseNumber, secondsToMs } from './fields.js';
-import type { PatchResult } from './agent-form.js';
+import type { PatchResult } from './fields.js';
 
 export const RISK_BANDS: readonly ToolRisk[] = ['safe', 'write', 'exec', 'network'];
 export const APPROVAL_POLICIES: readonly ToolApprovalPolicy[] = ['allow', 'ask', 'deny'];

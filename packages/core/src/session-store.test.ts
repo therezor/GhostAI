@@ -67,7 +67,7 @@ describe('sessions', () => {
       key: 'web:1',
       title: '',
       origin: 'web',
-      profileId: undefined,
+      agentId: undefined,
       createdAtMs: NOW,
       lastConsolidatedSeq: 0,
       lastLearnedSeq: 0,
@@ -203,22 +203,22 @@ describe('sessions', () => {
 
   it('patches only the fields it is given', () => {
     const store = makeStore();
-    store.ensureSession('a', { title: 'Title', profileId: 'p1' });
+    store.ensureSession('a', { title: 'Title', agentId: 'p1' });
 
     const updated = store.updateSession('a', { lastConsolidatedSeq: 4 });
     expect(updated.title).toBe('Title');
-    expect(updated.profileId).toBe('p1');
+    expect(updated.agentId).toBe('p1');
     expect(updated.lastConsolidatedSeq).toBe(4);
     store.close();
   });
 
-  it('distinguishes clearing a profile from leaving it alone', () => {
+  it('distinguishes clearing an agent from leaving it alone', () => {
     const store = makeStore();
-    store.ensureSession('a', { profileId: 'p1' });
+    store.ensureSession('a', { agentId: 'p1' });
 
-    expect(store.updateSession('a', { title: 'x' }).profileId).toBe('p1');
-    expect(store.updateSession('a', { profileId: null }).profileId).toBeUndefined();
-    expect(store.getSession('a')?.profileId).toBeUndefined();
+    expect(store.updateSession('a', { title: 'x' }).agentId).toBe('p1');
+    expect(store.updateSession('a', { agentId: null }).agentId).toBeUndefined();
+    expect(store.getSession('a')?.agentId).toBeUndefined();
     store.close();
   });
 
@@ -692,16 +692,16 @@ describe('forking', () => {
     store.close();
   });
 
-  it('inherits workspace, origin and profile', () => {
+  it('inherits workspace, origin and agent', () => {
     const store = makeStore();
-    store.ensureSession('s', { origin: 'cli', workspaceId: 'w2', profileId: 'p1' });
+    store.ensureSession('s', { origin: 'cli', workspaceId: 'w2', agentId: 'p1' });
     store.append('s', userMessage('one'));
 
     const fork = store.forkSession('s', 1);
 
     expect(fork.session.origin).toBe('cli');
     expect(fork.session.workspaceId).toBe('w2');
-    expect(fork.session.profileId).toBe('p1');
+    expect(fork.session.agentId).toBe('p1');
     expect(fork.session.key.startsWith('cli-')).toBe(true);
     store.close();
   });
@@ -783,6 +783,7 @@ describe('turn stats', () => {
   const stats = (turnId: string, overrides: Record<string, unknown> = {}) => ({
     turnId,
     sessionKey: 's',
+    agentId: 'default',
     provider: 'anthropic',
     model: 'claude-opus-5',
     startedAtMs: NOW,
@@ -799,6 +800,18 @@ describe('turn stats', () => {
     store.recordTurnStats(stats('t1'));
 
     expect(store.turnStats('s')).toEqual([stats('t1')]);
+    store.close();
+  });
+
+  it('keeps the agent that ran the turn, not the one the session now names', () => {
+    const store = makeStore();
+    store.ensureSession('s', { agentId: 'reviewer' });
+    store.recordTurnStats(stats('t1', { agentId: 'reviewer' }));
+
+    // The session moves; the turn that already ran does not move with it.
+    store.updateSession('s', { agentId: 'writer' });
+
+    expect(store.turnStats('s')[0]?.agentId).toBe('reviewer');
     store.close();
   });
 

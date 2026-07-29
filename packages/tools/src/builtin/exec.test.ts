@@ -7,6 +7,7 @@ import { isGhostError, type GhostError } from '@ghostai/core';
 
 import { toToolResult, type ToolContext, type ToolResult } from '../define.js';
 import { ToolRegistry } from '../registry.js';
+import type { CommandRunner, RunRequest } from '../runner.js';
 import { createTestWorkspace, type TestWorkspace } from '../testkit/workspace.js';
 import { execTool } from './exec.js';
 import { builtinTools, registerBuiltins } from './index.js';
@@ -221,5 +222,83 @@ describe('the built-in set', () => {
   it('includes exec by default and with no config at all', () => {
     expect(builtinTools()).toHaveLength(5);
     expect(builtinTools(context.config)).toHaveLength(5);
+  });
+});
+
+describe('the runner seam', () => {
+  /** Records what it was asked to run, and answers without a process. */
+  function recording(): { runner: CommandRunner; seen: RunRequest[] } {
+    const seen: RunRequest[] = [];
+    return {
+      seen,
+      runner: {
+        run: (request) => {
+          seen.push(request);
+          return Promise.resolve({
+            stdout: 'from somewhere else',
+            stderr: '',
+            truncated: false,
+            code: 0,
+            signal: null,
+            timedOut: false,
+          });
+        },
+      },
+    };
+  }
+
+  it('runs on the host when the context names no runner', async () => {
+    // The default has to stay the behaviour exec has always had, or every
+    // existing caller changes meaning without changing code.
+    const result = toToolResult(
+      await execTool.run({ argv: [NODE, '-e', 'process.stdout.write("local")'] }, context),
+    );
+
+    expect(result.isError).toBe(false);
+    expect(result.content).toContain('local');
+  });
+
+  it('uses the context’s runner instead of spawning', async () => {
+    const { runner, seen } = recording();
+    const result = toToolResult(
+      await execTool.run({ argv: [NODE, '-e', 'process.exit(1)'] }, { ...context, runner }),
+    );
+
+    expect(seen).toHaveLength(1);
+    expect(result.content).toContain('from somewhere else');
+    expect(result.isError).toBe(false);
+  });
+
+  it('hands the runner a plan that is already guarded', async () => {
+    // Whether a command may run is settled before a runner sees it, so a
+    // backend never has to re-implement policy.
+    const { runner, seen } = recording();
+    await execTool.run({ argv: [NODE, '--version'] }, { ...context, runner });
+
+    const plan = seen[0]?.plan;
+    expect(plan?.cwd).toBe(workspace.root);
+    expect(plan?.file).toBe(NODE);
+    expect(Object.keys(plan?.env ?? {})).toContain('PATH');
+  });
+
+  it('still refuses a denied command before any runner is consulted', async () => {
+    const { runner, seen } = recording();
+    const denied = workspace.with({
+      exec: { ...context.config.exec, deniedBinaries: ['node'] },
+    });
+
+    await expect(
+      execTool.execute({ argv: [NODE, '--version'] }, { ...denied, runner }),
+    ).rejects.toThrow();
+    expect(seen).toHaveLength(0);
+  });
+
+  it('passes the reconciled timeout, not the model’s request', async () => {
+    const { runner, seen } = recording();
+    const capped = workspace.with({ exec: { ...context.config.exec, timeoutMs: 5_000 } });
+
+    await execTool.run({ argv: [NODE, '--version'], timeoutMs: 60_000 }, { ...capped, runner });
+
+    expect(seen[0]?.timeoutMs).toBe(5_000);
   });
 });

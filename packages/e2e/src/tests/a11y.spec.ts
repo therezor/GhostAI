@@ -43,6 +43,8 @@ async function scrollsHorizontally(page: Page): Promise<boolean> {
 
 const SCREENS: readonly { readonly path: string; readonly name: string }[] = [
   { path: '/', name: 'chat' },
+  { path: '/agents', name: 'agents' },
+  { path: '/workspaces', name: 'workspaces' },
   { path: '/files', name: 'files' },
   { path: '/notifications', name: 'notifications' },
   { path: '/settings', name: 'settings' },

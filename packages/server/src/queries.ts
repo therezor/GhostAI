@@ -75,10 +75,20 @@ export const NotificationListQuerySchema: z.ZodType<NotificationListQuery> = z.o
 export interface WsQuery {
   /** The session to open on. Absent asks the hub to mint one. */
   readonly session?: string | undefined;
+  /**
+   * The agent a session *created* by this connection is bound to.
+   *
+   * A default for the connection, not an override: a frame may name its own,
+   * and a session that already exists keeps the agent it was created with. It
+   * is here for the same reason `workspaceId` reaches the hub — a tab connects
+   * before it has sent anything, and the store holds no row until the first
+   * message lands.
+   */
+  readonly agent?: string | undefined;
 }
 
 /**
- * The socket's only query parameter.
+ * The socket's query parameters.
  *
  * Validated before the upgrade rather than after, so a client that sends
  * `?session=` gets a 400 it can read instead of a socket that opens, mints a
@@ -86,6 +96,7 @@ export interface WsQuery {
  */
 export const WsQuerySchema: z.ZodType<WsQuery> = z.object({
   session: z.string().min(1).optional(),
+  agent: z.string().min(1).optional(),
 });
 
 export interface PathQuery {

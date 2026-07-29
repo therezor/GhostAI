@@ -153,8 +153,8 @@ export interface ConnectOptions {
   readonly sessionKey?: string;
   /** Recorded as the session's origin, so a bridged channel is not labelled `web`. */
   readonly channel?: string;
-  /** Default profile for turns from this connection; a frame may override it. */
-  readonly profileId?: string;
+  /** Default agent for turns from this connection; a frame may override it. */
+  readonly agentId?: string;
   /**
    * The workspace a session *created* by this connection lands in.
    *
@@ -180,19 +180,24 @@ export interface SessionHubOptions {
   /** Read for `server.replayBufferSize` when a session is first seen. */
   readonly config: Config;
   /**
-   * The loop to start the next turn on, read once per turn.
+   * The loop to start the next turn on, resolved once per turn.
    *
-   * A function rather than an instance because `reconfigure` replaces the loop:
-   * a settings save has to move the *next* turn onto the new provider, and the
-   * running one has to keep the loop it started on — its request is in flight
-   * and its tool definitions are already in the model's context.
+   * A function rather than an instance for two reasons. `reconfigure` replaces
+   * the loops: a settings save has to move the *next* turn onto the new
+   * provider, while the running one keeps the loop it started on — its request
+   * is in flight and its tool definitions are already in the model's context.
+   * And a turn names an agent, so which loop runs it is a per-turn question:
+   * one loop per agent, resolved here rather than switched inside the loop.
+   *
+   * It may throw for an id that names no runnable agent. The hub reports that
+   * on the one frame that asked for it rather than failing the connection.
    *
    * `null` when no provider and model are configured. The socket stays open and
    * every other frame keeps working — only a turn is refused, with
    * `not_configured`, because the client's answer to that is to offer setup
    * rather than to reconnect.
    */
-  readonly loop: () => TurnRunner | null;
+  readonly loop: (agentId: string | undefined) => TurnRunner | null;
   /** Read only to rebuild a transcript a replay could not cover. */
   readonly store: SessionStore;
   /**
@@ -216,7 +221,7 @@ interface Connection {
   readonly id: string;
   readonly send: (message: ServerMessage) => void;
   readonly channel: string;
-  readonly profileId: string | undefined;
+  readonly agentId: string | undefined;
   /** Mutable: a `session.new` naming a workspace re-points the connection. */
   workspaceId: string | undefined;
   sessionKey: string;
@@ -228,7 +233,7 @@ interface QueuedTurn {
   /** Acked to the client, and the `turnId` the turn will run under. */
   readonly id: string;
   readonly content: string | readonly ContentPart[];
-  readonly profileId: string | undefined;
+  readonly agentId: string | undefined;
   readonly channel: string;
   /** Only ever creates; an existing session keeps the workspace it was born in. */
   readonly workspaceId: string | undefined;
@@ -300,7 +305,7 @@ function describeParseFailure(issues: readonly { path: PropertyKey[]; message: s
 
 export class SessionHub {
   readonly #config: Config;
-  readonly #loop: () => TurnRunner | null;
+  readonly #loop: (agentId: string | undefined) => TurnRunner | null;
   readonly #store: SessionStore;
   readonly #approvals: HubApprovalGate;
   readonly #clock: Clock;
@@ -344,7 +349,7 @@ export class SessionHub {
       id: this.#newId(),
       send: options.send,
       channel: options.channel ?? 'web',
-      profileId: options.profileId,
+      agentId: options.agentId,
       workspaceId: options.workspaceId,
       sessionKey: options.sessionKey ?? this.#newId(),
       closed: false,
@@ -554,7 +559,7 @@ export class SessionHub {
       // modified — the model sees exactly what the user typed.
       mentions: parseMentions(message.content),
       ...(clientMessageId === undefined ? {} : { clientMessageId }),
-      ...(message.profileId === undefined ? {} : { profileId: message.profileId }),
+      ...(message.agentId === undefined ? {} : { agentId: message.agentId }),
     });
   }
 
@@ -573,7 +578,7 @@ export class SessionHub {
       readonly content: string | readonly ContentPart[];
       readonly mentions: ParsedMentions;
       readonly clientMessageId?: string;
-      readonly profileId?: string;
+      readonly agentId?: string;
     },
   ): void {
     if (state.queue.length >= this.#maxQueueDepth) {
@@ -592,7 +597,7 @@ export class SessionHub {
     state.queue.push({
       id,
       content: turn.content,
-      profileId: turn.profileId ?? connection.profileId,
+      agentId: turn.agentId ?? connection.agentId,
       channel: connection.channel,
       workspaceId: connection.workspaceId,
       mentions: turn.mentions,
@@ -632,7 +637,7 @@ export class SessionHub {
   ): void {
     const state = this.#session(message.sessionKey);
 
-    if (this.#loop() === null) {
+    if (this.#loop(undefined) === null) {
       this.#error(connection, 'not_configured', NO_MODEL_MESSAGE, false);
       return;
     }
@@ -672,7 +677,7 @@ export class SessionHub {
   #edit(connection: Connection, message: Extract<ClientMessage, { type: 'user.edit' }>): void {
     const state = this.#session(message.sessionKey);
 
-    if (this.#loop() === null) {
+    if (this.#loop(undefined) === null) {
       this.#error(connection, 'not_configured', NO_MODEL_MESSAGE, false);
       return;
     }
@@ -704,7 +709,7 @@ export class SessionHub {
       ...(message.clientMessageId === undefined
         ? {}
         : { clientMessageId: message.clientMessageId }),
-      ...(message.profileId === undefined ? {} : { profileId: message.profileId }),
+      ...(message.agentId === undefined ? {} : { agentId: message.agentId }),
     });
   }
 
@@ -785,7 +790,17 @@ export class SessionHub {
   async #runTurn(state: SessionState, turn: QueuedTurn): Promise<void> {
     const controller = new AbortController();
     try {
-      const runner = this.#loop();
+      const agentId = this.#agentFor(state.key, turn);
+      let runner: TurnRunner | null;
+      try {
+        runner = this.#loop(agentId);
+      } catch (error) {
+        // An id naming no runnable agent — deleted, disabled, or never real.
+        // Reported on the frame that asked for it: the connection is fine, and
+        // every other session on it keeps working.
+        this.#failTurn(state, turn.id, error);
+        return;
+      }
       if (runner === null) {
         // Not a failure of this turn so much as of the install. It is reported
         // where the turn would have been, and `turn.end` is *not* emitted,
@@ -812,7 +827,7 @@ export class SessionHub {
         turnId: turn.id,
         mentions: turn.mentions,
         ...(turn.workspaceId === undefined ? {} : { workspaceId: turn.workspaceId }),
-        ...(turn.profileId === undefined ? {} : { profileId: turn.profileId }),
+        ...(turn.agentId === undefined ? {} : { agentId: turn.agentId }),
       });
 
       for await (const event of events) this.#forward(state, event);
@@ -825,6 +840,25 @@ export class SessionHub {
       // again; announcing idle first would make a queue look like a gap.
       if (!this.#drain(state)) this.#status(state);
     }
+  }
+
+  /**
+   * Which agent runs this turn.
+   *
+   * The **stored session wins**, exactly as its workspace does. A history built
+   * under one agent's prompt, tools and permissions must not silently continue
+   * under another's, so a frame naming an agent can only ever decide the
+   * binding of a session that does not exist yet. Moving an existing one is an
+   * explicit `PATCH /api/sessions/:key`.
+   *
+   * The loop applies the same rule to the prompt when it calls `ensureSession`;
+   * this is the same decision made one layer earlier, because *which loop* runs
+   * the turn has to agree with what that loop then puts in the prompt.
+   */
+  #agentFor(sessionKey: string, turn: QueuedTurn): string | undefined {
+    const stored = this.#store.getSession(sessionKey)?.agentId;
+    if (stored !== undefined && stored !== '') return stored;
+    return turn.agentId;
   }
 
   #failTurn(state: SessionState, turnId: string, error: unknown): void {

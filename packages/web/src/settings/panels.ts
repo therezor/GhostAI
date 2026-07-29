@@ -24,19 +24,14 @@ export interface SettingsPanel {
   readonly phase?: number;
 }
 
-const AGENT_PANEL: SettingsPanel = {
-  id: 'agent',
-  label: 'Agent',
-  summary: 'The model a turn runs on, and the budget it runs inside.',
+const PROVIDERS_PANEL: SettingsPanel = {
+  id: 'providers',
+  label: 'Providers',
+  summary: 'Endpoints and API keys. Keys are written to the vault and never read back.',
 };
 
 export const SETTINGS_PANELS: readonly SettingsPanel[] = [
-  AGENT_PANEL,
-  {
-    id: 'providers',
-    label: 'Providers',
-    summary: 'Endpoints and API keys. Keys are written to the vault and never read back.',
-  },
+  PROVIDERS_PANEL,
   {
     id: 'tools',
     label: 'Tools',
@@ -67,7 +62,7 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = [
   },
 ];
 
-export const DEFAULT_PANEL_ID: string = AGENT_PANEL.id;
+export const DEFAULT_PANEL_ID: string = PROVIDERS_PANEL.id;
 
 /** One unbuilt system, listed inside the panel that will hold it. */
 export interface PlannedSystem {
@@ -86,7 +81,7 @@ export interface PlannedSystem {
 export const PLANNED_SYSTEMS: Readonly<Record<string, readonly PlannedSystem[]>> = {
   extensions: [
     { name: 'MCP servers', detail: 'Connect tool servers over stdio, SSE or HTTP.', phase: 3 },
-    { name: 'Skills and profiles', detail: 'Reusable instructions, scoped per session.', phase: 3 },
+    { name: 'Skills', detail: 'Reusable instructions an agent can pin.', phase: 3 },
     { name: 'OAuth connections', detail: 'Authorise a provider without pasting a key.', phase: 3 },
     { name: 'Channels', detail: 'Reach the same agent from Telegram.', phase: 3 },
     { name: 'Plugins', detail: 'Install and remove capabilities from the UI.', phase: 4 },
@@ -110,5 +105,5 @@ export function panelById(id: string | undefined): SettingsPanel {
   const found = SETTINGS_PANELS.find((panel) => panel.id === id);
   // A stale bookmark to a panel that was renamed lands on Agent, which is a
   // settings screen. The alternative is an empty tab panel, which is not.
-  return found ?? AGENT_PANEL;
+  return found ?? PROVIDERS_PANEL;
 }

@@ -31,6 +31,8 @@ export {
   expandHome,
   resolveGhostPaths,
   resolvePath,
+  agentDirFor,
+  sharedDirFor,
   workspaceDirFor,
   type GhostPaths,
   type ResolveGhostPathsOptions,
@@ -43,6 +45,22 @@ export {
   deriveSlug,
   isWorkspaceId,
 } from './workspace-id.js';
+
+export {
+  AGENT_ID_PATTERN,
+  DEFAULT_AGENT_ID,
+  RESERVED_AGENT_IDS,
+  deriveAgentId,
+  isAgentId,
+} from './agent-id.js';
+
+export {
+  MAX_SLUG_ID_LENGTH,
+  RESERVED_DEVICE_NAMES,
+  SLUG_ID_PATTERN,
+  isSlugId,
+  slugify,
+} from './slug-id.js';
 
 export {
   WorkspaceStore,

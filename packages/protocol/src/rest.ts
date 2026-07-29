@@ -218,7 +218,7 @@ export const SessionSummarySchema = z.object({
   origin: z.string().default('web'),
   /** Fixed when the session was created; see `SessionRecord.workspaceId`. */
   workspaceId: z.string().min(1).default('default'),
-  profileId: z.string().optional(),
+  agentId: z.string().optional(),
   totalUsage: UsageSchema.optional(),
 });
 export type SessionSummary = z.infer<typeof SessionSummarySchema>;
@@ -241,13 +241,13 @@ export const CreateSessionRequestSchema = z.object({
   title: z.string().optional(),
   /** Which workspace to open the conversation in. Defaults to `default`. */
   workspaceId: z.string().min(1).optional(),
-  profileId: z.string().optional(),
+  agentId: z.string().optional(),
 });
 export type CreateSessionRequest = z.infer<typeof CreateSessionRequestSchema>;
 
 export const UpdateSessionRequestSchema = z.object({
   title: z.string().min(1).optional(),
-  profileId: z.string().optional(),
+  agentId: z.string().optional(),
 });
 export type UpdateSessionRequest = z.infer<typeof UpdateSessionRequestSchema>;
 
@@ -277,6 +277,7 @@ export type ContextResponse = z.infer<typeof ContextResponseSchema>;
 export const TurnStatsSchema = z.object({
   turnId: z.string().min(1),
   sessionKey: z.string().min(1),
+  agentId: z.string().default(''),
   provider: z.string(),
   model: z.string(),
   startedAtMs: z.number().int().nonnegative(),
@@ -308,6 +309,34 @@ export const BranchSessionRequestSchema = z.object({
   title: z.string().optional(),
 });
 export type BranchSessionRequest = z.infer<typeof BranchSessionRequestSchema>;
+
+// ---------------------------------------------------------------------------
+// Agents
+// ---------------------------------------------------------------------------
+
+/**
+ * One agent, as a picker needs it.
+ *
+ * Deliberately thin. The full settings tree — system prompts, tool selections,
+ * approval overrides — already reaches the client through `GET /api/settings`,
+ * and a second, subtly different copy of it here is how the two drift. What
+ * this adds is the part settings cannot answer: the model *after* inheritance
+ * and after any process-wide pin, which is what a turn would actually use.
+ */
+export const AgentSummarySchema = z.object({
+  id: z.string().min(1),
+  /** Never empty: falls back to the id. */
+  label: z.string().min(1),
+  model: z.string(),
+  provider: z.string(),
+});
+export type AgentSummary = z.infer<typeof AgentSummarySchema>;
+
+export const AgentListResponseSchema = z.object({
+  /** The default agent first, then the operator's own order. */
+  agents: z.array(AgentSummarySchema),
+});
+export type AgentListResponse = z.infer<typeof AgentListResponseSchema>;
 
 // ---------------------------------------------------------------------------
 // Tools
@@ -440,6 +469,29 @@ export const CreateDirectoryRequestSchema = z.object({
   workspaceId: z.string().min(1).optional(),
 });
 export type CreateDirectoryRequest = z.infer<typeof CreateDirectoryRequestSchema>;
+
+/**
+ * Moving a file or a directory within one workspace.
+ *
+ * **Two full paths, not a name.** A rename and a move are the same filesystem
+ * operation, and a `{ path, newName }` shape would be a rename that has to grow
+ * a second endpoint the first time anybody wants to drag a file into a folder.
+ * The UI renames by sending the same parent with a different last segment,
+ * which costs it one `joinPath` and keeps this route honest about what it does.
+ *
+ * Both ends are workspace-relative and both go through the jail, so a `to` that
+ * climbs out is refused by the same code that refuses a `from` that does. There
+ * is no `workspaceId` per side on purpose: moving *between* workspaces would
+ * cross a boundary the jail exists to hold, and the honest way to do it is a
+ * read and a write.
+ */
+export const MoveFileRequestSchema = z.object({
+  from: z.string().min(1),
+  to: z.string().min(1),
+  /** Which workspace both paths are relative to. Defaults to `default`. */
+  workspaceId: z.string().min(1).optional(),
+});
+export type MoveFileRequest = z.infer<typeof MoveFileRequestSchema>;
 
 // ---------------------------------------------------------------------------
 // Workspaces

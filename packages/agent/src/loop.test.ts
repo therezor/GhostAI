@@ -383,6 +383,31 @@ describe('AgentLoop', () => {
     expect(provider.requests).toHaveLength(1);
   });
 
+  it('sends no temperature or reasoning effort when neither is configured', async () => {
+    // Unset has to mean "say nothing", not "say undefined": an adapter that
+    // spreads the request into a JSON body would emit `"temperature": null`,
+    // which the models that accept no temperature at all reject outright.
+    const { loop, provider } = harness({ turns: [{ deltas: ['hi'] }] });
+
+    await runTurn(loop, { sessionKey: SESSION, content: 'hi' });
+
+    expect(provider.requests[0]).not.toHaveProperty('temperature');
+    expect(provider.requests[0]).not.toHaveProperty('reasoningEffort');
+  });
+
+  it('sends a temperature that was configured', async () => {
+    const { loop, provider } = harness({
+      turns: [{ deltas: ['hi'] }],
+      config: { temperature: 0, reasoningEffort: 'high' },
+    });
+
+    await runTurn(loop, { sessionKey: SESSION, content: 'hi' });
+
+    // Zero is a value, not an absence — the one a reviewer agent wants.
+    expect(provider.requests[0]?.temperature).toBe(0);
+    expect(provider.requests[0]?.reasoningEffort).toBe('high');
+  });
+
   it('reports reasoning separately from the answer', async () => {
     const { loop } = harness({ turns: [{ reasoning: ['thinking'], deltas: ['answer'] }] });
 
@@ -928,10 +953,10 @@ describe('AgentLoop', () => {
       sessionKey: SESSION,
       content: 'go',
       channel: 'telegram',
-      profileId: 'work',
+      agentId: 'work',
     });
 
-    expect(store.getSession(SESSION)).toMatchObject({ origin: 'telegram', profileId: 'work' });
+    expect(store.getSession(SESSION)).toMatchObject({ origin: 'telegram', agentId: 'work' });
   });
 
   it('takes the turn id from the caller when it has already published one', async () => {
