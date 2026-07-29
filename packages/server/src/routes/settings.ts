@@ -34,7 +34,8 @@ import { assertBootPolicy } from '../boot.js';
 import { badRequest } from '../errors.js';
 import type { RouteDeps, RouteGroup } from './types.js';
 
-type SettingsRouteId = 'settings.get' | 'settings.patch' | 'settings.credential';
+type SettingsRouteId =
+  'settings.get' | 'settings.patch' | 'settings.credential' | 'settings.reload';
 
 /**
  * Whether the settings this patch produces could be served on the next boot.
@@ -92,6 +93,20 @@ export function settingsRoutes(deps: RouteDeps): RouteGroup<SettingsRouteId> {
         const patch = request.body as ConfigPatch;
         assertServable(deps.runtime.config(), patch);
         deps.runtime.applySettings(patch);
+        return settingsResponse(deps);
+      },
+    },
+
+    'settings.reload': {
+      summary: 'Re-read config.json from disk and rebuild what depends on it',
+      // The settings tree on the way out, because that is the question the
+      // caller is really asking: not "did it work" but "what is it running
+      // now". A body of `{ ok: true }` would send every caller straight back
+      // for the answer, and would be a second shape to keep in step with the
+      // one `settings.get` already publishes.
+      schema: { response: { 200: SettingsResponseSchema } },
+      handler: (): SettingsResponse => {
+        deps.runtime.reload();
         return settingsResponse(deps);
       },
     },

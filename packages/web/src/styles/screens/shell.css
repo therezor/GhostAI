@@ -88,19 +88,30 @@
 
   /* ── Connection status ─────────────────────────────────────── *
    *
-   * A dot and a word. The dot is the only coloured thing, and it borrows the
-   * semantic tokens rather than introducing its own — four states, three
-   * colours, no new variables.
+   * A dot and a word, inside the button that opens the header menu. The dot is
+   * the only coloured thing, and it borrows the semantic tokens rather than
+   * introducing its own — four states, three colours, no new variables.
+   *
+   * The wrapper carries the state and the button carries the press, because the
+   * wrapper is the live region: `role="status"` and `role="button"` cannot be
+   * the same element, and the announcement is the part that must not move.
    */
 
   .conn {
     display: inline-flex;
     flex-shrink: 0;
     align-items: center;
-    gap: var(--space-2);
+  }
+
+  /* Tighter than `btn--sm`'s own inline padding: the dot is a third of the
+   * width of a glyph, so the default gutter reads as a gap on the leading edge
+   * rather than as symmetry. */
+  .conn__trigger {
+    padding-inline: var(--space-2);
   }
 
   .conn__dot {
+    flex-shrink: 0;
     width: var(--space-2);
     height: var(--space-2);
     border-radius: var(--radius-full);
@@ -124,25 +135,30 @@
 
   /* Below the breakpoint the dot says it on its own — a four-state indicator
    * whose states are also announced by the live region does not need its word
-   * taking a third of a phone's header. */
+   * taking a third of a phone's header. The menu spells it out for anyone who
+   * opens it.
+   *
+   * Hidden the `.sr-only` way rather than with `display: none`, which is the
+   * difference between a word that is not drawn and a word that is not there:
+   * this one is the trigger's accessible name, and a `display: none` label
+   * leaves a button announced as nothing but its dot. */
   @media (max-width: 40rem) {
     .conn__label {
-      display: none;
+      position: absolute;
+      width: var(--hairline);
+      height: var(--hairline);
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
     }
-  }
 
-  /* The resolved provider and model. Hidden on the narrowest screens, where the
-   * connection state and the theme control are the two things worth the room. */
-  .app-header__agent {
-    display: none;
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    color: var(--fg-3);
-  }
-
-  @media (min-width: 40rem) {
-    .app-header__agent {
-      display: inline;
+    /* Square, and the same square as the bell and the theme control beside it:
+     * with the word gone this is an icon button in everything but the prop
+     * that says so, and a phone is where the smaller target is felt. */
+    .conn__trigger {
+      width: var(--size-control-md);
+      height: var(--size-control-md);
+      padding-inline: 0;
     }
   }
 
@@ -195,9 +211,18 @@
    * the eye loses its place returning from, and the page frame is 64rem wide —
    * so without this the summary under every page title ran to roughly 150. `ch`
    * rather than a rem token because the limit is a character count, and `ch`
-   * tracks the font it is actually set in. */
+   * tracks the font it is actually set in.
+   *
+   * One step down from body, everywhere this class appears. A note is the
+   * caption under a heading or beside a control — the sentence that explains
+   * the screen, never the screen's content — and at `--text-base` in the muted
+   * tier it was the same size as the rows it was describing, which is a lot of
+   * grey competing for one glance. The size is on the class rather than on each
+   * page so that "what a note looks like" has one answer. */
   .page__note {
     max-width: 72ch;
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
     color: var(--fg-3);
   }
 

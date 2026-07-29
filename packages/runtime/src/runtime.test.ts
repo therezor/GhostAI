@@ -357,6 +357,101 @@ describe('reconfigure', () => {
   });
 });
 
+/**
+ * The other direction from `reconfigure`: what the *file* says, not what a
+ * client just sent. It is what a running server has instead of a restart.
+ */
+describe('reload', () => {
+  /** Overwrites the config file a runtime was built from, as an editor would. */
+  function rewrite(home: string, config: unknown): void {
+    writeFileSync(join(home, 'config.json'), JSON.stringify(config));
+  }
+
+  it('picks up an edit made to the file since the runtime was built', () => {
+    const home = tempHome({ agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } } });
+    const runtime = build({ home });
+    const before = runtime.loop;
+
+    rewrite(home, { agents: { defaults: { provider: 'ollama', model: 'llama3' } } });
+    const config = runtime.reload();
+
+    expect(config.agents.defaults.model).toBe('llama3');
+    expect(runtime.requireLoop().model).toBe('llama3');
+    expect(runtime.loop).not.toBe(before);
+  });
+
+  it('takes the file whole, so a hand-reverted field actually reverts', () => {
+    // The difference from `reconfigure`, and the reason this is not a patch of
+    // `{}` over what is in memory: a merge keeps the value the file no longer
+    // carries, which makes an undo in an editor look like it did nothing.
+    const home = tempHome({
+      agents: { defaults: { provider: 'ollama', model: 'qwen3:8b', temperature: 0.9 } },
+    });
+    const runtime = build({ home });
+    expect(runtime.config.agents.defaults.temperature).toBe(0.9);
+
+    rewrite(home, { agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } } });
+    runtime.reload();
+
+    expect(runtime.config.agents.defaults.temperature).toBeUndefined();
+  });
+
+  it('re-registers the built-ins, so a tool switched off in the file disappears', () => {
+    const home = tempHome({ agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } } });
+    const runtime = build({ home });
+    expect(runtime.tools.has('exec')).toBe(true);
+
+    rewrite(home, {
+      agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } },
+      tools: { exec: { enable: false } },
+    });
+    runtime.reload();
+
+    expect(runtime.tools.has('exec')).toBe(false);
+    expect(runtime.tools.has('read_file')).toBe(true);
+  });
+
+  it('keeps the store and the steering queue, so a turn in flight is not disturbed', () => {
+    const home = tempHome({ agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } } });
+    const runtime = build({ home });
+    const store = runtime.store;
+    runtime.requireLoop().steer('s1', 'actually, use TypeScript');
+
+    rewrite(home, { agents: { defaults: { provider: 'ollama', model: 'llama3' } } });
+    runtime.reload();
+
+    expect(runtime.store).toBe(store);
+    expect(runtime.steering.drain('s1')).toHaveLength(1);
+  });
+
+  it('changes nothing when the file cannot be built', () => {
+    const home = tempHome({ agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } } });
+    const runtime = build({ home });
+    const before = runtime.loop;
+
+    // A provider that resolves to an adapter this build cannot construct — the
+    // same failure `reconfigure` refuses, arriving through the file instead.
+    rewrite(home, { agents: { defaults: { provider: 'anthropic', model: 'claude-opus-5' } } });
+
+    expect(() => runtime.reload()).toThrow(/anthropic-messages/u);
+    expect(runtime.loop).toBe(before);
+    expect(runtime.config.agents.defaults.provider).toBe('ollama');
+  });
+
+  it('leaves a construction-time override in place', () => {
+    // Same rule as `reconfigure`: `ghost chat --model x` is a statement about
+    // this process, and an edit to the file must not move it.
+    const home = tempHome({ agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } } });
+    const runtime = build({ home, model: 'pinned' });
+
+    rewrite(home, { agents: { defaults: { provider: 'ollama', model: 'llama3' } } });
+    runtime.reload();
+
+    expect(runtime.model).toBe('pinned');
+    expect(runtime.config.agents.defaults.model).toBe('llama3');
+  });
+});
+
 describe('multiple agents', () => {
   /** A runtime with one named agent beside the defaults. */
   function withAgent(entry: Record<string, unknown>, id = 'reviewer'): GhostRuntime {

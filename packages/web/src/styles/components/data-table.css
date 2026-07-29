@@ -19,6 +19,38 @@
     --gap: var(--space-3);
   }
 
+  /* The blurb beside the filter, which is a different job from the same
+   * paragraph under a page title — and it took a wrapped row to notice.
+   *
+   * `.page__note` caps itself at 72ch, and a flex item sized by its content
+   * asks for all 72 before it will shrink. There was not that much room left
+   * beside a filter box, so the row wrapped: the note took the whole first
+   * line and the filter dropped to a second one, left-aligned under it, which
+   * is neither of the two places a filter belongs.
+   *
+   * `flex: 1 1 0` is the fix — the note starts at nothing and grows into
+   * whatever the filter leaves, so the two share one row and the filter stays
+   * at the end. The measure is still enforced above it, for a page wide enough
+   * that the note could otherwise run past a readable line.
+   *
+   * `3`, not `1`: the `.spacer` beside it is also a grower, and at equal
+   * weights the two split the leftover evenly — which wrapped the note to four
+   * short lines against a column of nothing. The filter is pinned right either
+   * way, being the last item in a row that is fully packed, so the weight only
+   * decides how much of the middle the sentence gets. */
+  .list-toolbar .page__note {
+    flex: 3 1 0;
+  }
+
+  /* On a phone there is no row to share: a note squeezed beside a filter is
+   * two unreadable columns, so it takes its own line and the filter sits under
+   * it at full width — the arrangement `cluster` was already reaching for. */
+  @media (max-width: 40rem) {
+    .list-toolbar .page__note {
+      flex-basis: 100%;
+    }
+  }
+
   .data-table {
     width: 100%;
   }

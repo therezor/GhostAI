@@ -255,8 +255,103 @@ export function parseRetryAfter(value: string | null, nowMs: number): number | n
   return Math.max(0, dateMs - nowMs);
 }
 
-/** Normalises anything thrown on the request path into a `ProviderError`. */
-export function toProviderError(value: unknown, providerId: string): ProviderError {
+/**
+ * What the socket said, dug out from under `TypeError: fetch failed`.
+ *
+ * That string is all undici puts on the error it throws; the code that says
+ * *why* is on `cause`, sometimes two levels down, and on an `AggregateError`
+ * when a host resolved to several addresses and every one of them failed.
+ * Walking it is the difference between "fetch failed" and "nothing is listening
+ * at http://127.0.0.1:11434".
+ *
+ * Bounded rather than recursive-until-null: a cause chain is a linked list a
+ * library controls, and one that loops would hang the error path.
+ */
+function transportCode(value: unknown, depth = 0): string | undefined {
+  if (depth > 4 || typeof value !== 'object' || value === null) return undefined;
+
+  const code: unknown = (value as { code?: unknown }).code;
+  if (typeof code === 'string' && code !== '') return code;
+
+  // Every address for one host failed, each with its own reason. They are
+  // almost always the same reason — a server that is down is down on both
+  // 127.0.0.1 and ::1 — so the first one is the answer, not a summary.
+  const errors: unknown = (value as { errors?: unknown }).errors;
+  if (Array.isArray(errors)) {
+    for (const nested of errors) {
+      const found = transportCode(nested, depth + 1);
+      if (found !== undefined) return found;
+    }
+  }
+
+  return transportCode((value as { cause?: unknown }).cause, depth + 1);
+}
+
+/**
+ * Socket code → what an operator should read, and whether pressing send again
+ * could possibly help.
+ *
+ * The wording names a thing to *do* wherever the code implies one. "fetch
+ * failed" is true of every entry here and useful for none of them: it does not
+ * distinguish a model server that was never started from a hostname that no
+ * longer resolves from a certificate the machine will not accept, and those are
+ * three different afternoons.
+ *
+ * `retryable` is false where the same request is certain to fail the same way
+ * until somebody changes something. It is not a claim about permanence — it is
+ * what decides whether the UI offers "sending the message again may work",
+ * which under a refused connection is advice to press a button that cannot
+ * work.
+ */
+const TRANSPORT_FAULTS: Readonly<
+  Record<string, { readonly detail: string; readonly retryable: boolean }>
+> = {
+  ECONNREFUSED: { detail: 'nothing is listening there', retryable: false },
+  ENOTFOUND: { detail: 'that host name does not resolve', retryable: false },
+  EAI_AGAIN: { detail: 'the host name could not be looked up', retryable: true },
+  EHOSTUNREACH: { detail: 'there is no route to that host', retryable: true },
+  ENETUNREACH: { detail: 'that network is unreachable', retryable: true },
+  ETIMEDOUT: { detail: 'the connection timed out', retryable: true },
+  UND_ERR_CONNECT_TIMEOUT: { detail: 'the connection timed out', retryable: true },
+  UND_ERR_HEADERS_TIMEOUT: { detail: 'it accepted the request and never replied', retryable: true },
+  UND_ERR_BODY_TIMEOUT: { detail: 'it stopped sending mid-answer', retryable: true },
+  ECONNRESET: { detail: 'it closed the connection before answering', retryable: true },
+  EPIPE: { detail: 'it closed the connection before answering', retryable: true },
+  UND_ERR_SOCKET: { detail: 'it closed the connection before answering', retryable: true },
+};
+
+/** TLS refusals, which are all the same sentence with a different code in it. */
+const TLS_CODE = /^(CERT_|ERR_TLS_|DEPTH_ZERO|SELF_SIGNED|UNABLE_TO_(GET|VERIFY))/u;
+
+/** Where the request was aimed, so the message can name it. */
+export interface TransportContext {
+  /** The full request URL. Reported as its origin — a path adds nothing here. */
+  readonly url?: string | undefined;
+  /** The provider's display name. Falls back to the id. */
+  readonly label?: string | undefined;
+}
+
+/** `http://127.0.0.1:11434`, or the whole string if it does not parse. */
+function originOf(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Normalises anything thrown on the request path into a `ProviderError`.
+ *
+ * The transport branch is where the message is *built* rather than forwarded,
+ * and it is the one case where forwarding is wrong: undici's own message is
+ * `fetch failed` for every connection failure there is.
+ */
+export function toProviderError(
+  value: unknown,
+  providerId: string,
+  context: TransportContext = {},
+): ProviderError {
   if (isProviderError(value)) return value;
 
   if (value instanceof Error && value.name === 'AbortError') {
@@ -265,8 +360,29 @@ export function toProviderError(value: unknown, providerId: string): ProviderErr
   if (value instanceof Error && value.name === 'TimeoutError') {
     return new ProviderError('timeout', 'Request timed out', { providerId, cause: value });
   }
-  // Everything else on this path is a failed connection: undici raises
-  // `TypeError: fetch failed` with the real cause nested underneath.
-  const message = value instanceof Error ? value.message : String(value);
-  return new ProviderError('transport', message, { providerId, cause: value });
+
+  // Everything else on this path is a failed connection.
+  const raw = value instanceof Error ? value.message : String(value);
+  const code = transportCode(value);
+  const name = context.label ?? providerId;
+  const target = context.url === undefined ? name : `${name} at ${originOf(context.url)}`;
+
+  const fault = code === undefined ? undefined : TRANSPORT_FAULTS[code];
+  const detail =
+    fault?.detail ??
+    (code !== undefined && TLS_CODE.test(code)
+      ? `its TLS certificate was rejected (${code})`
+      : // No code, or one this table has never seen: undici's own message, which
+        // is at least specific when it is not literally "fetch failed".
+        (code ?? raw));
+
+  return new ProviderError('transport', `Could not reach ${target} — ${detail}.`, {
+    providerId,
+    cause: value,
+    ...(fault === undefined ? {} : { retryable: fault.retryable }),
+    details: {
+      ...(code === undefined ? {} : { code }),
+      ...(context.url === undefined ? {} : { url: context.url }),
+    },
+  });
 }

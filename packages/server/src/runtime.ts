@@ -112,6 +112,20 @@ export interface ServerRuntime {
   applySettings(patch: ConfigPatch): Config;
 
   /**
+   * Re-reads `config.json` from disk and rebuilds what depends on it.
+   *
+   * The other direction from `applySettings`, which takes a patch from a client
+   * and writes it out. This one takes what the *file* says and leaves it alone,
+   * so it is the answer to every edit a running server cannot see: a config
+   * changed in an editor, a plugin dropped in beside it, an endpoint that came
+   * back on a different port.
+   *
+   * Throws without applying anything when the file cannot be built, leaving the
+   * server on the settings it was already serving.
+   */
+  reload(): Config;
+
+  /**
    * Provider id → whether a usable credential exists.
    *
    * Booleans, never values. The vault is write-only over HTTP, and this is the

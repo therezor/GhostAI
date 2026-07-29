@@ -61,6 +61,11 @@ const MANIFEST = [
   { id: 'settings.get', method: 'GET', url: '/api/settings', auth: 'required' },
   { id: 'settings.patch', method: 'PATCH', url: '/api/settings', auth: 'required' },
   { id: 'settings.credential', method: 'PUT', url: '/api/settings/credentials', auth: 'required' },
+  // A POST because it is not idempotent in the way that matters: it rebuilds
+  // the provider, the loops and the tool registry, and doing that twice is two
+  // rebuilds. Under `/api/settings` rather than `/api/system` because what it
+  // re-reads is the settings file — the process it belongs to keeps running.
+  { id: 'settings.reload', method: 'POST', url: '/api/settings/reload', auth: 'required' },
 
   // Providers and models
   { id: 'providers.list', method: 'GET', url: '/api/providers', auth: 'required' },

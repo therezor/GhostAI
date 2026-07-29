@@ -11,12 +11,14 @@
 import { RouterProvider, createMemoryHistory } from '@tanstack/react-router';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { ConfigSchema } from '@ghostai/protocol';
 
 import { Providers } from './providers.js';
 import { createAppRouter } from './router.js';
 import { useTurnStore } from '@/state/turn.js';
-import { stubApi, testQueryClient, type RecordedRequest } from '@/test/render.js';
+import { stubApi, testQueryClient, type RecordedRequest, type StubRoute } from '@/test/render.js';
 
 const STATUS = {
   version: '0.0.0',
@@ -32,6 +34,9 @@ const STATUS = {
   mcpServersConnected: 0,
   pluginsLoaded: 0,
 };
+
+/** What `POST /api/settings/reload` answers with: the settings it now serves. */
+const SETTINGS = { config: ConfigSchema.parse({}), credentialsPresent: {} };
 
 const SESSIONS = {
   sessions: [
@@ -60,7 +65,10 @@ const MESSAGES = {
   ],
 };
 
-function renderApp(initial = '/'): {
+function renderApp(
+  initial = '/',
+  overrides: Record<string, StubRoute> = {},
+): {
   readonly user: ReturnType<typeof userEvent.setup>;
   readonly calls: RecordedRequest[];
 } {
@@ -89,6 +97,8 @@ function renderApp(initial = '/'): {
       },
     ],
     '/api/sessions/web%3A7/messages': [200, MESSAGES],
+    'POST /api/settings/reload': [200, SETTINGS],
+    ...overrides,
   });
 
   const router = createAppRouter();
@@ -104,12 +114,21 @@ function renderApp(initial = '/'): {
 }
 
 describe('the shell', () => {
-  it('renders the sidebar, the route and what the agent is running', async () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('renders the sidebar and the route, without repeating the model in the header', async () => {
     renderApp();
 
     // The chat route on an empty session is the welcome screen.
     expect(await screen.findByRole('heading', { name: 'Ready when you are.' })).toBeInTheDocument();
-    expect(await screen.findByText('ollama · test-model')).toBeInTheDocument();
+
+    // The provider and the model are named on the welcome card and on each
+    // turn. The header used to print them a third time, which is a third place
+    // to keep in sync and the first one to go stale.
+    const header = screen.getByRole('banner');
+    expect(within(header).queryByText(/test-model/u)).not.toBeInTheDocument();
 
     // "New session" replaced the Chat nav link, which navigated nowhere: it
     // dropped `?session=` from a route that reads the store rather than the
@@ -193,6 +212,49 @@ describe('the shell', () => {
     await waitFor(() => {
       expect(status).toHaveTextContent('Connected');
     });
+  });
+
+  it('reloads the server and then the page, from the status indicator', async () => {
+    // jsdom's own `reload` is a not-implemented stub that logs to the console,
+    // so the assertion has to own it rather than watch it.
+    // `stubGlobal` rather than a spy: `location.reload` is unforgeable, so
+    // `spyOn` cannot redefine it and the whole object has to be swapped.
+    const reload = vi.fn();
+    vi.stubGlobal('location', { href: globalThis.location.href, reload });
+
+    const { user, calls } = renderApp();
+
+    // The badge is the trigger: the reasons to reload are all read off the
+    // indicator, so that is where the control belongs.
+    await user.click(await screen.findByRole('button', { name: 'Connecting' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Reload app' }));
+
+    await waitFor(() => {
+      expect(reload).toHaveBeenCalledTimes(1);
+    });
+    // The server first. A page that came back on the same stale config would
+    // look like the button did nothing.
+    expect(calls.some((call) => call.path === '/api/settings/reload')).toBe(true);
+  });
+
+  it('keeps the page when the server could not reload, and says why', async () => {
+    const reload = vi.fn();
+    vi.stubGlobal('location', { href: globalThis.location.href, reload });
+
+    const { user } = renderApp('/', {
+      'POST /api/settings/reload': [
+        500,
+        { error: { code: 'config_invalid', message: 'config.json is not valid JSON' } },
+      ],
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Connecting' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Reload app' }));
+
+    // The message is the point. A navigation here would wipe it after one
+    // frame and leave the operator pressing a button that does nothing.
+    expect(await screen.findByText('config.json is not valid JSON')).toBeInTheDocument();
+    expect(reload).not.toHaveBeenCalled();
   });
 
   it('opens the sidebar in a dialog on a narrow screen, and closes it on navigation', async () => {

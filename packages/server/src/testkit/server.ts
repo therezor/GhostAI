@@ -39,6 +39,8 @@ export interface TestServerOptions {
   /** `false` drives the routes as a fresh install with no provider or model. */
   readonly configured?: boolean;
   readonly systemPrompt?: string;
+  /** Stands in for the config file `POST /api/settings/reload` re-reads. */
+  readonly onReload?: () => Config;
   /** Drives the store, the signer and the session TTL together. */
   readonly clock?: Clock;
   /** What the scripted turn behind the socket answers with. */
@@ -76,6 +78,7 @@ export async function startTestServer(options: TestServerOptions = {}): Promise<
     ...(options.model === undefined ? {} : { model: options.model }),
     ...(options.configured === undefined ? {} : { configured: options.configured }),
     ...(options.systemPrompt === undefined ? {} : { systemPrompt: options.systemPrompt }),
+    ...(options.onReload === undefined ? {} : { onReload: options.onReload }),
     ...(options.clock === undefined ? {} : { clock: options.clock }),
     ...(options.credentialsPresent === undefined
       ? {}

@@ -27,7 +27,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FolderPlus, Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { useMemo, useState, type JSX } from 'react';
 
 import type { WorkspaceSummary } from '@ghostai/protocol';
@@ -184,7 +184,10 @@ export function WorkspacesRoute(): JSX.Element {
             setCreating(true);
           }}
         >
-          <FolderPlus />
+          {/* The bare mark, as on Agents and New session. A plus *inside* a
+              folder said "add a folder", which is the implementation — what the
+              button does is add a workspace, and the label already says so. */}
+          <Plus />
           New workspace
         </Button>
       </div>

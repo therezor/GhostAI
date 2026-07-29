@@ -12,6 +12,7 @@ import {
   type ProvidersResponse,
   type ToolDefinition,
 } from '@ghostai/protocol';
+import { GhostError } from '@ghostai/core';
 import { PROVIDERS } from '@ghostai/providers';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -201,6 +202,59 @@ describe('PATCH /api/settings', () => {
 
     expect(response.statusCode).toBe(422);
     expect(Object.keys(response.json().error.details)).toEqual(['/agents/defaults/temperature']);
+  });
+});
+
+describe('POST /api/settings/reload', () => {
+  it('re-reads the file and answers with what it is now serving', async () => {
+    const edited = ConfigSchema.parse({ agents: { defaults: { model: 'edited-by-hand' } } });
+    const { server, headers, runtime } = await start({ onReload: () => edited });
+
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/settings/reload',
+      headers,
+    });
+
+    expect(response.statusCode).toBe(200);
+    // The answer is the settings tree, not `{ ok: true }`: the question behind
+    // the press is "what is it running now", and a bare acknowledgement sends
+    // the caller straight back for it.
+    expect(response.json().config.agents.defaults.model).toBe('edited-by-hand');
+    expect(runtime.reloads).toHaveLength(1);
+  });
+
+  it('serves the reloaded settings on the next read', async () => {
+    const edited = ConfigSchema.parse({ agents: { defaults: { temperature: 0.9 } } });
+    const { server, headers } = await start({ onReload: () => edited });
+    await server.app.inject({ method: 'POST', url: '/api/settings/reload', headers });
+
+    const response = await server.app.inject({ method: 'GET', url: '/api/settings', headers });
+    expect(response.json().config.agents.defaults.temperature).toBe(0.9);
+  });
+
+  it('reports a file that cannot be built, still serving the settings it had', async () => {
+    const { server, headers } = await start({
+      onReload: () => {
+        throw new GhostError('config', 'config.json is not valid JSON');
+      },
+    });
+
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/settings/reload',
+      headers,
+    });
+
+    // 500 with the operator's own message, not the opaque one: a `GhostError`
+    // is written for whoever has to fix the file.
+    expect(response.statusCode).toBe(500);
+    expect(response.json().error.message).toMatch(/not valid JSON/);
+
+    // The rebuild failed, so the server is still on what it was serving — which
+    // is the difference between a reload and a restart.
+    const settings = await server.app.inject({ method: 'GET', url: '/api/settings', headers });
+    expect(settings.statusCode).toBe(200);
   });
 });
 

@@ -7,8 +7,14 @@
  * than a button that opens the real thing.
  *
  * The header carries the wordmark and then, in the space a hosted product would
- * spend on navigation, what the agent is doing: the resolved model, the socket's
- * state, and the theme control.
+ * spend on navigation, what the agent is doing: the socket's state, unread
+ * notifications, and the theme control.
+ *
+ * It used to carry the resolved provider and model too. That is already on
+ * screen where it belongs — the welcome card names them before the first
+ * message, and the turn inspector names the ones a given answer actually ran
+ * on. A header copy of the same pair is a second place to read it and a second
+ * place for it to go stale.
  *
  * The WebSocket hangs here, and here specifically: this is the router's root
  * component, so it is the only one that survives every navigation. A socket
@@ -16,17 +22,24 @@
  * which would drop the turn the user went to Settings to reconfigure.
  */
 
-import { useQuery } from '@tanstack/react-query';
 import { useSearch } from '@tanstack/react-router';
-import { Menu } from 'lucide-react';
+import { Menu, RotateCw } from 'lucide-react';
 import { useState, type JSX, type ReactNode } from 'react';
 
 import { api } from '@/lib/api.js';
-import { queryKeys } from '@/lib/query.js';
 import { useTurnStore } from '@/state/turn.js';
 import { useConnection } from '@/chat/use-connection.js';
 import { Button } from '@/components/ui/button.js';
+import { toast } from '@/components/ui/toast.js';
 import { Dialog, DialogContent, DialogHeading, DialogTrigger } from '@/components/ui/dialog.js';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu.js';
 import { NotificationBell } from '@/notifications/notification-bell.js';
 import { ThemeSwitcher } from '@/components/theme-switcher.js';
 import { Wordmark } from '@/components/wordmark.js';
@@ -63,11 +76,6 @@ function Header({
   readonly drawerOpen: boolean;
   readonly onOpenDrawer: (open: boolean) => void;
 }): JSX.Element {
-  const status = useQuery({
-    queryKey: queryKeys.status,
-    queryFn: ({ signal }) => api.status(signal),
-  });
-
   const connection = useTurnStore((state) => state.connection);
   // The header, not the chat route: the inspector measures the session the
   // socket is on, and that outlives a trip to Settings and back.
@@ -92,17 +100,6 @@ function Header({
 
       <Wordmark className="app-header__brand" />
 
-      {status.isSuccess && (
-        <span className="app-header__agent truncate">
-          {/* The separator belongs to the pair, not to the provider: an
-              unconfigured install has an endpoint and no model, and
-              "ollama · " reads as a value that failed to load. */}
-          {status.data.configured
-            ? `${status.data.provider} · ${status.data.model}`
-            : 'no model configured'}
-        </span>
-      )}
-
       <div className="spacer" />
 
       <ConnectionBadge connection={connection} />
@@ -120,7 +117,34 @@ const CONNECTION_LABELS = {
 } as const;
 
 /**
- * A dot and a word, not a filled pill.
+ * Both halves of a reload: the server's settings, then the page.
+ *
+ * The server first, and the page only if it answered. A tab that reloaded
+ * itself and came back on the same stale config would look like the button did
+ * nothing — and the reason it did nothing (a `config.json` that no longer
+ * parses) would have been on screen for the length of a navigation. So a
+ * failure keeps the page and says what happened; the operator can fix the file
+ * and press again.
+ *
+ * The page reload is not redundant once the server has rebuilt. Query has a
+ * cache, the transcript has a store, and the built assets may be older than the
+ * ones on disk — a navigation is the one thing that clears all three.
+ */
+async function reloadApp(): Promise<void> {
+  try {
+    await api.reloadSettings();
+  } catch (error) {
+    toast.error(
+      'Could not reload',
+      error instanceof Error ? error.message : 'The server did not answer.',
+    );
+    return;
+  }
+  globalThis.location.reload();
+}
+
+/**
+ * A dot and a word, not a filled pill — and the menu they hang off.
  *
  * It was a `warning`-toned badge, and on a screen with one accent that made the
  * loudest element in the header a *transient* one: a socket reconnecting for
@@ -129,19 +153,53 @@ const CONNECTION_LABELS = {
  * for, not to compete when it is not. The dot carries the colour, which is as
  * much colour as a four-state indicator needs.
  *
- * Live-region, because it is the one piece of the header that changes without
- * anyone acting: a socket that dropped has to announce itself to a user who is
- * not looking at the top-right corner.
+ * Reload lives here rather than beside the theme control because this is where
+ * someone already is when they want it: the reasons to reload — a socket wedged
+ * in `reconnecting`, a config edited in an editor, a build that changed under a
+ * tab left open for a week — are all read off this indicator, or read as its
+ * absence of change. It is the server's settings and then the page, in that
+ * order; `reloadApp` above says why.
+ *
+ * The live region stays on the wrapper rather than moving to the trigger: this
+ * is the one piece of the header that changes without anyone acting, so a
+ * socket that dropped has to announce itself to a user who is not looking at
+ * the top-right corner — and a name that changes under an *open* menu is the
+ * one that must not be the button's own accessible name.
  */
 function ConnectionBadge({
   connection,
 }: {
   readonly connection: keyof typeof CONNECTION_LABELS;
 }): JSX.Element {
+  const label = CONNECTION_LABELS[connection];
+
   return (
     <span role="status" aria-live="polite" className="conn" data-connection={connection}>
-      <span className="conn__dot" aria-hidden="true" />
-      <span className="conn__label">{CONNECTION_LABELS[connection]}</span>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" className="conn__trigger">
+            <span className="conn__dot" aria-hidden="true" />
+            {/* Never `display: none`, even where the word is not drawn — see
+                `shell.css`. It is the button's accessible name. */}
+            <span className="conn__label">{label}</span>
+          </Button>
+        </DropdownMenuTrigger>
+
+        <DropdownMenuContent align="end" className="floating--menu">
+          {/* The state in words, for the narrow screens that draw the dot
+              alone and for anyone who cannot tell green from amber. */}
+          <DropdownMenuLabel>{label}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onSelect={() => {
+              void reloadApp();
+            }}
+          >
+            <RotateCw />
+            Reload app
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </span>
   );
 }

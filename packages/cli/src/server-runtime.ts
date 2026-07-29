@@ -167,6 +167,19 @@ export function createServerRuntime(
       return saveConfig(runtime.file, merged);
     },
 
+    reload: (): Config => {
+      const next = runtime.reload();
+      // The file is the source here, so there is nothing to write back — and
+      // writing would turn a reload into a save, which is how a config edited
+      // by hand gets reformatted by the button that was meant to read it.
+      //
+      // The catalogue goes, though: a reload is how an operator picks up an
+      // endpoint that moved or a model they have just pulled, and serving a
+      // list fetched before the reload would answer with what they changed.
+      cached = undefined;
+      return next;
+    },
+
     credentialsPresent: (): Readonly<Record<string, boolean>> => {
       const stored = openIfUseful(false);
       const present: Record<string, boolean> = {};

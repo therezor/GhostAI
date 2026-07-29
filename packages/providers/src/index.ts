@@ -74,6 +74,7 @@ export {
   toProviderError,
   type ProviderErrorOptions,
   type ProviderErrorReason,
+  type TransportContext,
   type WireErrorBody,
 } from './errors.js';
 

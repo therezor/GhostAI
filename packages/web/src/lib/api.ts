@@ -292,6 +292,18 @@ export const api = {
   patchSettings: (patch: ConfigPatch): Promise<SettingsResponse> =>
     request('/api/settings', SettingsResponseSchema, { method: 'PATCH', body: patch }),
 
+  /**
+   * Makes the server re-read `config.json` and rebuild what depends on it.
+   *
+   * Not a restart: the process, the socket and any turn already running all
+   * survive. It is for the changes a running server cannot see — a config
+   * edited by hand, a plugin dropped in beside it — and it answers with the
+   * settings it is now serving, so a caller can tell a reload that changed
+   * something from one that changed nothing.
+   */
+  reloadSettings: (): Promise<SettingsResponse> =>
+    request('/api/settings/reload', SettingsResponseSchema, { method: 'POST' }),
+
   /** Write-only. `value: null` clears the entry; nothing reads one back. */
   setCredential: (body: SetCredentialRequest): Promise<void> =>
     requestVoid('/api/settings/credentials', { method: 'PUT', body }),

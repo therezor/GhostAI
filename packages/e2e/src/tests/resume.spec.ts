@@ -41,6 +41,35 @@ test('a reload rebuilds an in-flight turn from the replay buffer', async ({ app 
   await expect(app.getByRole('button', { name: 'Send' })).toBeVisible();
 });
 
+/**
+ * The reload in the status menu, which is two reloads: the server's settings
+ * and then the page.
+ *
+ * Here rather than in a component test because the join is the part that can
+ * break — `api.reloadSettings()` names a URL, the manifest names a URL, and
+ * nothing but a real request compares them. A stub answers whatever it is
+ * asked for.
+ *
+ * What is asserted is durable on both sides: the response the server actually
+ * sent, and an app that is usable after the navigation. "Reloading" is not a
+ * state this waits for — it lasts exactly as long as one fetch.
+ */
+test('reloads the server from the status indicator, then the page', async ({ app }) => {
+  const reloaded = app.waitForResponse((response) =>
+    response.url().endsWith('/api/settings/reload'),
+  );
+
+  await app.getByRole('button', { name: /Connected|Connecting|Reconnecting|Offline/ }).click();
+  await app.getByRole('menuitem', { name: 'Reload app' }).click();
+
+  expect((await reloaded).status()).toBe(200);
+
+  // The page came back and the socket is up again, which is what makes the
+  // press useful rather than just eventful.
+  await expect(app.getByRole('textbox', { name: 'Message' })).toBeVisible();
+  await expect(app.getByRole('status')).toHaveText('Connected');
+});
+
 test.describe('a completed conversation', () => {
   test.use({
     harnessOptions: {

@@ -211,6 +211,24 @@ export interface GhostRuntime {
    * runtime exactly as it was, still serving turns.
    */
   reconfigure(patch: ConfigPatch): Config;
+  /**
+   * Re-reads `config.json` and rebuilds everything derived from it.
+   *
+   * The counterpart to `reconfigure`, and the difference is where the settings
+   * come from: a patch is what a client just sent, and this is what the file
+   * says now. It is for the edits a running server cannot see — a config
+   * hand-edited in an editor, a plugin dropped into the directory, an MCP
+   * server whose command changed — which otherwise wait for a restart.
+   *
+   * The whole file, not a merge over what is in memory. A settings save that
+   * was rolled back by hand has to actually come back, and a merge would keep
+   * the value that is no longer written anywhere.
+   *
+   * Same failure contract as `reconfigure`: a file that cannot be built throws
+   * and changes nothing, leaving the runtime serving what it was already
+   * serving. A turn already running keeps the loop it started on.
+   */
+  reload(): Config;
   close(): void;
 }
 
@@ -429,6 +447,19 @@ class Runtime implements GhostRuntime {
     const next = mergeConfigPatch(this.#current.config, patch);
     this.#current = this.#build(next, this.#current);
     return next;
+  }
+
+  reload(): Config {
+    // The constructor's own arguments, so a runtime built against a home or a
+    // workspace override re-reads the same file it was built from rather than
+    // whichever one the environment happens to name now.
+    const loaded = loadConfig({
+      ...(this.#options.home === undefined ? {} : { root: this.#options.home }),
+      ...(this.#options.workspace === undefined ? {} : { workspace: this.#options.workspace }),
+      env: this.#env,
+    });
+    this.#current = this.#build(loaded.config, this.#current);
+    return loaded.config;
   }
 
   close(): void {

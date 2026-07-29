@@ -211,8 +211,8 @@ export function AgentsRoute(): JSX.Element {
 
       <div className="cluster list-toolbar">
         <p className="page__note">
-          Each has its own prompt, model and permissions, and its own memory. They share the working
-          folder, and inherit from the default unless they say otherwise.
+          Each has its own prompt, model, permissions and memory, and inherits from the default
+          unless it says otherwise.
         </p>
         <span className="spacer" />
         <SearchFilter value={filter} label="Filter agents by name" onValueChange={setFilter} />

@@ -288,6 +288,12 @@ function harnessRuntime(runtime: GhostRuntime, configFile: string): ServerRuntim
     applySettings: (patch: ConfigPatch): Config =>
       saveConfig(configFile, runtime.reconfigure(patch)),
 
+    // No write back, exactly as the real adapter does not: the file is the
+    // source here, and saving what was just read would turn a reload into a
+    // save. It re-reads `configFile`, because that is the config the harness
+    // built this runtime's `home` around.
+    reload: (): Config => runtime.reload(),
+
     credentialsPresent: (): Readonly<Record<string, boolean>> => {
       const present: Record<string, boolean> = {};
       for (const key of credentials.keys()) {

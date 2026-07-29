@@ -46,11 +46,22 @@ export interface FakeRuntimeOptions {
   readonly systemPrompt?: string;
   /** Injected where a test needs two rows to carry different timestamps. */
   readonly clock?: Clock;
+  /**
+   * Stands in for the config file a reload re-reads.
+   *
+   * There is no file here, so a test that wants a reload to *change* something
+   * — or to fail the way an unbuildable config does — says so with this.
+   * Without it a reload returns what is already loaded, which is what reading
+   * an unchanged file does.
+   */
+  readonly onReload?: () => Config;
 }
 
 export interface FakeRuntime extends ServerRuntime {
   /** Every patch this runtime was asked to apply, in order. */
   readonly patches: ConfigPatch[];
+  /** What each `reload()` produced, in order. Empty until one is asked for. */
+  readonly reloads: Config[];
   /** Every credential write, with the value it was handed. */
   readonly credentialWrites: { namespace: string; key: string; value: string | null }[];
 }
@@ -85,6 +96,7 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
   const jail = jailFor(DEFAULT_WORKSPACE_ID);
   const workspaces = new WorkspaceStore({ database: options.database, paths });
   const patches: ConfigPatch[] = [];
+  const reloads: Config[] = [];
   const credentialWrites: { namespace: string; key: string; value: string | null }[] = [];
 
   let config = options.config ?? ConfigSchema.parse({});
@@ -127,12 +139,20 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
 
   return {
     patches,
+    reloads,
     credentialWrites,
     workspaces,
     config: () => config,
     applySettings: (patch) => {
       patches.push(patch);
       config = ConfigSchema.parse(merge(config, patch));
+      return config;
+    },
+    reload: () => {
+      // Assigned before it is recorded: a hook that throws is a file that could
+      // not be built, and that leaves the runtime on what it was serving.
+      config = options.onReload?.() ?? config;
+      reloads.push(config);
       return config;
     },
     credentialsPresent: () => credentials,
