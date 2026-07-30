@@ -5,8 +5,8 @@ import {
   AgentEntrySchema,
   ConfigPatchSchema,
   ConfigSchema,
+  DEFAULT_AGENT_TOOLS,
   McpServerConfigSchema,
-  ToolApprovalsConfigSchema,
   isLoopbackHost,
 } from './config.js';
 
@@ -20,7 +20,7 @@ describe('ConfigSchema', () => {
     expect(config.server.port).toBe(3000);
     expect(config.server.auth.enabled).toBe(true);
     expect(config.tools.exec.enable).toBe(true);
-    expect(config.tools.approvals.exec).toBe('ask');
+    expect(config.tools.approvalTimeoutMs).toBe(5 * 60 * 1000);
     expect(config.tools.web.search.provider).toBe('brave');
     expect(config.scheduler.heartbeat.file).toBe('TASK.md');
     expect(config.rag.rrfK).toBe(60);
@@ -106,19 +106,21 @@ describe('ConfigSchema', () => {
   });
 });
 
-describe('ToolApprovalsConfigSchema', () => {
-  it('asks before exec and network, allows reads and jailed writes', () => {
-    const approvals = ToolApprovalsConfigSchema.parse({});
-    expect(approvals).toMatchObject({
-      safe: 'allow',
-      write: 'allow',
+describe('DEFAULT_AGENT_TOOLS', () => {
+  it('asks before exec and allows reads and jailed writes', () => {
+    expect(DEFAULT_AGENT_TOOLS).toMatchObject({
+      read_file: 'allow',
+      list_dir: 'allow',
+      write_file: 'allow',
+      edit_file: 'allow',
       exec: 'ask',
-      network: 'ask',
     });
   });
 
-  it('rejects an unknown policy', () => {
-    expect(ToolApprovalsConfigSchema.safeParse({ exec: 'maybe' }).success).toBe(false);
+  it('cannot be mutated by whoever seeds an agent from it', () => {
+    // Spread into every new entry, so a caller that pushed into it would change
+    // what the *next* agent is created with.
+    expect(Object.isFrozen(DEFAULT_AGENT_TOOLS)).toBe(true);
   });
 });
 
@@ -165,7 +167,7 @@ describe('AgentEntrySchema', () => {
     expect(agent.label).toBe('');
     expect(agent.systemPrompt).toBe('');
     expect(agent.enabled).toBe(true);
-    expect(agent.tools).toEqual({ allow: [], deny: [] });
+    expect(agent.tools).toEqual(DEFAULT_AGENT_TOOLS);
     expect(agent.toolbox).toEqual({
       name: '',
       network: { mode: 'none', allow: [] },
@@ -185,16 +187,31 @@ describe('AgentEntrySchema', () => {
       label: 'Code Reviewer',
       model: 'claude-opus-5',
       temperature: 0,
-      tools: { deny: ['exec'] },
-      approvals: { exec: 'deny' },
+      tools: { read_file: 'allow', exec: 'deny' },
     });
 
     expect(agent.model).toBe('claude-opus-5');
     expect(agent.temperature).toBe(0);
-    expect(agent.tools.deny).toEqual(['exec']);
-    expect(agent.approvals?.exec).toBe('deny');
-    // A partial approvals override must not invent the bands it did not name.
-    expect(agent.approvals).not.toHaveProperty('write');
+    expect(agent.tools).toEqual({ read_file: 'allow', exec: 'deny' });
+  });
+
+  it('seeds the built-in tools when an entry names none', () => {
+    expect(AgentEntrySchema.parse({}).tools).toEqual(DEFAULT_AGENT_TOOLS);
+  });
+
+  it('replaces the seed rather than merging into it', () => {
+    // The distinction the whole model rests on: an entry naming one tool has
+    // one tool, or switching a seeded tool off would be inexpressible.
+    const agent = AgentEntrySchema.parse({ tools: { read_file: 'allow' } });
+    expect(agent.tools).toEqual({ read_file: 'allow' });
+  });
+
+  it('accepts an empty map as "nothing enabled"', () => {
+    expect(AgentEntrySchema.parse({ tools: {} }).tools).toEqual({});
+  });
+
+  it('rejects an unknown permission', () => {
+    expect(AgentEntrySchema.safeParse({ tools: { exec: 'maybe' } }).success).toBe(false);
   });
 
   it('still validates an inherited field it is given', () => {
@@ -261,9 +278,9 @@ describe('ConfigPatchSchema', () => {
 
   it('still validates the fields it is given', () => {
     expect(ConfigPatchSchema.safeParse({ server: { port: -1 } }).success).toBe(false);
-    expect(ConfigPatchSchema.safeParse({ tools: { approvals: { exec: 'nope' } } }).success).toBe(
-      false,
-    );
+    expect(
+      ConfigPatchSchema.safeParse({ agents: { list: { a: { tools: { exec: 'nope' } } } } }).success,
+    ).toBe(false);
   });
 });
 

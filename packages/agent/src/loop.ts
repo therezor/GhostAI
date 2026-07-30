@@ -33,10 +33,12 @@
  *    tool without writing a result would make the *next* turn fail on history
  *    the user cannot see — the failure surfaces long after the Ctrl-C that
  *    caused it. A *denied* call is the same case: no execution, still a result.
- *  - **Approval is checked between the `tool.call` event and execution**, which
- *    is the only place it can be checked once for every transport. What the
- *    loop decides is whether to ask; what the answer is, and how long it holds,
- *    belong to the gate. See `approval.ts`.
+ *  - **Permission is checked between the `tool.call` event and execution**,
+ *    which is the only place it can be checked once for every transport. The
+ *    answer comes from the scope — `tools.permissionFor(name)` — because the
+ *    scope is what knows whether a name resolved to a built-in or to a program
+ *    in this agent's toolbox. What the loop decides is whether to ask; what the
+ *    answer is, and how long it holds, belong to the gate. See `approval.ts`.
  *
  * The signal threads from the caller through the provider request, tool
  * execution and any child process. There is one cancellation mechanism, and
@@ -336,13 +338,12 @@ export interface AgentLoopOptions {
   readonly agent?: LoopAgent;
   readonly contributors?: readonly ContextContributor[];
   /**
-   * Who to ask before a tool whose risk band is set to `ask` runs.
+   * Who to ask before a tool whose permission is `ask` runs.
    *
-   * Absent means nobody is there to ask, and an `ask` policy then runs the tool
-   * — today's behaviour, and what keeps a terminal session unchanged. A `deny`
-   * policy is enforced with or without a gate. Any transport that exposes this
-   * agent to something other than its operator's own keyboard should install
-   * one.
+   * Absent means nobody is there to ask, and `ask` then runs the tool — today's
+   * behaviour, and what keeps a terminal session unchanged. `deny` is enforced
+   * with or without a gate. Any transport that exposes this agent to something
+   * other than its operator's own keyboard should install one.
    */
   readonly approvals?: ApprovalGate;
   readonly steering?: SteeringQueue;
@@ -1063,12 +1064,15 @@ export class AgentLoop {
     risk: ToolRisk,
     turn: { sessionKey: string; turnId: string; signal: AbortSignal },
   ): AsyncGenerator<AgentEvent, ToolExecution | undefined> {
-    const approvals = this.#toolsConfig.approvals;
-    const policy = approvals[risk];
-    if (policy === 'allow') return undefined;
+    const permission = this.#tools.permissionFor(call.name);
+    if (permission === 'allow') return undefined;
 
     let denial: DenialReason;
-    if (policy === 'deny') {
+    if (permission === 'deny') {
+      // Belt and braces. A denied tool is not in the definitions the model was
+      // sent and `execute` would report it as `not_found`, so reaching here
+      // means something advertised a tool this scope does not permit — which is
+      // exactly the case an enforcement point exists to catch.
       denial = 'policy';
     } else {
       const gate = this.#approvals;
@@ -1077,7 +1081,8 @@ export class AgentLoop {
       // for the command *is* the approval.
       if (gate === undefined) return undefined;
 
-      const expiresAtMs = this.#clock.now() + approvals.timeoutMs;
+      const timeoutMs = this.#toolsConfig.approvalTimeoutMs;
+      const expiresAtMs = this.#clock.now() + timeoutMs;
       const request: ApprovalRequest = {
         sessionKey: turn.sessionKey,
         agentId: this.#agentId,
@@ -1100,14 +1105,21 @@ export class AgentLoop {
         expiresAtMs,
       };
 
-      const outcome = await this.#decide(gate, request, approvals.timeoutMs);
+      const outcome = await this.#decide(gate, request, timeoutMs);
       if (outcome === 'approved') return undefined;
       if (outcome === 'aborted') return cancelledExecution(call.name);
       denial = outcome;
     }
 
     this.#logger.warn(
-      { sessionKey: turn.sessionKey, turnId: turn.turnId, tool: call.name, risk, policy, denial },
+      {
+        sessionKey: turn.sessionKey,
+        turnId: turn.turnId,
+        tool: call.name,
+        risk,
+        permission,
+        denial,
+      },
       'tool call denied',
     );
     yield {

@@ -13,7 +13,7 @@ import { z } from 'zod';
 
 import { ConfigSchema } from './config.js';
 import { StopReasonSchema, StoredMessageSchema, UsageSchema } from './messages.js';
-import { ToolDefinitionSchema } from './tools.js';
+import { ToolDefinitionSchema, ToolPermissionSchema } from './tools.js';
 import { AutomationJobSchema, AutomationRunSchema } from './automation.js';
 
 // ---------------------------------------------------------------------------
@@ -413,13 +413,36 @@ export type ToolListResponse = z.infer<typeof ToolListResponseSchema>;
  * toolbox whose manifest changed after approval reports `approved: false` with a
  * `problem`, because from the runtime's point of view those are the same state.
  */
+/**
+ * One program in an installed toolbox.
+ *
+ * Three fields rather than a bare name, because the agent editor renders a
+ * permission row per program: it needs something to label the row with (`use`)
+ * and the manifest's own answer to show until the agent overrides it. Fetching
+ * that separately would mean a second request per toolbox to render one list.
+ */
+export const ToolboxToolSummarySchema = z.object({
+  name: z.string(),
+  use: z.string(),
+  /** The manifest's default. An agent's `tools` map wins over it. */
+  permission: ToolPermissionSchema,
+});
+export type ToolboxToolSummary = z.infer<typeof ToolboxToolSummarySchema>;
+
 export const ToolboxSummarySchema = z.object({
   name: z.string(),
   label: z.string(),
   version: z.string(),
   image: z.string(),
   /** What is in the box, for the picker to show without a second request. */
-  tools: z.array(z.string()),
+  tools: z.array(ToolboxToolSummarySchema),
+  /**
+   * Whether those programs are callables the model sees by name, or only a
+   * prompt section. The editor renders permission rows for them only when they
+   * are real tools — a `prompt` toolbox is reached through `exec`, and its
+   * permission is `exec`'s.
+   */
+  exposesTools: z.boolean(),
   /** The most this toolbox ever permits; an agent may ask for less. */
   maxNetwork: z.enum(['none', 'allowlist', 'open']),
   capsAdded: z.array(z.string()),

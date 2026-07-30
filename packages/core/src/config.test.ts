@@ -33,7 +33,7 @@ describe('parseConfig', () => {
     const config = parseConfig('{}', 'config.json');
     expect(config.agents.defaults.provider).toBe('auto');
     expect(config.server.port).toBe(3000);
-    expect(config.tools.approvals.exec).toBe('ask');
+    expect(config.tools.approvalTimeoutMs).toBe(5 * 60 * 1000);
   });
 
   it('names the file and the syntax problem on malformed JSON', () => {

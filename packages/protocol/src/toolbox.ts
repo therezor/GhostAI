@@ -43,6 +43,8 @@
 
 import { z } from 'zod';
 
+import { ToolPermissionSchema } from './tools.js';
+
 /** How much network a toolbox is willing to permit at most. */
 export const ToolboxNetworkModeSchema = z.enum(['none', 'allowlist', 'open']);
 export type ToolboxNetworkMode = z.infer<typeof ToolboxNetworkModeSchema>;
@@ -90,6 +92,20 @@ export const ToolboxEntrySchema = z.object({
   example: z.array(z.string()).default([]),
   /** When true, a call with no arguments is refused by the schema. */
   requiresArgs: z.boolean().default(false),
+  /**
+   * What this program should be allowed to do, as the box's author sees it.
+   *
+   * A **default, not a ceiling** — unlike `network.maxMode` next door, an
+   * agent's own `tools` map overrides it in either direction. The asymmetry is
+   * deliberate: `maxMode` is a containment boundary that config must not be
+   * able to widen, while this is a suggestion about a program that is reachable
+   * through `exec` anyway. A toolbox that marked `nmap` as `ask` and could not
+   * be overridden would be a manifest edit — and therefore a re-approval —
+   * every time an operator wanted their own scanner to run unattended.
+   *
+   * `ask` by default because these are all `exec` underneath.
+   */
+  permission: ToolPermissionSchema.default('ask'),
 });
 export type ToolboxEntry = z.infer<typeof ToolboxEntrySchema>;
 

@@ -1,5 +1,10 @@
 import { isGhostError } from '@ghostai/core';
-import { ConfigSchema, type Config, type ConfigPatch } from '@ghostai/protocol';
+import {
+  ConfigSchema,
+  DEFAULT_AGENT_TOOLS,
+  type Config,
+  type ConfigPatch,
+} from '@ghostai/protocol';
 import { describe, expect, it } from 'vitest';
 
 import { hasAgent, listAgents, resolveAgent } from './agents.js';
@@ -21,7 +26,7 @@ describe('resolveAgent', () => {
     expect(agent.systemPrompt).toBe('');
     expect(agent.defaults).toEqual(base.agents.defaults);
     expect(agent.toolsConfig).toEqual(base.tools);
-    expect(agent.tools).toEqual({ allow: [], deny: [] });
+    expect(agent.tools).toEqual(DEFAULT_AGENT_TOOLS);
   });
 
   it('treats an empty id as the default, the way an unbound session does', () => {
@@ -79,17 +84,36 @@ describe('resolveAgent', () => {
     expect(resolveAgent(config, 'reviewer').defaults.workspace).toBe('/tmp/shared');
   });
 
-  it('merges approvals band by band rather than replacing the table', () => {
+  it('replaces the tool map rather than merging into the seed', () => {
+    // The one field that does not inherit per key. A merge could add a tool and
+    // change a permission but never remove one, and switching a tool off has to
+    // be expressible.
     const config = configWith({
-      agents: { list: { reviewer: { approvals: { exec: 'deny' } } } },
+      agents: { list: { reviewer: { tools: { read_file: 'allow', exec: 'deny' } } } },
     });
-    const agent = resolveAgent(config, 'reviewer');
 
-    expect(agent.toolsConfig.approvals.exec).toBe('deny');
-    // The bands the agent said nothing about keep the global policy.
-    expect(agent.toolsConfig.approvals.write).toBe(base.tools.approvals.write);
-    expect(agent.toolsConfig.approvals.network).toBe(base.tools.approvals.network);
-    expect(agent.toolsConfig.approvals.timeoutMs).toBe(base.tools.approvals.timeoutMs);
+    expect(resolveAgent(config, 'reviewer').tools).toEqual({
+      read_file: 'allow',
+      exec: 'deny',
+    });
+  });
+
+  it('seeds the built-ins for an agent that names no tools', () => {
+    const config = configWith({ agents: { list: { reviewer: {} } } });
+
+    expect(resolveAgent(config, 'reviewer').tools).toEqual(DEFAULT_AGENT_TOOLS);
+  });
+
+  it('seeds the default agent, which usually has no entry at all', () => {
+    // An agent with no tools cannot do anything, and `default` is the agent an
+    // install that configured nothing runs as.
+    expect(resolveAgent(configWith({}), undefined).tools).toEqual(DEFAULT_AGENT_TOOLS);
+  });
+
+  it('lets an agent hold no tools at all when it says so', () => {
+    const config = configWith({ agents: { list: { reviewer: { tools: {} } } } });
+
+    expect(resolveAgent(config, 'reviewer').tools).toEqual({});
   });
 
   it('merges the exec guard so one agent can hold a tighter allow-list', () => {

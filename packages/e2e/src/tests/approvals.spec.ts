@@ -1,11 +1,11 @@
 /**
  * The approval prompt, both ways.
  *
- * `exec` is in the `ask` band by default, which is what a browser-facing server
- * ships with and therefore what these tests leave alone. Both paths continue
- * into the same second model turn — approve and deny differ in what the tool
- * result says, not in whether the loop keeps going — so the assertion that
- * separates them is what the card reports, not whether an answer arrived.
+ * `exec` is seeded at `ask` on a new agent, which is what a browser-facing
+ * server ships with and therefore what these tests leave alone. Both paths
+ * continue into the same second model turn — approve and deny differ in what
+ * the tool result says, not in whether the loop keeps going — so the assertion
+ * that separates them is what the card reports, not whether an answer arrived.
  */
 
 import { expect, test } from '../fixtures.js';
@@ -63,10 +63,31 @@ test.describe('a tool that needs approval', () => {
 });
 
 // The same journey with one setting moved, which is the only honest way to
-// assert that the prompt is the *policy* speaking rather than something the
-// tool card does on its own.
+// assert that the prompt is the agent's *permission* speaking rather than
+// something the tool card does on its own.
 test.describe('with exec allowed', () => {
-  test.use({ harnessOptions: { config: { tools: { approvals: { exec: 'allow' } } } } });
+  test.use({
+    harnessOptions: {
+      config: {
+        agents: {
+          list: {
+            // The whole map, because it replaces rather than merges — an agent
+            // holding only `exec` could not read a file to answer with.
+            default: {
+              tools: {
+                read_file: 'allow',
+                list_dir: 'allow',
+                write_file: 'allow',
+                edit_file: 'allow',
+                e2e_wait: 'allow',
+                exec: 'allow',
+              },
+            },
+          },
+        },
+      },
+    },
+  });
 
   test('runs unattended', async ({ app }) => {
     await app.getByRole('textbox', { name: 'Message' }).fill('run the version command');

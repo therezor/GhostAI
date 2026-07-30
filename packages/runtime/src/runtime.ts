@@ -68,7 +68,7 @@ import {
   type GhostPaths,
   type Logger,
 } from '@ghostai/core';
-import type { Config, ConfigPatch } from '@ghostai/protocol';
+import type { Config, ConfigPatch, ToolPermissions } from '@ghostai/protocol';
 import {
   PROVIDERS,
   resolveConnection,
@@ -88,6 +88,7 @@ import {
 import {
   ToolRegistry,
   registerBuiltins,
+  toolboxPermissions,
   toolboxTools,
   withToolboxTools,
   type AnyTool,
@@ -688,11 +689,24 @@ class Runtime implements GhostRuntime {
     built: {
       readonly prompts: ReadonlyMap<string, PromptToolbox>;
       readonly exposed: ReadonlyMap<string, readonly AnyTool[]>;
+      readonly toolboxPerms: ReadonlyMap<string, ToolPermissions>;
     },
   ): AgentLoop | null {
     const agent = resolveAgent(config, agentId);
     const { provider, model } = this.#resolveProvider(config, agent, paths);
     if (provider === null) return null;
+
+    // One map, built once, used for both halves of the scope below — so a name
+    // cannot be enabled in the definitions the model sees and refused by the
+    // gate, or the reverse. The toolbox's manifest supplies defaults for its own
+    // programs and the agent's own map wins over them: a manifest is the box
+    // author's opinion about a program that `exec` can reach anyway, not a
+    // containment boundary. (`toolbox.network.maxMode` is the boundary, and it
+    // is intersected rather than overridden — see `assertNetworkWithinCeiling`.)
+    const permissions: ToolPermissions = {
+      ...built.toolboxPerms.get(agent.id),
+      ...agent.tools,
+    };
 
     return new AgentLoop({
       provider,
@@ -701,7 +715,11 @@ class Runtime implements GhostRuntime {
       // The overlay, not the registry: a toolbox's programs are this agent's
       // alone, so they are laid over its view rather than registered globally
       // where two toolboxes holding `curl` would collide.
-      tools: withToolboxTools(this.tools.select(agent.tools), built.exposed.get(agent.id) ?? []),
+      tools: withToolboxTools(
+        this.tools.select(permissions),
+        built.exposed.get(agent.id) ?? [],
+        permissions,
+      ),
       store: this.store,
       jails,
       toolbox: agent.toolbox,
@@ -739,9 +757,12 @@ class Runtime implements GhostRuntime {
     pool: ToolboxPool | null;
     prompts: ReadonlyMap<string, PromptToolbox>;
     exposed: ReadonlyMap<string, readonly AnyTool[]>;
+    toolboxPerms: ReadonlyMap<string, ToolPermissions>;
   } {
     const boxed = agents.filter((agent) => agent.toolbox.name !== '');
-    if (boxed.length === 0) return { pool: null, prompts: new Map(), exposed: new Map() };
+    if (boxed.length === 0) {
+      return { pool: null, prompts: new Map(), exposed: new Map(), toolboxPerms: new Map() };
+    }
 
     const toolboxes = new ToolboxStore({
       database: this.store.database,
@@ -755,10 +776,12 @@ class Runtime implements GhostRuntime {
     // sections fall out of the same pass, which is why this is not two walks.
     const prompts = new Map<string, PromptToolbox>();
     const exposed = new Map<string, readonly AnyTool[]>();
+    const toolboxPerms = new Map<string, ToolPermissions>();
     for (const agent of boxed) {
       const approved = toolboxes.require(agent.toolbox.name);
       assertNetworkWithinCeiling(approved.toolbox, agent.toolbox.network, agent.id);
       exposed.set(agent.id, toolboxTools(approved.toolbox));
+      toolboxPerms.set(agent.id, toolboxPermissions(approved.toolbox));
       prompts.set(agent.id, {
         name: approved.toolbox.name,
         workdir: approved.toolbox.workdir,
@@ -790,7 +813,7 @@ class Runtime implements GhostRuntime {
       logger: this.#logger,
     });
 
-    return { pool, prompts, exposed };
+    return { pool, prompts, exposed, toolboxPerms };
   }
 
   /**

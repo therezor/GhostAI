@@ -306,38 +306,24 @@ describe('the providers panel', () => {
 });
 
 describe('the tools panel', () => {
-  it('shows the matrix and what it does to each registered tool', async () => {
+  it('is install-wide settings only — no tool list, no permissions', async () => {
+    // Both were here when this screen decided what happened to a tool. The
+    // matrix could not say which agent it bound, and the inventory below it was
+    // a list you could read but not act on. Both live on the agent now.
     mount('/settings?panel=tools');
 
-    expect(await screen.findByRole('combobox', { name: 'Execute policy' })).toHaveTextContent(
-      'Ask first',
-    );
+    await screen.findByLabelText('Approval timeout (seconds)');
 
-    const list = screen.getByRole('region', { name: 'Registered tools' });
-    const rows = await within(list).findAllByRole('listitem');
-    const textOf = (prefix: string): string =>
-      rows.find((row) => row.textContent.startsWith(prefix))?.textContent ?? '';
-
-    // `exec: ask` in the matrix, so the exec tool reads "Ask first" — which is
-    // the connection the matrix on its own cannot make.
-    expect(textOf('exec')).toContain('Ask first');
-    expect(textOf('read_file')).toContain('Run it');
+    expect(screen.queryByRole('region', { name: 'Registered tools' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: /policy/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Ask first' })).not.toBeInTheDocument();
   });
 
-  it('saves a changed policy as a tools patch', async () => {
-    const { user, calls } = mount('/settings?panel=tools');
+  it('says how the install-wide exec switch differs from a per-agent one', async () => {
+    mount('/settings?panel=tools');
 
-    await user.click(await screen.findByRole('combobox', { name: 'Execute policy' }));
-    await user.click(await screen.findByRole('option', { name: 'Refuse' }));
-    await user.click(screen.getByRole('button', { name: 'Save changes' }));
-
-    await waitFor(() => {
-      expect(patchesOf(calls)).toHaveLength(1);
-    });
-
-    const [patch] = patchesOf(calls);
-    expect(patch?.tools?.approvals?.exec).toBe('deny');
-    expect(Object.keys(patch ?? {})).toEqual(['tools']);
+    expect(await screen.findByLabelText('Let agents run commands')).toBeInTheDocument();
+    expect(screen.getByText(/removes exec from every agent/)).toBeInTheDocument();
   });
 
   it('refuses an approval timeout of zero', async () => {

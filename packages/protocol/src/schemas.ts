@@ -39,7 +39,8 @@ export const PROTOCOL_SCHEMAS = {
 
   // tools
   ToolRisk: tools.ToolRiskSchema,
-  ToolApprovalPolicy: tools.ToolApprovalPolicySchema,
+  ToolPermission: tools.ToolPermissionSchema,
+  ToolPermissions: tools.ToolPermissionsSchema,
   ToolSource: tools.ToolSourceSchema,
   ToolAnnotations: tools.ToolAnnotationsSchema,
   ToolDefinition: tools.ToolDefinitionSchema,
@@ -59,9 +60,7 @@ export const PROTOCOL_SCHEMAS = {
   McpOAuthConfig: config.McpOAuthConfigSchema,
   McpTransport: config.McpTransportSchema,
   McpServerConfig: config.McpServerConfigSchema,
-  ToolApprovalsConfig: config.ToolApprovalsConfigSchema,
   ToolsConfig: config.ToolsConfigSchema,
-  AgentToolsSelection: config.AgentToolsSelectionSchema,
   AgentToolboxNetwork: config.AgentToolboxNetworkSchema,
   AgentToolbox: config.AgentToolboxSchema,
   AgentMemoryScope: config.AgentMemoryScopeSchema,
@@ -171,6 +170,7 @@ export const PROTOCOL_SCHEMAS = {
   AgentSummary: rest.AgentSummarySchema,
   AgentListResponse: rest.AgentListResponseSchema,
   ToolListResponse: rest.ToolListResponseSchema,
+  ToolboxToolSummary: rest.ToolboxToolSummarySchema,
   ToolboxSummary: rest.ToolboxSummarySchema,
   ToolboxListResponse: rest.ToolboxListResponseSchema,
   FileEntry: rest.FileEntrySchema,

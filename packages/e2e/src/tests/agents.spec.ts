@@ -116,7 +116,7 @@ test.describe('agents', () => {
           list: {
             default: {
               systemPrompt: 'House style: be terse.',
-              tools: { allow: [], deny: ['exec'] },
+              tools: { read_file: 'allow', exec: 'deny' },
             },
           },
         },
@@ -139,7 +139,7 @@ test.describe('agents', () => {
             agents: {
               list: Record<
                 string,
-                { systemPrompt: string; tools: { deny: string[] }; maxTokens?: number }
+                { systemPrompt: string; tools: Record<string, string>; maxTokens?: number }
               >;
             };
           };
@@ -148,7 +148,7 @@ test.describe('agents', () => {
       })
       .toMatchObject({
         systemPrompt: 'House style: be terse.',
-        tools: { deny: ['exec'] },
+        tools: { read_file: 'allow', exec: 'deny' },
         maxTokens: 1234,
       });
   });
@@ -184,7 +184,13 @@ test.describe('agents', () => {
     harness,
   }) => {
     await app.request.patch(`${harness.url}/api/settings`, {
-      data: { agents: { list: { reviewer: { label: 'Reviewer', tools: { deny: ['exec'] } } } } },
+      data: {
+        agents: {
+          list: {
+            reviewer: { label: 'Reviewer', tools: { read_file: 'allow', exec: 'deny' } },
+          },
+        },
+      },
     });
 
     await app.goto(`${harness.url}/agents`);
@@ -198,12 +204,12 @@ test.describe('agents', () => {
         const response = await app.request.get(`${harness.url}/api/settings`);
         const body = (await response.json()) as {
           config: {
-            agents: { list: Record<string, { enabled: boolean; tools: { deny: string[] } }> };
+            agents: { list: Record<string, { enabled: boolean; tools: Record<string, string> }> };
           };
         };
         return body.config.agents.list.reviewer;
       })
-      .toMatchObject({ enabled: false, tools: { deny: ['exec'] } });
+      .toMatchObject({ enabled: false, tools: { read_file: 'allow', exec: 'deny' } });
 
     const agents = await app.request.get(`${harness.url}/api/agents`);
     const listed = (await agents.json()) as { agents: { id: string }[] };
@@ -262,7 +268,7 @@ test.describe('agents', () => {
             reviewer: {
               label: 'Reviewer',
               systemPrompt: '# {{name}}\n\nOnly ever read. Never write.',
-              tools: { allow: [], deny: ['exec'] },
+              tools: { read_file: 'allow', exec: 'deny' },
             },
           },
         },
@@ -314,7 +320,7 @@ test.describe('agents', () => {
       data: {
         agents: {
           list: {
-            reader: { label: 'Reader', tools: { allow: ['read_file'], deny: ['exec'] } },
+            reader: { label: 'Reader', tools: { read_file: 'allow' } },
           },
         },
       },

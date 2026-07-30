@@ -14,7 +14,7 @@
  * cleared field unrepresentable, so the input fights the user as they type.
  */
 
-import type { ConfigPatch, ToolApprovalPolicy, ToolRisk } from '@ghostai/protocol';
+import type { ConfigPatch } from '@ghostai/protocol';
 import type { TFunction } from 'i18next';
 
 export interface NumberConstraint {
@@ -140,14 +140,6 @@ export function modelOptions(
 
   const unique = [...new Set(current === '' ? matching : [current, ...matching])];
   return unique.sort((a, b) => a.localeCompare(b));
-}
-
-/** Risk band → the policy that governs it. The matrix, read one cell at a time. */
-export function policyFor(
-  risk: ToolRisk,
-  approvals: Record<ToolRisk, ToolApprovalPolicy>,
-): ToolApprovalPolicy {
-  return approvals[risk];
 }
 
 /**

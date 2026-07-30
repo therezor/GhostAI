@@ -53,6 +53,7 @@ import {
   type AgentEntry,
   type ConfigPatch,
   type ReasoningEffort,
+  type ToolPermission,
 } from '@ghostai/protocol';
 
 import { msToSeconds, parseNumber, secondsToMs, type PatchResult } from '@/settings/fields.js';
@@ -220,13 +221,14 @@ export interface AgentEntryForm {
   readonly temperature: string;
   readonly reasoningEffort: string;
   readonly toolTimeoutSeconds: string;
-  /** Comma-separated tool names. Empty means "everything not denied". */
-  readonly allowTools: string;
-  readonly denyTools: string;
-  /** Risk band → policy, empty leaving the band to the global `tools.approvals`. */
-  readonly approveExec: string;
-  readonly approveNetwork: string;
-  readonly approveWrite: string;
+  /**
+   * Tool name → permission. A name absent from the map is not enabled.
+   *
+   * Held as the stored shape rather than as text, unlike the CIDR list below:
+   * this is a set of choices from a fixed vocabulary, and the editor renders one
+   * control per entry. There is nothing to parse and nothing a typo can express.
+   */
+  readonly tools: Readonly<Record<string, ToolPermission>>;
   /** A toolbox name, or empty to run commands on this machine. */
   readonly toolboxName: string;
   readonly toolboxNetworkMode: string;
@@ -234,7 +236,14 @@ export interface AgentEntryForm {
   readonly toolboxAllow: string;
 }
 
-export const APPROVAL_POLICIES: readonly string[] = ['allow', 'ask', 'deny'];
+/**
+ * The three permissions, in the order the select offers them.
+ *
+ * Widest first, because that is the order the consequences run in and a picker
+ * that reads `deny, allow, ask` makes the operator work out the ordering
+ * themselves every time they open it.
+ */
+export const TOOL_PERMISSIONS: readonly ToolPermission[] = ['allow', 'ask', 'deny'];
 
 /**
  * One agent's stored settings, with the defaults filled in where it stored none.
@@ -262,11 +271,7 @@ export function toAgentEntryForm(entry: AgentEntry, defaults: AgentDefaults): Ag
     temperature: temperature === undefined ? '' : String(temperature),
     reasoningEffort: entry.reasoningEffort ?? defaults.reasoningEffort ?? '',
     toolTimeoutSeconds: msToSeconds(toolTimeoutMs),
-    allowTools: entry.tools.allow.join(', '),
-    denyTools: entry.tools.deny.join(', '),
-    approveExec: entry.approvals?.exec ?? '',
-    approveNetwork: entry.approvals?.network ?? '',
-    approveWrite: entry.approvals?.write ?? '',
+    tools: { ...entry.tools },
     toolboxName: entry.toolbox.name,
     toolboxNetworkMode: entry.toolbox.network.mode,
     toolboxAllow: entry.toolbox.network.allow.join(', '),
@@ -278,7 +283,7 @@ export type AgentPatchResult =
   | { readonly ok: false; readonly errors: Readonly<Record<string, string>> };
 
 /** `a, b , ,c` → `['a','b','c']`. Empty entries dropped, order kept. */
-export function parseToolList(value: string): string[] {
+export function parseList(value: string): string[] {
   return value
     .split(',')
     .map((name) => name.trim())
@@ -289,18 +294,18 @@ function isReasoningEffort(value: string): value is ReasoningEffort {
   return (REASONING_EFFORTS as readonly string[]).includes(value);
 }
 
-function isPolicy(value: string): value is 'allow' | 'ask' | 'deny' {
-  return APPROVAL_POLICIES.includes(value);
+export function isToolPermission(value: string): value is ToolPermission {
+  return (TOOL_PERMISSIONS as readonly string[]).includes(value);
 }
 
 /**
  * The half of an agent that is the same whichever agent it is.
  *
- * Its prompt, its name, its tool selection, its approval bands — plus every
- * setting this screen does not render, carried straight through from the stored
- * entry. That carry-through is not defensive: `agents.list.*` is replaced
- * wholesale, so an entry rebuilt from the form alone loses its sandbox, its
- * memory scope and its exec allow-list every time the prompt is saved.
+ * Its prompt, its name, its tool permissions — plus every setting this screen
+ * does not render, carried straight through from the stored entry. That
+ * carry-through is not defensive: `agents.list.*` is replaced wholesale, so an
+ * entry rebuilt from the form alone loses its sandbox, its memory scope and its
+ * exec allow-list every time the prompt is saved.
  *
  * The model and the budget are deliberately *not* here. They differ between the
  * default agent — whose are `agents.defaults` — and every other, so they are
@@ -330,25 +335,20 @@ function ownFields(form: AgentEntryForm, entry: AgentEntry): AgentOwnFields {
     temperature: _temperature,
     reasoningEffort: _reasoningEffort,
     toolTimeoutMs: _toolTimeoutMs,
-    approvals: _approvals,
     toolbox: _toolbox,
     ...carried
   } = entry;
-
-  const approvals = {
-    ...(isPolicy(form.approveExec) ? { exec: form.approveExec } : {}),
-    ...(isPolicy(form.approveNetwork) ? { network: form.approveNetwork } : {}),
-    ...(isPolicy(form.approveWrite) ? { write: form.approveWrite } : {}),
-  };
 
   return {
     ...carried,
     label: form.label.trim(),
     systemPrompt: form.systemPrompt,
     enabled: form.enabled,
-    tools: { allow: parseToolList(form.allowTools), deny: parseToolList(form.denyTools) },
+    // Sent whole, every time. The merge replaces `agents.list.*` wholesale, so
+    // this is also the only way a tool can be removed from an agent — a patch
+    // that mentioned only what changed could never express a deletion.
+    tools: { ...form.tools },
     toolbox: toToolbox(form),
-    ...(Object.keys(approvals).length === 0 ? {} : { approvals }),
   };
 }
 
@@ -371,7 +371,7 @@ function toToolbox(form: AgentEntryForm): AgentEntry['toolbox'] {
   const mode = name === '' ? 'none' : networkMode(form.toolboxNetworkMode);
   return {
     name,
-    network: { mode, allow: mode === 'allowlist' ? parseToolList(form.toolboxAllow) : [] },
+    network: { mode, allow: mode === 'allowlist' ? parseList(form.toolboxAllow) : [] },
   };
 }
 
@@ -513,8 +513,8 @@ export function toDefaultAgentPatch(
 /**
  * A new agent, prepopulated from the one it was started from.
  *
- * Everything is copied: the prompt, the tool selection, the approvals, the
- * sandbox, the memory scope — *and* the model and the budget, which used to be
+ * Everything is copied: the prompt, the tool permissions, the sandbox, the
+ * memory scope — *and* the model and the budget, which used to be
  * left out so the new agent would keep inheriting them. It no longer inherits
  * anything, so leaving them out would produce an agent whose model the editor
  * had to describe as somebody else's.
@@ -540,7 +540,7 @@ export function toNewAgentPatch(
           label,
           enabled: true,
           systemPrompt: template.systemPrompt,
-          tools: { allow: [...template.tools.allow], deny: [...template.tools.deny] },
+          tools: { ...template.tools },
           toolbox: { ...template.toolbox },
           memory: { ...template.memory },
           provider: template.provider ?? defaults.provider,
@@ -550,7 +550,6 @@ export function toNewAgentPatch(
           toolTimeoutMs: template.toolTimeoutMs ?? defaults.toolTimeoutMs,
           ...(temperature === undefined ? {} : { temperature }),
           ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
-          ...(template.approvals === undefined ? {} : { approvals: { ...template.approvals } }),
           ...(template.exec === undefined ? {} : { exec: { ...template.exec } }),
         },
       },

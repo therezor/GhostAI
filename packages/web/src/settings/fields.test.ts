@@ -19,7 +19,6 @@ import {
   msToSeconds,
   parseList,
   parseNumber,
-  policyFor,
   secondsToMs,
 } from './fields.js';
 
@@ -118,13 +117,5 @@ describe('modelOptions', () => {
 
   it('does not list the current model twice', () => {
     expect(modelOptions(models, 'ollama', 'qwen')).toEqual(['llama3', 'qwen']);
-  });
-});
-
-describe('policyFor', () => {
-  it('reads one cell of the matrix', () => {
-    const approvals = { safe: 'allow', write: 'allow', exec: 'ask', network: 'deny' } as const;
-    expect(policyFor('exec', approvals)).toBe('ask');
-    expect(policyFor('network', approvals)).toBe('deny');
   });
 });

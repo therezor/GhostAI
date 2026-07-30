@@ -119,15 +119,20 @@ describe('mergeConfigPatch', () => {
     expect(one.agents.defaults).toEqual(base.agents.defaults);
   });
 
-  it("lifts an agent's tool restriction when the editor sends an empty selection", () => {
-    const restricted = mergeConfigPatch(base, {
-      agents: { list: { reviewer: { tools: { allow: ['read_file'], deny: ['exec'] } } } },
+  it("replaces an agent's tool map wholesale, so a tool can be removed", () => {
+    // A deep merge here would make the second save a no-op: `exec` would
+    // survive as `deny` and `write_file` would survive at `allow`, and there
+    // would be no way to express "this agent has one tool".
+    const wide = mergeConfigPatch(base, {
+      agents: {
+        list: { reviewer: { tools: { read_file: 'allow', write_file: 'allow', exec: 'deny' } } },
+      },
     });
-    const lifted = mergeConfigPatch(restricted, {
-      agents: { list: { reviewer: { tools: { allow: [], deny: [] } } } },
+    const narrowed = mergeConfigPatch(wide, {
+      agents: { list: { reviewer: { tools: { read_file: 'ask' } } } },
     });
 
-    expect(lifted.agents.list.reviewer?.tools).toEqual({ allow: [], deny: [] });
+    expect(narrowed.agents.list.reviewer?.tools).toEqual({ read_file: 'ask' });
   });
 
   it('clears an optional default on an explicit null', () => {

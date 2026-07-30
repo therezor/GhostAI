@@ -48,7 +48,7 @@ export {
   type ToolScope,
 } from './registry.js';
 
-export { isUnrestricted, selectionAllows, type ToolSelection } from './scope.js';
+export { isEnabled, permissionFor } from './scope.js';
 
 export {
   KILL_GRACE_MS,
@@ -79,7 +79,7 @@ export {
 } from './container-runner.js';
 
 export { coerceArgv } from './argv.js';
-export { toolboxTool, toolboxTools } from './toolbox-tools.js';
+export { toolboxPermissions, toolboxTool, toolboxTools } from './toolbox-tools.js';
 
 export {
   BUILTIN_TOOLS,

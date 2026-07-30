@@ -32,6 +32,7 @@ import { createHash } from 'node:crypto';
 
 import { GhostError } from '@ghostai/core';
 import {
+  BUILTIN_TOOL_NAMES,
   ToolboxSchema,
   type AgentToolboxNetwork,
   type ToolboxNetworkMode,
@@ -62,18 +63,13 @@ export const IMAGE_DIGEST_PATTERN: RegExp =
 /**
  * Tool names a toolbox entry may not take.
  *
- * Listed here rather than imported from `@ghostai/tools`, which sits *above*
- * this package: security decides what is allowed, and a dependency in that
- * direction would invert the layer graph. Short enough that a drift would be
- * caught by the conformance suite the moment a built-in is added.
+ * Re-exported from `@ghostai/protocol` rather than restated, and not imported
+ * from `@ghostai/tools` where the tools are actually defined: that package sits
+ * *above* this one, and security deciding what is allowed by asking the layer
+ * it constrains would invert the graph. `protocol` sits under both, and
+ * `packages/tools` owns the test that the list still matches `BUILTIN_TOOLS`.
  */
-export const BUILTIN_TOOL_NAMES: readonly string[] = [
-  'read_file',
-  'write_file',
-  'edit_file',
-  'list_dir',
-  'exec',
-];
+export { BUILTIN_TOOL_NAMES };
 
 /** Capabilities a toolbox may never request. See the module header. */
 export const FORBIDDEN_CAPABILITIES: readonly string[] = ['NET_ADMIN', 'SYS_ADMIN', 'SYS_MODULE'];

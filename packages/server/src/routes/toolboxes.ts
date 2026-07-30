@@ -31,7 +31,14 @@ export function toolboxRoutes(deps: RouteDeps): RouteGroup<'toolboxes.list'> {
         const listed: ToolboxSummary[] = deps.runtime.toolboxes().map((entry) => ({
           name: entry.name,
           label: entry.toolbox?.label ?? '',
-          tools: (entry.toolbox?.tools ?? []).map((tool) => tool.name),
+          tools: (entry.toolbox?.tools ?? []).map((tool) => ({
+            name: tool.name,
+            use: tool.use,
+            permission: tool.permission,
+          })),
+          // Whether those names are callables the agent editor can permission
+          // one by one, or a prompt section reached through `exec`.
+          exposesTools: entry.toolbox?.expose === 'tools',
           version: entry.toolbox?.version ?? '',
           image: entry.toolbox?.image ?? '',
           maxNetwork: entry.toolbox?.network.maxMode ?? 'none',

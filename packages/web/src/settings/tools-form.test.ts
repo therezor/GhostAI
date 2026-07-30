@@ -25,12 +25,6 @@ describe('toToolsForm', () => {
   it('reads the shipped defaults', () => {
     const form = toToolsForm(config());
 
-    expect(form.approvals).toEqual({
-      safe: 'allow',
-      write: 'allow',
-      exec: 'ask',
-      network: 'ask',
-    });
     expect(form.approvalTimeoutSeconds).toBe('300');
     expect(form.execEnabled).toBe(true);
   });
@@ -42,23 +36,11 @@ describe('toToolsPatch', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    expect(result.patch.tools?.approvals).toEqual({
-      safe: 'allow',
-      write: 'allow',
-      exec: 'ask',
-      network: 'ask',
-      timeoutMs: 300_000,
-    });
+    expect(result.patch.tools?.approvalTimeoutMs).toBe(300_000);
+    // No permission state reaches this patch: permission is per agent, and
+    // `agents-form.ts` is the only thing that writes it.
+    expect(result.patch.tools).not.toHaveProperty('approvals');
     expect(Object.keys(result.patch)).toEqual(['tools']);
-  });
-
-  it('carries a changed policy', () => {
-    const form = toToolsForm(config());
-    const result = toToolsPatch({ ...form, approvals: { ...form.approvals, exec: 'deny' } }, t);
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.patch.tools?.approvals?.exec).toBe('deny');
   });
 
   it('refuses an approval timeout of zero, unlike every other duration here', () => {

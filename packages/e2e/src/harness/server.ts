@@ -40,6 +40,7 @@ import {
 } from '@ghostai/core';
 import {
   ConfigSchema,
+  DEFAULT_AGENT_TOOLS,
   DEFAULT_USERNAME,
   type Config,
   type ConfigPatch,
@@ -173,6 +174,17 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
         model: 'qwen3',
         workspace,
         ...(options.config?.agents?.defaults ?? {}),
+      },
+      // The default agent gets an explicit tool map, because permission is per
+      // tool and absent means disabled — the seed covers the built-ins, and
+      // `e2e_wait` is registered below by the harness itself, so nothing else
+      // would ever enable it and every spec that waits would stall.
+      list: {
+        ...(options.config?.agents?.list ?? {}),
+        default: {
+          tools: { ...DEFAULT_AGENT_TOOLS, e2e_wait: 'allow' },
+          ...(options.config?.agents?.list?.default ?? {}),
+        },
       },
     },
     // The host is a config decision — `assertBootPolicy` refuses a non-loopback

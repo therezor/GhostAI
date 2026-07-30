@@ -20,7 +20,7 @@
 
 import { z } from 'zod';
 
-import { ToolApprovalPolicySchema } from './tools.js';
+import { ToolPermissionsSchema, type ToolPermission, type ToolPermissions } from './tools.js';
 
 /** A duration in milliseconds where `0` disables the limit. */
 const OptionalDurationMs = z.number().int().nonnegative();
@@ -331,31 +331,39 @@ export const McpServerConfigSchema = z.object({
 });
 export type McpServerConfig = z.infer<typeof McpServerConfigSchema>;
 
-/**
- * Risk band → policy. The default asks before `exec` and network egress and
- * allows reads and jailed writes, which is the split an operator running a
- * self-hosted agent on their own machine actually wants.
- */
-export const ToolApprovalsConfigSchema = z.object({
-  safe: ToolApprovalPolicySchema.default('allow'),
-  write: ToolApprovalPolicySchema.default('allow'),
-  exec: ToolApprovalPolicySchema.default('ask'),
-  network: ToolApprovalPolicySchema.default('ask'),
-  /** How long to wait for a UI decision before treating the call as denied. */
-  timeoutMs: z
+export const ToolsConfigSchema = z.object({
+  web: WebToolsConfigSchema.prefault({}),
+  exec: ExecToolConfigSchema.prefault({}),
+  /**
+   * How long to wait for a decision before treating an `ask` call as denied.
+   *
+   * A timeout rather than a policy, which is why it survived the band table
+   * that used to live beside it: whether a tool asks at all is now a property
+   * of the agent (`agents.list.<id>.tools`), but how long the prompt stays open
+   * is a property of the deployment and has nowhere else to be.
+   */
+  approvalTimeoutMs: z
     .number()
     .int()
     .positive()
     .default(5 * 60 * 1000),
-});
-export type ToolApprovalsConfig = z.infer<typeof ToolApprovalsConfigSchema>;
-
-export const ToolsConfigSchema = z.object({
-  web: WebToolsConfigSchema.prefault({}),
-  exec: ExecToolConfigSchema.prefault({}),
-  approvals: ToolApprovalsConfigSchema.prefault({}),
   restrictToWorkspace: z.boolean().default(true),
-  /** Head+tail truncation budget for a single tool result. */
+  /**
+   * Head+tail truncation budget for a single tool result.
+   *
+   * **`.positive()`, and 0 does not mean "no limit" here** — which is worth
+   * stating because it does on every duration in this tree, and because
+   * `truncateHeadTail` and `historyForLLM`'s `maxToolResultChars` both read 0
+   * as "do not truncate". Those two are display caps with nothing behind them.
+   * This one is also an *allocation* bound: `read_file` sizes its read from it
+   * (`maxOutputChars * 4` bytes, UTF-8's worst case) and allocates that buffer.
+   * So 0 would make `read_file` read one byte of every file, and teaching it to
+   * read the whole file instead would remove the only thing stopping one call
+   * from allocating a multi-gigabyte buffer.
+   *
+   * An operator who wants effectively no cap sets a large number, which is
+   * bounded and says what it means.
+   */
   maxOutputChars: z.number().int().positive().default(8192),
   mcpServers: z.record(z.string(), McpServerConfigSchema).default({}),
 });
@@ -370,19 +378,45 @@ export type ToolsConfig = z.infer<typeof ToolsConfigSchema>;
 // from an agent to the tools rather than the other way round.
 
 /**
- * Which tools an agent may call.
+ * Which tools an agent may call, and what happens when it does.
  *
- * Empty `allow` means "everything not denied", matching `ExecToolConfig`'s
- * allow-list convention — the alternative, empty meaning "nothing", turns a
- * newly created agent into one that cannot do anything and looks broken.
- * `deny` wins over `allow`, so a blanket allow-list cannot resurrect a tool an
- * operator switched off.
+ * One map, not a selection plus a policy. A tool the map does not mention is
+ * not enabled — it never reaches the definitions the model is sent — so
+ * enabling a tool and choosing its permission are one act. That is the opposite
+ * of the convention next door in `ExecToolConfig.allowedBinaries`, where empty
+ * means "anything not denied", and deliberately so: an allow-list of *binaries*
+ * is a narrowing of one tool an operator already turned on, while this is the
+ * list of tools themselves, and a newly created agent quietly holding every
+ * tool the registry happens to carry is the failure this replaces.
+ *
+ * Which is why a new agent is not born empty either — see `DEFAULT_AGENT_TOOLS`.
+ *
+ * The shape is `ToolPermissionsSchema` itself rather than an alias of it: the
+ * schema registry asserts every entry is a distinct object, and a second name
+ * for one schema would be a `$ref` in the OpenAPI document pointing at nothing
+ * the wire distinguishes. The type alias below is for readers, not for zod.
  */
-export const AgentToolsSelectionSchema = z.object({
-  allow: z.array(z.string()).default([]),
-  deny: z.array(z.string()).default([]),
+export type AgentTools = ToolPermissions;
+
+/**
+ * What a newly created agent starts with: the built-in tools, at the permission
+ * their risk band implies.
+ *
+ * The one place a risk band still turns into a permission, and it happens once,
+ * at creation, where an operator can see the result and change it. Nothing
+ * reads a band at call time.
+ *
+ * Seeding rather than starting empty because an agent that can do nothing looks
+ * broken to whoever just made it — and because the alternative reading of
+ * "explicit" would be a setup chore five clicks long before the first turn.
+ */
+export const DEFAULT_AGENT_TOOLS: Readonly<Record<string, ToolPermission>> = Object.freeze({
+  read_file: 'allow',
+  list_dir: 'allow',
+  write_file: 'allow',
+  edit_file: 'allow',
+  exec: 'ask',
 });
-export type AgentToolsSelection = z.infer<typeof AgentToolsSelectionSchema>;
 
 /**
  * How much network an agent asks its toolbox for.
@@ -484,9 +518,12 @@ export const AgentEntrySchema = patchOf(AgentDefaultsSchema)
      */
     wrapUpPrompt: z.string().default(''),
     enabled: z.boolean().default(true),
-    tools: AgentToolsSelectionSchema.prefault({}),
-    /** Risk-band policy for this agent only; merged over `tools.approvals`. */
-    approvals: patchOf(ToolApprovalsConfigSchema).optional(),
+    /**
+     * Replaces, never merges. An entry that names three tools has three tools —
+     * the seed is what a *new* agent gets, not a floor every agent stands on,
+     * or switching a tool off would be impossible to express.
+     */
+    tools: ToolPermissionsSchema.default({ ...DEFAULT_AGENT_TOOLS }),
     /** Merged over `tools.exec`, so one agent can hold a tighter allow-list. */
     exec: patchOf(ExecToolConfigSchema).optional(),
     toolbox: AgentToolboxSchema.prefault({}),
@@ -676,7 +713,12 @@ export const ConfigPatchSchema = z.object({
           z.string(),
           patchOf(AgentEntrySchema)
             .extend({
-              tools: patchOf(AgentToolsSelectionSchema).optional(),
+              // Not a patch: the map replaces wholesale, because a patch that
+              // merged key by key could add a tool and change a permission but
+              // never remove one. `agents.list.*` is in the merge's
+              // `REPLACE_WHOLESALE` list, so this is what already happens — it
+              // is restated here so the type says it.
+              tools: ToolPermissionsSchema.optional(),
               // `network` is restated because `patchOf` is not recursive, and
               // without it a save that only changes the mode would have to
               // resend `allow` — which is how a settings panel silently clears
@@ -713,7 +755,6 @@ export const ConfigPatchSchema = z.object({
         .extend({ search: patchOf(WebSearchConfigSchema).optional() })
         .optional(),
       exec: patchOf(ExecToolConfigSchema).optional(),
-      approvals: patchOf(ToolApprovalsConfigSchema).optional(),
     })
     .optional(),
   /**

@@ -9,11 +9,14 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { afterAll, describe } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
+
+import { BUILTIN_TOOL_NAMES, DEFAULT_AGENT_TOOLS } from '@ghostai/protocol';
 
 import type { ToolContext } from '../define.js';
 import { toolConformance } from '../testkit/conformance.js';
 import { createTestWorkspace, type TestWorkspace } from '../testkit/workspace.js';
+import { BUILTIN_TOOLS } from './index.js';
 import { editFileTool } from './edit-file.js';
 import { execTool } from './exec.js';
 import { listDirTool } from './list-dir.js';
@@ -80,5 +83,33 @@ describe('built-in conformance', () => {
     largeOutputArgs: {
       argv: [process.execPath, '-e', 'process.stdout.write("x".repeat(5000))'],
     },
+  });
+});
+
+/**
+ * Two packages below this one hold the built-in *names* without the tools:
+ * `@ghostai/protocol` publishes the list, `@ghostai/security` refuses a toolbox
+ * that shadows one, and `DEFAULT_AGENT_TOOLS` seeds a new agent from it. This
+ * file is the only place both the names and the implementations are visible, so
+ * it is the only place the drift can be caught — and drift is silent otherwise:
+ * a sixth built-in would simply never be enabled on any agent anyone created.
+ */
+describe('the built-in set, as packages below it assume it', () => {
+  const names = BUILTIN_TOOLS.map((tool) => tool.name).sort();
+
+  it('matches the name list protocol publishes', () => {
+    expect([...BUILTIN_TOOL_NAMES].sort()).toEqual(names);
+  });
+
+  it('is what a new agent is seeded with', () => {
+    expect(Object.keys(DEFAULT_AGENT_TOOLS).sort()).toEqual(names);
+  });
+
+  it('seeds each tool at the permission its risk band implies', () => {
+    for (const tool of BUILTIN_TOOLS) {
+      const seeded = DEFAULT_AGENT_TOOLS[tool.name];
+      const risk = tool.definition('builtin').risk;
+      expect(seeded).toBe(risk === 'safe' || risk === 'write' ? 'allow' : 'ask');
+    }
   });
 });

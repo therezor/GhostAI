@@ -155,63 +155,12 @@
     color: var(--fg-1);
   }
 
-  .settings-divided-list__name--mono {
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    font-weight: var(--weight-normal);
-  }
-
   .settings-divided-list__detail {
     font-size: var(--text-sm);
     color: var(--fg-3);
   }
 
   /* ── The approval matrix ───────────────────────────────────── */
-
-  .approval-matrix {
-    width: 100%;
-  }
-
-  .approval-matrix thead tr {
-    font-size: var(--text-2xs);
-    font-weight: var(--weight-semibold);
-    letter-spacing: var(--tracking-caps);
-    text-transform: uppercase;
-    color: var(--fg-3);
-    text-align: left;
-  }
-
-  .approval-matrix th {
-    padding-bottom: var(--space-2);
-    font-weight: inherit;
-  }
-
-  .approval-matrix tbody tr {
-    border-top: var(--hairline) solid var(--line);
-  }
-
-  .approval-matrix tbody th {
-    padding: var(--space-3) var(--space-4) var(--space-3) 0;
-    font-weight: var(--weight-normal);
-    text-align: left;
-  }
-
-  .approval-matrix__band {
-    display: block;
-    font-weight: var(--weight-medium);
-    color: var(--fg-1);
-  }
-
-  .approval-matrix__detail {
-    display: block;
-    font-size: var(--text-sm);
-    color: var(--fg-3);
-  }
-
-  .approval-matrix__policy {
-    width: 10rem;
-    padding-block: var(--space-3);
-  }
 
   /* ── Providers ─────────────────────────────────────────────── */
 

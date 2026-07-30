@@ -11,10 +11,8 @@ import {
   type AgentDefaults,
   type ApprovalScope,
   type ChatMessage,
-  type ToolApprovalPolicy,
   ServerMessageSchema,
-  type ToolRisk,
-  type ToolsConfig,
+  type ToolPermissions,
   ToolboxSchema,
 } from '@ghostai/protocol';
 import { ProviderError, type ChatRequest } from '@ghostai/providers';
@@ -23,6 +21,7 @@ import {
   DEFAULT_TOOLS_CONFIG,
   ToolRegistry,
   defineTool,
+  toolboxPermissions,
   toolboxTools,
   withToolboxTools,
   type AnyTool,
@@ -75,6 +74,12 @@ interface Harness {
 interface HarnessOptions {
   readonly turns?: readonly ScriptedTurn[];
   readonly tools?: readonly AnyTool[];
+  /**
+   * The agent's permission map. Absent means the bare registry, which permits
+   * everything — the CLI's view, and the right default for the tests here that
+   * are about something other than the gate.
+   */
+  readonly permissions?: ToolPermissions;
   readonly config?: Partial<AgentDefaults>;
   readonly clock?: ManualClock;
   readonly loop?: Partial<AgentLoopOptions>;
@@ -111,7 +116,7 @@ function harness(options: HarnessOptions = {}): Harness {
 
   const loop = new AgentLoop({
     provider,
-    tools: registry,
+    tools: options.permissions === undefined ? registry : registry.select(options.permissions),
     store,
     jails: singleJail(jail),
     config,
@@ -274,14 +279,6 @@ function manualGate(): ManualGate {
       if (resolve === undefined) throw new Error('nothing was waiting for approval');
       resolve({ approved, scope });
     },
-  };
-}
-
-/** A tools config with one risk band's policy replaced. */
-function policyFor(risk: ToolRisk, policy: ToolApprovalPolicy): ToolsConfig {
-  return {
-    ...DEFAULT_TOOLS_CONFIG,
-    approvals: { ...DEFAULT_TOOLS_CONFIG.approvals, [risk]: policy },
   };
 }
 
@@ -464,17 +461,18 @@ describe('AgentLoop', () => {
   it('reports a toolbox overlay as part of its tools', async () => {
     // `withToolboxTools` composes the container's programs on top of the agent's
     // scope, which is exactly the part `tools.select(agent.tools)` cannot see.
+    const box = ToolboxSchema.parse({
+      schema: 'ghostai.toolbox/1',
+      name: 'research',
+      image: `sha256:${'a'.repeat(64)}`,
+      expose: 'tools',
+      tools: [{ name: 'search', use: 'Search the web.', permission: 'allow' }],
+    });
+    const permissions = toolboxPermissions(box);
     const scope = withToolboxTools(
-      new ToolRegistry({ clock: manualClock() }).select({ allow: [], deny: [] }),
-      toolboxTools(
-        ToolboxSchema.parse({
-          schema: 'ghostai.toolbox/1',
-          name: 'research',
-          image: `sha256:${'a'.repeat(64)}`,
-          expose: 'tools',
-          tools: [{ name: 'search', use: 'Search the web.' }],
-        }),
-      ),
+      new ToolRegistry({ clock: manualClock() }).select(permissions),
+      toolboxTools(box),
+      permissions,
     );
     const { loop } = harness({ loop: { tools: scope } });
 
@@ -1127,6 +1125,7 @@ describe('AgentLoop approvals', () => {
       clock,
       tools: [shell.tool],
       turns: SHELL_TURNS,
+      permissions: { shell: 'ask' },
       loop: { approvals: gate.gate, toolHeartbeatMs: 0 },
     });
 
@@ -1143,7 +1142,7 @@ describe('AgentLoop approvals', () => {
       name: 'shell',
       args: { argv: ['ls', '-la'] },
       risk: 'exec',
-      expiresAtMs: clock.now() + DEFAULT_TOOLS_CONFIG.approvals.timeoutMs,
+      expiresAtMs: clock.now() + DEFAULT_TOOLS_CONFIG.approvalTimeoutMs,
     });
 
     gate.answer(true, 'session');
@@ -1171,11 +1170,12 @@ describe('AgentLoop approvals', () => {
     expect(unansweredToolCalls(messagesOf(store))).toEqual([]);
   });
 
-  it('does not ask about a tool whose risk band is allowed', async () => {
+  it('does not ask about a tool the agent set to allow', async () => {
     const gate = manualGate();
     const { loop } = harness({
       tools: [echoTool],
       turns: [{ toolCalls: [toolCall('c1', 'echo', { text: 'hi' })] }, { deltas: ['done'] }],
+      permissions: { echo: 'allow' },
       loop: { approvals: gate.gate, toolHeartbeatMs: 0 },
     });
 
@@ -1191,6 +1191,7 @@ describe('AgentLoop approvals', () => {
     const { loop, store } = harness({
       tools: [shell.tool],
       turns: SHELL_TURNS,
+      permissions: { shell: 'ask' },
       loop: { approvals: gate.gate, toolHeartbeatMs: 0 },
     });
 
@@ -1240,6 +1241,7 @@ describe('AgentLoop approvals', () => {
       clock,
       tools: [shell.tool],
       turns: SHELL_TURNS,
+      permissions: { shell: 'ask' },
       loop: { approvals: gate.gate, toolHeartbeatMs: 0 },
     });
 
@@ -1247,7 +1249,7 @@ describe('AgentLoop approvals', () => {
     await waitFor(() => gate.requests.length === 1);
 
     // The gate is never answered — a browser tab closed on an open prompt.
-    clock.advance(DEFAULT_TOOLS_CONFIG.approvals.timeoutMs);
+    clock.advance(DEFAULT_TOOLS_CONFIG.approvalTimeoutMs);
     const result = await turn.done;
 
     expect(shell.calls()).toBe(0);
@@ -1275,6 +1277,7 @@ describe('AgentLoop approvals', () => {
           ],
         },
       ],
+      permissions: { shell: 'ask' },
       loop: { approvals: gate.gate, toolHeartbeatMs: 0 },
     });
 
@@ -1311,6 +1314,7 @@ describe('AgentLoop approvals', () => {
       clock,
       tools: [shell.tool],
       turns: SHELL_TURNS,
+      permissions: { shell: 'ask' },
       loop: { approvals: gate.gate, toolHeartbeatMs: 0 },
     });
 
@@ -1353,6 +1357,7 @@ describe('AgentLoop approvals', () => {
     const { loop } = harness({
       tools: [shell.tool],
       turns: SHELL_TURNS,
+      permissions: { shell: 'ask' },
       loop: { approvals: gate, toolHeartbeatMs: 0 },
     });
 
@@ -1367,17 +1372,17 @@ describe('AgentLoop approvals', () => {
     });
   });
 
-  it('never asks about a tool the policy denies outright', async () => {
+  it('never asks about a tool the agent denies outright', async () => {
+    // A denied tool is not in the definitions the model was offered, so this is
+    // the belt-and-braces path: something advertised a call the scope refuses,
+    // and the gate is where that has to stop.
     const shell = shellTool();
     const gate = manualGate();
     const { loop, store } = harness({
       tools: [shell.tool],
       turns: SHELL_TURNS,
-      loop: {
-        approvals: gate.gate,
-        toolsConfig: policyFor('exec', 'deny'),
-        toolHeartbeatMs: 0,
-      },
+      permissions: { shell: 'deny' },
+      loop: { approvals: gate.gate, toolHeartbeatMs: 0 },
     });
 
     const { events, result } = await runTurn(loop, { sessionKey: SESSION, content: 'list them' });
@@ -1397,12 +1402,13 @@ describe('AgentLoop approvals', () => {
     expect(unansweredToolCalls(messagesOf(store))).toEqual([]);
   });
 
-  it('enforces a deny policy even with no gate installed', async () => {
+  it('enforces deny even with no gate installed', async () => {
     const shell = shellTool();
     const { loop } = harness({
       tools: [shell.tool],
       turns: SHELL_TURNS,
-      loop: { toolsConfig: policyFor('exec', 'deny'), toolHeartbeatMs: 0 },
+      permissions: { shell: 'deny' },
+      loop: { toolHeartbeatMs: 0 },
     });
 
     const { events } = await runTurn(loop, { sessionKey: SESSION, content: 'list them' });
@@ -1436,6 +1442,7 @@ describe('AgentLoop approvals', () => {
     const { loop } = harness({
       tools: [shell.tool],
       turns: SHELL_TURNS,
+      permissions: { shell: 'ask' },
       loop: { approvals: gate, toolHeartbeatMs: 0 },
     });
 

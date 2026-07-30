@@ -31,7 +31,7 @@
  */
 
 import { guardExec } from '@ghostai/security';
-import type { Toolbox, ToolboxEntry } from '@ghostai/protocol';
+import type { Toolbox, ToolboxEntry, ToolPermission } from '@ghostai/protocol';
 import { z } from 'zod';
 
 import { TOOL_NAME_PATTERN, assertNotAborted, defineTool, type AnyTool } from './define.js';
@@ -137,4 +137,23 @@ export function toolboxTools(toolbox: Toolbox): readonly AnyTool[] {
     if (tool !== undefined) tools.push(tool);
   }
   return tools;
+}
+
+/**
+ * What the manifest says each of those callables may do.
+ *
+ * The *defaults* an agent's own `tools` map is laid over, not a ceiling — see
+ * `ToolboxEntrySchema.permission`. Derived from `toolboxTools` rather than from
+ * `toolbox.tools` so the two cannot disagree: an entry whose name no provider
+ * would accept is dropped from the callables, and a permission for a tool that
+ * does not exist would read in the settings UI as a row nothing can call.
+ */
+export function toolboxPermissions(toolbox: Toolbox): Record<string, ToolPermission> {
+  const permissions: Record<string, ToolPermission> = {};
+  if (toolbox.expose !== 'tools') return permissions;
+  for (const entry of toolbox.tools) {
+    if (!TOOL_NAME_PATTERN.test(entry.name)) continue;
+    permissions[entry.name] = entry.permission;
+  }
+  return permissions;
 }

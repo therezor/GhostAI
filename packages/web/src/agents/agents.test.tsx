@@ -19,7 +19,7 @@
  */
 
 import { RouterProvider, createMemoryHistory } from '@tanstack/react-router';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
@@ -33,7 +33,12 @@ import { STATUS } from '@/test/fixtures.js';
 const CONFIG = ConfigSchema.parse({
   agents: {
     defaults: { model: 'llama3', provider: 'ollama', maxTokens: 4096 },
-    list: { reviewer: { label: 'Reviewer', tools: { deny: ['exec'] } } },
+    list: {
+      reviewer: {
+        label: 'Reviewer',
+        tools: { read_file: 'allow', list_dir: 'allow', exec: 'deny' },
+      },
+    },
   },
   providers: { ollama: { type: 'ollama' } },
 });
@@ -130,6 +135,21 @@ function statefulSettings(base = CONFIG): Record<string, StubRoute> {
   };
 }
 
+/**
+ * Sets one tool's permission through its row's select.
+ *
+ * The whole control, in one call: the tool list is one row per tool with one
+ * combobox on it, so there is no switch to press first and no mode to be in.
+ */
+async function pick(
+  user: ReturnType<typeof userEvent.setup>,
+  tool: string,
+  permission: string,
+): Promise<void> {
+  await user.click(await screen.findByRole('combobox', { name: `Permission for ${tool}` }));
+  await user.click(await screen.findByRole('option', { name: permission }));
+}
+
 describe('the agents index', () => {
   it('lists the default even though nothing wrote it down', async () => {
     // Every unbound conversation runs on it, so a list of only the configured
@@ -143,7 +163,9 @@ describe('the agents index', () => {
   it('says what an agent does without opening it', async () => {
     mount();
 
-    expect(await screen.findByText('no exec')).toBeInTheDocument();
+    // Counts, not names: every agent's map holds the same five tools, so
+    // listing them would print the same words on every row.
+    expect(await screen.findByText(/2 tools/)).toBeInTheDocument();
   });
 
   it('filters the list by name', async () => {
@@ -242,7 +264,7 @@ describe('the agents index', () => {
   it('switches an agent off from the row menu, keeping everything it holds', async () => {
     // The reversible half of Delete: `agents.list.*` is replaced wholesale, so
     // a patch of `{ enabled: false }` alone would disable the agent by erasing
-    // its tool selection — and switching it back on would return an empty one.
+    // its tool permissions — and switching it back on would return an empty one.
     const { user, calls } = mount();
 
     await user.click(await screen.findByRole('button', { name: 'Actions for Reviewer' }));
@@ -253,7 +275,7 @@ describe('the agents index', () => {
     });
     expect(patchesOf(calls)[0]?.agents?.list?.reviewer).toMatchObject({
       enabled: false,
-      tools: { deny: ['exec'] },
+      tools: { read_file: 'allow', list_dir: 'allow', exec: 'deny' },
     });
   });
 
@@ -686,7 +708,7 @@ describe('a named agent', () => {
     expect(patchesOf(calls)[0]?.agents?.list?.reviewer).toMatchObject({
       label: 'Second Reader',
       // Wholesale replacement, so the rest of the agent has to ride along.
-      tools: { deny: ['exec'] },
+      tools: { read_file: 'allow', list_dir: 'allow', exec: 'deny' },
     });
 
     // The assertion that would have caught it: the agents query is refetched,
@@ -732,9 +754,7 @@ describe('a named agent', () => {
       ],
     });
 
-    // `exec` is already denied by the fixture, so switching `write_file` off
-    // denies it too.
-    await user.click(await screen.findByRole('switch', { name: 'write_file' }));
+    await pick(user, 'write_file', 'Ask first');
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => {
@@ -743,15 +763,45 @@ describe('a named agent', () => {
 
     const [patch] = patchesOf(calls);
     expect(patch?.agents?.list?.reviewer).toMatchObject({
-      tools: { allow: [], deny: ['exec', 'write_file'] },
+      // The whole map, every save — the fixture's three plus the one just added.
+      tools: { read_file: 'allow', list_dir: 'allow', exec: 'deny', write_file: 'ask' },
     });
     // The defaults are not touched by editing one agent.
     expect(patch?.agents).not.toHaveProperty('defaults');
   });
 
-  it('keeps a denied tool this install does not have registered', async () => {
-    // `agents.list.*` is replaced wholesale on save, so a checkbox list built
-    // only from the live registry would silently drop the denial of a tool
+  it('puts exec at the top, above the alphabetical rest', async () => {
+    // The row this section is opened to look at. Alphabetical sorted it second
+    // by accident of spelling, between `edit_file` and `list_dir`.
+    mount('/agents/reviewer', {
+      '/api/tools': [
+        200,
+        {
+          tools: [
+            { name: 'edit_file', description: '', risk: 'write', parameters: {} },
+            { name: 'exec', description: '', risk: 'exec', parameters: {} },
+            { name: 'read_file', description: '', risk: 'safe', parameters: {} },
+          ],
+        },
+      ],
+    });
+
+    await screen.findByRole('combobox', { name: 'Permission for edit_file' });
+    const rows = within(screen.getByRole('region', { name: 'Tools' })).getAllByRole('listitem');
+    const startsWith = rows.map((row) => row.textContent);
+
+    // The row's text opens with the tool's own name, so the order of the list
+    // is readable off the prefixes. `exec` first, then A–Z — pinning one row
+    // must not scramble the rest.
+    expect(startsWith[0]?.startsWith('exec')).toBe(true);
+    expect(startsWith[1]?.startsWith('edit_file')).toBe(true);
+    expect(startsWith[2]?.startsWith('list_dir')).toBe(true);
+    expect(startsWith[3]?.startsWith('read_file')).toBe(true);
+  });
+
+  it('keeps a tool this install does not have registered', async () => {
+    // `agents.list.*` is replaced wholesale on save, so a list built only from
+    // the live registry would silently drop this agent's opinion about a tool
     // whose MCP server happens to be down — and it would not come back.
     const { user, calls } = mount('/agents/reviewer', {
       '/api/tools': [
@@ -761,11 +811,13 @@ describe('a named agent', () => {
     });
 
     // `read_file` arrives with the tools query; `exec` is already on screen from
-    // the stored deny list, so waiting for the slower one is what makes this
-    // assert the union rather than a race.
-    await user.click(await screen.findByRole('switch', { name: 'read_file' }));
-    expect(screen.getByRole('switch', { name: 'exec' })).toBeInTheDocument();
-    expect(screen.getByText('not installed')).toBeInTheDocument();
+    // the stored map, so waiting for the slower one is what makes this assert
+    // the union rather than a race.
+    await pick(user, 'read_file', 'Ask first');
+    expect(screen.getByRole('combobox', { name: 'Permission for exec' })).toBeInTheDocument();
+    // `exec` and `list_dir` are both in the stored map and neither is
+    // registered in this fixture, so both rows carry the badge.
+    expect(screen.getAllByText('not installed')).toHaveLength(2);
 
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
@@ -773,7 +825,30 @@ describe('a named agent', () => {
       expect(patchesOf(calls)).toHaveLength(1);
     });
     expect(patchesOf(calls)[0]?.agents?.list?.reviewer).toMatchObject({
-      tools: { allow: [], deny: ['exec', 'read_file'] },
+      tools: { read_file: 'ask', list_dir: 'allow', exec: 'deny' },
+    });
+  });
+
+  it('disables a tool by choosing Disabled, with no separate switch to disagree with it', async () => {
+    const { user, calls } = mount('/agents/reviewer', {
+      '/api/tools': [
+        200,
+        { tools: [{ name: 'read_file', description: '', risk: 'safe', parameters: {} }] },
+      ],
+    });
+
+    await pick(user, 'read_file', 'Disabled');
+    expect(screen.queryByRole('switch', { name: 'read_file' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => {
+      expect(patchesOf(calls)).toHaveLength(1);
+    });
+    // `deny` rather than a dropped key: both read as off, but only this one
+    // leaves a row in the editor to switch back on.
+    expect(patchesOf(calls)[0]?.agents?.list?.reviewer?.tools).toMatchObject({
+      read_file: 'deny',
     });
   });
 
@@ -889,7 +964,11 @@ describe('choosing a toolbox', () => {
           {
             name: 'web-research',
             label: 'Web research',
-            tools: ['search', 'fetch'],
+            tools: [
+              { name: 'search', use: 'Search the web.', permission: 'allow' },
+              { name: 'fetch', use: 'Read a page.', permission: 'ask' },
+            ],
+            exposesTools: true,
             version: '3.0.0',
             image: `sha256:${'a'.repeat(64)}`,
             maxNetwork: 'open',
@@ -941,6 +1020,51 @@ describe('choosing a toolbox', () => {
     await choose(user, 'Toolbox', /None — run commands on this machine/);
 
     expect(screen.queryByRole('combobox', { name: 'Network' })).not.toBeInTheDocument();
+  });
+
+  it('gives a toolbox program one row, not one in each list', async () => {
+    // An override of a toolbox program lands in the same map as everything
+    // else, but the program is not in the shared registry — so the built-in
+    // list used to pick it up out of the map and badge it "not installed",
+    // beside the group below that knew perfectly well what it was.
+    mount('/agents/researcher', {
+      ...ROUTES,
+      // Registered, so the only thing that could badge "not installed" is a
+      // toolbox program that leaked into the list above.
+      '/api/tools': [
+        200,
+        { tools: [{ name: 'read_file', description: '', risk: 'safe', parameters: {} }] },
+      ],
+      '/api/settings': [
+        200,
+        {
+          config: ConfigSchema.parse({
+            agents: {
+              defaults: { model: 'llama3', provider: 'ollama', maxTokens: 4096 },
+              list: {
+                researcher: {
+                  label: 'Researcher',
+                  tools: { read_file: 'allow', search: 'deny' },
+                  toolbox: { name: 'web-research', network: { mode: 'open', allow: [] } },
+                },
+              },
+            },
+            providers: { ollama: { type: 'ollama' } },
+          }),
+          credentialsPresent: { ollama: false },
+        },
+      ],
+    });
+
+    // Both queries have to have landed before the lists mean anything: the
+    // group heading proves `/api/toolboxes` did, the risk badge proves
+    // `/api/tools` did. Asserting an absence before either would pass on an
+    // empty screen.
+    await screen.findByText('From the Web research toolbox');
+    await screen.findByText('safe');
+
+    expect(screen.getAllByRole('combobox', { name: 'Permission for search' })).toHaveLength(1);
+    expect(screen.queryByText('not installed')).not.toBeInTheDocument();
   });
 
   it('puts an agent into a container, and the sentinel never reaches the wire', async () => {

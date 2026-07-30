@@ -14,7 +14,7 @@ const t = createWebI18n('en').getFixedT(null, 'web');
 
 import {
   MODEL_REQUIRED,
-  parseToolList,
+  parseList,
   toAgentDeletePatch,
   toAgentEnabledPatch,
   toAgentEntryForm,
@@ -88,14 +88,13 @@ describe('toAgentEntryForm', () => {
     expect(shown.toolTimeoutSeconds).toBe('30');
   });
 
-  it('renders tool lists as something a person can type', () => {
+  it('carries the tool permissions across as stored', () => {
     const shown = toAgentEntryForm(
-      AgentEntrySchema.parse({ tools: { allow: ['read_file', 'list_dir'], deny: ['exec'] } }),
+      AgentEntrySchema.parse({ tools: { read_file: 'allow', exec: 'ask', write_file: 'deny' } }),
       DEFAULTS,
     );
 
-    expect(shown.allowTools).toBe('read_file, list_dir');
-    expect(shown.denyTools).toBe('exec');
+    expect(shown.tools).toEqual({ read_file: 'allow', exec: 'ask', write_file: 'deny' });
   });
 });
 
@@ -279,44 +278,34 @@ describe('toAgentEntryPatch', () => {
     expect(entry).not.toHaveProperty('reasoningEffort');
   });
 
-  it('sends only the approval bands that were set', () => {
+  it('always sends the whole tool map, so a tool can be removed', () => {
+    // The merge replaces this object wholesale; sending only what changed would
+    // make "this agent no longer has that tool" impossible to express.
     const entry = parsed(
-      toAgentEntryPatch('reviewer', form({ approveExec: 'deny', approveNetwork: '' }), EMPTY, t),
+      toAgentEntryPatch('reviewer', form({ tools: { read_file: 'allow' } }), EMPTY, t),
     );
-
-    expect(entry).toMatchObject({ approvals: { exec: 'deny' } });
-    // The bands left blank keep the global policy, so they must not be sent.
-    expect((entry as { approvals: Record<string, unknown> }).approvals).not.toHaveProperty(
-      'network',
-    );
+    expect(entry).toMatchObject({ tools: { read_file: 'allow' } });
+    expect((entry as { tools: Record<string, unknown> }).tools).not.toHaveProperty('exec');
   });
 
-  it('omits approvals altogether when no band was set', () => {
-    expect(parsed(toAgentEntryPatch('reviewer', form(), EMPTY, t))).not.toHaveProperty('approvals');
+  it('lets an agent hold no tools at all', () => {
+    const entry = parsed(toAgentEntryPatch('reviewer', form({ tools: {} }), EMPTY, t));
+    expect(entry).toMatchObject({ tools: {} });
   });
 
-  it('clears a stored approval the operator blanked', () => {
-    // The stored entry is carried through wholesale, so a band dropped from it
-    // has to be dropped explicitly or blanking one would do nothing at all.
-    const stored = AgentEntrySchema.parse({ approvals: { exec: 'deny' } });
-    const entry = parsed(toAgentEntryPatch('reviewer', form({ approveExec: '' }), stored, t));
-
-    expect(entry).not.toHaveProperty('approvals');
-  });
-
-  it('always sends the tool selection, so a restriction can be lifted', () => {
-    // The merge replaces this object wholesale; omitting it would make
-    // "clear this agent's tool restrictions" impossible to express.
+  it('carries a disabled tool through rather than dropping the key', () => {
+    // `deny` and absent mean the same thing to the runtime, but only `deny`
+    // survives a round trip through the editor as a row with an off position.
     const entry = parsed(
-      toAgentEntryPatch('reviewer', form({ allowTools: '', denyTools: '' }), EMPTY, t),
+      toAgentEntryPatch('reviewer', form({ tools: { exec: 'deny' } }), EMPTY, t),
     );
-    expect(entry).toMatchObject({ tools: { allow: [], deny: [] } });
+    expect(entry).toMatchObject({ tools: { exec: 'deny' } });
   });
 
   it('produces a patch the server’s own schema accepts', () => {
     const result = toAgentEntryPatch(
       'reviewer',
-      form({ label: 'Reviewer', model: 'qwen3:32b', denyTools: 'exec' }),
+      form({ label: 'Reviewer', model: 'qwen3:32b', tools: { exec: 'deny' } }),
       EMPTY,
       t,
     );
@@ -370,7 +359,7 @@ describe('toDefaultAgentPatch', () => {
 describe('toNewAgentPatch', () => {
   const template: AgentEntry = AgentEntrySchema.parse({
     systemPrompt: 'House style: be terse.',
-    tools: { allow: [], deny: ['exec'] },
+    tools: { read_file: 'allow', exec: 'deny' },
   });
 
   it('copies the model and budget the template would have run on', () => {
@@ -394,7 +383,7 @@ describe('toNewAgentPatch', () => {
 
     expect(patch.agents?.list?.reviewer).toMatchObject({
       systemPrompt: 'House style: be terse.',
-      tools: { deny: ['exec'] },
+      tools: { read_file: 'allow', exec: 'deny' },
     });
     expect(ConfigPatchSchema.safeParse(patch).success).toBe(true);
   });
@@ -411,19 +400,19 @@ describe('toAgentEnabledPatch', () => {
   const entry = AgentEntrySchema.parse({
     label: 'Reviewer',
     systemPrompt: 'Only ever read.',
-    tools: { allow: [], deny: ['exec'] },
+    tools: { read_file: 'allow', exec: 'deny' },
   });
 
   it('carries the whole agent, because the patch replaces it wholesale', () => {
     // `{ enabled: false }` alone would switch the agent off by deleting its
-    // prompt and its tool selection — so switching it back on would return an
+    // prompt and its tool permissions — so switching it back on would return an
     // empty agent wearing the same name.
     const patch = toAgentEnabledPatch('reviewer', entry, false);
 
     expect(patch.agents?.list?.reviewer).toMatchObject({
       enabled: false,
       systemPrompt: 'Only ever read.',
-      tools: { deny: ['exec'] },
+      tools: { read_file: 'allow', exec: 'deny' },
     });
     expect(ConfigPatchSchema.safeParse(patch).success).toBe(true);
   });
@@ -436,7 +425,7 @@ describe('toAgentEnabledPatch', () => {
   });
 });
 
-describe('parseToolList', () => {
+describe('parseList', () => {
   it.each([
     ['', []],
     ['exec', ['exec']],
@@ -444,7 +433,7 @@ describe('parseToolList', () => {
     ['a, , b', ['a', 'b']],
     ['  ', []],
   ])('parses %j', (value, expected) => {
-    expect(parseToolList(value)).toEqual(expected);
+    expect(parseList(value)).toEqual(expected);
   });
 });
 

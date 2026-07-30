@@ -517,10 +517,10 @@ describe('multiple agents', () => {
   });
 
   it('narrows one agent’s tools without touching the shared registry', () => {
-    const runtime = withAgent({ tools: { deny: ['exec'] } });
+    const runtime = withAgent({ tools: { read_file: 'allow', exec: 'deny' } });
 
-    const scope = runtime.tools.select(runtime.agents[1]?.tools);
-    expect(scope.definitions().map((definition) => definition.name)).not.toContain('exec');
+    const scope = runtime.tools.select(runtime.agents[1]?.tools ?? {});
+    expect(scope.definitions().map((definition) => definition.name)).toEqual(['read_file']);
     // The registry itself still has it, for every other agent.
     expect(runtime.tools.has('exec')).toBe(true);
   });

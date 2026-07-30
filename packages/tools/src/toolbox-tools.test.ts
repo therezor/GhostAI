@@ -9,7 +9,7 @@ import { WorkspaceJail } from '@ghostai/security';
 
 import { DEFAULT_TOOLS_CONFIG, type ToolContext } from './define.js';
 import { ToolRegistry, withToolboxTools } from './registry.js';
-import { toolboxTool, toolboxTools } from './toolbox-tools.js';
+import { toolboxPermissions, toolboxTool, toolboxTools } from './toolbox-tools.js';
 import { registerBuiltins } from './builtin/index.js';
 import type { CommandRunner } from './runner.js';
 
@@ -112,6 +112,43 @@ describe('toolboxTools', () => {
   });
 });
 
+describe('toolboxPermissions', () => {
+  it('is empty unless the entries are real callables', () => {
+    // Nothing to permission when the box is only a prompt section: those
+    // programs are reached through `exec`, and `exec`'s permission is theirs.
+    expect(toolboxPermissions(toolboxOf())).toEqual({});
+  });
+
+  it('reports the manifest default per program', () => {
+    expect(toolboxPermissions(toolboxOf({ expose: 'tools' }))).toEqual({
+      ddgr: 'ask',
+      fetch: 'ask',
+    });
+  });
+
+  it('carries a declared permission through', () => {
+    const box = toolboxOf({
+      expose: 'tools',
+      tools: [
+        { name: 'search', use: 'Search.', permission: 'allow' },
+        { name: 'nmap', use: 'Scan.', permission: 'deny' },
+      ],
+    });
+
+    expect(toolboxPermissions(box)).toEqual({ search: 'allow', nmap: 'deny' });
+  });
+
+  it('skips an entry no provider would accept, exactly as the callables do', () => {
+    const box = toolboxOf({
+      expose: 'tools',
+      tools: [{ name: 'ok', use: 'Fine.' }, { name: 'not ok' }],
+    });
+
+    expect(Object.keys(toolboxPermissions(box))).toEqual(['ok']);
+    expect(toolboxTools(box).map((tool) => tool.name)).toEqual(['ok']);
+  });
+});
+
 describe('withToolboxTools', () => {
   const base = (): ToolRegistry => {
     const registry = new ToolRegistry();
@@ -119,8 +156,13 @@ describe('withToolboxTools', () => {
     return registry;
   };
 
+  const box = toolboxOf({ expose: 'tools' });
+  // What the runtime hands in: the manifest's own defaults, with any agent
+  // override already merged over them.
+  const permissionsOf = toolboxPermissions;
+
   it('lays the toolbox over the built-ins, sorted as one list', () => {
-    const scope = withToolboxTools(base(), toolboxTools(toolboxOf({ expose: 'tools' })));
+    const scope = withToolboxTools(base(), toolboxTools(box), permissionsOf(box));
     const names = scope.definitions().map((definition) => definition.name);
 
     expect(names).toContain('ddgr');
@@ -130,15 +172,39 @@ describe('withToolboxTools', () => {
 
   it('returns the base untouched when nothing is exposed', () => {
     const registry = base();
-    expect(withToolboxTools(registry, [])).toBe(registry);
+    expect(withToolboxTools(registry, [], {})).toBe(registry);
   });
 
   it('resolves a toolbox name to the toolbox tool, not the registry', () => {
-    const scope = withToolboxTools(base(), toolboxTools(toolboxOf({ expose: 'tools' })));
+    const scope = withToolboxTools(base(), toolboxTools(box), permissionsOf(box));
 
     expect(scope.get('ddgr')?.name).toBe('ddgr');
     expect(scope.get('read_file')?.name).toBe('read_file');
     expect(scope.get('nothing')).toBeUndefined();
+  });
+
+  it('reports the overlay tool own permission and defers to the base otherwise', () => {
+    const scope = withToolboxTools(base(), toolboxTools(box), {
+      ...permissionsOf(box),
+      ddgr: 'allow',
+    });
+
+    expect(scope.permissionFor('ddgr')).toBe('allow');
+    // `fetch` keeps the manifest's default; `read_file` is the base's answer.
+    expect(scope.permissionFor('fetch')).toBe('ask');
+    expect(scope.permissionFor('read_file')).toBe('allow');
+  });
+
+  it('hides an overlay tool the agent switched off', () => {
+    // A toolbox program is not exempt from the map just because the operator
+    // chose the toolbox — the manifest supplies a default, not a guarantee.
+    const scope = withToolboxTools(base(), toolboxTools(box), {
+      ...permissionsOf(box),
+      ddgr: 'deny',
+    });
+
+    expect(scope.definitions().map((definition) => definition.name)).not.toContain('ddgr');
+    expect(scope.get('ddgr')).toBeUndefined();
   });
 
   it('runs a toolbox tool through the context runner, as exec would', async () => {
@@ -169,7 +235,7 @@ describe('withToolboxTools', () => {
         runner,
         sandboxed: true,
       };
-      const scope = withToolboxTools(base(), toolboxTools(toolboxOf({ expose: 'tools' })));
+      const scope = withToolboxTools(base(), toolboxTools(box), permissionsOf(box));
 
       const result = await scope.execute(
         { name: 'ddgr', argumentsJson: JSON.stringify({ args: ['--json', 'q'] }) },

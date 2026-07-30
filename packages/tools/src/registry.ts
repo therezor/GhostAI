@@ -35,10 +35,15 @@ import {
   truncateHeadTail,
 } from '@ghostai/core';
 import type { Clock, ErrorKind, Logger } from '@ghostai/core';
-import type { ToolDefinition, ToolSource } from '@ghostai/protocol';
+import type {
+  ToolDefinition,
+  ToolPermission,
+  ToolPermissions,
+  ToolSource,
+} from '@ghostai/protocol';
 
 import { toToolResult, type AnyTool, type ToolContext, type ToolResult } from './define.js';
-import { isUnrestricted, selectionAllows, type ToolSelection } from './scope.js';
+import { isEnabled, permissionFor } from './scope.js';
 
 export interface ToolRegistryOptions {
   /**
@@ -99,14 +104,21 @@ interface Registration {
  * never happen: a toolbox declaring `read_file` would shadow the jailed one, so
  * `assertToolboxPolicy` refuses the built-in names outright.
  */
-export function withToolboxTools(base: ToolScope, tools: readonly AnyTool[]): ToolScope {
+export function withToolboxTools(
+  base: ToolScope,
+  tools: readonly AnyTool[],
+  permissions: ToolPermissions,
+): ToolScope {
   if (tools.length === 0) return base;
 
   const overlay = new Map(tools.map((tool) => [tool.name, tool]));
   // Its own registry, so the timeout, the abort race, the output cap and the
-  // never-throws contract come from one implementation rather than two.
+  // never-throws contract come from one implementation rather than two. It gets
+  // the same permission map the base was built from, so a toolbox program the
+  // agent switched off is filtered here exactly as a built-in would be.
   const registry = new ToolRegistry();
   for (const tool of tools) registry.register(tool, 'builtin');
+  const scoped = registry.select(permissions);
 
   let cached: readonly ToolDefinition[] | null = null;
   let cachedFrom: readonly ToolDefinition[] | null = null;
@@ -120,18 +132,21 @@ export function withToolboxTools(base: ToolScope, tools: readonly AnyTool[]): To
       if (cached !== null && cachedFrom === underneath) return cached;
       const merged = [
         ...underneath.filter((definition) => !overlay.has(definition.name)),
-        ...registry.definitions(),
+        ...scoped.definitions(),
       ].sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
       cached = Object.freeze(merged);
       cachedFrom = underneath;
       return cached;
     },
     get(name: string): AnyTool | undefined {
-      return overlay.get(name) ?? base.get(name);
+      return overlay.has(name) ? scoped.get(name) : base.get(name);
+    },
+    permissionFor(name: string): ToolPermission {
+      return overlay.has(name) ? scoped.permissionFor(name) : base.permissionFor(name);
     },
     async execute(call: ToolInvocation, context: ToolContext): Promise<ToolExecution> {
       return overlay.has(call.name)
-        ? await registry.execute(call, context)
+        ? await scoped.execute(call, context)
         : await base.execute(call, context);
     },
   };
@@ -142,6 +157,15 @@ export interface ToolScope {
   definitions(): readonly ToolDefinition[];
   /** `undefined` for a name this scope cannot see, whoever else registered it. */
   get(name: string): AnyTool | undefined;
+  /**
+   * What this scope permits for `name` — the whole of the gate's input.
+   *
+   * On the scope rather than looked up from config by the caller, because the
+   * scope is the only thing that knows where a name came from: a toolbox
+   * program and a built-in of the same name resolve to different tools, and a
+   * caller reading one map would answer for the wrong one.
+   */
+  permissionFor(name: string): ToolPermission;
   execute(call: ToolInvocation, context: ToolContext): Promise<ToolExecution>;
 }
 
@@ -149,7 +173,7 @@ export interface ToolScope {
  * A restricted view of one registry.
  *
  * Holds the registry rather than a snapshot of it: a plugin registering a tool
- * after boot has to become visible to every agent whose selection admits it,
+ * after boot has to become visible to every agent whose permissions admit it,
  * and a view built once at agent-resolution time would never see it. The memo
  * is keyed on the registry's revision for exactly that reason.
  */
@@ -159,7 +183,7 @@ class RegistryScope implements ToolScope {
 
   constructor(
     private readonly registry: ToolRegistry,
-    private readonly selection: ToolSelection,
+    private readonly permissions: ToolPermissions,
   ) {}
 
   definitions(): readonly ToolDefinition[] {
@@ -168,19 +192,23 @@ class RegistryScope implements ToolScope {
     }
     const definitions = this.registry
       .definitions()
-      .filter((definition) => selectionAllows(this.selection, definition.name));
+      .filter((definition) => isEnabled(this.permissions, definition.name));
     this.#cached = Object.freeze(definitions);
     this.#cachedRevision = this.registry.revision;
     return this.#cached;
   }
 
   get(name: string): AnyTool | undefined {
-    if (!selectionAllows(this.selection, name)) return undefined;
+    if (!isEnabled(this.permissions, name)) return undefined;
     return this.registry.get(name);
   }
 
+  permissionFor(name: string): ToolPermission {
+    return permissionFor(this.permissions, name);
+  }
+
   execute(call: ToolInvocation, context: ToolContext): Promise<ToolExecution> {
-    return this.registry.execute(call, context, this.selection);
+    return this.registry.execute(call, context, this.permissions);
   }
 }
 
@@ -367,13 +395,21 @@ export class ToolRegistry {
   /**
    * A view of this registry restricted to what one agent may call.
    *
-   * Returns the registry itself when the selection restricts nothing, which is
-   * every agent that has not been given a tool list — so the common case pays
-   * for no wrapper and no second memo.
+   * Always a wrapper. There used to be a fast path handing back the registry
+   * itself for an agent that restricted nothing, and under the permission model
+   * there is no such agent — an empty map is an agent with no tools, not an
+   * agent with all of them.
    */
-  select(selection: ToolSelection | undefined): ToolScope {
-    if (isUnrestricted(selection)) return this;
-    return new RegistryScope(this, selection ?? {});
+  select(permissions: ToolPermissions): ToolScope {
+    return new RegistryScope(this, permissions);
+  }
+
+  /**
+   * `allow`, always: an unscoped registry is the CLI's and the tests' view, and
+   * it is not reachable from a turn. See `permissionFor` in `scope.ts`.
+   */
+  permissionFor(_name: string): ToolPermission {
+    return 'allow';
   }
 
   /** The definitions to send to the provider. Sorted, memoised, frozen. */
@@ -401,7 +437,7 @@ export class ToolRegistry {
   async execute(
     call: ToolInvocation,
     context: ToolContext,
-    selection?: ToolSelection,
+    permissions?: ToolPermissions,
   ): Promise<ToolExecution> {
     const startedAt = this.clock.monotonic();
     const registration = this.tools.get(call.name);
@@ -410,8 +446,8 @@ export class ToolRegistry {
     // deliberately: the model was never offered it, and an error that admitted
     // it exists but is off-limits would invite the model to argue about it. The
     // available list is the scope's, so the suggestion is actionable.
-    if (registration === undefined || !selectionAllows(selection, call.name)) {
-      const available = this.names().filter((name) => selectionAllows(selection, name));
+    if (registration === undefined || !isEnabled(permissions, call.name)) {
+      const available = this.names().filter((name) => isEnabled(permissions, name));
       return this.failure(
         call.name,
         new GhostError(

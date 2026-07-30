@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { defineTool, type ToolContext } from './define.js';
 import { ToolRegistry } from './registry.js';
-import { isUnrestricted, selectionAllows } from './scope.js';
+import { isEnabled, permissionFor } from './scope.js';
 import { createTestWorkspace, type TestWorkspace } from './testkit/workspace.js';
 
 const tool = (name: string) =>
@@ -13,6 +13,9 @@ const tool = (name: string) =>
     schema: z.strictObject({}),
     execute: () => name,
   });
+
+/** Everything the fixture registry holds, at `allow`. */
+const ALL = { read_file: 'allow', write_file: 'allow', exec: 'allow' } as const;
 
 let workspace: TestWorkspace;
 let context: ToolContext;
@@ -29,52 +32,58 @@ afterEach(() => {
   workspace.dispose();
 });
 
-describe('selectionAllows', () => {
-  it('lets everything through when there is no selection at all', () => {
-    expect(selectionAllows(undefined, 'exec')).toBe(true);
-    expect(selectionAllows({}, 'exec')).toBe(true);
+describe('permissionFor', () => {
+  it('reads back what the map says', () => {
+    const perms = { read_file: 'allow', exec: 'ask', write_file: 'deny' } as const;
+
+    expect(permissionFor(perms, 'read_file')).toBe('allow');
+    expect(permissionFor(perms, 'exec')).toBe('ask');
+    expect(permissionFor(perms, 'write_file')).toBe('deny');
   });
 
-  it('treats an empty allow-list as "everything not denied"', () => {
-    // The same reading as ExecToolConfig.allowedBinaries. Empty meaning
-    // "nothing" would make a freshly created agent look broken.
-    expect(selectionAllows({ allow: [] }, 'exec')).toBe(true);
-    expect(selectionAllows({ allow: [], deny: ['exec'] }, 'exec')).toBe(false);
+  it('denies a tool the map does not mention', () => {
+    // The whole model: enabling is explicit, so silence is not consent. The
+    // opposite of the allow/deny lists this replaced, where empty meant "all".
+    expect(permissionFor({}, 'exec')).toBe('deny');
+    expect(permissionFor({ read_file: 'allow' }, 'exec')).toBe('deny');
   });
 
-  it('admits only the allow-list once it has an entry', () => {
-    expect(selectionAllows({ allow: ['read_file'] }, 'read_file')).toBe(true);
-    expect(selectionAllows({ allow: ['read_file'] }, 'exec')).toBe(false);
-  });
-
-  it('lets deny beat allow', () => {
-    // Otherwise switching a tool off for an agent could be undone by a blanket
-    // allow-list in the same object, and which wins would be unpredictable.
-    expect(selectionAllows({ allow: ['exec'], deny: ['exec'] }, 'exec')).toBe(false);
+  it('allows everything when there is no map at all', () => {
+    // The bare registry — the CLI's one-shot paths and most tests. Not
+    // reachable from a turn, which always resolves an agent first.
+    expect(permissionFor(undefined, 'exec')).toBe('allow');
   });
 });
 
-describe('isUnrestricted', () => {
+describe('isEnabled', () => {
   it.each([
-    ['undefined', undefined, true],
-    ['empty', {}, true],
-    ['both lists empty', { allow: [], deny: [] }, true],
-    ['a deny entry', { deny: ['exec'] }, false],
-    ['an allow entry', { allow: ['read_file'] }, false],
-  ])('reports %s as %s', (_name, selection, expected) => {
-    expect(isUnrestricted(selection)).toBe(expected);
+    ['allow', 'allow', true],
+    ['ask', 'ask', true],
+    ['deny', 'deny', false],
+  ])('reports %s as %s', (_name, permission, expected) => {
+    expect(isEnabled({ exec: permission as 'allow' }, 'exec')).toBe(expected);
+  });
+
+  it('treats absent exactly as deny', () => {
+    expect(isEnabled({}, 'exec')).toBe(false);
   });
 });
 
 describe('ToolRegistry.select', () => {
-  it('hands back the registry itself when nothing is restricted', () => {
-    // The common case — an agent with no tool list — pays for no wrapper.
-    expect(registry.select(undefined)).toBe(registry);
-    expect(registry.select({ allow: [], deny: [] })).toBe(registry);
+  it('always returns a view, never the registry itself', () => {
+    // There is no unrestricted agent any more: an empty map is an agent with
+    // no tools, not one with all of them, so there is nothing to fast-path.
+    expect(registry.select(ALL)).not.toBe(registry);
+    expect(registry.select({})).not.toBe(registry);
+  });
+
+  it('offers nothing for an empty map', () => {
+    expect(registry.select({}).definitions()).toEqual([]);
+    expect(registry.definitions()).toHaveLength(3);
   });
 
   it('hides a denied tool from the definitions the model is offered', () => {
-    const scope = registry.select({ deny: ['exec'] });
+    const scope = registry.select({ ...ALL, exec: 'deny' });
 
     expect(scope.definitions().map((definition) => definition.name)).toEqual([
       'read_file',
@@ -83,21 +92,28 @@ describe('ToolRegistry.select', () => {
     expect(registry.definitions()).toHaveLength(3);
   });
 
-  it('offers only the allow-list when one is given', () => {
-    const scope = registry.select({ allow: ['read_file'] });
+  it('offers a tool set to ask — asking is not hiding', () => {
+    const scope = registry.select({ read_file: 'allow', exec: 'ask' });
+
+    expect(scope.definitions().map((definition) => definition.name)).toEqual(['exec', 'read_file']);
+    expect(scope.permissionFor('exec')).toBe('ask');
+  });
+
+  it('offers only what the map names', () => {
+    const scope = registry.select({ read_file: 'allow' });
 
     expect(scope.definitions().map((definition) => definition.name)).toEqual(['read_file']);
   });
 
   it('keeps definitions sorted, so the cached prompt prefix is stable', () => {
-    const scope = registry.select({ deny: ['nothing-by-this-name'] });
+    const scope = registry.select(ALL);
     const names = scope.definitions().map((definition) => definition.name);
 
     expect(names).toEqual([...names].sort());
   });
 
   it('reports a hidden tool as absent rather than as forbidden', () => {
-    const scope = registry.select({ deny: ['exec'] });
+    const scope = registry.select({ ...ALL, exec: 'deny' });
 
     expect(scope.get('exec')).toBeUndefined();
     expect(scope.get('read_file')?.name).toBe('read_file');
@@ -106,7 +122,7 @@ describe('ToolRegistry.select', () => {
   });
 
   it('refuses to execute a hidden tool, without admitting it exists', async () => {
-    const scope = registry.select({ deny: ['exec'] });
+    const scope = registry.select({ ...ALL, exec: 'deny' });
     const result = await scope.execute({ name: 'exec' }, context);
 
     expect(result.isError).toBe(true);
@@ -116,8 +132,8 @@ describe('ToolRegistry.select', () => {
     expect(result.content).not.toMatch(/denied|forbidden|not allowed/i);
   });
 
-  it('still executes a tool the selection admits', async () => {
-    const scope = registry.select({ allow: ['read_file'] });
+  it('still executes a tool the map admits', async () => {
+    const scope = registry.select({ read_file: 'allow' });
     const result = await scope.execute({ name: 'read_file' }, context);
 
     expect(result.isError).toBe(false);
@@ -126,8 +142,8 @@ describe('ToolRegistry.select', () => {
 
   it('sees a tool registered after the scope was built', async () => {
     // A plugin loading at runtime must become visible to every agent whose
-    // selection admits it; a scope that snapshotted the list never would.
-    const scope = registry.select({ deny: ['exec'] });
+    // permissions admit it; a scope that snapshotted the list never would.
+    const scope = registry.select({ ...ALL, exec: 'deny', list_dir: 'allow' });
     expect(scope.definitions()).toHaveLength(2);
 
     registry.register(tool('list_dir'), 'plugin');
@@ -140,8 +156,20 @@ describe('ToolRegistry.select', () => {
     expect((await scope.execute({ name: 'list_dir' }, context)).isError).toBe(false);
   });
 
+  it('does not admit a late-registered tool the agent never enabled', () => {
+    // The reason absent means denied: a plugin cannot widen an agent by loading.
+    const scope = registry.select({ ...ALL, exec: 'deny' });
+
+    registry.register(tool('list_dir'), 'plugin');
+
+    expect(scope.definitions().map((definition) => definition.name)).toEqual([
+      'read_file',
+      'write_file',
+    ]);
+  });
+
   it('drops a tool the registry unregisters', () => {
-    const scope = registry.select({ deny: ['exec'] });
+    const scope = registry.select({ ...ALL, exec: 'deny' });
     expect(scope.definitions()).toHaveLength(2);
 
     registry.unregister('write_file');
@@ -150,7 +178,7 @@ describe('ToolRegistry.select', () => {
   });
 
   it('reuses the memo while nothing has changed, and rebuilds when it does', () => {
-    const scope = registry.select({ deny: ['exec'] });
+    const scope = registry.select({ ...ALL, list_dir: 'allow' });
 
     const first = scope.definitions();
     expect(scope.definitions()).toBe(first);
@@ -163,11 +191,15 @@ describe('ToolRegistry.select', () => {
   });
 
   it('gives two agents independent views of one registry', () => {
-    const reviewer = registry.select({ allow: ['read_file'] });
-    const writer = registry.select({ deny: ['exec'] });
+    const reviewer = registry.select({ read_file: 'allow' });
+    const writer = registry.select({ ...ALL, exec: 'deny' });
 
     expect(reviewer.definitions()).toHaveLength(1);
     expect(writer.definitions()).toHaveLength(2);
     expect(registry.definitions()).toHaveLength(3);
+  });
+
+  it('answers allow for an unscoped registry', () => {
+    expect(registry.permissionFor('exec')).toBe('allow');
   });
 });

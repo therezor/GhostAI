@@ -26,6 +26,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { BrainCircuit, Copy, Pencil, Plus, Power, PowerOff, Trash2 } from 'lucide-react';
 import { useMemo, useState, type JSX } from 'react';
+import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -90,14 +91,23 @@ const COMPARE: Comparators<AgentRow, SortKey> = {
   status: (a, b) => statusLabel(a).localeCompare(statusLabel(b)),
 };
 
-/** What an agent is offering, in one line, without opening it. */
-function summarise(entry: AgentEntry): string {
-  const parts: string[] = [];
-  if (entry.tools.deny.length > 0) parts.push(`no ${entry.tools.deny.join(', ')}`);
-  if (entry.tools.allow.length > 0) parts.push(`only ${entry.tools.allow.join(', ')}`);
-  if (entry.approvals?.exec === 'deny') parts.push('cannot run commands');
-  if (entry.systemPrompt.trim() !== '') parts.push('own prompt');
-  return parts.length === 0 ? 'Every tool, no restrictions' : parts.join(' · ');
+/**
+ * What an agent is offering, in one line, without opening it.
+ *
+ * Counts rather than names. An agent's map holds every tool the install has, so
+ * listing them would fill the column with the same five words on every row —
+ * what differs between agents is how many of them are on, and how many of those
+ * stop to ask.
+ */
+function summarise(entry: AgentEntry, t: TFunction): string {
+  const permissions = Object.values(entry.tools);
+  const enabled = permissions.filter((permission) => permission !== 'deny').length;
+  const asking = permissions.filter((permission) => permission === 'ask').length;
+
+  const parts = [t('agents.summaryTools', { count: enabled })];
+  if (asking > 0) parts.push(t('agents.summaryAsking', { count: asking }));
+  if (entry.systemPrompt.trim() !== '') parts.push(t('agents.summaryOwnPrompt'));
+  return parts.join(' · ');
 }
 
 export function AgentsRoute(): JSX.Element {
@@ -329,7 +339,7 @@ export function AgentsRoute(): JSX.Element {
                           <span className="truncate">{row.label}</span>
                           {row.isDefault && <Badge>default</Badge>}
                         </span>
-                        <span className="agents__summary truncate">{summarise(row.entry)}</span>
+                        <span className="agents__summary truncate">{summarise(row.entry, t)}</span>
                       </span>
                     </Link>
                   </td>

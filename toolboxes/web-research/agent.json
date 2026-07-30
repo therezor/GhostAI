@@ -1,12 +1,12 @@
 {
   "label": "Researcher",
   "enabled": true,
-  "approvals": {
-    "exec": "allow"
-  },
   "tools": {
-    "allow": [],
-    "deny": []
+    "read_file": "allow",
+    "list_dir": "allow",
+    "write_file": "allow",
+    "edit_file": "allow",
+    "exec": "allow"
   },
   "toolbox": {
     "name": "web-research",

@@ -2,25 +2,24 @@
  * The Tools panel's form.
  *
  * Same shape as the Agent panel's — strings in, patch or errors out — with one
- * field that is not like the others. `tools.approvals.timeoutMs` is `.positive()`
+ * field that is not like the others. `tools.approvalTimeoutMs` is `.positive()`
  * in the schema rather than `.nonnegative()`, so unlike every other duration in
  * the tree, **zero does not mean "no limit" here.** An approval that never
  * expires is a turn that waits forever for a browser tab that was closed an hour
  * ago, holding its tool call and its provider connection open. The bound below
  * is what turns that into a message instead of a 400.
+ *
+ * There is no permission state here. Permission is per tool and per agent, and
+ * `agents-form.ts` is where it is edited — see the header of `tools-panel.tsx`.
  */
 
-import type { ToolApprovalPolicy, ToolRisk, ToolsConfig } from '@ghostai/protocol';
+import type { ToolsConfig } from '@ghostai/protocol';
 import type { TFunction } from 'i18next';
 
 import { msToSeconds, parseNumber, secondsToMs } from './fields.js';
 import type { PatchResult } from './fields.js';
 
-export const RISK_BANDS: readonly ToolRisk[] = ['safe', 'write', 'exec', 'network'];
-export const APPROVAL_POLICIES: readonly ToolApprovalPolicy[] = ['allow', 'ask', 'deny'];
-
 export interface ToolsForm {
-  readonly approvals: Readonly<Record<ToolRisk, ToolApprovalPolicy>>;
   readonly approvalTimeoutSeconds: string;
   readonly execEnabled: boolean;
   readonly execTimeoutSeconds: string;
@@ -31,13 +30,7 @@ export interface ToolsForm {
 
 export function toToolsForm(tools: ToolsConfig): ToolsForm {
   return {
-    approvals: {
-      safe: tools.approvals.safe,
-      write: tools.approvals.write,
-      exec: tools.approvals.exec,
-      network: tools.approvals.network,
-    },
-    approvalTimeoutSeconds: msToSeconds(tools.approvals.timeoutMs),
+    approvalTimeoutSeconds: msToSeconds(tools.approvalTimeoutMs),
     execEnabled: tools.exec.enable,
     execTimeoutSeconds: msToSeconds(tools.exec.timeoutMs),
     execMaxOutputBytes: String(tools.exec.maxOutputBytes),
@@ -68,13 +61,7 @@ export function toToolsPatch(form: ToolsForm, t: TFunction): PatchResult {
     ok: true,
     patch: {
       tools: {
-        approvals: {
-          safe: form.approvals.safe,
-          write: form.approvals.write,
-          exec: form.approvals.exec,
-          network: form.approvals.network,
-          timeoutMs: secondsToMs(approvalTimeout.value),
-        },
+        approvalTimeoutMs: secondsToMs(approvalTimeout.value),
         exec: {
           enable: form.execEnabled,
           timeoutMs: secondsToMs(execTimeout.value),

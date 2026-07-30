@@ -106,14 +106,14 @@
 
   /* ── The tool list ─────────────────────────────────────────── */
 
-  /* A column of switches rather than two comma-separated text boxes. The boxes
-     were the worst control on this screen: they asked an operator to remember
-     tool names exactly, offered no way to discover them, and turned a typo into
-     a permission that silently did nothing. */
+  /* A row per tool with one select on it, rather than two comma-separated text
+     boxes. The boxes were the worst control on this screen: they asked an
+     operator to remember tool names exactly, offered no way to discover them,
+     and turned a typo into a permission that silently did nothing. */
   .agent-editor__tools {
     --gap: var(--space-1);
 
-    max-height: 18rem;
+    max-height: 24rem;
     overflow-y: auto;
     padding: var(--space-2);
     background-color: var(--surface-1);
@@ -124,6 +124,7 @@
   .agent-editor__tool {
     --gap: var(--space-3);
 
+    align-items: center;
     padding: var(--space-1) var(--space-2);
     border-radius: var(--radius-md);
   }
@@ -132,10 +133,38 @@
     background-color: var(--hover);
   }
 
-  .agent-editor__tool-name {
+  /* The name and its description share a column so the badge and the select
+     stay in one vertical line down the list however long a description is. */
+  .agent-editor__tool-text {
+    display: flex;
     flex: 1;
+    min-width: 0;
+    flex-direction: column;
+  }
+
+  .agent-editor__tool-name {
     font-family: var(--font-mono);
     font-size: var(--text-sm);
+    color: var(--fg-2);
+  }
+
+  .agent-editor__tool-detail {
+    font-size: var(--text-xs);
+    color: var(--fg-3);
+  }
+
+  /* Wide enough for the longest option without the trigger resizing as the
+     value changes — a control that moves when you use it reads as a glitch. */
+  .agent-editor__tool-permission {
+    width: 9rem;
+    flex: none;
+  }
+
+  /* The heading over the second list, when the chosen toolbox exposes its
+     programs as callables. */
+  .agent-editor__tool-group {
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
     color: var(--fg-2);
   }
 }

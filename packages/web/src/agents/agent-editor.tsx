@@ -48,12 +48,14 @@ import {
   unknownPlaceholders,
   type AgentDefaults,
   type AgentEntry,
+  type ToolPermission,
+  type ToolRisk,
 } from '@ghostai/protocol';
 
+import type { WebKey } from '@/i18n/keys.js';
 import { Badge } from '@/components/ui/badge.js';
 import { Button } from '@/components/ui/button.js';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu.js';
-import { Switch } from '@/components/ui/switch.js';
 import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';
 import { RowActions } from '@/components/crud/row-actions.js';
 import { CodeEditor } from '@/files/code-editor.js';
@@ -70,10 +72,10 @@ import {
 import { modelOptions } from '@/settings/fields.js';
 import { useSaveSettings, useSettings } from '@/settings/use-settings.js';
 import {
-  APPROVAL_POLICIES,
   REASONING_EFFORTS,
+  TOOL_PERMISSIONS,
   UNSET_VALUE,
-  parseToolList,
+  isToolPermission,
   toAgentDeletePatch,
   toAgentEntryForm,
   toAgentEntryPatch,
@@ -88,7 +90,7 @@ import { useAgent } from './agent-context.js';
  * The fields both halves of the form hold as strings under the same name.
  *
  * Intersecting the two keeps `bind` honest: a field that exists on only one of
- * them — `learningEnabled`, `allowTools` — cannot be bound this way, and trying
+ * them — `learningEnabled`, `tools` — cannot be bound this way, and trying
  * is a compile error rather than a control that silently edits nothing.
  */
 type StringField = {
@@ -108,10 +110,9 @@ interface Bound {
 /**
  * A select whose blank is a real answer.
  *
- * `reasoningEffort` unset means the request carries no such parameter; an
- * approval band left blank is governed by `tools.approvals` rather than by this
- * agent. Neither is "no value chosen", so neither may render as a blank
- * trigger — `unsetLabel` is the sentence that says what the blank does.
+ * `reasoningEffort` unset means the request carries no such parameter — not "no
+ * value chosen" — so it may not render as a blank trigger. `unsetLabel` is the
+ * sentence that says what the blank does.
  */
 function OptionalSelect({
   label,
@@ -167,6 +168,80 @@ function BoundField({
     />
   );
 }
+
+/**
+ * One tool, and the single control that decides everything about it.
+ *
+ * There is no on/off switch beside the select, because there is nothing for one
+ * to say: `Disabled` *is* the off position, and a switch would let an operator
+ * express "off, but ask" — a state the config cannot hold and the runtime would
+ * silently read as off.
+ *
+ * The label is the tool's name in mono, which is what it is: an identifier the
+ * model types, not prose. The risk badge is advisory — it is what seeded this
+ * permission when the agent was created, and it decides nothing now.
+ */
+function ToolRow({
+  name,
+  detail,
+  risk,
+  permission,
+  onChange,
+}: {
+  readonly name: string;
+  readonly detail: string;
+  readonly risk: ToolRisk | undefined;
+  readonly permission: ToolPermission;
+  readonly onChange: (next: ToolPermission) => void;
+}): JSX.Element {
+  const { t } = useTranslation();
+
+  return (
+    <li className="row agent-editor__tool">
+      <div className="agent-editor__tool-text">
+        <span className="agent-editor__tool-name truncate">{name}</span>
+        {detail !== '' && <span className="agent-editor__tool-detail truncate">{detail}</span>}
+      </div>
+      {risk === undefined ? (
+        // Named in the config but not registered right now — an MCP server that
+        // is down, or a tool that was removed. It stays on the list so a save
+        // cannot drop it.
+        <Badge tone="warning">{t('agents.toolNotInstalled')}</Badge>
+      ) : (
+        <Badge tone="neutral">{risk}</Badge>
+      )}
+      <div className="agent-editor__tool-permission">
+        <SelectField
+          label={<span className="sr-only">{t('agents.toolPermissionFor', { name })}</span>}
+          value={permission}
+          options={TOOL_PERMISSIONS.map((option) => ({
+            value: option,
+            label: t(PERMISSION_LABELS[option]),
+          }))}
+          onValueChange={(next) => {
+            if (isToolPermission(next)) onChange(next);
+          }}
+        />
+      </div>
+    </li>
+  );
+}
+
+/**
+ * The tool pinned to the top of the list.
+ *
+ * A name rather than a risk band: `exec` is the specific tool that runs a
+ * program on the host, and pinning the whole `exec` band would float every
+ * toolbox program with it — which is the second list, in its own group, where
+ * manifest order is the useful order.
+ */
+const EXEC_TOOL = 'exec';
+
+const PERMISSION_LABELS: Readonly<Record<ToolPermission, WebKey>> = {
+  allow: 'agents.toolAllow',
+  ask: 'agents.toolAsk',
+  deny: 'agents.toolDisabled',
+};
 
 /**
  * The dropdown's stand-in for "no toolbox".
@@ -374,54 +449,53 @@ function Editor({
   const strayPlaceholders = useMemo(() => unknownPlaceholders(promptText), [promptText]);
 
   // ── Tools ────────────────────────────────────────────────────────────────
-  const allow = useMemo(() => parseToolList(form.allowTools), [form.allowTools]);
-  const deny = useMemo(() => parseToolList(form.denyTools), [form.denyTools]);
-  const onlyListed = allow.length > 0;
+  //
+  // One row per tool, one control on it. Enabling a tool and choosing what
+  // happens when it runs are the same act — `deny` is the off position — so
+  // there is no switch beside the select and no mode toggle above the list.
+
+  /** The programs the chosen toolbox contributes, which get a list of their own. */
+  const toolboxToolNames = useMemo(
+    () => new Set((chosen?.tools ?? []).map((tool) => tool.name)),
+    [chosen],
+  );
 
   /**
    * Every tool this agent could name, registered or not.
    *
    * The union matters because `agents.list.*` is replaced wholesale on save: a
-   * checkbox list built only from the live registry would silently drop a tool
-   * this agent denies but whose MCP server happens to be down, and the denial
-   * would be gone the next time anything on this screen was saved.
+   * list built only from the live registry would silently drop a tool this
+   * agent has an opinion about but whose MCP server happens to be down, and
+   * that opinion would be gone the next time anything on this screen was saved.
+   *
+   * The toolbox's own programs are subtracted, because they are in one map with
+   * everything else but not in the shared registry — so overriding one put it
+   * here as a spurious "not installed" row *and* in the group below, one tool
+   * wearing two rows that disagreed about whether it existed.
    */
   const toolNames = useMemo(() => {
     const names = new Set<string>((tools.data?.tools ?? []).map((tool) => tool.name));
-    for (const name of [...allow, ...deny]) names.add(name);
-    return [...names].sort((a, b) => a.localeCompare(b));
-  }, [tools.data, allow, deny]);
+    for (const name of Object.keys(form.tools)) {
+      if (!toolboxToolNames.has(name)) names.add(name);
+    }
+    // `exec` first, then A–Z. Alphabetical put the one tool that runs arbitrary
+    // programs on this machine second from the top by accident of spelling, and
+    // it is the row an operator opens this section to look at. Everything below
+    // it reads a file or writes one inside the jail.
+    return [...names].sort((a, b) => {
+      if (a === EXEC_TOOL) return -1;
+      if (b === EXEC_TOOL) return 1;
+      return a.localeCompare(b);
+    });
+  }, [tools.data, form.tools, toolboxToolNames]);
 
   const registered = useMemo(
-    () => new Set((tools.data?.tools ?? []).map((tool) => tool.name)),
+    () => new Map((tools.data?.tools ?? []).map((tool) => [tool.name, tool])),
     [tools.data],
   );
 
-  const setToolChecked = (name: string, checked: boolean): void => {
-    if (onlyListed) {
-      const next = checked ? [...allow, name] : allow.filter((tool) => tool !== name);
-      update('allowTools', next.join(', '));
-      return;
-    }
-    // "Everything except": a *checked* box is a tool the agent may call, so
-    // unchecking one adds it to the deny list.
-    const next = checked ? deny.filter((tool) => tool !== name) : [...deny, name];
-    update('denyTools', next.join(', '));
-  };
-
-  const setOnlyListed = (next: boolean): void => {
-    // Carry the choice across rather than resetting it: the tools that were
-    // reachable a moment ago are the obvious starting point for the other mode.
-    const reachable = toolNames.filter(
-      (name) => (onlyListed ? allow : deny).includes(name) === onlyListed,
-    );
-    if (next) {
-      update('allowTools', reachable.join(', '));
-      update('denyTools', '');
-    } else {
-      update('allowTools', '');
-      update('denyTools', toolNames.filter((name) => !reachable.includes(name)).join(', '));
-    }
+  const setToolPermission = (name: string, permission: ToolPermission): void => {
+    update('tools', { ...form.tools, [name]: permission });
   };
 
   const providerOptions = useMemo(() => {
@@ -639,85 +713,54 @@ function Editor({
       </Section>
 
       <Section title={t('agents.toolsSection')} description={t('agents.toolsDesc')}>
-        <SwitchRow
-          label={t('agents.onlyPicked')}
-          hint={
-            onlyListed
-              ? 'Anything unchecked is not offered to the model at all.'
-              : 'Every tool this install has, except the ones you uncheck.'
-          }
-          checked={onlyListed}
-          onCheckedChange={setOnlyListed}
-        />
-
         {tools.isPending && <p className="page__note">{t('agents.loadingTools')}</p>}
         {toolNames.length > 0 && (
           <ul className="stack agent-editor__tools">
-            {toolNames.map((tool) => {
-              const checked = onlyListed ? allow.includes(tool) : !deny.includes(tool);
+            {toolNames.map((name) => {
+              const tool = registered.get(name);
               return (
-                <li key={tool} className="row agent-editor__tool">
-                  <Switch
-                    id={`tool-${tool}`}
-                    checked={checked}
-                    onCheckedChange={(next) => {
-                      setToolChecked(tool, next);
-                    }}
-                  />
-                  <label htmlFor={`tool-${tool}`} className="agent-editor__tool-name truncate">
-                    {tool}
-                  </label>
-                  {!registered.has(tool) && (
-                    // Named in the config but not registered right now — an MCP
-                    // server that is down, or a tool that was removed. It stays
-                    // on the list so a save cannot drop it.
-                    <Badge tone="warning">not installed</Badge>
-                  )}
-                </li>
+                <ToolRow
+                  key={name}
+                  name={name}
+                  detail={tool?.description ?? ''}
+                  risk={tool?.risk}
+                  permission={form.tools[name] ?? 'deny'}
+                  onChange={(next) => {
+                    setToolPermission(name, next);
+                  }}
+                />
               );
             })}
           </ul>
         )}
 
-        <FieldGrid>
-          {/* These three are the one place a blank still defers to another
-              screen — the global `tools.approvals`, which is a policy for the
-              whole install rather than a setting this agent could hold a
-              private copy of. */}
-          <OptionalSelect
-            label={t('agents.runCommands')}
-            bound={{
-              value: form.approveExec,
-              set: (value) => {
-                update('approveExec', value);
-              },
-            }}
-            options={APPROVAL_POLICIES}
-            unsetLabel="The global policy — Settings → Tools"
-          />
-          <OptionalSelect
-            label={t('agents.reachNetwork')}
-            bound={{
-              value: form.approveNetwork,
-              set: (value) => {
-                update('approveNetwork', value);
-              },
-            }}
-            options={APPROVAL_POLICIES}
-            unsetLabel="The global policy — Settings → Tools"
-          />
-          <OptionalSelect
-            label={t('agents.writeFiles')}
-            bound={{
-              value: form.approveWrite,
-              set: (value) => {
-                update('approveWrite', value);
-              },
-            }}
-            options={APPROVAL_POLICIES}
-            unsetLabel="The global policy — Settings → Tools"
-          />
-        </FieldGrid>
+        {/* Only when the box exposes callables. A `prompt` toolbox's programs
+            are reached through `exec`, so `exec`'s permission is already
+            theirs and a second set of rows would be a lie. */}
+        {chosen?.exposesTools === true && chosen.tools.length > 0 && (
+          <>
+            <h3 className="agent-editor__tool-group">
+              {t('agents.toolboxToolsGroup', { name: chosen.label || chosen.name })}
+            </h3>
+            <ul className="stack agent-editor__tools">
+              {chosen.tools.map((tool) => (
+                <ToolRow
+                  key={tool.name}
+                  name={tool.name}
+                  detail={tool.use}
+                  risk="exec"
+                  // The manifest's default until this agent overrides it. It is
+                  // a suggestion from the box's author, not a ceiling — the
+                  // programs are reachable through `exec` either way.
+                  permission={form.tools[tool.name] ?? tool.permission}
+                  onChange={(next) => {
+                    setToolPermission(tool.name, next);
+                  }}
+                />
+              ))}
+            </ul>
+          </>
+        )}
       </Section>
 
       {/* After the tools, because a profile decides *where* the tools it just
