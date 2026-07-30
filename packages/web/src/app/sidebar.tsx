@@ -22,11 +22,9 @@
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Boxes,
   BrainCircuit,
   FolderOpen,
   MoreHorizontal,
-  Palette,
   Pencil,
   Plus,
   Settings,
@@ -61,12 +59,26 @@ interface NavItem {
   readonly icon: typeof FolderOpen;
 }
 
+/**
+ * Two things this list deliberately does not carry.
+ *
+ * **No `/workspaces` row.** The switcher sits directly above it and carries
+ * "Manage workspaces…" as its last item, which is the same destination one
+ * control higher and in the place someone is already thinking about workspaces.
+ * A nav row beside it was a second door into one room — and it named the *only*
+ * thing in the column that the control above it already scopes.
+ *
+ * **No `/tokens` row.** The style guide is a developer surface: its copy names
+ * tokens and CSS values rather than addressing a user, which is why it is the
+ * one file `untranslated.test.ts` exempts. The route stays — it is how the
+ * design system is read, and `routes/tokens.test.tsx` holds it to resolving
+ * every `var()` it renders — but a permanent row in an operator's sidebar
+ * advertised it as a feature of the product.
+ */
 const NAV: readonly NavItem[] = [
   { to: '/agents', label: 'nav.agents', icon: BrainCircuit },
-  { to: '/workspaces', label: 'nav.workspaces', icon: Boxes },
   { to: '/files', label: 'nav.files', icon: FolderOpen },
   { to: '/settings', label: 'nav.settings', icon: Settings },
-  { to: '/tokens', label: 'nav.tokens', icon: Palette },
 ];
 
 /**

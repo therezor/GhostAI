@@ -156,6 +156,81 @@ describe('PATCH /api/workspaces/:id', () => {
     expect(existsSync(join(test.workspace, 'acme'))).toBe(true);
   });
 
+  it('moves the folder, and the sessions that named it come with it', async () => {
+    const test = await start();
+    await create(test, { name: 'Client Acme', id: 'acme' });
+    writeFileSync(join(test.workspace, 'acme', 'notes.md'), 'kept');
+    await test.server.app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers: test.headers,
+      payload: { key: 'web-1', workspaceId: 'acme' },
+    });
+
+    const response = await test.server.app.inject({
+      method: 'PATCH',
+      url: '/api/workspaces/acme',
+      headers: test.headers,
+      payload: { id: 'acme24' },
+    });
+
+    expect(response.json()).toMatchObject({ id: 'acme24', name: 'Client Acme' });
+    expect(existsSync(join(test.workspace, 'acme'))).toBe(false);
+    expect(existsSync(join(test.workspace, 'acme24', 'notes.md'))).toBe(true);
+    // The half that is not the store's: a folder that moved without its
+    // conversations is worse than either half on its own.
+    expect((await list(test)).find((workspace) => workspace.id === 'acme24')).toMatchObject({
+      sessionCount: 1,
+    });
+  });
+
+  it('takes the name and the folder in one request', async () => {
+    const test = await start();
+    await create(test, { name: 'Old', id: 'acme' });
+
+    const response = await test.server.app.inject({
+      method: 'PATCH',
+      url: '/api/workspaces/acme',
+      headers: test.headers,
+      payload: { name: 'Client Acme', id: 'acme24' },
+    });
+
+    expect(response.json()).toMatchObject({ id: 'acme24', name: 'Client Acme' });
+  });
+
+  it('refuses to move the default, whose folder holds all the others', async () => {
+    const test = await start();
+    const response = await test.server.app.inject({
+      method: 'PATCH',
+      url: '/api/workspaces/default',
+      headers: test.headers,
+      payload: { id: 'elsewhere' },
+    });
+    expect(response.statusCode).toBe(409);
+  });
+
+  it('refuses a folder that could be a path, or that is taken', async () => {
+    const test = await start();
+    await create(test, { name: 'Alpha', id: 'alpha' });
+    await create(test, { name: 'Beta', id: 'beta' });
+
+    const move = async (id: string): Promise<number> =>
+      (
+        await test.server.app.inject({
+          method: 'PATCH',
+          url: '/api/workspaces/beta',
+          headers: test.headers,
+          payload: { id },
+        })
+      ).statusCode;
+
+    // 422 for the same reason a create with that id gets one: the store's
+    // `invalid_input` and Zod's rejection are one class of answer to a caller.
+    expect(await move('../etc')).toBe(422);
+    expect(await move('alpha')).toBe(409);
+    expect(existsSync(join(test.workspace, 'beta'))).toBe(true);
+  });
+
   it('404s for a workspace that is not there', async () => {
     const test = await start();
     const response = await test.server.app.inject({

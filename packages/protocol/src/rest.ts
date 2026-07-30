@@ -618,8 +618,19 @@ export const CreateWorkspaceRequestSchema = z.object({
 });
 export type CreateWorkspaceRequest = z.infer<typeof CreateWorkspaceRequestSchema>;
 
+/**
+ * What an edit may change: the label, the folder, or both.
+ *
+ * `id` is the directory name, so sending it is a `rename(2)` under a tree
+ * somebody may be working in — refused for the default workspace, whose folder
+ * *is* the workspace root and the parent of every other one. Both fields are
+ * optional and a body with neither is a no-op, which is what lets the editor
+ * send one PATCH for whichever boxes were touched.
+ */
 export const UpdateWorkspaceRequestSchema = z.object({
-  name: z.string().min(1).max(60),
+  name: z.string().min(1).max(60).optional(),
+  /** The folder to move it to. Lowercase; see `WORKSPACE_ID_PATTERN`. */
+  id: z.string().min(1).max(40).optional(),
 });
 export type UpdateWorkspaceRequest = z.infer<typeof UpdateWorkspaceRequestSchema>;
 

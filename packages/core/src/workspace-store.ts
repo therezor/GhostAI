@@ -28,16 +28,16 @@
  * that made `agents.defaults.workspace` default to the empty string.
  */
 
-import { statSync } from 'node:fs';
+import { renameSync, statSync } from 'node:fs';
 import type { DatabaseSync, SQLOutputValue, StatementSync } from 'node:sqlite';
 
 import { systemClock, type Clock } from './clock.js';
 import { GhostError } from './errors.js';
-import { ensureDir, workspaceDirFor, type GhostPaths } from './paths.js';
+import { ensureDir, sharedDirFor, workspaceDirFor, type GhostPaths } from './paths.js';
 import {
   DEFAULT_WORKSPACE_ID,
   RESERVED_WORKSPACE_IDS,
-  deriveSlug,
+  deriveWorkspaceId,
   isWorkspaceId,
 } from './workspace-id.js';
 
@@ -175,7 +175,7 @@ export class WorkspaceStore {
       throw new GhostError('invalid_input', 'A workspace needs a name');
     }
 
-    const id = options.id ?? this.#uniqueSlug(deriveSlug(name));
+    const id = options.id ?? this.#uniqueSlug(deriveWorkspaceId(name));
     if (!isWorkspaceId(id)) {
       throw new GhostError(
         'invalid_input',
@@ -233,6 +233,114 @@ export class WorkspaceStore {
       id,
     );
     return { ...existing, name: trimmed };
+  }
+
+  /**
+   * Moves a workspace to a different folder: the row's id, and the tree on disk.
+   *
+   * The id **is** the directory name, so this is a `rename(2)` and a primary-key
+   * update that have to agree. It is one operation rather than two because the
+   * two failure modes of doing it separately are both unrecoverable by hand: a
+   * row pointing at a folder that is not there, or a folder nothing in the
+   * registry can name.
+   *
+   * **Everything that resolves through the id is the caller's to repoint.**
+   * Sessions carry a `workspace_id` and `SessionStore.reassignWorkspace` is how
+   * they follow; a cached jail keyed on the old id has to be evicted. Neither is
+   * done here, for the reason stated on `delete`: a store reaching into another
+   * store's table is how their schemas start to drift.
+   *
+   * Three things it refuses, each because the alternative is worse than a
+   * refusal:
+   *
+   *  - **The default**, whose directory *is* the workspace root and is also the
+   *    parent of every other workspace. There is no rename of it that does not
+   *    mean relocating the entire tree, which is `GHOSTAI_HOME`'s job.
+   *  - **A folder something already occupies.** `rename(2)` onto an existing
+   *    empty directory succeeds on POSIX, which would silently swallow it.
+   *  - **A reserved or malformed id**, on the rules that guard every other
+   *    place an id becomes a path.
+   *
+   * What it does *not* protect is a signed URL already in flight: those carry
+   * the old folder and stop resolving. They are minted for seconds at a time and
+   * the alternative is a folder nobody can correct, so that is the trade.
+   */
+  relocate(id: string, folder: string): WorkspaceRecord {
+    const existing = this.get(id);
+    if (existing === undefined) {
+      throw new GhostError('not_found', `No workspace called "${id}"`, { details: { id } });
+    }
+    if (existing.isDefault) {
+      throw new GhostError(
+        'conflict',
+        'The default workspace is the folder that holds the others and cannot be moved',
+        { details: { id } },
+      );
+    }
+    if (folder === id) return existing;
+
+    if (!isWorkspaceId(folder)) {
+      throw new GhostError(
+        'invalid_input',
+        `Not a usable workspace folder: ${folder}. Use 1-40 lowercase letters, digits and hyphens.`,
+        { details: { id: folder } },
+      );
+    }
+    if (RESERVED_WORKSPACE_IDS.has(folder)) {
+      throw new GhostError('invalid_input', `"${folder}" is reserved and cannot name a folder`, {
+        details: { id: folder },
+      });
+    }
+    if (this.get(folder) !== undefined) {
+      throw new GhostError('conflict', `A workspace called "${folder}" already exists`, {
+        details: { id: folder },
+      });
+    }
+
+    const from = workspaceDirFor(this.#paths, id);
+    const to = workspaceDirFor(this.#paths, folder);
+    // Checked rather than left to `rename(2)`, which happily replaces an empty
+    // directory at the destination — and the thing it would replace is a folder
+    // the user or the agent put there.
+    if (statSync(to, { throwIfNoEntry: false }) !== undefined) {
+      throw new GhostError('conflict', `"${folder}" already exists in the default workspace`, {
+        details: { id: folder },
+      });
+    }
+
+    // The directory first. A row updated before a `rename(2)` that then fails —
+    // a permission error, a cross-device link — would leave the registry naming
+    // a folder that does not exist, and every turn in that workspace creating an
+    // empty one beside the real files.
+    try {
+      renameSync(from, to);
+    } catch (error) {
+      throw new GhostError('storage', `Could not move the workspace folder to "${folder}"`, {
+        details: { id: folder },
+        cause: error,
+      });
+    }
+
+    // The layer agents working in one folder share is keyed by workspace id too,
+    // and lives outside the jail. Nothing writes it yet — it arrives with the
+    // memory tools — so this is usually a no-op, and the alternative when it is
+    // not is a workspace that silently loses what it had pooled.
+    const sharedFrom = sharedDirFor(this.#paths, id);
+    if (statSync(sharedFrom, { throwIfNoEntry: false }) !== undefined) {
+      renameSync(sharedFrom, sharedDirFor(this.#paths, folder));
+    }
+
+    this.#stmt('UPDATE workspaces SET id = ?, updated_at_ms = ? WHERE id = ?').run(
+      folder,
+      this.#clock.now(),
+      id,
+    );
+
+    const moved = this.get(folder);
+    if (moved === undefined) {
+      throw new GhostError('storage', `Workspace ${id} vanished while being moved to ${folder}`);
+    }
+    return moved;
   }
 
   /**

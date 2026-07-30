@@ -158,6 +158,34 @@ describe('JailCache', () => {
     expect(roots.length).toBe(built);
   });
 
+  it('rebuilds one workspace after its folder has moved out from under it', () => {
+    // The case `evict` exists for: a jail canonicalises its root once, so an
+    // entry for a folder that has been renamed away would be handed to the next
+    // workspace created on that freed name.
+    const { create, roots } = counting();
+    const cache = new JailCache({ paths, create });
+    const acme = cache.forWorkspace('acme');
+    const other = cache.forWorkspace('research');
+
+    cache.evict('acme');
+
+    expect(cache.forWorkspace('acme')).not.toBe(acme);
+    // And only that one: evicting is not clearing.
+    expect(cache.forWorkspace('research')).toBe(other);
+    expect(roots).toHaveLength(4);
+  });
+
+  it('ignores an eviction of the default, which is held for the life of the cache', () => {
+    const { create, roots } = counting();
+    const cache = new JailCache({ paths, create });
+    const original = cache.default;
+
+    cache.evict('default');
+
+    expect(cache.forWorkspace('default')).toBe(original);
+    expect(roots).toHaveLength(1);
+  });
+
   it('rebuilds everything after a clear', () => {
     const { create, roots } = counting();
     const cache = new JailCache({ paths, create });

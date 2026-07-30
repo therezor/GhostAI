@@ -356,6 +356,13 @@ function harnessRuntime(runtime: GhostRuntime, configFile: string): ServerRuntim
     store: runtime.store,
     workspaces: runtime.workspaces,
 
+    // Wired like the real adapter, and it has to be: a folder move that left a
+    // stale jail behind would only show up in a browser, which is what this
+    // harness is for.
+    releaseWorkspace: (workspaceId: string): void => {
+      runtime.evictWorkspace(workspaceId);
+    },
+
     agent: (agentId?: string): AgentView => {
       // Through the real resolver, like the real adapter: a spec that
       // configures a second agent has to see the same inheritance a browser

@@ -27,6 +27,7 @@ import { AgentsRoute } from '@/agents/agents-page.js';
 import { ProviderEditorRoute } from '@/settings/provider-editor.js';
 import { FilesRoute } from '@/routes/files.js';
 import { WorkspacesRoute } from '@/routes/workspaces.js';
+import { WorkspaceEditorRoute } from '@/workspaces/workspace-editor.js';
 import { NotificationsRoute } from '@/routes/notifications.js';
 import { SettingsRoute } from '@/routes/settings.js';
 import { TokensRoute } from '@/routes/tokens.js';
@@ -117,6 +118,13 @@ const agentEditorRoute = createRoute({
   component: AgentEditorRoute,
 });
 
+/** A sibling of `/workspaces`, exactly as the agent editor is of `/agents`. */
+const workspaceEditorRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/workspaces/$workspaceId',
+  component: WorkspaceEditorRoute,
+});
+
 /**
  * Under `/settings` rather than at the top level, because that is where the
  * list it belongs to lives — the back link returns to `?panel=providers`. A
@@ -141,6 +149,7 @@ const routeTree = rootRoute.addChildren([
   agentsRoute,
   agentEditorRoute,
   workspacesRoute,
+  workspaceEditorRoute,
   filesRoute,
   notificationsRoute,
   settingsRoute,

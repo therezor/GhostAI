@@ -42,7 +42,7 @@ export {
   DEFAULT_WORKSPACE_ID,
   RESERVED_WORKSPACE_IDS,
   WORKSPACE_ID_PATTERN,
-  deriveSlug,
+  deriveWorkspaceId,
   isWorkspaceId,
 } from './workspace-id.js';
 

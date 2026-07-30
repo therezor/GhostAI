@@ -15,13 +15,21 @@ import {
   createRoute,
   createRouter,
 } from '@tanstack/react-router';
-import { screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { Providers } from '@/app/providers.js';
+import { createAppRouter } from '@/app/router.js';
 import { queryKeys } from '@/lib/query.js';
-import { WorkspacesRoute } from '@/routes/workspaces.js';
-import { renderWithProviders, stubApi } from '@/test/render.js';
+import { STATUS } from '@/test/fixtures.js';
+import {
+  renderWithProviders,
+  stubApi,
+  testQueryClient,
+  type RecordedRequest,
+  type StubRoute,
+} from '@/test/render.js';
 import { WorkspaceSwitcher } from './workspace-switcher.js';
 import { DEFAULT_WORKSPACE_ID } from './workspace-context.js';
 
@@ -179,6 +187,41 @@ describe('the workspace switcher', () => {
   });
 });
 
+/**
+ * The list and the editor, over the real route tree.
+ *
+ * Mounted through `createAppRouter` rather than as a bare component, the way
+ * `agents.test.tsx` does — the list's name cell is a `<Link>` into the editor
+ * now, and a test that rendered the page alone could assert the link's href and
+ * nothing about whether the screen behind it exists.
+ */
+const SHELL_ROUTES: Record<string, StubRoute> = {
+  '/api/status': [200, STATUS],
+  '/api/sessions': [200, { sessions: [] }],
+  '/api/notifications': [200, { notifications: [], unreadCount: 0 }],
+};
+
+function mount(
+  path = '/workspaces',
+  overrides: Record<string, StubRoute> = {},
+): { readonly calls: RecordedRequest[] } {
+  const calls = stubApi({
+    ...SHELL_ROUTES,
+    'GET /api/workspaces': [200, TWO],
+    ...overrides,
+  });
+
+  const router = createAppRouter();
+  router.update({ history: createMemoryHistory({ initialEntries: [path] }) });
+  render(
+    <Providers client={testQueryClient()}>
+      <RouterProvider router={router} />
+    </Providers>,
+  );
+
+  return { calls };
+}
+
 describe('the workspaces page', () => {
   /** Opens the kebab for one row and returns nothing — the menu is on screen. */
   async function openActions(name: string): Promise<void> {
@@ -186,11 +229,9 @@ describe('the workspaces page', () => {
   }
 
   it('creates one from a name, never a path', async () => {
-    const calls = stubApi({
-      'GET /api/workspaces': [200, TWO],
+    const { calls } = mount('/workspaces', {
       'POST /api/workspaces': [201, workspace('research', 'Research')],
     });
-    renderWithProviders(<WorkspacesRoute />);
 
     await userEvent.click(await screen.findByRole('button', { name: 'New workspace' }));
     await userEvent.type(await screen.findByLabelText('Name'), 'Research');
@@ -199,45 +240,103 @@ describe('the workspaces page', () => {
     await waitFor(() => {
       expect(calls.some((call) => call.method === 'POST')).toBe(true);
     });
+    // No `id`: a blank folder box means "derive it", and the derivation is the
+    // registry's — it is the only thing that can settle a collision.
     expect(calls.find((call) => call.method === 'POST')?.body).toEqual({ name: 'Research' });
   });
 
-  it('renames one from the row menu', async () => {
-    const calls = stubApi({
-      'GET /api/workspaces': [200, TWO],
-      'PATCH /api/workspaces/acme': [200, workspace('acme', 'Acme Ltd')],
+  it('lets the folder be chosen apart from the name', async () => {
+    // The whole point of the second box. "Client Acme (2024 rebuild)" would
+    // otherwise have to live in `/client-acme-2024-rebuild`, and the only way
+    // to get the short folder was to create it under a name nobody wanted.
+    const { calls } = mount('/workspaces', {
+      'POST /api/workspaces': [201, workspace('acme24', 'Client Acme (2024 rebuild)')],
     });
-    renderWithProviders(<WorkspacesRoute />);
 
-    await openActions('Client Acme');
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
-
-    const field = await screen.findByLabelText('Name');
-    expect(field).toHaveValue('Client Acme');
-
-    await userEvent.clear(field);
-    await userEvent.type(field, 'Acme Ltd{Enter}');
+    await userEvent.click(await screen.findByRole('button', { name: 'New workspace' }));
+    await userEvent.type(await screen.findByLabelText('Name'), 'Client Acme (2024 rebuild)');
+    await userEvent.type(await screen.findByLabelText('Folder'), 'acme24');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
 
     await waitFor(() => {
-      expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({ name: 'Acme Ltd' });
+      expect(calls.find((call) => call.method === 'POST')?.body).toEqual({
+        name: 'Client Acme (2024 rebuild)',
+        id: 'acme24',
+      });
     });
   });
 
+  it('shows the folder the name would derive, before it is created', async () => {
+    mount();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'New workspace' }));
+    await userEvent.type(await screen.findByLabelText('Name'), 'Client Acme');
+
+    // The derived slug, live. It is what pressing Create would actually produce,
+    // and seeing it change while the name is typed is what explains the field.
+    expect(await screen.findByText(/Creates \/client-acme/)).toBeInTheDocument();
+  });
+
+  it('refuses a folder the browser can already tell is wrong', async () => {
+    const { calls } = mount();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'New workspace' }));
+    await userEvent.type(await screen.findByLabelText('Name'), 'Research');
+
+    const folder = await screen.findByLabelText('Folder');
+    await userEvent.type(folder, 'Not A Slug');
+    expect(await screen.findByRole('alert')).toHaveTextContent(/lowercase letters/);
+    expect(screen.getByRole('button', { name: 'Create' })).toBeDisabled();
+
+    // A folder another workspace already occupies, checked here so the message
+    // can point at the box rather than arriving as a toast over a closed dialog.
+    await userEvent.clear(folder);
+    await userEvent.type(folder, 'acme');
+    expect(await screen.findByRole('alert')).toHaveTextContent(/already uses that folder/);
+
+    await userEvent.clear(folder);
+    await userEvent.type(folder, 'research');
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Create' })).toBeEnabled();
+    });
+    expect(calls.some((call) => call.method === 'POST')).toBe(false);
+  });
+
+  it('opens the editor from the row, rather than renaming in place', async () => {
+    mount();
+
+    // No Rename item: the name is a field on the screen the row opens, and a
+    // second way to edit one field is a shortcut kept correct twice.
+    await openActions('Client Acme');
+    expect(await screen.findByRole('menuitem', { name: 'Edit' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Rename' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
+
+    expect(await screen.findByRole('heading', { name: 'Client Acme' })).toBeInTheDocument();
+  });
+
+  it('says which folder each workspace is in, without opening it', async () => {
+    mount();
+
+    // The two are chosen separately now, so a list showing only the label would
+    // make you open the row to learn where the files actually are.
+    expect(await screen.findByText('/acme')).toBeInTheDocument();
+  });
+
   it('cannot delete the default, because it is the parent of the others', async () => {
-    stubApi({ 'GET /api/workspaces': [200, TWO] });
-    renderWithProviders(<WorkspacesRoute />);
+    mount();
 
     await openActions('Default');
 
-    expect(await screen.findByRole('menuitem', { name: 'Rename' })).toBeInTheDocument();
+    expect(await screen.findByRole('menuitem', { name: 'Edit' })).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument();
   });
 
   it('asks before deleting, and sends nothing until the answer is yes', async () => {
     // The behaviour the dialog never had: a delete used to fire on the single
     // click of an icon sitting next to Rename.
-    const calls = stubApi({ 'GET /api/workspaces': [200, TWO] });
-    renderWithProviders(<WorkspacesRoute />);
+    const { calls } = mount();
 
     await openActions('Client Acme');
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
@@ -251,8 +350,7 @@ describe('the workspaces page', () => {
 
   it('offers to move the conversations when a delete is refused, then deletes', async () => {
     let refused = true;
-    const calls = stubApi({
-      'GET /api/workspaces': [200, TWO],
+    const { calls } = mount('/workspaces', {
       'DELETE /api/workspaces/acme': () =>
         refused
           ? [
@@ -272,7 +370,6 @@ describe('the workspaces page', () => {
         return [200, { moved: 2 }];
       },
     });
-    renderWithProviders(<WorkspacesRoute />);
 
     await openActions('Client Acme');
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
@@ -293,15 +390,13 @@ describe('the workspaces page', () => {
   });
 
   it('explains what a workspace is, once, where someone is reading about them', async () => {
-    stubApi({ 'GET /api/workspaces': [200, TWO] });
-    renderWithProviders(<WorkspacesRoute />);
+    mount();
 
     expect(await screen.findByText(/cannot reach each other/)).toBeInTheDocument();
   });
 
   it('keeps the default at the top however the list is sorted', async () => {
-    stubApi({ 'GET /api/workspaces': [200, TWO] });
-    renderWithProviders(<WorkspacesRoute />);
+    mount();
 
     const firstCell = async (): Promise<string> => {
       const rows = await screen.findAllByRole('row');
@@ -313,6 +408,107 @@ describe('the workspaces page', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Name' }));
     expect(await firstCell()).toContain('Default');
+  });
+});
+
+describe('the workspace editor', () => {
+  it('moves the folder, and sends the conversations after it in one request', async () => {
+    const { calls } = mount('/workspaces/acme', {
+      'PATCH /api/workspaces/acme': [200, workspace('acme24', 'Client Acme')],
+    });
+
+    const folder = await screen.findByLabelText('Folder');
+    expect(folder).toHaveValue('acme');
+
+    await userEvent.clear(folder);
+    await userEvent.type(folder, 'acme24');
+    // Said before it is done, because a rename under a tree someone is working
+    // in is not something to discover from a toast afterwards.
+    expect(await screen.findByText(/Moves the folder to \/acme24/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => {
+      expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({ id: 'acme24' });
+    });
+  });
+
+  it('refuses a folder another workspace already holds', async () => {
+    const { calls } = mount('/workspaces/acme');
+
+    const folder = await screen.findByLabelText('Folder');
+    await userEvent.clear(folder);
+    await userEvent.type(folder, 'default');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/reserved/);
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(calls.some((call) => call.method === 'PATCH')).toBe(false);
+  });
+
+  it('leaves the default workspace no folder to move', async () => {
+    mount('/workspaces/default');
+
+    // Its directory *is* the root every other workspace is created inside, so
+    // there is nothing a rename of it could mean. The box holds `/` as a value
+    // rather than as a placeholder: a placeholder is drawn muted and means
+    // "nothing here yet", which made the one answer on the screen that is fixed
+    // look like the one nobody had filled in.
+    const folder = await screen.findByLabelText('Folder');
+    expect(folder).toBeDisabled();
+    expect(folder).toHaveValue('/');
+  });
+
+  it('never claims the default lives in a folder called default', async () => {
+    mount();
+
+    // `workspace/default` is a path that does not exist, and the list rendered
+    // it under the name for a while. The default's row reads `/`, so the column
+    // shows the nesting the others sit in — and never borrows `workspace`,
+    // which the Files breadcrumb already uses for a different directory.
+    expect(await screen.findByText('/acme')).toBeInTheDocument();
+    expect(screen.getByText('/', { exact: true })).toBeInTheDocument();
+    expect(screen.queryByText(/^workspace/)).not.toBeInTheDocument();
+  });
+
+  it('will not save nothing', async () => {
+    const { calls } = mount('/workspaces/acme');
+
+    // Clean on arrival: a Save that is always pressable invites a rename to the
+    // name it already has.
+    expect(await screen.findByRole('button', { name: 'Save changes' })).toBeDisabled();
+
+    await userEvent.clear(await screen.findByLabelText('Name'));
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(calls.some((call) => call.method === 'PATCH')).toBe(false);
+  });
+
+  it('offers no delete for the default, and one for the others', async () => {
+    mount('/workspaces/default');
+    await screen.findByRole('heading', { name: 'Default' });
+    expect(screen.queryByRole('button', { name: /^Actions for/ })).not.toBeInTheDocument();
+  });
+
+  it('renames without touching the folder, and sends only the name', async () => {
+    const { calls } = mount('/workspaces/acme', {
+      'PATCH /api/workspaces/acme': [200, workspace('acme', 'Acme Ltd')],
+    });
+
+    await userEvent.clear(await screen.findByLabelText('Name'));
+    await userEvent.type(screen.getByLabelText('Name'), 'Acme Ltd');
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => {
+      // No `id`: an unchanged box is not an instruction to move a directory.
+      expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({ name: 'Acme Ltd' });
+    });
+  });
+
+  it('says so rather than showing an empty form for a workspace that is gone', async () => {
+    mount('/workspaces/vanished');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no workspace called/);
+    expect(screen.getByRole('link', { name: /Back to workspaces/ })).toBeInTheDocument();
   });
 });
 
@@ -328,10 +524,12 @@ describe('the workspaces page', () => {
  */
 describe('filtering to nothing', () => {
   it('says so instead of rendering an empty line', async () => {
-    stubApi({ 'GET /api/workspaces': [200, TWO] });
-    renderWithProviders(<WorkspacesRoute />);
+    mount();
 
-    await userEvent.type(await screen.findByLabelText('Filter workspaces by name'), 'zzzznothing');
+    await userEvent.type(
+      await screen.findByLabelText('Filter workspaces by name or folder'),
+      'zzzznothing',
+    );
 
     expect(screen.getByText(/Nothing here matches/)).toBeInTheDocument();
   });

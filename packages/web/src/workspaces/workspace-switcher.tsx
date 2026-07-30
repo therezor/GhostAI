@@ -116,7 +116,7 @@ export function WorkspaceSwitcher({
           <DropdownMenuItem asChild>
             <Link to="/workspaces" onClick={onNavigate}>
               <Settings2 />
-              {t('providers.manage')}
+              {t('workspaces.manage')}
             </Link>
           </DropdownMenuItem>
         </DropdownMenuContent>

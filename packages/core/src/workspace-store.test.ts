@@ -7,12 +7,12 @@ import fc from 'fast-check';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { isGhostError } from './errors.js';
-import { resolveGhostPaths, workspaceDirFor, type GhostPaths } from './paths.js';
+import { resolveGhostPaths, sharedDirFor, workspaceDirFor, type GhostPaths } from './paths.js';
 import { SessionStore } from './session-store.js';
 import {
   DEFAULT_WORKSPACE_ID,
   RESERVED_WORKSPACE_IDS,
-  deriveSlug,
+  deriveWorkspaceId,
   isWorkspaceId,
 } from './workspace-id.js';
 import { WorkspaceStore } from './workspace-store.js';
@@ -76,7 +76,7 @@ describe('workspace ids', () => {
     // `Work` and `work` on APFS or NTFS are two rows over one tree — two
     // workspaces that believe they are isolated and are not.
     expect(isWorkspaceId('Work')).toBe(false);
-    expect(deriveSlug('Work')).toBe('work');
+    expect(deriveWorkspaceId('Work')).toBe('work');
   });
 
   it.each([
@@ -88,13 +88,13 @@ describe('workspace ids', () => {
     ['default', 'workspace'],
     ['CON', 'workspace'],
   ])('derives %j to %j', (name, expected) => {
-    expect(deriveSlug(name)).toBe(expected);
+    expect(deriveWorkspaceId(name)).toBe(expected);
   });
 
   it('always derives something legal, for any name at all', () => {
     fc.assert(
       fc.property(fc.string(), (name) => {
-        const slug = deriveSlug(name);
+        const slug = deriveWorkspaceId(name);
         expect(isWorkspaceId(slug)).toBe(true);
         // And it can only ever name a child of the default workspace.
         expect(workspaceDirFor(paths, slug)).toBe(join(paths.workspace, slug));
@@ -210,6 +210,78 @@ describe('WorkspaceStore', () => {
 
   it('refuses to rename something that is not there', () => {
     expect(kindOf(() => store.rename('ghost', 'New'))).toBe('not_found');
+  });
+
+  it('relocates the row and the tree together, keeping what is inside', () => {
+    const created = store.create({ name: 'Client Acme' });
+    writeFileSync(join(workspaceDirFor(paths, created.id), 'notes.md'), 'kept');
+
+    const moved = store.relocate(created.id, 'acme24');
+
+    expect(moved.id).toBe('acme24');
+    // The label is untouched: the folder and the name are separate answers, and
+    // moving one must not silently reword the other.
+    expect(moved.name).toBe('Client Acme');
+    expect(store.get(created.id)).toBeUndefined();
+    expect(statSync(join(paths.workspace, 'acme24', 'notes.md')).isFile()).toBe(true);
+    expect(statSync(join(paths.workspace, created.id), { throwIfNoEntry: false })).toBeUndefined();
+  });
+
+  it('takes the shared layer with it, since that is keyed by workspace too', () => {
+    const created = store.create({ name: 'Research' });
+    mkdirSync(sharedDirFor(paths, created.id), { recursive: true });
+    writeFileSync(join(sharedDirFor(paths, created.id), 'facts.md'), 'pooled');
+
+    store.relocate(created.id, 'lab');
+
+    expect(statSync(join(sharedDirFor(paths, 'lab'), 'facts.md')).isFile()).toBe(true);
+  });
+
+  it('is a no-op when the folder is the one it already has', () => {
+    store.create({ name: 'Notes', id: 'notes' });
+    expect(store.relocate('notes', 'notes')).toMatchObject({ id: 'notes' });
+    expect(statSync(join(paths.workspace, 'notes')).isDirectory()).toBe(true);
+  });
+
+  it('refuses to move the default, whose folder is the root the others live in', () => {
+    expect(kindOf(() => store.relocate(DEFAULT_WORKSPACE_ID, 'somewhere'))).toBe('conflict');
+  });
+
+  it('refuses a folder that is not a legal slug, or is reserved', () => {
+    const created = store.create({ name: 'Notes' });
+    expect(kindOf(() => store.relocate(created.id, '../etc'))).toBe('invalid_input');
+    expect(kindOf(() => store.relocate(created.id, 'Work'))).toBe('invalid_input');
+    expect(kindOf(() => store.relocate(created.id, 'con'))).toBe('invalid_input');
+  });
+
+  it('refuses a folder another workspace already registers', () => {
+    store.create({ name: 'Alpha', id: 'alpha' });
+    const beta = store.create({ name: 'Beta', id: 'beta' });
+    expect(kindOf(() => store.relocate(beta.id, 'alpha'))).toBe('conflict');
+  });
+
+  it('refuses a folder that exists on disk, rather than renaming over it', () => {
+    // `rename(2)` replaces an empty directory at the destination on POSIX, and
+    // the thing it would swallow is a folder the user or the agent put there.
+    const created = store.create({ name: 'Notes' });
+    mkdirSync(join(paths.workspace, 'occupied'), { recursive: true });
+
+    expect(kindOf(() => store.relocate(created.id, 'occupied'))).toBe('conflict');
+    expect(store.get(created.id)?.id).toBe(created.id);
+  });
+
+  it('refuses to move something that is not there', () => {
+    expect(kindOf(() => store.relocate('ghost', 'elsewhere'))).toBe('not_found');
+  });
+
+  it('leaves the row alone when the directory could not be moved', () => {
+    // The order the method exists to guarantee: a row updated before a
+    // `rename(2)` that failed would name a folder nobody could find.
+    const created = store.create({ name: 'Notes' });
+    rmSync(workspaceDirFor(paths, created.id), { recursive: true });
+
+    expect(kindOf(() => store.relocate(created.id, 'moved'))).toBe('storage');
+    expect(store.get(created.id)?.id).toBe(created.id);
   });
 
   it('detaches without touching the files', () => {

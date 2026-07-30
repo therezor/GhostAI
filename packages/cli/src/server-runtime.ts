@@ -295,6 +295,10 @@ export function createServerRuntime(
     store: runtime.store,
     workspaces: runtime.workspaces,
 
+    releaseWorkspace: (workspaceId: string): void => {
+      runtime.evictWorkspace(workspaceId);
+    },
+
     agent: (agentId?: string): AgentView => {
       // Resolution throws for an id naming nothing runnable, which the route
       // turns into a 404 — the alternative, silently describing the default,

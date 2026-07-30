@@ -181,9 +181,7 @@
   "nav": {
     "agents": "Agents",
     "files": "Files",
-    "settings": "Settings",
-    "tokens": "Tokens",
-    "workspaces": "Workspaces"
+    "settings": "Settings"
   },
   "notifications": {
     "empty": "Automation runs and expired approvals report themselves here.",
@@ -207,7 +205,6 @@
     "identityDesc": "What this endpoint is called in the list.",
     "loading": "Loading providers…",
     "loadingOne": "Loading provider…",
-    "manage": "Manage workspaces…",
     "models": "Models",
     "modelsPlaceholder": "one model id per line",
     "newHint": "One endpoint. The type is fixed once it exists — add the same type twice to run against two servers, and they keep separate keys.",
@@ -411,19 +408,34 @@
     "stopped": "Stopped"
   },
   "workspaces": {
+    "backToWorkspaces": "Back to workspaces",
     "blocked_one": "{{count}} conversation still belongs to {{workspace}}. Moving them to Default keeps their history; the files stay where they are either way.",
     "blocked_other": "{{count}} conversations still belong to {{workspace}}. Moving them to Default keeps their history; the files stay where they are either way.",
     "chats": "Chats",
+    "defaultNote": "The folder that holds every other workspace, so a turn in it can reach their files. It cannot be detached.",
+    "deleteHint": "{{workspace}} is detached from GhostAI. Its folder and everything in it stays on disk, and recreating a workspace on the same folder adopts it again.",
     "deleteTitle": "Delete this workspace?",
-    "filter": "Filter workspaces by name",
+    "deleteWorkspace": "Delete this workspace",
+    "filter": "Filter workspaces by name or folder",
+    "folder": "Folder",
+    "folderDefault": "The default workspace is the root every other one is a directory inside, so it has no folder of its own to move.",
+    "folderHint": "The directory created under the workspace root. Leave it blank to use the one derived from the name.",
+    "folderHintEdit": "The directory this workspace’s files are in, under the workspace root. Changing it moves the folder and brings its conversations with it; links already shared for its files stop resolving.",
+    "folderReserved": "That folder name is reserved and cannot name a workspace.",
+    "folderShape": "Use 1–40 lowercase letters, digits and hyphens, starting and ending with a letter or digit.",
+    "folderTaken": "A workspace already uses that folder.",
+    "identity": "Identity",
+    "identityDesc": "What this workspace is called, and where its files are.",
+    "loadingOne": "Loading workspace…",
+    "manage": "Manage workspaces…",
     "moveTitle": "Move the conversations first?",
+    "namedNote_one": "Isolated from the other named workspaces — it cannot reach their files, and they cannot reach its. {{count}} conversation runs in it, last updated {{updated}}.",
+    "namedNote_other": "Isolated from the other named workspaces — it cannot reach their files, and they cannot reach its. {{count}} conversations run in it, last updated {{updated}}.",
     "namePlaceholder": "Client Acme",
     "new": "New workspace",
-    "newHint": "A name, not a path. The folder is created inside the workspace root and the id comes from the name.",
+    "newHint": "A name, and the folder it gets inside the workspace root. Neither is a path, and the two are independent — the folder only starts out derived from the name.",
     "newTitle": "New workspace",
     "note": "A workspace is a folder the agent works in. Default holds all the others, so it can reach their files; the named ones cannot reach each other.",
-    "renameHint": "The folder on disk keeps its own name — only the label changes.",
-    "renameTitle": "Rename workspace",
     "title": "Workspaces",
     "updated": "Updated"
   }

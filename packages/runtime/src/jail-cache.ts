@@ -94,6 +94,24 @@ export class JailCache implements JailResolver {
     return jail;
   }
 
+  /**
+   * Drops one workspace's jail, for when its folder has moved out from under it.
+   *
+   * A jail canonicalises its root once, at construction, so an entry for a
+   * folder that has since been renamed away holds a path that no longer exists.
+   * Left in place it is mostly inert — nothing names the old id after a
+   * relocation — but it stops being inert the moment a *new* workspace is
+   * created on the freed folder name: the lookup would hand it a jail resolved
+   * against the directory that used to be there.
+   *
+   * Never the default, whose entry is also held by `#default`; there is nothing
+   * that can move it, so nothing asks.
+   */
+  evict(workspaceId: string): void {
+    if (workspaceId === DEFAULT_WORKSPACE_ID) return;
+    this.#jails.delete(workspaceId);
+  }
+
   clear(): void {
     this.#jails.clear();
   }

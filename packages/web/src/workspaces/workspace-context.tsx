@@ -22,10 +22,19 @@
 
 import { createContext, useCallback, useContext, useState, type JSX, type ReactNode } from 'react';
 
+import { DEFAULT_WORKSPACE_ID } from '@ghostai/protocol';
+
 const STORAGE_KEY = 'ghostai:workspace';
 
-/** The workspace every install has. Also the parent folder of all the others. */
-export const DEFAULT_WORKSPACE_ID = 'default';
+/**
+ * The workspace every install has. Also the parent folder of all the others.
+ *
+ * Re-exported rather than declared, so the half-dozen files that already import
+ * it from here keep working while there is only one `'default'` in the
+ * codebase. It belongs with the rest of the id rules — the same module that
+ * says which ids are reserved and how a name becomes a folder.
+ */
+export { DEFAULT_WORKSPACE_ID };
 
 export interface WorkspaceState {
   readonly workspaceId: string;

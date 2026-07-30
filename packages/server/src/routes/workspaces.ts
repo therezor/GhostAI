@@ -95,7 +95,7 @@ export function workspaceRoutes(deps: RouteDeps): RouteGroup<WorkspaceRouteId> {
     },
 
     'workspaces.update': {
-      summary: 'Rename a workspace',
+      summary: 'Rename a workspace, move its folder, or both',
       schema: {
         params: IdParamsSchema,
         body: UpdateWorkspaceRequestSchema,
@@ -103,11 +103,26 @@ export function workspaceRoutes(deps: RouteDeps): RouteGroup<WorkspaceRouteId> {
       },
       handler: (request): WorkspaceSummary => {
         const { id } = request.params as IdParams;
-        const { name } = request.body as UpdateWorkspaceRequest;
-        // The name is a label; the id is the folder. Renaming deliberately
-        // moves nothing on disk — a rename that relocated a tree would break
-        // every session bound to it and every signed URL still in flight.
-        return summarise(workspaces().rename(require(id).id, name));
+        const { name, id: folder } = request.body as UpdateWorkspaceRequest;
+        let record = require(id);
+
+        // The name first, and against the *old* id, so a body carrying both
+        // does not have to guess which one the row is keyed on mid-request.
+        if (name !== undefined) record = workspaces().rename(record.id, name);
+
+        if (folder !== undefined && folder !== record.id) {
+          const from = record.id;
+          // The store moves the directory and the row together and refuses the
+          // default, whose folder is the root every other workspace sits in.
+          record = workspaces().relocate(from, folder);
+          // Then everything that resolved through the old id follows it. Not in
+          // the store: `sessions` is another store's table, and the jail cache
+          // is not a store at all.
+          deps.runtime.store.reassignWorkspace(from, record.id);
+          deps.runtime.releaseWorkspace?.(from);
+        }
+
+        return summarise(record);
       },
     },
 

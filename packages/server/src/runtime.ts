@@ -164,6 +164,21 @@ export interface ServerRuntime {
   readonly workspaces: WorkspaceStore;
 
   /**
+   * Forgets whatever is cached against one workspace id.
+   *
+   * There is exactly one caller: the folder move behind `PATCH
+   * /api/workspaces/:id`. A jail canonicalises its root once, when it is built,
+   * so an entry keyed on an id whose directory has just been renamed away holds
+   * a path that is no longer there — and would be handed to the *next*
+   * workspace created on that freed folder name.
+   *
+   * Optional because it is a cache detail rather than a capability: a runtime
+   * that keeps no jails has nothing to forget, and a route test should not have
+   * to say so.
+   */
+  releaseWorkspace?(workspaceId: string): void;
+
+  /**
    * One agent's view. `undefined` is the default agent.
    *
    * Takes an id because `tools`, `systemPrompt` and `contextWindowTokens` all

@@ -475,10 +475,23 @@ export const api = {
       body: { name, ...(id === undefined ? {} : { id }) },
     }),
 
-  renameWorkspace: (id: string, name: string): Promise<WorkspaceSummary> =>
+  /**
+   * The label, the folder, or both — whichever the editor's boxes changed.
+   *
+   * `folder` is the directory name, so sending it moves the tree on disk and
+   * repoints every session at it. Omitted fields are left alone, which is what
+   * lets one press send one request.
+   */
+  updateWorkspace: (
+    id: string,
+    changes: { readonly name?: string; readonly folder?: string },
+  ): Promise<WorkspaceSummary> =>
     request(`/api/workspaces/${encodeURIComponent(id)}`, WorkspaceSummarySchema, {
       method: 'PATCH',
-      body: { name },
+      body: {
+        ...(changes.name === undefined ? {} : { name: changes.name }),
+        ...(changes.folder === undefined ? {} : { id: changes.folder }),
+      },
     }),
 
   /** Detaches it. The folder and everything in it stays on disk. */

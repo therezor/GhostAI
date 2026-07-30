@@ -179,7 +179,16 @@ export interface GhostRuntime {
   readonly jail: WorkspaceJail;
   /** Every workspace's jail, keyed by id. Rebuilt only when the root moves. */
   readonly jails: JailResolver;
-  /** The registry: listing, naming and detaching. Never a path. */
+  /**
+   * Drops the cached jail for one workspace, after its folder has moved.
+   *
+   * A method here rather than `evict` on `JailResolver`: that interface is
+   * `@ghostai/security`'s, it is what decides whether a path may be touched,
+   * and widening it with a cache operation would put "forget this" in front of
+   * every implementation of a containment boundary.
+   */
+  evictWorkspace(workspaceId: string): void;
+  /** The registry: listing, naming, moving and detaching. Never a path. */
   readonly workspaces: WorkspaceStore;
   /**
    * Rebuilt by `reconfigure`; a running turn keeps the one it started on.
@@ -427,6 +436,10 @@ class Runtime implements GhostRuntime {
 
   get jails(): JailResolver {
     return this.#current.jails;
+  }
+
+  evictWorkspace(workspaceId: string): void {
+    this.#current.jails.evict(workspaceId);
   }
 
   get loop(): AgentLoop | null {

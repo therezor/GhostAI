@@ -18,6 +18,13 @@ import type { Page } from '@playwright/test';
 
 import { expect, test } from '../fixtures.js';
 
+/** Every workspace as the registry has it, reduced to what an assertion reads. */
+async function workspacesOf(app: Page, url: string): Promise<{ id: string; name: string }[]> {
+  const response = await app.request.get(`${url}/api/workspaces`);
+  const body = (await response.json()) as { workspaces: { id: string; name: string }[] };
+  return body.workspaces.map((row) => ({ id: row.id, name: row.name }));
+}
+
 /** Picks a workspace from the sidebar switcher. */
 async function switchTo(app: Page, name: string): Promise<void> {
   await app.getByRole('button', { name: /^Workspace: / }).click();
@@ -25,6 +32,113 @@ async function switchTo(app: Page, name: string): Promise<void> {
 }
 
 test.describe('workspaces', () => {
+  test('a workspace is created under a folder of its own choosing', async ({ app, harness }) => {
+    // The two are separate answers, and the registry has always stored them in
+    // separate columns — what only a browser shows is that the second box
+    // actually reaches the request rather than being decoration over a slug the
+    // name derived anyway.
+    await app.goto(`${harness.url}/workspaces`);
+
+    await app.getByRole('button', { name: 'New workspace' }).click();
+    await app.getByRole('dialog').getByLabel('Name').fill('Client Acme (2024 rebuild)');
+    await app.getByRole('dialog').getByLabel('Folder').fill('acme24');
+    await app.getByRole('dialog').getByRole('button', { name: 'Create' }).click();
+
+    // The durable state, not the toast that announces it: a row naming both
+    // halves, and a registry that agrees.
+    //
+    // Scoped to the table, and that is not tidiness. The dialog's own hint reads
+    // "Creates /acme24. …", so an unscoped `getByText` matches two
+    // nodes for as long as the dialog is still mounted — which fails strict mode
+    // on exactly the runs where the close animation loses the race with the
+    // refetch. Whether that happens is a question about the machine, so it may
+    // not be in an `expect`.
+    await expect(app.getByRole('table').getByText('/acme24', { exact: true })).toBeVisible();
+    await expect
+      .poll(async () => await workspacesOf(app, harness.url))
+      .toContainEqual({
+        id: 'acme24',
+        name: 'Client Acme (2024 rebuild)',
+      });
+  });
+
+  test('the row opens an editor, and the name changes without the folder moving', async ({
+    app,
+    harness,
+  }) => {
+    await app.request.post(`${harness.url}/api/workspaces`, {
+      data: { name: 'Acme', id: 'acme' },
+    });
+    await app.goto(`${harness.url}/workspaces`);
+
+    await app.getByRole('link', { name: 'Edit Acme' }).click();
+    await expect(app).toHaveURL(/\/workspaces\/acme$/u);
+    await expect(app.getByLabel('Folder')).toHaveValue('acme');
+
+    await app.getByLabel('Name').fill('Acme Ltd');
+    await app.getByRole('button', { name: 'Save changes' }).click();
+
+    await expect
+      .poll(async () => await workspacesOf(app, harness.url))
+      .toContainEqual({
+        id: 'acme',
+        name: 'Acme Ltd',
+      });
+  });
+
+  test('moving the folder renames the directory and takes the conversations', async ({
+    app,
+    harness,
+  }) => {
+    // The assertion only a real stack can make: the tree on disk, the registry
+    // row and the sessions that named the old folder all end up agreeing. Each
+    // of the three is a different store, and nothing below this level sees more
+    // than one of them.
+    await app.request.post(`${harness.url}/api/workspaces`, {
+      data: { name: 'Acme', id: 'acme' },
+    });
+    await app.request.put(`${harness.url}/api/files/text`, {
+      data: { path: 'brief.md', content: 'the brief', workspaceId: 'acme' },
+    });
+    await app.request.post(`${harness.url}/api/sessions`, {
+      data: { key: 'web-acme-1', workspaceId: 'acme' },
+    });
+
+    await app.goto(`${harness.url}/workspaces/acme`);
+    await app.getByLabel('Folder').fill('acme24');
+    await app.getByRole('button', { name: 'Save changes' }).click();
+
+    // The durable state: the editor is now on the new folder's URL.
+    await expect(app).toHaveURL(/\/workspaces\/acme24$/u);
+    await expect
+      .poll(async () => await workspacesOf(app, harness.url))
+      .toContainEqual({
+        id: 'acme24',
+        name: 'Acme',
+      });
+
+    // The files came with it, and are reachable under the new folder alone.
+    await app.goto(`${harness.url}/files?workspace=acme24`);
+    await expect(app.getByRole('cell', { name: 'brief.md', exact: true })).toBeVisible();
+
+    // And so did the conversation, which would otherwise resolve to a folder
+    // that is not there any more.
+    const sessions = await app.request.get(`${harness.url}/api/sessions?workspace=acme24`);
+    expect(
+      ((await sessions.json()) as { sessions: { key: string }[] }).sessions.map((row) => row.key),
+    ).toContain('web-acme-1');
+  });
+
+  test('the default workspace has no folder to move', async ({ app, harness }) => {
+    await app.goto(`${harness.url}/workspaces/default`);
+
+    // Its directory *is* the root every other workspace sits inside, so the box
+    // is inert rather than absent, states `/`, and says why it cannot move.
+    await expect(app.getByLabel('Folder')).toBeDisabled();
+    await expect(app.getByLabel('Folder')).toHaveValue('/');
+    await expect(app.getByText(/no folder of its own to move/)).toBeVisible();
+  });
+
   test('switching moves the Files page, and workspaces do not see each other', async ({
     app,
     harness,
