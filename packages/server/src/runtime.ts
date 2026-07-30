@@ -25,7 +25,7 @@ import type {
   SetCredentialRequest,
   ToolDefinition,
 } from '@ghostai/protocol';
-import type { WorkspaceJail } from '@ghostai/security';
+import type { ToolboxListing, WorkspaceJail } from '@ghostai/security';
 import type { PromptPreviewInput } from '@ghostai/agent';
 
 /**
@@ -143,6 +143,17 @@ export interface ServerRuntime {
   loadError?(): string | undefined;
 
   readonly store: SessionStore;
+
+  /**
+   * Toolboxes installed on this machine, read fresh.
+   *
+   * Exposed as a listing rather than as a store or a path, for the reason the
+   * port exists at all: the server should not know where toolboxes live on disk or
+   * how an approval is recorded, only what an operator is allowed to choose from.
+   * Read on every call because a manifest edited after approval stops being
+   * usable the moment it changes.
+   */
+  toolboxes(): readonly ToolboxListing[];
 
   /**
    * The workspace registry.

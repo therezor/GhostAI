@@ -170,7 +170,7 @@ describe('createChatRuntime', () => {
   it('honours a configured apiBase over the registry default', () => {
     const home = tempHome({
       agents: { defaults: { provider: 'ollama', model: 'm' } },
-      providers: { ollama: { apiBase: 'http://127.0.0.1:9999/v1' } },
+      providers: { ollama: { type: 'ollama', apiBase: 'http://127.0.0.1:9999/v1' } },
     });
     // Nothing observable on the runtime exposes the base URL, so the assertion
     // that matters is that an override parses and constructs at all — an

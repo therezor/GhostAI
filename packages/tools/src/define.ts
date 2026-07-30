@@ -98,6 +98,16 @@ export interface ToolContext {
    * the seam an agent's `sandbox` setting reaches the tool layer through.
    */
   readonly runner?: CommandRunner;
+  /**
+   * Whether `runner` confines the command to a container mounting only the
+   * workspace.
+   *
+   * Separate from `runner` being set, because the two answer different
+   * questions: `runner` is *where*, and this is *whether the guard's
+   * host-shaped assumptions still hold*. A future runner that ran commands on
+   * another host without confining them would set one and not the other.
+   */
+  readonly sandboxed?: boolean;
 }
 
 /**

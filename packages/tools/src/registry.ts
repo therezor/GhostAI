@@ -86,6 +86,57 @@ interface Registration {
  * loop takes this rather than the class so that an agent with a tool subset is
  * not a special case anywhere in the turn.
  */
+/**
+ * A scope with a toolbox's own programs laid over it.
+ *
+ * A *composition* rather than extra registrations, and the reason is name
+ * collision: two toolboxes can both hold `curl`, and one shared registry would
+ * have to prefix them into `web-research__curl` — which is the name the model
+ * would then have to type. Each agent instead sees its own box's programs under
+ * the names they actually have, and nothing is shared between agents.
+ *
+ * The overlay wins on a clash with a built-in, which is deliberate but should
+ * never happen: a toolbox declaring `read_file` would shadow the jailed one, so
+ * `assertToolboxPolicy` refuses the built-in names outright.
+ */
+export function withToolboxTools(base: ToolScope, tools: readonly AnyTool[]): ToolScope {
+  if (tools.length === 0) return base;
+
+  const overlay = new Map(tools.map((tool) => [tool.name, tool]));
+  // Its own registry, so the timeout, the abort race, the output cap and the
+  // never-throws contract come from one implementation rather than two.
+  const registry = new ToolRegistry();
+  for (const tool of tools) registry.register(tool, 'builtin');
+
+  let cached: readonly ToolDefinition[] | null = null;
+  let cachedFrom: readonly ToolDefinition[] | null = null;
+
+  return {
+    definitions(): readonly ToolDefinition[] {
+      const underneath = base.definitions();
+      // Memoised against the base's own array identity, which the registry
+      // already keys on its revision — so a plugin registering late still shows
+      // up, and a turn that asks twice does not re-sort.
+      if (cached !== null && cachedFrom === underneath) return cached;
+      const merged = [
+        ...underneath.filter((definition) => !overlay.has(definition.name)),
+        ...registry.definitions(),
+      ].sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
+      cached = Object.freeze(merged);
+      cachedFrom = underneath;
+      return cached;
+    },
+    get(name: string): AnyTool | undefined {
+      return overlay.get(name) ?? base.get(name);
+    },
+    async execute(call: ToolInvocation, context: ToolContext): Promise<ToolExecution> {
+      return overlay.has(call.name)
+        ? await registry.execute(call, context)
+        : await base.execute(call, context);
+    },
+  };
+}
+
 export interface ToolScope {
   /** The definitions to send to the provider. Sorted, memoised, frozen. */
   definitions(): readonly ToolDefinition[];

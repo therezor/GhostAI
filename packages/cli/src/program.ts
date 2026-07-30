@@ -45,6 +45,7 @@ import type { LogLevel } from '@ghostai/core';
 import type { ChatOptions } from './chat.js';
 import { describeError, translationsFor, type CliT, type Env } from './i18n.js';
 import type { InitOptions } from './init.js';
+import { runToolbox } from './toolbox.js';
 import type { ServeCommandOptions } from './serve.js';
 
 /**
@@ -146,7 +147,8 @@ export function buildProgram(deps: CliDeps = {}): Command {
   // From the environment only. `--help` and a bad flag are both answered before
   // any subcommand has loaded a config, so `config.ui.locale` does not exist
   // yet — see the seam documented in `i18n.ts`.
-  const { t } = translationsFor(env);
+  const translations = translationsFor(env);
+  const { t } = translations;
 
   // Keyed by the literal commander passes in, because that is the only thing it
   // gives `styleTitle` to identify a heading by. A heading commander adds later
@@ -247,6 +249,44 @@ export function buildProgram(deps: CliDeps = {}): Command {
       });
       command.setOptionValue('exitCode', code);
     });
+
+  const toolbox = program.command('toolbox').description(t('toolbox.description'));
+  const toolboxAction =
+    (action: 'list' | 'approve' | 'revoke') =>
+    (id: string | undefined, _options: unknown, command: Command) => {
+      const globals = command.parent?.parent?.opts<GlobalOptions>() ?? { color: true };
+      const code = runToolbox({
+        action,
+        ...(id === undefined ? {} : { id }),
+        ...(globals.home === undefined ? {} : { home: globals.home }),
+        out: (line) => {
+          out.write(`${line}\n`);
+        },
+        errOut: (line) => {
+          errOut.write(`${line}\n`);
+        },
+        env,
+        t: translations,
+      });
+      command.setOptionValue('exitCode', code);
+    };
+
+  toolbox
+    .command('list')
+    .description(t('toolbox.list.description'))
+    .action((options: unknown, command: Command) => {
+      toolboxAction('list')(undefined, options, command);
+    });
+  toolbox
+    .command('approve')
+    .argument('<id>')
+    .description(t('toolbox.approve.description'))
+    .action(toolboxAction('approve'));
+  toolbox
+    .command('revoke')
+    .argument('<id>')
+    .description(t('toolbox.revoke.description'))
+    .action(toolboxAction('revoke'));
 
   program
     .command('serve')

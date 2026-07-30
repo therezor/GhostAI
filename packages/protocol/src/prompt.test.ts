@@ -12,9 +12,6 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_SYSTEM_PROMPT_TEMPLATE,
   PROMPT_PLACEHOLDERS,
-  SECTION_SEPARATOR,
-  hasPlaceholder,
-  legacyInstructionsToTemplate,
   renderPromptTemplate,
   unknownPlaceholders,
   type PromptValues,
@@ -98,11 +95,25 @@ describe('unknownPlaceholders', () => {
 });
 
 describe('DEFAULT_SYSTEM_PROMPT_TEMPLATE', () => {
-  it('uses every placeholder it is allowed to, and no others', () => {
-    for (const placeholder of PROMPT_PLACEHOLDERS) {
+  it('names no placeholder that nothing will fill', () => {
+    expect(unknownPlaceholders(DEFAULT_SYSTEM_PROMPT_TEMPLATE)).toEqual([]);
+  });
+
+  it('withholds the two host facts a model misuses when it is given them', () => {
+    // Both are still *available* — a custom prompt may want them — and the
+    // default deliberately declines. Handed the absolute root, a model writes
+    // `<root>/notes/x` and the jail resolves it inside the workspace again;
+    // handed the host OS, a toolboxed agent believes its commands run there.
+    // See the `PROMPT_PLACEHOLDERS` comment for both failures.
+    expect(DEFAULT_SYSTEM_PROMPT_TEMPLATE).not.toContain('{{workspaceRoot}}');
+    expect(DEFAULT_SYSTEM_PROMPT_TEMPLATE).not.toContain('{{runtime}}');
+
+    // The three it does use, so this test fails if one is dropped by accident
+    // rather than silently rendering a prompt with a hole in it.
+    for (const placeholder of ['name', 'workspaceId', 'platformPolicy'] as const) {
+      expect(PROMPT_PLACEHOLDERS).toContain(placeholder);
       expect(DEFAULT_SYSTEM_PROMPT_TEMPLATE).toContain(`{{${placeholder}}}`);
     }
-    expect(unknownPlaceholders(DEFAULT_SYSTEM_PROMPT_TEMPLATE)).toEqual([]);
   });
 
   it('renders to a prompt with no braces left in it', () => {
@@ -110,40 +121,10 @@ describe('DEFAULT_SYSTEM_PROMPT_TEMPLATE', () => {
 
     expect(rendered).not.toContain('{{');
     expect(rendered).toContain('# Reviewer');
-    expect(rendered).toContain('That directory is your root');
+    expect(rendered).toContain('To the file tools it is the');
     expect(rendered).toContain('## Guidelines');
-    expect(rendered).toContain('## Platform policy (POSIX)');
-  });
-});
-
-describe('legacyInstructionsToTemplate', () => {
-  it('keeps the old composition exactly — built-in, then an Instructions section', () => {
-    const migrated = legacyInstructionsToTemplate('Only ever read. Never write.');
-
-    expect(migrated).toBe(
-      `${DEFAULT_SYSTEM_PROMPT_TEMPLATE}${SECTION_SEPARATOR}## Instructions\n\nOnly ever read. Never write.`,
-    );
-  });
-
-  it('trims the operator text without touching the template', () => {
-    expect(legacyInstructionsToTemplate('  be terse  ')).toContain('## Instructions\n\nbe terse');
-  });
-
-  it('produces something the migration can recognise as already done', () => {
-    expect(hasPlaceholder(legacyInstructionsToTemplate('be terse'))).toBe(true);
-  });
-});
-
-describe('hasPlaceholder', () => {
-  it('is false for a prompt that names none', () => {
-    expect(hasPlaceholder('Only ever read. Never write.')).toBe(false);
-  });
-
-  it('is false for an unknown one, so a typo does not look migrated', () => {
-    expect(hasPlaceholder('{{nmae}}')).toBe(false);
-  });
-
-  it('is true as soon as one known placeholder appears', () => {
-    expect(hasPlaceholder('hello {{name}}')).toBe(true);
+    // Whatever `platformPolicy` was rendered with. The wording is the agent
+    // package's, because it is the half that knows where `exec` lands.
+    expect(rendered).toContain(VALUES.platformPolicy);
   });
 });

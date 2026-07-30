@@ -44,6 +44,7 @@ import {
   WorkspaceSummarySchema,
   StatusResponseSchema,
   AgentListResponseSchema,
+  ToolboxListResponseSchema,
   ToolListResponseSchema,
   UploadResponseSchema,
   type AuthSessionResponse,
@@ -72,6 +73,7 @@ import {
   type WorkspaceSummary,
   type StatusResponse,
   type AgentListResponse,
+  type ToolboxListResponse,
   type ToolListResponse,
   type UploadResponse,
 } from '@ghostai/protocol';
@@ -270,6 +272,15 @@ export const api = {
 
   tools: (signal?: AbortSignal): Promise<ToolListResponse> =>
     request('/api/tools', ToolListResponseSchema, { ...(signal ? { signal } : {}) }),
+
+  /**
+   * Toolboxes installed on this machine.
+   *
+   * Read fresh rather than cached long: a manifest edited after approval stops
+   * being usable the moment it changes, and a stale list would keep offering it.
+   */
+  toolboxes: (signal?: AbortSignal): Promise<ToolboxListResponse> =>
+    request('/api/toolboxes', ToolboxListResponseSchema, { ...(signal ? { signal } : {}) }),
 
   /**
    * The agents a turn can run on, resolved.

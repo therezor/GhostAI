@@ -15,10 +15,18 @@ import {
   ServerMessageSchema,
   type ToolRisk,
   type ToolsConfig,
+  ToolboxSchema,
 } from '@ghostai/protocol';
 import { ProviderError, type ChatRequest } from '@ghostai/providers';
 import { WorkspaceJail, singleJail, toolOutputTag, type JailResolver } from '@ghostai/security';
-import { DEFAULT_TOOLS_CONFIG, ToolRegistry, defineTool, type AnyTool } from '@ghostai/tools';
+import {
+  DEFAULT_TOOLS_CONFIG,
+  ToolRegistry,
+  defineTool,
+  toolboxTools,
+  withToolboxTools,
+  type AnyTool,
+} from '@ghostai/tools';
 
 import {
   deniedToolResult,
@@ -34,6 +42,7 @@ import {
   type TurnInput,
   type TurnResult,
 } from './loop.js';
+import type { ContextContributor } from './prompt.js';
 import { STEERING_PREFIX, SteeringQueue } from './steering.js';
 import { manualClock, type ManualClock } from './testkit/clock.js';
 import {
@@ -421,6 +430,124 @@ describe('AgentLoop', () => {
     ]);
   });
 
+  it('completes a turn in which the model reasoned and then said nothing', async () => {
+    // The failure behind "I see a reasoning window and no answer": a model —
+    // usually a small local one, or any model whose `maxTokens` ran out inside
+    // the reasoning channel — returns empty content and no tool calls. There is
+    // nothing to continue on, so the turn is over; what must not happen is an
+    // error, since the provider did answer.
+    const { loop, store } = harness({ turns: [{ reasoning: ['weighing the options'] }] });
+
+    const { events, result } = await runTurn(loop, { sessionKey: SESSION, content: 'hi' });
+
+    expect(typesOf(events)).toEqual(['turn.start', 'reasoning.delta', 'turn.end']);
+    expect(result.stopReason).toBe('complete');
+    expect(result.text).toBe('');
+    // Still appended, so the next turn's history reflects what happened rather
+    // than skipping the iteration entirely.
+    expect(store.history(SESSION).at(-1)?.role).toBe('assistant');
+  });
+
+  it('reports the same tool definitions it sends', async () => {
+    // The context inspector rebuilt this list from the registry instead of asking
+    // the loop, so a toolboxed agent's tools were absent from the panel *and* from
+    // its token count — the one screen whose job is to say what the model is sent.
+    // Asserting the two agree is what stops that being rebuilt a second time.
+    const { loop, provider } = harness({ tools: [echoTool], turns: [{ deltas: ['ok'] }] });
+
+    await runTurn(loop, { sessionKey: SESSION, content: 'hi' });
+
+    expect(loop.toolDefinitions.map((definition) => definition.name)).toEqual(['echo']);
+    expect(provider.requests[0]?.tools).toEqual(loop.toolDefinitions);
+  });
+
+  it('reports a toolbox overlay as part of its tools', async () => {
+    // `withToolboxTools` composes the container's programs on top of the agent's
+    // scope, which is exactly the part `tools.select(agent.tools)` cannot see.
+    const scope = withToolboxTools(
+      new ToolRegistry({ clock: manualClock() }).select({ allow: [], deny: [] }),
+      toolboxTools(
+        ToolboxSchema.parse({
+          schema: 'ghostai.toolbox/1',
+          name: 'research',
+          image: `sha256:${'a'.repeat(64)}`,
+          expose: 'tools',
+          tools: [{ name: 'search', use: 'Search the web.' }],
+        }),
+      ),
+    );
+    const { loop } = harness({ loop: { tools: scope } });
+
+    expect(loop.toolDefinitions.map((definition) => definition.name)).toContain('search');
+  });
+
+  it('corrects a model that writes a tool call as text, and takes the retry', async () => {
+    // The failure this exists for: the provider reports no tool calls, so the turn
+    // used to end `complete` with a JSON blob as the answer and nothing saying the
+    // model had tried to act. See `text-tool-call.ts` for the real transcript.
+    const { loop, provider } = harness({
+      tools: [echoTool],
+      turns: [
+        { deltas: ['<tool_call>\n{"name": "echo", "arguments": {"text": "hi"}}\n</tool_call>'] },
+        { deltas: ['Actually done.'] },
+      ],
+    });
+
+    const { events, result } = await runTurn(loop, { sessionKey: SESSION, content: 'go' });
+
+    expect(typesOf(events)).toEqual([
+      'turn.start',
+      'assistant.delta',
+      'notice',
+      'assistant.delta',
+      'turn.end',
+    ]);
+    expect(events[2]).toMatchObject({ kind: 'degraded', message: expect.stringContaining('echo') });
+    expect(result.stopReason).toBe('complete');
+    expect(result.text).toBe('Actually done.');
+
+    // The correction reaches the model in the runtime half of the next request,
+    // where it costs no cached prefix and leaves nothing in history.
+    const second = provider.requests[1]?.messages[0];
+    const system = second?.role === 'system' ? second.content : '';
+    expect(system).toContain('## Correction');
+    expect(system).toContain('`echo`');
+  });
+
+  it('corrects once, then lets the answer stand however wrong it is', async () => {
+    // A model that writes a call out twice is not going to be talked round, and a
+    // loop of corrections would spend the whole iteration budget repeating itself.
+    const written = '<tool_call>{"name": "echo", "arguments": {}}</tool_call>';
+    const { loop, provider } = harness({
+      tools: [echoTool],
+      turns: [{ deltas: [written] }, { deltas: [written] }],
+    });
+
+    const { events, result } = await runTurn(loop, { sessionKey: SESSION, content: 'go' });
+
+    expect(events.filter((event) => event.type === 'notice')).toHaveLength(1);
+    expect(result.stopReason).toBe('complete');
+    expect(provider.requests).toHaveLength(2);
+    // And the second request is the only one carrying the correction, so it is
+    // not still being scolded on an iteration it did nothing wrong on.
+    const third = provider.requests[1]?.messages[0];
+    expect(third?.role === 'system' ? third.content : '').toContain('## Correction');
+  });
+
+  it('leaves an answer that merely mentions a tool alone', async () => {
+    // Prose about tools is not an attempt to use one, and a correction here would
+    // be telling the model off for a correct answer.
+    const { loop } = harness({
+      tools: [echoTool],
+      turns: [{ deltas: ['You can call the `echo` tool to repeat text back.'] }],
+    });
+
+    const { events, result } = await runTurn(loop, { sessionKey: SESSION, content: 'how?' });
+
+    expect(typesOf(events)).toEqual(['turn.start', 'assistant.delta', 'turn.end']);
+    expect(result.text).toContain('You can call');
+  });
+
   it('runs the tools the model asked for, then answers', async () => {
     const { loop, store } = harness({
       tools: [echoTool],
@@ -507,10 +634,14 @@ describe('AgentLoop', () => {
   });
 
   it('keeps the static half of the prompt byte-identical across iterations', async () => {
+    // A cap of 3 so the wrap-up sentence is in range on both iterations and
+    // counts down between them: the volatile half has to actually move, or this
+    // proves only that two identical strings are identical.
     const clock = manualClock();
     const { loop, provider } = harness({
       clock,
       tools: [echoTool],
+      config: { maxToolIterations: 3 },
       turns: [{ toolCalls: [toolCall('c1', 'echo', { text: 'x' })] }, { deltas: ['done'] }],
       loop: { toolHeartbeatMs: 0 },
     });
@@ -519,9 +650,8 @@ describe('AgentLoop', () => {
 
     const [first, second] = provider.requests;
     expect(staticHalfOf(first!)).toBe(staticHalfOf(second!));
-    // …while the volatile half did move on, which is what it is there for.
-    expect(systemPromptOf(first!)).toContain('Agent iteration: 1 / 6');
-    expect(systemPromptOf(second!)).toContain('Agent iteration: 2 / 6');
+    expect(systemPromptOf(first!)).toContain('Tool iterations left in this turn: 3');
+    expect(systemPromptOf(second!)).toContain('Tool iterations left in this turn: 2');
   });
 
   it('stops at the iteration cap and says so', async () => {
@@ -1360,12 +1490,24 @@ describe('AgentLoop.previewPrompt', () => {
     expect(preview).toContain('The user prefers rem over px');
   });
 
-  it('names the session and defaults the channel to web', async () => {
-    const { loop } = harness();
-    const preview = await loop.previewPrompt({ sessionKey: SESSION });
+  it('defaults the channel to web, and hands it to contributors', async () => {
+    // Asserted through a contributor rather than through the prompt text: the
+    // channel and the session key are no longer *printed* — nothing told the
+    // model what they meant — but they are still part of the context a memory or
+    // skills section is entitled to scope by, which is the contract worth pinning.
+    const seen: string[] = [];
+    const spy: ContextContributor = {
+      name: 'spy',
+      runtimeSection: (context) => {
+        seen.push(`${context.channel}:${context.sessionKey}`);
+        return undefined;
+      },
+    };
+    const { loop } = harness({ loop: { contributors: [spy] } });
 
-    expect(preview).toContain(`Session: ${SESSION}`);
-    expect(preview).toContain('Channel: web');
+    await loop.previewPrompt({ sessionKey: SESSION });
+
+    expect(seen).toEqual([`web:${SESSION}`]);
   });
 
   it('reports the provider a turn would reach', () => {
@@ -1510,11 +1652,14 @@ describe('AgentLoop workspaces', () => {
   });
 
   it('previews the prompt for the session workspace, and the default when there is no session', async () => {
-    const { loop, store, rootOf } = workspaceHarness();
+    // Asserted on the workspace *id*, because the prompt no longer carries the
+    // absolute root — see `PROMPT_PLACEHOLDERS`. The id is what identifies the
+    // workspace to the agent, and it is what has to differ between these two.
+    const { loop, store } = workspaceHarness();
     store.ensureSession('s1', { workspaceId: 'acme' });
 
-    expect(await loop.previewPrompt({ sessionKey: 's1' })).toContain(rootOf('acme'));
-    expect(await loop.previewPrompt({ sessionKey: 'never-seen' })).toContain(rootOf('default'));
+    expect(await loop.previewPrompt({ sessionKey: 's1' })).toContain('`acme` workspace');
+    expect(await loop.previewPrompt({ sessionKey: 'never-seen' })).toContain('`default` workspace');
   });
 });
 

@@ -88,6 +88,31 @@ export interface GhostPaths {
    * reason to pool. Outside the jail for the same reason as `agentsDir`.
    */
   readonly sharedDir: string;
+  /**
+   * Installed toolboxes — one directory per toolbox, each holding a
+   * `toolbox.json`.
+   *
+   * Outside the jail for the same reason as `agentsDir`: a manifest kept inside
+   * the workspace would be writable by `write_file`, which turns prompt
+   * injection into a way of rewriting the container policy the agent runs
+   * under. The approval that makes a manifest usable lives in the database, not
+   * here, so a file edited in place stops resolving rather than taking effect.
+   */
+  readonly toolboxesDir: string;
+  /**
+   * Sandbox command transcripts, one directory per container.
+   *
+   * **Outside the workspace, and that is a security boundary rather than
+   * tidiness.** These files are written by the *host* process while the container
+   * holds the workspace as a writable bind mount. Written inside the workspace, an
+   * agent could plant a symlink where the next transcript is about to be created
+   * — `ln -s ~/.ssh/authorized_keys .ghost/runs/<id>/stdout.log` — and the host
+   * would follow it and write attacker-chosen bytes outside the container, as the
+   * GhostAI user. Verified before this moved. The container gets the same files
+   * back as a **read-only** mount, so it can still read its own output and cannot
+   * create anything in there.
+   */
+  readonly runsDir: string;
   readonly configFile: string;
   /** One SQLite file: sessions, messages, jobs, runs, auth, KB vectors. */
   readonly dbFile: string;
@@ -129,6 +154,8 @@ export function resolveGhostPaths(options: ResolveGhostPathsOptions = {}): Ghost
         : resolvePath(expandHome(options.workspace, home), root),
     agentsDir: join(root, 'agents'),
     sharedDir: join(root, 'shared'),
+    toolboxesDir: join(root, 'toolboxes'),
+    runsDir: join(root, 'runs'),
     configFile: join(root, 'config.json'),
     dbFile: join(root, 'ghost.db'),
     logsDir: join(root, 'logs'),

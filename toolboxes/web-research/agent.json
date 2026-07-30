@@ -1,0 +1,18 @@
+{
+  "label": "Researcher",
+  "enabled": true,
+  "approvals": {
+    "exec": "allow"
+  },
+  "tools": {
+    "allow": [],
+    "deny": []
+  },
+  "toolbox": {
+    "name": "web-research",
+    "network": {
+      "mode": "open",
+      "allow": []
+    }
+  }
+}

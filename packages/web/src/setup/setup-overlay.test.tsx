@@ -22,6 +22,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Providers } from '@/app/providers.js';
 import { stubApi, testQueryClient, type RecordedRequest, type StubRoute } from '@/test/render.js';
+import { UNCONFIGURED_STATUS } from '@/test/fixtures.js';
 
 const UNAUTHENTICATED: StubRoute = [401, { error: { code: 'unauthorized', message: 'nope' } }];
 
@@ -209,23 +210,7 @@ describe('a claimed install with no model', () => {
     // claimed.
     mount({
       '/api/setup': [200, { required: false }],
-      '/api/status': [
-        200,
-        {
-          version: '0.0.0',
-          protocolVersion: 1,
-          uptimeMs: 1,
-          model: '',
-          provider: '',
-          configured: false,
-          workspaceId: 'default',
-          workspaceCount: 1,
-          authEnabled: true,
-          toolCount: 0,
-          mcpServersConnected: 0,
-          pluginsLoaded: 0,
-        },
-      ],
+      '/api/status': [200, { ...UNCONFIGURED_STATUS, authEnabled: true, toolCount: 0 }],
     });
 
     expect(

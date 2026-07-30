@@ -27,7 +27,7 @@ import {
   type ConfigPatch,
   type ToolDefinition,
 } from '@ghostai/protocol';
-import { WorkspaceJail } from '@ghostai/security';
+import { WorkspaceJail, type ToolboxListing } from '@ghostai/security';
 import type { DatabaseSync } from 'node:sqlite';
 
 import type { AgentSummary, AgentView, ServerRuntime } from '../runtime.js';
@@ -42,6 +42,7 @@ export interface FakeRuntimeOptions {
   /** `false` drives the routes as a fresh install with no provider or model. */
   readonly configured?: boolean;
   readonly tools?: readonly ToolDefinition[];
+  readonly toolboxes?: readonly ToolboxListing[];
   readonly credentialsPresent?: Readonly<Record<string, boolean>>;
   readonly systemPrompt?: string;
   /** Injected where a test needs two rows to carry different timestamps. */
@@ -138,6 +139,7 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
   ];
 
   return {
+    toolboxes: () => options.toolboxes ?? [],
     patches,
     reloads,
     credentialWrites,

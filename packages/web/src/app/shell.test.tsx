@@ -19,21 +19,7 @@ import { Providers } from './providers.js';
 import { createAppRouter } from './router.js';
 import { useTurnStore } from '@/state/turn.js';
 import { stubApi, testQueryClient, type RecordedRequest, type StubRoute } from '@/test/render.js';
-
-const STATUS = {
-  version: '0.0.0',
-  protocolVersion: 1,
-  uptimeMs: 1,
-  model: 'test-model',
-  provider: 'ollama',
-  configured: true,
-  workspaceId: 'default',
-  workspaceCount: 1,
-  authEnabled: false,
-  toolCount: 3,
-  mcpServersConnected: 0,
-  pluginsLoaded: 0,
-};
+import { STATUS } from '@/test/fixtures.js';
 
 /** What `POST /api/settings/reload` answers with: the settings it now serves. */
 const SETTINGS = { config: ConfigSchema.parse({}), credentialsPresent: {} };

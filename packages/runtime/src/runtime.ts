@@ -55,7 +55,7 @@
 import { existsSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
 
-import { AgentLoop, SteeringQueue, type ApprovalGate } from '@ghostai/agent';
+import { AgentLoop, type PromptToolbox, SteeringQueue, type ApprovalGate } from '@ghostai/agent';
 import {
   DEFAULT_AGENT_ID,
   GhostError,
@@ -77,17 +77,27 @@ import {
   type ProviderInstance,
   type ProviderSpec,
 } from '@ghostai/providers';
-import type {
-  CredentialVault,
-  FetchImplementation,
-  JailResolver,
-  WorkspaceJail,
+import {
+  ToolboxStore,
+  assertNetworkWithinCeiling,
+  type CredentialVault,
+  type FetchImplementation,
+  type JailResolver,
+  type WorkspaceJail,
 } from '@ghostai/security';
-import { ToolRegistry, registerBuiltins } from '@ghostai/tools';
+import {
+  ToolRegistry,
+  registerBuiltins,
+  toolboxTools,
+  withToolboxTools,
+  type AnyTool,
+  type RunnerResolver,
+} from '@ghostai/tools';
 
 import { listAgents, resolveAgent, type EffectiveAgent } from './agents.js';
 import { PROVIDER_CREDENTIAL_NAMESPACE, findCredential, openVault } from './credentials.js';
 import { JailCache } from './jail-cache.js';
+import { ToolboxPool, dockerEngine, type ContainerEngine } from './toolbox-pool.js';
 import { LoopCache } from './loop-cache.js';
 import { mergeConfigPatch } from './merge.js';
 import { ProviderCache } from './provider-cache.js';
@@ -116,6 +126,22 @@ export interface RuntimeOptions {
   readonly env?: Readonly<Record<string, string | undefined>>;
   /** Injected by tests so nothing here opens a socket. */
   readonly fetchImpl?: FetchImplementation | undefined;
+  /**
+   * How sandbox containers are started. Defaults to the `docker` CLI.
+   *
+   * Injected so a test can exercise the pool — and the refusals around it —
+   * without a daemon, and so an install can point at `podman` instead.
+   */
+  readonly containerEngine?: ContainerEngine | undefined;
+  /**
+   * Translates GhostAI's view of the workspace into the *daemon's*.
+   *
+   * Identity when GhostAI runs on the host. A containerised GhostAI must supply
+   * this: a bind path is resolved by the daemon, so asking for its own
+   * `/data/workspace` would mount the host's path of that name — silently, and
+   * usually as an empty directory.
+   */
+  readonly hostWorkspacePath?: ((workspaceRoot: string) => string) | undefined;
   /** `false` skips the credential vault; a value replaces it. */
   readonly vault?: CredentialVault | false | undefined;
   /**
@@ -242,6 +268,17 @@ interface Resolved {
   readonly agents: readonly EffectiveAgent[];
   readonly paths: GhostPaths;
   readonly jails: JailCache;
+  /**
+   * Live sandbox containers, or `null` when no enabled agent asks for one.
+   *
+   * Built only when something needs it, so an install with no sandboxed agent
+   * never probes for a container runtime — and one that *does* discovers an
+   * unreachable daemon here, during an all-or-nothing rebuild, rather than in
+   * the middle of a turn.
+   */
+  readonly toolboxPool: ToolboxPool | null;
+  /** Each sandboxed agent's toolbox contents, for its static prompt. */
+  readonly toolboxPrompts: ReadonlyMap<string, PromptToolbox>;
   /** One loop per agent, built on first use. Dropped whole on a reconfigure. */
   readonly loops: LoopCache;
   readonly loop: AgentLoop | null;
@@ -445,7 +482,13 @@ class Runtime implements GhostRuntime {
 
   reconfigure(patch: ConfigPatch): Config {
     const next = mergeConfigPatch(this.#current.config, patch);
-    this.#current = this.#build(next, this.#current);
+    const previous = this.#current;
+    this.#current = this.#build(next, previous);
+    // After the build, never before: `#build` can throw, and a reconfigure that
+    // failed must leave the runtime serving exactly what it was serving — with
+    // its containers still alive. Stopping them first would make a *refused*
+    // save kill the toolboxPool of every running session.
+    this.#retireToolboxes(previous);
     return next;
   }
 
@@ -458,13 +501,29 @@ class Runtime implements GhostRuntime {
       ...(this.#options.workspace === undefined ? {} : { workspace: this.#options.workspace }),
       env: this.#env,
     });
-    this.#current = this.#build(loaded.config, this.#current);
+    const previous = this.#current;
+    this.#current = this.#build(loaded.config, previous);
+    this.#retireToolboxes(previous);
     return loaded.config;
   }
 
   close(): void {
+    this.#current.toolboxPool?.close();
     this.store.close();
     if (this.#ownsProviders) this.#providers.clear();
+  }
+
+  /**
+   * Stops the containers a superseded build owned.
+   *
+   * A profile can change under a running pool, and a container started from the
+   * manifest that was approved *before* a save must not outlive it. Guarded on
+   * identity because `#build` reuses the pool when nothing about it moved, and
+   * closing the one now in use would stop the toolboxPool it just kept.
+   */
+  #retireToolboxes(previous: Resolved | undefined): void {
+    const stale = previous?.toolboxPool;
+    if (stale !== undefined && stale !== null && stale !== this.#current.toolboxPool) stale.close();
   }
 
   /**
@@ -502,6 +561,13 @@ class Runtime implements GhostRuntime {
     const jails =
       previous?.paths.workspace === paths.workspace ? previous.jails : new JailCache({ paths });
 
+    // Before the mutations below, because every failure it can produce — an
+    // unapproved profile, a manifest edited since approval, a capability the
+    // machinery will not grant, an unreachable daemon — must leave the runtime
+    // serving on the settings that worked a moment ago.
+    const built = this.#buildToolboxes(agents, paths);
+    const toolboxPool = built.pool;
+
     // Past here nothing throws, so the mutations below cannot leave the
     // registry describing a runtime that failed to build.
     this.tools.timeoutMs = resolved.agent.defaults.toolTimeoutMs;
@@ -515,7 +581,8 @@ class Runtime implements GhostRuntime {
     // settings that just changed. A turn already running keeps the loop it
     // started on, because it holds the object rather than looking it up again.
     const loops = new LoopCache({
-      create: (agentId) => this.#createLoop(config, agentId, paths, jails),
+      create: (agentId) =>
+        this.#createLoop(config, agentId, paths, jails, toolboxPool ?? undefined, built),
     });
     const loop = loops.get(DEFAULT_AGENT_ID);
 
@@ -524,6 +591,8 @@ class Runtime implements GhostRuntime {
       agents,
       paths,
       jails,
+      toolboxPool,
+      toolboxPrompts: built.prompts,
       loops,
       loop,
       instance: resolved.instance,
@@ -602,6 +671,11 @@ class Runtime implements GhostRuntime {
     agentId: string,
     paths: GhostPaths,
     jails: JailCache,
+    runners: RunnerResolver | undefined,
+    built: {
+      readonly prompts: ReadonlyMap<string, PromptToolbox>;
+      readonly exposed: ReadonlyMap<string, readonly AnyTool[]>;
+    },
   ): AgentLoop | null {
     const agent = resolveAgent(config, agentId);
     const { provider, model } = this.#resolveProvider(config, agent, paths);
@@ -611,19 +685,99 @@ class Runtime implements GhostRuntime {
       provider,
       // A view of the one shared registry, not a registry of its own: an MCP
       // server is one connection however many agents are configured.
-      tools: this.tools.select(agent.tools),
+      // The overlay, not the registry: a toolbox's programs are this agent's
+      // alone, so they are laid over its view rather than registered globally
+      // where two toolboxes holding `curl` would collide.
+      tools: withToolboxTools(this.tools.select(agent.tools), built.exposed.get(agent.id) ?? []),
       store: this.store,
       jails,
+      toolbox: agent.toolbox,
+      ...toolboxPromptOf(built.prompts, agent.id),
       config: agent.defaults,
       toolsConfig: agent.toolsConfig,
       model,
-      agent: { id: agent.id, label: agent.label, systemPrompt: agent.systemPrompt },
+      agent: {
+        id: agent.id,
+        label: agent.label,
+        systemPrompt: agent.systemPrompt,
+        livePrompt: agent.livePrompt,
+        wrapUpPrompt: agent.wrapUpPrompt,
+      },
       logger: this.#logger,
       steering: this.steering,
       env: this.#env,
       ...(this.#options.approvals === undefined ? {} : { approvals: this.#options.approvals }),
       ...(this.#options.clock === undefined ? {} : { clock: this.#options.clock }),
+      ...(runners === undefined ? {} : { runners }),
     });
+  }
+
+  /**
+   * The pool, when any enabled agent names a profile.
+   *
+   * `null` otherwise, and that is not an optimisation: probing for a container
+   * runtime on an install that has no sandboxed agent would turn "docker is not
+   * running" into a boot failure for people who never asked for a container.
+   */
+  #buildToolboxes(
+    agents: readonly EffectiveAgent[],
+    paths: GhostPaths,
+  ): {
+    pool: ToolboxPool | null;
+    prompts: ReadonlyMap<string, PromptToolbox>;
+    exposed: ReadonlyMap<string, readonly AnyTool[]>;
+  } {
+    const boxed = agents.filter((agent) => agent.toolbox.name !== '');
+    if (boxed.length === 0) return { pool: null, prompts: new Map(), exposed: new Map() };
+
+    const toolboxes = new ToolboxStore({
+      database: this.store.database,
+      dir: paths.toolboxesDir,
+      ...(this.#options.clock === undefined ? {} : { clock: this.#options.clock }),
+    });
+
+    // Every toolboxed agent resolved *here*, so an unapproved toolbox, one
+    // edited since approval, or a network request above its ceiling is a refusal
+    // on the save rather than a turn that dies on its first `exec`. The prompt
+    // sections fall out of the same pass, which is why this is not two walks.
+    const prompts = new Map<string, PromptToolbox>();
+    const exposed = new Map<string, readonly AnyTool[]>();
+    for (const agent of boxed) {
+      const approved = toolboxes.require(agent.toolbox.name);
+      assertNetworkWithinCeiling(approved.toolbox, agent.toolbox.network, agent.id);
+      exposed.set(agent.id, toolboxTools(approved.toolbox));
+      prompts.set(agent.id, {
+        name: approved.toolbox.name,
+        workdir: approved.toolbox.workdir,
+        tools: approved.toolbox.tools,
+        notes: approved.toolbox.notes,
+        docs: approved.docs,
+      });
+    }
+
+    // **The daemon is deliberately not probed here.** Whether a profile is
+    // installed, approved and internally coherent is static config, and belongs
+    // in an all-or-nothing rebuild. Whether a container runtime is *running* is
+    // not: it changes while the server is up, an operator may start Docker after
+    // GhostAI, and one sandboxed agent must not make the daemon a precondition
+    // for the web UI, the settings screen and every other agent. Probing here
+    // did exactly that — an install with a research agent would not boot at all
+    // without Docker. The pool probes on first use instead, and refuses that
+    // turn.
+    const engine = this.#options.containerEngine ?? dockerEngine();
+
+    const pool = new ToolboxPool({
+      toolboxes,
+      engine,
+      runsDir: paths.runsDir,
+      ...(this.#options.hostWorkspacePath === undefined
+        ? {}
+        : { hostPath: this.#options.hostWorkspacePath }),
+      ...(this.#options.clock === undefined ? {} : { clock: this.#options.clock }),
+      logger: this.#logger,
+    });
+
+    return { pool, prompts, exposed };
   }
 
   /**
@@ -654,4 +808,20 @@ class Runtime implements GhostRuntime {
 
 export function createRuntime(options: RuntimeOptions = {}): GhostRuntime {
   return new Runtime(options);
+}
+
+/**
+ * The `toolboxPrompt` spread, or nothing.
+ *
+ * A helper rather than an inline ternary because `exactOptionalPropertyTypes`
+ * treats `{ toolboxPrompt: PromptToolbox | undefined }` as different from the
+ * property being absent, and a `Map.get` narrowed in the condition widens again
+ * in the branch.
+ */
+function toolboxPromptOf(
+  prompts: ReadonlyMap<string, PromptToolbox>,
+  agentId: string,
+): { toolboxPrompt?: PromptToolbox } {
+  const prompt = prompts.get(agentId);
+  return prompt === undefined ? {} : { toolboxPrompt: prompt };
 }

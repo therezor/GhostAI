@@ -525,15 +525,15 @@ describe('multiple agents', () => {
     expect(runtime.tools.has('exec')).toBe(true);
   });
 
-  it('refuses to build at all when an agent asks for a sandbox with no backend', () => {
+  it('refuses to build at all when an agent asks for an unbuildable sandbox', () => {
     const home = tempHome({
       agents: {
         defaults: { provider: 'ollama', model: 'qwen3:8b' },
-        list: { boxed: { sandbox: { kind: 'docker', image: 'node:22' } } },
+        list: { boxed: { toolbox: { network: { mode: 'open' } } } },
       },
     });
 
-    expect(() => build({ home })).toThrow(/not implemented yet/);
+    expect(() => build({ home })).toThrow(/names no toolbox/);
   });
 
   it('leaves the runtime serving when a patch adds an unbuildable agent', () => {
@@ -542,8 +542,10 @@ describe('multiple agents', () => {
     const runtime = ollama();
 
     expect(() =>
-      runtime.reconfigure({ agents: { list: { boxed: { sandbox: { kind: 'docker' } } } } }),
-    ).toThrow(/not implemented yet/);
+      runtime.reconfigure({
+        agents: { list: { boxed: { toolbox: { network: { mode: 'open' } } } } },
+      }),
+    ).toThrow(/names no toolbox/);
 
     expect(runtime.requireLoop().model).toBe('qwen3:8b');
     expect(runtime.agents.map((agent) => agent.id)).toEqual(['default']);

@@ -1,0 +1,85 @@
+{
+  "schema": "ghostai.toolbox/1",
+  "name": "web-research",
+  "version": "3.0.0",
+  "label": "Web research",
+  "tools": [
+    {
+      "name": "search",
+      "use": "Search the web and read the top results. Prints a numbered list plus the text of the top 3 pages, so one call usually answers the question.",
+      "args": "The query as plain words — no quote characters, they become part of it. --read N reads that many pages instead of 3, --read 0 gives links only. --recent day|week|month|year limits by age and is what you want for news. -n N sets list length (default 6). --site DOMAIN restricts to one domain, --region CODE biases to one (uk-en, us-en).",
+      "example": ["best local model for tool calling"],
+      "requiresArgs": true
+    },
+    {
+      "name": "fetch",
+      "use": "Read web pages as markdown — headings, lists, tables, code and links kept, navigation and markup discarded.",
+      "args": "One or more URLs. --max-chars 0 removes the 24,000-character cap, --save DIR also writes each page to a file, --links prints the page's links instead of its text.",
+      "example": ["https://sqlite.org/wal.html"],
+      "requiresArgs": true
+    },
+    {
+      "name": "tools",
+      "use": "Print this toolbox's reference — every command, its flags, and worked examples.",
+      "args": "Nothing for all of it, or a section name: search, fetch, files, pdf, limits, recipes.",
+      "example": [],
+      "requiresArgs": false
+    },
+    {
+      "name": "rg",
+      "use": "Search inside pages you already saved to /workspace.",
+      "args": "A pattern and a path. -n prints line numbers, -i ignores case.",
+      "example": ["-n", "-i", "rate limit", "/workspace/sources"],
+      "requiresArgs": true
+    },
+    {
+      "name": "jq",
+      "use": "Filter or reshape JSON, usually from curl.",
+      "args": "A jq filter, then a file — or nothing after it to read stdin.",
+      "example": ["-r", ".items[].name"],
+      "requiresArgs": true
+    },
+    {
+      "name": "curl",
+      "use": "Call an API, when you want the raw bytes rather than a page to read.",
+      "args": "-sSL and a URL. Use fetch for anything you intend to read as text.",
+      "example": ["-sSL", "https://api.github.com/repos/sqlite/sqlite"],
+      "requiresArgs": true
+    },
+    {
+      "name": "python3",
+      "use": "Run Python, for anything the other commands cannot express.",
+      "args": "-c and a program, or a script path. requests, lxml, beautifulsoup4 and trafilatura are installed.",
+      "example": ["-c", "import requests; print(requests.get('https://example.com').status_code)"],
+      "requiresArgs": true
+    }
+  ],
+  "notes": "Run `tools` for the full reference with worked examples. `search` already reads the top results for you, so answer from that page text rather than from the snippets — and one search is usually enough: if it did not answer the question, `fetch` one of the URLs it gave you for the full page instead of searching again with different words. There is no browser and no JavaScript engine, so a page that renders client-side comes back empty and says so. Write findings to /workspace and search them with rg rather than holding whole pages in context.",
+  "expose": "tools",
+  "image": "__IMAGE_ID__",
+  "runtime": "runc",
+  "workdir": "/workspace",
+  "user": "1000:1000",
+  "caps": {
+    "drop": ["ALL"],
+    "add": []
+  },
+  "security": {
+    "noNewPrivileges": true,
+    "seccomp": "default",
+    "readOnlyRoot": true,
+    "tmpfs": ["/tmp:rw,nosuid,size=256m", "/home/ghost:rw,nosuid,size=32m"]
+  },
+  "limits": {
+    "memoryMb": 1024,
+    "cpus": 2,
+    "pidsMax": 128,
+    "shmSizeMb": 64
+  },
+  "network": {
+    "maxMode": "open",
+    "dns": [],
+    "proxyAllowHosts": []
+  },
+  "env": ["LANG", "TZ"]
+}

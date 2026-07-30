@@ -25,6 +25,7 @@ export const queryKeys = {
   status: ['status'] as const,
   workspaces: ['workspaces'] as const,
   agents: ['agents'] as const,
+  toolboxes: ['toolboxes'] as const,
   /**
    * Scoped by workspace, because a session list is per workspace now.
    *

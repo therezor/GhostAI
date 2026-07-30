@@ -84,6 +84,8 @@ describe('resolveGhostPaths', () => {
       workspace: join(root, 'workspace'),
       agentsDir: join(root, 'agents'),
       sharedDir: join(root, 'shared'),
+      toolboxesDir: join(root, 'toolboxes'),
+      runsDir: join(root, 'runs'),
       configFile: join(root, 'config.json'),
       dbFile: join(root, 'ghost.db'),
       logsDir: join(root, 'logs'),

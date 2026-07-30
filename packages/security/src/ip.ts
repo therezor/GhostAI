@@ -269,6 +269,43 @@ export function parseIpLiteral(host: string): ParsedIp | null {
 // Classification
 // ---------------------------------------------------------------------------
 
+/** A CIDR block, parsed once so containment is a byte comparison. */
+export interface ParsedCidr {
+  readonly family: IpFamily;
+  /** The network address. Host bits are *not* masked off — see `cidrContains`. */
+  readonly bytes: Uint8Array;
+  readonly prefix: number;
+}
+
+/**
+ * Parses `10.0.0.0/8`, or `null` if it is not one.
+ *
+ * Exported because the sandbox egress allow-list needs exactly this and had no
+ * business reimplementing it. Note the deliberate asymmetry with
+ * `BLOCKED_RANGES`: this module's *policy* refuses private ranges for
+ * `guardedFetch`, but an engagement scope is `192.168.1.0/24` and is entirely
+ * legitimate. Parsing is shared; policy is the caller's.
+ */
+export function parseCidr(text: string): ParsedCidr | null {
+  const slash = text.lastIndexOf('/');
+  if (slash === -1) return null;
+  const parsed = parseIpLiteral(text.slice(0, slash));
+  if (parsed === null) return null;
+  const prefixText = text.slice(slash + 1);
+  // `Number.parseInt` would accept `8abc` and `+8`; a prefix is digits or it is
+  // not a prefix.
+  if (!/^\d{1,3}$/.test(prefixText)) return null;
+  const prefix = Number.parseInt(prefixText, 10);
+  if (prefix > parsed.bytes.length * 8) return null;
+  return { family: parsed.family, bytes: parsed.bytes, prefix };
+}
+
+/** Whether an address falls inside a block. Families must match. */
+export function cidrContains(cidr: ParsedCidr, ip: ParsedIp): boolean {
+  if (cidr.family !== ip.family) return false;
+  return matchesPrefix(ip.bytes, cidr.bytes, cidr.prefix);
+}
+
 interface CompiledRange {
   readonly range: AddressRange;
   readonly family: IpFamily;
@@ -277,18 +314,11 @@ interface CompiledRange {
 }
 
 function compileRange(range: AddressRange): CompiledRange {
-  const [address, prefixText] = range.cidr.split('/');
-  const parsed = address === undefined ? null : parseIpLiteral(address);
-  const prefix = prefixText === undefined ? Number.NaN : Number.parseInt(prefixText, 10);
-  if (
-    parsed === null ||
-    !Number.isInteger(prefix) ||
-    prefix < 0 ||
-    prefix > parsed.bytes.length * 8
-  ) {
+  const parsed = parseCidr(range.cidr);
+  if (parsed === null) {
     throw new GhostError('internal', `Malformed blocked range: ${range.cidr}`);
   }
-  return { range, family: parsed.family, bytes: parsed.bytes, prefix };
+  return { range, family: parsed.family, bytes: parsed.bytes, prefix: parsed.prefix };
 }
 
 /**

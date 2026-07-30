@@ -19,11 +19,11 @@
  *    `temperature` keeps the default model, and an entry that names only one
  *    approval band keeps the other three. Anything coarser makes an operator
  *    restate settings they did not want to change, which is how the two drift.
- *  - **Resolution is where an unbuildable agent is refused.** `docker` parses
- *    as a sandbox because the field is real and the UI should be able to show
- *    it; it fails here, during `reconfigure`, which is all-or-nothing — so a
- *    settings save naming a backend that does not exist is a 400 that changes
- *    nothing, rather than a turn that dies minutes later.
+ *  - **Resolution is where an unbuildable agent is refused.** A toolbox setting
+ *    that cannot be honoured fails here, during `reconfigure`, which is
+ *    all-or-nothing — so a settings save naming an unapproved toolbox is a 400
+ *    that changes nothing, rather than a turn that dies minutes later. Only the
+ *    half decidable from config is checked here; see `assertBuildable`.
  */
 
 import { DEFAULT_AGENT_ID, GhostError } from '@ghostai/core';
@@ -32,11 +32,12 @@ import {
   type AgentDefaults,
   type AgentEntry,
   type AgentMemoryScope,
-  type AgentSandbox,
+  type AgentToolbox,
   type AgentToolsSelection,
   type Config,
   type ToolsConfig,
 } from '@ghostai/protocol';
+import { parseCidr } from '@ghostai/security';
 
 /**
  * Which of an entry's fields belong to `AgentDefaults`.
@@ -54,13 +55,21 @@ export interface EffectiveAgent {
   /** Never empty: falls back to the id, so a UI never has to. */
   readonly label: string;
   readonly systemPrompt: string;
+  /**
+   * The per-iteration half's templates. Empty means the built-ins.
+   *
+   * Resolved beside `systemPrompt` rather than read from the config downstream,
+   * so every consumer sees one already-inherited answer.
+   */
+  readonly livePrompt: string;
+  readonly wrapUpPrompt: string;
   /** Model, provider, temperature, effort, caps — the whole of `AgentDefaults`. */
   readonly defaults: AgentDefaults;
   /** Which tools this agent may call. */
   readonly tools: AgentToolsSelection;
   /** `config.tools` with this agent's approval and exec overrides applied. */
   readonly toolsConfig: ToolsConfig;
-  readonly sandbox: AgentSandbox;
+  readonly toolbox: AgentToolbox;
   readonly memory: AgentMemoryScope;
 }
 
@@ -87,7 +96,7 @@ function defined<T extends object>(patch: T | undefined): Defined<T> {
  *
  * Driven by `AGENT_DEFAULT_KEYS` rather than by the entry's own keys, because
  * the entry also carries fields that belong to the agent rather than to a turn
- * — `label`, `sandbox`, `tools` — and none of those belong in the block handed
+ * — `label`, `toolbox`, `tools` — and none of those belong in the block handed
  * to the loop. `workspace` is not among them: the schema omits it, so it can
  * only ever come from the defaults.
  */
@@ -112,14 +121,36 @@ function mergeToolsConfig(tools: ToolsConfig, entry: AgentEntry | undefined): To
   };
 }
 
+/**
+ * What can be decided from the config alone.
+ *
+ * Whether the named toolbox *exists and is approved* is not here, deliberately:
+ * that needs the toolbox store, which is disk, and this function is the pure
+ * inheritance rule. It is checked in `GhostRuntime#build`, which is equally
+ * all-or-nothing, so a settings save naming an unapproved toolbox is still a 400
+ * that changes nothing rather than a turn that dies later.
+ */
 function assertBuildable(agent: EffectiveAgent): void {
-  if (agent.sandbox.kind === 'docker') {
+  const { name, network } = agent.toolbox;
+
+  if (name === '' && network.mode !== 'none') {
     throw new GhostError(
       'config',
-      `Agent "${agent.id}" asks for the docker sandbox, which is not implemented yet.\n` +
-        '  Set its sandbox to "host" to run tools on this machine, inside the workspace jail.',
-      { details: { agentId: agent.id, sandbox: agent.sandbox.kind } },
+      `Agent "${agent.id}" asks for toolbox network "${network.mode}" but names no toolbox.\n` +
+        '  Egress scoping is enforced by the container, so it means nothing on the host.',
+      { details: { agentId: agent.id, mode: network.mode } },
     );
+  }
+
+  for (const entry of network.allow) {
+    if (parseCidr(entry) === null) {
+      throw new GhostError(
+        'config',
+        `Agent "${agent.id}" has an egress entry that is not a CIDR block: ${entry}\n` +
+          '  Hostnames are refused because DNS rebinding defeats them. Use 10.0.0.0/8.',
+        { details: { agentId: agent.id, entry } },
+      );
+    }
   }
 }
 
@@ -128,10 +159,12 @@ function build(config: Config, id: string, entry: AgentEntry | undefined): Effec
     id,
     label: entry?.label === undefined || entry.label === '' ? id : entry.label,
     systemPrompt: entry?.systemPrompt ?? '',
+    livePrompt: entry?.livePrompt ?? '',
+    wrapUpPrompt: entry?.wrapUpPrompt ?? '',
     defaults: mergeDefaults(config.agents.defaults, entry),
     tools: entry?.tools ?? { allow: [], deny: [] },
     toolsConfig: mergeToolsConfig(config.tools, entry),
-    sandbox: entry?.sandbox ?? { kind: 'host', image: '', workdir: '/workspace', network: false },
+    toolbox: entry?.toolbox ?? { name: '', network: { mode: 'none', allow: [] } },
     memory: entry?.memory ?? { shared: true },
   };
   assertBuildable(agent);

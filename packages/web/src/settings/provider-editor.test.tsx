@@ -26,6 +26,7 @@ import { ConfigSchema, type ConfigPatch } from '@ghostai/protocol';
 import { Providers } from '@/app/providers.js';
 import { createAppRouter } from '@/app/router.js';
 import { stubApi, testQueryClient, type RecordedRequest, type StubRoute } from '@/test/render.js';
+import { STATUS } from '@/test/fixtures.js';
 import { KEY_PLACEHOLDER } from './provider-form.js';
 
 const CONFIG = ConfigSchema.parse({
@@ -77,21 +78,7 @@ const PROVIDERS = {
 const SHELL_ROUTES: Record<string, StubRoute> = {
   '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
   '/api/setup': [200, { required: false }],
-  '/api/status': [
-    200,
-    {
-      version: '0.0.0',
-      protocolVersion: 1,
-      uptimeMs: 1,
-      model: 'llama3',
-      provider: 'ollama',
-      workspace: '/tmp/w',
-      authEnabled: false,
-      toolCount: 0,
-      mcpServersConnected: 0,
-      pluginsLoaded: 0,
-    },
-  ],
+  '/api/status': [200, { ...STATUS, model: 'llama3', toolCount: 0 }],
   '/api/sessions': [200, { sessions: [] }],
   '/api/notifications': [200, { notifications: [], unreadCount: 0 }],
 };

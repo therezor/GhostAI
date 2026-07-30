@@ -33,6 +33,8 @@ export interface TurnStartEvent {
   readonly agentId: string;
   readonly model: string;
   readonly provider: string;
+  /** The user message that started it — see the protocol schema. */
+  readonly firstSeq?: number;
 }
 
 /** A chunk of the answer. Consumers append; the loop never resends. */

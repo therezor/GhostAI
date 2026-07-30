@@ -147,18 +147,76 @@ describe('toAgentEntryPatch', () => {
 
   it('keeps the settings this screen does not render', () => {
     // `agents.list.*` is replaced wholesale, so an entry rebuilt from the form
-    // alone would drop the sandbox and the exec allow-list every time the
-    // prompt was saved — silently, and with no way to notice from the screen.
-    const stored = AgentEntrySchema.parse({
-      sandbox: { kind: 'docker', image: 'ghost:latest' },
-      exec: { allowedBinaries: ['git'] },
-    });
+    // alone would drop the exec allow-list every time the prompt was saved —
+    // silently, and with no way to notice from the screen.
+    const stored = AgentEntrySchema.parse({ exec: { allowedBinaries: ['git'] } });
 
     const entry = parsed(toAgentEntryPatch('reviewer', form(), stored, t));
 
-    expect(entry).toMatchObject({
-      sandbox: { kind: 'docker', image: 'ghost:latest' },
-      exec: { allowedBinaries: ['git'] },
+    expect(entry).toMatchObject({ exec: { allowedBinaries: ['git'] } });
+  });
+
+  it('drives the toolbox from the form, now that the screen renders it', () => {
+    // The opposite of the case above, and the reason the two are separate tests:
+    // a field the screen shows must come from the screen, or clearing it in the
+    // UI would silently keep the stored value.
+    const stored = AgentEntrySchema.parse({
+      toolbox: { name: 'kali-pentest', network: { mode: 'allowlist', allow: ['10.0.0.0/8'] } },
+    });
+
+    const entry = parsed(
+      toAgentEntryPatch(
+        'reviewer',
+        form({ toolboxName: 'ghost-research', toolboxNetworkMode: 'open' }),
+        stored,
+        t,
+      ),
+    );
+
+    expect((entry as { toolbox: Record<string, unknown> }).toolbox).toEqual({
+      name: 'ghost-research',
+      network: { mode: 'open', allow: [] },
+    });
+  });
+
+  it('clears the allow-list when the mode stops using it', () => {
+    // Otherwise a stale set of CIDRs sits in the file waiting to take effect the
+    // next time somebody switches back to `allowlist`.
+    const entry = parsed(
+      toAgentEntryPatch(
+        'reviewer',
+        form({
+          toolboxName: 'kali',
+          toolboxNetworkMode: 'none',
+          toolboxAllow: '10.0.0.0/8',
+        }),
+        EMPTY,
+        t,
+      ),
+    );
+
+    expect((entry as { toolbox: Record<string, unknown> }).toolbox.network).toEqual({
+      mode: 'none',
+      allow: [],
+    });
+  });
+
+  it('forces an agent with no toolbox onto no network', () => {
+    // Egress scoping is enforced by the sandbox, so it means nothing on the host
+    // — and `assertBuildable` refuses the combination outright, which would turn
+    // a save into a 400 rather than a setting that quietly does nothing.
+    const entry = parsed(
+      toAgentEntryPatch(
+        'reviewer',
+        form({ toolboxName: '', toolboxNetworkMode: 'open' }),
+        EMPTY,
+        t,
+      ),
+    );
+
+    expect((entry as { toolbox: Record<string, unknown> }).toolbox).toEqual({
+      name: '',
+      network: { mode: 'none', allow: [] },
     });
   });
 

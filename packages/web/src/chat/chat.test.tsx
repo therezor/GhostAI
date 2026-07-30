@@ -22,6 +22,7 @@ import { createAppRouter } from '@/app/router.js';
 import { resetConnection } from '@/lib/connection.js';
 import { useTurnStore } from '@/state/turn.js';
 import { stubFetch, testQueryClient } from '@/test/render.js';
+import { AGENTS, STATUS, UNCONFIGURED_STATUS } from '@/test/fixtures.js';
 
 /** Distributes over the union, which a bare `Omit` would collapse. */
 type Unsequenced<T> = T extends unknown ? Omit<T, 'seq'> : never;
@@ -134,21 +135,8 @@ beforeEach(() => {
     // Claimed: the setup overlay mounts above the login one and would
     // otherwise be deciding whether to open on an unstubbed request.
     '/api/setup': [200, { required: false }],
-    '/api/status': [
-      200,
-      {
-        version: '0.0.0',
-        protocolVersion: 1,
-        uptimeMs: 1,
-        model: 'test-model',
-        provider: 'ollama',
-        workspace: '/tmp/w',
-        authEnabled: false,
-        toolCount: 3,
-        mcpServersConnected: 0,
-        pluginsLoaded: 0,
-      },
-    ],
+    '/api/status': [200, STATUS],
+    '/api/agents': [200, AGENTS],
     '/api/sessions': [200, { sessions: [] }],
     '/api/notifications': [200, { notifications: [], unreadCount: 0 }],
     '/api/sessions/web%3A1/messages': [200, { sessionKey: SESSION, messages: [] }],
@@ -311,6 +299,145 @@ describe('a turn with tool calls', () => {
   });
 });
 
+/**
+ * The shape a small local model produces often enough to be a bug report: the
+ * whole response arrives on the reasoning channel, content is empty, and there
+ * are no tool calls. `loop.ts` has nothing to continue on and ends the turn as
+ * `complete`, so the transcript holds one reasoning part and the turn renders as
+ * a collapsed strip above a footer — a message that looks empty, with no reason
+ * given for it.
+ */
+describe('an install with no model yet', () => {
+  it('says so, and points at the provider settings', async () => {
+    // Untestable until now, and not because nobody wrote the test: the status
+    // stub carried a `workspace` field that had been replaced by `workspaceId`
+    // plus `workspaceCount`, so the client's schema parse rejected the response,
+    // `status.data` stayed `undefined`, and this notice — which branches on
+    // `configured` — could not render for any value of it. See `test/fixtures.ts`.
+    stubFetch({
+      '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
+      '/api/setup': [200, { required: false }],
+      '/api/status': [200, UNCONFIGURED_STATUS],
+      '/api/agents': [200, { agents: [] }],
+      '/api/sessions': [200, { sessions: [] }],
+      '/api/notifications': [200, { notifications: [], unreadCount: 0 }],
+      '/api/sessions/web%3A1/messages': [200, { sessionKey: SESSION, messages: [] }],
+    });
+    mount();
+    await connect();
+
+    // By text, not by role: the composer's own live regions are `role="status"`
+    // too, and this assertion is about which sentence is on screen.
+    const notice = await screen.findByText(/No model is configured yet\./);
+    expect(notice).toHaveRole('status');
+    expect(within(notice).getByRole('link', { name: 'Add a provider' })).toBeInTheDocument();
+  });
+
+  it('names no model on the welcome card rather than an empty badge', async () => {
+    stubFetch({
+      '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
+      '/api/setup': [200, { required: false }],
+      '/api/status': [200, UNCONFIGURED_STATUS],
+      '/api/agents': [200, { agents: [] }],
+      '/api/sessions': [200, { sessions: [] }],
+      '/api/notifications': [200, { notifications: [], unreadCount: 0 }],
+      '/api/sessions/web%3A1/messages': [200, { sessionKey: SESSION, messages: [] }],
+    });
+    mount();
+    await connect();
+
+    expect(await screen.findByRole('heading', { name: 'Ready when you are.' })).toBeInTheDocument();
+    expect(screen.queryByText('test-model')).not.toBeInTheDocument();
+  });
+});
+
+describe('a turn that produced no answer', () => {
+  it('says so, and opens the reasoning that is all there is', async () => {
+    mount();
+    await connect();
+
+    deliver(
+      START,
+      { type: 'reasoning.delta', turnId: 't1', text: 'weighing the options' },
+      { type: 'turn.end', turnId: 't1', stopReason: 'complete', iterations: 1 },
+    );
+
+    expect(
+      await screen.findByText(/finished its reasoning without writing an answer/),
+    ).toBeVisible();
+    // Not merely present: the disclosure body carries `hidden` when collapsed,
+    // and a sentence pointing at reasoning nobody can see is worse than neither.
+    expect(screen.getByText('weighing the options')).toBeVisible();
+  });
+
+  it('says nothing about a turn the user stopped', async () => {
+    // The answer is missing because it was asked to be, and the footer already
+    // says "Stopped." — a second line would be the app explaining a decision
+    // back to the person who made it.
+    mount();
+    await connect();
+
+    deliver(
+      START,
+      { type: 'reasoning.delta', turnId: 't1', text: 'weighing the options' },
+      { type: 'turn.end', turnId: 't1', stopReason: 'aborted', iterations: 1 },
+    );
+
+    expect(await screen.findByText('Stopped.')).toBeInTheDocument();
+    expect(screen.queryByText(/without writing an answer/)).not.toBeInTheDocument();
+  });
+
+  it('says nothing about a turn whose work was a tool call', async () => {
+    // A turn can legitimately end with a card and no prose — "delete the file"
+    // answered by deleting it. Only a turn with neither is unexplained.
+    mount();
+    await connect();
+
+    deliver(
+      START,
+      {
+        type: 'tool.call',
+        turnId: 't1',
+        callId: 'c1',
+        name: 'read',
+        args: { path: 'a.txt' },
+        risk: 'safe',
+      },
+      {
+        type: 'tool.result',
+        turnId: 't1',
+        callId: 'c1',
+        ok: true,
+        content: 'contents of a',
+        truncated: false,
+        durationMs: 12,
+      },
+      { type: 'turn.end', turnId: 't1', stopReason: 'complete', iterations: 1 },
+    );
+
+    await screen.findByRole('region', { name: 'Tool call: read' });
+    expect(screen.queryByText(/without writing an answer/)).not.toBeInTheDocument();
+  });
+
+  it('leaves an error to speak for itself', async () => {
+    // Two lines saying the turn went wrong is one too many, and the failure's
+    // own message is the specific one.
+    mount();
+    await connect();
+
+    deliver(START, {
+      type: 'error',
+      code: 'provider_error',
+      message: 'The provider hung up.',
+      retryable: true,
+      turnId: 't1',
+    });
+
+    expect(await screen.findByText(/The provider hung up\./)).toBeInTheDocument();
+    expect(screen.queryByText(/no answer, and no tool call/)).not.toBeInTheDocument();
+  });
+});
+
 describe('sending', () => {
   it('shows the bubble before the ack and settles it after', async () => {
     const user = userEvent.setup();
@@ -350,21 +477,8 @@ describe('a message that storage catches up with', () => {
     // racing the ack — which is exactly the case that produced two bubbles.
     stubFetch({
       '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
-      '/api/status': [
-        200,
-        {
-          version: '0',
-          protocolVersion: 1,
-          uptimeMs: 1,
-          model: 'm',
-          provider: 'p',
-          workspace: '/w',
-          authEnabled: false,
-          toolCount: 0,
-          mcpServersConnected: 0,
-          pluginsLoaded: 0,
-        },
-      ],
+      '/api/status': [200, STATUS],
+      '/api/agents': [200, AGENTS],
       '/api/sessions': [200, { sessions: [] }],
       '/api/notifications': [200, { notifications: [], unreadCount: 0 }],
       '/api/sessions/web%3A1/messages': [

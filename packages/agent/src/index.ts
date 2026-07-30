@@ -39,6 +39,7 @@ export {
 
 export {
   SECTION_SEPARATOR,
+  type PromptToolbox,
   buildRuntimeBlock,
   buildStaticPrompt,
   composeSystemPrompt,

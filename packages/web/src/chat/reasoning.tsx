@@ -10,7 +10,8 @@
  * It auto-expands while it is the only thing arriving, because a turn that
  * spends thirty seconds reasoning before its first token would otherwise show
  * an empty bubble and a spinner. The moment answer text starts, it collapses
- * again on its own.
+ * again on its own — and if the answer never comes, it stays open, because at
+ * that point the reasoning is not an aside about the answer, it is all there is.
  */
 
 import { Brain, ChevronRight } from 'lucide-react';
@@ -23,19 +24,37 @@ export interface ReasoningBlockProps {
   readonly text: string;
   /** True while this is the newest thing on a turn that has produced no answer yet. */
   readonly live?: boolean;
+  /**
+   * True when this reasoning is the whole of what the turn produced.
+   *
+   * A finished turn that reasoned and then said nothing would otherwise render
+   * as a single collapsed strip and a footer — the user sees a message that
+   * appears to be empty and has no way to tell that anything happened. When the
+   * reasoning is all there is, it stops being an aside and becomes the content,
+   * so it is shown rather than hidden behind a disclosure nobody knows to open.
+   */
+  readonly expanded?: boolean;
 }
 
-export function ReasoningBlock({ text, live = false }: ReasoningBlockProps): JSX.Element {
+export function ReasoningBlock({
+  text,
+  live = false,
+  expanded = false,
+}: ReasoningBlockProps): JSX.Element {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(live);
+  // One condition, so a turn that ends without an answer stays open rather than
+  // collapsing the instant `live` goes false — which is the same frame the
+  // reasoning becomes the only thing there is to read.
+  const shouldOpen = live || expanded;
+  const [open, setOpen] = useState(shouldOpen);
   const [pinned, setPinned] = useState(false);
   const bodyId = useId();
 
-  // Follows `live` until the reader takes over. Without the pin, a click to
+  // Follows `shouldOpen` until the reader takes over. Without the pin, a click to
   // keep it open would be undone by the first answer token.
   useEffect(() => {
-    if (!pinned) setOpen(live);
-  }, [live, pinned]);
+    if (!pinned) setOpen(shouldOpen);
+  }, [shouldOpen, pinned]);
 
   return (
     <div className="reasoning">

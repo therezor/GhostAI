@@ -880,3 +880,60 @@ describe('turn.end reporting', () => {
     expect(after[0]).toMatchObject({ kind: 'user', seq: 4 });
   });
 });
+
+describe('a turn that failed', () => {
+  it('keeps the address it was started with, so it can be re-run', () => {
+    // The bug this exists for: `turn.end` carried `firstSeq` and a turn that
+    // threw never reached its end, so a failed turn had no storage address —
+    // the failure line advised sending the message again and the footer offered
+    // no button to do it with.
+    const items = play(
+      { ...START, firstSeq: 7 },
+      {
+        type: 'error',
+        code: 'internal',
+        message: 'the sandbox is unreachable',
+        retryable: true,
+        turnId: 't1',
+      },
+      { type: 'turn.end', turnId: 't1', stopReason: 'error', iterations: 0 },
+    );
+
+    const turn = turnOf(items);
+    expect(turn.failure?.message).toContain('sandbox');
+    expect(turn.firstSeq).toBe(7);
+  });
+
+  it('stamps the optimistic user bubble at turn.start', () => {
+    // Regenerate addresses the *user* message, so the bubble needs its seq even
+    // when nothing after the start ever arrives.
+    const pending = appendPendingUserMessage([], { clientMessageId: 'c-1', text: 'search' });
+    const acked = applyServerMessage(pending, {
+      type: 'message.ack',
+      seq: 1,
+      sessionKey: 'web:1',
+      messageId: 't1',
+      clientMessageId: 'c-1',
+    });
+    const started = applyServerMessage(acked, { ...START, seq: 2, firstSeq: 7 });
+
+    const bubble = started.find((item) => item.kind === 'user');
+    expect(bubble?.kind === 'user' && bubble.seq).toBe(7);
+  });
+
+  it('does not renumber a bubble a fetch already placed', () => {
+    // `turn.end` stamps too, and a replayed `turn.start` must not move a seq
+    // that storage has already supplied.
+    const items = play(
+      { ...START, firstSeq: 7 },
+      { type: 'turn.end', turnId: 't1', stopReason: 'complete', iterations: 1, firstSeq: 9 },
+    );
+
+    expect(turnOf(items).firstSeq).toBe(9);
+  });
+
+  it('tolerates a server that does not report firstSeq on the start', () => {
+    const items = play(START);
+    expect(turnOf(items).firstSeq).toBeUndefined();
+  });
+});

@@ -8,6 +8,7 @@ import {
   buildStaticPrompt,
   composeSystemPrompt,
   type ContextContributor,
+  type PromptToolbox,
   type RuntimePromptContext,
   type StaticPromptContext,
 } from './prompt.js';
@@ -27,13 +28,28 @@ const RUNTIME: RuntimePromptContext = {
   nowMs: 1_700_000_000_000,
 };
 
+/** Long enough for `toolOutputTag`, which refuses a short one. */
+const NONCE = 'a1b2c3d4e5f60718';
+
+const TOOLBOX: PromptToolbox = {
+  name: 'web-research',
+  workdir: '/workspace',
+  tools: [{ name: 'search', use: 'Search the web.' }],
+  notes: 'Run `tools` for the full reference.',
+};
+
 describe('buildStaticPrompt', () => {
-  it('names the workspace and states that paths resolve into it', async () => {
+  it('names the workspace by id, and withholds its absolute path', async () => {
+    // The path is the one thing the file tools exist to hide, and a model handed
+    // it uses it: `<root>/notes/x` was resolved *into* the workspace again,
+    // landing on `<root>/home/u/.ghostai/workspace/notes/x` with no error. It is
+    // also the only line in the prompt that told a provider the operator's home
+    // directory layout.
     const prompt = await buildStaticPrompt({ context: CONTEXT, platform: 'linux' });
 
-    expect(prompt).toContain('/home/u/.ghostai/workspace');
     expect(prompt).toContain('`default` workspace');
-    expect(prompt).toContain('That directory is your root');
+    expect(prompt).toContain('To the file tools it is the');
+    expect(prompt).not.toContain(CONTEXT.workspaceRoot);
   });
 
   it('states the exec exception, because the two layers disagree on purpose', async () => {
@@ -42,8 +58,8 @@ describe('buildStaticPrompt', () => {
     // first rule reads the second one's error as a malfunction.
     const prompt = await buildStaticPrompt({ context: CONTEXT, platform: 'linux' });
 
-    expect(prompt).toContain('`exec` is the exception');
-    expect(prompt).toContain('confined to the workspace');
+    expect(prompt).toContain('`exec` runs on this machine');
+    expect(prompt).toContain('*not* confined to the workspace');
   });
 
   it('names the workspace the session is bound to, not always the default', async () => {
@@ -76,12 +92,12 @@ describe('buildStaticPrompt', () => {
     expect(await buildStaticPrompt(options)).toBe(await buildStaticPrompt(options));
   });
 
-  it('gives Windows its own platform policy', async () => {
+  it('gives Windows its own shell advice', async () => {
     const posix = await buildStaticPrompt({ context: CONTEXT, platform: 'linux' });
     const windows = await buildStaticPrompt({ context: CONTEXT, platform: 'win32' });
 
-    expect(posix).toContain('Platform policy (POSIX)');
-    expect(windows).toContain('Platform policy (Windows)');
+    expect(posix).toContain('Standard shell tools and UTF-8 are available');
+    expect(windows).toContain('Do not assume GNU tools');
     expect(windows).toContain('grep');
   });
 
@@ -154,9 +170,9 @@ describe('buildStaticPrompt', () => {
       agent: { label: 'Reviewer', systemPrompt: '' },
     });
 
-    expect(prompt).toContain('That directory is your root');
-    expect(prompt).toContain('`exec` is the exception');
-    expect(prompt).toContain('## Platform policy (Windows)');
+    expect(prompt).toContain('To the file tools it is the');
+    expect(prompt).toContain('`exec` runs on this machine');
+    expect(prompt).toContain('Do not assume GNU tools');
     expect(prompt).toContain('## Guidelines');
   });
 
@@ -189,10 +205,12 @@ describe('buildStaticPrompt', () => {
       },
     });
 
+    // `workspaceRoot` and `runtime` are still filled for a prompt that asks —
+    // the default declines them, this is not a removal.
     expect(prompt).toContain(
       `Reviewer | ${CONTEXT.workspaceId} | ${CONTEXT.workspaceRoot} | Windows x64, Node 22.0.0`,
     );
-    expect(prompt).toContain('## Platform policy (Windows)');
+    expect(prompt).toContain('## Running commands');
   });
 
   it('treats a whitespace-only prompt as no prompt at all', async () => {
@@ -244,8 +262,128 @@ describe('buildStaticPrompt', () => {
   });
 });
 
+/**
+ * The half of the prompt that depends on *where* `exec` lands.
+ *
+ * Untested until now, and it was wrong in four places for a toolboxed agent: it
+ * named the host OS as the command environment, claimed commands were not
+ * confined to the workspace when only the workspace is mounted, and on a Windows
+ * host warned that GNU tools might be missing from a Linux container that has
+ * them. A model resolving a contradiction between its prompt and its tools tends
+ * to resolve it by refusing.
+ */
+describe('buildStaticPrompt: with a toolbox', () => {
+  it('says commands run in the container, not on the host it names', async () => {
+    const prompt = await buildStaticPrompt({
+      context: CONTEXT,
+      platform: 'darwin',
+      runtimeLabel: 'macOS arm64, Node 22.0.0',
+      toolbox: TOOLBOX,
+    });
+
+    expect(prompt).toContain('This machine runs macOS arm64, Node 22.0.0');
+    expect(prompt).toContain('Your `exec` calls do not: they run inside the');
+    expect(prompt).toContain('`web-research` toolbox container');
+    // The host wording, which would be a direct contradiction of the above.
+    expect(prompt).not.toContain('`exec` runs on this machine');
+    expect(prompt).not.toContain('*not* confined to the workspace');
+  });
+
+  it('keeps the file tools on this machine, and maps the two names for one file', async () => {
+    // The sentence a model has no other way to arrive at: the file it wrote and
+    // the file a command sees are the same file, addressed differently.
+    const prompt = await buildStaticPrompt({
+      context: CONTEXT,
+      platform: 'linux',
+      toolbox: TOOLBOX,
+    });
+
+    expect(prompt).toContain('they always act on the workspace here, never inside the container');
+    expect(prompt).toContain('`notes/todo.md` is `/workspace/notes/todo.md` to a command');
+  });
+
+  it('does not warn a Windows host about tools the container has', async () => {
+    // The container is Linux whatever the host is, so the Windows advice is not
+    // merely unhelpful here — it is false about the machine the command runs on.
+    const prompt = await buildStaticPrompt({
+      context: CONTEXT,
+      platform: 'win32',
+      toolbox: TOOLBOX,
+    });
+
+    expect(prompt).not.toContain('Do not assume GNU tools');
+  });
+
+  it('leaves the toolbox section to say only what is specific to the box', async () => {
+    // It used to open by stating where commands run, which `commandPolicy` now
+    // says earlier and for both placements.
+    const prompt = await buildStaticPrompt({
+      context: CONTEXT,
+      platform: 'linux',
+      toolbox: TOOLBOX,
+    });
+
+    expect(prompt).toContain('## Toolbox: web-research');
+    expect(prompt).toContain('A shell is available in here');
+    expect(prompt).toContain('- `search` — Search the web.');
+    expect(prompt).toContain('Run `tools` for the full reference.');
+    expect(prompt).not.toContain('run inside this container, not on this machine');
+  });
+
+  it('includes the toolbox reference, because a model does not go looking for it', async () => {
+    // The failure: `TOOLS.md` lived inside the image, reachable only by the model
+    // choosing to run `tools`. It did not — it answered a research question from
+    // search snippets with the section explaining how to read pages one command
+    // away. Discoverable is not read.
+    const prompt = await buildStaticPrompt({
+      context: CONTEXT,
+      platform: 'linux',
+      toolbox: { ...TOOLBOX, docs: '## search\n\nReading is the default.' },
+    });
+
+    expect(prompt).toContain('### web-research reference');
+    expect(prompt).toContain('Reading is the default.');
+    // After the installed list, not instead of it: the list is what a model scans,
+    // the reference is what it consults.
+    expect(prompt.indexOf('- `search`')).toBeLessThan(prompt.indexOf('Reading is the default.'));
+  });
+
+  it('renders no reference heading for a toolbox without one', async () => {
+    const prompt = await buildStaticPrompt({
+      context: CONTEXT,
+      platform: 'linux',
+      toolbox: TOOLBOX,
+    });
+
+    // The heading specifically: the fixture's `notes` mention the word, and an
+    // assertion on the bare word would pass for the wrong reason.
+    expect(prompt).toContain('## Toolbox: web-research');
+    expect(prompt).not.toContain('### web-research reference');
+  });
+
+  it('keeps the reference in the cached half', async () => {
+    // A few thousand tokens re-sent on every iteration of every turn would undo
+    // the split this file exists for. Two builds of the same session are
+    // byte-identical, which is what a provider's prefix cache requires.
+    const options = {
+      context: CONTEXT,
+      platform: 'linux' as const,
+      toolbox: { ...TOOLBOX, docs: 'the reference' },
+    };
+
+    expect(await buildStaticPrompt(options)).toBe(await buildStaticPrompt(options));
+  });
+
+  it('renders the host wording when there is no toolbox', async () => {
+    const prompt = await buildStaticPrompt({ context: CONTEXT, platform: 'linux' });
+
+    expect(prompt).toContain('`exec` runs on this machine');
+    expect(prompt).not.toContain('## Toolbox');
+  });
+});
+
 describe('buildRuntimeBlock', () => {
-  it('reports live state and the turn in progress', () => {
+  it('gives the time locally and as an instant, and nothing else', () => {
     const block = buildRuntimeBlock({
       context: RUNTIME,
       nonce: 'a1b2c3d4e5f60718',
@@ -253,12 +391,123 @@ describe('buildRuntimeBlock', () => {
     });
 
     expect(block).toContain('## Live state');
-    expect(block).toContain(
-      'Current time: 2023-11-14T22:13:20.000Z (host time zone: Europe/Madrid)',
-    );
-    expect(block).toContain('Channel: cli');
-    expect(block).toContain('Session: web:1');
-    expect(block).toContain('Agent iteration: 3 / 40');
+    // The local reading, for what "this afternoon" means, with the weekday for
+    // "this weekend" — and the ISO instant, because local time is ambiguous.
+    expect(block).toContain('Tuesday, 14 November 2023 at 23:13 (Europe/Madrid)');
+    expect(block).toContain('2023-11-14T22:13:20Z');
+    // Milliseconds are gone: no question has ever turned on them.
+    expect(block).not.toContain('.000Z');
+  });
+
+  it('carries no channel, session key or iteration counter', () => {
+    // All three were printed on every request of every turn, in the *uncached*
+    // half, and nothing in the prompt said what any of them meant. The session
+    // key is a UUID the model cannot use and might echo at the user.
+    const block = buildRuntimeBlock({
+      context: RUNTIME,
+      nonce: 'a1b2c3d4e5f60718',
+      timeZone: 'Europe/Madrid',
+    });
+
+    expect(block).not.toContain('Channel:');
+    expect(block).not.toContain('Session:');
+    expect(block).not.toContain('web:1');
+    expect(block).not.toContain('Agent iteration');
+  });
+
+  it('says nothing about iterations until they are nearly gone', () => {
+    // At 3 of 40 the count is a fact with no consequence. The cost of saying it
+    // anyway is paid on every request, because this half is never cached.
+    const early = buildRuntimeBlock({ context: RUNTIME, nonce: NONCE, timeZone: 'UTC' });
+
+    expect(early).not.toMatch(/iterations left/);
+  });
+
+  it('tells the model to wrap up when the cap is close', () => {
+    const late = buildRuntimeBlock({
+      context: { ...RUNTIME, iteration: 38, maxIterations: 40 },
+      nonce: NONCE,
+      timeZone: 'UTC',
+    });
+
+    expect(late).toContain('Tool iterations left in this turn: 3');
+    expect(late).toContain('answer with what you have');
+  });
+
+  it('says it is the last one on the final iteration', () => {
+    // Counted inclusively: on the last legal iteration one is left, not none.
+    const last = buildRuntimeBlock({
+      context: { ...RUNTIME, iteration: 40, maxIterations: 40 },
+      nonce: NONCE,
+      timeZone: 'UTC',
+    });
+
+    expect(last).toContain('Tool iterations left in this turn: 1');
+  });
+
+  it('lets an operator replace the wording entirely', () => {
+    // The point of the templates. Prompt text an install runs on should be text
+    // an operator can read and edit, not text compiled into the binary — the same
+    // decision `systemPrompt` already made for the identity half.
+    const block = buildRuntimeBlock({
+      context: RUNTIME,
+      nonce: NONCE,
+      timeZone: 'UTC',
+      livePrompt: '## Ahora\n\nSon las {{time}} en la sesión {{sessionKey}}.',
+    });
+
+    expect(block).toContain('## Ahora');
+    expect(block).toContain('Son las Tuesday, 14 November 2023');
+    // `sessionKey` and `channel` are offered even though the default declines
+    // them, so an operator who disagrees can put them back without patching us.
+    expect(block).toContain('web:1');
+  });
+
+  it('lets an operator reword the wrap-up sentence', () => {
+    const block = buildRuntimeBlock({
+      context: { ...RUNTIME, iteration: 39, maxIterations: 40 },
+      nonce: NONCE,
+      timeZone: 'UTC',
+      wrapUpPrompt: '\n\nOnly {{iterationsLeft}} left — stop and summarise.',
+    });
+
+    expect(block).toContain('Only 2 left — stop and summarise.');
+    expect(block).not.toContain('Wrap up');
+  });
+
+  it('treats a single space as removing the section, and empty as “use the default”', () => {
+    // The asymmetry matters: empty has to keep inheriting improvements to the
+    // built-in, so it cannot also be the way to say "I want this gone".
+    const silenced = buildRuntimeBlock({
+      context: RUNTIME,
+      nonce: NONCE,
+      timeZone: 'UTC',
+      livePrompt: ' ',
+    });
+    const defaulted = buildRuntimeBlock({
+      context: RUNTIME,
+      nonce: NONCE,
+      timeZone: 'UTC',
+      livePrompt: '',
+    });
+
+    expect(silenced).not.toContain('## Live state');
+    // And the rest of the block survives: the tool-output policy is not the
+    // operator's to remove, since it is the injection defence rather than prose.
+    expect(silenced).toContain(toolOutputTag(NONCE));
+    expect(defaulted).toContain('## Live state');
+  });
+
+  it('falls back to UTC rather than throwing on an unknown zone', () => {
+    // `Intl` throws for a zone it does not know, and a prompt that fails to build
+    // fails every turn on that agent.
+    const block = buildRuntimeBlock({
+      context: RUNTIME,
+      nonce: NONCE,
+      timeZone: 'Mars/Olympus_Mons',
+    });
+
+    expect(block).toContain('2023-11-14T22:13:20Z');
   });
 
   it('names this turn’s delimiter in the tool-output policy', () => {

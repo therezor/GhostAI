@@ -31,12 +31,7 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import {
-  ConfigSchema,
-  hasPlaceholder,
-  legacyInstructionsToTemplate,
-  type Config,
-} from '@ghostai/protocol';
+import { ConfigSchema, type Config } from '@ghostai/protocol';
 
 import { GhostError } from './errors.js';
 import {
@@ -59,123 +54,6 @@ export interface LoadedConfig {
   readonly file: string;
   /** `false` when no file existed and the schema's defaults were used. */
   readonly fromFile: boolean;
-  /** The file was in an older shape and has been rewritten in the current one. */
-  readonly migrated: boolean;
-}
-
-/**
- * Brings an older `config.json` up to the current shape.
- *
- * Two migrations, and they are **independent steps over the same record**
- * rather than a chain. That shape is deliberate: the first version of this
- * function returned early when `providers` was not a record, which was correct
- * while there was one migration and would have silently skipped the second one
- * for every install that had agents and no configured providers.
- *
- * Both run on the raw JSON, before validation, because both fix shapes the
- * current schema would either reject or misread. Both are idempotent, so a file
- * written by this version migrates to itself.
- */
-export function migrateConfigShape(raw: unknown): { value: unknown; changed: boolean } {
-  if (!isRecord(raw)) return { value: raw, changed: false };
-
-  let value: Record<string, unknown> = raw;
-  let changed = false;
-
-  for (const step of [migrateProviderTypes, migrateAgentPrompts]) {
-    const result = step(value);
-    if (result !== undefined) {
-      value = result;
-      changed = true;
-    }
-  }
-
-  return changed ? { value, changed: true } : { value: raw, changed: false };
-}
-
-/**
- * `providers` used to be keyed by provider id with no `type` field; it is now
- * keyed by an arbitrary *instance* id and `type` names the provider. An old
- * file's key already *is* a provider id, so the migration is `type` = the key —
- * which is also why nothing in the credential vault has to move: an old
- * instance's id is the string its key was already stored under.
- *
- * It lives here rather than in `@ghostai/providers` because it needs no
- * registry lookup. A key that was never a real provider id produces
- * `type: "typo"` and fails at resolution with the same message it would have
- * failed with before, which is better than this function silently discarding an
- * entry it did not recognise.
- *
- * Returns `undefined` when there was nothing to do.
- */
-function migrateProviderTypes(raw: Record<string, unknown>): Record<string, unknown> | undefined {
-  const providers = raw.providers;
-  if (!isRecord(providers)) return undefined;
-
-  let changed = false;
-  const next: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(providers)) {
-    if (!isRecord(entry) || typeof entry.type === 'string') {
-      next[key] = entry;
-      continue;
-    }
-    next[key] = { ...entry, type: key };
-    changed = true;
-  }
-
-  return changed ? { ...raw, providers: next } : undefined;
-}
-
-/**
- * An agent's `systemPrompt` used to mean "append this below the built-in
- * identity as an `## Instructions` section". It now *is* the whole static
- * prompt, so a stored value written under the old meaning has to be rewritten
- * as a full template or the agent silently loses its workspace rules,
- * guidelines and heading.
- *
- * `legacyInstructionsToTemplate` reproduces the old composition byte for byte,
- * so an install that migrates keeps the prompt it was already running on.
- *
- * Two properties worth stating because both are load-bearing:
- *
- *  - **An empty prompt is never touched.** Empty means "use the built-in", and
- *    materialising the default into the file would freeze that install on
- *    today's wording forever.
- *  - **Idempotence is detected by the placeholders**, since every migrated
- *    value contains the built-in template and therefore `{{name}}`. The one
- *    thing this misreads is a legacy prompt that already contained a literal
- *    `{{name}}`: it is treated as migrated and stays instructions-only, which
- *    becomes that agent's whole prompt. A `configVersion` field would settle it
- *    properly, and is the right answer the third time a migration needs one —
- *    not for this one.
- */
-function migrateAgentPrompts(raw: Record<string, unknown>): Record<string, unknown> | undefined {
-  const agents = raw.agents;
-  if (!isRecord(agents)) return undefined;
-  const list = agents.list;
-  if (!isRecord(list)) return undefined;
-
-  let changed = false;
-  const next: Record<string, unknown> = {};
-  for (const [id, entry] of Object.entries(list)) {
-    if (!isRecord(entry)) {
-      next[id] = entry;
-      continue;
-    }
-    const prompt = entry.systemPrompt;
-    if (typeof prompt !== 'string' || prompt.trim() === '' || hasPlaceholder(prompt)) {
-      next[id] = entry;
-      continue;
-    }
-    next[id] = { ...entry, systemPrompt: legacyInstructionsToTemplate(prompt) };
-    changed = true;
-  }
-
-  return changed ? { ...raw, agents: { ...agents, list: next } } : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /** Only the two errno values that mean "there is no config file here". */
@@ -191,19 +69,10 @@ function errnoOf(error: unknown): string | undefined {
  * Parses and validates config text.
  *
  * Separate from the file read so that a config arriving over the wire — the
- * settings panel's preview in Phase 2 — is validated by exactly the same code
- * that validates the file, rather than by a second implementation that drifts.
- *
- * Migration runs here rather than in `loadConfig` for that same reason: an old
- * config pasted into a preview has to become a valid one, not an error about a
- * missing `type` the operator never wrote.
+ * settings panel's preview — is validated by exactly the same code that
+ * validates the file, rather than by a second implementation that drifts.
  */
 export function parseConfig(text: string, file: string): Config {
-  return parseUpgraded(text, file).config;
-}
-
-/** `parseConfig`, plus whether the text needed migrating. */
-function parseUpgraded(text: string, file: string): { config: Config; migrated: boolean } {
   let raw: unknown;
   try {
     raw = JSON.parse(text) as unknown;
@@ -214,8 +83,7 @@ function parseUpgraded(text: string, file: string): { config: Config; migrated: 
     });
   }
 
-  const upgraded = migrateConfigShape(raw);
-  const result = ConfigSchema.safeParse(upgraded.value);
+  const result = ConfigSchema.safeParse(raw);
   if (!result.success) {
     const issues = result.error.issues.map(
       (issue) => `  ${issue.path.length === 0 ? '(root)' : issue.path.join('.')}: ${issue.message}`,
@@ -225,7 +93,7 @@ function parseUpgraded(text: string, file: string): { config: Config; migrated: 
       details: { file, issues },
     });
   }
-  return { config: result.data, migrated: upgraded.changed };
+  return result.data;
 }
 
 function describeJsonError(error: unknown): string {
@@ -303,18 +171,7 @@ export function loadConfig(options: LoadConfigOptions = {}): LoadedConfig {
     }
   }
 
-  const parsed =
-    text === undefined
-      ? { config: ConfigSchema.parse({}), migrated: false }
-      : parseUpgraded(text, file);
-  const config = parsed.config;
-
-  // Written back rather than only migrated in memory, so the operator's file
-  // and the running settings say the same thing — otherwise every save from
-  // the settings panel would look like it rewrote a section nobody touched.
-  // Only when a file was actually read: a fresh install has nothing to upgrade
-  // and must not have a config.json created for it as a side effect of a load.
-  if (parsed.migrated && text !== undefined) saveConfig(file, config);
+  const config = text === undefined ? ConfigSchema.parse({}) : parseConfig(text, file);
 
   const configured = config.agents.defaults.workspace;
   const workspace = options.workspace ?? (configured === '' ? undefined : configured);
@@ -327,6 +184,5 @@ export function loadConfig(options: LoadConfigOptions = {}): LoadedConfig {
     }),
     file,
     fromFile: text !== undefined,
-    migrated: parsed.migrated,
   };
 }

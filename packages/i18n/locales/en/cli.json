@@ -159,5 +159,17 @@
       "sessions": "sessions",
       "workspaces": "workspaces"
     }
+  },
+  "toolbox": {
+    "approve": {
+      "description": "Approve a toolbox's current contents so agents may work in it."
+    },
+    "description": "List, approve and revoke toolboxes.",
+    "list": {
+      "description": "Show every installed toolbox and whether it is approved."
+    },
+    "revoke": {
+      "description": "Withdraw approval. The manifest stays installed but stops running."
+    }
   }
 }

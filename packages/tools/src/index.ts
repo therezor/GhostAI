@@ -41,6 +41,7 @@ export {
 
 export {
   ToolRegistry,
+  withToolboxTools,
   type ToolExecution,
   type ToolInvocation,
   type ToolRegistryOptions,
@@ -53,9 +54,32 @@ export {
   KILL_GRACE_MS,
   localRunner,
   type CommandRunner,
+  type OutputTee,
+  type RunnerResolver,
+  type ToolboxRequest,
   type RunOutcome,
   type RunRequest,
 } from './runner.js';
+
+export {
+  TOOLBOX_MOUNT_DIR,
+  RUNS_MOUNT_DIR,
+  containerCreateArgv,
+  containerExecArgv,
+  containerIsGone,
+  containerKillArgv,
+  containerRunDir,
+  containerRunner,
+  openTranscript,
+  type ContainerCreateOptions,
+  type ContainerExecOptions,
+  type ContainerRunnerOptions,
+  type ToolboxMount,
+  type Transcript,
+} from './container-runner.js';
+
+export { coerceArgv } from './argv.js';
+export { toolboxTool, toolboxTools } from './toolbox-tools.js';
 
 export {
   BUILTIN_TOOLS,

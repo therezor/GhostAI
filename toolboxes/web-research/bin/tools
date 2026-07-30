@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""Print this toolbox's reference, whole or one section of it.
+
+**The prompt now carries this file, so this command is the second way to reach it
+rather than the only one.** It was the only one, and that did not work: a model
+that has to choose to read a reference mostly does not — asked a research question
+it answered from search snippets while the section explaining how to read pages
+sat one command away. Discoverable is not the same as read.
+
+It stays because it is still the cheaper way to re-read one section mid-turn
+(`tools search` is a few hundred tokens against re-reading the prompt), and
+because `cat /run/ghost/TOOLS.md` is a path to remember in a filesystem the model
+cannot list without spending a call — where getting it slightly wrong returns "No
+such file", which reads as the reference not existing.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+# Beside the manifest, in the read-only mount — not baked into the image.
+#
+# The host installs it next to `toolbox.json` so the prompt builder can include it
+# (a model that has to *choose* to read a reference mostly does not). The same
+# directory is mounted here, so this command keeps working for the case where it
+# does look.
+REFERENCE = Path("/run/ghost/TOOLS.md")
+
+
+def sections(text: str) -> dict[str, str]:
+    """The `##` blocks, keyed by the first word of each heading, lowercased.
+
+    First word rather than the whole heading: `tools search` should work, and
+    `tools "The two commands that matter"` should not be the only way in.
+    """
+    found: dict[str, str] = {}
+    name = ""
+    lines: list[str] = []
+    for line in text.splitlines():
+        if line.startswith("## "):
+            if name:
+                found[name] = "\n".join(lines).rstrip()
+            heading = line[3:].strip()
+            name = heading.split()[0].lower()
+            lines = [line]
+        else:
+            lines.append(line)
+    if name:
+        found[name] = "\n".join(lines).rstrip()
+    return found
+
+
+def main() -> int:
+    try:
+        text = REFERENCE.read_text("utf-8")
+    except OSError as error:
+        print(f"tools: {REFERENCE}: {error}", file=sys.stderr)
+        return 1
+
+    topics = [argument.lower() for argument in sys.argv[1:] if not argument.startswith("-")]
+    if not topics:
+        print(text.rstrip())
+        return 0
+
+    available = sections(text)
+    status = 0
+    for topic in topics:
+        block = available.get(topic)
+        if block is None:
+            # Naming what does exist, because the alternative is the model
+            # guessing a second topic and spending another call to be told again.
+            print(
+                f"tools: no section '{topic}'. Available: {', '.join(sorted(available))}."
+                " Run `tools` with no arguments for all of it.",
+                file=sys.stderr,
+            )
+            status = 1
+            continue
+        print(block)
+        print()
+
+    return status
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -28,6 +28,13 @@
  * the workspace root and substituting an absolute path would corrupt any
  * argument that only looked like a path — `git log a/b`, a regex, a URL.
  *
+ * Two of those rules — the shell refusal and the path refusal — are premised on
+ * the child being unconfined, and both are lifted when `sandboxed` says it is
+ * not. See `ExecGuardOptions.sandboxed`; the short version is that a container
+ * mounting only the workspace enforces by construction what they enforce by
+ * inspection, and lifting one without the other produces a shell that refuses
+ * the redirects it was enabled for.
+ *
  * That is also why this is the one place in GhostAI where a path outside the
  * workspace is **refused instead of clamped**. `WorkspaceJail` resolves
  * `/etc/passwd` to `<workspace>/etc/passwd`, but clamping is a property of
@@ -96,6 +103,26 @@ export interface ExecGuardOptions {
   readonly config?: ExecToolConfig;
   /** Defaults to `process.env`. */
   readonly env?: Readonly<Record<string, string | undefined>>;
+  /**
+   * Whether the command will run in a container that mounts only the workspace.
+   *
+   * Two of the rules below exist because a host child process is not confined by
+   * anything: a shell would reintroduce a parser between the argv contract and
+   * the kernel, and an absolute path would reach the real filesystem. Move the
+   * command into a container and both premises fail — the only filesystem it can
+   * address *is* the workspace, and a shell inside it can reach nothing the
+   * command could not reach anyway.
+   *
+   * So both are lifted here, together. Lifting only the shell ban would be worse
+   * than lifting neither: `bash -lc 'nmap … > /tmp/out'` carries its redirect
+   * inside the script string, the path check sees `/tmp/out` and refuses, and the
+   * operator gets a shell that rejects the pipelines they enabled it for.
+   *
+   * What does **not** change: the binary allow- and deny-lists still apply, and
+   * every argv is still recorded. The container is the boundary; the audit log is
+   * still the record.
+   */
+  readonly sandboxed?: boolean;
 }
 
 export interface ExecPlan {
@@ -232,7 +259,9 @@ export function guardExec(argv: readonly string[], options: ExecGuardOptions): E
   if (allowed.length > 0 && !allowed.includes(name)) {
     throw denied(`Binary is not in the allow-list: ${name}`, { binary: name, allowed });
   }
-  if (SHELL_BINARIES.includes(name)) {
+  const sandboxed = options.sandboxed === true;
+
+  if (SHELL_BINARIES.includes(name) && !sandboxed) {
     if (!allowed.includes(name)) {
       throw denied(
         `${name} is a shell. Pass the program and its arguments as argv instead, or add "${name}" to allowedBinaries.`,
@@ -256,7 +285,7 @@ export function guardExec(argv: readonly string[], options: ExecGuardOptions): E
   // resolved from `PATH` by the OS, and an absolute path is a system binary the
   // allow/deny lists have already ruled on.
   let file = argv0;
-  if (isPathShaped(argv0) && !argv0.startsWith('/') && !DRIVE_LETTER.test(argv0)) {
+  if (!sandboxed && isPathShaped(argv0) && !argv0.startsWith('/') && !DRIVE_LETTER.test(argv0)) {
     assertInsideByShape(
       argv0,
       (shapes) => `Program path points outside the workspace (${shapes.join(', ')}): ${argv0}`,
@@ -276,7 +305,7 @@ export function guardExec(argv: readonly string[], options: ExecGuardOptions): E
     paths.push(verdict.path);
   }
 
-  for (const argument of argv.slice(1)) {
+  for (const argument of sandboxed ? [] : argv.slice(1)) {
     const candidate = pathCandidate(argument);
     if (candidate === null) continue;
     assertInsideByShape(

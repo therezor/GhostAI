@@ -315,3 +315,24 @@ describe('the workspaces page', () => {
     expect(await firstCell()).toContain('Default');
   });
 });
+
+/**
+ * The empty-filter message.
+ *
+ * `common.noMatches` interpolates `{{count}}`, which makes i18next look for
+ * `noMatches_one` / `noMatches_other` — and both were committed empty. Measured:
+ * i18next falls back to the base key when a plural form is `''`, so this rendered
+ * correctly the whole time; the empty entries were untidy rather than broken.
+ * They are filled in now because the fallback is a behaviour of the library
+ * rather than a promise, and because `pnpm i18n:extract` keeps re-creating them.
+ */
+describe('filtering to nothing', () => {
+  it('says so instead of rendering an empty line', async () => {
+    stubApi({ 'GET /api/workspaces': [200, TWO] });
+    renderWithProviders(<WorkspacesRoute />);
+
+    await userEvent.type(await screen.findByLabelText('Filter workspaces by name'), 'zzzznothing');
+
+    expect(screen.getByText(/Nothing here matches/)).toBeInTheDocument();
+  });
+});

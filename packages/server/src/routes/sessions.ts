@@ -272,6 +272,7 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
         return {
           sessionKey: report.sessionKey,
           systemPrompt: report.systemPrompt,
+          tools: [...report.tools],
           messages: report.messages.map(toStoredMessage),
           estimatedTokens: report.estimatedTokens,
           contextWindowTokens: report.contextWindowTokens,

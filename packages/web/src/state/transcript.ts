@@ -245,30 +245,37 @@ export function applyServerMessage(items: Transcript, message: ServerMessage): T
     case 'message.ack':
       return acknowledge(items, message.messageId, message.clientMessageId);
 
-    case 'turn.start':
+    case 'turn.start': {
       // A `turn.start` for a turn already in the transcript is a replayed
       // frame, not a second turn — the ring re-sends by design, and appending
       // would leave an empty turn above the real one for every resume.
-      return items.some((item) => item.kind === 'turn' && item.id === message.turnId)
-        ? items
-        : [
-            ...items,
-            {
-              kind: 'turn',
-              id: message.turnId,
-              model: message.model,
-              provider: message.provider,
-              parts: [],
-              stopReason: undefined,
-              usage: undefined,
-              iterations: 0,
-              elapsedMs: undefined,
-              firstSeq: undefined,
-              lastSeq: undefined,
-              done: false,
-              failure: undefined,
-            },
-          ];
+      if (items.some((item) => item.kind === 'turn' && item.id === message.turnId)) return items;
+      // The optimistic bubble this tab drew has no storage address until the
+      // server names one. Stamping it here rather than only at `turn.end` is
+      // what lets a turn that *fails* still be re-run.
+      const withSeq = stampUserSeq(items, message.turnId, message.firstSeq);
+      return [
+        ...withSeq,
+        {
+          kind: 'turn',
+          id: message.turnId,
+          model: message.model,
+          provider: message.provider,
+          parts: [],
+          stopReason: undefined,
+          usage: undefined,
+          iterations: 0,
+          elapsedMs: undefined,
+          // From `turn.start`, not only from `turn.end`: a turn that fails
+          // never reaches its end, and without an address here the failure
+          // could offer nothing to re-run.
+          firstSeq: message.firstSeq,
+          lastSeq: undefined,
+          done: false,
+          failure: undefined,
+        },
+      ];
+    }
 
     case 'assistant.delta':
       return appendText(items, message.turnId, 'text', message.text);
@@ -341,8 +348,11 @@ export function applyServerMessage(items: Transcript, message: ServerMessage): T
         usage: message.usage,
         iterations: message.iterations,
         elapsedMs: message.elapsedMs,
-        firstSeq: message.firstSeq,
-        lastSeq: message.lastSeq,
+        // Kept if the end does not restate it. `turn.start` already carried it,
+        // and overwriting with `undefined` would take the address back off a
+        // turn that had one — which is the whole thing this is here to preserve.
+        firstSeq: message.firstSeq ?? turn.firstSeq,
+        lastSeq: message.lastSeq ?? turn.lastSeq,
       }));
 
       // The second half of the job, and the reason `firstSeq` is on the wire at
@@ -351,13 +361,7 @@ export function applyServerMessage(items: Transcript, message: ServerMessage): T
       // number here is what a refetch would otherwise have to supply — and a
       // refetch would also replace the live turn's tool timings with stored
       // rows that do not carry them.
-      if (message.firstSeq === undefined) return ended;
-      const seq = message.firstSeq;
-      return ended.map((item) =>
-        item.kind === 'user' && item.turnId === message.turnId && item.seq === undefined
-          ? { ...item, seq }
-          : item,
-      );
+      return stampUserSeq(ended, message.turnId, message.firstSeq);
     }
 
     case 'error':
@@ -799,6 +803,28 @@ function applyNotice(
  * produces two text parts, and merging the second into the first would render
  * the tool card after text it came before.
  */
+/**
+ * Gives this turn's optimistic user bubble its storage address.
+ *
+ * Idempotent, and only ever fills a gap: `seq === undefined` is the guard, so a
+ * replayed frame or a second stamping cannot renumber a bubble that a fetch has
+ * already placed. Called from both `turn.start` and `turn.end` because the two
+ * cover different failures — the end never arrives for a turn that threw, and the
+ * start does not know the seq on an install whose server predates carrying it.
+ */
+function stampUserSeq(
+  items: readonly TranscriptItem[],
+  turnId: string,
+  seq: number | undefined,
+): readonly TranscriptItem[] {
+  if (seq === undefined) return items;
+  return items.map((item) =>
+    item.kind === 'user' && item.turnId === turnId && item.seq === undefined
+      ? { ...item, seq }
+      : item,
+  );
+}
+
 function appendText(
   items: Transcript,
   turnId: string,

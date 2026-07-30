@@ -23,8 +23,17 @@
  *    back as `isError` with the output intact, so the model can read the
  *    compiler errors rather than a wrapper's opinion of them.
  *
- *  - **How an outcome reads.** `renderOutcome` is what the model sees, and
+ *  - **How an outcome reads.** `renderRun` is what the model sees, and
  *    `details` is what an approval prompt and the audit log see.
+ *
+ * The description and the argument schema have to cover **both** placements,
+ * because they are computed once at module load and the same definition is
+ * advertised to a host agent and a sandboxed one. They used to state the host
+ * rules flatly — "there is no shell", "paths outside the workspace are errors" —
+ * and a sandboxed agent read that beside a Sandbox section telling it to run
+ * `ddgr --json | jq`. Faced with the contradiction a model does the conservative
+ * thing and reports it cannot do the task at all, which is how "I can't search
+ * the internet" came out of an agent holding a search tool.
  */
 
 import { guardExec, type ExecPlan } from '@ghostai/security';
@@ -38,7 +47,7 @@ const schema = z.strictObject({
     .array(z.string())
     .min(1)
     .describe(
-      'Program and arguments as separate strings, e.g. ["git","status","--short"]. There is no shell: pipes, redirection and globs are not interpreted.',
+      'Program and arguments as separate strings, e.g. ["git","status","--short"]. On the host there is no shell, so pipes, redirection and globs are not interpreted. In a sandbox there is one: ["bash","-lc","a | b > c"] works. Your instructions say which applies — a "Sandbox" section means the second.',
     ),
   timeoutMs: z.coerce
     .number()
@@ -51,7 +60,7 @@ const schema = z.strictObject({
 export const execTool: AnyTool = defineTool({
   name: 'exec',
   description:
-    'Run a program in the workspace root and return its output. Arguments are passed as an argv array and are not interpreted by a shell. Unlike the file tools, an argument pointing outside the workspace is refused rather than resolved inside it — the child process runs on the real filesystem and is not confined to the workspace, so "/etc/passwd" and "../x" are errors here.',
+    'Run a program and return its output. Arguments are passed as an argv array. On the host it runs in the workspace root on the real filesystem, so an argument pointing outside the workspace is refused rather than clamped — "/etc/passwd" and "../x" are errors, and there is no shell. In a sandbox it runs inside a container that mounts only the workspace: a shell is available, and absolute paths address the container rather than this machine. Your instructions carry a "Sandbox" section when that is the case, naming what the image holds.',
   schema,
   risk: 'exec',
   annotations: {
@@ -69,6 +78,7 @@ export const execTool: AnyTool = defineTool({
       jail: context.jail,
       config: context.config.exec,
       ...(context.env === undefined ? {} : { env: context.env }),
+      ...(context.sandboxed === undefined ? {} : { sandboxed: context.sandboxed }),
     });
 
     // Where it runs is the context's to decide; whether it may run was settled
@@ -79,7 +89,7 @@ export const execTool: AnyTool = defineTool({
       signal: context.signal,
       ...(context.clock === undefined ? {} : { clock: context.clock }),
     });
-    return renderOutcome(args.argv, plan, outcome);
+    return renderRun(args.argv, plan, outcome);
   },
 });
 
@@ -96,7 +106,14 @@ function effectiveTimeout(plan: ExecPlan, requested: number | undefined): number
   return Math.min(requested, plan.timeoutMs);
 }
 
-function renderOutcome(
+/**
+ * How a command's outcome reads to the model.
+ *
+ * Exported because a toolbox entry exposed as its own tool is the same command
+ * with the program fixed, and two renderings of "what happened" would drift —
+ * one of them eventually forgetting to mention the transcript, or the exit code.
+ */
+export function renderRun(
   argv: readonly string[],
   plan: ExecPlan,
   outcome: RunOutcome,
@@ -107,7 +124,25 @@ function renderOutcome(
   if (sections.length === 0) sections.push('(no output)');
 
   if (outcome.truncated) {
-    sections.push(`[exec: output truncated at ${String(plan.maxOutputBytes)} bytes per stream.]`);
+    // With a transcript there is somewhere to send the model for the rest, and
+    // saying so is the difference between a truncation it can recover from and
+    // one it has to guess around. That is the whole token argument: a
+    // 12,000-token scan comes back as a summary and a path.
+    //
+    // **`exec`, explicitly, not `read_file`.** The transcript is mounted into the
+    // container from outside the workspace, so its path is absolute and outside
+    // the jail — `read_file` would refuse it as an escape. Naming the wrong tool
+    // here would send the model down a path that cannot work and cost it a turn
+    // discovering that.
+    sections.push(
+      outcome.transcriptDir === undefined
+        ? `[exec: output truncated at ${String(plan.maxOutputBytes)} bytes per stream.]`
+        : `[exec: output truncated at ${String(plan.maxOutputBytes)} bytes per stream. ` +
+            `The complete output is at ${outcome.transcriptDir}/stdout.log and ` +
+            `${outcome.transcriptDir}/stderr.log. Reach it with exec — ` +
+            `grep/tail/cat those paths rather than re-running the command. ` +
+            `read_file cannot: the path is outside the workspace.]`,
+    );
   }
   if (outcome.timedOut) {
     sections.push('[exec: the command was killed after exceeding its time limit.]');
@@ -130,6 +165,7 @@ function renderOutcome(
       exitCode: outcome.code,
       signal: outcome.signal,
       timedOut: outcome.timedOut,
+      ...(outcome.transcriptDir === undefined ? {} : { transcriptDir: outcome.transcriptDir }),
     },
   };
 }

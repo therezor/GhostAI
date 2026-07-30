@@ -45,7 +45,6 @@ import { systemClock, type Clock } from './clock.js';
 import { GhostError } from './errors.js';
 import { findLegalEnd, historyForLLM, type HistoryForLLMOptions } from './history.js';
 import { textOf } from './messages.js';
-import { migrate } from './migrate.js';
 import { ensureDir } from './paths.js';
 import { deriveSessionTitle } from './session-title.js';
 import { DEFAULT_WORKSPACE_ID } from './workspace-id.js';
@@ -238,6 +237,11 @@ CREATE TABLE IF NOT EXISTS sessions (
   title                 TEXT    NOT NULL DEFAULT '',
   origin                TEXT    NOT NULL DEFAULT 'web',
   agent_id              TEXT,
+  -- No \`REFERENCES workspaces(id)\`: the two tables are created by two
+  -- different stores in an order nothing guarantees. The relationship is held
+  -- in code instead, which is also what lets a *detached* workspace's sessions
+  -- keep resolving to their own files rather than falling into another's.
+  workspace_id          TEXT    NOT NULL DEFAULT '${DEFAULT_WORKSPACE_ID}',
   created_at_ms         INTEGER NOT NULL,
   updated_at_ms         INTEGER NOT NULL,
   metadata_json         TEXT    NOT NULL DEFAULT '{}',
@@ -245,6 +249,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   last_learned_seq      INTEGER NOT NULL DEFAULT 0,
   next_seq              INTEGER NOT NULL DEFAULT 1
 ) STRICT;
+
+CREATE INDEX IF NOT EXISTS sessions_workspace ON sessions(workspace_id, updated_at_ms DESC);
 
 CREATE TABLE IF NOT EXISTS messages (
   id            TEXT    PRIMARY KEY,
@@ -293,25 +299,6 @@ CREATE INDEX IF NOT EXISTS messages_turn ON messages(session_key, turn_id);
 CREATE INDEX IF NOT EXISTS sessions_updated ON sessions(updated_at_ms DESC);
 CREATE INDEX IF NOT EXISTS turn_stats_session ON turn_stats(session_key, ended_at_ms DESC);
 `;
-
-/**
- * Append-only. The list's length is the schema version; see `migrate`.
- *
- * `workspace_id` is not in `SCHEMA` above, deliberately: leaving it to the
- * ledger means a fresh database and a database from before workspaces existed
- * run the *same* statement, so there is one code path rather than a "new
- * install" path that no upgrade ever exercises.
- *
- * There is no `REFERENCES workspaces(id)`. SQLite cannot attach a foreign key
- * through `ADD COLUMN`, and the two tables are created by two different stores
- * in an order nothing guarantees. The relationship is held in code instead —
- * and holding it there is what lets a *detached* workspace's sessions keep
- * resolving to their own files rather than falling into another workspace's.
- */
-const SESSION_MIGRATIONS: readonly string[] = [
-  `ALTER TABLE sessions ADD COLUMN workspace_id TEXT NOT NULL DEFAULT '${DEFAULT_WORKSPACE_ID}';
-   CREATE INDEX IF NOT EXISTS sessions_workspace ON sessions(workspace_id, updated_at_ms DESC);`,
-];
 
 type Row = Record<string, SQLOutputValue>;
 
@@ -445,7 +432,6 @@ export class SessionStore {
     // SQLite defaults foreign keys *off* for backwards compatibility.
     this.#db.exec('PRAGMA foreign_keys = ON');
     this.#db.exec(SCHEMA);
-    migrate(this.#db, 'sessions', SESSION_MIGRATIONS);
   }
 
   /**

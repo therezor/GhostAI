@@ -33,7 +33,7 @@
  * The patch this builds *is* the agent: `agents.list.*` is in the merge's
  * `REPLACE_WHOLESALE` list, so a field left out of it is a field cleared. That
  * is why `toAgentEntryPatch` takes the stored entry as well as the form — the
- * settings this screen does not render (the sandbox, the memory scope, the exec
+ * settings this screen does not render (the toolbox, the memory scope, the exec
  * allow-list) have to be carried through by hand, or saving the prompt would
  * quietly delete them.
  *
@@ -227,6 +227,11 @@ export interface AgentEntryForm {
   readonly approveExec: string;
   readonly approveNetwork: string;
   readonly approveWrite: string;
+  /** A toolbox name, or empty to run commands on this machine. */
+  readonly toolboxName: string;
+  readonly toolboxNetworkMode: string;
+  /** Comma-separated CIDR blocks. Only read when the mode is `allowlist`. */
+  readonly toolboxAllow: string;
 }
 
 export const APPROVAL_POLICIES: readonly string[] = ['allow', 'ask', 'deny'];
@@ -262,6 +267,9 @@ export function toAgentEntryForm(entry: AgentEntry, defaults: AgentDefaults): Ag
     approveExec: entry.approvals?.exec ?? '',
     approveNetwork: entry.approvals?.network ?? '',
     approveWrite: entry.approvals?.write ?? '',
+    toolboxName: entry.toolbox.name,
+    toolboxNetworkMode: entry.toolbox.network.mode,
+    toolboxAllow: entry.toolbox.network.allow.join(', '),
   };
 }
 
@@ -323,6 +331,7 @@ function ownFields(form: AgentEntryForm, entry: AgentEntry): AgentOwnFields {
     reasoningEffort: _reasoningEffort,
     toolTimeoutMs: _toolTimeoutMs,
     approvals: _approvals,
+    toolbox: _toolbox,
     ...carried
   } = entry;
 
@@ -338,8 +347,42 @@ function ownFields(form: AgentEntryForm, entry: AgentEntry): AgentOwnFields {
     systemPrompt: form.systemPrompt,
     enabled: form.enabled,
     tools: { allow: parseToolList(form.allowTools), deny: parseToolList(form.denyTools) },
+    toolbox: toToolbox(form),
     ...(Object.keys(approvals).length === 0 ? {} : { approvals }),
   };
+}
+
+/**
+ * The toolbox the form describes.
+ *
+ * Note what is *not* here: an image, a runtime, a capability set. Those live in
+ * the profile manifest an operator installed, so this screen can only ever point
+ * an agent at one and narrow its network — it cannot widen what the profile
+ * permits, and there is no field through which a saved setting could try.
+ *
+ * The allow-list is dropped unless the mode actually uses it, so switching to
+ * `none` and saving does not leave a stale set of CIDRs in the file waiting to
+ * take effect the next time somebody switches back.
+ */
+function toToolbox(form: AgentEntryForm): AgentEntry['toolbox'] {
+  const name = form.toolboxName.trim();
+  // An agent on the host cannot scope egress — there is no sandbox to enforce it
+  // — and `assertBuildable` refuses the combination, so it is not offered.
+  const mode = name === '' ? 'none' : networkMode(form.toolboxNetworkMode);
+  return {
+    name,
+    network: { mode, allow: mode === 'allowlist' ? parseToolList(form.toolboxAllow) : [] },
+  };
+}
+
+const NETWORK_MODES: readonly AgentEntry['toolbox']['network']['mode'][] = [
+  'none',
+  'allowlist',
+  'open',
+];
+
+function networkMode(value: string): AgentEntry['toolbox']['network']['mode'] {
+  return NETWORK_MODES.find((mode) => mode === value) ?? 'none';
 }
 
 /**
@@ -498,7 +541,7 @@ export function toNewAgentPatch(
           enabled: true,
           systemPrompt: template.systemPrompt,
           tools: { allow: [...template.tools.allow], deny: [...template.tools.deny] },
-          sandbox: { ...template.sandbox },
+          toolbox: { ...template.toolbox },
           memory: { ...template.memory },
           provider: template.provider ?? defaults.provider,
           model: template.model ?? defaults.model,

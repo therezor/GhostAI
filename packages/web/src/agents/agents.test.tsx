@@ -28,6 +28,7 @@ import { ConfigSchema, type ConfigPatch } from '@ghostai/protocol';
 import { Providers } from '@/app/providers.js';
 import { createAppRouter } from '@/app/router.js';
 import { stubApi, testQueryClient, type RecordedRequest, type StubRoute } from '@/test/render.js';
+import { STATUS } from '@/test/fixtures.js';
 
 const CONFIG = ConfigSchema.parse({
   agents: {
@@ -53,23 +54,7 @@ const SHELL_ROUTES: Record<string, StubRoute> = {
     200,
     { workspaces: [{ id: 'default', name: 'Default', isDefault: true, sessionCount: 0 }] },
   ],
-  '/api/status': [
-    200,
-    {
-      version: '0.0.0',
-      protocolVersion: 1,
-      configured: true,
-      workspaceId: 'default',
-      workspaceCount: 1,
-      uptimeMs: 1,
-      model: 'llama3',
-      provider: 'ollama',
-      authEnabled: false,
-      toolCount: 2,
-      mcpServersConnected: 0,
-      pluginsLoaded: 0,
-    },
-  ],
+  '/api/status': [200, { ...STATUS, model: 'llama3', toolCount: 2 }],
   '/api/sessions': [200, { sessions: [] }],
   '/api/notifications': [200, { notifications: [], unreadCount: 0 }],
 };
@@ -542,7 +527,7 @@ describe('the default agent', () => {
     mount('/agents/default');
 
     const prompt = await screen.findByLabelText(/^System prompt for/);
-    expect((prompt as HTMLTextAreaElement).value).toContain('That directory is your root');
+    expect((prompt as HTMLTextAreaElement).value).toContain('To the file tools it is the');
     expect(screen.getByText('The built-in prompt')).toBeInTheDocument();
   });
 });
@@ -859,5 +844,117 @@ describe('a named agent', () => {
     mount('/agents/deleted-last-week');
 
     expect(await screen.findByRole('alert')).toHaveTextContent('no agent called');
+  });
+});
+
+/**
+ * The toolbox picker.
+ *
+ * Untested until a one-way door shipped: a `SelectItem` may not carry an empty
+ * value — Radix reserves it for "nothing chosen" — so "None" existed only as the
+ * placeholder, which shows while the field is empty and is unreachable once it is
+ * not. An agent could be put in a container and never taken out of one without
+ * hand-editing the config file.
+ */
+describe('choosing a toolbox', () => {
+  const BOXED = ConfigSchema.parse({
+    agents: {
+      defaults: { model: 'llama3', provider: 'ollama', maxTokens: 4096 },
+      list: {
+        researcher: {
+          label: 'Researcher',
+          toolbox: { name: 'web-research', network: { mode: 'open', allow: [] } },
+        },
+      },
+    },
+    providers: { ollama: { type: 'ollama' } },
+  });
+
+  const ROUTES: Record<string, StubRoute> = {
+    '/api/settings': [200, { config: BOXED, credentialsPresent: { ollama: false } }],
+    'PATCH /api/settings': [200, { config: BOXED, credentialsPresent: { ollama: false } }],
+    '/api/agents': [
+      200,
+      {
+        agents: [
+          { id: 'default', label: 'default', model: 'llama3', provider: 'ollama' },
+          { id: 'researcher', label: 'Researcher', model: 'llama3', provider: 'ollama' },
+        ],
+      },
+    ],
+    '/api/toolboxes': [
+      200,
+      {
+        toolboxes: [
+          {
+            name: 'web-research',
+            label: 'Web research',
+            tools: ['search', 'fetch'],
+            version: '3.0.0',
+            image: `sha256:${'a'.repeat(64)}`,
+            maxNetwork: 'open',
+            capsAdded: [],
+            weakened: [],
+            approved: true,
+          },
+        ],
+      },
+    ],
+  };
+
+  async function choose(
+    user: ReturnType<typeof userEvent.setup>,
+    field: string,
+    option: RegExp,
+  ): Promise<void> {
+    await user.click(await screen.findByRole('combobox', { name: field }));
+    await user.click(await screen.findByRole('option', { name: option }));
+  }
+
+  it('offers “no toolbox” as something you can pick, not just as a placeholder', async () => {
+    const { user } = mount('/agents/researcher', ROUTES);
+
+    await user.click(await screen.findByRole('combobox', { name: 'Toolbox' }));
+
+    expect(
+      await screen.findByRole('option', { name: /None — run commands on this machine/ }),
+    ).toBeInTheDocument();
+  });
+
+  it('takes an agent back out of its container', async () => {
+    // The regression. Before the fix the only way out was editing config.json.
+    const { user, calls } = mount('/agents/researcher', ROUTES);
+
+    await choose(user, 'Toolbox', /None — run commands on this machine/);
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => {
+      expect(patchesOf(calls)).toHaveLength(1);
+    });
+    expect(patchesOf(calls)[0]?.agents?.list?.researcher?.toolbox?.name).toBe('');
+  });
+
+  it('hides the network field once there is no container to scope', async () => {
+    const { user } = mount('/agents/researcher', ROUTES);
+
+    expect(await screen.findByRole('combobox', { name: 'Network' })).toBeInTheDocument();
+    await choose(user, 'Toolbox', /None — run commands on this machine/);
+
+    expect(screen.queryByRole('combobox', { name: 'Network' })).not.toBeInTheDocument();
+  });
+
+  it('puts an agent into a container, and the sentinel never reaches the wire', async () => {
+    const { user, calls } = mount('/agents/researcher', ROUTES);
+
+    await choose(user, 'Toolbox', /None — run commands on this machine/);
+    await choose(user, 'Toolbox', /Web research/);
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => {
+      expect(patchesOf(calls)).toHaveLength(1);
+    });
+    const name = patchesOf(calls)[0]?.agents?.list?.researcher?.toolbox?.name;
+    expect(name).toBe('web-research');
+    expect(name).not.toContain('none');
   });
 });

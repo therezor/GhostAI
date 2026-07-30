@@ -2,12 +2,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import fc from 'fast-check';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { legacyInstructionsToTemplate } from '@ghostai/protocol';
-
-import { loadConfig, migrateConfigShape, parseConfig, saveConfig } from './config.js';
+import { loadConfig, parseConfig, saveConfig } from './config.js';
 import { isGhostError } from './errors.js';
 
 const tempDirs: string[] = [];
@@ -29,126 +26,6 @@ afterEach(() => {
     const dir = tempDirs.pop();
     if (dir !== undefined) rmSync(dir, { recursive: true, force: true });
   }
-});
-
-describe('migrateConfigShape', () => {
-  it('names each old provider entry with the key it was already stored under', () => {
-    const { value, changed } = migrateConfigShape({
-      providers: { ollama: { apiBase: 'http://gpu.lan:11434/v1' } },
-    });
-    expect(changed).toBe(true);
-    expect(value).toEqual({
-      providers: { ollama: { apiBase: 'http://gpu.lan:11434/v1', type: 'ollama' } },
-    });
-  });
-
-  it('leaves an entry that already names a type alone', () => {
-    const current = { providers: { 'ollama-gpu': { type: 'ollama' } } };
-    const { value, changed } = migrateConfigShape(current);
-    expect(changed).toBe(false);
-    expect(value).toBe(current);
-  });
-
-  it('does not invent a providers block, or reject a config without one', () => {
-    expect(migrateConfigShape({ server: { port: 4242 } })).toEqual({
-      value: { server: { port: 4242 } },
-      changed: false,
-    });
-  });
-
-  it('keeps a key that is not a real provider id, rather than dropping the entry', () => {
-    // The registry is downstream of this package and cannot be consulted here.
-    // A typo has to survive to fail at resolution, where the message can name
-    // it — silently discarding the entry would look like the file was ignored.
-    const { value } = migrateConfigShape({ providers: { ollamaa: {} } });
-    expect(value).toEqual({ providers: { ollamaa: { type: 'ollamaa' } } });
-  });
-
-  it('is idempotent for any shape', () => {
-    fc.assert(
-      fc.property(fc.jsonValue(), (raw) => {
-        const once = migrateConfigShape(raw);
-        const twice = migrateConfigShape(once.value);
-        expect(twice.changed).toBe(false);
-        expect(twice.value).toEqual(once.value);
-      }),
-    );
-  });
-
-  describe("an agent's system prompt", () => {
-    /** The stored prompt for `reviewer`, whatever the migration made of it. */
-    const promptOf = (raw: unknown): unknown =>
-      (
-        (migrateConfigShape(raw).value as { agents: { list: Record<string, unknown> } }).agents.list
-          .reviewer as { systemPrompt?: unknown }
-      ).systemPrompt;
-
-    it('becomes the whole prompt, composed exactly as the old one was', () => {
-      // Byte-identical to what the old composer produced for this install: a
-      // migration that changes what an agent says changes how it behaves, and
-      // that gets discovered later and blamed on something else.
-      const migrated = promptOf({
-        agents: { list: { reviewer: { label: 'Reviewer', systemPrompt: 'Be terse.' } } },
-      });
-
-      expect(migrated).toBe(legacyInstructionsToTemplate('Be terse.'));
-      expect(migrated).toContain('That directory is your root');
-      expect(migrated).toContain('## Instructions\n\nBe terse.');
-    });
-
-    it('is left alone when it is empty, so the built-in keeps improving', () => {
-      const raw = { agents: { list: { reviewer: { systemPrompt: '' } } } };
-      const { value, changed } = migrateConfigShape(raw);
-
-      expect(changed).toBe(false);
-      expect(value).toBe(raw);
-    });
-
-    it('runs even when there is no providers block to migrate', () => {
-      // The shape bug this restructuring fixed: the provider step used to
-      // return early for a config with no `providers`, which would have skipped
-      // every migration added after it.
-      const { changed } = migrateConfigShape({
-        agents: { list: { reviewer: { systemPrompt: 'Be terse.' } } },
-      });
-
-      expect(changed).toBe(true);
-    });
-
-    it('migrates prompts and provider types in the same pass', () => {
-      const { value, changed } = migrateConfigShape({
-        providers: { ollama: {} },
-        agents: { list: { reviewer: { systemPrompt: 'Be terse.' } } },
-      });
-
-      expect(changed).toBe(true);
-      expect(value).toMatchObject({
-        providers: { ollama: { type: 'ollama' } },
-        agents: { list: { reviewer: { systemPrompt: legacyInstructionsToTemplate('Be terse.') } } },
-      });
-    });
-
-    it('does not touch an agent that has already been migrated', () => {
-      const raw = {
-        agents: { list: { reviewer: { systemPrompt: legacyInstructionsToTemplate('Be terse.') } } },
-      };
-
-      expect(migrateConfigShape(raw)).toEqual({ value: raw, changed: false });
-    });
-
-    it('leaves the other agents in the list untouched', () => {
-      const { value } = migrateConfigShape({
-        agents: {
-          defaults: { model: 'llama3' },
-          list: { reviewer: { systemPrompt: 'Be terse.' }, writer: { label: 'Writer' } },
-        },
-      });
-
-      expect(value).toMatchObject({
-        agents: { defaults: { model: 'llama3' }, list: { writer: { label: 'Writer' } } },
-      });
-    });
-  });
 });
 
 describe('parseConfig', () => {
@@ -218,29 +95,20 @@ describe('loadConfig', () => {
     expect(loaded.config.agents.defaults.provider).toBe('ollama');
   });
 
-  it('rewrites an older provider block, on disk as well as in memory', () => {
+  it('refuses a provider entry that does not name a type', () => {
+    // There is no migration path: the schema is the only shape a config may be
+    // in, so a file written against an older one is an error that names the key
+    // rather than something quietly rewritten underneath the operator.
     const root = tempHome();
-    const file = writeConfig(root, {
-      providers: { ollama: { apiBase: 'http://gpu.lan:11434/v1' } },
-    });
+    writeConfig(root, { providers: { ollama: { apiBase: 'http://gpu.lan:11434/v1' } } });
 
-    const loaded = loadConfig({ root });
-    expect(loaded.migrated).toBe(true);
-    expect(loaded.config.providers.ollama?.type).toBe('ollama');
-
-    // On disk too: otherwise the operator's file and the running settings
-    // disagree, and the next save from the settings panel looks like it
-    // rewrote a section nobody touched.
-    const written: unknown = JSON.parse(readFileSync(file, 'utf8'));
-    expect(written).toMatchObject({ providers: { ollama: { type: 'ollama' } } });
-
-    expect(loadConfig({ root }).migrated).toBe(false);
+    expect(() => loadConfig({ root })).toThrow(/providers\.ollama\.type/);
   });
 
   it('does not write a config file for an install that has none', () => {
     const root = tempHome();
     const loaded = loadConfig({ root });
-    expect(loaded.migrated).toBe(false);
+    expect(loaded.fromFile).toBe(false);
     expect(existsSync(join(root, 'config.json'))).toBe(false);
   });
 

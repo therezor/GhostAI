@@ -326,7 +326,7 @@ export class WorkspaceJail {
       return reject('nul_byte', 'Path contains a NUL byte');
     }
 
-    const { segments, rewrites } = normalise(inputPath);
+    const { segments, rewrites } = normalise(this.withoutRootPrefix(inputPath));
     const relativePath = segments.join(sep);
     const target = join(this.root, ...segments);
 
@@ -394,6 +394,40 @@ export class WorkspaceJail {
       });
     }
     return pathRelative(this.root, resolved);
+  }
+
+  /**
+   * The workspace root, removed from the front of a path that repeats it.
+   *
+   * Clamping treats a leading `/` as the root, which is right for `/notes/x` and
+   * silently wrong for the absolute path of the root itself: `<root>/notes/x`
+   * clamped segment by segment lands on `<root>/Users/you/project/notes/x` — a
+   * real directory tree of junk, created without an error by `write_file` and
+   * reported as "not found" by `read_file` for a file that exists.
+   *
+   * Nothing legitimate is lost. Addressing a directory *inside* the workspace
+   * whose path spells out the workspace's own absolute path is not a thing anyone
+   * does, and the alternative reading is never what was meant.
+   *
+   * The result stays a fixed point, which `normalise` explains is the property
+   * the REST layer depends on: what comes back no longer starts with the root, so
+   * a second pass finds nothing to remove. The leading separator is kept so the
+   * path is still recorded as an `absolute` rewrite rather than looking relative.
+   */
+  private withoutRootPrefix(inputPath: string): string {
+    // A workspace at the filesystem root has no prefix to remove, and every
+    // absolute path would match it.
+    if (this.root === sep || this.root === '/') return inputPath;
+
+    // Compared with separators unified, because a model on a POSIX host can
+    // still produce `\` and the two spell the same path. Neither this nor case
+    // folding changes the length, which is what makes slicing by it correct.
+    const candidate = this.fold(inputPath.replaceAll('\\', '/'));
+    const root = this.fold(this.root.replaceAll('\\', '/'));
+
+    if (candidate === root) return '/';
+    if (candidate.startsWith(`${root}/`)) return inputPath.slice(this.root.length);
+    return inputPath;
   }
 
   private fold(value: string): string {

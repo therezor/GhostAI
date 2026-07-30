@@ -277,6 +277,16 @@ export const TurnStartEventSchema = z.object({
   sessionKey: z.string().min(1),
   turnId: z.string().min(1),
   /**
+   * The `seq` of the user message that started this turn.
+   *
+   * Also on `turn.end`, and reported *here* because a turn that fails never
+   * reaches its end. Without it a failed turn had no storage address, so the
+   * client could offer no way to re-run it — the failure line said "sending the
+   * message again may work" and gave the reader nothing to press. Known by the
+   * time this event is emitted, since the user message is appended first.
+   */
+  firstSeq: z.number().int().positive().optional(),
+  /**
    * Which agent is running the turn.
    *
    * Reported per turn rather than looked up from the session, for the same

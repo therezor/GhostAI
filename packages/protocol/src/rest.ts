@@ -303,6 +303,15 @@ export type UpdateSessionRequest = z.infer<typeof UpdateSessionRequestSchema>;
 export const ContextResponseSchema = z.object({
   sessionKey: z.string().min(1),
   systemPrompt: z.string(),
+  /**
+   * The definitions as the provider would receive them.
+   *
+   * Carried so the inspector's `tools` row can be opened. The breakdown reported
+   * a token cost for a block the client had no copy of, which makes the one
+   * follow-up question anyone has — *which* tools, and how big is each schema —
+   * unanswerable from the panel that raised it.
+   */
+  tools: z.array(ToolDefinitionSchema).default([]),
   messages: z.array(StoredMessageSchema),
   estimatedTokens: z.number().int().nonnegative(),
   contextWindowTokens: z.number().int().positive(),
@@ -391,6 +400,40 @@ export const ToolListResponseSchema = z.object({
   tools: z.array(ToolDefinitionSchema),
 });
 export type ToolListResponse = z.infer<typeof ToolListResponseSchema>;
+
+/**
+ * One installed toolbox, as a settings screen needs to see it.
+ *
+ * Carries the fields an operator weighs before approving — the image, the
+ * network ceiling, the capabilities added back, whether hardening was switched
+ * off — rather than only a name. A picker that shows names alone makes approving
+ * a rubber stamp, and the whole model rests on that approval meaning something.
+ *
+ * `approved` is the only field that decides whether an agent can use it. A
+ * toolbox whose manifest changed after approval reports `approved: false` with a
+ * `problem`, because from the runtime's point of view those are the same state.
+ */
+export const ToolboxSummarySchema = z.object({
+  name: z.string(),
+  label: z.string(),
+  version: z.string(),
+  image: z.string(),
+  /** What is in the box, for the picker to show without a second request. */
+  tools: z.array(z.string()),
+  /** The most this toolbox ever permits; an agent may ask for less. */
+  maxNetwork: z.enum(['none', 'allowlist', 'open']),
+  capsAdded: z.array(z.string()),
+  /** Non-default hardening, named so it can be shown as a warning. */
+  weakened: z.array(z.string()),
+  approved: z.boolean(),
+  problem: z.string().optional(),
+});
+export type ToolboxSummary = z.infer<typeof ToolboxSummarySchema>;
+
+export const ToolboxListResponseSchema = z.object({
+  toolboxes: z.array(ToolboxSummarySchema),
+});
+export type ToolboxListResponse = z.infer<typeof ToolboxListResponseSchema>;
 
 // ---------------------------------------------------------------------------
 // Files

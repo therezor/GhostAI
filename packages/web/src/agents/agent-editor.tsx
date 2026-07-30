@@ -168,6 +168,16 @@ function BoundField({
   );
 }
 
+/**
+ * The dropdown's stand-in for "no toolbox".
+ *
+ * A `SelectItem` may not carry an empty value — Radix reserves it for "nothing
+ * chosen" — so the option that clears the field needs a value of its own. It
+ * begins with `-`, which `ToolboxStore.manifestPathFor` refuses in a toolbox
+ * name, so no installed toolbox can ever collide with it.
+ */
+const NO_TOOLBOX = '-none-';
+
 export function AgentEditorRoute(): JSX.Element {
   const { t } = useTranslation();
   const { agentId } = useParams({ from: '/agents/$agentId' });
@@ -253,7 +263,57 @@ function Editor({
     queryFn: ({ signal }) => api.tools(signal),
   });
 
+  const toolboxes = useQuery({
+    queryKey: queryKeys.toolboxes,
+    queryFn: ({ signal }) => api.toolboxes(signal),
+  });
+
   const resolved = agents.data?.agents.find((agent) => agent.id === agentId);
+
+  /**
+   * Every installed toolbox, approved or not.
+   *
+   * Unapproved ones are offered rather than hidden: an operator who has just
+   * built one needs to see it in the list to understand that approving is the
+   * step they are missing. Choosing it is refused at save with a sentence that
+   * says so, which is a better teacher than an empty dropdown.
+   */
+  const toolboxOptions = [
+    // "No toolbox" has to be a real option, not the placeholder.
+    //
+    // Radix shows a placeholder only while the value is empty, and empty is the
+    // one value a `SelectItem` may not carry — so choosing a toolbox was a
+    // one-way door: the option that would take it back did not exist, and an
+    // agent could not be moved off a container without hand-editing the config.
+    { value: NO_TOOLBOX, label: t('agents.toolboxHost') },
+    ...(toolboxes.data?.toolboxes ?? []).map((box: { name: string; label: string }) => ({
+      value: box.name,
+      label: box.label === '' ? box.name : `${box.label} (${box.name})`,
+    })),
+  ];
+  const chosen = toolboxes.data?.toolboxes.find(
+    (box: { name: string }) => box.name === form.toolboxName,
+  );
+  const boxed = form.toolboxName !== '';
+
+  /**
+   * The network modes this toolbox actually permits.
+   *
+   * Filtered by the toolbox's own ceiling rather than offering all three and
+   * failing the save: a picker that lets you choose something the manifest
+   * forbids is a picker that teaches the wrong thing about who is in charge.
+   */
+  const networkOptions = (
+    [
+      { value: 'none', label: t('agents.toolboxNetworkNone') },
+      { value: 'allowlist', label: t('agents.toolboxNetworkAllowlist') },
+      { value: 'open', label: t('agents.toolboxNetworkOpen') },
+    ] as const
+  ).filter((option) => {
+    const order = ['none', 'allowlist', 'open'];
+    const ceiling = chosen?.maxNetwork ?? 'none';
+    return order.indexOf(option.value) <= order.indexOf(ceiling);
+  });
 
   const update = <K extends keyof AgentEntryForm>(key: K, value: AgentEntryForm[K]): void => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -658,6 +718,61 @@ function Editor({
             unsetLabel="The global policy — Settings → Tools"
           />
         </FieldGrid>
+      </Section>
+
+      {/* After the tools, because a profile decides *where* the tools it just
+          listed actually run — and before the budget, which is a smaller
+          decision. */}
+      <Section title={t('agents.toolboxSection')} description={t('agents.toolboxDesc')}>
+        {toolboxes.isPending && <p className="page__note">{t('agents.toolboxLoading')}</p>}
+        {toolboxes.data?.toolboxes.length === 0 && (
+          <p className="page__note">{t('agents.toolboxNoProfiles')}</p>
+        )}
+
+        <FieldGrid>
+          <SelectField
+            label={t('agents.toolboxProfile')}
+            // The sentinel is a display concern and never leaves this control:
+            // the form's own value for "no toolbox" is and stays the empty string.
+            value={form.toolboxName === '' ? NO_TOOLBOX : form.toolboxName}
+            onValueChange={(value) => {
+              update('toolboxName', value === NO_TOOLBOX ? '' : value);
+            }}
+            options={toolboxOptions}
+          />
+          {boxed && (
+            <SelectField
+              label={t('agents.toolboxNetwork')}
+              value={form.toolboxNetworkMode}
+              onValueChange={(value) => {
+                update('toolboxNetworkMode', value);
+              }}
+              options={networkOptions}
+            />
+          )}
+        </FieldGrid>
+
+        {/* Only the two states an operator has to act on. A profile that is
+            approved and unweakened needs no line of its own. */}
+        {chosen?.approved === false && (
+          <p className="page__note">{t('agents.toolboxNotApproved')}</p>
+        )}
+        {chosen !== undefined && chosen.weakened.length > 0 && (
+          <p className="page__note">
+            {t('agents.toolboxWeakened', { what: chosen.weakened.join(', ') })}
+          </p>
+        )}
+
+        {boxed && form.toolboxNetworkMode === 'allowlist' && (
+          <TextField
+            label={t('agents.toolboxAllow')}
+            value={form.toolboxAllow}
+            onValueChange={(value) => {
+              update('toolboxAllow', value);
+            }}
+            hint={t('agents.toolboxAllowHint')}
+          />
+        )}
       </Section>
 
       {/* Below the tools and above the prompt, in plain sight. It sat behind a

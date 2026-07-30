@@ -19,6 +19,22 @@ import { renderWithProviders, stubApi, type StubRoute } from '@/test/render.js';
 const CONTEXT = {
   sessionKey: 'web:1',
   systemPrompt: 'You are GhostAI, a helpful agent.',
+  tools: [
+    {
+      name: 'read_file',
+      description: 'Read a file from the workspace.',
+      parameters: { type: 'object', properties: { path: { type: 'string' } } },
+      risk: 'safe',
+      source: 'builtin',
+    },
+    {
+      name: 'exec',
+      description: 'Run a command.',
+      parameters: { type: 'object', properties: { argv: { type: 'array' } } },
+      risk: 'exec',
+      source: 'builtin',
+    },
+  ],
   messages: [
     {
       id: 'm1',
@@ -163,5 +179,66 @@ describe('the context inspector', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('the prompt could not be built');
     });
+  });
+});
+
+/**
+ * The three sections, openable.
+ *
+ * The table reports "tools: 1,000" and the only follow-up question anyone has is
+ * *which* tools — which used to be unanswerable from the panel that raised it,
+ * because the client had no copy of the definitions at all.
+ */
+describe('the context inspector: what is in each section', () => {
+  it('opens the system prompt', async () => {
+    const user = mount();
+    await open(user);
+
+    // By `summary`, because "System prompt" is also the label of its row in the
+    // table above — the two are deliberately the same word.
+    await user.click(await screen.findByText('System prompt', { selector: 'summary' }));
+    expect(screen.getByText('You are GhostAI, a helpful agent.')).toBeVisible();
+  });
+
+  it('opens the tool definitions, with each schema behind its own disclosure', async () => {
+    const user = mount();
+    await open(user);
+
+    await user.click(await screen.findByText('Tool definitions (2)'));
+
+    expect(screen.getByText('read_file')).toBeVisible();
+    expect(screen.getByText('Read a file from the workspace.')).toBeVisible();
+    // The risk band, because it is the field that decides whether a call needs
+    // approving and it is the one most worth seeing beside the name.
+    expect(screen.getByText('exec', { selector: '.badge' })).toBeVisible();
+
+    // The schema is nested one level deeper: it is the reason to open this at all
+    // when a budget is unexpectedly large, and it is far too long to show inline.
+    // Asserted on *visibility*, not presence — a closed `<details>` keeps its
+    // children in the DOM, so `queryByText` finds them either way.
+    const [schema] = screen.getAllByText(/"properties"/);
+    expect(schema).not.toBeVisible();
+    await user.click(screen.getByText('read_file schema'));
+    expect(schema).toBeVisible();
+  });
+
+  it('opens the conversation, addressed by the seq the rest of the UI uses', async () => {
+    const user = mount();
+    await open(user);
+
+    await user.click(await screen.findByText('Conversation (1 message)'));
+
+    expect(screen.getByText('hello')).toBeVisible();
+    expect(screen.getByText('#1')).toBeVisible();
+  });
+
+  it('says so rather than showing an empty box for an agent with no tools', async () => {
+    const user = mount({
+      '/api/sessions/web%3A1/context': [200, { ...CONTEXT, tools: [] }],
+    });
+    await open(user);
+
+    await user.click(await screen.findByText('Tool definitions (0)'));
+    expect(screen.getByText('This agent has no tools.')).toBeVisible();
   });
 });

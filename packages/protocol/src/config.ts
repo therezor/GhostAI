@@ -385,22 +385,49 @@ export const AgentToolsSelectionSchema = z.object({
 export type AgentToolsSelection = z.infer<typeof AgentToolsSelectionSchema>;
 
 /**
- * Where an agent's `exec` calls run.
+ * How much network an agent asks its toolbox for.
  *
- * `host` is the behaviour that has always existed: a child process on the
- * machine running GhostAI, inside the workspace jail. `docker` is accepted by
- * the schema but has no backend yet, and is refused when the runtime resolves
- * the agent — a config that parses and then fails a turn much later would be
- * worse than one that fails the save.
+ * Intersected with the profile's `network.maxMode`, never unioned: a profile is
+ * a ceiling and this is a narrowing of it. An agent asking for `open` against a
+ * profile whose maximum is `none` gets `none`, and the settings save that tried
+ * it is refused rather than silently downgraded — a config that means something
+ * other than what it says is worse than one that fails.
+ *
+ * `allow` is CIDRs only. A hostname allow-list is defeated by DNS rebinding,
+ * which is the attack `guardedFetch` already exists to stop; a profile whose
+ * traffic is all HTTP(S) scopes by hostname through the proxy instead
+ * (`SandboxProfileNetwork.proxyAllowHosts`).
  */
-export const AgentSandboxSchema = z.object({
-  kind: z.enum(['host', 'docker']).default('host'),
-  image: z.string().default(''),
-  /** Where the workspace is mounted inside the container. */
-  workdir: z.string().default('/workspace'),
-  network: z.boolean().default(false),
+export const AgentToolboxNetworkSchema = z.object({
+  mode: z.enum(['none', 'allowlist', 'open']).default('none'),
+  allow: z.array(z.string()).default([]),
 });
-export type AgentSandbox = z.infer<typeof AgentSandboxSchema>;
+export type AgentToolboxNetwork = z.infer<typeof AgentToolboxNetworkSchema>;
+
+/**
+ * Which toolbox an agent works in — that is, where its `exec` calls run.
+ *
+ * An empty `name` is the behaviour that has always existed: a child process on
+ * the machine running GhostAI, inside the workspace jail. A named toolbox routes
+ * `exec` into that toolbox's container instead.
+ *
+ * This replaces what used to be `sandbox`, because the two were one idea wearing
+ * two words: "where exec runs" *is* "which box of tools the agent has".
+ *
+ * **There is no `image`, `runtime`, `caps` or `limits` here, deliberately.**
+ * Those live in the toolbox manifest, which is installed by an operator and
+ * authorised by content hash. A value with no representation in this schema
+ * cannot be reached by a config patch, a settings save, or anything that later
+ * gains the ability to propose one — which is what makes "the agent cannot
+ * change the image it runs in" a property of the shape rather than a rule
+ * somebody has to enforce.
+ */
+export const AgentToolboxSchema = z.object({
+  /** A toolbox name, or empty to run on the host. */
+  name: z.string().default(''),
+  network: AgentToolboxNetworkSchema.prefault({}),
+});
+export type AgentToolbox = z.infer<typeof AgentToolboxSchema>;
 
 export const AgentMemoryScopeSchema = z.object({
   /** Also read the layer shared by every agent working in this folder. */
@@ -434,13 +461,35 @@ export const AgentEntrySchema = patchOf(AgentDefaultsSchema)
      * See `prompt.ts` for the placeholder set and the substitution rules.
      */
     systemPrompt: z.string().default(''),
+    /**
+     * The per-iteration half's live-state section, as a template.
+     *
+     * Beside `systemPrompt` and for the same reason — an operator owns what their
+     * agent is told — but with the opposite economics: this half is never cached,
+     * so every line is re-sent on every request of every turn. Empty means the
+     * built-in `DEFAULT_LIVE_STATE_TEMPLATE`. Its placeholder vocabulary is
+     * `LIVE_PROMPT_PLACEHOLDERS`, which is *not* the identity half's: `{{time}}`
+     * belongs only here, and `{{workspaceId}}` only there.
+     *
+     * Setting it to a single space is how an operator removes the section
+     * entirely, since empty means "use the built-in".
+     */
+    livePrompt: z.string().default(''),
+    /**
+     * What is appended in the last few iterations of a turn.
+     *
+     * Separate from `livePrompt` because it is conditional and a placeholder
+     * template cannot express a condition. Empty means the built-in
+     * `DEFAULT_WRAP_UP_TEMPLATE`; a single space silences it.
+     */
+    wrapUpPrompt: z.string().default(''),
     enabled: z.boolean().default(true),
     tools: AgentToolsSelectionSchema.prefault({}),
     /** Risk-band policy for this agent only; merged over `tools.approvals`. */
     approvals: patchOf(ToolApprovalsConfigSchema).optional(),
     /** Merged over `tools.exec`, so one agent can hold a tighter allow-list. */
     exec: patchOf(ExecToolConfigSchema).optional(),
-    sandbox: AgentSandboxSchema.prefault({}),
+    toolbox: AgentToolboxSchema.prefault({}),
     memory: AgentMemoryScopeSchema.prefault({}),
   });
 export type AgentEntry = z.infer<typeof AgentEntrySchema>;
@@ -628,7 +677,13 @@ export const ConfigPatchSchema = z.object({
           patchOf(AgentEntrySchema)
             .extend({
               tools: patchOf(AgentToolsSelectionSchema).optional(),
-              sandbox: patchOf(AgentSandboxSchema).optional(),
+              // `network` is restated because `patchOf` is not recursive, and
+              // without it a save that only changes the mode would have to
+              // resend `allow` — which is how a settings panel silently clears
+              // the allow-list it never rendered.
+              toolbox: patchOf(AgentToolboxSchema)
+                .extend({ network: patchOf(AgentToolboxNetworkSchema).optional() })
+                .optional(),
               memory: patchOf(AgentMemoryScopeSchema).optional(),
             })
             .nullable(),

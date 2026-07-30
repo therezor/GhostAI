@@ -166,11 +166,9 @@ describe('AgentEntrySchema', () => {
     expect(agent.systemPrompt).toBe('');
     expect(agent.enabled).toBe(true);
     expect(agent.tools).toEqual({ allow: [], deny: [] });
-    expect(agent.sandbox).toEqual({
-      kind: 'host',
-      image: '',
-      workdir: '/workspace',
-      network: false,
+    expect(agent.toolbox).toEqual({
+      name: '',
+      network: { mode: 'none', allow: [] },
     });
     expect(agent.memory).toEqual({ shared: true });
   });
@@ -217,7 +215,7 @@ describe('AgentsConfigSchema', () => {
     const two = AgentEntrySchema.parse({});
 
     expect(one.tools).not.toBe(two.tools);
-    expect(one.sandbox).not.toBe(two.sandbox);
+    expect(one.toolbox).not.toBe(two.toolbox);
   });
 
   it('keys agents by an id the operator chooses', () => {
@@ -291,5 +289,27 @@ describe('isLoopbackHost', () => {
   it('does not treat a host merely starting with 127 as loopback', () => {
     expect(isLoopbackHost('127.0.0.1.evil.com')).toBe(false);
     expect(isLoopbackHost('1270.0.0.1')).toBe(false);
+  });
+});
+
+describe('ConfigPatchSchema: the toolbox', () => {
+  it('accepts a network patch that changes only the mode', () => {
+    // `patchOf` is not recursive, so without the hand-restated `network` this
+    // would demand `allow` back — and a panel that never rendered the allow-list
+    // would clear it on every save of the mode.
+    const patch = ConfigPatchSchema.parse({
+      agents: { list: { boxed: { toolbox: { network: { mode: 'open' } } } } },
+    });
+
+    expect(patch.agents?.list?.boxed?.toolbox?.network).toEqual({ mode: 'open' });
+  });
+
+  it('accepts a toolbox patch that names only the box', () => {
+    const patch = ConfigPatchSchema.parse({
+      agents: { list: { boxed: { toolbox: { name: 'kali-pentest' } } } },
+    });
+
+    expect(patch.agents?.list?.boxed?.toolbox?.name).toBe('kali-pentest');
+    expect(patch.agents?.list?.boxed?.toolbox?.network).toBeUndefined();
   });
 });

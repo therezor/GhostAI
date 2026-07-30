@@ -19,8 +19,10 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+
+import type { StoredMessage, ToolDefinition } from '@ghostai/protocol';
 
 import { api, ApiError } from '@/lib/api.js';
 import { useFormat } from '@/lib/use-format.js';
@@ -165,11 +167,139 @@ export function ContextBody({ sessionKey }: { readonly sessionKey: string }): JS
         <span>{sessionKey}</span>
       </div>
 
-      <details className="context__prompt">
-        <summary>{t('context.systemPrompt')}</summary>
-        <pre>{context.data.systemPrompt}</pre>
-      </details>
+      {/* One disclosure per section, in the order they reach the model. Each is
+          the *contents* of the row above with the same name, which is what turns
+          the table from a set of numbers into something answerable: "tools:
+          1,240" and "which tools" are one click apart rather than a question for
+          whoever wrote the agent. */}
+      <div className="stack context__sections">
+        <Section fill={SEGMENT_FILLS.systemPrompt} label={t('context.systemPrompt')}>
+          <pre className="context__text">{context.data.systemPrompt}</pre>
+        </Section>
+
+        <Section
+          fill={SEGMENT_FILLS.tools}
+          label={t('context.toolDefinitions', { count: context.data.tools.length })}
+        >
+          {context.data.tools.length === 0 ? (
+            <p className="page__note">{t('context.noTools')}</p>
+          ) : (
+            <ul className="stack context__tools">
+              {context.data.tools.map((tool) => (
+                <ToolEntry key={tool.name} tool={tool} />
+              ))}
+            </ul>
+          )}
+        </Section>
+
+        <Section
+          fill={SEGMENT_FILLS.messages}
+          label={t('context.conversation', { count: context.data.messages.length })}
+        >
+          {context.data.messages.length === 0 ? (
+            <p className="page__note">{t('context.nothingYet')}</p>
+          ) : (
+            <ol className="stack context__messages">
+              {context.data.messages.map((stored) => (
+                <MessageEntry key={stored.id} stored={stored} />
+              ))}
+            </ol>
+          )}
+        </Section>
+      </div>
     </div>
+  );
+}
+
+/**
+ * One collapsed section of the prompt.
+ *
+ * `<details>` rather than a button and state: it is a disclosure, the element
+ * exists for exactly this, and it comes with the keyboard behaviour and the
+ * `aria-expanded` semantics already correct. The swatch ties it to its row in the
+ * table and to its band in the bar.
+ */
+function Section({
+  fill,
+  label,
+  children,
+}: {
+  readonly fill: string | undefined;
+  readonly label: string;
+  readonly children: ReactNode;
+}): JSX.Element {
+  return (
+    <details className="context__section">
+      <summary>
+        <span aria-hidden="true" className={cn('context__swatch', fill ?? FALLBACK_FILL)} />
+        {label}
+      </summary>
+      <div className="context__section-body">{children}</div>
+    </details>
+  );
+}
+
+/**
+ * One tool, as the provider is given it.
+ *
+ * The schema is shown as formatted JSON rather than summarised, because the
+ * reason to open this is almost always that a schema is bigger than expected —
+ * and a summary is exactly what hides that.
+ */
+function ToolEntry({ tool }: { readonly tool: ToolDefinition }): JSX.Element {
+  const { t } = useTranslation();
+
+  return (
+    <li className="stack context__tool">
+      <p className="cluster context__tool-head">
+        <code>{tool.name}</code>
+        <Badge tone={tool.risk === 'safe' ? 'neutral' : 'warning'}>{tool.risk}</Badge>
+      </p>
+      <p className="context__tool-desc">{tool.description}</p>
+      <details>
+        <summary>{t('context.toolSchema', { name: tool.name })}</summary>
+        <pre className="context__text">{JSON.stringify(tool.parameters, null, 2)}</pre>
+      </details>
+    </li>
+  );
+}
+
+/**
+ * One message in the window, addressed by the seq the rest of the UI uses.
+ *
+ * Tool results are shown whole. They are the entries most likely to be the
+ * reason a window filled up, and this is the one screen where the envelope and
+ * the full untruncated output are the point rather than noise.
+ */
+function MessageEntry({ stored }: { readonly stored: StoredMessage }): JSX.Element {
+  const { message } = stored;
+  // `content` is a bare string for `system` and `tool`, and a part array for the
+  // two that can carry images. One branch on the *shape* covers all four roles;
+  // branching on the role would need four.
+  const text =
+    typeof message.content === 'string'
+      ? message.content
+      : message.content
+          .map((part) => (part.type === 'text' ? part.text : `[${part.type}]`))
+          .join('');
+
+  const calls = message.role === 'assistant' ? message.toolCalls : [];
+  const reasoning = message.role === 'assistant' ? (message.reasoning ?? '') : '';
+
+  return (
+    <li className="stack context__message">
+      <p className="cluster context__message-head">
+        <Badge tone="neutral">{message.role}</Badge>
+        <span className="context__message-seq">#{stored.seq}</span>
+      </p>
+      {reasoning !== '' && <pre className="context__text context__text--dim">{reasoning}</pre>}
+      {text !== '' && <pre className="context__text">{text}</pre>}
+      {calls.map((call) => (
+        <pre key={call.id} className="context__text">
+          {call.name}({call.argumentsJson})
+        </pre>
+      ))}
+    </li>
   );
 }
 

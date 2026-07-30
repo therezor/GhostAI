@@ -48,6 +48,23 @@ export const SECTION_SEPARATOR = '\n\n---\n\n';
  * everything after it, and a per-turn placeholder here would quietly cost a
  * tool-using session ten times the tokens it should. Live state belongs in the
  * runtime block, which is rewritten every iteration and sits at the end.
+ *
+ * **`workspaceRoot` and `runtime` are available and the default template no
+ * longer uses either.** Both are host facts, and a model that is handed one tends
+ * to use it:
+ *
+ *  - The absolute root is the path the file tools *hide*. Given it, a model will
+ *    write `/Users/you/project/notes/todo.md`, which the jail resolves *inside*
+ *    the workspace — it lands on `<root>/Users/you/project/notes/todo.md`, a real
+ *    directory tree of junk, with no error. The path is also the one thing in the
+ *    prompt that leaks the operator's home directory layout to the provider.
+ *  - `runtime` names the host OS, which is where `exec` runs only when the agent
+ *    has no toolbox. For a toolboxed agent it describes a machine none of its
+ *    commands touch, and `{{platformPolicy}}` now states the correct one.
+ *
+ * They stay in this list because a custom prompt may reasonably want them — an
+ * agent whose job is to talk about the host, say — and removing a placeholder
+ * silently changes every stored template that uses it.
  */
 export const PROMPT_PLACEHOLDERS = [
   'name',
@@ -89,9 +106,12 @@ const KNOWN: ReadonlySet<string> = new Set(PROMPT_PLACEHOLDERS);
  * Substitution is a single pass and inserted values are never rescanned, so a
  * workspace named `{{workspaceRoot}}` cannot expand into anything.
  */
-export function renderPromptTemplate(template: string, values: PromptValues): string {
+export function renderPromptTemplate(
+  template: string,
+  values: Readonly<Record<string, string>>,
+): string {
   return template.replace(PLACEHOLDER, (match, name: string) =>
-    KNOWN.has(name) ? values[name as PromptPlaceholder] : match,
+    Object.hasOwn(values, name) ? (values[name] ?? match) : match,
   );
 }
 
@@ -102,22 +122,96 @@ export function renderPromptTemplate(template: string, values: PromptValues): st
  * is first-appearance and each name is reported once, because a warning listing
  * `{{workspacRoot}}` four times is a worse version of the same sentence.
  */
-export function unknownPlaceholders(template: string): readonly string[] {
+export function unknownPlaceholders(
+  template: string,
+  known: readonly string[] = PROMPT_PLACEHOLDERS,
+): readonly string[] {
+  // Defaulted rather than always the static set, because there are two templates
+  // now and each has its own vocabulary — `{{time}}` is a typo in the identity
+  // half and correct in the live one. An editor that warned from one list would
+  // be wrong about whichever template it was not looking at.
+  const vocabulary = known === PROMPT_PLACEHOLDERS ? KNOWN : new Set<string>(known);
   const seen = new Set<string>();
   for (const match of template.matchAll(PLACEHOLDER)) {
     const name = match[1] ?? '';
-    if (!KNOWN.has(name)) seen.add(name);
+    if (!vocabulary.has(name)) seen.add(name);
   }
   return [...seen];
 }
 
-/** Whether a stored value names any placeholder — i.e. has been through the migration. */
-export function hasPlaceholder(template: string): boolean {
-  for (const match of template.matchAll(PLACEHOLDER)) {
-    if (KNOWN.has(match[1] ?? '')) return true;
-  }
-  return false;
-}
+/**
+ * What a *live state* template may ask for.
+ *
+ * A second vocabulary rather than an extension of the first, because the two
+ * halves of the prompt are cached differently and that is the whole reason they
+ * are separate files' worth of thought. Anything here changes between requests,
+ * so it may only appear in the half that is rebuilt every iteration; anything in
+ * `PROMPT_PLACEHOLDERS` is stable for the session and belongs in the cached half.
+ *
+ * `channel` and `sessionKey` are here and the default template deliberately does
+ * not use them — see `DEFAULT_LIVE_STATE_TEMPLATE`. They are offered because an
+ * operator who disagrees with that judgement should be able to put them back
+ * without patching the source.
+ */
+export const LIVE_PROMPT_PLACEHOLDERS = [
+  'time',
+  'wrapUp',
+  'iteration',
+  'maxIterations',
+  'iterationsLeft',
+  'channel',
+  'sessionKey',
+] as const;
+
+export type LivePromptPlaceholder = (typeof LIVE_PROMPT_PLACEHOLDERS)[number];
+
+export type LivePromptValues = Readonly<Record<LivePromptPlaceholder, string>>;
+
+/**
+ * The per-iteration half's opening section, as a template.
+ *
+ * Editable for the same reason the identity half is: an operator owns what their
+ * agent is told. This one is smaller and its economics are the opposite — it is
+ * **never cached**, so every line is re-sent on every request of every turn, and
+ * a tool-using turn is ten requests.
+ *
+ * That is why the default is one line. It used to be four:
+ *
+ * ```
+ * Current time: 2026-07-30T13:05:40.935Z (host time zone: Europe/London)
+ * Channel: web
+ * Session: web-a4968997-5d6a-4e0b-9cd1-e5ea3f39340d
+ * Agent iteration: 1 / 40
+ * ```
+ *
+ * Nothing in the prompt said what the last three meant, and nothing read them.
+ * The session key is a UUID the model cannot use and may echo at the user; the
+ * channel named a difference no instruction drew a consequence from; the counter
+ * is only actionable near the cap, which is what `{{wrapUp}}` is for. The time is
+ * the one line that earns its place — a model has no clock, and without it
+ * "today" and "latest" are answered from a training cutoff.
+ *
+ * `{{wrapUp}}` renders empty except in the last few iterations of a turn.
+ */
+export const DEFAULT_LIVE_STATE_TEMPLATE = `## Live state
+
+Current time: {{time}}{{wrapUp}}`;
+
+/**
+ * What fills `{{wrapUp}}` when a turn is nearly out of iterations.
+ *
+ * Separate from the section above because it is *conditional*, and a placeholder
+ * template cannot express a condition. The loop supplies it only when it applies,
+ * so an operator editing this is editing a sentence that appears three times per
+ * turn at most rather than one that appears on every request.
+ *
+ * Phrased to be plural-safe — "iterations left: 1" rather than "1 iterations
+ * left" — because the alternative is a plural rule in a string an operator is
+ * meant to be able to rewrite in their own words.
+ */
+export const DEFAULT_WRAP_UP_TEMPLATE = `
+
+Tool iterations left in this turn: {{iterationsLeft}}. Wrap up — answer with what you have, or say plainly what is still missing.`;
 
 const GUIDELINES = `## Guidelines
 
@@ -141,38 +235,13 @@ export const DEFAULT_SYSTEM_PROMPT_TEMPLATE = `# {{name}}
 You are {{name}}, a self-hosted agent running on your user's own machine, with
 their files and their shell. You work on their behalf and answer to them alone.
 
-## Runtime
-
-{{runtime}}
-
 ## Workspace
 
-You are working in the \`{{workspaceId}}\` workspace, at {{workspaceRoot}}.
-
-That directory is your root. \`/notes/todo.md\`, \`notes/todo.md\` and
-\`../notes/todo.md\` all name the same file inside it, and no path you can write
-reaches outside it — paths are resolved into the workspace, not rejected. Prefer
-the plain relative form: say \`notes/todo.md\`.
-
-\`exec\` is the exception, and the difference matters. The program you run is a
-real process on the real filesystem, so it is *not* confined to the workspace —
-which is why an argument pointing outside it (\`/etc/passwd\`, \`../secrets\`)
-is refused there rather than resolved inside. Pass workspace-relative arguments
-to \`exec\`; its working directory is already the root.
+You are working in the \`{{workspaceId}}\` workspace. To the file tools it is the
+whole filesystem: \`/notes/todo.md\`, \`notes/todo.md\` and \`../notes/todo.md\`
+all name the same file in it, and no path you can write reaches outside it.
+Prefer the plain relative form — say \`notes/todo.md\`.
 
 {{platformPolicy}}
 
 ${GUIDELINES}`;
-
-/**
- * An old `systemPrompt` — which meant "append this as `## Instructions`" — as a
- * template that means the same thing.
- *
- * The result is byte-identical to what the old composer produced for that
- * install, which is the whole requirement: a migration that changes what an
- * agent says is a migration that changes how it behaves, discovered later and
- * blamed on something else.
- */
-export function legacyInstructionsToTemplate(instructions: string): string {
-  return `${DEFAULT_SYSTEM_PROMPT_TEMPLATE}${SECTION_SEPARATOR}## Instructions\n\n${instructions.trim()}`;
-}

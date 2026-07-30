@@ -1,0 +1,426 @@
+#!/usr/bin/env python3
+"""Search the web, and optionally read the results in the same call.
+
+**The searching itself is `ddgs`, not code in this file.** That is the whole
+design, and it replaced three hand-written scrapers that were worse at it:
+
+  * `ddgs` queries **nine** backends — Brave, DuckDuckGo, Google, Grokipedia,
+    Mojeek, Startpage, Wikipedia, Yahoo, Yandex — and `backend="auto"` moves
+    between them. Scraping consumer search front-ends from one residential IP gets
+    that IP blocked; the fix is more independent front doors, not better parsing.
+
+  * It is maintained. Measured while writing this: DuckDuckGo was serving an
+    anomaly page, Mojeek a captcha and Brave a 429 — all three blocked at once —
+    and `backend="auto"` still answered in 0.9s from Startpage, Yahoo and Yandex.
+    Startpage in particular bot-walls a naive request; `ddgs` knows the flow.
+
+  * Nine selector sets are nine things to keep working. Upstream already does.
+
+What is left here is the part that is about *this* toolbox: compact numbered output
+instead of JSON, `--read N` so searching and reading are one call, Hacker News as a
+fallback that cannot be rate-limited, and a cache so a model that retries costs
+nothing.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import re
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import requests
+
+from ghostweb import HEADERS, FetchError, fetch_page, truncate
+
+DEFAULT_COUNT = 6
+
+# How many result pages are read when nobody says otherwise.
+#
+# **Reading is the default, and that is the important decision in this file.**
+# `--read` used to be opt-in, and a model that did not opt in answered from
+# one-line snippets: asked which sub-4B model is best at tool calling, it
+# summarised six link *titles* and offered to dig deeper. The instruction to pass
+# `--read` was in the tool description; it was simply not taken. A research tool
+# whose useful mode has to be asked for has its default the wrong way round.
+#
+# Three, because one source is an opinion and two that agree is a coincidence.
+DEFAULT_READ = 3
+
+# The size the whole output aims to stay under, list and extracts together.
+#
+# **This is a property of the harness, not a taste.** GhostAI caps a tool result
+# at `exec.maxOutputChars` — 8,192 by default — and keeps the head, writing the
+# rest to `/run/ghost-runs/`. The first version of read-by-default produced ~11,700
+# characters, so the model was handed a view that stopped mid-page: it got the list,
+# one extract and half of another. Reading pages the model never sees is worse than
+# not reading them, because it pays the latency and gets a document that ends in the
+# middle of a sentence — which reads as "there is more to find" and sends it
+# searching again. Measured: forty iterations without an answer.
+#
+# Slightly under the cap, so the transcript's own header lines do not push it over.
+INLINE_BUDGET = 7_600
+
+# No extract is worth printing below this, however many were asked for. Better to
+# read fewer pages properly than to hand back six openings of six paragraphs.
+MIN_EXTRACT_CHARS = 900
+
+# How many *extra* results may be tried to reach `--read N` successful reads.
+#
+# Search results include pages there is no point fetching: a YouTube watch page
+# has no text without JavaScript, Reddit and news sites bot-wall, a PDF may be a
+# scan. "Read the top 3" meaning "attempt the first 3" spent the budget on those
+# and returned nothing readable. It now walks further down the list until three
+# have genuinely produced text, bounded so a page of dead links cannot turn one
+# search into nine fetches.
+READ_ATTEMPT_SLACK = 3
+
+
+CACHE_DIR = Path("/tmp/.ghost-search")
+
+# Only for the case where every backend failed at once. `ddgs` rotates internally,
+# so this is not the per-engine cooldown an earlier version needed — it exists so a
+# model that retries a failing query does not send nine more requests each time.
+COOLDOWN_S = 300
+
+
+@dataclass(frozen=True)
+class Result:
+    title: str
+    url: str
+    snippet: str
+    source: str = field(default="")
+    """Named only when it is not a general web result, so the model can judge fit."""
+
+
+def _clean(text: str) -> str:
+    return " ".join(text.split())
+
+
+# Sponsored placements and click trackers, which some backends mix into results.
+#
+# Observed from the Bing-backed path: `https://www.bing.com/aclick?ld=e8Wsdet…`,
+# a 400-character redirect that fetches to an ad landing page. Worth dropping
+# rather than ranking, on two counts — it is never the answer, and left in the list
+# it consumes one of the three reads on a page with nothing to read.
+_ADVERT = re.compile(
+    r"""(?:
+        /aclick\?           | /aclk\?              | /pagead/          |
+        doubleclick\.net    | googleadservices\.com | googlesyndication\.com |
+        duckduckgo\.com/y\.js
+    )""",
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+def _is_advert(url: str) -> bool:
+    return _ADVERT.search(url) is not None
+
+
+# ---------------------------------------------------------------------------
+# Cache
+# ---------------------------------------------------------------------------
+
+
+def _cache_file(key: str) -> Path:
+    return CACHE_DIR / f"q-{hashlib.sha256(key.encode()).hexdigest()[:32]}.json"
+
+
+def _cached(key: str) -> list[Result] | None:
+    try:
+        rows = json.loads(_cache_file(key).read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+    return [Result(**row) for row in rows]
+
+
+def _store(key: str, results: list[Result]) -> None:
+    try:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        _cache_file(key).write_text(
+            json.dumps([result.__dict__ for result in results]), encoding="utf-8"
+        )
+    except OSError:
+        pass
+
+
+def _cooling() -> bool:
+    try:
+        return time.time() < float((CACHE_DIR / "blocked").read_text("utf-8"))
+    except (OSError, ValueError):
+        return False
+
+
+def _cool_down() -> None:
+    try:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        (CACHE_DIR / "blocked").write_text(str(time.time() + COOLDOWN_S), encoding="utf-8")
+    except OSError:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Sources
+# ---------------------------------------------------------------------------
+
+
+def _via_ddgs(query: str, count: int, *, recent: str | None, region: str | None) -> list[Result]:
+    """Nine backends behind one call. See the module header.
+
+    `ddgs` raises rather than returning empty when a backend has nothing, and
+    `auto` raising means every backend it tried failed — so the exception is the
+    signal, not an error to log and continue past.
+    """
+    from ddgs import DDGS
+
+    options: dict[str, object] = {"backend": "auto", "max_results": count}
+    if recent is not None:
+        options["timelimit"] = recent
+    if region is not None:
+        options["region"] = region
+
+    return [
+        Result(
+            title=_clean(str(row.get("title", ""))),
+            url=str(row.get("href", "")),
+            snippet=_clean(str(row.get("body", ""))),
+        )
+        for row in DDGS().text(query, **options)
+        if row.get("href") and not _is_advert(str(row["href"]))
+    ]
+
+
+def _via_hn(query: str, count: int) -> list[Result]:
+    """Hacker News via Algolia's public API. Keyless, and it does not rate-limit.
+
+    A fallback rather than a peer: it searches *discussion*, not the web. For the
+    questions this toolbox actually gets, a thread arguing about SQLite over NFS is
+    often better than the third blog post about it — but it cannot answer "what
+    happened today", so it never displaces a working web result.
+    """
+    response = requests.get(
+        "https://hn.algolia.com/api/v1/search",
+        params={"query": query, "hitsPerPage": str(count)},
+        headers=HEADERS,
+        timeout=12,
+    )
+    response.raise_for_status()
+
+    found: list[Result] = []
+    for hit in (response.json().get("hits") or [])[:count]:
+        title = _clean(str(hit.get("title") or hit.get("story_title") or ""))
+        if title == "":
+            continue
+        url = str(hit.get("url") or "")
+        # An `Ask HN` post has no URL of its own; the thread *is* the content.
+        thread = f"https://news.ycombinator.com/item?id={hit.get('objectID', '')}"
+        found.append(
+            Result(
+                title=title,
+                url=url if url.startswith("http") else thread,
+                snippet=f"{hit.get('points') or 0} points, {hit.get('num_comments') or 0} comments — {thread}",
+                source="hn",
+            )
+        )
+    return found
+
+
+def run_search(
+    query: str,
+    count: int,
+    *,
+    recent: str | None = None,
+    region: str | None = None,
+    use_cache: bool = True,
+) -> list[Result]:
+    key = f"{count}|{recent}|{region}|{query}"
+    if use_cache:
+        hit = _cached(key)
+        if hit is not None:
+            return hit
+
+    problems: list[str] = []
+
+    if _cooling():
+        problems.append("every backend failed a moment ago and is being left alone briefly")
+    else:
+        try:
+            results = _via_ddgs(query, count, recent=recent, region=region)
+            if results:
+                _store(key, results)
+                return results[:count]
+            problems.append("web backends: no results")
+        except Exception as error:  # noqa: BLE001 — any failure falls through to HN
+            _cool_down()
+            problems.append(f"web backends: {' '.join(str(error).split())[:120]}")
+
+    # Nothing from the web tier. Hacker News is a different index reached through a
+    # real API, so it answers when scraping cannot.
+    try:
+        results = _via_hn(query, count)
+    except Exception as error:  # noqa: BLE001
+        problems.append(f"hn: {' '.join(str(error).split())[:80]}")
+        results = []
+
+    if results:
+        _store(key, results)
+        return results[:count]
+
+    # Named individually, because the advice differs: nothing found means rephrase,
+    # everything failing means the query was fine and re-asking is what caused it.
+    print(
+        "search: nothing found. If the reason below is a block or a rate limit, the query"
+        " was fine — do not re-ask it; `fetch` a likely URL directly instead, or answer"
+        f" without searching and say you could not. ({'; '.join(problems)})",
+        file=sys.stderr,
+    )
+    return []
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+# `d`/`w`/`m`/`y` is what `ddgs` wants; the long names are what a model writes.
+RECENCY = {"day": "d", "week": "w", "month": "m", "year": "y"}
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        prog="search",
+        description="Search the web. Prints numbered results; --read also fetches them.",
+    )
+    parser.add_argument("query", nargs="+", help="the search terms, as plain words")
+    parser.add_argument(
+        "-n",
+        "--count",
+        type=int,
+        default=DEFAULT_COUNT,
+        metavar="N",
+        help=f"how many results (default {DEFAULT_COUNT})",
+    )
+    parser.add_argument(
+        "--read",
+        type=int,
+        default=DEFAULT_READ,
+        metavar="N",
+        help=(
+            f"read this many result pages and print their text (default {DEFAULT_READ}); "
+            "0 for the list of links only"
+        ),
+    )
+    parser.add_argument(
+        "--recent",
+        choices=sorted(RECENCY),
+        help="only results from the last day/week/month/year — use this for news",
+    )
+    parser.add_argument(
+        "--site", metavar="DOMAIN", help="restrict to one domain, e.g. --site docs.python.org"
+    )
+    parser.add_argument(
+        "--region", metavar="CODE", help="bias to a region, e.g. uk-en, us-en, de-de"
+    )
+    parser.add_argument("--no-cache", action="store_true", help="re-run instead of reusing a result")
+    args = parser.parse_args()
+
+    # Stripped, because the instruction not to quote is not always followed and a
+    # phrase search for `"sqlite wal"` matches almost nothing. Cheaper to accept the
+    # input than to be right about it.
+    query = " ".join(args.query).strip().strip('"').strip("'").strip()
+    if args.site:
+        query = f"site:{args.site} {query}"
+    if query == "":
+        print("search: the query is empty", file=sys.stderr)
+        return 1
+
+    results = run_search(
+        query,
+        max(args.count, args.read),
+        recent=RECENCY.get(args.recent or ""),
+        region=args.region,
+        use_cache=not args.no_cache,
+    )
+    if not results:
+        return 1
+
+    listing: list[str] = []
+    for index, result in enumerate(results, start=1):
+        tag = f"  [{result.source}]" if result.source else ""
+        listing.append(f"{index}. {result.title}{tag}")
+        listing.append(f"   {result.url}")
+        if result.snippet:
+            listing.append(f"   {result.snippet}")
+    print("\n".join(listing))
+
+    if args.read <= 0:
+        return 0
+
+    # What is left of the budget after the list, split between the pages. Computed
+    # rather than fixed, so `-n 12` or `--read 6` cannot push the result past the
+    # point where the harness truncates it. See `INLINE_BUDGET`.
+    spent = sum(len(line) + 1 for line in listing)
+    share = max(MIN_EXTRACT_CHARS, (INLINE_BUDGET - spent) // max(args.read, 1))
+
+    # Fetched in one concurrent batch — every one of them is waiting on a network
+    # round trip, so doing them in sequence would multiply the wall time by the
+    # number of pages for no benefit. The batch is `--read N` plus a little slack,
+    # and only the first N that produce text are printed.
+    targets = results[: args.read + READ_ATTEMPT_SLACK]
+
+    def one(result: Result):
+        try:
+            return fetch_page(result.url)
+        except FetchError as error:
+            return error
+
+    with ThreadPoolExecutor(max_workers=min(4, len(targets))) as pool:
+        pages = list(pool.map(one, targets))
+
+    printed = 0
+    skipped: list[str] = []
+    for result, page in zip(targets, pages, strict=True):
+        if printed >= args.read:
+            break
+
+        if isinstance(page, FetchError):
+            skipped.append(f"{result.url} ({page})")
+            continue
+        if not page.ok:
+            skipped.append(f"{result.url} ({page.note})")
+            continue
+
+        printed += 1
+        # Numbered by reading order rather than by rank, and the URL is on the
+        # header line: this is what a model quotes when it cites a source, and it
+        # is what `fetch` needs for the rest of the page.
+        print(f"\n===== [{printed}] {result.url} =====")
+        if page.title:
+            print(f"# {page.title}\n")
+        if page.note:
+            print(f"> note: {page.note}\n")
+        body, dropped = truncate(page.text, share)
+        print(body)
+        if dropped:
+            print(f"\n[{dropped:,} characters not shown — `fetch {result.url}` for the rest]")
+
+    # Named rather than silently dropped. A model that sees three extracts where it
+    # expected the top three results needs to know the others were unreadable, not
+    # that they were judged irrelevant — otherwise it re-fetches them one at a time.
+    if skipped:
+        print(f"\n[not readable, skipped: {'; '.join(skipped[:4])}]")
+    if printed == 0:
+        print(
+            "\n[none of the result pages could be read — answer from the snippets above,"
+            " or search again with different words]"
+        )
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

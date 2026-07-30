@@ -16,6 +16,7 @@ import type { z } from 'zod';
 import * as automation from './automation.js';
 import * as config from './config.js';
 import * as messages from './messages.js';
+import * as toolbox from './toolbox.js';
 import * as rest from './rest.js';
 import * as tools from './tools.js';
 import * as ws from './ws.js';
@@ -61,7 +62,8 @@ export const PROTOCOL_SCHEMAS = {
   ToolApprovalsConfig: config.ToolApprovalsConfigSchema,
   ToolsConfig: config.ToolsConfigSchema,
   AgentToolsSelection: config.AgentToolsSelectionSchema,
-  AgentSandbox: config.AgentSandboxSchema,
+  AgentToolboxNetwork: config.AgentToolboxNetworkSchema,
+  AgentToolbox: config.AgentToolboxSchema,
   AgentMemoryScope: config.AgentMemoryScopeSchema,
   AgentEntry: config.AgentEntrySchema,
   AudioConfig: config.AudioConfigSchema,
@@ -73,6 +75,16 @@ export const PROTOCOL_SCHEMAS = {
   UiConfig: config.UiConfigSchema,
   Config: config.ConfigSchema,
   ConfigPatch: config.ConfigPatchSchema,
+
+  // toolbox
+  ToolboxNetworkMode: toolbox.ToolboxNetworkModeSchema,
+  ToolboxRuntime: toolbox.ToolboxRuntimeSchema,
+  ToolboxEntry: toolbox.ToolboxEntrySchema,
+  ToolboxCaps: toolbox.ToolboxCapsSchema,
+  ToolboxSecurity: toolbox.ToolboxSecuritySchema,
+  ToolboxLimits: toolbox.ToolboxLimitsSchema,
+  ToolboxNetwork: toolbox.ToolboxNetworkSchema,
+  Toolbox: toolbox.ToolboxSchema,
 
   // automation
   AtSchedule: automation.AtScheduleSchema,
@@ -159,6 +171,8 @@ export const PROTOCOL_SCHEMAS = {
   AgentSummary: rest.AgentSummarySchema,
   AgentListResponse: rest.AgentListResponseSchema,
   ToolListResponse: rest.ToolListResponseSchema,
+  ToolboxSummary: rest.ToolboxSummarySchema,
+  ToolboxListResponse: rest.ToolboxListResponseSchema,
   FileEntry: rest.FileEntrySchema,
   FileListResponse: rest.FileListResponseSchema,
   SignedUrl: rest.SignedUrlSchema,

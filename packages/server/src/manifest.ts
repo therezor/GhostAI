@@ -93,6 +93,7 @@ const MANIFEST = [
   // tree, so it is created and edited through `settings.patch`.
   { id: 'agents.list', method: 'GET', url: '/api/agents', auth: 'required' },
   { id: 'tools.list', method: 'GET', url: '/api/tools', auth: 'required' },
+  { id: 'toolboxes.list', method: 'GET', url: '/api/toolboxes', auth: 'required' },
 
   // Files, upload and signed media
   { id: 'files.list', method: 'GET', url: '/api/files', auth: 'required' },

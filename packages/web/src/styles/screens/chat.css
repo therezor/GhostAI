@@ -152,6 +152,31 @@
     color: var(--danger-fg);
   }
 
+  /* Warning, not danger. A turn that produced no answer is a disappointing
+   * result rather than a broken one — nothing failed, the model simply did not
+   * write anything — and giving it the same red as a provider error would put
+   * two different severities in one colour. */
+  .turn__unanswered {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--warning-soft);
+    border: var(--hairline) solid var(--warning-edge);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
+    color: var(--fg-2);
+  }
+
+  .turn__unanswered > svg {
+    flex-shrink: 0;
+    width: var(--size-icon-sm);
+    height: var(--size-icon-sm);
+    margin-top: var(--space-0-5);
+    color: var(--warning-fg);
+  }
+
   .turn__footer {
     display: flex;
     flex-wrap: wrap;

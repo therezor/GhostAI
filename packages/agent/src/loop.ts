@@ -71,11 +71,13 @@ import {
 import {
   AgentDefaultsSchema,
   type AgentDefaults,
+  type AgentToolbox,
   type ContentPart,
   type ErrorCode,
   type ParsedMentions,
   type StopReason,
   type ToolCall,
+  type ToolDefinition,
   type ToolRisk,
   type ToolsConfig,
   type Usage,
@@ -96,6 +98,8 @@ import {
 } from '@ghostai/security';
 import {
   DEFAULT_TOOLS_CONFIG,
+  type RunnerResolver,
+  type ToolboxRequest,
   type ToolContext,
   type ToolExecution,
   type ToolScope,
@@ -112,12 +116,14 @@ import type { AgentEvent } from './events.js';
 import {
   buildRuntimeBlock,
   buildStaticPrompt,
+  type PromptToolbox,
   composeSystemPrompt,
   type ContextContributor,
   type PromptAgent,
   type StaticPromptContext,
 } from './prompt.js';
 import { SteeringQueue, steeringText } from './steering.js';
+import { textToolCallCorrection, textToolCallName } from './text-tool-call.js';
 
 /**
  * How often a running tool reports that it is still running.
@@ -301,6 +307,19 @@ export interface AgentLoopOptions {
    * `singleJail(jail)` is the adapter for a caller that has only one.
    */
   readonly jails: JailResolver;
+  /**
+   * Supplies the container a turn's `exec` runs in, keyed the same way.
+   *
+   * Absent — or returning `undefined` — means the host, which is what `exec`
+   * has always done. A resolver rather than one runner for the same reason as
+   * `jails`: two sessions in one process can be bound to different agents, and
+   * therefore to different sandboxes.
+   */
+  readonly runners?: RunnerResolver;
+  /** Which toolbox this agent works in. Defaults to the host. */
+  readonly toolbox?: AgentToolbox;
+  /** The toolbox's declared contents, injected into the static prompt. */
+  readonly toolboxPrompt?: PromptToolbox;
   /** Defaults to the schema's defaults, so a caller without a config file works. */
   readonly config?: AgentDefaults;
   readonly toolsConfig?: ToolsConfig;
@@ -403,6 +422,9 @@ export class AgentLoop {
   readonly #agentId: string;
   readonly #store: SessionStore;
   readonly #jails: JailResolver;
+  readonly #runners: RunnerResolver | undefined;
+  readonly #toolbox: AgentToolbox;
+  readonly #toolboxPrompt: PromptToolbox | undefined;
   readonly #config: AgentDefaults;
   readonly #toolsConfig: ToolsConfig;
   readonly #model: string;
@@ -422,6 +444,9 @@ export class AgentLoop {
     this.#tools = options.tools;
     this.#store = options.store;
     this.#jails = options.jails;
+    this.#runners = options.runners;
+    this.#toolbox = options.toolbox ?? { name: '', network: { mode: 'none', allow: [] } };
+    this.#toolboxPrompt = options.toolboxPrompt;
     this.#config = options.config ?? AgentDefaultsSchema.parse({});
     this.#toolsConfig = options.toolsConfig ?? DEFAULT_TOOLS_CONFIG;
     this.#agent = options.agent;
@@ -459,6 +484,22 @@ export class AgentLoop {
   /** The queue this loop drains. Exposed so a transport can push into it. */
   get steering(): SteeringQueue {
     return this.#steering;
+  }
+
+  /**
+   * The tool definitions a turn on this loop would send.
+   *
+   * Exposed for the same reason `previewPrompt` is: describing what a turn would
+   * carry has to come from the object that carries it. The context inspector used
+   * to rebuild the list from the registry instead — `tools.select(agent.tools)` —
+   * which is the built-ins narrowed by the agent's allow-list and nothing else. A
+   * toolboxed agent's `search`, `fetch` and the rest are composed on *top* of that
+   * scope by `withToolboxTools`, so they were missing from the panel and, worse,
+   * missing from its token count: seven entries the model is really sent, absent
+   * from the one screen whose job is to say what the model is sent.
+   */
+  get toolDefinitions(): readonly ToolDefinition[] {
+    return this.#tools.definitions();
   }
 
   /**
@@ -505,6 +546,10 @@ export class AgentLoop {
       },
       nonce: createToolOutputNonce(this.#random),
       contributors: this.#contributors,
+      ...(this.#agent?.livePrompt === undefined ? {} : { livePrompt: this.#agent.livePrompt }),
+      ...(this.#agent?.wrapUpPrompt === undefined
+        ? {}
+        : { wrapUpPrompt: this.#agent.wrapUpPrompt }),
     });
 
     return composeSystemPrompt(staticPrompt, runtimeBlock);
@@ -610,9 +655,23 @@ export class AgentLoop {
 
     const staticPrompt = await buildStaticPrompt({
       context: promptContext,
+      ...(this.#toolboxPrompt === undefined ? {} : { toolbox: this.#toolboxPrompt }),
       ...(this.#agent === undefined ? {} : { agent: this.#agent }),
       contributors: this.#contributors,
     });
+
+    // Resolved once per turn, beside the jail and for the same reason: a
+    // sandbox is a property of (agent, workspace, session), and re-deriving it
+    // per tool call would let a mid-turn config change move it.
+    const sandbox: ToolboxRequest = {
+      agentId: session.agentId ?? DEFAULT_AGENT_ID,
+      workspaceId: session.workspaceId,
+      sessionKey,
+      toolbox: this.#toolbox.name,
+      network: this.#toolbox.network,
+      workspaceRoot: jail.root,
+    };
+    const runner = this.#runners?.forTurn(sandbox);
 
     const toolContext: ToolContext = {
       jail,
@@ -621,6 +680,7 @@ export class AgentLoop {
       clock: this.#clock,
       logger: this.#logger,
       env: this.#env,
+      ...(runner === undefined ? {} : { runner, sandboxed: true }),
     };
 
     const startedAt = this.#clock.monotonic();
@@ -634,6 +694,9 @@ export class AgentLoop {
     let stopReason: StopReason | undefined;
     let finalText = '';
     let usage: Usage = emptyUsage();
+    /** Set for exactly one iteration, then cleared. See `text-tool-call.ts`. */
+    let correction: string | undefined;
+    let correctedOnce = false;
 
     try {
       // Inside the `try`, so a caller that abandons the iterator before the
@@ -645,6 +708,10 @@ export class AgentLoop {
         agentId: this.#agentId,
         model: this.#model,
         provider: this.#provider.id,
+        // Here as well as on `turn.end`: a turn that throws never reaches its
+        // end, and a failed turn with no seq is a failed turn nothing can
+        // re-run.
+        firstSeq,
       };
 
       while (iteration < maxIterations) {
@@ -678,7 +745,16 @@ export class AgentLoop {
           },
           nonce,
           contributors: this.#contributors,
+          ...(this.#agent?.livePrompt === undefined ? {} : { livePrompt: this.#agent.livePrompt }),
+          ...(this.#agent?.wrapUpPrompt === undefined
+            ? {}
+            : { wrapUpPrompt: this.#agent.wrapUpPrompt }),
+          ...(correction === undefined ? {} : { correction }),
         });
+        // Consumed, not left standing: it describes what the *previous* iteration
+        // did, and a correction that persisted would be scolding the model for
+        // something it has already stopped doing.
+        correction = undefined;
 
         const request: ChatRequest = {
           model: this.#model,
@@ -757,6 +833,52 @@ export class AgentLoop {
         if (result.message.toolCalls.length === 0) {
           lastSeq = this.#store.append(sessionKey, result.message, { turnId }).seq;
           finalText = textOf(result.message);
+
+          // A call the model wrote out instead of making. Left alone, this ends
+          // the turn `complete` with a JSON blob as the answer and no sign
+          // anywhere that the model tried to act — see `text-tool-call.ts` for the
+          // transcript that motivates it. One correction per turn: a model that
+          // gets it wrong twice is not going to be talked round, and a loop of
+          // corrections would burn the iteration budget saying the same thing.
+          const attempted = correctedOnce
+            ? undefined
+            : textToolCallName(
+                finalText,
+                toolDefinitions.map((definition) => definition.name),
+              );
+          if (attempted !== undefined) {
+            correctedOnce = true;
+            correction = textToolCallCorrection(attempted);
+            this.#logger.warn(
+              { sessionKey, turnId, iteration, tool: attempted },
+              'model wrote a tool call as text; correcting it',
+            );
+            yield {
+              type: 'notice',
+              kind: 'degraded',
+              message: `The model wrote a call to \`${attempted}\` as text instead of calling it. Asking it again.`,
+              turnId,
+            };
+            continue;
+          }
+
+          if (finalText === '') {
+            // Not an error, and deliberately not retried: the provider answered,
+            // the model simply wrote nothing outside its reasoning channel. Small
+            // local models do this, and a low `maxTokens` makes any reasoning
+            // model do it. Logged because the turn is otherwise indistinguishable
+            // from a successful one in every record it leaves — the UI derives
+            // the same conclusion from the transcript and says so on the turn.
+            this.#logger.warn(
+              {
+                sessionKey,
+                turnId,
+                iteration,
+                reasoningChars: (result.message.reasoning ?? '').length,
+              },
+              'model produced neither an answer nor a tool call',
+            );
+          }
           // The correction arrived while this answer was being composed. Keep
           // going so it is answered, rather than ending a turn the user has
           // already asked to change.

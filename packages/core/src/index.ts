@@ -69,11 +69,8 @@ export {
   type WorkspaceStoreOptions,
 } from './workspace-store.js';
 
-export { migrate } from './migrate.js';
-
 export {
   loadConfig,
-  migrateConfigShape,
   parseConfig,
   saveConfig,
   type LoadConfigOptions,

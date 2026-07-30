@@ -44,6 +44,20 @@
     "systemPrompt": "System prompt",
     "temperature": "Temperature",
     "title": "Agents",
+    "toolboxAllow": "Allowed networks",
+    "toolboxAllowHint": "CIDR blocks, comma separated — 10.0.0.0/8, 192.168.1.0/24. Host names are refused because DNS rebinding defeats them.",
+    "toolboxDesc": "Which box of tools this agent works in. A toolbox is a container image plus its whole security policy, installed and approved by you — this screen can point at one and narrow its network, never widen it.",
+    "toolboxHost": "None — run commands on this machine",
+    "toolboxLoading": "Loading toolboxes…",
+    "toolboxNetwork": "Network",
+    "toolboxNetworkAllowlist": "Only these networks",
+    "toolboxNetworkNone": "None",
+    "toolboxNetworkOpen": "Open",
+    "toolboxNoProfiles": "No toolboxes installed. Build one with toolboxes/build.sh, then approve it.",
+    "toolboxNotApproved": "Not approved yet — approve it with `ghost toolbox approve` before an agent can use it.",
+    "toolboxProfile": "Toolbox",
+    "toolboxSection": "Toolbox",
+    "toolboxWeakened": "Weakened hardening: {{what}}",
     "toolsDesc": "Which tools this agent may call, and what it has to ask about first.",
     "toolsSection": "Tools",
     "toolTimeout": "Tool timeout (seconds)",
@@ -60,6 +74,10 @@
     "jumpToLatest": "Jump to latest",
     "mentions": "Mentions",
     "message": "Message",
+    "noAnswer": {
+      "reasoningOnly": "The model finished its reasoning without writing an answer. Nothing was lost — regenerating usually produces one.",
+      "silent": "The model returned nothing at all: no answer, and no tool call. Regenerating usually produces one."
+    },
     "noModel": "No model configured yet",
     "notices": {
       "approval_denied": "Denied",
@@ -98,9 +116,8 @@
     "navigation": "Navigation",
     "newFile": "New file",
     "newFolder": "New folder",
-    "noMatches": "Nothing here matches “{{filter}}”. {{count}} hidden.",
-    "noMatches_one": "",
-    "noMatches_other": "",
+    "noMatches_one": "Nothing here matches “{{filter}}”. {{count}} hidden.",
+    "noMatches_other": "Nothing here matches “{{filter}}”. {{count}} hidden.",
     "notFound": "Not found",
     "notFoundBody": "There is nothing at this address.",
     "nothingHere": "Nothing here yet.",
@@ -115,6 +132,8 @@
     "reconnecting": "Reconnecting"
   },
   "context": {
+    "conversation_one": "Conversation ({{count}} message)",
+    "conversation_other": "Conversation ({{count}} messages)",
     "intro": "What a turn on this conversation would send to the model right now.",
     "labels": {
       "messages": "Conversation",
@@ -126,11 +145,15 @@
     "messagesInWindow_one": "{{count}} message in the window",
     "messagesInWindow_other": "{{count}} messages in the window",
     "nothingYet": "Nothing to measure yet — this conversation has not started. Send a message and the budget appears here.",
+    "noTools": "This agent has no tools.",
     "section": "Section",
     "share": "Share",
     "systemPrompt": "System prompt",
     "title": "Context",
     "tokens": "Tokens",
+    "toolDefinitions_one": "Tool definitions ({{count}})",
+    "toolDefinitions_other": "Tool definitions ({{count}})",
+    "toolSchema": "{{name}} schema",
     "usageBySection": "Token usage by section"
   },
   "files": {

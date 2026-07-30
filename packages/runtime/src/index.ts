@@ -31,3 +31,16 @@ export {
 } from './provider-cache.js';
 
 export { createRuntime, type GhostRuntime, type RuntimeOptions } from './runtime.js';
+
+export {
+  MAX_LIVE_TOOLBOXES,
+  OWNER_LABEL,
+  TOOLBOX_IDLE_MS,
+  ToolboxPool,
+  dockerEngine,
+  ownerProcessLooksAlive,
+  ownerTag,
+  type ContainerEngine,
+  type DockerEngineOptions,
+  type ToolboxPoolOptions,
+} from './toolbox-pool.js';

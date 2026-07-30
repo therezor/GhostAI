@@ -223,8 +223,11 @@ function TurnMessage({
   readonly onApprove: MessageProps['onApprove'];
   readonly onAction: (action: MessageAction) => void;
 }): JSX.Element {
+  const { t } = useTranslation();
   const lastPart = turn.parts.at(-1);
   const hasAnswer = turn.parts.some((part) => part.kind === 'text');
+  const hasReasoning = turn.parts.some((part) => part.kind === 'reasoning');
+  const unanswered = isUnanswered(turn);
 
   return (
     <article className="stack turn">
@@ -243,7 +246,14 @@ function TurnMessage({
             );
 
           case 'reasoning':
-            return <ReasoningBlock key={part.id} text={part.text} live={live && !hasAnswer} />;
+            return (
+              <ReasoningBlock
+                key={part.id}
+                text={part.text}
+                live={live && !hasAnswer}
+                expanded={unanswered}
+              />
+            );
 
           case 'tool':
             return <ToolCard key={part.id} tool={part} onApprove={onApprove} />;
@@ -274,9 +284,48 @@ function TurnMessage({
         </p>
       )}
 
+      {unanswered && (
+        <p className="turn__unanswered">
+          <AlertCircle />
+          <span>{t(hasReasoning ? 'chat.noAnswer.reasoningOnly' : 'chat.noAnswer.silent')}</span>
+        </p>
+      )}
+
       <TurnFooter turn={turn} busy={busy} sessionKey={sessionKey} onAction={onAction} />
     </article>
   );
+}
+
+/**
+ * A finished turn that produced no answer and called no tool.
+ *
+ * The failure it exists for is a small local model — or any reasoning model with
+ * a low token cap — that spends its whole response in the reasoning channel and
+ * returns empty content with no tool calls. `loop.ts` has nothing to continue on,
+ * so it ends the turn as `complete`; the transcript then holds a single reasoning
+ * part, which renders as a collapsed strip above a footer. The user sees what
+ * looks like an empty message and is given no reason for it, which reads as the
+ * app having lost the answer rather than the model never having written one.
+ *
+ * Three exclusions, each because something else already explains the silence:
+ *
+ *  - **A failure** prints its own message, and two lines saying the turn went
+ *    wrong is one too many.
+ *  - **`aborted`** means the user pressed Stop. An answer is missing because
+ *    they asked for it to be, and the footer already says "Stopped."
+ *  - **`max_iterations` / `wall_timeout`** are unreachable here, because
+ *    `loop.ts` appends a sentence explaining itself and that sentence is a text
+ *    part. Named anyway, so a future path that stops without writing one does
+ *    not start claiming the model said nothing.
+ *
+ * A turn with no parts at all satisfies this too, which is correct: an empty
+ * `<article>` and a footer is the same non-explanation.
+ */
+function isUnanswered(turn: TurnItem): boolean {
+  if (!turn.done || turn.failure !== undefined) return false;
+  if (turn.stopReason === 'aborted') return false;
+  if (turn.stopReason === 'max_iterations' || turn.stopReason === 'wall_timeout') return false;
+  return !turn.parts.some((part) => part.kind === 'text' || part.kind === 'tool');
 }
 
 /**

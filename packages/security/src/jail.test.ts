@@ -218,6 +218,50 @@ describe('clamping', () => {
     expect(jail.accept('/etc/passwd').rewrites).toEqual(['absolute']);
   });
 
+  it('does not nest the workspace root inside itself', () => {
+    // The failure this fixes was silent, which is what made it worth fixing: the
+    // absolute root is the one path a model is most likely to produce — it used
+    // to be printed in the system prompt — and clamped segment by segment it
+    // landed on `<root><root>/notes/x`. `write_file` created that tree without
+    // complaint, and `read_file` reported "not found" for a file that existed.
+    const verdict = jail.check(join(root, 'notes', 'x.md'));
+    expect(verdict.ok).toBe(true);
+    if (!verdict.ok) return;
+    expect(verdict.path).toBe(join(root, 'notes', 'x.md'));
+    expect(verdict.relative).toBe(join('notes', 'x.md'));
+    // Still recorded as a rewrite: a caller that clamped a path has to be able
+    // to say so, or the model believes it addressed the host's filesystem.
+    expect(verdict.rewrites).toEqual(['absolute']);
+  });
+
+  it('resolves the bare workspace root to the root', () => {
+    const verdict = jail.check(root);
+    expect(verdict.ok).toBe(true);
+    if (!verdict.ok) return;
+    expect(verdict.path).toBe(root);
+    expect(verdict.relative).toBe('');
+  });
+
+  it('leaves an absolute path that merely resembles the root alone', () => {
+    // Only a genuine prefix is removed. A sibling directory whose name starts
+    // with the root's is a different place, and clamping it is the correct
+    // outcome rather than stripping a prefix that was never there.
+    const verdict = jail.check(`${root}-other/notes/x.md`);
+    expect(verdict.ok).toBe(true);
+    if (!verdict.ok) return;
+    expect(verdict.relative).not.toBe(join('notes', 'x.md'));
+    expect(verdict.relative).toContain('notes');
+  });
+
+  it('is still a fixed point: the relative form resolves to the same file', () => {
+    // The property `normalise` documents, and the one this could have broken —
+    // the REST layer hands `relative` back to clients that send it again.
+    const first = jail.check(join(root, 'a', 'b.txt'));
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(jail.resolve(first.relative)).toBe(first.path);
+  });
+
   it('re-folds after stripping a root marker, so stripping cannot create a traversal', () => {
     // Found by the idempotence property. `./c:..` folds to the single segment
     // `c:..`; taking the drive prefix off it leaves a bare `..`, which — if the

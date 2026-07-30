@@ -1,7 +1,14 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
-import { BLOCKED_RANGES, type ParsedIp, classifyAddress, parseIpLiteral } from './ip.js';
+import {
+  BLOCKED_RANGES,
+  type ParsedIp,
+  cidrContains,
+  classifyAddress,
+  parseCidr,
+  parseIpLiteral,
+} from './ip.js';
 
 const parse = (host: string): ParsedIp => {
   const parsed = parseIpLiteral(host);
@@ -277,6 +284,86 @@ describe('property: encoding cannot smuggle a blocked address past the guard', (
         if (parsed !== null) {
           expect(parsed.bytes.byteLength).toBe(parsed.family === 4 ? 4 : 16);
           classifyAddress(parsed);
+        }
+      }),
+      { numRuns: 2000 },
+    );
+  });
+});
+
+describe('parseCidr', () => {
+  it.each([
+    ['10.0.0.0/8', 4, 8],
+    ['192.168.1.0/24', 4, 24],
+    ['0.0.0.0/0', 4, 0],
+    ['10.1.2.3/32', 4, 32],
+    ['2001:db8::/32', 6, 32],
+    ['::/0', 6, 0],
+  ])('parses %s', (text, family, prefix) => {
+    const parsed = parseCidr(text);
+    expect(parsed).not.toBeNull();
+    expect(parsed?.family).toBe(family);
+    expect(parsed?.prefix).toBe(prefix);
+  });
+
+  it.each([
+    ['10.0.0.0', 'no prefix at all'],
+    ['10.0.0.0/', 'an empty prefix'],
+    ['10.0.0.0/8abc', 'trailing rubbish after the digits'],
+    ['10.0.0.0/+8', 'a signed prefix'],
+    ['10.0.0.0/ 8', 'whitespace Number.parseInt would have accepted'],
+    ['10.0.0.0/33', 'a prefix wider than the family'],
+    ['2001:db8::/129', 'a prefix wider than IPv6'],
+    ['not-an-address/8', 'an address that does not parse'],
+    ['/8', 'no address'],
+  ])('refuses %s (%s)', (text) => {
+    expect(parseCidr(text)).toBeNull();
+  });
+
+  it('takes the last slash, so an IPv6 block still parses', () => {
+    expect(parseCidr('2001:db8::/32')?.prefix).toBe(32);
+  });
+});
+
+describe('cidrContains', () => {
+  const contains = (cidr: string, host: string): boolean => {
+    const block = parseCidr(cidr);
+    if (block === null) throw new Error(`expected ${cidr} to parse`);
+    return cidrContains(block, parse(host));
+  };
+
+  it.each([
+    ['10.0.0.0/8', '10.255.255.255', true],
+    ['10.0.0.0/8', '11.0.0.1', false],
+    ['192.168.1.0/24', '192.168.1.42', true],
+    ['192.168.1.0/24', '192.168.2.42', false],
+    ['10.1.2.3/32', '10.1.2.3', true],
+    ['10.1.2.3/32', '10.1.2.4', false],
+    ['0.0.0.0/0', '203.0.113.9', true],
+  ])('%s contains %s → %s', (cidr, host, expected) => {
+    expect(contains(cidr, host)).toBe(expected);
+  });
+
+  it('handles a prefix that does not land on a byte boundary', () => {
+    // 10.0.0.0/12 covers 10.0.0.0 – 10.15.255.255. The partial-byte mask is the
+    // part of prefix matching most likely to be written wrong.
+    expect(contains('10.0.0.0/12', '10.15.255.255')).toBe(true);
+    expect(contains('10.0.0.0/12', '10.16.0.0')).toBe(false);
+  });
+
+  it('never matches across families', () => {
+    // An IPv4-shaped rule must not silently authorise an IPv6 destination.
+    expect(contains('0.0.0.0/0', '::1')).toBe(false);
+    expect(contains('::/0', '10.0.0.1')).toBe(false);
+  });
+
+  it('never crashes on arbitrary CIDR strings', () => {
+    fc.assert(
+      fc.property(fc.string(), (text) => {
+        const parsed = parseCidr(text);
+        if (parsed !== null) {
+          expect(parsed.prefix).toBeLessThanOrEqual(parsed.bytes.byteLength * 8);
+          cidrContains(parsed, parse('10.0.0.1'));
         }
       }),
       { numRuns: 2000 },

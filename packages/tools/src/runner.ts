@@ -25,10 +25,14 @@
 import { spawn } from 'node:child_process';
 
 import { GhostError, abortedError, systemClock, type Clock } from '@ghostai/core';
+import type { AgentToolboxNetwork } from '@ghostai/protocol';
 import { createOutputCap, type ExecPlan } from '@ghostai/security';
 
 /** Grace between asking a child to stop and insisting. */
 export const KILL_GRACE_MS = 2_000;
+
+/** Receives every byte a command writes, before the output budget is applied. */
+export type OutputTee = (stream: 'stdout' | 'stderr', chunk: Uint8Array) => void;
 
 export interface RunRequest {
   /** What to run. Already guarded — a runner does not re-decide policy. */
@@ -38,6 +42,17 @@ export interface RunRequest {
   /** The turn's cancellation, threaded all the way from the transport. */
   readonly signal: AbortSignal;
   readonly clock?: Clock;
+  /**
+   * Where the *complete* output goes, when somebody wants it kept.
+   *
+   * Its presence also changes the overflow behaviour: without a tee, a command
+   * that exceeds its budget has its pipe destroyed, because reading bytes nobody
+   * will see is waste. With one, reading continues to the end — the budget then
+   * bounds only what the *model* is shown, while the transcript stays whole.
+   * That difference is what lets a 12,000-token scan come back as a summary and
+   * a path with nothing lost.
+   */
+  readonly tee?: OutputTee;
 }
 
 /** What a command did. Identical whether it ran on the host or elsewhere. */
@@ -48,10 +63,39 @@ export interface RunOutcome {
   readonly code: number | null;
   readonly signal: NodeJS.Signals | null;
   readonly timedOut: boolean;
+  /** Where the full transcript was kept, in the caller's own path vocabulary. */
+  readonly transcriptDir?: string;
 }
 
 export interface CommandRunner {
   run(request: RunRequest): Promise<RunOutcome>;
+}
+
+/** What a turn needs in order to be given the right container. */
+export interface ToolboxRequest {
+  readonly agentId: string;
+  readonly workspaceId: string;
+  readonly sessionKey: string;
+  /** The agent's profile id; empty means the host. */
+  readonly toolbox: string;
+  readonly network: AgentToolboxNetwork;
+  /** GhostAI's view of the workspace root, where transcripts are written. */
+  readonly workspaceRoot: string;
+}
+
+/**
+ * Supplies the runner a turn's `exec` uses.
+ *
+ * Declared here rather than beside its implementation for the same reason
+ * `JailResolver` is declared in `@ghostai/security`: `@ghostai/agent` has to
+ * name the type and sits *below* the composition root that builds one. The
+ * implementation — a pool of live containers — lives in `@ghostai/runtime`.
+ *
+ * `undefined` means the host, so `exec` keeps `localRunner` as its own default
+ * and nothing here has to know what running on the host means.
+ */
+export interface RunnerResolver {
+  forTurn(request: ToolboxRequest): CommandRunner | undefined;
 }
 
 /**
@@ -126,11 +170,14 @@ export const localRunner: CommandRunner = {
       // boolean return: a command that has already written more than the model
       // can be shown gets the same treatment `head` would give it, rather than
       // being read to the end so its output can be thrown away.
+      const tee = request.tee;
       child.stdout.on('data', (chunk: Buffer) => {
-        if (!stdout.push(chunk)) child.stdout.destroy();
+        tee?.('stdout', chunk);
+        if (!stdout.push(chunk) && tee === undefined) child.stdout.destroy();
       });
       child.stderr.on('data', (chunk: Buffer) => {
-        if (!stderr.push(chunk)) child.stderr.destroy();
+        tee?.('stderr', chunk);
+        if (!stderr.push(chunk) && tee === undefined) child.stderr.destroy();
       });
 
       child.on('error', (error) => {

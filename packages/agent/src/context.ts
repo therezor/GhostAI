@@ -28,6 +28,14 @@ export interface ContextBreakdown {
 export interface ContextReport {
   readonly sessionKey: string;
   readonly systemPrompt: string;
+  /**
+   * The definitions as the provider would receive them.
+   *
+   * Returned as well as measured, because the breakdown says `tools: 1,240` and
+   * the only follow-up question anyone has is *which* tools. A number with
+   * nothing behind it is the part of an inspector that gets asked about.
+   */
+  readonly tools: readonly ToolDefinition[];
   /** The window as it would be sent, in storage order. */
   readonly messages: readonly StoredMessageRecord[];
   readonly estimatedTokens: number;
@@ -103,6 +111,7 @@ export async function describeContext(
   return {
     sessionKey: input.sessionKey,
     systemPrompt,
+    tools: input.tools,
     messages,
     estimatedTokens: promptTokens + toolTokens + messageTokens,
     contextWindowTokens: input.contextWindowTokens,

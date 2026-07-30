@@ -55,6 +55,7 @@ import {
   type ChatProvider,
   type ProviderSpec,
 } from '@ghostai/providers';
+import { ToolboxStore } from '@ghostai/security';
 import { openVault, resolveAgent, type GhostRuntime } from '@ghostai/runtime';
 import type { AgentSummary, AgentView, ServerRuntime } from '@ghostai/server';
 import type { CredentialVault, FetchImplementation } from '@ghostai/security';
@@ -220,6 +221,19 @@ export function createServerRuntime(
   return {
     config: () => runtime.config,
 
+    /**
+     * Read from disk on every call, deliberately.
+     *
+     * A profile edited after approval must stop reporting as usable the moment it
+     * changes, and a list cached at boot would keep saying it was fine until a
+     * restart. Constructing the store per call is a table check and a `readdir`.
+     */
+    toolboxes: () =>
+      new ToolboxStore({
+        database: runtime.store.database,
+        dir: runtime.paths.toolboxesDir,
+      }).list(),
+
     applySettings: (patch: ConfigPatch): Config => {
       const before = new Set(Object.keys(runtime.config.providers));
       const merged = runtime.reconfigure(patch);
@@ -299,9 +313,16 @@ export function createServerRuntime(
         configured: isDefault ? runtime.configured : loop !== null,
         jail: runtime.jail,
         jailFor: (workspaceId) => runtime.jails.forWorkspace(workspaceId),
-        // This agent's tools, not the registry's — an agent with a subset must
-        // not be described by a list of tools it cannot call.
-        tools: runtime.tools.select(agent.tools).definitions(),
+        // The loop's own list, for the same reason `systemPrompt` below defers to
+        // it. `runtime.tools.select(agent.tools)` is the built-ins narrowed by the
+        // allow-list — correct as far as it goes, and blind to the toolbox tools
+        // that `withToolboxTools` composes on top of that scope when the agent has
+        // a toolbox. Rebuilt here, a researcher's `search` and `fetch` were absent
+        // from the context inspector and from its token count.
+        //
+        // The fallback covers an unconfigured install, where there is no loop and
+        // so no turn to describe; the narrowed registry is the honest answer there.
+        tools: loop?.toolDefinitions ?? runtime.tools.select(agent.tools).definitions(),
         contextWindowTokens: agent.defaults.contextWindowTokens,
         // The loop's own composition, not a second assembly of it: memory and
         // skills arrive as contributors attached to that object, and a

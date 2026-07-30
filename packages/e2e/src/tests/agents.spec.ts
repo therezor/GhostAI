@@ -305,7 +305,7 @@ test.describe('agents', () => {
     const body = (await context.json()) as { systemPrompt: string };
 
     expect(body.systemPrompt).toContain('# Plain');
-    expect(body.systemPrompt).toContain('That directory is your root');
+    expect(body.systemPrompt).toContain('To the file tools it is the');
     expect(body.systemPrompt).toContain('## Guidelines');
   });
 

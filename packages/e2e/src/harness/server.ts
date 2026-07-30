@@ -304,6 +304,8 @@ function harnessRuntime(runtime: GhostRuntime, configFile: string): ServerRuntim
   const credentials = new Map<string, string>();
 
   return {
+    // The harness runs no containers; an empty listing is the honest answer.
+    toolboxes: () => [],
     config: () => runtime.config,
 
     applySettings: (patch: ConfigPatch): Config => {

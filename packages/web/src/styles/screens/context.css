@@ -128,27 +128,89 @@
     color: var(--fg-3);
   }
 
-  .context__prompt {
+  .context__sections {
+    --gap: var(--space-2);
+  }
+
+  /* One card per section of the prompt. The swatch in the summary is what ties
+   * it back to its row in the table and its band in the bar. */
+  .context__section {
     background-color: var(--surface-1);
     border: var(--hairline) solid var(--line);
     border-radius: var(--radius-md);
   }
 
-  .context__prompt summary {
+  .context__section > summary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     padding: var(--space-2) var(--space-3);
     color: var(--fg-2);
-    cursor: default;
+    cursor: pointer;
   }
 
-  .context__prompt pre {
-    max-height: 16rem;
-    overflow: auto;
+  .context__section > summary:hover {
+    color: var(--fg-1);
+  }
+
+  .context__section-body {
     padding: var(--space-2) var(--space-3);
     border-top: var(--hairline) solid var(--line);
+  }
+
+  /* Capped and scrollable: a system prompt is a couple of screens and the
+   * conversation can be twenty, and a dialog that grows to fit them is a dialog
+   * whose own scrolling fights the page's. */
+  .context__text {
+    max-height: 16rem;
+    overflow: auto;
     font-family: var(--font-mono);
     font-size: var(--text-sm);
+    line-height: var(--leading-sm);
     color: var(--fg-2);
     white-space: pre-wrap;
+    overflow-wrap: break-word;
+  }
+
+  .context__text--dim {
+    color: var(--fg-3);
+  }
+
+  .context__tools,
+  .context__messages {
+    --gap: var(--space-3);
+
+    max-height: 22rem;
+    overflow: auto;
+    padding: 0;
+    list-style: none;
+  }
+
+  .context__tool,
+  .context__message {
+    --gap: var(--space-1);
+
+    padding-bottom: var(--space-2);
+    border-bottom: var(--hairline) solid var(--line);
+  }
+
+  .context__tool-head,
+  .context__message-head {
+    --gap: var(--space-2);
+
+    align-items: center;
+    font-size: var(--text-sm);
+  }
+
+  .context__tool-desc {
+    font-size: var(--text-sm);
+    color: var(--fg-2);
+  }
+
+  .context__message-seq {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--fg-3);
   }
 
   /* ── The strip under the composer ──────────────────────────── *

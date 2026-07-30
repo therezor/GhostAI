@@ -518,3 +518,70 @@ describe('property: every path-shaped argument is contained or refused', () => {
     );
   });
 });
+
+describe('guardExec: sandboxed', () => {
+  const sandboxed = (argv: readonly string[]) => guardExec(argv, { jail, sandboxed: true });
+
+  it('permits a shell, which the container rather than the guard now bounds', () => {
+    // On the host a shell puts a parser back between the argv contract and the
+    // kernel. In a container that mounts only the workspace it can reach nothing
+    // the command could not reach anyway.
+    const plan = sandboxed(['bash', '-lc', 'nmap -sV 10.0.0.5 | tee scan.txt']);
+    expect(plan.file).toBe('bash');
+    expect(plan.args).toEqual(['-lc', 'nmap -sV 10.0.0.5 | tee scan.txt']);
+  });
+
+  it('permits an absolute path, which addresses the container and not the host', () => {
+    expect(() => sandboxed(['cat', '/etc/os-release'])).not.toThrow();
+    expect(() => sandboxed(['nmap', '-oN', '/tmp/scan.txt', '10.0.0.5'])).not.toThrow();
+  });
+
+  it('permits a redirect inside a script string', () => {
+    // The failure that made lifting the two rules together necessary: the path
+    // lives inside the script, so a path check would refuse the very pipelines
+    // enabling the shell was meant to allow.
+    expect(() => sandboxed(['sh', '-c', 'nuclei -u http://t > /workspace/out.txt'])).not.toThrow();
+  });
+
+  it('still enforces the binary deny-list', () => {
+    // The container is the boundary; the operator's allow- and deny-lists are
+    // still policy and still apply.
+    expect(() =>
+      guardExec(['curl', 'http://x'], {
+        jail,
+        sandboxed: true,
+        config: { ...config(), deniedBinaries: ['curl'] },
+      }),
+    ).toThrow(/denied/);
+  });
+
+  it('still enforces the binary allow-list', () => {
+    expect(() =>
+      guardExec(['bash', '-lc', 'x'], {
+        jail,
+        sandboxed: true,
+        config: { ...config(), allowedBinaries: ['nmap'] },
+      }),
+    ).toThrow(/allow-list/);
+  });
+
+  it('still refuses a NUL byte', () => {
+    expect(() => sandboxed(['nmap', 'a\0b'])).toThrow(/NUL/);
+  });
+
+  it('still refuses to run when exec is disabled entirely', () => {
+    expect(() =>
+      guardExec(['nmap'], {
+        jail,
+        sandboxed: true,
+        config: { ...config(), enable: false },
+      }),
+    ).toThrow(/disabled/);
+  });
+
+  it('keeps refusing shells and outside paths when not sandboxed', () => {
+    // The relaxation is opt-in per call and must not leak into the host path.
+    expect(() => guardExec(['bash', '-lc', 'x'], { jail })).toThrow(/shell/);
+    expect(() => guardExec(['cat', '/etc/passwd'], { jail })).toThrow(/outside/);
+  });
+});

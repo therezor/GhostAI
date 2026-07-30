@@ -132,11 +132,13 @@ describe('resolveAgent', () => {
     expect(() => resolveAgent(config, 'reviewer')).toThrow(/disabled/);
   });
 
-  it('refuses the docker sandbox while it has no backend', () => {
+  it('refuses toolbox networking on an agent that names none', () => {
     // Resolution runs inside an all-or-nothing rebuild, so this is a 400 on the
-    // save rather than a turn that dies minutes later.
+    // save rather than a turn that dies minutes later. Egress scoping is
+    // enforced by the sandbox, so asking for it on the host means nothing — and
+    // an option that silently does nothing is worse than one that is refused.
     const config = configWith({
-      agents: { list: { boxed: { sandbox: { kind: 'docker', image: 'node:22' } } } },
+      agents: { list: { boxed: { toolbox: { network: { mode: 'open' } } } } },
     });
 
     const error = (() => {
@@ -149,15 +151,49 @@ describe('resolveAgent', () => {
     })();
 
     expect(isGhostError(error) && error.kind).toBe('config');
-    expect(() => resolveAgent(config, 'boxed')).toThrow(/not implemented yet/);
+    expect(() => resolveAgent(config, 'boxed')).toThrow(/names no toolbox/);
   });
 
-  it('still resolves an agent that asked for the host sandbox explicitly', () => {
+  it('refuses an egress entry that is not a CIDR block', () => {
+    // A hostname allow-list is defeated by DNS rebinding, which is the attack
+    // `guardedFetch` already exists to stop.
     const config = configWith({
-      agents: { list: { plain: { sandbox: { kind: 'host' } } } },
+      agents: {
+        list: {
+          boxed: {
+            toolbox: { name: 'kali', network: { mode: 'allowlist', allow: ['example.com'] } },
+          },
+        },
+      },
     });
 
-    expect(resolveAgent(config, 'plain').sandbox.kind).toBe('host');
+    expect(() => resolveAgent(config, 'boxed')).toThrow(/CIDR/);
+  });
+
+  it('resolves an agent naming a toolbox with a scoped allow-list', () => {
+    const config = configWith({
+      agents: {
+        list: {
+          boxed: {
+            toolbox: {
+              name: 'kali-pentest',
+              network: { mode: 'allowlist', allow: ['192.168.1.0/24'] },
+            },
+          },
+        },
+      },
+    });
+
+    const agent = resolveAgent(config, 'boxed');
+    expect(agent.toolbox.name).toBe('kali-pentest');
+    expect(agent.toolbox.network.allow).toEqual(['192.168.1.0/24']);
+  });
+
+  it('defaults an agent with no toolbox entry to the host', () => {
+    const config = configWith({ agents: { list: { plain: {} } } });
+
+    expect(resolveAgent(config, 'plain').toolbox.name).toBe('');
+    expect(resolveAgent(config, 'plain').toolbox.network.mode).toBe('none');
   });
 });
 
