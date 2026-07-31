@@ -106,6 +106,7 @@ import {
   pruneDanglingSubagents,
   resolveAgent,
   resolveAgents,
+  toolPromptWarnings,
   type AgentConfigWarning,
   type EffectiveAgent,
 } from './agents.js';
@@ -643,6 +644,21 @@ class Runtime implements GhostRuntime {
     const built = this.#buildToolboxes(agents, paths);
     const toolboxPool = built.pool;
 
+    // Here rather than in `resolveAgents`, because only now is the full set of
+    // names an agent can advertise known: the toolbox's own programs are merged
+    // over its map in `#createLoop`, and warning without them would fire on every
+    // override a toolboxed agent has.
+    const promptWarnings = agents.flatMap((agent) =>
+      toolPromptWarnings(
+        agent,
+        new Set([
+          ...Object.keys(built.toolboxPerms.get(agent.id) ?? {}),
+          ...Object.keys(agent.tools),
+          ...agent.subagents.map((binding) => binding.toolName),
+        ]),
+      ),
+    );
+
     // Past here nothing throws, so the mutations below cannot leave the
     // registry describing a runtime that failed to build.
     this.tools.timeoutMs = resolved.agent.defaults.toolTimeoutMs;
@@ -671,7 +687,7 @@ class Runtime implements GhostRuntime {
     return {
       config,
       agents,
-      warnings,
+      warnings: promptWarnings.length === 0 ? warnings : [...warnings, ...promptWarnings],
       paths,
       jails,
       toolboxPool,
@@ -808,6 +824,11 @@ class Runtime implements GhostRuntime {
         systemPrompt: agent.systemPrompt,
         livePrompt: agent.livePrompt,
         wrapUpPrompt: agent.wrapUpPrompt,
+        platformPrompt: agent.platformPrompt,
+        toolboxPrompt: agent.toolboxPrompt,
+        toolPolicyPrompt: agent.toolPolicyPrompt,
+        promptMode: agent.promptMode,
+        toolPrompts: agent.toolPrompts,
       },
       logger: this.#logger,
       steering: this.steering,

@@ -43,6 +43,23 @@ async function scrollsHorizontally(page: Page): Promise<boolean> {
 }
 
 /**
+ * True when the *document* scrolls vertically.
+ *
+ * The app is a fixed-height shell: `.shell` is `100dvh` and `.shell__main` is
+ * the one vertical scrollport in it. A second scrollbar on the document means
+ * something has stretched the page past the viewport, and the symptom an
+ * operator sees is two scrollbars side by side plus a strip of background below
+ * the shell once the outer one moves.
+ */
+async function scrollsVertically(page: Page): Promise<boolean> {
+  return await page.evaluate(() => {
+    const root = document.documentElement;
+    // A pixel of slack, for the same reason the horizontal check takes one.
+    return root.scrollHeight > root.clientHeight + 1;
+  });
+}
+
+/**
  * Everything painted past the right edge of the column that is supposed to
  * clip it.
  *
@@ -144,6 +161,34 @@ test.describe('at 200% font size', () => {
     await expect(app.getByTestId('transcript').getByText('Here is what I found.')).toBeVisible();
     expect(await scrollsHorizontally(app)).toBe(false);
   });
+});
+
+/**
+ * The vertical counterpart to the reflow sweeps above, and it caught a real one.
+ *
+ * `.sr-only` was `position: absolute` with no offsets, so it kept its *static
+ * position* — where it would have sat in flow — while its containing block was
+ * the document, there being no positioned ancestor. Inside a tall scrollport
+ * both are true at once: a clipped hairline landed a thousand pixels down,
+ * measured against the page, and stretched the page to reach it.
+ *
+ * Neither existing sensor could see it. It scrolls the page *vertically*, and
+ * it escapes nothing horizontally — it is one pixel wide and clipped to none.
+ *
+ * The agent editor is the screen that exercises this: it is the tallest, and it
+ * holds the `.sr-only` labels on the tool rows. The rest are here because the
+ * property is the shell's rather than any screen's, and the next thing to break
+ * it will break it somewhere nobody was looking.
+ */
+test.describe('the shell owns the only vertical scrollbar', () => {
+  for (const screen of SCREENS) {
+    test(`${screen.name} does not scroll the page itself`, async ({ app, harness }) => {
+      await app.goto(`${harness.url}${screen.path}`);
+      await expect(app.getByRole('complementary', { name: 'Sidebar' })).toBeVisible();
+
+      expect(await scrollsVertically(app)).toBe(false);
+    });
+  }
 });
 
 /**

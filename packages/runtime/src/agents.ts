@@ -40,6 +40,8 @@ import {
   type AgentTools,
   type AgentToolbox,
   type Config,
+  type PromptMode,
+  type ToolPromptOverrides,
   type ToolsConfig,
 } from '@ghostai/protocol';
 import { parseCidr } from '@ghostai/security';
@@ -68,6 +70,20 @@ export interface EffectiveAgent {
    */
   readonly livePrompt: string;
   readonly wrapUpPrompt: string;
+  /**
+   * The three sections that used to be composed in code, and the mode that says
+   * whether any of them are placed at all.
+   *
+   * Resolved here beside the other templates so a consumer sees one
+   * already-inherited answer, rather than each of the loop, the editor and the
+   * context inspector reaching into `agents.list` for its own.
+   */
+  readonly platformPrompt: string;
+  readonly toolboxPrompt: string;
+  readonly toolPolicyPrompt: string;
+  readonly promptMode: PromptMode;
+  /** This agent's replacements for what its tools say about themselves. */
+  readonly toolPrompts: ToolPromptOverrides;
   /** Model, provider, temperature, effort, caps — the whole of `AgentDefaults`. */
   readonly defaults: AgentDefaults;
   /** Which tools this agent may call, and what happens when it does. */
@@ -97,7 +113,12 @@ export interface EffectiveAgent {
  */
 export interface AgentConfigWarning {
   readonly agentId: string;
-  readonly code: 'missing_subagent' | 'disabled_subagent' | 'illegal_agent_id';
+  readonly code:
+    | 'missing_subagent'
+    | 'disabled_subagent'
+    | 'illegal_agent_id'
+    | 'tool_policy_missing_nonce'
+    | 'unknown_tool_prompt';
   readonly message: string;
   readonly details: Readonly<Record<string, string>>;
 }
@@ -272,8 +293,25 @@ function resolveSubagents(
  * all-or-nothing, so a settings save naming an unapproved toolbox is still a 400
  * that changes nothing rather than a turn that dies later.
  */
-function assertBuildable(agent: EffectiveAgent): void {
+function assertBuildable(agent: EffectiveAgent, warn: WarningSink): void {
   const { name, network } = agent.toolbox;
+
+  // A warning rather than a refusal, and the distinction is the whole design of
+  // this feature: the envelopes around tool results are emitted by
+  // `wrapToolOutput` whatever this text says, so a policy naming neither hole is
+  // an agent that is *told* less, not one that is *guarded* less. Refusing the
+  // save would make this the one template an operator does not own after all.
+  const policy = agent.toolPolicyPrompt;
+  if (policy.trim() !== '' && !policy.includes('{{nonce}}') && !policy.includes('{{tag}}')) {
+    warn({
+      agentId: agent.id,
+      code: 'tool_policy_missing_nonce',
+      message:
+        `Agent "${agent.id}" has a tool-output policy that names neither {{tag}} nor {{nonce}}.\n` +
+        "  Tool results are still wrapped in the turn's delimiter; the model is just not told what it means.",
+      details: { agentId: agent.id },
+    });
+  }
 
   if (name === '' && network.mode !== 'none') {
     throw new GhostError(
@@ -308,6 +346,11 @@ function build(
     systemPrompt: entry?.systemPrompt ?? '',
     livePrompt: entry?.livePrompt ?? '',
     wrapUpPrompt: entry?.wrapUpPrompt ?? '',
+    platformPrompt: entry?.platformPrompt ?? '',
+    toolboxPrompt: entry?.toolboxPrompt ?? '',
+    toolPolicyPrompt: entry?.toolPolicyPrompt ?? '',
+    promptMode: entry?.promptMode ?? 'template',
+    toolPrompts: entry?.toolPrompts ?? {},
     defaults: mergeDefaults(config.agents.defaults, entry),
     // The `default` agent usually has no `agents.list` entry at all, and an
     // agent with no tools cannot do anything — so the seed is the fallback
@@ -318,8 +361,39 @@ function build(
     memory: entry?.memory ?? { shared: true },
     subagents: resolveSubagents(config, id, entry, warn),
   };
-  assertBuildable(agent);
+  assertBuildable(agent, warn);
   return agent;
+}
+
+/**
+ * Tool prompt overrides naming a tool this agent will not advertise.
+ *
+ * Separate from `assertBuildable` because it needs something the pure
+ * inheritance rule does not have: the toolbox's own programs, which are merged
+ * over the agent's map in `#createLoop` and are not decidable from `agents.list`
+ * alone. Checking without them would warn about every override on a toolboxed
+ * agent, which is worse than not checking.
+ *
+ * Field names are not checked here for the same reason one step further on —
+ * they need the tool's JSON Schema, which lives in the registry. The editor
+ * validates those against the live definitions as they are typed, and the loop
+ * logs whatever still gets through.
+ */
+export function toolPromptWarnings(
+  agent: EffectiveAgent,
+  advertised: ReadonlySet<string>,
+): readonly AgentConfigWarning[] {
+  const warnings: AgentConfigWarning[] = [];
+  for (const name of Object.keys(agent.toolPrompts)) {
+    if (advertised.has(name)) continue;
+    warnings.push({
+      agentId: agent.id,
+      code: 'unknown_tool_prompt',
+      message: `Agent "${agent.id}" rewrites the description of "${name}", which it does not have.`,
+      details: { agentId: agent.id, tool: name },
+    });
+  }
+  return warnings;
 }
 
 /**

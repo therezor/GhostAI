@@ -64,9 +64,26 @@
    * `clip-path` rather than `display: none` or `visibility: hidden`, both of
    * which remove the element from the accessibility tree along with the
    * layout — which is the opposite of what this is for.
+   *
+   * **The offsets are load-bearing, and their absence was a real bug.** An
+   * absolutely positioned element with no `inset` keeps its *static position* —
+   * where it would have sat in flow — and its containing block is the nearest
+   * positioned ancestor, or the document when there is none. Inside a tall
+   * scrollport with no positioned ancestor, both of those are true at once: the
+   * hairline landed at its flow position a thousand pixels down, measured
+   * against the document, and stretched the document to reach it. The result was
+   * a page-level scrollbar beside the app's own, and a strip of background below
+   * the shell when you scrolled it.
+   *
+   * Pinning it to the start of whatever contains it costs nothing — the element
+   * is a clipped hairline with no visual position to lose — and means it can
+   * never extend anything. Nothing here reveals an `.sr-only` on focus, which is
+   * the one pattern that would want the static position kept.
    */
   .sr-only {
     position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
     width: var(--hairline);
     height: var(--hairline);
     padding: 0;

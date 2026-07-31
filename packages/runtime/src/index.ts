@@ -24,6 +24,7 @@ export {
   resolveAgent,
   resolveAgentOrDefault,
   resolveAgents,
+  toolPromptWarnings,
   type AgentConfigWarning,
   type AgentMissReason,
   type AgentResolution,

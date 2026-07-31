@@ -1525,6 +1525,159 @@ describe('AgentLoop.previewPrompt', () => {
     const { loop, provider } = harness();
     expect(loop.provider).toBe(provider.id);
   });
+
+  it('shows the toolbox section a turn would carry', async () => {
+    // The preview used to omit `toolboxPrompt` while `run` passed it, so the one
+    // screen whose job is to report the prompt under-reported it — and its token
+    // count with it — for exactly the agents with the longest prompts.
+    const { loop } = harness({
+      loop: {
+        toolboxPrompt: {
+          name: 'research',
+          workdir: '/workspace',
+          tools: [{ name: 'search', use: 'Search the web.' }],
+          notes: '',
+        },
+      },
+    });
+
+    expect(await loop.previewPrompt({ sessionKey: SESSION })).toContain('## Toolbox: research');
+  });
+});
+
+describe('promptMode: raw', () => {
+  it('sends exactly the template, with nothing placed around it', async () => {
+    const { loop, provider } = harness({
+      loop: {
+        agent: {
+          id: 'raw',
+          label: 'Raw',
+          promptMode: 'raw',
+          systemPrompt: 'You are Raw. Answer in one line.',
+        },
+      },
+    });
+
+    await runTurn(loop, { sessionKey: SESSION, content: 'hi' });
+
+    expect(systemPromptOf(provider.requests[0]!)).toBe('You are Raw. Answer in one line.');
+  });
+
+  it('fills the sections the template names', async () => {
+    const { loop, provider } = harness({
+      loop: {
+        agent: {
+          id: 'raw',
+          label: 'Raw',
+          promptMode: 'raw',
+          systemPrompt: 'Rules.\n\n{{toolPolicy}}',
+        },
+      },
+    });
+
+    await runTurn(loop, { sessionKey: SESSION, content: 'hi' });
+
+    const sent = systemPromptOf(provider.requests[0]!);
+    expect(sent).toContain('Rules.');
+    expect(sent).toContain('## Tool output policy');
+  });
+
+  it('previews what it sends, the way template mode does', async () => {
+    const { loop, provider } = harness({
+      loop: {
+        agent: { id: 'raw', label: 'Raw', promptMode: 'raw', systemPrompt: 'Rules for {{name}}.' },
+      },
+    });
+
+    await runTurn(loop, { sessionKey: SESSION, content: 'hi', channel: 'web' });
+
+    expect(await loop.previewPrompt({ sessionKey: SESSION, channel: 'web' })).toBe(
+      systemPromptOf(provider.requests[0]!),
+    );
+  });
+
+  it('runs a contributor’s static section once per turn, not once per iteration', async () => {
+    // The obligation raw mode could most easily have lost: `staticSection` may do
+    // I/O, so a turn that calls it per iteration pays for it five or ten times.
+    let calls = 0;
+    const { loop } = harness({
+      tools: [echoTool],
+      turns: [
+        { toolCalls: [toolCall('c1', 'echo', { text: 'one' })] },
+        { toolCalls: [toolCall('c2', 'echo', { text: 'two' })] },
+        { deltas: ['done'] },
+      ],
+      loop: {
+        agent: { id: 'raw', label: 'Raw', promptMode: 'raw', systemPrompt: 'R.{{contributors}}' },
+        contributors: [
+          {
+            name: 'memory',
+            staticSection: () => {
+              calls += 1;
+              return '## Memory';
+            },
+          },
+        ],
+      },
+    });
+
+    await runTurn(loop, { sessionKey: SESSION, content: 'hi' });
+
+    expect(calls).toBe(1);
+  });
+});
+
+describe('toolPrompts', () => {
+  const rawAgent = (
+    toolPrompts: Record<string, { description: string; fields: Record<string, string> }>,
+  ) => ({
+    id: 'default',
+    label: 'Default',
+    systemPrompt: '',
+    toolPrompts,
+  });
+
+  it('replaces a tool description in the definitions a turn sends', async () => {
+    const { loop, provider } = harness({
+      tools: [echoTool],
+      loop: { agent: rawAgent({ echo: { description: 'Echo it back, verbatim.', fields: {} } }) },
+    });
+
+    await runTurn(loop, { sessionKey: SESSION, content: 'hi' });
+
+    expect(loop.toolDefinitions[0]?.description).toBe('Echo it back, verbatim.');
+    expect(provider.requests[0]?.tools?.[0]?.description).toBe('Echo it back, verbatim.');
+  });
+
+  it('does not leak one agent’s wording into another’s through the shared registry', async () => {
+    // `ToolRegistry.definitions()` is memoised and shared by every agent in the
+    // process. Rewriting a description in place there would give this override to
+    // all of them, which is why it is applied on the loop and clones as it goes.
+    const { registry, loop } = harness({
+      tools: [echoTool],
+      loop: { agent: rawAgent({ echo: { description: 'Mine only.', fields: {} } }) },
+    });
+
+    expect(loop.toolDefinitions[0]?.description).toBe('Mine only.');
+    expect(registry.definitions()[0]?.description).toBe(echoTool.description);
+  });
+
+  it('beats the operator’s subagent prompt, being the more specific of the two', () => {
+    const { parent } = delegationHarness({
+      loop: {
+        agent: {
+          id: 'default',
+          label: 'Default',
+          systemPrompt: '',
+          toolPrompts: {
+            ask_researcher: { description: 'Ask for a literature review.', fields: {} },
+          },
+        },
+      },
+    });
+
+    expect(parent.toolDefinitions[0]?.description).toBe('Ask for a literature review.');
+  });
 });
 
 /**

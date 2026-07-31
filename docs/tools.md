@@ -42,6 +42,51 @@ between requests.
 Every registration carries a source — `builtin`, `mcp` or `plugin` — so uninstalling a
 plugin can remove exactly its tools, with no module-cache surgery and no restart.
 
+### Rewriting what a tool says about itself
+
+A tool's description is the sentence that decides whether the model reaches for it, and
+it used to be a string literal beside the handler — the one part of the payload an
+operator could read in the context inspector and not change.
+`agents.list.<id>.toolPrompts` is the key that fixes that, per agent:
+
+```json
+"toolPrompts": {
+  "exec": {
+    "description": "Run a program. Prefer `rg` over `grep`.",
+    "fields": { "argv": "argv array; argv[0] is the binary.", "timeoutMs": "0 is no limit." }
+  }
+}
+```
+
+**Prose only, and the boundary is load-bearing.** `type`, `required`, `enum` and the rest
+of the schema stay generated from the tool's Zod object — which is also what `parseArgs`
+validates against. Letting an operator supply a schema would let the advertised shape
+drift from the accepted one, and the failure mode is a model dutifully passing a field
+that then fails validation on every call: an agent that looks broken for a reason nothing
+reports. For the same reason a `fields` name the schema does not have is dropped and
+reported rather than added.
+
+Top-level arguments only. A path syntax reaching `argv.items` would be a second
+mini-language to specify and validate, for a field whose parent can say the same thing in
+a sentence.
+
+In the editor each tool row carries a pencil that opens a dialog — a box for the
+description and one per argument, each showing **the tool's own wording as its
+placeholder**. That is the whole question an operator is answering: whether the built-in
+is good enough. A box that said "the built-in description" instead cost them a trip to
+this page to find out what it was. The row then shows whichever description the model
+actually receives, so the list cannot disagree with the payload.
+
+The rewrite happens in `AgentLoop.toolDefinitions`, after the subagent definitions are
+appended — one pass covering built-ins, toolbox programs, MCP and plugin tools and
+`ask_<id>` alike, and the reason `toolPrompts` beats `subagents[].prompt`. It cannot
+happen in the registry: `definitions()` is memoised and shared by every agent in the
+process, so one agent's wording would become everyone's.
+
+A key naming no tool this agent advertises is an `unknown_tool_prompt` config warning, not
+an error — a tool leaves the list when a toolbox is uninstalled or `exec` is switched off,
+and neither should stop an agent that was working a moment ago.
+
 ## Permissions
 
 **Per tool, per agent, and one map rather than a selection plus a policy.**

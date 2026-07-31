@@ -84,8 +84,10 @@ import {
   type StopReason,
   type SubagentLineage,
   type SubagentRunRef,
+  applyToolPrompts,
   type ToolCall,
   type ToolDefinition,
+  type ToolPromptOverrides,
   type ToolRisk,
   type ToolsConfig,
   type Usage,
@@ -122,12 +124,15 @@ import {
 } from './approval.js';
 import type { AgentEvent } from './events.js';
 import {
+  buildRawPrompt,
   buildRuntimeBlock,
   buildStaticPrompt,
   type PromptToolbox,
   composeSystemPrompt,
+  contributorSections,
   type ContextContributor,
   type PromptAgent,
+  type RuntimePromptContext,
   type StaticPromptContext,
 } from './prompt.js';
 import { SteeringQueue, steeringText } from './steering.js';
@@ -300,8 +305,32 @@ function watchAbort(signal: AbortSignal): AbortWatch {
  * collaborators around this loop by the time it is constructed, and carrying
  * them again would invite something below here to read the copy instead.
  */
+/**
+ * What a turn works out once and reuses on every iteration.
+ *
+ * Exactly one of the two is populated, decided by `promptMode`. A discriminated
+ * union would be tidier to read and worse to use: both fields are consumed by
+ * one `#composePrompt` that already branches on the mode, and a second
+ * discriminant would have to be kept in step with it.
+ */
+interface PromptPreamble {
+  /** Template mode: the cached static half, built once. Empty in raw mode. */
+  readonly staticPrompt: string;
+  /** Raw mode: the contributor sections, which may have done I/O. Empty otherwise. */
+  readonly staticSections: readonly string[];
+}
+
 export interface LoopAgent extends PromptAgent {
   readonly id: string;
+  /**
+   * This agent's replacements for what its tools say about themselves.
+   *
+   * Beside the prompt templates rather than passed alongside the registry,
+   * because it is the same kind of thing: text the operator owns, scoped to one
+   * agent. The registry's definitions are memoised across every agent in the
+   * process, so this cannot be applied there.
+   */
+  readonly toolPrompts?: ToolPromptOverrides;
 }
 
 export interface AgentLoopOptions {
@@ -581,7 +610,6 @@ export class AgentLoop {
    */
   get toolDefinitions(): readonly ToolDefinition[] {
     const tools = this.#tools.definitions();
-    if (this.#subagents.size === 0) return tools;
 
     // Appended rather than merged and re-sorted. The registry's list is already
     // sorted, and keeping the subagents in the operator's configured order at
@@ -603,7 +631,36 @@ export class AgentLoop {
       }
       subagents.push(subagentDefinition(binding));
     }
-    return [...tools, ...subagents];
+
+    return this.#withToolPrompts(subagents.length === 0 ? tools : [...tools, ...subagents]);
+  }
+
+  /**
+   * The operator's wording in place of the compiled one.
+   *
+   * Last, and after the subagents are appended, so one pass covers built-ins,
+   * toolbox programs, MCP and plugin tools and `ask_<id>` alike — and so an
+   * override for a subagent tool beats `subagents[].prompt`, being the more
+   * specific of the two. Doing it in the registry instead would have to happen
+   * before the subagents exist, and would put per-agent text into a list that is
+   * memoised across every agent.
+   *
+   * A miss is logged rather than thrown. `assertBuildable` already warned the
+   * operator at save time; this is the backstop for a tool that left the list
+   * afterwards, because a toolbox was uninstalled or `exec` was switched off.
+   */
+  #withToolPrompts(definitions: readonly ToolDefinition[]): readonly ToolDefinition[] {
+    const overrides = this.#agent?.toolPrompts;
+    if (overrides === undefined) return definitions;
+
+    const applied = applyToolPrompts(definitions, overrides);
+    if (applied.unknownTools.length > 0 || applied.unknownFields.length > 0) {
+      this.#logger.warn(
+        { tools: applied.unknownTools, fields: applied.unknownFields },
+        'tool prompt override names something this agent does not advertise',
+      );
+    }
+    return applied.definitions;
   }
 
   /** The binding for a call, or `undefined` when a registered tool wins. */
@@ -646,27 +703,81 @@ export class AgentLoop {
       channel: input.channel ?? 'web',
     };
 
-    const staticPrompt = await buildStaticPrompt({
-      context,
-      ...(this.#agent === undefined ? {} : { agent: this.#agent }),
-      contributors: this.#contributors,
-    });
-    const runtimeBlock = buildRuntimeBlock({
-      context: {
+    return this.#composePrompt(
+      await this.#preamble(context),
+      {
         ...context,
         iteration: 1,
         maxIterations: this.#config.maxToolIterations,
         nowMs: this.#clock.now(),
       },
-      nonce: createToolOutputNonce(this.#random),
-      contributors: this.#contributors,
-      ...(this.#agent?.livePrompt === undefined ? {} : { livePrompt: this.#agent.livePrompt }),
-      ...(this.#agent?.wrapUpPrompt === undefined
-        ? {}
-        : { wrapUpPrompt: this.#agent.wrapUpPrompt }),
-    });
+      createToolOutputNonce(this.#random),
+    );
+  }
 
-    return composeSystemPrompt(staticPrompt, runtimeBlock);
+  /**
+   * The once-per-turn half, in whichever form this agent's mode needs it.
+   *
+   * Both modes have the same obligation and it is the reason this is separate
+   * from `#composePrompt`: `ContextContributor.staticSection` may do I/O, so it
+   * runs once per turn and never per iteration. Template mode wants the finished
+   * static prompt; raw mode wants the contributor sections on their own, because
+   * a raw template places them itself through `{{contributors}}`.
+   */
+  async #preamble(context: StaticPromptContext): Promise<PromptPreamble> {
+    if (this.#agent?.promptMode === 'raw') {
+      return {
+        staticPrompt: '',
+        staticSections: await contributorSections(this.#contributors, context),
+      };
+    }
+
+    return {
+      staticPrompt: await buildStaticPrompt({
+        context,
+        ...(this.#toolboxPrompt === undefined ? {} : { toolbox: this.#toolboxPrompt }),
+        ...(this.#agent === undefined ? {} : { agent: this.#agent }),
+        contributors: this.#contributors,
+      }),
+      staticSections: [],
+    };
+  }
+
+  /** The system message for one iteration. One function, so the preview cannot drift from the turn. */
+  #composePrompt(
+    preamble: PromptPreamble,
+    context: RuntimePromptContext,
+    nonce: string,
+    correction?: string,
+  ): string {
+    const agent = this.#agent;
+
+    if (agent?.promptMode === 'raw') {
+      return buildRawPrompt({
+        context,
+        nonce,
+        agent,
+        staticSections: preamble.staticSections,
+        contributors: this.#contributors,
+        ...(this.#toolboxPrompt === undefined ? {} : { toolbox: this.#toolboxPrompt }),
+        ...(correction === undefined ? {} : { correction }),
+      });
+    }
+
+    return composeSystemPrompt(
+      preamble.staticPrompt,
+      buildRuntimeBlock({
+        context,
+        nonce,
+        contributors: this.#contributors,
+        ...(agent?.livePrompt === undefined ? {} : { livePrompt: agent.livePrompt }),
+        ...(agent?.wrapUpPrompt === undefined ? {} : { wrapUpPrompt: agent.wrapUpPrompt }),
+        ...(agent?.toolPolicyPrompt === undefined
+          ? {}
+          : { toolPolicyPrompt: agent.toolPolicyPrompt }),
+        ...(correction === undefined ? {} : { correction }),
+      }),
+    );
   }
 
   /** Queues a correction for the turn currently running on `sessionKey`. */
@@ -769,12 +880,7 @@ export class AgentLoop {
       if (title !== '') this.#store.updateSession(sessionKey, { title });
     }
 
-    const staticPrompt = await buildStaticPrompt({
-      context: promptContext,
-      ...(this.#toolboxPrompt === undefined ? {} : { toolbox: this.#toolboxPrompt }),
-      ...(this.#agent === undefined ? {} : { agent: this.#agent }),
-      contributors: this.#contributors,
-    });
+    const preamble = await this.#preamble(promptContext);
 
     // Resolved once per turn, beside the jail and for the same reason: a
     // sandbox is a property of (agent, workspace, session), and re-deriving it
@@ -849,8 +955,9 @@ export class AgentLoop {
 
         iteration += 1;
 
-        const runtimeBlock = buildRuntimeBlock({
-          context: {
+        const systemPrompt = this.#composePrompt(
+          preamble,
+          {
             ...promptContext,
             iteration,
             maxIterations,
@@ -860,13 +967,8 @@ export class AgentLoop {
             ...(input.mentions === undefined ? {} : { mentions: input.mentions }),
           },
           nonce,
-          contributors: this.#contributors,
-          ...(this.#agent?.livePrompt === undefined ? {} : { livePrompt: this.#agent.livePrompt }),
-          ...(this.#agent?.wrapUpPrompt === undefined
-            ? {}
-            : { wrapUpPrompt: this.#agent.wrapUpPrompt }),
-          ...(correction === undefined ? {} : { correction }),
-        });
+          correction,
+        );
         // Consumed, not left standing: it describes what the *previous* iteration
         // did, and a correction that persisted would be scolding the model for
         // something it has already stopped doing.
@@ -875,7 +977,7 @@ export class AgentLoop {
         const request: ChatRequest = {
           model: this.#model,
           messages: [
-            systemMessage(composeSystemPrompt(staticPrompt, runtimeBlock)),
+            systemMessage(systemPrompt),
             // Re-read every iteration: the tool results this turn just wrote are
             // part of the next request, and reading them back from the store is
             // what keeps history and the request identical rather than merely

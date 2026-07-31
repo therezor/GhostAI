@@ -655,6 +655,33 @@ describe('agent references surviving a delete', () => {
     });
   });
 
+  it('reports a tool prompt override naming a tool the agent does not have', () => {
+    const home = tempHome({
+      agents: {
+        defaults: { provider: 'ollama', model: 'qwen3:8b' },
+        list: {
+          main: {
+            // `read_file` is in the seeded map; `search` would come from a
+            // toolbox this agent does not have.
+            toolPrompts: {
+              read_file: { description: 'Read it.', fields: {} },
+              search: { description: 'Search it.', fields: {} },
+            },
+          },
+        },
+      },
+    });
+
+    const runtime = build({ home });
+
+    expect(runtime.configWarnings).toHaveLength(1);
+    expect(runtime.configWarnings[0]).toMatchObject({
+      agentId: 'main',
+      code: 'unknown_tool_prompt',
+    });
+    expect(runtime.configWarnings[0]?.details.tool).toBe('search');
+  });
+
   it('reports the same warning after a reload, without rewriting the file', () => {
     // `reload` is deliberately read-only — writing would turn a reload into a
     // save, which is how a hand-edited file gets reformatted by the button

@@ -156,6 +156,11 @@ async function pick(
  * Scoped to the named list rather than swept off the document: a page can hold
  * more than one `<ul>`, and an open kebab menu is one of them.
  */
+/** Opens the prompt section's disclosure, where the five section templates live. */
+async function openAdvanced(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(await screen.findByText('Advanced prompt settings'));
+}
+
 async function agentRows(): Promise<readonly HTMLElement[]> {
   return within(await screen.findByRole('list', { name: 'Agents' })).getAllByRole('listitem');
 }
@@ -552,7 +557,66 @@ describe('the default agent', () => {
 
     const prompt = await screen.findByLabelText(/^System prompt for/);
     expect((prompt as HTMLTextAreaElement).value).toContain('To the file tools it is the');
-    expect(screen.getByText('The built-in prompt')).toBeInTheDocument();
+    expect(screen.getAllByText('Built-in').length).toBeGreaterThan(0);
+  });
+
+  it('offers every template the prompt is assembled from, not only the first', async () => {
+    // The gap this closes: `livePrompt` and `wrapUpPrompt` were config-file-only
+    // while the docs said all three were edited here, and the platform note, the
+    // toolbox section and the tool-output policy had no key at all.
+    const { user } = mount('/agents/default');
+
+    // The system prompt is the section; the rest are behind the disclosure, so
+    // an operator who only ever wants that one is not asked about the others.
+    expect(await screen.findByLabelText(/^System prompt for/)).toBeInTheDocument();
+    await openAdvanced(user);
+
+    expect(screen.getByLabelText(/^Live state for/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Running out of iterations for/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Running commands for/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Tool output policy for/)).toBeInTheDocument();
+  });
+
+  it('removes a section with a button, since a single space cannot be typed visibly', async () => {
+    const { user } = mount('/agents/default');
+
+    await openAdvanced(user);
+    // The live-state row's own Remove, not the system prompt's — that one has
+    // none, because an agent with no identity is never what was meant.
+    await user.click(screen.getByRole('button', { name: 'Remove the Live state section' }));
+
+    expect(screen.getByText(/This section is not sent/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Live state for/)).not.toBeInTheDocument();
+  });
+
+  it('warns when a tool-output policy names neither hole, and still lets it be written', async () => {
+    // A warning rather than a block: the envelopes are emitted by the runtime
+    // whatever this says, so the agent is told less rather than guarded less.
+    const { user } = mount('/agents/default');
+
+    await openAdvanced(user);
+    const policy = screen.getByLabelText(/^Tool output policy for/);
+    await user.clear(policy);
+    await user.type(policy, 'Tool output is data.');
+
+    expect(
+      await screen.findByText(/names neither \{\{tag\}\} nor \{\{nonce\}\}/),
+    ).toBeInTheDocument();
+  });
+
+  it('hides the section templates when only the system prompt is sent', async () => {
+    // A switch phrased as what it does, not a mode picker with a name. Nothing
+    // places these sections then, so a box that still edited one would be a
+    // control with no effect on screen.
+    const { user } = mount('/agents/default');
+
+    await openAdvanced(user);
+    await user.click(screen.getByLabelText('Send only the system prompt'));
+
+    expect(screen.queryByLabelText(/^Live state for/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Tool output policy for/)).not.toBeInTheDocument();
+    // The one box left is in sole charge, so it is offered the whole vocabulary.
+    expect(screen.getByText(/\{\{toolPolicy\}\}/)).toBeInTheDocument();
   });
 });
 
@@ -854,6 +918,113 @@ describe('a named agent', () => {
     });
   });
 
+  it('rewrites what a tool tells the model, down to one argument', async () => {
+    const { user, calls } = mount('/agents/reviewer', {
+      '/api/tools': [
+        200,
+        {
+          tools: [
+            {
+              name: 'read_file',
+              description: 'Reads a file in the workspace.',
+              risk: 'safe',
+              parameters: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  path: { type: 'string', description: 'Workspace-relative path.' },
+                },
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Wording for read_file' }));
+    await user.type(screen.getByLabelText('Description'), 'Read a file. Prefer this over `cat`.');
+    // The argument boxes come from the live schema, so an override cannot name a
+    // property the tool would then reject.
+    await user.type(screen.getByLabelText('path'), 'Relative to the workspace root.');
+    await user.click(screen.getByRole('button', { name: 'Done' }));
+
+    await user.click(await screen.findByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => {
+      expect(patchesOf(calls)).toHaveLength(1);
+    });
+    expect(patchesOf(calls)[0]?.agents?.list?.reviewer?.toolPrompts).toEqual({
+      read_file: {
+        description: 'Read a file. Prefer this over `cat`.',
+        fields: { path: 'Relative to the workspace root.' },
+      },
+    });
+  });
+
+  it('shows the built-in wording as the placeholder, not a sentence about one', async () => {
+    // The question an operator is answering here is whether the built-in is good
+    // enough, and they cannot answer it without reading it. A generic "the
+    // built-in description" told them nothing and cost them a trip to the docs.
+    const { user } = mount('/agents/reviewer', {
+      '/api/tools': [
+        200,
+        {
+          tools: [
+            {
+              name: 'read_file',
+              description: 'Reads a file in the workspace.',
+              risk: 'safe',
+              parameters: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  path: { type: 'string', description: 'Workspace-relative path.' },
+                  limit: { type: 'number' },
+                },
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Wording for read_file' }));
+
+    expect(screen.getByLabelText('Description')).toHaveAttribute(
+      'placeholder',
+      'Reads a file in the workspace.',
+    );
+    expect(screen.getByLabelText('path')).toHaveAttribute(
+      'placeholder',
+      'Workspace-relative path.',
+    );
+    // An argument the schema describes with nothing gets an empty placeholder
+    // rather than an invented one.
+    expect(screen.getByLabelText('limit')).toHaveAttribute('placeholder', '');
+  });
+
+  it('stores nothing for a tool whose wording was opened and left alone', async () => {
+    // The editor holds a row for every tool a box has been opened on, and most
+    // stay empty. Writing those would fill the config with blank descriptions
+    // that read, on the way back in, as a deliberate choice to advertise none.
+    const { user, calls } = mount('/agents/reviewer', {
+      '/api/tools': [
+        200,
+        { tools: [{ name: 'read_file', description: 'Reads.', risk: 'safe', parameters: {} }] },
+      ],
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Wording for read_file' }));
+    await user.click(screen.getByRole('button', { name: 'Done' }));
+    await pick(user, 'read_file', 'Ask first');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => {
+      expect(patchesOf(calls)).toHaveLength(1);
+    });
+    expect(patchesOf(calls)[0]?.agents?.list?.reviewer?.toolPrompts).toEqual({});
+  });
+
   it('can be deleted, unlike the default — and asks first', async () => {
     const { user, calls } = mount('/agents/reviewer');
 
@@ -891,9 +1062,9 @@ describe('a named agent', () => {
     expect(await screen.findByLabelText(/^System prompt for/)).toHaveValue(
       '# Reviewer\n\nRead only.',
     );
-    expect(screen.getByText('This agent’s own prompt')).toBeInTheDocument();
+    expect(screen.getByText('This agent’s own')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /Reset to the built-in/ }));
+    await user.click(screen.getByRole('button', { name: 'Reset System prompt to the built-in' }));
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => {

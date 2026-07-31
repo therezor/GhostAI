@@ -36,29 +36,50 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowLeft, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, RotateCcw, SquarePen, Trash2 } from 'lucide-react';
 import { useMemo, useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import {
   AgentEntrySchema,
   DEFAULT_AGENT_ID,
+  DEFAULT_LIVE_STATE_TEMPLATE,
+  DEFAULT_PLATFORM_HOST_TEMPLATE,
+  DEFAULT_PLATFORM_TOOLBOX_TEMPLATE,
   DEFAULT_SYSTEM_PROMPT_TEMPLATE,
+  DEFAULT_TOOLBOX_TEMPLATE,
+  DEFAULT_TOOL_POLICY_TEMPLATE,
+  DEFAULT_WRAP_UP_TEMPLATE,
   defaultSubagentPrompt,
   deriveAgentId,
+  LIVE_PROMPT_PLACEHOLDERS,
+  PLATFORM_PROMPT_PLACEHOLDERS,
   PROMPT_PLACEHOLDERS,
+  RAW_PROMPT_PLACEHOLDERS,
   subagentToolName,
+  TOOL_POLICY_PLACEHOLDERS,
+  TOOLBOX_PROMPT_PLACEHOLDERS,
   unknownPlaceholders,
   type AgentDefaults,
   type AgentEntry,
   type SubagentRef,
   type ToolPermission,
+  type ToolPromptOverride,
   type ToolRisk,
 } from '@ghostai/protocol';
 
 import type { WebKey } from '@/i18n/keys.js';
 import { Badge } from '@/components/ui/badge.js';
 import { Button } from '@/components/ui/button.js';
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogHeading,
+  DialogSubheading,
+} from '@/components/ui/dialog.js';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu.js';
 import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';
 import { RowActions } from '@/components/crud/row-actions.js';
@@ -174,6 +195,197 @@ function BoundField({
   );
 }
 
+/** Shared so an unopened row does not allocate one per render. */
+const EMPTY_OVERRIDE: ToolPromptOverride = { description: '', fields: {} };
+
+/**
+ * The placeholders whose value differs between two requests in the same turn.
+ *
+ * Only used to warn a raw template about the prefix cache. In Sections mode
+ * these live in the block at the end, which is rebuilt every iteration anyway;
+ * one of them in a raw template makes the *whole* prompt uncacheable.
+ */
+const VOLATILE: readonly string[] = [
+  'time',
+  'wrapUp',
+  'iteration',
+  'iterationsLeft',
+  'nonce',
+  'tag',
+  'toolPolicy',
+  'runtimeSections',
+  'correction',
+];
+
+/** One advertised argument, and what the tool itself says about it. */
+interface ToolField {
+  readonly name: string;
+  /** The built-in description, or empty when the schema gives none. */
+  readonly description: string;
+}
+
+/**
+ * The top-level arguments in a tool's advertised JSON Schema, with their own
+ * descriptions — which are what the boxes below show as placeholders.
+ *
+ * A generic "the built-in description" told an operator nothing: the whole
+ * question they are answering is whether the built-in wording is good enough,
+ * and they cannot answer it without reading it. Showing the real one means an
+ * empty box is a legible statement about what the model is being told.
+ *
+ * Top level only, which is the same bound `applyToolPrompts` enforces: an
+ * override reaching `argv.items` would need a path syntax to specify and to
+ * validate, for a field whose parent can say the same thing in a sentence.
+ */
+function parameterFields(parameters: Readonly<Record<string, unknown>>): ToolField[] {
+  const properties = parameters.properties;
+  if (typeof properties !== 'object' || properties === null || Array.isArray(properties)) return [];
+
+  return Object.entries(properties as Record<string, unknown>).map(([name, schema]) => {
+    const described =
+      typeof schema === 'object' && schema !== null && !Array.isArray(schema)
+        ? (schema as Record<string, unknown>).description
+        : undefined;
+    return { name, description: typeof described === 'string' ? described : '' };
+  });
+}
+
+/**
+ * One template an agent owns, with the three states it can be in.
+ *
+ * Six boxes on this screen behave identically, and the behaviour is not obvious
+ * enough to reimplement six times: **empty inherits the built-in, and a single
+ * space deletes the section.** Both are real answers, and neither is expressible
+ * by typing — an operator cannot type "inherit", and a space is invisible — so
+ * each gets a button and a state the box says out loud.
+ *
+ * **Ownership is state, not `value !== ''`.** Deriving it made the box fight the
+ * person typing in it: selecting all and deleting — the obvious way to start a
+ * short prompt from scratch — emptied the field, which flipped it back to "not
+ * owned", which refilled the box with the built-in. The next keystroke landed at
+ * the end of a page of text nobody asked for.
+ */
+function TemplateEditor({
+  name,
+  label,
+  builtIn,
+  value,
+  placeholders,
+  hint,
+  removable = true,
+  warning,
+  onChange,
+}: {
+  readonly name: string;
+  /** Typed `WebKey` rather than `string`, or a deleted key renders as itself. */
+  readonly label: WebKey;
+  /** What an empty value renders as. Shown in the box until the first keystroke. */
+  readonly builtIn: string;
+  readonly value: string;
+  readonly placeholders: readonly string[];
+  readonly hint?: WebKey;
+  /** `systemPrompt` is not: an agent with no identity is never what was meant. */
+  readonly removable?: boolean;
+  /** A second warning the caller decides, shown beside the stray-placeholder one. */
+  readonly warning?: string | undefined;
+  readonly onChange: (next: string) => void;
+}): JSX.Element {
+  const { t } = useTranslation();
+  const [owned, setOwned] = useState(() => value.trim() !== '');
+  // A stored value that is whitespace but not empty is the deletion. It is the
+  // one state with nothing to edit, so it renders as a sentence and a button
+  // rather than as a box holding a space nobody can see.
+  const removed = value !== '' && value.trim() === '';
+  const text = owned && !removed ? value : builtIn;
+  const stray = useMemo(() => unknownPlaceholders(text, placeholders), [text, placeholders]);
+
+  return (
+    <div className="stack agent-editor__template">
+      <div className="cluster agent-editor__prompt-bar">
+        <span className="micro-label">{t(label)}</span>
+        <span className="agent-editor__template-state">
+          {t(
+            removed ? 'agents.promptRemoved' : owned ? 'agents.promptOwn' : 'agents.promptBuiltIn',
+          )}
+        </span>
+        <span className="spacer" />
+        {/* Both buttons are named for their section. Six of each on this screen
+            read identically otherwise, which leaves a screen reader — and a
+            test — with no way to say which one it means. */}
+        {removable && !removed && (
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={t('agents.promptRemoveFor', { label: t(label) })}
+            onClick={() => {
+              // A single space, because empty already means "inherit". See the
+              // asymmetry documented on `AgentEntry.livePrompt`.
+              onChange(' ');
+            }}
+          >
+            <Trash2 aria-hidden="true" />
+            {t('agents.promptRemove')}
+          </Button>
+        )}
+        {(owned || removed) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={t(removed ? 'agents.promptRestoreFor' : 'agents.promptResetFor', {
+              label: t(label),
+            })}
+            onClick={() => {
+              setOwned(false);
+              onChange('');
+            }}
+          >
+            <RotateCcw aria-hidden="true" />
+            {t(removed ? 'agents.promptRestore' : 'agents.resetBuiltin')}
+          </Button>
+        )}
+      </div>
+
+      {removed ? (
+        <p className="agent-editor__hint">{t('agents.promptRemovedHint')}</p>
+      ) : (
+        <>
+          <CodeEditor
+            value={text}
+            readOnly={false}
+            language="markdown"
+            label={t('agents.promptEditorFor', { label: t(label), name })}
+            onChange={(next) => {
+              // The first keystroke is the decision: from here the text is this
+              // agent's, including when it is emptied.
+              setOwned(true);
+              onChange(next);
+            }}
+          />
+          <p className="agent-editor__hint">
+            {hint === undefined ? '' : `${t(hint)} `}
+            {t(owned ? 'agents.promptPlaceholders' : 'agents.promptAdoptHint')}{' '}
+            {placeholders.map((placeholder) => `{{${placeholder}}}`).join(', ')}.
+          </p>
+          {stray.length > 0 && (
+            <p role="alert" className="notice notice--warning">
+              <span>
+                {t('agents.promptStray', {
+                  names: stray.map((placeholder) => `{{${placeholder}}}`).join(', '),
+                })}
+              </span>
+            </p>
+          )}
+          {warning !== undefined && (
+            <p role="alert" className="notice notice--warning">
+              <span>{warning}</span>
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 /**
  * One tool, and the single control that decides everything about it.
  *
@@ -191,21 +403,43 @@ function ToolRow({
   detail,
   risk,
   permission,
+  fields,
+  override,
   onChange,
+  onOverrideChange,
 }: {
   readonly name: string;
+  /** The tool's own description. The row shows the override instead when there is one. */
   readonly detail: string;
   readonly risk: ToolRisk | undefined;
   readonly permission: ToolPermission;
+  /** Top-level arguments from the live schema. Empty when it is not registered. */
+  readonly fields: readonly ToolField[];
+  readonly override: ToolPromptOverride | undefined;
   readonly onChange: (next: ToolPermission) => void;
+  readonly onOverrideChange: (next: ToolPromptOverride) => void;
 }): JSX.Element {
   const { t } = useTranslation();
+  const stored = override ?? EMPTY_OVERRIDE;
+  const [editing, setEditing] = useState(false);
+  const rewritten = stored.description !== '';
+
+  const setField = (field: string, text: string): void => {
+    onOverrideChange({ ...stored, fields: { ...stored.fields, [field]: text } });
+  };
 
   return (
     <li className="row agent-editor__tool">
       <div className="agent-editor__tool-text">
         <span className="agent-editor__tool-name truncate">{name}</span>
-        {detail !== '' && <span className="agent-editor__tool-detail truncate">{detail}</span>}
+        {/* The row says what the model is told, not what the tool shipped with.
+            Showing the built-in under a tool whose description an operator has
+            replaced would make the list disagree with the payload. */}
+        {(rewritten ? stored.description : detail) !== '' && (
+          <span className="agent-editor__tool-detail truncate">
+            {rewritten ? stored.description : detail}
+          </span>
+        )}
       </div>
       {risk === undefined ? (
         // Named in the config but not registered right now — an MCP server that
@@ -215,6 +449,19 @@ function ToolRow({
       ) : (
         <Badge tone="neutral">{risk}</Badge>
       )}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="agent-editor__tool-edit"
+        // Named for the tool: a list of ten rows has ten of these, and an icon
+        // called "Wording" tells a screen reader nothing about which.
+        aria-label={t('agents.toolWordingFor', { name })}
+        onClick={() => {
+          setEditing(true);
+        }}
+      >
+        <SquarePen aria-hidden="true" />
+      </Button>
       <div className="agent-editor__tool-permission">
         <SelectField
           label={<span className="sr-only">{t('agents.toolPermissionFor', { name })}</span>}
@@ -228,6 +475,70 @@ function ToolRow({
           }}
         />
       </div>
+
+      {/* A dialog rather than an expander on the row. The list is a scrolling
+          box of one-line rows, and pushing a form into the middle of it moved
+          every row below the one being edited — while giving the form the width
+          of a column sized for a permission select. */}
+      <Dialog open={editing} onOpenChange={setEditing}>
+        <DialogContent className="agent-editor__wording-dialog">
+          <DialogHeader>
+            <DialogHeading>{t('agents.toolWordingTitle', { name })}</DialogHeading>
+            <DialogSubheading>{t('agents.toolWordingHint')}</DialogSubheading>
+          </DialogHeader>
+
+          <div className="stack agent-editor__wording-body">
+            <TextareaField
+              label={t('agents.toolWordingDesc')}
+              value={stored.description}
+              // The tool's real description, so an empty box is a legible
+              // statement about what the model is being told rather than a
+              // promise that something exists somewhere.
+              placeholder={detail}
+              rows={3}
+              onValueChange={(next) => {
+                onOverrideChange({ ...stored, description: next });
+              }}
+            />
+            {fields.length > 0 && (
+              <>
+                <h4 className="agent-editor__wording-heading">{t('agents.toolWordingArgs')}</h4>
+                {fields.map((field) => (
+                  <TextareaField
+                    key={field.name}
+                    label={field.name}
+                    value={stored.fields[field.name] ?? ''}
+                    placeholder={field.description}
+                    rows={2}
+                    onValueChange={(next) => {
+                      setField(field.name, next);
+                    }}
+                  />
+                ))}
+              </>
+            )}
+            {/* The boundary that stops an override from breaking the tool: the
+                model is told what these arguments mean, and the schema that
+                accepts them is still generated from the tool's own definition. */}
+            <p className="agent-editor__hint">{t('agents.toolWordingNote')}</p>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                onOverrideChange({ description: '', fields: {} });
+              }}
+            >
+              <RotateCcw aria-hidden="true" />
+              {t('agents.resetBuiltin')}
+            </Button>
+            <DialogClose asChild>
+              <Button>{t('common.done')}</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </li>
   );
 }
@@ -574,21 +885,30 @@ function Editor({
     toolTimeoutSeconds: bind('toolTimeoutSeconds'),
   } satisfies Record<string, Bound>;
 
-  // ── The system prompt ────────────────────────────────────────────────────
+  // ── The prompt ───────────────────────────────────────────────────────────
   //
-  // Empty means "use the built-in", so the box shows the built-in and typing
-  // into it is what makes the prompt this agent's own. That is the whole of the
-  // discoverability problem: an operator cannot choose to edit something they
-  // have never been shown.
+  // Six templates, one component. Empty means "use the built-in", so each box
+  // shows the built-in and typing into it is what makes the wording this
+  // agent's own — an operator cannot choose to edit something they have never
+  // been shown. See `TemplateEditor` for the three states each one holds.
   //
-  // **Ownership is state, not `systemPrompt !== ''`.** Deriving it made the box
-  // fight the person typing in it: selecting all and deleting — the obvious way
-  // to start a short prompt from scratch — emptied the field, which flipped it
-  // back to "not owned", which refilled the box with the built-in template. The
-  // next keystroke then landed at the end of a page of text nobody asked for.
-  const [promptOwned, setPromptOwned] = useState(() => entry.systemPrompt.trim() !== '');
-  const promptText = promptOwned ? form.systemPrompt : DEFAULT_SYSTEM_PROMPT_TEMPLATE;
-  const strayPlaceholders = useMemo(() => unknownPlaceholders(promptText), [promptText]);
+  // Nothing here is hidden behind a "show advanced" toggle. The point of the
+  // feature is that the prompt an install runs on is one an operator can read;
+  // a section they have to go looking for is one they will not know exists.
+  const raw = form.promptMode === 'raw';
+
+  /** Bumped by a revert, to remount the template editors. See `onRevert`. */
+  const [formEpoch, setFormEpoch] = useState(0);
+
+  /**
+   * Whether the policy would leave the model unable to identify a tool-output
+   * fence. Mirrors `assertBuildable`, so the editor says it before the save
+   * rather than the settings response saying it after.
+   */
+  const policyUnfenced =
+    form.toolPolicyPrompt.trim() !== '' &&
+    !form.toolPolicyPrompt.includes('{{nonce}}') &&
+    !form.toolPolicyPrompt.includes('{{tag}}');
 
   // ── Tools ────────────────────────────────────────────────────────────────
   //
@@ -638,6 +958,13 @@ function Editor({
 
   const setToolPermission = (name: string, permission: ToolPermission): void => {
     update('tools', { ...form.tools, [name]: permission });
+  };
+
+  const setToolPrompt = (name: string, override: ToolPromptOverride): void => {
+    // Kept as typed, blanks and all. `pruneToolPrompts` drops the empty ones on
+    // the way to the patch — doing it here instead would delete a row from under
+    // the operator the moment they cleared the box to start again.
+    update('toolPrompts', { ...form.toolPrompts, [name]: override });
   };
 
   const setSubagents = (next: readonly SubagentRef[]): void => {
@@ -814,9 +1141,12 @@ function Editor({
     setForm(toAgentEntryForm(entry, defaults));
     setBase(toAgentForm(defaults));
     setIdDraft(agentId);
-    // Or a revert would leave the box holding the stored (empty) prompt while
-    // still claiming the agent owns one.
-    setPromptOwned(entry.systemPrompt.trim() !== '');
+    // Remounts every `TemplateEditor`, which is what re-derives "does this agent
+    // own this template" from the stored value. Without it a revert leaves each
+    // box holding the stored (empty) template while still claiming the agent
+    // owns one — the state is deliberately not derived from the value, so
+    // nothing else would reset it.
+    setFormEpoch((epoch) => epoch + 1);
     setErrors({});
     setDirty(false);
   };
@@ -970,8 +1300,13 @@ function Editor({
                   detail={tool?.description ?? ''}
                   risk={tool?.risk}
                   permission={form.tools[name] ?? 'deny'}
+                  fields={tool === undefined ? [] : parameterFields(tool.parameters)}
+                  override={form.toolPrompts[name]}
                   onChange={(next) => {
                     setToolPermission(name, next);
+                  }}
+                  onOverrideChange={(next) => {
+                    setToolPrompt(name, next);
                   }}
                 />
               );
@@ -998,8 +1333,17 @@ function Editor({
                   // a suggestion from the box's author, not a ceiling — the
                   // programs are reachable through `exec` either way.
                   permission={form.tools[tool.name] ?? tool.permission}
+                  // A toolbox program's schema is synthesised from the manifest
+                  // and is not in `GET /api/tools`, so there are no argument
+                  // boxes to offer — only the description, which is the part the
+                  // manifest author wrote and this agent may disagree with.
+                  fields={[]}
+                  override={form.toolPrompts[tool.name]}
                   onChange={(next) => {
                     setToolPermission(tool.name, next);
+                  }}
+                  onOverrideChange={(next) => {
+                    setToolPrompt(tool.name, next);
                   }}
                 />
               ))}
@@ -1167,57 +1511,139 @@ function Editor({
       </Section>
 
       <Section title={t('agents.systemPrompt')} description={t('agents.promptDesc')}>
-        <div className="cluster agent-editor__prompt-bar">
-          <span className="micro-label">
-            {promptOwned ? 'This agent’s own prompt' : 'The built-in prompt'}
-          </span>
-          <span className="spacer" />
-          {promptOwned && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setPromptOwned(false);
-                update('systemPrompt', '');
-              }}
-            >
-              <RotateCcw aria-hidden="true" />
-              {t('agents.resetBuiltin')}
-            </Button>
-          )}
-        </div>
-
         <div className="stack agent-editor__prompt">
-          {/* The real editor, not an input. This is the one field here that
-              holds prose, and a one-line box is the control that makes people
-              write one sentence and stop. */}
-          <CodeEditor
-            value={promptText}
-            readOnly={false}
-            language="markdown"
-            label={`System prompt for ${name}`}
-            onChange={(value) => {
-              // The first keystroke is the decision: from here the text is this
-              // agent's, including when it is emptied.
-              setPromptOwned(true);
-              update('systemPrompt', value);
+          <TemplateEditor
+            key={`${String(formEpoch)}-system`}
+            name={name}
+            label="agents.promptSystem"
+            builtIn={DEFAULT_SYSTEM_PROMPT_TEMPLATE}
+            value={form.systemPrompt}
+            placeholders={raw ? RAW_PROMPT_PLACEHOLDERS : PROMPT_PLACEHOLDERS}
+            removable={false}
+            hint={raw ? 'agents.promptSystemRawHint' : 'agents.promptSystemHint'}
+            {...(raw && VOLATILE.some((hole) => form.systemPrompt.includes(`{{${hole}}}`))
+              ? {
+                  // Not an error: a clock in the prompt is a legitimate thing to
+                  // want. It is a price, and one an operator cannot see on the
+                  // bill, so it is said here instead.
+                  warning: t('agents.promptUncacheable'),
+                }
+              : {})}
+            onChange={(next) => {
+              update('systemPrompt', next);
             }}
           />
-          <p className="agent-editor__hint">
-            {promptOwned
-              ? 'Placeholders:'
-              : 'Editing this makes it this agent’s own; until then it follows the built-in prompt and improves with each release. Placeholders:'}{' '}
-            {PROMPT_PLACEHOLDERS.map((placeholder) => `{{${placeholder}}}`).join(', ')}.
-          </p>
-          {strayPlaceholders.length > 0 && (
-            <p role="alert" className="notice notice--warning">
-              <span>
-                Nothing will fill{' '}
-                {strayPlaceholders.map((placeholder) => `{{${placeholder}}}`).join(', ')} — it will
-                appear in the prompt exactly as written.
-              </span>
-            </p>
-          )}
+
+          {/* A disclosure, not a second mode picker. The sections below are the
+              rest of the prompt, and an operator who has not gone looking for
+              them should not have to answer a question about them first — the
+              old "Assembly: Sections / Raw" select made a rare decision the
+              opening move of an ordinary screen.
+
+              `<details>` rather than a button and state: it is what the element
+              is for, and the keyboard behaviour and `aria-expanded` come out
+              correct without being written. */}
+          <details className="agent-editor__advanced">
+            <summary>{t('agents.promptAdvanced')}</summary>
+            <div className="stack agent-editor__advanced-body">
+              {/* Phrased as what it does rather than as a mode with a name. An
+                  operator reaching for this wants "stop adding things to my
+                  prompt", which is a behaviour; `raw` is our word for it. */}
+              <SwitchRow
+                label={t('agents.promptOnlySystem')}
+                hint={t('agents.promptOnlySystemHint')}
+                checked={raw}
+                onCheckedChange={(next) => {
+                  update('promptMode', next ? 'raw' : 'template');
+                }}
+              />
+
+              {/* Hidden rather than disabled: nothing places them, so a box that
+                  still edited one would be a control with no effect on screen.
+                  The stored values survive — switching back restores them. */}
+              {!raw && (
+                <>
+                  <TemplateEditor
+                    key={`${String(formEpoch)}-live`}
+                    name={name}
+                    label="agents.promptLive"
+                    builtIn={DEFAULT_LIVE_STATE_TEMPLATE}
+                    value={form.livePrompt}
+                    placeholders={LIVE_PROMPT_PLACEHOLDERS}
+                    hint="agents.promptLiveHint"
+                    onChange={(next) => {
+                      update('livePrompt', next);
+                    }}
+                  />
+                  <TemplateEditor
+                    key={`${String(formEpoch)}-wrapup`}
+                    name={name}
+                    label="agents.promptWrapUp"
+                    builtIn={DEFAULT_WRAP_UP_TEMPLATE}
+                    value={form.wrapUpPrompt}
+                    placeholders={['iterationsLeft']}
+                    hint="agents.promptWrapUpHint"
+                    onChange={(next) => {
+                      update('wrapUpPrompt', next);
+                    }}
+                  />
+                  <TemplateEditor
+                    key={`${String(formEpoch)}-platform`}
+                    name={name}
+                    label="agents.promptPlatform"
+                    builtIn={
+                      form.toolboxName.trim() === ''
+                        ? DEFAULT_PLATFORM_HOST_TEMPLATE
+                        : DEFAULT_PLATFORM_TOOLBOX_TEMPLATE
+                    }
+                    value={form.platformPrompt}
+                    placeholders={PLATFORM_PROMPT_PLACEHOLDERS}
+                    hint="agents.promptPlatformHint"
+                    onChange={(next) => {
+                      update('platformPrompt', next);
+                    }}
+                  />
+                  {form.toolboxName.trim() !== '' && (
+                    <TemplateEditor
+                      key={`${String(formEpoch)}-toolbox`}
+                      name={name}
+                      label="agents.promptToolbox"
+                      builtIn={DEFAULT_TOOLBOX_TEMPLATE}
+                      value={form.toolboxPrompt}
+                      placeholders={TOOLBOX_PROMPT_PLACEHOLDERS}
+                      hint="agents.promptToolboxHint"
+                      onChange={(next) => {
+                        update('toolboxPrompt', next);
+                      }}
+                    />
+                  )}
+                  <TemplateEditor
+                    key={`${String(formEpoch)}-policy`}
+                    name={name}
+                    label="agents.promptToolPolicy"
+                    builtIn={DEFAULT_TOOL_POLICY_TEMPLATE}
+                    value={form.toolPolicyPrompt}
+                    placeholders={TOOL_POLICY_PLACEHOLDERS}
+                    hint="agents.promptToolPolicyHint"
+                    {...(policyUnfenced
+                      ? {
+                          warning: t('agents.promptToolPolicyUnfenced', {
+                            // Passed rather than written into the bundle: i18next
+                            // does not rescan an interpolated value, which is the
+                            // only way a literal `{{…}}` survives to the screen.
+                            tag: '{{tag}}',
+                            nonce: '{{nonce}}',
+                          }),
+                        }
+                      : {})}
+                    onChange={(next) => {
+                      update('toolPolicyPrompt', next);
+                    }}
+                  />
+                </>
+              )}
+            </div>
+          </details>
         </div>
       </Section>
 

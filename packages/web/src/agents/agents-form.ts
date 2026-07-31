@@ -52,9 +52,11 @@ import {
   type AgentDefaults,
   type AgentEntry,
   type ConfigPatch,
+  type PromptMode,
   type ReasoningEffort,
   type SubagentRef,
   type ToolPermission,
+  type ToolPromptOverride,
 } from '@ghostai/protocol';
 
 import { msToSeconds, parseNumber, secondsToMs, type PatchResult } from '@/settings/fields.js';
@@ -212,6 +214,28 @@ export function toAgentPatch(form: AgentForm, t: TFunction): PatchResult {
 export interface AgentEntryForm {
   readonly label: string;
   readonly systemPrompt: string;
+  /**
+   * The five other templates an agent owns, and the mode that decides whether
+   * any of them are placed.
+   *
+   * Held raw, unlike almost everything else on this form: `''` and `' '` mean
+   * different things — inherit the built-in, and delete the section — so a
+   * trim anywhere on the way through would make deleting one impossible to
+   * express. `systemPrompt` above has always been raw for the same reason.
+   */
+  readonly livePrompt: string;
+  readonly wrapUpPrompt: string;
+  readonly platformPrompt: string;
+  readonly toolboxPrompt: string;
+  readonly toolPolicyPrompt: string;
+  readonly promptMode: string;
+  /**
+   * Tool name → the operator's replacement for what it tells the model.
+   *
+   * The stored shape, for the reason `tools` below is: every value is free text
+   * behind a labelled box, and there is nothing for a parse step to do.
+   */
+  readonly toolPrompts: Readonly<Record<string, ToolPromptOverride>>;
   readonly enabled: boolean;
   readonly provider: string;
   /** Empty asks the registry to resolve one — a value, not an absence. */
@@ -272,6 +296,17 @@ export function toAgentEntryForm(entry: AgentEntry, defaults: AgentDefaults): Ag
   return {
     label: entry.label,
     systemPrompt: entry.systemPrompt,
+    // No fallback to a default, unlike the model and budget above: empty is a
+    // meaningful stored value here — it is what "follow the built-in and keep
+    // receiving improvements to it" is spelled as — so filling it in would
+    // freeze every agent on today's wording the first time anything was saved.
+    livePrompt: entry.livePrompt,
+    wrapUpPrompt: entry.wrapUpPrompt,
+    platformPrompt: entry.platformPrompt,
+    toolboxPrompt: entry.toolboxPrompt,
+    toolPolicyPrompt: entry.toolPolicyPrompt,
+    promptMode: entry.promptMode,
+    toolPrompts: { ...entry.toolPrompts },
     enabled: entry.enabled,
     provider: entry.provider ?? defaults.provider,
     model: entry.model ?? defaults.model,
@@ -308,6 +343,36 @@ function isReasoningEffort(value: string): value is ReasoningEffort {
 
 export function isToolPermission(value: string): value is ToolPermission {
   return (TOOL_PERMISSIONS as readonly string[]).includes(value);
+}
+
+/** The two prompt modes, in the order the toggle offers them. */
+export const PROMPT_MODES: readonly PromptMode[] = ['template', 'raw'];
+
+export function isPromptMode(value: string): value is PromptMode {
+  return (PROMPT_MODES as readonly string[]).includes(value);
+}
+
+/**
+ * The overrides that actually say something.
+ *
+ * The editor holds a row for every tool an operator has opened, so most of them
+ * are empty most of the time. Storing those would fill `config.json` with blank
+ * descriptions that are indistinguishable, on the way back in, from a deliberate
+ * one — and `''` is precisely the value that means "inherit the built-in", so a
+ * stored blank is not merely noise but a lie about what was chosen.
+ */
+export function pruneToolPrompts(
+  overrides: Readonly<Record<string, ToolPromptOverride>>,
+): Record<string, ToolPromptOverride> {
+  const kept: Record<string, ToolPromptOverride> = {};
+  for (const [name, override] of Object.entries(overrides)) {
+    const fields = Object.fromEntries(
+      Object.entries(override.fields).filter(([, text]) => text !== ''),
+    );
+    if (override.description === '' && Object.keys(fields).length === 0) continue;
+    kept[name] = { description: override.description, fields };
+  }
+  return kept;
 }
 
 /**
@@ -356,6 +421,21 @@ function ownFields(form: AgentEntryForm, entry: AgentEntry): AgentOwnFields {
     ...carried,
     label: form.label.trim(),
     systemPrompt: form.systemPrompt,
+    // Untrimmed, all six. A single space is how an operator deletes a section,
+    // and it is the only way to say it — empty already means "inherit".
+    livePrompt: form.livePrompt,
+    wrapUpPrompt: form.wrapUpPrompt,
+    platformPrompt: form.platformPrompt,
+    toolboxPrompt: form.toolboxPrompt,
+    toolPolicyPrompt: form.toolPolicyPrompt,
+    promptMode: isPromptMode(form.promptMode) ? form.promptMode : 'template',
+    // Sent whole for the same reason `tools` is: the merge replaces
+    // `agents.list.*` wholesale, so this is also the only way an override can be
+    // removed. An entry that says nothing is dropped rather than written as a
+    // row of empty strings — the editor holds one for every tool with a box on
+    // screen, and storing those would fill the config with blanks that read as
+    // deliberate.
+    toolPrompts: pruneToolPrompts(form.toolPrompts),
     enabled: form.enabled,
     // Sent whole, every time. The merge replaces `agents.list.*` wholesale, so
     // this is also the only way a tool can be removed from an agent — a patch
@@ -560,6 +640,16 @@ export function toNewAgentPatch(
           label,
           enabled: true,
           systemPrompt: template.systemPrompt,
+          // Every template the source agent had, for the same reason its prompt
+          // is copied: a duplicate that reverted to the built-in platform note
+          // would not be a copy of the agent it was stamped from.
+          livePrompt: template.livePrompt,
+          wrapUpPrompt: template.wrapUpPrompt,
+          platformPrompt: template.platformPrompt,
+          toolboxPrompt: template.toolboxPrompt,
+          toolPolicyPrompt: template.toolPolicyPrompt,
+          promptMode: template.promptMode,
+          toolPrompts: structuredClone(template.toolPrompts),
           tools: { ...template.tools },
           // The one thing deliberately *not* copied. Everything else here is a
           // setting — how the agent thinks, what it may touch, what it costs —

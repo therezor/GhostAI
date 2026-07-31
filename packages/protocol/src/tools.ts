@@ -115,3 +115,139 @@ export type ToolDefinition = z.infer<typeof ToolDefinitionSchema>;
  */
 export const ApprovalScopeSchema = z.enum(['once', 'session', 'always']);
 export type ApprovalScope = z.infer<typeof ApprovalScopeSchema>;
+
+// ---------------------------------------------------------------------------
+// Rewriting what a tool says about itself
+// ---------------------------------------------------------------------------
+
+/**
+ * An operator's replacement for one tool's prose.
+ *
+ * A tool's description is the sentence that decides whether the model reaches
+ * for it, and until now it was a string literal next to the handler — the one
+ * part of the payload an operator could see in the context inspector and not
+ * change. This is the same argument that made the whole system prompt editable,
+ * one layer down.
+ *
+ * **Prose only, and that boundary is load-bearing.** `type`, `required`, `enum`
+ * and the rest of the schema stay generated from the tool's Zod object, which is
+ * also what `parseArgs` validates against. Letting an operator supply a schema
+ * would let the advertised shape drift from the accepted one, and the failure
+ * mode is a model dutifully passing a field that then fails validation on every
+ * call — an agent that looks broken for a reason nothing reports.
+ */
+export const ToolPromptOverrideSchema = z.strictObject({
+  /**
+   * Replaces the tool's description. Empty means the built-in.
+   *
+   * A single space advertises the tool with no description at all, which is the
+   * same "empty inherits, whitespace deletes" rule the prompt templates use.
+   * Rarely what anyone wants — a nameless verb is a tool the model guesses at —
+   * but it is the only way to say it, so it is available.
+   */
+  description: z.string().default(''),
+  /**
+   * Top-level parameter name → its description.
+   *
+   * Top-level only. A path syntax reaching `argv.items.description` would be a
+   * second mini-language to specify and to validate, for the sake of a field
+   * whose parent description can say the same thing in a sentence.
+   *
+   * A name that is not in the schema is reported and dropped rather than added:
+   * inventing a property would advertise an argument the model then passes and
+   * `parseArgs` then rejects.
+   */
+  fields: z.record(z.string(), z.string()).default({}),
+});
+export type ToolPromptOverride = z.infer<typeof ToolPromptOverrideSchema>;
+
+/** Tool name → its prose overrides. Keyed the way permissions are, for the same reason. */
+export const ToolPromptOverridesSchema = z.record(z.string(), ToolPromptOverrideSchema);
+export type ToolPromptOverrides = z.infer<typeof ToolPromptOverridesSchema>;
+
+/** What `applyToolPrompts` could not apply, for the warning sink and the editor. */
+export interface ToolPromptMisses {
+  /** Override keys naming no advertised tool. */
+  readonly unknownTools: readonly string[];
+  /** `<tool>.<field>` pairs naming no property in that tool's schema. */
+  readonly unknownFields: readonly string[];
+}
+
+export interface AppliedToolPrompts extends ToolPromptMisses {
+  readonly definitions: readonly ToolDefinition[];
+}
+
+/** The `properties` map of a JSON Schema object, when it has one. */
+function propertiesOf(parameters: Record<string, unknown>): Record<string, unknown> | undefined {
+  const properties = parameters.properties;
+  if (typeof properties !== 'object' || properties === null || Array.isArray(properties)) {
+    return undefined;
+  }
+  return properties as Record<string, unknown>;
+}
+
+/**
+ * The definitions, with each operator's wording in place of the compiled one.
+ *
+ * Pure, and the only place a definition's prose is rewritten — so "what does the
+ * model actually see" has one answer and the context inspector shows it without
+ * reassembling anything.
+ *
+ * **Nothing here mutates.** `parameters` is frozen at definition time and shared
+ * by every turn on every agent through the registry's memoised list; writing a
+ * description into it in place would give one agent's wording to all of them.
+ * Each level is cloned on the way down, and only where an override actually
+ * lands — a definition nobody overrode is passed through by reference.
+ */
+export function applyToolPrompts(
+  definitions: readonly ToolDefinition[],
+  overrides: ToolPromptOverrides,
+): AppliedToolPrompts {
+  const names = Object.keys(overrides);
+  if (names.length === 0) return { definitions, unknownTools: [], unknownFields: [] };
+
+  const seen = new Set<string>();
+  const unknownFields: string[] = [];
+
+  const applied = definitions.map((definition) => {
+    const override = overrides[definition.name];
+    if (override === undefined) return definition;
+    seen.add(definition.name);
+
+    const fields = Object.entries(override.fields);
+    const properties = fields.length === 0 ? undefined : propertiesOf(definition.parameters);
+
+    let parameters = definition.parameters;
+    if (properties !== undefined) {
+      const next: Record<string, unknown> = { ...properties };
+      let changed = false;
+      for (const [field, description] of fields) {
+        const property = next[field];
+        if (typeof property !== 'object' || property === null || Array.isArray(property)) {
+          unknownFields.push(`${definition.name}.${field}`);
+          continue;
+        }
+        next[field] = { ...(property as Record<string, unknown>), description };
+        changed = true;
+      }
+      if (changed) parameters = { ...definition.parameters, properties: next };
+    } else if (fields.length > 0) {
+      // A tool whose schema has no `properties` at all — `z.strictObject({})`.
+      // Every named field is unknown, and saying so once per field matches what
+      // the operator wrote.
+      for (const [field] of fields) unknownFields.push(`${definition.name}.${field}`);
+    }
+
+    return {
+      ...definition,
+      ...(override.description === '' ? {} : { description: override.description.trim() }),
+      parameters,
+    };
+  });
+
+  return {
+    definitions: applied,
+    unknownTools: names.filter((name) => !seen.has(name)),
+    unknownFields,
+  };
+}

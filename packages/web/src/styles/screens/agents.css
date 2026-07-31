@@ -120,6 +120,47 @@
     height: 20rem;
   }
 
+  /* The rest of the prompt, behind a disclosure. Closed it is one line, which
+     is what keeps the section reading as "the system prompt" for the operators
+     who only ever want that — and open it is the whole payload. */
+  .agent-editor__advanced > summary {
+    padding: var(--space-2) 0;
+    font-size: var(--text-sm);
+    color: var(--fg-2);
+    cursor: pointer;
+  }
+
+  .agent-editor__advanced > summary:hover {
+    color: var(--fg-1);
+  }
+
+  .agent-editor__advanced-body {
+    --gap: var(--space-4);
+
+    padding-top: var(--space-3);
+  }
+
+  /* Five templates under the disclosure, none of them a page of text — the
+     system prompt above is the only one that is. A uniform 20rem would make the
+     panel a scroll of mostly-empty boxes. */
+  .agent-editor__advanced-body .agent-editor__template + .agent-editor__template {
+    padding-top: var(--space-4);
+    border-top: var(--hairline) solid var(--line);
+  }
+
+  .agent-editor__advanced-body .code-editor {
+    height: 10rem;
+  }
+
+  /* Which of the three states this template is in, beside its name. Quieter
+     than the label it follows: the name is what you look for, the state is what
+     you check. */
+  .agent-editor__template-state {
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
+    color: var(--fg-3);
+  }
+
   /* ── The tool list ─────────────────────────────────────────── */
 
   /* A row per tool with one select on it, rather than two comma-separated text
@@ -147,6 +188,33 @@
 
   .agent-editor__tool:hover {
     background-color: var(--hover);
+  }
+
+  /* A tool's wording is edited in a dialog rather than in the row. The list is
+     a scrolling box of one-line rows, and a form opened inside it moved every
+     row below the one being edited while giving itself the width of a column
+     sized for a permission select. */
+  .agent-editor__wording-dialog {
+    width: min(40rem, calc(100vw - var(--space-6)));
+  }
+
+  /* No `overflow` and no height of its own, deliberately: `.dialog` is already a
+     scrollport, and a second one inside it clipped every focus ring it held.
+
+     An outline is painted *outside* the border box — `--ring-width` plus
+     `--ring-offset` beyond it — and a scroll container clips at its padding
+     edge. The dialog has `--space-6` of padding, which is room to spare; this
+     had none, so a focused textarea lost the left and right thirds of its ring
+     and looked like it had a green underline. It also meant two scrollbars for
+     one dialog. */
+  .agent-editor__wording-body {
+    --gap: var(--space-4);
+  }
+
+  .agent-editor__wording-heading {
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+    color: var(--fg-2);
   }
 
   /* The name and its description share a column so the badge and the select
@@ -211,10 +279,10 @@
       --gap: var(--space-2);
 
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-columns: minmax(0, 1fr) auto auto;
       grid-template-areas:
-        'text badge'
-        'permission permission';
+        'text badge wording'
+        'permission permission permission';
       align-items: start;
       padding-block: var(--space-3);
       /* Square, because the row now carries a rule: a radius here rounds the
@@ -233,6 +301,13 @@
 
     .agent-editor__tool > .badge {
       grid-area: badge;
+    }
+
+    /* Beside the badge rather than left to fall into an implicit row, which is
+       where an unplaced grid item goes: the pencil landed centred on a line of
+       its own under the select, reading as a control belonging to no tool. */
+    .agent-editor__tool-edit {
+      grid-area: wording;
     }
 
     .agent-editor__tool-permission {

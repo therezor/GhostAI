@@ -297,6 +297,94 @@ test.describe('agents', () => {
     expect(body.systemPrompt).not.toContain('## Guidelines');
   });
 
+  /**
+   * The one bug the phone sweep in `a11y.spec` cannot see.
+   *
+   * That sweep asks whether anything overflows its column, and an unplaced grid
+   * item overflows nothing: the wording pencil simply fell into an implicit row
+   * of its own, centred under the permission select, reading as a control that
+   * belonged to no tool. Nothing scrolled and nothing escaped.
+   *
+   * Geometry after reflow rather than a class name, because the assertion is
+   * about what an operator sees and the class is only how it was arranged. And
+   * geometry is durable here — the row has settled by the time the select is
+   * visible, so this is not a state that exists between two frames.
+   */
+  test('the wording pencil stays on the tool row on a phone', async ({ app, harness }) => {
+    await app.request.patch(`${harness.url}/api/settings`, {
+      data: { agents: { list: { reviewer: { label: 'Reviewer' } } } },
+    });
+
+    await app.goto(`${harness.url}/agents/reviewer`);
+    await expect(app.getByRole('complementary', { name: 'Sidebar' })).toBeVisible();
+    await app.setViewportSize({ width: 375, height: 800 });
+    await expect(app.getByRole('button', { name: 'Open menu' })).toBeVisible();
+
+    const pencil = app.getByRole('button', { name: 'Wording for read_file' });
+    const permission = app.getByRole('combobox', { name: 'Permission for read_file' });
+    await expect(pencil).toBeVisible();
+    await expect(permission).toBeVisible();
+
+    const above = await pencil.boundingBox();
+    const below = await permission.boundingBox();
+    if (above === null || below === null) throw new Error('both controls should have a box');
+
+    // On the badge's line, above the full-width select — not on a line of its own
+    // below it, which is where an unplaced grid item lands.
+    expect(above.y).toBeLessThan(below.y);
+  });
+
+  /**
+   * A focus ring is painted *outside* the border box — `--ring-width` plus
+   * `--ring-offset` beyond it — and a scroll container clips at its padding
+   * edge. So a scrollport with no padding eats the ring of everything it holds.
+   *
+   * `.dialog` is already a scrollport and already has `--space-6` of padding,
+   * which is room to spare. What broke this was a *second* scroller nested
+   * inside it with none: a focused textarea kept the top and bottom of its ring
+   * and lost the left and right, which reads as a green underline rather than as
+   * focus. It also gave one dialog two scrollbars.
+   *
+   * Asserted as the property rather than as "this element has no overflow",
+   * because the property is what an operator sees and the overflow is only one
+   * way to break it.
+   */
+  test('a focused control in a scrolling dialog keeps its whole focus ring', async ({
+    app,
+    harness,
+  }) => {
+    await app.request.patch(`${harness.url}/api/settings`, {
+      data: { agents: { list: { reviewer: { label: 'Reviewer' } } } },
+    });
+
+    await app.goto(`${harness.url}/agents/reviewer`);
+    // `exec` carries the longest built-in wording of the five, which is what
+    // makes this dialog tall enough to scroll at all.
+    await app.getByRole('button', { name: 'Wording for exec' }).click();
+
+    const description = app.getByLabel('Description');
+    await description.click();
+    await expect(description).toBeFocused();
+
+    const clippedBy = await description.evaluate((element) => {
+      // `--ring-width` + `--ring-offset`, both 0.125rem, at the default root size.
+      const ring = 4;
+      const rect = element.getBoundingClientRect();
+      for (let node = element.parentElement; node !== null; node = node.parentElement) {
+        const style = getComputedStyle(node);
+        if (!/auto|scroll|hidden/.test(style.overflowX + style.overflowY)) continue;
+        // Only the nearest clipping ancestor can crop the ring; anything above it
+        // is clipping a box that already fits.
+        const port = node.getBoundingClientRect();
+        const cropped = rect.left - ring < port.left || rect.right + ring > port.right;
+        return cropped ? node.className : null;
+      }
+      return null;
+    });
+
+    expect(clippedBy, 'nothing should crop the ring of a focused control').toBeNull();
+  });
+
   test('an agent that stores no prompt still gets the built-in one', async ({ app, harness }) => {
     // The other half of the contract: empty means "the built-in", so an install
     // that never customised a prompt keeps receiving improvements to it.

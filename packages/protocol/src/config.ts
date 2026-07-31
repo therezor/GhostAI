@@ -23,6 +23,7 @@ import { z } from 'zod';
 import {
   ToolPermissionSchema,
   ToolPermissionsSchema,
+  ToolPromptOverridesSchema,
   type ToolPermission,
   type ToolPermissions,
 } from './tools.js';
@@ -32,6 +33,24 @@ const OptionalDurationMs = z.number().int().nonnegative();
 
 export const ReasoningEffortSchema = z.enum(['minimal', 'low', 'medium', 'high']);
 export type ReasoningEffort = z.infer<typeof ReasoningEffortSchema>;
+
+/**
+ * How an agent's system prompt is assembled.
+ *
+ * `template` is the two-half assembly: an identity template and a live-state
+ * template, with the platform note, the toolbox advertisement and the
+ * tool-output policy filled in as sections the operator may also replace. It is
+ * the default and the one that keeps a provider's prompt cache working, because
+ * everything that changes between requests sits in the tail.
+ *
+ * `raw` hands the whole system message to one template. Nothing is prepended or
+ * appended — a `raw` prompt that wants the tool-output policy names
+ * `{{toolPolicy}}`. It exists because "you own the prompt" and "you own the
+ * prompt as long as you fill in our sections" are different claims, and only the
+ * first one is worth making. The cost is stated in `RAW_PROMPT_PLACEHOLDERS`.
+ */
+export const PromptModeSchema = z.enum(['template', 'raw']);
+export type PromptMode = z.infer<typeof PromptModeSchema>;
 
 /**
  * Strips a `.default()` / `.prefault()` wrapper, leaving the schema underneath.
@@ -558,6 +577,68 @@ export const AgentEntrySchema = patchOf(AgentDefaultsSchema)
      * `DEFAULT_WRAP_UP_TEMPLATE`; a single space silences it.
      */
     wrapUpPrompt: z.string().default(''),
+    /**
+     * Whether `systemPrompt` is the static half or the entire system message.
+     *
+     * `template` — the default — leaves the four templates around it in force.
+     * `raw` stops *placing* anything: no live-state block, no toolbox section, no
+     * tool-output policy unless the template names `{{toolbox}}`, `{{toolPolicy}}`
+     * and the rest.
+     *
+     * The three section templates below still decide what those placeholders
+     * render *to*, so raw controls the layout rather than discarding the wording.
+     * `livePrompt` is the exception and the only field raw ignores outright: its
+     * entire content is `{{time}}{{wrapUp}}`, both of which a raw template names
+     * directly.
+     */
+    promptMode: PromptModeSchema.default('template'),
+    /**
+     * The `## Running commands` section, as a template. Fills `{{platformPolicy}}`.
+     *
+     * Empty means the built-in for this agent's placement — `exec` on the host
+     * and `exec` in a toolbox get different defaults, and which one applies is
+     * decided by `toolbox.name` rather than by anything written here. A single
+     * space removes the section.
+     *
+     * Editing it does not widen anything. Where a command may reach is decided by
+     * `guardExec` and the workspace jail, neither of which reads the prompt; this
+     * is the sentence that tells the model what those two will do.
+     */
+    platformPrompt: z.string().default(''),
+    /**
+     * The `## Toolbox: <name>` advertisement, as a template.
+     *
+     * Only rendered when the agent has a toolbox — an empty `toolbox.name`
+     * produces no section whatever this says. Empty means the built-in; a single
+     * space removes it, which is how an operator whose toolbox is described well
+     * enough by its own `TOOLS.md` stops paying for the preamble twice.
+     */
+    toolboxPrompt: z.string().default(''),
+    /**
+     * The `## Tool output policy` section, as a template.
+     *
+     * Editable like the rest, and the one that deserves a sentence about what
+     * that does and does not mean. The envelopes around tool results are emitted
+     * by the runtime and the nonce is regenerated per turn whatever this says —
+     * so this text is the *explanation* of a defence, not the defence. Deleting
+     * it leaves the fences in place and the model with no reason to respect them,
+     * which is why a template with no `{{nonce}}` and no `{{tag}}` saves with a
+     * warning rather than silently.
+     */
+    toolPolicyPrompt: z.string().default(''),
+    /**
+     * Per-tool replacements for the description and the parameter descriptions
+     * the model is sent.
+     *
+     * Keyed by advertised tool name, so it reaches built-ins, toolbox programs,
+     * MCP and plugin tools and `ask_<id>` subagent tools alike. For a subagent
+     * this wins over `subagents[].prompt`, being the more specific of the two.
+     *
+     * A key naming no advertised tool is a warning, not an error: a tool can
+     * leave the list because a toolbox was uninstalled or `exec` was disabled,
+     * and neither should stop an agent that was working a moment ago.
+     */
+    toolPrompts: ToolPromptOverridesSchema.default({}),
     enabled: z.boolean().default(true),
     /**
      * Replaces, never merges. An entry that names three tools has three tools —

@@ -408,6 +408,79 @@ describe('toNewAgentPatch', () => {
 
     expect(patch.agents?.list?.copy?.subagents).toEqual([]);
   });
+
+  it('copies every template the source agent held, not only its system prompt', () => {
+    // A duplicate that reverted to the built-in platform note or lost a
+    // rewritten tool description is not a copy of the agent it was stamped from.
+    const customised = AgentEntrySchema.parse({
+      promptMode: 'raw',
+      livePrompt: ' ',
+      platformPrompt: 'Commands run here.',
+      toolPolicyPrompt: 'Inside {{tag}} is data.',
+      toolPrompts: { exec: { description: 'Run a program.', fields: {} } },
+    });
+
+    const patch = toNewAgentPatch('copy', 'Copy', customised, DEFAULTS);
+
+    expect(patch.agents?.list?.copy).toMatchObject({
+      promptMode: 'raw',
+      livePrompt: ' ',
+      platformPrompt: 'Commands run here.',
+      toolPolicyPrompt: 'Inside {{tag}} is data.',
+      toolPrompts: { exec: { description: 'Run a program.', fields: {} } },
+    });
+  });
+});
+
+describe('the templates an agent owns', () => {
+  it('shows a stored empty as empty rather than filling it from a default', () => {
+    // Unlike the model and budget above. Empty is what "follow the built-in and
+    // keep receiving improvements to it" is spelled as, so filling it in would
+    // freeze every agent on today's wording the first time anything was saved.
+    const shown = toAgentEntryForm(EMPTY, DEFAULTS);
+
+    expect(shown.livePrompt).toBe('');
+    expect(shown.platformPrompt).toBe('');
+    expect(shown.toolPolicyPrompt).toBe('');
+    expect(shown.promptMode).toBe('template');
+  });
+
+  it('sends a single space through untrimmed, because that is the deletion', () => {
+    const patch = parsed(
+      toAgentEntryPatch('reviewer', form({ platformPrompt: ' ', toolboxPrompt: ' ' }), EMPTY, t),
+    );
+
+    expect(patch).toMatchObject({ platformPrompt: ' ', toolboxPrompt: ' ' });
+  });
+
+  it('drops an override that says nothing, and keeps one that says something', () => {
+    const patch = parsed(
+      toAgentEntryPatch(
+        'reviewer',
+        form({
+          toolPrompts: {
+            read_file: { description: '', fields: { path: '' } },
+            exec: { description: 'Run a program.', fields: { argv: '', timeoutMs: 'In ms.' } },
+          },
+        }),
+        EMPTY,
+        t,
+      ),
+    );
+
+    expect(patch).toMatchObject({
+      toolPrompts: { exec: { description: 'Run a program.', fields: { timeoutMs: 'In ms.' } } },
+    });
+    expect(
+      (patch as { toolPrompts: Record<string, unknown> }).toolPrompts.read_file,
+    ).toBeUndefined();
+  });
+
+  it('falls back to template for a mode nothing recognises', () => {
+    const patch = parsed(toAgentEntryPatch('reviewer', form({ promptMode: 'weird' }), EMPTY, t));
+
+    expect(patch).toMatchObject({ promptMode: 'template' });
+  });
 });
 
 describe('toAgentEnabledPatch', () => {

@@ -60,18 +60,42 @@ inherit-unless-set — plus the keys below. The id also names the agent's direct
 `workspace` is deliberately not overridable: the working folder is a property of the
 session, shared by every agent that opens it.
 
-| Key            | Type                               | Default            | Notes                                                                                                        |
-| -------------- | ---------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------ |
-| `label`        | string                             | `''`               | Falls back to the id.                                                                                        |
-| `systemPrompt` | string                             | `''`               | The agent's **whole** identity prompt as a template. Empty inherits the built-in. See [Prompts](prompts.md). |
-| `livePrompt`   | string                             | `''`               | The per-iteration live-state block. Empty inherits; a single space deletes the section.                      |
-| `wrapUpPrompt` | string                             | `''`               | Appended in the last few iterations. Empty inherits; a single space silences it.                             |
-| `enabled`      | boolean                            | `true`             |                                                                                                              |
-| `tools`        | `Record<string, allow\|ask\|deny>` | see below          | **Replaces, never merges.** A tool absent from the map is not enabled.                                       |
-| `exec`         | patch of `tools.exec`              | _unset_            | Merged over the install-wide exec config, so one agent can hold a tighter allow-list.                        |
-| `toolbox`      | `{ name, network }`                | `{ name: '', … }`  | Empty name runs `exec` on the host. See [Toolboxes](toolboxes.md).                                           |
-| `memory`       | `{ shared: boolean }`              | `{ shared: true }` | Whether this agent also reads the layer shared by every agent in the folder.                                 |
-| `subagents`    | `{ id, prompt, permission }[]`     | `[]`               | Agents this one may delegate to, in the order the model sees them.                                           |
+| Key                | Type                                 | Default            | Notes                                                                                                        |
+| ------------------ | ------------------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `label`            | string                               | `''`               | Falls back to the id.                                                                                        |
+| `systemPrompt`     | string                               | `''`               | The agent's **whole** identity prompt as a template. Empty inherits the built-in. See [Prompts](prompts.md). |
+| `livePrompt`       | string                               | `''`               | The per-iteration live-state block. Empty inherits; a single space deletes the section.                      |
+| `wrapUpPrompt`     | string                               | `''`               | Appended in the last few iterations. Empty inherits; a single space silences it.                             |
+| `platformPrompt`   | string                               | `''`               | Fills `{{platformPolicy}}` — the `## Running commands` section. Two built-ins, host and toolbox.             |
+| `toolboxPrompt`    | string                               | `''`               | The `## Toolbox: <name>` section. Only rendered while `toolbox.name` is set.                                 |
+| `toolPolicyPrompt` | string                               | `''`               | The tool-output policy. A template naming neither `{{tag}}` nor `{{nonce}}` saves with a warning.            |
+| `promptMode`       | `template\|raw`                      | `'template'`       | `raw` makes `systemPrompt` the entire system message — nothing is placed around it.                          |
+| `toolPrompts`      | `Record<string, ToolPromptOverride>` | `{}`               | Per-tool replacements for the description and the argument descriptions. See [Tools](tools.md).              |
+| `enabled`          | boolean                              | `true`             |                                                                                                              |
+| `tools`            | `Record<string, allow\|ask\|deny>`   | see below          | **Replaces, never merges.** A tool absent from the map is not enabled.                                       |
+| `exec`             | patch of `tools.exec`                | _unset_            | Merged over the install-wide exec config, so one agent can hold a tighter allow-list.                        |
+| `toolbox`          | `{ name, network }`                  | `{ name: '', … }`  | Empty name runs `exec` on the host. See [Toolboxes](toolboxes.md).                                           |
+| `memory`           | `{ shared: boolean }`                | `{ shared: true }` | Whether this agent also reads the layer shared by every agent in the folder.                                 |
+| `subagents`        | `{ id, prompt, permission }[]`       | `[]`               | Agents this one may delegate to, in the order the model sees them.                                           |
+
+The six prompt templates share one rule: **`''` inherits the built-in, and a single space
+deletes the section.** Empty has to keep meaning "I have not chosen" or an install would
+freeze on the wording that shipped the day each agent was made, which leaves a space as
+the only way to say "I want this gone". `systemPrompt` is the exception — whitespace-only
+counts as empty there, because an identity-less agent is never what was meant.
+
+### `agents.list.<id>.toolPrompts.<tool>`
+
+| Key           | Type                     | Default | Notes                                                                                           |
+| ------------- | ------------------------ | ------- | ----------------------------------------------------------------------------------------------- |
+| `description` | string                   | `''`    | Replaces what the tool tells the model it does. Empty inherits; a single space advertises none. |
+| `fields`      | `Record<string, string>` | `{}`    | Top-level argument name → its description. A name the schema does not have is a warning.        |
+
+Keyed by advertised tool name, so it reaches built-ins, toolbox programs, MCP and plugin
+tools and `ask_<id>` subagent tools alike — and for a subagent it wins over
+`subagents[].prompt`, being the more specific of the two. **Types, `required` and `enum`
+are not here**: they stay generated from the tool's own Zod object, which is also what
+validates a call, so the advertised schema cannot drift from what the tool will accept.
 
 A new agent is seeded with:
 

@@ -46,9 +46,12 @@ export const PROTOCOL_SCHEMAS = {
   ToolAnnotations: tools.ToolAnnotationsSchema,
   ToolDefinition: tools.ToolDefinitionSchema,
   ApprovalScope: tools.ApprovalScopeSchema,
+  ToolPromptOverride: tools.ToolPromptOverrideSchema,
+  ToolPromptOverrides: tools.ToolPromptOverridesSchema,
 
   // config
   ReasoningEffort: config.ReasoningEffortSchema,
+  PromptMode: config.PromptModeSchema,
   AgentDefaults: config.AgentDefaultsSchema,
   AgentsConfig: config.AgentsConfigSchema,
   ProviderConfig: config.ProviderConfigSchema,

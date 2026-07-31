@@ -34,14 +34,19 @@ import { arch, platform as hostPlatform, versions } from 'node:process';
 
 import {
   DEFAULT_LIVE_STATE_TEMPLATE,
+  DEFAULT_PLATFORM_HOST_TEMPLATE,
+  DEFAULT_PLATFORM_TOOLBOX_TEMPLATE,
   DEFAULT_SYSTEM_PROMPT_TEMPLATE,
+  DEFAULT_TOOLBOX_TEMPLATE,
   DEFAULT_WRAP_UP_TEMPLATE,
   SECTION_SEPARATOR,
   renderPromptTemplate,
+  renderWrapUp,
   type LivePromptValues,
   type ParsedMentions,
+  type PromptMode,
 } from '@ghostai/protocol';
-import { toolOutputPolicy } from '@ghostai/security';
+import { toolOutputPolicy, toolOutputTag } from '@ghostai/security';
 
 /**
  * The separator between top-level sections. Also joins the two halves.
@@ -133,6 +138,25 @@ export interface PromptAgent {
   readonly livePrompt?: string;
   readonly wrapUpPrompt?: string;
   /**
+   * The three sections that used to be composed in code with no way to reach
+   * them: the platform note, the toolbox advertisement and the tool-output
+   * policy. Empty means the built-in; a single space removes the section.
+   *
+   * They sit here rather than being derived, so "what does this agent send"
+   * has one answer held by one object — the same reason `systemPrompt` does.
+   */
+  readonly platformPrompt?: string;
+  readonly toolboxPrompt?: string;
+  readonly toolPolicyPrompt?: string;
+  /**
+   * Whether `systemPrompt` is the static half or the entire system message.
+   *
+   * Absent is `template`, so a caller that predates raw mode — the CLI's
+   * default agent, a test constructing a `PromptAgent` by hand — keeps the
+   * assembly it had.
+   */
+  readonly promptMode?: PromptMode;
+  /**
    * This agent's whole static prompt, as a template.
    *
    * Empty means the built-in `DEFAULT_SYSTEM_PROMPT_TEMPLATE` — which is what
@@ -205,6 +229,12 @@ export interface BuildRuntimeBlockOptions {
    */
   readonly livePrompt?: string;
   readonly wrapUpPrompt?: string;
+  /**
+   * The tool-output policy, as a template. Empty means the built-in; a single
+   * space removes the section, leaving the envelopes unexplained but still in
+   * place — `wrapToolOutput` does not read this.
+   */
+  readonly toolPolicyPrompt?: string;
   /** This turn's tool-output nonce. See the module header for why it lives here. */
   readonly nonce: string;
   readonly contributors?: readonly ContextContributor[];
@@ -238,35 +268,34 @@ export interface BuildRuntimeBlockOptions {
  * it for both placements — so repeating it here would be the same claim twice,
  * and this section is left to say only what is true of *this* box.
  */
-function renderToolbox(toolbox: PromptToolbox | undefined): string {
+function renderToolbox(toolbox: PromptToolbox | undefined, template: string | undefined): string {
   if (toolbox === undefined || toolbox.name === '') return '';
 
-  const lines = [
-    `## Toolbox: ${toolbox.name}`,
-    '',
-    'A shell is available in here, so a pipeline goes through `["bash","-lc","…"]`.',
-    'Nothing from this machine is visible except the workspace, so write findings',
-    'there rather than holding them in context. Output too large to return is kept',
-    'in full under `/run/ghost-runs/`; reach it with a shell command, not the file',
-    'tools.',
-  ];
+  const stored = templateOr(template, DEFAULT_TOOLBOX_TEMPLATE);
+  if (stored.trim() === '') return '';
 
-  if (toolbox.tools.length > 0) {
-    lines.push('', 'Installed:');
-    for (const tool of toolbox.tools) {
-      lines.push(tool.use === '' ? `- \`${tool.name}\`` : `- \`${tool.name}\` — ${tool.use}`);
-    }
-  }
-  if (toolbox.notes.trim() !== '') lines.push('', toolbox.notes.trim());
-
+  const toolList = toolbox.tools
+    .map((tool) => (tool.use === '' ? `- \`${tool.name}\`` : `- \`${tool.name}\` — ${tool.use}`))
+    .join('\n');
+  const notes = toolbox.notes.trim();
   // Last, and under its own heading, so the reference reads as a document rather
   // than as more of this section's prose. It is the longest thing here by an order
   // of magnitude and the part most likely to answer a question the model would
   // otherwise guess at.
   const docs = (toolbox.docs ?? '').trim();
-  if (docs !== '') lines.push('', `### ${toolbox.name} reference`, '', docs);
 
-  return lines.join('\n');
+  return renderPromptTemplate(stored, {
+    name: toolbox.name,
+    workdir: toolbox.workdir,
+    // Each of these carries its own leading blank line, so a toolbox with no
+    // notes leaves no gap where the paragraph would have been. See the
+    // convention noted beside the templates in `@ghostai/protocol`.
+    tools: toolList === '' ? '' : `\n\nInstalled:\n${toolList}`,
+    toolList,
+    notes: notes === '' ? '' : `\n\n${notes}`,
+    reference: docs === '' ? '' : `\n\n### ${toolbox.name} reference\n\n${docs}`,
+    docs,
+  }).trim();
 }
 
 function osLabel(platform: NodeJS.Platform): string {
@@ -301,40 +330,63 @@ function osLabel(platform: NodeJS.Platform): string {
 function commandPolicy(
   platform: NodeJS.Platform,
   runtimeLabel: string,
+  workspaceId: string,
   toolbox: PromptToolbox | undefined,
+  template: string | undefined,
 ): string {
-  if (toolbox !== undefined && toolbox.name !== '') {
-    // The host label is still named, and deliberately as a fact about the machine
-    // rather than about the commands: an agent asked what it is running on should
-    // not have to guess, and the sentence that follows is what stops it reading
-    // that as where `exec` lands.
-    return `## Running commands
+  const boxed = toolbox !== undefined && toolbox.name !== '';
 
-This machine runs ${runtimeLabel}. Your \`exec\` calls do not: they run inside the
-\`${toolbox.name}\` toolbox container described below. The file tools are the other
-way round — they always act on the workspace here, never inside the container.
+  // The branch survives only to pick which default applies. An *override* needs
+  // no branch: placement is `toolbox.name`, a config fact, so an operator writing
+  // this for one agent is writing the one sentence that is true of it.
+  const stored = templateOr(
+    template,
+    boxed ? DEFAULT_PLATFORM_TOOLBOX_TEMPLATE : DEFAULT_PLATFORM_HOST_TEMPLATE,
+  );
+  if (stored.trim() === '') return '';
 
-Both reach the same files under different names: what the file tools call
-\`notes/todo.md\` is \`${toolbox.workdir}/notes/todo.md\` to a command.`;
-  }
-
-  const shell =
-    platform === 'win32'
-      ? `- Do not assume GNU tools such as \`grep\`, \`sed\` or \`awk\` are installed.
+  // A toolboxed agent gets none: its shell is the container's, and the toolbox
+  // section describes that one. Emitting the host's would name tools that may
+  // not exist in the image and omit ones that do.
+  const shell = boxed
+    ? ''
+    : platform === 'win32'
+      ? `\n\n- Do not assume GNU tools such as \`grep\`, \`sed\` or \`awk\` are installed.
 - Prefer the file tools over shelling out; prefer Windows-native commands when you must.
 - If command output comes back garbled, re-run it with UTF-8 output enabled.`
-      : `- Standard shell tools and UTF-8 are available.
+      : `\n\n- Standard shell tools and UTF-8 are available.
 - Prefer the file tools where they are simpler or more reliable than a command.`;
 
-  return `## Running commands
+  return renderPromptTemplate(stored, {
+    runtime: runtimeLabel,
+    platform,
+    workspaceId,
+    // `boxed` already proved `toolbox` is there and named — the empty strings
+    // are the host case, where there is no container to describe.
+    toolbox: boxed ? toolbox.name : '',
+    workdir: boxed ? toolbox.workdir : '',
+    shellPolicy: shell,
+  }).trim();
+}
 
-\`exec\` runs on this machine — ${runtimeLabel} — as a real process on the real
-filesystem. Unlike the file tools it is therefore *not* confined to the workspace,
-which is why an argument pointing outside it (\`/etc/passwd\`, \`../secrets\`) is
-refused rather than resolved inside. Its working directory is already the
-workspace root, so pass relative arguments.
-
-${shell}`;
+/**
+ * Every contributor's static section, joined and trimmed.
+ *
+ * Extracted from `buildStaticPrompt` because raw mode needs the same value in a
+ * different place — as `{{contributors}}` rather than as trailing sections — and
+ * both modes have to keep the one obligation that matters: `staticSection` may
+ * do I/O and is therefore called **once per turn**, never per iteration.
+ */
+export async function contributorSections(
+  contributors: readonly ContextContributor[] | undefined,
+  context: StaticPromptContext,
+): Promise<readonly string[]> {
+  const sections: string[] = [];
+  for (const contributor of contributors ?? []) {
+    const section = await contributor.staticSection?.(context);
+    if (section !== undefined && section.trim() !== '') sections.push(section.trim());
+  }
+  return sections;
 }
 
 /**
@@ -382,7 +434,13 @@ function identity(
     // than withholding it. A custom prompt that asks for it still gets it.
     workspaceRoot,
     runtime: runtimeLabel,
-    platformPolicy: commandPolicy(platform, runtimeLabel, toolbox),
+    platformPolicy: commandPolicy(
+      platform,
+      runtimeLabel,
+      workspaceId,
+      toolbox,
+      agent?.platformPrompt,
+    ),
   });
 }
 
@@ -416,13 +474,10 @@ export async function buildStaticPrompt(options: BuildStaticPromptOptions): Prom
   // Before contributors, after the identity: it describes the environment every
   // later section is talking about, and a model told what it can run before it
   // is told what to do needs fewer turns to discover the difference.
-  const toolbox = renderToolbox(options.toolbox);
+  const toolbox = renderToolbox(options.toolbox, options.agent?.toolboxPrompt);
   if (toolbox !== '') sections.push(toolbox);
 
-  for (const contributor of options.contributors ?? []) {
-    const section = await contributor.staticSection?.(options.context);
-    if (section !== undefined && section.trim() !== '') sections.push(section.trim());
-  }
+  sections.push(...(await contributorSections(options.contributors, options.context)));
 
   return sections.join(SECTION_SEPARATOR);
 }
@@ -457,6 +512,21 @@ const ITERATION_WARNING_AT = 3;
  */
 function templateOr(stored: string | undefined, fallback: string): string {
   return stored === undefined || stored === '' ? fallback : stored;
+}
+
+/**
+ * The tool-output policy, or nothing when the operator deleted it.
+ *
+ * The same "empty inherits, whitespace deletes" rule as the live-state block,
+ * kept in one function because raw mode fills `{{toolPolicy}}` from it too. What
+ * a deletion costs is the *explanation*: `wrapToolOutput` still wraps every
+ * result and still escapes a forged delimiter, so the envelopes remain and the
+ * model is simply never told what they mean.
+ */
+function renderToolPolicy(nonce: string, template: string | undefined): string {
+  const stored = template ?? '';
+  if (stored !== '' && stored.trim() === '') return '';
+  return toolOutputPolicy(nonce, stored);
 }
 
 function liveTime(nowMs: number, timeZone: string): string {
@@ -522,9 +592,7 @@ export function buildRuntimeBlock(options: BuildRuntimeBlockOptions): string {
     // Only when it is about to matter. See `ITERATION_WARNING_AT`.
     wrapUp:
       context.maxIterations > 0 && left <= ITERATION_WARNING_AT
-        ? renderPromptTemplate(templateOr(options.wrapUpPrompt, DEFAULT_WRAP_UP_TEMPLATE), {
-            iterationsLeft: String(Math.max(left, 0)),
-          })
+        ? renderWrapUp(templateOr(options.wrapUpPrompt, DEFAULT_WRAP_UP_TEMPLATE), left)
         : '',
     iteration: String(context.iteration),
     maxIterations: String(context.maxIterations),
@@ -544,7 +612,8 @@ export function buildRuntimeBlock(options: BuildRuntimeBlockOptions): string {
     if (section !== undefined && section.trim() !== '') sections.push(section.trim());
   }
 
-  sections.push(toolOutputPolicy(options.nonce));
+  const policy = renderToolPolicy(options.nonce, options.toolPolicyPrompt);
+  if (policy !== '') sections.push(policy);
 
   // Last, so it is the final thing read before the model answers. A correction
   // buried above a few hundred tokens of policy is a correction competing with
@@ -559,4 +628,110 @@ export function buildRuntimeBlock(options: BuildRuntimeBlockOptions): string {
 /** Joins the halves the way the loop does, for tests and for reuse. */
 export function composeSystemPrompt(staticPrompt: string, runtimeBlock: string): string {
   return staticPrompt + SECTION_SEPARATOR + runtimeBlock;
+}
+
+// ---------------------------------------------------------------------------
+// Raw mode
+// ---------------------------------------------------------------------------
+
+export interface BuildRawPromptOptions {
+  readonly context: RuntimePromptContext;
+  readonly agent?: PromptAgent;
+  readonly toolbox?: PromptToolbox;
+  readonly platform?: NodeJS.Platform;
+  readonly runtimeLabel?: string;
+  readonly nonce: string;
+  /**
+   * The static contributor sections, already collected.
+   *
+   * Passed in rather than gathered here because this function runs on every
+   * iteration and `staticSection` may do I/O. The caller holds the once-per-turn
+   * result; see `contributorSections`.
+   */
+  readonly staticSections?: readonly string[];
+  readonly contributors?: readonly ContextContributor[];
+  readonly timeZone?: string;
+  readonly correction?: string;
+}
+
+/**
+ * The whole system message, from one template.
+ *
+ * Nothing is placed for the operator here — no separator, no live-state block,
+ * no toolbox section, no tool-output policy. A template that wants one names its
+ * placeholder, and a template that names none gets exactly what it says.
+ *
+ * The section *templates* still apply: `{{platformPolicy}}`, `{{toolbox}}` and
+ * `{{toolPolicy}}` render from the agent's own overrides, so raw mode decides
+ * the layout rather than throwing the wording away. `livePrompt` is the one
+ * field it ignores, because its entire content is `{{time}}{{wrapUp}}` and both
+ * are named here directly.
+ *
+ * **The cache cost is real and worth stating.** In template mode the identity
+ * half is a byte-identical prefix a provider discounts for the life of the
+ * session. One blob rebuilt per iteration has no such prefix if anything in it
+ * moves — a `{{time}}` at the top ends the discount for everything after it, on
+ * every request of every turn. A raw template that names no volatile placeholder
+ * renders identically each iteration and caches exactly as well as before, which
+ * is the case an operator writing a fixed instruction sheet lands in anyway.
+ */
+export function buildRawPrompt(options: BuildRawPromptOptions): string {
+  const { context } = options;
+  const platform = options.platform ?? hostPlatform;
+  const runtimeLabel =
+    options.runtimeLabel ?? `${osLabel(platform)} ${arch}, Node ${versions.node}`;
+  const timeZone = options.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  const label = options.agent?.label ?? '';
+  const stored = options.agent?.systemPrompt ?? '';
+  // Whitespace-only is empty here too, and it matters more than it does in
+  // template mode: a raw agent whose template renders to nothing would be sent
+  // no system message at all.
+  const template = stored.trim() === '' ? DEFAULT_SYSTEM_PROMPT_TEMPLATE : stored;
+
+  const left = context.maxIterations - context.iteration + 1;
+  const toolbox = renderToolbox(options.toolbox, options.agent?.toolboxPrompt);
+
+  const runtimeSections: string[] = [];
+  for (const contributor of options.contributors ?? []) {
+    const section = contributor.runtimeSection?.(context);
+    if (section !== undefined && section.trim() !== '') runtimeSections.push(section.trim());
+  }
+  const statics = (options.staticSections ?? []).join(SECTION_SEPARATOR);
+  const correction = (options.correction ?? '').trim();
+
+  return renderPromptTemplate(template, {
+    name: label === '' ? 'GhostAI' : label,
+    workspaceId: context.workspaceId,
+    workspaceRoot: context.workspaceRoot,
+    runtime: runtimeLabel,
+    platformPolicy: commandPolicy(
+      platform,
+      runtimeLabel,
+      context.workspaceId,
+      options.toolbox,
+      options.agent?.platformPrompt,
+    ),
+    time: liveTime(context.nowMs, timeZone),
+    wrapUp:
+      context.maxIterations > 0 && left <= ITERATION_WARNING_AT
+        ? renderWrapUp(templateOr(options.agent?.wrapUpPrompt, DEFAULT_WRAP_UP_TEMPLATE), left)
+        : '',
+    iteration: String(context.iteration),
+    maxIterations: String(context.maxIterations),
+    iterationsLeft: String(Math.max(left, 0)),
+    channel: context.channel,
+    sessionKey: context.sessionKey,
+    // The section placeholders carry their own leading blank line, so one that
+    // does not apply to this agent vanishes instead of leaving a gap. The policy
+    // is the exception: it is usually placed on its own, where a leading break
+    // would be the template's to write.
+    toolbox: toolbox === '' ? '' : `${SECTION_SEPARATOR}${toolbox}`,
+    toolPolicy: renderToolPolicy(options.nonce, options.agent?.toolPolicyPrompt),
+    nonce: options.nonce,
+    tag: toolOutputTag(options.nonce),
+    contributors: statics === '' ? '' : `${SECTION_SEPARATOR}${statics}`,
+    runtimeSections: runtimeSections.length === 0 ? '' : `\n\n${runtimeSections.join('\n\n')}`,
+    correction: correction === '' ? '' : `\n\n${correction}`,
+  });
 }
