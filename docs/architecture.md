@@ -172,9 +172,21 @@ table is `STRICT`.
 | `auth_secrets`, `auth_sessions`, `auth_throttle` | Password, username, setup code, sessions, throttle counters       |
 | `notifications`                                  | The bell and the archive                                          |
 | `toolbox_approvals`                              | The sha256 of each approved manifest's exact bytes                |
+| `automation_jobs`                                | Schedule and payload as JSON, plus the indexed `next_run_at_ms`   |
+| `automation_runs`                                | One row per execution: status, output, warnings, session key      |
 
 `seq` is both the ordering and the pagination cursor. Timestamps are not usable for
 either, because a turn writing parallel tool results collides on them.
 
 `sessions.origin` is `web`, `cli`, `telegram`, `automation`, `subagent`, or a plugin id.
-Session listing excludes `subagent`.
+Session listing excludes `subagent` **and `automation`** unless asked for one by name.
+Both are real rows and neither is a conversation: one turn, started by a model. Automation
+is the one that scales badly if it leaks — a job on a five-minute interval writes about
+105,000 sessions a year, and the sidebar is a list of conversations a person had.
+
+A job's `schedule` and `payload` are JSON columns rather than a flat set of nullable ones.
+They are discriminated unions, and the union exists precisely so `{kind: 'cron', atMs: 5}`
+cannot be represented; spreading them into columns would rebuild that. `state` _is_
+decomposed, because `next_run_at_ms` has to be indexable for the timer's due query. Run
+history is trimmed per job rather than globally — one shared ceiling would let a busy job's
+afternoon evict a nightly job's whole year.

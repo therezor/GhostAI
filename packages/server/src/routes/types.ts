@@ -14,12 +14,14 @@ import type { Clock, Logger } from '@ghostai/core';
 import type { Config } from '@ghostai/protocol';
 import type { FastifyReply, FastifyRequest, FastifySchema } from 'fastify';
 
+import type { AutomationStore } from '../automation-store.js';
 import type { AuthStore } from '../auth-store.js';
 import type { SessionHub } from '../hub.js';
 import type { LoginThrottle } from '../login-throttle.js';
 import type { RouteId } from '../manifest.js';
 import type { NotificationStore } from '../notifications.js';
 import type { ServerRuntime } from '../runtime.js';
+import type { SchedulerPort } from '../scheduler.js';
 
 /**
  * One module's slice of the route table, keyed by the ids it owns.
@@ -100,6 +102,16 @@ export interface RouteDeps {
    */
   readonly loginThrottle: LoginThrottle;
   readonly notifications: NotificationStore;
+  readonly automation: AutomationStore;
+  /**
+   * The engine, deferred for the reason `openapiDocument` is.
+   *
+   * It is built over the notification store `createServer` returns, so it does
+   * not exist when `createRoutes` runs. Absent means this build has no engine —
+   * the CRUD routes still work, so an operator can author jobs, and only
+   * `automation.run` refuses.
+   */
+  readonly scheduler?: () => SchedulerPort | undefined;
   /** Pinged by the health check, which is the only honest liveness signal. */
   readonly database: DatabaseSync;
   /** Deferred: the document does not exist until the app is ready. */

@@ -59,17 +59,22 @@ async function seedOllama(app: Page, url: string, withKey = false): Promise<void
 }
 
 test.describe('providers', () => {
-  test('creating one asks for the type and opens its editor', async ({ app, harness }) => {
-    // The same shape as "New agent": the dialog asks the one question the
-    // editor cannot — the type is fixed for the life of an instance — and then
-    // gets out of the way.
+  test('creating one asks for the type on the form that edits it', async ({ app, harness }) => {
+    // The same shape as "New agent": one form for create and edit, with the one
+    // question the editor cannot ask afterwards — the type is fixed for the
+    // life of an instance — asked here and only here.
     await app.goto(`${harness.url}/settings?panel=providers`);
 
-    await app.getByRole('button', { name: 'New provider' }).click();
+    await app.getByRole('link', { name: 'New provider' }).click();
     await app.getByRole('combobox', { name: 'Type' }).click();
     await app.getByRole('option', { name: 'Ollama' }).click();
-    await app.getByRole('dialog').getByLabel('Name').fill('GPU box');
-    await app.getByRole('dialog').getByRole('button', { name: 'Create' }).click();
+    await app.getByLabel('Name').fill('GPU box');
+
+    // Nothing has been written yet — the dialog this replaced had already
+    // created the endpoint by now.
+    expect((await settingsOf(app, harness.url)).config.providers.ollama).toBeUndefined();
+
+    await app.getByRole('button', { name: 'Save changes' }).click();
 
     // Landed in the editor, on the endpoint that was just made.
     await expect(app).toHaveURL(/\/settings\/providers\/ollama$/u);

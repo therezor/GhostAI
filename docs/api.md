@@ -122,6 +122,28 @@ Everything resolves inside the workspace jail.
 | POST   | `/api/notifications/:id/read` | `required` |
 | DELETE | `/api/notifications/:id`      | `required` |
 
+### Automation
+
+| Method | Path                            | Auth       | Notes                                            |
+| ------ | ------------------------------- | ---------- | ------------------------------------------------ |
+| GET    | `/api/automation/jobs`          | `required` | Every job. Unpaged.                              |
+| POST   | `/api/automation/jobs`          | `required` | 201 with the job and its computed next run.      |
+| GET    | `/api/automation/jobs/:id`      | `required` | So a deep link to the editor resolves.           |
+| PATCH  | `/api/automation/jobs/:id`      | `required` | Recomputes the next run when the schedule moves. |
+| DELETE | `/api/automation/jobs/:id`      | `required` | Cascades to the job's run history.               |
+| POST   | `/api/automation/jobs/:id/run`  | `required` | **202** with a `pending` run — see below.        |
+| GET    | `/api/automation/jobs/:id/runs` | `required` | Keyset-paged, newest first.                      |
+
+`POST .../run` answers **202, not 200**. A turn takes minutes, and a handler that awaited
+one would hold the request open past every timeout between the browser and the server. The
+run row comes back `pending`; its result arrives later as a notification, and the client
+refreshes the run list. It is also the one route where a single HTTP call starts an
+unbounded agent turn, so it carries its own rate limit.
+
+A cron expression the scheduler cannot honour is a **422 naming the field**, not a 500:
+`parseCron` throws a `config` error, whose default mapping is a 500 because a config error
+normally means the install is broken. Here it means the operator typed something.
+
 The route table is a manifest that the router registers _from_ and the auth-matrix test
 iterates over, so a route cannot exist without a declared auth class, and a manifest entry
 with no handler is a type error.

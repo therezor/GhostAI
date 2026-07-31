@@ -69,6 +69,7 @@ export const BUILTIN_TOOL_NAMES: readonly string[] = [
   'edit_file',
   'list_dir',
   'exec',
+  'automation',
 ];
 
 /** Where a registered tool came from, so `unregisterBySource` can be exact. */

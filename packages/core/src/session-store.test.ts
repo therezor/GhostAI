@@ -126,6 +126,29 @@ describe('sessions', () => {
     store.close();
   });
 
+  it('keeps machine-started sessions out of the unscoped listing', () => {
+    // Neither is a conversation a person had. Automation is the one that scales
+    // badly if it leaks: a five-minute job writes about 105,000 of these a year.
+    const store = makeStore();
+    store.ensureSession('a', { origin: 'web' });
+    store.ensureSession('sub', { origin: 'subagent' });
+    store.ensureSession('auto', { origin: 'automation' });
+
+    expect(store.listSessions().map((s) => s.key)).toEqual(['a']);
+    store.close();
+  });
+
+  it('still lists a machine-started origin when asked for it by name', () => {
+    // What the run history's "open in chat" link relies on.
+    const store = makeStore();
+    store.ensureSession('a', { origin: 'web' });
+    store.ensureSession('auto', { origin: 'automation' });
+
+    expect(store.listSessions({ origin: 'automation' }).map((s) => s.key)).toEqual(['auto']);
+    expect(store.getSession('auto')?.origin).toBe('automation');
+    store.close();
+  });
+
   it('paginates the listing', () => {
     const store = makeStore();
     store.ensureSession('a');

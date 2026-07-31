@@ -61,6 +61,11 @@ export const queryKeys = {
   fileText: (workspace: string, path: string) => ['file-text', workspace, path] as const,
   fileUrl: (workspace: string, path: string) => ['file-url', workspace, path] as const,
   context: (key: string) => ['sessions', key, 'context'] as const,
+  automation: ['automation'] as const,
+  automationJob: (id: string) => ['automation', id] as const,
+  // Under the job's own key, so invalidating one job refreshes both the row and
+  // its history — which is what a `notification` carrying a `jobId` wants.
+  automationRuns: (id: string) => ['automation', id, 'runs'] as const,
 };
 
 export function createQueryClient(): QueryClient {

@@ -132,6 +132,20 @@ const MANIFEST = [
     auth: 'required',
   },
   { id: 'notifications.delete', method: 'DELETE', url: '/api/notifications/:id', auth: 'required' },
+
+  // Automation. `/api/automation/jobs` rather than `/api/jobs`: "job" alone is
+  // too general a noun to own a top-level surface — a turn is a job and an
+  // upload is a job — and the prefix is where the heartbeat's own routes go
+  // next. `automation.get` exists although the listing is unpaged, because the
+  // editor lives at its own URL and a deep link must resolve without fetching
+  // every job the install has.
+  { id: 'automation.list', method: 'GET', url: '/api/automation/jobs', auth: 'required' },
+  { id: 'automation.create', method: 'POST', url: '/api/automation/jobs', auth: 'required' },
+  { id: 'automation.get', method: 'GET', url: '/api/automation/jobs/:id', auth: 'required' },
+  { id: 'automation.update', method: 'PATCH', url: '/api/automation/jobs/:id', auth: 'required' },
+  { id: 'automation.delete', method: 'DELETE', url: '/api/automation/jobs/:id', auth: 'required' },
+  { id: 'automation.run', method: 'POST', url: '/api/automation/jobs/:id/run', auth: 'required' },
+  { id: 'automation.runs', method: 'GET', url: '/api/automation/jobs/:id/runs', auth: 'required' },
 ] as const;
 
 export type RouteId = (typeof MANIFEST)[number]['id'];

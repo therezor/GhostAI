@@ -273,33 +273,97 @@ block, so installing a channel does not require a schema change here.
 | `ttsLang`      | string     | `'en'`                     |
 | `ttsModelPath` | string     | _unset_                    |
 
-## `rag`, `scheduler`, `plugins`
+## `scheduler`
 
-_All three are schema-only today. See [BUILD_PLAN.md](BUILD_PLAN.md)._
+Read and honoured. Edited in **Settings → Automation**. The jobs themselves are a page of
+their own — a list an operator keeps is not a setting.
 
-| Key                               | Type                         | Default                                                          |
-| --------------------------------- | ---------------------------- | ---------------------------------------------------------------- |
-| `rag.provider`                    | string                       | `'local'` (Ollama `/api/embed`)                                  |
-| `rag.apiBase`                     | string                       | `''`                                                             |
-| `rag.model`                       | string                       | `'nomic-embed-text'`                                             |
-| `rag.chunkSize` / `chunkOverlap`  | int                          | `1024` / `128`                                                   |
-| `rag.topK`                        | int > 0                      | `8`                                                              |
-| `rag.hybrid`                      | boolean                      | `true`                                                           |
-| `rag.rrfK`                        | int > 0                      | `60` — the constant from the reciprocal-rank-fusion paper        |
-| `scheduler.enabled`               | boolean                      | `true`                                                           |
-| `scheduler.concurrency`           | int > 0                      | `2`                                                              |
-| `scheduler.catchUpOnBoot`         | boolean                      | `true`                                                           |
-| `scheduler.heartbeat.enabled`     | boolean                      | `true`                                                           |
-| `scheduler.heartbeat.intervalMin` | int > 0                      | `30`                                                             |
-| `scheduler.heartbeat.model`       | string                       | _unset_                                                          |
-| `scheduler.heartbeat.sessionKey`  | string                       | `'heartbeat:default'`                                            |
-| `scheduler.heartbeat.file`        | string                       | `'TASK.md'` (workspace-relative)                                 |
-| `scheduler.heartbeat.targets`     | `Record<channelId, address>` | `{}`                                                             |
-| `scheduler.heartbeat.agentId`     | string                       | _unset_                                                          |
-| `plugins.load`                    | string[]                     | `[]`                                                             |
-| `plugins.disabled`                | string[]                     | `[]`                                                             |
-| `plugins.allowUnverified`         | boolean                      | `false` — required before an arbitrary npm spec may be installed |
-| `plugins.allowOverride`           | boolean                      | `false`                                                          |
+Five knobs, and every one of them is true of the **engine**. None describes a task —
+that is what a job is for.
+
+| Key                       | Type      | Default                                       |
+| ------------------------- | --------- | --------------------------------------------- |
+| `scheduler.enabled`       | boolean   | `true` — the master switch                    |
+| `scheduler.concurrency`   | int > 0   | `2` — concurrent runs across all jobs         |
+| `scheduler.catchUpOnBoot` | boolean   | `true`                                        |
+| `scheduler.runRetention`  | int > 0   | `200` — runs kept **per job**                 |
+| `scheduler.timezone`      | IANA name | `'UTC'` — the zone a zoneless cron is read in |
+
+> **There is no `scheduler.heartbeat` block, and there should not be.** A heartbeat _is_ a
+> scheduled job: its interval is the job's schedule, its task file and decision model are
+> the job's payload, and its on/off is the job's own `enabled`. A config block restating
+> all of that is a second vocabulary for one concept — and the half an operator would
+> configure while the other half is what actually runs. Create a job whose payload kind is
+> "read a task file and decide".
+
+**`catchUpOnBoot` coalesces.** A job whose time passed while the process was down runs
+**once** when it comes back, not once per missed occurrence — a five-minute job that was
+down for a weekend would otherwise produce hundreds of runs at boot. With it off, a missed
+one-shot is recorded `skipped` rather than deleted (a reminder that vanished without trace
+is worse than one that says it was missed), and a recurring job simply rearms.
+
+**The cron dialect is five fields** — minute, hour, day-of-month, month, day-of-week —
+with `*`, lists, ranges, `/step`, and names (`JAN`, `MON`). A six-field expression is
+refused by name rather than absorbed: every dialect that grew a seconds column put it at
+the front, so reading `0 * * * * *` as five fields plus a stray runs something sixty times
+more often than asked. `tz` is an IANA name; absent means `scheduler.timezone`, which defaults to **UTC** rather
+than the host zone. That default is deliberate: a server's own zone is a property of where
+it happens to be running, so `0 9 * * *` would fire at a different real instant after a
+migration nobody connected to the schedule.
+
+When **day-of-month and day-of-week are both restricted, a day matches if _either_ does**.
+`0 0 13 * 5` is "the 13th, and also every Friday", not "Friday the 13th".
+
+A wall-clock time a zone skips (spring forward) does not fire that day; one that happens
+twice (fall back) fires **once**, at the earlier instant — so an hourly job sees 23 or 25
+wall-clock hours rather than running twice.
+
+### The heartbeat payload
+
+A job's payload is either **a fixed message** or **a heartbeat**: read a file, and let a
+cheap model decide whether there is anything to do. Three steps, and only the middle one
+is an agent turn.
+
+1. **Decide.** The task file is read through the workspace jail and capped at 64 KiB, then
+   one _direct provider call_ with a single tool, forced. Not a turn — registering a
+   `heartbeat` tool in the shared registry would leak it into every ordinary chat and every
+   subagent, and an agent turn for a yes/no would write two messages into a session every
+   interval forever. The answer is `skip` or `run`, with a reason.
+2. **Run.** Only on `run`, and using the instruction the model gave. A real turn, through
+   the hub, on the job's agent.
+3. **Evaluate.** A second forced call: is this worth interrupting anyone? `no` still writes
+   the run and its output — it just raises no notification. That is the whole reason a
+   heartbeat every thirty minutes is tolerable rather than infuriating.
+
+Three rules make it safe to leave running:
+
+- **Fail-closed on acting, fail-loud on reporting.** A decision that cannot be read —
+  malformed arguments, or no tool call at all because the resilience ladder stripped
+  `tool_choice` — is a **skip with a warning**, never a run. Defaulting to `run` means an
+  unbounded agent turn started on garbage, every interval, decided by the cheapest model in
+  the install.
+- **Cheap paths cost nothing.** No task file, or an empty one: skipped, with no provider
+  call at all. That is the normal state of a fresh install and it must not bill.
+- **Errors always notify.** The evaluate step never gets to veto a failure. A job that has
+  quietly not worked for a week is worse than a spurious toast.
+
+## `rag`, `plugins`
+
+_Both are schema-only today. See [BUILD_PLAN.md](BUILD_PLAN.md)._
+
+| Key                              | Type     | Default                                                          |
+| -------------------------------- | -------- | ---------------------------------------------------------------- |
+| `rag.provider`                   | string   | `'local'` (Ollama `/api/embed`)                                  |
+| `rag.apiBase`                    | string   | `''`                                                             |
+| `rag.model`                      | string   | `'nomic-embed-text'`                                             |
+| `rag.chunkSize` / `chunkOverlap` | int      | `1024` / `128`                                                   |
+| `rag.topK`                       | int > 0  | `8`                                                              |
+| `rag.hybrid`                     | boolean  | `true`                                                           |
+| `rag.rrfK`                       | int > 0  | `60` — the constant from the reciprocal-rank-fusion paper        |
+| `plugins.load`                   | string[] | `[]`                                                             |
+| `plugins.disabled`               | string[] | `[]`                                                             |
+| `plugins.allowUnverified`        | boolean  | `false` — required before an arbitrary npm spec may be installed |
+| `plugins.allowOverride`          | boolean  | `false`                                                          |
 
 ---
 

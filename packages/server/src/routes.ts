@@ -13,6 +13,7 @@
  */
 
 import { authRoutes } from './routes/auth.js';
+import { automationRoutes } from './routes/automation.js';
 import { fileRoutes } from './routes/files.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { providerRoutes } from './routes/providers.js';
@@ -46,5 +47,6 @@ export function createRoutes(deps: RouteDeps): Record<RouteId, RouteDefinition> 
     ...fileRoutes(deps),
     ...workspaceRoutes(deps),
     ...notificationRoutes(deps),
+    ...automationRoutes(deps),
   };
 }

@@ -184,8 +184,7 @@ The wire schemas, config blocks and seams for these already ship — which is wh
 | **Memory**                 | The tuning keys, `lastConsolidatedSeq`, the prompt contributor seam | The store, retrieval and consolidation pass  |
 | **Skills**                 | `pinnedSkills`, `maxPinnedSkills`                                   | The on-disk format, loader and prompt budget |
 | **RAG**                    | Embedder and chunking config, hybrid search constants               | The index, embedder client and retrieval     |
-| **Scheduled jobs**         | The whole automation vocabulary and the Settings panel slot         | The timer engine, store and routes           |
-| **Heartbeat**              | Interval, model, task file and target config                        | The loop. Depends on the two above           |
+| **Heartbeat delivery**     | The decide/run/evaluate triad, as a scheduled job's payload         | `targets` reaching a channel. Needs Telegram |
 | **Telegram**               | The `Channel` contract, `ChannelManager`, `TurnProjection`          | One adapter over the Bot API                 |
 | **Plugins**                | Load specs, `allowUnverified`, `unregisterBySource`                 | Discovery, loader and manifest format        |
 | **Browser slash commands** | The terminal's command table                                        | A shared table and the composer UI           |

@@ -36,6 +36,12 @@ export interface NotificationCursor {
   readonly id: string;
 }
 
+/** Where a run listing resumes, in the `startedAtMs DESC, id ASC` order. */
+export interface AutomationRunCursor {
+  readonly startedAtMs: number;
+  readonly id: string;
+}
+
 function encode(payload: unknown): string {
   return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
 }
@@ -96,4 +102,14 @@ export function decodeNotificationCursor(cursor: string): NotificationCursor {
   const raw = decode(cursor);
   if (!isRecord(raw)) throw badRequest('Malformed pagination cursor');
   return { createdAtMs: integer(raw.c), id: text(raw.i) };
+}
+
+export function encodeAutomationRunCursor(cursor: AutomationRunCursor): string {
+  return encode({ s: cursor.startedAtMs, i: cursor.id });
+}
+
+export function decodeAutomationRunCursor(cursor: string): AutomationRunCursor {
+  const raw = decode(cursor);
+  if (!isRecord(raw)) throw badRequest('Malformed pagination cursor');
+  return { startedAtMs: integer(raw.s), id: text(raw.i) };
 }

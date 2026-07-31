@@ -23,6 +23,7 @@ import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   BrainCircuit,
+  CalendarClock,
   FolderOpen,
   MoreHorizontal,
   Pencil,
@@ -78,6 +79,12 @@ interface NavItem {
 const NAV: readonly NavItem[] = [
   { to: '/agents', label: 'nav.agents', icon: BrainCircuit },
   { to: '/files', label: 'nav.files', icon: FolderOpen },
+  // Before Settings, and a row of its own rather than a settings panel: the
+  // jobs are a list an operator keeps, which is the same kind of thing as
+  // Agents. The scheduler's own switches live on that page for the reason
+  // `panels.test.ts` gives for agents — the settings a panel would hold *are*
+  // the page's subject, and a nav row plus a panel is two doors into one room.
+  { to: '/automation', label: 'nav.automation', icon: CalendarClock },
   { to: '/settings', label: 'nav.settings', icon: Settings },
 ];
 

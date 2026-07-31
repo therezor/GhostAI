@@ -108,6 +108,47 @@ each with its own description and permission.
 Model and budget live on the agent, not in Settings — they are properties of an agent, and
 an install with several agents has several answers.
 
+## Scheduled jobs
+
+A page rather than a settings panel, in the nav above Settings, built out of the same CRUD
+chrome as Agents and Workspaces: filter, sort, `DataList` rows, a kebab, a create dialog
+and a confirm on delete. Per job: the schedule (once at a time, on an interval, or on a
+cron expression with its own zone), what it does (a fixed message, or a heartbeat that
+reads a task file and decides), the agent it runs on, an optional pinned session key, and
+delivery. Below it, the **run history** — each run's outcome, output, skip reason, error
+and any warnings.
+
+The scheduler's own switches are **not** here — enabled, catch-up on boot, default
+timezone, concurrency and how much history to keep per job are install-wide, and live in
+Settings → Automation. The split is the one Agents already makes: the agents are a page,
+and only install-wide tool settings sit in Settings.
+
+A row reports where the last run **landed** and when the next one is due, never whether one
+is in flight. Keeping that honest would mean polling, and it is exactly the transient state
+the e2e rule says not to build a UI around.
+
+## Creating things
+
+Every CRUD screen follows one rule: **`New X` is a link to `/x/new`, not a dialog.** That
+route renders the same component the editor renders, seeded from defaults instead of from
+a stored row, plus whatever fields only exist at creation. Save writes and navigates to
+the row it made; the editor's Save patches.
+
+The rule exists because a dialog that creates on submit has to invent the settings to
+create _with_ — a job got a message made from its name, an agent a copy of the default
+one, a workspace a `mkdir`. Abandoning the editor you landed on left that invented row
+behind. Nothing is written before Save now, so an abandoned create leaves nothing.
+
+| Screen         | Route                     | Asked only at creation                                    |
+| -------------- | ------------------------- | --------------------------------------------------------- |
+| Scheduled jobs | `/automation/new`         | —                                                         |
+| Agents         | `/agents/new`             | The identifier, which follows the name until you type one |
+| Workspaces     | `/workspaces/new`         | The folder — a `mkdir` now, a `rename(2)` later           |
+| Providers      | `/settings/providers/new` | The type, fixed for the life of an instance               |
+
+Duplicating an agent stays a direct create: it has a source to copy, so there is nothing
+to fill in first.
+
 ## Settings
 
 | Panel      | State                                                                                                                                                                  |
@@ -116,8 +157,8 @@ an install with several agents has several answers.
 | Tools      | Built. Install-wide only: approval timeout, `exec` settings, output caps. **No permission matrix here** — permission is per tool per agent.                            |
 | Account    | Built. Username and password together, requires the current password, revokes every other session.                                                                     |
 | Appearance | Built. Language (install-wide) and theme (this browser only).                                                                                                          |
+| Automation | Built. The scheduler engine only: enabled, concurrency, catch-up on boot, run retention, default timezone. **The jobs are a page.**                                    |
 | Extensions | Placeholder naming its phase — MCP, skills, OAuth, channels, plugins.                                                                                                  |
-| Automation | Placeholder — scheduled jobs and heartbeat.                                                                                                                            |
 | Knowledge  | Placeholder — the knowledge base.                                                                                                                                      |
 
 The placeholders are shown rather than hidden, and each names what it will hold. A

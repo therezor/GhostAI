@@ -33,7 +33,7 @@ describe('the settings panels', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('ship the four the phase builds', () => {
+  it('ship the five the phase builds', () => {
     // No `agent` panel: the settings it held *are* the default agent's, so they
     // are edited on that agent rather than in a second room describing the same
     // subtree. Agents are a page of their own, and picking one happens in the
@@ -42,8 +42,13 @@ describe('the settings panels', () => {
     // `appearance` joined them with the translation layer. It is the natural
     // home for the theme too, which until then lived only in the header — a
     // preference with no page you could point someone at.
+    //
+    // `automation` holds the scheduler engine and nothing else — the jobs are a
+    // page in the nav, because a list an operator keeps is not a setting. That
+    // is the split Agents already makes: the agents are a page, and only
+    // install-wide tool settings are in Settings.
     const built = SETTINGS_PANELS.filter((panel) => !isPlanned(panel)).map((panel) => panel.id);
-    expect(built).toEqual(['providers', 'tools', 'account', 'appearance']);
+    expect(built).toEqual(['providers', 'tools', 'account', 'appearance', 'automation']);
   });
 
   it('no longer advertise profiles as unbuilt, now that agents ship', () => {

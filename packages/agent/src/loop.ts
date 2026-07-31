@@ -108,6 +108,7 @@ import {
 } from '@ghostai/security';
 import {
   DEFAULT_TOOLS_CONFIG,
+  type AutomationResolver,
   type RunnerResolver,
   type ToolboxRequest,
   type ToolContext,
@@ -362,6 +363,15 @@ export interface AgentLoopOptions {
    * therefore to different sandboxes.
    */
   readonly runners?: RunnerResolver;
+  /**
+   * Supplies the scheduler a turn's `automation` tool writes through, keyed the
+   * same way and for the same reason: the port is scoped to the agent and the
+   * session, so a job records who asked for it and an agent cannot reach
+   * another's.
+   *
+   * Absent means this build has no scheduler, and the tool says so.
+   */
+  readonly automation?: AutomationResolver;
   /** Which toolbox this agent works in. Defaults to the host. */
   readonly toolbox?: AgentToolbox;
   /** The toolbox's declared contents, injected into the static prompt. */
@@ -529,6 +539,7 @@ export class AgentLoop {
   readonly #store: SessionStore;
   readonly #jails: JailResolver;
   readonly #runners: RunnerResolver | undefined;
+  readonly #automation: AutomationResolver | undefined;
   readonly #toolbox: AgentToolbox;
   readonly #toolboxPrompt: PromptToolbox | undefined;
   readonly #config: AgentDefaults;
@@ -553,6 +564,7 @@ export class AgentLoop {
     this.#store = options.store;
     this.#jails = options.jails;
     this.#runners = options.runners;
+    this.#automation = options.automation;
     this.#toolbox = options.toolbox ?? { name: '', network: { mode: 'none', allow: [] } };
     this.#toolboxPrompt = options.toolboxPrompt;
     this.#config = options.config ?? AgentDefaultsSchema.parse({});
@@ -894,6 +906,10 @@ export class AgentLoop {
       workspaceRoot: jail.root,
     };
     const runner = this.#runners?.forTurn(sandbox);
+    // Beside the runner and off the same request, for the same reason: which
+    // agent and which session is a property of the turn, and re-deriving it per
+    // tool call would let a mid-turn change move it.
+    const automation = this.#automation?.forTurn(sandbox);
 
     const toolContext: ToolContext = {
       jail,
@@ -903,6 +919,7 @@ export class AgentLoop {
       logger: this.#logger,
       env: this.#env,
       ...(runner === undefined ? {} : { runner, sandboxed: true }),
+      ...(automation === undefined ? {} : { automation }),
     };
 
     const startedAt = this.#clock.monotonic();

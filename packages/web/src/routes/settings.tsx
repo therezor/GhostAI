@@ -29,6 +29,7 @@ import { AccountPanel } from '@/settings/account-panel.js';
 import { PlannedPanel } from '@/settings/planned-panel.js';
 import { ProvidersPanel } from '@/settings/providers-panel.js';
 import { ToolsPanel } from '@/settings/tools-panel.js';
+import { AutomationPanel } from '@/settings/automation-panel.js';
 import { isPlanned, panelById, SETTINGS_PANELS } from '@/settings/panels.js';
 import { useSettings } from '@/settings/use-settings.js';
 
@@ -130,5 +131,6 @@ function PanelBody({ panelId }: { readonly panelId: string }): JSX.Element {
 
   const { config } = settings.data;
   if (panel.id === 'tools') return <ToolsPanel config={config} />;
-  return <ProvidersPanel config={config} />;
+  if (panel.id === 'automation') return <AutomationPanel config={config} />;
+  return <ProvidersPanel />;
 }

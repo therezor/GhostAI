@@ -1,0 +1,277 @@
+/**
+ * The scheduled jobs index.
+ *
+ * A page rather than a settings panel, and built out of the same chrome as
+ * Agents, Files and Workspaces — the same `page page--wide` container, the same
+ * `cluster page__header`, the same `list-toolbar` with `SearchFilter` and
+ * `ListSort`, the same `DataList` rows and the same kebab. CRUD screens that
+ * merely *look* alike drift the moment one is touched; ones that share the
+ * components cannot.
+ *
+ * **The engine's own knobs are not here.** Whether the scheduler runs at all,
+ * how many runs at once, the default timezone — those are install-wide settings
+ * and live in Settings → Automation. This page is the jobs, which are content
+ * rather than configuration; the same split Agents makes, where the agents are a
+ * page and only install-wide tool settings sit in Settings.
+ *
+ * **What a row reports is where the last run landed, plus when the next one is
+ * due.** Not whether one is in flight: keeping that honest would mean polling,
+ * and "running" is exactly the transient state the e2e rule says not to build a
+ * UI around. Status is a word in a badge — colour alone is the one encoding
+ * some readers do not receive.
+ */
+
+import { Link, useNavigate } from '@tanstack/react-router';
+import { CalendarClock, Copy, Pencil, Play, Plus, Power, PowerOff, Trash2 } from 'lucide-react';
+import { useMemo, useState, type JSX } from 'react';
+import { useTranslation } from 'react-i18next';
+
+import type { AutomationJob, RunStatus } from '@ghostai/protocol';
+
+import { Badge } from '@/components/ui/badge.js';
+import { Button } from '@/components/ui/button.js';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu.js';
+import { SearchFilter } from '@/components/ui/search-filter.js';
+import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';
+import { DataList, DataListRow } from '@/components/crud/data-list.js';
+import { ListSort } from '@/components/crud/list-sort.js';
+import { RowActions } from '@/components/crud/row-actions.js';
+import { filterRows, sortRows, type Comparators, type SortOrder } from '@/components/crud/sort.js';
+import { useFormat } from '@/lib/use-format.js';
+import { describeSchedule } from './job-form.js';
+import {
+  useAutomationJobs,
+  useCreateJob,
+  useRemoveJob,
+  useRunJob,
+  useSaveJob,
+} from './use-automation.js';
+
+type SortKey = 'name' | 'schedule' | 'status' | 'nextRun';
+
+/** Every text column reads from A; the next-run column reads soonest first. */
+const ASCENDING_FIRST: readonly SortKey[] = ['name', 'schedule', 'status', 'nextRun'];
+
+/** Tones chosen so the word carries the meaning and the colour only agrees. */
+const STATUS_TONE: Readonly<Record<RunStatus, 'neutral' | 'success' | 'warning' | 'danger'>> = {
+  pending: 'neutral',
+  ok: 'success',
+  skipped: 'neutral',
+  error: 'danger',
+};
+
+const COMPARE: Comparators<AutomationJob, SortKey> = {
+  name: (a, b) => a.name.localeCompare(b.name),
+  schedule: (a, b) => describeSchedule(a.schedule).localeCompare(describeSchedule(b.schedule)),
+  status: (a, b) => a.state.lastStatus.localeCompare(b.state.lastStatus),
+  // Unscheduled sorts last in both directions rather than as zero, which would
+  // put every switched-off job at the top of "soonest first".
+  nextRun: (a, b) =>
+    (a.state.nextRunAtMs === 0 ? Number.MAX_SAFE_INTEGER : a.state.nextRunAtMs) -
+    (b.state.nextRunAtMs === 0 ? Number.MAX_SAFE_INTEGER : b.state.nextRunAtMs),
+};
+
+function JobRow({ job }: { readonly job: AutomationJob }): JSX.Element {
+  const { t } = useTranslation();
+  const format = useFormat();
+  const navigate = useNavigate();
+  const [pendingDelete, setPendingDelete] = useState(false);
+  const save = useSaveJob(job.id);
+  const remove = useRemoveJob();
+  const run = useRunJob();
+  const create = useCreateJob();
+
+  /**
+   * A copy, under a name that does not collide.
+   *
+   * Created **switched off**, whatever the original was: two jobs on one
+   * schedule is almost never what a duplicate is for, and the copy firing
+   * alongside its source before anyone has edited it is the surprising half.
+   */
+  const duplicate = (): void => {
+    create.mutate({
+      name: t('automation.copyOf', { name: job.name }),
+      schedule: job.schedule,
+      payload: job.payload,
+      enabled: false,
+      deleteAfterRun: job.deleteAfterRun,
+    });
+  };
+
+  return (
+    <>
+      <DataListRow
+        primary={
+          <Link
+            to="/automation/$jobId"
+            params={{ jobId: job.id }}
+            className="data-list__open"
+            aria-label={t('automation.editAria', { name: job.name })}
+          >
+            <CalendarClock />
+            <span className="truncate">{job.name}</span>
+          </Link>
+        }
+        meta={
+          <>
+            <span className="data-list__code">{describeSchedule(job.schedule)}</span>
+            <Badge tone={STATUS_TONE[job.state.lastStatus]}>
+              {t(`automation.status.${job.state.lastStatus}`)}
+            </Badge>
+            <Badge tone={job.enabled ? 'success' : 'neutral'}>
+              {job.enabled ? t('automation.enabled') : t('automation.disabled')}
+            </Badge>
+            {/* The engine's own answer to "when", rather than anything this
+                page computed — which is what makes it worth showing at all. */}
+            <span>
+              {job.state.nextRunAtMs > 0
+                ? t('automation.nextRun', { when: format.date(job.state.nextRunAtMs) })
+                : t('automation.notScheduled')}
+            </span>
+          </>
+        }
+        actions={
+          <RowActions label={job.name}>
+            <DropdownMenuItem
+              onSelect={() => {
+                void navigate({ to: '/automation/$jobId', params: { jobId: job.id } });
+              }}
+            >
+              <Pencil />
+              {t('automation.edit')}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={run.pending}
+              onSelect={() => {
+                run.mutate(job.id);
+              }}
+            >
+              <Play />
+              {t('automation.runNow')}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={create.pending}
+              onSelect={() => {
+                duplicate();
+              }}
+            >
+              <Copy />
+              {t('automation.duplicate')}
+            </DropdownMenuItem>
+            {/* Reversible where Delete is not, so it does not ask: switching it
+                back on is the same click. */}
+            <DropdownMenuItem
+              disabled={save.pending}
+              onSelect={() => {
+                save.mutate({ enabled: !job.enabled });
+              }}
+            >
+              {job.enabled ? <PowerOff /> : <Power />}
+              {job.enabled ? t('automation.disable') : t('automation.enable')}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="menu__item--danger"
+              onSelect={() => {
+                setPendingDelete(true);
+              }}
+            >
+              <Trash2 />
+              {t('automation.delete')}
+            </DropdownMenuItem>
+          </RowActions>
+        }
+      />
+
+      <ConfirmDialog
+        open={pendingDelete}
+        onOpenChange={setPendingDelete}
+        title={t('automation.deleteTitle')}
+        description={t('automation.deleteHint', { name: job.name })}
+        confirmLabel={t('automation.delete')}
+        pending={remove.pending}
+        onConfirm={() => {
+          // Closed on success, not on the press: a delete that failed should
+          // leave the question on screen with its error.
+          remove.mutate(job.id, {
+            onSuccess: () => {
+              setPendingDelete(false);
+            },
+          });
+        }}
+      />
+    </>
+  );
+}
+
+export function AutomationRoute(): JSX.Element {
+  const { t } = useTranslation();
+  const [filter, setFilter] = useState('');
+  const [sort, setSort] = useState<SortOrder<SortKey>>({ key: 'nextRun', descending: false });
+
+  const jobs = useAutomationJobs();
+
+  const rows = useMemo(
+    () =>
+      sortRows(
+        filterRows(jobs.data?.jobs ?? [], filter, (job) => `${job.name} ${job.payload.kind}`),
+        sort,
+        COMPARE,
+        { tiebreak: (a, b) => a.name.localeCompare(b.name) },
+      ),
+    [jobs.data, filter, sort],
+  );
+
+  return (
+    <div className="stack page page--wide">
+      <div className="cluster page__header">
+        <h1 className="page__title">{t('automation.title')}</h1>
+        <span className="spacer" />
+        {/* A link, not a dialog: creating a job is the same form as editing
+            one, and nothing is written until it is saved. */}
+        <Button asChild>
+          <Link to="/automation/new">
+            <Plus />
+            {t('automation.newJob')}
+          </Link>
+        </Button>
+      </div>
+
+      <p className="page__note">{t('automation.note')}</p>
+
+      <div className="row list-toolbar">
+        <SearchFilter value={filter} label={t('automation.filter')} onValueChange={setFilter} />
+        <ListSort
+          options={[
+            { key: 'nextRun', label: t('automation.nextRunColumn') },
+            { key: 'name', label: t('common.name') },
+            { key: 'schedule', label: t('automation.scheduleColumn') },
+            { key: 'status', label: t('common.status') },
+          ]}
+          sort={sort}
+          ascendingFirst={ASCENDING_FIRST}
+          onChange={setSort}
+        />
+      </div>
+
+      {jobs.isPending && <p className="page__note">{t('automation.loading')}</p>}
+      {jobs.isError && (
+        <p role="alert" className="page__error">
+          {t('automation.loadError', { message: jobs.error.message })}
+        </p>
+      )}
+
+      {jobs.isSuccess &&
+        (rows.length === 0 ? (
+          <p className="page__note">
+            {filter === '' ? t('automation.none') : t('automation.noMatch', { filter })}
+          </p>
+        ) : (
+          <DataList label={t('automation.title')}>
+            {rows.map((job) => (
+              <JobRow key={job.id} job={job} />
+            ))}
+          </DataList>
+        ))}
+    </div>
+  );
+}

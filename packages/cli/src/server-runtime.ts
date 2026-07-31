@@ -36,7 +36,7 @@
 
 import { existsSync } from 'node:fs';
 
-import { DEFAULT_AGENT_ID, saveConfig } from '@ghostai/core';
+import { DEFAULT_AGENT_ID, GhostError, saveConfig } from '@ghostai/core';
 import type {
   Config,
   ConfigPatch,
@@ -53,6 +53,7 @@ import {
   listInstances,
   resolveConnection,
   type ChatProvider,
+  type ChatResult,
   type ProviderSpec,
 } from '@ghostai/providers';
 import { ToolboxStore } from '@ghostai/security';
@@ -438,6 +439,32 @@ export function createServerRuntime(
       // Ids only. The probe's job is "can this be reached, and what is on it" —
       // the shaped catalogue is what `models.list` serves.
       return { ok: true, models: result.models.map((model) => model.id) };
+    },
+
+    /**
+     * One provider request outside a turn — the heartbeat's forced `skip | run`
+     * decision, and nothing else.
+     *
+     * `providerFor` resolves the same endpoint, credential and model a turn for
+     * this agent would use, with `model` overriding so a heartbeat can run on
+     * something cheaper than the agent's own. It refuses rather than falling
+     * back on an unconfigured install: a heartbeat that could not ask has to be
+     * a recorded error, because the alternative is guessing "run" and starting
+     * an unbounded turn every interval forever.
+     */
+    chat: async (input): Promise<ChatResult> => {
+      const resolved = runtime.providerFor(input.agentId, input.model);
+      if (resolved === null) {
+        throw new GhostError('not_found', 'No provider is configured to answer with.');
+      }
+      return await resolved.provider.chat({
+        model: resolved.model,
+        messages: input.messages,
+        tools: input.tools,
+        toolChoice: input.toolChoice,
+        ...(input.maxTokens === undefined ? {} : { maxTokens: input.maxTokens }),
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
+      });
     },
   };
 }

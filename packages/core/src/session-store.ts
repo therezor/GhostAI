@@ -33,6 +33,7 @@ import { randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 
 import {
+  AUTOMATION_ORIGIN,
   ChatMessageSchema,
   SUBAGENT_ORIGIN,
   subagentRunsOf,
@@ -537,11 +538,13 @@ export class SessionStore {
     // The predicate is the sort order written as a comparison: strictly older,
     // or the same instant and a key that sorts later. Bound as `?` twice each
     // rather than named, because `node:sqlite` binds positionally.
-    // Subagent sessions are excluded unless asked for by name. They are real
-    // rows — that is what makes a delegation inspectable after a reload — but
-    // they are not conversations: one turn, started by a model, ending when the
-    // tool call that made it returns. A sidebar that listed them would bury the
-    // conversations a person actually had under the machinery of one of them.
+    // Subagent and automation sessions are excluded unless asked for by name.
+    // Both are real rows — that is what makes a delegation inspectable after a
+    // reload, and a scheduled run's transcript readable afterwards — but
+    // neither is a conversation: one turn, started by a model rather than by a
+    // person. A sidebar that listed them would bury the conversations someone
+    // actually had under the machinery of one of them, and in automation's case
+    // under about 105,000 rows a year from a single five-minute job.
     //
     // Expressed as `origin = ?` winning over the exclusion rather than as a
     // separate flag, so there is one way to ask and no combination that means
@@ -550,7 +553,7 @@ export class SessionStore {
       `SELECT s.*, (SELECT COUNT(*) FROM messages m WHERE m.session_key = s.key) AS message_count
          FROM sessions s
         WHERE (? IS NULL OR s.origin = ?)
-          AND (? IS NOT NULL OR s.origin <> '${SUBAGENT_ORIGIN}')
+          AND (? IS NOT NULL OR s.origin NOT IN ('${SUBAGENT_ORIGIN}', '${AUTOMATION_ORIGIN}'))
           AND (? IS NULL OR s.workspace_id = ?)
           AND (? IS NULL
                OR s.updated_at_ms < ?

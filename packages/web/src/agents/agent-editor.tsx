@@ -684,6 +684,43 @@ const PERMISSION_LABELS: Readonly<Record<ToolPermission, WebKey>> = {
  */
 const NO_TOOLBOX = '-none-';
 
+/**
+ * Creating an agent, on the page that edits one.
+ *
+ * The same `Editor`, seeded from the default agent's entry — which is exactly
+ * what the dialog it replaced used as its template, only now the operator sees
+ * it and can change it *before* anything is written. Nothing reaches the
+ * settings tree until Save, so an abandoned create leaves no agent behind.
+ */
+export function AgentCreateRoute(): JSX.Element {
+  const { t } = useTranslation();
+  const settings = useSettings();
+
+  if (settings.isPending) return <p className="page__note">{t('agents.loading')}</p>;
+  if (settings.isError) {
+    return (
+      <p role="alert" className="page__error">
+        Could not load the defaults: {settings.error.message}
+      </p>
+    );
+  }
+
+  const { config } = settings.data;
+  // The template a new agent is stamped from, and the same one `toNewAgentPatch`
+  // used: the default agent as it actually stands, not the schema's defaults.
+  const template = config.agents.list[DEFAULT_AGENT_ID] ?? AgentEntrySchema.parse({});
+
+  return (
+    <Editor
+      mode="create"
+      agentId=""
+      entry={template}
+      defaults={config.agents.defaults}
+      list={config.agents.list}
+    />
+  );
+}
+
 export function AgentEditorRoute(): JSX.Element {
   const { t } = useTranslation();
   const { agentId } = useParams({ from: '/agents/$agentId' });
@@ -724,6 +761,7 @@ export function AgentEditorRoute(): JSX.Element {
       // Remounts on a change of agent, so one agent's edits cannot survive into
       // the next one's boxes.
       key={agentId}
+      mode="edit"
       agentId={agentId}
       entry={entry ?? AgentEntrySchema.parse({})}
       defaults={config.agents.defaults}
@@ -736,18 +774,28 @@ export function AgentEditorRoute(): JSX.Element {
 }
 
 function Editor({
+  mode,
   agentId,
   entry,
   defaults,
   list,
 }: {
+  /**
+   * `create` seeds from the template and POSTs the agent into existence on
+   * Save; `edit` loads the stored entry and patches it. It decides three things
+   * and nothing else — the seed, what Save does, and whether the edit-only
+   * controls render (Delete, and the id box's rename behaviour).
+   */
+  readonly mode: 'create' | 'edit';
   readonly agentId: string;
   readonly entry: AgentEntry;
   readonly defaults: AgentDefaults;
   readonly list: Readonly<Record<string, AgentEntry>>;
 }): JSX.Element {
   const { t } = useTranslation();
-  const isDefault = agentId === DEFAULT_AGENT_ID;
+  const creating = mode === 'create';
+  // A new agent is never the default one, whatever its id box says.
+  const isDefault = !creating && agentId === DEFAULT_AGENT_ID;
   const navigate = useNavigate();
   const { agentId: active, select } = useAgent();
   const { save, saving } = useSaveSettings();
@@ -1061,10 +1109,20 @@ function Editor({
    * bargain the create dialog makes. `''` means the box holds nothing usable,
    * which is only an error once it differs from the id the agent already has.
    */
-  const proposedId = idDraft.trim() === '' ? '' : deriveAgentId(idDraft);
-  const renaming = !isDefault && proposedId !== '' && proposedId !== agentId;
+  // While creating, an untouched id box follows the name — the same bargain the
+  // dialog this replaced made, and what the workspace create page does with its
+  // folder. Typing in the box takes it over.
+  const idSource = creating && idDraft.trim() === '' ? form.label : idDraft;
+  const proposedId = idSource.trim() === '' ? '' : deriveAgentId(idSource);
+  // Creating is never renaming: there is no old id for the new one to move
+  // away from, so the same box means "what this will be called" instead.
+  const renaming = !creating && !isDefault && proposedId !== '' && proposedId !== agentId;
 
   const idError = ((): string | undefined => {
+    if (creating) {
+      if (proposedId === '') return t('agents.idEmpty');
+      return list[proposedId] === undefined ? undefined : t('agents.idTaken', { id: proposedId });
+    }
     if (isDefault || idDraft.trim() === agentId) return undefined;
     if (proposedId === '') return t('agents.idEmpty');
     // Checked against the settings tree rather than the agent listing, which
@@ -1096,7 +1154,7 @@ function Editor({
       return;
     }
 
-    const target = renaming ? proposedId : agentId;
+    const target = creating || renaming ? proposedId : agentId;
     const result = isDefault
       ? toDefaultAgentPatch(base, form, entry, t)
       : toAgentEntryPatch(target, form, entry, t);
@@ -1105,6 +1163,19 @@ function Editor({
       return;
     }
     setErrors({});
+
+    if (creating) {
+      // The first write this page makes. On success, not on the press — the
+      // editor it navigates to reads the settings cache, and arriving before
+      // the write lands is the "There is no agent called…" path.
+      save(result.patch, {
+        onSuccess: () => {
+          void navigate({ to: '/agents/$agentId', params: { agentId: target } });
+        },
+      });
+      setDirty(false);
+      return;
+    }
 
     // One request, patch and rename together. As two it was two writes with a
     // window between them: the rename could land and the patch fail, leaving the
@@ -1151,7 +1222,7 @@ function Editor({
     setDirty(false);
   };
 
-  const name = form.label === '' ? agentId : form.label;
+  const name = form.label === '' ? (creating ? t('agents.newTitle') : agentId) : form.label;
 
   return (
     <div className="stack page page--wide agent-editor">
@@ -1167,8 +1238,9 @@ function Editor({
           <span className="spacer" />
           {/* Not a section at the bottom of the form any more. A destructive
               action does not belong in the reading order of the settings it
-              would destroy, and it used to fire without asking. */}
-          {!isDefault && (
+              would destroy, and it used to fire without asking. Absent while
+              creating: there is nothing yet to delete. */}
+          {!isDefault && !creating && (
             <RowActions label={name}>
               <DropdownMenuItem
                 className="menu__item--danger"
@@ -1213,12 +1285,22 @@ function Editor({
             <TextField
               label={t('agents.idLabel')}
               value={idDraft}
+              {...(creating ? { placeholder: proposedId } : {})}
               onValueChange={(value) => {
                 setIdDraft(value);
                 setDirty(true);
               }}
-              {...(errors.agentId === undefined ? {} : { error: errors.agentId })}
-              hint={renaming ? t('agents.idPreview', { id: proposedId }) : t('agents.idHint')}
+              {...(errors.agentId === undefined || creating ? {} : { error: errors.agentId })}
+              hint={
+                // Creating shows what the id *will be* as it is typed, and says
+                // so inline rather than as an error — a name that collides is a
+                // thing to fix, not a failure that has happened.
+                creating
+                  ? (idError ?? t('agents.idCreatePreview', { id: proposedId }))
+                  : renaming
+                    ? t('agents.idPreview', { id: proposedId })
+                    : t('agents.idHint')
+              }
             />
           )}
           {!isDefault && (

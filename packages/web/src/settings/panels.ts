@@ -56,16 +56,15 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = [
     summary: 'settings.panels.appearance.summary',
   },
   {
+    id: 'automation',
+    label: 'settings.panels.automation.label',
+    summary: 'settings.panels.automation.summary',
+  },
+  {
     id: 'extensions',
     label: 'settings.panels.extensions.label',
     summary: 'settings.panels.extensions.summary',
     phase: 3,
-  },
-  {
-    id: 'automation',
-    label: 'settings.panels.automation.label',
-    summary: 'settings.panels.automation.summary',
-    phase: 5,
   },
   {
     id: 'knowledge',
@@ -106,18 +105,6 @@ export const PLANNED_SYSTEMS: Readonly<Record<string, readonly PlannedSystem[]>>
       phase: 3,
     },
     { name: 'settings.planned.plugins.name', detail: 'settings.planned.plugins.detail', phase: 4 },
-  ],
-  automation: [
-    {
-      name: 'settings.planned.scheduledJobs.name',
-      detail: 'settings.planned.scheduledJobs.detail',
-      phase: 5,
-    },
-    {
-      name: 'settings.planned.heartbeat.name',
-      detail: 'settings.planned.heartbeat.detail',
-      phase: 5,
-    },
   ],
   knowledge: [
     {

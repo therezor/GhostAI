@@ -32,6 +32,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
+import { open } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 
 import { ChannelManager, type ChannelFactory } from '@ghostai/channels';
@@ -46,7 +47,15 @@ import {
 } from '@ghostai/core';
 import { instanceLabel } from '@ghostai/providers';
 import { createRuntime, resolveAgentOrDefault, type GhostRuntime } from '@ghostai/runtime';
-import { HubApprovalGate, SessionHub, createServer, type GhostServer } from '@ghostai/server';
+import {
+  HubApprovalGate,
+  Scheduler,
+  SessionHub,
+  createAutomationResolver,
+  createServer,
+  type GhostServer,
+} from '@ghostai/server';
+import type { AutomationResolver } from '@ghostai/tools';
 import pc from 'picocolors';
 
 import { translationsFor, type CliT } from './i18n.js';
@@ -139,6 +148,52 @@ export function resolveUiRoot(explicit: string | undefined): string | undefined 
 }
 
 /**
+ * Reads a heartbeat's task file, through the jail.
+ *
+ * `payload.file` is operator-authored and workspace-relative, so it goes
+ * through `WorkspaceJail` rather than `node:fs` directly — the jail is what
+ * turns `../../.ssh/id_rsa` into a refusal instead of a file the heartbeat
+ * model then reads aloud.
+ *
+ * A missing file becomes `GhostError('not_found')`, which the scheduler reads
+ * as "nothing to do" rather than a fault: an install with no `TASK.md` is the
+ * normal case, not a broken one.
+ *
+ * Capped rather than read whole, because this runs every interval forever and
+ * a large file would be paid for on each one.
+ */
+async function readWorkspaceFile(
+  runtime: GhostRuntime,
+  path: string,
+  maxBytes: number,
+): Promise<string> {
+  const verdict = runtime.jail.check(path);
+  if (!verdict.ok) {
+    throw new GhostError('jail_escape', `Cannot read ${path}: ${verdict.message}`, {
+      details: { path },
+    });
+  }
+
+  let handle;
+  try {
+    handle = await open(verdict.path, 'r');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new GhostError('not_found', `No ${path} in the workspace.`, { details: { path } });
+    }
+    throw error;
+  }
+
+  try {
+    const buffer = Buffer.alloc(maxBytes);
+    const { bytesRead } = await handle.read(buffer, 0, maxBytes, 0);
+    return buffer.subarray(0, bytesRead).toString('utf8');
+  } finally {
+    await handle.close();
+  }
+}
+
+/**
  * Brings the whole stack up and returns it. Does not block.
  *
  * Separate from `serveCommand` so a test can start a real server, drive it, and
@@ -164,15 +219,28 @@ export async function startServer(options: ServeOptions = {}): Promise<RunningSe
   // Before the runtime, because the runtime hands it to the loop.
   const approvals = new HubApprovalGate({ logger });
 
+  // The `automation` tool's reach into the scheduler, late-bound for the same
+  // knot `scheduler` has: the store it writes through is built by
+  // `createServer`, which needs a runtime that is built here. The loop resolves
+  // through this indirection once per turn, so filling it in below is enough.
+  const automationHolder: { current: AutomationResolver | undefined } = { current: undefined };
+  const automation: AutomationResolver = {
+    forTurn: (request) => automationHolder.current?.forTurn(request),
+  };
+
   let runtime: GhostRuntime | undefined;
   let hub: SessionHub | undefined;
   let server: GhostServer | undefined;
   let channels: ChannelManager | undefined;
+  // Declared out here so the catch below can stop a timer a later step failed
+  // after arming.
+  let scheduler: Scheduler | undefined;
 
   try {
     const built = createRuntime({
       database,
       approvals,
+      automation,
       logger,
       env,
       ...(options.home === undefined ? {} : { home: options.home }),
@@ -207,16 +275,54 @@ export async function startServer(options: ServeOptions = {}): Promise<RunningSe
     });
 
     const ui = resolveUiRoot(options.ui);
+    const serverRuntime = createServerRuntime(built, { env });
+    // Captured rather than reached through the object at call time, so the
+    // optional-method check and the call cannot disagree.
+    const directChat = serverRuntime.chat?.bind(serverRuntime);
 
+    // `scheduler` is still undefined here and is filled in below.
+    // `createServer` builds the stores the engine runs over, so the engine
+    // cannot exist before the call — the getter is what unties that, the same
+    // way `openapiDocument` is untied inside `createServer`.
     server = await createServer({
       config: built.config,
-      runtime: createServerRuntime(built, { env }),
+      runtime: serverRuntime,
       hub,
       database,
       logger,
+      scheduler: () => scheduler,
       ...(options.password === undefined ? {} : { password: options.password }),
       ...(options.username === undefined ? {} : { username: options.username }),
       ...(ui === undefined ? {} : { ui: { root: ui } }),
+    });
+
+    const sessionHub = hub;
+    const listener = server;
+    automationHolder.current = createAutomationResolver({
+      jobs: listener.automation,
+      sessions: built.store,
+      timezone: () => built.config.scheduler.timezone,
+      refresh: () => {
+        scheduler?.refresh();
+      },
+    });
+
+    scheduler = new Scheduler({
+      jobs: listener.automation,
+      config: () => built.config,
+      // Through the hub, not straight to a loop: a job may name a session a
+      // browser is also in, and the hub is the only thing that serialises one.
+      connect: (connectOptions) => sessionHub.connect(connectOptions),
+      broadcast: (event) => {
+        sessionHub.broadcast(event);
+      },
+      raise: (input) => listener.notifications.create(input),
+      deleteSession: (sessionKey) => {
+        built.store.deleteSession(sessionKey);
+      },
+      readFile: async (path, maxBytes) => await readWorkspaceFile(built, path, maxBytes),
+      ...(directChat === undefined ? {} : { chat: directChat }),
+      logger,
     });
 
     channels = new ChannelManager({
@@ -237,10 +343,14 @@ export async function startServer(options: ServeOptions = {}): Promise<RunningSe
 
     const url = await server.listen(options.port === undefined ? {} : { port: options.port });
 
+    // After `listen`, so a job that fires immediately — a missed one-shot the
+    // boot sweep picks up — reaches a server that can already answer for it.
+    scheduler.start();
+
     let closed = false;
-    const listener = server;
     const bridge = channels;
     const sessions = hub;
+    const engine = scheduler;
     const running: RunningServer = {
       url,
       server: listener,
@@ -252,10 +362,15 @@ export async function startServer(options: ServeOptions = {}): Promise<RunningSe
       close: async (): Promise<void> => {
         if (closed) return;
         closed = true;
-        // Backwards through the list above: channels stop accepting, the hub
-        // aborts what is running, the listener closes, and the connection goes
-        // last — closing it first would pull the database out from under a turn
-        // that is still writing to it.
+        // Backwards through the list above: the scheduler stops starting work,
+        // channels stop accepting, the hub aborts what is running, the listener
+        // closes, and the connection goes last — closing it first would pull
+        // the database out from under a turn that is still writing to it.
+        //
+        // The scheduler goes first *and* is awaited, because it drives its
+        // turns through the hub: stopping the hub underneath an in-flight run
+        // would leave the run row `pending` with nothing to close it.
+        await engine.stop();
         await bridge.stop();
         sessions.close();
         await listener.close();
@@ -266,7 +381,8 @@ export async function startServer(options: ServeOptions = {}): Promise<RunningSe
     return running;
   } catch (error) {
     // Anything already built is taken back down: a failed start must not leave
-    // a listener, a WAL or a channel connection behind.
+    // a listener, a WAL, a timer or a channel connection behind.
+    await scheduler?.stop();
     await channels?.stop();
     hub?.close();
     await server?.close();

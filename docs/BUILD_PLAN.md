@@ -23,35 +23,6 @@ Two rules apply to every entry and are not restated in them, both in
 
 ---
 
-## Scheduled jobs
-
-**What.** Run an agent turn on a schedule — once at a time, every interval, or
-on a cron expression — and keep a history of the runs.
-
-**Already there.** `packages/protocol/src/automation.ts` is the whole wire
-vocabulary: `AutomationJob`, `AtSchedule` / `EverySchedule` / `CronSchedule`,
-`AutomationDelivery`, `AutomationRun`, `RunStatus`, and the create/update DTOs.
-`SchedulerConfigSchema` holds `enabled`, `concurrency` and `catchUpOnBoot`.
-`sessions.origin` already accepts `automation`. The Settings → Automation panel
-exists as a placeholder in `settings/panels.ts`.
-
-**Missing.** Everything that runs: the timer engine, a jobs/runs store, the REST
-routes, and the panel. `catchUpOnBoot` is the one behaviour worth deciding early
-— what a job whose time passed while the process was down should do.
-
-## Heartbeat
-
-**What.** A cheap model reads a task file on an interval and acts on it, so the
-agent does something without being asked.
-
-**Already there.** `HeartbeatConfigSchema` under `scheduler.heartbeat`:
-`intervalMin`, its own `model`, `sessionKey`, the `file` (`TASK.md`, workspace
-relative), `targets` (channel id → address) and `agentId`.
-
-**Missing.** The loop itself. Depends on **Scheduled jobs** for the timer, and
-on **Telegram** for `targets` to reach anything — it is the first consumer of
-both, which is a reason to build it after them rather than in parallel.
-
 ## Connect MCP servers
 
 **What.** Speak MCP as a client, so a third-party server's tools appear beside
@@ -203,6 +174,32 @@ deny` map; absent means disabled, so a tool is enabled explicitly or not at
 - **The i18n layer.** Three namespaces, the JSON typed as the key union, errors
   carrying a translatable key across packages, and two CI gates for the opposite
   halves of the problem.
+- **Scheduled jobs, and the heartbeat.** A rearming `Clock` timer to the
+  earliest due job, clamped so a distant one-shot cannot overflow `setTimeout`
+  and fire immediately; `automation_jobs` and `automation_runs` on the shared
+  connection, with schedule and payload as JSON so a discriminated union stays
+  one; a hand-rolled five-field cron parser in `@ghostai/core` with the
+  day-of-month/day-of-week OR rule and both DST edges; seven REST routes with
+  `run` answering 202; a **Scheduled jobs page** in the nav with an editor per
+  job; and a Settings → Automation panel holding the engine's five knobs and
+  nothing else. `catchUpOnBoot` **coalesces** — a job that missed twelve occurrences runs
+  once, not twelve times. Runs go through the hub rather than straight to a
+  loop, because `payload.sessionKey` lets two jobs — or a browser tab — name one
+  session, and the hub is the only thing that serialises one. The
+  heartbeat's decide/run/evaluate triad ships too: decide and evaluate are
+  single forced-tool provider calls rather than turns, so no `heartbeat` tool
+  ever enters the shared registry, and a decision that cannot be read becomes a
+  skip rather than an unbounded turn on garbage.
+
+  **A heartbeat is a job, not a second system.** Its interval is the job's
+  schedule, its file and model are the payload, its on/off is the job's own
+  flag — so the `scheduler.heartbeat` config block that described all of it a
+  second time was deleted rather than wired up. What is left in `scheduler` is
+  five knobs that are true of the engine and of no particular task: `enabled`,
+  `concurrency`, `catchUpOnBoot`, `runRetention`, `timezone`. What remains of
+  the original Heartbeat entry is only `targets` delivery, blocked on
+  **Telegram**.
+
 - **Subagents.** `agents.list.<id>.subagents` points one agent at others; each
   becomes a tool named `ask_<id>` whose description is the operator's own
   guidance, with its own `allow | ask | deny`. Delegation lives in `AgentLoop`

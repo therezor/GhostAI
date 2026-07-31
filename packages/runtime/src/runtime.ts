@@ -98,6 +98,7 @@ import {
   toolboxTools,
   withToolboxTools,
   type AnyTool,
+  type AutomationResolver,
   type RunnerResolver,
 } from '@ghostai/tools';
 
@@ -148,6 +149,15 @@ export interface RuntimeOptions {
    * without a daemon, and so an install can point at `podman` instead.
    */
   readonly containerEngine?: ContainerEngine | undefined;
+  /**
+   * Supplies the scheduler a turn's `automation` tool writes through.
+   *
+   * Injected rather than built here, because the store it needs is created by
+   * `createServer` — which happens *after* this runtime exists. `ghost serve`
+   * passes a resolver that delegates to one it fills in afterwards, the same
+   * late binding `ServerOptions.scheduler` uses for the same knot.
+   */
+  readonly automation?: AutomationResolver | undefined;
   /**
    * Translates GhostAI's view of the workspace into the *daemon's*.
    *
@@ -257,6 +267,17 @@ export interface GhostRuntime {
   loopFor(agentId: string | undefined): AgentLoop | null;
   /** `loopFor`, with the same refusal `requireLoop` makes. */
   requireLoopFor(agentId: string | undefined): AgentLoop;
+  /**
+   * One agent's resolved provider and model, for a request that is not a turn.
+   *
+   * The one caller is the heartbeat's forced `skip | run` decision. See the
+   * implementation for why this is narrow on purpose — everything a turn gets
+   * is bypassed here.
+   */
+  providerFor(
+    agentId: string | undefined,
+    model?: string,
+  ): { readonly provider: ChatProvider; readonly model: string } | null;
   /**
    * Applies a settings patch and rebuilds what depends on it.
    *
@@ -494,6 +515,37 @@ class Runtime implements GhostRuntime {
     const loop = this.loopFor(agentId);
     if (loop !== null) return loop;
     throw this.#current.unconfigured ?? noProviderError(this.file);
+  }
+
+  /**
+   * One agent's resolved provider and model, for a request that is **not** a
+   * turn.
+   *
+   * Deliberately narrow, and worth naming its one caller: the heartbeat's
+   * forced `skip | run` decision, which is a single request carrying one tool
+   * and no history. Everything a turn gets — the tool registry, the approval
+   * gate, history windowing, the turn-stats row — is bypassed here, which is
+   * correct for a classification and wrong for anything that looks like work.
+   * A second caller wanting "just one completion" is a sign it wants a turn.
+   *
+   * `model` overrides what the agent would otherwise use, which is how
+   * `scheduler.heartbeat.model` gets to be a cheaper one than the agent's.
+   */
+  providerFor(
+    agentId: string | undefined,
+    model?: string,
+  ): { readonly provider: ChatProvider; readonly model: string } | null {
+    const config = this.config;
+    const agent = resolveAgent(config, agentId ?? DEFAULT_AGENT_ID);
+    const resolved = this.#resolveProvider(
+      config,
+      model === undefined || model === ''
+        ? agent
+        : { ...agent, defaults: { ...agent.defaults, model } },
+      this.paths,
+    );
+    if (resolved.provider === null) return null;
+    return { provider: resolved.provider, model: resolved.model };
   }
 
   get instance(): ProviderInstance | null {
@@ -836,6 +888,7 @@ class Runtime implements GhostRuntime {
       ...(this.#options.approvals === undefined ? {} : { approvals: this.#options.approvals }),
       ...(this.#options.clock === undefined ? {} : { clock: this.#options.clock }),
       ...(runners === undefined ? {} : { runners }),
+      ...(this.#options.automation === undefined ? {} : { automation: this.#options.automation }),
     });
   }
 

@@ -124,9 +124,9 @@ test.describe('agents', () => {
     });
 
     await app.goto(`${harness.url}/agents`);
-    await app.getByRole('button', { name: 'New agent' }).click();
+    await app.getByRole('link', { name: 'New agent' }).click();
     await app.getByLabel('Name', { exact: true }).fill('Reviewer');
-    await app.getByRole('button', { name: 'Create' }).click();
+    await app.getByRole('button', { name: 'Save changes' }).click();
 
     // Nothing inherits any more, so what a new agent runs on has to be written
     // into its own entry — otherwise the editor would have to describe this
@@ -234,9 +234,9 @@ test.describe('agents', () => {
   }) => {
     await app.goto(`${harness.url}/agents`);
 
-    await app.getByRole('button', { name: 'New agent' }).click();
+    await app.getByRole('link', { name: 'New agent' }).click();
     await app.getByLabel('Name', { exact: true }).fill('Code Reviewer');
-    await app.getByRole('button', { name: 'Create' }).click();
+    await app.getByRole('button', { name: 'Save changes' }).click();
 
     // The durable result: the settings tree the server sends back names it.
     await expect

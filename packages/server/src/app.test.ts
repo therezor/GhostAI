@@ -12,6 +12,7 @@ import { SESSION_COOKIE } from './auth.js';
 import type { SessionHub } from './hub.js';
 import { LoginThrottle } from './login-throttle.js';
 import { ROUTE_MANIFEST, type RouteSpec } from './manifest.js';
+import { AutomationStore } from './automation-store.js';
 import { NotificationStore } from './notifications.js';
 import { createRoutes } from './routes.js';
 import { createTestHub } from './testkit/hub.js';
@@ -255,6 +256,7 @@ describe('auth matrix', () => {
         auth: server.auth,
         loginThrottle: new LoginThrottle({ database }),
         notifications: new NotificationStore({ database }),
+        automation: new AutomationStore({ database }),
         database,
         openapiDocument: () => ({}),
         startedAt: 0,

@@ -19,6 +19,7 @@ import { ConfigSchema, type Config, type ToolDefinition } from '@ghostai/protoco
 import { createServer, type GhostServer, type UiOptions } from '../app.js';
 import type { PasswordHasher } from '../auth-store.js';
 import type { SessionHub } from '../hub.js';
+import type { SchedulerPort } from '../scheduler.js';
 import { createTestHub, type FakeRunner } from './hub.js';
 import { createFakeRuntime, type FakeRuntime } from './runtime.js';
 
@@ -49,6 +50,14 @@ export interface TestServerOptions {
   readonly runner?: FakeRunner;
   /** A built UI to serve, with the SPA fallback that goes with it. */
   readonly ui?: UiOptions;
+  /**
+   * Stands in for the engine, which a route test has no business starting.
+   *
+   * `SchedulerPort` is two methods and a flag on purpose: a test that wants to
+   * assert `POST .../run` answers 202 supplies an object, and a test that wants
+   * to assert it refuses without one supplies nothing.
+   */
+  readonly scheduler?: SchedulerPort;
 }
 
 export interface TestServer {
@@ -59,6 +68,8 @@ export interface TestServer {
   readonly runner: FakeRunner;
   /** The jail root. Tests write fixtures straight into it. */
   readonly workspace: string;
+  /** The automation store the routes read, so a test can seed a job directly. */
+  readonly automation: GhostServer['automation'];
   /** A `Bearer` header that authenticates every `required` route. */
   readonly headers: Record<string, string>;
   close(): Promise<void>;
@@ -96,6 +107,7 @@ export async function startTestServer(options: TestServerOptions = {}): Promise<
     password: TEST_PASSWORD,
     ...(options.clock === undefined ? {} : { clock: options.clock }),
     ...(options.ui === undefined ? {} : { ui: options.ui }),
+    ...(options.scheduler === undefined ? {} : { scheduler: () => options.scheduler }),
   });
 
   return {
@@ -104,6 +116,7 @@ export async function startTestServer(options: TestServerOptions = {}): Promise<
     hub,
     runner,
     workspace,
+    automation: server.automation,
     headers: { authorization: `Bearer ${server.auth.issue('test').token}` },
     close: async () => {
       hub.close();

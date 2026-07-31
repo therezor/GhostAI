@@ -42,7 +42,9 @@ import { HttpError, registerErrorHandler } from './errors.js';
 import type { SessionHub } from './hub.js';
 import { LoginThrottle } from './login-throttle.js';
 import { ROUTE_MANIFEST } from './manifest.js';
+import { AutomationStore } from './automation-store.js';
 import { NotificationStore } from './notifications.js';
+import type { SchedulerPort } from './scheduler.js';
 import type { ServerRuntime } from './runtime.js';
 import {
   PROTOCOL_COMPONENTS,
@@ -101,6 +103,19 @@ export interface ServerOptions {
    * same file and reintroduce the lock contention the sharing avoids.
    */
   readonly database: DatabaseSync;
+  /**
+   * The engine, read lazily.
+   *
+   * A getter rather than a value because of a knot: the scheduler is built over
+   * the `AutomationStore` and `NotificationStore` that *this function* creates,
+   * so it cannot exist before the call. The caller passes `() => scheduler`
+   * over a binding it fills in afterwards — the same shape, for the same
+   * reason, as `RouteDeps.openapiDocument`.
+   *
+   * Absent means no engine: the CRUD routes still work and only `run` refuses,
+   * which is what a route test that never wanted a timer needs.
+   */
+  readonly scheduler?: () => SchedulerPort | undefined;
   readonly logger?: Logger;
   readonly clock?: Clock;
   readonly random?: RandomSource;
@@ -149,6 +164,14 @@ export interface GhostServer {
   readonly auth: AuthStore;
   /** Raised by the scheduler and the hub; read over `/api/notifications`. */
   readonly notifications: NotificationStore;
+  /**
+   * The jobs and runs the scheduler drives.
+   *
+   * Returned so the caller can build a `Scheduler` over it — the engine needs a
+   * hub and a runtime that this function does not have, so it is constructed
+   * outside and handed back in through `ServerOptions.scheduler`.
+   */
+  readonly automation: AutomationStore;
   readonly config: Config;
   /** Resolves to the bound address. */
   listen(options?: ListenOptions): Promise<string>;
@@ -323,6 +346,17 @@ export async function createServer(options: ServerOptions): Promise<GhostServer>
     ...(options.clock === undefined ? {} : { clock: options.clock }),
   });
 
+  // Built here rather than by the caller, so the two callers that compose a
+  // server — `ghost serve` and the e2e harness — both get the automation
+  // surface without either remembering to. `createServer` awaits `app.ready()`,
+  // after which no route can be added, so anything the routes need is decided
+  // at this point or not at all.
+  const automation = new AutomationStore({
+    database,
+    ...(options.clock === undefined ? {} : { clock: options.clock }),
+    ...(options.logger === undefined ? {} : { logger: options.logger }),
+  });
+
   // On the same connection as the sessions it guards, so a restart does not
   // hand an attacker a fresh counter — see `login-throttle.ts`.
   const loginThrottle = new LoginThrottle({
@@ -343,9 +377,11 @@ export async function createServer(options: ServerOptions): Promise<GhostServer>
     auth,
     loginThrottle,
     notifications,
+    automation,
     database,
     openapiDocument: () => app.swagger(),
     startedAt: clock.monotonic(),
+    ...(options.scheduler === undefined ? {} : { scheduler: options.scheduler }),
     ...(options.clock === undefined ? {} : { clock: options.clock }),
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   });
@@ -393,6 +429,7 @@ export async function createServer(options: ServerOptions): Promise<GhostServer>
     app,
     auth,
     notifications,
+    automation,
     config,
     listen: async (listenOptions: ListenOptions = {}): Promise<string> =>
       await app.listen({

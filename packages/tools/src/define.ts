@@ -52,6 +52,7 @@ import type {
 import { ToolsConfigSchema } from '@ghostai/protocol';
 import type { WorkspaceJail } from '@ghostai/security';
 
+import type { AutomationPort } from './automation.js';
 import type { CommandRunner } from './runner.js';
 
 /**
@@ -108,6 +109,15 @@ export interface ToolContext {
    * another host without confining them would set one and not the other.
    */
   readonly sandboxed?: boolean;
+  /**
+   * Where a scheduled job gets written, already scoped to this turn's agent and
+   * session.
+   *
+   * Optional and resolved per turn for the same reasons as `runner`: nothing
+   * constructing a context has to know about it, and a build with no scheduler
+   * simply leaves it out — the tool then refuses rather than pretending.
+   */
+  readonly automation?: AutomationPort;
 }
 
 /**

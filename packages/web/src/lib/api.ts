@@ -20,6 +20,9 @@
  */
 
 import {
+  AutomationJobListResponseSchema,
+  AutomationJobSchema,
+  AutomationRunListResponseSchema,
   AuthSessionResponseSchema,
   ContextResponseSchema,
   ErrorResponseSchema,
@@ -48,6 +51,11 @@ import {
   ToolListResponseSchema,
   UploadResponseSchema,
   type AuthSessionResponse,
+  type AutomationJob,
+  type AutomationJobListResponse,
+  type AutomationRunListResponse,
+  type CreateAutomationJob,
+  type UpdateAutomationJob,
   type SettingsPatchRequest,
   type ContextResponse,
   type FileEntry,
@@ -145,11 +153,9 @@ export async function requestVoid(path: string, options: RequestOptions = {}): P
 /**
  * The endpoints something in this package actually calls.
  *
- * Still not a client for all thirty routes: a wrapper written before its caller
- * is a wrapper written to the wrong shape, and an untested one, since nothing
- * exercises it. Everything here has a caller, and the routes that do not appear
- * — the automation surface — are the ones whose panels arrive in a later
- * phase.
+ * Still not a client for every route: a wrapper written before its caller is a
+ * wrapper written to the wrong shape, and an untested one, since nothing
+ * exercises it. Everything here has a caller.
  *
  * One rule holds across the whole object and is the reason `setCredential`
  * returns `void`: **no response body ever carries a credential.** The vault is
@@ -269,6 +275,53 @@ export const api = {
 
   deleteNotification: (id: string): Promise<void> =>
     requestVoid(`/api/notifications/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  automationJobs: (signal?: AbortSignal): Promise<AutomationJobListResponse> =>
+    request('/api/automation/jobs', AutomationJobListResponseSchema, {
+      ...(signal ? { signal } : {}),
+    }),
+
+  automationJob: (id: string, signal?: AbortSignal): Promise<AutomationJob> =>
+    request(`/api/automation/jobs/${encodeURIComponent(id)}`, AutomationJobSchema, {
+      ...(signal ? { signal } : {}),
+    }),
+
+  createAutomationJob: (body: CreateAutomationJob): Promise<AutomationJob> =>
+    request('/api/automation/jobs', AutomationJobSchema, { method: 'POST', body }),
+
+  updateAutomationJob: (id: string, body: UpdateAutomationJob): Promise<AutomationJob> =>
+    request(`/api/automation/jobs/${encodeURIComponent(id)}`, AutomationJobSchema, {
+      method: 'PATCH',
+      body,
+    }),
+
+  deleteAutomationJob: (id: string): Promise<void> =>
+    requestVoid(`/api/automation/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  /**
+   * Starts a run and returns the `pending` row.
+   *
+   * 202, not 200: the answer is minutes away. The caller refreshes the run list
+   * rather than holding this open — which is also what the `notification` frame
+   * arriving on the socket tells it to do.
+   */
+  runAutomationJob: (id: string): Promise<AutomationJob> =>
+    request(`/api/automation/jobs/${encodeURIComponent(id)}/run`, AutomationJobSchema, {
+      method: 'POST',
+    }),
+
+  automationRuns: (
+    id: string,
+    options: { readonly cursor?: string; readonly signal?: AbortSignal } = {},
+  ): Promise<AutomationRunListResponse> =>
+    request(
+      `/api/automation/jobs/${encodeURIComponent(id)}/runs`,
+      AutomationRunListResponseSchema,
+      {
+        ...(options.cursor === undefined ? {} : { query: { cursor: options.cursor } }),
+        ...(options.signal ? { signal: options.signal } : {}),
+      },
+    ),
 
   tools: (signal?: AbortSignal): Promise<ToolListResponse> =>
     request('/api/tools', ToolListResponseSchema, { ...(signal ? { signal } : {}) }),

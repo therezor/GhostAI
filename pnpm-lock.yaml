@@ -328,6 +328,9 @@ importers:
       '@ghostai/security':
         specifier: workspace:*
         version: link:../security
+      '@ghostai/tools':
+        specifier: workspace:*
+        version: link:../tools
       '@node-rs/argon2':
         specifier: ^2.0.0
         version: 2.0.2

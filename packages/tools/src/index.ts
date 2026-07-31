@@ -39,6 +39,13 @@ export {
   type ToolSpec,
 } from './define.js';
 
+export type {
+  AutomationOutcome,
+  AutomationPort,
+  AutomationRefusal,
+  AutomationResolver,
+} from './automation.js';
+
 export {
   ToolRegistry,
   withToolboxTools,

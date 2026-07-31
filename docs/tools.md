@@ -2,7 +2,7 @@
 
 ## The built-ins
 
-Five, and the count is deliberate: anything expressible as a command is `exec`'s job. A
+Six, and the count is deliberate: anything expressible as a command is `exec`'s job. A
 `grep` tool would be a worse `rg`, and a `move_file` tool would be a worse `mv`.
 
 | Tool         | Args                                        | Risk band | Does                                                           |
@@ -12,13 +12,44 @@ Five, and the count is deliberate: anything expressible as a command is `exec`'s
 | `write_file` | `path`, `content`                           | `write`   | Creates or overwrites.                                         |
 | `edit_file`  | `path`, `oldText`, `newText`, `replaceAll?` | `write`   | Exact-match replacement.                                       |
 | `exec`       | `argv: string[]`, `timeoutMs?`              | `exec`    | Runs a program — on the host, or in a [toolbox](toolboxes.md). |
+| `automation` | `action`, plus a name, message and schedule | `exec`    | Schedules a turn for later. See below.                         |
 
 All file paths resolve inside the workspace jail; see [Security](security.md). `exec`
 takes an argv array, never a command string.
 
 Setting `tools.exec.enable: false` removes `exec` from the definitions entirely rather
 than advertising a tool that will refuse — a model told about a tool that always fails
-spends iterations rediscovering that.
+spends iterations rediscovering that. `automation` follows the same rule against
+`scheduler.enabled`.
+
+### `automation`
+
+The only built-in that acts on the _future_, and the only one **absent from
+`DEFAULT_AGENT_TOOLS`** — a new agent cannot reach it at all until an operator grants it.
+That asymmetry is the point: a single approved `exec` runs once, and a single approved
+`automation` create runs forever, unattended, on a timer.
+
+The model's surface is a strict subset of the operator's — `create`, `list`, `delete`. No
+`update`, because repointing an existing job's payload is the one edit nobody watches
+happen; no `run`, no enable/disable. Schedules are the same three kinds a
+[scheduled job](configuration.md#scheduler) has, one at a time: `every_minutes`, `cron`
+(+`tz`), or an ISO `at`.
+
+Everything the tool cannot be trusted with lives on the other side of `AutomationPort`,
+which the composition root binds to the calling agent and session before the tool ever
+sees it. Three refusals, each answered as a tool _result_ rather than a throw:
+
+| Refusal       | Why                                                                                                                                                                                                                                      |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `nested`      | A scheduled run may not schedule. Otherwise a job that says "keep an eye on things" creates another that says the same, without bound. Read from `sessions.origin`, because the stored row is the only thing a caller cannot argue with. |
+| `at-capacity` | A cap per agent, so a model in a loop meets a wall rather than filling the table.                                                                                                                                                        |
+| `not-yours`   | An agent lists and deletes only what it created; the operator's jobs are invisible to it. One answer for "no such job" and "not yours", so ids cannot be probed for the difference.                                                      |
+
+Note that the subagent chain guard does **not** cover the first: `turn.chain` is empty for
+a turn a person started, and the scheduler starts turns the same way.
+
+Jobs an agent made carry `createdBy`, so the panel can say which agent asked and link back
+to the conversation that caused it.
 
 More tools arrive two ways: from a [toolbox](toolboxes.md) that declares its programs, and
 from a subagent, which appears as `ask_<id>` (see

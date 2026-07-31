@@ -227,6 +227,12 @@ export function settingsRoutes(deps: RouteDeps): RouteGroup<SettingsRouteId> {
         }
 
         forgetDepartedAgents(deps);
+        // On both writers, for the reason `forgetDepartedAgents` is on both:
+        // a patch and a reload can each move `scheduler.*`. The engine reads
+        // `enabled`, `concurrency` and `runRetention` live, but its *timer* is
+        // armed from what was due when it last looked — so without this,
+        // switching the scheduler on does nothing until a restart.
+        deps.scheduler?.()?.refresh();
         return settingsResponse(deps);
       },
     },
@@ -242,6 +248,12 @@ export function settingsRoutes(deps: RouteDeps): RouteGroup<SettingsRouteId> {
       handler: (): SettingsResponse => {
         deps.runtime.reload();
         forgetDepartedAgents(deps);
+        // On both writers, for the reason `forgetDepartedAgents` is on both:
+        // a patch and a reload can each move `scheduler.*`. The engine reads
+        // `enabled`, `concurrency` and `runRetention` live, but its *timer* is
+        // armed from what was due when it last looked — so without this,
+        // switching the scheduler on does nothing until a restart.
+        deps.scheduler?.()?.refresh();
         return settingsResponse(deps);
       },
     },

@@ -252,18 +252,20 @@ describe('the providers panel', () => {
     expect(patchesOf(calls)[0]?.providers).toEqual({ ollama: { enabled: true } });
   });
 
-  it('creates an endpoint and opens its editor, the way New agent does', async () => {
-    // The type is the one question the editor cannot ask \u2014 it is fixed for the
-    // life of an instance \u2014 so it is the only one the dialog asks.
-    const { user, calls, router } = mount('/settings?panel=providers');
+  it('creates an endpoint on the same form that edits one, writing nothing early', async () => {
+    // The type is the one question the editor cannot ask afterwards — it is
+    // fixed for the life of an instance — so it is the only create-only field.
+    const { user, calls, router } = mount('/settings/providers/new');
 
-    await user.click(await screen.findByRole('button', { name: 'New provider' }));
     await user.click(await screen.findByRole('combobox', { name: 'Type' }));
     await user.click(await screen.findByRole('option', { name: 'Ollama' }));
 
-    const dialog = within(screen.getByRole('dialog'));
-    await user.type(dialog.getByLabelText('Name'), 'GPU box');
-    await user.click(dialog.getByRole('button', { name: 'Create' }));
+    await user.type(await screen.findByLabelText('Name'), 'GPU box');
+    // Nothing has gone to the wire yet: the dialog this replaced had already
+    // created the endpoint by this point.
+    expect(patchesOf(calls)).toHaveLength(0);
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => {
       expect(patchesOf(calls)).toHaveLength(1);
@@ -271,7 +273,15 @@ describe('the providers panel', () => {
     // A free id: a second Ollama is a second endpoint, not a merge into the
     // first.
     expect(patchesOf(calls)[0]?.providers).toEqual({
-      'ollama-2': { type: 'ollama', label: 'GPU box', apiBase: '', models: [], enabled: true },
+      'ollama-2': {
+        type: 'ollama',
+        label: 'GPU box',
+        // The type's own default endpoint, prefilled and visible before Save
+        // rather than arriving after it.
+        apiBase: 'http://127.0.0.1:11434/v1',
+        models: [],
+        enabled: true,
+      },
     });
 
     // On success, not on the press: navigating early lands the editor on a
@@ -279,6 +289,14 @@ describe('the providers panel', () => {
     await waitFor(() => {
       expect(router.state.location.pathname).toBe('/settings/providers/ollama-2');
     });
+  });
+
+  it('opens the create page from the panel', async () => {
+    const { user, router } = mount('/settings?panel=providers');
+
+    await user.click(await screen.findByRole('link', { name: 'New provider' }));
+
+    expect(router.state.location.pathname).toBe('/settings/providers/new');
   });
 
   it('asks before deleting, because the key goes with it', async () => {
@@ -353,13 +371,15 @@ describe('a panel whose system lands in a later phase', () => {
   });
 
   it('is reachable from the tab strip and lands in the URL', async () => {
+    // Knowledge rather than Automation: the scheduler ships, so Automation is a
+    // real panel now and this case is about the placeholder.
     const { user, router } = mount();
 
-    await user.click(await screen.findByRole('tab', { name: 'Automation' }));
-    expect(await screen.findByText('Scheduled jobs')).toBeInTheDocument();
+    await user.click(await screen.findByRole('tab', { name: 'Knowledge' }));
+    expect(await screen.findByText('Knowledge base')).toBeInTheDocument();
     // The panel is in the URL, which is what makes "set your key here" a link
     // rather than a sentence describing four clicks.
-    expect(router.state.location.searchStr).toContain('panel=automation');
+    expect(router.state.location.searchStr).toContain('panel=knowledge');
   });
 });
 

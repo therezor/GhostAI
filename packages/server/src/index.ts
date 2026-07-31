@@ -36,6 +36,48 @@ export {
 } from './notifications.js';
 
 export {
+  MAX_AGENT_JOBS,
+  createAutomationResolver,
+  type AutomationPortOptions,
+} from './automation-port.js';
+
+export {
+  AutomationStore,
+  type AutomationStoreOptions,
+  type CreateJobInput,
+  type FinishRunInput,
+  type ListRunsOptions,
+  type StartRunInput,
+  type TrimmedRun,
+  type UpdateJobInput,
+} from './automation-store.js';
+
+export {
+  BUSY_RETRY_MS,
+  DEFAULT_RUN_TIMEOUT_MS,
+  INTERRUPTED_BY_RESTART,
+  MAX_ARM_MS,
+  Scheduler,
+  firstRunAt,
+  nextRunAfter,
+  type NotificationBroadcast,
+  type SchedulerChat,
+  type SchedulerConnectOptions,
+  type SchedulerConnection,
+  type SchedulerOptions,
+  type SchedulerPort,
+  type SchedulerReadFile,
+} from './scheduler.js';
+
+export {
+  HEARTBEAT_RESULT_TOOL,
+  HEARTBEAT_TOOL,
+  MAX_TASK_FILE_BYTES,
+  type HeartbeatDecision,
+  type HeartbeatEvaluation,
+} from './heartbeat.js';
+
+export {
   MEDIA_SECRET_NAME,
   assertSigningKey,
   mediaUrl,
@@ -45,12 +87,15 @@ export {
 } from './signing.js';
 
 export {
+  decodeAutomationRunCursor,
   decodeMessageCursor,
   decodeNotificationCursor,
   decodeSessionCursor,
+  encodeAutomationRunCursor,
   encodeMessageCursor,
   encodeNotificationCursor,
   encodeSessionCursor,
+  type AutomationRunCursor,
   type MessageCursor,
   type NotificationCursor,
   type SessionListCursor,

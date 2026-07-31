@@ -40,7 +40,12 @@ import { ArrowLeft, Trash2 } from 'lucide-react';
 import { useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { RESERVED_WORKSPACE_IDS, isWorkspaceId, type WorkspaceSummary } from '@ghostai/protocol';
+import {
+  RESERVED_WORKSPACE_IDS,
+  deriveWorkspaceId,
+  isWorkspaceId,
+  type WorkspaceSummary,
+} from '@ghostai/protocol';
 
 import { Badge } from '@/components/ui/badge.js';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu.js';
@@ -53,6 +58,38 @@ import { FieldGrid, SaveBar, Section, TextField } from '@/settings/controls.js';
 import { DeleteWorkspaceDialog } from './delete-workspace.js';
 import { WORKSPACE_ROOT_PATH, folderLabel } from './folder.js';
 import { useWorkspace } from './workspace-context.js';
+
+/**
+ * Creating a workspace, on the page that edits one.
+ *
+ * The same form, empty. The dialog it replaced asked for exactly these two
+ * fields and then created the directory on submit — so an operator who changed
+ * their mind in the editor had already left a folder on disk. Nothing is
+ * written until Save here.
+ *
+ * The folder is still asked at creation, and that argument is unchanged: making
+ * it is a `mkdir`, while changing it afterwards is a `rename(2)` under a tree
+ * somebody may be working in, plus a repoint of every conversation that named
+ * the old one.
+ */
+export function WorkspaceCreateRoute(): JSX.Element {
+  const { t } = useTranslation();
+  const workspaces = useQuery({
+    queryKey: queryKeys.workspaces,
+    queryFn: ({ signal }) => api.workspaces(signal),
+  });
+
+  if (workspaces.isPending) return <p className="page__note">{t('workspaces.loadingOne')}</p>;
+  if (workspaces.isError) {
+    return (
+      <p role="alert" className="page__error">
+        Could not load the workspaces: {workspaces.error.message}
+      </p>
+    );
+  }
+
+  return <Editor others={workspaces.data.workspaces} />;
+}
 
 export function WorkspaceEditorRoute(): JSX.Element {
   const { t } = useTranslation();
@@ -100,7 +137,8 @@ function Editor({
   workspace,
   others,
 }: {
-  readonly workspace: WorkspaceSummary;
+  /** Absent is create: the same form, seeded empty, writing nothing until Save. */
+  readonly workspace?: WorkspaceSummary;
   /** Every workspace, so a folder another one already holds is refused here. */
   readonly others: readonly WorkspaceSummary[];
 }): JSX.Element {
@@ -110,21 +148,25 @@ function Editor({
   const queryClient = useQueryClient();
   const { workspaceId: selected, select } = useWorkspace();
 
-  const [name, setName] = useState(workspace.name);
-  const [folder, setFolder] = useState(workspace.id);
+  const creating = workspace === undefined;
+  const [name, setName] = useState(workspace?.name ?? '');
+  const [folder, setFolder] = useState(workspace?.id ?? '');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
-  const nameChanged = name.trim() !== workspace.name;
-  const folderChanged = folder.trim() !== workspace.id;
+  const nameChanged = name.trim() !== (workspace?.name ?? '');
+  const folderChanged = folder.trim() !== (workspace?.id ?? '');
   const folderError = folderProblem(folder.trim(), workspace, others, t);
   const dirty = nameChanged || folderChanged;
 
   const save = useMutation({
     mutationFn: () =>
-      api.updateWorkspace(workspace.id, {
-        ...(nameChanged ? { name: name.trim() } : {}),
-        ...(folderChanged ? { folder: folder.trim() } : {}),
-      }),
+      workspace === undefined
+        ? // Empty folder means "derive it from the name", which the server does.
+          api.createWorkspace(name.trim(), folder.trim() === '' ? undefined : folder.trim())
+        : api.updateWorkspace(workspace.id, {
+            ...(nameChanged ? { name: name.trim() } : {}),
+            ...(folderChanged ? { folder: folder.trim() } : {}),
+          }),
     onSuccess: (updated) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.workspaces });
       // A move changes the id every other scope is keyed on, so the session
@@ -132,6 +174,19 @@ function Editor({
       // from entries filed under a folder that no longer exists.
       void queryClient.invalidateQueries({ queryKey: ['sessions'] });
       void queryClient.invalidateQueries({ queryKey: ['files'] });
+
+      if (workspace === undefined) {
+        // Straight into the editor for the workspace just made, on success
+        // rather than on the press: the folder is real on disk now, and the
+        // page that describes it is the one that can move or remove it.
+        void navigate({
+          to: '/workspaces/$workspaceId',
+          params: { workspaceId: updated.id },
+          replace: true,
+        });
+        toast.success(`Created ${updated.name}`, `Its folder is ${folderLabel(updated)}.`);
+        return;
+      }
 
       if (updated.id !== workspace.id) {
         // The switcher and the URL both name the old folder. Moving them is not
@@ -172,12 +227,13 @@ function Editor({
         </Link>
 
         <div className="cluster editor__title">
-          <h1 className="page__title">{workspace.name}</h1>
-          {workspace.isDefault && <Badge>default</Badge>}
+          <h1 className="page__title">{workspace?.name ?? t('workspaces.newTitle')}</h1>
+          {workspace?.isDefault === true && <Badge>default</Badge>}
           <span className="spacer" />
           {/* The default is the parent of every other workspace; there is no
-              coherent thing removing it could mean. */}
-          {!workspace.isDefault && (
+              coherent thing removing it could mean — and neither is there for
+              one that does not exist yet. */}
+          {workspace !== undefined && !workspace.isDefault && (
             <RowActions label={workspace.name}>
               <DropdownMenuItem
                 className="menu__item--danger"
@@ -193,12 +249,14 @@ function Editor({
         </div>
 
         <p className="page__note">
-          {workspace.isDefault
-            ? t('workspaces.defaultNote')
-            : t('workspaces.namedNote', {
-                count: workspace.sessionCount,
-                updated: fmt.relativeTime(workspace.updatedAtMs, now),
-              })}
+          {workspace === undefined
+            ? t('workspaces.newHint')
+            : workspace.isDefault
+              ? t('workspaces.defaultNote')
+              : t('workspaces.namedNote', {
+                  count: workspace.sessionCount,
+                  updated: fmt.relativeTime(workspace.updatedAtMs, now),
+                })}
         </p>
       </div>
 
@@ -207,7 +265,7 @@ function Editor({
           <TextField
             label={t('common.name')}
             value={name}
-            placeholder={workspace.id}
+            placeholder={workspace?.id ?? t('workspaces.namePlaceholder')}
             onValueChange={setName}
             hint="A label. Changing it moves nothing on disk and breaks no link."
           />
@@ -221,19 +279,26 @@ function Editor({
             // looked empty. It is a value now, and inert — `/` is the root every
             // other workspace is a directory inside, so there is no rename of it
             // that does not mean relocating the whole tree.
-            value={workspace.isDefault ? WORKSPACE_ROOT_PATH : folder}
+            value={workspace?.isDefault === true ? WORKSPACE_ROOT_PATH : folder}
             className="workspaces__folder-input"
             spellCheck={false}
-            disabled={workspace.isDefault}
-            placeholder={workspace.id}
+            disabled={workspace?.isDefault === true}
+            placeholder={workspace?.id ?? deriveWorkspaceId(name)}
             onValueChange={setFolder}
             error={folderError}
             hint={
-              workspace.isDefault
-                ? t('workspaces.folderDefault')
-                : folderChanged && folderError === undefined
-                  ? `Moves the folder to ${WORKSPACE_ROOT_PATH}${folder.trim()} and brings its conversations with it.`
-                  : t('workspaces.folderHintEdit')
+              creating
+                ? // The derived slug, live. It is what Save would actually
+                  // produce, and watching it change while the name is typed is
+                  // what explains a second box next to the name at all.
+                  folder.trim() === '' && name.trim() !== ''
+                  ? `Creates ${WORKSPACE_ROOT_PATH}${deriveWorkspaceId(name)}. You can move it later from this screen.`
+                  : t('workspaces.folderHint')
+                : workspace.isDefault
+                  ? t('workspaces.folderDefault')
+                  : folderChanged && folderError === undefined
+                    ? `Moves the folder to ${WORKSPACE_ROOT_PATH}${folder.trim()} and brings its conversations with it.`
+                    : t('workspaces.folderHintEdit')
             }
           />
         </FieldGrid>
@@ -244,8 +309,8 @@ function Editor({
         saving={save.isPending}
         onSave={onSave}
         onRevert={() => {
-          setName(workspace.name);
-          setFolder(workspace.id);
+          setName(workspace?.name ?? '');
+          setFolder(workspace?.id ?? '');
         }}
       />
 
@@ -271,11 +336,15 @@ function Editor({
  */
 function folderProblem(
   folder: string,
-  workspace: WorkspaceSummary,
+  /** Absent while creating: there is no own-folder to exempt from the checks. */
+  workspace: WorkspaceSummary | undefined,
   others: readonly WorkspaceSummary[],
   t: TFunction,
 ): string | undefined {
-  if (workspace.isDefault || folder === workspace.id) return undefined;
+  // Creating with an empty box is legal — the server derives the folder from
+  // the name — so there is nothing to judge until something is typed.
+  if (workspace === undefined && folder === '') return undefined;
+  if (workspace?.isDefault === true || folder === workspace?.id) return undefined;
   if (folder === '') return t('workspaces.folderShape');
   if (!isWorkspaceId(folder)) return t('workspaces.folderShape');
   if (RESERVED_WORKSPACE_IDS.has(folder)) return t('workspaces.folderReserved');

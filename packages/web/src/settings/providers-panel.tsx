@@ -25,7 +25,7 @@ import { useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Link, useNavigate } from '@tanstack/react-router';
-import type { Config, ProviderInstanceInfo } from '@ghostai/protocol';
+import type { ProviderInstanceInfo } from '@ghostai/protocol';
 
 import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
@@ -35,15 +35,13 @@ import { DropdownMenuItem } from '@/components/ui/dropdown-menu.js';
 import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';
 import { DataList, DataListRow } from '@/components/crud/data-list.js';
 import { RowActions } from '@/components/crud/row-actions.js';
-import { AddProviderDialog } from './add-provider-dialog.js';
 import { Section } from './controls.js';
 import { toProviderEnabledPatch } from './provider-form.js';
 import { useRemoveProvider } from './use-provider.js';
 import { useSaveSettings } from './use-settings.js';
 
-export function ProvidersPanel({ config }: { readonly config: Config }): JSX.Element {
+export function ProvidersPanel(): JSX.Element {
   const { t } = useTranslation();
-  const [adding, setAdding] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ProviderInstanceInfo | undefined>(undefined);
   const { save, saving } = useSaveSettings();
   const { remove, removing } = useRemoveProvider();
@@ -65,7 +63,7 @@ export function ProvidersPanel({ config }: { readonly config: Config }): JSX.Ele
     );
   }
 
-  const { types, instances } = providers.data;
+  const { instances } = providers.data;
 
   return (
     <Section title={t('providers.title')} description={t('providers.panelDesc')}>
@@ -74,13 +72,13 @@ export function ProvidersPanel({ config }: { readonly config: Config }): JSX.Ele
           the create the loudest thing in a panel whose subject is the list. */}
       <div className="cluster">
         <span className="spacer" />
-        <Button
-          onClick={() => {
-            setAdding(true);
-          }}
-        >
-          <Plus />
-          {t('providers.newProvider')}
+        {/* A link, not a dialog: adding an endpoint is the same form as
+            editing one, and nothing is written until it is saved. */}
+        <Button asChild>
+          <Link to="/settings/providers/new">
+            <Plus />
+            {t('providers.newProvider')}
+          </Link>
         </Button>
       </div>
 
@@ -162,13 +160,6 @@ export function ProvidersPanel({ config }: { readonly config: Config }): JSX.Ele
           ))}
         </DataList>
       )}
-
-      <AddProviderDialog
-        open={adding}
-        onOpenChange={setAdding}
-        types={types}
-        taken={Object.keys(config.providers)}
-      />
 
       <ConfirmDialog
         open={pendingDelete !== undefined}

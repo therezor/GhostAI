@@ -706,27 +706,53 @@ export const RagConfigSchema = z.object({
 });
 export type RagConfig = z.infer<typeof RagConfigSchema>;
 
-export const HeartbeatConfigSchema = z.object({
-  enabled: z.boolean().default(true),
-  intervalMin: z.number().int().positive().default(30),
-  /** A cheap model is the point — this runs every 30 minutes forever. */
-  model: z.string().optional(),
-  sessionKey: z.string().min(1).default('heartbeat:default'),
-  /** Path relative to the workspace. */
-  file: z.string().min(1).default('TASK.md'),
-  /** Channel id → destination address. */
-  targets: z.record(z.string(), z.string()).default({}),
-  agentId: z.string().optional(),
-});
-export type HeartbeatConfig = z.infer<typeof HeartbeatConfigSchema>;
-
+/**
+ * The engine, and nothing about any one job.
+ *
+ * Every key here is true of the *scheduler*; none of them describes a task.
+ * That line is the whole shape of this block, and it is worth stating because
+ * this schema used to break it: a `heartbeat` sub-block carried an
+ * `intervalMin`, a `file`, a `model`, an `agentId`, a `sessionKey` and its own
+ * `enabled`, which is a second way to describe one scheduled job — and the one
+ * nothing read.
+ *
+ * A heartbeat **is** a job. Its interval is the job's schedule, its file and
+ * model are the job's payload, and its on/off is the job's own flag. Two
+ * vocabularies for one concept is how an operator configures the half that does
+ * not run, so there is one: `AutomationJob`.
+ */
 export const SchedulerConfigSchema = z.object({
   enabled: z.boolean().default(true),
   /** Concurrent automation runs. Two keeps a slow job from blocking the queue. */
   concurrency: z.number().int().positive().default(2),
   /** Run `at` jobs whose time passed while the process was down. */
   catchUpOnBoot: z.boolean().default(true),
-  heartbeat: HeartbeatConfigSchema.prefault({}),
+  /**
+   * The zone a cron job is read in when it does not name one.
+   *
+   * **UTC rather than the host zone**, and that default is the point. A server's
+   * zone is a property of where it happens to be running — it moves when the
+   * box moves, it is whatever the image was built with, and on a laptop it
+   * follows the traveller. A schedule written as `0 9 * * *` would then fire at
+   * a different real instant after a migration nobody connected to it. UTC is
+   * the one zone that does not drift, and an operator who wants local time says
+   * so once, here, rather than inheriting it by accident.
+   *
+   * A bare `z.string()` for the reason `locale` is: an enum would have to
+   * enumerate the IANA database, which changes without this schema. It is
+   * validated where it is used — `parseCron` refuses a zone `Intl` does not
+   * know, which surfaces as a 422 on the job that names it.
+   */
+  timezone: z.string().min(1).default('UTC'),
+  /**
+   * Runs kept per job, trimmed on write.
+   *
+   * Per job rather than a global cap: a nightly job's year of history must not
+   * be evicted by a five-minute job's afternoon, which is exactly what one
+   * shared ceiling would do. Unbounded is not an option — a job on a
+   * five-minute interval writes about 105,000 rows a year.
+   */
+  runRetention: z.number().int().positive().default(200),
 });
 export type SchedulerConfig = z.infer<typeof SchedulerConfigSchema>;
 
@@ -905,9 +931,7 @@ export const ConfigPatchSchema = z.object({
     .optional(),
   audio: patchOf(AudioConfigSchema).optional(),
   rag: patchOf(RagConfigSchema).optional(),
-  scheduler: patchOf(SchedulerConfigSchema)
-    .extend({ heartbeat: patchOf(HeartbeatConfigSchema).optional() })
-    .optional(),
+  scheduler: patchOf(SchedulerConfigSchema).optional(),
   plugins: patchOf(PluginsConfigSchema).optional(),
   ui: patchOf(UiConfigSchema).optional(),
 });

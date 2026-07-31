@@ -25,6 +25,8 @@ export {
 
 export { systemClock, type Clock, type TimerHandle } from './clock.js';
 
+export { parseCron, nextCronRun, type CronSpec } from './cron.js';
+
 export {
   HOME_ENV_VAR,
   ensureDir,

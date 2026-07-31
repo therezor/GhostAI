@@ -233,9 +233,9 @@ describe('the workspaces page', () => {
       'POST /api/workspaces': [201, workspace('research', 'Research')],
     });
 
-    await userEvent.click(await screen.findByRole('button', { name: 'New workspace' }));
+    await userEvent.click(await screen.findByRole('link', { name: 'New workspace' }));
     await userEvent.type(await screen.findByLabelText('Name'), 'Research');
-    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => {
       expect(calls.some((call) => call.method === 'POST')).toBe(true);
@@ -253,10 +253,10 @@ describe('the workspaces page', () => {
       'POST /api/workspaces': [201, workspace('acme24', 'Client Acme (2024 rebuild)')],
     });
 
-    await userEvent.click(await screen.findByRole('button', { name: 'New workspace' }));
+    await userEvent.click(await screen.findByRole('link', { name: 'New workspace' }));
     await userEvent.type(await screen.findByLabelText('Name'), 'Client Acme (2024 rebuild)');
     await userEvent.type(await screen.findByLabelText('Folder'), 'acme24');
-    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => {
       expect(calls.find((call) => call.method === 'POST')?.body).toEqual({
@@ -269,7 +269,7 @@ describe('the workspaces page', () => {
   it('shows the folder the name would derive, before it is created', async () => {
     mount();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'New workspace' }));
+    await userEvent.click(await screen.findByRole('link', { name: 'New workspace' }));
     await userEvent.type(await screen.findByLabelText('Name'), 'Client Acme');
 
     // The derived slug, live. It is what pressing Create would actually produce,
@@ -280,24 +280,27 @@ describe('the workspaces page', () => {
   it('refuses a folder the browser can already tell is wrong', async () => {
     const { calls } = mount();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'New workspace' }));
+    await userEvent.click(await screen.findByRole('link', { name: 'New workspace' }));
     await userEvent.type(await screen.findByLabelText('Name'), 'Research');
 
     const folder = await screen.findByLabelText('Folder');
     await userEvent.type(folder, 'Not A Slug');
     expect(await screen.findByRole('alert')).toHaveTextContent(/lowercase letters/);
-    expect(screen.getByRole('button', { name: 'Create' })).toBeDisabled();
 
     // A folder another workspace already occupies, checked here so the message
-    // can point at the box rather than arriving as a toast over a closed dialog.
+    // can point at the box rather than arriving as a toast after the directory
+    // was not created.
     await userEvent.clear(folder);
     await userEvent.type(folder, 'acme');
     expect(await screen.findByRole('alert')).toHaveTextContent(/already uses that folder/);
 
+    // Nothing has been sent while any of that was on screen.
+    expect(calls.some((call) => call.method === 'POST')).toBe(false);
+
     await userEvent.clear(folder);
     await userEvent.type(folder, 'research');
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Create' })).toBeEnabled();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
     expect(calls.some((call) => call.method === 'POST')).toBe(false);
   });

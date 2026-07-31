@@ -40,7 +40,6 @@ import { Button } from '@/components/ui/button.js';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu.js';
 import { SearchFilter } from '@/components/ui/search-filter.js';
 import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';
-import { NameDialog } from '@/components/crud/name-dialog.js';
 import { RowActions } from '@/components/crud/row-actions.js';
 import { DataList, DataListRow } from '@/components/crud/data-list.js';
 import { ListSort } from '@/components/crud/list-sort.js';
@@ -113,7 +112,6 @@ export function AgentsRoute(): JSX.Element {
 
   const [filter, setFilter] = useState('');
   const [sort, setSort] = useState<SortOrder<SortKey>>({ key: 'name', descending: false });
-  const [creating, setCreating] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<AgentRow | undefined>(undefined);
 
   const agents = useQuery({
@@ -136,8 +134,6 @@ export function AgentsRoute(): JSX.Element {
     () => [DEFAULT_AGENT_ID, ...Object.keys(list).filter((id) => id !== DEFAULT_AGENT_ID)],
     [list],
   );
-
-  const entryFor = (id: string): AgentEntry => list[id] ?? AgentEntrySchema.parse({});
 
   /** The agents that delegate to the one about to be deleted, by label. */
   const dependants = useMemo((): readonly string[] => {
@@ -210,18 +206,6 @@ export function AgentsRoute(): JSX.Element {
     });
   };
 
-  const create = (name: string): void => {
-    const proposed = deriveAgentId(name);
-    // A new agent is a copy of the defaults, so there is nothing to copy until
-    // they have arrived. The dialog is reachable while the query is in flight.
-    if (proposed === '' || taken.has(proposed) || defaults === undefined) return;
-    // Straight into the editor: creating one is the first half of setting it
-    // up, and a list that has merely grown a row leaves the other half to be
-    // found.
-    createThenOpen(proposed, toNewAgentPatch(proposed, name, entryFor(DEFAULT_AGENT_ID), defaults));
-    setCreating(false);
-  };
-
   /**
    * A copy, under a name that does not collide.
    *
@@ -269,13 +253,13 @@ export function AgentsRoute(): JSX.Element {
       <div className="cluster page__header">
         <h1 className="page__title">{t('agents.title')}</h1>
         <span className="spacer" />
-        <Button
-          onClick={() => {
-            setCreating(true);
-          }}
-        >
-          <Plus />
-          {t('agents.newAgent')}
+        {/* A link, not a dialog: creating an agent is the same form as editing
+            one, and nothing is written until it is saved. */}
+        <Button asChild>
+          <Link to="/agents/new">
+            <Plus />
+            {t('agents.newAgent')}
+          </Link>
         </Button>
       </div>
 
@@ -393,25 +377,6 @@ export function AgentsRoute(): JSX.Element {
             ))}
           </DataList>
         ))}
-
-      <NameDialog
-        open={creating}
-        onOpenChange={setCreating}
-        title={t('agents.newTitle')}
-        description={t('agents.newHint')}
-        fieldLabel="Name"
-        placeholder={t('agents.namePlaceholder')}
-        pending={saving}
-        validate={(value) => {
-          const proposed = value.trim() === '' ? '' : deriveAgentId(value);
-          if (proposed === '') return { ok: true, hint: 'The id is derived from the name.' };
-          if (taken.has(proposed)) {
-            return { ok: false, hint: `There is already an agent called “${proposed}”.` };
-          }
-          return { ok: true, hint: `Creates “${proposed}”.` };
-        }}
-        onSubmit={create}
-      />
 
       <ConfirmDialog
         open={pendingDelete !== undefined}

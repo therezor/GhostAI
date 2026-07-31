@@ -741,6 +741,81 @@ describe('SessionHub', () => {
       expect(switched.types()).toEqual([]);
     });
 
+    it('broadcasts one frame to every attached client, across sessions', async () => {
+      // What the scheduler raises notifications through: a nightly job's result
+      // is addressed to whoever is looking, not to a conversation.
+      const h = harness();
+      const here = h.connect();
+      const elsewhere = h.connect();
+      await send(elsewhere, { type: 'session.switch', sessionKey: 'web:2' });
+      here.reset();
+      elsewhere.reset();
+
+      h.hub.broadcast({
+        type: 'notification',
+        id: 'n1',
+        title: 'Nightly finished',
+        body: '',
+        level: 'info',
+        createdAtMs: 1,
+        jobId: 'job-1',
+      });
+
+      expect(here.of('notification')).toHaveLength(1);
+      expect(elsewhere.of('notification')).toHaveLength(1);
+      expect(here.of('notification')[0]).toMatchObject({ jobId: 'job-1' });
+    });
+
+    it('stamps each session′s own seq rather than inventing a second sequence', async () => {
+      const h = harness();
+      const client = h.connect();
+      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'hello' });
+      const turn = h.runner.turn(0);
+      await turn.end();
+      client.reset();
+
+      h.hub.broadcast({
+        type: 'notification',
+        id: 'n1',
+        title: 'x',
+        body: '',
+        level: 'info',
+        createdAtMs: 1,
+      });
+
+      const [notification] = client.of('notification');
+      expect(notification?.seq).toBeGreaterThan(0);
+    });
+
+    it('skips a session nobody is watching, so its seq stays honest', async () => {
+      // Bumping a counter nobody is reading would leave a session that
+      // reconnects later resuming at a `lastSeq` accounting for an event it was
+      // never sent — exactly the gap `replay` reports as incomplete.
+      const h = harness();
+      const client = h.connect();
+      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'hello' });
+      const turn = h.runner.turn(0);
+      await turn.end();
+      // The session's own counter, as the hub reports it to a joining client —
+      // rather than guessing which frame happened to be last.
+      const probe = h.connect();
+      const before = probe.of('connected')[0]?.lastSeq;
+      probe.close();
+      client.close();
+
+      h.hub.broadcast({
+        type: 'notification',
+        id: 'n1',
+        title: 'x',
+        body: '',
+        level: 'info',
+        createdAtMs: 1,
+      });
+
+      const reconnected = h.connect();
+      expect(reconnected.of('connected')[0]?.lastSeq).toBe(before);
+    });
+
     it('reports the target session when a client opens or switches to one', async () => {
       const h = harness();
       const client = h.connect();

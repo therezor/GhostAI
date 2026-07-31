@@ -26,6 +26,7 @@
  */
 
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -33,6 +34,7 @@ import { createRequire } from 'node:module';
 
 import {
   DEFAULT_AGENT_ID,
+  GhostError,
   assistantMessage,
   saveConfig,
   silentLogger,
@@ -47,6 +49,7 @@ import {
   type SetCredentialRequest,
 } from '@ghostai/protocol';
 import type { ChatProvider, CreateProviderOptions } from '@ghostai/providers';
+import type { AutomationResolver } from '@ghostai/tools';
 import {
   ProviderCache,
   createRuntime,
@@ -56,7 +59,9 @@ import {
 } from '@ghostai/runtime';
 import {
   HubApprovalGate,
+  Scheduler,
   SessionHub,
+  createAutomationResolver,
   createServer,
   type AgentSummary,
   type AgentView,
@@ -136,6 +141,8 @@ export interface Harness {
   readonly server: GhostServer;
   readonly runtime: GhostRuntime;
   readonly hub: SessionHub;
+  /** The engine, so a spec can drive a job without waiting out a timer. */
+  readonly scheduler: Scheduler;
   /** The jail root, for a spec that wants to look at what a tool wrote. */
   readonly workspace: string;
   /** The one-time code, on an unclaimed harness. `undefined` once claimed. */
@@ -223,6 +230,14 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
   const database = new DatabaseSync(':memory:');
   const approvals = new HubApprovalGate({ logger: silentLogger });
 
+  // Late-bound exactly as `serve.ts` binds it, and wired here for the reason the
+  // scheduler is: this file is the *other* composition root, and anything only
+  // `serve.ts` knows about is invisible to every e2e run.
+  const automationHolder: { current: AutomationResolver | undefined } = { current: undefined };
+  const automation: AutomationResolver = {
+    forTurn: (request) => automationHolder.current?.forTurn(request),
+  };
+
   // One instance, handed back whatever the cache is asked for: the settings
   // panel can move the model mid-suite, and a second script would then be
   // answering while the first held the conversation.
@@ -234,6 +249,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
     workspace,
     database,
     approvals,
+    automation,
     providers,
     // No keychain, and no `findCredential` reading one. The scripted provider
     // needs no key, and minting a keychain entry from a test suite is not a
@@ -262,16 +278,55 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
     logger: silentLogger,
   });
 
+  const serverRuntime = harnessRuntime(runtime, configFile);
+  const directChat = serverRuntime.chat?.bind(serverRuntime);
+
+  // Wired here and not only in `serve.ts`, because this file is the *other*
+  // composition root: it builds the stack itself and never calls `startServer`.
+  // A scheduler wired only over there would leave every e2e run without one,
+  // which is the class of miss `CLAUDE.md` warns about for auth.
+  const engine: { current: Scheduler | undefined } = { current: undefined };
+
   const server = await createServer({
     config: runtime.config,
-    runtime: harnessRuntime(runtime, configFile),
+    runtime: serverRuntime,
     hub,
     database,
     logger: silentLogger,
     hasher: HASHER,
+    scheduler: () => engine.current,
     ...(options.password === null ? {} : { password: options.password ?? PASSWORD }),
     ui: { root: uiRoot() },
   });
+
+  automationHolder.current = createAutomationResolver({
+    jobs: server.automation,
+    sessions: runtime.store,
+    timezone: () => runtime.config.scheduler.timezone,
+    refresh: () => {
+      engine.current?.refresh();
+    },
+  });
+
+  const scheduler = new Scheduler({
+    jobs: server.automation,
+    config: () => runtime.config,
+    connect: (connectOptions) => hub.connect(connectOptions),
+    broadcast: (event) => {
+      hub.broadcast(event);
+    },
+    raise: (input) => server.notifications.create(input),
+    deleteSession: (sessionKey) => {
+      runtime.store.deleteSession(sessionKey);
+    },
+    // Over the scripted provider, which is what lets a spec cover a heartbeat
+    // without an endpoint.
+    ...(directChat === undefined ? {} : { chat: directChat }),
+    readFile: async (path, maxBytes) => await readJailed(runtime, path, maxBytes),
+    logger: silentLogger,
+  });
+  engine.current = scheduler;
+  scheduler.start();
 
   // The same condition `ghost serve` mints on, so a spec sees the code the
   // terminal would have printed.
@@ -289,11 +344,16 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
     server,
     runtime,
     hub,
+    scheduler,
     workspace,
     writeConfig: (patch) => {
       saveConfig(configFile, ConfigSchema.parse({ ...config, ...patch }));
     },
     close: async () => {
+      // Before the hub, exactly as `serve.ts` orders it: the scheduler drives
+      // its turns through the hub, so stopping the hub first would leave a run
+      // row `pending` with nothing left to close it.
+      await scheduler.stop();
       hub.close();
       await server.close();
       runtime.close();
@@ -440,5 +500,48 @@ function harnessRuntime(runtime: GhostRuntime, configFile: string): ServerRuntim
         model: runtime.loopFor(agent.id)?.model ?? agent.defaults.model,
         provider: runtime.instance?.id ?? '',
       })),
+
+    // Over the scripted provider, like everything else here. This is what lets
+    // an automation spec cover a heartbeat's forced decision without an
+    // endpoint — and, since the field is optional, what stops the harness
+    // silently reporting "this build has no provider access" for every
+    // heartbeat run.
+    chat: async (input) => {
+      const resolved = runtime.providerFor(input.agentId, input.model);
+      if (resolved === null) {
+        throw new GhostError('not_found', 'No provider is configured to answer with.');
+      }
+      return await resolved.provider.chat({
+        model: resolved.model,
+        messages: input.messages,
+        tools: input.tools,
+        toolChoice: input.toolChoice,
+        ...(input.maxTokens === undefined ? {} : { maxTokens: input.maxTokens }),
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
+      });
+    },
   };
+}
+
+/**
+ * Reads a workspace file through the jail, as `serve.ts` does.
+ *
+ * Duplicated rather than shared because the two composition roots deliberately
+ * do not import each other — and because the thing being reproduced is a
+ * *policy* (a heartbeat's file goes through the jail, a missing one is
+ * `not_found` rather than a fault), which a spec has to see hold here too.
+ */
+async function readJailed(runtime: GhostRuntime, path: string, maxBytes: number): Promise<string> {
+  const verdict = runtime.jail.check(path);
+  if (!verdict.ok) {
+    throw new GhostError('jail_escape', `Cannot read ${path}: ${verdict.message}`);
+  }
+  try {
+    return (await readFile(verdict.path, 'utf8')).slice(0, maxBytes);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new GhostError('not_found', `No ${path} in the workspace.`);
+    }
+    throw error;
+  }
 }

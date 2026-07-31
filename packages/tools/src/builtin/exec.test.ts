@@ -201,10 +201,17 @@ describe('exec', () => {
 });
 
 describe('the built-in set', () => {
-  it('registers all five under the builtin source', () => {
+  it('registers every built-in under the builtin source', () => {
     const registry = new ToolRegistry();
     registerBuiltins(registry);
-    expect(registry.names()).toEqual(['edit_file', 'exec', 'list_dir', 'read_file', 'write_file']);
+    expect(registry.names()).toEqual([
+      'automation',
+      'edit_file',
+      'exec',
+      'list_dir',
+      'read_file',
+      'write_file',
+    ]);
     expect(registry.sourceOf('exec')).toBe('builtin');
   });
 
@@ -216,12 +223,21 @@ describe('the built-in set', () => {
       workspace.with({ exec: { ...context.config.exec, enable: false } }).config,
     );
     expect(registry.has('exec')).toBe(false);
-    expect(registry.size).toBe(4);
+    expect(registry.size).toBe(5);
   });
 
-  it('includes exec by default and with no config at all', () => {
-    expect(builtinTools()).toHaveLength(5);
-    expect(builtinTools(context.config)).toHaveLength(5);
+  it('does not advertise automation when the scheduler is switched off', () => {
+    // The same rule as exec, for the same reason: an install that cannot
+    // schedule should not offer a way to.
+    const registry = new ToolRegistry();
+    registerBuiltins(registry, context.config, { scheduler: false });
+    expect(registry.has('automation')).toBe(false);
+    expect(registry.has('exec')).toBe(true);
+  });
+
+  it('includes both by default and with no config at all', () => {
+    expect(builtinTools()).toHaveLength(6);
+    expect(builtinTools(context.config)).toHaveLength(6);
   });
 });
 

@@ -70,6 +70,7 @@ function mount(
 ): {
   readonly user: ReturnType<typeof userEvent.setup>;
   readonly calls: RecordedRequest[];
+  readonly router: ReturnType<typeof createAppRouter>;
 } {
   const calls = stubApi({
     ...SHELL_ROUTES,
@@ -91,7 +92,7 @@ function mount(
     </Providers>,
   );
 
-  return { user, calls };
+  return { user, calls, router };
 }
 
 const patchesOf = (calls: readonly RecordedRequest[]): ConfigPatch[] =>
@@ -200,24 +201,53 @@ describe('the agents index', () => {
     expect(screen.getByText(/No agent matches/)).toBeInTheDocument();
   });
 
-  it('refuses a name that would collide with an agent already there', async () => {
-    const { user, calls } = mount();
+  it('opens the create page rather than a dialog', async () => {
+    const { user, router } = mount();
 
-    await user.click(await screen.findByRole('button', { name: 'New agent' }));
-    await user.type(screen.getByLabelText('Name'), 'Reviewer');
+    await user.click(await screen.findByRole('link', { name: 'New agent' }));
 
-    expect(screen.getByText(/already an agent called/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create' })).toBeDisabled();
+    expect(router.state.location.pathname).toBe('/agents/new');
+  });
+
+  it('creates nothing until the create page is saved', async () => {
+    // The whole reason create is a page: the dialog it replaced wrote the agent
+    // the moment it was submitted, so abandoning the editor left it behind.
+    const { user, calls } = mount('/agents/new');
+
+    await user.type(await screen.findByLabelText('Identifier'), 'Half Written');
+    // The page's own back link — the sidebar carries one of the same name.
+    const links = screen.getAllByRole('link', { name: 'Agents' });
+    const back = links.find((link) => link.classList.contains('page__back')) ?? links[0];
+    if (back === undefined) throw new Error('no way back from the create page');
+    await user.click(back);
+
     expect(patchesOf(calls)).toHaveLength(0);
   });
 
   it('shows the id it would mint, before minting it', async () => {
-    const { user } = mount();
+    const { user } = mount('/agents/new');
 
-    await user.click(await screen.findByRole('button', { name: 'New agent' }));
-    await user.type(screen.getByLabelText('Name'), 'Code Reviewer');
+    await user.type(await screen.findByLabelText('Identifier'), 'Code Reviewer');
 
-    expect(screen.getByText(/Creates “code-reviewer”/)).toBeInTheDocument();
+    expect(await screen.findByText(/Creates “code-reviewer”/u)).toBeInTheDocument();
+  });
+
+  it('refuses a name that would collide with an agent already there', async () => {
+    const { user, calls } = mount('/agents/new');
+
+    await user.type(await screen.findByLabelText('Identifier'), 'Reviewer');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByText(/already an agent called/u)).toBeInTheDocument();
+    expect(patchesOf(calls)).toHaveLength(0);
+  });
+
+  it('has no Delete while creating, because there is nothing to delete', async () => {
+    const { user } = mount('/agents/new');
+
+    await screen.findByLabelText('Identifier');
+    expect(screen.queryByRole('button', { name: /Actions for/u })).not.toBeInTheDocument();
+    void user;
   });
 
   it('deletes from the row menu, and asks before it does', async () => {

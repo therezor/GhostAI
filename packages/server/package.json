@@ -34,6 +34,7 @@
     "@ghostai/protocol": "workspace:*",
     "@ghostai/providers": "workspace:*",
     "@ghostai/security": "workspace:*",
+    "@ghostai/tools": "workspace:*",
     "@node-rs/argon2": "^2.0.0",
     "fastify": "^5.2.0",
     "zod": "^4.0.0"

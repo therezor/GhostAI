@@ -28,7 +28,7 @@
  * `DeleteWorkspaceDialog`, shared with the editor.
  */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Folder, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useMemo, useState, type JSX } from 'react';
@@ -40,7 +40,6 @@ import { Badge } from '@/components/ui/badge.js';
 import { Button } from '@/components/ui/button.js';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu.js';
 import { SearchFilter } from '@/components/ui/search-filter.js';
-import { toast } from '@/components/ui/toast.js';
 import { RowActions } from '@/components/crud/row-actions.js';
 import { DataList, DataListRow } from '@/components/crud/data-list.js';
 import { ListSort } from '@/components/crud/list-sort.js';
@@ -48,7 +47,6 @@ import { filterRows, sortRows, type Comparators, type SortOrder } from '@/compon
 import { api } from '@/lib/api.js';
 import { useFormat } from '@/lib/use-format.js';
 import { queryKeys } from '@/lib/query.js';
-import { CreateWorkspaceDialog } from '@/workspaces/create-workspace-dialog.js';
 import { folderLabel } from '@/workspaces/folder.js';
 import { DeleteWorkspaceDialog } from '@/workspaces/delete-workspace.js';
 
@@ -67,32 +65,14 @@ export function WorkspacesRoute(): JSX.Element {
   const { t } = useTranslation();
   const fmt = useFormat();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
   const [filter, setFilter] = useState('');
   const [sort, setSort] = useState<SortOrder<SortKey>>({ key: 'name', descending: false });
-  const [creating, setCreating] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<WorkspaceSummary | undefined>(undefined);
 
   const workspaces = useQuery({
     queryKey: queryKeys.workspaces,
     queryFn: ({ signal }) => api.workspaces(signal),
-  });
-
-  const create = useMutation({
-    mutationFn: ({ name, folder }: { readonly name: string; readonly folder: string }) =>
-      // An empty folder is not an empty answer, it is "derive it" — and the
-      // derivation belongs to the registry, which is also the only thing that
-      // can settle a collision by falling through to `client-acme-2`.
-      api.createWorkspace(name, folder === '' ? undefined : folder),
-    onSuccess: (created) => {
-      setCreating(false);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.workspaces });
-      toast.success(`Created ${created.name}`, `Its folder is ${folderLabel(created)}.`);
-    },
-    onError: (error: Error) => {
-      toast.error('Could not create it', error.message);
-    },
   });
 
   const all = workspaces.data?.workspaces ?? [];
@@ -122,16 +102,16 @@ export function WorkspacesRoute(): JSX.Element {
       <div className="cluster page__header">
         <h1 className="page__title">{t('workspaces.title')}</h1>
         <span className="spacer" />
-        <Button
-          onClick={() => {
-            setCreating(true);
-          }}
-        >
-          {/* The bare mark, as on Agents and New session. A plus *inside* a
-              folder said "add a folder", which is the implementation — what the
-              button does is add a workspace, and the label already says so. */}
-          <Plus />
-          {t('workspaces.new')}
+        {/* A link, not a dialog: creating a workspace is the same form as
+            editing one, and no directory is made until it is saved. */}
+        <Button asChild>
+          <Link to="/workspaces/new">
+            {/* The bare mark, as on Agents and New session. A plus *inside* a
+                folder said "add a folder", which is the implementation — what
+                the button does is add a workspace, and the label says so. */}
+            <Plus />
+            {t('workspaces.new')}
+          </Link>
         </Button>
       </div>
 
@@ -239,16 +219,6 @@ export function WorkspacesRoute(): JSX.Element {
             ))}
           </DataList>
         ))}
-
-      <CreateWorkspaceDialog
-        open={creating}
-        onOpenChange={setCreating}
-        existing={all}
-        pending={create.isPending}
-        onSubmit={(values) => {
-          create.mutate(values);
-        }}
-      />
 
       <DeleteWorkspaceDialog
         workspace={pendingDelete}

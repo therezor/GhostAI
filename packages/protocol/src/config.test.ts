@@ -22,10 +22,29 @@ describe('ConfigSchema', () => {
     expect(config.tools.exec.enable).toBe(true);
     expect(config.tools.approvalTimeoutMs).toBe(5 * 60 * 1000);
     expect(config.tools.web.search.provider).toBe('brave');
-    expect(config.scheduler.heartbeat.file).toBe('TASK.md');
+    expect(config.scheduler.concurrency).toBe(2);
+    expect(config.scheduler.runRetention).toBe(200);
+    // UTC, not the host zone: a server's own zone moves when the server does.
+    expect(config.scheduler.timezone).toBe('UTC');
     expect(config.rag.rrfK).toBe(60);
     expect(config.channels.sendProgress).toBe(true);
     expect(config.plugins.allowUnverified).toBe(false);
+  });
+
+  it('keeps the scheduler block to the engine, with nothing describing a task', () => {
+    // A heartbeat *is* a job: its interval is the job's schedule, its file and
+    // model are the job's payload, its on/off is the job's own flag. This block
+    // used to carry a `heartbeat` sub-block restating all of that — a second
+    // vocabulary for one concept, and the one nothing read.
+    const scheduler = ConfigSchema.parse({}).scheduler;
+
+    expect(Object.keys(scheduler).sort()).toEqual([
+      'catchUpOnBoot',
+      'concurrency',
+      'enabled',
+      'runRetention',
+      'timezone',
+    ]);
   });
 
   it('does not share mutable defaults between parses', () => {
@@ -225,6 +244,22 @@ describe('AgentsConfigSchema', () => {
     const agents = ConfigSchema.parse({}).agents;
     expect(agents.list).toEqual({});
     expect(agents.defaults.provider).toBe('auto');
+  });
+
+  it('keeps the scheduler block to the engine, with nothing describing a task', () => {
+    // A heartbeat *is* a job: its interval is the job's schedule, its file and
+    // model are the job's payload, its on/off is the job's own flag. This block
+    // used to carry a `heartbeat` sub-block restating all of that — a second
+    // vocabulary for one concept, and the one nothing read.
+    const scheduler = ConfigSchema.parse({}).scheduler;
+
+    expect(Object.keys(scheduler).sort()).toEqual([
+      'catchUpOnBoot',
+      'concurrency',
+      'enabled',
+      'runRetention',
+      'timezone',
+    ]);
   });
 
   it('does not share mutable defaults between parses', () => {

@@ -20,6 +20,9 @@
       "path": "../providers/tsconfig.json"
     },
     {
+      "path": "../tools/tsconfig.json"
+    },
+    {
       "path": "../agent/tsconfig.json"
     }
   ]

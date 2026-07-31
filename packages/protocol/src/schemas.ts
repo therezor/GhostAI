@@ -73,7 +73,6 @@ export const PROTOCOL_SCHEMAS = {
   AgentEntry: config.AgentEntrySchema,
   AudioConfig: config.AudioConfigSchema,
   RagConfig: config.RagConfigSchema,
-  HeartbeatConfig: config.HeartbeatConfigSchema,
   SchedulerConfig: config.SchedulerConfigSchema,
   ChannelsConfig: config.ChannelsConfigSchema,
   PluginsConfig: config.PluginsConfigSchema,

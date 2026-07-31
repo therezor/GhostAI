@@ -359,6 +359,33 @@ export class SessionHub {
   }
 
   /**
+   * One frame to every attached client, on every session.
+   *
+   * What this exists for: the scheduler raises notifications about turns nobody
+   * started, and there is no session they belong to — a nightly job's result is
+   * addressed to whoever is looking, not to a conversation.
+   *
+   * `seq` is per session, so this stamps each session's own counter rather than
+   * inventing a second sequence space the replay ring would not understand.
+   *
+   * **Sessions with no client attached are skipped**, and that is the part that
+   * keeps the `seq` contract honest rather than being an optimisation: bumping
+   * a counter nobody is reading would leave a session that reconnects later
+   * resuming at a `lastSeq` accounting for an event it was never sent, which is
+   * exactly the gap `replay` reports as incomplete.
+   *
+   * The accepted cost is the mirror of that: a tab reconnecting mid-turn
+   * replays the ring and sees the notification a second time. A duplicate toast
+   * is worth less than a false gap.
+   */
+  broadcast(event: HubEvent): void {
+    for (const state of this.#sessions.values()) {
+      if (state.clients.size === 0) continue;
+      this.#emit(state, event);
+    }
+  }
+
+  /**
    * Attaches a connection and greets it.
    *
    * The `connected` frame carries `lastSeq` so a fresh client knows where the

@@ -22,12 +22,14 @@ import { z } from 'zod';
 
 import { Shell } from './shell.js';
 import { ChatRoute } from '@/routes/chat.js';
-import { AgentEditorRoute } from '@/agents/agent-editor.js';
+import { AgentCreateRoute, AgentEditorRoute } from '@/agents/agent-editor.js';
 import { AgentsRoute } from '@/agents/agents-page.js';
-import { ProviderEditorRoute } from '@/settings/provider-editor.js';
+import { ProviderCreateRoute, ProviderEditorRoute } from '@/settings/provider-editor.js';
+import { AutomationRoute } from '@/automation/automation-page.js';
+import { JobCreateRoute, JobEditorRoute } from '@/automation/job-editor.js';
 import { FilesRoute } from '@/routes/files.js';
 import { WorkspacesRoute } from '@/routes/workspaces.js';
-import { WorkspaceEditorRoute } from '@/workspaces/workspace-editor.js';
+import { WorkspaceCreateRoute, WorkspaceEditorRoute } from '@/workspaces/workspace-editor.js';
 import { NotificationsRoute } from '@/routes/notifications.js';
 import { SettingsRoute } from '@/routes/settings.js';
 import { TokensRoute } from '@/routes/tokens.js';
@@ -121,6 +123,13 @@ const workspacesRoute = createRoute({
   component: WorkspacesRoute,
 });
 
+/** Creating an agent, on the same form that edits one. */
+const agentCreateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/agents/new',
+  component: AgentCreateRoute,
+});
+
 const agentEditorRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/agents/$agentId',
@@ -128,6 +137,13 @@ const agentEditorRoute = createRoute({
 });
 
 /** A sibling of `/workspaces`, exactly as the agent editor is of `/agents`. */
+/** Creating a workspace, on the same form that edits one. */
+const workspaceCreateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/workspaces/new',
+  component: WorkspaceCreateRoute,
+});
+
 const workspaceEditorRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/workspaces/$workspaceId',
@@ -141,10 +157,44 @@ const workspaceEditorRoute = createRoute({
  * is a sibling of `/agents`: the panel has a search schema this page does not
  * share, and nesting would make an endpoint's URL carry the list's tab.
  */
+/** Adding an endpoint, on the same form that edits one. */
+const providerCreateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings/providers/new',
+  component: ProviderCreateRoute,
+});
+
 const providerEditorRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/providers/$instanceId',
   component: ProviderEditorRoute,
+});
+
+const automationRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/automation',
+  component: AutomationRoute,
+});
+
+/**
+ * Creating a job.
+ *
+ * A route rather than a dialog, so nothing is written until Save. Declared
+ * before the `$jobId` route below for readability only — the router ranks a
+ * static segment above a dynamic one regardless of order, so `/automation/new`
+ * cannot be swallowed as a job called "new".
+ */
+const jobCreateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/automation/new',
+  component: JobCreateRoute,
+});
+
+/** The job editor, a sibling of `/automation` exactly as the agent editor is. */
+const jobEditorRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/automation/$jobId',
+  component: JobEditorRoute,
 });
 
 const tokensRoute = createRoute({
@@ -156,13 +206,19 @@ const tokensRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   chatRoute,
   agentsRoute,
+  agentCreateRoute,
   agentEditorRoute,
   workspacesRoute,
+  workspaceCreateRoute,
   workspaceEditorRoute,
   filesRoute,
   notificationsRoute,
   settingsRoute,
+  providerCreateRoute,
   providerEditorRoute,
+  automationRoute,
+  jobCreateRoute,
+  jobEditorRoute,
   tokensRoute,
 ]);
 

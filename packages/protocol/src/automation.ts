@@ -16,6 +16,19 @@
 
 import { z } from 'zod';
 
+/**
+ * The origin a scheduled run's session is recorded under.
+ *
+ * Load-bearing rather than descriptive, exactly as `SUBAGENT_ORIGIN` is:
+ * `listSessions` excludes it from the unscoped listing. A job on a five-minute
+ * interval writes about 105,000 sessions a year, and every one of them is a
+ * single machine-started turn — a sidebar that listed them would bury the
+ * conversations a person actually had under a year of cron output. They stay
+ * reachable by key and by asking for `origin: 'automation'` by name, which is
+ * what a run history's "open in chat" link does.
+ */
+export const AUTOMATION_ORIGIN = 'automation';
+
 /** One-shot, at an absolute epoch-ms instant. */
 export const AtScheduleSchema = z.strictObject({
   kind: z.literal('at'),
@@ -127,6 +140,24 @@ export const AutomationJobSchema = z.object({
   updatedAtMs: z.number().int().nonnegative().default(0),
   /** Self-destruct after firing — how a one-shot reminder cleans up. */
   deleteAfterRun: z.boolean().default(false),
+  /**
+   * Who made this, when it was not a person.
+   *
+   * Absent means the operator, through the panel. Present means an agent asked
+   * for it during a turn, and names both the agent and the conversation — so a
+   * job list that has grown mysterious can be traced back to the sentence that
+   * caused it, and one agent's jobs can be found and removed together.
+   *
+   * A job with no attribution is the common case, which is why this is optional
+   * rather than a required field carrying an empty string.
+   */
+  createdBy: z
+    .object({
+      agentId: z.string().min(1),
+      /** The conversation the tool call came from. */
+      sessionKey: z.string().min(1),
+    })
+    .optional(),
 });
 export type AutomationJob = z.infer<typeof AutomationJobSchema>;
 
@@ -146,6 +177,17 @@ export const AutomationRunSchema = z.object({
   error: z.string().optional(),
   output: z.string().optional(),
   sessionKey: z.string().optional(),
+  /**
+   * Things worth saying about a run that did not fail.
+   *
+   * A separate list rather than folding into `error`, because `status` is what
+   * the panel colours and a run that succeeded with a caveat must not read as
+   * broken. What lands here: `deliver: true` on an install with no channel
+   * wired, a boot catch-up that coalesced several missed occurrences into one
+   * run, output truncated at the cap. Each is something an operator would be
+   * annoyed to discover was silently dropped, and none of them is a failure.
+   */
+  warnings: z.array(z.string()).default([]),
 });
 export type AutomationRun = z.infer<typeof AutomationRunSchema>;
 

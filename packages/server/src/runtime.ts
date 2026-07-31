@@ -17,6 +17,7 @@
 
 import type { SessionStore, WorkspaceStore } from '@ghostai/core';
 import type {
+  ChatMessage,
   Config,
   ConfigPatch,
   ConfigWarning,
@@ -26,6 +27,7 @@ import type {
   SetCredentialRequest,
   ToolDefinition,
 } from '@ghostai/protocol';
+import type { ChatResult, ToolChoice } from '@ghostai/providers';
 import type { ToolboxListing, WorkspaceJail } from '@ghostai/security';
 import type { PromptPreviewInput } from '@ghostai/agent';
 
@@ -242,4 +244,32 @@ export interface ServerRuntime {
 
   /** Zero for both until `@ghostai/mcp` and `@ghostai/plugin-host` exist. */
   extensions?(): ExtensionCounts;
+
+  /**
+   * One provider request that is **not** a turn.
+   *
+   * Optional for the reason `models` is: a route test has no business opening a
+   * socket, and a runtime with no adapter has nothing to ask.
+   *
+   * The one caller is the heartbeat's forced `skip | run` decision — a single
+   * request carrying one tool and no history, whose answer decides whether an
+   * expensive turn happens at all. Everything a turn gets is bypassed here: the
+   * tool registry never learns the tool exists, no approval is asked, no
+   * history is windowed and no turn-stats row is written. That is right for a
+   * classification and wrong for work, so a second caller reaching for this is
+   * a sign it actually wants a turn.
+   */
+  chat?(input: DirectChatInput): Promise<ChatResult>;
+}
+
+/** The narrowest request shape the heartbeat's two decisions need. */
+export interface DirectChatInput {
+  readonly agentId?: string;
+  /** Overrides the agent's own model — how a cheap heartbeat model is chosen. */
+  readonly model?: string;
+  readonly messages: readonly ChatMessage[];
+  readonly tools: readonly ToolDefinition[];
+  readonly toolChoice: ToolChoice;
+  readonly maxTokens?: number;
+  readonly signal?: AbortSignal;
 }

@@ -39,29 +39,35 @@ test.describe('workspaces', () => {
     // name derived anyway.
     await app.goto(`${harness.url}/workspaces`);
 
-    await app.getByRole('button', { name: 'New workspace' }).click();
-    await app.getByRole('dialog').getByLabel('Name').fill('Client Acme (2024 rebuild)');
-    await app.getByRole('dialog').getByLabel('Folder').fill('acme24');
-    await app.getByRole('dialog').getByRole('button', { name: 'Create' }).click();
+    await app.getByRole('link', { name: 'New workspace' }).click();
+    await app.getByLabel('Name').fill('Client Acme (2024 rebuild)');
+    await app.getByLabel('Folder').fill('acme24');
+    await app.getByRole('button', { name: 'Save changes' }).click();
 
-    // The durable state, not the toast that announces it: a row naming both
-    // halves, and a registry that agrees.
-    //
-    // Scoped to the list, and that is not tidiness. The dialog's own hint reads
-    // "Creates /acme24. …", so an unscoped `getByText` matches two
-    // nodes for as long as the dialog is still mounted — which fails strict mode
-    // on exactly the runs where the close animation loses the race with the
-    // refetch. Whether that happens is a question about the machine, so it may
-    // not be in an `expect`.
-    await expect(
-      app.getByRole('list', { name: 'Workspaces' }).getByText('/acme24', { exact: true }),
-    ).toBeVisible();
+    // The durable state, not the toast that announces it: the registry holds
+    // both halves, separately, as they were typed.
     await expect
       .poll(async () => await workspacesOf(app, harness.url))
       .toContainEqual({
         id: 'acme24',
         name: 'Client Acme (2024 rebuild)',
       });
+
+    // And Save lands on the workspace it made, which is the page that can now
+    // move or remove it.
+    await expect(app).toHaveURL(/\/workspaces\/acme24$/u);
+  });
+
+  test('an abandoned create makes no directory at all', async ({ app, harness }) => {
+    // The reason create is a page rather than the dialog it replaced: that
+    // dialog ran the `mkdir` the moment it was submitted.
+    const before = await workspacesOf(app, harness.url);
+
+    await app.goto(`${harness.url}/workspaces/new`);
+    await app.getByLabel('Name').fill('Never finished');
+    await app.getByRole('link', { name: 'Workspaces' }).first().click();
+
+    expect(await workspacesOf(app, harness.url)).toEqual(before);
   });
 
   test('the row opens an editor, and the name changes without the folder moving', async ({

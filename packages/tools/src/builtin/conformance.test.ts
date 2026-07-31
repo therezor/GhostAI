@@ -101,13 +101,25 @@ describe('the built-in set, as packages below it assume it', () => {
     expect([...BUILTIN_TOOL_NAMES].sort()).toEqual(names);
   });
 
-  it('is what a new agent is seeded with', () => {
-    expect(Object.keys(DEFAULT_AGENT_TOOLS).sort()).toEqual(names);
+  it('is what a new agent is seeded with, save for the one deliberate omission', () => {
+    expect(Object.keys(DEFAULT_AGENT_TOOLS).sort()).toEqual(
+      names.filter((name) => name !== 'automation'),
+    );
+  });
+
+  it('does not give a new agent the ability to schedule', () => {
+    // The one built-in absent from the seed, and it is not an oversight. Every
+    // other tool acts once, when called; `automation` causes a turn to happen
+    // later, unattended, on a timer — so it is granted per agent by an operator
+    // who chose to, rather than inherited by everything that gets created.
+    expect(DEFAULT_AGENT_TOOLS).not.toHaveProperty('automation');
+    expect(BUILTIN_TOOL_NAMES).toContain('automation');
   });
 
   it('seeds each tool at the permission its risk band implies', () => {
     for (const tool of BUILTIN_TOOLS) {
       const seeded = DEFAULT_AGENT_TOOLS[tool.name];
+      if (seeded === undefined) continue; // covered above
       const risk = tool.definition('builtin').risk;
       expect(seeded).toBe(risk === 'safe' || risk === 'write' ? 'allow' : 'ask');
     }

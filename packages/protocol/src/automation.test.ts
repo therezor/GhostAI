@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AutomationJobSchema,
   AutomationPayloadSchema,
+  AutomationRunSchema,
   AutomationScheduleSchema,
   CreateAutomationJobSchema,
 } from './automation.js';
@@ -140,6 +141,32 @@ describe('AutomationJobSchema', () => {
       state: { lastStatus: 'skipped' },
     });
     expect(job.state.lastStatus).toBe('skipped');
+  });
+});
+
+describe('AutomationRunSchema', () => {
+  const base = { id: 'r1', jobId: 'j1', startedAtMs: 1_700_000_000_000, status: 'ok' as const };
+
+  it('defaults to no warnings', () => {
+    expect(AutomationRunSchema.parse(base).warnings).toEqual([]);
+  });
+
+  it('does not share the warnings array between parses', () => {
+    // The same defect `pinnedSkills` has a test for: a shared default array is
+    // one run's caveat showing up on every other run.
+    expect(AutomationRunSchema.parse(base).warnings).not.toBe(
+      AutomationRunSchema.parse(base).warnings,
+    );
+  });
+
+  it('keeps warnings separate from an error, so a caveat is not a failure', () => {
+    const run = AutomationRunSchema.parse({
+      ...base,
+      warnings: ['deliver: true reached no channel'],
+    });
+    expect(run.status).toBe('ok');
+    expect(run).not.toHaveProperty('error');
+    expect(run.warnings).toEqual(['deliver: true reached no channel']);
   });
 });
 

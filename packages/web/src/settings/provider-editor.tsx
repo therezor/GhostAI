@@ -42,10 +42,13 @@ import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';
 import { RowActions } from '@/components/crud/row-actions.js';
 import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
-import { FieldGrid, SaveBar, Section, SwitchRow, TextField } from './controls.js';
+import { FieldGrid, SaveBar, Section, SelectField, SwitchRow, TextField } from './controls.js';
 import { KeyField, ProbeLine } from './provider-fields.js';
 import {
+  EMPTY_PROVIDER_FORM,
   initialKeyField,
+  proposeInstanceId,
+  toCreateProviderPatch,
   toCredentialValue,
   toProviderForm,
   toProviderPatch,
@@ -54,6 +57,103 @@ import {
 } from './provider-form.js';
 import { useRemoveProvider, useSaveProvider, useTestProvider } from './use-provider.js';
 import { useSettings } from './use-settings.js';
+
+/**
+ * Adding an endpoint, on the page that edits one.
+ *
+ * The type is asked here and nowhere else — it is fixed for the life of the
+ * instance, because the credential in the vault is keyed to the id and a type
+ * that could change would be a key handed to a stranger. Everything below it is
+ * the same form the editor renders, and **nothing is written until Save**: the
+ * dialog this replaced created the instance from `EMPTY_PROVIDER_FORM` on
+ * submit, so an abandoned editor left an endpoint with no endpoint in it.
+ */
+export function ProviderCreateRoute(): JSX.Element {
+  const { t } = useTranslation();
+  const [type, setType] = useState('');
+
+  const providers = useQuery({
+    queryKey: queryKeys.providers,
+    queryFn: ({ signal }) => api.providers(signal),
+  });
+
+  if (providers.isPending) return <p className="page__note">{t('providers.loadingOne')}</p>;
+  if (providers.isError) {
+    return (
+      <p role="alert" className="page__error">
+        Could not load the provider types: {providers.error.message}
+      </p>
+    );
+  }
+
+  const { types, instances } = providers.data;
+  const chosen = types.find((candidate) => candidate.id === type);
+  const taken = instances.map((one) => one.id);
+
+  const typeField = (
+    <SelectField
+      label={t('common.type')}
+      value={type}
+      placeholder={t('providers.chooseType')}
+      options={types.map((candidate) => ({
+        value: candidate.id,
+        label: candidate.displayName,
+      }))}
+      onValueChange={setType}
+      hint={
+        chosen === undefined
+          ? t('providers.typeHintNone')
+          : chosen.defaultApiBase === undefined
+            ? t('providers.typeHintNoBase')
+            : t('providers.typeHintBase', { base: chosen.defaultApiBase })
+      }
+    />
+  );
+
+  // Until a type is chosen there is nothing to describe: an endpoint's defaults,
+  // its credential rule and whether it can list models all come from the type.
+  if (chosen === undefined) {
+    return (
+      <div className="stack page page--wide">
+        <div className="cluster page__header">
+          <Link to="/settings" search={{ panel: 'providers' }} className="page__back">
+            <ArrowLeft aria-hidden="true" />
+            {t('providers.backToProviders')}
+          </Link>
+        </div>
+        <h2 className="page__title">{t('providers.newTitle')}</h2>
+        <Section title={t('providers.identity')} description={t('providers.newHint')}>
+          {typeField}
+        </Section>
+      </div>
+    );
+  }
+
+  return (
+    <Editor
+      // Remounts on a change of type, so one type's defaults cannot survive
+      // into another's boxes.
+      key={chosen.id}
+      mode="create"
+      typeField={typeField}
+      instance={{
+        id: proposeInstanceId(chosen.id, taken),
+        type: chosen.id,
+        displayName: chosen.displayName,
+        apiBase: chosen.defaultApiBase ?? '',
+        isLocal: chosen.isLocal,
+        isGateway: chosen.isGateway,
+        isOAuth: chosen.isOAuth,
+        credentialsPresent: false,
+        enabled: true,
+        supportsModelListing: chosen.supportsModelListing,
+        ...(chosen.envKey === undefined ? {} : { envKey: chosen.envKey }),
+      }}
+      form={{ ...EMPTY_PROVIDER_FORM, type: chosen.id, apiBase: chosen.defaultApiBase ?? '' }}
+      extraHeaders={{}}
+    />
+  );
+}
 
 export function ProviderEditorRoute(): JSX.Element {
   const { t } = useTranslation();
@@ -98,6 +198,7 @@ export function ProviderEditorRoute(): JSX.Element {
     // field — cannot survive into the next one's boxes.
     <Editor
       key={instance.id}
+      mode="edit"
       instance={instance}
       form={toProviderForm(settings.data.config.providers[instance.id])}
       extraHeaders={settings.data.config.providers[instance.id]?.extraHeaders ?? {}}
@@ -106,17 +207,28 @@ export function ProviderEditorRoute(): JSX.Element {
 }
 
 function Editor({
+  mode,
   instance,
   form: stored,
   extraHeaders,
+  typeField,
 }: {
+  /**
+   * `create` synthesises `instance` from the chosen type and POSTs on Save;
+   * `edit` loads the stored endpoint and patches it. It decides the seed, what
+   * Save does, and whether Delete and the connection probe render.
+   */
+  readonly mode: 'create' | 'edit';
   readonly instance: ProviderInstanceInfo;
   readonly form: ProviderForm;
   readonly extraHeaders: Readonly<Record<string, string>>;
+  /** The type select, rendered only while creating — it is fixed afterwards. */
+  readonly typeField?: JSX.Element;
 }): JSX.Element {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const modelsId = useId();
+  const creating = mode === 'create';
 
   const [form, setForm] = useState<ProviderForm>(stored);
   const [keyField, setKeyField] = useState(() => initialKeyField(instance.credentialsPresent));
@@ -147,22 +259,39 @@ function Editor({
     });
 
   const onSave = (): void => {
-    save({
-      instanceId: instance.id,
-      patch: toProviderPatch(instance.id, form),
-      credential: toCredentialValue(keyField, instance.credentialsPresent),
-      // No `apiKey`: by the time this runs the vault holds whatever the save
-      // just put there — including nothing, if the field was cleared — and
-      // reading it back is the only way to check a key this page never held.
-      test: instance.supportsModelListing
+    save(
+      {
+        instanceId: instance.id,
+        patch: creating
+          ? toCreateProviderPatch(instance.id, form)
+          : toProviderPatch(instance.id, form),
+        credential: toCredentialValue(keyField, instance.credentialsPresent),
+        // No `apiKey`: by the time this runs the vault holds whatever the save
+        // just put there — including nothing, if the field was cleared — and
+        // reading it back is the only way to check a key this page never held.
+        test: instance.supportsModelListing
+          ? {
+              type: instance.type,
+              apiBase: form.apiBase.trim(),
+              extraHeaders,
+              instanceId: instance.id,
+            }
+          : null,
+      },
+      creating
         ? {
-            type: instance.type,
-            apiBase: form.apiBase.trim(),
-            extraHeaders,
-            instanceId: instance.id,
+            // On success, not on the press: the editor this lands on reads the
+            // settings cache, and arriving before the write does is the "There
+            // is no provider called…" path.
+            onSuccess: () => {
+              void navigate({
+                to: '/settings/providers/$instanceId',
+                params: { instanceId: instance.id },
+              });
+            },
           }
-        : null,
-    });
+        : {},
+    );
     setDirty(false);
     // The typed value has left for the vault; back to the resting state a
     // stored key is shown in.
@@ -199,18 +328,21 @@ function Editor({
           {!form.enabled && <Badge tone="warning">off</Badge>}
           <span className="spacer" />
           {/* Not a button at the bottom of the form: a destructive action does
-              not belong in the reading order of the settings it would destroy. */}
-          <RowActions label={instance.displayName}>
-            <DropdownMenuItem
-              className="menu__item--danger"
-              onSelect={() => {
-                setConfirmingDelete(true);
-              }}
-            >
-              <Trash2 />
-              {t('providers.deleteProvider')}
-            </DropdownMenuItem>
-          </RowActions>
+              not belong in the reading order of the settings it would destroy.
+              Absent while creating — there is nothing yet to remove. */}
+          {!creating && (
+            <RowActions label={instance.displayName}>
+              <DropdownMenuItem
+                className="menu__item--danger"
+                onSelect={() => {
+                  setConfirmingDelete(true);
+                }}
+              >
+                <Trash2 />
+                {t('providers.deleteProvider')}
+              </DropdownMenuItem>
+            </RowActions>
+          )}
         </div>
 
         <p className="page__note">
@@ -221,6 +353,10 @@ function Editor({
 
       <Section title={t('providers.identity')} description={t('providers.identityDesc')}>
         <FieldGrid>
+          {/* Only while creating. Afterwards the type is a fact rather than a
+              control — changing an endpoint's protocol is not an edit, it is a
+              different endpoint, and the vault entry is keyed to the id. */}
+          {typeField}
           <TextField
             label={t('common.name')}
             value={form.label}
