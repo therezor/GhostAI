@@ -14,7 +14,7 @@ import '@testing-library/jest-dom/vitest';
 import { createWebI18n } from '@ghostai/i18n/web';
 import { setI18n } from 'react-i18next';
 
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 import { afterEach, beforeEach, vi } from 'vitest';
 
 import { resetToasts } from '@/components/ui/toast.js';
@@ -35,6 +35,22 @@ import { useTurnStore } from '@/state/turn.js';
  * Production never relies on this: `I18nProvider` sits above the whole tree.
  */
 setI18n(createWebI18n('en'));
+
+/**
+ * `findBy*` and `waitFor` give up after one second by default, and that budget
+ * is testing-library's own — the 15s `testTimeout` in `vitest.config.ts` does
+ * not reach it, which is why raising that one did not stop the coverage job
+ * from failing. A page like the agent editor mounts the whole shell and settles
+ * half a dozen queries before the form exists: ~0.4s bare, ~1.8s under v8
+ * instrumentation, and a shared CI runner is slower again. So the query
+ * expired, the test read it as "the button is not there", and the failure
+ * pointed at the component rather than the clock.
+ *
+ * Five seconds is a stall, not a slow render. Nothing here waits on a real
+ * network — every route is stubbed — so a query that genuinely cannot resolve
+ * still fails well inside the test timeout, with the same message.
+ */
+configure({ asyncUtilTimeout: 5_000 });
 
 /** A no-op observer. Nothing is being laid out, so there is nothing to report. */
 class NoopResizeObserver {
