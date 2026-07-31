@@ -20,6 +20,12 @@ export default defineConfig({
   test: {
     name: 'web',
     environment: 'jsdom',
+    // The default 5s, measured against the slowest component test
+    // (`agents.test.tsx > subagents > saves the ref…`), leaves no margin: it
+    // runs in ~0.8s bare, ~1.8s under v8 coverage instrumentation, and a CI
+    // runner is another ~3x slower again — which is how it timed out at 5111ms
+    // in the coverage job while the uninstrumented `check` job passed.
+    testTimeout: 15_000,
     include: ['src/**/*.test.{ts,tsx}'],
     setupFiles: ['./src/test/setup.ts'],
   },
