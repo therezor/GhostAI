@@ -28,9 +28,22 @@ export function testQueryClient(): QueryClient {
 export function renderWithProviders(
   ui: ReactElement,
   client: QueryClient = testQueryClient(),
-): RenderResult & { readonly client: QueryClient } {
+): RenderResult & {
+  readonly client: QueryClient;
+  /** `rerender`, with the providers still around it. */
+  readonly update: (next: ReactElement) => void;
+} {
   const result = render(<Providers client={client}>{ui}</Providers>);
-  return Object.assign(result, { client });
+  return Object.assign(result, {
+    client,
+    // RTL's own `rerender` replaces the *whole* tree, so passing the bare
+    // component swaps the provider stack out from under it — which unmounts
+    // and remounts the subject, silently resetting every piece of state a test
+    // about "what happens on the next frame" is trying to observe.
+    update: (next: ReactElement) => {
+      result.rerender(<Providers client={client}>{next}</Providers>);
+    },
+  });
 }
 
 /**

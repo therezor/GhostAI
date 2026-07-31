@@ -1082,3 +1082,97 @@ describe('choosing a toolbox', () => {
     expect(name).not.toContain('none');
   });
 });
+
+describe('subagents', () => {
+  it('offers every other agent, and never the one being edited', async () => {
+    const { user } = mount('/agents/reviewer');
+
+    await user.click(await screen.findByRole('button', { name: 'Add subagent' }));
+    await user.click(screen.getByRole('combobox', { name: 'Agent for subagent 1' }));
+
+    expect(await screen.findByRole('option', { name: 'default' })).toBeInTheDocument();
+    // Self-delegation is refused at save, so it is not offered.
+    expect(screen.queryByRole('option', { name: 'Reviewer' })).not.toBeInTheDocument();
+  });
+
+  it('shows the tool name the model will call, which is derived not typed', async () => {
+    const { user } = mount('/agents/reviewer');
+
+    await user.click(await screen.findByRole('button', { name: 'Add subagent' }));
+    await user.click(screen.getByRole('combobox', { name: 'Agent for subagent 1' }));
+    await user.click(await screen.findByRole('option', { name: 'default' }));
+
+    expect(screen.getByText('ask_default')).toBeInTheDocument();
+  });
+
+  it('saves the ref, its guidance and its permission', async () => {
+    const { user, calls } = mount('/agents/reviewer');
+
+    await user.click(await screen.findByRole('button', { name: 'Add subagent' }));
+    await user.click(screen.getByRole('combobox', { name: 'Agent for subagent 1' }));
+    await user.click(await screen.findByRole('option', { name: 'default' }));
+    await user.type(
+      screen.getByLabelText('When to use subagent 1'),
+      'Use for anything outside review.',
+    );
+    await user.click(screen.getByRole('combobox', { name: 'Permission for subagent 1' }));
+    await user.click(await screen.findByRole('option', { name: 'Ask first' }));
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => {
+      expect(patchesOf(calls)).toHaveLength(1);
+    });
+    expect(patchesOf(calls)[0]?.agents?.list?.reviewer?.subagents).toEqual([
+      { id: 'default', prompt: 'Use for anything outside review.', permission: 'ask' },
+    ]);
+  });
+
+  it('removes a row, and the save says so', async () => {
+    const { user, calls } = mount('/agents/reviewer', {
+      '/api/settings': [
+        200,
+        {
+          config: ConfigSchema.parse({
+            agents: {
+              defaults: { model: 'llama3', provider: 'ollama', maxTokens: 4096 },
+              list: {
+                reviewer: {
+                  label: 'Reviewer',
+                  tools: { read_file: 'allow' },
+                  subagents: [{ id: 'default', prompt: 'Ask.', permission: 'allow' }],
+                },
+              },
+            },
+            providers: { ollama: { type: 'ollama' } },
+          }),
+          credentialsPresent: { ollama: false },
+        },
+      ],
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Remove subagent 1' }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => {
+      expect(patchesOf(calls)).toHaveLength(1);
+    });
+    // The empty array rather than an absent key: `agents.list.*` replaces
+    // wholesale, so this is the only shape that expresses a removal.
+    expect(patchesOf(calls)[0]?.agents?.list?.reviewer?.subagents).toEqual([]);
+  });
+
+  it('says so when there is nobody to delegate to', async () => {
+    const { user } = mount('/agents/reviewer', {
+      '/api/agents': [
+        200,
+        { agents: [{ id: 'reviewer', label: 'Reviewer', model: 'm', provider: 'p' }] },
+      ],
+    });
+
+    expect(
+      await screen.findByText(/There is no other agent to delegate to yet/),
+    ).toBeInTheDocument();
+    expect(user).toBeDefined();
+  });
+});

@@ -13,6 +13,7 @@ import { z } from 'zod';
 
 import { ConfigSchema } from './config.js';
 import { StopReasonSchema, StoredMessageSchema, UsageSchema } from './messages.js';
+import { SubagentRunRefSchema } from './subagent.js';
 import { ToolDefinitionSchema, ToolPermissionSchema } from './tools.js';
 import { AutomationJobSchema, AutomationRunSchema } from './automation.js';
 
@@ -278,6 +279,17 @@ export const SessionMessagesResponseSchema = z.object({
   sessionKey: z.string().min(1),
   messages: z.array(StoredMessageSchema),
   nextCursor: z.string().optional(),
+  /**
+   * The delegations this history contains, by the call that made each.
+   *
+   * Here rather than on `SessionSummary` because this is the response a
+   * transcript is *rebuilt* from, and a run is the one thing in a transcript
+   * that these rows cannot describe: a subagent's steps live in the subagent's
+   * own session. Carrying the pointer alongside the rows is what lets a
+   * reloaded conversation offer the run rather than silently drop it, without a
+   * second request to find out whether there is one.
+   */
+  subagentRuns: z.record(z.string(), SubagentRunRefSchema).default({}),
 });
 export type SessionMessagesResponse = z.infer<typeof SessionMessagesResponseSchema>;
 

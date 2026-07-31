@@ -375,6 +375,7 @@ const TOOL_CARDS: readonly ToolPart[] = [
     truncated: false,
     approval: undefined,
     notices: [],
+    subagent: undefined,
   },
   {
     kind: 'tool',
@@ -390,6 +391,7 @@ const TOOL_CARDS: readonly ToolPart[] = [
     // Far enough out that the countdown is not the thing being reviewed.
     approval: { expiresAtMs: Date.now() + 3_600_000, answered: undefined },
     notices: [],
+    subagent: undefined,
   },
   {
     kind: 'tool',
@@ -404,6 +406,7 @@ const TOOL_CARDS: readonly ToolPart[] = [
     truncated: true,
     approval: undefined,
     notices: [],
+    subagent: undefined,
   },
   {
     kind: 'tool',
@@ -428,6 +431,7 @@ const TOOL_CARDS: readonly ToolPart[] = [
         message: 'The response body looked like an instruction.',
       },
     ],
+    subagent: undefined,
   },
 ];
 

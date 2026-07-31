@@ -36,7 +36,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowLeft, RotateCcw, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { useMemo, useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -45,9 +45,11 @@ import {
   DEFAULT_AGENT_ID,
   DEFAULT_SYSTEM_PROMPT_TEMPLATE,
   PROMPT_PLACEHOLDERS,
+  subagentToolName,
   unknownPlaceholders,
   type AgentDefaults,
   type AgentEntry,
+  type SubagentRef,
   type ToolPermission,
   type ToolRisk,
 } from '@ghostai/protocol';
@@ -223,6 +225,96 @@ function ToolRow({
           }}
         />
       </div>
+    </li>
+  );
+}
+
+/**
+ * One agent this one may hand a task to.
+ *
+ * Three controls, in the order the decision is made: *who*, *when to use them*,
+ * and *whether to ask first*. The middle one is the largest because it is the
+ * one that matters — it becomes the tool description the model reads, and it is
+ * the only part of this feature that decides when a delegation actually fires.
+ *
+ * The tool name is shown rather than asked for. It is derived from the agent id
+ * so two subagents can never collide and none can shadow a built-in; showing it
+ * is what makes an operator's prompt ("use `ask_researcher` when…") match what
+ * the model is really offered.
+ */
+function SubagentRow({
+  ref_,
+  index,
+  options,
+  onChange,
+  onRemove,
+}: {
+  readonly ref_: SubagentRef;
+  readonly index: number;
+  readonly options: readonly { readonly id: string; readonly label: string }[];
+  readonly onChange: (next: SubagentRef) => void;
+  readonly onRemove: () => void;
+}): JSX.Element {
+  const { t } = useTranslation();
+  const position = index + 1;
+
+  return (
+    <li className="stack agent-editor__subagent">
+      <div className="row agent-editor__subagent-head">
+        <SelectField
+          label={<span className="sr-only">{t('agents.subagentAgentFor', { position })}</span>}
+          value={ref_.id}
+          placeholder={t('agents.subagentChoose')}
+          options={options.map((agent) => ({
+            value: agent.id,
+            label: agent.label === '' ? agent.id : agent.label,
+          }))}
+          onValueChange={(next) => {
+            onChange({ ...ref_, id: next });
+          }}
+        />
+
+        {ref_.id !== '' && (
+          <code className="agent-editor__subagent-tool">{subagentToolName(ref_.id)}</code>
+        )}
+
+        <div className="agent-editor__subagent-permission">
+          <SelectField
+            label={
+              <span className="sr-only">{t('agents.subagentPermissionFor', { position })}</span>
+            }
+            value={ref_.permission}
+            options={TOOL_PERMISSIONS.map((option) => ({
+              value: option,
+              label: t(PERMISSION_LABELS[option]),
+            }))}
+            onValueChange={(next) => {
+              if (isToolPermission(next)) onChange({ ...ref_, permission: next });
+            }}
+          />
+        </div>
+
+        <Button
+          variant="ghost"
+          aria-label={t('agents.subagentRemove', { position })}
+          onClick={onRemove}
+        >
+          <Trash2 aria-hidden="true" />
+        </Button>
+      </div>
+
+      {/* One line, like every other setting on this page. A guidance sentence
+          is a sentence — the place for paragraphs is the system prompt, which
+          has an editor precisely because it is the one field that needs one. */}
+      <TextField
+        label={<span className="sr-only">{t('agents.subagentPromptFor', { position })}</span>}
+        value={ref_.prompt}
+        placeholder={t('agents.subagentPromptPlaceholder')}
+        hint={t('agents.subagentPromptHint')}
+        onValueChange={(next) => {
+          onChange({ ...ref_, prompt: next });
+        }}
+      />
     </li>
   );
 }
@@ -498,6 +590,31 @@ function Editor({
     update('tools', { ...form.tools, [name]: permission });
   };
 
+  const setSubagents = (next: readonly SubagentRef[]): void => {
+    update('subagents', next);
+  };
+
+  const setSubagent = (index: number, next: SubagentRef): void => {
+    setSubagents(form.subagents.map((ref, at) => (at === index ? next : ref)));
+  };
+
+  /**
+   * The agents this one could delegate to.
+   *
+   * Everything `GET /api/agents` returns except this agent, which is refused at
+   * save as a self-reference. Disabled agents are already absent — `listAgents`
+   * skips them — which is the same set `assertBuildable` will accept.
+   */
+  const delegable = useMemo(
+    () => (agents.data?.agents ?? []).filter((agent) => agent.id !== agentId),
+    [agents.data, agentId],
+  );
+
+  const chosenSubagents = useMemo(
+    () => new Set(form.subagents.map((ref) => ref.id)),
+    [form.subagents],
+  );
+
   const providerOptions = useMemo(() => {
     const instances = (providers.data?.instances ?? []).filter((instance) => instance.enabled);
     return [
@@ -759,6 +876,57 @@ function Editor({
                 />
               ))}
             </ul>
+          </>
+        )}
+      </Section>
+
+      {/* After the tools, because delegating *is* a tool from the model's side —
+          one per subagent, named after it — and an operator reading down the
+          page has just decided what this agent may do on its own. */}
+      <Section title={t('agents.subagentsSection')} description={t('agents.subagentsDesc')}>
+        {delegable.length === 0 ? (
+          <p className="page__note">{t('agents.subagentsNoneAvailable')}</p>
+        ) : (
+          <>
+            {form.subagents.length === 0 && (
+              <p className="page__note">{t('agents.subagentsEmpty')}</p>
+            )}
+
+            <ul className="stack agent-editor__subagents">
+              {form.subagents.map((ref, index) => (
+                <SubagentRow
+                  // By position, not by id: a row the operator has not filled in
+                  // yet has no id, and two of them would collide on `''` — which
+                  // React resolves by reusing one input for both.
+                  key={index}
+                  ref_={ref}
+                  index={index}
+                  // The agent itself is never offered, and neither is one already
+                  // chosen — both are refused at save, and a picker that offers
+                  // what the save refuses teaches the wrong thing.
+                  options={delegable.filter(
+                    (agent) => agent.id === ref.id || !chosenSubagents.has(agent.id),
+                  )}
+                  onChange={(next) => {
+                    setSubagent(index, next);
+                  }}
+                  onRemove={() => {
+                    setSubagents(form.subagents.filter((_unused, at) => at !== index));
+                  }}
+                />
+              ))}
+            </ul>
+
+            <Button
+              variant="secondary"
+              disabled={form.subagents.length >= delegable.length}
+              onClick={() => {
+                setSubagents([...form.subagents, { id: '', prompt: '', permission: 'allow' }]);
+              }}
+            >
+              <Plus aria-hidden="true" />
+              {t('agents.subagentAdd')}
+            </Button>
           </>
         )}
       </Section>

@@ -203,3 +203,15 @@ deny` map; absent means disabled, so a tool is enabled explicitly or not at
 - **The i18n layer.** Three namespaces, the JSON typed as the key union, errors
   carrying a translatable key across packages, and two CI gates for the opposite
   halves of the problem.
+- **Subagents.** `agents.list.<id>.subagents` points one agent at others; each
+  becomes a tool named `ask_<id>` whose description is the operator's own
+  guidance, with its own `allow | ask | deny`. Delegation lives in `AgentLoop`
+  rather than in a tool — `@ghostai/tools` sits below it, and `ToolContext` has
+  no event sink — so a subagent's turn is a real turn on a real loop and its
+  events stream out wrapped in `subagent.event`. It runs in a session of its
+  own, in the caller's workspace, linked through the metadata bag the way a fork
+  is; the session is excluded from the sidebar and deleted with its parent, and
+  is what lets a reloaded transcript fetch the run back. Cycles and depth are
+  refused with a tool result rather than a throw, `subagentTimeoutMs` finally
+  reads, and an approval inside a subagent bubbles to the operator scoped to the
+  conversation rather than to the delegation.

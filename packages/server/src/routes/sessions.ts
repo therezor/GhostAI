@@ -23,6 +23,7 @@ import {
   SessionSummarySchema,
   TurnStatsResponseSchema,
   UpdateSessionRequestSchema,
+  subagentRunsOf,
   type BranchSessionRequest,
   type ContextResponse,
   type CreateSessionRequest,
@@ -226,6 +227,12 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
         return {
           sessionKey: key,
           messages: page.map(toStoredMessage),
+          // The one thing in a transcript these rows cannot describe: a
+          // subagent's steps live in the subagent's own session. Sent whole
+          // rather than paged with the messages — it is a handful of entries,
+          // and a page that carried only its own share would leave a card on
+          // the next page unable to say it had a run.
+          subagentRuns: subagentRunsOf(store.getSession(key)?.metadata ?? {}),
           ...(rows.length > query.limit && last !== undefined
             ? { nextCursor: encodeMessageCursor({ seq: last.seq }) }
             : {}),

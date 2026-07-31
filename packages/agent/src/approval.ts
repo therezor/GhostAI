@@ -30,6 +30,19 @@ import type { ApprovalScope, ToolRisk } from '@ghostai/protocol';
 export interface ApprovalRequest {
   readonly sessionKey: string;
   /**
+   * The session a human is actually looking at.
+   *
+   * Equal to `sessionKey` for an ordinary turn, and different for one running
+   * inside a subagent: a subagent gets a session of its own, which exists for
+   * the length of one delegation. Scoping a `session` answer to *that* would
+   * make the button mean "once" — the operator picks "this session" while
+   * looking at their conversation, and the conversation is what they meant.
+   *
+   * Optional so nothing constructing a request has to know about subagents;
+   * absent means "this one".
+   */
+  readonly rootSessionKey?: string;
+  /**
    * Which agent is asking.
    *
    * A gate that remembers an answer beyond one call has to remember it *per

@@ -668,6 +668,49 @@ describe('merging a fetched history', () => {
     expect(turnOf(merged).parts).toHaveLength(1);
   });
 
+  it("keeps a subagent's run, which storage does not record either", () => {
+    // The history query is invalidated on `turn.end`, so this rebuild happens
+    // moments after a delegation finishes. Without carrying it across, the run
+    // the operator was just watching disappears in front of them — and the
+    // nested transcript lives in the child's session, so nothing here can
+    // rebuild it from the parent's rows.
+    const live = play(
+      START,
+      {
+        type: 'tool.call',
+        turnId: 't1',
+        callId: 'c1',
+        name: 'ask_researcher',
+        args: {},
+        risk: 'safe',
+      },
+      {
+        type: 'subagent.event',
+        turnId: 't1',
+        parentSessionKey: 'web:1',
+        parentCallId: 'c1',
+        agentId: 'researcher',
+        label: 'Researcher',
+        sessionKey: 'sub-1',
+        depth: 1,
+        event: { type: 'assistant.delta', turnId: 't2', text: 'Found it.' },
+      },
+    );
+
+    const merged = mergeStoredHistory(live, [
+      row,
+      stored('row-2', 't1', {
+        role: 'assistant',
+        content: [],
+        toolCalls: [{ id: 'c1', name: 'ask_researcher', argumentsJson: '{}' }],
+      }),
+    ]);
+
+    expect(toolsOf(merged)[0]?.subagent?.parts).toEqual([
+      { kind: 'text', id: 'sub-1#0', text: 'Found it.' },
+    ]);
+  });
+
   it('keeps the risk band the socket reported, which storage does not record', () => {
     const live = play(START, {
       type: 'tool.call',
@@ -935,5 +978,260 @@ describe('a turn that failed', () => {
   it('tolerates a server that does not report firstSeq on the start', () => {
     const items = play(START);
     expect(turnOf(items).firstSeq).toBeUndefined();
+  });
+});
+
+describe('subagents', () => {
+  /** One nested frame, addressed as the loop addresses it. */
+  const nest = (
+    event: Extract<ServerMessage, { type: 'subagent.event' }>['event'],
+    over: Partial<Omit<Extract<ServerMessage, { type: 'subagent.event' }>, 'type' | 'seq'>> = {},
+  ): Unsequenced<ServerMessage> => ({
+    type: 'subagent.event',
+    turnId: 't1',
+    parentSessionKey: 'web:1',
+    parentCallId: 'c1',
+    agentId: 'researcher',
+    label: 'Researcher',
+    sessionKey: 'sub-1',
+    depth: 1,
+    event,
+    ...over,
+  });
+
+  const DELEGATE = {
+    type: 'tool.call',
+    turnId: 't1',
+    callId: 'c1',
+    name: 'ask_researcher',
+    args: { task: 'go' },
+    risk: 'safe',
+  } as const;
+
+  const CHILD_START = {
+    type: 'turn.start',
+    agentId: 'researcher',
+    sessionKey: 'sub-1',
+    turnId: 't2',
+    model: 'child-model',
+    provider: 'p',
+  } as const;
+
+  it('hangs the run off the delegating call rather than off the turn', () => {
+    const items = play(
+      START,
+      DELEGATE,
+      nest(CHILD_START),
+      nest({ type: 'assistant.delta', turnId: 't2', text: 'Found it.' }),
+    );
+
+    // One part on the turn: the card. The subagent is inside it.
+    expect(turnOf(items).parts).toHaveLength(1);
+
+    const run = toolsOf(items)[0]?.subagent;
+    expect(run).toMatchObject({
+      agentId: 'researcher',
+      label: 'Researcher',
+      sessionKey: 'sub-1',
+      model: 'child-model',
+      done: false,
+      loaded: true,
+    });
+    expect(run?.parts).toEqual([{ kind: 'text', id: 'sub-1#0', text: 'Found it.' }]);
+  });
+
+  it("renders a subagent's tool call with the same shape as its caller's", () => {
+    const items = play(
+      START,
+      DELEGATE,
+      nest(CHILD_START),
+      nest({
+        type: 'tool.call',
+        turnId: 't2',
+        callId: 'n1',
+        name: 'list_dir',
+        args: { path: 'src' },
+        risk: 'safe',
+      }),
+      nest({
+        type: 'tool.result',
+        turnId: 't2',
+        callId: 'n1',
+        ok: true,
+        content: 'a.ts',
+        truncated: false,
+        durationMs: 12,
+      }),
+    );
+
+    const nested = toolsOf(items)[0]?.subagent?.parts[0];
+    expect(nested).toMatchObject({
+      kind: 'tool',
+      id: 'n1',
+      name: 'list_dir',
+      status: 'ok',
+      content: 'a.ts',
+      durationMs: 12,
+    });
+  });
+
+  it('closes the run on turn.end, and keeps what it cost', () => {
+    const items = play(
+      START,
+      DELEGATE,
+      nest(CHILD_START),
+      nest({
+        type: 'turn.end',
+        turnId: 't2',
+        stopReason: 'complete',
+        iterations: 3,
+        elapsedMs: 4100,
+        usage: { promptTokens: 1200, completionTokens: 340, totalTokens: 1540 },
+      }),
+    );
+
+    expect(toolsOf(items)[0]?.subagent).toMatchObject({
+      done: true,
+      stopReason: 'complete',
+      iterations: 3,
+      elapsedMs: 4100,
+    });
+  });
+
+  it('keeps a parent and a subagent call with the same id apart', () => {
+    const items = play(
+      START,
+      // The caller's own call, and the subagent's, share an id — legal, since a
+      // call id is only unique within one assistant message.
+      { ...DELEGATE, callId: 'x' },
+      nest(CHILD_START, { parentCallId: 'x' }),
+      nest(
+        { type: 'tool.call', turnId: 't2', callId: 'x', name: 'echo', args: {}, risk: 'safe' },
+        {
+          parentCallId: 'x',
+        },
+      ),
+      nest(
+        {
+          type: 'tool.result',
+          turnId: 't2',
+          callId: 'x',
+          ok: true,
+          content: 'inner',
+          truncated: false,
+          durationMs: 1,
+        },
+        { parentCallId: 'x' },
+      ),
+      // …and the caller's own result, which must not land on the nested card.
+      {
+        type: 'tool.result',
+        turnId: 't1',
+        callId: 'x',
+        ok: true,
+        content: 'outer',
+        truncated: false,
+        durationMs: 9,
+      },
+    );
+
+    const outer = toolsOf(items)[0];
+    expect(outer?.content).toBe('outer');
+    expect(outer?.subagent?.parts).toHaveLength(1);
+    expect(outer?.subagent?.parts[0]).toMatchObject({ id: 'x', content: 'inner' });
+  });
+
+  it('nests a subagent of a subagent inside it', () => {
+    const items = play(
+      START,
+      DELEGATE,
+      nest(CHILD_START),
+      // The middle agent's own delegating call, inside its run.
+      nest({
+        type: 'tool.call',
+        turnId: 't2',
+        callId: 'm1',
+        name: 'ask_summariser',
+        args: {},
+        risk: 'safe',
+      }),
+      // The grandchild, addressed to the middle agent's call in its session.
+      nest(
+        { type: 'assistant.delta', turnId: 't3', text: 'Short.' },
+        {
+          parentSessionKey: 'sub-1',
+          parentCallId: 'm1',
+          agentId: 'summariser',
+          label: 'Summariser',
+          sessionKey: 'sub-2',
+          depth: 2,
+        },
+      ),
+    );
+
+    const middle = toolsOf(items)[0]?.subagent;
+    const grandchildCard = middle?.parts[0];
+    expect(grandchildCard).toMatchObject({ kind: 'tool', id: 'm1' });
+    expect(grandchildCard?.kind === 'tool' ? grandchildCard.subagent : undefined).toMatchObject({
+      agentId: 'summariser',
+      sessionKey: 'sub-2',
+    });
+  });
+
+  it('drops a nested frame for a delegating call it never saw', () => {
+    // A resume that landed mid-delegation. Inventing a card here would show a
+    // subagent's transcript under a heading that says "tool".
+    const items = play(START, nest(CHILD_START));
+
+    expect(turnOf(items).parts).toEqual([]);
+  });
+
+  it("answers a subagent's approval prompt, which is drawn in the nested card", () => {
+    const items = play(
+      START,
+      DELEGATE,
+      nest(CHILD_START),
+      nest({
+        type: 'tool.call',
+        turnId: 't2',
+        callId: 'n1',
+        name: 'exec',
+        args: {},
+        risk: 'exec',
+      }),
+      nest({
+        type: 'tool.approvalRequest',
+        turnId: 't2',
+        callId: 'n1',
+        name: 'exec',
+        args: {},
+        risk: 'exec',
+        expiresAtMs: 1_700_000_300_000,
+      }),
+    );
+
+    // The wire carries only the call id, so this has to find it wherever it is.
+    const answered = markApprovalAnswered(items, 'n1', 'approved');
+    const nested = toolsOf(answered)[0]?.subagent?.parts[0];
+    expect(nested).toMatchObject({
+      status: 'awaiting-approval',
+      approval: { answered: 'approved' },
+    });
+  });
+
+  it('does not re-run a delegation onto a turn that already finished', () => {
+    const items = play(
+      START,
+      DELEGATE,
+      nest(CHILD_START),
+      nest({ type: 'assistant.delta', turnId: 't2', text: 'once' }),
+      { type: 'turn.end', turnId: 't1', stopReason: 'complete', iterations: 1 },
+      // The ring re-sends on a resume; the turn is closed, so this is dropped.
+      nest({ type: 'assistant.delta', turnId: 't2', text: 'twice' }),
+    );
+
+    expect(toolsOf(items)[0]?.subagent?.parts).toEqual([
+      { kind: 'text', id: 'sub-1#0', text: 'once' },
+    ]);
   });
 });

@@ -55,7 +55,13 @@
 import { existsSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
 
-import { AgentLoop, type PromptToolbox, SteeringQueue, type ApprovalGate } from '@ghostai/agent';
+import {
+  AgentLoop,
+  type PromptToolbox,
+  SteeringQueue,
+  subagentMap,
+  type ApprovalGate,
+} from '@ghostai/agent';
 import {
   DEFAULT_AGENT_ID,
   GhostError,
@@ -594,9 +600,16 @@ class Runtime implements GhostRuntime {
     // A fresh cache per build: every loop in the old one was derived from the
     // settings that just changed. A turn already running keeps the loop it
     // started on, because it holds the object rather than looking it up again.
-    const loops = new LoopCache({
-      create: (agentId) =>
-        this.#createLoop(config, agentId, paths, jails, toolboxPool ?? undefined, built),
+    // Annotated rather than inferred, because the resolver below refers to
+    // `loops` from inside its own initialiser: a loop's subagents are resolved
+    // through the same cache that built it. Legal at runtime — `create` is only
+    // ever *called* from `loops.get`, by which point the binding exists — but
+    // inference cannot see that and gives up with an implicit `any`.
+    const loops: LoopCache = new LoopCache({
+      create: (agentId): AgentLoop | null =>
+        this.#createLoop(config, agentId, paths, jails, toolboxPool ?? undefined, built, (id) =>
+          loops.get(id),
+        ),
     });
     const loop = loops.get(DEFAULT_AGENT_ID);
 
@@ -691,6 +704,7 @@ class Runtime implements GhostRuntime {
       readonly exposed: ReadonlyMap<string, readonly AnyTool[]>;
       readonly toolboxPerms: ReadonlyMap<string, ToolPermissions>;
     },
+    resolveLoop: (agentId: string) => AgentLoop | null,
   ): AgentLoop | null {
     const agent = resolveAgent(config, agentId);
     const { provider, model } = this.#resolveProvider(config, agent, paths);
@@ -726,6 +740,11 @@ class Runtime implements GhostRuntime {
       ...toolboxPromptOf(built.prompts, agent.id),
       config: agent.defaults,
       toolsConfig: agent.toolsConfig,
+      // The delegation half of what this agent may do. Beside `tools` and for
+      // the same reason: both are resolved once, here, so a turn never asks the
+      // config who it is allowed to call.
+      subagents: subagentMap(agent.subagents),
+      resolveLoop,
       model,
       agent: {
         id: agent.id,

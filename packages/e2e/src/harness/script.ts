@@ -88,6 +88,15 @@ const LONG_ANSWER: readonly string[] = [
   'That is the whole of it.',
 ];
 
+/**
+ * What the caller asks its subagent for.
+ *
+ * Exported because the spec asserts it: the task is the argument on the
+ * delegating card *and* the sentence that routes the subagent's own turn, and a
+ * test that restated it would keep passing after the two drifted apart.
+ */
+export const SUBAGENT_TASK = 'find the note file';
+
 export const ROUTES: readonly Route[] = [
   {
     // Prose, a fenced block and a reasoning trace: the three things the
@@ -133,5 +142,26 @@ export const ROUTES: readonly Route[] = [
     // composer to be showing Stop.
     match: /\bstall\b/i,
     turns: [{ onStream: never, deltas: ['Unreachable unless the stall ends.'] }],
+  },
+  {
+    // The caller's half of a delegation. It hands the researcher a task and
+    // then answers from whatever comes back.
+    match: /\bdelegate\b/i,
+    turns: [
+      { toolCalls: [toolCall('call-sub', 'ask_researcher', { task: SUBAGENT_TASK })] },
+      { deltas: ['The researcher found ', '`notes.md`.'] },
+    ],
+  },
+  {
+    // The subagent's half, and it needs no new harness concept: a subagent's
+    // first user message *is* the task string, so it routes here exactly as the
+    // caller's message routes above. The word is chosen not to collide with any
+    // route before it — a task containing "list" would take the `list_dir`
+    // route and the delegation would silently test something else.
+    match: /\bfind\b/i,
+    turns: [
+      { toolCalls: [toolCall('call-nested', 'list_dir', { path: '.' })] },
+      { deltas: ['There is one file: ', '`notes.md`.'] },
+    ],
   },
 ];

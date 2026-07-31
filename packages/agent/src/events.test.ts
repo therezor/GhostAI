@@ -74,6 +74,19 @@ const SAMPLES: Record<AgentEventType, AgentEvent> = {
     usage: { promptTokens: 10, completionTokens: 4, totalTokens: 14 },
     iterations: 2,
   },
+  'subagent.event': {
+    type: 'subagent.event',
+    // The root turn, deliberately not the subagent's own — which is `turn-2`,
+    // on the inner event where it belongs.
+    turnId: 'turn-1',
+    parentSessionKey: 'web:1',
+    parentCallId: 'call-1',
+    agentId: 'researcher',
+    label: 'Researcher',
+    sessionKey: 'sub-9',
+    depth: 1,
+    event: { type: 'assistant.delta', turnId: 'turn-2', text: 'Found it' },
+  },
 };
 
 describe('AgentEvent', () => {

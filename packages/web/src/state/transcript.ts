@@ -9,7 +9,7 @@
  * finding its card, a reload rebuilding a half-finished turn — be tested
  * without mounting anything.
  *
- * The model is two levels deep and no deeper:
+ * The model is:
  *
  *  - A **transcript** is a flat list of items in arrival order: what the user
  *    said, what a turn produced, a mid-turn steer, a notice that belongs to no
@@ -19,6 +19,11 @@
  *    that writes a sentence, calls a tool, and writes another sentence must
  *    render in that order, and a shape with `text` and `tools[]` as separate
  *    fields cannot express it.
+ *  - A **delegating tool call carries a list of parts of its own** — a
+ *    subagent's turn, rendered inside the card that started it. It is the same
+ *    `TurnPart[]`, reduced by the same `applyPartEvent`, which is what makes a
+ *    nested `exec` card identical to a top-level one and makes a subagent of a
+ *    subagent free rather than a second implementation.
  *
  * Two rules are load-bearing:
  *
@@ -36,10 +41,12 @@ import type {
   Attachment,
   ContentPart,
   ErrorCode,
+  NestedAgentEvent,
   NoticeKind,
   ServerMessage,
   StopReason,
   StoredMessage,
+  SubagentRunRef,
   ToolRisk,
   Usage,
 } from '@ghostai/protocol';
@@ -137,6 +144,52 @@ export interface ToolPart {
   readonly approval: ToolApprovalState | undefined;
   /** Notices scoped to this call, rendered in the card. */
   readonly notices: readonly NoticePart[];
+  /**
+   * The subagent's run, when this call delegated to one.
+   *
+   * `undefined` on every ordinary tool call, which is what keeps a card that
+   * has nothing nested inside it from rendering an empty container.
+   */
+  readonly subagent: SubagentPart | undefined;
+}
+
+/**
+ * A subagent's turn, inside the card of the call that started it.
+ *
+ * Its own `parts`, of the same type as a turn's, because it *is* a turn: the
+ * events arrive from a real `AgentLoop` and carry no less than the caller's.
+ * Reduced by the same helper, so nothing about rendering a nested tool call
+ * differs from rendering a top-level one.
+ */
+export interface SubagentPart {
+  readonly agentId: string;
+  /** Never empty in practice — the wrapper falls back to the id. */
+  readonly label: string;
+  /**
+   * The subagent's own session.
+   *
+   * Two jobs. It disambiguates a nested `callId` from its caller's, which are
+   * both the model's and only unique within one assistant message. And it is
+   * the address a transcript rebuilt from storage fetches, when the parent's
+   * history holds only the delegating tool result.
+   */
+  readonly sessionKey: string;
+  readonly parts: readonly TurnPart[];
+  readonly model: string;
+  readonly stopReason: StopReason | undefined;
+  readonly usage: Usage | undefined;
+  readonly iterations: number;
+  readonly elapsedMs: number | undefined;
+  readonly done: boolean;
+  /**
+   * Whether `parts` is the whole run.
+   *
+   * False on a transcript rebuilt from storage, where the run is known to have
+   * happened — the parent's metadata names its session — but nothing has
+   * fetched it. The card offers to, rather than showing an empty box as though
+   * the subagent had done nothing.
+   */
+  readonly loaded: boolean;
 }
 
 export type TurnPart = TextPart | ReasoningPart | NoticePart | ToolPart;
@@ -151,6 +204,15 @@ export interface TurnItem {
   readonly kind: 'turn';
   /** The `turnId`. */
   readonly id: string;
+  /**
+   * The session this turn ran on, from `turn.start`.
+   *
+   * Here so a top-level tool call can be told apart from a subagent's call of
+   * the same id — see `SubagentPart.sessionKey`. Empty on a turn rebuilt from
+   * storage or reconstructed from a mid-turn resume, neither of which can
+   * contain a nested call anyway.
+   */
+  readonly sessionKey: string;
   readonly model: string;
   readonly provider: string;
   readonly parts: readonly TurnPart[];
@@ -190,6 +252,26 @@ export type TranscriptItem = UserItem | TurnItem | SteerItem | NoticeItem;
 export type Transcript = readonly TranscriptItem[];
 
 export const EMPTY_TRANSCRIPT: Transcript = [];
+
+/**
+ * The frames that land on a list of parts rather than on a turn or a session.
+ *
+ * `notice` is not among them even though it produces a part: it can also carry
+ * no turn at all, which makes it a transcript-level decision that `applyNotice`
+ * takes before any list of parts is chosen.
+ */
+type PartEvent = Extract<
+  NestedAgentEvent,
+  {
+    type:
+      | 'assistant.delta'
+      | 'reasoning.delta'
+      | 'tool.call'
+      | 'tool.progress'
+      | 'tool.approvalRequest'
+      | 'tool.result';
+  }
+>;
 
 // ---------------------------------------------------------------------------
 // Building
@@ -248,8 +330,14 @@ export function applyServerMessage(items: Transcript, message: ServerMessage): T
     case 'turn.start': {
       // A `turn.start` for a turn already in the transcript is a replayed
       // frame, not a second turn — the ring re-sends by design, and appending
-      // would leave an empty turn above the real one for every resume.
-      if (items.some((item) => item.kind === 'turn' && item.id === message.turnId)) return items;
+      // would leave an empty turn above the real one for every resume. It is
+      // still worth the session key it carries, which a turn reconstructed from
+      // a mid-turn resume does not have.
+      if (items.some((item) => item.kind === 'turn' && item.id === message.turnId)) {
+        return updateTurn(items, message.turnId, (turn) =>
+          turn.sessionKey === '' ? { ...turn, sessionKey: message.sessionKey } : turn,
+        );
+      }
       // The optimistic bubble this tab drew has no storage address until the
       // server names one. Stamping it here rather than only at `turn.end` is
       // what lets a turn that *fails* still be re-run.
@@ -259,6 +347,7 @@ export function applyServerMessage(items: Transcript, message: ServerMessage): T
         {
           kind: 'turn',
           id: message.turnId,
+          sessionKey: message.sessionKey,
           model: message.model,
           provider: message.provider,
           parts: [],
@@ -278,67 +367,21 @@ export function applyServerMessage(items: Transcript, message: ServerMessage): T
     }
 
     case 'assistant.delta':
-      return appendText(items, message.turnId, 'text', message.text);
-
     case 'reasoning.delta':
-      return appendText(items, message.turnId, 'reasoning', message.text);
-
     case 'tool.call':
-      return updateTurn(items, message.turnId, (turn) =>
-        // A `tool.call` for a call already on the turn is a replayed frame, not
-        // a second call: the ids are unique per turn and the ring re-sends.
-        findTool(turn, message.callId) !== undefined
-          ? turn
-          : {
-              ...turn,
-              parts: [
-                ...turn.parts,
-                {
-                  kind: 'tool',
-                  id: message.callId,
-                  name: message.name,
-                  args: message.args,
-                  risk: message.risk,
-                  status: 'running',
-                  elapsedMs: 0,
-                  durationMs: undefined,
-                  content: undefined,
-                  truncated: false,
-                  approval: undefined,
-                  notices: [],
-                },
-              ],
-            },
-      );
-
     case 'tool.progress':
-      return updateTool(items, message.turnId, message.callId, (tool) => ({
-        ...tool,
-        // Monotonic: a replayed heartbeat must not wind the counter back.
-        elapsedMs: Math.max(tool.elapsedMs, message.elapsedMs),
-      }));
-
     case 'tool.approvalRequest':
-      return updateTool(items, message.turnId, message.callId, (tool) => ({
-        ...tool,
-        status: 'awaiting-approval',
-        approval: { expiresAtMs: message.expiresAtMs, answered: undefined },
-      }));
-
     case 'tool.result':
-      return updateTool(items, message.turnId, message.callId, (tool) => ({
-        ...tool,
-        status: message.ok ? 'ok' : 'error',
-        // The tool's own output. The stored copy is wrapped in the turn's nonce
-        // envelope; this one deliberately is not.
-        content: message.content,
-        truncated: message.truncated,
-        durationMs: message.durationMs,
-        approval: undefined,
+      return updateTurn(items, message.turnId, (turn) => ({
+        ...turn,
+        parts: applyPartEvent(turn.parts, turn.id, message),
       }));
 
     case 'notice':
       return applyNotice(items, message);
+
+    case 'subagent.event':
+      return applySubagentEvent(items, message);
 
     case 'turn.end': {
       const ended = updateTurn(items, message.turnId, (turn) => ({
@@ -411,25 +454,39 @@ export function applyServerMessage(items: Transcript, message: ServerMessage): T
   }
 }
 
-/** Records this tab's answer, so the buttons go away before the round trip. */
+/**
+ * Records this tab's answer, so the buttons go away before the round trip.
+ *
+ * Reaches nested cards too: a subagent's `exec` prompt renders inside the
+ * delegating call, and it is answered by the same `tool.approve` frame — the
+ * wire carries only the `callId`, so this has to find it wherever it is.
+ */
 export function markApprovalAnswered(
   items: Transcript,
   callId: string,
   answered: 'approved' | 'denied',
 ): Transcript {
-  return items.map((item) => {
-    if (item.kind !== 'turn') return item;
-    const tool = findTool(item, callId);
-    if (tool?.approval === undefined) return item;
+  return items.map((item) =>
+    item.kind === 'turn' ? { ...item, parts: answerIn(item.parts, callId, answered) } : item,
+  );
+}
 
-    return {
-      ...item,
-      parts: item.parts.map((part) =>
-        part === tool
-          ? { ...tool, approval: { expiresAtMs: tool.approval?.expiresAtMs ?? 0, answered } }
-          : part,
-      ),
-    };
+function answerIn(
+  parts: readonly TurnPart[],
+  callId: string,
+  answered: 'approved' | 'denied',
+): readonly TurnPart[] {
+  return parts.map((part) => {
+    if (part.kind !== 'tool') return part;
+
+    if (part.id === callId && part.approval !== undefined) {
+      return { ...part, approval: { expiresAtMs: part.approval.expiresAtMs, answered } };
+    }
+
+    const subagent = part.subagent;
+    if (subagent === undefined) return part;
+    const nested = answerIn(subagent.parts, callId, answered);
+    return nested === subagent.parts ? part : { ...part, subagent: { ...subagent, parts: nested } };
   });
 }
 
@@ -448,6 +505,10 @@ const GROWTH_EVENTS: ReadonlySet<string> = new Set([
   'tool.approvalRequest',
   'tool.result',
   'notice',
+  // A delegation's events grow the turn they hang off, so a replayed one has to
+  // be dropped for the same reason: a finished turn's nested cards are already
+  // whatever the run made them.
+  'subagent.event',
 ]);
 
 function growsATurn(
@@ -510,8 +571,9 @@ export function unwrapToolOutput(content: string): string {
 export function mergeStoredHistory(
   existing: Transcript,
   messages: readonly StoredMessage[],
+  subagentRuns: Readonly<Record<string, SubagentRunRef>> = {},
 ): Transcript {
-  const base = withLiveRiskBands(fromStoredMessages(messages), existing);
+  const base = withLiveRiskBands(fromStoredMessages(messages, subagentRuns), existing);
 
   const ids = new Set(base.map((item) => item.id));
   // The second key, and the one that does the real work: a message sent a
@@ -539,28 +601,34 @@ export function mergeStoredHistory(
 }
 
 /**
- * Puts back the one thing storage cannot remember.
+ * Puts back the things storage cannot remember.
  *
- * A stored tool call has no risk band: the band was a property of the registry
- * at call time, and the row holds the model's arguments and the result. So
- * `fromStoredMessages` fills in `safe`, which is the honest answer for a
- * conversation loaded fresh — and the wrong one for a call this tab watched
- * happen. Without this, an `exec` the user was asked to approve is relabelled
- * `read` the instant its turn lands in the database, which is the badge
- * changing its mind about how dangerous something was after the fact.
+ * Two of them, and they fail the same way — a call this tab *watched happen* is
+ * rebuilt from a row that never held the detail, so the screen quietly loses
+ * something it was already showing:
+ *
+ *  - **The risk band.** It was a property of the registry at call time; the row
+ *    holds the model's arguments and the result. `fromStoredMessages` fills in
+ *    `safe`, which is honest for a conversation loaded fresh and wrong for one
+ *    being watched — an `exec` the user was asked to approve would be
+ *    relabelled `read` the instant its turn landed in the database.
+ *  - **The subagent's run.** A delegation's nested transcript lives in the
+ *    child's own session, not in the parent's history, so a rebuild would drop
+ *    it — and the history query is invalidated on `turn.end`, which means the
+ *    run vanished a moment after it finished, in front of the operator.
  *
  * Keyed on the call id, which the socket and the row genuinely share — unlike
  * the message id, which is why `mergeStoredHistory` needs a second key at all.
  */
 function withLiveRiskBands(base: Transcript, existing: Transcript): Transcript {
-  const bands = new Map<string, ToolRisk>();
+  const live = new Map<string, ToolPart>();
   for (const item of existing) {
     if (item.kind !== 'turn') continue;
     for (const part of item.parts) {
-      if (part.kind === 'tool') bands.set(part.id, part.risk);
+      if (part.kind === 'tool') live.set(part.id, part);
     }
   }
-  if (bands.size === 0) return base;
+  if (live.size === 0) return base;
 
   return base.map((item) => {
     if (item.kind !== 'turn') return item;
@@ -568,8 +636,9 @@ function withLiveRiskBands(base: Transcript, existing: Transcript): Transcript {
       ...item,
       parts: item.parts.map((part) => {
         if (part.kind !== 'tool') return part;
-        const risk = bands.get(part.id);
-        return risk === undefined ? part : { ...part, risk };
+        const watched = live.get(part.id);
+        if (watched === undefined) return part;
+        return { ...part, risk: watched.risk, subagent: watched.subagent };
       }),
     };
   });
@@ -583,7 +652,10 @@ function withLiveRiskBands(base: Transcript, existing: Transcript): Transcript {
  * `turnId` — written before turns were grouped, or by a channel that did not
  * set one — falls back to its own id, which renders it as a turn of one.
  */
-export function fromStoredMessages(messages: readonly StoredMessage[]): Transcript {
+export function fromStoredMessages(
+  messages: readonly StoredMessage[],
+  subagentRuns: Readonly<Record<string, SubagentRunRef>> = {},
+): Transcript {
   const items: TranscriptItem[] = [];
 
   // The seqs each turn spans, keyed the same way `openTurn` keys the turn
@@ -641,25 +713,26 @@ export function fromStoredMessages(messages: readonly StoredMessage[]): Transcri
         }
 
         for (const call of message.toolCalls) {
-          parts.push({
-            kind: 'tool',
-            id: call.id,
-            name: call.name,
-            // The stored form is the verbatim string the model emitted, which
-            // is not always JSON. The card renders whichever it turns out to be.
-            args: parseArgs(call.argumentsJson),
-            // Stored history does not carry the risk band — it was a property of
-            // the registry at call time. `safe` is the honest answer, and the
-            // result beside it is what the reader is actually looking at.
-            risk: 'safe',
-            status: 'running',
-            elapsedMs: 0,
-            durationMs: undefined,
-            content: undefined,
-            truncated: false,
-            approval: undefined,
-            notices: [],
-          });
+          // A delegation, if this call made one. The steps are in the child's
+          // own session, so all that can be built here is the card and the
+          // address to fetch them from — `loaded: false` is what makes the
+          // difference between "did nothing" and "not fetched yet" visible.
+          const run = subagentRuns[call.id];
+          parts.push(
+            seedTool(
+              call.id,
+              call.name,
+              // The stored form is the verbatim string the model emitted, which
+              // is not always JSON. The card renders whichever it turns out to be.
+              parseArgs(call.argumentsJson),
+              // Stored history does not carry the risk band — it was a property
+              // of the registry at call time. `safe` is the honest answer, and
+              // the result beside it is what the reader is actually looking at.
+              'safe',
+              'running',
+              run === undefined ? undefined : unloadedSubagent(run),
+            ),
+          );
         }
 
         replaceLast(items, { ...turn, parts, done: true });
@@ -671,7 +744,7 @@ export function fromStoredMessages(messages: readonly StoredMessage[]): Transcri
         // `findLegalStart` guarantees the assistant turn that made it is in the
         // same history, but not that it is in the last item.
         const index = items.findLastIndex(
-          (item) => item.kind === 'turn' && findTool(item, message.toolCallId) !== undefined,
+          (item) => item.kind === 'turn' && findTool(item.parts, message.toolCallId) !== undefined,
         );
         const turn = items[index];
         if (turn?.kind !== 'turn') continue;
@@ -780,29 +853,163 @@ function applyNotice(
     return [...items, { kind: 'notice', id, notice: message.kind, message: message.message }];
   }
 
-  // A notice about a call goes in that call's card: a `prompt_injection`
-  // warning rendered away from the output it describes is a warning about
-  // nothing in particular.
-  if (message.callId !== undefined) {
-    return updateTool(items, message.turnId, message.callId, (tool) => ({
-      ...tool,
-      notices: [...tool.notices, notice],
-    }));
-  }
-
   return updateTurn(items, message.turnId, (turn) => ({
     ...turn,
-    parts: [...turn.parts, { ...notice, id: `${turn.id}#${String(turn.parts.length)}` }],
+    parts: appendNotice(turn.parts, turn.id, notice, message.callId),
   }));
 }
 
 /**
- * Appends a delta to the trailing part of its kind, or opens a new one.
+ * One event from a subagent, into the card of the call that started it.
  *
- * "Trailing" and not "any": a model that writes, calls a tool, then writes again
- * produces two text parts, and merging the second into the first would render
- * the tool card after text it came before.
+ * The address is `parentSessionKey` + `parentCallId`, and both halves are
+ * needed: a `callId` is the model's and is only unique within one assistant
+ * message, so a subagent can mint the one its caller just used. Composing it
+ * with the session that emitted it is unique at any depth and needs no ids
+ * rewritten on the way through.
+ *
+ * The search is over the whole part tree of the turn rather than only its top
+ * level, which is what makes a subagent of a subagent free: a depth-2 event
+ * names its parent's call in its parent's session, and that call is a `ToolPart`
+ * sitting inside a `SubagentPart` — findable by the same walk.
  */
+function applySubagentEvent(
+  items: Transcript,
+  message: Extract<ServerMessage, { type: 'subagent.event' }>,
+): Transcript {
+  return updateTurn(items, message.turnId, (turn) => {
+    const parts = updateNestedTool(turn.parts, turn.sessionKey, message, (tool) => {
+      const subagent = tool.subagent ?? seedSubagent(message);
+      return { ...tool, subagent: applySubagentPart(subagent, message.event) };
+    });
+    return parts === turn.parts ? turn : { ...turn, parts };
+  });
+}
+
+function seedSubagent(message: Extract<ServerMessage, { type: 'subagent.event' }>): SubagentPart {
+  return {
+    agentId: message.agentId,
+    label: message.label === '' ? message.agentId : message.label,
+    sessionKey: message.sessionKey,
+    parts: [],
+    model: '',
+    stopReason: undefined,
+    usage: undefined,
+    iterations: 0,
+    elapsedMs: undefined,
+    done: false,
+    // Live events *are* the whole run, so nothing needs fetching.
+    loaded: true,
+  };
+}
+
+/** The subagent's own turn fields, plus its parts. */
+function applySubagentPart(
+  subagent: SubagentPart,
+  event: Extract<ServerMessage, { type: 'subagent.event' }>['event'],
+): SubagentPart {
+  switch (event.type) {
+    case 'turn.start':
+      return { ...subagent, model: event.model };
+
+    case 'turn.end':
+      return {
+        ...subagent,
+        done: true,
+        stopReason: event.stopReason,
+        usage: event.usage,
+        iterations: event.iterations,
+        elapsedMs: event.elapsedMs,
+      };
+
+    case 'error':
+      // A subagent that failed is a finished subagent. Its message reaches the
+      // reader through the delegating call's own error result, so there is
+      // nothing to render twice.
+      return { ...subagent, done: true };
+
+    case 'notice':
+      return {
+        ...subagent,
+        parts: appendNotice(
+          subagent.parts,
+          subagent.sessionKey,
+          {
+            kind: 'notice',
+            id: `${subagent.sessionKey}#${String(subagent.parts.length)}`,
+            notice: event.kind,
+            message: event.message,
+          },
+          event.callId,
+        ),
+      };
+
+    default:
+      return {
+        ...subagent,
+        parts: applyPartEvent(subagent.parts, subagent.sessionKey, event),
+      };
+  }
+}
+
+/**
+ * Finds the delegating call anywhere in a part tree and updates it.
+ *
+ * Returns `parts` unchanged when the call is not there — which happens on a
+ * resume that landed mid-delegation. Creating a placeholder card would be worse
+ * than dropping the frame: the caller's `tool.call` carries the tool's *name*,
+ * and a card invented here would be a subagent's transcript under a heading that
+ * says "tool".
+ */
+function updateNestedTool(
+  parts: readonly TurnPart[],
+  sessionKey: string,
+  message: Extract<ServerMessage, { type: 'subagent.event' }>,
+  update: (tool: ToolPart) => ToolPart,
+): readonly TurnPart[] {
+  const next = parts.map((part) => {
+    if (part.kind !== 'tool') return part;
+
+    if (sessionKey === message.parentSessionKey && part.id === message.parentCallId) {
+      return update(part);
+    }
+
+    // One level down: this call's own subagent, whose parts may hold the target.
+    const subagent = part.subagent;
+    if (subagent === undefined) return part;
+    const nested = updateNestedTool(subagent.parts, subagent.sessionKey, message, update);
+    return nested === subagent.parts ? part : { ...part, subagent: { ...subagent, parts: nested } };
+  });
+
+  // Identity, not a flag: a `let` assigned inside the callback is not something
+  // the compiler will narrow afterwards, and every branch above already returns
+  // the original object when it changed nothing. Returning `parts` unchanged is
+  // what tells `applySubagentEvent` the call was not in this subtree.
+  return next.some((part, index) => part !== parts[index]) ? next : parts;
+}
+
+/**
+ * A notice into a parts list — inside a call's card when it names one.
+ *
+ * A `prompt_injection` or `approval_denied` notice is a statement *about a
+ * call*, and floating it to the bottom of the turn separates the warning from
+ * the output it is warning about.
+ */
+function appendNotice(
+  parts: readonly TurnPart[],
+  scopeId: string,
+  notice: NoticePart,
+  callId: string | undefined,
+): readonly TurnPart[] {
+  if (callId !== undefined) {
+    return upsertTool(parts, callId, (tool) => ({
+      ...tool,
+      notices: [...tool.notices, notice],
+    }));
+  }
+  return [...parts, { ...notice, id: `${scopeId}#${String(parts.length)}` }];
+}
+
 /**
  * Gives this turn's optimistic user bubble its storage address.
  *
@@ -825,28 +1032,82 @@ function stampUserSeq(
   );
 }
 
+/**
+ * Appends a delta to the trailing part of its kind, or opens a new one.
+ *
+ * "Trailing" and not "any": a model that writes, calls a tool, then writes again
+ * produces two text parts, and merging the second into the first would render
+ * the tool card after text it came before.
+ */
 function appendText(
-  items: Transcript,
-  turnId: string,
+  parts: readonly TurnPart[],
+  scopeId: string,
   kind: 'text' | 'reasoning',
   text: string,
-): Transcript {
-  if (text === '') return items;
+): readonly TurnPart[] {
+  if (text === '') return parts;
 
-  return updateTurn(items, turnId, (turn) => {
-    const last = turn.parts.at(-1);
-    if (last?.kind === kind) {
-      return {
-        ...turn,
-        parts: [...turn.parts.slice(0, -1), { ...last, text: last.text + text }],
-      };
-    }
+  const last = parts.at(-1);
+  if (last?.kind === kind) {
+    return [...parts.slice(0, -1), { ...last, text: last.text + text }];
+  }
+  return [...parts, { kind, id: `${scopeId}#${String(parts.length)}`, text }];
+}
 
-    return {
-      ...turn,
-      parts: [...turn.parts, { kind, id: `${turn.id}#${String(turn.parts.length)}`, text }],
-    };
-  });
+/**
+ * One part-level event onto a list of parts.
+ *
+ * Shared by a turn and by a subagent's run inside a tool card, which is the
+ * whole reason it takes `parts` rather than a transcript: a nested `exec` card
+ * is not a second rendering of a tool call, it is the same one at a different
+ * place in the tree. `scopeId` only names the ids of parts created here, so it
+ * can be a turn id or a subagent's session key without meaning anything else.
+ */
+function applyPartEvent(
+  parts: readonly TurnPart[],
+  scopeId: string,
+  event: PartEvent,
+): readonly TurnPart[] {
+  switch (event.type) {
+    case 'assistant.delta':
+      return appendText(parts, scopeId, 'text', event.text);
+
+    case 'reasoning.delta':
+      return appendText(parts, scopeId, 'reasoning', event.text);
+
+    case 'tool.call':
+      // A `tool.call` for a call already here is a replayed frame, not a second
+      // call: the ids are unique per turn and the ring re-sends.
+      return findTool(parts, event.callId) !== undefined
+        ? parts
+        : [...parts, seedTool(event.callId, event.name, event.args, event.risk)];
+
+    case 'tool.progress':
+      return upsertTool(parts, event.callId, (tool) => ({
+        ...tool,
+        // Monotonic: a replayed heartbeat must not wind the counter back.
+        elapsedMs: Math.max(tool.elapsedMs, event.elapsedMs),
+      }));
+
+    case 'tool.approvalRequest':
+      return upsertTool(parts, event.callId, (tool) => ({
+        ...tool,
+        status: 'awaiting-approval',
+        approval: { expiresAtMs: event.expiresAtMs, answered: undefined },
+      }));
+
+    case 'tool.result':
+      return upsertTool(parts, event.callId, (tool) => ({
+        ...tool,
+        status: event.ok ? 'ok' : 'error',
+        // The tool's own output. The stored copy is wrapped in the turn's nonce
+        // envelope; this one deliberately is not.
+        content: event.content,
+        truncated: event.truncated,
+        durationMs: event.durationMs,
+        approval: undefined,
+      }));
+  }
 }
 
 /**
@@ -878,43 +1139,69 @@ function updateTurn(
   return copy;
 }
 
-function updateTool(
-  items: Transcript,
-  turnId: string,
-  callId: string,
-  update: (tool: ToolPart) => ToolPart,
-): Transcript {
-  return updateTurn(items, turnId, (turn) => {
-    const tool = findTool(turn, callId);
-    // A result for a call this client never saw. It happens on a resume that
-    // landed between the call and the result, and an empty card is better than
-    // an output with no name on it.
-    const target =
-      tool ??
-      ({
-        kind: 'tool',
-        id: callId,
-        name: 'tool',
-        args: undefined,
-        risk: 'safe',
-        status: 'running',
-        elapsedMs: 0,
-        durationMs: undefined,
-        content: undefined,
-        truncated: false,
-        approval: undefined,
-        notices: [],
-      } satisfies ToolPart);
-
-    const next = update(target);
-    return tool === undefined
-      ? { ...turn, parts: [...turn.parts, next] }
-      : { ...turn, parts: turn.parts.map((part) => (part === tool ? next : part)) };
-  });
+/** A run known to have happened, with nothing fetched yet. */
+function unloadedSubagent(run: SubagentRunRef): SubagentPart {
+  return {
+    agentId: run.agentId,
+    label: run.label === '' ? run.agentId : run.label,
+    sessionKey: run.sessionKey,
+    parts: [],
+    model: '',
+    stopReason: undefined,
+    usage: undefined,
+    iterations: 0,
+    elapsedMs: undefined,
+    done: true,
+    loaded: false,
+  };
 }
 
-function findTool(turn: TurnItem, callId: string): ToolPart | undefined {
-  for (const part of turn.parts) {
+function seedTool(
+  callId: string,
+  name: string,
+  args: unknown,
+  risk: ToolRisk,
+  status: ToolStatus = 'running',
+  subagent?: SubagentPart,
+): ToolPart {
+  return {
+    kind: 'tool',
+    id: callId,
+    name,
+    args,
+    risk,
+    status,
+    elapsedMs: 0,
+    durationMs: undefined,
+    content: undefined,
+    truncated: false,
+    approval: undefined,
+    notices: [],
+    subagent,
+  };
+}
+
+/**
+ * Applies `update` to a call's part, creating it if this client never saw it.
+ *
+ * The creation path is not defensive padding: a resume can land between a call
+ * and its result, and an empty card is better than an output with no name on it.
+ */
+function upsertTool(
+  parts: readonly TurnPart[],
+  callId: string,
+  update: (tool: ToolPart) => ToolPart,
+): readonly TurnPart[] {
+  const tool = findTool(parts, callId);
+  if (tool === undefined) {
+    return [...parts, update(seedTool(callId, 'tool', undefined, 'safe'))];
+  }
+  const next = update(tool);
+  return next === tool ? parts : parts.map((part) => (part === tool ? next : part));
+}
+
+function findTool(parts: readonly TurnPart[], callId: string): ToolPart | undefined {
+  for (const part of parts) {
     if (part.kind === 'tool' && part.id === callId) return part;
   }
   return undefined;
@@ -924,6 +1211,7 @@ function orphanTurn(turnId: string): TurnItem {
   return {
     kind: 'turn',
     id: turnId,
+    sessionKey: '',
     model: '',
     provider: '',
     parts: [],

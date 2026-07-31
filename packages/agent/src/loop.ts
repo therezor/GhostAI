@@ -52,6 +52,7 @@ import {
   DEFAULT_MAX_TOOL_RESULT_CHARS,
   DEFAULT_WORKSPACE_ID,
   GhostError,
+  abortedError,
   assistantMessage,
   deriveSessionTitle,
   isAbortError,
@@ -72,12 +73,17 @@ import {
 } from '@ghostai/core';
 import {
   AgentDefaultsSchema,
+  SUBAGENT_METADATA_KEY,
+  SUBAGENT_ORIGIN,
+  withSubagentRun,
   type AgentDefaults,
   type AgentToolbox,
   type ContentPart,
   type ErrorCode,
   type ParsedMentions,
   type StopReason,
+  type SubagentLineage,
+  type SubagentRunRef,
   type ToolCall,
   type ToolDefinition,
   type ToolRisk,
@@ -125,6 +131,15 @@ import {
   type StaticPromptContext,
 } from './prompt.js';
 import { SteeringQueue, steeringText } from './steering.js';
+import {
+  refuseDelegation,
+  refusedExecution,
+  parseTask,
+  subagentDefinition,
+  subagentResult,
+  subagentSessionKey,
+  type SubagentBinding,
+} from './subagent.js';
 import { textToolCallCorrection, textToolCallName } from './text-tool-call.js';
 
 /**
@@ -346,6 +361,27 @@ export interface AgentLoopOptions {
    * other than its operator's own keyboard should install one.
    */
   readonly approvals?: ApprovalGate;
+  /**
+   * The agents this one may delegate to, keyed by the tool name each is called
+   * by. Built with `subagentMap`.
+   *
+   * One map, not two, for the reason `#createLoop` builds one `ToolPermissions`:
+   * the definitions the model is shown and the permission `#authorize` reads
+   * both come from here, so a subagent cannot be advertised and then refused.
+   */
+  readonly subagents?: ReadonlyMap<string, SubagentBinding>;
+  /**
+   * Resolves the loop for a subagent. `Runtime.loopFor` satisfies it.
+   *
+   * A resolver rather than a map of loops, because loops are built lazily and
+   * cached with an LRU — handing this one a set of them at construction would
+   * build every subagent's provider whether or not it was ever used, and pin
+   * the ones that were not.
+   *
+   * `null` means that agent cannot run, which is a refusal the model is told
+   * about rather than an error.
+   */
+  readonly resolveLoop?: (agentId: string) => AgentLoop | null;
   readonly steering?: SteeringQueue;
   readonly clock?: Clock;
   readonly logger?: Logger;
@@ -390,6 +426,24 @@ export interface TurnInput {
    * Phase 3, and nothing in this package reads it.
    */
   readonly mentions?: ParsedMentions;
+  /**
+   * The agents already running above this turn, oldest first.
+   *
+   * Empty for a turn a person started. Carried on the input rather than held on
+   * the loop because loops are one per agent and shared through an LRU cache —
+   * anything depth-shaped stored on the object would be wrong the moment the
+   * same agent appeared at two depths. See `refuseDelegation`.
+   */
+  readonly chain?: readonly string[];
+  /**
+   * The session a person is looking at, when this turn is a subagent's.
+   *
+   * Absent means this turn *is* that session. It reaches `ApprovalRequest`, and
+   * nothing else reads it — see `ApprovalRequest.rootSessionKey` for why an
+   * answer scoped to "this session" has to mean the conversation rather than
+   * the delegation.
+   */
+  readonly rootSessionKey?: string;
 }
 
 /** What the context inspector knows about the session it is inspecting. */
@@ -416,6 +470,28 @@ interface Tick {
   cancel(): void;
 }
 
+/**
+ * What the tool half of a turn needs from the half above it.
+ *
+ * Named rather than inlined because it grew past the point where an inline
+ * object literal in two signatures is one shape: `#runToolCalls` and
+ * `#runSubagent` must agree about it, and a subagent needs the workspace and the
+ * chain that `#authorize` does not.
+ */
+interface TurnScope {
+  readonly sessionKey: string;
+  readonly turnId: string;
+  readonly nonce: string;
+  readonly signal: AbortSignal;
+  readonly toolContext: ToolContext;
+  /** The session's, so a subagent works in the folder its caller does. */
+  readonly workspaceId: string;
+  /** Ancestor agent ids, oldest first. See `refuseDelegation`. */
+  readonly chain: readonly string[];
+  /** The conversation a person is watching. See `ApprovalRequest`. */
+  readonly rootSessionKey: string;
+}
+
 export class AgentLoop {
   readonly #provider: ChatProvider;
   readonly #tools: ToolScope;
@@ -431,6 +507,8 @@ export class AgentLoop {
   readonly #model: string;
   readonly #contributors: readonly ContextContributor[];
   readonly #approvals: ApprovalGate | undefined;
+  readonly #subagents: ReadonlyMap<string, SubagentBinding>;
+  readonly #resolveLoop: ((agentId: string) => AgentLoop | null) | undefined;
   readonly #steering: SteeringQueue;
   readonly #clock: Clock;
   readonly #logger: Logger;
@@ -454,6 +532,8 @@ export class AgentLoop {
     this.#agentId = options.agent?.id ?? DEFAULT_AGENT_ID;
     this.#contributors = options.contributors ?? [];
     this.#approvals = options.approvals;
+    this.#subagents = options.subagents ?? new Map();
+    this.#resolveLoop = options.resolveLoop;
     this.#steering =
       options.steering ?? new SteeringQueue({ logger: options.logger ?? silentLogger });
     this.#clock = options.clock ?? systemClock;
@@ -500,7 +580,40 @@ export class AgentLoop {
    * from the one screen whose job is to say what the model is sent.
    */
   get toolDefinitions(): readonly ToolDefinition[] {
-    return this.#tools.definitions();
+    const tools = this.#tools.definitions();
+    if (this.#subagents.size === 0) return tools;
+
+    // Appended rather than merged and re-sorted. The registry's list is already
+    // sorted, and keeping the subagents in the operator's configured order at
+    // the end is both the order they were written in and a block a reader can
+    // see as one thing.
+    const registered = new Set(tools.map((tool) => tool.name));
+    const subagents: ToolDefinition[] = [];
+    for (const binding of this.#subagents.values()) {
+      // The registry wins. A name can only collide with one an MCP server or a
+      // plugin registered — no built-in starts with the subagent prefix — and
+      // silently shadowing it would take a tool away from the model with
+      // nothing anywhere saying so.
+      if (registered.has(binding.toolName)) {
+        this.#logger.warn(
+          { tool: binding.toolName, agentId: binding.agentId },
+          'subagent hidden by a registered tool of the same name',
+        );
+        continue;
+      }
+      subagents.push(subagentDefinition(binding));
+    }
+    return [...tools, ...subagents];
+  }
+
+  /** The binding for a call, or `undefined` when a registered tool wins. */
+  #subagentFor(name: string): SubagentBinding | undefined {
+    const binding = this.#subagents.get(name);
+    if (binding === undefined) return undefined;
+    // The same precedence the definitions apply, asked the same way — so a
+    // shadowed subagent is not advertised *and* is not reachable, rather than
+    // being invisible to the model and callable by a lucky guess.
+    return this.#tools.get(name) === undefined ? binding : undefined;
   }
 
   /**
@@ -596,6 +709,8 @@ export class AgentLoop {
     const { sessionKey } = input;
     const turnId = input.turnId ?? this.#newId();
     const channel = input.channel ?? 'cli';
+    const chain = input.chain ?? [];
+    const rootSessionKey = input.rootSessionKey ?? sessionKey;
     // A signal that never fires, so every path below reads `signal.aborted`
     // rather than re-deriving what "no cancellation" means.
     const signal = input.signal ?? new AbortController().signal;
@@ -605,7 +720,7 @@ export class AgentLoop {
 
     // Once per turn, both of them: see the module header.
     const nonce = createToolOutputNonce(this.#random);
-    const toolDefinitions = this.#tools.definitions();
+    const toolDefinitions = this.toolDefinitions;
 
     // Ensure first, then read what came back. `input.workspaceId` can only ever
     // *create* a session in a workspace — `ensureSession` ignores it for a row
@@ -894,6 +1009,9 @@ export class AgentLoop {
           nonce,
           signal,
           toolContext,
+          workspaceId: session.workspaceId,
+          chain,
+          rootSessionKey,
         });
         lastSeq = tools.lastSeq;
         if (tools.cancelled) {
@@ -961,13 +1079,7 @@ export class AgentLoop {
    */
   async *#runToolCalls(
     result: ChatResult,
-    turn: {
-      sessionKey: string;
-      turnId: string;
-      nonce: string;
-      signal: AbortSignal;
-      toolContext: ToolContext;
-    },
+    turn: TurnScope,
   ): AsyncGenerator<AgentEvent, { cancelled: boolean; lastSeq: number }> {
     const pending: ChatMessageInput[] = [result.message];
     let cancelled = turn.signal.aborted;
@@ -989,9 +1101,15 @@ export class AgentLoop {
       } else {
         // Between the event and the execution, and nowhere else: a transport
         // that gated it for itself would be one `if` away from an ungated one.
+        // A subagent is authorised here too — its binding carries a permission
+        // exactly as the scope carries a tool's, so `ask` gets the same prompt.
         const refusal = yield* this.#authorize(call, risk, turn);
+        const binding = this.#subagentFor(call.name);
         execution =
-          refusal ?? (yield* this.#executeWithHeartbeat(call, turn.toolContext, turn.turnId));
+          refusal ??
+          (binding === undefined
+            ? yield* this.#executeWithHeartbeat(call, turn.toolContext, turn.turnId)
+            : yield* this.#runSubagent(call, binding, turn));
       }
 
       if (execution.errorKind === 'aborted') cancelled = true;
@@ -1062,9 +1180,18 @@ export class AgentLoop {
   async *#authorize(
     call: ToolCall,
     risk: ToolRisk,
-    turn: { sessionKey: string; turnId: string; signal: AbortSignal },
+    turn: {
+      sessionKey: string;
+      rootSessionKey: string;
+      turnId: string;
+      signal: AbortSignal;
+    },
   ): AsyncGenerator<AgentEvent, ToolExecution | undefined> {
-    const permission = this.#tools.permissionFor(call.name);
+    // The binding first, and only when the registry has no such name — the same
+    // precedence `#subagentFor` and `toolDefinitions` apply, asked once here so
+    // a shadowed subagent is gated as the registered tool it actually is.
+    const permission =
+      this.#subagentFor(call.name)?.permission ?? this.#tools.permissionFor(call.name);
     if (permission === 'allow') return undefined;
 
     let denial: DenialReason;
@@ -1085,6 +1212,7 @@ export class AgentLoop {
       const expiresAtMs = this.#clock.now() + timeoutMs;
       const request: ApprovalRequest = {
         sessionKey: turn.sessionKey,
+        rootSessionKey: turn.rootSessionKey,
         agentId: this.#agentId,
         turnId: turn.turnId,
         callId: call.id,
@@ -1211,6 +1339,198 @@ export class AgentLoop {
         message: `${call.name} is still running`,
       };
     }
+  }
+
+  /**
+   * One delegated task: a whole turn on another agent's loop, awaited.
+   *
+   * The shape is `yield*` over the child's generator, which is what makes every
+   * event it produces reach the operator as it happens rather than as a
+   * paragraph at the end. Everything the child does — its tool calls, its
+   * approvals, its abort — runs on the machinery that already exists, because
+   * it is a real turn and not a simulation of one.
+   *
+   * Four decisions carry the weight:
+   *
+   *  - **The child gets a session of its own, in the caller's workspace.** Its
+   *    own, because context isolation is the feature: a subagent that inherited
+   *    the conversation would put the detour back in the window this exists to
+   *    keep clear. The caller's *workspace*, because a researcher that could not
+   *    read the files being discussed would be useless — the folder belongs to
+   *    the session, and a delegation does not leave it.
+   *  - **The pointer is written to the parent before the run, not after.** A
+   *    turn that is abandoned mid-delegation still leaves a child session, and a
+   *    child session nothing points at is one nothing can show or delete.
+   *  - **`subagentTimeoutMs` is the *caller's*.** The delegator caps its
+   *    delegate; an agent cannot grant itself more time by being called.
+   *  - **A timeout aborts the child and not the turn.** The combined signal is
+   *    the child's alone, so the caller gets a tool result saying the subagent
+   *    was cut short and can carry on — which is what the cap is for.
+   */
+  async *#runSubagent(
+    call: ToolCall,
+    binding: SubagentBinding,
+    turn: TurnScope,
+  ): AsyncGenerator<AgentEvent, ToolExecution> {
+    const refusal = refuseDelegation(turn.chain, binding.agentId);
+    if (refusal !== undefined) {
+      this.#logger.warn(
+        { tool: call.name, agentId: binding.agentId, chain: turn.chain, refusal },
+        'delegation refused',
+      );
+      return refusedExecution(refusal, binding, turn.chain);
+    }
+
+    const child = this.#resolveLoop?.(binding.agentId) ?? null;
+    if (child === null) {
+      this.#logger.warn(
+        { tool: call.name, agentId: binding.agentId },
+        'delegation refused: the subagent cannot run',
+      );
+      return refusedExecution('unconfigured', binding, turn.chain);
+    }
+
+    const task = parseTask(parseToolArgs(call.argumentsJson));
+    if (task === undefined) {
+      return {
+        name: call.name,
+        content:
+          `Invalid arguments for ${call.name}: "task" must be a non-empty string ` +
+          `describing what the subagent should do.`,
+        isError: true,
+        truncated: false,
+        durationMs: 0,
+        errorKind: 'invalid_input',
+      };
+    }
+
+    const depth = turn.chain.length + 1;
+    const sessionKey = subagentSessionKey(this.#newId);
+    this.#store.ensureSession(sessionKey, {
+      origin: SUBAGENT_ORIGIN,
+      workspaceId: turn.workspaceId,
+      agentId: binding.agentId,
+      metadata: {
+        [SUBAGENT_METADATA_KEY]: {
+          parentSessionKey: turn.sessionKey,
+          parentTurnId: turn.turnId,
+          parentCallId: call.id,
+          agentId: binding.agentId,
+          depth,
+        } satisfies SubagentLineage,
+      },
+    });
+    this.#rememberSubagentRun(turn.sessionKey, call.id, {
+      sessionKey,
+      agentId: binding.agentId,
+      // The label too, so a reloaded transcript can name the card before the
+      // fetch that fills it in resolves.
+      label: binding.label,
+    });
+
+    const timeout = this.#subagentTimeout(turn.signal);
+    const started = this.#clock.monotonic();
+    try {
+      const run = child.run({
+        sessionKey,
+        content: task.task,
+        signal: timeout.signal,
+        channel: SUBAGENT_ORIGIN,
+        agentId: binding.agentId,
+        workspaceId: turn.workspaceId,
+        chain: [...turn.chain, this.#agentId],
+        rootSessionKey: turn.rootSessionKey,
+      });
+
+      // Hand-driven rather than `yield*`, because the return value is the tool
+      // result and `yield*` on a generator whose events need rewriting on the
+      // way past would need a wrapper generator anyway.
+      let next = await run.next();
+      while (next.done !== true) {
+        yield this.#wrapSubagentEvent(turn, call.id, binding, sessionKey, depth, next.value);
+        next = await run.next();
+      }
+
+      return subagentResult(binding, next.value, this.#clock.monotonic() - started);
+    } finally {
+      timeout.dispose();
+    }
+  }
+
+  /**
+   * One event from a subagent, addressed to the card it belongs under.
+   *
+   * A `subagent.event` from *the child's own* subagent is forwarded rather than
+   * wrapped again: only `turnId` is rewritten to this turn's, because the rest
+   * of its address already names the grandchild's delegating call. That is what
+   * keeps the payload non-recursive at any depth — see `SubagentEventSchema`.
+   */
+  #wrapSubagentEvent(
+    turn: TurnScope,
+    callId: string,
+    binding: SubagentBinding,
+    sessionKey: string,
+    depth: number,
+    event: AgentEvent,
+  ): AgentEvent {
+    if (event.type === 'subagent.event') return { ...event, turnId: turn.turnId };
+    return {
+      type: 'subagent.event',
+      turnId: turn.turnId,
+      parentSessionKey: turn.sessionKey,
+      parentCallId: callId,
+      agentId: binding.agentId,
+      label: binding.label,
+      sessionKey,
+      depth,
+      event,
+    };
+  }
+
+  /**
+   * Records which call produced which child session, on the parent.
+   *
+   * Defensive for the same reason `#recordStats` is, and no more: this is how a
+   * reloaded transcript finds the run again, which is worth a write and is not
+   * worth failing a turn that has otherwise worked.
+   */
+  #rememberSubagentRun(parentSessionKey: string, callId: string, run: SubagentRunRef): void {
+    try {
+      const parent = this.#store.getSession(parentSessionKey);
+      if (parent === undefined) return;
+      this.#store.updateSession(parentSessionKey, {
+        metadata: withSubagentRun(parent.metadata, callId, run),
+      });
+    } catch (error) {
+      this.#logger.warn(
+        { err: error, sessionKey: parentSessionKey, callId },
+        'failed to record the subagent session pointer',
+      );
+    }
+  }
+
+  /**
+   * The child's signal: the turn's, plus this agent's cap on a delegation.
+   *
+   * `AbortSignal.any` rather than a listener, so the composed signal is dropped
+   * with the timer and nothing stays attached to a turn signal that outlives
+   * dozens of calls.
+   */
+  #subagentTimeout(parent: AbortSignal): { signal: AbortSignal; dispose(): void } {
+    const capMs = this.#config.subagentTimeoutMs;
+    if (capMs <= 0) return { signal: parent, dispose: () => undefined };
+
+    const cap = new AbortController();
+    const handle = this.#clock.setTimeout(() => {
+      cap.abort(abortedError(`the ${this.#agentId} agent's delegation cap`));
+    }, capMs);
+
+    return {
+      signal: AbortSignal.any([parent, cap.signal]),
+      dispose: () => {
+        this.#clock.clearTimeout(handle);
+      },
+    };
   }
 
   #riskOf(name: string): ToolRisk {

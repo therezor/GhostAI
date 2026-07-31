@@ -33,6 +33,7 @@ export * from './tools.js';
 export * from './ids.js';
 export * from './prompt.js';
 export * from './config.js';
+export * from './subagent.js';
 export * from './toolbox.js';
 export * from './automation.js';
 export * from './ws.js';

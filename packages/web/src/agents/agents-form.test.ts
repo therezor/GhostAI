@@ -445,3 +445,91 @@ describe('toAgentDeletePatch', () => {
     expect(ConfigPatchSchema.safeParse(patch).success).toBe(true);
   });
 });
+
+describe('subagents', () => {
+  const RESEARCHER = { id: 'researcher', prompt: 'Ask for facts.', permission: 'ask' } as const;
+
+  it('round-trips a stored ref through the form', () => {
+    const entry = AgentEntrySchema.parse({ subagents: [RESEARCHER] });
+
+    expect(toAgentEntryForm(entry, DEFAULTS).subagents).toEqual([RESEARCHER]);
+  });
+
+  it('fills in the defaults a bare ref leaves out', () => {
+    const entry = AgentEntrySchema.parse({ subagents: [{ id: 'researcher' }] });
+
+    expect(toAgentEntryForm(entry, DEFAULTS).subagents).toEqual([
+      { id: 'researcher', prompt: '', permission: 'allow' },
+    ]);
+  });
+
+  it('sends the whole list, so removing one is expressible', () => {
+    const entry = AgentEntrySchema.parse({
+      subagents: [RESEARCHER, { id: 'reviewer', prompt: '', permission: 'allow' }],
+    });
+    const result = toAgentEntryPatch('main', form({ subagents: [RESEARCHER] }), entry, t);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.patch.agents?.list?.main?.subagents).toEqual([RESEARCHER]);
+  });
+
+  it('drops a row the operator added and never filled in', () => {
+    // The editor appends `{ id: '' }` on Add. Sending it would be a `config`
+    // error from `assertBuildable` about an agent named "".
+    const result = toAgentEntryPatch(
+      'main',
+      form({ subagents: [RESEARCHER, { id: '', prompt: '', permission: 'allow' }] }),
+      EMPTY,
+      t,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.patch.agents?.list?.main?.subagents).toEqual([RESEARCHER]);
+  });
+
+  it('trims the guidance, which becomes a tool description', () => {
+    const result = toAgentEntryPatch(
+      'main',
+      form({ subagents: [{ ...RESEARCHER, prompt: '  Ask for facts.  ' }] }),
+      EMPTY,
+      t,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.patch.agents?.list?.main?.subagents?.[0]?.prompt).toBe('Ask for facts.');
+  });
+
+  it('produces a patch the server would accept', () => {
+    const result = toAgentEntryPatch('main', form({ subagents: [RESEARCHER] }), EMPTY, t);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(ConfigPatchSchema.safeParse(result.patch).success).toBe(true);
+  });
+
+  it('carries the refs into a duplicate', () => {
+    const template = AgentEntrySchema.parse({ subagents: [RESEARCHER] });
+    const patch = toNewAgentPatch('copy', 'Copy', template, DEFAULTS);
+
+    expect(patch.agents?.list?.copy?.subagents).toEqual([RESEARCHER]);
+  });
+
+  it('does not lose them when the prompt is the only thing edited', () => {
+    // `agents.list.*` replaces wholesale, so a field the form fails to carry
+    // through is erased on every save that touches anything else.
+    const entry = AgentEntrySchema.parse({ subagents: [RESEARCHER] });
+    const result = toAgentEntryPatch(
+      'main',
+      { ...toAgentEntryForm(entry, DEFAULTS), systemPrompt: 'Be brief.' },
+      entry,
+      t,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.patch.agents?.list?.main?.subagents).toEqual([RESEARCHER]);
+  });
+});

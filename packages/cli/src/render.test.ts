@@ -1,4 +1,4 @@
-import type { AgentEvent } from '@ghostai/agent';
+import type { AgentEvent, NestedAgentEvent } from '@ghostai/agent';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -338,5 +338,171 @@ describe('formatRate', () => {
     expect(
       formatRate({ promptTokens: 10, completionTokens: 0, totalTokens: 10 }, 500),
     ).toBeUndefined();
+  });
+});
+
+describe('subagents', () => {
+  /** One nested event, addressed as the loop addresses it. */
+  function nested(event: NestedAgentEvent, depth = 1): AgentEvent {
+    return {
+      type: 'subagent.event',
+      turnId: 't1',
+      parentSessionKey: 'cli:default',
+      parentCallId: 'c1',
+      agentId: 'researcher',
+      label: 'Researcher',
+      sessionKey: 'sub-1',
+      depth,
+      event,
+    };
+  }
+
+  const CHILD_START: NestedAgentEvent = {
+    type: 'turn.start',
+    agentId: 'researcher',
+    sessionKey: 'sub-1',
+    turnId: 't2',
+    model: 'qwen3',
+    provider: 'ollama',
+  };
+
+  it('opens and closes a delegation with a rule of its own', () => {
+    const text = render([
+      START,
+      {
+        type: 'tool.call',
+        turnId: 't1',
+        callId: 'c1',
+        name: 'ask_researcher',
+        args: {},
+        risk: 'safe',
+      },
+      nested(CHILD_START),
+      nested({ type: 'assistant.delta', turnId: 't2', text: 'Found it.' }),
+      nested({ type: 'turn.end', turnId: 't2', stopReason: 'complete', iterations: 1 }),
+    ]);
+
+    expect(text).toContain('┄ asking Researcher');
+    expect(text).toContain('┄ Researcher finished');
+  });
+
+  it("indents the subagent's work under the call that started it", () => {
+    const text = render([
+      START,
+      nested(CHILD_START),
+      nested({
+        type: 'tool.call',
+        turnId: 't2',
+        callId: 'n1',
+        name: 'list_dir',
+        args: { path: 'src' },
+        risk: 'safe',
+      }),
+      nested({
+        type: 'tool.result',
+        turnId: 't2',
+        callId: 'n1',
+        ok: true,
+        content: '',
+        truncated: false,
+        durationMs: 12,
+      }),
+    ]);
+
+    expect(text).toContain('  ⚙ list_dir');
+    // The caller's own tool line has no indent, so the two are distinguishable.
+    expect(text).not.toContain('\n⚙ list_dir');
+  });
+
+  it("indents every line of a subagent's answer, not only the first", () => {
+    const text = render([
+      START,
+      nested(CHILD_START),
+      // Two chunks, the first ending mid-line — which is how a stream arrives.
+      nested({ type: 'assistant.delta', turnId: 't2', text: 'one\ntwo' }),
+      nested({ type: 'assistant.delta', turnId: 't2', text: '\nthree\n' }),
+    ]);
+
+    expect(text).toContain('  one\n  two\n  three\n');
+  });
+
+  it('goes one level further in for a subagent of a subagent', () => {
+    const text = render([
+      START,
+      nested(
+        {
+          type: 'tool.call',
+          turnId: 't3',
+          callId: 'g1',
+          name: 'read_file',
+          args: {},
+          risk: 'safe',
+        },
+        2,
+      ),
+    ]);
+
+    expect(text).toContain('    ⚙ read_file');
+  });
+
+  it("does not let a subagent's turn clear the caller's tool labels", () => {
+    const text = render([
+      START,
+      {
+        type: 'tool.call',
+        turnId: 't1',
+        callId: 'c1',
+        name: 'ask_researcher',
+        args: {},
+        risk: 'safe',
+      },
+      nested(CHILD_START),
+      nested({ type: 'turn.end', turnId: 't2', stopReason: 'complete', iterations: 1 }),
+      // The caller's own progress event still knows what `c1` was.
+      { type: 'tool.progress', turnId: 't1', callId: 'c1', elapsedMs: 15_000 },
+    ]);
+
+    expect(text).toContain('… ask_researcher');
+    expect(text).not.toContain('… tool');
+  });
+
+  it('keeps a parent and a subagent call with the same id apart', () => {
+    const text = render(
+      [
+        START,
+        {
+          type: 'tool.call',
+          turnId: 't1',
+          callId: 'x',
+          name: 'ask_researcher',
+          args: {},
+          risk: 'safe',
+        },
+        nested(CHILD_START),
+        // The subagent's model mints the same call id — legal, and its result
+        // must not delete the label the caller is still using.
+        nested({
+          type: 'tool.call',
+          turnId: 't2',
+          callId: 'x',
+          name: 'echo',
+          args: {},
+          risk: 'safe',
+        }),
+        nested({
+          type: 'tool.result',
+          turnId: 't2',
+          callId: 'x',
+          ok: true,
+          content: '',
+          truncated: false,
+          durationMs: 1,
+        }),
+        { type: 'tool.progress', turnId: 't1', callId: 'x', elapsedMs: 15_000 },
+      ],
+      { toolResultLines: 0 },
+    );
+
+    expect(text).toContain('… ask_researcher');
   });
 });

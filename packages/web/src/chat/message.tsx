@@ -27,11 +27,9 @@ import { Badge } from '@/components/ui/badge.js';
 import { Button } from '@/components/ui/button.js';
 import { AutoGrowTextarea } from '@/components/auto-grow-textarea.js';
 import type { TranscriptItem, TurnItem, UserItem } from '@/state/transcript.js';
-import { Markdown } from './markdown/markdown.js';
 import { MessageActions } from './message-actions.js';
 import { Notice } from './notice.js';
-import { ReasoningBlock } from './reasoning.js';
-import { ToolCard } from './tool-card.js';
+import { TurnParts } from './tool-card.js';
 import { TurnInfo } from './turn-info.js';
 
 /**
@@ -224,44 +222,18 @@ function TurnMessage({
   readonly onAction: (action: MessageAction) => void;
 }): JSX.Element {
   const { t } = useTranslation();
-  const lastPart = turn.parts.at(-1);
-  const hasAnswer = turn.parts.some((part) => part.kind === 'text');
   const hasReasoning = turn.parts.some((part) => part.kind === 'reasoning');
   const unanswered = isUnanswered(turn);
 
   return (
     <article className="stack turn">
-      {turn.parts.map((part) => {
-        const live = streaming && !turn.done && part === lastPart;
-
-        switch (part.kind) {
-          case 'text':
-            return (
-              <Markdown
-                key={part.id}
-                text={part.text}
-                // Only the trailing part of an unfinished turn is still growing.
-                streaming={live}
-              />
-            );
-
-          case 'reasoning':
-            return (
-              <ReasoningBlock
-                key={part.id}
-                text={part.text}
-                live={live && !hasAnswer}
-                expanded={unanswered}
-              />
-            );
-
-          case 'tool':
-            return <ToolCard key={part.id} tool={part} onApprove={onApprove} />;
-
-          case 'notice':
-            return <Notice key={part.id} kind={part.notice} message={part.message} />;
-        }
-      })}
+      <TurnParts
+        parts={turn.parts}
+        // Only the trailing part of an unfinished turn is still growing.
+        streaming={streaming && !turn.done}
+        onApprove={onApprove}
+        unanswered={unanswered}
+      />
 
       {streaming && !turn.done && turn.parts.length === 0 && (
         <p className="turn__thinking" role="status">

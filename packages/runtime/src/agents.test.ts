@@ -270,3 +270,120 @@ describe('hasAgent', () => {
     expect(hasAgent(config, id)).toBe(expected);
   });
 });
+
+describe('subagents', () => {
+  /** A config with `main` delegating to whatever the refs name. */
+  const delegating = (refs: readonly { id: string; prompt?: string }[]): ConfigPatch => ({
+    agents: {
+      list: {
+        researcher: { label: 'Researcher' },
+        // `permission` is spelled out because `ConfigPatch` is the schema's
+        // *output* type: the protocol keeps input and output identical, so a
+        // defaulted field is still required of a TypeScript literal.
+        main: {
+          label: 'Main',
+          subagents: refs.map((ref) => ({ prompt: '', permission: 'allow' as const, ...ref })),
+        },
+      },
+    },
+  });
+
+  it('resolves a ref into the binding the loop is built with', () => {
+    const agent = resolveAgent(
+      configWith(delegating([{ id: 'researcher', prompt: 'Ask for facts.' }])),
+      'main',
+    );
+
+    expect(agent.subagents).toEqual([
+      {
+        // Derived, so two subagents cannot collide and none can shadow a
+        // built-in — no built-in name starts with the prefix.
+        toolName: 'ask_researcher',
+        agentId: 'researcher',
+        // Read off the target's entry, so renaming that agent is one edit.
+        label: 'Researcher',
+        prompt: 'Ask for facts.',
+        permission: 'allow',
+      },
+    ]);
+  });
+
+  it('turns a hyphenated id into a legal tool name', () => {
+    const config = configWith({
+      agents: {
+        list: {
+          'code-review': { label: 'Code review' },
+          main: { subagents: [{ id: 'code-review', prompt: '', permission: 'allow' }] },
+        },
+      },
+    });
+
+    expect(resolveAgent(config, 'main').subagents[0]?.toolName).toBe('ask_code_review');
+  });
+
+  it('is empty for an agent that delegates to nobody', () => {
+    expect(resolveAgent(base, undefined).subagents).toEqual([]);
+  });
+
+  it('lets an agent delegate to `default`, which usually has no entry', () => {
+    const config = configWith({
+      agents: {
+        list: { main: { subagents: [{ id: 'default', prompt: '', permission: 'allow' }] } },
+      },
+    });
+
+    expect(resolveAgent(config, 'main').subagents[0]).toMatchObject({
+      agentId: 'default',
+      label: 'default',
+    });
+  });
+
+  it('refuses an agent that lists itself', () => {
+    const config = configWith({
+      agents: { list: { main: { subagents: [{ id: 'main', prompt: '', permission: 'allow' }] } } },
+    });
+
+    expect(() => resolveAgent(config, 'main')).toThrow(/lists itself as a subagent/);
+    try {
+      resolveAgent(config, 'main');
+    } catch (error) {
+      // A `config` error, which is what makes a bad save a 400 that changes
+      // nothing rather than a turn that dies later.
+      expect(isGhostError(error) && error.kind).toBe('config');
+    }
+  });
+
+  it('refuses the same subagent twice', () => {
+    const config = configWith(delegating([{ id: 'researcher' }, { id: 'researcher' }]));
+
+    expect(() => resolveAgent(config, 'main')).toThrow(/lists "researcher" as a subagent twice/);
+  });
+
+  it('refuses a subagent that does not exist, and says what does', () => {
+    const config = configWith(delegating([{ id: 'nobody' }]));
+
+    expect(() => resolveAgent(config, 'main')).toThrow(/does not exist: "nobody"/);
+    expect(() => resolveAgent(config, 'main')).toThrow(/Known agents: researcher, main/);
+  });
+
+  it('refuses a disabled subagent, which is a different mistake', () => {
+    const config = configWith({
+      agents: {
+        list: {
+          researcher: { label: 'Researcher', enabled: false },
+          main: { subagents: [{ id: 'researcher', prompt: '', permission: 'allow' }] },
+        },
+      },
+    });
+
+    expect(() => resolveAgent(config, 'main')).toThrow(/that agent is disabled/);
+  });
+
+  it('refuses at listing too, not only when the agent is asked for', () => {
+    // `listAgents` builds every entry, so a save that introduces a bad ref
+    // fails the whole reconfigure rather than the first turn that uses it.
+    const config = configWith(delegating([{ id: 'nobody' }]));
+
+    expect(() => listAgents(config)).toThrow(/does not exist/);
+  });
+});

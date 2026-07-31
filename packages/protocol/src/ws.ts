@@ -410,6 +410,76 @@ export const TurnEndEventSchema = z.object({
   lastSeq: z.number().int().positive().optional(),
 });
 
+/**
+ * Everything a turn emits, minus the `seq` the transport owns.
+ *
+ * Built by omitting `seq` from the schemas above rather than by restating them,
+ * so a field added to `tool.call` is a field a nested `tool.call` carries with
+ * no second edit. `subagent.event` itself is **not** a member: nesting deeper
+ * than one level works by forwarding, not by wrapping a wrapper — see below.
+ */
+export const NestedAgentEventSchema = z.discriminatedUnion('type', [
+  TurnStartEventSchema.omit({ seq: true }),
+  AssistantDeltaEventSchema.omit({ seq: true }),
+  ReasoningDeltaEventSchema.omit({ seq: true }),
+  ToolCallEventSchema.omit({ seq: true }),
+  ToolProgressEventSchema.omit({ seq: true }),
+  ToolResultEventSchema.omit({ seq: true }),
+  ToolApprovalRequestEventSchema.omit({ seq: true }),
+  NoticeEventSchema.omit({ seq: true }),
+  TurnEndEventSchema.omit({ seq: true }),
+  // Already unsequenced — see `UNSEQUENCED_SERVER_EVENTS`.
+  ErrorEventSchema,
+]);
+export type NestedAgentEvent = z.infer<typeof NestedAgentEventSchema>;
+
+/**
+ * One event from a subagent's own turn, addressed to the card it belongs under.
+ *
+ * A wrapper rather than an optional `parentCallId` on every event, and the
+ * difference is which mistakes are possible. An optional field would let every
+ * existing consumer keep compiling while quietly doing the wrong thing — the
+ * channel projection would fold a subagent's `assistant.delta`s into the reply
+ * it sends to a chat app, and nothing would say so. A new member of the union is
+ * one case in an exhaustive switch, so every consumer is *made* to decide.
+ *
+ * Three fields carry the addressing, and each answers a question the others
+ * cannot:
+ *
+ *  - **`turnId` is always the root turn**, in the transcript a person is
+ *    reading. Rewritten on the way up at every level, so a client never has to
+ *    know how deep it is to find the turn this belongs to.
+ *  - **`parentSessionKey` + `parentCallId` are where it nests.** A `callId` is
+ *    the model's and is only unique within one assistant message, so a parent
+ *    and its subagent can mint the same one; composing it with the session that
+ *    emitted it is unique at any depth and needs no id rewriting.
+ *  - **`sessionKey` is the subagent's own session**, which is a real row. It is
+ *    what a client fetches to show this run again after a reload, when the
+ *    parent's stored history holds only the delegating tool result.
+ *
+ * Depth beyond one level works by **forwarding**: a loop that receives a
+ * `subagent.event` from its own subagent re-emits it with `turnId` rewritten and
+ * nothing else touched, because `parentSessionKey`/`parentCallId` already name
+ * the grandchild's delegating call. That is why the payload is not recursive —
+ * a `z.lazy` self-reference would have to survive `z.toJSONSchema` in both
+ * directions for the OpenAPI document, and buys nothing here.
+ */
+export const SubagentEventSchema = z.object({
+  type: z.literal('subagent.event'),
+  seq,
+  turnId: z.string().min(1),
+  parentSessionKey: z.string().min(1),
+  parentCallId: z.string().min(1),
+  /** The subagent that produced the inner event. */
+  agentId: z.string().min(1),
+  /** Its label, so a card can name it without resolving the id. */
+  label: z.string().default(''),
+  sessionKey: z.string().min(1),
+  /** 1 for a subagent of the session's own agent. */
+  depth: z.number().int().positive(),
+  event: NestedAgentEventSchema,
+});
+
 export const SessionStatusEventSchema = z.object({
   type: z.literal('session.status'),
   seq,
@@ -508,6 +578,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   ToolApprovalRequestEventSchema,
   NoticeEventSchema,
   TurnEndEventSchema,
+  SubagentEventSchema,
   SessionStatusEventSchema,
   SessionResetEventSchema,
   SessionReplayEventSchema,

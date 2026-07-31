@@ -167,4 +167,46 @@
     font-weight: var(--weight-medium);
     color: var(--fg-2);
   }
+
+  /* A subagent is two rows rather than one, unlike a tool: the guidance is the
+     field that decides when it fires, and squeezing it onto the same line as
+     three controls would make the important one the narrowest. */
+  .agent-editor__subagents {
+    --gap: var(--space-3);
+  }
+
+  .agent-editor__subagent {
+    --gap: var(--space-2);
+
+    padding: var(--space-2);
+    border: var(--hairline) solid var(--line);
+    border-radius: var(--radius-md);
+  }
+
+  .agent-editor__subagent-head {
+    --gap: var(--space-2);
+
+    align-items: center;
+  }
+
+  /* The derived tool name, shown rather than asked for. Mono because it is an
+     identifier the model types. */
+  .agent-editor__subagent-tool {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--fg-3);
+  }
+
+  /* Matched to `.agent-editor__tool-permission`, and for the same reason: the
+     two selects sit in adjacent sections and a different width between them
+     reads as a mistake. */
+  .agent-editor__subagent-permission {
+    width: 9rem;
+    flex: none;
+  }
 }

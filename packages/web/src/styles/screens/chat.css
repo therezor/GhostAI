@@ -409,6 +409,56 @@
     color: var(--fg-3);
   }
 
+  /* ── Subagent run ──────────────────────────────────────────── */
+
+  /* Depth is a surface and a stroke, never a shadow and never an indent. The
+   * card is `--surface-2`; a run inside it drops to `--surface-1` — the same
+   * sunken relationship `.tool-card__pre` has — so a nested card, which is
+   * `--surface-2` again, still reads as raised off what contains it. That is
+   * what makes depth 2 work with no rule of its own. */
+  .subagent {
+    --gap: var(--space-2);
+
+    padding: var(--space-2);
+    background-color: var(--surface-1);
+    border: var(--hairline) solid var(--line);
+    border-radius: var(--radius-sm);
+  }
+
+  .subagent__header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .subagent__icon {
+    flex-shrink: 0;
+    width: var(--size-icon-sm);
+    height: var(--size-icon-sm);
+    color: var(--fg-3);
+  }
+
+  .subagent__name {
+    font-weight: var(--weight-semibold);
+    color: var(--fg-2);
+  }
+
+  /* The resolved model is an identifier, so it is mono — the same rule the
+   * wordmark and the badges follow. */
+  .subagent__model {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--fg-3);
+  }
+
+  /* Ambient, like the connection indicator: a running subagent must not be the
+   * loudest thing on a screen whose point is the answer. */
+  .subagent__status {
+    margin-left: auto;
+    font-size: var(--text-sm);
+    color: var(--fg-3);
+  }
+
   /* ── Approval ──────────────────────────────────────────────── */
 
   .approval {

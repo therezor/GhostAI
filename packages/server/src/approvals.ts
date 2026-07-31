@@ -84,13 +84,33 @@ export class HubApprovalGate implements ApprovalGate {
     this.#logger = options.logger ?? silentLogger;
   }
 
+  /**
+   * Which session a `session`-scoped answer belongs to.
+   *
+   * The conversation, not the turn's own session — those differ when the turn
+   * is a subagent's, because a subagent gets a session that exists for the
+   * length of one delegation. Scoping to *that* would make "this session" mean
+   * "once", which is not what the button says: the operator is looking at their
+   * conversation when they press it, and the conversation is what they meant.
+   *
+   * It is also what makes `clearSession` on a conversation settle a prompt its
+   * subagent parked, rather than leaving one behind for a session that has gone.
+   */
+  static #scopeOf(request: ApprovalRequest): string {
+    return request.rootSessionKey ?? request.sessionKey;
+  }
+
   /** Calls waiting on an answer. A leak assertion, and a status field. */
   get pendingCount(): number {
     return this.#pending.size;
   }
 
   async request(request: ApprovalRequest): Promise<ApprovalDecision> {
-    const remembered = this.#recall(request.sessionKey, request.agentId, request.name);
+    const remembered = this.#recall(
+      HubApprovalGate.#scopeOf(request),
+      request.agentId,
+      request.name,
+    );
     if (remembered !== undefined) {
       this.#logger.debug(
         { sessionKey: request.sessionKey, tool: request.name, scope: remembered.scope },
@@ -155,10 +175,12 @@ export class HubApprovalGate implements ApprovalGate {
     const pending = this.#pending.get(callId);
     if (pending === undefined) return false;
 
-    this.#remember(pending.request.sessionKey, pending.request.agentId, pending.request.name, {
-      approved,
-      scope,
-    });
+    this.#remember(
+      HubApprovalGate.#scopeOf(pending.request),
+      pending.request.agentId,
+      pending.request.name,
+      { approved, scope },
+    );
     this.#logger.info(
       { sessionKey: pending.request.sessionKey, tool: pending.request.name, approved, scope },
       'approval answered',
@@ -173,11 +195,16 @@ export class HubApprovalGate implements ApprovalGate {
    * Called when the hub drops a session, which is the moment nothing can answer
    * for it any more. `always` survives — it was scoped to an agent, not to a
    * session.
+   *
+   * Matched against the *scope* rather than the request's own session, so a
+   * prompt parked by a subagent of this conversation is settled too. It is the
+   * same reasoning as the memory above: the operator watching that prompt was
+   * watching this conversation, and closing it is what took the answer away.
    */
   clearSession(sessionKey: string): void {
     this.#bySession.delete(sessionKey);
     for (const pending of [...this.#pending.values()]) {
-      if (pending.request.sessionKey !== sessionKey) continue;
+      if (HubApprovalGate.#scopeOf(pending.request) !== sessionKey) continue;
       pending.settle({ approved: false, reason: 'the session was closed' });
     }
   }
@@ -185,7 +212,9 @@ export class HubApprovalGate implements ApprovalGate {
   #recall(sessionKey: string, agentId: string, tool: string): RememberedDecision | undefined {
     // The session's own answer wins over the standing one: it is the more
     // specific of the two, and the more recently given. A session is bound to
-    // one agent, so the session-scoped map needs no agent dimension.
+    // one agent, so the session-scoped map needs no agent dimension — and a
+    // subagent's turn carries its own `agentId`, so the standing half stays
+    // per-agent even though the session half is the conversation's.
     return this.#bySession.get(sessionKey)?.get(tool) ?? this.#always.get(agentId)?.get(tool);
   }
 

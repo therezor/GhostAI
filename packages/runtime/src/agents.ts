@@ -29,9 +29,11 @@
  */
 
 import { DEFAULT_AGENT_ID, GhostError } from '@ghostai/core';
+import type { SubagentBinding } from '@ghostai/agent';
 import {
   AgentDefaultsSchema,
   DEFAULT_AGENT_TOOLS,
+  subagentToolName,
   type AgentDefaults,
   type AgentEntry,
   type AgentMemoryScope,
@@ -74,6 +76,14 @@ export interface EffectiveAgent {
   readonly toolsConfig: ToolsConfig;
   readonly toolbox: AgentToolbox;
   readonly memory: AgentMemoryScope;
+  /**
+   * The agents this one may delegate to, in the operator's order.
+   *
+   * Resolved to the shape the loop is constructed with rather than left as the
+   * stored refs, so the tool name is derived once — here — instead of in the
+   * loop, the editor and whatever asks next.
+   */
+  readonly subagents: readonly SubagentBinding[];
 }
 
 /**
@@ -118,6 +128,77 @@ function mergeDefaults(defaults: AgentDefaults, entry: AgentEntry | undefined): 
 function mergeToolsConfig(tools: ToolsConfig, entry: AgentEntry | undefined): ToolsConfig {
   if (entry === undefined) return tools;
   return { ...tools, exec: { ...tools.exec, ...defined(entry.exec) } };
+}
+
+/**
+ * The label an agent id resolves to, without building the whole agent.
+ *
+ * A subagent's label is read off the *target's* entry, not written on the
+ * reference: one place to rename an agent, and a reference that keeps up.
+ */
+function labelOf(config: Config, id: string): string {
+  const label = config.agents.list[id]?.label ?? '';
+  return label === '' ? id : label;
+}
+
+/**
+ * The stored refs as the loop's bindings, refusing what cannot work.
+ *
+ * Every refusal here is a `config` error, which makes it a 400 from a settings
+ * save that changes nothing — the same all-or-nothing property the toolbox
+ * checks rely on. The alternative is a subagent that looks configured in the
+ * editor and reports "no such agent" the first time the model tries to use it,
+ * which is a bug report rather than a validation message.
+ *
+ * What is *not* checked here: whether the target agent can actually resolve a
+ * provider. That depends on credentials and on a provider being reachable, so
+ * it is a runtime state rather than a config error — `#runSubagent` handles a
+ * `null` loop by telling the model, which is the right altitude for it.
+ */
+function resolveSubagents(
+  config: Config,
+  id: string,
+  entry: AgentEntry | undefined,
+): SubagentBinding[] {
+  const refs = entry?.subagents ?? [];
+  const bindings: SubagentBinding[] = [];
+  const seen = new Set<string>();
+
+  for (const ref of refs) {
+    if (ref.id === id) {
+      throw new GhostError('config', `Agent "${id}" lists itself as a subagent.`, {
+        details: { agentId: id },
+      });
+    }
+    if (seen.has(ref.id)) {
+      throw new GhostError('config', `Agent "${id}" lists "${ref.id}" as a subagent twice.`, {
+        details: { agentId: id, subagentId: ref.id },
+      });
+    }
+    // `hasAgent` rather than a lookup, so `default` — which usually has no
+    // entry at all — is delegable like any other agent.
+    if (!hasAgent(config, ref.id)) {
+      const known = Object.keys(config.agents.list).join(', ');
+      throw new GhostError(
+        'config',
+        config.agents.list[ref.id] === undefined
+          ? `Agent "${id}" names a subagent that does not exist: "${ref.id}". Known agents: ${known}`
+          : `Agent "${id}" names "${ref.id}" as a subagent, but that agent is disabled.`,
+        { details: { agentId: id, subagentId: ref.id } },
+      );
+    }
+
+    seen.add(ref.id);
+    bindings.push({
+      toolName: subagentToolName(ref.id),
+      agentId: ref.id,
+      label: labelOf(config, ref.id),
+      prompt: ref.prompt,
+      permission: ref.permission,
+    });
+  }
+
+  return bindings;
 }
 
 /**
@@ -168,6 +249,7 @@ function build(config: Config, id: string, entry: AgentEntry | undefined): Effec
     toolsConfig: mergeToolsConfig(config.tools, entry),
     toolbox: entry?.toolbox ?? { name: '', network: { mode: 'none', allow: [] } },
     memory: entry?.memory ?? { shared: true },
+    subagents: resolveSubagents(config, id, entry),
   };
   assertBuildable(agent);
   return agent;

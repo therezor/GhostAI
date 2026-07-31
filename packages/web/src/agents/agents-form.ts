@@ -53,6 +53,7 @@ import {
   type AgentEntry,
   type ConfigPatch,
   type ReasoningEffort,
+  type SubagentRef,
   type ToolPermission,
 } from '@ghostai/protocol';
 
@@ -229,6 +230,16 @@ export interface AgentEntryForm {
    * control per entry. There is nothing to parse and nothing a typo can express.
    */
   readonly tools: Readonly<Record<string, ToolPermission>>;
+  /**
+   * The agents this one may delegate to, in the operator's order.
+   *
+   * The stored shape rather than a form-shaped copy of it, for the reason
+   * `tools` above is: an id and a permission both come from a fixed vocabulary
+   * behind a picker, and the guidance is free text that needs no parsing. A row
+   * whose `id` is still empty is one the operator added and has not filled in;
+   * `ownFields` drops those rather than sending an id nothing resolves.
+   */
+  readonly subagents: readonly SubagentRef[];
   /** A toolbox name, or empty to run commands on this machine. */
   readonly toolboxName: string;
   readonly toolboxNetworkMode: string;
@@ -272,6 +283,7 @@ export function toAgentEntryForm(entry: AgentEntry, defaults: AgentDefaults): Ag
     reasoningEffort: entry.reasoningEffort ?? defaults.reasoningEffort ?? '',
     toolTimeoutSeconds: msToSeconds(toolTimeoutMs),
     tools: { ...entry.tools },
+    subagents: entry.subagents.map((ref) => ({ ...ref })),
     toolboxName: entry.toolbox.name,
     toolboxNetworkMode: entry.toolbox.network.mode,
     toolboxAllow: entry.toolbox.network.allow.join(', '),
@@ -336,6 +348,7 @@ function ownFields(form: AgentEntryForm, entry: AgentEntry): AgentOwnFields {
     reasoningEffort: _reasoningEffort,
     toolTimeoutMs: _toolTimeoutMs,
     toolbox: _toolbox,
+    subagents: _subagents,
     ...carried
   } = entry;
 
@@ -348,6 +361,13 @@ function ownFields(form: AgentEntryForm, entry: AgentEntry): AgentOwnFields {
     // this is also the only way a tool can be removed from an agent — a patch
     // that mentioned only what changed could never express a deletion.
     tools: { ...form.tools },
+    // Same rule, and the same reason a removed row has to be expressible.
+    // A row with no agent chosen is dropped: the editor adds an empty one when
+    // the operator presses Add, and saving before they pick would otherwise be
+    // a `config` error from `assertBuildable` about an agent named "".
+    subagents: form.subagents
+      .filter((ref) => ref.id !== '')
+      .map((ref) => ({ ...ref, prompt: ref.prompt.trim() })),
     toolbox: toToolbox(form),
   };
 }
@@ -541,6 +561,10 @@ export function toNewAgentPatch(
           enabled: true,
           systemPrompt: template.systemPrompt,
           tools: { ...template.tools },
+          // Copied like the tools: a duplicate of an agent that delegates is
+          // expected to delegate. It is also safe — the refs name other agents,
+          // and a copy pointing at the same ones is exactly what was asked for.
+          subagents: template.subagents.map((ref) => ({ ...ref })),
           toolbox: { ...template.toolbox },
           memory: { ...template.memory },
           provider: template.provider ?? defaults.provider,

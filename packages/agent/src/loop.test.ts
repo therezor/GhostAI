@@ -12,6 +12,9 @@ import {
   type ApprovalScope,
   type ChatMessage,
   ServerMessageSchema,
+  SUBAGENT_METADATA_KEY,
+  SUBAGENT_ORIGIN,
+  subagentRunsOf,
   type ToolPermissions,
   ToolboxSchema,
 } from '@ghostai/protocol';
@@ -33,7 +36,7 @@ import {
   type ApprovalGate,
   type ApprovalRequest,
 } from './approval.js';
-import type { AgentEvent } from './events.js';
+import type { AgentEvent, SubagentEvent } from './events.js';
 import {
   AgentLoop,
   CANCELLED_TOOL_RESULT,
@@ -42,6 +45,7 @@ import {
   type TurnResult,
 } from './loop.js';
 import type { ContextContributor } from './prompt.js';
+import { MAX_SUBAGENT_DEPTH, subagentMap, type SubagentBinding } from './subagent.js';
 import { STEERING_PREFIX, SteeringQueue } from './steering.js';
 import { manualClock, type ManualClock } from './testkit/clock.js';
 import {
@@ -1775,5 +1779,500 @@ describe('session titles', () => {
     await runTurn(loop, { sessionKey: SESSION, content: [{ type: 'text', text: '   ' }] });
 
     expect(store.getSession(SESSION)?.title).toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Subagents
+// ---------------------------------------------------------------------------
+
+/**
+ * A parent loop that can delegate to a child, over one store.
+ *
+ * One store because there is one store per install, and the child's session has
+ * to be a row beside the parent's for any of the persistence to mean anything.
+ * Two `newId` counters because both loops mint ids and a shared pinned one would
+ * give the parent's turn and the child's session the same string.
+ */
+interface DelegationHarness {
+  readonly parent: AgentLoop;
+  readonly child: AgentLoop;
+  readonly store: SessionStore;
+  readonly parentProvider: ScriptedProvider;
+  readonly childProvider: ScriptedProvider;
+}
+
+function counter(prefix: string): () => string {
+  let n = 0;
+  return () => {
+    n += 1;
+    return `${prefix}${String(n)}`;
+  };
+}
+
+const RESEARCHER: SubagentBinding = {
+  toolName: 'ask_researcher',
+  agentId: 'researcher',
+  label: 'Researcher',
+  prompt: 'Ask the researcher when you need facts you do not have.',
+  permission: 'allow',
+};
+
+function delegationHarness(
+  options: {
+    readonly parentTurns?: readonly ScriptedTurn[];
+    readonly childTurns?: readonly ScriptedTurn[];
+    readonly childTools?: readonly AnyTool[];
+    readonly binding?: SubagentBinding;
+    readonly resolveLoop?: (agentId: string) => AgentLoop | null;
+    readonly parentConfig?: Partial<AgentDefaults>;
+    readonly clock?: ManualClock;
+    /** Overrides on the *parent* loop. The child is built from the others. */
+    readonly loop?: Partial<AgentLoopOptions>;
+  } = {},
+): DelegationHarness {
+  const base = realpathSync(mkdtempSync(join(tmpdir(), 'ghostai-subagent-')));
+  cleanups.push(() => {
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  const jail = new WorkspaceJail({ root: join(base, 'workspace') });
+  const jails = singleJail(jail);
+  const clock = options.clock ?? manualClock();
+  const store = new SessionStore({ clock });
+  cleanups.push(() => {
+    store.close();
+  });
+
+  const defaults = AgentDefaultsSchema.parse({});
+  const childRegistry = new ToolRegistry({ clock });
+  childRegistry.registerAll(options.childTools ?? []);
+
+  const childProvider = scriptedProvider(options.childTurns ?? [{ deltas: ['Found it.'] }]);
+  const child = new AgentLoop({
+    provider: childProvider,
+    tools: childRegistry,
+    store,
+    jails,
+    config: { ...defaults, model: 'child-model', maxToolIterations: 4 },
+    agent: { id: 'researcher', label: 'Researcher', systemPrompt: '', livePrompt: '' },
+    clock,
+    random: (size) => Buffer.alloc(size, 0xab),
+    newId: counter('child-'),
+  });
+
+  const binding = options.binding ?? RESEARCHER;
+  const parentProvider = scriptedProvider(
+    options.parentTurns ?? [
+      { toolCalls: [toolCall('c1', binding.toolName, { task: 'find the retry config' })] },
+      { deltas: ['Done.'] },
+    ],
+  );
+  const parent = new AgentLoop({
+    provider: parentProvider,
+    tools: new ToolRegistry({ clock }),
+    store,
+    jails,
+    config: { ...defaults, model: 'parent-model', maxToolIterations: 4, ...options.parentConfig },
+    agent: { id: 'default', label: 'Default', systemPrompt: '', livePrompt: '' },
+    subagents: subagentMap([binding]),
+    resolveLoop: options.resolveLoop ?? ((id) => (id === binding.agentId ? child : null)),
+    clock,
+    random: (size) => Buffer.alloc(size, 0xab),
+    newId: counter('parent-'),
+    ...options.loop,
+  });
+
+  return { parent, child, store, parentProvider, childProvider };
+}
+
+/** Every `subagent.event` in order, unwrapped to its inner type. */
+function nestedTypes(events: readonly AgentEvent[]): string[] {
+  return events
+    .filter((event): event is SubagentEvent => event.type === 'subagent.event')
+    .map((event) => event.event.type);
+}
+
+function subagentEvents(events: readonly AgentEvent[]): SubagentEvent[] {
+  return events.filter((event): event is SubagentEvent => event.type === 'subagent.event');
+}
+
+describe('subagents', () => {
+  it("advertises one tool per subagent, after the registry's own", () => {
+    const { parent } = delegationHarness();
+
+    const names = parent.toolDefinitions.map((tool) => tool.name);
+    expect(names).toEqual(['ask_researcher']);
+
+    const definition = parent.toolDefinitions[0];
+    expect(definition?.description).toBe(RESEARCHER.prompt);
+    expect(definition?.risk).toBe('safe');
+    expect(definition?.parameters).toMatchObject({
+      type: 'object',
+      required: ['task'],
+      additionalProperties: false,
+    });
+  });
+
+  it('runs the subagent and returns its answer as the tool result', async () => {
+    const { parent, store } = delegationHarness();
+
+    const { events, result } = await runTurn(parent, {
+      sessionKey: SESSION,
+      content: 'how are retries configured',
+    });
+
+    expect(result.stopReason).toBe('complete');
+
+    const outcome = events.find((event) => event.type === 'tool.result');
+    expect(outcome).toMatchObject({ callId: 'c1', ok: true, content: 'Found it.' });
+
+    // The one `tool` message the assistant turn owes, and no other.
+    const tools = messagesOf(store).filter((message) => message.role === 'tool');
+    expect(tools).toHaveLength(1);
+    expect(unansweredToolCalls(messagesOf(store))).toEqual([]);
+  });
+
+  it("streams the subagent's own events, addressed to the delegating call", async () => {
+    const { events } = await runTurn(
+      delegationHarness({
+        childTools: [echoTool],
+        childTurns: [
+          { toolCalls: [toolCall('n1', 'echo', { text: 'hi' })] },
+          { deltas: ['Found it.'] },
+        ],
+      }).parent,
+      { sessionKey: SESSION, content: 'go' },
+    );
+
+    expect(nestedTypes(events)).toEqual([
+      'turn.start',
+      'tool.call',
+      'tool.result',
+      'assistant.delta',
+      'turn.end',
+    ]);
+
+    for (const event of subagentEvents(events)) {
+      // The root turn on every one of them, never the subagent's own — which is
+      // on the inner event, where a client that wants it can find it.
+      expect(event.turnId).toBe('parent-1');
+      expect(event.parentSessionKey).toBe(SESSION);
+      expect(event.parentCallId).toBe('c1');
+      expect(event.agentId).toBe('researcher');
+      expect(event.depth).toBe(1);
+      expect(event.sessionKey).toMatch(/^sub-/);
+    }
+  });
+
+  it('every nested event is a ServerMessage once the transport adds a seq', async () => {
+    const { events } = await runTurn(delegationHarness().parent, {
+      sessionKey: SESSION,
+      content: 'go',
+    });
+
+    for (const event of subagentEvents(events)) {
+      const parsed = ServerMessageSchema.safeParse({ ...event, seq: 3 });
+      expect(parsed.success, JSON.stringify(parsed.error?.issues)).toBe(true);
+    }
+  });
+
+  it("gives the subagent its own session, in the caller's workspace", async () => {
+    const { parent, store } = delegationHarness();
+    store.ensureSession(SESSION, { workspaceId: 'client-acme' });
+
+    const { events } = await runTurn(parent, { sessionKey: SESSION, content: 'go' });
+    const childKey = subagentEvents(events)[0]?.sessionKey ?? '';
+    const child = store.getSession(childKey);
+
+    expect(child?.workspaceId).toBe('client-acme');
+    expect(child?.agentId).toBe('researcher');
+    expect(child?.origin).toBe(SUBAGENT_ORIGIN);
+    expect(child?.metadata[SUBAGENT_METADATA_KEY]).toMatchObject({
+      parentSessionKey: SESSION,
+      parentTurnId: 'parent-1',
+      parentCallId: 'c1',
+      depth: 1,
+    });
+
+    // The pointer back, which is what a reloaded transcript follows.
+    expect(subagentRunsOf(store.getSession(SESSION)?.metadata ?? {})).toEqual({
+      c1: { sessionKey: childKey, agentId: 'researcher', label: 'Researcher' },
+    });
+  });
+
+  it('keeps subagent sessions out of the conversation list', async () => {
+    const { parent, store } = delegationHarness();
+    await runTurn(parent, { sessionKey: SESSION, content: 'go' });
+
+    expect(store.listSessions().map((session) => session.key)).toEqual([SESSION]);
+    // Still reachable when asked for by name — the transcript fetch needs it.
+    expect(store.listSessions({ origin: SUBAGENT_ORIGIN })).toHaveLength(1);
+  });
+
+  it("deletes a conversation's subagent sessions with it", async () => {
+    const { parent, store } = delegationHarness();
+    const { events } = await runTurn(parent, { sessionKey: SESSION, content: 'go' });
+    const childKey = subagentEvents(events)[0]?.sessionKey ?? '';
+
+    expect(store.getSession(childKey)).toBeDefined();
+    store.deleteSession(SESSION);
+    expect(store.getSession(childKey)).toBeUndefined();
+  });
+
+  it('refuses a cycle with a tool result rather than a throw', async () => {
+    const { parent, store } = delegationHarness();
+
+    const { events, result } = await runTurn(parent, {
+      sessionKey: SESSION,
+      content: 'go',
+      // As if `researcher` were already running above this turn.
+      chain: ['researcher'],
+    });
+
+    expect(result.stopReason).toBe('complete');
+    expect(nestedTypes(events)).toEqual([]);
+    const outcome = events.find((event) => event.type === 'tool.result');
+    expect(outcome).toMatchObject({ ok: false });
+    expect(outcome).toHaveProperty('content', expect.stringContaining('already running above'));
+    expect(unansweredToolCalls(messagesOf(store))).toEqual([]);
+  });
+
+  it('refuses once delegation is already at its depth cap', async () => {
+    const { parent } = delegationHarness();
+    const chain = Array.from({ length: MAX_SUBAGENT_DEPTH }, (_unused, i) => `a${String(i)}`);
+
+    const { events } = await runTurn(parent, { sessionKey: SESSION, content: 'go', chain });
+
+    expect(nestedTypes(events)).toEqual([]);
+    expect(events.find((event) => event.type === 'tool.result')).toHaveProperty(
+      'content',
+      expect.stringContaining('levels deep'),
+    );
+  });
+
+  it('refuses when the subagent has nothing to run on', async () => {
+    const { parent } = delegationHarness({ resolveLoop: () => null });
+
+    const { events } = await runTurn(parent, { sessionKey: SESSION, content: 'go' });
+
+    expect(events.find((event) => event.type === 'tool.result')).toHaveProperty(
+      'content',
+      expect.stringContaining('no provider or model'),
+    );
+  });
+
+  it('refuses a call with no task, and says what was wrong', async () => {
+    const { parent } = delegationHarness({
+      parentTurns: [
+        { toolCalls: [toolCall('c1', 'ask_researcher', { task: '  ' })] },
+        { deltas: ['Done.'] },
+      ],
+    });
+
+    const { events } = await runTurn(parent, { sessionKey: SESSION, content: 'go' });
+
+    expect(events.find((event) => event.type === 'tool.result')).toHaveProperty(
+      'content',
+      expect.stringContaining('"task" must be a non-empty string'),
+    );
+  });
+
+  it('gates the delegation itself when the binding says ask', async () => {
+    const asked: ApprovalRequest[] = [];
+    const gate: ApprovalGate = {
+      request: (request) => {
+        asked.push(request);
+        return Promise.resolve({ approved: false, scope: 'once' });
+      },
+    };
+    const { parent } = delegationHarness({
+      binding: { ...RESEARCHER, permission: 'ask' },
+      loop: { approvals: gate },
+    });
+
+    const { events } = await runTurn(parent, { sessionKey: SESSION, content: 'go' });
+
+    expect(asked.map((request) => request.name)).toEqual(['ask_researcher']);
+    // Refused, so the subagent never ran — and the call still got its result.
+    expect(nestedTypes(events)).toEqual([]);
+    expect(events.find((event) => event.type === 'tool.result')).toMatchObject({ ok: false });
+    expect(events.some((event) => event.type === 'tool.approvalRequest')).toBe(true);
+  });
+
+  it('carries the conversation, not the delegation, as the approval scope', async () => {
+    const seen: ApprovalRequest[] = [];
+
+    const gate: ApprovalGate = {
+      request: (request) => {
+        seen.push(request);
+        return Promise.resolve({ approved: true, scope: 'session' });
+      },
+    };
+
+    // A child loop with a gate and an `ask` tool of its own.
+    const base = realpathSync(mkdtempSync(join(tmpdir(), 'ghostai-subagent-approval-')));
+    cleanups.push(() => {
+      rmSync(base, { recursive: true, force: true });
+    });
+    const jails = singleJail(new WorkspaceJail({ root: join(base, 'workspace') }));
+    const clock = manualClock();
+    const store = new SessionStore({ clock });
+    cleanups.push(() => {
+      store.close();
+    });
+    const registry = new ToolRegistry({ clock });
+    registry.registerAll([echoTool]);
+    const defaults = AgentDefaultsSchema.parse({});
+
+    const researcher = new AgentLoop({
+      provider: scriptedProvider([
+        { toolCalls: [toolCall('n1', 'echo', { text: 'hi' })] },
+        { deltas: ['Found it.'] },
+      ]),
+      tools: registry.select({ echo: 'ask' }),
+      store,
+      jails,
+      config: { ...defaults, model: 'child-model' },
+      agent: { id: 'researcher', label: 'Researcher', systemPrompt: '', livePrompt: '' },
+      approvals: gate,
+      clock,
+      newId: counter('child-'),
+    });
+
+    const caller = new AgentLoop({
+      provider: scriptedProvider([
+        { toolCalls: [toolCall('c1', 'ask_researcher', { task: 'go' })] },
+        { deltas: ['Done.'] },
+      ]),
+      tools: new ToolRegistry({ clock }),
+      store,
+      jails,
+      config: { ...defaults, model: 'parent-model' },
+      agent: { id: 'default', label: 'Default', systemPrompt: '', livePrompt: '' },
+      subagents: subagentMap([RESEARCHER]),
+      resolveLoop: () => researcher,
+      approvals: gate,
+      clock,
+      newId: counter('parent-'),
+    });
+
+    await runTurn(caller, { sessionKey: SESSION, content: 'go' });
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.agentId).toBe('researcher');
+    // Its own session for the record, the conversation for the scope.
+    expect(seen[0]?.sessionKey).toMatch(/^sub-/);
+    expect(seen[0]?.rootSessionKey).toBe(SESSION);
+  });
+
+  it("caps a delegation with the caller's subagentTimeoutMs", async () => {
+    const clock = manualClock();
+    const { parent } = delegationHarness({
+      clock,
+      parentConfig: { subagentTimeoutMs: 5_000 },
+      childTurns: [
+        {
+          onStream: async () => {
+            // Long enough that the cap fires while the child is still streaming.
+            clock.advance(6_000);
+            await Promise.resolve();
+          },
+          deltas: ['too late'],
+        },
+      ],
+    });
+
+    const { result, events } = await runTurn(parent, { sessionKey: SESSION, content: 'go' });
+
+    // The subagent was cut short, and said so in the result the model reads…
+    const outcome = events.find((event) => event.type === 'tool.result');
+    // Not "found nothing" — a model acts on that by not asking again.
+    expect(outcome).toHaveProperty(
+      'content',
+      expect.stringContaining('stopped early (aborted) without writing an answer'),
+    );
+    // …while the caller's own turn carried on to its answer.
+    expect(result.stopReason).toBe('complete');
+    expect(result.text).toBe('Done.');
+  });
+
+  it("forwards a grandchild's events without wrapping them twice", async () => {
+    const clock = manualClock();
+    const base = realpathSync(mkdtempSync(join(tmpdir(), 'ghostai-subagent-depth-')));
+    cleanups.push(() => {
+      rmSync(base, { recursive: true, force: true });
+    });
+    const jails = singleJail(new WorkspaceJail({ root: join(base, 'workspace') }));
+    const store = new SessionStore({ clock });
+    cleanups.push(() => {
+      store.close();
+    });
+    const defaults = AgentDefaultsSchema.parse({});
+    const summariser: SubagentBinding = {
+      toolName: 'ask_summariser',
+      agentId: 'summariser',
+      label: 'Summariser',
+      prompt: 'Summarise.',
+      permission: 'allow',
+    };
+
+    const grandchild = new AgentLoop({
+      provider: scriptedProvider([{ deltas: ['Short.'] }]),
+      tools: new ToolRegistry({ clock }),
+      store,
+      jails,
+      config: { ...defaults, model: 'm' },
+      agent: { id: 'summariser', label: 'Summariser', systemPrompt: '', livePrompt: '' },
+      clock,
+      newId: counter('grand-'),
+    });
+    const middle = new AgentLoop({
+      provider: scriptedProvider([
+        { toolCalls: [toolCall('m1', 'ask_summariser', { task: 'shorten' })] },
+        { deltas: ['Found it.'] },
+      ]),
+      tools: new ToolRegistry({ clock }),
+      store,
+      jails,
+      config: { ...defaults, model: 'm' },
+      agent: { id: 'researcher', label: 'Researcher', systemPrompt: '', livePrompt: '' },
+      subagents: subagentMap([summariser]),
+      resolveLoop: () => grandchild,
+      clock,
+      newId: counter('child-'),
+    });
+    const top = new AgentLoop({
+      provider: scriptedProvider([
+        { toolCalls: [toolCall('c1', 'ask_researcher', { task: 'research' })] },
+        { deltas: ['Done.'] },
+      ]),
+      tools: new ToolRegistry({ clock }),
+      store,
+      jails,
+      config: { ...defaults, model: 'm' },
+      agent: { id: 'default', label: 'Default', systemPrompt: '', livePrompt: '' },
+      subagents: subagentMap([RESEARCHER]),
+      resolveLoop: () => middle,
+      clock,
+      newId: counter('parent-'),
+    });
+
+    const { events } = await runTurn(top, { sessionKey: SESSION, content: 'go' });
+    const wrapped = subagentEvents(events);
+
+    // Never a wrapper inside a wrapper — the payload union excludes it.
+    for (const event of wrapped) {
+      expect(event.event.type).not.toBe('subagent.event');
+      expect(event.turnId).toBe('parent-1');
+    }
+
+    const deep = wrapped.filter((event) => event.depth === 2);
+    expect(deep.length).toBeGreaterThan(0);
+    // Addressed to the *middle* agent's call, in the middle agent's session —
+    // which is what lets one flat map nest a card at any depth.
+    expect(deep[0]?.parentCallId).toBe('m1');
+    expect(deep[0]?.parentSessionKey).toMatch(/^sub-/);
+    expect(deep[0]?.agentId).toBe('summariser');
   });
 });

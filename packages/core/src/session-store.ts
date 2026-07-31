@@ -34,6 +34,8 @@ import { dirname } from 'node:path';
 
 import {
   ChatMessageSchema,
+  SUBAGENT_ORIGIN,
+  subagentRunsOf,
   type ChatMessage,
   type StopReason,
   type StoredMessage,
@@ -535,10 +537,20 @@ export class SessionStore {
     // The predicate is the sort order written as a comparison: strictly older,
     // or the same instant and a key that sorts later. Bound as `?` twice each
     // rather than named, because `node:sqlite` binds positionally.
+    // Subagent sessions are excluded unless asked for by name. They are real
+    // rows — that is what makes a delegation inspectable after a reload — but
+    // they are not conversations: one turn, started by a model, ending when the
+    // tool call that made it returns. A sidebar that listed them would bury the
+    // conversations a person actually had under the machinery of one of them.
+    //
+    // Expressed as `origin = ?` winning over the exclusion rather than as a
+    // separate flag, so there is one way to ask and no combination that means
+    // two things.
     const rows = this.#stmt(
       `SELECT s.*, (SELECT COUNT(*) FROM messages m WHERE m.session_key = s.key) AS message_count
          FROM sessions s
         WHERE (? IS NULL OR s.origin = ?)
+          AND (? IS NOT NULL OR s.origin <> '${SUBAGENT_ORIGIN}')
           AND (? IS NULL OR s.workspace_id = ?)
           AND (? IS NULL
                OR s.updated_at_ms < ?
@@ -546,6 +558,7 @@ export class SessionStore {
         ORDER BY s.updated_at_ms DESC, s.key ASC
         LIMIT ? OFFSET ?`,
     ).all(
+      origin ?? null,
       origin ?? null,
       origin ?? null,
       workspaceId ?? null,
@@ -1102,10 +1115,35 @@ export class SessionStore {
     return totals;
   }
 
-  /** Deletes the session and, by cascade, its messages and turn stats. */
+  /**
+   * Deletes the session, its messages, its turn stats — and its subagent runs.
+   *
+   * The first three are SQLite's cascade. The last one is not, and cannot be:
+   * the link to a subagent's session is a key inside the metadata bag, which is
+   * a JSON blob rather than a foreign key. Doing it here rather than leaving it
+   * to a caller is what keeps "delete this conversation" from leaving a row per
+   * delegation behind, invisible in every listing and reachable by nothing.
+   *
+   * One level, deliberately not recursive at the SQL layer but recursive by
+   * call: a subagent's own subagents are deleted when *it* is, because its row
+   * carries the same map. Depth is capped, so this terminates for the same
+   * reason delegation does.
+   */
   deleteSession(sessionKey: string): boolean {
     this.#assertOpen();
-    return this.#stmt('DELETE FROM sessions WHERE key = ?').run(sessionKey).changes > 0;
+
+    return this.#transaction(() => {
+      const session = this.getSession(sessionKey);
+      if (session === undefined) return false;
+
+      for (const run of Object.values(subagentRunsOf(session.metadata))) {
+        // Not guarded on existence: a child that is already gone is the normal
+        // case for a session deleted twice, and is not worth distinguishing.
+        this.deleteSession(run.sessionKey);
+      }
+
+      return this.#stmt('DELETE FROM sessions WHERE key = ?').run(sessionKey).changes > 0;
+    });
   }
 
   /** Idempotent, and a no-op for a connection this store did not open. */

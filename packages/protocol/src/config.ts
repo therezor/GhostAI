@@ -20,7 +20,12 @@
 
 import { z } from 'zod';
 
-import { ToolPermissionsSchema, type ToolPermission, type ToolPermissions } from './tools.js';
+import {
+  ToolPermissionSchema,
+  ToolPermissionsSchema,
+  type ToolPermission,
+  type ToolPermissions,
+} from './tools.js';
 
 /** A duration in milliseconds where `0` disables the limit. */
 const OptionalDurationMs = z.number().int().nonnegative();
@@ -470,6 +475,42 @@ export const AgentMemoryScopeSchema = z.object({
 export type AgentMemoryScope = z.infer<typeof AgentMemoryScopeSchema>;
 
 /**
+ * Another agent this one may hand a task to.
+ *
+ * A subagent is not a different kind of thing from an agent — it is an ordinary
+ * entry in `agents.list` that some other entry points at. That is the whole
+ * design: a researcher is configured, tested and used on its own, and being
+ * someone's subagent is a relationship rather than a mode. It also means the
+ * model, the tool map and the toolbox a subagent runs under are already answered
+ * by the entry it names, and nothing here restates them.
+ *
+ * Three fields, and the two that are not the id both exist because the operator
+ * is the one who knows things the schema cannot:
+ *
+ *  - **`prompt` is the tool description the model reads.** Not a note beside it —
+ *    the description *is* how a model decides whether to call something, so an
+ *    operator writing "use this when you need facts you do not have; ask for a
+ *    summary, not raw sources" is writing the only part of this feature that
+ *    decides when it fires. Empty falls back to a sentence naming the agent.
+ *  - **`permission` sits here rather than in `tools`.** The `tools` map is a list
+ *    of installed tools, and a subagent is not one — putting `ask_researcher`
+ *    there would render it in the editor's Tools section under a "not installed"
+ *    badge, because it is absent from `/api/tools` and always will be.
+ *
+ * `allow` is the default because delegation is the feature: an agent given a
+ * subagent is an agent whose operator wants it used. The tools the *subagent*
+ * runs are gated by the subagent's own map, which is where the risk actually is.
+ */
+export const SubagentRefSchema = z.object({
+  /** An id in `agents.list`. Checked against it by `assertBuildable`. */
+  id: z.string(),
+  /** The operator's guidance. Empty means the built-in sentence. */
+  prompt: z.string().default(''),
+  permission: ToolPermissionSchema.default('allow'),
+});
+export type SubagentRef = z.infer<typeof SubagentRefSchema>;
+
+/**
  * One named agent.
  *
  * Built on `patchOf(AgentDefaultsSchema)` rather than restating the fields, so
@@ -528,6 +569,15 @@ export const AgentEntrySchema = patchOf(AgentDefaultsSchema)
     exec: patchOf(ExecToolConfigSchema).optional(),
     toolbox: AgentToolboxSchema.prefault({}),
     memory: AgentMemoryScopeSchema.prefault({}),
+    /**
+     * Agents this one may delegate to. Order is the order the model sees them.
+     *
+     * A list rather than a record keyed by id because the order is the
+     * operator's and a record has none — and because "the same agent twice" is
+     * a mistake `assertBuildable` should name, not a shape the schema silently
+     * collapses.
+     */
+    subagents: z.array(SubagentRefSchema).default([]),
   });
 export type AgentEntry = z.infer<typeof AgentEntrySchema>;
 
@@ -727,6 +777,11 @@ export const ConfigPatchSchema = z.object({
                 .extend({ network: patchOf(AgentToolboxNetworkSchema).optional() })
                 .optional(),
               memory: patchOf(AgentMemoryScopeSchema).optional(),
+              // `subagents` is deliberately *not* restated beside these. It is
+              // an array, so it already replaces wholesale — there is no
+              // per-field merge for `patchOf` to be non-recursive about, and
+              // `patchOf` leaves the element schema's own defaults intact, so
+              // `[{ id: 'researcher' }]` still arrives with a permission.
             })
             .nullable(),
         )

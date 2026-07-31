@@ -30,7 +30,7 @@
  * be displaying the lock rather than the door.
  */
 
-import type { AgentEvent } from '@ghostai/agent';
+import type { AgentEvent, NestedAgentEvent, SubagentEvent } from '@ghostai/agent';
 import type { TurnStatsRecord } from '@ghostai/core';
 import { tokensPerSecond, type ToolRisk, type Usage } from '@ghostai/protocol';
 import pc from 'picocolors';
@@ -207,11 +207,30 @@ export class TurnRenderer {
   readonly #showUsage: boolean;
   readonly #toolResultLines: number;
   readonly #t: CliT;
-  /** Call id → tool name, so a result can label itself without re-reading. */
+  /**
+   * Tool name by call, so a result can label itself without re-reading.
+   *
+   * Keyed by `session:call` rather than by the call id alone. A call id is the
+   * model's and is only unique within one assistant message, so a subagent can
+   * mint the same one its caller just used — and a shared map would then have
+   * the child's result deleting the parent's label.
+   */
   readonly #calls = new Map<string, string>();
 
   #atLineStart = true;
   #mode: 'idle' | 'assistant' | 'reasoning' = 'idle';
+  /** The session the current top-level turn is on. Set by `turn.start`. */
+  #sessionKey = '';
+  /**
+   * How far in to write. `0` for the operator's own turn.
+   *
+   * Indentation is the only hierarchy signal a terminal has, and this file
+   * already used it for tool results — so a subagent is two more spaces rather
+   * than a new idea. Applied in `#write`, which is the one place text reaches
+   * the stream, so streamed prose is indented on every line it wraps onto and
+   * not only where a `#line` call happens to be.
+   */
+  #depth = 0;
 
   constructor(options: TurnRendererOptions) {
     this.#out = options.out;
@@ -223,10 +242,31 @@ export class TurnRenderer {
   }
 
   handle(event: AgentEvent): void {
+    if (event.type === 'subagent.event') {
+      this.#subagent(event);
+      return;
+    }
+    this.#render(event, this.#sessionKey);
+  }
+
+  /**
+   * One event, at the depth already set, attributed to `sessionKey`.
+   *
+   * Split from `handle` so a subagent's events go through exactly the same
+   * rendering as its caller's — a nested `exec` looks like an `exec`, which is
+   * the whole point of indentation being the only difference.
+   */
+  #render(event: NestedAgentEvent, sessionKey: string): void {
     switch (event.type) {
       case 'turn.start':
         this.#mode = 'idle';
-        this.#calls.clear();
+        // Only the operator's own turn resets the map. A subagent's `turn.start`
+        // arriving here would otherwise drop the labels of the calls its caller
+        // has in flight — including the delegating call itself.
+        if (this.#depth === 0) {
+          this.#sessionKey = event.sessionKey;
+          this.#calls.clear();
+        }
         return;
       case 'assistant.delta':
         this.#stream('assistant', event.text);
@@ -235,17 +275,30 @@ export class TurnRenderer {
         if (this.#showReasoning) this.#stream('reasoning', event.text);
         return;
       case 'tool.call':
-        this.#toolCall(event.callId, event.name, event.args, event.risk);
+        this.#toolCall(sessionKey, event.callId, event.name, event.args, event.risk);
         return;
       case 'tool.progress':
         this.#line(
           this.#c.dim(
-            `  … ${this.#calls.get(event.callId) ?? 'tool'} ${formatDuration(event.elapsedMs)}`,
+            `  … ${this.#calls.get(callKey(sessionKey, event.callId)) ?? 'tool'} ${formatDuration(event.elapsedMs)}`,
           ),
         );
         return;
       case 'tool.result':
-        this.#toolResult(event.callId, event.ok, event.content, event.truncated, event.durationMs);
+        this.#toolResult(
+          sessionKey,
+          event.callId,
+          event.ok,
+          event.content,
+          event.truncated,
+          event.durationMs,
+        );
+        return;
+      case 'tool.approvalRequest':
+        // The terminal has no way to answer one — `ghost chat` installs no gate,
+        // so an `ask` tool simply runs. Reaching here means the CLI is watching
+        // a turn some other surface is driving, and saying so beats a gap.
+        this.#line(this.#c.yellow(`⧗ ${this.#t('render.awaitingApproval', { tool: event.name })}`));
         return;
       case 'notice':
         this.#line(`${this.#c.yellow('⚠')} ${this.#c.yellow(event.message)}`);
@@ -256,6 +309,51 @@ export class TurnRenderer {
       case 'turn.end':
         this.#turnEnd(event.stopReason, event.iterations, event.usage, event.elapsedMs);
         return;
+    }
+  }
+
+  /**
+   * A subagent's event, indented under the call that started it.
+   *
+   * The two ends of the delegated turn get a rule of their own, at the *parent's*
+   * depth, because they are the boundary rather than something inside it — the
+   * same shape `#stream` uses for the `┄ thinking` header. Everything between
+   * renders one level in, through the same `#render` the caller's events use.
+   *
+   * `#depth` is restored in a `finally` so a renderer is never left indented by
+   * an event that threw halfway through — the next answer would otherwise be
+   * written two spaces in with nothing to explain it.
+   */
+  #subagent(event: SubagentEvent): void {
+    const who = event.label === '' ? event.agentId : event.label;
+    const previous = this.#depth;
+
+    if (event.event.type === 'turn.start') {
+      this.#break();
+      this.#mode = 'idle';
+      this.#depth = event.depth - 1;
+      try {
+        this.#line(this.#c.dim(`┄ ${this.#t('render.subagent.start', { agent: who })}`));
+      } finally {
+        this.#depth = previous;
+      }
+      return;
+    }
+
+    this.#depth = event.depth;
+    try {
+      this.#render(event.event, event.sessionKey);
+    } finally {
+      this.#depth = previous;
+    }
+
+    if (event.event.type !== 'turn.end') return;
+
+    this.#depth = event.depth - 1;
+    try {
+      this.#line(this.#c.dim(`┄ ${this.#t('render.subagent.done', { agent: who })}`));
+    } finally {
+      this.#depth = previous;
     }
   }
 
@@ -285,14 +383,15 @@ export class TurnRenderer {
     this.#write(mode === 'reasoning' ? this.#c.dim(text) : text);
   }
 
-  #toolCall(callId: string, name: string, args: unknown, risk: ToolRisk): void {
-    this.#calls.set(callId, name);
+  #toolCall(sessionKey: string, callId: string, name: string, args: unknown, risk: ToolRisk): void {
+    this.#calls.set(callKey(sessionKey, callId), name);
     const color = riskColor(this.#c, risk);
     const summary = summariseArgs(args);
     this.#line(`${color('⚙')} ${color(name)}${summary === '' ? '' : ` ${this.#c.dim(summary)}`}`);
   }
 
   #toolResult(
+    sessionKey: string,
     callId: string,
     ok: boolean,
     content: string,
@@ -302,6 +401,7 @@ export class TurnRenderer {
     const mark = ok ? this.#c.green('✓') : this.#c.red('✗');
     const suffix = truncated ? ', truncated' : '';
     this.#line(`  ${mark} ${this.#c.dim(`${formatDuration(durationMs)}${suffix}`)}`);
+    this.#calls.delete(callKey(sessionKey, callId));
 
     if (this.#toolResultLines <= 0 || content === '') return;
     const lines = content.split('\n');
@@ -310,7 +410,6 @@ export class TurnRenderer {
     }
     const hidden = lines.length - this.#toolResultLines;
     if (hidden > 0) this.#line(this.#c.dim(`    … ${String(hidden)} more lines`));
-    this.#calls.delete(callId);
   }
 
   #error(code: string, message: string, retryable: boolean): void {
@@ -373,9 +472,38 @@ export class TurnRenderer {
     if (!this.#atLineStart) this.#write('\n');
   }
 
+  /**
+   * The one place text reaches the stream, and therefore the one place indent
+   * belongs.
+   *
+   * Indenting in `#line` would be simpler and wrong: assistant text arrives as
+   * arbitrary chunks through `#stream`, so a subagent's answer would be indented
+   * on whichever line a chunk happened to start and flush left on every line it
+   * wrapped onto. Rewriting newlines here catches both.
+   */
   #write(text: string): void {
     if (text === '') return;
-    this.#out.write(text);
+    const indent = '  '.repeat(this.#depth);
+    this.#out.write(indent === '' ? text : indented(text, indent, this.#atLineStart));
     this.#atLineStart = text.endsWith('\n');
   }
+}
+
+/** Unique per call across nesting. See `TurnRenderer#calls`. */
+function callKey(sessionKey: string, callId: string): string {
+  return `${sessionKey}:${callId}`;
+}
+
+/**
+ * `text` with `indent` at the start of every line it writes.
+ *
+ * `atLineStart` decides whether the *first* line gets one — a chunk landing
+ * mid-sentence must not be pushed across. A trailing newline is left bare, so an
+ * indent is never written onto a line nothing has been put on yet: it would
+ * become trailing whitespace the moment the next chunk is a `\n` of its own.
+ */
+function indented(text: string, indent: string, atLineStart: boolean): string {
+  const body = text.replaceAll('\n', `\n${indent}`);
+  const trimmed = body.endsWith(`\n${indent}`) ? body.slice(0, -indent.length) : body;
+  return atLineStart ? `${indent}${trimmed}` : trimmed;
 }

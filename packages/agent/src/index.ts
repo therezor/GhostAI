@@ -18,8 +18,10 @@ export type {
   AgentEvent,
   AgentEventType,
   AssistantDeltaEvent,
+  NestedAgentEvent,
   NoticeEvent,
   ReasoningDeltaEvent,
+  SubagentEvent,
   ToolApprovalRequestEvent,
   ToolCallEvent,
   ToolProgressEvent,
@@ -27,6 +29,17 @@ export type {
   TurnEndEvent,
   TurnStartEvent,
 } from './events.js';
+
+export {
+  MAX_SUBAGENT_DEPTH,
+  describeSubagent,
+  refuseDelegation,
+  subagentDefinition,
+  subagentMap,
+  subagentResult,
+  type DelegationRefusal,
+  type SubagentBinding,
+} from './subagent.js';
 
 export {
   deniedNotice,

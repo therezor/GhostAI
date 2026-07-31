@@ -121,7 +121,7 @@ export function ChatRoute(): JSX.Element {
     // has already switched to another conversation would otherwise merge one
     // session's history into another's transcript.
     if (state.sessionKey !== session) return;
-    state.mergeHistory(data.messages);
+    state.mergeHistory(data.messages, data.subagentRuns);
   }, [history.data, session]);
 
   // The welcome screen is for a conversation that is genuinely empty, not for

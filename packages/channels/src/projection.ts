@@ -147,6 +147,32 @@ export class TurnProjection {
       case 'notice':
         return [this.#draft('notice', message.message)];
 
+      /**
+       * A subagent's turn, reduced to its two ends.
+       *
+       * The nested stream is deliberately *not* projected. A chat transport has
+       * one channel for everything, so forwarding a subagent's deltas would
+       * interleave its working-out with the answer the caller is composing —
+       * and `#answer` is a single accumulator, so they would literally be
+       * concatenated. Saying nothing is no better: a delegation can run for a
+       * minute, and a silent minute reads as a hung bot.
+       *
+       * So: one line when it starts, one when it ends, and nothing in between.
+       * Both are gated on `sendToolHints`, because that is already the flag for
+       * "tell me what the agent is doing, not only what it concluded".
+       */
+      case 'subagent.event': {
+        if (!this.#sendToolHints) return [];
+        const who = message.label === '' ? message.agentId : message.label;
+        if (message.event.type === 'turn.start') {
+          return [this.#draft('notice', `Asking ${who}…`)];
+        }
+        if (message.event.type === 'turn.end') {
+          return [this.#draft('notice', `${who} finished.`)];
+        }
+        return [];
+      }
+
       case 'message.queued':
         return [
           this.#draft(

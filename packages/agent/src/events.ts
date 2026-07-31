@@ -169,7 +169,15 @@ export interface TurnEndEvent {
   readonly lastSeq?: number;
 }
 
-export type AgentEvent =
+/**
+ * Everything a turn emits on its own behalf.
+ *
+ * Named separately from `AgentEvent` because it is what a *subagent's* events
+ * are wrapped around: a subagent produces these, and the loop above it turns
+ * each one into a `SubagentEvent`. Excluding the wrapper from its own payload is
+ * what keeps the protocol schema non-recursive — see `SubagentEvent`.
+ */
+export type NestedAgentEvent =
   | TurnStartEvent
   | AssistantDeltaEvent
   | ReasoningDeltaEvent
@@ -180,5 +188,33 @@ export type AgentEvent =
   | NoticeEvent
   | AgentErrorEvent
   | TurnEndEvent;
+
+/**
+ * One event from a subagent's turn, addressed to the card it belongs under.
+ *
+ * The reasoning for the shape — why a wrapper rather than an optional field on
+ * every event, why `parentSessionKey` is part of the address, and why depth
+ * beyond one level is forwarding rather than nesting — is on
+ * `SubagentEventSchema` in `@ghostai/protocol`, which this must stay 1:1 with.
+ *
+ * The one thing worth restating here, because it is the loop's job rather than
+ * the schema's: **`turnId` is the root turn, not the subagent's own.** The
+ * subagent's turn id is on the inner event, where it belongs; this field is what
+ * a transcript uses to find the turn a person is reading.
+ */
+export interface SubagentEvent {
+  readonly type: 'subagent.event';
+  readonly turnId: string;
+  readonly parentSessionKey: string;
+  readonly parentCallId: string;
+  readonly agentId: string;
+  readonly label: string;
+  readonly sessionKey: string;
+  /** 1 for a subagent of the session's own agent. */
+  readonly depth: number;
+  readonly event: NestedAgentEvent;
+}
+
+export type AgentEvent = NestedAgentEvent | SubagentEvent;
 
 export type AgentEventType = AgentEvent['type'];

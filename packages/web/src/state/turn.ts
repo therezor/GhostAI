@@ -20,7 +20,7 @@
 
 import { create } from 'zustand';
 
-import type { ServerMessage, StoredMessage } from '@ghostai/protocol';
+import type { ServerMessage, StoredMessage, SubagentRunRef } from '@ghostai/protocol';
 
 import {
   appendPendingUserMessage,
@@ -77,7 +77,10 @@ export interface TurnState {
   /** This tab answered an approval prompt; the buttons go now, not on the echo. */
   readonly answerApproval: (callId: string, answered: 'approved' | 'denied') => void;
   /** Puts a fetched history under whatever the socket has already built. */
-  readonly mergeHistory: (messages: readonly StoredMessage[]) => void;
+  readonly mergeHistory: (
+    messages: readonly StoredMessage[],
+    subagentRuns?: Readonly<Record<string, SubagentRunRef>>,
+  ) => void;
   readonly setTranscript: (transcript: Transcript) => void;
   readonly reset: () => void;
 }
@@ -173,8 +176,10 @@ export const useTurnStore = create<TurnState>((set) => ({
     set((state) => ({ transcript: markApprovalAnswered(state.transcript, callId, answered) }));
   },
 
-  mergeHistory: (messages) => {
-    set((state) => ({ transcript: mergeStoredHistory(state.transcript, messages) }));
+  mergeHistory: (messages, subagentRuns) => {
+    set((state) => ({
+      transcript: mergeStoredHistory(state.transcript, messages, subagentRuns),
+    }));
   },
 
   setTranscript: (transcript) => {

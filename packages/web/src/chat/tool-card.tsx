@@ -1,11 +1,22 @@
 /**
- * A tool call, as a card.
+ * A tool call, as a card — and the list of parts a turn or a delegation renders.
+ *
+ * Both are here because they are mutually recursive: a card that delegated to a
+ * subagent renders that subagent's parts inside itself, and one of those parts
+ * can be another card. Splitting them across two files would buy a tidier name
+ * and an import cycle.
  *
  * What the card has to answer, in the order a reader asks it: what is being
  * run, how dangerous the system considers it, whether it is still going, and
  * what it produced. Everything else — the full arguments, the whole output — is
  * behind a disclosure, because a turn that made six calls should not be six
  * screens of JSON before the answer.
+ *
+ * A delegation adds one more question ahead of "what it produced": *what did the
+ * subagent do*. So the nested run sits above the output rather than below it,
+ * and a card that is still delegating opens itself — the same rule the reasoning
+ * block uses, for the same reason. A collapsed card over a running subagent is a
+ * turn that has silently stopped.
  *
  * Three decisions:
  *
@@ -24,18 +35,37 @@
  *    the machinery instead of the answer.
  */
 
-import { AlertCircle, CheckCircle2, ChevronRight, Loader2, Terminal, Wrench } from 'lucide-react';
+import {
+  AlertCircle,
+  Bot,
+  CheckCircle2,
+  ChevronRight,
+  Loader2,
+  Terminal,
+  Wrench,
+} from 'lucide-react';
 import { useEffect, useId, useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type { ApprovalScope, ToolRisk } from '@ghostai/protocol';
+import { useQuery } from '@tanstack/react-query';
+
+import type { ApprovalScope, StoredMessage, ToolRisk } from '@ghostai/protocol';
 
 import { cn } from '@/lib/cn.js';
+import { api } from '@/lib/api.js';
 import { formatArgs, formatDuration, summariseArgs } from '@/lib/format.js';
+import { queryKeys } from '@/lib/query.js';
 import { Badge, type BadgeProps } from '@/components/ui/badge.js';
-import type { ToolPart } from '@/state/transcript.js';
+import {
+  fromStoredMessages,
+  type SubagentPart,
+  type ToolPart,
+  type TurnPart,
+} from '@/state/transcript.js';
 import { ApprovalPrompt } from './approval.js';
+import { Markdown } from './markdown/markdown.js';
 import { Notice } from './notice.js';
+import { ReasoningBlock } from './reasoning.js';
 
 /**
  * How loud each risk band is.
@@ -58,9 +88,23 @@ export interface ToolCardProps {
 
 export function ToolCard({ tool, onApprove }: ToolCardProps): JSX.Element {
   const { t } = useTranslation();
-  // Open by default while a decision is needed: an approval prompt inside a
-  // collapsed card is a turn that has silently stopped.
+  const subagent = tool.subagent;
+  // Open by default while a decision is needed, and opened when a subagent
+  // starts working: a running delegation inside a collapsed card is a card that
+  // says nothing for as long as the delegation takes. The approval half stays
+  // an *initial* state and deliberately does not gain an effect — the prompt
+  // itself renders outside this disclosure, so opening the body for one would
+  // reveal only the arguments the header already summarises.
+  //
+  // The subagent half is sticky rather than derived, and that is the whole
+  // subtlety. A derived `open` would *close* the card the moment the run ended
+  // — swallowing both the run and the answer the reader was waiting for. This
+  // opens on the edge and never closes on its own; a click always wins.
+  const live = subagent !== undefined && !subagent.done;
   const [open, setOpen] = useState(tool.status === 'awaiting-approval');
+  useEffect(() => {
+    if (live) setOpen(true);
+  }, [live]);
   const bodyId = useId();
   const elapsedMs = useElapsed(tool.status === 'running', tool.elapsedMs);
   const risk = RISK[tool.risk];
@@ -138,8 +182,10 @@ export function ToolCard({ tool, onApprove }: ToolCardProps): JSX.Element {
             </Labelled>
           )}
 
+          {subagent !== undefined && <SubagentRun run={subagent} onApprove={onApprove} />}
+
           {tool.content !== undefined && (
-            <Labelled label={tool.status === 'error' ? 'Error' : 'Output'}>
+            <Labelled label={tool.status === 'error' ? t('tool.error') : t('tool.output')}>
               <Output content={tool.content} terminal={tool.name === 'exec'} />
               {tool.truncated && <p className="tool-card__note">{t('tool.truncated')}</p>}
             </Labelled>
@@ -151,6 +197,137 @@ export function ToolCard({ tool, onApprove }: ToolCardProps): JSX.Element {
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * A subagent's turn, inside the card of the call that started it.
+ *
+ * Depth reads as a raised inner surface and a hairline, not as an indent and not
+ * as a shadow — the token layer has no shadow scale, and the answer it does have
+ * for elevation is a surface plus a stroke. The label row names the agent so a
+ * reader can tell whose `exec` they are approving, which is the one thing a
+ * nested card must not leave ambiguous.
+ */
+export function SubagentRun({
+  run,
+  onApprove,
+}: {
+  readonly run: SubagentPart;
+  readonly onApprove: ToolCardProps['onApprove'];
+}): JSX.Element {
+  const { t } = useTranslation();
+
+  // A run rebuilt from storage knows it happened and nothing else — its steps
+  // are rows in the subagent's own session. Fetched here rather than folded
+  // into the transcript because it is view state: it is wanted only while the
+  // card is open, and this component is mounted only then.
+  const fetched = useQuery({
+    queryKey: queryKeys.messages(run.sessionKey),
+    queryFn: ({ signal }) => api.messages(run.sessionKey, signal),
+    enabled: !run.loaded,
+    // A subagent session that has been deleted is a 404, and an expected one:
+    // retrying it three times to show the same empty card helps nobody.
+    retry: false,
+  });
+
+  const parts = run.loaded ? run.parts : partsOf(fetched.data?.messages ?? []);
+
+  // Three states, named rather than derived from the query's flags at each use.
+  // A *disabled* query reports `isPending` forever — it is waiting to be
+  // allowed to run, not waiting for an answer — so `!fetched.isPending` as a
+  // stand-in for "we know what is here" is false for every live run.
+  const state = run.loaded
+    ? 'ready'
+    : fetched.isError
+      ? 'unavailable'
+      : fetched.isSuccess
+        ? 'ready'
+        : 'loading';
+
+  return (
+    <section className="stack subagent" aria-label={t('tool.subagentRun', { agent: run.label })}>
+      <p className="subagent__header">
+        <Bot className="subagent__icon" aria-hidden="true" />
+        <span className="subagent__name">{run.label}</span>
+        {run.model !== '' && <span className="subagent__model">{run.model}</span>}
+        {!run.done && <span className="subagent__status">{t('tool.subagentRunning')}</span>}
+      </p>
+
+      {state === 'loading' && <p className="tool-card__note">{t('tool.subagentLoading')}</p>}
+      {state === 'unavailable' && (
+        <p className="tool-card__note">{t('tool.subagentUnavailable')}</p>
+      )}
+      {state === 'ready' && run.done && parts.length === 0 && (
+        <p className="tool-card__note">{t('tool.subagentEmpty')}</p>
+      )}
+
+      <TurnParts parts={parts} streaming={!run.done} onApprove={onApprove} />
+    </section>
+  );
+}
+
+/**
+ * A subagent session's stored rows as the parts of one run.
+ *
+ * Its opening user message is dropped: it is the task, which the delegating
+ * card already shows as its argument, and repeating it inside the run would
+ * make every delegation read as though it had been asked twice.
+ */
+function partsOf(messages: readonly StoredMessage[]): readonly TurnPart[] {
+  return fromStoredMessages(messages).flatMap((item) => (item.kind === 'turn' ? item.parts : []));
+}
+
+/**
+ * A list of parts, in arrival order.
+ *
+ * One implementation for a turn and for a delegation, which is what makes a
+ * nested `exec` card identical to a top-level one — including its approval
+ * prompt, which is answered by the same frame wherever it is drawn.
+ */
+export function TurnParts({
+  parts,
+  streaming,
+  onApprove,
+  unanswered = false,
+}: {
+  readonly parts: readonly TurnPart[];
+  /** True while the list is still growing — only its last part can be live. */
+  readonly streaming: boolean;
+  readonly onApprove: ToolCardProps['onApprove'];
+  /** Expands reasoning on a turn that produced nothing else. */
+  readonly unanswered?: boolean;
+}): JSX.Element {
+  const last = parts.at(-1);
+  const hasAnswer = parts.some((part) => part.kind === 'text');
+
+  return (
+    <>
+      {parts.map((part) => {
+        const live = streaming && part === last;
+
+        switch (part.kind) {
+          case 'text':
+            return <Markdown key={part.id} text={part.text} streaming={live} />;
+
+          case 'reasoning':
+            return (
+              <ReasoningBlock
+                key={part.id}
+                text={part.text}
+                live={live && !hasAnswer}
+                expanded={unanswered}
+              />
+            );
+
+          case 'tool':
+            return <ToolCard key={part.id} tool={part} onApprove={onApprove} />;
+
+          case 'notice':
+            return <Notice key={part.id} kind={part.notice} message={part.message} />;
+        }
+      })}
+    </>
   );
 }
 

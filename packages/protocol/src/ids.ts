@@ -156,3 +156,24 @@ export function isAgentId(value: string): boolean {
 export function deriveAgentId(label: string): string {
   return slugify(label, { reserved: RESERVED_AGENT_IDS, fallback: 'agent' });
 }
+
+/** The prefix that keeps a subagent's tool name out of every other namespace. */
+export const SUBAGENT_TOOL_PREFIX = 'ask_';
+
+/**
+ * The tool name a model calls to hand work to a subagent.
+ *
+ * Derived rather than configured, so an operator cannot name two subagents the
+ * same thing and cannot shadow a built-in: an agent id is 1–40 lowercase
+ * alphanumerics and hyphens, so the prefixed form is 5–45 characters of
+ * `[a-z0-9_]` — inside `TOOL_NAME_PATTERN`'s 64, and never equal to a built-in
+ * name, none of which start with the prefix. The hyphens become underscores
+ * because a leading `ask_` already reads as a prefix and `ask_code-review` reads
+ * as two.
+ *
+ * It lives beside `deriveAgentId` because the browser needs it too: the editor
+ * shows the operator the name their agent will be called by.
+ */
+export function subagentToolName(agentId: string): string {
+  return `${SUBAGENT_TOOL_PREFIX}${agentId.replaceAll('-', '_')}`;
+}

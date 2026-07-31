@@ -19,6 +19,7 @@ import * as messages from './messages.js';
 import * as toolbox from './toolbox.js';
 import * as rest from './rest.js';
 import * as tools from './tools.js';
+import * as subagent from './subagent.js';
 import * as ws from './ws.js';
 
 export const PROTOCOL_SCHEMAS = {
@@ -64,6 +65,8 @@ export const PROTOCOL_SCHEMAS = {
   AgentToolboxNetwork: config.AgentToolboxNetworkSchema,
   AgentToolbox: config.AgentToolboxSchema,
   AgentMemoryScope: config.AgentMemoryScopeSchema,
+  SubagentRef: config.SubagentRefSchema,
+  SubagentRunRef: subagent.SubagentRunRefSchema,
   AgentEntry: config.AgentEntrySchema,
   AudioConfig: config.AudioConfigSchema,
   RagConfig: config.RagConfigSchema,
@@ -133,6 +136,8 @@ export const PROTOCOL_SCHEMAS = {
   NoticeKind: ws.NoticeKindSchema,
   NoticeEvent: ws.NoticeEventSchema,
   TurnEndEvent: ws.TurnEndEventSchema,
+  NestedAgentEvent: ws.NestedAgentEventSchema,
+  SubagentEvent: ws.SubagentEventSchema,
   SessionStatusEvent: ws.SessionStatusEventSchema,
   SessionResetEvent: ws.SessionResetEventSchema,
   SessionReplayEvent: ws.SessionReplayEventSchema,
@@ -210,4 +215,4 @@ export const PROTOCOL_SCHEMAS = {
 export type ProtocolSchemaName = keyof typeof PROTOCOL_SCHEMAS;
 
 /** The modules the completeness test reflects over to catch unregistered exports. */
-export const SCHEMA_MODULES = { automation, config, messages, rest, tools, ws };
+export const SCHEMA_MODULES = { automation, config, messages, rest, subagent, tools, ws };

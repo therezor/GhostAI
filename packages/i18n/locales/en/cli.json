@@ -64,6 +64,7 @@
     "yesNoDefaultYes": "Y/n"
   },
   "render": {
+    "awaitingApproval": "{{tool}} is waiting for approval elsewhere",
     "steps_one": "{{count}} step",
     "steps_other": "{{count}} steps",
     "stopReasons": {
@@ -71,6 +72,10 @@
       "error": "failed",
       "max_iterations": "stopped at the tool-iteration cap",
       "wall_timeout": "stopped at the turn time cap"
+    },
+    "subagent": {
+      "done": "{{agent}} finished",
+      "start": "asking {{agent}}"
     }
   },
   "serve": {

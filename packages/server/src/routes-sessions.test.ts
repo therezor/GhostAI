@@ -332,7 +332,7 @@ describe('GET /api/sessions/:key/messages', () => {
       headers: test.headers,
     });
 
-    expect(response.json()).toEqual({ sessionKey: 'web-1', messages: [] });
+    expect(response.json()).toEqual({ sessionKey: 'web-1', messages: [], subagentRuns: {} });
   });
 });
 
