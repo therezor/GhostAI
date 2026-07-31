@@ -121,7 +121,7 @@ test.describe('workspaces', () => {
 
     // The files came with it, and are reachable under the new folder alone.
     await app.goto(`${harness.url}/files?workspace=acme24`);
-    await expect(app.getByRole('button', { name: 'brief.md', exact: true })).toBeVisible();
+    await expect(app.getByRole('link', { name: 'brief.md', exact: true })).toBeVisible();
 
     // And so did the conversation, which would otherwise resolve to a folder
     // that is not there any more.
@@ -165,17 +165,17 @@ test.describe('workspaces', () => {
 
     // Default is the parent of the others, so it sees them as folders — which
     // is the layout working, not a leak.
-    await expect(app.getByRole('button', { name: 'acme', exact: true })).toBeVisible();
+    await expect(app.getByRole('link', { name: 'acme', exact: true })).toBeVisible();
 
     await switchTo(app, 'Acme');
-    await expect(app.getByRole('button', { name: 'acme-only.md', exact: true })).toBeVisible();
-    await expect(app.getByRole('button', { name: 'research-only.md', exact: true })).toHaveCount(0);
+    await expect(app.getByRole('link', { name: 'acme-only.md', exact: true })).toBeVisible();
+    await expect(app.getByRole('link', { name: 'research-only.md', exact: true })).toHaveCount(0);
 
     await switchTo(app, 'Research');
-    await expect(app.getByRole('button', { name: 'research-only.md', exact: true })).toBeVisible();
+    await expect(app.getByRole('link', { name: 'research-only.md', exact: true })).toBeVisible();
     // The assertion the query key exists for: a cached listing from the
     // previous workspace would still be on screen here.
-    await expect(app.getByRole('button', { name: 'acme-only.md', exact: true })).toHaveCount(0);
+    await expect(app.getByRole('link', { name: 'acme-only.md', exact: true })).toHaveCount(0);
   });
 
   test('the workspace survives a reload, because it is in the URL', async ({ app, harness }) => {
@@ -188,10 +188,10 @@ test.describe('workspaces', () => {
     });
 
     await app.goto(`${harness.url}/files?workspace=acme`);
-    await expect(app.getByRole('button', { name: 'acme-only.md', exact: true })).toBeVisible();
+    await expect(app.getByRole('link', { name: 'acme-only.md', exact: true })).toBeVisible();
 
     await app.reload();
-    await expect(app.getByRole('button', { name: 'acme-only.md', exact: true })).toBeVisible();
+    await expect(app.getByRole('link', { name: 'acme-only.md', exact: true })).toBeVisible();
   });
 
   test('a workspace with conversations cannot be deleted until they move', async ({

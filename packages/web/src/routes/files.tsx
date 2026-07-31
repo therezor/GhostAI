@@ -10,9 +10,13 @@
  *
  * The decisions:
  *
- *  - **The directory is in the URL.** A file browser whose location lives in
- *    component state loses it on reload, cannot be linked, and turns the
- *    browser's own Back button into a way to leave the page entirely.
+ *  - **The directory is in the URL, and so is the file open on top of it.** A
+ *    file browser whose location lives in component state loses it on reload,
+ *    cannot be linked, and turns the browser's own Back button into a way to
+ *    leave the page entirely. Putting the open file there too is what lets both
+ *    kinds of row be an `<a href>` — the same control Agents, Workspaces and
+ *    Providers give their rows — instead of a `<button>` that opens a dialog
+ *    only this component knows about.
  *  - **Filter and sort are not.** They are how the current view is being read,
  *    not where the reader is, and a URL that changed on every keystroke would
  *    fill the history with states nobody wants to walk back through.
@@ -29,7 +33,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useSearch } from '@tanstack/react-router';
+import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import {
   File as FileIcon,
   FilePlus,
@@ -41,7 +45,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState, type DragEvent, type JSX } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { FileEntry } from '@ghostai/protocol';
@@ -96,7 +100,7 @@ type NewKind = 'file' | 'directory';
 export function FilesRoute(): JSX.Element {
   const { t } = useTranslation();
   const fmt = useFormat();
-  const { path, workspace: fromUrl } = useSearch({ from: '/files' });
+  const { path, workspace: fromUrl, file: openPath } = useSearch({ from: '/files' });
   const { workspaceId } = useWorkspace();
   // The URL wins when it has one, so a link to a file is complete and
   // shareable — this page's own doctrine is that its location lives in the
@@ -106,7 +110,6 @@ export function FilesRoute(): JSX.Element {
   const queryClient = useQueryClient();
 
   const directory = normalisePath(path ?? ROOT_PATH);
-  const [preview, setPreview] = useState<FileEntry | undefined>(undefined);
   const [previewDirty, setPreviewDirty] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<FileEntry | undefined>(undefined);
@@ -128,6 +131,36 @@ export function FilesRoute(): JSX.Element {
   const refresh = (): void => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.files(workspace, directory) });
   };
+
+  /**
+   * This page's address, written in one place.
+   *
+   * Every row, every menu item and every close builds its destination through
+   * here, because a search object in TanStack Router *replaces* the whole query
+   * string rather than merging into it — a hand-written `{ file }` somewhere
+   * would silently drop the workspace and the directory with it.
+   */
+  const searchFor = (file?: string): { path?: string; workspace: string; file?: string } => ({
+    // `path` is omitted at the root rather than sent as `.`: the parameter's
+    // default only applies when it is absent, and a URL that says `?path=` for
+    // "the top of the workspace" is a longer way of saying nothing.
+    ...(directory === ROOT_PATH ? {} : { path: directory }),
+    workspace,
+    ...(file === undefined ? {} : { file }),
+  });
+
+  /**
+   * The file the URL says is open, resolved against the listing.
+   *
+   * From `listing.data` rather than the filtered rows, so typing in the filter
+   * box does not close the dialog over it. A path that is not in this directory
+   * — a stale link, a file someone else deleted — resolves to nothing and the
+   * dialog simply does not open, which is the same answer the row would give.
+   */
+  const preview = useMemo(
+    () => listing.data?.entries.find((entry) => entry.path === openPath && !entry.isDirectory),
+    [listing.data, openPath],
+  );
 
   const upload = useMutation({
     mutationFn: async (files: readonly File[]) => {
@@ -157,6 +190,10 @@ export function FilesRoute(): JSX.Element {
       toast.success(`Deleted ${entry.name}`);
       setPendingDelete(undefined);
       refresh();
+      // The dialog would close on its own once the row is gone from the
+      // listing, but the address would keep naming a file that no longer
+      // exists — and that address is what a reload and a shared link read.
+      if (openPath === entry.path) void navigate({ to: '/files', search: searchFor() });
     },
     onError: (error: Error) => {
       toast.error('Could not delete it', error.message);
@@ -191,7 +228,7 @@ export function FilesRoute(): JSX.Element {
       refresh();
       toast.success(`Created ${entry.name}`);
       // Straight into it, which is the only reason to have made it.
-      if (kind === 'file') setPreview(entry);
+      if (kind === 'file') void navigate({ to: '/files', search: searchFor(entry.path) });
     },
     onError: (error: Error) => {
       toast.error('Could not create it', error.message);
@@ -216,7 +253,9 @@ export function FilesRoute(): JSX.Element {
       toast.success(`Renamed to ${entry.name}`);
       // An open preview is now pointing at a path that no longer exists, so it
       // follows the file rather than silently 404ing on the next save.
-      setPreview((current) => (current?.path === previous.path ? entry : current));
+      if (openPath === previous.path) {
+        void navigate({ to: '/files', search: searchFor(entry.path) });
+      }
     },
     onError: (error: Error) => {
       toast.error('Could not rename it', error.message);
@@ -228,11 +267,21 @@ export function FilesRoute(): JSX.Element {
     setPreviewDirty(dirty);
   }, []);
 
+  /** Closing is a navigation now: the open file is a search parameter. */
   const closePreview = (): void => {
-    setPreview(undefined);
     setPreviewDirty(false);
     setDiscarding(false);
+    void navigate({ to: '/files', search: searchFor() });
   };
+
+  // Whatever the last file's editor reported does not describe this one. Back,
+  // Forward and a link all change the open file without going through
+  // `closePreview`, so the reset belongs on the parameter rather than on the
+  // one path out that happens to be a button.
+  useEffect(() => {
+    setPreviewDirty(false);
+    setDiscarding(false);
+  }, [openPath]);
 
   const entries = useMemo(
     () => sortEntries(filterEntries(listing.data?.entries ?? [], filter), sort),
@@ -316,15 +365,9 @@ export function FilesRoute(): JSX.Element {
           describes the page rather than acting on the list. */}
       <Breadcrumbs
         path={directory}
-        onNavigate={(next) => {
+        workspace={workspace}
+        onNavigate={() => {
           setFilter('');
-          void navigate({
-            to: '/files',
-            search: {
-              ...(next === ROOT_PATH ? {} : { path: next }),
-              workspace,
-            },
-          });
         }}
       />
 
@@ -351,7 +394,11 @@ export function FilesRoute(): JSX.Element {
 
       {listing.isSuccess && (
         <div
-          className={cn('file-drop', dropping && 'file-drop--over')}
+          className={cn(
+            'file-drop',
+            total === 0 && 'file-drop--empty',
+            dropping && 'file-drop--over',
+          )}
           onDragOver={(event) => {
             event.preventDefault();
             setDropping(true);
@@ -367,7 +414,11 @@ export function FilesRoute(): JSX.Element {
           onDrop={onDrop}
         >
           {total === 0 ? (
-            <p className="page__note">{t('files.empty')}</p>
+            <div className="stack file-drop__empty">
+              <Upload />
+              <p className="file-drop__empty-title">{t('files.empty')}</p>
+              <p className="file-drop__empty-hint">{t('files.emptyHint')}</p>
+            </div>
           ) : entries.length === 0 ? (
             <p className="page__note">
               Nothing here matches “{filter}”. {String(total)} entries are hidden.
@@ -378,27 +429,31 @@ export function FilesRoute(): JSX.Element {
                 <DataListRow
                   key={entry.path}
                   primary={
-                    <button
-                      type="button"
+                    // One `<Link>` for both kinds, which is what every other
+                    // CRUD list in the app gives its rows. A directory changes
+                    // the listing and a file opens a dialog over it, but both
+                    // are a change of address here, so both are middle-
+                    // clickable, openable in a new tab, and reachable by Back.
+                    <Link
+                      to="/files"
+                      search={
+                        entry.isDirectory ? { path: entry.path, workspace } : searchFor(entry.path)
+                      }
                       className={cn(
                         'data-list__open',
                         entry.isDirectory && 'data-list__open--directory',
                       )}
                       onClick={() => {
-                        if (entry.isDirectory) {
-                          setFilter('');
-                          void navigate({
-                            to: '/files',
-                            search: { path: entry.path, workspace },
-                          });
-                        } else {
-                          setPreview(entry);
-                        }
+                        // The filter describes the listing being left. Going
+                        // into a directory is the same route, so the component
+                        // does not remount and would otherwise carry the filter
+                        // into a directory nobody typed it for.
+                        if (entry.isDirectory) setFilter('');
                       }}
                     >
                       {entry.isDirectory ? <Folder /> : <FileIcon />}
                       <span className="truncate">{entry.name}</span>
-                    </button>
+                    </Link>
                   }
                   meta={
                     <>
@@ -420,7 +475,7 @@ export function FilesRoute(): JSX.Element {
                               search: { path: entry.path, workspace },
                             });
                           } else {
-                            setPreview(entry);
+                            void navigate({ to: '/files', search: searchFor(entry.path) });
                           }
                         }}
                       >
@@ -556,12 +611,23 @@ export function FilesRoute(): JSX.Element {
   );
 }
 
+/**
+ * Where you are, and every step of the way back to the root.
+ *
+ * Links, like the rows under them: a crumb is a directory, a directory is an
+ * address, and a control that changes the address without an `href` cannot be
+ * opened in a second tab or told apart from a button by anything reading the
+ * page. `onNavigate` is what is left over — clearing the filter, which is view
+ * state and not part of the address.
+ */
 function Breadcrumbs({
   path,
+  workspace,
   onNavigate,
 }: {
   readonly path: string;
-  readonly onNavigate: (path: string) => void;
+  readonly workspace: string;
+  readonly onNavigate: () => void;
 }): JSX.Element {
   const { t } = useTranslation();
   const crumbs = breadcrumbs(path);
@@ -580,15 +646,17 @@ function Breadcrumbs({
                   {crumb.label}
                 </span>
               ) : (
-                <button
-                  type="button"
-                  className="breadcrumbs__link"
-                  onClick={() => {
-                    onNavigate(crumb.path);
+                <Link
+                  to="/files"
+                  search={{
+                    ...(crumb.path === ROOT_PATH ? {} : { path: crumb.path }),
+                    workspace,
                   }}
+                  className="breadcrumbs__link"
+                  onClick={onNavigate}
                 >
                   {crumb.label}
-                </button>
+                </Link>
               )}
             </li>
           );

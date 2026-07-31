@@ -1,37 +1,54 @@
 # GhostAI
 
-A self-hosted, security-first AI agent written in TypeScript. One process, one port, one SQLite file.
+**A self-hosted AI agent that reads your files and runs your commands — on your hardware, against your models, with nothing leaving the box.**
 
-- **Local-first models** — Ollama, LM Studio, llama.cpp, vLLM, or any OpenAI-compatible endpoint. Cloud providers (Anthropic, OpenAI, OpenRouter, Gemini) are opt-in.
-- **Web UI** — React + Vite over a hand-written token layer, dark and dense, served by the same process as the agent.
-- **Telegram bot** — the built-in chat channel; others arrive as plugins.
-- **MCP client _and_ server** — connect to any MCP server, and expose GhostAI's own tools to other agents.
-- **Security in the core** — encrypted credential vault, workspace jail, argv-only exec (never a shell), SSRF/DNS-rebinding guard, tool-output nonce wrapping, and per-tool approval prompts.
-- **Extensible** — a versioned plugin SDK for tools, channels, providers, TTS/STT, and embedders.
+Claw-style: the same tight tool loop the terminal coding agents run — model calls a tool, reads the result, calls the next one — but built as a _service_ rather than a terminal session. One process serves the agent, a web UI, a REST API and a WebSocket on a single port, and stores everything in one SQLite file.
 
-> **Status: pre-alpha.** Phases 1 and 2 are complete. `ghost chat` runs a turn end to end from a terminal; `ghost serve` puts the REST API, the WebSocket and every channel in front of the same agent; and the browser UI has chat, settings, files and notifications, behind an end-to-end suite that drives a real server in a real browser in both colour schemes. Phase 3 is next. See [Build plan](#build-plan) below.
+Point it at Ollama and it is fully offline. Point it at a container image you built yourself and it can run whatever is in it. It is built for long, tool-heavy work — recon and pen-test runs, codebase surgery, research sweeps, scheduled chores — on infrastructure you control.
+
+```bash
+pnpm install && pnpm build
+ghost serve
+```
 
 ---
 
-## Prerequisites
+## Why this one
 
-| Tool   | Version | Notes                                                                                 |
-| ------ | ------- | ------------------------------------------------------------------------------------- |
-| Node   | ≥ 22.11 | Uses the built-in `node:sqlite` module — no native SQLite dependency to compile       |
-| pnpm   | ≥ 10    | `npm i -g pnpm`                                                                       |
-| Ollama | any     | Optional, but needed to run the agent end to end. `ollama serve && ollama pull qwen3` |
+**It stays on your machine, and that is tested rather than promised.**
+Zero telemetry — a repo-wide grep for `telemetry|analytics|posthog|sentry|mixpanel` returns exactly one hit, and it is the comment in the test that forbids them. [`self-contained.test.ts`](packages/web/src/self-contained.test.ts) fails the build if a CDN link, a `preconnect` or a cross-origin stylesheet appears in the UI; fonts ship from npm. [`offline.spec.ts`](packages/e2e/src/tests/offline.spec.ts) blocks every foreign origin in a real browser and drives the whole app anyway. The server binds `127.0.0.1`, and a non-loopback bind with auth disabled **refuses to start**.
 
-## Getting started
+**Local models are the default, not the fallback.**
+Ollama, LM Studio, llama.cpp and vLLM ship in the registry with loopback defaults and live model listing. Cloud providers — OpenAI, Anthropic, Gemini, OpenRouter, DeepSeek, Groq, xAI — are opt-in, and `custom` takes any OpenAI-compatible endpoint. Two boxes running Ollama are two entries in one config file.
+
+**It is frugal with tokens on purpose.**
+The system prompt is split in two around the provider's cache prefix: a static half that is byte-identical for the life of a session, and a small runtime half at the tail. Tool definitions and the per-turn nonce are computed once per _turn_, not per iteration. The session key, the channel label and the iteration counter were deliberately deleted from the uncached half — the counter now prints only in the last three iterations, when it is actionable. A toolbox advertises a whole container of programs in about forty tokens, where tool schemas would cost sixty to eighty **each, on every request**. See [Prompts](docs/prompts.md).
+
+**Every prompt is yours.**
+Three templates — the identity prompt, the live-state block and the wrap-up sentence — live in config and are edited in the UI. `systemPrompt` **replaces** the built-in text; it is not appended to a hidden preamble. Leave one empty and you inherit improvements on upgrade; set it to a single space and the section is gone. A typo renders verbatim instead of silently deleting a line.
+
+**Permission is per tool, per agent.**
+`allow | ask | deny`, and a tool absent from the map is not enabled at all — it never reaches the definitions the model is sent. Risk bands seed a new agent and then decide nothing. An `ask` tool shows the operator the arguments before it runs, with once / this-session / always as the answer.
+
+**The security work is a package you can read.**
+Every decision about whether an agent may touch a path, reach a host, spawn a process or read a credential is in [`packages/security`](packages/security/src) and nowhere else, behind a 95%-line-and-branch coverage gate. Each guard's source explains the attack it closes and why the obvious approach does not work.
+
+---
+
+## Install
+
+| Tool   | Version | Why                                                             |
+| ------ | ------- | --------------------------------------------------------------- |
+| Node   | ≥ 22.11 | Uses the built-in `node:sqlite` — no native module to compile   |
+| pnpm   | ≥ 10    | `npm i -g pnpm`                                                 |
+| Ollama | any     | Optional. `ollama serve && ollama pull qwen3` for a local model |
+| Docker | any     | Optional. Only needed for [toolboxes](docs/toolboxes.md)        |
 
 ```bash
 pnpm install
-pnpm check      # typecheck + lint + test
-pnpm build
+pnpm build                                  # → packages/cli/dist/index.js
+pnpm --filter @ghostai/cli link --global    # gives you `ghost`
 ```
-
-## Running it
-
-`pnpm build` produces the `ghost` binary at `packages/cli/dist/index.js`. Link it (`pnpm --filter @ghostai/cli link --global`) or call it directly — the examples below use `ghost`.
 
 ### First run, from a browser
 
@@ -39,7 +56,7 @@ pnpm build
 ghost serve
 ```
 
-It starts even though nothing is configured, and prints a **one-time setup code**:
+It starts even with nothing configured, and prints a one-time setup code:
 
 ```
 GhostAI is listening.
@@ -48,7 +65,6 @@ GhostAI is listening.
   Auth       enabled
   Agent      not configured — add a provider in the UI, or run `ghost init`
   Workspace  /Users/you/.ghostai/workspace
-  UI         /path/to/packages/web/dist
 
 First run. Open the URL above and enter this one-time code:
 
@@ -57,35 +73,9 @@ First run. Open the URL above and enter this one-time code:
   It works once, and stops working as soon as you set a password.
 ```
 
-Open the URL, paste the code, and the wizard walks through a username, a password, a provider and a model. The username is prefilled with `ghost` and the password has to be at least 12 characters — what sits behind it is an agent that can read files and run commands on the host. The provider step fetches the model list from the endpoint itself, so on a machine running `ollama serve` the model question is a list rather than a text box.
+The wizard asks for a language, the code, a username and password, then a provider and a model. The provider step fetches the model list from the endpoint itself, so on a machine running `ollama serve` the model question is a list rather than a text box.
 
 Everything after the password is skippable. An install with no model still serves files, workspaces, settings and notifications — only chat is unavailable, and the composer says so and links to the panel that fixes it.
-
-### Signing in
-
-The login takes a username and a password. The username defaults to `ghost`; both are
-changed together from **Settings → Account**, which asks for the current password
-first — a session on its own is not enough to rotate the credential it was minted
-from. Changing either revokes every other session, which is the point.
-
-Guessing at it is throttled in two scopes at once, and they are asymmetric on purpose:
-
-| Scope                                       | After      | Backoff         | Caps at    |
-| ------------------------------------------- | ---------- | --------------- | ---------- |
-| One address                                 | 4 failures | doubles from 1s | 15 minutes |
-| The account, wherever the attempt came from | 4 failures | doubles from 1s | 30 seconds |
-
-The per-address scope handles one host hammering the form. The account scope is the
-one a botnet cannot spread out of: every guess lands in the same bucket regardless of
-origin, which caps the aggregate rate at roughly two a minute no matter how many
-addresses are in play. It caps _low_ deliberately — on a single-account server an
-unbounded lockout is a denial of service an attacker can trigger on purpose, so the
-operator's worst case is half a minute while the attacker's throughput is dead either
-way. Counters live in `ghost.db`, so a restart does not clear them.
-
-A wrong username and a wrong password give the same answer, in the same time: the
-password hash is verified on every attempt, against a decoy when the username does not
-match, so a failed login cannot be used to confirm an account name.
 
 ### First run, from a terminal
 
@@ -94,173 +84,135 @@ ghost init      # workspace, provider, model — same questions, no browser
 ghost chat      # talk to it
 ```
 
-`ghost init` needs a terminal; it refuses a pipe rather than reading EOF as an answer. Nothing is written until every question is answered.
+`ghost init` needs a real terminal; it refuses a pipe rather than reading EOF as an answer, and writes nothing until every question is answered. Both surfaces share one `ghost.db`, so a REPL conversation is the same row the browser sidebar lists.
 
 ### Where things live
 
-Everything is under `~/.ghostai`, or `$GHOSTAI_HOME` if that is set:
+Everything under `~/.ghostai`, or `$GHOSTAI_HOME`:
 
-| Path                       | What                                                                                    |
-| -------------------------- | --------------------------------------------------------------------------------------- |
-| `config.json`              | The settings tree. Safe to commit — credentials are never in it.                        |
-| `ghost.db`                 | Sessions, messages, auth, login throttling and notifications. One SQLite file.          |
-| `vault.json` + `vault.key` | The encrypted credential vault. The key moves to the OS keychain when one is available. |
-| `workspace/`               | The only directory the agent's file tools can reach.                                    |
+| Path                       | What                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------ |
+| `config.json`              | The settings tree. **Safe to commit** — credentials are never in it.                 |
+| `ghost.db`                 | Sessions, messages, turn stats, auth, login throttling, notifications, approvals.    |
+| `vault.json` + `vault.key` | The encrypted credential vault. The key moves to the OS keychain when there is one.  |
+| `workspace/`               | The only tree the agent's file tools can reach. Named workspaces are subdirectories. |
+| `toolboxes/`               | Installed toolbox manifests — beside the workspace, never inside it.                 |
+| `agents/`, `shared/`       | Per-agent and per-workspace state. Also outside the jail, on purpose.                |
 
-### Useful flags
+---
 
-| Flag                | Does                                                                                                     |
-| ------------------- | -------------------------------------------------------------------------------------------------------- |
-| `--host` / `--port` | Override the bind. A non-loopback host with `server.auth.enabled: false` refuses to start.               |
-| `--password`        | Set or rotate the login password without the wizard. Also read from `GHOSTAI_PASSWORD`.                  |
-| `--username`        | Set the login name, only alongside `--password`. Also read from `GHOSTAI_USERNAME`. Defaults to `ghost`. |
-| `--home <dir>`      | Use a different root, the same as `GHOSTAI_HOME`. Handy for a throwaway install.                         |
-| `--ui <dir>`        | Serve a UI built somewhere else.                                                                         |
+## What you get
 
-**Restart `ghost serve` after a UI build** — see [Working on the UI](#working-on-the-ui) for why.
+**A web UI** — chat with streaming answers, a collapsible reasoning block, a card per tool call with live progress, approval prompts showing the arguments before the call runs, and subagent runs nested inside the card that started them. Plus a file browser and editor, multiple workspaces, an agent editor, provider setup with live connection testing, and a context inspector that shows exactly what would be sent to the model and where the window went. Dark, light and system themes, all held to WCAG AA by a test that parses the real stylesheet. See [Web UI](docs/web-ui.md).
 
-### Providers
+**A CLI** — `ghost chat` as a one-shot, a pipe target or a REPL with slash commands for sessions, branching, editing, regeneration, workspaces and context. `ghost serve`, `ghost init`, `ghost toolbox`.
 
-`config.providers` is keyed by an **instance id** you choose, with `type` naming one of the providers in the registry. The same type can appear more than once, which is how two Ollama servers are configured:
+**An API** — REST and WebSocket on the same port, with an OpenAPI 3.1 document generated from the same Zod schemas the server validates against, served at `/api/openapi.json`. See [API](docs/api.md).
+
+---
+
+## How it works
+
+```
+protocol → core → { security, providers } → tools → agent → runtime → server → cli
+```
+
+Packages may only depend downward, and that is enforced mechanically rather than by review: pnpm's isolated `node_modules` means a package can only resolve `@ghostai/x` if it declares it, so an undeclared import fails to _resolve_, not merely to lint.
+
+A turn is an async generator. The caller drives it with `for await`; abandoning the iterator unwinds the turn through the same `finally` as an abort. Each iteration drains any steering the operator typed, rebuilds the small runtime half of the prompt, streams from the provider, and either finishes or runs the tool calls it got back. One `AbortSignal` threads from the HTTP request through the loop, the provider fetch, the tool and any child process — there is no second cancellation mechanism.
+
+Two invariants are worth knowing because they explain the rest: **history is append-only**, because a provider's prompt cache keys on an exact prefix, so only a suffix is ever dropped; and **a denied or cancelled tool call still gets a `tool` message**, because providers reject an assistant turn whose `tool_calls` went unanswered.
+
+[Architecture](docs/architecture.md) has the whole picture.
+
+---
+
+## Security posture
+
+| Guard                   | What it stops                                                                                                                                                                                                     |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Workspace jail**      | Path traversal. The workspace is a root: `/etc/passwd` addresses `<workspace>/etc/passwd`. Paths are rebuilt, then `realpath`'d, so an inside symlink pointing out is caught.                                     |
+| **Argv-only exec**      | Command injection. `execFile` with `shell: false`; a lint rule fails the build on `shell: true`. No metacharacter deny-list — with no shell, there is no string to interpret.                                     |
+| **Toolboxes**           | Blast radius. A digest-pinned container plus its whole policy, authorised by manifest hash. Caps dropped, root read-only, network mode capped by the manifest.                                                    |
+| **Per-tool permission** | An agent doing something you did not enable. Absent means not enabled; `ask` means the operator sees the arguments first.                                                                                         |
+| **`guardedFetch`**      | SSRF and DNS rebinding. Resolved addresses are pinned into the dispatcher, so there is no second lookup to differ from the first. Every redirect re-validated; credentials dropped on origin change.              |
+| **Nonce fencing**       | Prompt injection. Every tool result is wrapped in a delimiter carrying a fresh per-turn nonce, and the prompt says everything inside is inert. Detection raises a badge and passes content through byte-for-byte. |
+| **Credential vault**    | Key theft at rest. AES-256-GCM, `0600`, key in the OS keychain. Write-only over HTTP — nothing reads a credential back out.                                                                                       |
+| **Auth**                | Guessing. argon2id, and two asymmetric throttle scopes so a botnet cannot spread its attempts out. Wrong username and wrong password give the same answer in the same time.                                       |
+
+[Security](docs/security.md) explains each one and states its limits — including the one that matters: a workspace is an organisational boundary, not a security boundary, wherever host `exec` is enabled. That is what toolboxes are for.
+
+---
+
+## Configuration
+
+One JSON file, `~/.ghostai/config.json`. A missing file is normal — the schema produces a complete tree from `{}`. Every key has a documented default; [Configuration](docs/configuration.md) is the full reference.
 
 ```json
 {
-  "agents": { "defaults": { "provider": "ollama-gpu", "model": "qwen3:8b" } },
+  "agents": {
+    "defaults": { "provider": "ollama-gpu", "model": "qwen3:8b" },
+    "list": {
+      "researcher": {
+        "label": "Researcher",
+        "tools": { "read_file": "allow", "write_file": "allow", "exec": "allow" },
+        "toolbox": { "name": "web-research", "network": { "mode": "open" } }
+      }
+    }
+  },
   "providers": {
     "ollama": { "type": "ollama" },
-    "ollama-gpu": {
-      "type": "ollama",
-      "label": "GPU box",
-      "apiBase": "http://gpu.lan:11434/v1"
-    }
-  }
+    "ollama-gpu": { "type": "ollama", "label": "GPU box", "apiBase": "http://gpu.lan:11434/v1" }
+  },
+  "server": { "host": "127.0.0.1", "port": 3000 }
 }
 ```
 
-`agents.defaults.provider` names an instance, or `auto` to resolve one. API keys are not in this file — they go to the vault, keyed by the same instance id, so the two Ollama entries above can hold different tokens. A local endpoint may carry one too, for a model server behind an authenticating proxy.
+`providers` is keyed by an **instance id you choose**, with `type` naming a registry entry — which is how two Ollama servers become two entries. API keys are not in this file; they go to the vault under the same instance id, so the two entries above can hold different tokens.
 
-A `config.json` written before instances existed is migrated on load and rewritten in place: each key keeps its name and gains the matching `type`, so credentials already in the vault keep resolving.
-
-## Commands
-
-| Command                               | Does                                                                               |
-| ------------------------------------- | ---------------------------------------------------------------------------------- |
-| `pnpm check`                          | The full gate: `typecheck`, `lint`, `test`. Run this before every commit.          |
-| `pnpm typecheck`                      | `tsc -b` across all project references                                             |
-| `pnpm lint` / `pnpm lint:fix`         | ESLint with type-aware rules                                                       |
-| `pnpm format` / `pnpm format:check`   | Prettier                                                                           |
-| `pnpm test` / `pnpm test:watch`       | Vitest                                                                             |
-| `pnpm test:coverage`                  | Vitest with the per-package coverage gates enforced                                |
-| `pnpm --filter @ghostai/e2e test:e2e` | Playwright against a real server, in both colour schemes. Needs `pnpm build` first |
-| `pnpm build`                          | Turborepo build across the graph                                                   |
-| `node scripts/gen-packages.mjs`       | Regenerate package manifests after changing the package graph                      |
+Every key under `agents.defaults` is overridable per agent, and `agents.list.<id>` also carries the prompts, the tool permission map, the toolbox and the subagent list.
 
 ---
 
-## Repository layout
+## Roadmap
 
-```
-packages/
-  protocol/      Zod schemas → types + JSON Schema. Zero runtime deps.
-  core/          Canonical message types, MessageBus, SessionStore, Logger, Clock
-  security/      CredentialVault, WorkspaceJail, guardedFetch, exec argv guard
-  providers/     Provider registry table, wire adapters, withResilience()
-  tools/         defineTool, ToolRegistry, built-in tools
-  mcp/           McpHub (client) and McpServer (expose our tools)
-  memory/        ContextBuilder, three-tier memory, skills, profiles
-  rag/           Vector store, embedders, loaders, chunker, knowledge_search
-  agent/         AgentLoop, SubagentManager, context contributors
-  runtime/       Composition root: config → provider, jail, store, registry, loop
-  scheduler/     Cron/interval automation service + heartbeat agent
-  channels/      Channel contract, ChannelManager (Telegram in Phase 3)
-  plugin-sdk/    Public plugin contract. Zero deps. Semver-frozen.
-  plugin-host/   Discovery, manifest validation, lifecycle, capability gating
-  server/        Fastify: REST, WebSocket hub, auth, static, OpenAPI
-  web/           React SPA
-  cli/           bin: `ghost`
-plugins/         First-party plugins, published separately
-examples/        Loopback channel, plugin template, MCP fixture server
-scripts/         Repo tooling
-```
+The wire schemas, config blocks and seams for these already ship — which is why they appear in the settings tree and the UI. The implementations do not. [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) has the detail, one entry each.
 
-### Layering
+| Feature                    | Ships today                                                         | Missing                                      |
+| -------------------------- | ------------------------------------------------------------------- | -------------------------------------------- |
+| **MCP client**             | Config for all three transports, OAuth, `ToolSource: 'mcp'`         | The client, lifecycle and tool bridge        |
+| **Memory**                 | The tuning keys, `lastConsolidatedSeq`, the prompt contributor seam | The store, retrieval and consolidation pass  |
+| **Skills**                 | `pinnedSkills`, `maxPinnedSkills`                                   | The on-disk format, loader and prompt budget |
+| **RAG**                    | Embedder and chunking config, hybrid search constants               | The index, embedder client and retrieval     |
+| **Scheduled jobs**         | The whole automation vocabulary and the Settings panel slot         | The timer engine, store and routes           |
+| **Heartbeat**              | Interval, model, task file and target config                        | The loop. Depends on the two above           |
+| **Telegram**               | The `Channel` contract, `ChannelManager`, `TurnProjection`          | One adapter over the Bot API                 |
+| **Plugins**                | Load specs, `allowUnverified`, `unregisterBySource`                 | Discovery, loader and manifest format        |
+| **Browser slash commands** | The terminal's command table                                        | A shared table and the composer UI           |
+| **Session search**         | Keyset pagination and filters                                       | Text search over message content             |
 
-Packages may only depend downward:
-
-```
-protocol → core → { security, providers } → { tools, mcp, memory, rag } → agent → server → cli
-```
-
-This is enforced two ways, both mechanical:
-
-1. **pnpm's isolated `node_modules`.** A package can only resolve `@ghostai/x` if it declares it in `dependencies`. The manifests _are_ the layer graph — an undeclared import fails to resolve, not merely to lint.
-2. **`no-restricted-imports`** bans deep relative imports (`../../*`) that would sneak across a package boundary.
-
-The agent must never reach back into the HTTP server. Keep it that way.
+Two smaller ones, so nothing here reads as more finished than it is: only the `openai-chat` wire adapter exists, so `anthropic` is in the provider registry but reaches Anthropic through an OpenAI-compatible path rather than its native API; and the translation layer is complete while **English is the only shipped locale** — adding one is a folder plus a line.
 
 ---
 
-## Conventions
+## Contributing
 
-- **ESM only.** `"type": "module"` everywhere, `.js` extensions in relative imports (NodeNext resolution).
-- **`isolatedDeclarations` is on** everywhere except `protocol`. Every exported function needs an explicit return type; this keeps declaration emit fast and makes the public API surface reviewable in diffs. `protocol` is the one exception, because a Zod schema export _is_ an inference result and cannot carry a hand-written annotation without recreating the drift the schemas exist to prevent.
-- **`tsup` owns the JavaScript, `tsc -b` owns the types.** `emitDeclarationOnly` keeps `tsc` from overwriting the bundle, and `clean: false` keeps `tsup` from deleting the declarations. `pnpm build` runs both, in that order. Delete `dist` to force a full rebuild.
-- **Zod is the single source of truth** for config, wire messages, and tool parameters. Types come from `z.infer`; JSON Schema comes from `z.toJSONSchema`. Never hand-write a type that a schema could produce.
-- **Errors are values, not strings.** Never branch on substrings of an error message. Return a typed discriminated union with a `kind` field.
-- **One cancellation mechanism.** A single `AbortSignal` threads from the request through the loop, the provider fetch, tool execution, and any child process. No parallel `_running` flags or bespoke timeouts.
-- **No shell, ever.** The exec tool takes `argv: string[]` and calls `execFile` with `shell: false`. A lint rule fails the build on `shell: true`.
-- **No `Math.random()`.** Inject a generator so tests are deterministic; use `node:crypto` for anything security-relevant. Also lint-enforced.
-- **Injected `Clock` and `fetch`.** Tests use fake timers and a mock dispatcher; nothing sleeps and nothing touches the network.
+`pnpm check` is **not** the CI gate — it misses `format:check`, the design token gates, `i18n:check`, `build`, coverage and e2e. The real gate is [`.github/workflows/ci.yml`](.github/workflows/ci.yml), and [Development](docs/development.md) walks through running all of it, plus the conventions, the coverage bars and the UI workflow.
 
-### Coverage gates
+## Documentation
 
-Enforced by `pnpm test:coverage`, blocking in CI:
-
-| Package                     | Lines | Branches |
-| --------------------------- | ----- | -------- |
-| `security`                  | 95    | 95       |
-| `core`                      | 90    | 85       |
-| `agent`                     | 85    | 80       |
-| `channels`                  | 90    | 85       |
-| `server`                    | 85    | 80       |
-| `providers`, `mcp`, `tools` | 80    | 75       |
-| everything else             | 70    | 65       |
-
-`security` carries the strictest bar because an untested branch there is a vulnerability, not just a bug.
-
----
-
-## Build plan
-
-The phase-by-phase build order, with the done-criterion for each step and the notes each completed step left for the ones after it, lives in [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md).
-
-Phase 1 — the agent working from a terminal — is done, and so is Phase 2: the Fastify server and the React web UI in front of it. Phase 3 adds the full provider table, the MCP client, memory and skills, and Telegram.
-
----
-
-## Working on the UI
-
-**There is no CSS framework.** `packages/web/src/styles/` is hand-written CSS in five cascade layers — `reset`, `base`, `layout`, `components`, `screens` — declared in that order at the top of `app.css`. A component names what it _is_ (`.tool-card`, `.sidebar__link`) and the stylesheet says what that looks like; `cn()` joins class names and nothing resolves conflicts, because a screen rule already beats a component rule by layer rather than by specificity.
-
-`styles/tokens.css` is the vocabulary all of it is written in, and the only file allowed to contain a raw colour or a `px` literal. Three gates enforce that (`pnpm --filter @ghostai/web lint`), and `tokens/contrast.test.ts` resolves the sheet for both themes and holds every text-on-surface pairing to WCAG AA — so a seed edit that darkens text past the line fails the suite rather than shipping. `/tokens` in the running app renders every token and every primitive on one page, which is the fastest way to see what a change did.
-
-Three more things worth knowing before the first hour is spent on any of them.
-
-**Restart `ghost serve` after a UI build.** It enumerates the UI directory once, at boot (`@fastify/static` with `wildcard: false`), so a rebuild underneath a running server serves the new `index.html` and 404s its hashed assets into the SPA fallback. The result is a blank page that looks like a crash and is not one. For an edit-reload loop, run `pnpm --filter @ghostai/web dev` instead — the Vite dev server proxies `/api` and `/ws` to `ghost serve` on the default port.
-
-**The end-to-end suite drives the built bundle**, so `pnpm build` is a precondition rather than a convenience:
-
-```bash
-pnpm build
-pnpm --filter @ghostai/e2e exec playwright install chromium   # once
-pnpm --filter @ghostai/e2e test:e2e
-```
-
-Every spec boots its own server in-process against a scripted model, so nothing reaches the network and nothing shares state. The colour scheme is a Playwright project, which means every assertion runs twice — reviewing only in dark is how a light theme ships broken.
-
-The design-fidelity gate compares the shell's geometry and colour ramps against a checkout of the product being replaced. It is not in this repository and is not required: point `GHOSTAI_FIDELITY_ORIGINAL` at it to run the gate, and `pnpm --filter @ghostai/e2e baseline` to write the side-by-side captures. Without it the gate skips.
-
----
+| Page                                   | What                                                     |
+| -------------------------------------- | -------------------------------------------------------- |
+| [Architecture](docs/architecture.md)   | Packages, the turn, events, subagents, persistence       |
+| [Configuration](docs/configuration.md) | Every config key, its type and its default               |
+| [Prompts](docs/prompts.md)             | The three templates, placeholders, and the caching split |
+| [Providers](docs/providers.md)         | The registry, instances, resolution, resilience          |
+| [Tools & permissions](docs/tools.md)   | The built-ins, and who is allowed to call them           |
+| [Toolboxes](docs/toolboxes.md)         | Container sandboxes, manifests and approval              |
+| [Security](docs/security.md)           | Each guard, the attack it closes, and its limits         |
+| [API](docs/api.md)                     | REST and WebSocket                                       |
+| [Web UI](docs/web-ui.md)               | The screens and what they do                             |
+| [Development](docs/development.md)     | The CI gate, conventions, coverage, the UI loop          |
 
 ## License
 

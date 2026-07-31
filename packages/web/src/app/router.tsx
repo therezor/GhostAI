@@ -72,6 +72,15 @@ const filesSearchSchema = z.object({
    * shareable link. Absent means "whatever the switcher is on".
    */
   workspace: z.string().optional(),
+  /**
+   * The file open on top of that listing, if one is.
+   *
+   * Here for the reason the directory is, and for one more: it is what lets a
+   * row be an `<a href>` like every other CRUD list in the app. A dialog whose
+   * subject lives in component state can only be opened by a `<button>` — not
+   * middle-clickable, not openable in a new tab, and gone on reload.
+   */
+  file: z.string().optional(),
 });
 const settingsSearchSchema = z.object({ panel: z.string().optional() });
 

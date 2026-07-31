@@ -1,0 +1,133 @@
+# Tools and permissions
+
+## The built-ins
+
+Five, and the count is deliberate: anything expressible as a command is `exec`'s job. A
+`grep` tool would be a worse `rg`, and a `move_file` tool would be a worse `mv`.
+
+| Tool         | Args                                        | Risk band | Does                                                           |
+| ------------ | ------------------------------------------- | --------- | -------------------------------------------------------------- |
+| `read_file`  | `path`, `offset?`, `limit?`                 | `safe`    | Reads a file in the workspace.                                 |
+| `list_dir`   | `path`, `recursive?`, `maxEntries?`         | `safe`    | Lists a directory.                                             |
+| `write_file` | `path`, `content`                           | `write`   | Creates or overwrites.                                         |
+| `edit_file`  | `path`, `oldText`, `newText`, `replaceAll?` | `write`   | Exact-match replacement.                                       |
+| `exec`       | `argv: string[]`, `timeoutMs?`              | `exec`    | Runs a program — on the host, or in a [toolbox](toolboxes.md). |
+
+All file paths resolve inside the workspace jail; see [Security](security.md). `exec`
+takes an argv array, never a command string.
+
+Setting `tools.exec.enable: false` removes `exec` from the definitions entirely rather
+than advertising a tool that will refuse — a model told about a tool that always fails
+spends iterations rediscovering that.
+
+More tools arrive two ways: from a [toolbox](toolboxes.md) that declares its programs, and
+from a subagent, which appears as `ask_<id>` (see
+[Architecture](architecture.md#subagents)).
+
+### Defining one
+
+One Zod object is the only copy of a tool's shape. JSON Schema for the model is generated
+from it, arguments are validated against it, and the handler's argument type is inferred
+from it — a hand-written type could drift from the schema, and the drift would show up as
+a model call that validates and then crashes.
+
+Numbers coerce, because models emit `"10"` as often as `10`.
+
+`ToolRegistry.execute` **never throws**. A failure comes back as a result carrying
+`isError` and an error kind, because a throw at that point would take down the turn rather
+than letting the model read what went wrong and try something else. `definitions()` is
+memoised and sorted by name, so the prompt prefix a provider caches does not shuffle
+between requests.
+
+Every registration carries a source — `builtin`, `mcp` or `plugin` — so uninstalling a
+plugin can remove exactly its tools, with no module-cache surgery and no restart.
+
+## Permissions
+
+**Per tool, per agent, and one map rather than a selection plus a policy.**
+
+```json
+"tools": { "read_file": "allow", "list_dir": "allow", "exec": "ask" }
+```
+
+| Value    | Means                                                                        |
+| -------- | ---------------------------------------------------------------------------- |
+| `allow`  | Runs unattended.                                                             |
+| `ask`    | The operator sees the arguments and answers before it runs.                  |
+| `deny`   | Refused, with a result the model can read.                                   |
+| _absent_ | **Not enabled at all** — it never reaches the definitions sent to the model. |
+
+Enabling a tool and choosing its permission are one act. The alternative — a selection
+list plus a separate policy table — is how a newly created agent quietly ends up holding
+every tool the registry happens to carry.
+
+Note this is the opposite convention to `tools.exec.allowedBinaries`, where empty means
+"anything not denied". That is deliberate: an allow-list of _binaries_ narrows a tool the
+operator already turned on, while this is the list of tools themselves.
+
+A new agent is not born empty either — it is seeded with the file tools on `allow` and
+`exec` on `ask`, because an agent that can do nothing looks broken to whoever just made
+it. That seeding is the only place a risk band becomes a permission, and it happens once,
+at creation, where it is visible and editable.
+
+### Risk bands decide nothing
+
+`safe`, `write`, `exec` and `network` are metadata. They badge the tool card and the
+approval prompt so an operator can see at a glance what class of thing is being asked
+for, and they seed a new agent's map. **Nothing reads a band at call time.** There used to
+be a risk-band-to-policy table in config; it was replaced by the per-agent map because a
+band is a property of a tool and a permission is a property of a deployment.
+
+### Where the check happens
+
+Between the `tool.call` event and execution — the one point every transport shares. The
+browser, the CLI and a channel all get the same enforcement without each implementing it.
+
+The split of responsibility is worth knowing:
+
+- **The loop decides whether to ask.** It reads the agent's map, emits
+  `tool.approvalRequest` for `ask`, and owns the deadline.
+- **The gate decides the answer.** It is whatever the transport installed.
+
+**With no gate installed, `ask` runs the tool.** That is what keeps `ghost chat` in a
+terminal unchanged — the operator typing the request _is_ the approval, and a prompt with
+no UI to answer it would deadlock. Any transport that exposes the agent beyond its
+operator's keyboard must install a gate; the server does.
+
+### Answering
+
+An approval prompt takes one of three scopes:
+
+| Scope     | Remembered                                                                                                                                                                     |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `once`    | Not at all.                                                                                                                                                                    |
+| `session` | For the conversation, keyed on the **root** session — so answering "this session" inside a subagent means the conversation you are looking at, not the one-delegation session. |
+| `always`  | Per agent, for the life of the process. A standing "always allow `exec`" on a permissive agent must not pre-approve it for a locked-down one.                                  |
+
+**A refusal is remembered exactly like an approval.** Denying `always` is a real answer.
+
+Standing approvals are dropped when an agent is deleted and carried across a rename.
+
+### Timeouts and denial
+
+`tools.approvalTimeoutMs` (default 5 minutes) is a property of the deployment, and the
+loop owns it rather than the gate — a gate that hangs must not hang the turn. A gate that
+throws denies.
+
+Three denial reasons, and they are phrased for two different readers: `policy`,
+`declined`, `timeout`. The model gets a tool result worded to stop it retrying the same
+call; the operator gets a notice worded for a human.
+
+**An abort during an approval is a cancellation, not a denial.** They have different
+consequences for the turn, and conflating them means a stopped turn looks to the model
+like a refused tool.
+
+Either way the call still produces a `tool` message — providers reject an assistant turn
+whose `tool_calls` went unanswered.
+
+## Auditing
+
+Every tool call and result is stored in the session, and every turn records its model,
+provider, iterations, stop reason and token counts. For `exec`, the argv is recorded as
+argv — there is no command string to reconstruct or mis-quote, and the record survives the
+command running inside a container.

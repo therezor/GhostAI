@@ -30,9 +30,64 @@
     border-radius: var(--radius-md);
   }
 
+  /* The clearance every other screen gets from `.list-toolbar + p`.
+   *
+   * That selector stopped matching here the day the listing was wrapped in a
+   * drop target: the element after the rule is this box, not the sentence
+   * inside it, so the first row sat against the toolbar's border with nothing
+   * between them. A margin rather than padding, because the toolbar's negative
+   * bottom margin is what the gap is being measured from — see
+   * `components/data-list.css`. */
+  .list-toolbar + .file-drop {
+    margin-top: var(--space-3);
+  }
+
+  /* An empty directory is the one state where the target has to look like one.
+   *
+   * With rows in it there is something to aim at and a dashed box drawn around
+   * a list would be a second frame saying nothing; the edge only shows itself
+   * under a drag. With nothing in it, the previous version offered one line of
+   * grey text a few pixels below a rule — no target, no size, and no sign that
+   * the sentence naming a drop meant the space beneath it. So the box draws
+   * itself, at a height worth throwing a file at. */
+  .file-drop--empty {
+    display: grid;
+    place-items: center;
+    min-height: 16rem;
+    padding: var(--space-12) var(--space-6);
+    border-color: var(--line-strong);
+  }
+
+  /* After `--empty`, so a drag wins the border it shares with it. */
   .file-drop--over {
     border-color: var(--accent-fg);
     background-color: var(--accent-soft);
+  }
+
+  .file-drop__empty {
+    --gap: var(--space-2);
+
+    align-items: center;
+    max-width: 32rem;
+    text-align: center;
+  }
+
+  /* `--size-icon-md`, not a bigger one drawn for this box: the scale has two
+   * steps and an empty state is not a reason to add a third. */
+  .file-drop__empty > svg {
+    width: var(--size-icon-md);
+    height: var(--size-icon-md);
+    color: var(--fg-3);
+  }
+
+  .file-drop__empty-title {
+    color: var(--fg-2);
+  }
+
+  .file-drop__empty-hint {
+    color: var(--fg-3);
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
   }
 
   /* ── Breadcrumbs ───────────────────────────────────────────── */

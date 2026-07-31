@@ -158,7 +158,7 @@ describe('the file browser', () => {
   it('lists the workspace root and asks for it as `.`', async () => {
     const { calls } = mount();
 
-    expect(await screen.findByRole('button', { name: 'notes.md' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'notes.md' })).toBeInTheDocument();
     expect(screen.getByText('2.0 kB')).toBeInTheDocument();
 
     // `''` would reach the jail as an empty path: the query parameter's default
@@ -170,30 +170,77 @@ describe('the file browser', () => {
   it('navigates into a directory, and back out through the breadcrumb', async () => {
     const { user, router } = mount();
 
-    await user.click(await screen.findByRole('button', { name: 'notes' }));
-    expect(await screen.findByRole('button', { name: 'a.txt' })).toBeInTheDocument();
+    // A link, like every other CRUD row in the app: opening one changes the
+    // address, so it has to survive a middle-click and a new tab.
+    const folder = await screen.findByRole('link', { name: 'notes' });
+    expect(folder).toHaveAttribute('href', expect.stringContaining('path=notes'));
+
+    await user.click(folder);
+    expect(await screen.findByRole('link', { name: 'a.txt' })).toBeInTheDocument();
     expect(router.state.location.searchStr).toContain('path=notes');
 
     const trail = screen.getByRole('navigation', { name: 'Breadcrumb' });
-    await user.click(within(trail).getByRole('button', { name: 'workspace' }));
+    await user.click(within(trail).getByRole('link', { name: 'workspace' }));
 
-    expect(await screen.findByRole('button', { name: 'notes.md' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'notes.md' })).toBeInTheDocument();
     expect(router.state.location.searchStr).not.toContain('path=');
+  });
+
+  it('opens a file through the address, so its row is a link like every other', async () => {
+    const { user, router } = mount();
+
+    const file = await screen.findByRole('link', { name: 'notes.md' });
+    // The href is the whole point of the row being an `<a>`: a dialog held in
+    // component state cannot be opened in a second tab or reloaded back into.
+    expect(file).toHaveAttribute('href', expect.stringContaining('file=notes.md'));
+
+    await user.click(file);
+    expect(await screen.findByRole('dialog')).toHaveTextContent('notes.md');
+    expect(router.state.location.searchStr).toContain('file=notes.md');
+  });
+
+  it('opens the file the address names on a cold load', async () => {
+    mount('/files?file=notes.md');
+
+    expect(await screen.findByRole('textbox', { name: 'Contents of notes.md' })).toBeVisible();
+  });
+
+  it('takes the file back out of the address when the dialog closes', async () => {
+    const { user, router } = mount('/files?file=notes.md');
+    await screen.findByRole('textbox', { name: 'Contents of notes.md' });
+
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => {
+      expect(router.state.location.searchStr).not.toContain('file=');
+    });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('offers the whole empty directory as somewhere to drop a file', async () => {
+    mount('/files', {
+      'GET /api/files': [200, { path: '', entries: [] }],
+    });
+
+    // Not a sentence under a rule: with no rows there is nothing to aim a file
+    // at, so the target is the thing that has to be visible.
+    expect(await screen.findByText('This directory is empty.')).toBeInTheDocument();
+    expect(document.querySelector('.file-drop--empty')).not.toBeNull();
   });
 
   it('shows the trail down to the directory it is in', async () => {
     mount('/files?path=notes');
 
     const trail = await screen.findByRole('navigation', { name: 'Breadcrumb' });
-    expect(within(trail).getByRole('button', { name: 'workspace' })).toBeInTheDocument();
+    expect(within(trail).getByRole('link', { name: 'workspace' })).toBeInTheDocument();
     // The current directory is text, not a link to where it already is.
-    expect(within(trail).queryByRole('button', { name: 'notes' })).not.toBeInTheDocument();
+    expect(within(trail).queryByRole('link', { name: 'notes' })).not.toBeInTheDocument();
     expect(trail).toHaveTextContent('notes');
   });
 
   it('uploads into the directory being looked at', async () => {
     const { user, calls } = mount('/files?path=notes');
-    await screen.findByRole('button', { name: 'a.txt' });
+    await screen.findByRole('link', { name: 'a.txt' });
 
     const file = new File(['hello'], 'report.txt', { type: 'text/plain' });
     await user.upload(screen.getByLabelText('Upload files'), file);
@@ -212,7 +259,7 @@ describe('the file browser', () => {
 
   it('asks before deleting, and sends nothing when the answer is no', async () => {
     const { user, calls } = mount();
-    await screen.findByRole('button', { name: 'notes.md' });
+    await screen.findByRole('link', { name: 'notes.md' });
 
     await deleteFrom(user, 'notes.md');
     const dialog = await screen.findByRole('dialog');
@@ -224,7 +271,7 @@ describe('the file browser', () => {
 
   it('deletes the file the dialog named', async () => {
     const { user, calls } = mount();
-    await screen.findByRole('button', { name: 'notes.md' });
+    await screen.findByRole('link', { name: 'notes.md' });
 
     await deleteFrom(user, 'notes.md');
     const dialog = await screen.findByRole('dialog');
@@ -238,7 +285,7 @@ describe('the file browser', () => {
 
   it('counts what a folder holds before asking to delete it', async () => {
     const { user, calls } = mount();
-    await screen.findByRole('button', { name: 'notes.md' });
+    await screen.findByRole('link', { name: 'notes.md' });
 
     await deleteFrom(user, 'notes');
     const dialog = await screen.findByRole('dialog');
@@ -262,7 +309,7 @@ describe('the file browser', () => {
 
   it('does not ask a file to recurse', async () => {
     const { user, calls } = mount();
-    await screen.findByRole('button', { name: 'notes.md' });
+    await screen.findByRole('link', { name: 'notes.md' });
 
     await deleteFrom(user, 'notes.md');
     await user.click(
@@ -278,7 +325,7 @@ describe('the file browser', () => {
   it('previews an image through a signed URL rather than a public route', async () => {
     const { user, calls } = mount();
 
-    await user.click(await screen.findByRole('button', { name: 'shot.png' }));
+    await user.click(await screen.findByRole('link', { name: 'shot.png' }));
 
     const image = await screen.findByRole('img', { name: 'shot.png' });
     expect(image).toHaveAttribute('src', '/api/media/tok');
@@ -293,7 +340,7 @@ describe('the file browser', () => {
   it('reads a text file into the page rather than framing it', async () => {
     const { user } = mount();
 
-    await user.click(await screen.findByRole('button', { name: 'notes.md' }));
+    await user.click(await screen.findByRole('link', { name: 'notes.md' }));
 
     // The workspace holds model-authored files; an iframe would execute one.
     expect(await screen.findByDisplayValue(/hello from the workspace/)).toBeInTheDocument();
@@ -315,7 +362,7 @@ describe('the file browser', () => {
 
 /** Opens `notes.md` and hands back its textarea. */
 async function openEditor(user: ReturnType<typeof userEvent.setup>): Promise<HTMLElement> {
-  await user.click(await screen.findByRole('button', { name: 'notes.md' }));
+  await user.click(await screen.findByRole('link', { name: 'notes.md' }));
   return await screen.findByRole('textbox', { name: 'Contents of notes.md' });
 }
 
@@ -445,7 +492,7 @@ describe('the file editor', () => {
       ],
     });
 
-    await user.click(await screen.findByRole('button', { name: 'script.py' }));
+    await user.click(await screen.findByRole('link', { name: 'script.py' }));
 
     expect(await screen.findByDisplayValue('print("hi")')).toBeInTheDocument();
     expect(calls.some((call) => call.path === '/api/files/text')).toBe(true);
@@ -459,7 +506,7 @@ describe('the file editor', () => {
       ],
     });
 
-    await user.click(await screen.findByRole('button', { name: 'notes.md' }));
+    await user.click(await screen.findByRole('link', { name: 'notes.md' }));
 
     expect(await screen.findByText(/not text/)).toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: /Contents of/ })).not.toBeInTheDocument();
@@ -473,7 +520,7 @@ describe('the file editor', () => {
 describe('creating entries', () => {
   it('creates a folder in the directory being looked at', async () => {
     const { user, calls } = mount('/files?path=notes');
-    await screen.findByRole('button', { name: 'a.txt' });
+    await screen.findByRole('link', { name: 'a.txt' });
 
     await user.click(screen.getByRole('button', { name: 'New' }));
     await user.click(await screen.findByRole('menuitem', { name: 'New folder' }));
@@ -492,7 +539,7 @@ describe('creating entries', () => {
 
   it('creates an empty file and opens it', async () => {
     const { user, calls } = mount();
-    await screen.findByRole('button', { name: 'notes.md' });
+    await screen.findByRole('link', { name: 'notes.md' });
 
     await user.click(screen.getByRole('button', { name: 'New' }));
     await user.click(await screen.findByRole('menuitem', { name: 'New file' }));
@@ -603,20 +650,20 @@ describe('renaming', () => {
 describe('reading a large directory', () => {
   it('filters by name without asking the server again', async () => {
     const { user, calls } = mount();
-    await screen.findByRole('button', { name: 'notes.md' });
+    await screen.findByRole('link', { name: 'notes.md' });
     const before = calls.length;
 
     await user.type(screen.getByRole('searchbox', { name: 'Filter by name' }), 'shot');
 
-    expect(screen.getByRole('button', { name: 'shot.png' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'notes.md' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'shot.png' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'notes.md' })).not.toBeInTheDocument();
     // One directory is already loaded; filtering it is not a round trip.
     expect(calls.length).toBe(before);
   });
 
   it('sorts by a column and announces which one', async () => {
     const { user } = mount();
-    await screen.findByRole('button', { name: 'notes.md' });
+    await screen.findByRole('link', { name: 'notes.md' });
 
     await user.click(screen.getByRole('button', { name: /Sort by/ }));
     await user.click(await screen.findByRole('menuitemradio', { name: 'Size' }));
@@ -627,9 +674,12 @@ describe('reading a large directory', () => {
 
     // Directories stay first in every order — they are where to go next, not
     // small files — and the files behind them are largest first.
+    // The name off each row, by the cell it sits in rather than by role: a
+    // directory opens through a link and a file through a button, so there is
+    // no one role that names every row in the order they are being read in.
     const ordered = within(screen.getByRole('list', { name: 'Files' }))
       .getAllByRole('listitem')
-      .map((row) => within(row).getAllByRole('button')[0]?.textContent ?? '');
+      .map((row) => row.querySelector('.data-list__primary')?.textContent ?? '');
     expect(ordered).toEqual(['notes', 'shot.png', 'notes.md']);
   });
 });

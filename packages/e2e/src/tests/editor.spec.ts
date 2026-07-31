@@ -30,7 +30,7 @@ test.describe('the text editor', () => {
     });
 
     await app.goto(`${harness.url}/files`);
-    await app.getByRole('button', { name: 'long.ts', exact: true }).click();
+    await app.getByRole('link', { name: 'long.ts', exact: true }).click();
 
     const editor = app.locator('.code-editor');
     await expect(editor).toBeVisible();
@@ -71,7 +71,7 @@ test.describe('the text editor', () => {
     });
 
     await app.goto(`${harness.url}/files`);
-    await app.getByRole('button', { name: 'long.ts', exact: true }).click();
+    await app.getByRole('link', { name: 'long.ts', exact: true }).click();
 
     const editor = app.locator('.code-editor');
     await expect(editor).toBeVisible();
@@ -125,8 +125,8 @@ test.describe('renaming', () => {
     await app.getByRole('button', { name: 'Rename' }).click();
 
     // The durable result: the listing holds the new name and not the old one.
-    await expect(app.getByRole('button', { name: 'published', exact: true })).toBeVisible();
-    await expect(app.getByRole('button', { name: 'drafts', exact: true })).toHaveCount(0);
+    await expect(app.getByRole('link', { name: 'published', exact: true })).toBeVisible();
+    await expect(app.getByRole('link', { name: 'drafts', exact: true })).toHaveCount(0);
 
     // And the tree moved rather than being recreated empty.
     const moved = await app.request.get(
