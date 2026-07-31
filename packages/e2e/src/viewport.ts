@@ -14,3 +14,18 @@ export const VIEWPORT: { readonly width: number; readonly height: number } = {
   width: 1440,
   height: 900,
 };
+
+/**
+ * A phone, for the specs that assert the layout survives one.
+ *
+ * Not a second default — the runner still opens at `VIEWPORT`, and the fidelity
+ * references are still measured there. This is the size a reflow assertion
+ * resizes *to*, and it is the narrow end of what a phone actually is rather
+ * than the narrowest number anyone could name: at 375 the shell is in its
+ * drawer, the settings grid is one column, and a row that fits here fits every
+ * handset above it.
+ */
+export const NARROW_VIEWPORT: { readonly width: number; readonly height: number } = {
+  width: 375,
+  height: 812,
+};

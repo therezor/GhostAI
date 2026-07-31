@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { filterRows, nextSort, sortRows, type Comparators, type SortOrder } from './sort.js';
+import { filterRows, sortBy, sortRows, type Comparators } from './sort.js';
 
 interface Row {
   readonly name: string;
@@ -103,23 +103,14 @@ describe('filterRows', () => {
   });
 });
 
-describe('nextSort', () => {
+describe('sortBy', () => {
   const ASCENDING_FIRST: readonly Key[] = ['name'];
-  const current: SortOrder<Key> = { key: 'name', descending: false };
-
-  it('flips the direction of the column already sorted', () => {
-    expect(nextSort(current, 'name', ASCENDING_FIRST)).toEqual({ key: 'name', descending: true });
-  });
 
   it('starts a text column ascending', () => {
-    const fromSize: SortOrder<Key> = { key: 'size', descending: true };
-    expect(nextSort(fromSize, 'name', ASCENDING_FIRST)).toEqual({
-      key: 'name',
-      descending: false,
-    });
+    expect(sortBy('name', ASCENDING_FIRST)).toEqual({ key: 'name', descending: false });
   });
 
   it('starts a numeric column descending, because the question is “what is big”', () => {
-    expect(nextSort(current, 'size', ASCENDING_FIRST)).toEqual({ key: 'size', descending: true });
+    expect(sortBy('size', ASCENDING_FIRST)).toEqual({ key: 'size', descending: true });
   });
 });

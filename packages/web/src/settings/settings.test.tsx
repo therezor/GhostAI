@@ -193,12 +193,14 @@ describe('the providers panel', () => {
   it('reports each endpoint\u2019s key and status in words rather than in colour', async () => {
     mount('/settings?panel=providers');
 
-    const rows = within(await screen.findByRole('table')).getAllByRole('row');
-    // Header, then one per endpoint.
-    expect(rows).toHaveLength(3);
-    expect(rows[1]).toHaveTextContent('no key');
-    expect(rows[1]).toHaveTextContent('Enabled');
-    expect(rows[2]).toHaveTextContent('key saved');
+    const rows = within(await screen.findByRole('list', { name: 'Providers' })).getAllByRole(
+      'listitem',
+    );
+    // One per endpoint. There is no heading row any more — the list is cards.
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent('no key');
+    expect(rows[0]).toHaveTextContent('Enabled');
+    expect(rows[1]).toHaveTextContent('key saved');
   });
 
   it('shows a disabled endpoint as disabled rather than hiding it', async () => {
@@ -212,8 +214,10 @@ describe('the providers panel', () => {
       ],
     });
 
-    const rows = within(await screen.findByRole('table')).getAllByRole('row');
-    expect(rows[1]).toHaveTextContent('Disabled');
+    const rows = within(await screen.findByRole('list', { name: 'Providers' })).getAllByRole(
+      'listitem',
+    );
+    expect(rows[0]).toHaveTextContent('Disabled');
   });
 
   it('switches one off from the list, without asking', async () => {
@@ -299,7 +303,7 @@ describe('the providers panel', () => {
     // that endpoint's editor.
     mount('/settings?panel=providers');
 
-    await screen.findByRole('table');
+    await screen.findByRole('list', { name: 'Providers' });
     expect(screen.queryByRole('button', { name: /Refresh model lists/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Check for models/ })).not.toBeInTheDocument();
   });

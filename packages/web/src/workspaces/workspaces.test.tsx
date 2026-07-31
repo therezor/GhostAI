@@ -15,7 +15,7 @@ import {
   createRoute,
   createRouter,
 } from '@tanstack/react-router';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -398,16 +398,16 @@ describe('the workspaces page', () => {
   it('keeps the default at the top however the list is sorted', async () => {
     mount();
 
-    const firstCell = async (): Promise<string> => {
-      const rows = await screen.findAllByRole('row');
-      // `rows[0]` is the header.
-      return rows[1]?.textContent ?? '';
+    const firstRow = async (): Promise<string> => {
+      const list = await screen.findByRole('list', { name: 'Workspaces' });
+      return within(list).getAllByRole('listitem')[0]?.textContent ?? '';
     };
 
-    expect(await firstCell()).toContain('Default');
+    expect(await firstRow()).toContain('Default');
 
-    await userEvent.click(screen.getByRole('button', { name: 'Name' }));
-    expect(await firstCell()).toContain('Default');
+    await userEvent.click(await screen.findByRole('button', { name: /Sort by/ }));
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Descending' }));
+    expect(await firstRow()).toContain('Default');
   });
 });
 

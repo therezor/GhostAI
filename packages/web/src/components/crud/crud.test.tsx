@@ -1,6 +1,5 @@
 /**
- * The three pieces of list furniture, tested where their state can be held
- * still.
+ * The pieces of list furniture, tested where their state can be held still.
  *
  * These are the behaviours that are cheap to assert here and expensive to
  * assert anywhere else: that a close arriving by `Escape` looks the same to the
@@ -10,16 +9,17 @@
  * hand-written copies these components replace.
  */
 
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu.js';
 import { renderWithProviders } from '@/test/render.js';
 import { ConfirmDialog } from './confirm-dialog.js';
+import { DataList, DataListRow } from './data-list.js';
+import { ListSort } from './list-sort.js';
 import { NameDialog } from './name-dialog.js';
 import { RowActions } from './row-actions.js';
-import { SortHeader } from './sort-header.js';
 
 describe('ConfirmDialog', () => {
   const props = {
@@ -197,56 +197,92 @@ describe('RowActions', () => {
   });
 });
 
-describe('SortHeader', () => {
-  const render = (descending: boolean, onSort = vi.fn()) =>
+describe('DataList', () => {
+  it('is a list of rows, so nothing depends on a display property', () => {
     renderWithProviders(
-      <table>
-        <thead>
-          <tr>
-            <SortHeader
-              label="Name"
-              sortKey="name"
-              sort={{ key: 'name', descending }}
-              onSort={onSort}
-            />
-            <SortHeader
-              label="Size"
-              sortKey="size"
-              sort={{ key: 'name', descending }}
-              onSort={onSort}
-            />
-          </tr>
-        </thead>
-      </table>,
+      <DataList label="Providers">
+        <DataListRow primary={<button type="button">Ollama</button>} meta={<span>no key</span>} />
+        <DataListRow primary={<button type="button">OpenAI</button>} />
+      </DataList>,
     );
 
-  it('announces which column is sorted and which way', () => {
+    // The point of the `<ul>`: a `<tr>` set to `display: grid` stops being a
+    // row to a screen reader, and the card layout this replaced a table with
+    // needs a grid on every row.
+    const rows = within(screen.getByRole('list', { name: 'Providers' })).getAllByRole('listitem');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent('no key');
+  });
+
+  it('leaves out the parts a row does not have', () => {
+    renderWithProviders(
+      <DataList label="Providers">
+        <DataListRow primary={<button type="button">OpenAI</button>} />
+      </DataList>,
+    );
+
+    // An empty meta cluster would still take a grid row and a gap, which shows
+    // up as a card that is taller than the one below it for no reason.
+    expect(document.querySelector('.data-list__meta')).toBeNull();
+    expect(document.querySelector('.data-list__actions')).toBeNull();
+  });
+});
+
+describe('ListSort', () => {
+  const OPTIONS = [
+    { key: 'name', label: 'Name' },
+    { key: 'size', label: 'Size' },
+  ] as const;
+
+  const render = (descending: boolean, onChange = vi.fn()) =>
+    renderWithProviders(
+      <ListSort
+        options={OPTIONS}
+        sort={{ key: 'name', descending }}
+        ascendingFirst={['name']}
+        onChange={onChange}
+      />,
+    );
+
+  it('says both halves of the state without being opened', () => {
     render(false);
 
-    expect(screen.getByRole('columnheader', { name: /Name/ })).toHaveAttribute(
-      'aria-sort',
-      'ascending',
-    );
-    expect(screen.getByRole('columnheader', { name: /Size/ })).toHaveAttribute('aria-sort', 'none');
+    // The column *and* the direction. A trigger labelled only "Sort by" is a
+    // control you have to open to find out what it is doing.
+    expect(screen.getByRole('button', { name: 'Sort by Name, Ascending' })).toBeInTheDocument();
   });
 
-  it('says descending when it is', () => {
+  it('opens a new column in the direction that column is read', async () => {
+    const onChange = vi.fn();
+    render(false, onChange);
+
+    await userEvent.click(screen.getByRole('button', { name: /Sort by/ }));
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Size' }));
+
+    // `size` is not in `ascendingFirst`: "which is biggest" is the question
+    // that column answers, so it opens largest first.
+    expect(onChange).toHaveBeenCalledWith({ key: 'size', descending: true });
+  });
+
+  it('reverses without touching the column', async () => {
+    const onChange = vi.fn();
+    render(false, onChange);
+
+    await userEvent.click(screen.getByRole('button', { name: /Sort by/ }));
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Descending' }));
+
+    expect(onChange).toHaveBeenCalledWith({ key: 'name', descending: true });
+  });
+
+  it('marks the column and the direction currently in force', async () => {
     render(true);
 
-    expect(screen.getByRole('columnheader', { name: /Name/ })).toHaveAttribute(
-      'aria-sort',
-      'descending',
-    );
-  });
+    await userEvent.click(screen.getByRole('button', { name: /Sort by/ }));
 
-  it('is a real button, so a keyboard can sort', async () => {
-    const onSort = vi.fn();
-    render(false, onSort);
-
-    // Not a click handler on the cell — `Enter` on a `<th>` does nothing.
-    screen.getByRole('button', { name: /Size/ }).focus();
-    await userEvent.keyboard('{Enter}');
-
-    expect(onSort).toHaveBeenCalledWith('size');
+    // Two groups, so two marks — which is what makes the second question
+    // answerable without first working out the answer to the first.
+    expect(await screen.findByRole('menuitemradio', { name: 'Name' })).toBeChecked();
+    expect(screen.getByRole('menuitemradio', { name: 'Descending' })).toBeChecked();
+    expect(screen.getByRole('menuitemradio', { name: 'Ascending' })).not.toBeChecked();
   });
 });

@@ -6,7 +6,7 @@
  * always existed and might have settings, and is now an endpoint that exists
  * because someone added it. Two Ollama servers are two rows.
  *
- * Shaped like Agents, because it is the same kind of thing: a table that picks,
+ * Shaped like Agents, because it is the same kind of thing: a list that picks,
  * a `RowActions` kebab for the acts that need no form, and **an editor route**
  * for the rest. Creating one asks the single question the editor cannot — the
  * type, which is fixed for the life of the instance — and then opens the editor,
@@ -33,6 +33,7 @@ import { Badge } from '@/components/ui/badge.js';
 import { Button } from '@/components/ui/button.js';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu.js';
 import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';
+import { DataList, DataListRow } from '@/components/crud/data-list.js';
 import { RowActions } from '@/components/crud/row-actions.js';
 import { AddProviderDialog } from './add-provider-dialog.js';
 import { Section } from './controls.js';
@@ -86,90 +87,80 @@ export function ProvidersPanel({ config }: { readonly config: Config }): JSX.Ele
       {instances.length === 0 ? (
         <p className="page__note">{t('providers.none')}</p>
       ) : (
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th scope="col">{t('common.name')}</th>
-              <th scope="col">{t('providers.endpoint')}</th>
-              <th scope="col">Key</th>
-              <th scope="col">{t('common.status')}</th>
-              <th scope="col" className="data-table__actions">
-                <span className="sr-only">{t('common.actions')}</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {instances.map((instance) => (
-              <tr key={instance.id}>
-                <td>
-                  <Link
-                    to="/settings/providers/$instanceId"
-                    params={{ instanceId: instance.id }}
-                    className="data-table__open"
-                    aria-label={`Edit ${instance.displayName}`}
-                  >
-                    <Plug />
-                    <span className="row">
-                      <span className="truncate">{instance.displayName}</span>
-                      {instance.isLocal && <Badge tone="neutral">local</Badge>}
-                      {instance.isGateway && <Badge tone="info">gateway</Badge>}
-                    </span>
-                  </Link>
-                </td>
-                <td className="data-table__meta providers__endpoint truncate">
-                  {instance.apiBase}
-                </td>
-                <td className="data-table__meta">
+        <DataList label={t('providers.title')}>
+          {instances.map((instance) => (
+            <DataListRow
+              key={instance.id}
+              primary={
+                <Link
+                  to="/settings/providers/$instanceId"
+                  params={{ instanceId: instance.id }}
+                  className="data-list__open"
+                  aria-label={`Edit ${instance.displayName}`}
+                >
+                  <Plug />
+                  <span className="row">
+                    <span className="truncate">{instance.displayName}</span>
+                    {instance.isLocal && <Badge tone="neutral">local</Badge>}
+                    {instance.isGateway && <Badge tone="info">gateway</Badge>}
+                  </span>
+                </Link>
+              }
+              meta={
+                <>
+                  {/* The endpoint is what tells two Ollama servers apart, so it
+                      stays on the row rather than being shed on a phone. It
+                      breaks anywhere it has to — a URL with no spaces in it is
+                      the string that used to push this list off the screen. */}
+                  <span className="data-list__code">{instance.apiBase}</span>
                   {/* A badge with a word in it, not a bare coloured dot: colour
                       alone is the one encoding some readers do not receive. */}
                   <Badge tone={instance.credentialsPresent ? 'success' : 'neutral'}>
                     {instance.credentialsPresent ? 'key saved' : 'no key'}
                   </Badge>
-                </td>
-                <td className="data-table__meta">
                   <Badge tone={instance.enabled ? 'success' : 'neutral'}>
                     {instance.enabled ? 'Enabled' : 'Disabled'}
                   </Badge>
-                </td>
-                <td className="data-table__actions">
-                  <RowActions label={instance.displayName}>
-                    <DropdownMenuItem
-                      onSelect={() => {
-                        void navigate({
-                          to: '/settings/providers/$instanceId',
-                          params: { instanceId: instance.id },
-                        });
-                      }}
-                    >
-                      <Pencil />
-                      Edit
-                    </DropdownMenuItem>
-                    {/* Reversible where Delete is not, so it does not ask:
+                </>
+              }
+              actions={
+                <RowActions label={instance.displayName}>
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      void navigate({
+                        to: '/settings/providers/$instanceId',
+                        params: { instanceId: instance.id },
+                      });
+                    }}
+                  >
+                    <Pencil />
+                    Edit
+                  </DropdownMenuItem>
+                  {/* Reversible where Delete is not, so it does not ask:
                         switching it back on is the same click. */}
-                    <DropdownMenuItem
-                      disabled={saving}
-                      onSelect={() => {
-                        save(toProviderEnabledPatch(instance.id, !instance.enabled));
-                      }}
-                    >
-                      {instance.enabled ? <PowerOff /> : <Power />}
-                      {instance.enabled ? 'Disable' : 'Enable'}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className="menu__item--danger"
-                      onSelect={() => {
-                        setPendingDelete(instance);
-                      }}
-                    >
-                      <Trash2 />
-                      Delete
-                    </DropdownMenuItem>
-                  </RowActions>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  <DropdownMenuItem
+                    disabled={saving}
+                    onSelect={() => {
+                      save(toProviderEnabledPatch(instance.id, !instance.enabled));
+                    }}
+                  >
+                    {instance.enabled ? <PowerOff /> : <Power />}
+                    {instance.enabled ? 'Disable' : 'Enable'}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="menu__item--danger"
+                    onSelect={() => {
+                      setPendingDelete(instance);
+                    }}
+                  >
+                    <Trash2 />
+                    Delete
+                  </DropdownMenuItem>
+                </RowActions>
+              }
+            />
+          ))}
+        </DataList>
       )}
 
       <AddProviderDialog

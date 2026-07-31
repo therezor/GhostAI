@@ -475,7 +475,8 @@ describe('creating entries', () => {
     const { user, calls } = mount('/files?path=notes');
     await screen.findByRole('button', { name: 'a.txt' });
 
-    await user.click(screen.getByRole('button', { name: 'New folder' }));
+    await user.click(screen.getByRole('button', { name: 'New' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'New folder' }));
     await user.type(screen.getByRole('textbox', { name: 'Folder name' }), 'drafts');
     await user.click(screen.getByRole('button', { name: 'Create' }));
 
@@ -493,7 +494,8 @@ describe('creating entries', () => {
     const { user, calls } = mount();
     await screen.findByRole('button', { name: 'notes.md' });
 
-    await user.click(screen.getByRole('button', { name: 'New file' }));
+    await user.click(screen.getByRole('button', { name: 'New' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'New file' }));
     await user.type(screen.getByRole('textbox', { name: 'File name' }), 'notes.md');
     await user.click(screen.getByRole('button', { name: 'Create' }));
 
@@ -616,16 +618,17 @@ describe('reading a large directory', () => {
     const { user } = mount();
     await screen.findByRole('button', { name: 'notes.md' });
 
-    await user.click(screen.getByRole('button', { name: 'Size' }));
+    await user.click(screen.getByRole('button', { name: /Sort by/ }));
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Size' }));
 
-    const header = screen.getByRole('columnheader', { name: /Size/ });
-    expect(header).toHaveAttribute('aria-sort', 'descending');
+    // "Which is biggest" is what a size column is asked, so it opens largest
+    // first — the trigger names the column and the direction together.
+    expect(screen.getByRole('button', { name: 'Sort by Size, Descending' })).toBeInTheDocument();
 
     // Directories stay first in every order — they are where to go next, not
     // small files — and the files behind them are largest first.
-    const ordered = screen
-      .getAllByRole('row')
-      .slice(1)
+    const ordered = within(screen.getByRole('list', { name: 'Files' }))
+      .getAllByRole('listitem')
       .map((row) => within(row).getAllByRole('button')[0]?.textContent ?? '');
     expect(ordered).toEqual(['notes', 'shot.png', 'notes.md']);
   });

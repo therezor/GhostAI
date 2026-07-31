@@ -10,7 +10,7 @@
  * folder. Two of those were bugs that only looked like styling.
  *
  * So: the same `page page--wide` frame as Files and Agents, the same
- * `list-toolbar` and `SearchFilter`, the same `data-table`, the same kebab, and
+ * `list-toolbar` and `SearchFilter`, the same `DataList`, the same kebab, and
  * the same `ConfirmDialog` in front of the one irreversible action.
  *
  * **The row opens an editor, exactly as an agent's does.** The name cell is a
@@ -42,14 +42,9 @@ import { DropdownMenuItem } from '@/components/ui/dropdown-menu.js';
 import { SearchFilter } from '@/components/ui/search-filter.js';
 import { toast } from '@/components/ui/toast.js';
 import { RowActions } from '@/components/crud/row-actions.js';
-import { SortHeader } from '@/components/crud/sort-header.js';
-import {
-  filterRows,
-  nextSort,
-  sortRows,
-  type Comparators,
-  type SortOrder,
-} from '@/components/crud/sort.js';
+import { DataList, DataListRow } from '@/components/crud/data-list.js';
+import { ListSort } from '@/components/crud/list-sort.js';
+import { filterRows, sortRows, type Comparators, type SortOrder } from '@/components/crud/sort.js';
 import { api } from '@/lib/api.js';
 import { useFormat } from '@/lib/use-format.js';
 import { queryKeys } from '@/lib/query.js';
@@ -120,10 +115,6 @@ export function WorkspacesRoute(): JSX.Element {
     [all, filter, sort],
   );
 
-  const toggleSort = (key: SortKey): void => {
-    setSort((current) => nextSort(current, key, ASCENDING_FIRST));
-  };
-
   const now = Date.now();
 
   return (
@@ -144,10 +135,20 @@ export function WorkspacesRoute(): JSX.Element {
         </Button>
       </div>
 
-      <div className="cluster list-toolbar">
-        <p className="page__note">{t('workspaces.note')}</p>
-        <span className="spacer" />
+      <p className="page__note">{t('workspaces.note')}</p>
+
+      <div className="row list-toolbar">
         <SearchFilter value={filter} label={t('workspaces.filter')} onValueChange={setFilter} />
+        <ListSort
+          options={[
+            { key: 'name', label: t('common.name') },
+            { key: 'sessions', label: t('workspaces.chats') },
+            { key: 'updated', label: t('workspaces.updated') },
+          ]}
+          sort={sort}
+          ascendingFirst={ASCENDING_FIRST}
+          onChange={setSort}
+        />
       </div>
 
       {workspaces.isPending && <p className="page__note">{t('common.loading')}</p>}
@@ -161,106 +162,82 @@ export function WorkspacesRoute(): JSX.Element {
         (rows.length === 0 ? (
           <p className="page__note">{t('common.noMatches', { filter, count: all.length })}</p>
         ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <SortHeader
-                  label={t('common.name')}
-                  sortKey="name"
-                  sort={sort}
-                  onSort={toggleSort}
-                />
-                <SortHeader
-                  label={t('workspaces.chats')}
-                  sortKey="sessions"
-                  sort={sort}
-                  onSort={toggleSort}
-                />
-                <SortHeader
-                  label={t('workspaces.updated')}
-                  sortKey="updated"
-                  sort={sort}
-                  onSort={toggleSort}
-                  className="data-table__modified"
-                />
-                <th scope="col" className="data-table__actions">
-                  <span className="sr-only">{t('common.actions')}</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((workspace) => (
-                <tr key={workspace.id}>
-                  <td>
-                    <Link
-                      to="/workspaces/$workspaceId"
-                      params={{ workspaceId: workspace.id }}
-                      className="data-table__open"
-                      aria-label={`Edit ${workspace.name}`}
-                    >
-                      {/* A folder, because that is what a workspace is. One
+          <DataList label={t('workspaces.title')}>
+            {rows.map((workspace) => (
+              <DataListRow
+                key={workspace.id}
+                primary={
+                  <Link
+                    to="/workspaces/$workspaceId"
+                    params={{ workspaceId: workspace.id }}
+                    className="data-list__open"
+                    aria-label={`Edit ${workspace.name}`}
+                  >
+                    {/* A folder, because that is what a workspace is. One
                           icon for both kinds — that the default holds the
                           others is what the badge beside it says, and a second
                           glyph saying the same thing is a second thing to
                           learn. */}
-                      <Folder />
-                      <span className="stack workspaces__name">
-                        <span className="workspaces__name-row">
-                          <span className="truncate">{workspace.name}</span>
-                          {workspace.isDefault && <Badge>default</Badge>}
-                        </span>
-                        {/* Rooted at `/`, so the column reads `/` against
+                    <Folder />
+                    <span className="stack workspaces__name">
+                      <span className="workspaces__name-row">
+                        <span className="truncate">{workspace.name}</span>
+                        {workspace.isDefault && <Badge>default</Badge>}
+                      </span>
+                      {/* Rooted at `/`, so the column reads `/` against
                             `/acme` and the nesting is visible rather than
                             described. The default is not in a folder called
                             `default` — it *is* the root — and it is not called
                             `workspace` either, which is the Files breadcrumb's
                             name for whichever workspace you are in. See
                             `workspaces/folder.ts`. */}
-                        <span className="workspaces__folder truncate">
-                          {folderLabel(workspace)}
-                        </span>
-                      </span>
-                    </Link>
-                  </td>
-                  <td className="data-table__meta">{workspace.sessionCount}</td>
-                  <td className="data-table__meta data-table__modified">
-                    {fmt.relativeTime(workspace.updatedAtMs, now)}
-                  </td>
-                  <td className="data-table__actions">
-                    <RowActions label={workspace.name}>
-                      {/* No Rename. The name is a field in the editor, which is
+                      <span className="workspaces__folder truncate">{folderLabel(workspace)}</span>
+                    </span>
+                  </Link>
+                }
+                meta={
+                  <>
+                    {/* The count carries its own noun. There is no column
+                        heading above it any more, and a bare `12` beside a
+                        timestamp is a number nobody can name. */}
+                    <span>{t('workspaces.chatCount', { count: workspace.sessionCount })}</span>
+                    <span>{fmt.relativeTime(workspace.updatedAtMs, now)}</span>
+                  </>
+                }
+                actions={
+                  <RowActions label={workspace.name}>
+                    {/* No Rename. The name is a field in the editor, which is
                           one press away and is where the folder and everything
                           else about a workspace is read. */}
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        void navigate({
+                          to: '/workspaces/$workspaceId',
+                          params: { workspaceId: workspace.id },
+                        });
+                      }}
+                    >
+                      <Pencil />
+                      Edit
+                    </DropdownMenuItem>
+                    {/* The default is the parent of every other workspace;
+                          there is no coherent thing removing it could mean. */}
+                    {!workspace.isDefault && (
                       <DropdownMenuItem
+                        className="menu__item--danger"
                         onSelect={() => {
-                          void navigate({
-                            to: '/workspaces/$workspaceId',
-                            params: { workspaceId: workspace.id },
-                          });
+                          setPendingDelete(workspace);
                         }}
                       >
-                        <Pencil />
-                        Edit
+                        <Trash2 />
+                        Delete
                       </DropdownMenuItem>
-                      {/* The default is the parent of every other workspace;
-                          there is no coherent thing removing it could mean. */}
-                      {!workspace.isDefault && (
-                        <DropdownMenuItem
-                          className="menu__item--danger"
-                          onSelect={() => {
-                            setPendingDelete(workspace);
-                          }}
-                        >
-                          <Trash2 />
-                          Delete
-                        </DropdownMenuItem>
-                      )}
-                    </RowActions>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    )}
+                  </RowActions>
+                }
+              />
+            ))}
+          </DataList>
         ))}
 
       <CreateWorkspaceDialog

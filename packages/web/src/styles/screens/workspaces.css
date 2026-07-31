@@ -47,7 +47,7 @@
     font-weight: var(--weight-medium);
   }
 
-  /* `sm`, matching `.sidebar__session-count` and `.data-table__meta`: this is
+  /* `sm`, matching `.sidebar__session-count` and `.data-list__meta`: this is
      secondary metadata beside a name, which is the same job those do. The
      `2xs` step is budgeted for uppercase micro-labels and badge text, and
      `stylesheets.test.ts` caps how many rules may spend it. */
@@ -65,8 +65,8 @@
 
   /* Everything the manager dialog used to declare — its own row geometry, an
    * inline rename form, a create form pinned to the bottom — is gone with it.
-   * `/workspaces` is a `data-table` like Files and Agents, so the shared chrome
-   * in `components/data-table.css` is the whole of its layout.
+   * `/workspaces` is a `data-list` like Files and Agents, so the shared chrome
+   * in `components/data-list.css` is the whole of its layout.
    *
    * What is left is the two-line name cell, which is the same shape the agents
    * list uses and is deliberately styled to the same numbers: what it is

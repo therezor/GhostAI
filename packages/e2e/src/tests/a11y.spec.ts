@@ -16,6 +16,7 @@
 import type { Page } from '@playwright/test';
 
 import { expect, test } from '../fixtures.js';
+import { NARROW_VIEWPORT } from '../viewport.js';
 
 /**
  * Doubles the browser's font size, the way a browser setting does.
@@ -41,13 +42,80 @@ async function scrollsHorizontally(page: Page): Promise<boolean> {
   });
 }
 
+/**
+ * Everything painted past the right edge of the column that is supposed to
+ * clip it.
+ *
+ * The companion to `scrollsHorizontally`, and it catches the *other* half of
+ * the problem — the half that one misses entirely. Both of the app's two
+ * columns clip their own overflow, so content too wide for them does not make
+ * the page scroll: it is simply cut off mid-character, with no ellipsis and
+ * nothing in the console. A page can therefore be "not scrolling sideways" and
+ * still be hiding half a URL.
+ *
+ * Asserted against the two clipping columns rather than against a class,
+ * because the next component to get this wrong will get it wrong its own way.
+ * Anything portalled — a dialog, a popover, a tooltip — is outside both by
+ * construction and is not being measured here.
+ *
+ * What *is* excused is content inside something that scrolls sideways on
+ * purpose. The settings tab strip is the case: it is `overflow-x: auto` because
+ * a row of eight panel names is meant to scroll rather than wrap, and on a
+ * phone its last few tabs sit past the column edge by design. They are one
+ * swipe away, not lost — which is the distinction this is trying to draw, and
+ * it does not show up at 1440 because there the strip fits.
+ */
+async function escapees(page: Page): Promise<readonly string[]> {
+  return await page.evaluate(() => {
+    const found: string[] = [];
+    for (const selector of ['aside[aria-label="Sidebar"]', 'main']) {
+      const column = document.querySelector(selector);
+      if (column === null) continue;
+      const edge = column.getBoundingClientRect().right;
+
+      const inItsOwnScroller = (element: Element): boolean => {
+        for (let at = element.parentElement; at !== null && at !== column; at = at.parentElement) {
+          const overflow = getComputedStyle(at).overflowX;
+          if (overflow === 'auto' || overflow === 'scroll') return true;
+        }
+        return false;
+      };
+
+      for (const element of column.querySelectorAll('*')) {
+        const box = element.getBoundingClientRect();
+        // A pixel of slack for a fractional layout width, and skip what is not
+        // painted at all.
+        if (box.width === 0 || box.right <= edge + 1) continue;
+        if (inItsOwnScroller(element)) continue;
+        const text = element.textContent.trim().slice(0, 40);
+        found.push(`${selector} > ${element.tagName.toLowerCase()}: "${text}"`);
+      }
+    }
+    return found;
+  });
+}
+
+/**
+ * Every screen that has a layout of its own.
+ *
+ * The two settings entries are not redundant. `/settings` with no query lands
+ * on the first panel, so for as long as that was the only entry here the
+ * providers list — the widest thing in the app, and the one that actually broke
+ * on a phone — was never on screen while any of these assertions ran. A screen
+ * reached through a query parameter is still a screen.
+ *
+ * `/agents/default` is here for the same reason: the index was covered and the
+ * editor, which is where the tool and subagent rows live, was not.
+ */
 const SCREENS: readonly { readonly path: string; readonly name: string }[] = [
   { path: '/', name: 'chat' },
   { path: '/agents', name: 'agents' },
+  { path: '/agents/default', name: 'agent editor' },
   { path: '/workspaces', name: 'workspaces' },
   { path: '/files', name: 'files' },
   { path: '/notifications', name: 'notifications' },
   { path: '/settings', name: 'settings' },
+  { path: '/settings?panel=providers', name: 'providers' },
   { path: '/tokens', name: 'style guide' },
 ];
 
@@ -74,6 +142,103 @@ test.describe('at 200% font size', () => {
     await app.getByRole('button', { name: 'Send' }).click();
 
     await expect(app.getByTestId('transcript').getByText('Here is what I found.')).toBeVisible();
+    expect(await scrollsHorizontally(app)).toBe(false);
+  });
+});
+
+/**
+ * The same reflow claim, made against a phone instead of a font size.
+ *
+ * Doubling the root font size and halving the viewport are not the same test.
+ * The first shrinks the room every column has *relative to its content*, which
+ * is what catches a fixed-width control; the second takes the room away
+ * outright, which is what catches a layout that only ever had one arrangement.
+ * The four CRUD lists passed the first for a year while the providers list
+ * pushed the page sideways at 375 — five columns, one of them a URL in a cell
+ * that cannot be told to give way.
+ *
+ * Every screen, not just the ones that were broken. The point of a gate is to
+ * cover the screen nobody was thinking about.
+ */
+test.describe('on a phone', () => {
+  for (const screen of SCREENS) {
+    test(`${screen.name} fits a narrow viewport`, async ({ app, harness }) => {
+      await app.goto(`${harness.url}${screen.path}`);
+      // Resized here rather than through `test.use`, matching the composer's
+      // narrow spec: the `app` fixture waits for the inline sidebar, which
+      // below the shell's `md` breakpoint is a drawer and never appears. Boot
+      // wide, then narrow.
+      await expect(app.getByRole('complementary', { name: 'Sidebar' })).toBeVisible();
+      await app.setViewportSize(NARROW_VIEWPORT);
+
+      // The durable signal that the shell has actually taken the new width:
+      // the sidebar has become a drawer and the button that opens it exists.
+      // Waiting on that rather than on a timeout is what keeps this from
+      // measuring a layout mid-reflow.
+      await expect(app.getByRole('button', { name: 'Open menu' })).toBeVisible();
+
+      // Both sensors, because each misses what the other catches: the page can
+      // scroll sideways, or a column can clip the overflow and hide it instead.
+      expect(await scrollsHorizontally(app)).toBe(false);
+      expect(await escapees(app), 'nothing should extend past the column that clips it').toEqual(
+        [],
+      );
+    });
+  }
+
+  /**
+   * The sweep above walks every screen holding the fixtures' own data, and the
+   * fixtures are polite: the seeded endpoint is `http://127.0.0.1:11434`, which
+   * fits a phone whatever the layout does. A gate that only ever sees content
+   * that fits is not measuring anything — removing the guard that makes this
+   * work leaves it green.
+   *
+   * So this one supplies the string the bug was actually about. An endpoint is
+   * an identifier with no spaces in it, and the host is deliberately one
+   * unbroken run: a browser will happily break a URL after a hyphen, a dot or a
+   * slash, so `a-self-hosted-inference-box.internal.example.com` wraps on its
+   * own and proves nothing. What has no break opportunity at all is a long
+   * single-label host, and its min-content width is the whole line — which in a
+   * table cell is what pushed the page sideways, and is exactly what a card has
+   * to be able to break.
+   *
+   * Measured on the element rather than on the page, and that is the point.
+   * Neither sensor above can see this one: the span is a flex item with
+   * `min-width: 0`, so it *shrinks* and the text spills out of a box that is
+   * itself well inside the column — no element escapes, nothing scrolls, and
+   * the reader sees a URL cut off mid-host. Comparing the span's scroll width
+   * to its client width asks the only question that distinguishes the two:
+   * whether the text fits the box it was given.
+   */
+  test('a long endpoint wraps instead of widening the page', async ({ app, harness }) => {
+    await app.request.patch(`${harness.url}/api/settings`, {
+      data: {
+        providers: {
+          ollama: {
+            type: 'ollama',
+            apiBase: 'http://selfhostedinferenceboxonthelanwithalonghostname:11434/v1',
+          },
+        },
+      },
+    });
+
+    await app.goto(`${harness.url}/settings?panel=providers`);
+    await expect(app.getByRole('complementary', { name: 'Sidebar' })).toBeVisible();
+    await app.setViewportSize(NARROW_VIEWPORT);
+    await expect(app.getByRole('button', { name: 'Open menu' })).toBeVisible();
+
+    // On screen at all, and the page still fits. The first half matters: a row
+    // that hid the endpoint would pass the second half trivially, and hiding it
+    // is what the column-shedding version of this list did.
+    const endpoint = app.getByText('selfhostedinferencebox', { exact: false });
+    await expect(endpoint).toBeVisible();
+
+    // A pixel of slack, for the same reason the two sweeps above allow one.
+    const spill = await endpoint.evaluate((element) => element.scrollWidth - element.clientWidth);
+    expect(
+      spill,
+      'the endpoint should wrap inside its card rather than spill out of it',
+    ).toBeLessThanOrEqual(1);
     expect(await scrollsHorizontally(app)).toBe(false);
   });
 });
@@ -108,31 +273,11 @@ test.describe('at 1×', () => {
       // instead of by the column — and `truncate` has no width to truncate
       // against. What the user sees is a session key running out of the
       // sidebar and being cut off mid-character by the aside's own `overflow`,
-      // with no ellipsis and nothing in the console.
-      //
-      // Asserted against the two clipping columns rather than against a class,
-      // because the next component to get this wrong will get it wrong its own
-      // way. Anything portalled — a dialog, a popover, a tooltip — is outside
-      // both by construction and is not being measured here.
-      const escapees = await app.evaluate(() => {
-        const found: string[] = [];
-        for (const selector of ['aside[aria-label="Sidebar"]', 'main']) {
-          const column = document.querySelector(selector);
-          if (column === null) continue;
-          const edge = column.getBoundingClientRect().right;
-          for (const element of column.querySelectorAll('*')) {
-            const box = element.getBoundingClientRect();
-            // A pixel of slack for a fractional layout width, and skip what is
-            // not painted at all.
-            if (box.width === 0 || box.right <= edge + 1) continue;
-            const text = element.textContent.trim().slice(0, 40);
-            found.push(`${selector} > ${element.tagName.toLowerCase()}: "${text}"`);
-          }
-        }
-        return found;
-      });
-
-      expect(escapees, 'nothing should extend past the column that clips it').toEqual([]);
+      // with no ellipsis and nothing in the console. `escapees` is where the
+      // measurement lives, and the phone block above uses the same one.
+      expect(await escapees(app), 'nothing should extend past the column that clips it').toEqual(
+        [],
+      );
     });
   }
 });

@@ -2,7 +2,7 @@
  * The agent picker, and what the agents screens add to the shared list chrome.
  *
  * Most of the index is not here: the container, the header, the toolbar, the
- * filter and the table all come from `page`, `cluster` and `data-table`, which
+ * filter and the list all come from `page`, `cluster` and `data-list`, which
  * Files uses too. What is left is the two-line name cell and the editor's own
  * layout — the parts that are genuinely about agents rather than about lists.
  */
@@ -82,11 +82,9 @@
     color: var(--fg-3);
   }
 
-  /* Mono, like every other model readout in the app: it is an identifier, and
-     proportional type makes two similar ids hard to tell apart. */
-  .agents__model {
-    font-family: var(--font-mono);
-  }
+  /* The model readout is `.data-list__code` now — mono, like every other
+     identifier in the app, and shared with the endpoint on the providers list
+     rather than declared once per screen. */
 
   /* ---------------------------------------------------------------------
    * The editor
@@ -166,8 +164,12 @@
     color: var(--fg-2);
   }
 
+  /* `sm`, not the `xs` that used to be written here — that step does not exist,
+     so the line was quietly inheriting the base. This is a tool's description,
+     which is prose, and prose is barred from `2xs`. */
   .agent-editor__tool-detail {
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
     color: var(--fg-3);
   }
 
@@ -184,6 +186,59 @@
     font-size: var(--text-sm);
     font-weight: var(--weight-medium);
     color: var(--fg-2);
+  }
+
+  /* On a phone the row cannot hold a name, a badge and a 9rem select side by
+     side, and the name is what gets squeezed — which is the one thing on the
+     row that has to be readable. So it becomes a small grid: the tool and its
+     description on the left, the risk badge beside them, and the permission
+     select on a full-width line of its own beneath.
+
+     The gap between rows goes to zero and a rule takes over. Two three-line
+     blocks a quarter of a rem apart read as one six-line block, and at that
+     point an operator cannot see which select belongs to which tool — which is
+     the only question this list exists to answer.
+
+     `max-width` rather than a `min-width` on the other side, matching
+     `.composer__meta`: the single line is the normal case and this is the
+     exception, so the exception is what carries the query. */
+  @media (max-width: 40rem) {
+    .agent-editor__tools {
+      --gap: 0;
+    }
+
+    .agent-editor__tool {
+      --gap: var(--space-2);
+
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas:
+        'text badge'
+        'permission permission';
+      align-items: start;
+      padding-block: var(--space-3);
+      /* Square, because the row now carries a rule: a radius here rounds the
+         ends of that line into a pair of curls. */
+      border-radius: 0;
+      border-top: var(--hairline) solid var(--line);
+    }
+
+    .agent-editor__tool:first-child {
+      border-top: none;
+    }
+
+    .agent-editor__tool-text {
+      grid-area: text;
+    }
+
+    .agent-editor__tool > .badge {
+      grid-area: badge;
+    }
+
+    .agent-editor__tool-permission {
+      grid-area: permission;
+      width: 100%;
+    }
   }
 
   /* A subagent is two rows rather than one, unlike a tool: the guidance is the
@@ -220,11 +275,55 @@
     color: var(--fg-3);
   }
 
+  /* Nothing to say on a wide row — the select sizes itself, as it did before it
+     was wrapped. The wrapper exists for the phone layout at the bottom of this
+     section, which needs a box to place. */
+
   /* Matched to `.agent-editor__tool-permission`, and for the same reason: the
      two selects sit in adjacent sections and a different width between them
-     reads as a mistake. */
+     reads as a mistake. That includes the phone layout below — both go full
+     width there. */
   .agent-editor__subagent-permission {
     width: 9rem;
     flex: none;
+  }
+
+  /* The same collapse as the tool row above, and it is needed more here: this
+     row is four controls rather than three, and one of them is a select whose
+     value is an agent name. Who it delegates to keeps the top line with the
+     button that removes it; the derived tool name and the permission drop
+     beneath.
+
+     No rule between subagents — they are already separated by a border of their
+     own (`.agent-editor__subagent`), and a second line inside it would read as
+     a divider between the head and the prompt rather than between two
+     delegations. */
+  @media (max-width: 40rem) {
+    .agent-editor__subagent-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas:
+        'agent remove'
+        'tool tool'
+        'permission permission';
+      align-items: center;
+    }
+
+    .agent-editor__subagent-agent {
+      grid-area: agent;
+    }
+
+    .agent-editor__subagent-tool {
+      grid-area: tool;
+    }
+
+    .agent-editor__subagent-permission {
+      grid-area: permission;
+      width: 100%;
+    }
+
+    .agent-editor__subagent-head > .btn {
+      grid-area: remove;
+    }
   }
 }

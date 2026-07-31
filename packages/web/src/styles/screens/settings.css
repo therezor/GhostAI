@@ -166,16 +166,14 @@
 
   /*
    * The disclosure row this section used to dress is gone. A provider is a row
-   * in a `data-table` that links to an editor of its own, the same way an agent
+   * in a `data-list` that links to an editor of its own, the same way an agent
    * is — so there is no expanded body, no chevron, and no key input pinned
    * beside a button of its own.
    */
 
-  /* Mono, like every other endpoint and model readout: it is an identifier, and
-     proportional type makes two similar URLs hard to tell apart. */
-  .providers__endpoint {
-    font-family: var(--font-mono);
-  }
+  /* The endpoint readout is `.data-list__code`, shared with the agents list's
+     model column: both are identifiers, and proportional type makes two similar
+     URLs hard to tell apart. */
 
   /**
    * What the endpoint answered with.

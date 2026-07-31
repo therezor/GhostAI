@@ -1,21 +1,25 @@
 /**
  * The file browser, its editor and its preview.
  *
- * A table rather than a list of cards, because the columns are the point: a
- * reader scanning a workspace is comparing sizes and modification times down a
- * column, which is the one thing a card layout makes impossible. Once the
- * columns sort, that is doubly true — a sort control on a card grid has nothing
- * to sit at the top of.
+ * This was a table, and the argument for one was that the columns are the
+ * point: a reader scanning a workspace compares sizes and times down a column.
+ * That argument did not survive contact with a phone. A `<td>` is sized by its
+ * content and cannot be told to give way, so the `Modified` column had to be
+ * dropped below 40rem to keep the page from scrolling sideways — which is to
+ * say the column layout was already being abandoned at the width where it was
+ * hardest to hold, and only on this screen and Workspaces, because Agents and
+ * Providers never got the same treatment.
  *
- * The `Modified` column is dropped on a narrow screen rather than wrapped. A
- * relative timestamp that wraps to two lines doubles the height of every row
- * for information that is the least urgent of the three.
+ * It is a `data-list` now, like the other three, and the sort control that used
+ * to live in the headings lives in the toolbar. What that costs is the column
+ * scan; what it buys is one list shape across the whole app and a row that fits
+ * any width without a rule anywhere knowing what width it is.
  */
 
 @layer screens {
   /* A directory is the one thing in this list worth the accent: it is the only
    * row whose click changes where you are rather than what you are looking at. */
-  .data-table__open--directory > svg {
+  .data-list__open--directory > svg {
     color: var(--accent-fg);
   }
 

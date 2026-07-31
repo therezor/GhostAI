@@ -150,6 +150,16 @@ async function pick(
   await user.click(await screen.findByRole('option', { name: permission }));
 }
 
+/**
+ * The index's rows, in the order they are painted.
+ *
+ * Scoped to the named list rather than swept off the document: a page can hold
+ * more than one `<ul>`, and an open kebab menu is one of them.
+ */
+async function agentRows(): Promise<readonly HTMLElement[]> {
+  return within(await screen.findByRole('list', { name: 'Agents' })).getAllByRole('listitem');
+}
+
 describe('the agents index', () => {
   it('lists the default even though nothing wrote it down', async () => {
     // Every unbound conversation runs on it, so a list of only the configured
@@ -236,7 +246,7 @@ describe('the agents index', () => {
     expect(screen.queryByRole('menuitem', { name: 'Disable' })).not.toBeInTheDocument();
   });
 
-  it('says whether each agent is on, in a column of its own', async () => {
+  it('says whether each agent is on, in a word on the row', async () => {
     // It used to be an `off` badge beside the name and nothing at all when the
     // agent was on — which reads as "no comment" rather than as "this runs".
     mount('/agents', {
@@ -254,10 +264,10 @@ describe('the agents index', () => {
       ],
     });
 
-    const row = (await screen.findByRole('link', { name: 'Edit Reviewer' })).closest('tr');
+    const row = (await screen.findByRole('link', { name: 'Edit Reviewer' })).closest('li');
     expect(row).toHaveTextContent('Disabled');
     expect(
-      (await screen.findByRole('link', { name: 'Edit default' })).closest('tr'),
+      (await screen.findByRole('link', { name: 'Edit default' })).closest('li'),
     ).toHaveTextContent('Enabled');
   });
 
@@ -301,14 +311,11 @@ describe('the agents index', () => {
   it('sorts by status, and still keeps the default at the top', async () => {
     const { user } = mount();
 
-    await user.click(await screen.findByRole('button', { name: 'Status' }));
+    await user.click(await screen.findByRole('button', { name: /Sort by/ }));
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Status' }));
 
-    const rows = await screen.findAllByRole('row');
-    expect(rows[1]?.textContent).toContain('default');
-    expect(screen.getByRole('columnheader', { name: /Status/ })).toHaveAttribute(
-      'aria-sort',
-      'ascending',
-    );
+    expect((await agentRows())[0]?.textContent).toContain('default');
+    expect(screen.getByRole('button', { name: /Sort by Status/ })).toBeInTheDocument();
   });
 
   it('offers no Rename, because the name is a field in the editor', async () => {
@@ -382,22 +389,17 @@ describe('the agents index', () => {
   it('sorts by a column, and keeps the default at the top either way', async () => {
     const { user } = mount();
 
-    const firstRow = async (): Promise<string> => {
-      const rows = await screen.findAllByRole('row');
-      return rows[1]?.textContent ?? '';
-    };
+    const firstRow = async (): Promise<string> => (await agentRows())[0]?.textContent ?? '';
 
     expect(await firstRow()).toContain('default');
 
-    await user.click(screen.getByRole('button', { name: 'Name' }));
+    await user.click(await screen.findByRole('button', { name: /Sort by/ }));
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Descending' }));
 
     // Reversed, but the default is the one the others were created from rather
     // than a peer in the ordering.
     expect(await firstRow()).toContain('default');
-    expect(screen.getByRole('columnheader', { name: /Name/ })).toHaveAttribute(
-      'aria-sort',
-      'descending',
-    );
+    expect(screen.getByRole('button', { name: /Descending/ })).toBeInTheDocument();
   });
 });
 

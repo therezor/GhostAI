@@ -268,18 +268,23 @@ function SubagentRow({
   return (
     <li className="stack agent-editor__subagent">
       <div className="row agent-editor__subagent-head">
-        <SelectField
-          label={<span className="sr-only">{t('agents.subagentAgentFor', { position })}</span>}
-          value={ref_.id}
-          placeholder={t('agents.subagentChoose')}
-          options={options.map((agent) => ({
-            value: agent.id,
-            label: agent.label === '' ? agent.id : agent.label,
-          }))}
-          onValueChange={(next) => {
-            onChange({ ...ref_, id: next });
-          }}
-        />
+        {/* Wrapped, like the permission select beside it, so the stylesheet has
+            something to place. The two are the same kind of thing and the phone
+            layout has to address them both. */}
+        <div className="agent-editor__subagent-agent">
+          <SelectField
+            label={<span className="sr-only">{t('agents.subagentAgentFor', { position })}</span>}
+            value={ref_.id}
+            placeholder={t('agents.subagentChoose')}
+            options={options.map((agent) => ({
+              value: agent.id,
+              label: agent.label === '' ? agent.id : agent.label,
+            }))}
+            onValueChange={(next) => {
+              onChange({ ...ref_, id: next });
+            }}
+          />
+        </div>
 
         {ref_.id !== '' && (
           <code className="agent-editor__subagent-tool">{subagentToolName(ref_.id)}</code>

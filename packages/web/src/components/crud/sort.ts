@@ -80,23 +80,20 @@ export function filterRows<T>(
 }
 
 /**
- * What pressing a column heading does.
+ * The order a column opens in when it is chosen.
  *
- * The same column flips direction; a *new* column starts in the order that
- * column is usually read. Names go from A, but sizes, counts and times go
- * largest and newest first, because "what is big" and "what just changed" are
- * the questions being asked of those columns.
+ * Names go from A, but sizes, counts and times go largest and newest first,
+ * because "what is big" and "what just changed" are the questions being asked
+ * of those columns. `ascendingFirst` names the text ones. Written as a list
+ * rather than a per-column flag so the four lists cannot disagree about it,
+ * which is the whole reason this is a function and not four lines inlined into
+ * each screen.
  *
- * `ascendingFirst` names the columns that start ascending — the text ones.
- * Written as a list rather than a per-column flag so the three lists cannot
- * disagree about it, which is the whole reason this is a function and not four
- * lines inlined into each `toggleSort`.
+ * It used to take the current order too, and flip when handed the column
+ * already in force — because it was what a column *heading* did, and a heading
+ * is both the label and the toggle. `ListSort` asks the two questions
+ * separately, so choosing a column is only ever choosing a column.
  */
-export function nextSort<K extends string>(
-  current: SortOrder<K>,
-  key: K,
-  ascendingFirst: readonly K[],
-): SortOrder<K> {
-  if (current.key === key) return { key, descending: !current.descending };
+export function sortBy<K extends string>(key: K, ascendingFirst: readonly K[]): SortOrder<K> {
   return { key, descending: !ascendingFirst.includes(key) };
 }

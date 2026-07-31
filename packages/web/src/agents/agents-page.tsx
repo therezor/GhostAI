@@ -4,10 +4,9 @@
  * Built out of the same chrome as Files and Workspaces, deliberately and not by
  * resemblance: the same `page page--wide` container, the same `cluster
  * page__header` with its actions on the right, the same `list-toolbar` and
- * `SearchFilter`, the same `data-table` with the same sortable headings, and
- * the same kebab in the actions column. Three CRUD screens that merely *look*
- * similar drift the moment any of them is touched; three that share the
- * components cannot.
+ * `SearchFilter`, the same `DataList` rows with the same `ListSort` beside the
+ * filter, and the same kebab. CRUD screens that merely *look* similar drift the
+ * moment any of them is touched; ones that share the components cannot.
  *
  * Creating happens in a dialog rather than in a form pinned above the list —
  * again matching the other two. A permanent create form is a permanent piece of
@@ -43,21 +42,16 @@ import { SearchFilter } from '@/components/ui/search-filter.js';
 import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';
 import { NameDialog } from '@/components/crud/name-dialog.js';
 import { RowActions } from '@/components/crud/row-actions.js';
-import { SortHeader } from '@/components/crud/sort-header.js';
-import {
-  filterRows,
-  nextSort,
-  sortRows,
-  type Comparators,
-  type SortOrder,
-} from '@/components/crud/sort.js';
+import { DataList, DataListRow } from '@/components/crud/data-list.js';
+import { ListSort } from '@/components/crud/list-sort.js';
+import { filterRows, sortRows, type Comparators, type SortOrder } from '@/components/crud/sort.js';
 import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
 import { useSaveSettings, useSettings } from '@/settings/use-settings.js';
 import { toAgentDeletePatch, toAgentEnabledPatch, toNewAgentPatch } from './agents-form.js';
 import { useAgent } from './agent-context.js';
 
-/** One row of the table, with everything it renders already resolved. */
+/** One row of the list, with everything it renders already resolved. */
 interface AgentRow {
   readonly id: string;
   readonly label: string;
@@ -270,10 +264,6 @@ export function AgentsRoute(): JSX.Element {
     if (active === row.id) select(DEFAULT_AGENT_ID);
   };
 
-  const toggleSort = (key: SortKey): void => {
-    setSort((current) => nextSort(current, key, ASCENDING_FIRST));
-  };
-
   return (
     <div className="stack page page--wide">
       <div className="cluster page__header">
@@ -289,10 +279,20 @@ export function AgentsRoute(): JSX.Element {
         </Button>
       </div>
 
-      <div className="cluster list-toolbar">
-        <p className="page__note">{t('agents.note')}</p>
-        <span className="spacer" />
+      <p className="page__note">{t('agents.note')}</p>
+
+      <div className="row list-toolbar">
         <SearchFilter value={filter} label={t('agents.filter')} onValueChange={setFilter} />
+        <ListSort
+          options={[
+            { key: 'name', label: t('common.name') },
+            { key: 'model', label: t('agents.model') },
+            { key: 'status', label: t('common.status') },
+          ]}
+          sort={sort}
+          ascendingFirst={ASCENDING_FIRST}
+          onChange={setSort}
+        />
       </div>
 
       {settings.isPending && <p className="page__note">{t('common.loading')}</p>}
@@ -306,116 +306,92 @@ export function AgentsRoute(): JSX.Element {
         (rows.length === 0 ? (
           <p className="page__note">No agent matches “{filter}”.</p>
         ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <SortHeader
-                  label={t('common.name')}
-                  sortKey="name"
-                  sort={sort}
-                  onSort={toggleSort}
-                />
-                <SortHeader
-                  label={t('agents.model')}
-                  sortKey="model"
-                  sort={sort}
-                  onSort={toggleSort}
-                />
-                <SortHeader
-                  label={t('common.status')}
-                  sortKey="status"
-                  sort={sort}
-                  onSort={toggleSort}
-                />
-                <th scope="col" className="data-table__actions">
-                  <span className="sr-only">{t('common.actions')}</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.id}>
-                  <td>
-                    <Link
-                      to="/agents/$agentId"
-                      params={{ agentId: row.id }}
-                      className="data-table__open"
-                      aria-label={`Edit ${row.label}`}
-                    >
-                      <BrainCircuit />
-                      <span className="stack agents__name">
-                        <span className="agents__name-row">
-                          <span className="truncate">{row.label}</span>
-                          {row.isDefault && <Badge>default</Badge>}
-                        </span>
-                        <span className="agents__summary truncate">{summarise(row.entry, t)}</span>
+          <DataList label={t('agents.title')}>
+            {rows.map((row) => (
+              <DataListRow
+                key={row.id}
+                primary={
+                  <Link
+                    to="/agents/$agentId"
+                    params={{ agentId: row.id }}
+                    className="data-list__open"
+                    aria-label={`Edit ${row.label}`}
+                  >
+                    <BrainCircuit />
+                    <span className="stack agents__name">
+                      <span className="agents__name-row">
+                        <span className="truncate">{row.label}</span>
+                        {row.isDefault && <Badge>default</Badge>}
                       </span>
-                    </Link>
-                  </td>
-                  <td className="data-table__meta agents__model">{row.model}</td>
-                  <td className="data-table__meta">
+                      <span className="agents__summary truncate">{summarise(row.entry, t)}</span>
+                    </span>
+                  </Link>
+                }
+                meta={
+                  <>
+                    <span className="data-list__code">{row.model}</span>
                     <Badge tone={row.enabled ? 'success' : 'neutral'}>{statusLabel(row)}</Badge>
-                  </td>
-                  <td className="data-table__actions">
-                    <RowActions label={row.label}>
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          open(row.id);
-                        }}
-                      >
-                        <Pencil />
-                        Edit
-                      </DropdownMenuItem>
-                      {/* A copy is the fastest route to a variant of something
+                  </>
+                }
+                actions={
+                  <RowActions label={row.label}>
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        open(row.id);
+                      }}
+                    >
+                      <Pencil />
+                      Edit
+                    </DropdownMenuItem>
+                    {/* A copy is the fastest route to a variant of something
                           that already works, which is most of what a second
                           agent is. */}
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          duplicate(row);
-                        }}
-                      >
-                        <Copy />
-                        Duplicate
-                      </DropdownMenuItem>
-                      {/* No Rename. The name is a field in the editor, which is
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        duplicate(row);
+                      }}
+                    >
+                      <Copy />
+                      Duplicate
+                    </DropdownMenuItem>
+                    {/* No Rename. The name is a field in the editor, which is
                           one press away and is where every other thing about
                           an agent is changed — a second way to edit one field,
                           with its own dialog and its own patch builder, was a
                           shortcut that had to be kept correct twice. */}
-                      {/* Reversible where Delete is not: a disabled agent keeps
+                    {/* Reversible where Delete is not: a disabled agent keeps
                           its prompt and permissions and simply stops being
                           something a turn can run on. No confirmation, for the
                           same reason — switching it back on is the same click. */}
-                      {!row.isDefault && (
-                        <DropdownMenuItem
-                          onSelect={() => {
-                            toggleEnabled(row);
-                          }}
-                        >
-                          {row.enabled ? <PowerOff /> : <Power />}
-                          {row.enabled ? 'Disable' : 'Enable'}
-                        </DropdownMenuItem>
-                      )}
-                      {/* Switching the default off would leave an install with
+                    {!row.isDefault && (
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          toggleEnabled(row);
+                        }}
+                      >
+                        {row.enabled ? <PowerOff /> : <Power />}
+                        {row.enabled ? 'Disable' : 'Enable'}
+                      </DropdownMenuItem>
+                    )}
+                    {/* Switching the default off would leave an install with
                           no agent at all, which is not a state anything
                           downstream can serve. */}
-                      {!row.isDefault && (
-                        <DropdownMenuItem
-                          className="menu__item--danger"
-                          onSelect={() => {
-                            setPendingDelete(row);
-                          }}
-                        >
-                          <Trash2 />
-                          Delete
-                        </DropdownMenuItem>
-                      )}
-                    </RowActions>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    {!row.isDefault && (
+                      <DropdownMenuItem
+                        className="menu__item--danger"
+                        onSelect={() => {
+                          setPendingDelete(row);
+                        }}
+                      >
+                        <Trash2 />
+                        Delete
+                      </DropdownMenuItem>
+                    )}
+                  </RowActions>
+                }
+              />
+            ))}
+          </DataList>
         ))}
 
       <NameDialog

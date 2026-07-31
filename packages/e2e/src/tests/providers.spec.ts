@@ -36,6 +36,16 @@ const settingsOf = async (app: Page, url: string): Promise<SettingsView> => {
   return (await response.json()) as SettingsView;
 };
 
+/**
+ * One endpoint's card.
+ *
+ * Scoped to the Providers list rather than swept off the page: the shell has
+ * lists of its own — the sidebar's conversations, any open menu — and a bare
+ * `getByRole('listitem')` picks them up too.
+ */
+const providerRow = (app: Page, name: string) =>
+  app.getByRole('list', { name: 'Providers' }).getByRole('listitem').filter({ hasText: name });
+
 /** One endpoint, so a spec that edits has something to open. */
 async function seedOllama(app: Page, url: string, withKey = false): Promise<void> {
   await app.request.patch(`${url}/api/settings`, {
@@ -143,7 +153,7 @@ test.describe('providers', () => {
     await seedOllama(app, harness.url);
     await app.goto(`${harness.url}/settings?panel=providers`);
 
-    await expect(app.getByRole('row', { name: /Ollama/ })).toContainText('Enabled');
+    await expect(providerRow(app, 'Ollama')).toContainText('Enabled');
 
     await app.getByRole('button', { name: 'Actions for Ollama' }).click();
     await app.getByRole('menuitem', { name: 'Disable' }).click();
@@ -152,7 +162,7 @@ test.describe('providers', () => {
       .poll(async () => (await settingsOf(app, harness.url)).config.providers.ollama?.enabled)
       .toBe(false);
     // And the list says so rather than dropping the row.
-    await expect(app.getByRole('row', { name: /Ollama/ })).toContainText('Disabled');
+    await expect(providerRow(app, 'Ollama')).toContainText('Disabled');
   });
 
   test('deleting asks, takes the key with it, and returns to the list', async ({

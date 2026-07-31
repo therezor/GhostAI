@@ -37,6 +37,7 @@ import {
   FolderOpen,
   FolderPlus,
   Pencil,
+  Plus,
   Trash2,
   Upload,
 } from 'lucide-react';
@@ -58,14 +59,19 @@ import {
   DialogHeading,
   DialogSubheading,
 } from '@/components/ui/dialog.js';
-import { DropdownMenuItem } from '@/components/ui/dropdown-menu.js';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu.js';
 import { SearchFilter } from '@/components/ui/search-filter.js';
 import { toast } from '@/components/ui/toast.js';
 import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';
 import { NameDialog } from '@/components/crud/name-dialog.js';
 import { RowActions } from '@/components/crud/row-actions.js';
-import { SortHeader } from '@/components/crud/sort-header.js';
-import { nextSort } from '@/components/crud/sort.js';
+import { DataList, DataListRow } from '@/components/crud/data-list.js';
+import { ListSort } from '@/components/crud/list-sort.js';
 import { FilePreview } from '@/files/file-preview.js';
 import { useWorkspace } from '@/workspaces/workspace-context.js';
 import {
@@ -233,10 +239,6 @@ export function FilesRoute(): JSX.Element {
     [listing.data, filter, sort],
   );
 
-  const toggleSort = (key: SortKey): void => {
-    setSort((current) => nextSort(current, key, ASCENDING_FIRST));
-  };
-
   const onDrop = (event: DragEvent<HTMLDivElement>): void => {
     event.preventDefault();
     setDropping(false);
@@ -252,24 +254,38 @@ export function FilesRoute(): JSX.Element {
       <div className="cluster page__header">
         <h1 className="page__title">{t('files.title')}</h1>
         <span className="spacer" />
-        <Button
-          variant="ghost"
-          onClick={() => {
-            setCreating('file');
-          }}
-        >
-          <FilePlus />
-          {t('common.newFile')}
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={() => {
-            setCreating('directory');
-          }}
-        >
-          <FolderPlus />
-          {t('common.newFolder')}
-        </Button>
+        {/* One trigger rather than two buttons, and the phone is what decided
+            it: "New file", "New folder" and "Upload" spelled out side by side
+            are wider than a handset, so the header wrapped into a ragged
+            second line with one action stranded under the title. They are also
+            the same act asked about two things, which is what a menu is for —
+            Upload stays outside it because it is a different act entirely. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost">
+              <Plus />
+              {t('common.new')}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="floating--menu">
+            <DropdownMenuItem
+              onSelect={() => {
+                setCreating('file');
+              }}
+            >
+              <FilePlus />
+              {t('common.newFile')}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => {
+                setCreating('directory');
+              }}
+            >
+              <FolderPlus />
+              {t('common.newFolder')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Button
           disabled={upload.isPending}
           onClick={() => {
@@ -295,22 +311,35 @@ export function FilesRoute(): JSX.Element {
         />
       </div>
 
-      <div className="cluster list-toolbar">
-        <Breadcrumbs
-          path={directory}
-          onNavigate={(next) => {
-            setFilter('');
-            void navigate({
-              to: '/files',
-              search: {
-                ...(next === ROOT_PATH ? {} : { path: next }),
-                workspace,
-              },
-            });
-          }}
-        />
-        <span className="spacer" />
+      {/* Where you are, on its own line above the controls — the same place the
+          other lists put their explanatory note, and for the same reason: it
+          describes the page rather than acting on the list. */}
+      <Breadcrumbs
+        path={directory}
+        onNavigate={(next) => {
+          setFilter('');
+          void navigate({
+            to: '/files',
+            search: {
+              ...(next === ROOT_PATH ? {} : { path: next }),
+              workspace,
+            },
+          });
+        }}
+      />
+
+      <div className="row list-toolbar">
         <SearchFilter value={filter} label={t('files.filter')} onValueChange={setFilter} />
+        <ListSort
+          options={[
+            { key: 'name', label: t('common.name') },
+            { key: 'size', label: t('files.size') },
+            { key: 'modified', label: t('files.modified') },
+          ]}
+          sort={sort}
+          ascendingFirst={ASCENDING_FIRST}
+          onChange={setSort}
+        />
       </div>
 
       {listing.isPending && <p className="page__note">{t('common.loading')}</p>}
@@ -344,44 +373,46 @@ export function FilesRoute(): JSX.Element {
               Nothing here matches “{filter}”. {String(total)} entries are hidden.
             </p>
           ) : (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <SortHeader
-                    label={t('common.name')}
-                    sortKey="name"
-                    sort={sort}
-                    onSort={toggleSort}
-                  />
-                  <SortHeader
-                    label={t('files.size')}
-                    sortKey="size"
-                    sort={sort}
-                    onSort={toggleSort}
-                  />
-                  <SortHeader
-                    label={t('files.modified')}
-                    sortKey="modified"
-                    sort={sort}
-                    onSort={toggleSort}
-                    className="data-table__modified"
-                  />
-                  <th scope="col">
-                    <span className="sr-only">{t('common.actions')}</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {entries.map((entry) => (
-                  <tr key={entry.path}>
-                    <td>
-                      <button
-                        type="button"
-                        className={cn(
-                          'data-table__open',
-                          entry.isDirectory && 'data-table__open--directory',
-                        )}
-                        onClick={() => {
+            <DataList label={t('files.title')}>
+              {entries.map((entry) => (
+                <DataListRow
+                  key={entry.path}
+                  primary={
+                    <button
+                      type="button"
+                      className={cn(
+                        'data-list__open',
+                        entry.isDirectory && 'data-list__open--directory',
+                      )}
+                      onClick={() => {
+                        if (entry.isDirectory) {
+                          setFilter('');
+                          void navigate({
+                            to: '/files',
+                            search: { path: entry.path, workspace },
+                          });
+                        } else {
+                          setPreview(entry);
+                        }
+                      }}
+                    >
+                      {entry.isDirectory ? <Folder /> : <FileIcon />}
+                      <span className="truncate">{entry.name}</span>
+                    </button>
+                  }
+                  meta={
+                    <>
+                      {/* A directory has no size of its own to report, and the
+                          em dash is what the Size column used to say so. It
+                          still reads as "nothing to say here" beside a time. */}
+                      <span>{entry.isDirectory ? '—' : formatBytes(entry.sizeBytes)}</span>
+                      <span>{fmt.relativeTime(entry.modifiedAtMs, now)}</span>
+                    </>
+                  }
+                  actions={
+                    <RowActions label={entry.name}>
+                      <DropdownMenuItem
+                        onSelect={() => {
                           if (entry.isDirectory) {
                             setFilter('');
                             void navigate({
@@ -393,57 +424,31 @@ export function FilesRoute(): JSX.Element {
                           }
                         }}
                       >
-                        {entry.isDirectory ? <Folder /> : <FileIcon />}
-                        <span className="truncate">{entry.name}</span>
-                      </button>
-                    </td>
-                    <td className="data-table__meta">
-                      {entry.isDirectory ? '—' : formatBytes(entry.sizeBytes)}
-                    </td>
-                    <td className="data-table__meta data-table__modified">
-                      {fmt.relativeTime(entry.modifiedAtMs, now)}
-                    </td>
-                    <td className="data-table__actions">
-                      <RowActions label={entry.name}>
-                        <DropdownMenuItem
-                          onSelect={() => {
-                            if (entry.isDirectory) {
-                              setFilter('');
-                              void navigate({
-                                to: '/files',
-                                search: { path: entry.path, workspace },
-                              });
-                            } else {
-                              setPreview(entry);
-                            }
-                          }}
-                        >
-                          {entry.isDirectory ? <FolderOpen /> : <FileIcon />}
-                          {entry.isDirectory ? 'Open' : 'Edit'}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onSelect={() => {
-                            setRenaming(entry);
-                          }}
-                        >
-                          <Pencil />
-                          Rename
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="menu__item--danger"
-                          onSelect={() => {
-                            setPendingDelete(entry);
-                          }}
-                        >
-                          <Trash2 />
-                          Delete
-                        </DropdownMenuItem>
-                      </RowActions>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                        {entry.isDirectory ? <FolderOpen /> : <FileIcon />}
+                        {entry.isDirectory ? 'Open' : 'Edit'}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          setRenaming(entry);
+                        }}
+                      >
+                        <Pencil />
+                        Rename
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="menu__item--danger"
+                        onSelect={() => {
+                          setPendingDelete(entry);
+                        }}
+                      >
+                        <Trash2 />
+                        Delete
+                      </DropdownMenuItem>
+                    </RowActions>
+                  }
+                />
+              ))}
+            </DataList>
           )}
         </div>
       )}

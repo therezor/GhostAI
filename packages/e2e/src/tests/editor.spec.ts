@@ -125,8 +125,8 @@ test.describe('renaming', () => {
     await app.getByRole('button', { name: 'Rename' }).click();
 
     // The durable result: the listing holds the new name and not the old one.
-    await expect(app.getByRole('cell', { name: 'published', exact: true })).toBeVisible();
-    await expect(app.getByRole('cell', { name: 'drafts', exact: true })).toHaveCount(0);
+    await expect(app.getByRole('button', { name: 'published', exact: true })).toBeVisible();
+    await expect(app.getByRole('button', { name: 'drafts', exact: true })).toHaveCount(0);
 
     // And the tree moved rather than being recreated empty.
     const moved = await app.request.get(
