@@ -588,3 +588,127 @@ describe('multiple agents', () => {
     expect(runtime.requireLoopFor('reviewer').model).toBe('pinned');
   });
 });
+
+describe('agent references surviving a delete', () => {
+  /** A home whose config has `main` delegating to `researcher`. */
+  function delegatingHome(): string {
+    return tempHome({
+      agents: {
+        defaults: { provider: 'ollama', model: 'qwen3:8b' },
+        list: {
+          researcher: { label: 'Researcher' },
+          main: {
+            label: 'Main',
+            subagents: [{ id: 'researcher', prompt: 'Ask for facts.', permission: 'allow' }],
+          },
+        },
+      },
+    });
+  }
+
+  it('deletes an agent another one delegates to, instead of reporting a fault', () => {
+    // The whole point. This used to throw a `config` error during the rebuild,
+    // which the kind table maps to a 500 — and because the rebuild happens
+    // before the write, the file was left untouched. A delete that reported as
+    // a server fault and then did nothing.
+    const runtime = build({ home: delegatingHome() });
+
+    const next = runtime.reconfigure({ agents: { list: { researcher: null } } });
+
+    expect(next.agents.list.researcher).toBeUndefined();
+    // The *returned* config is what the caller saves, so the healing has to be
+    // in the return value and not only in what the runtime now holds.
+    expect(next.agents.list.main?.subagents).toEqual([]);
+  });
+
+  it('leaves the delegation alone when the target is only switched off', () => {
+    const runtime = build({ home: delegatingHome() });
+
+    const next = runtime.reconfigure({ agents: { list: { researcher: { enabled: false } } } });
+
+    expect(next.agents.list.main?.subagents.map((ref) => ref.id)).toEqual(['researcher']);
+    // The binding is dropped even though the ref survives, and the reason is
+    // reported rather than swallowed.
+    expect(runtime.agents.find((agent) => agent.id === 'main')?.subagents).toEqual([]);
+    expect(runtime.configWarnings).toHaveLength(1);
+    expect(runtime.configWarnings[0]).toMatchObject({ code: 'disabled_subagent' });
+  });
+
+  it('starts on a config whose delegation names an agent that is not there', () => {
+    // The boot-failure case: `resolveSubagents` runs inside `listAgents` inside
+    // `#build`, so throwing meant one hand-edited line stopped the server.
+    const home = tempHome({
+      agents: {
+        defaults: { provider: 'ollama', model: 'qwen3:8b' },
+        list: {
+          main: { subagents: [{ id: 'ghost', prompt: '', permission: 'allow' }] },
+        },
+      },
+    });
+
+    const runtime = build({ home });
+
+    expect(runtime.agents.map((agent) => agent.id)).toEqual(['default', 'main']);
+    expect(runtime.configWarnings[0]).toMatchObject({
+      agentId: 'main',
+      code: 'missing_subagent',
+    });
+  });
+
+  it('reports the same warning after a reload, without rewriting the file', () => {
+    // `reload` is deliberately read-only — writing would turn a reload into a
+    // save, which is how a hand-edited file gets reformatted by the button
+    // meant to read it. So the dangling ref stays, and stays reported.
+    const home = tempHome({
+      agents: {
+        defaults: { provider: 'ollama', model: 'qwen3:8b' },
+        list: { main: { subagents: [{ id: 'ghost', prompt: '', permission: 'allow' }] } },
+      },
+    });
+    const runtime = build({ home });
+
+    const reloaded = runtime.reload();
+
+    expect(reloaded.agents.list.main?.subagents.map((ref) => ref.id)).toEqual(['ghost']);
+    expect(runtime.configWarnings).toHaveLength(1);
+  });
+
+  it('refuses a patch that introduces an id nothing could use', () => {
+    const runtime = ollama();
+
+    expect(() => runtime.reconfigure({ agents: { list: { '../evil': { label: 'No' } } } })).toThrow(
+      /cannot be used as an agent id/,
+    );
+  });
+
+  it('still lets an odd id already on disk be deleted', () => {
+    const home = tempHome({
+      agents: {
+        defaults: { provider: 'ollama', model: 'qwen3:8b' },
+        list: { '../evil': { label: 'Sneaky' } },
+      },
+    });
+    const runtime = build({ home });
+
+    const next = runtime.reconfigure({ agents: { list: { '../evil': null } } });
+
+    expect(next.agents.list['../evil']).toBeUndefined();
+  });
+
+  it('resets the default agent rather than erroring when its entry is deleted', () => {
+    // `agents.list.default` is an *override* of an agent that always exists, so
+    // removing it means "back to inherited" rather than "delete the agent".
+    const home = tempHome({
+      agents: {
+        defaults: { provider: 'ollama', model: 'qwen3:8b' },
+        list: { default: { label: 'House style' } },
+      },
+    });
+    const runtime = build({ home });
+
+    runtime.reconfigure({ agents: { list: { default: null } } });
+
+    expect(runtime.agents.map((agent) => agent.id)).toEqual(['default']);
+    expect(runtime.agents[0]?.label).toBe('default');
+  });
+});

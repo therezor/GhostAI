@@ -101,7 +101,14 @@ import {
   type RunnerResolver,
 } from '@ghostai/tools';
 
-import { listAgents, resolveAgent, type EffectiveAgent } from './agents.js';
+import {
+  assertWritableAgentIds,
+  pruneDanglingSubagents,
+  resolveAgent,
+  resolveAgents,
+  type AgentConfigWarning,
+  type EffectiveAgent,
+} from './agents.js';
 import { PROVIDER_CREDENTIAL_NAMESPACE, findCredential, openVault } from './credentials.js';
 import { JailCache } from './jail-cache.js';
 import { ToolboxPool, dockerEngine, type ContainerEngine } from './toolbox-pool.js';
@@ -213,6 +220,14 @@ export interface GhostRuntime {
    * caller listing agents for a picker never has to know the inheritance rule.
    */
   readonly agents: readonly EffectiveAgent[];
+  /**
+   * What the settings asked for and this build could not honour. Empty is healthy.
+   *
+   * Never a reason to refuse the build: the commonest entry here is a
+   * delegation to an agent someone deleted, which is not a fault of whoever is
+   * starting the process now.
+   */
+  readonly configWarnings: readonly AgentConfigWarning[];
   /** The endpoint a turn would use, or `null` on an unconfigured install. */
   readonly instance: ProviderInstance | null;
   /** The provider type behind `instance`. Derived, and `null` for the same reason. */
@@ -282,6 +297,14 @@ interface Resolved {
   readonly config: Config;
   /** Every enabled agent, resolved. Rebuilt with the config it came from. */
   readonly agents: readonly EffectiveAgent[];
+  /**
+   * What the settings asked for and this build had to ignore. Empty is healthy.
+   *
+   * Held beside the agents rather than thrown, because every one of these is
+   * survivable and at least one of them — a delegation to an agent someone
+   * deleted — is not the fault of whoever is starting the server now.
+   */
+  readonly warnings: readonly AgentConfigWarning[];
   readonly paths: GhostPaths;
   readonly jails: JailCache;
   /**
@@ -492,6 +515,17 @@ class Runtime implements GhostRuntime {
     return this.#current.hasCredential;
   }
 
+  /**
+   * What the current settings asked for and could not have. Empty is healthy.
+   *
+   * Served rather than logged because the operator who can fix it is looking at
+   * the settings page, not at the process output — and because these survive a
+   * restart, so a warning nobody surfaced is one nobody ever sees.
+   */
+  get configWarnings(): readonly AgentConfigWarning[] {
+    return this.#current.warnings;
+  }
+
   requireLoop(): AgentLoop {
     const loop = this.#current.loop;
     if (loop !== null) return loop;
@@ -500,8 +534,29 @@ class Runtime implements GhostRuntime {
     throw this.#current.unconfigured ?? noProviderError(this.file);
   }
 
+  /**
+   * Merge a patch, heal what it orphaned, and rebuild — or change nothing.
+   *
+   * The order matters and each step earns its place:
+   *
+   *  1. **merge** — the generic tree merge, which knows nothing about agents.
+   *  2. **`assertWritableAgentIds`** — refuses an id nothing downstream could
+   *     use, comparing against the current config so an odd key already on disk
+   *     stays deletable.
+   *  3. **`pruneDanglingSubagents`** — strips delegations to agents this patch
+   *     just deleted. The *pruned* config is what this returns, and callers
+   *     save the return value, so the file is written already healed. Without
+   *     this step, deleting a delegated-to agent threw during the rebuild below
+   *     and — since the rebuild happens before the write — reported a 500 and
+   *     left the file untouched.
+   *  4. **build** — where an unbuildable agent is still refused outright.
+   *
+   * All-or-nothing throughout: any throw leaves `#current` exactly as it was.
+   */
   reconfigure(patch: ConfigPatch): Config {
-    const next = mergeConfigPatch(this.#current.config, patch);
+    const merged = mergeConfigPatch(this.#current.config, patch);
+    assertWritableAgentIds(this.#current.config, merged);
+    const { config: next } = pruneDanglingSubagents(merged);
     const previous = this.#current;
     this.#current = this.#build(next, previous);
     // After the build, never before: `#build` can throw, and a reconfigure that
@@ -565,7 +620,7 @@ class Runtime implements GhostRuntime {
     // was. Only the *default* agent's loop is constructed here; the rest are
     // built on first use, because an install with six agents and one in use
     // should not open six provider connections at boot.
-    const agents = listAgents(config);
+    const { agents, warnings } = resolveAgents(config);
     const paths = pathsFor(config, this.#options);
 
     const resolved = this.#resolveProvider(config, resolveAgent(config, DEFAULT_AGENT_ID), paths);
@@ -616,6 +671,7 @@ class Runtime implements GhostRuntime {
     return {
       config,
       agents,
+      warnings,
       paths,
       jails,
       toolboxPool,

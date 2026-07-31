@@ -48,7 +48,7 @@ import {
   ToolListResponseSchema,
   UploadResponseSchema,
   type AuthSessionResponse,
-  type ConfigPatch,
+  type SettingsPatchRequest,
   type ContextResponse,
   type FileEntry,
   type FileListResponse,
@@ -303,7 +303,7 @@ export const api = {
    * built by `patchOf()` with every default stripped, so a field this request
    * does not mention is a field the server does not touch.
    */
-  patchSettings: (patch: ConfigPatch): Promise<SettingsResponse> =>
+  patchSettings: (patch: SettingsPatchRequest): Promise<SettingsResponse> =>
     request('/api/settings', SettingsResponseSchema, { method: 'PATCH', body: patch }),
 
   /**

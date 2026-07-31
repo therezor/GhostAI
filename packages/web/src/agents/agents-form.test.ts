@@ -394,6 +394,20 @@ describe('toNewAgentPatch', () => {
 
     expect(patch.agents?.list?.copy).toMatchObject({ model: 'qwen3:32b', maxTokens: 512 });
   });
+
+  it('does not copy who the template delegates to', () => {
+    // The one thing that is a relationship rather than a setting. It also
+    // compounds: a new agent is stamped from the *default*, so a delegation
+    // copied there would put that tool in front of every agent created
+    // afterwards — and the model would use it.
+    const delegating = AgentEntrySchema.parse({
+      subagents: [{ id: 'researcher', prompt: 'Ask for facts.', permission: 'allow' }],
+    });
+
+    const patch = toNewAgentPatch('copy', 'Copy', delegating, DEFAULTS);
+
+    expect(patch.agents?.list?.copy?.subagents).toEqual([]);
+  });
 });
 
 describe('toAgentEnabledPatch', () => {
@@ -443,6 +457,16 @@ describe('toAgentDeletePatch', () => {
 
     expect(patch).toEqual({ agents: { list: { reviewer: null } } });
     expect(ConfigPatchSchema.safeParse(patch).success).toBe(true);
+  });
+
+  it('stays one key, and does not try to clean up the delegations to it', () => {
+    // Stripping the references belongs to the server, which owns the only
+    // chokepoint every write goes through — a client-side cascade would miss a
+    // delete made through the API or by hand, and would have to be right about
+    // a merge rule it does not implement.
+    const patch = toAgentDeletePatch('reviewer');
+
+    expect(Object.keys(patch.agents?.list ?? {})).toEqual(['reviewer']);
   });
 });
 
@@ -508,13 +532,6 @@ describe('subagents', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(ConfigPatchSchema.safeParse(result.patch).success).toBe(true);
-  });
-
-  it('carries the refs into a duplicate', () => {
-    const template = AgentEntrySchema.parse({ subagents: [RESEARCHER] });
-    const patch = toNewAgentPatch('copy', 'Copy', template, DEFAULTS);
-
-    expect(patch.agents?.list?.copy?.subagents).toEqual([RESEARCHER]);
   });
 
   it('does not lose them when the prompt is the only thing edited', () => {

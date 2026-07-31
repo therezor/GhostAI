@@ -23,7 +23,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
-import { ConfigSchema, type ConfigPatch } from '@ghostai/protocol';
+import { ConfigSchema, defaultSubagentPrompt, type ConfigPatch } from '@ghostai/protocol';
 
 import { Providers } from '@/app/providers.js';
 import { createAppRouter } from '@/app/router.js';
@@ -1105,6 +1105,43 @@ describe('subagents', () => {
     expect(screen.getByText('ask_default')).toBeInTheDocument();
   });
 
+  it('shows the sentence the model would read when the box is left empty', async () => {
+    // It used to hold an *example* of what an operator might write, so the only
+    // clue about the default was a hint saying one existed. This is the real
+    // one, from the same function the loop hands to the provider.
+    const { user } = mount('/agents/reviewer');
+
+    await user.click(await screen.findByRole('button', { name: 'Add subagent' }));
+    await user.click(screen.getByRole('combobox', { name: 'Agent for subagent 1' }));
+    await user.click(await screen.findByRole('option', { name: 'default' }));
+
+    expect(screen.getByLabelText('When to use subagent 1')).toHaveAttribute(
+      'placeholder',
+      defaultSubagentPrompt('default'),
+    );
+  });
+
+  it('gives the guidance box room to show that sentence', async () => {
+    // A textarea rather than an input, and the reason is the placeholder rather
+    // than the typing: the default runs to a couple of sentences, and one line
+    // showed about forty characters of it.
+    const { user } = mount('/agents/reviewer');
+
+    await user.click(await screen.findByRole('button', { name: 'Add subagent' }));
+
+    expect(screen.getByLabelText('When to use subagent 1').tagName).toBe('TEXTAREA');
+  });
+
+  it('leaves the placeholder empty until an agent is chosen', async () => {
+    // There is no agent to name yet, and a sentence about an unnamed one would
+    // be a description of nothing.
+    const { user } = mount('/agents/reviewer');
+
+    await user.click(await screen.findByRole('button', { name: 'Add subagent' }));
+
+    expect(screen.getByLabelText('When to use subagent 1')).toHaveAttribute('placeholder', '');
+  });
+
   it('saves the ref, its guidance and its permission', async () => {
     const { user, calls } = mount('/agents/reviewer');
 
@@ -1174,5 +1211,131 @@ describe('subagents', () => {
       await screen.findByText(/There is no other agent to delegate to yet/),
     ).toBeInTheDocument();
     expect(user).toBeDefined();
+  });
+});
+
+describe('renaming an agent', () => {
+  it('sends the rename with the patch, in one request', async () => {
+    // Two requests meant two writes with a window between them: the rename
+    // could land and the patch fail, leaving the agent under its new name
+    // holding its old settings.
+    const { user, calls } = mount('/agents/reviewer', statefulSettings());
+
+    const id = await screen.findByLabelText('Identifier');
+    await user.clear(id);
+    await user.type(id, 'code-review');
+    // The same Save every other box on this screen waits for.
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => {
+      expect(patchesOf(calls)).not.toHaveLength(0);
+    });
+    const patches = patchesOf(calls);
+    expect(patches).toHaveLength(1);
+    expect(patches[0]).toMatchObject({
+      renameAgents: [{ from: 'reviewer', to: 'code-review' }],
+    });
+    // The entry travels in the same body, addressed to the id it will have.
+    expect(patches[0]?.agents?.list?.['code-review']).toBeDefined();
+    // Nothing went anywhere else.
+    expect(calls.filter((call) => call.method === 'POST')).toEqual([]);
+  });
+
+  it('says what the id will become, since the box takes a label’s worth of typing', async () => {
+    const { user } = mount('/agents/reviewer', statefulSettings());
+
+    const id = await screen.findByLabelText('Identifier');
+    await user.clear(id);
+    await user.type(id, 'Code Review');
+
+    expect(await screen.findByText(/Will be renamed to “code-review”/)).toBeInTheDocument();
+  });
+
+  it('does not touch the rename endpoint when only other fields changed', async () => {
+    // The id is a field like any other, so a save that left it alone must not
+    // send a key move — a rename that is a no-op on the server is still a write
+    // it has to reason about.
+    const { user, calls } = mount('/agents/reviewer', statefulSettings());
+
+    const name = await screen.findByLabelText('Name');
+    await user.clear(name);
+    await user.type(name, 'Second Opinion');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => {
+      expect(patchesOf(calls)).not.toHaveLength(0);
+    });
+    expect(patchesOf(calls).some((patch) => 'renameAgents' in patch)).toBe(false);
+  });
+
+  it('keeps the other edits made alongside the rename', async () => {
+    // The bug the separate button had: renaming navigated to the new id, which
+    // remounts this editor, and every unsaved box went with it. One button
+    // cannot lose a change it is the one committing.
+    const { user, calls } = mount('/agents/reviewer', {
+      ...statefulSettings(),
+      'POST /api/agents/reviewer/rename': [
+        200,
+        {
+          agent: {
+            id: 'code-review',
+            label: 'Second Opinion',
+            model: 'llama3',
+            provider: 'ollama',
+          },
+          previousId: 'reviewer',
+          sessionsMoved: 0,
+        },
+      ],
+    });
+
+    const name = await screen.findByLabelText('Name');
+    await user.clear(name);
+    await user.type(name, 'Second Opinion');
+    const id = screen.getByLabelText('Identifier');
+    await user.clear(id);
+    await user.type(id, 'code-review');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    // The label edit survived, and it was written against the *new* id.
+    await waitFor(() => {
+      expect(
+        patchesOf(calls).some(
+          (patch) => patch.agents?.list?.['code-review']?.label === 'Second Opinion',
+        ),
+      ).toBe(true);
+    });
+  });
+
+  it('refuses an id another agent already holds, before anything is sent', async () => {
+    // Checked against the settings tree rather than `/api/agents`, which omits
+    // the disabled agents — colliding with a switched-off one is still the
+    // collision the server answers with a 409.
+    const twoAgents = ConfigSchema.parse({
+      ...CONFIG,
+      agents: {
+        ...CONFIG.agents,
+        list: { ...CONFIG.agents.list, writer: { label: 'Writer', enabled: false } },
+      },
+    });
+    const { user, calls } = mount('/agents/reviewer', statefulSettings(twoAgents));
+
+    const id = await screen.findByLabelText('Identifier');
+    await user.clear(id);
+    await user.type(id, 'writer');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByText(/already an agent called/)).toBeInTheDocument();
+    // Refused before anything is sent, so the entry edits do not go either.
+    expect(patchesOf(calls)).toHaveLength(0);
+  });
+
+  it('does not offer to rename the default agent', async () => {
+    // It resolves whether or not it has an entry, and an install with no
+    // default agent is not a state anything downstream can use.
+    mount('/agents/default');
+
+    await screen.findByLabelText('Name');
+    expect(screen.queryByLabelText('Identifier')).not.toBeInTheDocument();
   });
 });

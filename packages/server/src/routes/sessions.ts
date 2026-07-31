@@ -104,6 +104,29 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
     return request.params as SessionParams;
   }
 
+  /**
+   * Refuses a binding to an agent that cannot run, the way the workspace guard does.
+   *
+   * `ensureSession` would happily store any string, and a conversation bound to
+   * an agent nobody can resolve is one that can never take a turn under the
+   * agent it names. This is where almost every dangling binding came from: the
+   * adjacent `workspaceId` was checked and this was not.
+   *
+   * Deliberately about the *incoming* id and never the stored one — moving a
+   * session off an agent that has since been deleted has to keep working, and
+   * that is the recovery this route exists to provide.
+   *
+   * A disabled agent is refused too, matching `hasAgent`: it is absent from
+   * every listing an operator could have picked from, so accepting it here
+   * would bind a conversation to something the UI cannot show them.
+   */
+  function requireAgent(agentId: string | undefined): void {
+    if (agentId === undefined || agentId === '') return;
+    if (!deps.runtime.agents().some((agent) => agent.id === agentId)) {
+      throw notFound(`No such agent: ${agentId}`);
+    }
+  }
+
   return {
     'sessions.list': {
       summary: 'Sessions, newest activity first',
@@ -154,6 +177,7 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
         ) {
           throw notFound(`No such workspace: ${body.workspaceId}`);
         }
+        requireAgent(body.agentId);
 
         const record = store.ensureSession(body.key ?? `web-${randomUUID()}`, {
           origin: 'web',
@@ -186,6 +210,7 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
         const { key } = params(request);
         requireSession(key);
         const body = request.body as UpdateSessionRequest;
+        requireAgent(body.agentId);
         const updated = store.updateSession(key, {
           ...(body.title === undefined ? {} : { title: body.title }),
           ...(body.agentId === undefined ? {} : { agentId: body.agentId }),
@@ -260,7 +285,19 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
         // The session's own agent, not the default: its tool list, its prompt
         // and its context budget are what a turn here would actually carry, and
         // a meter measured against another agent's window is simply wrong.
-        const agent = deps.runtime.agent(session.agentId);
+        //
+        // Unless it names one that is gone, in which case the honest answer is
+        // the one a turn *would* get — the default agent — rather than a 404
+        // for a conversation that lists and opens perfectly well. Reported
+        // through `requestedAgentId` so the panel can say what it is showing
+        // instead of quietly measuring something else.
+        const bound = session.agentId;
+        const missing =
+          bound !== undefined &&
+          bound !== '' &&
+          !deps.runtime.agents().some((agent) => agent.id === bound);
+        const effectiveId = missing ? undefined : bound;
+        const agent = deps.runtime.agent(effectiveId);
 
         // The measurement itself lives in `@ghostai/agent`, so the CLI's
         // `/context` reports the same numbers from the same code rather than a
@@ -271,7 +308,10 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
           tools: agent.tools,
           sessionKey: key,
           channel: 'web',
-          ...(session.agentId === undefined ? {} : { agentId: session.agentId }),
+          // The effective id, not the stored one: this reaches `previewPrompt`,
+          // and a preview built for an agent that will not run is a preview of
+          // something that is not going to happen.
+          ...(effectiveId === undefined ? {} : { agentId: effectiveId }),
           contextWindowTokens: agent.contextWindowTokens,
         });
         if (report === undefined) throw notFound(`No session "${key}"`);
@@ -284,6 +324,10 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
           estimatedTokens: report.estimatedTokens,
           contextWindowTokens: report.contextWindowTokens,
           breakdown: { ...report.breakdown },
+          agentId: agent.id,
+          // Present only on a fallback, so a client can treat its presence as
+          // the whole signal rather than comparing two ids on every response.
+          ...(missing ? { requestedAgentId: bound } : {}),
         };
       },
     },

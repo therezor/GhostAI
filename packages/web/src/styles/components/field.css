@@ -45,6 +45,15 @@
     line-height: var(--leading-sm);
   }
 
+  /* The lists this control was built for hold identifiers, which is why the
+   * base rule is mono. A textarea holding a sentence is prose, and prose is set
+   * in the sans face — see the type rule. */
+  .textarea--prose {
+    font-family: var(--font-sans);
+    font-size: var(--text-md);
+    line-height: var(--leading-md);
+  }
+
   .input[aria-invalid='true'],
   .textarea[aria-invalid='true'] {
     border-color: var(--danger-fg);

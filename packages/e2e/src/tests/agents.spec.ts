@@ -379,4 +379,145 @@ test.describe('agents', () => {
     expect(moved.ok()).toBe(true);
     expect(await read()).toBe('default');
   });
+
+  test('a conversation keeps working after the agent it names is deleted', async ({
+    app,
+    harness,
+  }) => {
+    // The whole point of the fallback. An agent id is user-authored and lives
+    // in a file the operator edits, so it can go at any moment — and a
+    // conversation must not become a thing that cannot take another turn.
+    await app.request.patch(`${harness.url}/api/settings`, {
+      data: { agents: { list: { reviewer: { label: 'Reviewer' } } } },
+    });
+    await app.request.post(`${harness.url}/api/sessions`, {
+      data: { key: 'web-orphan', agentId: 'reviewer' },
+    });
+
+    const deleted = await app.request.patch(`${harness.url}/api/settings`, {
+      data: { agents: { list: { reviewer: null } } },
+    });
+    expect(deleted.ok()).toBe(true);
+
+    await app.goto(`${harness.url}/?session=web-orphan`);
+    await app.getByRole('textbox', { name: 'Message' }).fill('stream a long answer');
+    await app.getByRole('button', { name: 'Send' }).click();
+
+    // Settled state only: the answer arrived and the composer is offering Send
+    // again. Nothing here waits on a line that exists between two frames.
+    const transcript = app.getByTestId('transcript');
+    await expect(transcript.getByText('Here is what I found.')).toBeVisible();
+    await expect(app.getByRole('button', { name: 'Send' })).toBeVisible();
+
+    // The picker says what happened, and this *is* durable: it is read off the
+    // session row and the agent listing, both of which survive a reload. The
+    // `agent_fallback` notice is not — it is a live frame and nothing persists
+    // it — so it is asserted where the state can be held still, in
+    // `chat.test.tsx`, rather than raced for here.
+    await expect(
+      app.getByRole('button', { name: /reviewer — no longer configured/ }),
+    ).toBeVisible();
+
+    // And the binding is untouched, which is what lets re-creating the agent
+    // restore this conversation with no action taken on it.
+    const stored = await app.request.get(`${harness.url}/api/sessions/web-orphan`);
+    expect(((await stored.json()) as { agentId?: string }).agentId).toBe('reviewer');
+  });
+
+  test('deleting an agent another one delegates to succeeds', async ({ app, harness }) => {
+    // Used to be a 500 that changed nothing: the rebuild threw over the
+    // now-dangling delegation, and the rebuild happens before the write.
+    await app.request.patch(`${harness.url}/api/settings`, {
+      data: {
+        agents: {
+          list: {
+            reviewer: { label: 'Reviewer' },
+            planner: {
+              label: 'Planner',
+              subagents: [{ id: 'reviewer', prompt: 'Check it.', permission: 'allow' }],
+            },
+          },
+        },
+      },
+    });
+
+    const deleted = await app.request.patch(`${harness.url}/api/settings`, {
+      data: { agents: { list: { reviewer: null } } },
+    });
+    expect(deleted.ok()).toBe(true);
+
+    // The settled tree: the agent is gone and so is the delegation to it.
+    const settings = await app.request.get(`${harness.url}/api/settings`);
+    const config = (await settings.json()) as {
+      config: { agents: { list: Record<string, { subagents: { id: string }[] }> } };
+    };
+    expect(config.config.agents.list.reviewer).toBeUndefined();
+    expect(config.config.agents.list.planner?.subagents).toEqual([]);
+
+    await app.goto(`${harness.url}/agents`);
+    await expect(app.getByRole('link', { name: 'Edit Reviewer' })).toHaveCount(0);
+  });
+
+  test('renaming an agent takes its conversations and delegations with it', async ({
+    app,
+    harness,
+  }) => {
+    await app.request.patch(`${harness.url}/api/settings`, {
+      data: {
+        agents: {
+          list: {
+            reviewer: { label: 'Reviewer' },
+            planner: {
+              label: 'Planner',
+              subagents: [{ id: 'reviewer', prompt: 'Check it.', permission: 'allow' }],
+            },
+          },
+        },
+      },
+    });
+    await app.request.post(`${harness.url}/api/sessions`, {
+      data: { key: 'web-renamed', agentId: 'reviewer' },
+    });
+
+    await app.goto(`${harness.url}/agents/reviewer`);
+    const id = app.getByLabel('Identifier');
+    await id.fill('code-review');
+    // The screen's one Save, the same as every other box on it.
+    await app.getByRole('button', { name: 'Save changes' }).click();
+
+    // The settled destination: the editor is now on the new id.
+    await expect(app).toHaveURL(new RegExp('/agents/code-review$'));
+
+    const settings = await app.request.get(`${harness.url}/api/settings`);
+    const config = (await settings.json()) as {
+      config: { agents: { list: Record<string, { subagents: { id: string }[] }> } };
+    };
+    expect(config.config.agents.list.reviewer).toBeUndefined();
+    expect(config.config.agents.list['code-review']).toBeDefined();
+    expect(config.config.agents.list.planner?.subagents[0]?.id).toBe('code-review');
+
+    // The conversation followed, so it is not left on the fallback path for an
+    // agent that never went anywhere.
+    const stored = await app.request.get(`${harness.url}/api/sessions/web-renamed`);
+    expect(((await stored.json()) as { agentId?: string }).agentId).toBe('code-review');
+  });
+
+  test('a config naming a delegation to nothing still boots, and says so', async ({
+    app,
+    harness,
+  }) => {
+    // Written the way a hand edit would leave it — the settings route prunes a
+    // dangling ref on the way in, so this goes through the file the reload
+    // re-reads rather than through a patch.
+    harness.writeConfig({
+      agents: {
+        list: { planner: { subagents: [{ id: 'ghost', prompt: '', permission: 'allow' }] } },
+      },
+    });
+    const reloaded = await app.request.post(`${harness.url}/api/settings/reload`);
+    expect(reloaded.ok()).toBe(true);
+
+    await app.goto(`${harness.url}/settings`);
+    await expect(app.getByRole('alert').filter({ hasText: /does not exist/ })).toBeVisible();
+  });
 });

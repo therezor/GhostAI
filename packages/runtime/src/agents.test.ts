@@ -7,7 +7,15 @@ import {
 } from '@ghostai/protocol';
 import { describe, expect, it } from 'vitest';
 
-import { hasAgent, listAgents, resolveAgent } from './agents.js';
+import {
+  assertWritableAgentIds,
+  hasAgent,
+  listAgents,
+  pruneDanglingSubagents,
+  resolveAgent,
+  resolveAgentOrDefault,
+  resolveAgents,
+} from './agents.js';
 import { mergeConfigPatch } from './merge.js';
 
 const base = ConfigSchema.parse({});
@@ -16,6 +24,22 @@ const base = ConfigSchema.parse({});
 function configWith(patch: ConfigPatch): Config {
   return mergeConfigPatch(base, patch);
 }
+
+/** A config with `main` delegating to whatever the refs name. */
+const delegating = (refs: readonly { id: string; prompt?: string }[]): ConfigPatch => ({
+  agents: {
+    list: {
+      researcher: { label: 'Researcher' },
+      // `permission` is spelled out because `ConfigPatch` is the schema's
+      // *output* type: the protocol keeps input and output identical, so a
+      // defaulted field is still required of a TypeScript literal.
+      main: {
+        label: 'Main',
+        subagents: refs.map((ref) => ({ prompt: '', permission: 'allow' as const, ...ref })),
+      },
+    },
+  },
+});
 
 describe('resolveAgent', () => {
   it('resolves the default agent on an install that has defined none', () => {
@@ -272,22 +296,6 @@ describe('hasAgent', () => {
 });
 
 describe('subagents', () => {
-  /** A config with `main` delegating to whatever the refs name. */
-  const delegating = (refs: readonly { id: string; prompt?: string }[]): ConfigPatch => ({
-    agents: {
-      list: {
-        researcher: { label: 'Researcher' },
-        // `permission` is spelled out because `ConfigPatch` is the schema's
-        // *output* type: the protocol keeps input and output identical, so a
-        // defaulted field is still required of a TypeScript literal.
-        main: {
-          label: 'Main',
-          subagents: refs.map((ref) => ({ prompt: '', permission: 'allow' as const, ...ref })),
-        },
-      },
-    },
-  });
-
   it('resolves a ref into the binding the loop is built with', () => {
     const agent = resolveAgent(
       configWith(delegating([{ id: 'researcher', prompt: 'Ask for facts.' }])),
@@ -347,9 +355,9 @@ describe('subagents', () => {
     try {
       resolveAgent(config, 'main');
     } catch (error) {
-      // A `config` error, which is what makes a bad save a 400 that changes
-      // nothing rather than a turn that dies later.
-      expect(isGhostError(error) && error.kind).toBe('config');
+      // `invalid_input`, not `config`: this arrives in a settings *body*, and a
+      // `config` kind maps to a 500 — a server fault for a bad request.
+      expect(isGhostError(error) && error.kind).toBe('invalid_input');
     }
   });
 
@@ -359,14 +367,27 @@ describe('subagents', () => {
     expect(() => resolveAgent(config, 'main')).toThrow(/lists "researcher" as a subagent twice/);
   });
 
-  it('refuses a subagent that does not exist, and says what does', () => {
+  it('drops a subagent that does not exist rather than refusing the agent', () => {
+    // Caused by an edit to some *other* agent, possibly months ago and possibly
+    // by hand while the server was down. Refusing would let one delete stop an
+    // install that was working a moment earlier.
     const config = configWith(delegating([{ id: 'nobody' }]));
 
-    expect(() => resolveAgent(config, 'main')).toThrow(/does not exist: "nobody"/);
-    expect(() => resolveAgent(config, 'main')).toThrow(/Known agents: researcher, main/);
+    expect(resolveAgent(config, 'main').subagents).toEqual([]);
   });
 
-  it('refuses a disabled subagent, which is a different mistake', () => {
+  it('reports the dropped subagent as a warning, and says what does exist', () => {
+    const config = configWith(delegating([{ id: 'nobody' }]));
+
+    const { warnings } = resolveAgents(config);
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({ agentId: 'main', code: 'missing_subagent' });
+    expect(warnings[0]?.message).toMatch(/does not exist/);
+    expect(warnings[0]?.message).toMatch(/Known agents: researcher, main/);
+  });
+
+  it('drops a disabled subagent, which is a different warning', () => {
     const config = configWith({
       agents: {
         list: {
@@ -376,14 +397,253 @@ describe('subagents', () => {
       },
     });
 
-    expect(() => resolveAgent(config, 'main')).toThrow(/that agent is disabled/);
+    const { warnings } = resolveAgents(config);
+
+    expect(resolveAgent(config, 'main').subagents).toEqual([]);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({ agentId: 'main', code: 'disabled_subagent' });
+    expect(warnings[0]?.message).toMatch(/switched off/);
   });
 
-  it('refuses at listing too, not only when the agent is asked for', () => {
-    // `listAgents` builds every entry, so a save that introduces a bad ref
-    // fails the whole reconfigure rather than the first turn that uses it.
+  it('keeps the delegations either side of a dropped one, in order', () => {
+    const config = configWith({
+      agents: {
+        list: {
+          researcher: { label: 'Researcher' },
+          writer: { label: 'Writer' },
+          main: {
+            subagents: [
+              { id: 'researcher', prompt: '', permission: 'allow' },
+              { id: 'nobody', prompt: '', permission: 'allow' },
+              { id: 'writer', prompt: '', permission: 'allow' },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(resolveAgent(config, 'main').subagents.map((binding) => binding.agentId)).toEqual([
+      'researcher',
+      'writer',
+    ]);
+  });
+
+  it('does not refuse at listing either, which is what used to break boot', () => {
+    // `listAgents` builds every entry and runs inside `GhostRuntime#build`, so
+    // throwing here meant one hand-edited line stopped the server starting.
     const config = configWith(delegating([{ id: 'nobody' }]));
 
-    expect(() => listAgents(config)).toThrow(/does not exist/);
+    expect(() => listAgents(config)).not.toThrow();
+  });
+});
+
+describe('resolveAgentOrDefault', () => {
+  it('answers with the agent that was asked for when it resolves', () => {
+    const config = configWith({ agents: { list: { writer: { label: 'Writer' } } } });
+
+    const resolution = resolveAgentOrDefault(config, 'writer');
+
+    expect(resolution.requestedId).toBe('writer');
+    expect(resolution.agent.id).toBe('writer');
+    expect(resolution.miss).toBeUndefined();
+  });
+
+  it('falls back to the default agent for an id that names nothing', () => {
+    const resolution = resolveAgentOrDefault(base, 'reviewer');
+
+    expect(resolution.agent.id).toBe('default');
+    // Preserved verbatim: the caller reports what was asked for, and a session
+    // still bound to `reviewer` is exactly what the operator needs told.
+    expect(resolution.requestedId).toBe('reviewer');
+    expect(resolution.miss).toBe('unknown');
+  });
+
+  it('separates a disabled agent from a missing one', () => {
+    const config = configWith({
+      agents: { list: { writer: { label: 'Writer', enabled: false } } },
+    });
+
+    expect(resolveAgentOrDefault(config, 'writer').miss).toBe('disabled');
+  });
+
+  it('treats a key that is not a usable id as missing', () => {
+    const config = configWith({ agents: { list: { '../evil': { label: 'Sneaky' } } } });
+
+    expect(resolveAgentOrDefault(config, '../evil').miss).toBe('unknown');
+  });
+
+  it('reports no miss for a session that was never bound', () => {
+    for (const id of [undefined, '']) {
+      const resolution = resolveAgentOrDefault(base, id);
+      expect(resolution.requestedId).toBe('default');
+      expect(resolution.miss).toBeUndefined();
+    }
+  });
+
+  it('resolves the default agent even when an entry switches it off', () => {
+    // Its `enabled` flag is ignored everywhere else too: an install with no
+    // agent at all is not a state anything above here can do anything with.
+    const config = configWith({ agents: { list: { default: { enabled: false } } } });
+
+    expect(resolveAgentOrDefault(config, 'default').miss).toBeUndefined();
+  });
+
+  it('still throws for an agent that exists but cannot be built', () => {
+    // The line between degrading and hiding: an id nobody can find is a stale
+    // reference, but settings that were never going to work are the one thing
+    // the operator has to be shown.
+    const config = configWith({
+      agents: {
+        list: {
+          main: { toolbox: { name: 'sandbox', network: { mode: 'allowlist', allow: ['nope'] } } },
+        },
+      },
+    });
+
+    expect(() => resolveAgentOrDefault(config, 'main')).toThrow(/not a CIDR block/);
+  });
+});
+
+describe('resolveAgents', () => {
+  it('reports no warnings for a config with nothing wrong', () => {
+    const config = configWith({ agents: { list: { writer: { label: 'Writer' } } } });
+
+    expect(resolveAgents(config).warnings).toEqual([]);
+  });
+
+  it('ignores an entry stored under a key that is not a usable id', () => {
+    const config = configWith({ agents: { list: { '../evil': { label: 'Sneaky' } } } });
+
+    const { agents, warnings } = resolveAgents(config);
+
+    expect(agents.map((agent) => agent.id)).toEqual(['default']);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({ agentId: '../evil', code: 'illegal_agent_id' });
+  });
+});
+
+describe('pruneDanglingSubagents', () => {
+  it('removes a delegation whose target is gone, and says which', () => {
+    const config = configWith(delegating([{ id: 'researcher' }, { id: 'nobody' }]));
+
+    const { config: pruned, removed } = pruneDanglingSubagents(config);
+
+    expect(pruned.agents.list.main?.subagents.map((ref) => ref.id)).toEqual(['researcher']);
+    expect(removed).toEqual([{ agentId: 'main', subagentId: 'nobody' }]);
+  });
+
+  it('reports every dangling target, not just the first', () => {
+    const config = configWith(delegating([{ id: 'nobody' }, { id: 'also-nobody' }]));
+
+    expect(pruneDanglingSubagents(config).removed).toHaveLength(2);
+  });
+
+  it('keeps a delegation whose target is merely switched off', () => {
+    // Disabling is the reversible half of deleting, so pruning here would make
+    // switching an agent back on silently fail to restore the delegation.
+    const config = configWith({
+      agents: {
+        list: {
+          researcher: { label: 'Researcher', enabled: false },
+          main: { subagents: [{ id: 'researcher', prompt: '', permission: 'allow' }] },
+        },
+      },
+    });
+
+    const { config: pruned, removed } = pruneDanglingSubagents(config);
+
+    expect(pruned.agents.list.main?.subagents.map((ref) => ref.id)).toEqual(['researcher']);
+    expect(removed).toEqual([]);
+  });
+
+  it('keeps a delegation to the default agent, which usually has no entry', () => {
+    const config = configWith({
+      agents: {
+        list: { main: { subagents: [{ id: 'default', prompt: '', permission: 'allow' }] } },
+      },
+    });
+
+    expect(pruneDanglingSubagents(config).removed).toEqual([]);
+  });
+
+  it('hands back the very same config when there is nothing to do', () => {
+    // Identity, not equality: every save runs through this, and rewriting a
+    // healthy tree into an equal-but-different one would defeat the identity
+    // checks downstream that decide what to rebuild.
+    const config = configWith(delegating([{ id: 'researcher' }]));
+
+    expect(pruneDanglingSubagents(config).config).toBe(config);
+  });
+
+  it('is idempotent', () => {
+    const config = configWith(delegating([{ id: 'nobody' }]));
+
+    const once = pruneDanglingSubagents(config).config;
+    const twice = pruneDanglingSubagents(once);
+
+    expect(twice.removed).toEqual([]);
+    expect(twice.config).toBe(once);
+  });
+});
+
+describe('assertWritableAgentIds', () => {
+  it('allows an ordinary new id', () => {
+    const after = configWith({ agents: { list: { 'code-review': { label: 'Reviewer' } } } });
+
+    expect(() => {
+      assertWritableAgentIds(base, after);
+    }).not.toThrow();
+  });
+
+  it.each([
+    ['../evil', 'a path traversal'],
+    ['CON', 'a reserved device name'],
+    ['Reviewer', 'an upper-case letter'],
+    ['-lead', 'a leading hyphen'],
+    ['lead-', 'a trailing hyphen'],
+    ['a'.repeat(41), 'more than 40 characters'],
+  ])('refuses %s (%s)', (id) => {
+    const after = configWith({ agents: { list: { [id]: { label: 'Nope' } } } });
+
+    expect(() => {
+      assertWritableAgentIds(base, after);
+    }).toThrow(/cannot be used as an agent id/);
+    try {
+      assertWritableAgentIds(base, after);
+    } catch (error) {
+      // 422 rather than a 500: this is a request body being refused, not a
+      // complaint about the operator's own file.
+      expect(isGhostError(error) && error.kind).toBe('invalid_input');
+    }
+  });
+
+  it('grandfathers an odd key that is already stored', () => {
+    const before = configWith({ agents: { list: { '../evil': { label: 'Sneaky' } } } });
+    const after = configWith({
+      agents: { list: { '../evil': { label: 'Renamed' }, writer: { label: 'Writer' } } },
+    });
+
+    expect(() => {
+      assertWritableAgentIds(before, after);
+    }).not.toThrow();
+  });
+
+  it('lets an odd key that is already stored be deleted', () => {
+    // The case this rule exists to not break: an id that cannot be written is
+    // otherwise an id that can never be removed, and the agents page is the
+    // only interface that edits agents.
+    const before = configWith({ agents: { list: { '../evil': { label: 'Sneaky' } } } });
+
+    expect(() => {
+      assertWritableAgentIds(before, base);
+    }).not.toThrow();
+  });
+
+  it('allows the default agent to be given an entry', () => {
+    const after = configWith({ agents: { list: { default: { label: 'House style' } } } });
+
+    expect(() => {
+      assertWritableAgentIds(base, after);
+    }).not.toThrow();
   });
 });

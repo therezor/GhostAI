@@ -53,6 +53,23 @@ export function SettingsRoute(): JSX.Element {
         </p>
       )}
 
+      {/* Separate from `loadError` above, which means the file did not parse at
+          all. These parsed and could not be honoured — a delegation to an agent
+          that was deleted, an entry under a key that is not a usable id — and
+          each is addressed on its own, so they render as a list rather than
+          being folded into one sentence. The server's message is shown as
+          written: it names the agents involved, which no key here could. */}
+      {(settings.data?.warnings ?? []).map((warning) => (
+        <p
+          key={`${warning.code}:${warning.agentId ?? ''}:${warning.message}`}
+          role="alert"
+          className="settings-load-error"
+        >
+          <AlertTriangle />
+          <span>{warning.message}</span>
+        </p>
+      ))}
+
       <Tabs
         value={panel.id}
         onValueChange={(value) => {

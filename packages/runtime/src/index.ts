@@ -16,7 +16,19 @@ export { PROVIDER_CREDENTIAL_NAMESPACE, findCredential, openVault } from './cred
 
 export { mergeConfigPatch } from './merge.js';
 
-export { hasAgent, listAgents, resolveAgent, type EffectiveAgent } from './agents.js';
+export {
+  assertWritableAgentIds,
+  hasAgent,
+  listAgents,
+  pruneDanglingSubagents,
+  resolveAgent,
+  resolveAgentOrDefault,
+  resolveAgents,
+  type AgentConfigWarning,
+  type AgentMissReason,
+  type AgentResolution,
+  type EffectiveAgent,
+} from './agents.js';
 
 export { JailCache, MAX_CACHED_JAILS, type JailCacheOptions } from './jail-cache.js';
 

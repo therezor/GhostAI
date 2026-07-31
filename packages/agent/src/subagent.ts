@@ -25,7 +25,7 @@
  */
 
 import { GhostError } from '@ghostai/core';
-import type { ToolDefinition, ToolPermission } from '@ghostai/protocol';
+import { defaultSubagentPrompt, type ToolDefinition, type ToolPermission } from '@ghostai/protocol';
 import type { ToolExecution } from '@ghostai/tools';
 
 /**
@@ -90,11 +90,10 @@ const TASK_PARAMETERS: Readonly<Record<string, unknown>> = Object.freeze({
 export function describeSubagent(binding: SubagentBinding): string {
   const own = binding.prompt.trim();
   if (own !== '') return own;
-  return (
-    `Hand a self-contained task to the "${binding.label}" agent and wait for its ` +
-    `answer. It does not see this conversation, so say everything it needs; it ` +
-    `replies with a written result, not with raw tool output.`
-  );
+  // The sentence itself lives in `@ghostai/protocol` because the settings UI
+  // shows it as the field's placeholder, and a second copy over there would be
+  // a promise about what the model reads that could quietly stop being true.
+  return defaultSubagentPrompt(binding.label);
 }
 
 /** The tool definition a subagent is advertised as. */

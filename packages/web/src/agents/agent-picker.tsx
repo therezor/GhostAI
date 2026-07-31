@@ -25,8 +25,8 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { BrainCircuit, ChevronDown, Settings2 } from 'lucide-react';
-import type { JSX } from 'react';
+import { BrainCircuit, ChevronDown, Settings2, TriangleAlert } from 'lucide-react';
+import { useEffect, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { DEFAULT_AGENT_ID } from '@ghostai/protocol';
@@ -70,7 +70,25 @@ export function AgentPicker({ sessionKey }: { readonly sessionKey?: string }): J
   const bound = stored.data?.agentId;
   const current = bound ?? preferred;
   const rows = agents.data?.agents ?? [];
-  const label = rows.find((row) => row.id === current)?.label ?? current;
+  const match = rows.find((row) => row.id === current);
+  const label = match?.label ?? current;
+  // Only once the listing has actually arrived. While it is in flight every id
+  // looks missing, and a picker that flagged the agent on each cold load would
+  // cry wolf until the query settled.
+  const missing = agents.isSuccess && match === undefined;
+
+  // A stale *preference* is corrected here, because this is the first place
+  // that holds both the remembered id and the list to check it against — the
+  // agent context is mounted above the data layer and has no listing.
+  //
+  // Only a preference, never a binding: moving a conversation is a real edit
+  // and belongs to the operator. The remembered id is otherwise only ever fixed
+  // in the browser that did the deleting, so every other tab and device keeps
+  // sending a dead id indefinitely.
+  useEffect(() => {
+    if (!missing || bound !== undefined) return;
+    select(DEFAULT_AGENT_ID);
+  }, [missing, bound, select]);
 
   const move = useMutation({
     mutationFn: (agentId: string) => api.moveSessionToAgent(sessionKey ?? '', agentId),
@@ -82,7 +100,7 @@ export function AgentPicker({ sessionKey }: { readonly sessionKey?: string }): J
       adopt(updated.agentId ?? DEFAULT_AGENT_ID);
     },
     onError: (error: Error) => {
-      toast.error('Could not move the conversation', error.message);
+      toast.error(t('agents.moveFailed'), error.message);
     },
   });
 
@@ -102,18 +120,30 @@ export function AgentPicker({ sessionKey }: { readonly sessionKey?: string }): J
         <Button
           variant="ghost"
           size="sm"
-          className="agent-picker__trigger"
-          aria-label={`Agent: ${label}`}
+          className={missing ? 'agent-picker__trigger is-missing' : 'agent-picker__trigger'}
+          aria-label={
+            missing ? t('agents.missingLabel', { id: current }) : t('agents.pickerLabel', { label })
+          }
         >
-          <BrainCircuit aria-hidden="true" />
+          {missing ? <TriangleAlert aria-hidden="true" /> : <BrainCircuit aria-hidden="true" />}
           <span className="truncate">{label}</span>
           <ChevronDown className="agent-picker__caret" aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="start" side="top" className="floating--menu">
+        {/* Said before the list rather than as an empty selection. The radio
+            group below matches nothing when the bound agent is gone, and a menu
+            with no item checked reads as a rendering bug rather than as a
+            conversation pointing at an agent that no longer exists. */}
+        {missing && (
+          <DropdownMenuLabel className="agent-picker__missing" role="alert">
+            {t('agents.missingNotice', { id: current })}
+          </DropdownMenuLabel>
+        )}
+
         <DropdownMenuLabel>
-          {bound === undefined ? 'For this conversation' : 'Move this conversation'}
+          {bound === undefined ? t('agents.forThisChat') : t('agents.moveThisChat')}
         </DropdownMenuLabel>
 
         <DropdownMenuRadioGroup value={current} onValueChange={choose}>

@@ -8,6 +8,7 @@
  */
 
 import { assistantMessage, textOf, userMessage } from '@ghostai/core';
+import { ConfigSchema } from '@ghostai/protocol';
 import type {
   ChatMessage,
   ContextResponse,
@@ -125,6 +126,87 @@ describe('sessions CRUD', () => {
 
     expect(response.json().title).toBe('New');
     expect(runtime.store.getSession('web-1')?.title).toBe('New');
+  });
+
+  it('refuses to bind a new session to an agent that does not exist', async () => {
+    // Where almost every dangling binding came from: the adjacent `workspaceId`
+    // was checked against the registry and this was not, so any string landed
+    // in `sessions.agent_id`.
+    const { server, headers } = await start();
+
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers,
+      payload: { key: 'web-2', agentId: 'ghost' },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.message).toMatch(/No such agent: ghost/);
+  });
+
+  it('refuses a disabled agent too, which is absent from every listing', async () => {
+    const { server, headers } = await start({
+      config: ConfigSchema.parse({ agents: { list: { reviewer: { enabled: false } } } }),
+    });
+
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers,
+      payload: { key: 'web-2', agentId: 'reviewer' },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('binds a new session to an agent that does exist', async () => {
+    const { server, headers, runtime } = await start({
+      config: ConfigSchema.parse({ agents: { list: { reviewer: { label: 'Reviewer' } } } }),
+    });
+
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers,
+      payload: { key: 'web-2', agentId: 'reviewer' },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(runtime.store.getSession('web-2')?.agentId).toBe('reviewer');
+  });
+
+  it('refuses to move a session onto an agent that does not exist', async () => {
+    const { server, headers } = await start();
+
+    const response = await server.app.inject({
+      method: 'PATCH',
+      url: '/api/sessions/web-1',
+      headers,
+      payload: { agentId: 'ghost' },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('moves a session off an agent that has been deleted', async () => {
+    // The recovery path, and the reason the check is on the *incoming* id and
+    // never the stored one. A conversation bound to a deleted agent has to stay
+    // fixable, or the fallback becomes a state nobody can leave.
+    const { server, headers, runtime } = await start({
+      config: ConfigSchema.parse({ agents: { list: { writer: { label: 'Writer' } } } }),
+    });
+    runtime.store.ensureSession('web-1', { agentId: 'reviewer' });
+
+    const response = await server.app.inject({
+      method: 'PATCH',
+      url: '/api/sessions/web-1',
+      headers,
+      payload: { agentId: 'writer' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(runtime.store.getSession('web-1')?.agentId).toBe('writer');
   });
 
   it('deletes a session and its messages', async () => {
@@ -404,6 +486,39 @@ describe('GET /api/sessions/:key/context', () => {
     });
 
     expect(texts(response.json<ContextResponse>().messages)).toEqual(['still here']);
+  });
+
+  it('names the agent it measured, and says nothing was substituted', async () => {
+    const test = await start();
+    test.runtime.store.ensureSession('web-1');
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: '/api/sessions/web-1/context',
+      headers: test.headers,
+    });
+
+    const body = response.json<ContextResponse>();
+    expect(body.agentId).toBe('default');
+    // Absent is the healthy state, so presence alone is the whole signal.
+    expect(body.requestedAgentId).toBeUndefined();
+  });
+
+  it('measures the default agent rather than 404ing for a binding that is gone', async () => {
+    // The panel used to 404 for a conversation that lists and opens perfectly
+    // well, and blamed the session for it.
+    const test = await start();
+    test.runtime.store.ensureSession('web-1', { agentId: 'reviewer' });
+
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: '/api/sessions/web-1/context',
+      headers: test.headers,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json<ContextResponse>();
+    expect(body.agentId).toBe('default');
+    expect(body.requestedAgentId).toBe('reviewer');
   });
 });
 

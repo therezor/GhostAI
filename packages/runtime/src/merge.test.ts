@@ -193,4 +193,24 @@ describe('mergeConfigPatch', () => {
       /agents\.defaults\.temperature/,
     );
   });
+
+  it('does not cascade a delete into another agent’s delegations', () => {
+    // A guard, not a feature. Healing a dangling delegation belongs to
+    // `pruneDanglingSubagents`, which `reconfigure` owns: this merge is generic
+    // and pure, and it is also what previews a patch. Cascading here would make
+    // a preview change more than the patch said it would.
+    const before = mergeConfigPatch(base, {
+      agents: {
+        list: {
+          researcher: { label: 'Researcher' },
+          main: { subagents: [{ id: 'researcher', prompt: '', permission: 'allow' }] },
+        },
+      },
+    });
+
+    const merged = mergeConfigPatch(before, { agents: { list: { researcher: null } } });
+
+    expect(merged.agents.list.researcher).toBeUndefined();
+    expect(merged.agents.list.main?.subagents.map((ref) => ref.id)).toEqual(['researcher']);
+  });
 });

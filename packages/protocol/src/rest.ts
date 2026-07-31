@@ -11,7 +11,7 @@
 
 import { z } from 'zod';
 
-import { ConfigSchema } from './config.js';
+import { ConfigPatchSchema, ConfigSchema } from './config.js';
 import { StopReasonSchema, StoredMessageSchema, UsageSchema } from './messages.js';
 import { SubagentRunRefSchema } from './subagent.js';
 import { ToolDefinitionSchema, ToolPermissionSchema } from './tools.js';
@@ -102,6 +102,24 @@ export type HealthResponse = z.infer<typeof HealthResponseSchema>;
 // ---------------------------------------------------------------------------
 
 /**
+ * Something the settings say that could not be honoured, but did not stop the
+ * install from running.
+ *
+ * The counterpart to a `config` `GhostError`, which refuses the whole tree. An
+ * agent id is user-authored and deletable, so a reference to one that has gone
+ * has to be survivable — and the only alternative to a warning is discarding it
+ * silently, which is how an operator ends up with a delegation that stopped
+ * working and nothing that says when.
+ */
+export const ConfigWarningSchema = z.object({
+  code: z.string().min(1),
+  message: z.string(),
+  /** The agent the warning is about, when it is about one. */
+  agentId: z.string().optional(),
+});
+export type ConfigWarning = z.infer<typeof ConfigWarningSchema>;
+
+/**
  * Config as served to the UI. Credentials never appear — the vault is
  * write-only over HTTP — so the panel gets a per-provider boolean instead.
  */
@@ -111,8 +129,61 @@ export const SettingsResponseSchema = z.object({
   credentialsPresent: z.record(z.string(), z.boolean()),
   /** Set when the file on disk failed to parse and defaults are in use. */
   loadError: z.string().optional(),
+  /**
+   * Non-fatal problems found resolving the settings. Empty is healthy.
+   *
+   * A sibling of `loadError` rather than a widening of it: that field means the
+   * file did not parse *at all* and defaults are standing in, which is one
+   * string and one alert. These are individually addressable and render as a
+   * list, and folding both into one field would leave the UI no way to tell
+   * "nothing loaded" from "three delegations were dropped".
+   */
+  warnings: z.array(ConfigWarningSchema).default([]),
 });
 export type SettingsResponse = z.infer<typeof SettingsResponseSchema>;
+
+/**
+ * One agent moving to a new id, as part of a settings save.
+ *
+ * A rename travels *with* the patch rather than through a route of its own, and
+ * the reason is that it is not separable from one. The editor's Save can change
+ * an agent's id and its model in the same gesture, and as two requests that is
+ * two writes with a window between them: the first can land and the second fail,
+ * leaving the agent under its new name holding its old settings.
+ *
+ * What a patch alone cannot say is which of two things a key move *means* —
+ * `{ "reviewer": null, "code-review": {…} }` describes "rename reviewer" and
+ * "delete reviewer, create code-review" equally well, and the two are opposites:
+ * a rename takes the conversations bound to the old id and its standing tool
+ * approvals across, where a delete-and-recreate must strand the first and refuse
+ * the second, because an id is user-authored and anyone can create one under a
+ * name that was just freed. Naming the rename is how the caller says which.
+ */
+export const AgentRenameSchema = z.object({
+  from: z.string().min(1),
+  to: z.string().min(1),
+});
+export type AgentRename = z.infer<typeof AgentRenameSchema>;
+
+/**
+ * The body of `PATCH /api/settings`: a config patch, plus what it means.
+ *
+ * `ConfigPatchSchema` and nothing else was the shape until agents could be
+ * renamed. It stays the whole of it in every other respect — the extra field is
+ * not config and is never stored, it is read and discarded by the route, which
+ * is why it is an extension here rather than a branch of `ConfigSchema`.
+ */
+export const SettingsPatchRequestSchema = ConfigPatchSchema.extend({
+  /**
+   * Applied *before* the patch, so the patch addresses the new ids.
+   *
+   * An array rather than one, because there is no reason for the route to be
+   * the thing that stops an operator renaming two agents in one save — and
+   * because a single field would have had to be widened the first time one did.
+   */
+  renameAgents: z.array(AgentRenameSchema).optional(),
+});
+export type SettingsPatchRequest = z.infer<typeof SettingsPatchRequestSchema>;
 
 /** Write-only credential update. */
 export const SetCredentialRequestSchema = z.object({
@@ -329,6 +400,21 @@ export const ContextResponseSchema = z.object({
   contextWindowTokens: z.number().int().positive(),
   /** Section name → token cost, so an oversized block is visible. */
   breakdown: z.record(z.string(), z.number()).default({}),
+  /**
+   * The agent these figures describe — the one a turn would actually run on.
+   *
+   * Not always the session's binding: an agent can be deleted out from under a
+   * conversation, and the panel's whole job is "what would be sent", so it
+   * measures what would run rather than what the row still names.
+   */
+  agentId: z.string().optional(),
+  /**
+   * Set only when the binding did not resolve, naming what it asked for.
+   *
+   * Absent is the healthy state, so a client can treat presence alone as "this
+   * conversation is running on a fallback" without comparing two strings.
+   */
+  requestedAgentId: z.string().optional(),
 });
 export type ContextResponse = z.infer<typeof ContextResponseSchema>;
 

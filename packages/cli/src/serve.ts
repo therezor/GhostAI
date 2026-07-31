@@ -45,7 +45,7 @@ import {
   type Logger,
 } from '@ghostai/core';
 import { instanceLabel } from '@ghostai/providers';
-import { createRuntime, type GhostRuntime } from '@ghostai/runtime';
+import { createRuntime, resolveAgentOrDefault, type GhostRuntime } from '@ghostai/runtime';
 import { HubApprovalGate, SessionHub, createServer, type GhostServer } from '@ghostai/server';
 import pc from 'picocolors';
 
@@ -194,6 +194,13 @@ export async function startServer(options: ServeOptions = {}): Promise<RunningSe
       // A function, so a settings save moves the *next* turn onto the rebuilt
       // loop while the running one keeps the one it started on.
       loop: (agentId) => built.loopFor(agentId),
+      // A function for the same reason, and for one more: an agent deleted a
+      // moment ago must stop resolving, rather than living on because the hub
+      // was constructed before the delete.
+      resolveAgentId: (agentId) => {
+        const { agent, miss } = resolveAgentOrDefault(built.config, agentId);
+        return { agentId: agent.id, miss };
+      },
       store: built.store,
       approvals,
       logger,

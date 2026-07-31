@@ -813,6 +813,62 @@ export class SessionStore {
   }
 
   /**
+   * Re-points every conversation bound to one agent id at another.
+   *
+   * For renaming an agent, and only for that. A rename is the *same* agent
+   * under a new name, so the conversations it owns have to follow it — leaving
+   * them behind would drop every one of them onto the fallback path for an
+   * agent that never went anywhere.
+   *
+   * `turn_stats.agent_id` is deliberately untouched. That column records which
+   * agent ran each past turn, and it stays what it was written as: the rows are
+   * a record of what happened, not a pointer to what exists now. Same for the
+   * subagent lineage in session metadata, which snapshots the label beside the
+   * id precisely so a display never has to resolve one.
+   *
+   * Returns how many rows moved, which is the part of a rename that happens
+   * outside the settings tree and would otherwise have to be taken on trust.
+   */
+  reassignAgent(from: string, to: string): number {
+    return this.reassignAgents([{ from, to }]);
+  }
+
+  /**
+   * The same, for every rename in one settings save, in one transaction.
+   *
+   * Transactional because a save can carry more than one rename and half of them
+   * landing is the state nobody can reason about: the settings tree would name
+   * agents that some conversations had followed and others had not, with nothing
+   * on disk saying which. All or none is the only answer that leaves the
+   * fallback able to describe what happened.
+   *
+   * This is the *second* of two stores a rename touches, and the order is
+   * deliberate. The config is written first, atomically, so a failure here
+   * leaves conversations pointing at ids that no longer resolve — which is the
+   * case the default-agent fallback exists for, and which re-running the rename
+   * repairs. The other order would move the conversations and then fail to
+   * record why, which nothing could repair because nothing would say it had
+   * happened.
+   */
+  reassignAgents(renames: readonly { readonly from: string; readonly to: string }[]): number {
+    this.#assertOpen();
+    if (renames.length === 0) return 0;
+
+    return this.#transaction(() => {
+      const now = this.#clock.now();
+      const update = this.#stmt(
+        'UPDATE sessions SET agent_id = ?, updated_at_ms = ? WHERE agent_id = ?',
+      );
+      let moved = 0;
+      for (const { from, to } of renames) {
+        if (from === to) continue;
+        moved += Number(update.run(to, now, from).changes);
+      }
+      return moved;
+    });
+  }
+
+  /**
    * Drops every message but keeps the session row.
    *
    * `next_seq` is *not* reset. Reusing sequence numbers after a clear would

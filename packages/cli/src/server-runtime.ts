@@ -251,6 +251,8 @@ export function createServerRuntime(
       return saveConfig(runtime.file, merged);
     },
 
+    configWarnings: () => runtime.configWarnings,
+
     reload: (): Config => {
       const next = runtime.reload();
       // The file is the source here, so there is nothing to write back — and

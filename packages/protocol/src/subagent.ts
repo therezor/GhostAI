@@ -95,3 +95,27 @@ export function withSubagentRun(
     [SUBAGENT_RUNS_METADATA_KEY]: { ...subagentRunsOf(metadata), [callId]: run },
   };
 }
+
+/**
+ * What the model reads about a delegation whose operator wrote nothing.
+ *
+ * Here rather than beside the loop that hands it to the provider, because the
+ * settings UI has to show it: the field is optional, and a placeholder that
+ * invents an *example* of what an operator might write — which is what it used
+ * to hold — leaves them unable to find out what happens if they write nothing.
+ *
+ * Takes the label rather than a binding, and is called with the *target's*
+ * current label, so the sentence follows a rename. That is the reason to show
+ * it rather than to prefill a box with it: the moment it is stored on the
+ * reference it stops tracking the agent it names.
+ *
+ * It says the one thing a model cannot infer — that the subagent starts from
+ * nothing and answers in prose.
+ */
+export function defaultSubagentPrompt(label: string): string {
+  return (
+    `Hand a self-contained task to the "${label}" agent and wait for its ` +
+    `answer. It does not see this conversation, so say everything it needs; it ` +
+    `replies with a written result, not with raw tool output.`
+  );
+}

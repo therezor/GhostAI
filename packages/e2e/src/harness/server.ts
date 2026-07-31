@@ -47,7 +47,13 @@ import {
   type SetCredentialRequest,
 } from '@ghostai/protocol';
 import type { ChatProvider, CreateProviderOptions } from '@ghostai/providers';
-import { ProviderCache, createRuntime, resolveAgent, type GhostRuntime } from '@ghostai/runtime';
+import {
+  ProviderCache,
+  createRuntime,
+  resolveAgent,
+  resolveAgentOrDefault,
+  type GhostRuntime,
+} from '@ghostai/runtime';
 import {
   HubApprovalGate,
   SessionHub,
@@ -134,6 +140,18 @@ export interface Harness {
   readonly workspace: string;
   /** The one-time code, on an unclaimed harness. `undefined` once claimed. */
   readonly setupCode: string | undefined;
+  /**
+   * Writes `config.json` behind the server's back, the way a hand edit does.
+   *
+   * The settings route validates and heals what it is given — that is its job —
+   * so a spec about a file nobody validated cannot go through it. This is the
+   * only way to reach the state a text editor can leave the install in, which
+   * is exactly the state that used to stop it booting.
+   *
+   * Pair it with `POST /api/settings/reload`, which is what an operator presses
+   * after editing the file.
+   */
+  writeConfig(patch: Record<string, unknown>): void;
   close(): Promise<void>;
 }
 
@@ -233,6 +251,12 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
   const hub = new SessionHub({
     config: runtime.config,
     loop: () => runtime.loop,
+    // The real rule, off the live config, exactly as `serve.ts` wires it: a
+    // spec that deletes an agent has to see the fallback a browser would.
+    resolveAgentId: (agentId) => {
+      const { agent, miss } = resolveAgentOrDefault(runtime.config, agentId);
+      return { agentId: agent.id, miss };
+    },
     store: runtime.store,
     approvals,
     logger: silentLogger,
@@ -266,6 +290,9 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
     runtime,
     hub,
     workspace,
+    writeConfig: (patch) => {
+      saveConfig(configFile, ConfigSchema.parse({ ...config, ...patch }));
+    },
     close: async () => {
       hub.close();
       await server.close();
@@ -400,6 +427,11 @@ function harnessRuntime(runtime: GhostRuntime, configFile: string): ServerRuntim
           'No model is configured, so no system prompt has been assembled yet.',
       };
     },
+
+    // Wired here as well as in the real adapter, because this harness has its
+    // own `RuntimePort` — the field is optional, so forgetting it breaks no
+    // build and simply leaves the settings page with nothing to report.
+    configWarnings: () => runtime.configWarnings,
 
     agents: (): readonly AgentSummary[] =>
       runtime.agents.map((agent) => ({

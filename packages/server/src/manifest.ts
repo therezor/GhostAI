@@ -90,7 +90,11 @@ const MANIFEST = [
   { id: 'sessions.turns', method: 'GET', url: '/api/sessions/:key/turns', auth: 'required' },
 
   // Agents and tools. Both read-only: an agent is a subtree of the settings
-  // tree, so it is created and edited through `settings.patch`.
+  // tree, so it is created, edited, deleted *and renamed* through
+  // `settings.patch` — the last of those carries a `renameAgents` field,
+  // because a key move on its own cannot say whether it means "rename" or
+  // "delete and create", and those differ on what happens to the old id's
+  // conversations and standing approvals.
   { id: 'agents.list', method: 'GET', url: '/api/agents', auth: 'required' },
   { id: 'tools.list', method: 'GET', url: '/api/tools', auth: 'required' },
   { id: 'toolboxes.list', method: 'GET', url: '/api/toolboxes', auth: 'required' },

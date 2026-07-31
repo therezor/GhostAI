@@ -19,6 +19,7 @@ import type { SessionStore, WorkspaceStore } from '@ghostai/core';
 import type {
   Config,
   ConfigPatch,
+  ConfigWarning,
   ModelsResponse,
   ProviderTestRequest,
   ProviderTestResponse,
@@ -73,6 +74,15 @@ export interface AgentView {
    */
   systemPrompt(input: PromptPreviewInput): Promise<string>;
 }
+
+/**
+ * Why an id did not name an agent that could run.
+ *
+ * Declared here rather than imported from `@ghostai/runtime`, which this
+ * package deliberately does not depend on — the port describes what the server
+ * needs, and an adapter supplies it.
+ */
+export type AgentMissReason = 'unknown' | 'disabled';
 
 /**
  * One agent, as a picker and the settings screen need it.
@@ -141,6 +151,19 @@ export interface ServerRuntime {
 
   /** Set when `config.json` failed to parse and the defaults are in use. */
   loadError?(): string | undefined;
+
+  /**
+   * Settings that parsed but could not be fully honoured. Empty is healthy.
+   *
+   * Distinct from `loadError`, which means nothing loaded at all. These are
+   * individually addressable — a delegation to an agent that was deleted, an
+   * entry stored under a key that is not a usable id — and the operator fixes
+   * them one at a time.
+   *
+   * Optional for the same reason `releaseWorkspace` is: a route test standing
+   * in for a runtime has no settings file to have warnings about.
+   */
+  configWarnings?(): readonly ConfigWarning[];
 
   readonly store: SessionStore;
 

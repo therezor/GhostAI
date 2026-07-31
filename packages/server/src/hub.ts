@@ -68,6 +68,7 @@ import {
 
 import type { HubApprovalGate } from './approvals.js';
 import { resolveError } from './errors.js';
+import type { AgentMissReason } from './runtime.js';
 import { ReplayBuffer, type SequencedServerMessage } from './replay.js';
 
 /**
@@ -198,6 +199,23 @@ export interface SessionHubOptions {
    * rather than to reconnect.
    */
   readonly loop: (agentId: string | undefined) => TurnRunner | null;
+  /**
+   * Which agent an id actually names, and whether it is the one asked for.
+   *
+   * A function rather than a snapshot, for the reason `loop` is one: a settings
+   * save has to move the *next* turn, and an agent deleted a moment ago must
+   * not still resolve because the hub was built before it went.
+   *
+   * Every id reaching this came from somewhere that could not check it — a
+   * session row written months ago, a frame from a tab that has been open since
+   * before the delete, a channel's configured default. Refusing them would make
+   * one settings edit stop conversations that have nothing to do with it, so a
+   * miss falls back and is *reported* rather than refused.
+   */
+  readonly resolveAgentId: (agentId: string | undefined) => {
+    readonly agentId: string;
+    readonly miss: AgentMissReason | undefined;
+  };
   /** Read only to rebuild a transcript a replay could not cover. */
   readonly store: SessionStore;
   /**
@@ -221,7 +239,8 @@ interface Connection {
   readonly id: string;
   readonly send: (message: ServerMessage) => void;
   readonly channel: string;
-  readonly agentId: string | undefined;
+  /** Mutable, like `workspaceId`: a `session.new` naming an agent re-points it. */
+  agentId: string | undefined;
   /** Mutable: a `session.new` naming a workspace re-points the connection. */
   workspaceId: string | undefined;
   sessionKey: string;
@@ -306,6 +325,7 @@ function describeParseFailure(issues: readonly { path: PropertyKey[]; message: s
 export class SessionHub {
   readonly #config: Config;
   readonly #loop: (agentId: string | undefined) => TurnRunner | null;
+  readonly #resolveAgentId: SessionHubOptions['resolveAgentId'];
   readonly #store: SessionStore;
   readonly #approvals: HubApprovalGate;
   readonly #clock: Clock;
@@ -318,6 +338,7 @@ export class SessionHub {
   constructor(options: SessionHubOptions) {
     this.#config = options.config;
     this.#loop = options.loop;
+    this.#resolveAgentId = options.resolveAgentId;
     this.#store = options.store;
     this.#approvals = options.approvals;
     this.#clock = options.clock ?? systemClock;
@@ -398,6 +419,22 @@ export class SessionHub {
       this.#approvals.clearSession(state.key);
     }
     this.#sessions.clear();
+  }
+
+  /**
+   * Forgets standing tool approvals for agents that are no longer configured.
+   *
+   * Called after a settings write, because that is the only moment an agent can
+   * stop existing. The gate is the hub's, so the route reaches it through here
+   * rather than being handed the gate as a second dependency.
+   */
+  retainAgents(agentIds: ReadonlySet<string>): void {
+    this.#approvals.retainAgents(agentIds);
+  }
+
+  /** Carries one agent's standing tool approvals to its new id. */
+  renameAgent(from: string, to: string): void {
+    this.#approvals.renameAgent(from, to);
   }
 
   // -------------------------------------------------------------------------
@@ -482,6 +519,12 @@ export class SessionHub {
         // conversation it is about to start lands there rather than in whatever
         // the tab was opened with.
         if (message.workspaceId !== undefined) connection.workspaceId = message.workspaceId;
+        // And the same for the agent it names. Without this the field was read
+        // off the frame and dropped: `connection.agentId` was only ever set at
+        // connect time, so the fallback at `#submit` could never see anything a
+        // client chose later. The web UI happens to resend `agentId` on every
+        // message, which is what hid it — a channel does not.
+        if (message.agentId !== undefined) connection.agentId = message.agentId;
         this.#move(connection, message.sessionKey ?? this.#newId());
         return;
 
@@ -790,12 +833,42 @@ export class SessionHub {
   async #runTurn(state: SessionState, turn: QueuedTurn): Promise<void> {
     const controller = new AbortController();
     try {
-      const agentId = this.#agentFor(state.key, turn);
+      // An id naming no runnable agent — deleted, switched off, or never real —
+      // becomes the default agent rather than a refusal. A conversation must
+      // not stop working because an agent it was bound to was deleted, and the
+      // binding is left alone, so re-creating that agent silently restores it.
+      const requested = this.#agentFor(state.key, turn);
+      const { agentId, miss } = this.#resolveAgentId(requested);
+      if (miss !== undefined) {
+        // Said out loud every turn, not once. The fallback is re-decided each
+        // time — nothing is written to make it stick — so a notice that fired
+        // once would describe a state the operator could no longer see. It also
+        // matters that they see it: the default agent may allow tools the
+        // departed one did not, so this widens what the turn can do.
+        // Through `#emit`, so it is sequenced into the transcript and survives
+        // a reload the way the turn's own events do. A fallback the operator
+        // only saw if they happened to be watching would be worth very little.
+        //
+        // Deliberately carries **no `turnId`**. This is a statement about the
+        // conversation's binding rather than about anything the turn did, and
+        // the turn it would name has not started yet — a notice addressed to a
+        // turn the transcript has no item for is one the client silently drops.
+        this.#emit(state, {
+          type: 'notice',
+          kind: 'agent_fallback',
+          message:
+            miss === 'disabled'
+              ? `This conversation runs on "${requested ?? agentId}", which is switched off. Using "${agentId}" instead.`
+              : `This conversation runs on "${requested ?? agentId}", which no longer exists. Using "${agentId}" instead.`,
+        });
+      }
+
       let runner: TurnRunner | null;
       try {
         runner = this.#loop(agentId);
       } catch (error) {
-        // An id naming no runnable agent — deleted, disabled, or never real.
+        // Not a missing agent any more — `resolveAgentId` just ruled that out —
+        // but an agent that exists and cannot be built, which is a real fault.
         // Reported on the frame that asked for it: the connection is fine, and
         // every other session on it keeps working.
         this.#failTurn(state, turn.id, error);
@@ -827,7 +900,15 @@ export class SessionHub {
         turnId: turn.id,
         mentions: turn.mentions,
         ...(turn.workspaceId === undefined ? {} : { workspaceId: turn.workspaceId }),
-        ...(turn.agentId === undefined ? {} : { agentId: turn.agentId }),
+        // The *resolved* id, so the loop that runs and the binding it writes
+        // agree. Passing the frame's raw id would let a turn run on `default`
+        // while `ensureSession` recorded a session bound to an agent that does
+        // not exist — the exact disagreement `#agentFor` exists to prevent.
+        //
+        // Still conditional on the frame having named one at all: an absent
+        // `agentId` means "do not bind", and substituting `default` here would
+        // turn every unbound conversation into an explicitly-bound one.
+        ...(turn.agentId === undefined ? {} : { agentId }),
       });
 
       for await (const event of events) this.#forward(state, event);
@@ -854,11 +935,25 @@ export class SessionHub {
    * The loop applies the same rule to the prompt when it calls `ensureSession`;
    * this is the same decision made one layer earlier, because *which loop* runs
    * the turn has to agree with what that loop then puts in the prompt.
+   *
+   * One exception, and only one: a stored id that **no longer resolves** loses
+   * to a frame that names an agent which does. The rule above protects a
+   * conversation from being continued under settings it was not built with, and
+   * an agent that has been deleted offers no such settings to protect — so the
+   * only thing outranking the operator's explicit pick would achieve is
+   * dropping them onto `default` while they watched themselves choose something
+   * else.
    */
   #agentFor(sessionKey: string, turn: QueuedTurn): string | undefined {
     const stored = this.#store.getSession(sessionKey)?.agentId;
-    if (stored !== undefined && stored !== '') return stored;
-    return turn.agentId;
+    if (stored === undefined || stored === '') return turn.agentId;
+    if (this.#resolveAgentId(stored).miss === undefined) return stored;
+    if (turn.agentId !== undefined && this.#resolveAgentId(turn.agentId).miss === undefined) {
+      return turn.agentId;
+    }
+    // Neither resolves. The stored one is returned so the notice names what the
+    // conversation actually claims rather than whatever the last frame carried.
+    return stored;
   }
 
   #failTurn(state: SessionState, turnId: string, error: unknown): void {

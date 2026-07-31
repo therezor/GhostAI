@@ -145,6 +145,15 @@ export function AgentsRoute(): JSX.Element {
 
   const entryFor = (id: string): AgentEntry => list[id] ?? AgentEntrySchema.parse({});
 
+  /** The agents that delegate to the one about to be deleted, by label. */
+  const dependants = useMemo((): readonly string[] => {
+    const target = pendingDelete?.id;
+    if (target === undefined) return [];
+    return Object.entries(list)
+      .filter(([id, entry]) => id !== target && entry.subagents.some((ref) => ref.id === target))
+      .map(([id, entry]) => (entry.label === '' ? id : entry.label));
+  }, [list, pendingDelete]);
+
   const all = useMemo((): readonly AgentRow[] => {
     const resolved = agents.data?.agents ?? [];
     return ids.map((id) => {
@@ -434,7 +443,17 @@ export function AgentsRoute(): JSX.Element {
           if (!open) setPendingDelete(undefined);
         }}
         title={t('agents.deleteTitle')}
-        description={`${pendingDelete?.label ?? ''} is removed from the settings. Its conversations keep their history and fall back to the default agent.`}
+        // The delegation sentence is only shown when there is one, and it names
+        // the agents rather than saying "some": the server strips those
+        // references as part of the delete, and an edit made on the operator's
+        // behalf should be one they were told about before they agreed to it.
+        description={
+          `${pendingDelete?.label ?? ''} is removed from the settings. ` +
+          'Its conversations keep their history and fall back to the default agent.' +
+          (dependants.length === 0
+            ? ''
+            : ` ${dependants.join(' and ')} ${dependants.length === 1 ? 'delegates' : 'delegate'} to it; that delegation is removed too.`)
+        }
         confirmLabel="Delete"
         pending={saving}
         onConfirm={() => {

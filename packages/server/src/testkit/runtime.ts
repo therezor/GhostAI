@@ -67,7 +67,16 @@ export interface FakeRuntime extends ServerRuntime {
   readonly credentialWrites: { namespace: string; key: string; value: string | null }[];
 }
 
-/** A deep merge over plain objects — enough for a patch, and nothing more. */
+/**
+ * A deep merge over plain objects — enough for a patch, and nothing more.
+ *
+ * `null` removes a key, which is the real merge's rule for the records an
+ * operator adds to and removes from — `providers.*`, `agents.list.*`. Without
+ * it a patch that deletes an agent would store a literal `null` where an entry
+ * belongs and fail the re-parse below, so no route test could ever cover a
+ * delete. It is deliberately blanket here where the real rule is a path list:
+ * this is a fixture, and the paths it would need are exactly the ones tests use.
+ */
 function merge(base: unknown, patch: unknown): unknown {
   if (typeof patch !== 'object' || patch === null || Array.isArray(patch)) return patch;
   if (typeof base !== 'object' || base === null || Array.isArray(base)) return patch;
@@ -75,6 +84,11 @@ function merge(base: unknown, patch: unknown): unknown {
   const out: Record<string, unknown> = { ...(base as Record<string, unknown>) };
   for (const [key, value] of Object.entries(patch as Record<string, unknown>)) {
     if (value === undefined) continue;
+    if (value === null) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- the key is the operator's
+      delete out[key];
+      continue;
+    }
     out[key] = merge(out[key], value);
   }
   return out;

@@ -9,6 +9,7 @@
 import {
   ConfigSchema,
   PROTOCOL_VERSION,
+  type Config,
   type ProvidersResponse,
   type ToolDefinition,
 } from '@ghostai/protocol';
@@ -18,6 +19,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { SERVER_VERSION } from './version.js';
 import { startTestServer, type TestServer } from './testkit/server.js';
+import type { GhostServer } from './app.js';
 
 const running: TestServer[] = [];
 
@@ -138,6 +140,30 @@ describe('GET /api/settings', () => {
     const response = await server.app.inject({ method: 'GET', url: '/api/settings', headers });
     expect(response.json().loadError).toMatch(/not valid JSON/);
   });
+
+  it('reports an empty warning list on a healthy install', async () => {
+    // Empty rather than absent, so a client renders "nothing wrong" without a
+    // presence check that would read a missing field as healthy too.
+    const { server, headers } = await start();
+    const response = await server.app.inject({ method: 'GET', url: '/api/settings', headers });
+
+    expect(response.json().warnings).toEqual([]);
+  });
+
+  it('carries settings that parsed but could not be honoured', async () => {
+    const { server, headers, runtime } = await start();
+    Object.assign(runtime, {
+      configWarnings: () => [
+        { code: 'missing_subagent', message: 'planner delegates to reviewer', agentId: 'planner' },
+      ],
+    });
+
+    const response = await server.app.inject({ method: 'GET', url: '/api/settings', headers });
+
+    expect(response.json().warnings).toEqual([
+      { code: 'missing_subagent', message: 'planner delegates to reviewer', agentId: 'planner' },
+    ]);
+  });
 });
 
 describe('PATCH /api/settings', () => {
@@ -202,6 +228,58 @@ describe('PATCH /api/settings', () => {
 
     expect(response.statusCode).toBe(422);
     expect(Object.keys(response.json().error.details)).toEqual(['/agents/defaults/temperature']);
+  });
+
+  it('deletes an agent another one delegates to', async () => {
+    // Used to be a 500 that changed nothing: the rebuild threw a `config` error
+    // over the now-dangling delegation, and the rebuild happens before the
+    // write, so the file was left exactly as it was.
+    const { server, headers, runtime } = await start({
+      config: ConfigSchema.parse({
+        agents: {
+          list: {
+            reviewer: { label: 'Reviewer' },
+            planner: { subagents: [{ id: 'reviewer', prompt: '', permission: 'allow' }] },
+          },
+        },
+      }),
+    });
+
+    const response = await server.app.inject({
+      method: 'PATCH',
+      url: '/api/settings',
+      headers,
+      payload: { agents: { list: { reviewer: null } } },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(runtime.config().agents.list.reviewer).toBeUndefined();
+  });
+
+  it('forgets a deleted agent’s standing tool approvals', async () => {
+    // An id is user-authored and re-creatable, so a new agent under a name the
+    // operator just freed must not inherit what the old one was granted.
+    const { server, headers, hub } = await start({
+      config: ConfigSchema.parse({ agents: { list: { reviewer: { label: 'Reviewer' } } } }),
+    });
+    const retained: ReadonlySet<string>[] = [];
+    const original = hub.retainAgents.bind(hub);
+    Object.assign(hub, {
+      retainAgents: (ids: ReadonlySet<string>) => {
+        retained.push(ids);
+        original(ids);
+      },
+    });
+
+    await server.app.inject({
+      method: 'PATCH',
+      url: '/api/settings',
+      headers,
+      payload: { agents: { list: { reviewer: null } } },
+    });
+
+    expect(retained).toHaveLength(1);
+    expect([...(retained[0] ?? [])]).toEqual(['default']);
   });
 });
 
@@ -562,6 +640,212 @@ describe('GET /api/agents', () => {
     expect(response.json<{ agents: { id: string }[] }>().agents.map((a) => a.id)).toEqual([
       'default',
     ]);
+  });
+});
+
+describe('renaming an agent through PATCH /api/settings', () => {
+  /** A config with `reviewer`, and `planner` delegating to it. */
+  function withReviewer(): Config {
+    return ConfigSchema.parse({
+      agents: {
+        list: {
+          reviewer: { label: 'Reviewer' },
+          planner: {
+            label: 'Planner',
+            subagents: [{ id: 'reviewer', prompt: 'Check it.', permission: 'allow' }],
+          },
+        },
+      },
+    });
+  }
+
+  /**
+   * A rename, as it travels: on the settings patch rather than its own route.
+   *
+   * `patch` is what an editor would send alongside it — the point of carrying
+   * the two together is that a Save which changes an id *and* a setting is one
+   * write, not two with a window between them.
+   */
+  function rename(
+    server: GhostServer,
+    from: string,
+    to: string,
+    headers: Record<string, string>,
+    patch: Record<string, unknown> = {},
+  ) {
+    return server.app.inject({
+      method: 'PATCH',
+      url: '/api/settings',
+      headers,
+      payload: { ...patch, renameAgents: [{ from, to }] },
+    });
+  }
+
+  it('moves the agent, its delegations and its conversations together', async () => {
+    const { server, runtime, headers } = await start({ config: withReviewer() });
+    runtime.store.ensureSession('mine', { agentId: 'reviewer' });
+    runtime.store.ensureSession('other', { agentId: 'planner' });
+
+    const response = await rename(server, 'reviewer', 'code-review', headers);
+
+    expect(response.statusCode).toBe(200);
+
+    const config = runtime.config();
+    expect(config.agents.list.reviewer).toBeUndefined();
+    expect(config.agents.list['code-review']?.label).toBe('Reviewer');
+    // The delegation follows, so the model keeps the subagent it had.
+    expect(config.agents.list.planner?.subagents.map((ref) => ref.id)).toEqual(['code-review']);
+    // Conversations follow; ones bound elsewhere do not.
+    expect(runtime.store.getSession('mine')?.agentId).toBe('code-review');
+    expect(runtime.store.getSession('other')?.agentId).toBe('planner');
+  });
+
+  it('does not rewrite which agent ran a past turn', async () => {
+    // History is a record of what happened, not a pointer to what exists now.
+    const { server, runtime, headers } = await start({ config: withReviewer() });
+    runtime.store.ensureSession('mine', { agentId: 'reviewer' });
+    runtime.store.recordTurnStats({
+      turnId: 't1',
+      sessionKey: 'mine',
+      agentId: 'reviewer',
+      provider: 'ollama',
+      model: 'qwen3:8b',
+      startedAtMs: 1,
+      endedAtMs: 2,
+      iterations: 1,
+      stopReason: 'complete',
+      usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+    });
+
+    await rename(server, 'reviewer', 'code-review', headers);
+
+    expect(runtime.store.turnStats('mine')[0]?.agentId).toBe('reviewer');
+  });
+
+  it('answers a rename to the same id without complaining about it', async () => {
+    const { server, runtime, headers } = await start({ config: withReviewer() });
+
+    const response = await rename(server, 'reviewer', 'reviewer', headers);
+
+    expect(response.statusCode).toBe(200);
+    expect(runtime.config().agents.list.reviewer).toBeDefined();
+  });
+
+  it('404s for an agent that does not exist', async () => {
+    const { server, headers } = await start({ config: withReviewer() });
+
+    expect((await rename(server, 'ghost', 'phantom', headers)).statusCode).toBe(404);
+  });
+
+  it('refuses to rename the default agent', async () => {
+    // It resolves whether or not it has an entry, and an install with no
+    // default agent is not a state anything downstream can use.
+    const { server, headers } = await start({ config: withReviewer() });
+
+    expect((await rename(server, 'default', 'house', headers)).statusCode).toBe(422);
+  });
+
+  it.each([
+    ['default', 'the reserved default'],
+    ['con', 'a reserved device name'],
+    ['../evil', 'a path traversal'],
+    ['Reviewer', 'an upper-case letter'],
+    ['-lead', 'a leading hyphen'],
+    ['', 'empty'],
+  ])('422s renaming to %s (%s)', async (to) => {
+    const { server, headers } = await start({ config: withReviewer() });
+
+    expect((await rename(server, 'reviewer', to, headers)).statusCode).toBe(422);
+  });
+
+  it('409s when the new id is already taken', async () => {
+    const { server, headers } = await start({ config: withReviewer() });
+
+    const response = await rename(server, 'reviewer', 'planner', headers);
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.message).toMatch(/already an agent/);
+  });
+
+  it('carries the rename and the entry edit in one write', async () => {
+    // The reason the two travel together. As separate requests this was two
+    // writes with a window between them, and the failure mode was an agent
+    // under its new name holding its old settings.
+    const { server, runtime, headers } = await start({ config: withReviewer() });
+    runtime.store.ensureSession('mine', { agentId: 'reviewer' });
+
+    const response = await rename(server, 'reviewer', 'code-review', headers, {
+      agents: { list: { 'code-review': { label: 'Second Opinion', model: 'qwen3:32b' } } },
+    });
+
+    expect(response.statusCode).toBe(200);
+    // One `applySettings`, not two: the rename and the edit are one merge.
+    expect(runtime.patches).toHaveLength(1);
+    expect(runtime.config().agents.list['code-review']).toMatchObject({
+      label: 'Second Opinion',
+      model: 'qwen3:32b',
+    });
+    expect(runtime.store.getSession('mine')?.agentId).toBe('code-review');
+  });
+
+  it('changes nothing at all when the rename is refused', async () => {
+    // Validated before `applySettings`, so a body carrying both a bad rename and
+    // a good edit lands neither — which is what "atomic" has to mean from the
+    // caller's side.
+    const { server, runtime, headers } = await start({ config: withReviewer() });
+    runtime.store.ensureSession('mine', { agentId: 'reviewer' });
+
+    const response = await rename(server, 'reviewer', 'planner', headers, {
+      agents: { list: { planner: { label: 'Renamed anyway' } } },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(runtime.patches).toEqual([]);
+    expect(runtime.config().agents.list.reviewer).toBeDefined();
+    expect(runtime.config().agents.list.planner?.label).toBe('Planner');
+    expect(runtime.store.getSession('mine')?.agentId).toBe('reviewer');
+  });
+
+  it('moves two agents in one save', async () => {
+    const { server, runtime, headers } = await start({ config: withReviewer() });
+    runtime.store.ensureSession('one', { agentId: 'reviewer' });
+    runtime.store.ensureSession('two', { agentId: 'planner' });
+
+    const response = await server.app.inject({
+      method: 'PATCH',
+      url: '/api/settings',
+      headers,
+      payload: {
+        renameAgents: [
+          { from: 'reviewer', to: 'code-review' },
+          { from: 'planner', to: 'strategist' },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const list = runtime.config().agents.list;
+    expect(list['code-review']).toBeDefined();
+    expect(list.strategist).toBeDefined();
+    // The delegation followed the agent it names, through both moves.
+    expect(list.strategist?.subagents.map((ref) => ref.id)).toEqual(['code-review']);
+    expect(runtime.store.getSession('one')?.agentId).toBe('code-review');
+    expect(runtime.store.getSession('two')?.agentId).toBe('strategist');
+  });
+
+  it('renames an agent that is switched off', async () => {
+    // Disabling is the reversible half of deleting, so a disabled agent is
+    // still an agent — it is just absent from every listing.
+    const { server, runtime, headers } = await start({
+      config: ConfigSchema.parse({
+        agents: { list: { reviewer: { label: 'Reviewer', enabled: false } } },
+      }),
+    });
+
+    const response = await rename(server, 'reviewer', 'code-review', headers);
+
+    expect(response.statusCode).toBe(200);
+    expect(runtime.config().agents.list['code-review']?.enabled).toBe(false);
   });
 
   it('falls back to the id when an agent has no label', async () => {

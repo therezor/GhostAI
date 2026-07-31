@@ -101,6 +101,8 @@ async function stack(answer = 'Hello from the agent.'): Promise<Stack> {
   const hub = new SessionHub({
     config: ConfigSchema.parse({}),
     loop: () => loop,
+    // This example configures no agents, so every id is the default one.
+    resolveAgentId: () => ({ agentId: 'default', miss: undefined }),
     store,
     approvals: new HubApprovalGate(),
   });

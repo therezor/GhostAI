@@ -14,7 +14,7 @@
  * an image dropped to fit a context window are not the same news.
  */
 
-import { AlertTriangle, Info, ShieldAlert, Scissors, ShieldX } from 'lucide-react';
+import { AlertTriangle, BrainCircuit, Info, ShieldAlert, Scissors, ShieldX } from 'lucide-react';
 import type { JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { WebKey } from '@/i18n/keys.js';
@@ -37,6 +37,10 @@ const NOTICES: Record<
   degraded: { label: 'chat.notices.degraded', tone: 'warning', icon: AlertTriangle },
   truncated_history: { label: 'chat.notices.truncated_history', tone: 'warning', icon: Scissors },
   provider_fallback: { label: 'chat.notices.provider_fallback', tone: 'info', icon: Info },
+  // Warning rather than info: the substituted agent may allow tools the one
+  // this conversation names did not, so the turn ran with wider powers than
+  // were configured for it.
+  agent_fallback: { label: 'chat.notices.agent_fallback', tone: 'warning', icon: BrainCircuit },
 };
 
 /** Neutral is the base rule in `chat.css`, so it needs no modifier. */

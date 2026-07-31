@@ -23,7 +23,11 @@ import {
   type QueryClient,
   type UseQueryResult,
 } from '@tanstack/react-query';
-import type { ConfigPatch, SetCredentialRequest, SettingsResponse } from '@ghostai/protocol';
+import type {
+  SetCredentialRequest,
+  SettingsPatchRequest,
+  SettingsResponse,
+} from '@ghostai/protocol';
 
 import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
@@ -83,11 +87,11 @@ export interface SaveHandle<T> {
   readonly saving: boolean;
 }
 
-export function useSaveSettings(): SaveHandle<ConfigPatch> {
+export function useSaveSettings(): SaveHandle<SettingsPatchRequest> {
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: (patch: ConfigPatch) => api.patchSettings(patch),
+    mutationFn: (patch: SettingsPatchRequest) => api.patchSettings(patch),
     onSuccess: (response) => {
       afterSettingsWrite(queryClient, response);
       toast.success('Settings saved');

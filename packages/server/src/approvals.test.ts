@@ -281,3 +281,78 @@ describe('HubApprovalGate across agents', () => {
     expect(gate.pendingCount).toBe(1);
   });
 });
+
+describe('HubApprovalGate when an agent goes away', () => {
+  it('forgets a departed agent’s standing answers', async () => {
+    // The bug this exists to stop: an agent id is user-authored, so deleting
+    // `reviewer` and creating a new `reviewer` produces two different agents
+    // that share a key — and the second would inherit the first's permissions.
+    const gate = new HubApprovalGate({ clock: manualClock() });
+
+    const granted = gate.request(approvalRequest({ agentId: 'reviewer', callId: 'c1' }));
+    gate.resolve('c1', true, 'always');
+    await granted;
+
+    gate.retainAgents(new Set(['default']));
+
+    // The re-created agent has to ask for itself.
+    void gate.request(approvalRequest({ agentId: 'reviewer', sessionKey: 'web:2', callId: 'c2' }));
+    expect(gate.pendingCount).toBe(1);
+  });
+
+  it('keeps the standing answers of agents that are still configured', async () => {
+    const gate = new HubApprovalGate({ clock: manualClock() });
+
+    const granted = gate.request(approvalRequest({ agentId: 'writer', callId: 'c1' }));
+    gate.resolve('c1', true, 'always');
+    await granted;
+
+    gate.retainAgents(new Set(['default', 'writer']));
+
+    await expect(
+      gate.request(approvalRequest({ agentId: 'writer', sessionKey: 'web:2', callId: 'c2' })),
+    ).resolves.toMatchObject({ approved: true, scope: 'always' });
+    expect(gate.pendingCount).toBe(0);
+  });
+
+  it('leaves session-scoped answers alone, which belong to the conversation', async () => {
+    const gate = new HubApprovalGate({ clock: manualClock() });
+
+    const granted = gate.request(approvalRequest({ agentId: 'reviewer', callId: 'c1' }));
+    gate.resolve('c1', true, 'session');
+    await granted;
+
+    gate.retainAgents(new Set(['default']));
+
+    // Same session, so the conversation's own answer still stands — a
+    // conversation does not stop existing because an agent did.
+    await expect(
+      gate.request(approvalRequest({ agentId: 'reviewer', callId: 'c2' })),
+    ).resolves.toMatchObject({ approved: true });
+  });
+
+  it('carries a standing answer across a rename, which is the same agent', async () => {
+    const gate = new HubApprovalGate({ clock: manualClock() });
+
+    const granted = gate.request(approvalRequest({ agentId: 'reviewer', callId: 'c1' }));
+    gate.resolve('c1', true, 'always');
+    await granted;
+
+    gate.renameAgent('reviewer', 'code-review');
+
+    await expect(
+      gate.request(approvalRequest({ agentId: 'code-review', sessionKey: 'web:2', callId: 'c2' })),
+    ).resolves.toMatchObject({ approved: true, scope: 'always' });
+    // And nothing is left behind under the old name.
+    void gate.request(approvalRequest({ agentId: 'reviewer', sessionKey: 'web:3', callId: 'c3' }));
+    expect(gate.pendingCount).toBe(1);
+  });
+
+  it('renames an agent that has no standing answers without inventing any', () => {
+    const gate = new HubApprovalGate({ clock: manualClock() });
+
+    expect(() => {
+      gate.renameAgent('reviewer', 'code-review');
+    }).not.toThrow();
+  });
+});

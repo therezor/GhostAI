@@ -963,3 +963,89 @@ describe('corrupt data', () => {
     database.close();
   });
 });
+
+describe('reassigning an agent', () => {
+  it('moves every conversation bound to the old id', () => {
+    const store = makeStore();
+    store.ensureSession('a', { agentId: 'reviewer' });
+    store.ensureSession('b', { agentId: 'reviewer' });
+
+    expect(store.reassignAgent('reviewer', 'code-review')).toBe(2);
+    expect(store.getSession('a')?.agentId).toBe('code-review');
+    expect(store.getSession('b')?.agentId).toBe('code-review');
+  });
+
+  it('leaves conversations bound to other agents, and unbound ones, alone', () => {
+    const store = makeStore();
+    store.ensureSession('mine', { agentId: 'reviewer' });
+    store.ensureSession('theirs', { agentId: 'writer' });
+    store.ensureSession('nobody');
+
+    expect(store.reassignAgent('reviewer', 'code-review')).toBe(1);
+    expect(store.getSession('theirs')?.agentId).toBe('writer');
+    expect(store.getSession('nobody')?.agentId).toBeUndefined();
+  });
+
+  it('does not rewrite which agent ran a past turn', () => {
+    // `turn_stats.agent_id` is a record of what happened, not a pointer to what
+    // exists now. A transcript that relabelled its history after a rename would
+    // be describing turns under a name they were never run with.
+    const store = makeStore();
+    store.ensureSession('s', { agentId: 'reviewer' });
+    store.recordTurnStats({
+      turnId: 't1',
+      sessionKey: 's',
+      agentId: 'reviewer',
+      provider: 'anthropic',
+      model: 'claude-opus-5',
+      startedAtMs: NOW,
+      endedAtMs: NOW + 1000,
+      iterations: 1,
+      stopReason: 'complete',
+      usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+    });
+
+    store.reassignAgent('reviewer', 'code-review');
+
+    expect(store.getSession('s')?.agentId).toBe('code-review');
+    expect(store.turnStats('s')[0]?.agentId).toBe('reviewer');
+  });
+
+  it('reports nothing moved when no conversation names the old id', () => {
+    const store = makeStore();
+    store.ensureSession('s');
+
+    expect(store.reassignAgent('reviewer', 'code-review')).toBe(0);
+  });
+
+  it('applies every rename in one save', () => {
+    const store = makeStore();
+    store.ensureSession('a', { agentId: 'reviewer' });
+    store.ensureSession('b', { agentId: 'writer' });
+
+    const moved = store.reassignAgents([
+      { from: 'reviewer', to: 'code-review' },
+      { from: 'writer', to: 'author' },
+    ]);
+
+    expect(moved).toBe(2);
+    expect(store.getSession('a')?.agentId).toBe('code-review');
+    expect(store.getSession('b')?.agentId).toBe('author');
+  });
+
+  it('skips a rename that moves an id onto itself', () => {
+    const store = makeStore();
+    store.ensureSession('a', { agentId: 'reviewer' });
+
+    expect(store.reassignAgents([{ from: 'reviewer', to: 'reviewer' }])).toBe(0);
+    expect(store.getSession('a')?.agentId).toBe('reviewer');
+  });
+
+  it('does nothing at all for an empty list', () => {
+    const store = makeStore();
+    store.ensureSession('a', { agentId: 'reviewer' });
+
+    expect(store.reassignAgents([])).toBe(0);
+    expect(store.getSession('a')?.agentId).toBe('reviewer');
+  });
+});

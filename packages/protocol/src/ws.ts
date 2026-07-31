@@ -376,6 +376,22 @@ export const NoticeKindSchema = z.enum([
   'truncated_history',
   'provider_fallback',
   'approval_denied',
+  /**
+   * The session is bound to an agent that no longer resolves, so the turn ran
+   * on `default` instead.
+   *
+   * A notice rather than an error because the turn *happened*: an agent id is
+   * user-authored and can be deleted at any moment, and refusing every
+   * conversation that named one would make a config edit break work that has
+   * nothing to do with it. The binding is deliberately left alone, so
+   * re-creating the agent silently restores every conversation waiting for it —
+   * which is why this repeats each turn rather than firing once.
+   *
+   * Worth stating plainly, because the notice is the only thing that says it:
+   * `default` may allow tools the departed agent did not, so this widens what
+   * the turn could do rather than narrowing it.
+   */
+  'agent_fallback',
 ]);
 export type NoticeKind = z.infer<typeof NoticeKindSchema>;
 

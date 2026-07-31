@@ -18,7 +18,7 @@ import { useId } from 'react';
 
 import { cn } from '@/lib/cn.js';
 import { Button } from '@/components/ui/button.js';
-import { Input, Label } from '@/components/ui/field.js';
+import { Input, Label, Textarea } from '@/components/ui/field.js';
 import {
   Select,
   SelectContent,
@@ -51,6 +51,71 @@ export function Section({
 /** Two columns above `sm`, one below — a settings form is the last place to force a scroll. */
 export function FieldGrid({ children }: { readonly children: ReactNode }): JSX.Element {
   return <div className="settings-grid">{children}</div>;
+}
+
+export interface TextareaFieldProps extends Omit<ComponentProps<'textarea'>, 'id' | 'onChange'> {
+  readonly label: ReactNode;
+  readonly hint?: ReactNode;
+  readonly error?: string | undefined;
+  readonly onValueChange: (value: string) => void;
+}
+
+/**
+ * `TextField`, for a setting that is a sentence rather than a value.
+ *
+ * The box grows with its content — `field-sizing: content` on `.textarea` — so
+ * it is one line for a short answer and several for a long one, and it is set in
+ * the sans face rather than the mono the list textareas use: this holds prose,
+ * and mono is for the things read character by character.
+ *
+ * It exists because a one-line input hides a long *placeholder*. That is not a
+ * cosmetic complaint — a placeholder holding the default an operator gets if
+ * they type nothing is unreadable at forty characters, which leaves the default
+ * exactly as invisible as having no placeholder at all.
+ */
+export function TextareaField({
+  label,
+  hint,
+  error,
+  onValueChange,
+  className,
+  ...props
+}: TextareaFieldProps): JSX.Element {
+  const id = useId();
+  const hintId = `${id}-hint`;
+  const errorId = `${id}-error`;
+  const describedBy = [
+    hint === undefined ? undefined : hintId,
+    error === undefined ? undefined : errorId,
+  ]
+    .filter((value) => value !== undefined)
+    .join(' ');
+
+  return (
+    <div className="stack settings-field">
+      <Label htmlFor={id}>{label}</Label>
+      <Textarea
+        id={id}
+        aria-invalid={error !== undefined}
+        {...(describedBy === '' ? {} : { 'aria-describedby': describedBy })}
+        className={cn('textarea--prose', className)}
+        onChange={(event) => {
+          onValueChange(event.target.value);
+        }}
+        {...props}
+      />
+      {hint !== undefined && (
+        <p id={hintId} className="settings-field__hint">
+          {hint}
+        </p>
+      )}
+      {error !== undefined && (
+        <p id={errorId} role="alert" className="settings-field__error">
+          {error}
+        </p>
+      )}
+    </div>
+  );
 }
 
 export interface TextFieldProps extends Omit<ComponentProps<'input'>, 'id' | 'onChange'> {

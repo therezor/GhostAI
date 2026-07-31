@@ -12,7 +12,7 @@
 
 import type { AgentEvent, TurnInput, TurnResult } from '@ghostai/agent';
 import type { SessionStore } from '@ghostai/core';
-import { ConfigSchema, type Config } from '@ghostai/protocol';
+import { ConfigSchema, DEFAULT_AGENT_ID, type Config } from '@ghostai/protocol';
 
 import { HubApprovalGate } from '../approvals.js';
 import { SessionHub, type TurnRunner } from '../hub.js';
@@ -106,9 +106,21 @@ export function createTestHub(
   supplied?: FakeRunner,
 ): TestHub {
   const runner = supplied ?? fakeRunner(answer);
+  const resolved = config ?? ConfigSchema.parse({});
   const hub = new SessionHub({
-    config: config ?? ConfigSchema.parse({}),
+    config: resolved,
     loop: () => runner,
+    // The real rule, off the config the test supplied, so a test that sets up
+    // an agent the way an operator would gets the behaviour an operator would.
+    // Reimplementing it as "everything resolves" would make the fallback the
+    // one thing these tests could never see.
+    resolveAgentId: (agentId) => {
+      const id = agentId === undefined || agentId === '' ? DEFAULT_AGENT_ID : agentId;
+      if (id === DEFAULT_AGENT_ID) return { agentId: id, miss: undefined };
+      const entry = resolved.agents.list[id];
+      if (entry?.enabled === true) return { agentId: id, miss: undefined };
+      return { agentId: DEFAULT_AGENT_ID, miss: entry === undefined ? 'unknown' : 'disabled' };
+    },
     store,
     approvals: new HubApprovalGate(),
   });

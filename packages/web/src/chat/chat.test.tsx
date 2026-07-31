@@ -297,6 +297,33 @@ describe('a turn with tool calls', () => {
     // is still there to read.
     expect(await screen.findByText('Possible prompt injection.')).toBeInTheDocument();
   });
+
+  it('shows a fallback notice that belongs to no turn, before the turn it precedes', async () => {
+    // The hub raises this *before* asking for a loop, so it names no turn — the
+    // turn it would name has not started, and a notice addressed to one the
+    // transcript has no item for is silently dropped.
+    //
+    // Asserted here rather than in e2e on purpose: nothing persists a notice,
+    // so a browser that reloaded would not see it, and a spec racing for it is
+    // the transient assertion that put `approvals.spec` red in CI four runs.
+    mount();
+    await connect();
+
+    deliver(
+      {
+        type: 'notice',
+        kind: 'agent_fallback',
+        message: 'This conversation runs on "reviewer", which no longer exists.',
+      },
+      START,
+      { type: 'assistant.delta', turnId: 't1', text: 'Done.' },
+    );
+
+    expect(await screen.findByText('Ran on the default agent.')).toBeInTheDocument();
+    expect(screen.getByText(/which no longer exists/)).toBeInTheDocument();
+    // The turn still ran: this is a notice, not a refusal.
+    expect(screen.getByText('Done.')).toBeInTheDocument();
+  });
 });
 
 /**

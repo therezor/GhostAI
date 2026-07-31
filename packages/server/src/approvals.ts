@@ -209,6 +209,39 @@ export class HubApprovalGate implements ApprovalGate {
     }
   }
 
+  /**
+   * Forgets standing approvals for agents that are no longer configured.
+   *
+   * Not a cache detail — a permission one. An agent id is user-authored and
+   * re-creatable, so a deleted `reviewer` and a new one created under the same
+   * name are two different agents that happen to share a key. Without this,
+   * the new one silently inherits every tool the old one was ever granted
+   * standing permission for, and the operator who granted them was answering
+   * about an agent that no longer exists.
+   *
+   * Session-scoped answers are untouched: those belong to a conversation, and a
+   * conversation does not stop existing because an agent did.
+   */
+  retainAgents(agentIds: ReadonlySet<string>): void {
+    for (const agentId of [...this.#always.keys()]) {
+      if (!agentIds.has(agentId)) this.#always.delete(agentId);
+    }
+  }
+
+  /**
+   * Carries standing approvals from one agent id to another.
+   *
+   * The other half of `retainAgents`, and the reason both are needed: a rename
+   * is the *same* agent, so its permissions follow it, where a delete-then-
+   * recreate is a different agent and its permissions must not.
+   */
+  renameAgent(from: string, to: string): void {
+    const decisions = this.#always.get(from);
+    if (decisions === undefined) return;
+    this.#always.delete(from);
+    this.#always.set(to, decisions);
+  }
+
   #recall(sessionKey: string, agentId: string, tool: string): RememberedDecision | undefined {
     // The session's own answer wins over the standing one: it is the more
     // specific of the two, and the more recently given. A session is bound to

@@ -44,6 +44,8 @@ import {
   AgentEntrySchema,
   DEFAULT_AGENT_ID,
   DEFAULT_SYSTEM_PROMPT_TEMPLATE,
+  defaultSubagentPrompt,
+  deriveAgentId,
   PROMPT_PLACEHOLDERS,
   subagentToolName,
   unknownPlaceholders,
@@ -70,6 +72,7 @@ import {
   SelectField,
   SwitchRow,
   TextField,
+  TextareaField,
 } from '@/settings/controls.js';
 import { modelOptions } from '@/settings/fields.js';
 import { useSaveSettings, useSettings } from '@/settings/use-settings.js';
@@ -257,6 +260,10 @@ function SubagentRow({
 }): JSX.Element {
   const { t } = useTranslation();
   const position = index + 1;
+  // The target's label, which is what the generated description names. Read off
+  // the option list rather than stored on the reference, for the same reason
+  // `labelOf` reads it off the target's entry: one place to rename an agent.
+  const targetLabel = options.find((agent) => agent.id === ref_.id)?.label ?? '';
 
   return (
     <li className="stack agent-editor__subagent">
@@ -303,14 +310,30 @@ function SubagentRow({
         </Button>
       </div>
 
-      {/* One line, like every other setting on this page. A guidance sentence
-          is a sentence — the place for paragraphs is the system prompt, which
-          has an editor precisely because it is the one field that needs one. */}
-      <TextField
+      {/* The one box on this page that is not a single line, and it earns it by
+          what it has to *show* rather than by what gets typed into it. The
+          placeholder is the description the model reads when this is left
+          empty — a couple of sentences — and in an `<input>` an operator saw
+          about forty characters of it, which left the default as invisible as
+          having no placeholder at all. It grows with its content, so a one-word
+          answer still costs one line. */}
+      <TextareaField
         label={<span className="sr-only">{t('agents.subagentPromptFor', { position })}</span>}
         value={ref_.prompt}
-        placeholder={t('agents.subagentPromptPlaceholder')}
+        // The sentence the model would actually read, not an invented example
+        // of one an operator might write — which is what this used to hold, and
+        // left "leave it empty for a generic one" as the only clue about a
+        // default nobody could see.
+        //
+        // A placeholder rather than a prefilled value on purpose: it is built
+        // from the *target's* current label, so it follows a rename. Written
+        // into the reference it would freeze the name the agent had on the day
+        // the delegation was added, and nothing would ever correct it.
+        placeholder={
+          ref_.id === '' ? '' : defaultSubagentPrompt(targetLabel === '' ? ref_.id : targetLabel)
+        }
         hint={t('agents.subagentPromptHint')}
+        rows={2}
         onValueChange={(next) => {
           onChange({ ...ref_, prompt: next });
         }}
@@ -388,6 +411,10 @@ export function AgentEditorRoute(): JSX.Element {
       agentId={agentId}
       entry={entry ?? AgentEntrySchema.parse({})}
       defaults={config.agents.defaults}
+      // The whole list, not the `/api/agents` listing: that one omits the
+      // disabled agents, and a rename onto a switched-off agent's id is still
+      // the collision the server refuses with a 409.
+      list={config.agents.list}
     />
   );
 }
@@ -396,10 +423,12 @@ function Editor({
   agentId,
   entry,
   defaults,
+  list,
 }: {
   readonly agentId: string;
   readonly entry: AgentEntry;
   readonly defaults: AgentDefaults;
+  readonly list: Readonly<Record<string, AgentEntry>>;
 }): JSX.Element {
   const { t } = useTranslation();
   const isDefault = agentId === DEFAULT_AGENT_ID;
@@ -412,6 +441,22 @@ function Editor({
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   const [dirty, setDirty] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  /**
+   * The id box, which is an ordinary field even though it is not an ordinary save.
+   *
+   * Changing it needs its own request: a settings patch could move the key, but
+   * it could not say whether that meant "rename" or "delete and create", which
+   * differ on whether this agent's conversations and approvals follow. That is a
+   * fact about the wire, and it is not a reason to put a second commit button on
+   * a screen that already has one: every other box here waits for Save, and one
+   * control that did not would be a rule the operator learns by surprise.
+   *
+   * It also went wrong in a way worth recording. Renaming immediately meant
+   * navigating to the new id, which remounts this editor — `key={agentId}` on
+   * the route — and every unsaved edit in every other box went with it, silently.
+   * One button cannot lose a change it is the one committing.
+   */
+  const [idDraft, setIdDraft] = useState(agentId);
 
   const agents = useQuery({
     queryKey: queryKeys.agents,
@@ -676,6 +721,29 @@ function Editor({
     }
   };
 
+  /**
+   * What the id box would actually produce, and why it might not be allowed.
+   *
+   * Slugified rather than validated-as-typed: the box accepts a label's worth of
+   * typing and the hint below it says what that becomes, which is the same
+   * bargain the create dialog makes. `''` means the box holds nothing usable,
+   * which is only an error once it differs from the id the agent already has.
+   */
+  const proposedId = idDraft.trim() === '' ? '' : deriveAgentId(idDraft);
+  const renaming = !isDefault && proposedId !== '' && proposedId !== agentId;
+
+  const idError = ((): string | undefined => {
+    if (isDefault || idDraft.trim() === agentId) return undefined;
+    if (proposedId === '') return t('agents.idEmpty');
+    // Checked against the settings tree rather than the agent listing, which
+    // omits the disabled ones — colliding with an agent that is merely switched
+    // off is still a collision, and the server would refuse it with a 409.
+    if (proposedId !== agentId && list[proposedId] !== undefined) {
+      return t('agents.idTaken', { id: proposedId });
+    }
+    return undefined;
+  })();
+
   const onDelete = (): void => {
     save(toAgentDeletePatch(agentId));
     // Anything pointed at the agent that just went has to move, or the next
@@ -687,25 +755,60 @@ function Editor({
   };
 
   const onSave = (): void => {
+    // The id is settled first, because everything below is addressed *to* an id
+    // and the patch has to name the one the entry will be under by the time it
+    // arrives. A failed rename must therefore leave the settings untouched
+    // rather than half-applied to a key that no longer exists.
+    if (idError !== undefined) {
+      setErrors({ agentId: idError });
+      return;
+    }
+
+    const target = renaming ? proposedId : agentId;
     const result = isDefault
       ? toDefaultAgentPatch(base, form, entry, t)
-      : toAgentEntryPatch(agentId, form, entry, t);
+      : toAgentEntryPatch(target, form, entry, t);
     if (!result.ok) {
       setErrors(result.errors);
       return;
     }
     setErrors({});
-    // No invalidation here any more: `useSaveSettings` refreshes the agents
-    // query once the write has landed. Doing it on this line fired it *before*
-    // the PATCH resolved, so the refetch answered from the old config and a
-    // rename never reached the composer's picker.
-    save(result.patch);
+
+    // One request, patch and rename together. As two it was two writes with a
+    // window between them: the rename could land and the patch fail, leaving the
+    // agent under its new name holding its old settings.
+    //
+    // No invalidation on this line: `useSaveSettings` refreshes the agents query
+    // once the write has landed, and doing it here fired it *before* the PATCH
+    // resolved — the refetch answered from the old config and a renamed label
+    // never reached the composer's picker.
+    save(
+      renaming
+        ? { ...result.patch, renameAgents: [{ from: agentId, to: proposedId }] }
+        : result.patch,
+      renaming
+        ? {
+            // Only once the write has landed and the cache holds it. Navigating
+            // first lands the editor on an id the settings tree does not have
+            // yet, which is the race that used to say "There is no agent called…".
+            onSuccess: () => {
+              // This browser's remembered choice is the one reference the server
+              // cannot reach, and nothing else fixes it: the picker only resets
+              // an id that names *nothing*, and this one now names the renamed
+              // agent.
+              if (active === agentId) select(proposedId);
+              void navigate({ to: '/agents/$agentId', params: { agentId: proposedId } });
+            },
+          }
+        : {},
+    );
     setDirty(false);
   };
 
   const onRevert = (): void => {
     setForm(toAgentEntryForm(entry, defaults));
     setBase(toAgentForm(defaults));
+    setIdDraft(agentId);
     // Or a revert would leave the box holding the stored (empty) prompt while
     // still claiming the agent owns one.
     setPromptOwned(entry.systemPrompt.trim() !== '');
@@ -746,9 +849,17 @@ function Editor({
         </div>
 
         <p className="page__note">
+          {/* A switched-off agent is absent from `/api/agents` just as a
+              deleted one is, so `resolved` being undefined cannot on its own
+              mean "no model". Asked in this order, the disabled case answers
+              for itself and the model line is only reached by an agent that
+              could actually run — otherwise a disabled agent was told it had
+              no model, and choosing one would not have helped. */}
           {isDefault
             ? 'Every conversation that names no agent runs on this one, and a new agent starts as a copy of it.'
-            : `Runs on ${resolved?.model === '' || resolved === undefined ? 'no model yet — it cannot take a turn until one is chosen' : resolved.model}.`}
+            : !form.enabled
+              ? 'Switched off: it cannot take a turn, and it is hidden from the picker. Its settings and its conversations are kept.'
+              : `Runs on ${resolved?.model === '' || resolved === undefined ? 'no model yet — it cannot take a turn until one is chosen' : resolved.model}.`}
         </p>
       </div>
 
@@ -763,6 +874,18 @@ function Editor({
             }}
             hint="Fills {{name}} in the system prompt."
           />
+          {!isDefault && (
+            <TextField
+              label={t('agents.idLabel')}
+              value={idDraft}
+              onValueChange={(value) => {
+                setIdDraft(value);
+                setDirty(true);
+              }}
+              {...(errors.agentId === undefined ? {} : { error: errors.agentId })}
+              hint={renaming ? t('agents.idPreview', { id: proposedId }) : t('agents.idHint')}
+            />
+          )}
           {!isDefault && (
             <SwitchRow
               label={t('agents.enabled')}

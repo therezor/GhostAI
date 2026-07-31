@@ -28,7 +28,7 @@
  *    half decidable from config is checked here; see `assertBuildable`.
  */
 
-import { DEFAULT_AGENT_ID, GhostError } from '@ghostai/core';
+import { DEFAULT_AGENT_ID, GhostError, RESERVED_AGENT_IDS, isAgentId } from '@ghostai/core';
 import type { SubagentBinding } from '@ghostai/agent';
 import {
   AgentDefaultsSchema,
@@ -87,6 +87,42 @@ export interface EffectiveAgent {
 }
 
 /**
+ * Something the settings asked for that had to be ignored to keep going.
+ *
+ * The counterpart to the `GhostError`s below, and the distinction is *whose
+ * fault it is and when*. A malformed entry is the operator's, and it is refused
+ * where they wrote it. A reference to an agent that has since been deleted is
+ * nobody's — the id it names was legal when it was written — so refusing it
+ * would let one delete stop an install that was working a moment ago.
+ */
+export interface AgentConfigWarning {
+  readonly agentId: string;
+  readonly code: 'missing_subagent' | 'disabled_subagent' | 'illegal_agent_id';
+  readonly message: string;
+  readonly details: Readonly<Record<string, string>>;
+}
+
+/** Where a warning goes. Required, so a call site cannot drop one by omission. */
+type WarningSink = (warning: AgentConfigWarning) => void;
+
+/** Discards warnings, for the callers that resolve one agent and have no listener. */
+const IGNORE_WARNINGS: WarningSink = () => {
+  // Nothing is listening; see the doc above.
+};
+
+/** Why an id did not name an agent that could run. */
+export type AgentMissReason = 'unknown' | 'disabled';
+
+export interface AgentResolution {
+  /** What was asked for, verbatim — including an id that names nothing. */
+  readonly requestedId: string;
+  /** What would actually run. Never null: `default` when the request missed. */
+  readonly agent: EffectiveAgent;
+  /** `undefined` when `requestedId` resolved to itself. */
+  readonly miss: AgentMissReason | undefined;
+}
+
+/**
  * Drops the keys a patch left undefined.
  *
  * `{ ...base, ...patch }` would let an explicit `undefined` — which is what a
@@ -142,13 +178,28 @@ function labelOf(config: Config, id: string): string {
 }
 
 /**
- * The stored refs as the loop's bindings, refusing what cannot work.
+ * The stored refs as the loop's bindings, dropping what cannot work.
  *
- * Every refusal here is a `config` error, which makes it a 400 from a settings
- * save that changes nothing — the same all-or-nothing property the toolbox
- * checks rely on. The alternative is a subagent that looks configured in the
- * editor and reports "no such agent" the first time the model tries to use it,
- * which is a bug report rather than a validation message.
+ * Two kinds of bad ref, and they are bad at *different moments*, which is why
+ * they get different answers:
+ *
+ *  - **Malformed** — a ref to itself, or the same target twice. Decidable from
+ *    this entry alone, and no edit to any *other* agent can cause it. Refused,
+ *    as `invalid_input`, so a settings save reports it as the bad request it is
+ *    and changes nothing.
+ *  - **Dangling** — the target has been deleted or switched off. Caused by an
+ *    edit somewhere else entirely, possibly months ago, possibly by hand while
+ *    the server was down. Dropped with a warning.
+ *
+ * The second used to be refused too, and the argument for it was that a
+ * subagent which looks configured in the editor and reports "no such agent" the
+ * first time the model reaches for it is a bug report rather than a validation
+ * message. That argument is about *save time*, and it still holds — a patch
+ * that introduces a ref to nothing is still refused, by `pruneDanglingSubagents`
+ * below, which strips it before it can be written. What changed is that a ref
+ * *already on disk* no longer takes the install down with it: this function runs
+ * inside `listAgents` inside `GhostRuntime#build`, so throwing here meant one
+ * hand-edited line stopped the server from starting at all.
  *
  * What is *not* checked here: whether the target agent can actually resolve a
  * provider. That depends on credentials and on a provider being reachable, so
@@ -159,6 +210,7 @@ function resolveSubagents(
   config: Config,
   id: string,
   entry: AgentEntry | undefined,
+  warn: WarningSink,
 ): SubagentBinding[] {
   const refs = entry?.subagents ?? [];
   const bindings: SubagentBinding[] = [];
@@ -166,26 +218,36 @@ function resolveSubagents(
 
   for (const ref of refs) {
     if (ref.id === id) {
-      throw new GhostError('config', `Agent "${id}" lists itself as a subagent.`, {
+      throw new GhostError('invalid_input', `Agent "${id}" lists itself as a subagent.`, {
         details: { agentId: id },
       });
     }
     if (seen.has(ref.id)) {
-      throw new GhostError('config', `Agent "${id}" lists "${ref.id}" as a subagent twice.`, {
-        details: { agentId: id, subagentId: ref.id },
-      });
+      throw new GhostError(
+        'invalid_input',
+        `Agent "${id}" lists "${ref.id}" as a subagent twice.`,
+        {
+          details: { agentId: id, subagentId: ref.id },
+        },
+      );
     }
     // `hasAgent` rather than a lookup, so `default` — which usually has no
     // entry at all — is delegable like any other agent.
     if (!hasAgent(config, ref.id)) {
+      const missing = config.agents.list[ref.id] === undefined;
       const known = Object.keys(config.agents.list).join(', ');
-      throw new GhostError(
-        'config',
-        config.agents.list[ref.id] === undefined
-          ? `Agent "${id}" names a subagent that does not exist: "${ref.id}". Known agents: ${known}`
-          : `Agent "${id}" names "${ref.id}" as a subagent, but that agent is disabled.`,
-        { details: { agentId: id, subagentId: ref.id } },
-      );
+      warn({
+        agentId: id,
+        code: missing ? 'missing_subagent' : 'disabled_subagent',
+        message: missing
+          ? `Agent "${id}" delegates to "${ref.id}", which does not exist. Known agents: ${known}`
+          : `Agent "${id}" delegates to "${ref.id}", which is switched off.`,
+        details: { agentId: id, subagentId: ref.id },
+      });
+      // Dropped rather than bound: a binding whose target cannot run would put a
+      // tool in front of the model that fails every time it is called, which
+      // reads to the model as its own mistake rather than as a missing agent.
+      continue;
     }
 
     seen.add(ref.id);
@@ -234,7 +296,12 @@ function assertBuildable(agent: EffectiveAgent): void {
   }
 }
 
-function build(config: Config, id: string, entry: AgentEntry | undefined): EffectiveAgent {
+function build(
+  config: Config,
+  id: string,
+  entry: AgentEntry | undefined,
+  warn: WarningSink,
+): EffectiveAgent {
   const agent: EffectiveAgent = {
     id,
     label: entry?.label === undefined || entry.label === '' ? id : entry.label,
@@ -249,7 +316,7 @@ function build(config: Config, id: string, entry: AgentEntry | undefined): Effec
     toolsConfig: mergeToolsConfig(config.tools, entry),
     toolbox: entry?.toolbox ?? { name: '', network: { mode: 'none', allow: [] } },
     memory: entry?.memory ?? { shared: true },
-    subagents: resolveSubagents(config, id, entry),
+    subagents: resolveSubagents(config, id, entry, warn),
   };
   assertBuildable(agent);
   return agent;
@@ -264,6 +331,11 @@ function build(config: Config, id: string, entry: AgentEntry | undefined): Effec
  */
 export function hasAgent(config: Config, id: string): boolean {
   if (id === DEFAULT_AGENT_ID) return true;
+  // The pattern check as well as the lookup, so an entry stored under a key
+  // that is not a legal id is invisible everywhere rather than only to
+  // `resolveAgents` — otherwise it could be delegated to and bound to, and then
+  // fail later at the one place that turns an id into a path.
+  if (!isAgentId(id)) return false;
   return config.agents.list[id]?.enabled === true;
 }
 
@@ -279,35 +351,195 @@ export function resolveAgent(config: Config, id: string | undefined): EffectiveA
   const agentId = id === undefined || id === '' ? DEFAULT_AGENT_ID : id;
   const entry = config.agents.list[agentId];
 
-  if (agentId !== DEFAULT_AGENT_ID && entry?.enabled !== true) {
+  if (!hasAgent(config, agentId)) {
     const known = listAgents(config)
       .map((agent) => agent.id)
       .join(', ');
     throw new GhostError(
       'not_found',
-      entry === undefined
+      entry === undefined || !isAgentId(agentId)
         ? `No agent named "${agentId}". Known agents: ${known}`
         : `Agent "${agentId}" is disabled.`,
       { details: { agentId } },
     );
   }
 
-  return build(config, agentId, entry);
+  return build(config, agentId, entry, IGNORE_WARNINGS);
+}
+
+/**
+ * The same answer as `resolveAgent`, degrading to `default` instead of throwing.
+ *
+ * The door for anything holding an id it did not choose — a session row, a
+ * websocket frame, a browser's remembered preference. All three can name an
+ * agent an operator deleted between when it was written and now, and none of
+ * them is a place where "this install is broken" is a true thing to say.
+ *
+ * It degrades on **absence**, never on **fault**: an agent that exists but
+ * cannot be built — an egress rule that is not a CIDR, a toolbox network with
+ * no toolbox — still throws. Those are settings that were never going to work
+ * and silently substituting a different agent for them would hide the one thing
+ * the operator needs to see.
+ *
+ * The caller decides what to do about `miss`. Nothing here reports it, because
+ * the vocabulary differs by surface: the hub raises a notice on the turn, the
+ * context panel labels the figures it is showing, and the picker marks the
+ * binding. A message written here would be wrong for two of the three.
+ */
+export function resolveAgentOrDefault(config: Config, id: string | undefined): AgentResolution {
+  const requestedId = id === undefined || id === '' ? DEFAULT_AGENT_ID : id;
+  const entry = config.agents.list[requestedId];
+
+  if (hasAgent(config, requestedId)) {
+    return {
+      requestedId,
+      agent: build(config, requestedId, entry, IGNORE_WARNINGS),
+      miss: undefined,
+    };
+  }
+
+  return {
+    requestedId,
+    agent: build(config, DEFAULT_AGENT_ID, config.agents.list[DEFAULT_AGENT_ID], IGNORE_WARNINGS),
+    // An entry under an unusable key reads as `unknown` rather than `disabled`:
+    // it is switched on, it just cannot be reached by that name, and telling
+    // the operator it is disabled would send them to a toggle that is already
+    // in the position they want.
+    miss: entry === undefined || !isAgentId(requestedId) ? 'unknown' : 'disabled',
+  };
+}
+
+/**
+ * Every agent that can run a turn, plus what had to be ignored to build them.
+ *
+ * The default one first, then insertion order — the order the operator wrote
+ * them in `config.json` and the order the picker shows.
+ *
+ * Warnings come out beside the agents rather than hanging off each one, because
+ * `EffectiveAgent` is held by the loop and the picker and half the settings
+ * tree, and none of those wants to carry a diagnostics list it will never read.
+ */
+export function resolveAgents(config: Config): {
+  readonly agents: readonly EffectiveAgent[];
+  readonly warnings: readonly AgentConfigWarning[];
+} {
+  const warnings: AgentConfigWarning[] = [];
+  const warn: WarningSink = (warning) => warnings.push(warning);
+
+  const agents: EffectiveAgent[] = [
+    build(config, DEFAULT_AGENT_ID, config.agents.list[DEFAULT_AGENT_ID], warn),
+  ];
+  for (const [id, entry] of Object.entries(config.agents.list)) {
+    if (id === DEFAULT_AGENT_ID || !entry.enabled) continue;
+    // A key that is not a legal id got in by hand or through an older build:
+    // the schema types this record's key as a plain string, deliberately, so
+    // that a file carrying one still parses and can still be edited back out.
+    // It is excluded rather than refused, because an id that cannot name a
+    // directory cannot run a turn either — see `agentDirFor`.
+    if (!isAgentId(id)) {
+      warnings.push({
+        agentId: id,
+        code: 'illegal_agent_id',
+        message:
+          `"${id}" is not a usable agent id, so that agent is being ignored.\n` +
+          '  Ids are lower-case letters, digits and hyphens, up to 40 characters.',
+        details: { agentId: id },
+      });
+      continue;
+    }
+    agents.push(build(config, id, entry, warn));
+  }
+  return { agents, warnings };
 }
 
 /**
  * Every agent that can run a turn, the default one first.
  *
- * Insertion order after that, which is the order the operator wrote them in
- * `config.json` and the order the picker shows.
+ * The warning-free half of `resolveAgents`, kept because most callers are
+ * answering "which agents are there" and have nowhere to put a diagnostic.
  */
 export function listAgents(config: Config): readonly EffectiveAgent[] {
-  const agents: EffectiveAgent[] = [
-    build(config, DEFAULT_AGENT_ID, config.agents.list[DEFAULT_AGENT_ID]),
-  ];
+  return resolveAgents(config).agents;
+}
+
+/**
+ * The config with delegations to agents that no longer exist removed.
+ *
+ * Owned by `reconfigure` rather than by the merge, because "deleting
+ * `agents.list.x` also edits `agents.list.y.subagents`" is knowledge about
+ * agents and `mergeConfigPatch` is a generic tree merge — putting it there
+ * would make a *preview* of a patch change more than the patch said. Owning it
+ * at the route was the other option and is worse: there is more than one way
+ * into a write, and a second one would silently skip the healing.
+ *
+ * It is what makes deleting a delegated-to agent work at all. The delete used
+ * to leave a ref pointing at nothing, `resolveSubagents` threw a `config` error
+ * on the rebuild, and because `applySettings` rebuilds *before* it writes, the
+ * operator got a 500 and a file that had not changed — a delete that reported
+ * as a server fault and then did nothing.
+ *
+ * Absent and disabled are treated differently on purpose:
+ *
+ *  - **Absent → pruned.** The ref can never work again. Only re-creating an
+ *    agent under the same id would revive it, and that is a new agent.
+ *  - **Disabled → kept.** Switching an agent off is documented as the
+ *    reversible half of deleting it, so a delegation has to survive it.
+ *    `resolveSubagents` drops the *binding* and warns; the *ref* stays in the
+ *    file, and switching the agent back on restores the delegation.
+ */
+export function pruneDanglingSubagents(config: Config): {
+  readonly config: Config;
+  readonly removed: readonly { readonly agentId: string; readonly subagentId: string }[];
+} {
+  const removed: { readonly agentId: string; readonly subagentId: string }[] = [];
+  const list: Record<string, AgentEntry> = {};
+
   for (const [id, entry] of Object.entries(config.agents.list)) {
-    if (id === DEFAULT_AGENT_ID || !entry.enabled) continue;
-    agents.push(build(config, id, entry));
+    const kept = entry.subagents.filter((ref) => {
+      // Present-but-disabled survives, so the test is the entry's existence
+      // rather than `hasAgent`, which also answers false for a disabled agent.
+      const exists = ref.id === DEFAULT_AGENT_ID || config.agents.list[ref.id] !== undefined;
+      if (!exists) removed.push({ agentId: id, subagentId: ref.id });
+      return exists;
+    });
+    list[id] = kept.length === entry.subagents.length ? entry : { ...entry, subagents: kept };
   }
-  return agents;
+
+  // The same object back when nothing changed, so a healthy config is not
+  // rewritten into an equal-but-different one on every single save.
+  if (removed.length === 0) return { config, removed };
+  return { config: { ...config, agents: { ...config.agents, list } }, removed };
+}
+
+/**
+ * Refuses a write that introduces an agent id nothing downstream can use.
+ *
+ * The record's key is typed as a plain string and stays that way: tightening
+ * the *schema* would stop an install whose file already holds an odd key from
+ * booting at all, which is the exact failure this whole area exists to remove.
+ * So the rule lives on the write instead — a file already on disk keeps
+ * loading, and nothing new gets in.
+ *
+ * Before/after rather than a flat check for the same reason. A key that is
+ * already stored has to stay *deletable*: an id that cannot be written is
+ * otherwise an id that can never be removed, and the operator is stuck with an
+ * agent they cannot get rid of through the only interface that edits agents.
+ *
+ * `invalid_input` rather than `config`, because this is a request body being
+ * refused — a 422 rather than a 500 about the operator's own file.
+ */
+export function assertWritableAgentIds(before: Config, after: Config): void {
+  for (const id of Object.keys(after.agents.list)) {
+    if (id in before.agents.list) continue;
+    if (id === DEFAULT_AGENT_ID) continue;
+    if (isAgentId(id) && !RESERVED_AGENT_IDS.has(id)) continue;
+
+    throw new GhostError(
+      'invalid_input',
+      `"${id}" cannot be used as an agent id.\n` +
+        '  Ids are lower-case letters, digits and hyphens, up to 40 characters,\n' +
+        '  and cannot be a reserved device name.',
+      { details: { agentId: id } },
+    );
+  }
 }

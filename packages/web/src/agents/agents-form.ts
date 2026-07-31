@@ -561,10 +561,18 @@ export function toNewAgentPatch(
           enabled: true,
           systemPrompt: template.systemPrompt,
           tools: { ...template.tools },
-          // Copied like the tools: a duplicate of an agent that delegates is
-          // expected to delegate. It is also safe — the refs name other agents,
-          // and a copy pointing at the same ones is exactly what was asked for.
-          subagents: template.subagents.map((ref) => ({ ...ref })),
+          // The one thing deliberately *not* copied. Everything else here is a
+          // setting — how the agent thinks, what it may touch, what it costs —
+          // and inheriting those is what "a copy of the default agent" means.
+          // Delegation is not a setting but a relationship: it says this agent's
+          // job is partly somebody else's, which is specific to the job and not
+          // to the template it was stamped from.
+          //
+          // It also compounds. A prompt copied into an agent that did not want
+          // it is one wrong sentence; a delegation copied into every agent
+          // created afterwards puts a tool in front of each of them, and the
+          // model will use it.
+          subagents: [],
           toolbox: { ...template.toolbox },
           memory: { ...template.memory },
           provider: template.provider ?? defaults.provider,

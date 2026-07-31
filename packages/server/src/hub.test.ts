@@ -151,6 +151,8 @@ interface Harness {
 interface HarnessOptions {
   readonly config?: Partial<Config['server']>;
   readonly loop?: (agentId: string | undefined) => TurnRunner | null;
+  /** `agents.list`, so a test can set an agent up the way an operator would. */
+  readonly agents?: Record<string, unknown>;
   readonly maxQueueDepth?: number;
   readonly maxSessions?: number;
 }
@@ -162,7 +164,10 @@ afterEach(() => {
 });
 
 function harness(options: HarnessOptions = {}): Harness {
-  const config = ConfigSchema.parse({ server: options.config ?? {} });
+  const config = ConfigSchema.parse({
+    server: options.config ?? {},
+    agents: { list: options.agents ?? {} },
+  });
   const store = new SessionStore();
   cleanups.push(() => {
     store.close();
@@ -177,6 +182,15 @@ function harness(options: HarnessOptions = {}): Harness {
     store,
     approvals,
     loop: options.loop ?? ((): TurnRunner => runner),
+    // The real rule, read off the config this harness built, so a test that
+    // deletes an agent sees exactly what a deployment would.
+    resolveAgentId: (agentId) => {
+      const id = agentId === undefined || agentId === '' ? 'default' : agentId;
+      if (id === 'default') return { agentId: id, miss: undefined };
+      const entry = config.agents.list[id];
+      if (entry?.enabled === true) return { agentId: id, miss: undefined };
+      return { agentId: 'default', miss: entry === undefined ? 'unknown' : 'disabled' };
+    },
     newId: () => `id-${String(++counter)}`,
     ...(options.maxQueueDepth === undefined ? {} : { maxQueueDepth: options.maxQueueDepth }),
     ...(options.maxSessions === undefined ? {} : { maxSessions: options.maxSessions }),
@@ -1155,9 +1169,14 @@ describe('SessionHub agent routing', () => {
     };
   }
 
+  /** `agents.list` with the named ids enabled, as an operator would write them. */
+  function configured(...ids: readonly string[]): Record<string, unknown> {
+    return Object.fromEntries(ids.map((id) => [id, { label: id }]));
+  }
+
   it('resolves the loop for the agent a frame names', async () => {
     const tracked = tracking();
-    const h = harness({ loop: tracked.loop });
+    const h = harness({ loop: tracked.loop, agents: configured('reviewer') });
     const client = h.connect();
 
     await send(client, {
@@ -1177,14 +1196,17 @@ describe('SessionHub agent routing', () => {
 
     await send(client, { type: 'user.message', sessionKey: SESSION, content: 'hello' });
 
-    expect(tracked.asked).toEqual([undefined]);
+    // Named rather than left `undefined`: the hub has decided which agent runs
+    // and says which, so the id it asks for and the id it reports on
+    // `turn.start` cannot drift apart. `loopFor` treats the two identically.
+    expect(tracked.asked).toEqual(['default']);
   });
 
   it('lets the stored session win over a frame that names another agent', async () => {
     // A history built under one agent's prompt, tools and permissions must not
     // silently continue under another's.
     const tracked = tracking();
-    const h = harness({ loop: tracked.loop });
+    const h = harness({ loop: tracked.loop, agents: configured('reviewer', 'writer') });
     h.store.ensureSession(SESSION, { agentId: 'reviewer' });
     const client = h.connect();
 
@@ -1198,11 +1220,97 @@ describe('SessionHub agent routing', () => {
     expect(tracked.asked).toEqual(['reviewer']);
   });
 
-  it('reports an unknown agent on the turn, and keeps the connection', async () => {
+  it('runs on the default agent when the one a session names is gone', async () => {
+    // A conversation must not stop working because the agent it was bound to
+    // was deleted — an agent id is user-authored and can go at any moment.
+    const tracked = tracking();
+    const h = harness({ loop: tracked.loop });
+    h.store.ensureSession(SESSION, { agentId: 'reviewer' });
+    const client = h.connect();
+
+    await send(client, { type: 'user.message', sessionKey: SESSION, content: 'hello' });
+
+    expect(tracked.asked).toEqual(['default']);
+    expect(client.of('notice')[0]).toMatchObject({ kind: 'agent_fallback' });
+    expect(client.of('notice')[0]).toMatchObject({ message: /no longer exists/ });
+
+    // The turn happened: this is a notice, not a refusal. Driven to completion
+    // rather than asserted mid-flight, so what is checked is where the turn
+    // settled and not whether it had got there yet.
+    await tracked.runner.turn(0).end();
+    expect(client.of('turn.end')).toHaveLength(1);
+  });
+
+  it('says so differently when the agent is merely switched off', async () => {
+    const h = harness({ agents: { reviewer: { label: 'Reviewer', enabled: false } } });
+    h.store.ensureSession(SESSION, { agentId: 'reviewer' });
+    const client = h.connect();
+
+    await send(client, { type: 'user.message', sessionKey: SESSION, content: 'hello' });
+
+    expect(client.of('notice')[0]).toMatchObject({ message: /switched off/ });
+  });
+
+  it('does not raise the notice when the binding resolves', async () => {
+    const h = harness({ agents: configured('reviewer') });
+    h.store.ensureSession(SESSION, { agentId: 'reviewer' });
+    const client = h.connect();
+
+    await send(client, { type: 'user.message', sessionKey: SESSION, content: 'hello' });
+
+    expect(client.of('notice')).toHaveLength(0);
+  });
+
+  it('raises the notice again on the next turn, because nothing was written', async () => {
+    // The binding is deliberately left alone, so re-creating the agent restores
+    // every conversation waiting for it. The cost is that the fallback is
+    // re-decided each turn — so a notice fired once would describe a state the
+    // operator could no longer see.
+    const h = harness();
+    h.store.ensureSession(SESSION, { agentId: 'reviewer' });
+    const client = h.connect();
+
+    // Each turn is finished before the next is sent: a second message arriving
+    // mid-turn is queued, and one turn cannot raise two notices.
+    await send(client, { type: 'user.message', sessionKey: SESSION, content: 'one' });
+    await h.runner.turn(0).end();
+    await send(client, { type: 'user.message', sessionKey: SESSION, content: 'two' });
+    await h.runner.turn(1).end();
+
+    expect(client.of('notice')).toHaveLength(2);
+    // And the session still says what it was bound to.
+    expect(h.store.getSession(SESSION)?.agentId).toBe('reviewer');
+  });
+
+  it('lets an explicit pick beat a stored binding that no longer resolves', async () => {
+    // The stored-wins rule protects a conversation from continuing under
+    // settings it was not built with. A deleted agent offers no such settings,
+    // so outranking the operator's pick would only drop them onto `default`
+    // while they watched themselves choose something else.
+    const tracked = tracking();
+    const h = harness({ loop: tracked.loop, agents: configured('writer') });
+    h.store.ensureSession(SESSION, { agentId: 'reviewer' });
+    const client = h.connect();
+
+    await send(client, {
+      type: 'user.message',
+      sessionKey: SESSION,
+      content: 'hello',
+      agentId: 'writer',
+    });
+
+    expect(tracked.asked).toEqual(['writer']);
+    expect(client.of('notice')).toHaveLength(0);
+  });
+
+  it('still fails the turn for an agent that exists and cannot be built', async () => {
+    // The backstop survives: a missing agent is a stale reference, but settings
+    // that were never going to work are a real fault and stay loud.
     const runner = new ScriptedRunner();
     const h = harness({
+      agents: configured('boxed'),
       loop: (agentId) => {
-        if (agentId === 'ghost') throw new GhostError('not_found', 'No agent named "ghost"');
+        if (agentId === 'boxed') throw new GhostError('config', 'names no toolbox');
         return runner;
       },
     });
@@ -1212,14 +1320,28 @@ describe('SessionHub agent routing', () => {
       type: 'user.message',
       sessionKey: SESSION,
       content: 'hello',
-      agentId: 'ghost',
+      agentId: 'boxed',
     });
 
-    expect(client.of('error')[0]).toMatchObject({ code: 'not_found' });
+    expect(client.of('error')[0]).toMatchObject({ code: 'config_invalid' });
     expect(runner.turns).toHaveLength(0);
 
     // The socket is fine: the next turn reaches a runner as usual.
     await send(client, { type: 'user.message', sessionKey: SESSION, content: 'hi' });
     expect(runner.turns).toHaveLength(1);
+  });
+
+  it('takes the agent a session.new names as the connection default', async () => {
+    // The field used to be read off the frame and dropped, so `connection.agentId`
+    // could only ever be set at connect time. The web client resends it on every
+    // message, which is what hid it; a channel does not.
+    const tracked = tracking();
+    const h = harness({ loop: tracked.loop, agents: configured('writer') });
+    const client = h.connect();
+
+    await send(client, { type: 'session.new', sessionKey: 'fresh', agentId: 'writer' });
+    await send(client, { type: 'user.message', sessionKey: 'fresh', content: 'hello' });
+
+    expect(tracked.asked).toEqual(['writer']);
   });
 });

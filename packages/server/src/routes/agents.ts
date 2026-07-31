@@ -1,12 +1,22 @@
 /**
  * The agents a turn can be run by.
  *
- * Read-only, and that is the whole design. Creating, editing and deleting an
- * agent is a settings edit — `PATCH /api/settings` with an `agents.list` patch
- * — because an agent *is* a subtree of the settings tree, and a second CRUD
- * surface over the same state would need its own merge rules, its own
- * validation and its own answer to what a partial write means. `providers` made
- * the same call for the same reason.
+ * Read-only, and that is the whole design. Creating, editing, deleting and
+ * renaming an agent is a settings edit — `PATCH /api/settings` — because an
+ * agent *is* a subtree of the settings tree, and a second CRUD surface over the
+ * same state would need its own merge rules, its own validation and its own
+ * answer to what a partial write means. `providers` made the same call for the
+ * same reason.
+ *
+ * A rename is the interesting case, because it is the one operation a config
+ * patch cannot fully describe on its own: `{ "reviewer": null, "code-review":
+ * {…} }` lands the right tree, but says equally well "rename reviewer" and
+ * "delete reviewer, create code-review", which are opposites for the
+ * conversations bound to the old id and for its standing tool approvals. That
+ * missing word is carried by `renameAgents` on the settings body rather than by
+ * a route here — see `SettingsPatchRequestSchema`. Keeping it in the same
+ * request is what lets one Save move an agent's id *and* its model without a
+ * window in which the first has landed and the second has not.
  *
  * What this route adds that `GET /api/settings` cannot: the model each agent
  * would actually use, after inheritance from `agents.defaults` and after any
