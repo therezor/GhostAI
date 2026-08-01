@@ -65,8 +65,8 @@ function TurnInfoBody({
   const { t } = useTranslation();
   const fmt = useFormat();
 
-  // Only for a turn the live stream did not describe. A conversation the user
-  // is sitting in front of never reaches this.
+  // Only for a turn the live stream did not describe. A session the user is
+  // sitting in front of never reaches this.
   const stored = useQuery({
     queryKey: queryKeys.turns(sessionKey ?? ''),
     queryFn: ({ signal }) => api.turns(sessionKey ?? '', signal),
@@ -74,6 +74,23 @@ function TurnInfoBody({
     retry: false,
   });
 
+  // What made this session, for the sessions a person did not. It reads from
+  // the session row rather than the turn because origin belongs to the whole
+  // session, and it is fetched here rather than under the composer because a
+  // badge saying `web` on almost every session says nothing — the same
+  // reasoning as `BADGED_ORIGINS` in `sessions/sessions-page.tsx`.
+  //
+  // Costs nothing until asked: this body only mounts when the popover opens.
+  const session = useQuery({
+    queryKey: queryKeys.session(sessionKey ?? ''),
+    queryFn: ({ signal }) => api.session(sessionKey ?? '', signal),
+    enabled: sessionKey !== undefined,
+    // A 404 until the first turn lands, which is the normal state of a new
+    // session rather than a failure worth retrying.
+    retry: false,
+  });
+
+  const origin = session.data?.origin ?? '';
   const row = stored.data?.turns.find((entry) => entry.turnId === turn.id);
 
   const usage: Usage | undefined = turn.usage ?? row?.usage;
@@ -93,6 +110,10 @@ function TurnInfoBody({
 
   return (
     <dl className="turn-info">
+      {/* Absent for `web`, and absent for a session with no row yet. Every
+          session someone opened by hand is `web`, so naming it would be a row
+          that is always there and never tells anyone anything. */}
+      {origin !== '' && origin !== 'web' && <Row label={t('turn.origin')} value={origin} />}
       <Row label={t('turn.model')} value={model === '' ? '—' : model} />
       <Row label={t('turn.provider')} value={provider === '' ? '—' : provider} />
       <Row label={t('turn.in')} value={fmt.tokens(usage.promptTokens)} />

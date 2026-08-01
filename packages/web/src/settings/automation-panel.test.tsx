@@ -66,7 +66,7 @@ describe('the Automation panel', () => {
 
     expect(await screen.findByLabelText('Concurrent runs')).toBeInTheDocument();
     // The jobs are a page, not a panel — there is no list and no create here.
-    expect(screen.queryByRole('list', { name: 'Scheduled jobs' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Automation' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'New job' })).not.toBeInTheDocument();
   });
 

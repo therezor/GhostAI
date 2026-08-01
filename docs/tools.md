@@ -40,11 +40,11 @@ or an ISO `at`. There is no `tz` argument: a cron is read in the install's
 beside the current time in the model's own prompt — so the hour it writes is the hour it
 sees, with nothing to convert.
 
-**The run happens on the agent that scheduled it, and in a conversation of its own.** The
+**The run happens on the agent that scheduled it, and in a session of its own.** The
 port stamps the caller's `agentId` onto the payload — the tool cannot, because a tool
 running on arguments a model wrote must not be able to schedule a turn as somebody else.
 The session is a fresh `automation:{jobId}`, so a scheduled turn cannot see the
-conversation that created it; the tool says so in its own description, because a `message`
+session that created it; the tool says so in its own description, because a `message`
 that refers back to "what we discussed" otherwise fails silently a week later. `list` and
 the create confirmation both report the schedule and the resolved next run, which is how a
 model checks that its cron was read the way it meant.
@@ -63,7 +63,7 @@ Note that the subagent chain guard does **not** cover the first: `turn.chain` is
 a turn a person started, and the scheduler starts turns the same way.
 
 Jobs an agent made carry `createdBy`, so the panel can say which agent asked and link back
-to the conversation that caused it.
+to the session that caused it.
 
 More tools arrive two ways: from a [toolbox](toolboxes.md) that declares its programs, and
 from a subagent, which appears as `ask_<id>` (see
@@ -188,11 +188,11 @@ operator's keyboard must install a gate; the server does.
 
 An approval prompt takes one of three scopes:
 
-| Scope     | Remembered                                                                                                                                                                     |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `once`    | Not at all.                                                                                                                                                                    |
-| `session` | For the conversation, keyed on the **root** session — so answering "this session" inside a subagent means the conversation you are looking at, not the one-delegation session. |
-| `always`  | Per agent, for the life of the process. A standing "always allow `exec`" on a permissive agent must not pre-approve it for a locked-down one.                                  |
+| Scope     | Remembered                                                                                                                                                           |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `once`    | Not at all.                                                                                                                                                          |
+| `session` | For the session, keyed on the **root** session — so answering "this session" inside a subagent means the session you are looking at, not the one-delegation session. |
+| `always`  | Per agent, for the life of the process. A standing "always allow `exec`" on a permissive agent must not pre-approve it for a locked-down one.                        |
 
 **A refusal is remembered exactly like an approval.** Denying `always` is a real answer.
 

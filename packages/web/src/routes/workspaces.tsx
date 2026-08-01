@@ -131,7 +131,7 @@ export function WorkspacesRoute(): JSX.Element {
         <ListSort
           options={[
             { key: 'name', label: t('common.name') },
-            { key: 'sessions', label: t('workspaces.chats') },
+            { key: 'sessions', label: t('workspaces.sessions') },
             { key: 'updated', label: t('workspaces.updated') },
           ]}
           sort={sort}
@@ -189,7 +189,7 @@ export function WorkspacesRoute(): JSX.Element {
                     {/* The count carries its own noun. There is no column
                         heading above it any more, and a bare `12` beside a
                         timestamp is a number nobody can name. */}
-                    <span>{t('workspaces.chatCount', { count: workspace.sessionCount })}</span>
+                    <span>{t('workspaces.sessionCount', { count: workspace.sessionCount })}</span>
                     <span>{fmt.relativeTime(workspace.updatedAtMs, now)}</span>
                   </>
                 }

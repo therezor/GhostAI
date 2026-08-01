@@ -72,7 +72,7 @@ export function turnIndex(messages: readonly ChatMessage[]): number {
  * said.
  *
  * The runtime half of the prompt — live state, the turn's delimiter — travels as
- * a `user` message after the history, so the conversation stays inside the
+ * a `user` message after the history, so the session stays inside the
  * provider's cached prefix. A real model reads it as the operator metadata its
  * envelope says it is; this fake keys off "the last thing the user said", so
  * without this check every request would look like the user had typed a clock.

@@ -12,7 +12,7 @@
     "currentPasswordRequired": "The current password is required to change it",
     "currentPasswordWrong": "Incorrect current password",
     "authRequired": "Authentication required",
-    "sessionInvalid": "Invalid or expired session",
+    "sessionInvalid": "You have been signed out. Sign in again to continue.",
     "signedUrlRequired": "A signed URL is required",
     "signedUrlInvalid": "Invalid or expired signed URL",
     "internal": "Internal server error"

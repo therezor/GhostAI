@@ -36,16 +36,16 @@ So the prompt is assembled from two pieces:
 **The halves are two different messages, at two ends of the request.** That is the part
 worth being precise about, because it was once got wrong: the runtime half used to be
 appended to the system message, which is `messages[0]` — the _front_ of the request.
-Everything after it is the conversation, so a changed iteration counter ended the
+Everything after it is the session, so a changed iteration counter ended the
 discount for the whole history on every request, and a ten-iteration turn over a long
-conversation paid for that history ten times.
+session paid for that history ten times.
 
 What a turn actually sends:
 
 ```
 system( static half )       ← cached, session-stable
 tools                       ← cached, stable per turn
-...conversation history     ← cached, append-only
+...session history     ← cached, append-only
 user( <system-reminder> )   ← the only part re-read at full price
 ```
 
@@ -54,7 +54,7 @@ two system messages is a shape some providers reject and others quietly reorder,
 provider that hoisted it would put the volatile text back in front of the history, which
 is the exact cost this avoids. It is wrapped in a `<system-reminder>` envelope so the
 model reads it as operator metadata rather than as something you typed, and it is sent
-but never stored — the history is the conversation, and this is scaffolding for one
+but never stored — the history is the session, and this is scaffolding for one
 request.
 
 Anything that changes between requests must go in the runtime half. A timestamp, a

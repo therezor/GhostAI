@@ -16,7 +16,7 @@
       "provider": "provider id, overriding the configured default",
       "session": "session to continue",
       "workspace": "workspace root, overriding the configured default",
-      "workspaceId": "workspace new conversations land in"
+      "workspaceId": "workspace new sessions land in"
     }
   },
   "help": {
@@ -108,7 +108,7 @@
   "slash": {
     "errors": {
       "messageGone": "That message is gone",
-      "noConversation": "No conversation {{key}}",
+      "noSession": "No session {{key}}",
       "notYours": "Message {{seq}} is not one of yours",
       "noWorkspace": "No workspace {{id}}",
       "usageEdit": "usage: /edit <ref> <text>",
@@ -117,8 +117,8 @@
       "usageWorkspaceNew": "usage: /workspace new <name>",
       "usageWorkspaceRename": "usage: /workspace rename <id> <name>",
       "usageWorkspaceRm": "usage: /workspace rm <id>",
-      "workspaceInUse_one": "{{count}} conversation is still in {{id}}. Move it first: /workspace move {{id}} default",
-      "workspaceInUse_other": "{{count}} conversations are still in {{id}}. Move them first: /workspace move {{id}} default"
+      "workspaceInUse_one": "{{count}} session is still in {{id}}. Move it first: /workspace move {{id}} default",
+      "workspaceInUse_other": "{{count}} sessions are still in {{id}}. Move them first: /workspace move {{id}} default"
     },
     "help": {
       "branch": "fork up to <ref> and attach to the fork",
@@ -129,15 +129,15 @@
       "exit": "leave",
       "help": "this list",
       "messages": "the last n messages, with their seq numbers",
-      "new": "start a fresh conversation and attach to it",
+      "new": "start a fresh session and attach to it",
       "regenerate": "re-run the last turn, or the one <ref> started",
-      "rename": "rename this conversation",
+      "rename": "rename this session",
       "session": "show this session, or attach to another",
-      "sessions": "conversations in this workspace, newest first",
+      "sessions": "sessions in this workspace, newest first",
       "stats": "the last n turns: model, tokens, tokens/s, time",
-      "workspace": "show or switch where new conversations land",
-      "workspaceMove": "move conversations between workspaces",
-      "workspaceRm": "detach; refuses while conversations name it",
+      "workspace": "show or switch where new sessions land",
+      "workspaceMove": "move sessions between workspaces",
+      "workspaceRm": "detach; refuses while sessions name it",
       "workspaces": "list them, marking the current one"
     },
     "notes": {
@@ -145,17 +145,17 @@
       "deleted": "deleted {{key}}",
       "detached": "detached {{id}}",
       "historyCleared": "history cleared",
-      "landIn": "new conversations land in {{workspace}}",
-      "moved_one": "moved {{count}} conversation from {{from}} to {{to}}",
-      "moved_other": "moved {{count}} conversations from {{from}} to {{to}}",
-      "noConversations": "no conversations yet",
-      "nothingSaid": "nothing said in this conversation yet",
-      "nothingToMeasure": "nothing to measure yet — this conversation has not started",
-      "noTurns": "no turns recorded for this conversation yet",
+      "landIn": "new sessions land in {{workspace}}",
+      "moved_one": "moved {{count}} session from {{from}} to {{to}}",
+      "moved_other": "moved {{count}} sessions from {{from}} to {{to}}",
+      "noSessions": "no sessions yet",
+      "nothingSaid": "nothing said in this session yet",
+      "nothingToMeasure": "nothing to measure yet — this session has not started",
+      "noTurns": "no turns recorded for this session yet",
       "renamedTo": "renamed to {{title}}",
       "renamedWorkspace": "renamed {{id}} to {{name}}",
       "unknownCommand": "unknown command: /{{name}}",
-      "willLandIn": "new conversations will land in {{workspace}}"
+      "willLandIn": "new sessions will land in {{workspace}}"
     },
     "refNote": "A <ref> is a seq number from /messages, or a negative offset over your own\n  messages: -1 is the last thing you said. It defaults to -1.",
     "sections": {

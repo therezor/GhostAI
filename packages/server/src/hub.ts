@@ -759,7 +759,7 @@ export class SessionHub {
       this.#error(
         connection,
         'session_busy',
-        'A turn is running on this conversation. Stop it, then try again.',
+        'A turn is running on this session. Stop it, then try again.',
         true,
       );
       return;
@@ -770,11 +770,7 @@ export class SessionHub {
         ? this.#lastQuestion(state.key)
         : this.#userMessageAt(state.key, message.seq);
     if (target === undefined) {
-      this.#error(
-        connection,
-        'bad_request',
-        'There is nothing to regenerate on this conversation.',
-      );
+      this.#error(connection, 'bad_request', 'There is nothing to regenerate on this session.');
       return;
     }
 
@@ -797,7 +793,7 @@ export class SessionHub {
       this.#error(
         connection,
         'session_busy',
-        'A turn is running on this conversation. Stop it, then try again.',
+        'A turn is running on this session. Stop it, then try again.',
         true,
       );
       return;
@@ -926,8 +922,8 @@ export class SessionHub {
           kind: 'agent_fallback',
           message:
             miss === 'disabled'
-              ? `This conversation runs on "${requested ?? agentId}", which is switched off. Using "${agentId}" instead.`
-              : `This conversation runs on "${requested ?? agentId}", which no longer exists. Using "${agentId}" instead.`,
+              ? `This session runs on "${requested ?? agentId}", which is switched off. Using "${agentId}" instead.`
+              : `This session runs on "${requested ?? agentId}", which no longer exists. Using "${agentId}" instead.`,
         });
       }
 

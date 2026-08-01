@@ -40,7 +40,7 @@ const settingsOf = async (app: Page, url: string): Promise<SettingsView> => {
  * One endpoint's card.
  *
  * Scoped to the Providers list rather than swept off the page: the shell has
- * lists of its own — the sidebar's conversations, any open menu — and a bare
+ * lists of its own — the sidebar's sessions, any open menu — and a bare
  * `getByRole('listitem')` picks them up too.
  */
 const providerRow = (app: Page, name: string) =>

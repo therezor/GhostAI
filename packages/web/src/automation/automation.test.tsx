@@ -1,5 +1,5 @@
 /**
- * The Scheduled jobs page and the job editor, through the real router.
+ * The Automation page and the job editor, through the real router.
  *
  * Assertions are on what went over the wire, not on what the screen says
  * afterwards — the same rule the rest of the CRUD screens follow, and the
@@ -104,14 +104,14 @@ const writesOf = (calls: RecordedRequest[]): RecordedRequest[] =>
   calls.filter((call) => call.method !== 'GET');
 
 describe('the sidebar', () => {
-  it('carries Scheduled jobs, before Settings', async () => {
+  it('carries Automation, before Settings', async () => {
     const { router } = mount('/');
     const nav = await screen.findByRole('navigation');
     const labels = within(nav)
       .getAllByRole('link')
       .map((link) => link.textContent);
 
-    const jobs = labels.findIndex((label) => label.includes('Scheduled jobs'));
+    const jobs = labels.findIndex((label) => label.includes('Automation'));
     const settings = labels.findIndex((label) => label.includes('Settings'));
     expect(jobs).toBeGreaterThanOrEqual(0);
     expect(jobs).toBeLessThan(settings);
@@ -119,10 +119,10 @@ describe('the sidebar', () => {
   });
 });
 
-describe('the Scheduled jobs page', () => {
+describe('the Automation page', () => {
   it('shows a job with its schedule, its last outcome and when it runs next', async () => {
     mount();
-    const row = within(await screen.findByRole('list', { name: 'Scheduled jobs' })).getByRole(
+    const row = within(await screen.findByRole('list', { name: 'Automation' })).getByRole(
       'listitem',
     );
 
@@ -140,7 +140,7 @@ describe('the Scheduled jobs page', () => {
     // with no time, on the one line whose entire job is saying *when* — and
     // nothing on screen said which clock it was.
     mount();
-    const row = within(await screen.findByRole('list', { name: 'Scheduled jobs' })).getByRole(
+    const row = within(await screen.findByRole('list', { name: 'Automation' })).getByRole(
       'listitem',
     );
 
@@ -150,7 +150,7 @@ describe('the Scheduled jobs page', () => {
 
   it('filters the list without asking the server again', async () => {
     const { user, calls } = mount();
-    await screen.findByRole('list', { name: 'Scheduled jobs' });
+    await screen.findByRole('list', { name: 'Automation' });
     const before = calls.length;
 
     await user.type(await screen.findByLabelText('Filter jobs'), 'nothing');
@@ -449,7 +449,7 @@ describe('the job editor', () => {
       ],
     });
 
-    const link = await screen.findByRole('link', { name: 'Open conversation' });
+    const link = await screen.findByRole('link', { name: 'Open session' });
     expect(link).toHaveAttribute(
       'href',
       expect.stringContaining(encodeURIComponent('automation:job-1:run-1')),
@@ -461,7 +461,7 @@ describe('the job editor', () => {
     // worse than no link.
     mount('/automation/job-1');
     expect(await screen.findByText('the build is green')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Open conversation' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Open session' })).not.toBeInTheDocument();
   });
 
   it('holds the in-flight wording still, which e2e cannot', async () => {

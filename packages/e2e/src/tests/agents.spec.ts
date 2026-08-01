@@ -32,10 +32,7 @@ test.describe('agents', () => {
     await expect(app.getByRole('heading', { name: 'Agents' })).toBeVisible();
   });
 
-  test('picking one before the first message binds the conversation to it', async ({
-    app,
-    harness,
-  }) => {
+  test('picking one before the first message binds the session to it', async ({ app, harness }) => {
     await app.request.patch(`${harness.url}/api/settings`, {
       data: { agents: { list: { reviewer: { label: 'Reviewer' } } } },
     });
@@ -468,13 +465,10 @@ test.describe('agents', () => {
     expect(await read()).toBe('default');
   });
 
-  test('a conversation keeps working after the agent it names is deleted', async ({
-    app,
-    harness,
-  }) => {
+  test('a session keeps working after the agent it names is deleted', async ({ app, harness }) => {
     // The whole point of the fallback. An agent id is user-authored and lives
     // in a file the operator edits, so it can go at any moment — and a
-    // conversation must not become a thing that cannot take another turn.
+    // session must not become a thing that cannot take another turn.
     await app.request.patch(`${harness.url}/api/settings`, {
       data: { agents: { list: { reviewer: { label: 'Reviewer' } } } },
     });
@@ -507,7 +501,7 @@ test.describe('agents', () => {
     ).toBeVisible();
 
     // And the binding is untouched, which is what lets re-creating the agent
-    // restore this conversation with no action taken on it.
+    // restore this session with no action taken on it.
     const stored = await app.request.get(`${harness.url}/api/sessions/web-orphan`);
     expect(((await stored.json()) as { agentId?: string }).agentId).toBe('reviewer');
   });
@@ -546,10 +540,7 @@ test.describe('agents', () => {
     await expect(app.getByRole('link', { name: 'Edit Reviewer' })).toHaveCount(0);
   });
 
-  test('renaming an agent takes its conversations and delegations with it', async ({
-    app,
-    harness,
-  }) => {
+  test('renaming an agent takes its sessions and delegations with it', async ({ app, harness }) => {
     await app.request.patch(`${harness.url}/api/settings`, {
       data: {
         agents: {
@@ -584,7 +575,7 @@ test.describe('agents', () => {
     expect(config.config.agents.list['code-review']).toBeDefined();
     expect(config.config.agents.list.planner?.subagents[0]?.id).toBe('code-review');
 
-    // The conversation followed, so it is not left on the fallback path for an
+    // The session followed, so it is not left on the fallback path for an
     // agent that never went anywhere.
     const stored = await app.request.get(`${harness.url}/api/sessions/web-renamed`);
     expect(((await stored.json()) as { agentId?: string }).agentId).toBe('code-review');

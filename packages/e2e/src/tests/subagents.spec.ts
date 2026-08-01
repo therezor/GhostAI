@@ -126,15 +126,13 @@ test.describe('a delegating agent', () => {
     await expect(run.getByText('There is one file: notes.md.')).toBeVisible();
   });
 
-  test('leaves the subagent run in the sidebar, openable like any conversation', async ({
-    app,
-  }) => {
+  test('leaves the subagent run in the sidebar, openable like any session', async ({ app }) => {
     await app.getByRole('textbox', { name: 'Message' }).fill('delegate this to the researcher');
     await app.getByRole('button', { name: 'Send' }).click();
     await expect(delegation(app).header.getByLabel('Succeeded')).toBeVisible();
 
     // These used to be hidden on the grounds that a delegation is not a
-    // conversation. It is still not one — but it is the turn that produced the
+    // session. It is still not one — but it is the turn that produced the
     // answer, and hiding it left no way to read it when the answer was wrong.
     const sidebar = app.getByRole('complementary', { name: 'Sidebar' });
     await expect(sidebar.getByText(SUBAGENT_TASK)).toHaveCount(1);

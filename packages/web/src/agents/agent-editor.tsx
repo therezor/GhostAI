@@ -1270,9 +1270,9 @@ function Editor({
               could actually run — otherwise a disabled agent was told it had
               no model, and choosing one would not have helped. */}
           {isDefault
-            ? 'Every conversation that names no agent runs on this one, and a new agent starts as a copy of it.'
+            ? 'Every session that names no agent runs on this one, and a new agent starts as a copy of it.'
             : !form.enabled
-              ? 'Switched off: it cannot take a turn, and it is hidden from the picker. Its settings and its conversations are kept.'
+              ? 'Switched off: it cannot take a turn, and it is hidden from the picker. Its settings and its sessions are kept.'
               : `Runs on ${resolved?.model === '' || resolved === undefined ? 'no model yet — it cannot take a turn until one is chosen' : resolved.model}.`}
         </p>
       </div>
@@ -1751,7 +1751,7 @@ function Editor({
         open={confirmingDelete}
         onOpenChange={setConfirmingDelete}
         title={t('agents.deleteTitle')}
-        description={`${name} is removed from the settings. Its conversations keep their history and fall back to the default agent.`}
+        description={`${name} is removed from the settings. Its sessions keep their history and fall back to the default agent.`}
         confirmLabel="Delete"
         pending={saving}
         onConfirm={onDelete}

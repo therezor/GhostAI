@@ -36,7 +36,6 @@ import {
 } from '@/lib/connection.js';
 import { queryKeys } from '@/lib/query.js';
 import { useTurnStore } from '@/state/turn.js';
-import { Badge } from '@/components/ui/badge.js';
 import { toast } from '@/components/ui/toast.js';
 import { AgentPicker } from '@/agents/agent-picker.js';
 import { useAgent } from '@/agents/agent-context.js';
@@ -76,7 +75,7 @@ export function ChatRoute(): JSX.Element {
       void navigate({ to: '/', search: { session: fork.key } });
     },
     onError: (error: Error) => {
-      toast.error('Could not branch the conversation', error.message);
+      toast.error('Could not branch the session', error.message);
     },
   });
 
@@ -168,19 +167,19 @@ export function ChatRoute(): JSX.Element {
           <Link to="/settings" search={{ panel: 'providers' }}>
             Add a provider
           </Link>{' '}
-          to start a conversation.
+          to start a session.
         </p>
       )}
 
       <Composer
-        // Which agent the next turn runs on. In the conversation rather than
-        // the sidebar: choosing one is part of asking the question.
-        lead={
-          <>
-            <AgentPicker {...(sessionKey === undefined ? {} : { sessionKey })} />
-            <SessionOrigin sessionKey={sessionKey} />
-          </>
-        }
+        // Which agent the next turn runs on. In the session rather than the
+        // sidebar: choosing one is part of asking the question.
+        //
+        // A control, and only a control. Where the session came from used to sit
+        // beside it as a badge, which put the word `web` under almost every
+        // message box and said nothing — the same reason the list does not badge
+        // it either (`sessions-page.tsx`). It reads from the turn details now.
+        lead={<AgentPicker {...(sessionKey === undefined ? {} : { sessionKey })} />}
         // The line under the box is the budget's now: it is the one thing there
         // that changes, and it used to share the row with a keyboard hint that
         // never did. See `composer.tsx`.
@@ -205,32 +204,4 @@ export function ChatRoute(): JSX.Element {
       />
     </div>
   );
-}
-
-/**
- * Where this conversation came from.
- *
- * Session keys are plain ids and say nothing about what made them — which is
- * the right shape for a key and leaves this as the only place the answer can
- * be read. It matters because the sidebar now lists every origin: a scheduled
- * run and a conversation someone had look identical in that list, and opening
- * one is the moment you need to know which you are looking at.
- *
- * Absent for a conversation with no row yet — a fresh tab that has not been
- * spoken in has no origin to report, and inventing `web` for it would be a
- * claim rather than a fact.
- */
-function SessionOrigin({ sessionKey }: { readonly sessionKey: string | undefined }): JSX.Element {
-  const session = useQuery({
-    queryKey: queryKeys.session(sessionKey ?? ''),
-    queryFn: ({ signal }) => api.session(sessionKey ?? '', signal),
-    enabled: sessionKey !== undefined,
-    // A 404 until the first turn lands, which is the normal state of a new
-    // conversation rather than a failure worth retrying.
-    retry: false,
-  });
-
-  const origin = session.data?.origin;
-  if (origin === undefined || origin === '') return <></>;
-  return <Badge tone="neutral">{origin}</Badge>;
 }

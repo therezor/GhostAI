@@ -296,9 +296,9 @@ test.describe('at 1×', () => {
       // of them, one titled and one not, because a title and a bare key are
       // rendered by the same line.
       sessions: [
-        { key: 'a-conversation-key-long-enough-to-overflow', turns: ['hello'] },
+        { key: 'a-session-key-long-enough-to-overflow', turns: ['hello'] },
         {
-          key: 'b-conversation-key-long-enough-to-overflow',
+          key: 'b-session-key-long-enough-to-overflow',
           title: 'A title that is also far too long to fit in the column',
           turns: ['hello'],
         },

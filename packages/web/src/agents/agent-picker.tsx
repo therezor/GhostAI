@@ -143,7 +143,7 @@ export function AgentPicker({ sessionKey }: { readonly sessionKey?: string }): J
         )}
 
         <DropdownMenuLabel>
-          {bound === undefined ? t('agents.forThisChat') : t('agents.moveThisChat')}
+          {bound === undefined ? t('agents.forThisSession') : t('agents.moveThisSession')}
         </DropdownMenuLabel>
 
         <DropdownMenuRadioGroup value={current} onValueChange={choose}>

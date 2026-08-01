@@ -1,12 +1,12 @@
 /**
- * The conversations page.
+ * The sessions page.
  *
  * The cases worth holding here are the ones that separate this list from every
  * other one in the app: the search and the sort go to the *server*, so what has
  * to be asserted is the request, not the rows left on screen after a client-side
  * filter. A test that only checked the rows would pass against an implementation
  * that filtered the page in hand — which is the bug this page exists to avoid,
- * because it would search the newest 25 conversations and confidently report
+ * because it would search the newest 25 sessions and confidently report
  * nothing for the one from last month.
  *
  * The rename and delete flows are here rather than in the sidebar's tests
@@ -88,21 +88,21 @@ function mount(overrides: Record<string, StubRoute> = {}): {
 /**
  * The page's own list.
  *
- * The sidebar is on screen too and holds the same conversations, so its kebab
+ * The sidebar is on screen too and holds the same sessions, so its kebab
  * carries the same accessible name as this one's. Scoping to the `DataList`
  * rather than renaming either: they are the same action on the same object, and
  * a screen reader tells them apart by the landmark they sit in.
  */
 function list(): HTMLElement {
-  return screen.getByRole('list', { name: 'Conversations' });
+  return screen.getByRole('list', { name: 'Sessions' });
 }
 
-/** The requests this page made for a page of conversations. */
+/** The requests this page made for a page of sessions. */
 function listCalls(calls: readonly RecordedRequest[]): RecordedRequest[] {
   return calls.filter((call) => call.method === 'GET' && call.path === '/api/sessions');
 }
 
-describe('the conversations page', () => {
+describe('the sessions page', () => {
   it('lists what the server sent', async () => {
     mount();
 
@@ -124,7 +124,7 @@ describe('the conversations page', () => {
    * five-minute job filling a recency-sorted list. `web` gets none: it is
    * almost every row, so badging it would say nothing.
    */
-  it('marks the conversations nobody started by hand', async () => {
+  it('marks the sessions nobody started by hand', async () => {
     mount();
 
     await screen.findByRole('link', { name: 'Open Nightly digest' });
@@ -132,10 +132,10 @@ describe('the conversations page', () => {
     expect(screen.queryByText('web')).not.toBeInTheDocument();
   });
 
-  it('falls back to a name for a conversation nobody has spoken in', async () => {
+  it('falls back to a name for a session nobody has spoken in', async () => {
     mount({ '/api/sessions': [200, { sessions: [session({ title: '' })], total: 1 }] });
 
-    expect(await screen.findByRole('link', { name: 'Open New conversation' })).toBeVisible();
+    expect(await screen.findByRole('link', { name: 'Open New session' })).toBeVisible();
   });
 
   it('scopes the request to the workspace on screen', async () => {
@@ -146,7 +146,7 @@ describe('the conversations page', () => {
   });
 });
 
-describe('searching conversations', () => {
+describe('searching sessions', () => {
   /**
    * The whole reason this page exists. A client-side filter over the page in
    * hand would search the newest 25 and report nothing for the rest, which is a
@@ -156,7 +156,7 @@ describe('searching conversations', () => {
     const { user, calls } = mount();
 
     await screen.findByRole('link', { name: 'Open Fix the login throttle' });
-    await user.type(screen.getByRole('searchbox', { name: 'Filter conversations' }), 'login');
+    await user.type(screen.getByRole('searchbox', { name: 'Filter sessions' }), 'login');
 
     await waitFor(() => {
       expect(listCalls(calls).some((call) => call.query.get('q') === 'login')).toBe(true);
@@ -165,18 +165,18 @@ describe('searching conversations', () => {
 
   /**
    * Two different sentences, because they are two different situations: an
-   * install with no conversations yet, and a search that found none. Showing
-   * "No conversations yet" to someone who has just typed a query reads as data
+   * install with no sessions yet, and a search that found none. Showing
+   * "No sessions yet" to someone who has just typed a query reads as data
    * loss.
    */
   it('tells an empty workspace apart from a search that matched nothing', async () => {
     const { user } = mount({ '/api/sessions': [200, { sessions: [], total: 0 }] });
 
-    expect(await screen.findByText('No conversations yet.')).toBeInTheDocument();
+    expect(await screen.findByText('No sessions yet.')).toBeInTheDocument();
 
-    await user.type(screen.getByRole('searchbox', { name: 'Filter conversations' }), 'login');
+    await user.type(screen.getByRole('searchbox', { name: 'Filter sessions' }), 'login');
 
-    expect(await screen.findByText('No conversation matches “login”.')).toBeInTheDocument();
+    expect(await screen.findByText('No session matches “login”.')).toBeInTheDocument();
   });
 
   it('sends the chosen column and direction', async () => {
@@ -195,10 +195,10 @@ describe('searching conversations', () => {
   });
 });
 
-describe('paging conversations', () => {
+describe('paging sessions', () => {
   const full = {
     sessions: Array.from({ length: 25 }, (_unused, index) =>
-      session({ key: `web:${String(index)}`, title: `Conversation ${String(index)}` }),
+      session({ key: `web:${String(index)}`, title: `Session ${String(index)}` }),
     ),
     total: 60,
   };
@@ -212,7 +212,7 @@ describe('paging conversations', () => {
   it('asks the server for the page rather than slicing the one it has', async () => {
     const { user, calls } = mount({ '/api/sessions': [200, full] });
 
-    const pager = await screen.findByRole('navigation', { name: 'Conversations' });
+    const pager = await screen.findByRole('navigation', { name: 'Sessions' });
     await user.click(within(pager).getByRole('button', { name: 'Page 3' }));
 
     await waitFor(() => {
@@ -228,13 +228,13 @@ describe('paging conversations', () => {
   it('returns to the first page when the search changes', async () => {
     const { user, calls } = mount({ '/api/sessions': [200, full] });
 
-    const pager = await screen.findByRole('navigation', { name: 'Conversations' });
+    const pager = await screen.findByRole('navigation', { name: 'Sessions' });
     await user.click(within(pager).getByRole('button', { name: 'Page 3' }));
     await waitFor(() => {
       expect(listCalls(calls).some((call) => call.query.get('offset') === '50')).toBe(true);
     });
 
-    await user.type(screen.getByRole('searchbox', { name: 'Filter conversations' }), 'login');
+    await user.type(screen.getByRole('searchbox', { name: 'Filter sessions' }), 'login');
 
     await waitFor(() => {
       const searched = listCalls(calls).filter((call) => call.query.get('q') === 'login');
@@ -244,7 +244,7 @@ describe('paging conversations', () => {
   });
 });
 
-describe('acting on a conversation', () => {
+describe('acting on a session', () => {
   it('renames one through a dialog rather than in place', async () => {
     const { user, calls } = mount({
       'PATCH /api/sessions/web%3A1': [200, session({ title: 'Renamed' })],

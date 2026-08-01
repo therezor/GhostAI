@@ -84,7 +84,7 @@ ghost init      # workspace, provider, model — same questions, no browser
 ghost chat      # talk to it
 ```
 
-`ghost init` needs a real terminal; it refuses a pipe rather than reading EOF as an answer, and writes nothing until every question is answered. Both surfaces share one `ghost.db`, so a REPL conversation is the same row the browser sidebar lists.
+`ghost init` needs a real terminal; it refuses a pipe rather than reading EOF as an answer, and writes nothing until every question is answered. Both surfaces share one `ghost.db`, so a REPL session is the same row the browser sidebar lists.
 
 ### Where things live
 

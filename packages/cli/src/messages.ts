@@ -52,7 +52,7 @@ export function resolveSeq(
   if (raw > 0) {
     const [record] = store.messages(sessionKey, { afterSeq: raw - 1, beforeSeq: raw + 1 });
     if (record === undefined) {
-      throw new GhostError('not_found', `No message ${String(raw)} in this conversation`, {
+      throw new GhostError('not_found', `No message ${String(raw)} in this session`, {
         details: { seq: raw },
       });
     }
@@ -68,8 +68,8 @@ export function resolveSeq(
     throw new GhostError(
       'not_found',
       spoken.length === 0
-        ? 'You have not said anything in this conversation yet'
-        : `Only ${String(spoken.length)} of your messages are in this conversation`,
+        ? 'You have not said anything in this session yet'
+        : `Only ${String(spoken.length)} of your messages are in this session`,
       { details: { offset: raw, available: spoken.length } },
     );
   }

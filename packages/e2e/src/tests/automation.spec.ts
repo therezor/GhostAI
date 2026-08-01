@@ -1,5 +1,5 @@
 /**
- * Scheduled jobs, in a browser, against the real stack.
+ * Automation, in a browser, against the real stack.
  *
  * The unit suites already prove the pieces: the cron parser lands on the right
  * instant, the store pages, the engine coalesces a boot backlog, the form
@@ -66,16 +66,13 @@ async function seedJob(
 }
 
 const jobRow = (app: Page, name: string) =>
-  app.getByRole('list', { name: 'Scheduled jobs' }).getByRole('listitem').filter({ hasText: name });
+  app.getByRole('list', { name: 'Automation' }).getByRole('listitem').filter({ hasText: name });
 
-test('Scheduled jobs is a page, reached from the sidebar before Settings', async ({
-  app,
-  harness,
-}) => {
+test('Automation is a page, reached from the sidebar before Settings', async ({ app, harness }) => {
   await app.goto(harness.url);
 
   const nav = app.getByRole('navigation');
-  await nav.getByRole('link', { name: 'Scheduled jobs' }).click();
+  await nav.getByRole('link', { name: 'Automation' }).click();
 
   await expect(app).toHaveURL(/\/automation$/u);
   await expect(app.getByRole('link', { name: 'New job' })).toBeVisible();
@@ -88,7 +85,7 @@ test('the engine settings are in Settings, and the jobs are not', async ({ app, 
   await app.goto(`${harness.url}/settings?panel=automation`);
 
   await expect(app.getByLabel('Concurrent runs')).toBeVisible();
-  await expect(app.getByRole('list', { name: 'Scheduled jobs' })).toHaveCount(0);
+  await expect(app.getByRole('list', { name: 'Automation' })).toHaveCount(0);
   await expect(app.getByRole('link', { name: 'New job' })).toHaveCount(0);
 });
 
@@ -242,7 +239,7 @@ test('a run leaves a session that is listed like any other', async ({ app, harne
   // And the run history is a way in to it. The link is the whole path from
   // "this run went wrong" to the turn that says why.
   await app.goto(`${harness.url}/automation/${seeded.id}`);
-  await app.getByRole('link', { name: 'Open conversation' }).first().click();
+  await app.getByRole('link', { name: 'Open session' }).first().click();
   await expect(app.getByTestId('transcript')).toBeVisible();
 });
 

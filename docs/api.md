@@ -81,7 +81,7 @@ the schema, and changing either revokes every other session.
 | GET / DELETE         | `/api/sessions/:key/messages` | `required` |                                                                   |
 | GET                  | `/api/sessions/:key/context`  | `required` | What would be sent to the model, and the token breakdown.         |
 | GET                  | `/api/sessions/:key/turns`    | `required` | Per-turn stats: model, provider, iterations, stop reason, tokens. |
-| POST                 | `/api/sessions/:key/branch`   | `required` | Forks the conversation at a message.                              |
+| POST                 | `/api/sessions/:key/branch`   | `required` | Forks the session at a message.                                   |
 
 ### Agents, tools, toolboxes
 
@@ -111,7 +111,7 @@ Everything resolves inside the workspace jail.
 | -------------- | ----------------------------------- | ---------- | -------------------------------------------------------- |
 | GET / POST     | `/api/workspaces`                   | `required` |                                                          |
 | PATCH / DELETE | `/api/workspaces/:id`               | `required` | `PATCH` can rename the label or move the folder on disk. |
-| POST           | `/api/workspaces/:id/sessions/move` | `required` | Moves conversations between workspaces.                  |
+| POST           | `/api/workspaces/:id/sessions/move` | `required` | Moves sessions between workspaces.                       |
 
 ### Notifications
 
@@ -167,7 +167,7 @@ parameters `?session=` and `?agent=`.
 | `turn.stop`        | Aborts.                                                  |
 | `turn.regenerate`  | Drops the last answer and re-runs.                       |
 | `user.edit`        | Rewrites a user message and re-runs from it.             |
-| `session.new`      | Starts a conversation.                                   |
+| `session.new`      | Starts a session.                                        |
 | `session.switch`   | Rebinds this socket.                                     |
 | `session.resume`   | `{ lastSeq }` — replays what was missed.                 |
 | `tool.approve`     | Answers an approval prompt, with a scope.                |

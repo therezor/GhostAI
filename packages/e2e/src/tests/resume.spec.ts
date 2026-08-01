@@ -23,7 +23,7 @@ test('a reload rebuilds an in-flight turn from the replay buffer', async ({ app 
   await expect(card.getByLabel('Running')).toBeVisible();
 
   // The URL caught up with the session the server minted, which is what makes
-  // the reload land on the same conversation rather than on a fresh one.
+  // the reload land on the same session rather than on a fresh one.
   await expect(app).toHaveURL(/session=/);
 
   await app.reload();
@@ -70,13 +70,13 @@ test('reloads the server from the status indicator, then the page', async ({ app
   await expect(app.getByRole('status')).toHaveText('Connected');
 });
 
-test.describe('a completed conversation', () => {
+test.describe('a completed session', () => {
   test.use({
     harnessOptions: {
       sessions: [
         {
           key: 'seeded',
-          title: 'A conversation from before',
+          title: 'A session from before',
           turns: ['What did we decide?', 'To ship the gate before the feature.'],
         },
       ],

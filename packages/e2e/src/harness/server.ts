@@ -240,7 +240,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
 
   // One instance, handed back whatever the cache is asked for: the settings
   // panel can move the model mid-suite, and a second script would then be
-  // answering while the first held the conversation.
+  // answering while the first held the session.
   const provider: ChatProvider = routedProvider(ROUTES);
   const providers = new ProviderCache({ create: (_options: CreateProviderOptions) => provider });
 

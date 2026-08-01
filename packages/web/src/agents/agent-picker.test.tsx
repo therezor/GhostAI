@@ -36,7 +36,7 @@ const STORAGE_KEY = 'ghostai:agent';
  */
 const session = (agentId: string) => ({
   key: 'web-1',
-  title: 'A conversation',
+  title: 'A session',
   messageCount: 2,
   createdAtMs: 1,
   updatedAtMs: 2,
@@ -71,7 +71,7 @@ function mount(
 }
 
 describe('the agent picker', () => {
-  it('names the agent the conversation is bound to', async () => {
+  it('names the agent the session is bound to', async () => {
     mount({ '/api/sessions/web-1': [200, session('writer')] }, { sessionKey: 'web-1' });
 
     expect(await screen.findByRole('button', { name: 'Agent: Writer' })).toBeInTheDocument();
@@ -80,7 +80,7 @@ describe('the agent picker', () => {
   it('marks a binding whose agent is no longer configured', async () => {
     // The trigger used to render the dead id as though it were an ordinary
     // label, and the menu's radio group matched nothing — so the only signal
-    // that a conversation pointed at a deleted agent was an unchecked list.
+    // that a session pointed at a deleted agent was an unchecked list.
     mount({ '/api/sessions/web-1': [200, session('reviewer')] }, { sessionKey: 'web-1' });
 
     expect(
@@ -88,8 +88,8 @@ describe('the agent picker', () => {
     ).toBeInTheDocument();
   });
 
-  it('does not move a bound conversation on its own', async () => {
-    // Moving a conversation is a real edit and belongs to the operator: the
+  it('does not move a bound session on its own', async () => {
+    // Moving a session is a real edit and belongs to the operator: the
     // binding is what re-creating the agent would restore.
     const calls = stubApi({
       '/api/agents': [200, AGENTS],

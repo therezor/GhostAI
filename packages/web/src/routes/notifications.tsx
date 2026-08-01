@@ -264,7 +264,7 @@ function NotificationRow({
               search={{ session: notification.sessionKey }}
               className="notification__link"
             >
-              {t('notifications.openConversation')}
+              {t('notifications.openSession')}
             </Link>
           )}
           {unread && (

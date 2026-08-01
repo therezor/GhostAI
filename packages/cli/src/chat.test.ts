@@ -523,7 +523,7 @@ describe('chatCommand', () => {
     expect(JSON.stringify(messages?.[1]?.content)).toContain('what is here?');
   });
 
-  it('runs a conversation at the prompt, with slash commands beside it', async () => {
+  it('runs a session at the prompt, with slash commands beside it', async () => {
     const home = tempHome();
     const { fetchImpl } = transport(sse(textFrame('Two.'), finishFrame('stop'), USAGE));
     const out = streamSink();
@@ -576,7 +576,7 @@ describe('chatCommand', () => {
     await waitFor(() => out.text().includes('› '));
     await quiet(out);
 
-    // A conversation, so there is something to name, list and rework.
+    // A session, so there is something to name, list and rework.
     await send(input, out, 'the first question', 'An answer.');
     // The usage line, not the rate: a turn this fast can measure 0 ms, and
     // `formatRate` reports nothing rather than dividing by it. That rule is
@@ -607,11 +607,11 @@ describe('chatCommand', () => {
     // A branch attaches to the fork, so the next turn continues down it.
     expect(out.text()).toContain('attached to');
 
-    await send(input, out, '/new a second conversation', 'attached to');
-    await send(input, out, '/session', 'a second conversation');
+    await send(input, out, '/new a second session', 'attached to');
+    await send(input, out, '/session', 'a second session');
 
-    await send(input, out, '/workspaces', 'conversations');
-    expect(out.text()).toContain('conversations');
+    await send(input, out, '/workspaces', 'sessions');
+    expect(out.text()).toContain('sessions');
 
     await send(input, out, '/workspace nope', 'No workspace nope');
     expect(out.text()).toContain('No workspace nope');
@@ -656,7 +656,7 @@ describe('chatCommand', () => {
     await send(input, out, '/regenerate', 'A third answer.');
 
     // Each rework replaced the exchange rather than appending one: the
-    // conversation still holds a single question, and it is the edited wording.
+    // session still holds a single question, and it is the edited wording.
     //
     // The seqs are *not* 1 and 2. `truncateAfter` deliberately leaves
     // `next_seq` alone — reusing sequence numbers would make a stale cursor
@@ -696,7 +696,7 @@ describe('chatCommand', () => {
     await send(input, out, '/edit 99 nope', 'No message 99');
     expect(out.text()).toContain('No message 99');
 
-    // A refused command leaves the conversation exactly as it was.
+    // A refused command leaves the session exactly as it was.
     await send(input, out, '/messages', 'the first question');
     expect(out.text()).toContain('1  user  the first question');
     expect(out.text()).toContain('2  assistant  An answer.');

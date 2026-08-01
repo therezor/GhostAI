@@ -47,7 +47,7 @@ const SCOPES: readonly {
   {
     scope: 'session',
     label: 'This session',
-    hint: 'Allow this tool for the rest of this conversation.',
+    hint: 'Allow this tool for the rest of this session.',
   },
   {
     scope: 'always',

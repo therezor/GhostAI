@@ -77,17 +77,17 @@ describe('the context strip', () => {
     ).toBeInTheDocument();
   });
 
-  it('renders nothing before a conversation exists', () => {
+  it('renders nothing before a session exists', () => {
     stubApi({});
     const { container } = renderWithProviders(<ContextStrip sessionKey={undefined} />);
 
     // A fresh tab holds a key the socket minted with no stored row behind it,
     // so the request would 404 — and an error under the composer of a
-    // conversation that simply has not started answers a question nobody asked.
+    // session that simply has not started answers a question nobody asked.
     expect(container.querySelector('.context-strip')).toBeNull();
   });
 
-  it('renders nothing when the conversation has not started', async () => {
+  it('renders nothing when the session has not started', async () => {
     stubApi({ '/api/sessions/web%3A1/context': [404, { error: { code: 'not_found' } }] });
     const { container } = renderWithProviders(<ContextStrip sessionKey="web:1" />);
 
@@ -122,7 +122,7 @@ describe('the context inspector', () => {
     expect(rows).toEqual([
       'System prompt1,00010.0%',
       'Tool definitions1,00010.0%',
-      'Conversation3,00030.0%',
+      'Session3,00030.0%',
       'Live state1201.2%',
     ]);
   });
@@ -158,7 +158,7 @@ describe('the context inspector', () => {
    * eviction between the strip rendering and the dialog opening puts the fetch
    * back on the wire where it can fail again.
    */
-  it('does not treat a conversation that has not started as a failure', async () => {
+  it('does not treat a session that has not started as a failure', async () => {
     // The socket mints a session key the moment a tab connects; the store holds
     // no row for it until the first message lands. A red error there answers a
     // question nobody asked.
@@ -170,7 +170,7 @@ describe('the context inspector', () => {
     });
     renderWithProviders(<ContextBody sessionKey="web:1" />);
 
-    expect(await screen.findByText(/this conversation has not started/i)).toBeInTheDocument();
+    expect(await screen.findByText(/this session has not started/i)).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
@@ -241,11 +241,11 @@ describe('the context inspector: what is in each section', () => {
     expect(schema).toBeVisible();
   });
 
-  it('opens the conversation, addressed by the seq the rest of the UI uses', async () => {
+  it('opens the session, addressed by the seq the rest of the UI uses', async () => {
     const user = mount();
     await open(user);
 
-    await user.click(await screen.findByText('Conversation (1 message)'));
+    await user.click(await screen.findByText('Session (1 message)'));
 
     expect(screen.getByText('hello')).toBeVisible();
     expect(screen.getByText('#1')).toBeVisible();

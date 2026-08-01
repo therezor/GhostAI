@@ -97,7 +97,7 @@ export function DeleteWorkspaceDialog({
       remove.mutate(target);
     },
     onError: (error: Error) => {
-      toast.error('Could not move the conversations', error.message);
+      toast.error('Could not move the sessions', error.message);
     },
   });
 

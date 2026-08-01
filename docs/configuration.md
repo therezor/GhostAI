@@ -451,12 +451,12 @@ vault wins over the environment**:
 
 ## CLI flags that override config
 
-| Flag                        | Overrides                                                     |
-| --------------------------- | ------------------------------------------------------------- |
-| `--home <dir>`              | The root. Same as `GHOSTAI_HOME`.                             |
-| `--host` / `--port`         | `server.host` / `server.port`.                                |
-| `--workspace <dir>`         | The workspace root — moves the whole tree.                    |
-| `--workspace-id <id>`       | Which workspace new conversations land in. A different thing. |
-| `--model` / `--provider`    | `agents.defaults.model` / `.provider`, for one invocation.    |
-| `--ui <dir>`                | Serve a UI built somewhere else.                              |
-| `--password` / `--username` | Sets the login credential without the wizard.                 |
+| Flag                        | Overrides                                                  |
+| --------------------------- | ---------------------------------------------------------- |
+| `--home <dir>`              | The root. Same as `GHOSTAI_HOME`.                          |
+| `--host` / `--port`         | `server.host` / `server.port`.                             |
+| `--workspace <dir>`         | The workspace root — moves the whole tree.                 |
+| `--workspace-id <id>`       | Which workspace new sessions land in. A different thing.   |
+| `--model` / `--provider`    | `agents.defaults.model` / `.provider`, for one invocation. |
+| `--ui <dir>`                | Serve a UI built somewhere else.                           |
+| `--password` / `--username` | Sets the login credential without the wizard.              |

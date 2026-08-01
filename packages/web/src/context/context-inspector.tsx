@@ -201,7 +201,7 @@ export function ContextBody({ sessionKey }: { readonly sessionKey: string }): JS
 
         <Section
           fill={SEGMENT_FILLS.messages}
-          label={t('context.conversation', { count: context.data.messages.length })}
+          label={t('context.session', { count: context.data.messages.length })}
         >
           {context.data.messages.length === 0 ? (
             <p className="page__note">{t('context.nothingYet')}</p>

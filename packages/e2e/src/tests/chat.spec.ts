@@ -148,7 +148,7 @@ test.describe('the composer on a narrow screen', () => {
       timeout: 15_000,
     });
 
-    // And gone once there is a conversation, because the row under the box is
+    // And gone once there is a session, because the row under the box is
     // the budget's now.
     await expect(app.getByText('Enter to send', { exact: false })).toHaveCount(0);
   });

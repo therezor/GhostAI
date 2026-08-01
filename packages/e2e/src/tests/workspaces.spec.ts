@@ -94,7 +94,7 @@ test.describe('workspaces', () => {
       });
   });
 
-  test('moving the folder renames the directory and takes the conversations', async ({
+  test('moving the folder renames the directory and takes the sessions', async ({
     app,
     harness,
   }) => {
@@ -129,7 +129,7 @@ test.describe('workspaces', () => {
     await app.goto(`${harness.url}/files?workspace=acme24`);
     await expect(app.getByRole('link', { name: 'brief.md', exact: true })).toBeVisible();
 
-    // And so did the conversation, which would otherwise resolve to a folder
+    // And so did the session, which would otherwise resolve to a folder
     // that is not there any more.
     const sessions = await app.request.get(`${harness.url}/api/sessions?workspace=acme24`);
     expect(
@@ -200,10 +200,7 @@ test.describe('workspaces', () => {
     await expect(app.getByRole('link', { name: 'acme-only.md', exact: true })).toBeVisible();
   });
 
-  test('a workspace with conversations cannot be deleted until they move', async ({
-    app,
-    harness,
-  }) => {
+  test('a workspace with sessions cannot be deleted until they move', async ({ app, harness }) => {
     await app.request.post(`${harness.url}/api/workspaces`, {
       data: { name: 'Acme', id: 'acme' },
     });

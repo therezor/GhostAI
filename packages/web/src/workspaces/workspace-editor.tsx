@@ -198,7 +198,7 @@ function Editor({
           params: { workspaceId: updated.id },
           replace: true,
         });
-        toast.success(`Moved to ${folderLabel(updated)}`, 'Its conversations came with it.');
+        toast.success(`Moved to ${folderLabel(updated)}`, 'Its sessions came with it.');
         return;
       }
       toast.success(`Renamed to ${updated.name}`);
@@ -297,7 +297,7 @@ function Editor({
                 : workspace.isDefault
                   ? t('workspaces.folderDefault')
                   : folderChanged && folderError === undefined
-                    ? `Moves the folder to ${WORKSPACE_ROOT_PATH}${folder.trim()} and brings its conversations with it.`
+                    ? `Moves the folder to ${WORKSPACE_ROOT_PATH}${folder.trim()} and brings its sessions with it.`
                     : t('workspaces.folderHintEdit')
             }
           />

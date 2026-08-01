@@ -136,7 +136,7 @@ the part that decides when the model reaches for it.
   a throw, so the model can adapt instead of the turn dying.
 - **Nesting forwards rather than recurses.** A grandchild's event is passed through with
   only its `turnId` rewritten, which keeps the wire schema non-recursive.
-- **An approval inside a subagent bubbles to the operator** scoped to the conversation
+- **An approval inside a subagent bubbles to the operator** scoped to the session
   they are looking at, not to the delegation.
 - **The timeout is the caller's** `subagentTimeoutMs`, composed with `AbortSignal.any`.
   It kills the child, not the parent turn.
@@ -180,9 +180,9 @@ either, because a turn writing parallel tool results collides on them.
 
 `sessions.origin` is `web`, `cli`, `telegram`, `automation`, `subagent`, or a plugin id.
 Session listing excludes `subagent` **and `automation`** unless asked for one by name.
-Both are real rows and neither is a conversation: one turn, started by a model. Automation
+Both are real rows and neither is a session: one turn, started by a model. Automation
 is the one that scales badly if it leaks — a job on a five-minute interval writes about
-105,000 sessions a year, and the sidebar is a list of conversations a person had.
+105,000 sessions a year, and the sidebar is a list of sessions a person had.
 
 A job's `schedule` and `payload` are JSON columns rather than a flat set of nullable ones.
 They are discriminated unions, and the union exists precisely so `{kind: 'cron', atMs: 5}`

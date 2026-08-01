@@ -351,7 +351,7 @@ describe('the workspaces page', () => {
     expect(calls.some((call) => call.method === 'DELETE')).toBe(false);
   });
 
-  it('offers to move the conversations when a delete is refused, then deletes', async () => {
+  it('offers to move the sessions when a delete is refused, then deletes', async () => {
     let refused = true;
     const { calls } = mount('/workspaces', {
       'DELETE /api/workspaces/acme': () =>
@@ -380,9 +380,7 @@ describe('the workspaces page', () => {
 
     // The 409 is a question, not a failure: the count it carries is what the
     // offer is made out of.
-    expect(
-      await screen.findByText(/2 conversations still belong to Client Acme/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/2 sessions still belong to Client Acme/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Move and delete' }));
 
@@ -415,7 +413,7 @@ describe('the workspaces page', () => {
 });
 
 describe('the workspace editor', () => {
-  it('moves the folder, and sends the conversations after it in one request', async () => {
+  it('moves the folder, and sends the sessions after it in one request', async () => {
     const { calls } = mount('/workspaces/acme', {
       'PATCH /api/workspaces/acme': [200, workspace('acme24', 'Client Acme')],
     });

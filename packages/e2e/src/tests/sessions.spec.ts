@@ -1,16 +1,16 @@
 /**
- * Starting, naming and forking a conversation.
+ * Starting, naming and forking a session.
  *
  * The web UI had no way to start one. What looked like the control — a "Chat"
  * nav link — dropped `?session=` from a route that reads the store rather than
  * the URL, so it cleared nothing and the first message put the key straight
  * back. These four cases are the replacement, driven through the real server:
- * a conversation is created, it names itself after what was said in it, picking
+ * a session is created, it names itself after what was said in it, picking
  * another switches to it, and a branch forks without disturbing the original.
  *
  * The title is the one worth having end to end. Nothing in the browser derives
  * it — the agent loop does, from the first message, which is what makes a
- * conversation started in the terminal show up named in the sidebar. A unit
+ * session started in the terminal show up named in the sidebar. A unit
  * test of the derivation cannot see that.
  */
 
@@ -18,7 +18,7 @@ import type { Page } from '@playwright/test';
 
 import { expect, test } from '../fixtures.js';
 
-test.describe('conversations', () => {
+test.describe('sessions', () => {
   test('starts one, names it after the first message, and lists it', async ({ app }) => {
     const sidebar = app.getByRole('complementary', { name: 'Sidebar' });
 
@@ -44,8 +44,8 @@ test.describe('conversations', () => {
     await expect(app.getByRole('heading', { name: 'Ready when you are.' })).toBeVisible();
 
     // Pressed, then thought better of. A row written on the press would still
-    // be here — and the list would fill with conversations nobody had.
-    await expect(sidebar.getByText('No conversations yet.')).toBeVisible();
+    // be here — and the list would fill with sessions nobody had.
+    await expect(sidebar.getByText('No sessions yet.')).toBeVisible();
 
     await app.getByRole('textbox', { name: 'Message' }).fill('stream a long answer');
     await app.getByRole('textbox', { name: 'Message' }).press('Enter');
@@ -54,7 +54,7 @@ test.describe('conversations', () => {
     await expect(sidebar.getByText('stream a long answer')).toBeVisible({ timeout: 15_000 });
   });
 
-  test('switches between conversations without losing either', async ({ app }) => {
+  test('switches between sessions without losing either', async ({ app }) => {
     const sidebar = app.getByRole('complementary', { name: 'Sidebar' });
     const message = app.getByRole('textbox', { name: 'Message' });
 
@@ -66,7 +66,7 @@ test.describe('conversations', () => {
     });
 
     await sidebar.getByRole('button', { name: 'New session' }).click();
-    // A fresh conversation is empty, which the dead nav link never managed.
+    // A fresh session is empty, which the dead nav link never managed.
     await expect(app.getByRole('heading', { name: 'Ready when you are.' })).toBeVisible();
 
     await sidebar.getByRole('link', { name: /list the workspace/u }).click();
@@ -93,7 +93,7 @@ test.describe('conversations', () => {
     await expect(sidebar.locator('[aria-current="page"]')).toHaveText(/stream a long answer/u);
   });
 
-  test('lists a conversation on one line, without a message count', async ({ app }) => {
+  test('lists a session on one line, without a message count', async ({ app }) => {
     const sidebar = app.getByRole('complementary', { name: 'Sidebar' });
 
     await sidebar.getByRole('button', { name: 'New session' }).click();
@@ -104,12 +104,12 @@ test.describe('conversations', () => {
     await expect(row).toBeVisible({ timeout: 15_000 });
 
     // The title is what this list is scanned for. A count on a second line
-    // halved how many conversations fit in the column to carry a number nobody
+    // halved how many sessions fit in the column to carry a number nobody
     // reads — it is still on the API for anything that wants it.
     await expect(row).not.toContainText('message');
   });
 
-  test('marks which conversation is open', async ({ app }) => {
+  test('marks which session is open', async ({ app }) => {
     const sidebar = app.getByRole('complementary', { name: 'Sidebar' });
 
     await sidebar.getByRole('button', { name: 'New session' }).click();
@@ -123,7 +123,7 @@ test.describe('conversations', () => {
     await expect(sidebar.locator('a[aria-current="page"]')).toHaveText(/stream a long answer/u);
   });
 
-  test('branches into a second conversation, leaving the first alone', async ({ app }) => {
+  test('branches into a second session, leaving the first alone', async ({ app }) => {
     const sidebar = app.getByRole('complementary', { name: 'Sidebar' });
     const message = app.getByRole('textbox', { name: 'Message' });
 
@@ -140,7 +140,7 @@ test.describe('conversations', () => {
 });
 
 /**
- * The conversations page.
+ * The sessions page.
  *
  * What is asserted here and nowhere else is that the search and the page are the
  * *server's*: a component test stubs the response, so it can only check that the
@@ -154,9 +154,9 @@ test.describe('conversations', () => {
  * seen depends on how the runner interleaves the two. They are held still in
  * `sessions.test.tsx` instead.
  */
-test.describe('the conversations page', () => {
+test.describe('the sessions page', () => {
   /**
-   * Says something in each conversation, so there are rows to search.
+   * Says something in each session, so there are rows to search.
    *
    * A turn per row rather than a seeded database, because a session is written
    * by the loop and not by the button — see "saves nothing until something is
@@ -172,13 +172,16 @@ test.describe('the conversations page', () => {
     }
   }
 
-  /** Through the link, which is also the assertion that the link goes there. */
+  /** Through the nav row, which is also the assertion that it goes there. */
   async function openPage(app: Page): Promise<void> {
     await app
       .getByRole('complementary', { name: 'Sidebar' })
-      .getByRole('link', { name: 'All conversations' })
+      .getByRole('link', { name: 'Sessions', exact: true })
       .click();
-    await expect(app.getByRole('heading', { name: 'Conversations' })).toBeVisible();
+    // `exact`, because the sidebar's own "Latest sessions" heading is a
+    // substring match for this one and Playwright's default name matching is
+    // not anchored.
+    await expect(app.getByRole('heading', { name: 'Sessions', exact: true })).toBeVisible();
   }
 
   test('is reachable from the sidebar and lists what is there', async ({ app }) => {
@@ -186,18 +189,18 @@ test.describe('the conversations page', () => {
     await openPage(app);
 
     await expect(
-      app.getByRole('list', { name: 'Conversations' }).getByText('stream a long answer'),
+      app.getByRole('list', { name: 'Sessions' }).getByText('stream a long answer'),
     ).toBeVisible();
   });
 
-  test('searches every conversation, not the page in hand', async ({ app }) => {
+  test('searches every session, not the page in hand', async ({ app }) => {
     await seed(app, ['stream a long answer', 'list the workspace']);
     await openPage(app);
 
-    const list = app.getByRole('list', { name: 'Conversations' });
+    const list = app.getByRole('list', { name: 'Sessions' });
     await expect(list.getByText('list the workspace')).toBeVisible();
 
-    await app.getByRole('searchbox', { name: 'Filter conversations' }).fill('workspace');
+    await app.getByRole('searchbox', { name: 'Filter sessions' }).fill('workspace');
 
     // The durable state: one row matches and the other is gone. A SQL `LIKE`
     // decided that, not a filter over the rows the browser already had.
@@ -205,11 +208,11 @@ test.describe('the conversations page', () => {
     await expect(list.getByText('stream a long answer')).toHaveCount(0);
   });
 
-  test('renames a conversation, and the sidebar agrees', async ({ app }) => {
+  test('renames a session, and the sidebar agrees', async ({ app }) => {
     await seed(app, ['stream a long answer']);
     await openPage(app);
 
-    const list = app.getByRole('list', { name: 'Conversations' });
+    const list = app.getByRole('list', { name: 'Sessions' });
     await list.getByRole('button', { name: /^Actions for/u }).click();
     await app.getByRole('menuitem', { name: 'Rename' }).click();
 
@@ -229,7 +232,7 @@ test.describe('the conversations page', () => {
     await seed(app, ['stream a long answer']);
     await openPage(app);
 
-    const list = app.getByRole('list', { name: 'Conversations' });
+    const list = app.getByRole('list', { name: 'Sessions' });
     await list.getByRole('button', { name: /^Actions for/u }).click();
     await app.getByRole('menuitem', { name: 'Delete' }).click();
 
@@ -239,6 +242,6 @@ test.describe('the conversations page', () => {
     await expect(dialog).toContainText('There is no undo.');
     await dialog.getByRole('button', { name: 'Delete' }).click();
 
-    await expect(app.getByText('No conversations yet.').first()).toBeVisible();
+    await expect(app.getByText('No sessions yet.').first()).toBeVisible();
   });
 });

@@ -12,7 +12,7 @@ building a second one beside it.
 
 - [ ] **Connect MCP servers** — third-party MCP tools appear beside the
       built-ins.
-- [ ] **Telegram** — hold a conversation with an agent from Telegram. Unblocks
+- [ ] **Telegram** — hold a session with an agent from Telegram. Unblocks
       heartbeat `targets` delivery.
 - [ ] **Skills** — reusable instruction bundles, some pinned, the rest loaded
       when relevant.
@@ -20,7 +20,7 @@ building a second one beside it.
       outgrows the prompt.
 - [ ] **Slash commands in the browser** — the terminal REPL's commands, in the
       composer.
-- [ ] **Session search page** — find a conversation by what was said in it.
+- [ ] **Session search page** — find a session by what was said in it.
 - [ ] **Extensions** — third-party packages that add tools, channels or
       providers.
 - [ ] **RAG** — index the workspace, put the relevant chunks in the prompt.

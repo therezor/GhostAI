@@ -89,11 +89,11 @@ describe('opening', () => {
     expect(useTurnStore.getState().sessionKey).toBe('web:7');
   });
 
-  it('sends no resume for a conversation this tab has never rendered', () => {
+  it('sends no resume for a session this tab has never rendered', () => {
     open('web:1');
 
     // A cursor of zero means the REST history is the whole story; resuming
-    // from it would replay the same conversation a second time.
+    // from it would replay the same session a second time.
     expect(socket().sent).toEqual([]);
   });
 

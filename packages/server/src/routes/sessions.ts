@@ -365,7 +365,7 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
     },
 
     'sessions.branch': {
-      summary: 'Fork a conversation at a point into a new session',
+      summary: 'Fork a session at a point into a new one',
       schema: {
         params: SessionParamsSchema,
         body: BranchSessionRequestSchema,
@@ -381,7 +381,7 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
         // traffic in one transaction at the end, so a branch taken now starts
         // with an unanswered question and no way to tell that it did.
         if (deps.hub.busy(key)) {
-          throw conflict('A turn is running on this conversation. Stop it, then branch.');
+          throw conflict('A turn is running on this session. Stop it, then branch.');
         }
 
         const fork = store.forkSession(key, body.seq, {

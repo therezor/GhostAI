@@ -403,7 +403,7 @@ export function AgentsRoute(): JSX.Element {
         // behalf should be one they were told about before they agreed to it.
         description={
           `${pendingDelete?.label ?? ''} is removed from the settings. ` +
-          'Its conversations keep their history and fall back to the default agent.' +
+          'Its sessions keep their history and fall back to the default agent.' +
           (dependants.length === 0
             ? ''
             : ` ${dependants.join(' and ')} ${dependants.length === 1 ? 'delegates' : 'delegate'} to it; that delegation is removed too.`)

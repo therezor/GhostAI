@@ -50,7 +50,7 @@ describe('summariseContext', () => {
     expect(summariseContext(input, t).segments.map((segment) => segment.label)).toEqual([
       'System prompt',
       'Tool definitions',
-      'Conversation',
+      'Session',
     ]);
   });
 

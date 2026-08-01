@@ -25,6 +25,7 @@ import {
   BrainCircuit,
   CalendarClock,
   FolderOpen,
+  MessagesSquare,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -71,6 +72,12 @@ interface NavItem {
  * A nav row beside it was a second door into one room — and it named the *only*
  * thing in the column that the control above it already scopes.
  *
+ * That argument was once made about `/sessions` too, and it was wrong for a
+ * reason worth keeping: the list below is a *shortlist* of thirty, not the
+ * room. The switcher genuinely holds every workspace, so a row beside it
+ * duplicated it; the session list holds the newest fraction, so a row pointing
+ * at the whole set is a different destination rather than a second door.
+ *
  * **No `/tokens` row.** The style guide is a developer surface: its copy names
  * tokens and CSS values rather than addressing a user, which is why it is the
  * one file `untranslated.test.ts` exempts. The route stays — it is how the
@@ -79,6 +86,18 @@ interface NavItem {
  * advertised it as a feature of the product.
  */
 const NAV: readonly NavItem[] = [
+  // First, and directly under New session: the two things you do with a session
+  // are start one and find one, and they belong next to each other.
+  //
+  // This row *is* the way to the full list. It replaced a "All sessions" link in
+  // the footer under the list below, which was the correct shape on paper — "and
+  // the others" belongs after the thing it is the rest of — and the wrong one in
+  // practice. That footer sat beneath a scroll area holding thirty rows, so on
+  // any window short enough to scroll it was below the fold, and a door nobody
+  // can see is not a door. A fixed row costs one line and is always in the same
+  // place. See `sessions.heading` below, which now labels a shortlist rather
+  // than introducing the only way in.
+  { to: '/sessions', label: 'nav.sessions', icon: MessagesSquare },
   { to: '/agents', label: 'nav.agents', icon: BrainCircuit },
   { to: '/files', label: 'nav.files', icon: FolderOpen },
   // Before Settings, and a row of its own rather than a settings panel: the
@@ -323,24 +342,6 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
             )}
           </ul>
         </ScrollArea>
-
-        {/* The way to the rest of them, and a nav row would have been the wrong
-            shape for it. `sidebar.tsx` already refuses a `/workspaces` row
-            because the switcher above it carries the same destination — "a
-            second door into one room" — and a Sessions row sitting on top of
-            the session list is that mistake again. A footer under the list is
-            where "and the others" belongs.
-
-            Shown whether or not the list is full: a door nobody can find until
-            they have thirty conversations is a door most installs never get.
-
-            Its own wording rather than `common.seeAll`, which the notification
-            bell already uses. Two links reading "See all" in one page are two
-            links a screen reader announces identically, and the one thing a
-            link's name has to say is where it goes. */}
-        <Link to="/sessions" onClick={onNavigate} className="sidebar__see-all">
-          {t('sessions.seeAll')}
-        </Link>
       </Section>
 
       <ConfirmDialog

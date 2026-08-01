@@ -135,7 +135,7 @@ export function createAuthHook(options: AuthHookOptions): onRequestHookHandler {
     if (session === undefined) {
       // One message for a malformed token, an unknown one and an expired one.
       // Distinguishing them tells a caller which half of a guess was right.
-      done(unauthorized('Invalid or expired session'));
+      done(unauthorized('You have been signed out. Sign in again to continue.'));
       return;
     }
 

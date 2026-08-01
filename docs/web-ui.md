@@ -16,7 +16,7 @@ origin blocked. See [Security](security.md#privacy).
 
 | Route                             | What it is                                                    |
 | --------------------------------- | ------------------------------------------------------------- |
-| `/`                               | Chat. `?session=` picks the conversation.                     |
+| `/`                               | Chat. `?session=` picks the session.                          |
 | `/agents`, `/agents/:id`          | Agent list and editor.                                        |
 | `/workspaces`, `/workspaces/:id`  | Workspace list and editor.                                    |
 | `/files`                          | File browser. `?path=` and `?workspace=` are in the URL.      |
@@ -64,7 +64,7 @@ never drops a running turn.
 ### Message actions
 
 **Edit** a user message and re-run from the new wording. **Regenerate** an answer.
-**Branch** either into a new conversation, leaving the original intact. **Info** for the
+**Branch** either into a new session, leaving the original intact. **Info** for the
 turn's cost. **Copy**.
 
 Destructive actions are disabled mid-turn, and anything needing a sequence number stays
@@ -73,7 +73,7 @@ disabled until the message has landed.
 ### Context inspector
 
 A bar showing the whole context window and where it went — system prompt, tool
-definitions, conversation — with overflow stated in words rather than a clipped bar. It is
+definitions, session — with overflow stated in words rather than a clipped bar. It is
 the same measurement the CLI's `/context` prints and `GET /api/sessions/:key/context`
 returns, so all three agree.
 
@@ -89,8 +89,8 @@ refused rather than silently winning. Media previews go through short-lived sign
 ## Workspaces
 
 Create one with a folder of its own choosing. Rename the label without moving the folder,
-or move the folder on disk — which renames the directory and repoints the conversations.
-Move conversations between workspaces. A workspace with conversations cannot be deleted
+or move the folder on disk — which renames the directory and repoints the sessions.
+Move sessions between workspaces. A workspace with sessions cannot be deleted
 until they move.
 
 Switching workspace moves the Files page and the session list. Workspaces do not see each
@@ -108,7 +108,7 @@ each with its own description and permission.
 Model and budget live on the agent, not in Settings — they are properties of an agent, and
 an install with several agents has several answers.
 
-## Scheduled jobs
+## Automation
 
 A page rather than a settings panel, in the nav above Settings, built out of the same CRUD
 chrome as Agents and Workspaces: filter, sort, `DataList` rows, a kebab, a create dialog
@@ -139,12 +139,12 @@ create _with_ — a job got a message made from its name, an agent a copy of the
 one, a workspace a `mkdir`. Abandoning the editor you landed on left that invented row
 behind. Nothing is written before Save now, so an abandoned create leaves nothing.
 
-| Screen         | Route                     | Asked only at creation                                    |
-| -------------- | ------------------------- | --------------------------------------------------------- |
-| Scheduled jobs | `/automation/new`         | —                                                         |
-| Agents         | `/agents/new`             | The identifier, which follows the name until you type one |
-| Workspaces     | `/workspaces/new`         | The folder — a `mkdir` now, a `rename(2)` later           |
-| Providers      | `/settings/providers/new` | The type, fixed for the life of an instance               |
+| Screen     | Route                     | Asked only at creation                                    |
+| ---------- | ------------------------- | --------------------------------------------------------- |
+| Automation | `/automation/new`         | —                                                         |
+| Agents     | `/agents/new`             | The identifier, which follows the name until you type one |
+| Workspaces | `/workspaces/new`         | The folder — a `mkdir` now, a `rename(2)` later           |
+| Providers  | `/settings/providers/new` | The type, fixed for the life of an instance               |
 
 Duplicating an agent stays a direct create: it has a source to copy, so there is nothing
 to fill in first.

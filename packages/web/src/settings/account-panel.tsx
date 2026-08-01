@@ -67,7 +67,7 @@ export function AccountPanel(): JSX.Element {
       setConfirm('');
       toast.success(
         'Password changed',
-        'Every other signed-in session was revoked. This tab stayed signed in.',
+        'Every other device was signed out. This tab stayed signed in.',
       );
       // The name may have moved, and `me` is where it is read from.
       await queryClient.invalidateQueries({ queryKey: queryKeys.me });
@@ -107,7 +107,7 @@ export function AccountPanel(): JSX.Element {
           value={currentPassword}
           onValueChange={setCurrentPassword}
           error={change.error === null ? undefined : errorMessageOf(change.error)}
-          hint="Required. A session on its own is not enough to change the credential it was minted from."
+          hint="Required. Being signed in on its own is not enough to change the credential it was minted from."
         />
 
         <TextField

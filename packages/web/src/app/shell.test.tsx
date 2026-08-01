@@ -28,7 +28,7 @@ const SESSIONS = {
   sessions: [
     {
       key: 'web:1',
-      title: 'First conversation',
+      title: 'First session',
       messageCount: 2,
       createdAtMs: 1,
       updatedAtMs: 2,
@@ -129,7 +129,7 @@ describe('the shell', () => {
   it('lists sessions in the sidebar and unread notifications in the header', async () => {
     renderApp();
 
-    expect(await screen.findByText('First conversation')).toBeInTheDocument();
+    expect(await screen.findByText('First session')).toBeInTheDocument();
     // The count is in the bell's accessible name rather than drawn as a badge:
     // "3" beside an icon is not a sentence a screen reader can use.
     expect(
@@ -142,17 +142,16 @@ describe('the shell', () => {
    * server's default page was — fifty — which read as the whole list while being
    * the newest fraction of it, and had no way to the rest.
    */
-  it('asks for a shortlist of conversations, and offers a way to the rest', async () => {
+  it('asks for a shortlist of sessions, and offers a way to the rest', async () => {
     const { calls } = renderApp();
 
-    await screen.findByText('First conversation');
+    await screen.findByText('First session');
 
     const listed = calls.find((call) => call.method === 'GET' && call.path === '/api/sessions');
     expect(listed?.query.get('limit')).toBe('30');
-    expect(screen.getByRole('link', { name: 'All conversations' })).toHaveAttribute(
-      'href',
-      '/sessions',
-    );
+    // The way to the rest is a nav row rather than a footer under the list: the
+    // list scrolls, so anything below it is below the fold on a short window.
+    expect(screen.getByRole('link', { name: 'Sessions' })).toHaveAttribute('href', '/sessions');
   });
 
   it('opens recent notifications from the header, with a way to the full list', async () => {
@@ -215,7 +214,7 @@ describe('the shell', () => {
     // it, so the only way to clear the dot was Mark all read — which also
     // clears the ones the operator has not looked at yet.
     const { user, calls } = renderApp('/', {
-      // A notification that names a conversation is the one that is a link —
+      // A notification that names a session is the one that is a link —
       // and a link is what an operator clicks. One with nowhere to go is not
       // made into a button just so it can be dismissed.
       '/api/notifications': [
@@ -249,7 +248,7 @@ describe('the shell', () => {
     });
   });
 
-  it('starts a conversation without saving an empty one', async () => {
+  it('starts a session without saving an empty one', async () => {
     const { user, calls } = renderApp();
 
     const sidebar = await screen.findByRole('complementary', { name: 'Sidebar' });
@@ -259,18 +258,18 @@ describe('the shell', () => {
     // The URL moves to a key minted on the client, so the click can navigate to
     // it — but nothing is written. A row created on the press is a row that
     // survives someone changing their mind, and the sidebar fills with empty
-    // conversations. The agent loop creates it when the first message lands.
+    // sessions. The agent loop creates it when the first message lands.
     await waitFor(() => {
       expect(useTurnStore.getState().sessionKey).toMatch(/^[0-9a-f-]{8,}/u);
     });
     expect(calls.slice(before).filter((call) => call.method === 'POST')).toEqual([]);
   });
 
-  it('names a conversation rather than showing its key', async () => {
+  it('names a session rather than showing its key', async () => {
     renderApp();
 
-    expect(await screen.findByText('First conversation')).toBeInTheDocument();
-    // The complaint this fixes: a list of uuids is not a list of conversations.
+    expect(await screen.findByText('First session')).toBeInTheDocument();
+    // The complaint this fixes: a list of uuids is not a list of sessions.
     const sidebar = screen.getByRole('complementary', { name: 'Sidebar' });
     expect(within(sidebar).queryByText('web:1')).not.toBeInTheDocument();
   });
@@ -366,7 +365,7 @@ describe('the shell', () => {
 
     expect(await screen.findByRole('heading', { name: 'Not found' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('link', { name: 'Back to chat' }));
+    await user.click(screen.getByRole('link', { name: 'Back to the session' }));
     expect(await screen.findByRole('heading', { name: 'Ready when you are.' })).toBeInTheDocument();
   });
 

@@ -537,7 +537,7 @@ function RunItem({ run }: { readonly run: AutomationRun }): JSX.Element {
           search={{ session: run.sessionKey }}
           className="settings-divided-list__detail settings-divided-list__detail--link"
         >
-          {t('automation.openConversation')}
+          {t('automation.openSession')}
         </Link>
       )}
     </li>

@@ -234,7 +234,7 @@ async function dispatch(
         ...(workspaceId === undefined ? {} : { workspaceId }),
       });
       if (rows.length === 0) {
-        renderer.note(t('slash.notes.noConversations'));
+        renderer.note(t('slash.notes.noSessions'));
         return CONTINUE;
       }
       renderer.note(
@@ -287,7 +287,7 @@ async function dispatch(
     case 'delete': {
       const key = argv[0] ?? ctx.sessionKey;
       if (!store.deleteSession(key)) {
-        throw new GhostError('not_found', t('slash.errors.noConversation', { key }));
+        throw new GhostError('not_found', t('slash.errors.noSession', { key }));
       }
       renderer.note(t('slash.notes.deleted', { key }));
       if (key !== ctx.sessionKey) return CONTINUE;
@@ -384,7 +384,7 @@ async function dispatch(
           .map((workspace) => {
             const mark = workspace.id === current ? '*' : ' ';
             const count = store.countByWorkspace(workspace.id);
-            return `${mark} ${workspace.id}  ·  ${workspace.name}  ·  ${String(count)} conversations`;
+            return `${mark} ${workspace.id}  ·  ${workspace.name}  ·  ${String(count)} sessions`;
           })
           .join('\n'),
       );

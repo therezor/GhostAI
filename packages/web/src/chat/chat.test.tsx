@@ -316,7 +316,7 @@ describe('a turn with tool calls', () => {
       {
         type: 'notice',
         kind: 'agent_fallback',
-        message: 'This conversation runs on "reviewer", which no longer exists.',
+        message: 'This session runs on "reviewer", which no longer exists.',
       },
       START,
       { type: 'assistant.delta', turnId: 't1', text: 'Done.' },
@@ -563,52 +563,7 @@ describe('a message that storage catches up with', () => {
   });
 });
 
-describe('where a conversation came from', () => {
-  it('names the origin, so a scheduled run is not mistaken for a chat', async () => {
-    // The sidebar lists every origin now, and a session key is a plain id that
-    // says nothing about what made it. This badge is the only place the answer
-    // is readable once a conversation is open.
-    stubFetch({
-      '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
-      '/api/setup': [200, { required: false }],
-      '/api/status': [200, STATUS],
-      '/api/agents': [200, AGENTS],
-      '/api/sessions': [200, { sessions: [], total: 0 }],
-      '/api/notifications': [200, { notifications: [], unreadCount: 0, total: 0 }],
-      '/api/sessions/web%3A1/messages': [200, { sessionKey: SESSION, messages: [] }],
-      '/api/sessions/web%3A1': [
-        200,
-        {
-          key: SESSION,
-          title: 'Nightly weather',
-          messageCount: 2,
-          createdAtMs: 1,
-          updatedAtMs: 2,
-          origin: 'automation',
-          workspaceId: 'default',
-        },
-      ],
-    });
-
-    mount();
-    await connect();
-
-    expect(await screen.findByText('automation')).toBeInTheDocument();
-  });
-
-  it('says nothing for a conversation that has no row yet', async () => {
-    // A fresh tab has no stored session, so there is no origin to report and
-    // inventing `web` would be a claim rather than a fact.
-    mount();
-    await connect();
-
-    await screen.findByRole('textbox', { name: 'Message' });
-    expect(screen.queryByText('automation')).not.toBeInTheDocument();
-    expect(screen.queryByText('web')).not.toBeInTheDocument();
-  });
-});
-
-describe('switching to a conversation whose history is already cached', () => {
+describe('switching to a session whose history is already cached', () => {
   const OTHER = 'automation:job-1:run-1';
 
   function storedIn(sessionKey: string, text: string): unknown {
@@ -632,7 +587,7 @@ describe('switching to a conversation whose history is already cached', () => {
     const user = userEvent.setup();
     const client = testQueryClient();
     // Fetched once already and unchanged since — a finished automation run, or
-    // any conversation nobody is adding to. React Query's structural sharing
+    // any session nobody is adding to. React Query's structural sharing
     // hands back the *same* `history.data` reference when the refetch is
     // deep-equal, so a switch produces no new reference to react to.
     client.setQueryData(['sessions', OTHER, 'messages'], storedIn(OTHER, 'the weather report'));
@@ -666,7 +621,7 @@ describe('switching to a conversation whose history is already cached', () => {
           total: 2,
         },
       ],
-      '/api/sessions/web%3A1/messages': [200, storedIn(SESSION, 'the first conversation')],
+      '/api/sessions/web%3A1/messages': [200, storedIn(SESSION, 'the first session')],
       [`/api/sessions/${encodeURIComponent(OTHER)}/messages`]: [
         200,
         storedIn(OTHER, 'the weather report'),
@@ -675,7 +630,7 @@ describe('switching to a conversation whose history is already cached', () => {
 
     mount();
     await connect();
-    expect(await screen.findByText('the first conversation')).toBeInTheDocument();
+    expect(await screen.findByText('the first session')).toBeInTheDocument();
 
     // The switch. The route's history effect runs before the shell attaches the
     // socket — a child's effects run first — so the first pass after this sees
@@ -684,7 +639,7 @@ describe('switching to a conversation whose history is already cached', () => {
     await user.click(screen.getByRole('link', { name: /Weather run/u }));
 
     expect(await screen.findByText('the weather report')).toBeInTheDocument();
-    expect(screen.queryByText('the first conversation')).not.toBeInTheDocument();
+    expect(screen.queryByText('the first session')).not.toBeInTheDocument();
   });
 });
 
@@ -970,7 +925,7 @@ describe('a mid-stream reload', () => {
   });
 });
 
-describe('reworking a conversation', () => {
+describe('reworking a session', () => {
   /** A finished exchange, with the seqs storage would have given it. */
   async function seeded(): Promise<void> {
     mount();
