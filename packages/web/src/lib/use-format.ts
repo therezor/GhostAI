@@ -20,27 +20,36 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useAppLocale } from '@/i18n/i18n-context.js';
+import { useAppTimezone } from '@/timezone/timezone-context.js';
 
-import { formatDate, formatRelativeTime, formatTokens } from './format.js';
+import { formatDate, formatDateTime, formatRelativeTime, formatTokens } from './format.js';
 
 export interface Formatters {
   /** A token count with the locale's grouping separator. */
   readonly tokens: (value: number) => string;
   /** `just now`, `5m ago`, or a date once counting back stops working. */
   readonly relativeTime: (atMs: number, now: number) => string;
+  /** A date with no time of day. For when the day is the answer. */
   readonly date: (atMs: number) => string;
+  /** A date, a time and the zone it is in. For when the time of day is the answer. */
+  readonly dateTime: (atMs: number) => string;
 }
 
 export function useFormat(): Formatters {
   const { t } = useTranslation();
   const { resolved } = useAppLocale();
+  // The install's zone, so two people reading the same screen read the same
+  // clock — and so the time a job's next run is printed in is the same one the
+  // scheduler read its cron expression against.
+  const timeZone = useAppTimezone();
 
   return useMemo(
     () => ({
       tokens: (value: number) => formatTokens(value, resolved),
       relativeTime: (atMs: number, now: number) => formatRelativeTime(atMs, now, resolved, t),
-      date: (atMs: number) => formatDate(atMs, resolved),
+      date: (atMs: number) => formatDate(atMs, resolved, timeZone),
+      dateTime: (atMs: number) => formatDateTime(atMs, resolved, timeZone),
     }),
-    [resolved, t],
+    [resolved, t, timeZone],
   );
 }

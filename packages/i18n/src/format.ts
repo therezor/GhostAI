@@ -31,10 +31,37 @@ export function formatCompactNumber(value: number, locale: string): string {
   return compactNumberFormat(locale).format(value);
 }
 
-/** An absolute date, for anything too old to phrase as an interval. */
-export function formatDate(atMs: number, locale: string): string {
+/**
+ * An absolute date, for anything too old to phrase as an interval.
+ *
+ * `timeZone` is optional and omitting it means the host zone, which is what
+ * every `Intl` constructor already does — so a caller that has no opinion is
+ * unchanged. A caller that does have one passes the install's `ui.timezone`,
+ * and the point of threading it this far is the same as threading the locale:
+ * an implicit zone is whatever the machine happens to be set to, and two
+ * machines then disagree about a date that is a single instant.
+ */
+export function formatDate(atMs: number, locale: string, timeZone?: string): string {
   if (!Number.isFinite(atMs)) return '—';
-  return dateFormat(locale).format(new Date(atMs));
+  return dateFormat(locale, timeZone).format(new Date(atMs));
+}
+
+/**
+ * A date *and* a time, with the zone named.
+ *
+ * Separate from `formatDate` rather than an option on it, because the two
+ * answer different questions and the wrong one is silently wrong: a file's
+ * modified date reads better without a time, and a scheduled job's next run is
+ * *only* about the time. `formatDate` used to be the sole option, which is why
+ * "Next run" rendered as `8 Aug 2026` and dropped the one field it existed for.
+ *
+ * `timeZoneName: 'short'` is not decoration. Once an install can render in a
+ * zone that is not the reader's own, an unlabelled `09:00` is a number the
+ * reader will assume is their clock. The label is what makes it checkable.
+ */
+export function formatDateTime(atMs: number, locale: string, timeZone?: string): string {
+  if (!Number.isFinite(atMs)) return '—';
+  return dateTimeFormat(locale, timeZone).format(new Date(atMs));
 }
 
 /**
@@ -159,6 +186,7 @@ export function pluralCategory(count: number, locale: string): Intl.LDMLPluralRu
 const numberFormats = new Map<string, Intl.NumberFormat>();
 const compactNumberFormats = new Map<string, Intl.NumberFormat>();
 const dateFormats = new Map<string, Intl.DateTimeFormat>();
+const dateTimeFormats = new Map<string, Intl.DateTimeFormat>();
 const relativeTimeFormats = new Map<string, Intl.RelativeTimeFormat>();
 const pluralRuleSets = new Map<string, Intl.PluralRules>();
 
@@ -179,11 +207,51 @@ function compactNumberFormat(locale: string): Intl.NumberFormat {
   );
 }
 
-function dateFormat(locale: string): Intl.DateTimeFormat {
+/**
+ * The zone as part of the memo key, not just as an option.
+ *
+ * Keyed on both because the cache is keyed on everything the constructor was
+ * given — a map keyed on the locale alone would hand a caller asking for Tokyo
+ * the formatter built earlier for UTC, and the bug would be invisible until
+ * someone compared two rows.
+ */
+function formatterKey(locale: string, timeZone: string | undefined): string {
+  return timeZone === undefined ? locale : `${locale}/${timeZone}`;
+}
+
+/** `{ timeZone }` only when there is one — passing `undefined` is not the same as omitting it. */
+function zoneOption(timeZone: string | undefined): { timeZone?: string } {
+  return timeZone === undefined ? {} : { timeZone };
+}
+
+function dateFormat(locale: string, timeZone?: string): Intl.DateTimeFormat {
   return cached(
     dateFormats,
-    locale,
-    () => new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'short', day: 'numeric' }),
+    formatterKey(locale, timeZone),
+    () =>
+      new Intl.DateTimeFormat(locale, {
+        ...zoneOption(timeZone),
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      }),
+  );
+}
+
+function dateTimeFormat(locale: string, timeZone?: string): Intl.DateTimeFormat {
+  return cached(
+    dateTimeFormats,
+    formatterKey(locale, timeZone),
+    () =>
+      new Intl.DateTimeFormat(locale, {
+        ...zoneOption(timeZone),
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZoneName: 'short',
+      }),
   );
 }
 

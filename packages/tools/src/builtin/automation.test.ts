@@ -75,11 +75,13 @@ async function run(args: unknown, port?: AutomationPort): Promise<ReturnType<typ
 
 describe('the automation tool', () => {
   it('advertises the two things a model gets wrong', async () => {
-    // The current time is in the prompt already, and a zoneless cron is read in
-    // the scheduler's zone rather than the host's — without which a model
-    // writes `0 9 * * *` meaning local and the job fires at the wrong hour.
+    // The current time is in the prompt already, and the clock printed beside
+    // it *is* the zone a cron is read in — so the hour the model writes is the
+    // hour it sees. Saying so is what stops a model trained on the old advice
+    // from converting an offset it no longer needs to convert.
     expect(automationTool.description).toMatch(/current time is in your system prompt/iu);
-    expect(automationTool.description).toMatch(/NOT the host zone/u);
+    expect(automationTool.description).toMatch(/install timezone/u);
+    expect(automationTool.description).toMatch(/do not convert it/u);
   });
 
   it('is in the exec band, because of what it causes rather than what it does', () => {
@@ -100,18 +102,24 @@ describe('create', () => {
     expect(s.created[0]).toMatchObject({ schedule: { kind: 'every', everyMs: 900_000 } });
   });
 
-  it('maps cron and its zone', async () => {
+  it('maps cron onto a schedule with no zone of its own', async () => {
     const s = stub();
-    await run({ action: 'create', name: 'x', message: 'go', cron: '0 9 * * *', tz: 'UTC' }, s.port);
-    expect(s.created[0]).toMatchObject({
-      schedule: { kind: 'cron', expr: '0 9 * * *', tz: 'UTC' },
-    });
+    await run({ action: 'create', name: 'x', message: 'go', cron: '0 9 * * *' }, s.port);
+    expect(s.created[0]).toMatchObject({ schedule: { kind: 'cron', expr: '0 9 * * *' } });
+    expect(s.created[0]).not.toHaveProperty('schedule.tz');
   });
 
-  it('omits an empty zone rather than sending a blank one', async () => {
+  it('refuses a tz argument rather than accepting one it would ignore', async () => {
+    // The parameter is gone, and the schema is strict. A model that has learned
+    // to pass `tz` is told, instead of having it silently dropped and getting a
+    // job on a clock it did not ask for.
     const s = stub();
-    await run({ action: 'create', name: 'x', message: 'go', cron: '0 9 * * *', tz: '  ' }, s.port);
-    expect(s.created[0]).not.toHaveProperty('schedule.tz');
+    await expect(
+      automationTool.run(
+        { action: 'create', name: 'x', message: 'go', cron: '0 9 * * *', tz: 'UTC' },
+        contextWith(s.port),
+      ),
+    ).rejects.toThrow();
   });
 
   it('maps an ISO instant onto a one-shot, which self-destructs by default', async () => {

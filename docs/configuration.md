@@ -50,7 +50,7 @@ What every agent inherits, and what an install with no named agents runs as.
 | `maxPinnedSkills`              | int ≥ 0                      | `5`      | _Declared, not yet read._                                                                                                                      |
 
 The keys marked _declared, not yet read_ belong to memory and skills, which are in
-[BUILD_PLAN.md](BUILD_PLAN.md). They parse and persist; nothing consumes them.
+[ROADMAP.md](ROADMAP.md). They parse and persist; nothing consumes them.
 
 ## `agents.list.<id>`
 
@@ -230,7 +230,7 @@ blocking nothing.
 
 ### `tools.mcpServers.<id>`
 
-_The schema ships; the client does not. See [BUILD_PLAN.md](BUILD_PLAN.md)._
+_The schema ships; the client does not. See [ROADMAP.md](ROADMAP.md)._
 
 | Key                      | Type                                                         | Default          | Notes                             |
 | ------------------------ | ------------------------------------------------------------ | ---------------- | --------------------------------- |
@@ -246,9 +246,40 @@ _The schema ships; the client does not. See [BUILD_PLAN.md](BUILD_PLAN.md)._
 
 ## `ui`
 
-| Key      | Type          | Default | Notes                                                                                                                                                                          |
-| -------- | ------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `locale` | BCP-47 string | `'en'`  | Unknown tags fall back to the nearest match and ultimately to English, rather than failing to parse and taking the whole file down. **`en` is the only shipped locale today.** |
+| Key        | Type          | Default | Notes                                                                                                                                                                          |
+| ---------- | ------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `locale`   | BCP-47 string | `'en'`  | Unknown tags fall back to the nearest match and ultimately to English, rather than failing to parse and taking the whole file down. **`en` is the only shipped locale today.** |
+| `timezone` | IANA name     | `'UTC'` | The one clock this install reads and writes. See below.                                                                                                                        |
+
+### `ui.timezone` is the only timezone
+
+Everything is **stored** in UTC — every persisted instant is epoch milliseconds — so this
+is not a storage format. It is the answer to _whose clock_, and there is deliberately one
+of it rather than three. A job used to carry its own `tz`, the scheduler had a default,
+and the browser rendered in whatever zone it happened to be in; predicting when a job
+fired meant holding all three in your head.
+
+It governs both halves, and that is the point:
+
+- Every timestamp in the web UI is **rendered** in it, with the zone named.
+- Every wall-clock time is **read** in it — a cron expression and the one-shot picker
+  alike — so `0 9 * * *` fires at 9am on the same clock the next-run line is printed
+  against, and nobody converts anything by hand.
+
+**Changing it reschedules existing cron jobs.** That follows from the above and is not a
+side effect worth hiding: an expression is a wall-clock time, so its stored instant is
+only valid against the zone it was computed in. `PATCH /api/settings` recomputes them.
+Interval and one-shot jobs do not move — neither has a wall clock in it.
+
+**Always a concrete IANA name, never a rule.** The settings select offers `System`, but
+resolves it to a real zone before saving. Storing the rule would mean the server resolved
+it to the _host_ zone while a browser resolved it to the _reader's_ — the disagreement
+this field exists to end.
+
+**UTC rather than the host zone as the default.** A server's own zone is a property of
+where it happens to be running: it moves when the box moves, it is whatever the image was
+built with, and on a laptop it follows the traveller. `0 9 * * *` would then fire at a
+different real instant after a migration nobody connected to it.
 
 ## `channels`
 
@@ -281,13 +312,17 @@ their own — a list an operator keeps is not a setting.
 Five knobs, and every one of them is true of the **engine**. None describes a task —
 that is what a job is for.
 
-| Key                       | Type      | Default                                       |
-| ------------------------- | --------- | --------------------------------------------- |
-| `scheduler.enabled`       | boolean   | `true` — the master switch                    |
-| `scheduler.concurrency`   | int > 0   | `2` — concurrent runs across all jobs         |
-| `scheduler.catchUpOnBoot` | boolean   | `true`                                        |
-| `scheduler.runRetention`  | int > 0   | `200` — runs kept **per job**                 |
-| `scheduler.timezone`      | IANA name | `'UTC'` — the zone a zoneless cron is read in |
+| Key                       | Type    | Default                               |
+| ------------------------- | ------- | ------------------------------------- |
+| `scheduler.enabled`       | boolean | `true` — the master switch            |
+| `scheduler.concurrency`   | int > 0 | `2` — concurrent runs across all jobs |
+| `scheduler.catchUpOnBoot` | boolean | `true`                                |
+| `scheduler.runRetention`  | int > 0 | `200` — runs kept **per job**         |
+
+> **There is no `scheduler.timezone`.** The zone a cron expression is read in is
+> [`ui.timezone`](#uitimezone-is-the-only-timezone), because it is also the zone every
+> timestamp is rendered in — one install-wide answer to "whose clock" rather than a
+> scheduler knob and a display convention that could disagree.
 
 > **There is no `scheduler.heartbeat` block, and there should not be.** A heartbeat _is_ a
 > scheduled job: its interval is the job's schedule, its task file and decision model are
@@ -306,10 +341,14 @@ is worse than one that says it was missed), and a recurring job simply rearms.
 with `*`, lists, ranges, `/step`, and names (`JAN`, `MON`). A six-field expression is
 refused by name rather than absorbed: every dialect that grew a seconds column put it at
 the front, so reading `0 * * * * *` as five fields plus a stray runs something sixty times
-more often than asked. `tz` is an IANA name; absent means `scheduler.timezone`, which defaults to **UTC** rather
-than the host zone. That default is deliberate: a server's own zone is a property of where
-it happens to be running, so `0 9 * * *` would fire at a different real instant after a
-migration nobody connected to the schedule.
+more often than asked. **A job carries no zone of its own** — the schema refuses one
+rather than ignoring it — and the expression is read in `ui.timezone`.
+
+**Daylight saving is handled rather than assumed.** A wall-clock time the zone skips
+(spring forward) has no occurrence that day; one that happens twice (fall back) fires at
+the **earlier** instant, so an hourly job sees the repeated hour once and there is a single
+two-hour gap in real time. Firing on both would mean a job written "hourly" running
+twenty-five times that day.
 
 When **day-of-month and day-of-week are both restricted, a day matches if _either_ does**.
 `0 0 13 * 5` is "the 13th, and also every Friday", not "Friday the 13th".
@@ -349,7 +388,7 @@ Three rules make it safe to leave running:
 
 ## `rag`, `plugins`
 
-_Both are schema-only today. See [BUILD_PLAN.md](BUILD_PLAN.md)._
+_Both are schema-only today. See [ROADMAP.md](ROADMAP.md)._
 
 | Key                              | Type     | Default                                                          |
 | -------------------------------- | -------- | ---------------------------------------------------------------- |

@@ -4,8 +4,8 @@
  * The cases that matter are the two this panel could get wrong without looking
  * wrong: that it saves **only** the `scheduler` branch — `ConfigPatch` is a
  * deep-partial precisely so one panel's save does not rewrite another's fields
- * — and that the timezone it offers defaults to UTC rather than to whatever
- * zone the browser or the server happens to be in.
+ * — and that it points at Appearance for the timezone, which used to live here
+ * and is now the install's one zone rather than a scheduler knob.
  *
  * The jobs are not asserted here because they are not here: they are a page,
  * covered by `automation/automation.test.tsx`.
@@ -65,17 +65,18 @@ describe('the Automation panel', () => {
     mount();
 
     expect(await screen.findByLabelText('Concurrent runs')).toBeInTheDocument();
-    expect(screen.getByLabelText('Default timezone')).toBeInTheDocument();
     // The jobs are a page, not a panel — there is no list and no create here.
     expect(screen.queryByRole('list', { name: 'Scheduled jobs' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'New job' })).not.toBeInTheDocument();
   });
 
-  it('defaults the timezone to UTC rather than the host zone', async () => {
-    // A server's own zone moves when the server does; UTC is the one that does
-    // not drift under a migration nobody connected to the schedule.
+  it('sends the operator to Appearance for the timezone instead of dropping it', async () => {
+    // The knob moved rather than went away. Someone who remembers it being here
+    // must be told where it went — a silent gap reads as a removed feature.
     mount();
-    expect(await screen.findByLabelText('Default timezone')).toHaveTextContent('UTC');
+    await screen.findByLabelText('Concurrent runs');
+    expect(screen.queryByLabelText('Default timezone')).not.toBeInTheDocument();
+    expect(screen.getByText(/timezone moved to Settings . Appearance/u)).toBeInTheDocument();
   });
 
   it('saves one scheduler patch and nothing else', async () => {
@@ -90,7 +91,10 @@ describe('the Automation panel', () => {
       expect(patchesOf(calls)).toHaveLength(1);
     });
     const patch = patchesOf(calls)[0]?.body as { scheduler?: Record<string, unknown> };
-    expect(patch.scheduler).toMatchObject({ concurrency: 4, timezone: 'UTC' });
+    expect(patch.scheduler).toMatchObject({ concurrency: 4 });
+    // Gone from this branch entirely — it is `ui.timezone` now, and a scheduler
+    // patch that still carried it would fail to parse.
+    expect(patch.scheduler).not.toHaveProperty('timezone');
     expect(Object.keys(patch)).toEqual(['scheduler']);
   });
 
@@ -109,7 +113,6 @@ describe('the Automation panel', () => {
       {
         enabled: true,
         catchUpOnBoot: false,
-        timezone: 'UTC',
         concurrency: 2,
         runRetention: 200,
       },

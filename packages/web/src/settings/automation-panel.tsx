@@ -6,24 +6,29 @@
  * where the agents are a page and only install-wide tool settings are in
  * Settings.
  *
- * What is here is the five knobs that are true of the scheduler and of no
+ * What is here is the four knobs that are true of the scheduler and of no
  * particular job: whether it runs at all, how many runs at once, what a job
- * whose time passed while the process was down should do, how much history to
- * keep per job, and the zone a cron with no zone of its own is read in.
+ * whose time passed while the process was down should do, and how much history
+ * to keep per job.
+ *
+ * **The timezone is not here, and used to be.** It moved to Appearance, because
+ * it stopped being a scheduler setting the moment it also became the zone every
+ * timestamp in the UI is rendered in — one install-wide answer to "whose clock",
+ * read by the scheduler and by every screen. `engineTzMoved` says so where the
+ * knob used to be, so an operator looking for it is told rather than left to
+ * conclude it was removed.
  *
  * There is deliberately no heartbeat block. A heartbeat *is* a job — its
  * interval is the job's schedule, its task file and decision model are the
  * job's payload — so it is configured on the job, not twice.
  */
 
-import { useMemo, useState, type JSX } from 'react';
+import { useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { Config } from '@ghostai/protocol';
 
-import { timezoneOptions } from '@/automation/job-form.js';
-
-import { FieldGrid, SaveBar, Section, SelectField, SwitchRow, TextField } from './controls.js';
+import { FieldGrid, SaveBar, Section, SwitchRow, TextField } from './controls.js';
 import { parseNumber, type PatchResult } from './fields.js';
 import { useSaveSettings } from './use-settings.js';
 
@@ -32,18 +37,10 @@ export function AutomationPanel({ config }: { readonly config: Config }): JSX.El
   const { save, saving } = useSaveSettings();
   const [enabled, setEnabled] = useState(config.scheduler.enabled);
   const [catchUp, setCatchUp] = useState(config.scheduler.catchUpOnBoot);
-  const [timezone, setTimezone] = useState(config.scheduler.timezone);
   const [concurrency, setConcurrency] = useState(String(config.scheduler.concurrency));
   const [retention, setRetention] = useState(String(config.scheduler.runRetention));
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   const [dirty, setDirty] = useState(false);
-
-  // Built once: the IANA list is several hundred entries and does not change
-  // while the panel is open.
-  const tzOptions = useMemo(
-    () => timezoneOptions().map((zone) => ({ value: zone, label: zone })),
-    [],
-  );
 
   const build = (): PatchResult => {
     const parsedConcurrency = parseNumber(concurrency, t, { min: 1, integer: true });
@@ -59,7 +56,6 @@ export function AutomationPanel({ config }: { readonly config: Config }): JSX.El
         scheduler: {
           enabled,
           catchUpOnBoot: catchUp,
-          timezone,
           concurrency: parsedConcurrency.value,
           runRetention: parsedRetention.value,
         },
@@ -88,16 +84,6 @@ export function AutomationPanel({ config }: { readonly config: Config }): JSX.El
         }}
       />
       <FieldGrid>
-        <SelectField
-          label={t('automation.timezone')}
-          hint={t('automation.timezoneHint')}
-          value={timezone}
-          options={tzOptions}
-          onValueChange={(value) => {
-            setTimezone(value);
-            setDirty(true);
-          }}
-        />
         <TextField
           label={t('automation.concurrency')}
           hint={t('automation.concurrencyHint')}
@@ -121,13 +107,15 @@ export function AutomationPanel({ config }: { readonly config: Config }): JSX.El
           }}
         />
       </FieldGrid>
+      {/* Where the timezone knob was. An operator who came here looking for it
+          needs to be sent somewhere, not to find a gap. */}
+      <p className="settings-field__hint">{t('automation.engineTzMoved')}</p>
       <SaveBar
         dirty={dirty}
         saving={saving}
         onRevert={() => {
           setEnabled(config.scheduler.enabled);
           setCatchUp(config.scheduler.catchUpOnBoot);
-          setTimezone(config.scheduler.timezone);
           setConcurrency(String(config.scheduler.concurrency));
           setRetention(String(config.scheduler.runRetention));
           setErrors({});

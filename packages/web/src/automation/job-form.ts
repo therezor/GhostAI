@@ -16,6 +16,7 @@
  */
 
 import type { TFunction } from 'i18next';
+import { formatDateTime, instantFromZonedInput, zonedInputValue } from '@ghostai/i18n';
 import type {
   AutomationJob,
   AutomationSchedule,
@@ -24,59 +25,6 @@ import type {
 } from '@ghostai/protocol';
 
 import { parseNumber } from '@/settings/fields.js';
-
-/**
- * The value the timezone select uses for "whatever the scheduler is set to".
- *
- * A sentinel rather than an empty string, for the reason the agent select uses
- * one: a Radix select reads `''` as "nothing chosen" and renders a blank
- * trigger, which looks broken. The form still stores `''`, and the wire still
- * omits `tz` — this exists only between the two.
- */
-export const DEFAULT_TZ_OPTION = '__scheduler_default__';
-
-/**
- * Every zone this runtime knows, or a usable subset when it does not say.
- *
- * `Intl.supportedValuesOf` is the whole IANA list and needs no data of our own,
- * which matters: a bundled timezone table would be a copy of something the
- * platform already has and would go stale on its own schedule. The fallback
- * covers a runtime without it — the list is short and deliberately not a guess
- * at what the operator wants, since UTC is always first and always correct.
- */
-export function timezoneNames(): readonly string[] {
-  try {
-    const supported = Intl.supportedValuesOf('timeZone');
-    return supported.length > 0 ? supported : FALLBACK_ZONES;
-  } catch {
-    return FALLBACK_ZONES;
-  }
-}
-
-const FALLBACK_ZONES: readonly string[] = [
-  'UTC',
-  'Europe/London',
-  'Europe/Berlin',
-  'Europe/Kyiv',
-  'America/New_York',
-  'America/Chicago',
-  'America/Los_Angeles',
-  'Asia/Tokyo',
-  'Asia/Shanghai',
-  'Asia/Kolkata',
-  'Australia/Sydney',
-];
-
-/**
- * The zones a select offers, with UTC pinned to the top.
- *
- * UTC is the default for a reason — a server's own zone moves when the server
- * does — so it is the one entry that should not have to be scrolled to.
- */
-export function timezoneOptions(): readonly string[] {
-  const rest = timezoneNames().filter((zone) => zone !== 'UTC');
-  return ['UTC', ...rest];
-}
 
 export type ScheduleKind = AutomationSchedule['kind'];
 export type PayloadKind = AutomationJob['payload']['kind'];
@@ -92,7 +40,6 @@ export interface JobForm {
   /** Minutes, for an `every` schedule. Minutes rather than ms — nobody types 300000. */
   readonly everyMinutes: string;
   readonly cronExpr: string;
-  readonly cronTz: string;
   readonly payloadKind: PayloadKind;
   readonly message: string;
   readonly file: string;
@@ -114,23 +61,22 @@ export type JobFormResult =
 
 const MINUTE_MS = 60_000;
 
-/** `datetime-local` wants local wall-clock with no zone, to the minute. */
-export function toLocalInput(epochMs: number): string {
-  const date = new Date(epochMs);
-  const pad = (value: number): string => String(value).padStart(2, '0');
-  return `${String(date.getFullYear())}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-export function emptyJobForm(): JobForm {
+/**
+ * The install's zone, threaded in rather than read here.
+ *
+ * These functions are pure and stay pure — the zone lives in a React context,
+ * and reaching for it from a module function would make every one of them
+ * untestable without mounting a provider. Callers pass `useAppTimezone()`.
+ */
+export function emptyJobForm(timeZone: string, nowMs = Date.now()): JobForm {
   return {
     name: '',
     enabled: true,
     deleteAfterRun: false,
     scheduleKind: 'cron',
-    at: toLocalInput(Date.now() + 60 * MINUTE_MS),
+    at: zonedInputValue(nowMs + 60 * MINUTE_MS, timeZone),
     everyMinutes: '60',
     cronExpr: '0 9 * * *',
-    cronTz: '',
     payloadKind: 'scheduled',
     message: '',
     file: 'TASK.md',
@@ -143,8 +89,8 @@ export function emptyJobForm(): JobForm {
   };
 }
 
-export function toJobForm(job: AutomationJob): JobForm {
-  const empty = emptyJobForm();
+export function toJobForm(job: AutomationJob, timeZone: string): JobForm {
+  const empty = emptyJobForm(timeZone);
   const { schedule, payload } = job;
 
   return {
@@ -153,9 +99,9 @@ export function toJobForm(job: AutomationJob): JobForm {
     enabled: job.enabled,
     deleteAfterRun: job.deleteAfterRun,
     scheduleKind: schedule.kind,
-    ...(schedule.kind === 'at' ? { at: toLocalInput(schedule.atMs) } : {}),
+    ...(schedule.kind === 'at' ? { at: zonedInputValue(schedule.atMs, timeZone) } : {}),
     ...(schedule.kind === 'every' ? { everyMinutes: String(schedule.everyMs / MINUTE_MS) } : {}),
-    ...(schedule.kind === 'cron' ? { cronExpr: schedule.expr, cronTz: schedule.tz ?? '' } : {}),
+    ...(schedule.kind === 'cron' ? { cronExpr: schedule.expr } : {}),
     payloadKind: payload.kind,
     ...(payload.kind === 'scheduled' ? { message: payload.message } : {}),
     ...(payload.kind === 'heartbeat' ? { file: payload.file, model: payload.model ?? '' } : {}),
@@ -170,13 +116,21 @@ export function toJobForm(job: AutomationJob): JobForm {
 function buildSchedule(
   form: JobForm,
   t: TFunction,
+  timeZone: string,
 ):
   | { readonly ok: true; readonly schedule: AutomationSchedule }
   | { readonly ok: false; readonly errors: Record<string, string> } {
   if (form.scheduleKind === 'at') {
-    const atMs = Date.parse(form.at);
-    if (Number.isNaN(atMs)) {
-      return { ok: false, errors: { at: t('settings.fields.required') } };
+    // Read as a wall clock in the install's zone, not the browser's. A bare
+    // `Date.parse` on a `datetime-local` value means the browser's, silently —
+    // so the field would mean one thing and the row it renders back another.
+    const atMs = instantFromZonedInput(form.at, timeZone);
+    if (atMs === null) {
+      // `null` covers both "not a datetime" and "a wall-clock time this zone
+      // skipped over a spring-forward". The second is why this is not a
+      // `Number.isNaN` check: that time never happened, and booking an hour
+      // away from where the operator pointed is worse than refusing.
+      return { ok: false, errors: { at: t('automation.atUnreal') } };
     }
     return { ok: true, schedule: { kind: 'at', atMs } };
   }
@@ -191,10 +145,9 @@ function buildSchedule(
   // Shape only — see the header. The server owns the real answer.
   const fields = expr.split(/\s+/u).filter(Boolean);
   if (fields.length !== 5) {
-    return { ok: false, errors: { cronExpr: 'A cron expression has five fields.' } };
+    return { ok: false, errors: { cronExpr: t('automation.cronFields') } };
   }
-  const tz = form.cronTz.trim();
-  return { ok: true, schedule: { kind: 'cron', expr, ...(tz === '' ? {} : { tz }) } };
+  return { ok: true, schedule: { kind: 'cron', expr } };
 }
 
 /**
@@ -204,13 +157,13 @@ function buildSchedule(
  * — building them separately is how a field gets added to create and forgotten
  * on update.
  */
-export function toJobRequest(form: JobForm, t: TFunction): JobFormResult {
+export function toJobRequest(form: JobForm, t: TFunction, timeZone: string): JobFormResult {
   const errors: Record<string, string> = {};
 
   const name = form.name.trim();
   if (name === '') errors.name = t('settings.fields.required');
 
-  const schedule = buildSchedule(form, t);
+  const schedule = buildSchedule(form, t, timeZone);
   if (!schedule.ok) Object.assign(errors, schedule.errors);
 
   if (form.payloadKind === 'scheduled' && form.message.trim() === '') {
@@ -262,16 +215,34 @@ export function toJobRequest(form: JobForm, t: TFunction): JobFormResult {
   return { ok: true, create: body, update: body };
 }
 
-/** A schedule as one line, for the list. */
-export function describeSchedule(schedule: AutomationSchedule): string {
+/**
+ * A schedule as one line, for the list.
+ *
+ * Through `t()` and the shared formatter, which it was not: it used to build
+ * `Once, at …` and `Every N minutes` as English string literals over a bare
+ * `toLocaleString()`. That slipped past `untranslated.test.ts` because the
+ * sweep reads `.tsx` and this is a `.ts` — so the one line summarising every
+ * job in the list was the only copy in the feature that no locale could change,
+ * and the only timestamp that ignored the install's zone.
+ *
+ * `count` on the interval case rather than a hand-written singular: i18next
+ * resolves the plural through `Intl.PluralRules`, so a language with more than
+ * two categories gets them without this function knowing which language it is.
+ */
+export function describeSchedule(
+  schedule: AutomationSchedule,
+  t: TFunction,
+  locale: string,
+  timeZone: string,
+): string {
   switch (schedule.kind) {
     case 'at':
-      return `Once, at ${new Date(schedule.atMs).toLocaleString()}`;
-    case 'every': {
-      const minutes = schedule.everyMs / MINUTE_MS;
-      return minutes === 1 ? 'Every minute' : `Every ${String(minutes)} minutes`;
-    }
+      return t('automation.scheduleOnce', {
+        when: formatDateTime(schedule.atMs, locale, timeZone),
+      });
+    case 'every':
+      return t('automation.scheduleEvery', { count: schedule.everyMs / MINUTE_MS });
     case 'cron':
-      return schedule.tz === undefined ? schedule.expr : `${schedule.expr} (${schedule.tz})`;
+      return schedule.expr;
   }
 }

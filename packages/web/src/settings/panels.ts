@@ -4,7 +4,7 @@
  * Three panels are built and four name a phase instead. Keeping both in one
  * list is deliberate: the unbuilt ones are part of the shape of the product, and
  * a settings screen that simply omits them reads as a product that does not have
- * them rather than one whose scheduler arrives in Phase 5. The build plan says
+ * them rather than one whose scheduler arrives in Phase 5. The roadmap says
  * this explicitly — a panel whose backing system lands later renders a
  * placeholder naming the phase, not a stub implementation, because a stub is
  * indistinguishable from a broken feature and gets reported as one.

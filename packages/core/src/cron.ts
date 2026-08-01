@@ -163,6 +163,9 @@ function partsOf(instantMs: number, tz: string | undefined): LocalParts {
   return { year, month, day, hour, minute, second };
 }
 
+/** Wide enough to bracket any DST transition. See `instantOfLocal`. */
+const DAY_MS = 86_400_000;
+
 /** Milliseconds to add to UTC to reach local wall-clock time at this instant. */
 function offsetAt(instantMs: number, tz: string | undefined): number {
   const p = partsOf(instantMs, tz);
@@ -178,10 +181,19 @@ function offsetAt(instantMs: number, tz: string | undefined): number {
  * 01:30 on a fall-back night runs once rather than twice.
  *
  * The offset has to be discovered rather than assumed, and discovering it needs
- * an instant, which is what we are solving for. Two probes settle it: guess
- * that the wall clock is UTC, read the offset there, and re-read it at the
- * corrected instant. Around a transition those disagree, which is exactly when
- * both candidates are worth testing.
+ * an instant, which is what we are solving for. So the offset is sampled at
+ * three points — a day before, at the naive guess, and a day after — and each
+ * sample yields a candidate instant. Away from a transition all three agree and
+ * the loop below runs once for nothing; across one they disagree, which is
+ * exactly when more than one candidate is worth testing.
+ *
+ * **The day either side is what makes "the earlier instant" reachable**, and it
+ * is the fix for a case this used to get backwards. Probing only at the guess
+ * and at the instant it corrects to cannot find both sides of a fall-back: both
+ * probes land after the transition, so they read the same post-transition
+ * offset, the pre-transition candidate is never generated, and the *later*
+ * instant wins by default — the opposite of what the header promises. No
+ * transition is more than a day wide, so a day either side brackets any of them.
  */
 function instantOfLocal(
   year: number,
@@ -193,10 +205,9 @@ function instantOfLocal(
 ): number | null {
   const asIfUtc = Date.UTC(year, month - 1, day, hour, minute, 0);
   const candidates = new Set<number>();
-  const firstOffset = offsetAt(asIfUtc, tz);
-  candidates.add(asIfUtc - firstOffset);
-  const secondOffset = offsetAt(asIfUtc - firstOffset, tz);
-  candidates.add(asIfUtc - secondOffset);
+  for (const probe of [asIfUtc - DAY_MS, asIfUtc, asIfUtc + DAY_MS]) {
+    candidates.add(asIfUtc - offsetAt(probe, tz));
+  }
 
   let best: number | null = null;
   for (const candidate of candidates) {

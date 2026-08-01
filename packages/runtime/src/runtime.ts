@@ -885,6 +885,10 @@ class Runtime implements GhostRuntime {
       logger: this.#logger,
       steering: this.steering,
       env: this.#env,
+      // Read per turn, so the clock the model is given is the same one the
+      // scheduler reads cron expressions against and the UI renders timestamps
+      // in — one zone, and no conversion asked of anybody.
+      timeZone: () => this.config.ui.timezone,
       ...(this.#options.approvals === undefined ? {} : { approvals: this.#options.approvals }),
       ...(this.#options.clock === undefined ? {} : { clock: this.#options.clock }),
       ...(runners === undefined ? {} : { runners }),

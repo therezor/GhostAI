@@ -19,6 +19,7 @@ import {
   durationParts,
   formatNumber,
   formatDate as formatDateIn,
+  formatDateTime as formatDateTimeIn,
   relativeSpan,
 } from '@ghostai/i18n';
 import type { TFunction } from 'i18next';
@@ -99,9 +100,22 @@ const AGO_KEYS: Partial<
   day: 'time.daysAgo',
 };
 
-/** An absolute date, in the install's locale, for anything older than a week. */
-export function formatDate(atMs: number, locale: string): string {
-  return formatDateIn(atMs, locale);
+/** An absolute date, in the install's locale and zone, for anything older than a week. */
+export function formatDate(atMs: number, locale: string, timeZone?: string): string {
+  return formatDateIn(atMs, locale, timeZone);
+}
+
+/**
+ * A date *and* a time, with the zone named.
+ *
+ * The one to reach for whenever the time of day is the answer rather than
+ * context — a scheduled job's next run, a run's start. `formatDate` drops it,
+ * which is correct for a file's modified date and was silently wrong for
+ * "Next run", where it rendered `8 Aug 2026` for a field that exists to say
+ * *when*.
+ */
+export function formatDateTime(atMs: number, locale: string, timeZone?: string): string {
+  return formatDateTimeIn(atMs, locale, timeZone);
 }
 
 /**

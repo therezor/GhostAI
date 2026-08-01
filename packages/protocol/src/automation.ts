@@ -41,11 +41,22 @@ export const EveryScheduleSchema = z.strictObject({
   everyMs: z.number().int().positive(),
 });
 
-/** Standard 5-field cron, evaluated in `tz` (IANA name; host zone if absent). */
+/**
+ * Standard 5-field cron, evaluated in the install's `ui.timezone`.
+ *
+ * **No per-job zone**, and its absence is deliberate. A job used to carry its
+ * own `tz`, which made "when does this fire" a question with three inputs — the
+ * job's zone, the scheduler's default, and the zone the reader's browser
+ * happened to render the answer in. One install-wide zone means the expression
+ * is read against the same clock the next-run line is printed against.
+ *
+ * A job stored by an older build may still carry `tz`; `AutomationStore` strips
+ * it on open, because this is a `strictObject` and would otherwise refuse to
+ * parse the row rather than ignore the key.
+ */
 export const CronScheduleSchema = z.strictObject({
   kind: z.literal('cron'),
   expr: z.string().min(1),
-  tz: z.string().optional(),
 });
 
 export const AutomationScheduleSchema = z.discriminatedUnion('kind', [

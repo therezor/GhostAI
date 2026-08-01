@@ -30,7 +30,7 @@ const SETTINGS = { config: CONFIG, credentialsPresent: {} };
 const CRON_JOB: AutomationJob = {
   id: 'job-1',
   name: 'Nightly build',
-  schedule: { kind: 'cron', expr: '0 9 * * *', tz: 'UTC' },
+  schedule: { kind: 'cron', expr: '0 9 * * *' },
   payload: { kind: 'scheduled', message: 'check the build', deliver: false, targets: {} },
   enabled: true,
   deleteAfterRun: false,
@@ -127,10 +127,25 @@ describe('the Scheduled jobs page', () => {
     );
 
     expect(row).toHaveTextContent('Nightly build');
-    expect(row).toHaveTextContent('0 9 * * * (UTC)');
+    // The bare expression — the zone is the install's now, so repeating it on
+    // every row would be noise rather than information.
+    expect(row).toHaveTextContent('0 9 * * *');
     // A word, not a colour: the one encoding some readers do not receive.
     expect(row).toHaveTextContent('Succeeded');
     expect(row).toHaveTextContent('Enabled');
+  });
+
+  it('gives the next run a time of day and names the zone', async () => {
+    // Both halves were missing. `formatDate` rendered `15 Jan 2027` — a date
+    // with no time, on the one line whose entire job is saying *when* — and
+    // nothing on screen said which clock it was.
+    mount();
+    const row = within(await screen.findByRole('list', { name: 'Scheduled jobs' })).getByRole(
+      'listitem',
+    );
+
+    expect(row).toHaveTextContent('08:00');
+    expect(row).toHaveTextContent('UTC');
   });
 
   it('filters the list without asking the server again', async () => {
@@ -334,7 +349,10 @@ describe('the job editor', () => {
     expect(await screen.findByLabelText('Agent')).toHaveTextContent('no longer exists');
   });
 
-  it('offers the scheduler default as the timezone, not a blank box', async () => {
+  it('names the install zone on the cron field rather than offering a per-job one', async () => {
+    // There is no timezone select any more. What replaces it is the hint: five
+    // numbers with no clock named is a field that cannot answer "nine o'clock
+    // where", and the zone is now the install's rather than this job's.
     mount('/automation/job-1', {
       '/api/automation/jobs': [
         200,
@@ -342,7 +360,9 @@ describe('the job editor', () => {
       ],
     });
 
-    expect(await screen.findByLabelText('Timezone')).toHaveTextContent('Scheduler default');
+    await screen.findByLabelText('Cron expression');
+    expect(screen.queryByLabelText('Timezone')).not.toBeInTheDocument();
+    expect(screen.getByText(/Read in /u)).toBeInTheDocument();
   });
 
   it('says so on a stale link rather than showing an empty form', async () => {
@@ -366,7 +386,6 @@ describe('the job editor', () => {
     expect((writesOf(calls)[0]?.body as AutomationJob).schedule).toEqual({
       kind: 'cron',
       expr: '30 6 * * 1-5',
-      tz: 'UTC',
     });
   });
 

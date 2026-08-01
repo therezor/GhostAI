@@ -54,7 +54,7 @@ export interface AutomationPortOptions {
   readonly jobs: AutomationStore;
   /** Read for the calling session's origin — the `nested` guard. */
   readonly sessions: SessionStore;
-  /** The zone a cron with none of its own is read in. */
+  /** The install's `ui.timezone` — the one zone a cron expression is read in. */
   readonly timezone: () => string;
   readonly now?: () => number;
   /** Re-arms the timer after a write, so a job created mid-turn actually fires. */

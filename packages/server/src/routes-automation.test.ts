@@ -8,6 +8,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { ConfigSchema } from '@ghostai/protocol';
 import type {
   AutomationJob,
   AutomationJobListResponse,
@@ -61,7 +62,9 @@ async function start(options: Parameters<typeof startTestServer>[0] = {}): Promi
 
 const CRON_BODY = {
   name: 'Morning',
-  schedule: { kind: 'cron', expr: '0 9 * * *', tz: 'UTC' },
+  // No `tz`: a job has no zone of its own. The install's `ui.timezone` is the
+  // one clock every expression is read against.
+  schedule: { kind: 'cron', expr: '0 9 * * *' },
   payload: { kind: 'scheduled', message: 'check the build' },
 };
 
@@ -263,15 +266,57 @@ describe('automation validation', () => {
     );
   });
 
-  it('answers 422 for an unknown timezone, at save rather than at first fire', async () => {
+  it('answers 422 for an unknown install timezone, at save rather than at first fire', async () => {
+    // `ui.timezone` is a bare `z.string()` — an enum would have to enumerate the
+    // IANA database — so an unusable zone gets as far as `parseCron`, which
+    // refuses it. Surfacing that on the save is the point: the alternative is a
+    // job that looks scheduled and silently never fires.
+    const test = await start({
+      config: ConfigSchema.parse({ ui: { timezone: 'Mars/Base' } }),
+    });
+    const response = await test.server.app.inject({
+      method: 'POST',
+      url: '/api/automation/jobs',
+      headers: test.headers,
+      payload: CRON_BODY,
+    });
+    expect(response.statusCode).toBe(422);
+  });
+
+  it('refuses a per-job timezone rather than quietly dropping it', async () => {
+    // `CronScheduleSchema` is strict. A client written against the old shape
+    // gets a validation error instead of a job scheduled on a clock it did not
+    // ask for and cannot see.
     const test = await start();
     const response = await test.server.app.inject({
       method: 'POST',
       url: '/api/automation/jobs',
       headers: test.headers,
-      payload: { ...CRON_BODY, schedule: { kind: 'cron', expr: '0 9 * * *', tz: 'Mars/Base' } },
+      payload: { ...CRON_BODY, schedule: { kind: 'cron', expr: '0 9 * * *', tz: 'Europe/Kyiv' } },
     });
     expect(response.statusCode).toBe(422);
+  });
+
+  it('reads a cron expression in the install timezone', async () => {
+    // The behaviour the whole design turns on: the same expression is a
+    // different instant in a different install zone, and nothing about the job
+    // changed between these two.
+    const at = async (timezone: string): Promise<number> => {
+      const test = await start({ config: ConfigSchema.parse({ ui: { timezone } }) });
+      const response = await test.server.app.inject({
+        method: 'POST',
+        url: '/api/automation/jobs',
+        headers: test.headers,
+        payload: CRON_BODY,
+      });
+      return (JSON.parse(response.body) as AutomationJob).state.nextRunAtMs;
+    };
+
+    const utc = await at('UTC');
+    const tokyo = await at('Asia/Tokyo');
+    expect(utc).toBeGreaterThan(0);
+    expect(tokyo).toBeGreaterThan(0);
+    expect(tokyo).not.toBe(utc);
   });
 
   it('refuses a schedule carrying a field from a different kind', async () => {

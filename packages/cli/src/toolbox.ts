@@ -1,7 +1,7 @@
 /**
  * `ghost toolbox` — list, approve and revoke toolboxes.
  *
- * A fourth command on a surface `BUILD_PLAN` step 5 said would stay at three.
+ * A fourth command on a surface the roadmap said would stay at three.
  * The exception is deliberate: approving a toolbox is the one operator action
  * that cannot be delegated to the agent, and an install driven from a terminal
  * needs a way to perform it without opening a browser.

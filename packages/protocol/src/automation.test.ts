@@ -16,9 +16,9 @@ describe('AutomationScheduleSchema', () => {
     expect(AutomationScheduleSchema.parse({ kind: 'every', everyMs: 60_000 })).toMatchObject({
       kind: 'every',
     });
-    expect(
-      AutomationScheduleSchema.parse({ kind: 'cron', expr: '0 9 * * 1', tz: 'Europe/Kyiv' }),
-    ).toMatchObject({ kind: 'cron' });
+    expect(AutomationScheduleSchema.parse({ kind: 'cron', expr: '0 9 * * 1' })).toMatchObject({
+      kind: 'cron',
+    });
   });
 
   it('rejects fields belonging to a different kind', () => {
@@ -40,7 +40,16 @@ describe('AutomationScheduleSchema', () => {
     expect(AutomationScheduleSchema.safeParse({ kind: 'every', everyMs: 0 }).success).toBe(false);
   });
 
-  it('allows a cron with no timezone, falling back to the host zone', () => {
+  it('refuses a per-job timezone rather than ignoring it', () => {
+    // A job has no zone of its own: the install's `ui.timezone` reads every
+    // expression. Strict rather than key-stripping so that a hand-edited job or
+    // an importer written against the old shape fails loudly, instead of being
+    // silently rescheduled onto a different clock than the one it names.
+    expect(
+      AutomationScheduleSchema.safeParse({ kind: 'cron', expr: '* * * * *', tz: 'Europe/Kyiv' })
+        .success,
+    ).toBe(false);
+
     const parsed = AutomationScheduleSchema.parse({ kind: 'cron', expr: '* * * * *' });
     expect(parsed).not.toHaveProperty('tz');
   });

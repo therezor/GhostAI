@@ -1,7 +1,7 @@
 # GhostAI documentation
 
 Everything here describes what is built. Work that is designed but not implemented lives
-in [BUILD_PLAN.md](BUILD_PLAN.md) and is not documented as though it works.
+in [ROADMAP.md](ROADMAP.md) and is not documented as though it works.
 
 ## Using it
 
@@ -24,10 +24,10 @@ in [BUILD_PLAN.md](BUILD_PLAN.md) and is not documented as though it works.
 
 ## Working on it
 
-| Page                          | What it covers                                                             |
-| ----------------------------- | -------------------------------------------------------------------------- |
-| [Development](development.md) | The CI gate, conventions, coverage bars, the UI loop, the e2e suite.       |
-| [Build plan](BUILD_PLAN.md)   | What is left to build, with the schema each feature already ships against. |
+| Page                          | What it covers                                                       |
+| ----------------------------- | -------------------------------------------------------------------- |
+| [Development](development.md) | The CI gate, conventions, coverage bars, the UI loop, the e2e suite. |
+| [Roadmap](ROADMAP.md)         | What is built and what is left, as a checklist.                      |
 
 ## Where the truth lives
 

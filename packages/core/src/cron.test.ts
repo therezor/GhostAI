@@ -182,6 +182,37 @@ describe('nextCronRun', () => {
       expect(localOf(second, 'America/New_York')).toBe('2026-11-02 01:30');
     });
 
+    // Kyiv falls back at 01:00 UTC on 25 October 2026: 04:00 -> 03:00 local,
+    // so 03:30 local happens twice.
+    it('fires at the earlier instant east of UTC too, not just west of it', () => {
+      // This is the case the old two-probe search got backwards, and the reason
+      // it survived: the sign of the offset decides whether the naive guess
+      // lands before or after the transition. West of UTC (New York, above) it
+      // lands before, so the first probe reads the pre-transition offset and
+      // the earlier instant falls out. East of UTC it lands *after*, both
+      // probes read the post-transition offset, and the later instant won —
+      // silently, in every European and Asian zone, against a header that
+      // promised the opposite.
+      const spec = parseCron('30 3 * * *', 'Europe/Kyiv');
+      const from = Date.parse('2026-10-24T12:00:00Z');
+      const first = nextCronRun(spec, from)!;
+      expect(localOf(first, 'Europe/Kyiv')).toBe('2026-10-25 03:30');
+      // The earlier of the two, which is EEST (UTC+3), not EET (UTC+2).
+      expect(new Date(first).toISOString()).toBe('2026-10-25T00:30:00.000Z');
+
+      // And the next one is the following day, not the second 03:30.
+      const second = nextCronRun(spec, first)!;
+      expect(localOf(second, 'Europe/Kyiv')).toBe('2026-10-26 03:30');
+    });
+
+    it('skips a wall-clock time an east-of-UTC zone never reaches', () => {
+      // The spring-forward half of the same asymmetry. Kyiv goes 03:00 -> 04:00
+      // on 29 March 2026, so 03:30 does not exist that day.
+      const spec = parseCron('30 3 * * *', 'Europe/Kyiv');
+      const at = nextCronRun(spec, Date.parse('2026-03-28T12:00:00Z'))!;
+      expect(localOf(at, 'Europe/Kyiv')).toBe('2026-03-30 03:30');
+    });
+
     it('runs an hourly job once per wall-clock hour, skipping the repeated one', () => {
       // The consequence of the fire-once rule, stated so it is a decision and
       // not a surprise: on a fall-back night an hourly job sees 01:00 once, so

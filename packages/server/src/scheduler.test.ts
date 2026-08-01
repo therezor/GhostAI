@@ -205,15 +205,16 @@ describe('nextRunAfter', () => {
     expect(nextRunAfter({ kind: 'every', everyMs: 5000 }, START)).toBe(START + 5000);
   });
 
-  it('reads a cron expression in its own zone', () => {
+  it('reads a cron expression in the zone it is given', () => {
     const at = nextRunAfter(
-      { kind: 'cron', expr: '0 9 * * *', tz: 'UTC' },
+      { kind: 'cron', expr: '0 9 * * *' },
       Date.parse('2026-01-15T08:00:00Z'),
+      'UTC',
     );
     expect(new Date(at).toISOString()).toBe('2026-01-15T09:00:00.000Z');
   });
 
-  it('reads a zoneless cron in the configured default rather than the host zone', () => {
+  it('defaults to UTC rather than the host zone', () => {
     // The default is UTC, and that is the point: a server's own zone moves when
     // the server does, so the same expression would fire at a different real
     // instant after a migration nobody connected to it.
@@ -221,26 +222,17 @@ describe('nextRunAfter', () => {
     expect(new Date(nextRunAfter({ kind: 'cron', expr: '0 9 * * *' }, from)).toISOString()).toBe(
       '2026-01-15T09:00:00.000Z',
     );
-    // And an explicitly configured zone is honoured: 08:00 UTC is already 17:00
-    // in Tokyo, so that day's 09:00 has gone and the answer is the next one.
+    // And the install's zone is honoured: 08:00 UTC is already 17:00 in Tokyo,
+    // so that day's 09:00 has gone and the answer is the next one.
     expect(
       new Date(nextRunAfter({ kind: 'cron', expr: '0 9 * * *' }, from, 'Asia/Tokyo')).toISOString(),
     ).toBe('2026-01-16T00:00:00.000Z');
   });
 
-  it('lets the job′s own zone win over the configured default', () => {
-    const from = Date.parse('2026-01-15T08:00:00Z');
-    expect(
-      new Date(
-        nextRunAfter({ kind: 'cron', expr: '0 9 * * *', tz: 'UTC' }, from, 'Asia/Tokyo'),
-      ).toISOString(),
-    ).toBe('2026-01-15T09:00:00.000Z');
-  });
-
   it('is 0 for a cron expression that can never match', () => {
     // Legal to write, impossible to reach. The column's 0 means "unscheduled",
     // which is the same thing to the timer as a fired one-shot.
-    expect(nextRunAfter({ kind: 'cron', expr: '0 0 30 2 *', tz: 'UTC' }, START)).toBe(0);
+    expect(nextRunAfter({ kind: 'cron', expr: '0 0 30 2 *' }, START, 'UTC')).toBe(0);
   });
 });
 
@@ -344,6 +336,77 @@ describe('Scheduler timer', () => {
 
     await tick(1000);
     expect(h.runs).toHaveLength(1);
+    await h.scheduler.stop();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The install timezone
+// ---------------------------------------------------------------------------
+
+describe('Scheduler and a change of timezone', () => {
+  /** A cron job whose next run the scheduler will have settled against the zone. */
+  function cronJob(): CreateJobInput {
+    return job({ schedule: { kind: 'cron', expr: '0 9 * * *' }, nextRunAtMs: START + 60_000 });
+  }
+
+  it('reschedules an existing cron job when `ui.timezone` moves', async () => {
+    // The behaviour the whole design turns on, and the one worth pinning: a
+    // cron expression is a wall-clock time, so its stored instant is only valid
+    // against the zone it was computed in. `settings.patch` calls `refresh()`,
+    // which is where this happens — otherwise the panel's answer would only
+    // become true after each job happened to fire once more.
+    const h = harness();
+    const created = h.jobs.createJob(cronJob());
+    h.scheduler.start();
+    const before = h.jobs.getJob(created.id)?.state.nextRunAtMs;
+
+    h.config = ConfigSchema.parse({ ui: { timezone: 'Asia/Tokyo' } });
+    h.scheduler.refresh();
+
+    expect(h.jobs.getJob(created.id)?.state.nextRunAtMs).not.toBe(before);
+    await h.scheduler.stop();
+  });
+
+  it('leaves an interval job alone, because it has no wall clock in it', async () => {
+    // Recomputing it would push the next run a full interval into the future on
+    // every unrelated save, which is a job that quietly never runs.
+    const h = harness();
+    const created = h.jobs.createJob(job({ schedule: { kind: 'every', everyMs: 60_000 } }));
+    h.scheduler.start();
+    const before = h.jobs.getJob(created.id)?.state.nextRunAtMs;
+
+    h.config = ConfigSchema.parse({ ui: { timezone: 'Asia/Tokyo' } });
+    h.scheduler.refresh();
+
+    expect(h.jobs.getJob(created.id)?.state.nextRunAtMs).toBe(before);
+    await h.scheduler.stop();
+  });
+
+  it('does not touch a cron job when a refresh changes something else', async () => {
+    // `refresh()` runs after every create, update and delete. Rescanning every
+    // job on each of those is work with no answer to give.
+    const h = harness();
+    const created = h.jobs.createJob(cronJob());
+    h.scheduler.start();
+    const before = h.jobs.getJob(created.id)?.state.nextRunAtMs;
+
+    h.config = ConfigSchema.parse({ scheduler: { concurrency: 4 } });
+    h.scheduler.refresh();
+
+    expect(h.jobs.getJob(created.id)?.state.nextRunAtMs).toBe(before);
+    await h.scheduler.stop();
+  });
+
+  it('leaves a disabled cron job unscheduled rather than waking it', async () => {
+    const h = harness();
+    const created = h.jobs.createJob({ ...cronJob(), enabled: false, nextRunAtMs: 0 });
+    h.scheduler.start();
+
+    h.config = ConfigSchema.parse({ ui: { timezone: 'Asia/Tokyo' } });
+    h.scheduler.refresh();
+
+    expect(h.jobs.getJob(created.id)?.state.nextRunAtMs).toBe(0);
     await h.scheduler.stop();
   });
 });
@@ -460,9 +523,7 @@ describe('Scheduler catch-up', () => {
 
   it('coalesces missed cron occurrences the same way', async () => {
     const h = harness();
-    h.jobs.createJob(
-      job({ schedule: { kind: 'cron', expr: '* * * * *', tz: 'UTC' }, nextRunAtMs: past }),
-    );
+    h.jobs.createJob(job({ schedule: { kind: 'cron', expr: '* * * * *' }, nextRunAtMs: past }));
     h.scheduler.start();
     await tick(0);
 
@@ -529,7 +590,7 @@ describe('Scheduler catch-up', () => {
   it('just rearms a missed cron job when catch-up is off', async () => {
     const h = harness({ patch: { scheduler: { catchUpOnBoot: false } } });
     const created = h.jobs.createJob(
-      job({ schedule: { kind: 'cron', expr: '* * * * *', tz: 'UTC' }, nextRunAtMs: past }),
+      job({ schedule: { kind: 'cron', expr: '* * * * *' }, nextRunAtMs: past }),
     );
     h.scheduler.start();
     await tick(0);

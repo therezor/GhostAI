@@ -390,6 +390,20 @@ export interface AgentLoopOptions {
    * a turn already running therefore keeps the agent it started under.
    */
   readonly agent?: LoopAgent;
+  /**
+   * The zone the prompt's clock is printed in — the install's `ui.timezone`.
+   *
+   * A thunk rather than a value, because it is read once per turn and an
+   * operator who changes it in settings should not have to restart to be
+   * believed. Absent means the host zone, which keeps a caller that has no
+   * config working exactly as before.
+   *
+   * This is the same zone the `automation` tool's cron expressions are read in,
+   * and that is the whole point of threading it this far: the tool tells the
+   * model to write the hour it sees on the clock beside it, which is only true
+   * if the clock and the scheduler agree.
+   */
+  readonly timeZone?: () => string;
   readonly contributors?: readonly ContextContributor[];
   /**
    * Who to ask before a tool whose permission is `ask` runs.
@@ -563,6 +577,7 @@ export class AgentLoop {
   readonly #toolsConfig: ToolsConfig;
   readonly #model: string;
   readonly #contributors: readonly ContextContributor[];
+  readonly #timeZone: (() => string) | undefined;
   readonly #approvals: ApprovalGate | undefined;
   readonly #subagents: ReadonlyMap<string, SubagentBinding>;
   readonly #resolveLoop: ((agentId: string) => AgentLoop | null) | undefined;
@@ -589,6 +604,7 @@ export class AgentLoop {
     this.#agent = options.agent;
     this.#agentId = options.agent?.id ?? DEFAULT_AGENT_ID;
     this.#contributors = options.contributors ?? [];
+    this.#timeZone = options.timeZone;
     this.#approvals = options.approvals;
     this.#subagents = options.subagents ?? new Map();
     this.#resolveLoop = options.resolveLoop;
@@ -811,6 +827,7 @@ export class AgentLoop {
         context,
         nonce,
         contributors: this.#contributors,
+        ...(this.#timeZone === undefined ? {} : { timeZone: this.#timeZone() }),
         ...(agent?.livePrompt === undefined ? {} : { livePrompt: agent.livePrompt }),
         ...(agent?.wrapUpPrompt === undefined ? {} : { wrapUpPrompt: agent.wrapUpPrompt }),
         ...(agent?.toolPolicyPrompt === undefined

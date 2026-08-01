@@ -728,23 +728,6 @@ export const SchedulerConfigSchema = z.object({
   /** Run `at` jobs whose time passed while the process was down. */
   catchUpOnBoot: z.boolean().default(true),
   /**
-   * The zone a cron job is read in when it does not name one.
-   *
-   * **UTC rather than the host zone**, and that default is the point. A server's
-   * zone is a property of where it happens to be running — it moves when the
-   * box moves, it is whatever the image was built with, and on a laptop it
-   * follows the traveller. A schedule written as `0 9 * * *` would then fire at
-   * a different real instant after a migration nobody connected to it. UTC is
-   * the one zone that does not drift, and an operator who wants local time says
-   * so once, here, rather than inheriting it by accident.
-   *
-   * A bare `z.string()` for the reason `locale` is: an enum would have to
-   * enumerate the IANA database, which changes without this schema. It is
-   * validated where it is used — `parseCron` refuses a zone `Intl` does not
-   * know, which surfaces as a 422 on the job that names it.
-   */
-  timezone: z.string().min(1).default('UTC'),
-  /**
    * Runs kept per job, trimmed on write.
    *
    * Per job rather than a global cap: a nightly job's year of history must not
@@ -801,6 +784,41 @@ export type PluginsConfig = z.infer<typeof PluginsConfigSchema>;
 export const UiConfigSchema = z.object({
   /** A BCP-47 tag. Unknown values fall back rather than failing to parse. */
   locale: z.string().default('en'),
+  /**
+   * The one zone this install reads and writes clock times in.
+   *
+   * Everything is *stored* in UTC — every persisted instant is epoch
+   * milliseconds — so this is not a storage format. It is the answer to "whose
+   * clock", and it is deliberately a single install-wide answer rather than one
+   * per job: three timezone controls (a per-job zone, a scheduler default, and
+   * whatever the viewer's browser happens to be set to) meant an operator had to
+   * hold all three in their head to predict when a job fires.
+   *
+   * It governs both halves, and that is the point. A timestamp is *rendered* in
+   * this zone, and a wall-clock time is *read* in it — so a cron written
+   * `0 9 * * *` fires at 9am on the same clock the next-run line is printed
+   * against, and nobody converts anything by hand.
+   *
+   * **A concrete IANA name, never a rule.** `system` is offered by the settings
+   * select and resolved to a real zone before it is saved, exactly as the
+   * language select resolves its own `system`. Storing the rule instead would
+   * mean the server resolved it to the host zone while a browser resolved it to
+   * the viewer's, which is the disagreement this field exists to end.
+   *
+   * **UTC rather than the host zone as the default**, and that is the point of
+   * the default. A server's zone is a property of where it happens to be
+   * running — it moves when the box moves, it is whatever the image was built
+   * with, and on a laptop it follows the traveller. A schedule written
+   * `0 9 * * *` would then fire at a different real instant after a migration
+   * nobody connected to it. UTC is the one zone that does not drift, and an
+   * operator who wants local time says so once, here.
+   *
+   * A bare `z.string()` for the reason `locale` is: an enum would have to
+   * enumerate the IANA database, which changes without this schema. It is
+   * validated where it is used — `parseCron` refuses a zone `Intl` does not
+   * know, which surfaces as a 422 on the job that names it.
+   */
+  timezone: z.string().min(1).default('UTC'),
 });
 export type UiConfig = z.infer<typeof UiConfigSchema>;
 

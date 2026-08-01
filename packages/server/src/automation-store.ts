@@ -290,6 +290,62 @@ export class AutomationStore {
     this.#db.exec('PRAGMA foreign_keys = ON');
     this.#db.exec(SCHEMA);
     this.#addMissingColumns();
+    this.#dropLegacyScheduleTz();
+  }
+
+  /**
+   * Strips the per-job `tz` an older build wrote into `schedule_json`.
+   *
+   * Not cosmetic, and not deferrable. `CronScheduleSchema` is a `strictObject`,
+   * so a row still carrying `tz` does not parse with the key ignored — it fails
+   * outright, and `listJobs` throws for *every* job because one of them is old.
+   * The panel would show an empty automation page on an install that has jobs.
+   *
+   * Rewriting rather than tolerating on read, because a blob nobody rewrites is
+   * a blob that keeps the stale field until someone edits that job by hand — and
+   * the next reader of the row has to know a rule that is written down nowhere
+   * in it.
+   *
+   * The log line is the point of the `zones` set. A job written `0 9 * * *` in
+   * `Europe/Kyiv` now fires at 09:00 in the install's zone, which is a different
+   * instant; an operator who is told which zones were dropped can go and check
+   * the jobs that moved. Silence here would be the same change made invisibly.
+   */
+  #dropLegacyScheduleTz(): void {
+    const rows = this.#db
+      .prepare(`SELECT id, schedule_json FROM automation_jobs WHERE schedule_json LIKE '%"tz"%'`)
+      .all();
+    if (rows.length === 0) return;
+
+    const update = this.#stmt('UPDATE automation_jobs SET schedule_json = ? WHERE id = ?');
+    const zones = new Set<string>();
+    let changed = 0;
+
+    for (const row of rows) {
+      const id = readString(row, 'id');
+      const raw = readString(row, 'schedule_json');
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        // Unreadable JSON is a different defect and not one this pass invented.
+        // Leaving it is what lets the schema report it against the job it is on.
+        continue;
+      }
+      if (typeof parsed !== 'object' || parsed === null || !('tz' in parsed)) continue;
+
+      const { tz, ...rest } = parsed as Record<string, unknown>;
+      if (typeof tz === 'string' && tz !== '') zones.add(tz);
+      update.run(JSON.stringify(rest), id);
+      changed += 1;
+    }
+
+    if (changed > 0) {
+      this.#logger.warn(
+        { jobs: changed, zones: [...zones].sort((a, b) => a.localeCompare(b)) },
+        'dropped per-job automation timezones; these jobs now use the install timezone (ui.timezone) and may fire at a different instant',
+      );
+    }
   }
 
   /**

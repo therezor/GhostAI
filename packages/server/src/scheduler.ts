@@ -194,21 +194,19 @@ export interface SchedulerPort {
  * cron expression like `0 0 30 2 *` that is legal to write and impossible to
  * reach. All three are the same to the timer.
  */
-export function nextRunAfter(
-  schedule: AutomationSchedule,
-  fromMs: number,
-  defaultTz = 'UTC',
-): number {
+export function nextRunAfter(schedule: AutomationSchedule, fromMs: number, tz = 'UTC'): number {
   switch (schedule.kind) {
     case 'at':
       return schedule.atMs > fromMs ? schedule.atMs : 0;
     case 'every':
       return fromMs + schedule.everyMs;
     case 'cron': {
-      // The job's own zone wins; `scheduler.timezone` is the fallback and
-      // defaults to UTC. Falling back to the *host* zone would make the same
-      // expression fire at a different instant after the server moved.
-      const spec = parseCron(schedule.expr, schedule.tz ?? defaultTz);
+      // The install's `ui.timezone`, and only it — a job has no zone of its own
+      // any more. The same setting renders the next-run line, so the expression
+      // is read against the clock the answer is printed against. Defaulting to
+      // the *host* zone instead would make one expression fire at a different
+      // instant after the server moved.
+      const spec = parseCron(schedule.expr, tz);
       return nextCronRun(spec, fromMs) ?? 0;
     }
   }
@@ -225,11 +223,11 @@ export function firstRunAt(
   schedule: AutomationSchedule,
   nowMs: number,
   enabled: boolean,
-  defaultTz = 'UTC',
+  tz = 'UTC',
 ): number {
   if (!enabled) return 0;
   if (schedule.kind === 'at') return schedule.atMs;
-  return nextRunAfter(schedule, nowMs, defaultTz);
+  return nextRunAfter(schedule, nowMs, tz);
 }
 
 // ---------------------------------------------------------------------------
@@ -335,6 +333,14 @@ export class Scheduler implements SchedulerPort {
   #timer: TimerHandle | undefined;
   #started = false;
   #stopping = false;
+  /**
+   * The zone the stored `next_run_at_ms` values were computed against.
+   *
+   * `undefined` until `start()`, which is what makes the first `refresh()` after
+   * a boot a no-op rather than a full rescan of jobs whose next run the boot
+   * sweep just settled.
+   */
+  #zonedAt: string | undefined;
   /** Job ids with a run in flight. What stops a job overlapping itself. */
   readonly #inFlight = new Map<string, AbortController>();
   /** Every in-flight run's promise, so `stop()` can await the tail. */
@@ -359,9 +365,17 @@ export class Scheduler implements SchedulerPort {
     return this.#config().scheduler.enabled;
   }
 
-  /** Read live, so changing it in the panel moves the next rearm. */
+  /**
+   * Read live, so changing it in Appearance moves the next rearm.
+   *
+   * `ui.timezone` rather than a scheduler setting of its own: this is the same
+   * zone every timestamp is rendered in, which is what makes `0 9 * * *` mean
+   * nine on the clock the operator is reading. `settings.patch` calls
+   * `scheduler.refresh()`, so an existing cron job is rescheduled on the save
+   * rather than on the next fire.
+   */
   #timezone(): string {
-    return this.#config().scheduler.timezone;
+    return this.#config().ui.timezone;
   }
 
   /**
@@ -374,6 +388,10 @@ export class Scheduler implements SchedulerPort {
   start(): void {
     if (this.#started) return;
     this.#started = true;
+    // The zone the stored next-runs are already valid against, so the first
+    // `refresh()` after boot has nothing to recompute. `#catchUp` below settles
+    // them against this same value.
+    this.#zonedAt = this.#timezone();
 
     const closed = this.#jobs.reconcilePending(INTERRUPTED_BY_RESTART);
     if (closed > 0) {
@@ -408,11 +426,51 @@ export class Scheduler implements SchedulerPort {
   /** Re-reads what is due. Called after any create, update, delete or save. */
   refresh(): void {
     if (!this.#started) return;
+    this.#rezone();
     if (!this.enabled) {
       this.#clearTimer();
       return;
     }
     this.#arm();
+  }
+
+  /**
+   * Recomputes cron next-runs when the install's zone changed under them.
+   *
+   * A cron expression is a wall-clock time, so its stored instant is only valid
+   * against the zone it was computed in. Changing `ui.timezone` is therefore a
+   * reschedule, and doing it here — on the `refresh()` that `settings.patch`
+   * already calls — is what makes the panel's answer true immediately rather
+   * than after each job happens to fire once more.
+   *
+   * **Cron only.** An `every` job is an interval with no wall clock in it, and
+   * recomputing it would push its next run a full interval into the future on
+   * every unrelated save. An `at` job is an instant that was already resolved.
+   * Neither moves when the zone does.
+   *
+   * Guarded on an actual change rather than run unconditionally: `refresh()` is
+   * called after every create, update and delete, and a rescan of every job on
+   * each of those is work with no answer to give.
+   */
+  #rezone(): void {
+    const tz = this.#timezone();
+    if (this.#zonedAt === tz) return;
+    this.#zonedAt = tz;
+
+    const now = this.#clock.now();
+    let moved = 0;
+    for (const job of this.#jobs.listJobs()) {
+      if (job.schedule.kind !== 'cron' || !job.enabled) continue;
+      const next = nextRunAfter(job.schedule, now, tz);
+      if (next === job.state.nextRunAtMs) continue;
+      this.#jobs.setNextRun(job.id, next);
+      moved += 1;
+    }
+    if (moved > 0) {
+      this.#logger.info(
+        `Timezone is now ${tz}; rescheduled ${String(moved)} cron job(s) against it.`,
+      );
+    }
   }
 
   /**

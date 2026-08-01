@@ -58,7 +58,7 @@ never drops a running turn.
 - **`@` autocomplete** for `@kb:`, `@mcp:` and `@skill:`, as a real listbox with
   `aria-activedescendant`. The grammar is parsed once, in the protocol, for every channel.
   _The mention kinds are parsed and carried today; the features behind them are in
-  [BUILD_PLAN.md](BUILD_PLAN.md)._
+  [ROADMAP.md](ROADMAP.md)._
 - An agent picker, and a context budget strip.
 
 ### Message actions
@@ -156,7 +156,7 @@ to fill in first.
 | Providers  | Built. Add by type, save endpoint and key in one press, test the connection before saving, per-endpoint model catalogue, enable/disable, delete takes the key with it. |
 | Tools      | Built. Install-wide only: approval timeout, `exec` settings, output caps. **No permission matrix here** — permission is per tool per agent.                            |
 | Account    | Built. Username and password together, requires the current password, revokes every other session.                                                                     |
-| Appearance | Built. Language (install-wide) and theme (this browser only).                                                                                                          |
+| Appearance | Built. Language and timezone (install-wide) and theme (this browser only).                                                                                             |
 | Automation | Built. The scheduler engine only: enabled, concurrency, catch-up on boot, run retention, default timezone. **The jobs are a page.**                                    |
 | Extensions | Placeholder naming its phase — MCP, skills, OAuth, channels, plugins.                                                                                                  |
 | Knowledge  | Placeholder — the knowledge base.                                                                                                                                      |

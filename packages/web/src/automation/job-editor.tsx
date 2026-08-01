@@ -36,6 +36,7 @@ import { Button } from '@/components/ui/button.js';
 import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
 import { useFormat } from '@/lib/use-format.js';
+import { useAppTimezone } from '@/timezone/timezone-context.js';
 import {
   FieldGrid,
   SaveBar,
@@ -47,9 +48,7 @@ import {
 } from '@/settings/controls.js';
 
 import {
-  DEFAULT_TZ_OPTION,
   emptyJobForm,
-  timezoneOptions,
   toJobForm,
   toJobRequest,
   type JobForm,
@@ -135,10 +134,14 @@ export function JobEditorRoute(): JSX.Element {
 function Editor({ job }: { readonly job?: AutomationJob }): JSX.Element {
   const { t } = useTranslation();
   const format = useFormat();
+  // The install's zone. Every wall-clock field on this page is read and written
+  // in it, so the value the picker shows and the value the row reads back are
+  // the same clock rather than the browser's and the server's.
+  const timeZone = useAppTimezone();
   const navigate = useNavigate();
   const creating = job === undefined;
   const [form, setForm] = useState<JobForm>(() =>
-    job === undefined ? emptyJobForm() : toJobForm(job),
+    job === undefined ? emptyJobForm(timeZone) : toJobForm(job, timeZone),
   );
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   const [dirty, setDirty] = useState(false);
@@ -169,11 +172,6 @@ function Editor({ job }: { readonly job?: AutomationJob }): JSX.Element {
     return options;
   }, [agents.data, form.agentId, t]);
 
-  const tzOptions = useMemo(() => {
-    const zones = timezoneOptions().map((zone) => ({ value: zone, label: zone }));
-    return [{ value: DEFAULT_TZ_OPTION, label: t('automation.tzDefault') }, ...zones];
-  }, [t]);
-
   // Called unconditionally — hooks cannot be conditional — and inert on create:
   // `useSaveJob('')` is never invoked, and `useAutomationRuns('')` is disabled.
   const save = useSaveJob(job?.id ?? '');
@@ -187,7 +185,7 @@ function Editor({ job }: { readonly job?: AutomationJob }): JSX.Element {
   };
 
   const onSave = (): void => {
-    const result = toJobRequest(form, t);
+    const result = toJobRequest(form, t, timeZone);
     if (!result.ok) {
       setErrors(result.errors);
       return;
@@ -279,7 +277,10 @@ function Editor({ job }: { readonly job?: AutomationJob }): JSX.Element {
           {form.scheduleKind === 'at' && (
             <TextField
               label={t('automation.atLabel')}
-              hint={t('automation.atHint')}
+              // Named for the same reason the cron hint is: a `datetime-local`
+              // carries no zone of its own, so without this the operator is
+              // typing a wall clock and guessing whose.
+              hint={t('automation.atHint', { zone: timeZone })}
               type="datetime-local"
               value={form.at}
               error={errors.at}
@@ -301,27 +302,19 @@ function Editor({ job }: { readonly job?: AutomationJob }): JSX.Element {
             />
           )}
           {form.scheduleKind === 'cron' && (
-            <>
-              <TextField
-                label={t('automation.cronLabel')}
-                hint={t('automation.cronHint')}
-                value={form.cronExpr}
-                error={errors.cronExpr}
-                onValueChange={(value) => {
-                  update('cronExpr', value);
-                }}
-              />
-              <SelectField
-                label={t('automation.tzLabel')}
-                hint={t('automation.tzHint')}
-                value={form.cronTz === '' ? DEFAULT_TZ_OPTION : form.cronTz}
-                options={tzOptions}
-                error={errors.cronTz}
-                onValueChange={(value) => {
-                  update('cronTz', value === DEFAULT_TZ_OPTION ? '' : value);
-                }}
-              />
-            </>
+            <TextField
+              label={t('automation.cronLabel')}
+              // The hint names the install's zone, because that is the clock
+              // the expression is read against and there is no per-job zone to
+              // override it with. Without it the field is five numbers and no
+              // answer to "nine o'clock where".
+              hint={t('automation.cronHint', { zone: timeZone })}
+              value={form.cronExpr}
+              error={errors.cronExpr}
+              onValueChange={(value) => {
+                update('cronExpr', value);
+              }}
+            />
           )}
         </FieldGrid>
         <SwitchRow
@@ -337,7 +330,7 @@ function Editor({ job }: { readonly job?: AutomationJob }): JSX.Element {
         {job !== undefined && (
           <p className="settings-field__hint">
             {job.state.nextRunAtMs > 0
-              ? t('automation.nextRun', { when: format.date(job.state.nextRunAtMs) })
+              ? t('automation.nextRun', { when: format.dateTime(job.state.nextRunAtMs) })
               : t('automation.notScheduled')}
           </p>
         )}
@@ -451,7 +444,7 @@ function Editor({ job }: { readonly job?: AutomationJob }): JSX.Element {
         saving={creating ? create.pending : save.pending}
         onSave={onSave}
         onRevert={() => {
-          setForm(job === undefined ? emptyJobForm() : toJobForm(job));
+          setForm(job === undefined ? emptyJobForm(timeZone) : toJobForm(job, timeZone));
           setErrors({});
           setDirty(false);
         }}
@@ -492,7 +485,7 @@ function RunItem({ run }: { readonly run: AutomationRun }): JSX.Element {
     <li className="settings-divided-list__text">
       <div className="cluster">
         <Badge tone={STATUS_TONE[run.status]}>{t(`automation.status.${run.status}`)}</Badge>
-        <span className="settings-divided-list__name">{format.date(run.startedAtMs)}</span>
+        <span className="settings-divided-list__name">{format.dateTime(run.startedAtMs)}</span>
       </div>
       {run.skipReason !== undefined && (
         <p className="settings-divided-list__detail">{run.skipReason}</p>

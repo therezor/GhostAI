@@ -25,7 +25,9 @@ describe('ConfigSchema', () => {
     expect(config.scheduler.concurrency).toBe(2);
     expect(config.scheduler.runRetention).toBe(200);
     // UTC, not the host zone: a server's own zone moves when the server does.
-    expect(config.scheduler.timezone).toBe('UTC');
+    // It lives on `ui` rather than `scheduler` because one install-wide zone
+    // both renders every timestamp and reads every cron expression.
+    expect(config.ui.timezone).toBe('UTC');
     expect(config.rag.rrfK).toBe(60);
     expect(config.channels.sendProgress).toBe(true);
     expect(config.plugins.allowUnverified).toBe(false);
@@ -38,12 +40,15 @@ describe('ConfigSchema', () => {
     // vocabulary for one concept, and the one nothing read.
     const scheduler = ConfigSchema.parse({}).scheduler;
 
+    // No `timezone` either, and that is the newer half of the same rule: the
+    // zone is not a property of the engine, it is the install's one answer to
+    // "whose clock" — read here *and* by every screen that renders a time — so
+    // it lives on `ui` beside the locale.
     expect(Object.keys(scheduler).sort()).toEqual([
       'catchUpOnBoot',
       'concurrency',
       'enabled',
       'runRetention',
-      'timezone',
     ]);
   });
 
@@ -253,12 +258,15 @@ describe('AgentsConfigSchema', () => {
     // vocabulary for one concept, and the one nothing read.
     const scheduler = ConfigSchema.parse({}).scheduler;
 
+    // No `timezone` either, and that is the newer half of the same rule: the
+    // zone is not a property of the engine, it is the install's one answer to
+    // "whose clock" — read here *and* by every screen that renders a time — so
+    // it lives on `ui` beside the locale.
     expect(Object.keys(scheduler).sort()).toEqual([
       'catchUpOnBoot',
       'concurrency',
       'enabled',
       'runRetention',
-      'timezone',
     ]);
   });
 

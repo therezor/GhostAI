@@ -61,10 +61,10 @@ function nextRunOrRefuse(
   schedule: AutomationSchedule,
   nowMs: number,
   enabled: boolean,
-  defaultTz: string,
+  tz: string,
 ): number {
   try {
-    return firstRunAt(schedule, nowMs, enabled, defaultTz);
+    return firstRunAt(schedule, nowMs, enabled, tz);
   } catch (error) {
     if (isGhostError(error) && error.kind === 'config') {
       throw unprocessable(error.message, { '/schedule': error.message });
@@ -76,9 +76,9 @@ function nextRunOrRefuse(
 export function automationRoutes(deps: RouteDeps): RouteGroup<AutomationRouteId> {
   const store = deps.automation;
   const now = (): number => deps.clock?.now() ?? Date.now();
-  // Live, so a zone changed in the panel applies to the next job saved rather
+  // Live, so a zone changed in Appearance applies to the next job saved rather
   // than to the next restart.
-  const defaultTz = (): string => deps.runtime.config().scheduler.timezone;
+  const timezone = (): string => deps.runtime.config().ui.timezone;
 
   /** The engine, or a refusal naming which of the two reasons it is missing. */
   const requireScheduler = (): NonNullable<ReturnType<NonNullable<RouteDeps['scheduler']>>> => {
@@ -114,7 +114,7 @@ export function automationRoutes(deps: RouteDeps): RouteGroup<AutomationRouteId>
           payload: body.payload,
           enabled: body.enabled,
           deleteAfterRun: body.deleteAfterRun,
-          nextRunAtMs: nextRunOrRefuse(body.schedule, now(), body.enabled, defaultTz()),
+          nextRunAtMs: nextRunOrRefuse(body.schedule, now(), body.enabled, timezone()),
         });
         deps.scheduler?.()?.refresh();
         return reply.status(201).send(created);
@@ -155,7 +155,7 @@ export function automationRoutes(deps: RouteDeps): RouteGroup<AutomationRouteId>
         const updated = store.updateJob(id, {
           ...body,
           ...(rescheduled
-            ? { nextRunAtMs: nextRunOrRefuse(schedule, now(), enabled, defaultTz()) }
+            ? { nextRunAtMs: nextRunOrRefuse(schedule, now(), enabled, timezone()) }
             : {}),
         });
         if (updated === undefined) throw notFound(`No automation job "${id}"`);

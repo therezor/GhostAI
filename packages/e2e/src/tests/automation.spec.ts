@@ -23,7 +23,7 @@ interface JobView {
   readonly id: string;
   readonly name: string;
   readonly enabled: boolean;
-  readonly schedule: { readonly kind: string; readonly expr?: string; readonly tz?: string };
+  readonly schedule: { readonly kind: string; readonly expr?: string };
   readonly payload: { readonly kind: string; readonly message?: string };
   readonly state: { readonly nextRunAtMs: number; readonly lastStatus: string };
 }
@@ -54,8 +54,10 @@ async function seedJob(
     data: {
       name: 'Nightly build',
       // Far enough out that the timer cannot fire it mid-spec and make the run
-      // list a moving target.
-      schedule: { kind: 'cron', expr: '0 9 1 1 *', tz: 'UTC' },
+      // list a moving target. No `tz` — a job has no zone of its own; the
+      // install's `ui.timezone` reads every expression, and sending one here is
+      // a 422 rather than a key the server ignores.
+      schedule: { kind: 'cron', expr: '0 9 1 1 *' },
       payload: { kind: 'scheduled', message: 'say hello' },
       ...over,
     },
@@ -108,6 +110,36 @@ test('creating a job writes it to the store, from the create page', async ({ app
   await expect
     .poll(async () => (await jobsOf(app, harness.url))[0]?.payload.message)
     .toBe('check the build');
+});
+
+test('the install timezone reschedules an existing cron job', async ({ app, harness }) => {
+  // The behaviour the one-zone design turns on, end to end: a cron expression
+  // is a wall-clock time, so its stored instant is only valid against the zone
+  // it was computed in. Changing the zone in Appearance is therefore a
+  // reschedule, not a display tweak — and `settings.patch` does it on the save
+  // rather than leaving each job on a stale instant until it next fires.
+  const seeded = await seedJob(app, harness.url);
+  const before = seeded.state.nextRunAtMs;
+  expect(before).toBeGreaterThan(0);
+
+  await app.goto(`${harness.url}/settings?panel=appearance`);
+  await app.getByRole('combobox', { name: 'Timezone' }).click();
+  await app.getByRole('option', { name: 'Asia/Tokyo', exact: true }).click();
+  await app
+    .getByRole('region', { name: 'Date and time' })
+    .getByRole('button', { name: 'Save changes' })
+    .click();
+
+  // The settled value, never the saving state: the config carries the new zone
+  // and the job's next run has moved with it.
+  await expect
+    .poll(async () => (await jobsOf(app, harness.url))[0]?.state.nextRunAtMs)
+    .not.toBe(before);
+
+  // And the list renders that instant in the zone that produced it, with the
+  // zone named — an unlabelled clock is the half of this that was missing.
+  await app.goto(`${harness.url}/automation`);
+  await expect(jobRow(app, 'Nightly build')).toContainText('GMT+9');
 });
 
 test('an abandoned create writes nothing at all', async ({ app, harness }) => {

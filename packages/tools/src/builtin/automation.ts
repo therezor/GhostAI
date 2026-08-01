@@ -49,10 +49,6 @@ const schema = z.strictObject({
     .string()
     .optional()
     .describe('A 5-field cron expression: minute hour day-of-month month day-of-week.'),
-  tz: z
-    .string()
-    .optional()
-    .describe('IANA zone for the cron expression, such as Europe/Kyiv. See the description.'),
   at: z
     .string()
     .optional()
@@ -68,16 +64,20 @@ const schema = z.strictObject({
  * The description does two jobs beyond saying what the tool is.
  *
  * It points at the current time already in the system prompt rather than
- * restating it, and it says what a cron with no zone means — because the prompt
- * shows the *host* zone and a zoneless cron is read in the scheduler's, which
- * defaults to UTC. Without that sentence a model writes `0 9 * * *` meaning
- * local and the job fires at the wrong hour, silently and forever.
+ * restating it, and it says which clock a cron expression is read against.
+ *
+ * That second sentence used to warn that a zoneless cron and the prompt's clock
+ * disagreed, and to tell the model to pass `tz` when it meant local. There is no
+ * `tz` now: one install-wide `ui.timezone` reads every expression and renders
+ * every timestamp, so the warning has become a promise. It is still worth
+ * stating — a model that has been trained on the old advice will otherwise
+ * convert an hour it did not need to convert.
  */
 const DESCRIPTION = [
   'Schedule work for later, list what you have scheduled, or cancel it.',
   'To create, give a name, a message, and exactly one of: every_minutes, cron, or at.',
   'The current time is in your system prompt — compute an "at" instant from it yourself.',
-  'A cron expression with no tz is read in the scheduler default zone, which is usually UTC and is NOT the host zone shown in your prompt; pass tz when the time is meant locally.',
+  'A cron expression is read in the install timezone, which is the zone named beside the current time in your prompt; write the hour you mean on that clock and do not convert it.',
   'You only ever see and delete jobs you created yourself.',
 ].join(' ');
 
@@ -114,8 +114,7 @@ function toSchedule(args: z.output<typeof schema>): AutomationSchedule | string 
     return { kind: 'every', everyMs: args.every_minutes * 60_000 };
   }
   if (args.cron !== undefined) {
-    const tz = args.tz?.trim() ?? '';
-    return { kind: 'cron', expr: args.cron.trim(), ...(tz === '' ? {} : { tz }) };
+    return { kind: 'cron', expr: args.cron.trim() };
   }
 
   const atMs = Date.parse(args.at ?? '');

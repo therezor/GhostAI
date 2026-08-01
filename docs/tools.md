@@ -32,8 +32,11 @@ That asymmetry is the point: a single approved `exec` runs once, and a single ap
 The model's surface is a strict subset of the operator's — `create`, `list`, `delete`. No
 `update`, because repointing an existing job's payload is the one edit nobody watches
 happen; no `run`, no enable/disable. Schedules are the same three kinds a
-[scheduled job](configuration.md#scheduler) has, one at a time: `every_minutes`, `cron`
-(+`tz`), or an ISO `at`.
+[scheduled job](configuration.md#scheduler) has, one at a time: `every_minutes`, `cron`,
+or an ISO `at`. There is no `tz` argument: a cron is read in the install's
+[`ui.timezone`](configuration.md#uitimezone-is-the-only-timezone), which is the zone named
+beside the current time in the model's own prompt — so the hour it writes is the hour it
+sees, with nothing to convert.
 
 Everything the tool cannot be trusted with lives on the other side of `AutomationPort`,
 which the composition root binds to the calling agent and session before the tool ever

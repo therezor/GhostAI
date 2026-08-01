@@ -213,6 +213,72 @@ describe('AutomationStore and a row it cannot read', () => {
     expect(jobs.listJobs()).toEqual([]);
     expect(jobs.dueJobs(2000, 10)).toEqual([]);
   });
+
+  /**
+   * The per-job `tz` an older build wrote, stripped when the store opens.
+   *
+   * These use a **second** store over the same database, because the migration
+   * runs in the constructor: the legacy row has to exist before the store that
+   * is supposed to fix it is built.
+   */
+  describe('a job written by a build that had per-job timezones', () => {
+    function reopen(database: DatabaseSync): AutomationStore {
+      let counter = 0;
+      return new AutomationStore({
+        database,
+        clock: manualClock(),
+        newId: () => `y${String(++counter).padStart(3, '0')}`,
+      });
+    }
+
+    it('loads rather than taking the whole listing down with it', () => {
+      // `CronScheduleSchema` is strict, so without the migration this row does
+      // not parse — and `listJobs` would drop every job on an install that has
+      // one, which reads as "the automation page is empty".
+      const { database } = withRawAccess();
+      corrupt(database, 'legacy', JSON.stringify({ kind: 'cron', expr: '0 9 * * *', tz: 'UTC' }));
+
+      const jobs = reopen(database);
+      expect(jobs.listJobs().map((j) => j.id)).toEqual(['legacy']);
+      expect(jobs.getJob('legacy')?.schedule).toEqual({ kind: 'cron', expr: '0 9 * * *' });
+    });
+
+    it('rewrites the stored blob rather than tolerating it on every read', () => {
+      // A field nobody rewrites survives until someone edits that job by hand,
+      // and the next reader has to know a rule written down nowhere in the row.
+      const { database } = withRawAccess();
+      corrupt(
+        database,
+        'legacy',
+        JSON.stringify({ kind: 'cron', expr: '0 9 * * *', tz: 'Europe/Kyiv' }),
+      );
+
+      reopen(database);
+      const row = database
+        .prepare('SELECT schedule_json FROM automation_jobs WHERE id = ?')
+        .get('legacy');
+      expect(String(row?.schedule_json)).not.toContain('tz');
+      expect(JSON.parse(String(row?.schedule_json))).toEqual({ kind: 'cron', expr: '0 9 * * *' });
+    });
+
+    it('leaves a row whose JSON never parsed for the schema to report', () => {
+      // Not this pass's defect to invent a fix for. Rewriting it would destroy
+      // the evidence of whatever actually wrote it.
+      const { database } = withRawAccess();
+      corrupt(database, 'bad', '{"tz": not json');
+
+      const jobs = reopen(database);
+      expect(jobs.listJobs()).toEqual([]);
+    });
+
+    it('does nothing at all to a database that has no such row', () => {
+      const { jobs: first, database } = withRawAccess();
+      const created = first.createJob(job());
+
+      const jobs = reopen(database);
+      expect(jobs.getJob(created.id)?.schedule).toEqual(CRON);
+    });
+  });
 });
 
 describe('AutomationStore runs', () => {

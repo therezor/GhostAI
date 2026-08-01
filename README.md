@@ -176,7 +176,7 @@ Every key under `agents.defaults` is overridable per agent, and `agents.list.<id
 
 ## Roadmap
 
-The wire schemas, config blocks and seams for these already ship — which is why they appear in the settings tree and the UI. The implementations do not. [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) has the detail, one entry each.
+The wire schemas, config blocks and seams for these already ship — which is why they appear in the settings tree and the UI. The implementations do not. [`docs/ROADMAP.md`](docs/ROADMAP.md) tracks them, one line each.
 
 | Feature                    | Ships today                                                         | Missing                                      |
 | -------------------------- | ------------------------------------------------------------------- | -------------------------------------------- |

@@ -302,7 +302,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
   automationHolder.current = createAutomationResolver({
     jobs: server.automation,
     sessions: runtime.store,
-    timezone: () => runtime.config.scheduler.timezone,
+    timezone: () => runtime.config.ui.timezone,
     refresh: () => {
       engine.current?.refresh();
     },

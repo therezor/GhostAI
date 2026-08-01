@@ -301,7 +301,7 @@ export async function startServer(options: ServeOptions = {}): Promise<RunningSe
     automationHolder.current = createAutomationResolver({
       jobs: listener.automation,
       sessions: built.store,
-      timezone: () => built.config.scheduler.timezone,
+      timezone: () => built.config.ui.timezone,
       refresh: () => {
         scheduler?.refresh();
       },
