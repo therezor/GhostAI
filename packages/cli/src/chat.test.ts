@@ -444,8 +444,16 @@ describe('chatCommand', () => {
     const second = transport(sse(textFrame('two'), finishFrame('stop'), USAGE));
     await chatCommand({ ...base, home, fetchImpl: second.fetchImpl, out: sink(), message: 'b' });
     const carried = second.bodies[0]?.messages as { role: string }[] | undefined;
-    // system + the first turn's user/assistant + this turn's user.
-    expect(carried).toHaveLength(4);
+    // system + the first turn's user/assistant + this turn's user + the trailing
+    // turn carrying live state, which is sent on every request and stored on none.
+    expect(carried).toHaveLength(5);
+    expect(carried?.map((message) => message.role)).toEqual([
+      'system',
+      'user',
+      'assistant',
+      'user',
+      'user',
+    ]);
 
     const third = transport(sse(textFrame('three'), finishFrame('stop'), USAGE));
     await chatCommand({
@@ -456,7 +464,7 @@ describe('chatCommand', () => {
       out: sink(),
       message: 'c',
     });
-    expect(third.bodies[0]?.messages).toHaveLength(2);
+    expect(third.bodies[0]?.messages).toHaveLength(3);
   });
 
   it('exits 1 on a provider failure, and writes nothing to history', async () => {

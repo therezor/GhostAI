@@ -446,6 +446,12 @@ describe('GET /api/sessions/:key/context', () => {
     expect(body.estimatedTokens).toBe(
       Object.values(body.breakdown).reduce((total, tokens) => total + tokens, 0),
     );
+    // The trailing turn, reported apart from the system prompt because it is the
+    // only section billed again on every step. Asserted on the wire and not just
+    // in `describeContext`: a field missing from the route's response schema is
+    // stripped during serialisation, silently and with the handler none the wiser.
+    expect(body.runtimeBlock).toContain('Live state');
+    expect(body.breakdown.runtimeBlock).toBeGreaterThan(0);
   });
 
   /**

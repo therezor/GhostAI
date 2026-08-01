@@ -339,7 +339,10 @@ export function createServerRuntime(
             // The context route asks for this to show what a turn would carry.
             // With no model there is no turn and no prompt, and throwing would
             // make one unconfigured panel break a screen that otherwise works.
-            return 'No model is configured, so no system prompt has been assembled yet.';
+            return {
+              staticPrompt: 'No model is configured, so no system prompt has been assembled yet.',
+              runtimeBlock: '',
+            };
           }
           return await loop.previewPrompt(input);
         },

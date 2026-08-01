@@ -68,6 +68,19 @@ export interface ChatRequest {
   readonly temperature?: number | undefined;
   readonly reasoningEffort?: ReasoningEffort | undefined;
   /**
+   * A stable identifier for the conversation this request belongs to.
+   *
+   * A hint for the provider's prompt cache, not a correctness input: caching
+   * itself works off the prefix bytes, and this only tells a load balancer to
+   * send requests that share a prefix to the machine already holding it. The
+   * loop passes the session key, so every iteration of every turn on one
+   * conversation routes together.
+   *
+   * Omitted rather than empty when there is nothing to say, and removable by the
+   * degradation ladder for endpoints that reject fields they do not know.
+   */
+  readonly cacheKey?: string | undefined;
+  /**
    * The turn's signal. The same one threads from the WebSocket disconnect
    * through the loop, this request, tool execution and any child process.
    */

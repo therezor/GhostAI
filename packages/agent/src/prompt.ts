@@ -14,13 +14,34 @@
  *    cached prefix, and everything that goes in it must be stable: a timestamp,
  *    an iteration counter or a per-turn nonce placed here invalidates the cache
  *    for the whole session, which is the exact cost this split exists to avoid.
- *  - The runtime half — live state and the turn's tool-output policy — is
- *    rewritten before every request. It sits at the end, so what it invalidates
- *    is only itself.
+ *  - The runtime half — live state, the turn's delimiter, a correction — is
+ *    rewritten before every request. It must be the last thing in the *request*,
+ *    not merely the last thing in the system message.
  *
- * The loop rewrites `messages[0]` each iteration rather than appending a second
- * system message. Two system messages is a shape some providers reject and
- * others quietly reorder, and the ordering is what the cache depends on.
+ * **That distinction is the whole point, and it was once got wrong here.** The
+ * runtime half used to be appended to the system message, which is `messages[0]`
+ * — the *front* of the request. Everything after it is the conversation, so a
+ * changed iteration counter ended the discount for the entire history on every
+ * request: a ten-iteration turn over a long conversation paid for that history
+ * ten times. The halves are now composed into different messages, and the loop
+ * sends the runtime half as a trailing turn after the history:
+ *
+ * ```
+ * system( staticPrompt )      ← cached, session-stable
+ * tools                       ← cached, stable per turn
+ * ...history                  ← cached, append-only
+ * user( <system-reminder> )   ← the only part re-read at full price
+ * ```
+ *
+ * A trailing *user* message rather than a second system one: two system messages
+ * is a shape some providers reject and others quietly reorder, and the ordering
+ * is what the cache depends on. `AgentLoop` wraps it so the model reads it as
+ * operator metadata rather than as something the user typed.
+ *
+ * The tool-output policy moved with that reasoning too. It is the largest block
+ * in the prompt that never changes, and it sat in the runtime half only because
+ * it named a per-turn delimiter; the delimiter is now one line of live state and
+ * the prose is cached. See `DEFAULT_TOOL_POLICY_TEMPLATE`.
  *
  * **The identity text is not in this file.** It is a template in
  * `@ghostai/protocol`, because an agent owns its whole system prompt and the
@@ -46,7 +67,7 @@ import {
   type ParsedMentions,
   type PromptMode,
 } from '@ghostai/protocol';
-import { toolOutputPolicy, toolOutputTag } from '@ghostai/security';
+import { toolOutputPolicy, toolOutputTag, toolPolicyUsesNonce } from '@ghostai/security';
 
 /**
  * The separator between top-level sections. Also joins the two halves.
@@ -408,8 +429,9 @@ export async function contributorSections(
  * the prompt an install actually runs on is one they can read and edit rather
  * than one compiled into the binary.
  *
- * What stays out of reach is in the runtime half: `toolOutputPolicy` carries
- * the turn's nonce and is a mechanism, not a message.
+ * The tool-output policy is a separate section for the same reason, and is
+ * separately overridable — it explains a mechanism rather than being one, so
+ * replacing the identity does not silently delete it.
  */
 function identity(
   workspaceRoot: string,
@@ -477,6 +499,17 @@ export async function buildStaticPrompt(options: BuildStaticPromptOptions): Prom
   const toolbox = renderToolbox(options.toolbox, options.agent?.toolboxPrompt);
   if (toolbox !== '') sections.push(toolbox);
 
+  // The tool-output policy, when it names no delimiter — which the default does
+  // not. It is the largest block in the prompt that never changes, so leaving it
+  // in the per-iteration half meant re-sending two hundred tokens on every
+  // request of every turn to say something the model had already been told.
+  // `buildRuntimeBlock` places it instead when a custom template asks for the
+  // tag, and the two conditions are exact complements, so it appears once.
+  if (toolPolicyIsStatic(options.agent?.toolPolicyPrompt)) {
+    const policy = renderToolPolicy(options.agent?.toolPolicyPrompt);
+    if (policy !== '') sections.push(policy);
+  }
+
   sections.push(...(await contributorSections(options.contributors, options.context)));
 
   return sections.join(SECTION_SEPARATOR);
@@ -523,10 +556,38 @@ function templateOr(stored: string | undefined, fallback: string): string {
  * result and still escapes a forged delimiter, so the envelopes remain and the
  * model is simply never told what they mean.
  */
-function renderToolPolicy(nonce: string, template: string | undefined): string {
+function renderToolPolicy(template: string | undefined, nonce?: string): string {
   const stored = template ?? '';
   if (stored !== '' && stored.trim() === '') return '';
   return toolOutputPolicy(nonce, stored);
+}
+
+/**
+ * The policy for `raw` mode's `{{toolPolicy}}`, delimiter included.
+ *
+ * Template mode splits the prose from the tag it refers to so the prose can be
+ * cached; raw mode has one blob and nothing to gain from that, so the two are
+ * rejoined here. A policy that names the tag itself already says it, and gets no
+ * second line.
+ */
+function rawToolPolicy(template: string | undefined, nonce: string): string {
+  const policy = renderToolPolicy(template, nonce);
+  if (policy === '' || toolPolicyUsesNonce(template ?? '')) return policy;
+  return `${policy}\n\nTool output delimiter: ${toolOutputTag(nonce)}`;
+}
+
+/**
+ * Which half of the prompt this agent's tool-output policy belongs in.
+ *
+ * The default policy names no delimiter, so it is identical for the life of a
+ * session and goes in the cached prefix. An operator who put `{{tag}}` back gets
+ * the old placement — correct output, and the caching cost the editor warns
+ * about — rather than a broken prompt or a config migration.
+ */
+function toolPolicyIsStatic(template: string | undefined): boolean {
+  const stored = template ?? '';
+  if (stored !== '' && stored.trim() === '') return false;
+  return !toolPolicyUsesNonce(stored);
 }
 
 function liveTime(nowMs: number, timeZone: string): string {
@@ -599,6 +660,10 @@ export function buildRuntimeBlock(options: BuildRuntimeBlockOptions): string {
     iterationsLeft: String(Math.max(left, 0)),
     channel: context.channel,
     sessionKey: context.sessionKey,
+    // The one part of the tool-output policy that changes. The prose that
+    // explains what it means is in the cached half; this names the value it
+    // refers to. See `DEFAULT_TOOL_POLICY_TEMPLATE`.
+    tag: toolOutputTag(options.nonce),
   };
 
   const live = renderPromptTemplate(
@@ -612,8 +677,14 @@ export function buildRuntimeBlock(options: BuildRuntimeBlockOptions): string {
     if (section !== undefined && section.trim() !== '') sections.push(section.trim());
   }
 
-  const policy = renderToolPolicy(options.nonce, options.toolPolicyPrompt);
-  if (policy !== '') sections.push(policy);
+  // Only a policy that names the delimiter — the complement of the condition in
+  // `buildStaticPrompt`, so exactly one of the two places emits it. A default
+  // policy is prose about a mechanism and belongs in the cached half; one that
+  // spells the tag out has to be rebuilt with the turn.
+  if (!toolPolicyIsStatic(options.toolPolicyPrompt)) {
+    const policy = renderToolPolicy(options.toolPolicyPrompt, options.nonce);
+    if (policy !== '') sections.push(policy);
+  }
 
   // Last, so it is the final thing read before the model answers. A correction
   // buried above a few hundred tokens of policy is a correction competing with
@@ -625,9 +696,32 @@ export function buildRuntimeBlock(options: BuildRuntimeBlockOptions): string {
   return sections.join('\n\n');
 }
 
-/** Joins the halves the way the loop does, for tests and for reuse. */
-export function composeSystemPrompt(staticPrompt: string, runtimeBlock: string): string {
-  return staticPrompt + SECTION_SEPARATOR + runtimeBlock;
+/** Marks the trailing turn as operator metadata rather than something a person typed. */
+const REMINDER_TAG = 'system-reminder';
+
+/** Matches an opening or closing reminder delimiter, either case. */
+const REMINDER_DELIMITER = new RegExp(`<(/?)(${REMINDER_TAG})`, 'gi');
+
+/**
+ * The runtime half, wrapped so a *user* turn can carry it.
+ *
+ * The block has to travel after the conversation to keep the history inside the
+ * cached prefix, and a trailing user message is the only shape every provider on
+ * the OpenAI-compatible wire accepts — a second system message is rejected by
+ * some and silently hoisted by others, and hoisting it would put the volatile
+ * text back in front of the history, which is the exact cost this avoids.
+ *
+ * The envelope is what stops that being a lie about who is speaking. Without it
+ * the model reads live state and a correction as the user's own words; with it
+ * they are labelled, in the same shape `wrapToolOutput` uses two sections above.
+ * A forged delimiter is escaped for the same reason it is there — a correction
+ * or a contributor section is text this module did not write.
+ */
+export function runtimeReminder(block: string): string {
+  const escaped = block.replace(REMINDER_DELIMITER, (_match, slash: string, tag: string) => {
+    return `<\\${slash}${tag}`;
+  });
+  return `<${REMINDER_TAG}>\n${escaped}\n</${REMINDER_TAG}>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -727,7 +821,14 @@ export function buildRawPrompt(options: BuildRawPromptOptions): string {
     // is the exception: it is usually placed on its own, where a leading break
     // would be the template's to write.
     toolbox: toolbox === '' ? '' : `${SECTION_SEPARATOR}${toolbox}`,
-    toolPolicy: renderToolPolicy(options.nonce, options.agent?.toolPolicyPrompt),
+    // Self-contained, and with the nonce: raw mode is one blob placed by the
+    // operator, so there is no cached half to keep a delimiter out of. In
+    // template mode the policy's prose and the delimiter it refers to are split
+    // across the two halves on purpose; here they would land in the same blob
+    // anyway, and a `{{toolPolicy}}` that named no delimiter would quietly stop
+    // saying what it used to — the placeholder means "the tool-output policy",
+    // not "most of it".
+    toolPolicy: rawToolPolicy(options.agent?.toolPolicyPrompt, options.nonce),
     nonce: options.nonce,
     tag: toolOutputTag(options.nonce),
     contributors: statics === '' ? '' : `${SECTION_SEPARATOR}${statics}`,

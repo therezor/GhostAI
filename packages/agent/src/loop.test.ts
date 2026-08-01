@@ -159,9 +159,22 @@ function systemPromptOf(request: ChatRequest): string {
   return first.content;
 }
 
+/**
+ * The static half is now the whole system message — the runtime half travels as
+ * a trailing turn, so there is no longer a marker to slice at.
+ */
 function staticHalfOf(request: ChatRequest): string {
-  const prompt = systemPromptOf(request);
-  return prompt.slice(0, prompt.indexOf('## Live state'));
+  return systemPromptOf(request);
+}
+
+/** The trailing turn's contents, with the reminder envelope taken off. */
+function runtimeBlockOf(request: ChatRequest): string {
+  const last = request.messages[request.messages.length - 1];
+  if (last?.role !== 'user') throw new Error('expected a user message last');
+  const text = last.content.map((part) => (part.type === 'text' ? part.text : '')).join('');
+  const match = /^<system-reminder>\n([\S\s]*)\n<\/system-reminder>$/.exec(text);
+  if (match === null) throw new Error('expected the trailing turn to be a reminder envelope');
+  return match[1] ?? '';
 }
 
 function messagesOf(store: SessionStore): ChatMessage[] {
@@ -510,10 +523,9 @@ describe('AgentLoop', () => {
 
     // The correction reaches the model in the runtime half of the next request,
     // where it costs no cached prefix and leaves nothing in history.
-    const second = provider.requests[1]?.messages[0];
-    const system = second?.role === 'system' ? second.content : '';
-    expect(system).toContain('## Correction');
-    expect(system).toContain('`echo`');
+    const block = runtimeBlockOf(provider.requests[1]!);
+    expect(block).toContain('## Correction');
+    expect(block).toContain('`echo`');
   });
 
   it('corrects once, then lets the answer stand however wrong it is', async () => {
@@ -532,8 +544,7 @@ describe('AgentLoop', () => {
     expect(provider.requests).toHaveLength(2);
     // And the second request is the only one carrying the correction, so it is
     // not still being scolded on an iteration it did nothing wrong on.
-    const third = provider.requests[1]?.messages[0];
-    expect(third?.role === 'system' ? third.content : '').toContain('## Correction');
+    expect(runtimeBlockOf(provider.requests[1]!)).toContain('## Correction');
   });
 
   it('leaves an answer that merely mentions a tool alone', async () => {
@@ -631,8 +642,10 @@ describe('AgentLoop', () => {
     // Same array identity: the definitions were not rebuilt for the second
     // request, so the cached prompt prefix holding them is unchanged.
     expect(first?.tools).toBe(second?.tools);
-    expect(systemPromptOf(first!)).toContain(NONCE_TAG);
-    expect(systemPromptOf(second!)).toContain(NONCE_TAG);
+    // The delimiter is live state, so it rides the trailing turn rather than the
+    // cached system message — the same nonce on both, which is the point here.
+    expect(runtimeBlockOf(first!)).toContain(NONCE_TAG);
+    expect(runtimeBlockOf(second!)).toContain(NONCE_TAG);
   });
 
   it('keeps the static half of the prompt byte-identical across iterations', async () => {
@@ -652,8 +665,60 @@ describe('AgentLoop', () => {
 
     const [first, second] = provider.requests;
     expect(staticHalfOf(first!)).toBe(staticHalfOf(second!));
-    expect(systemPromptOf(first!)).toContain('Tool iterations left in this turn: 3');
-    expect(systemPromptOf(second!)).toContain('Tool iterations left in this turn: 2');
+    expect(runtimeBlockOf(first!)).toContain('Tool iterations left in this turn: 3');
+    expect(runtimeBlockOf(second!)).toContain('Tool iterations left in this turn: 2');
+  });
+
+  /**
+   * The property the two halves exist for, asserted on the request rather than
+   * on the prompt.
+   *
+   * A provider's cache ends at the first byte that differs from the last request,
+   * so it is not enough for the volatile text to be last in the system message —
+   * it has to be last in the *messages array*. This is the regression that shape
+   * once had: the runtime half sat at the end of `messages[0]`, which is the
+   * front of the request, and re-priced the whole conversation every iteration.
+   */
+  it('keeps every message before the trailing turn identical across iterations', async () => {
+    const clock = manualClock();
+    const { loop, provider } = harness({
+      clock,
+      tools: [echoTool],
+      config: { maxToolIterations: 3 },
+      turns: [{ toolCalls: [toolCall('c1', 'echo', { text: 'x' })] }, { deltas: ['done'] }],
+      loop: { toolHeartbeatMs: 0 },
+    });
+
+    await runTurn(loop, { sessionKey: SESSION, content: 'go' });
+
+    const [first, second] = provider.requests;
+    const prefixOf = (request: ChatRequest): readonly ChatMessage[] =>
+      request.messages.slice(0, -1);
+
+    // The second request's prefix starts with the first's, entry for entry, and
+    // only grows — the tool result this turn just wrote is appended to the end.
+    expect(second!.messages.length).toBeGreaterThan(first!.messages.length);
+    expect(prefixOf(second!).slice(0, prefixOf(first!).length)).toEqual(prefixOf(first!));
+
+    // And the volatile half really did move, or the assertion above proves only
+    // that two identical requests are identical.
+    expect(runtimeBlockOf(first!)).not.toBe(runtimeBlockOf(second!));
+    expect(second!.messages.at(-1)?.role).toBe('user');
+  });
+
+  it('sends the runtime half without ever storing it', async () => {
+    const { loop, provider, store } = harness();
+    await runTurn(loop, { sessionKey: SESSION, content: 'hello' });
+
+    expect(runtimeBlockOf(provider.requests[0]!)).toContain('## Live state');
+    // The store is the conversation; the trailing turn is scaffolding for one
+    // request. Persisting it would put a clock into the history every turn re-reads.
+    for (const message of messagesOf(store)) {
+      if (message.role !== 'user') continue;
+      for (const part of message.content) {
+        if (part.type === 'text') expect(part.text).not.toContain('system-reminder');
+      }
+    }
   });
 
   it('stops at the iteration cap and says so', async () => {
@@ -1473,13 +1538,18 @@ describe('AgentLoop.previewPrompt', () => {
     const { loop, provider } = harness();
     await runTurn(loop, { sessionKey: SESSION, content: 'hello', channel: 'web' });
 
-    const sent = systemPromptOf(provider.requests[0]!);
+    const request = provider.requests[0]!;
     const preview = await loop.previewPrompt({ sessionKey: SESSION, channel: 'web' });
 
     // The nonce is per-turn and has no meaning outside one, so the delimiter is
     // the only part that legitimately differs.
     const withoutNonce = (prompt: string): string => prompt.replaceAll(/ghost-tool-[0-9a-f]+/g, '');
-    expect(withoutNonce(preview)).toBe(withoutNonce(sent));
+
+    // Both halves, against the two messages that actually carry them — a preview
+    // that reported the right text in the wrong place would be reporting the bug
+    // this split exists to prevent.
+    expect(withoutNonce(preview.staticPrompt)).toBe(withoutNonce(systemPromptOf(request)));
+    expect(withoutNonce(preview.runtimeBlock)).toBe(withoutNonce(runtimeBlockOf(request)));
   });
 
   it('sees the contributors a turn would see', async () => {
@@ -1498,7 +1568,7 @@ describe('AgentLoop.previewPrompt', () => {
 
     // A prompt reassembled outside the loop could not know about this section,
     // and the inspector would quietly under-report the token cost.
-    expect(preview).toContain('The user prefers rem over px');
+    expect(preview.staticPrompt).toContain('The user prefers rem over px');
   });
 
   it('defaults the channel to web, and hands it to contributors', async () => {
@@ -1541,7 +1611,9 @@ describe('AgentLoop.previewPrompt', () => {
       },
     });
 
-    expect(await loop.previewPrompt({ sessionKey: SESSION })).toContain('## Toolbox: research');
+    expect((await loop.previewPrompt({ sessionKey: SESSION })).staticPrompt).toContain(
+      '## Toolbox: research',
+    );
   });
 });
 
@@ -1591,9 +1663,11 @@ describe('promptMode: raw', () => {
 
     await runTurn(loop, { sessionKey: SESSION, content: 'hi', channel: 'web' });
 
-    expect(await loop.previewPrompt({ sessionKey: SESSION, channel: 'web' })).toBe(
-      systemPromptOf(provider.requests[0]!),
-    );
+    // Raw mode is one blob in the system message, so the preview's static half is
+    // the whole of it and its runtime half is empty.
+    const preview = await loop.previewPrompt({ sessionKey: SESSION, channel: 'web' });
+    expect(preview.staticPrompt).toBe(systemPromptOf(provider.requests[0]!));
+    expect(preview.runtimeBlock).toBe('');
   });
 
   it('runs a contributor’s static section once per turn, not once per iteration', async () => {
@@ -1822,8 +1896,12 @@ describe('AgentLoop workspaces', () => {
     const { loop, store } = workspaceHarness();
     store.ensureSession('s1', { workspaceId: 'acme' });
 
-    expect(await loop.previewPrompt({ sessionKey: 's1' })).toContain('`acme` workspace');
-    expect(await loop.previewPrompt({ sessionKey: 'never-seen' })).toContain('`default` workspace');
+    expect((await loop.previewPrompt({ sessionKey: 's1' })).staticPrompt).toContain(
+      '`acme` workspace',
+    );
+    expect((await loop.previewPrompt({ sessionKey: 'never-seen' })).staticPrompt).toContain(
+      '`default` workspace',
+    );
   });
 });
 

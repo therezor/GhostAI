@@ -115,8 +115,33 @@ describe('summariseContext', () => {
       t,
     );
 
+    // Unattributed by construction, so it counts as uncached — the honest side
+    // to err on for a figure nobody can point at.
     expect(budget.segments).toEqual([
-      { key: 'other', label: 'Unattributed', tokens: 400, percent: 50 },
+      { key: 'other', label: 'Unattributed', tokens: 400, percent: 50, cacheable: false },
     ]);
+    expect(budget.uncachedTokens).toBe(400);
+  });
+
+  it('separates what a prompt cache can serve from what every step pays again', () => {
+    const budget = summariseContext(
+      {
+        breakdown: { systemPrompt: 1000, tools: 500, messages: 2000, runtimeBlock: 120 },
+        estimatedTokens: 3620,
+        contextWindowTokens: 10_000,
+      },
+      t,
+    );
+
+    // Request order, which is also cached-then-not.
+    expect(budget.segments.map((segment) => segment.key)).toEqual([
+      'systemPrompt',
+      'tools',
+      'messages',
+      'runtimeBlock',
+    ]);
+    expect(budget.segments.map((segment) => segment.cacheable)).toEqual([true, true, true, false]);
+    // The figure the split exists to move: the trailing turn, and nothing else.
+    expect(budget.uncachedTokens).toBe(120);
   });
 });

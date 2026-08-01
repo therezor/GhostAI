@@ -44,9 +44,10 @@ const CONTEXT = {
       message: { role: 'user', content: [{ type: 'text', text: 'hello' }] },
     },
   ],
-  estimatedTokens: 5000,
+  runtimeBlock: '## Live state\n\nCurrent time: Tuesday, 14 November 2023 at 22:13 (UTC)',
+  estimatedTokens: 5120,
   contextWindowTokens: 10_000,
-  breakdown: { systemPrompt: 1000, tools: 1000, messages: 3000 },
+  breakdown: { systemPrompt: 1000, tools: 1000, messages: 3000, runtimeBlock: 120 },
 };
 
 /**
@@ -72,7 +73,7 @@ describe('the context strip', () => {
     // The whole point of moving it here: the number is readable at a glance,
     // rather than behind a button nobody presses.
     expect(
-      await screen.findByRole('button', { name: /5,000 of 10,000 · 50%/ }),
+      await screen.findByRole('button', { name: /5,120 of 10,000 · 51%/ }),
     ).toBeInTheDocument();
   });
 
@@ -101,9 +102,12 @@ describe('the context inspector', () => {
     const user = mount();
     await open(user);
 
-    expect(await screen.findByText('5,000')).toBeInTheDocument();
-    expect(screen.getByText(/of 10,000 tokens · 50%/)).toBeInTheDocument();
-    expect(screen.getByText('5,000 free')).toBeInTheDocument();
+    expect(await screen.findByText('5,120')).toBeInTheDocument();
+    expect(screen.getByText(/of 10,000 tokens · 51%/)).toBeInTheDocument();
+    expect(screen.getByText('4,880 free')).toBeInTheDocument();
+    // The figure the two halves exist to move, beside the total rather than
+    // buried in the table: what one more step of this turn costs.
+    expect(screen.getByText('120 per step')).toBeInTheDocument();
   });
 
   it('breaks the total down by section, in a table and not only in a bar', async () => {
@@ -113,10 +117,13 @@ describe('the context inspector', () => {
     const table = await screen.findByRole('table', { name: 'Token usage by section' });
     const rows = [...table.querySelectorAll('tbody tr')].map((row) => row.textContent);
 
+    // Request order, which is also cached-then-not: the trailing turn is last
+    // because it is the only row a provider's cache cannot serve.
     expect(rows).toEqual([
       'System prompt1,00010.0%',
       'Tool definitions1,00010.0%',
       'Conversation3,00030.0%',
+      'Live state1201.2%',
     ]);
   });
 
@@ -198,6 +205,18 @@ describe('the context inspector: what is in each section', () => {
     // table above — the two are deliberately the same word.
     await user.click(await screen.findByText('System prompt', { selector: 'summary' }));
     expect(screen.getByText('You are GhostAI, a helpful agent.')).toBeVisible();
+  });
+
+  it('opens the live state, which is the part every step of a turn pays for again', async () => {
+    // The section this panel exists to make legible: everything above it is the
+    // provider's cached prefix, and this is the tail re-read at full price.
+    const user = mount();
+    await open(user);
+
+    await user.click(await screen.findByText('Live state', { selector: 'summary' }));
+    expect(
+      screen.getByText(/Current time: Tuesday, 14 November 2023 at 22:13 \(UTC\)/),
+    ).toBeVisible();
   });
 
   it('opens the tool definitions, with each schema behind its own disclosure', async () => {

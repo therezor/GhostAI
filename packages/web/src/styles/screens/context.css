@@ -113,6 +113,13 @@
     background-color: var(--success);
   }
 
+  /* The one section a provider's cache cannot serve, so it is the one the eye
+   * should land on: `--danger` is not "broken" here, it is "you pay for this
+   * again on every request". */
+  .context-fill--runtime-block {
+    background-color: var(--danger);
+  }
+
   .context-fill--other {
     background-color: var(--warning);
   }

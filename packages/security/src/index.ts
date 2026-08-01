@@ -57,6 +57,7 @@ export {
   detectPromptInjection,
   toolOutputPolicy,
   toolOutputTag,
+  toolPolicyUsesNonce,
   wrapToolOutput,
   type InjectionFinding,
   type InjectionSignal,

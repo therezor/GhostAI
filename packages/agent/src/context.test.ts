@@ -7,6 +7,7 @@ import { describeContext } from './context.js';
 
 const SESSION = 'web:1';
 const PROMPT = 'You are GhostAI, a helpful agent.';
+const RUNTIME = '## Live state\n\nCurrent time: whenever';
 
 const TOOLS: readonly ToolDefinition[] = [
   {
@@ -19,7 +20,9 @@ const TOOLS: readonly ToolDefinition[] = [
 ];
 
 /** The one method `describeContext` needs, so no jail or provider is built. */
-const loop = { previewPrompt: () => Promise.resolve(PROMPT) };
+const loop = {
+  previewPrompt: () => Promise.resolve({ staticPrompt: PROMPT, runtimeBlock: RUNTIME }),
+};
 
 function makeStore(): SessionStore {
   return new SessionStore();
@@ -71,13 +74,17 @@ describe('describeContext', () => {
       sessionKey: SESSION,
       contextWindowTokens: 10_000,
     });
-    const { systemPrompt, tools, messages } = report?.breakdown ?? {
+    const { systemPrompt, tools, messages, runtimeBlock } = report?.breakdown ?? {
       systemPrompt: 0,
       tools: 0,
       messages: 0,
+      runtimeBlock: 0,
     };
 
-    expect(report?.estimatedTokens).toBe(systemPrompt + tools + messages);
+    // Every section, including the trailing turn — a total that omitted it would
+    // under-report the request by exactly the part billed on every iteration.
+    expect(report?.estimatedTokens).toBe(systemPrompt + tools + messages + runtimeBlock);
+    expect(runtimeBlock).toBeGreaterThan(0);
     store.close();
   });
 

@@ -11,9 +11,10 @@
  * **Degradation is a declarative ladder.** A rejected request is not always a
  * dead request: the model may simply not accept a parameter this one carried.
  * Each `DegradationStep` states what it can repair and how, in the order that
- * costs the least — drop `reasoning_effort`, then `tool_choice`, then images,
- * then the oldest turns. Every step is a pure function of the request, so each
- * is unit-testable on its own and the ladder is data rather than control flow.
+ * costs the least — drop `prompt_cache_key`, then merge the trailing turn, then
+ * `reasoning_effort`, then `tool_choice`, then images, then the oldest turns.
+ * Every step is a pure function of the request, so each is unit-testable on its
+ * own and the ladder is data rather than control flow.
  *
  * **A degradation is not a retry.** They have different budgets. Retries exist
  * for transient failures and are capped low because each one costs a round trip
@@ -133,8 +134,16 @@ export function truncateOldestTurns(
 
   let dropped = 0;
   let cut = 0;
-  // Never drop the final message: it is the user turn this request is answering.
-  while (cut < body.length - 1 && dropped < target) {
+  // Never drop the turn this request is answering. That is the last message —
+  // except when the loop has appended the prompt's runtime half as a trailing
+  // user message, in which case the question is the one before it and keeping
+  // only the last would leave a clock with nothing to answer. One extra, not a
+  // whole run: two consecutive user turns is that shape, and more than two is
+  // ordinary history nobody promised to keep.
+  const trailingPair =
+    body.length >= 2 && body.at(-1)?.role === 'user' && body.at(-2)?.role === 'user';
+  const floor = body.length - (trailingPair ? 2 : 1);
+  while (cut < floor && dropped < target) {
     dropped += sizes[cut] ?? 0;
     cut += 1;
   }
@@ -168,6 +177,60 @@ function alignToLegalStart(messages: readonly ChatMessage[]): readonly ChatMessa
   return start === 0 ? messages : messages.slice(start);
 }
 
+const dropPromptCacheKey: DegradationStep = {
+  id: 'drop_prompt_cache_key',
+  description: 'retrying without prompt_cache_key',
+  applies: (error, request) =>
+    isRepairable(error) &&
+    !blamesOther(error, 'prompt_cache_key') &&
+    request.cacheKey !== undefined,
+  // First on the ladder because it is the only repair that costs nothing. The
+  // field is a routing hint for the provider's prompt cache; without it requests
+  // still cache, they just may not land on the machine already holding the
+  // prefix. Everything below this point costs the answer something.
+  apply: (request) => (request.cacheKey === undefined ? null : { ...request, cacheKey: undefined }),
+};
+
+/**
+ * Folds a trailing user turn into the one before it.
+ *
+ * The loop sends the prompt's volatile half as a trailing user message, so the
+ * conversation stays inside the cached prefix. When the history already ends
+ * with a user message that produces two in a row — which OpenAI and the
+ * mainstream compatible endpoints accept, and strict-alternation shims reject.
+ *
+ * Merging is a repair and not the default shape because the default is the one
+ * that caches: two messages keep the boundary between what the user said and
+ * what the harness added, and a provider that accepts them needs no help.
+ */
+const mergeTrailingUserTurn: DegradationStep = {
+  id: 'merge_trailing_user',
+  description: 'retrying with the trailing turn merged',
+  applies: (error, request) => isRepairable(error) && lastTwoAreUser(request.messages),
+  apply: (request) => {
+    const messages = request.messages;
+    if (!lastTwoAreUser(messages)) return null;
+    const last = messages[messages.length - 1];
+    const previous = messages[messages.length - 2];
+    if (last?.role !== 'user' || previous?.role !== 'user') return null;
+    return {
+      ...request,
+      messages: [
+        ...messages.slice(0, -2),
+        { ...previous, content: [...previous.content, ...last.content] },
+      ],
+    };
+  },
+};
+
+function lastTwoAreUser(messages: readonly ChatMessage[]): boolean {
+  return (
+    messages.length >= 2 &&
+    messages[messages.length - 1]?.role === 'user' &&
+    messages[messages.length - 2]?.role === 'user'
+  );
+}
+
 const truncateTurns: DegradationStep = {
   id: 'truncate_turns',
   description: 'retrying with the oldest turns dropped',
@@ -181,12 +244,15 @@ const truncateTurns: DegradationStep = {
 /**
  * The ladder, cheapest repair first.
  *
- * Order is the policy: losing `reasoning_effort` costs answer quality, losing
- * images costs information the user supplied, and losing turns costs the
- * conversation's memory. Each step is tried only after the one above it has
- * failed or does not apply.
+ * Order is the policy: dropping a cache-routing hint costs nothing, merging the
+ * trailing turn costs a message boundary, losing `reasoning_effort` costs answer
+ * quality, losing images costs information the user supplied, and losing turns
+ * costs the conversation's memory. Each step is tried only after the one above
+ * it has failed or does not apply.
  */
 export const DEFAULT_DEGRADATION_STEPS: readonly DegradationStep[] = [
+  dropPromptCacheKey,
+  mergeTrailingUserTurn,
   dropReasoningEffort,
   dropToolChoice,
   stripImages,

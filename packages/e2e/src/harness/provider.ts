@@ -60,17 +60,33 @@ export function turnIndex(messages: readonly ChatMessage[]): number {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
     if (message === undefined) continue;
+    if (isRuntimeReminder(message)) continue;
     if (message.role === 'user') break;
     if (message.role === 'assistant') index += 1;
   }
   return index;
 }
 
+/**
+ * Whether this is the loop's trailing prompt turn rather than something a person
+ * said.
+ *
+ * The runtime half of the prompt — live state, the turn's delimiter — travels as
+ * a `user` message after the history, so the conversation stays inside the
+ * provider's cached prefix. A real model reads it as the operator metadata its
+ * envelope says it is; this fake keys off "the last thing the user said", so
+ * without this check every request would look like the user had typed a clock.
+ */
+function isRuntimeReminder(message: ChatMessage): boolean {
+  return message.role === 'user' && textOf(message).startsWith('<system-reminder>');
+}
+
 /** The last thing the user said, or `''` before they have said anything. */
 export function lastUserText(messages: readonly ChatMessage[]): string {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
-    if (message?.role === 'user') return textOf(message);
+    if (message === undefined || isRuntimeReminder(message)) continue;
+    if (message.role === 'user') return textOf(message);
   }
   return '';
 }

@@ -23,11 +23,29 @@ export interface ContextBreakdown {
   readonly systemPrompt: number;
   readonly tools: number;
   readonly messages: number;
+  /**
+   * The trailing turn: live state, the turn's delimiter, a correction.
+   *
+   * Reported apart from `systemPrompt` because it is the one section billed at
+   * full price on every iteration — the three above it are the provider's cached
+   * prefix. A single "prompt" figure would average the two together and hide the
+   * only number here anyone can act on.
+   */
+  readonly runtimeBlock: number;
 }
 
 export interface ContextReport {
   readonly sessionKey: string;
+  /** The cached prefix: the system message, without the per-iteration tail. */
   readonly systemPrompt: string;
+  /**
+   * The trailing turn, as the loop would send it — before the reminder envelope,
+   * which is framing rather than content anyone reading this panel needs.
+   *
+   * Empty in `raw` mode, where the operator's one template is the whole system
+   * message and there is no second half to show.
+   */
+  readonly runtimeBlock: string;
   /**
    * The definitions as the provider would receive them.
    *
@@ -95,13 +113,14 @@ export async function describeContext(
     if (record !== undefined) messages.push(record);
   }
 
-  const systemPrompt = await input.loop.previewPrompt({
+  const { staticPrompt, runtimeBlock } = await input.loop.previewPrompt({
     sessionKey: input.sessionKey,
     ...(input.channel === undefined ? {} : { channel: input.channel }),
     ...(input.agentId === undefined ? {} : { agentId: input.agentId }),
   });
 
-  const promptTokens = estimateTokens(systemPrompt);
+  const promptTokens = estimateTokens(staticPrompt);
+  const runtimeTokens = estimateTokens(runtimeBlock);
   const toolTokens = estimateTokens(JSON.stringify(input.tools));
   const messageTokens = window.reduce(
     (total, message) => total + estimateTokens(JSON.stringify(message)),
@@ -110,11 +129,20 @@ export async function describeContext(
 
   return {
     sessionKey: input.sessionKey,
-    systemPrompt,
+    systemPrompt: staticPrompt,
+    runtimeBlock,
     tools: input.tools,
     messages,
-    estimatedTokens: promptTokens + toolTokens + messageTokens,
+    estimatedTokens: promptTokens + toolTokens + messageTokens + runtimeTokens,
     contextWindowTokens: input.contextWindowTokens,
-    breakdown: { systemPrompt: promptTokens, tools: toolTokens, messages: messageTokens },
+    // In request order, which is also cached-then-not: the three sections a
+    // provider can serve from its prefix cache, then the tail that is re-read
+    // at full price on every iteration.
+    breakdown: {
+      systemPrompt: promptTokens,
+      tools: toolTokens,
+      messages: messageTokens,
+      runtimeBlock: runtimeTokens,
+    },
   };
 }

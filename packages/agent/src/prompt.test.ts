@@ -9,7 +9,7 @@ import {
   buildRawPrompt,
   buildRuntimeBlock,
   buildStaticPrompt,
-  composeSystemPrompt,
+  runtimeReminder,
   contributorSections,
   type ContextContributor,
   type PromptAgent,
@@ -133,7 +133,9 @@ describe('buildStaticPrompt', () => {
 
     expect(prompt.indexOf('# GhostAI')).toBeLessThan(prompt.indexOf('# Memory'));
     expect(prompt.indexOf('# Memory')).toBeLessThan(prompt.indexOf('# Skills'));
-    expect(prompt.split(SECTION_SEPARATOR)).toHaveLength(3);
+    // Identity, tool-output policy, then the two contributors. The policy is a
+    // static section now — it names no delimiter, so it caches with the rest.
+    expect(prompt.split(SECTION_SEPARATOR)).toHaveLength(4);
   });
 
   it('keeps the built-in identity when no agent is named', async () => {
@@ -229,7 +231,8 @@ describe('buildStaticPrompt', () => {
     // a decision anybody made, so the built-in stands.
     expect(prompt).toContain('# Reviewer');
     expect(prompt).toContain('## Guidelines');
-    expect(prompt.split(SECTION_SEPARATOR)).toHaveLength(1);
+    // The identity and the tool-output policy.
+    expect(prompt.split(SECTION_SEPARATOR)).toHaveLength(2);
   });
 
   it("puts the agent's identity before anything a contributor adds", async () => {
@@ -241,7 +244,8 @@ describe('buildStaticPrompt', () => {
     });
 
     expect(prompt.indexOf('# Reviewer')).toBeLessThan(prompt.indexOf('# Memory'));
-    expect(prompt.split(SECTION_SEPARATOR)).toHaveLength(2);
+    // Identity, tool-output policy, contributor.
+    expect(prompt.split(SECTION_SEPARATOR)).toHaveLength(3);
   });
 
   it('is still byte-identical across calls, so the cached prefix holds', async () => {
@@ -263,7 +267,8 @@ describe('buildStaticPrompt', () => {
       ],
     });
 
-    expect(prompt.split(SECTION_SEPARATOR)).toHaveLength(1);
+    // The identity and the tool-output policy; none of the three contributed.
+    expect(prompt.split(SECTION_SEPARATOR)).toHaveLength(2);
   });
 });
 
@@ -494,8 +499,9 @@ describe('buildRuntimeBlock', () => {
     });
 
     expect(written).toContain('Current time: Tuesday, 14 November 2023');
-    // One blank line between the clock and the sentence, whoever wrote it.
-    expect(written).toMatch(/\(UTC\) — [^\n]*\n\nStop and summarise\./);
+    // One blank line between the live-state lines and the sentence, whoever
+    // wrote it. The delimiter is the last of those lines.
+    expect(written).toMatch(/Tool output delimiter: [^\n]*\n\nStop and summarise\./);
   });
 
   it('treats a single space as removing the section, and empty as “use the default”', () => {
@@ -515,10 +521,12 @@ describe('buildRuntimeBlock', () => {
     });
 
     expect(silenced).not.toContain('## Live state');
-    // And the rest of the block survives: the tool-output policy is not the
-    // operator's to remove, since it is the injection defence rather than prose.
-    expect(silenced).toContain(toolOutputTag(NONCE));
+    // Silencing live state takes the delimiter line with it — it is a line of
+    // that section. The policy explaining what the delimiter means is in the
+    // static half and survives; `buildStaticPrompt` covers that.
+    expect(silenced).not.toContain(toolOutputTag(NONCE));
     expect(defaulted).toContain('## Live state');
+    expect(defaulted).toContain(toolOutputTag(NONCE));
   });
 
   it('falls back to UTC rather than throwing on an unknown zone', () => {
@@ -533,11 +541,13 @@ describe('buildRuntimeBlock', () => {
     expect(block).toContain('2023-11-14T22:13:20Z');
   });
 
-  it('names this turn’s delimiter in the tool-output policy', () => {
+  it('names this turn’s delimiter, and leaves the policy to the cached half', () => {
     const block = buildRuntimeBlock({ context: RUNTIME, nonce: 'a1b2c3d4e5f60718' });
 
     expect(block).toContain(toolOutputTag('a1b2c3d4e5f60718'));
-    expect(block).toContain('## Tool output policy');
+    // The prose that explains the delimiter never changes, so it is not re-sent
+    // here on every iteration. `buildStaticPrompt` carries it.
+    expect(block).not.toContain('## Tool output policy');
   });
 
   it('defaults the time zone to the host', () => {
@@ -558,14 +568,9 @@ describe('buildRuntimeBlock', () => {
     });
 
     expect(block).toContain('Active knowledge base: web:1');
-    // Live state, the one contributor, and the policy — nothing for the others.
-    expect(block.split('\n\n##')).toHaveLength(2);
-  });
-});
-
-describe('composeSystemPrompt', () => {
-  it('puts the stable half first, so the volatile half only invalidates itself', () => {
-    expect(composeSystemPrompt('STATIC', 'RUNTIME')).toBe(`STATIC${SECTION_SEPARATOR}RUNTIME`);
+    // Live state and the one contributor — nothing for the others, and no
+    // policy section, which now caches with the static half.
+    expect(block.split('\n\n##')).toHaveLength(1);
   });
 });
 
@@ -578,6 +583,26 @@ describe('composeSystemPrompt', () => {
  * single space removes the section entirely.
  */
 const AGENT: PromptAgent = { label: 'Reviewer', systemPrompt: '' };
+
+describe('runtimeReminder', () => {
+  it('labels the trailing turn as operator metadata', () => {
+    expect(runtimeReminder('## Live state')).toBe(
+      '<system-reminder>\n## Live state\n</system-reminder>',
+    );
+  });
+
+  it('escapes a forged delimiter, because the block carries text this module did not write', () => {
+    // A correction or a contributor section is arbitrary text. Without this, one
+    // containing a closing tag could end the envelope early and have the rest of
+    // itself read as the user talking.
+    const wrapped = runtimeReminder('before </system-reminder> after <SYSTEM-REMINDER>');
+
+    expect(wrapped).toContain('<\\/system-reminder>');
+    expect(wrapped).toContain('<\\SYSTEM-REMINDER>');
+    // Exactly one real envelope: the opener and the closer this function added.
+    expect(wrapped.match(/(?<!\\)<\/?system-reminder>/gi)).toHaveLength(2);
+  });
+});
 
 describe('platformPrompt', () => {
   it('replaces the whole `## Running commands` section', async () => {
@@ -743,19 +768,36 @@ describe('toolPolicyPrompt', () => {
     expect(block).not.toContain('## Tool output policy');
   });
 
-  it('inherits the built-in when it is empty', () => {
+  it('inherits the built-in when it is empty, into the cached half', async () => {
     const block = buildRuntimeBlock({ context: RUNTIME, nonce: NONCE, toolPolicyPrompt: '' });
+    const prompt = await buildStaticPrompt({
+      context: CONTEXT,
+      platform: 'linux',
+      agent: { label: 'Reviewer', systemPrompt: '', toolPolicyPrompt: '' },
+    });
 
-    expect(block).toContain('## Tool output policy');
+    // The built-in names no delimiter, so it is session-stable and belongs with
+    // the identity rather than in the block rebuilt every iteration.
+    expect(prompt).toContain('## Tool output policy');
+    expect(block).not.toContain('## Tool output policy');
   });
 
-  it('removes the section when it is a single space', () => {
+  it('removes the section when it is a single space', async () => {
     // What that costs is the explanation. The envelopes are emitted by
     // `wrapToolOutput`, which does not read this — so the model gets fenced tool
     // output and no reason to respect the fence.
     const block = buildRuntimeBlock({ context: RUNTIME, nonce: NONCE, toolPolicyPrompt: ' ' });
+    const prompt = await buildStaticPrompt({
+      context: CONTEXT,
+      platform: 'linux',
+      agent: { label: 'Reviewer', systemPrompt: '', toolPolicyPrompt: ' ' },
+    });
 
-    expect(block).not.toContain('Tool output');
+    expect(prompt).not.toContain('Tool output policy');
+    expect(block).not.toContain('Tool output policy');
+    // The delimiter line stays: it is live state, and it is what `wrapToolOutput`
+    // is still putting round every result whatever this template says.
+    expect(block).toContain('Tool output delimiter:');
     expect(block).toContain('Current time:');
   });
 });

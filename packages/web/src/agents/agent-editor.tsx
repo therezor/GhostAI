@@ -953,10 +953,17 @@ function Editor({
    * fence. Mirrors `assertBuildable`, so the editor says it before the save
    * rather than the settings response saying it after.
    */
+  const namesDelimiter = (template: string): boolean =>
+    template.includes('{{nonce}}') || template.includes('{{tag}}');
+
+  // The delimiter has to be named somewhere, not specifically in the policy. The
+  // built-in policy names none on purpose — it is prose that never changes, so it
+  // caches, and the live-state section supplies the turn's tag. Both templates
+  // have to drop it before the model is left unable to identify a fence.
   const policyUnfenced =
     form.toolPolicyPrompt.trim() !== '' &&
-    !form.toolPolicyPrompt.includes('{{nonce}}') &&
-    !form.toolPolicyPrompt.includes('{{tag}}');
+    !namesDelimiter(form.toolPolicyPrompt) &&
+    !namesDelimiter(form.livePrompt === '' ? DEFAULT_LIVE_STATE_TEMPLATE : form.livePrompt);
 
   // ── Tools ────────────────────────────────────────────────────────────────
   //
@@ -1717,7 +1724,16 @@ function Editor({
                             nonce: '{{nonce}}',
                           }),
                         }
-                      : {})}
+                      : namesDelimiter(form.toolPolicyPrompt)
+                        ? {
+                            // Naming the tag here is legal and costs the cache:
+                            // this section is otherwise identical for the life of
+                            // a session, so it rides the cached prefix — unless it
+                            // spells out a delimiter that changes every turn, at
+                            // which point the whole of it is re-sent per step.
+                            warning: t('agents.promptToolPolicyUncacheable', { tag: '{{tag}}' }),
+                          }
+                        : {})}
                     onChange={(next) => {
                       update('toolPolicyPrompt', next);
                     }}

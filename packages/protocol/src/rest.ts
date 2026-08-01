@@ -385,7 +385,18 @@ export type UpdateSessionRequest = z.infer<typeof UpdateSessionRequestSchema>;
  */
 export const ContextResponseSchema = z.object({
   sessionKey: z.string().min(1),
+  /** The cached prefix: the system message, without the per-iteration tail. */
   systemPrompt: z.string(),
+  /**
+   * The trailing turn the loop appends after the history — live state, the
+   * turn's delimiter, a correction.
+   *
+   * Separate from `systemPrompt` because the two are billed differently: this is
+   * the only section re-read at full price on every iteration, and the panel's
+   * job is to make that legible. Defaulted so a client reading an older server's
+   * response gets an empty section rather than a parse error.
+   */
+  runtimeBlock: z.string().default(''),
   /**
    * The definitions as the provider would receive them.
    *

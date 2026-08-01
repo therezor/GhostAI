@@ -73,7 +73,8 @@
     "promptToolboxHint": "Only sent while this agent has a toolbox.",
     "promptToolPolicy": "Tool output policy",
     "promptToolPolicyHint": "What makes the delimiters around tool results mean something.",
-    "promptToolPolicyUnfenced": "This names neither {{tag}} nor {{nonce}}. Tool results are still wrapped in the turn’s delimiter — the model is just not told what it means, so text inside one can read as an instruction.",
+    "promptToolPolicyUncacheable": "Naming {{tag}} here moves this whole section into the part of the prompt that is re-read on every step of a turn. Left out, it is discounted for the life of the conversation and the live-state section names the delimiter instead.",
+    "promptToolPolicyUnfenced": "Neither this nor the live-state section names {{tag}} or {{nonce}}. Tool results are still wrapped in the turn’s delimiter — the model is just not told which one, so text inside one can read as an instruction.",
     "promptUncacheable": "This template contains something that changes between requests, so the provider re-reads the whole prompt every time rather than only the part after the change. Normally the changing part is a short block at the end and everything above it is discounted.",
     "promptWrapUp": "Running out of iterations",
     "promptWrapUpHint": "Appended to the live state in the last three iterations of a turn.",
@@ -319,6 +320,7 @@
     "labels": {
       "messages": "Conversation",
       "other": "Unattributed",
+      "runtimeBlock": "Live state",
       "systemPrompt": "System prompt",
       "tools": "Tool definitions"
     },
@@ -327,6 +329,8 @@
     "messagesInWindow_other": "{{count}} messages in the window",
     "nothingYet": "Nothing to measure yet — this conversation has not started. Send a message and the budget appears here.",
     "noTools": "This agent has no tools.",
+    "perIteration": "{{tokens}} per step",
+    "runtimeBlock": "Live state",
     "section": "Section",
     "share": "Share",
     "systemPrompt": "System prompt",

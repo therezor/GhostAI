@@ -243,6 +243,52 @@ describe('the degradation ladder', () => {
     ).toEqual([textPart('look')]);
   });
 
+  it('drops the cache key before anything that costs the answer something', async () => {
+    const inner = scripted(
+      new ProviderError('unsupported_param', 'unknown field prompt_cache_key'),
+      resultOf('ok'),
+    );
+    const { provider } = wrap(inner);
+
+    await provider.chat(request({ cacheKey: 'web:1', reasoningEffort: 'high' }));
+
+    expect(inner.seen[1]?.cacheKey).toBeUndefined();
+    // And nothing else was given up to get there — the whole reason this step
+    // sits at the top of the ladder.
+    expect(inner.seen[1]?.reasoningEffort).toBe('high');
+  });
+
+  it('merges a trailing user turn for an endpoint that wants strict alternation', async () => {
+    // The loop sends the prompt's volatile half as a trailing user message so the
+    // history stays inside the cached prefix. Most endpoints accept two user
+    // turns in a row; the ones that do not get them folded together.
+    const inner = scripted(
+      new ProviderError('invalid_request', 'messages must alternate'),
+      resultOf('ok'),
+    );
+    const { provider } = wrap(inner);
+
+    await provider.chat(
+      request({ messages: [systemMessage('rules'), userMessage('hello'), userMessage('live')] }),
+    );
+
+    const merged = inner.seen[1]?.messages;
+    expect(merged).toHaveLength(2);
+    expect(merged?.[1]?.role === 'user' && merged[1].content).toEqual([
+      textPart('hello'),
+      textPart('live'),
+    ]);
+  });
+
+  it('leaves a request whose last two turns are not both user alone', () => {
+    const step = DEFAULT_DEGRADATION_STEPS.find((entry) => entry.id === 'merge_trailing_user')!;
+
+    expect(step.apply(request({ messages: [userMessage('hello')] }))).toBeNull();
+    expect(
+      step.apply(request({ messages: [userMessage('hello'), assistantMessage('hi')] })),
+    ).toBeNull();
+  });
+
   it('does not degrade an error no repair addresses', async () => {
     const inner = scripted(new ProviderError('content_filter', 'refused'));
     const { provider } = wrap(inner);
@@ -252,7 +298,11 @@ describe('the degradation ladder', () => {
 
   it('exposes each step as a pure function of the request', () => {
     const ids = DEFAULT_DEGRADATION_STEPS.map((step) => step.id);
+    // Cheapest repair first: a cache-routing hint costs nothing, a message
+    // boundary costs almost nothing, and it climbs from there to losing turns.
     expect(ids).toEqual([
+      'drop_prompt_cache_key',
+      'merge_trailing_user',
       'drop_reasoning_effort',
       'drop_tool_choice',
       'strip_images',
@@ -277,6 +327,37 @@ describe('truncateOldestTurns', () => {
     expect(kept?.[0]).toEqual(systemMessage('rules'));
     expect(kept?.at(-1)).toEqual(messages.at(-1));
     expect(kept!.length).toBeLessThan(messages.length);
+  });
+
+  it('keeps the trailing runtime turn, which carries the live half of the prompt', () => {
+    // It cuts from the front, so this holds by construction — but the tool-pair
+    // realignment runs over the whole array, and dropping this message would
+    // send a request with no clock, no delimiter and no wrap-up warning.
+    const runtime = userMessage('<system-reminder>\n## Live state\n</system-reminder>');
+    const messages = [systemMessage('rules'), long('a'), long('b'), long('c'), runtime];
+    const kept = truncateOldestTurns(messages);
+
+    expect(kept?.at(-1)).toEqual(runtime);
+  });
+
+  it('keeps the question as well as the trailing turn behind it', () => {
+    // The guard is "the turn this request is answering", not "the last message".
+    // With the runtime half appended after the history those are two different
+    // messages, and cutting to the last one alone would send a clock with no
+    // question in front of it.
+    const question = userMessage('what did the migration change?');
+    const runtime = userMessage('<system-reminder>\n## Live state\n</system-reminder>');
+    const kept = truncateOldestTurns([
+      systemMessage('rules'),
+      long('a'),
+      long('b'),
+      long('c'),
+      question,
+      runtime,
+    ]);
+
+    expect(kept).toContainEqual(question);
+    expect(kept?.at(-1)).toEqual(runtime);
   });
 
   it('never leaves a tool result without the assistant turn that requested it', () => {

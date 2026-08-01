@@ -483,8 +483,10 @@ function harnessRuntime(runtime: GhostRuntime, configFile: string): ServerRuntim
         tools: runtime.tools.select(agent.tools).definitions(),
         contextWindowTokens: agent.defaults.contextWindowTokens,
         systemPrompt: async (input) =>
-          (await loop?.previewPrompt(input)) ??
-          'No model is configured, so no system prompt has been assembled yet.',
+          (await loop?.previewPrompt(input)) ?? {
+            staticPrompt: 'No model is configured, so no system prompt has been assembled yet.',
+            runtimeBlock: '',
+          },
       };
     },
 

@@ -224,10 +224,34 @@ export function describeInjectionFindings(findings: readonly InjectionFinding[])
  * offer it as a starting point; the layer graph runs protocol → core → security,
  * so this import is the direction that exists.
  */
-export function toolOutputPolicy(nonce: string, template?: string): string {
-  const tag = toolOutputTag(nonce);
-  return renderPromptTemplate(
-    template === undefined || template === '' ? DEFAULT_TOOL_POLICY_TEMPLATE : template,
-    { nonce, tag },
-  );
+export function toolOutputPolicy(nonce: string | undefined, template?: string): string {
+  const effective = effectiveToolPolicy(template);
+  // The tag is derived only when the text asks for it. That is what lets a policy
+  // naming no delimiter be rendered with no turn in hand, and so be placed in the
+  // cached half of the prompt — `toolOutputTag` needs a real nonce and throws
+  // without one, so computing it eagerly would have made `nonce` mandatory for a
+  // string that never mentions it.
+  if (nonce === undefined) return renderPromptTemplate(effective, {});
+  return renderPromptTemplate(effective, { nonce, tag: toolOutputTag(nonce) });
+}
+
+function effectiveToolPolicy(template?: string): string {
+  return template === undefined || template === '' ? DEFAULT_TOOL_POLICY_TEMPLATE : template;
+}
+
+/** Matches the placeholder syntax `renderPromptTemplate` fills. */
+const POLICY_NONCE_PLACEHOLDER = /\{\{(?:nonce|tag)\}\}/;
+
+/**
+ * Whether this policy text names the turn's delimiter.
+ *
+ * The placement rule, in one predicate: a policy that spells out the tag changes
+ * every turn and belongs in the runtime half; one that does not is identical for
+ * the life of a session and belongs in the cached prefix. Deriving it beats
+ * declaring it, because an operator who customised the template with `{{tag}}`
+ * then keeps working with no migration — they simply keep paying for it, which
+ * is what the editor's warning tells them.
+ */
+export function toolPolicyUsesNonce(template?: string): boolean {
+  return POLICY_NONCE_PLACEHOLDER.test(effectiveToolPolicy(template));
 }

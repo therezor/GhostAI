@@ -45,6 +45,8 @@ export interface FakeRuntimeOptions {
   readonly toolboxes?: readonly ToolboxListing[];
   readonly credentialsPresent?: Readonly<Record<string, boolean>>;
   readonly systemPrompt?: string;
+  /** The trailing turn the loop appends after the history. */
+  readonly runtimeBlock?: string;
   /** Injected where a test needs two rows to carry different timestamps. */
   readonly clock?: Clock;
   /**
@@ -129,8 +131,10 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
     jailFor,
     tools: options.tools ?? [],
     contextWindowTokens: config.agents.defaults.contextWindowTokens,
-    systemPrompt: async ({ sessionKey }) =>
-      options.systemPrompt ?? `# GhostAI\n\nSession: ${sessionKey}`,
+    systemPrompt: async ({ sessionKey }) => ({
+      staticPrompt: options.systemPrompt ?? `# GhostAI\n\nSession: ${sessionKey}`,
+      runtimeBlock: options.runtimeBlock ?? '## Live state\n\nCurrent time: whenever',
+    }),
   };
 
   /**

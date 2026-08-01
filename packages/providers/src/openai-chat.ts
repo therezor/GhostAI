@@ -224,6 +224,13 @@ function buildBody(
   if (maxTokens !== undefined) body[spec.maxTokensParam ?? 'max_tokens'] = Math.max(1, maxTokens);
   if (temperature !== undefined) body.temperature = temperature;
   if (request.reasoningEffort !== undefined) body.reasoning_effort = request.reasoningEffort;
+  // Only where the table says the provider caches prompts. It is an optional
+  // routing hint everywhere it is understood and an unknown field everywhere
+  // else, and sending unknown fields to endpoints that have no use for them is
+  // how the degradation ladder ends up doing work that need not happen.
+  if (spec.supportsPromptCaching === true && request.cacheKey !== undefined) {
+    body.prompt_cache_key = request.cacheKey;
+  }
 
   if (request.tools !== undefined && request.tools.length > 0) {
     body.tools = request.tools.map((tool) => ({

@@ -43,6 +43,7 @@ const SEGMENT_FILLS: Readonly<Record<string, string>> = {
   systemPrompt: 'context-fill--system-prompt',
   tools: 'context-fill--tools',
   messages: 'context-fill--messages',
+  runtimeBlock: 'context-fill--runtime-block',
   other: 'context-fill--other',
 };
 
@@ -131,6 +132,12 @@ export function ContextBody({ sessionKey }: { readonly sessionKey: string }): JS
         ) : (
           <Badge tone="neutral">{fmt.tokens(budget.freeTokens)} free</Badge>
         )}
+        {/* The figure the two halves exist to move. Everything else here is
+            paid once for the conversation; this is paid again on every request
+            of every turn, which is what makes it the number worth acting on. */}
+        <Badge tone="neutral">
+          {t('context.perIteration', { tokens: fmt.tokens(budget.uncachedTokens) })}
+        </Badge>
       </div>
 
       {/* The bar is decoration for the table below it, which carries the same
@@ -206,6 +213,16 @@ export function ContextBody({ sessionKey }: { readonly sessionKey: string }): JS
             </ol>
           )}
         </Section>
+
+        {/* Last, because it is last in the request — the trailing turn the loop
+            appends after the conversation so the conversation stays cacheable.
+            Absent in `raw` mode, where the operator's one template is the whole
+            system message and there is no second half to show. */}
+        {context.data.runtimeBlock === '' ? null : (
+          <Section fill={SEGMENT_FILLS.runtimeBlock} label={t('context.runtimeBlock')}>
+            <pre className="context__text">{context.data.runtimeBlock}</pre>
+          </Section>
+        )}
       </div>
     </div>
   );

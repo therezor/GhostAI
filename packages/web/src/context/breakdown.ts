@@ -27,14 +27,30 @@ import type { TFunction } from 'i18next';
 import type { WebKey } from '@/i18n/keys.js';
 
 /** The order the three sections the server reports are always shown in. */
-const KNOWN_ORDER: readonly string[] = ['systemPrompt', 'tools', 'messages'];
+/**
+ * Request order, which is also cached-then-not: the three sections a provider
+ * can serve from its prefix cache, then the trailing turn that is re-read at
+ * full price on every iteration of every turn.
+ */
+const KNOWN_ORDER: readonly string[] = ['systemPrompt', 'tools', 'messages', 'runtimeBlock'];
 
 const LABELS: Readonly<Record<string, WebKey>> = {
   systemPrompt: 'context.labels.systemPrompt',
   tools: 'context.labels.tools',
   messages: 'context.labels.messages',
+  runtimeBlock: 'context.labels.runtimeBlock',
   other: 'context.labels.other',
 };
+
+/**
+ * The sections a provider's prompt cache can serve, so the strip can say which
+ * part of the bill is paid once and which is paid every iteration.
+ *
+ * `other` is the gap between the named sections and the server's total, so it
+ * is unattributed by construction and counted as uncached — the honest side to
+ * err on for a number nobody can point at.
+ */
+const CACHEABLE: ReadonlySet<string> = new Set(['systemPrompt', 'tools', 'messages']);
 
 export interface ContextSegment {
   /** The breakdown key, or `other` for the unaccounted remainder. */
@@ -43,6 +59,8 @@ export interface ContextSegment {
   readonly tokens: number;
   /** Share of the context window, 0–100, unclamped so overflow stays visible. */
   readonly percent: number;
+  /** Whether a provider's prefix cache can serve this section. */
+  readonly cacheable: boolean;
 }
 
 export interface ContextBudget {
@@ -53,6 +71,14 @@ export interface ContextBudget {
   /** What is left, floored at zero: a negative "remaining" is not a quantity. */
   readonly freeTokens: number;
   readonly over: boolean;
+  /**
+   * What every iteration costs again — the sections the cache cannot serve.
+   *
+   * The figure the two-halves split exists to move, and the one an operator can
+   * act on: the cached total is paid once per conversation, this one is paid on
+   * every request of every turn.
+   */
+  readonly uncachedTokens: number;
 }
 
 export interface ContextInput {
@@ -77,18 +103,24 @@ export function summariseContext(
   const remainder = Math.max(0, estimatedTokens - accounted);
   const sections = remainder > 0 ? [...named, { key: 'other', tokens: remainder }] : named;
 
+  const segments = sections.map(({ key, tokens }) => ({
+    key,
+    label: labelFor(key, t),
+    tokens,
+    percent: percentOf(tokens),
+    cacheable: CACHEABLE.has(key),
+  }));
+
   return {
-    segments: sections.map(({ key, tokens }) => ({
-      key,
-      label: labelFor(key, t),
-      tokens,
-      percent: percentOf(tokens),
-    })),
+    segments,
     usedTokens: estimatedTokens,
     windowTokens,
     usedPercent: percentOf(estimatedTokens),
     freeTokens: Math.max(0, windowTokens - estimatedTokens),
     over: estimatedTokens > windowTokens,
+    uncachedTokens: segments
+      .filter((segment) => !segment.cacheable)
+      .reduce((total, segment) => total + segment.tokens, 0),
   };
 }
 

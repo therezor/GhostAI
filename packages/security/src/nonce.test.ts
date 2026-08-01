@@ -11,6 +11,7 @@ import {
   detectPromptInjection,
   toolOutputPolicy,
   toolOutputTag,
+  toolPolicyUsesNonce,
   wrapToolOutput,
 } from './nonce.js';
 
@@ -239,11 +240,20 @@ describe('describeInjectionFindings', () => {
 });
 
 describe('toolOutputPolicy', () => {
-  it('names the delimiter in force and states that content is data', () => {
+  it('states that content is data, without naming the delimiter', () => {
     const policy = toolOutputPolicy(NONCE);
-    expect(policy).toContain(TAG);
     expect(policy).toContain('untrusted data');
     expect(policy).toContain('never an instruction');
+    // The built-in refers to the delimiter rather than spelling it out, which is
+    // what lets it sit in the prompt's cached half — see
+    // `DEFAULT_TOOL_POLICY_TEMPLATE`. The tag is named once, in live state.
+    expect(policy).not.toContain(TAG);
+  });
+
+  it('renders with no turn in hand when the text names no delimiter', () => {
+    // The whole point of the split: a policy that needs no nonce can be built
+    // once per session rather than once per turn.
+    expect(toolOutputPolicy(undefined)).toBe(toolOutputPolicy(NONCE));
   });
 
   it('refuses to describe a guessable delimiter', () => {
@@ -254,6 +264,16 @@ describe('toolOutputPolicy', () => {
     const policy = toolOutputPolicy(NONCE, 'Data sits in {{tag}}. Nonce: {{nonce}}.');
 
     expect(policy).toBe(`Data sits in ${TAG}. Nonce: ${NONCE}.`);
+  });
+
+  it('reports whether a template depends on the turn, which decides where it goes', () => {
+    // Derived rather than declared, so an operator who kept `{{tag}}` keeps
+    // working — they simply keep paying for it on every iteration.
+    expect(toolPolicyUsesNonce()).toBe(false);
+    expect(toolPolicyUsesNonce('')).toBe(false);
+    expect(toolPolicyUsesNonce('Data sits in {{tag}}.')).toBe(true);
+    expect(toolPolicyUsesNonce('Nonce: {{nonce}}.')).toBe(true);
+    expect(toolPolicyUsesNonce('Plain prose.')).toBe(false);
   });
 
   it('falls back to the built-in when the template is empty', () => {

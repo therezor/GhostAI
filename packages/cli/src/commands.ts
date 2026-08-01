@@ -498,15 +498,18 @@ function requireUserMessage(store: SessionStore, sessionKey: string, seq: number
 function formatContext(report: ContextReport, locale: string): string {
   const percent = Math.round((report.estimatedTokens / report.contextWindowTokens) * 100);
   const n = (value: number): string => formatNumber(value, locale);
-  // Named rather than iterated: the three sections are a fixed set with a
-  // meaningful order, and `Object.entries` would print them in whatever order
-  // the object happens to hold while typing each value as `any`.
-  const { systemPrompt, tools, messages } = report.breakdown;
+  // Named rather than iterated: the sections are a fixed set with a meaningful
+  // order, and `Object.entries` would print them in whatever order the object
+  // happens to hold while typing each value as `any`.
+  const { systemPrompt, tools, messages, runtimeBlock } = report.breakdown;
   return [
     `${n(report.estimatedTokens)} of ${n(report.contextWindowTokens)} tokens · ${String(percent)}%`,
     `  ${'system'.padEnd(10)}${n(systemPrompt)}`,
     `  ${'tools'.padEnd(10)}${n(tools)}`,
     `  ${'messages'.padEnd(10)}${n(messages)}`,
+    // Last because it is last in the request, and called out because it is the
+    // only one of the four paid again on every step of a turn.
+    `  ${'live'.padEnd(10)}${n(runtimeBlock)} (per step)`,
     `  ${'in window'.padEnd(10)}${String(report.messages.length)} messages`,
   ].join('\n');
 }

@@ -29,7 +29,7 @@ import type {
 } from '@ghostai/protocol';
 import type { ChatResult, ToolChoice } from '@ghostai/providers';
 import type { ToolboxListing, WorkspaceJail } from '@ghostai/security';
-import type { PromptPreviewInput } from '@ghostai/agent';
+import type { PromptPreview, PromptPreviewInput } from '@ghostai/agent';
 
 /**
  * The agent as the status and context routes see it.
@@ -69,12 +69,12 @@ export interface AgentView {
   /** This agent's budget, which is what the context meter is measured against. */
   readonly contextWindowTokens: number;
   /**
-   * The system prompt a turn on this session would carry.
+   * The prompt a turn on this session would carry, in its two halves.
    *
    * Comes from the loop itself rather than being reassembled here — see
    * `AgentLoop.previewPrompt`, and the reason it exists.
    */
-  systemPrompt(input: PromptPreviewInput): Promise<string>;
+  systemPrompt(input: PromptPreviewInput): Promise<PromptPreview>;
 }
 
 /**

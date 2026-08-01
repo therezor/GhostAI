@@ -129,8 +129,8 @@ import {
   buildRuntimeBlock,
   buildStaticPrompt,
   type PromptToolbox,
-  composeSystemPrompt,
   contributorSections,
+  runtimeReminder,
   type ContextContributor,
   type PromptAgent,
   type RuntimePromptContext,
@@ -493,6 +493,23 @@ export interface PromptPreviewInput {
   readonly agentId?: string;
 }
 
+/**
+ * The prompt as two messages at two ends of the request, kept apart.
+ *
+ * They are billed differently and that is the reason they are separate here:
+ * `staticPrompt` is the system message and the provider's cached prefix, while
+ * `runtimeBlock` is the trailing turn re-read at full price on every iteration.
+ * Joining them would hand the inspector a single figure whose whole purpose is
+ * to be broken in two.
+ *
+ * In `raw` mode `runtimeBlock` is empty — the operator's template is one blob
+ * placed entirely in the system message, which is the cost that mode chooses.
+ */
+export interface PromptPreview {
+  readonly staticPrompt: string;
+  readonly runtimeBlock: string;
+}
+
 export interface TurnResult {
   readonly turnId: string;
   readonly stopReason: StopReason;
@@ -686,7 +703,7 @@ export class AgentLoop {
   }
 
   /**
-   * The system prompt a turn on `sessionKey` would be sent, without running one.
+   * The prompt a turn on `sessionKey` would be sent, without running one.
    *
    * This exists so the context inspector shows the prompt the agent actually
    * uses rather than a second assembly of it. Composing the two halves outside
@@ -694,12 +711,18 @@ export class AgentLoop {
    * arrive as `ContextContributor`s attached to *this* object, and a reimplementation
    * elsewhere cannot see them.
    *
+   * **Both halves, separately.** They are two different messages at two ends of
+   * the request and they are billed differently — the static half is the cached
+   * prefix and the runtime half is the tail re-read at full price on every
+   * iteration. Returning one joined string would report a number the inspector
+   * exists to break apart.
+   *
    * The runtime half is built at iteration 1 with a throwaway nonce. Both are
    * per-turn values with no meaning outside a turn, and the alternative —
    * reporting the nonce of some other turn — would be worse than reporting one
    * that was never used.
    */
-  async previewPrompt(input: PromptPreviewInput): Promise<string> {
+  async previewPrompt(input: PromptPreviewInput): Promise<PromptPreview> {
     // The stored session decides, exactly as it does in `run`. A preview that
     // reported the default workspace's root for a session bound to another one
     // would describe a prompt no turn on it will ever carry.
@@ -755,30 +778,36 @@ export class AgentLoop {
     };
   }
 
-  /** The system message for one iteration. One function, so the preview cannot drift from the turn. */
+  /** The prompt for one iteration. One function, so the preview cannot drift from the turn. */
   #composePrompt(
     preamble: PromptPreamble,
     context: RuntimePromptContext,
     nonce: string,
     correction?: string,
-  ): string {
+  ): PromptPreview {
     const agent = this.#agent;
 
     if (agent?.promptMode === 'raw') {
-      return buildRawPrompt({
-        context,
-        nonce,
-        agent,
-        staticSections: preamble.staticSections,
-        contributors: this.#contributors,
-        ...(this.#toolboxPrompt === undefined ? {} : { toolbox: this.#toolboxPrompt }),
-        ...(correction === undefined ? {} : { correction }),
-      });
+      // One blob, and it stays in the system message. There is no cached prefix
+      // to protect here — the operator's template places everything itself, so
+      // splitting it across two messages would move text they positioned.
+      return {
+        staticPrompt: buildRawPrompt({
+          context,
+          nonce,
+          agent,
+          staticSections: preamble.staticSections,
+          contributors: this.#contributors,
+          ...(this.#toolboxPrompt === undefined ? {} : { toolbox: this.#toolboxPrompt }),
+          ...(correction === undefined ? {} : { correction }),
+        }),
+        runtimeBlock: '',
+      };
     }
 
-    return composeSystemPrompt(
-      preamble.staticPrompt,
-      buildRuntimeBlock({
+    return {
+      staticPrompt: preamble.staticPrompt,
+      runtimeBlock: buildRuntimeBlock({
         context,
         nonce,
         contributors: this.#contributors,
@@ -789,7 +818,7 @@ export class AgentLoop {
           : { toolPolicyPrompt: agent.toolPolicyPrompt }),
         ...(correction === undefined ? {} : { correction }),
       }),
-    );
+    };
   }
 
   /** Queues a correction for the turn currently running on `sessionKey`. */
@@ -972,7 +1001,7 @@ export class AgentLoop {
 
         iteration += 1;
 
-        const systemPrompt = this.#composePrompt(
+        const prompt = this.#composePrompt(
           preamble,
           {
             ...promptContext,
@@ -994,14 +1023,27 @@ export class AgentLoop {
         const request: ChatRequest = {
           model: this.#model,
           messages: [
-            systemMessage(systemPrompt),
+            systemMessage(prompt.staticPrompt),
             // Re-read every iteration: the tool results this turn just wrote are
             // part of the next request, and reading them back from the store is
             // what keeps history and the request identical rather than merely
             // similar.
             ...this.#store.history(sessionKey, { maxToolResultChars: 0 }),
+            // The volatile half, after the history rather than before it. A
+            // provider's cache ends at the first byte that differs from the last
+            // request, so a clock or an iteration counter placed ahead of the
+            // conversation re-prices the whole conversation on every iteration.
+            // Sent, never stored: the store is the conversation, and this is
+            // scaffolding for one request.
+            ...(prompt.runtimeBlock === ''
+              ? []
+              : [userMessage(runtimeReminder(prompt.runtimeBlock))]),
           ],
           ...(toolDefinitions.length === 0 ? {} : { tools: toolDefinitions }),
+          // Keyed on the session so every request in a conversation lands on the
+          // same cache shard. Providers that do not know the field ignore it, and
+          // the one that rejects it is handled by the degradation ladder.
+          cacheKey: sessionKey,
           maxTokens: this.#config.maxTokens,
           // Both omitted rather than sent as `undefined` when unset: an adapter
           // that spreads the request into a JSON body would otherwise emit

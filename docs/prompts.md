@@ -28,19 +28,49 @@ requests over the same history.
 
 So the prompt is assembled from two pieces:
 
-| Half        | Rebuilt                                            | Contains                                                                            |
-| ----------- | -------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| **Static**  | Once per turn, identical for the life of a session | Identity, workspace rules, the platform note, guidelines, the toolbox advertisement |
-| **Runtime** | Every iteration                                    | Live state, the tool-output policy with this turn's nonce, one-off corrections      |
+| Half        | Rebuilt                                            | Contains                                                                                                    |
+| ----------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **Static**  | Once per turn, identical for the life of a session | Identity, workspace rules, the platform note, guidelines, the toolbox advertisement, the tool-output policy |
+| **Runtime** | Every iteration                                    | Live state, this turn's delimiter, one-off corrections                                                      |
 
-They are joined by `\n\n---\n\n`, and the runtime half sits at the **end**, so what it
-invalidates is only itself. The loop rewrites `messages[0]` each iteration rather than
-appending a second system message — two system messages is a shape some providers reject
-and others quietly reorder, and the ordering is what the cache depends on.
+**The halves are two different messages, at two ends of the request.** That is the part
+worth being precise about, because it was once got wrong: the runtime half used to be
+appended to the system message, which is `messages[0]` — the _front_ of the request.
+Everything after it is the conversation, so a changed iteration counter ended the
+discount for the whole history on every request, and a ten-iteration turn over a long
+conversation paid for that history ten times.
+
+What a turn actually sends:
+
+```
+system( static half )       ← cached, session-stable
+tools                       ← cached, stable per turn
+...conversation history     ← cached, append-only
+user( <system-reminder> )   ← the only part re-read at full price
+```
+
+The runtime half travels as a trailing **user** turn rather than a second system message:
+two system messages is a shape some providers reject and others quietly reorder, and a
+provider that hoisted it would put the volatile text back in front of the history, which
+is the exact cost this avoids. It is wrapped in a `<system-reminder>` envelope so the
+model reads it as operator metadata rather than as something you typed, and it is sent
+but never stored — the history is the conversation, and this is scaffolding for one
+request.
 
 Anything that changes between requests must go in the runtime half. A timestamp, a
 counter or a nonce placed in the static half invalidates the session's cached prefix on
 every single turn, which is exactly the cost this split exists to avoid.
+
+**The tool-output policy is in the static half**, which is why the built-in names no
+delimiter. It is the largest block in the prompt that never changes — around two hundred
+tokens — and it sat in the runtime half only because it spelled out a tag regenerated
+every turn. The tag is now one line of live state and the prose is discounted. Putting
+`{{tag}}` or `{{nonce}}` back into your own policy is allowed and moves the whole section
+back to the per-step half; the agent editor says so when you do.
+
+The context inspector reports the two halves separately, so the figure you can act on —
+what each step of a turn costs again — is a number on the screen rather than an
+inference.
 
 ## The six templates
 

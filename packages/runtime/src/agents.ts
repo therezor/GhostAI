@@ -33,6 +33,7 @@ import type { SubagentBinding } from '@ghostai/agent';
 import {
   AgentDefaultsSchema,
   DEFAULT_AGENT_TOOLS,
+  DEFAULT_LIVE_STATE_TEMPLATE,
   subagentToolName,
   type AgentDefaults,
   type AgentEntry,
@@ -293,6 +294,22 @@ function resolveSubagents(
  * all-or-nothing, so a settings save naming an unapproved toolbox is still a 400
  * that changes nothing rather than a turn that dies later.
  */
+/** Whether a template spells out the turn's tool-output delimiter. */
+function namesDelimiter(template: string): boolean {
+  return template.includes('{{tag}}') || template.includes('{{nonce}}');
+}
+
+/**
+ * The live-state template this agent actually renders.
+ *
+ * Empty inherits the built-in, which names the delimiter; a single space deletes
+ * the section, which does not. Same rule the prompt builder applies, asked here
+ * so the warning is about the prompt an agent will carry.
+ */
+function liveTemplate(agent: EffectiveAgent): string {
+  return agent.livePrompt === '' ? DEFAULT_LIVE_STATE_TEMPLATE : agent.livePrompt;
+}
+
 function assertBuildable(agent: EffectiveAgent, warn: WarningSink): void {
   const { name, network } = agent.toolbox;
 
@@ -301,14 +318,19 @@ function assertBuildable(agent: EffectiveAgent, warn: WarningSink): void {
   // `wrapToolOutput` whatever this text says, so a policy naming neither hole is
   // an agent that is *told* less, not one that is *guarded* less. Refusing the
   // save would make this the one template an operator does not own after all.
+  // The delimiter has to be named *somewhere*, not specifically here. The
+  // built-in policy deliberately names none — it is prose that never changes, so
+  // it lives in the prompt's cached half and the live-state section supplies the
+  // turn's tag. What leaves the model unable to identify a fence is neither
+  // template naming it, which takes two edits to reach.
   const policy = agent.toolPolicyPrompt;
-  if (policy.trim() !== '' && !policy.includes('{{nonce}}') && !policy.includes('{{tag}}')) {
+  if (policy.trim() !== '' && !namesDelimiter(policy) && !namesDelimiter(liveTemplate(agent))) {
     warn({
       agentId: agent.id,
       code: 'tool_policy_missing_nonce',
       message:
-        `Agent "${agent.id}" has a tool-output policy that names neither {{tag}} nor {{nonce}}.\n` +
-        "  Tool results are still wrapped in the turn's delimiter; the model is just not told what it means.",
+        `Agent "${agent.id}" names {{tag}} in neither its tool-output policy nor its live-state section.\n` +
+        "  Tool results are still wrapped in the turn's delimiter; the model is just not told which one.",
       details: { agentId: agent.id },
     });
   }
