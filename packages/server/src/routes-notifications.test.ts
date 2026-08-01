@@ -100,6 +100,35 @@ describe('NotificationStore', () => {
     expect(rest.map((entry) => entry.id)).toEqual([second.id]);
   });
 
+  it('counts the whole table, and the unread within it, separately', async () => {
+    const test = await start();
+    const first = test.server.notifications.create({ title: 'one' });
+    test.server.notifications.create({ title: 'two' });
+    test.server.notifications.markRead(first.id);
+
+    expect(test.server.notifications.count()).toBe(2);
+    expect(test.server.notifications.count({ unreadOnly: true })).toBe(1);
+    expect(test.server.notifications.unreadCount()).toBe(1);
+  });
+
+  it('pages over an offset for a numbered reader', async () => {
+    const test = await start();
+    for (let i = 0; i < 5; i += 1) test.server.notifications.create({ title: `n${String(i)}` });
+
+    expect(test.server.notifications.list({ limit: 2, offset: 2 })).toHaveLength(2);
+    expect(test.server.notifications.list({ limit: 2, offset: 99 })).toEqual([]);
+  });
+
+  it('empties the table and says how many went', async () => {
+    const test = await start();
+    for (let i = 0; i < 3; i += 1) test.server.notifications.create({ title: `n${String(i)}` });
+
+    expect(test.server.notifications.deleteAll()).toBe(3);
+    expect(test.server.notifications.count()).toBe(0);
+    // A second clear removes nothing rather than failing.
+    expect(test.server.notifications.deleteAll()).toBe(0);
+  });
+
   it('filters to unread', async () => {
     const notifications = store();
     const read = notifications.create({ title: 'read' });
@@ -220,6 +249,98 @@ describe('notification routes', () => {
 
     expect(response.statusCode).toBe(204);
     expect(test.server.notifications.get(created.id)).toBeUndefined();
+  });
+
+  it('pages over an offset and reports how many there are', async () => {
+    const test = await start();
+    for (let i = 0; i < 5; i += 1) test.server.notifications.create({ title: `n${String(i)}` });
+
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: '/api/notifications?limit=2&offset=2',
+      headers: test.headers,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json<NotificationListResponse>();
+    expect(body.notifications).toHaveLength(2);
+    expect(body.total).toBe(5);
+  });
+
+  /**
+   * `total` and `unreadCount` are two questions, and conflating them is how a
+   * list of 200 read notifications reports that it has none. The badge counts
+   * what is waiting; the pager counts what it is paging through.
+   */
+  it('separates how many there are from how many are unread', async () => {
+    const test = await start();
+    const first = test.server.notifications.create({ title: 'one' });
+    test.server.notifications.create({ title: 'two' });
+    test.server.notifications.markRead(first.id);
+
+    const all = (
+      await test.server.app.inject({
+        method: 'GET',
+        url: '/api/notifications',
+        headers: test.headers,
+      })
+    ).json<NotificationListResponse>();
+    expect(all).toMatchObject({ total: 2, unreadCount: 1 });
+
+    // With the filter on, the two agree — the rows being paged *are* the unread.
+    const unread = (
+      await test.server.app.inject({
+        method: 'GET',
+        url: '/api/notifications?unread=true',
+        headers: test.headers,
+      })
+    ).json<NotificationListResponse>();
+    expect(unread).toMatchObject({ total: 1, unreadCount: 1 });
+  });
+
+  it('refuses a request that names both paging modes', async () => {
+    const test = await start();
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: '/api/notifications?cursor=abc&offset=25',
+      headers: test.headers,
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toMatch(/cursor or an offset/i);
+  });
+
+  /**
+   * Read *and* unread. A clear-all that quietly kept the unread ones would
+   * leave the bell still counting after the list looked empty.
+   */
+  it('clears everything, read and unread alike', async () => {
+    const test = await start();
+    const first = test.server.notifications.create({ title: 'read one' });
+    test.server.notifications.create({ title: 'still unread' });
+    test.server.notifications.markRead(first.id);
+
+    const response = await test.server.app.inject({
+      method: 'DELETE',
+      url: '/api/notifications',
+      headers: test.headers,
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(test.server.notifications.count()).toBe(0);
+    expect(test.server.notifications.unreadCount()).toBe(0);
+  });
+
+  /** An empty table is not an error — clearing nothing is a no-op, not a 404. */
+  it('clears an empty list without complaint', async () => {
+    const test = await start();
+    const response = await test.server.app.inject({
+      method: 'DELETE',
+      url: '/api/notifications',
+      headers: test.headers,
+    });
+
+    expect(response.statusCode).toBe(204);
   });
 
   it.each([

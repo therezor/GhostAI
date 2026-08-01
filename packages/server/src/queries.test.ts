@@ -43,6 +43,31 @@ describe('PageQuerySchema', () => {
     expect(PaginationQuerySchema.safeParse({ limit: MAX_PAGE_LIMIT }).success).toBe(true);
     expect(PaginationQuerySchema.safeParse({ limit: MAX_PAGE_LIMIT + 1 }).success).toBe(false);
   });
+
+  it('coerces an offset the same way', () => {
+    expect(PageQuerySchema.parse({ offset: '50' })).toEqual({
+      limit: DEFAULT_PAGE_LIMIT,
+      offset: 50,
+    });
+    expect(PageQuerySchema.parse({ offset: '0' })).toMatchObject({ offset: 0 });
+  });
+
+  /**
+   * The distinction the paging guard rests on.
+   *
+   * `assertOnePagingMode` refuses a request carrying both a cursor and an
+   * offset, so "offset 0" and "no offset" have to stay different values — a
+   * schema that defaulted this to `0` would make every cursor request arrive
+   * carrying an offset it never sent, and the guard would reject all of them.
+   */
+  it('leaves an absent offset absent rather than defaulting it to zero', () => {
+    expect(PageQuerySchema.parse({})).toEqual({ limit: DEFAULT_PAGE_LIMIT });
+    expect(PageQuerySchema.parse({ cursor: 'abc' })).not.toHaveProperty('offset');
+  });
+
+  it.each(['-1', '1.5', 'lots'])('refuses offset=%s', (offset) => {
+    expect(PageQuerySchema.safeParse({ offset }).success).toBe(false);
+  });
 });
 
 describe('SessionListQuerySchema', () => {
@@ -55,6 +80,36 @@ describe('SessionListQuerySchema', () => {
 
   it('refuses an empty origin, which would filter to nothing', () => {
     expect(SessionListQuerySchema.safeParse({ origin: '' }).success).toBe(false);
+  });
+
+  /**
+   * Unlike `origin`, and deliberately: an empty search box is a legal thing for
+   * a client to send, and the store already reads blank as "no filter".
+   * Rejecting it would turn clearing the field into a 400.
+   */
+  it('accepts an empty search, because a cleared box is not a bad request', () => {
+    expect(SessionListQuerySchema.parse({ q: '' })).toMatchObject({ q: '' });
+  });
+
+  it.each(['updated', 'created', 'title'])('takes sort=%s', (sort) => {
+    expect(SessionListQuerySchema.parse({ sort })).toMatchObject({ sort });
+  });
+
+  it('refuses a column it cannot order by', () => {
+    // `messages` in particular: the count is a correlated subquery, so ordering
+    // by it would scan the messages table once per session row.
+    expect(SessionListQuerySchema.safeParse({ sort: 'messages' }).success).toBe(false);
+  });
+
+  it.each([
+    ['true', true],
+    ['false', false],
+  ])('reads desc=%s as a boolean', (input, expected) => {
+    expect(SessionListQuerySchema.parse({ desc: input })).toMatchObject({ desc: expected });
+  });
+
+  it('refuses a direction that is neither', () => {
+    expect(SessionListQuerySchema.safeParse({ desc: 'maybe' }).success).toBe(false);
   });
 });
 

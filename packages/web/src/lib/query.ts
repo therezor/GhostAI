@@ -35,6 +35,22 @@ export const queryKeys = {
    */
   sessions: (workspaceId?: string) =>
     workspaceId === undefined ? (['sessions'] as const) : (['sessions', { workspaceId }] as const),
+  /**
+   * One page of the sessions management screen.
+   *
+   * Under the `['sessions']` prefix like everything else here, so the
+   * invalidation `use-connection.ts` already fires after every turn refreshes
+   * it. Every input to the request is *in* the key rather than beside it: two
+   * searches are two different answers, and a shared key would serve the old
+   * rows for the new query until the refetch landed.
+   */
+  sessionPage: (params: {
+    readonly workspaceId: string;
+    readonly page: number;
+    readonly q: string;
+    readonly sort: string;
+    readonly desc: boolean;
+  }) => ['sessions', 'page', params] as const,
   session: (key: string) => ['sessions', key] as const,
   messages: (key: string) => ['sessions', key, 'messages'] as const,
   /**
@@ -43,7 +59,17 @@ export const queryKeys = {
    * grows without a second subscription.
    */
   turns: (key: string) => ['sessions', key, 'turns'] as const,
+  /** The bell's recent list, unpaged. */
   notifications: ['notifications'] as const,
+  /**
+   * One page of the notification centre.
+   *
+   * A key of its own rather than the bell's, because the two ask for different
+   * things: the bell wants the newest few and the centre wants rows 26–50. It
+   * still sits under the `['notifications']` prefix, so one invalidation after a
+   * write refreshes the badge and the list together.
+   */
+  notificationPage: (page: number) => ['notifications', 'page', { page }] as const,
   settings: ['settings'] as const,
   providers: ['providers'] as const,
   models: ['models'] as const,
@@ -65,7 +91,11 @@ export const queryKeys = {
   automationJob: (id: string) => ['automation', id] as const,
   // Under the job's own key, so invalidating one job refreshes both the row and
   // its history — which is what a `notification` carrying a `jobId` wants.
-  automationRuns: (id: string) => ['automation', id, 'runs'] as const,
+  //
+  // The page is *in* the key rather than beside it, because two pages of runs
+  // are two different answers: a shared key would serve page 1's rows for
+  // page 2 until the refetch landed, which is the same row twice on screen.
+  automationRuns: (id: string, page = 1) => ['automation', id, 'runs', { page }] as const,
 };
 
 export function createQueryClient(): QueryClient {

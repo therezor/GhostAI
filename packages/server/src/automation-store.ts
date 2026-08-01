@@ -30,7 +30,6 @@
  *    the sparse history is the one worth keeping.
  */
 
-import { randomUUID } from 'node:crypto';
 import type { DatabaseSync, SQLOutputValue, StatementSync } from 'node:sqlite';
 
 import { GhostError, silentLogger, systemClock, type Clock, type Logger } from '@ghostai/core';
@@ -38,6 +37,7 @@ import {
   AutomationPayloadSchema,
   AutomationScheduleSchema,
   RunStatusSchema,
+  newUuid,
   type AutomationJob,
   type AutomationPayload,
   type AutomationRun,
@@ -137,6 +137,15 @@ export interface UpdateJobInput {
 
 export interface ListRunsOptions {
   readonly limit?: number;
+  /**
+   * For a numbered pager, where `after` is for a sequential reader.
+   *
+   * The two are alternatives and never combined: `after` addresses a position in
+   * the sort order, `offset` counts rows from the top, and applying both asks
+   * for a page relative to a page. `automation.runs` refuses the combination
+   * with a 400 rather than letting one silently win.
+   */
+  readonly offset?: number;
   readonly after?: AutomationRunCursor;
 }
 
@@ -281,7 +290,7 @@ export class AutomationStore {
   constructor(options: AutomationStoreOptions) {
     this.#db = options.database;
     this.#clock = options.clock ?? systemClock;
-    this.#newId = options.newId ?? randomUUID;
+    this.#newId = options.newId ?? newUuid;
     this.#logger = options.logger ?? silentLogger;
     // Connection-level and idempotent. `SessionStore` already sets it on the
     // shared connection, but this store's cascade is the only thing standing
@@ -636,7 +645,7 @@ export class AutomationStore {
    * normal case when the boot sweep dispatches a backlog.
    */
   listRuns(jobId: string, options: ListRunsOptions = {}): AutomationRun[] {
-    const { limit = 50, after } = options;
+    const { limit = 50, offset = 0, after } = options;
     const rows = this.#stmt(
       `SELECT * FROM automation_runs
         WHERE job_id = ?
@@ -644,7 +653,7 @@ export class AutomationStore {
                OR started_at_ms < ?
                OR (started_at_ms = ? AND id > ?))
         ORDER BY started_at_ms DESC, id ASC
-        LIMIT ?`,
+        LIMIT ? OFFSET ?`,
     ).all(
       jobId,
       after?.startedAtMs ?? null,
@@ -652,8 +661,26 @@ export class AutomationStore {
       after?.startedAtMs ?? null,
       after?.id ?? null,
       limit,
+      offset,
     );
     return rows.map(rowToRun);
+  }
+
+  /**
+   * How many runs one job has kept.
+   *
+   * What a numbered pager needs and a cursor does not — "Page 3 of 12" cannot be
+   * derived from a page of rows. `SessionStore` builds its filter through a
+   * shared helper so its count and its page cannot disagree; there is nothing to
+   * share here, because a run listing filters on `job_id` and nothing else.
+   *
+   * The total is bounded rather than open-ended: `trimRuns` holds each job to
+   * its retention knob, so this counts a capped table however long the job has
+   * been running.
+   */
+  countRuns(jobId: string): number {
+    const row = this.#stmt('SELECT COUNT(*) AS n FROM automation_runs WHERE job_id = ?').get(jobId);
+    return row === undefined ? 0 : readInt(row, 'n');
   }
 
   /**

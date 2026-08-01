@@ -20,7 +20,7 @@
  */
 
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   BrainCircuit,
   CalendarClock,
@@ -33,12 +33,14 @@ import {
 } from 'lucide-react';
 import { useState, type JSX, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { SessionSummary } from '@ghostai/protocol';
 import type { WebKey } from '@/i18n/keys.js';
 
 import { cn } from '@/lib/cn.js';
 import { api } from '@/lib/api.js';
 import { newSession } from '@/lib/connection.js';
 import { queryKeys } from '@/lib/query.js';
+import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';
 import { Button } from '@/components/ui/button.js';
 import { Input, Label } from '@/components/ui/field.js';
 import {
@@ -48,11 +50,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu.js';
 import { ScrollArea } from '@/components/ui/scroll-area.js';
-import { toast } from '@/components/ui/toast.js';
 import { useTurnStore } from '@/state/turn.js';
 import { WorkspaceSwitcher } from '@/workspaces/workspace-switcher.js';
 import { useAgent } from '@/agents/agent-context.js';
 import { useWorkspace } from '@/workspaces/workspace-context.js';
+import { useDeleteSession, useRenameSession } from '@/sessions/use-sessions.js';
 
 interface NavItem {
   readonly to: string;
@@ -98,13 +100,24 @@ const NAV: readonly NavItem[] = [
  */
 const UNTITLED = 'sessions.untitled';
 
+/**
+ * How many conversations the column carries.
+ *
+ * It used to be whatever the server's default page was — fifty — which was not a
+ * decision so much as the absence of one, and it read as the whole list while
+ * being the newest fraction of it. Thirty is a number this column can *mean*:
+ * enough that the conversation you were in yesterday is still here, few enough
+ * that the See all link below is visibly the way to the rest rather than a
+ * footnote. Everything past it lives on `/sessions`, which searches and pages.
+ */
+const SIDEBAR_SESSIONS = 30;
+
 export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): JSX.Element {
   const { t } = useTranslation();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const { workspaceId } = useWorkspace();
   const { agentId } = useAgent();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
   // The session the socket is actually on, not the one the URL names. The two
   // differ for one render after starting a conversation — the route navigates
@@ -112,6 +125,7 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
   const attached = useTurnStore((state) => state.sessionKey);
 
   const [renaming, setRenaming] = useState<string | undefined>(undefined);
+  const [pendingDelete, setPendingDelete] = useState<SessionSummary | undefined>(undefined);
 
   function startChat(): void {
     // Nothing is written yet: the row appears in the list below when the first
@@ -129,7 +143,7 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
   // navigate. The switcher sits directly above it for the same reason.
   const sessions = useQuery({
     queryKey: queryKeys.sessions(workspaceId),
-    queryFn: ({ signal }) => api.sessions(workspaceId, signal),
+    queryFn: ({ signal }) => api.sessions({ workspaceId, limit: SIDEBAR_SESSIONS, signal }),
   });
 
   const rows = sessions.data?.sessions ?? [];
@@ -151,33 +165,12 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
     sessions.isSuccess &&
     (attached === undefined || !rows.some((session) => session.key === attached));
 
-  function refreshSessions(): void {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
-  }
-
-  const rename = useMutation({
-    mutationFn: ({ key, title }: { key: string; title: string }) => api.renameSession(key, title),
-    onSuccess: () => {
-      setRenaming(undefined);
-      refreshSessions();
-    },
-    onError: () => {
-      toast.error(t('sessions.renameFailed'));
-    },
-  });
-
-  const remove = useMutation({
-    mutationFn: (key: string) => api.deleteSession(key),
-    onSuccess: (_result, key) => {
-      refreshSessions();
-      // Only when the deleted conversation is the one on screen. Navigating
-      // away from a different session would move someone who was reading it.
-      if (key === attached) void navigate({ to: '/', search: {} });
-    },
-    onError: () => {
-      toast.error(t('sessions.deleteFailed'));
-    },
-  });
+  // Shared with the conversations page rather than written out here. Two
+  // implementations of "rename a session" is two sets of toasts and two answers
+  // to which queries a rename invalidates, and the second one is always the one
+  // that gets it wrong.
+  const rename = useRenameSession();
+  const remove = useDeleteSession();
 
   return (
     <div className="stack sidebar">
@@ -241,7 +234,17 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
                         event.preventDefault();
                         const value = new FormData(event.currentTarget).get('title');
                         if (typeof value === 'string' && value.trim() !== '') {
-                          rename.mutate({ key: session.key, title: value.trim() });
+                          // Closed on success rather than on submit: a rename
+                          // that failed should leave the box open with what was
+                          // typed in it.
+                          rename.mutate(
+                            { key: session.key, title: value.trim() },
+                            {
+                              onSuccess: () => {
+                                setRenaming(undefined);
+                              },
+                            },
+                          );
                         }
                       }}
                     >
@@ -257,7 +260,7 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
                           if (event.key === 'Escape') setRenaming(undefined);
                         }}
                       />
-                      <Button type="submit" size="sm" disabled={rename.isPending}>
+                      <Button type="submit" size="sm" disabled={rename.pending}>
                         Save
                       </Button>
                     </form>
@@ -295,15 +298,16 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
                         }}
                       >
                         <Pencil />
-                        Rename
+                        {t('sessions.rename')}
                       </DropdownMenuItem>
                       <DropdownMenuItem
+                        className="menu__item--danger"
                         onSelect={() => {
-                          remove.mutate(session.key);
+                          setPendingDelete(session);
                         }}
                       >
                         <Trash2 />
-                        Delete
+                        {t('sessions.delete')}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -319,9 +323,57 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
             )}
           </ul>
         </ScrollArea>
+
+        {/* The way to the rest of them, and a nav row would have been the wrong
+            shape for it. `sidebar.tsx` already refuses a `/workspaces` row
+            because the switcher above it carries the same destination — "a
+            second door into one room" — and a Sessions row sitting on top of
+            the session list is that mistake again. A footer under the list is
+            where "and the others" belongs.
+
+            Shown whether or not the list is full: a door nobody can find until
+            they have thirty conversations is a door most installs never get.
+
+            Its own wording rather than `common.seeAll`, which the notification
+            bell already uses. Two links reading "See all" in one page are two
+            links a screen reader announces identically, and the one thing a
+            link's name has to say is where it goes. */}
+        <Link to="/sessions" onClick={onNavigate} className="sidebar__see-all">
+          {t('sessions.seeAll')}
+        </Link>
       </Section>
+
+      <ConfirmDialog
+        open={pendingDelete !== undefined}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(undefined);
+        }}
+        title={t('sessions.deleteTitle')}
+        description={t('sessions.deleteHint', { title: titleOf(pendingDelete, t) })}
+        confirmLabel={t('sessions.delete')}
+        pending={remove.pending}
+        onConfirm={() => {
+          if (pendingDelete === undefined) return;
+          const { key } = pendingDelete;
+          remove.mutate(key, {
+            onSuccess: () => {
+              setPendingDelete(undefined);
+              // Only when the deleted conversation is the one on screen.
+              // Navigating away from a different session would move someone who
+              // was reading it.
+              if (key === attached) void navigate({ to: '/', search: {} });
+            },
+          });
+        }}
+      />
     </div>
   );
+}
+
+/** A conversation nobody has spoken in has no title of its own. See `UNTITLED`. */
+function titleOf(session: SessionSummary | undefined, t: (key: WebKey) => string): string {
+  if (session === undefined) return '';
+  return session.title === '' ? t(UNTITLED) : session.title;
 }
 
 /** `/` is only active when it is the whole path; everything else matches its prefix. */

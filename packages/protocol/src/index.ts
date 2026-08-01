@@ -16,6 +16,11 @@
  * browser edits it, so the template text and the substitution rules have to be
  * one definition rather than two that agree until they do not).
  *
+ * `newUuid` is the one export that is *not* pure — it reads a clock and a random
+ * source. It is here for the same reason `ids.ts` is: the server and the browser
+ * both mint ids, and the rule that two of them cannot collide has to be one
+ * implementation. It touches no I/O and imports nothing.
+ *
  * Runtime dependencies: `zod`, and nothing else — ever.
  */
 
@@ -31,6 +36,7 @@ export {
 export * from './messages.js';
 export * from './tools.js';
 export * from './ids.js';
+export * from './uuid.js';
 export * from './prompt.js';
 export * from './config.js';
 export * from './subagent.js';

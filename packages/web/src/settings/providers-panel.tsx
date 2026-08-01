@@ -17,11 +17,17 @@
  * look broken, and it answered a question nobody on this screen was asking.
  * Fetching a catalogue is a thing you do *to an endpoint*, and it lives in that
  * endpoint's editor.
+ *
+ * **It has the toolbar now, which it was alone in not having.** This was the one
+ * `DataList` screen with no filter and no sort — not a decision, just the screen
+ * that shipped before those moved into `components/crud`. "Shaped like Agents"
+ * has to include the row of controls above the rows, or the resemblance stops at
+ * the parts someone remembered to copy.
  */
 
 import { useQuery } from '@tanstack/react-query';
 import { Pencil, Plug, Plus, Power, PowerOff, Trash2 } from 'lucide-react';
-import { useState, type JSX } from 'react';
+import { useMemo, useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -34,15 +40,35 @@ import { Button } from '@/components/ui/button.js';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu.js';
 import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';
 import { DataList, DataListRow } from '@/components/crud/data-list.js';
+import { ListSort } from '@/components/crud/list-sort.js';
+import { Pagination } from '@/components/crud/pagination.js';
 import { RowActions } from '@/components/crud/row-actions.js';
+import { filterRows, sortRows, type Comparators, type SortOrder } from '@/components/crud/sort.js';
+import { pageRows, usePagination } from '@/components/crud/use-pagination.js';
+import { SearchFilter } from '@/components/ui/search-filter.js';
 import { Section } from './controls.js';
 import { toProviderEnabledPatch } from './provider-form.js';
 import { useRemoveProvider } from './use-provider.js';
 import { useSaveSettings } from './use-settings.js';
 
+type SortKey = 'name' | 'endpoint' | 'status';
+
+/** All three are text, and text reads from A. See `sortBy`. */
+const ASCENDING_FIRST: readonly SortKey[] = ['name', 'endpoint', 'status'];
+
+const COMPARE: Comparators<ProviderInstanceInfo, SortKey> = {
+  name: (a, b) => a.displayName.localeCompare(b.displayName),
+  endpoint: (a, b) => a.apiBase.localeCompare(b.apiBase),
+  // Disabled first ascending, so "what is switched off" is one press away —
+  // which is the question this column is ever asked.
+  status: (a, b) => Number(a.enabled) - Number(b.enabled),
+};
+
 export function ProvidersPanel(): JSX.Element {
   const { t } = useTranslation();
   const [pendingDelete, setPendingDelete] = useState<ProviderInstanceInfo | undefined>(undefined);
+  const [filter, setFilter] = useState('');
+  const [sort, setSort] = useState<SortOrder<SortKey>>({ key: 'name', descending: false });
   const { save, saving } = useSaveSettings();
   const { remove, removing } = useRemoveProvider();
   const navigate = useNavigate();
@@ -51,6 +77,25 @@ export function ProvidersPanel(): JSX.Element {
     queryKey: queryKeys.providers,
     queryFn: ({ signal }) => api.providers(signal),
   });
+
+  const all = providers.data?.instances ?? [];
+  const matched = useMemo(
+    () =>
+      sortRows(
+        // The endpoint is in the haystack because it is on screen under every
+        // name: a list that shows a value it will not match on reads as broken.
+        filterRows(all, filter, (instance) => `${instance.displayName} ${instance.apiBase}`),
+        sort,
+        COMPARE,
+        { tiebreak: (a, b) => a.displayName.localeCompare(b.displayName) },
+      ),
+    [all, filter, sort],
+  );
+
+  const pagination = usePagination({
+    resetOn: `${filter}|${sort.key}|${String(sort.descending)}`,
+  }).withTotal(matched.length);
+  const rows = pageRows(matched, pagination);
 
   if (providers.isPending) {
     return <p className="page__note">{t('providers.loading')}</p>;
@@ -62,8 +107,6 @@ export function ProvidersPanel(): JSX.Element {
       </p>
     );
   }
-
-  const { instances } = providers.data;
 
   return (
     <Section title={t('providers.title')} description={t('providers.panelDesc')}>
@@ -82,11 +125,32 @@ export function ProvidersPanel(): JSX.Element {
         </Button>
       </div>
 
-      {instances.length === 0 ? (
+      {/* Only once there is something to narrow. A search box over two rows is
+          furniture, and the empty-state sentence below reads better without a
+          control above it implying there is a list to filter. */}
+      {all.length > 0 && (
+        <div className="row list-toolbar">
+          <SearchFilter value={filter} label={t('providers.filter')} onValueChange={setFilter} />
+          <ListSort
+            options={[
+              { key: 'name', label: t('common.name') },
+              { key: 'endpoint', label: t('providers.endpoint') },
+              { key: 'status', label: t('common.status') },
+            ]}
+            sort={sort}
+            ascendingFirst={ASCENDING_FIRST}
+            onChange={setSort}
+          />
+        </div>
+      )}
+
+      {all.length === 0 ? (
         <p className="page__note">{t('providers.none')}</p>
+      ) : matched.length === 0 ? (
+        <p className="page__note">{t('providers.noMatch', { filter })}</p>
       ) : (
         <DataList label={t('providers.title')}>
-          {instances.map((instance) => (
+          {rows.map((instance) => (
             <DataListRow
               key={instance.id}
               primary={
@@ -160,6 +224,8 @@ export function ProvidersPanel(): JSX.Element {
           ))}
         </DataList>
       )}
+
+      <Pagination pagination={pagination} total={matched.length} label={t('providers.title')} />
 
       <ConfirmDialog
         open={pendingDelete !== undefined}

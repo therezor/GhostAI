@@ -1,11 +1,26 @@
 /**
  * Opaque pagination cursors.
  *
- * Cursor rather than offset everywhere a client pages, because both listings
- * move under a reader: messages are appended while a transcript is being read,
- * and a turn landing anywhere bumps its session to the front of the session
- * list. An offset shifts with them, so an offset-paged reader sees one row twice
- * and misses another — on exactly the long conversations where it matters.
+ * Cursor rather than offset for a reader moving *through* a listing, because
+ * these listings move under one: messages are appended while a transcript is
+ * being read, and a turn landing anywhere bumps its session to the front of the
+ * session list. An offset shifts with them, so an offset-paged reader sees one
+ * row twice and misses another — on exactly the long conversations where it
+ * matters.
+ *
+ * **Two endpoints now also accept an offset, and that is not a retreat from the
+ * paragraph above.** `sessions.list` and `automation.runs` are read by numbered
+ * pagers as well — the sessions management screen and a job's run history — and
+ * a numbered pager is not the reader that argument is about. It does not walk
+ * the list; it jumps to page 7 and acts on a row there, which is a position it
+ * has never visited and therefore has no cursor for. Reordering under it costs
+ * it the guarantee that consecutive pages do not overlap, which is a guarantee
+ * it was never using: it is filtering to a handful of rows and clicking one.
+ *
+ * The two modes are alternatives and `assertOnePagingMode` refuses the pair.
+ * Which one a caller gets is decided by which it sends: the sidebar and every
+ * sequential reader send `cursor`, a pager sends `offset`, and a cursor is only
+ * *issued* while the listing is in the ordering that cursor addresses.
  *
  * The encoding is base64url'd JSON, and the point of it is that it is *opaque*.
  * A cursor that reads as `42` is a cursor a client will do arithmetic on, and
@@ -40,6 +55,24 @@ export interface NotificationCursor {
 export interface AutomationRunCursor {
   readonly startedAtMs: number;
   readonly id: string;
+}
+
+/**
+ * Refuses a request that names both paging modes.
+ *
+ * A cursor addresses a position in the sort order and an offset counts rows from
+ * the top, so a request carrying both is asking for a page relative to a page.
+ * There is no reading of that which is more correct than the others, and a
+ * precedence rule would mean one of the two parameters is silently ignored —
+ * which looks exactly like a server that paged wrongly.
+ */
+export function assertOnePagingMode(query: {
+  readonly cursor?: string | undefined;
+  readonly offset?: number | undefined;
+}): void {
+  if (query.cursor !== undefined && query.offset !== undefined) {
+    throw badRequest('Send either a cursor or an offset, not both');
+  }
 }
 
 function encode(payload: unknown): string {

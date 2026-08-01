@@ -16,7 +16,11 @@ import {
 } from '@ghostai/protocol';
 import type { FastifyReply } from 'fastify';
 
-import { decodeNotificationCursor, encodeNotificationCursor } from '../cursor.js';
+import {
+  assertOnePagingMode,
+  decodeNotificationCursor,
+  encodeNotificationCursor,
+} from '../cursor.js';
 import { notFound } from '../errors.js';
 import {
   IdParamsSchema,
@@ -27,7 +31,11 @@ import {
 import type { RouteDeps, RouteGroup } from './types.js';
 
 type NotificationRouteId =
-  'notifications.list' | 'notifications.read' | 'notifications.readAll' | 'notifications.delete';
+  | 'notifications.list'
+  | 'notifications.read'
+  | 'notifications.readAll'
+  | 'notifications.delete'
+  | 'notifications.deleteAll';
 
 export function notificationRoutes(deps: RouteDeps): RouteGroup<NotificationRouteId> {
   const store = deps.notifications;
@@ -41,9 +49,13 @@ export function notificationRoutes(deps: RouteDeps): RouteGroup<NotificationRout
       },
       handler: (request): NotificationListResponse => {
         const query = request.query as NotificationListQuery;
+        assertOnePagingMode(query);
+
+        const unreadOnly = query.unread === true;
         const rows = store.list({
           limit: query.limit + 1,
-          ...(query.unread === true ? { unreadOnly: true } : {}),
+          ...(unreadOnly ? { unreadOnly: true } : {}),
+          ...(query.offset === undefined ? {} : { offset: query.offset }),
           ...(query.cursor === undefined ? {} : { after: decodeNotificationCursor(query.cursor) }),
         });
 
@@ -54,6 +66,10 @@ export function notificationRoutes(deps: RouteDeps): RouteGroup<NotificationRout
           // Always the total, never the count of what this page happened to
           // contain: the badge counts what is waiting, not what is on screen.
           unreadCount: store.unreadCount(),
+          // A different number from `unreadCount` whenever the filter is off,
+          // and the pager needs this one: how many rows it is paging through,
+          // not how many of them are still unread.
+          total: store.count({ unreadOnly }),
           ...(rows.length > query.limit && last !== undefined
             ? {
                 nextCursor: encodeNotificationCursor({
@@ -84,6 +100,26 @@ export function notificationRoutes(deps: RouteDeps): RouteGroup<NotificationRout
       schema: {},
       handler: (_request, reply): FastifyReply => {
         store.markAllRead();
+        return reply.status(204).send();
+      },
+    },
+
+    /**
+     * Empties the list, read and unread alike.
+     *
+     * Its own route rather than a flag on the single delete: `DELETE /x/:id`
+     * with an id that means "all of them" is an id a typo can produce. What is
+     * *not* here is a confirmation — that belongs to the UI, which is where a
+     * person is standing. The server's job is to do exactly what was asked.
+     */
+    'notifications.deleteAll': {
+      summary: 'Delete every notification',
+      schema: {},
+      handler: (_request, reply): FastifyReply => {
+        store.deleteAll();
+        // 204 like its siblings. The count went nowhere useful: a client that
+        // just emptied the list refetches it, and a number it cannot act on is
+        // a number it would have to invent a use for.
         return reply.status(204).send();
       },
     },

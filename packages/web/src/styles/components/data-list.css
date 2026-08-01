@@ -254,4 +254,71 @@
     height: var(--size-icon-sm);
     color: var(--fg-3);
   }
+
+  /* ── Pagination ────────────────────────────────────────────── */
+
+  /* The mirror image of `.list-toolbar`, and deliberately so: the toolbar rules
+     the list off at the top and this closes it at the bottom, so the rows sit
+     inside a pair of lines rather than trailing off. Same `--space-3` between
+     the rule and the text either side of it, which is a row's own padding — see
+     the note on `.list-toolbar`.
+
+     The count reads first and the controls anchor to the far end, matching the
+     filter-then-sort arrangement above. `.spacer` between them rather than
+     `space-between`, because the three control groups on the right have to stay
+     together as one cluster. */
+  .pagination {
+    --gap: var(--space-1);
+
+    align-items: center;
+    padding-top: var(--space-3);
+    border-top: var(--hairline) solid var(--line);
+  }
+
+  /* Wraps under the controls on a narrow screen rather than squeezing them: it
+     is the part that can be read later, and `1 1 auto` on a flex line with
+     `flex-wrap` in `.row` is what lets it take its own line. */
+  .pagination__count {
+    flex: 1 1 auto;
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
+    color: var(--fg-3);
+  }
+
+  .pagination__pages {
+    --gap: var(--space-0-5);
+
+    align-items: center;
+  }
+
+  /* Square, so a column of numbers is a row of equal boxes rather than one that
+     jostles when the page count crosses ten. `--size-control-sm` is the height
+     `.btn--sm` already has, so this only pins the width to match it — a `4rem`
+     typed here would be a number that has to be re-derived every time the
+     control scale moves. */
+  .pagination__page,
+  .pagination__step {
+    min-width: var(--size-control-sm);
+    padding-inline: var(--space-1);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The same statement selection makes everywhere else in this UI: a raised
+     surface and the full-strength text tier. Not the accent — see the note at
+     the head of `pagination.tsx`. */
+  .pagination__page--current {
+    background-color: var(--surface-3);
+    color: var(--fg-1);
+  }
+
+  /* Sized like the buttons either side of it so the run of numbers keeps its
+     rhythm across the elision, and centred because it stands where a digit
+     would. */
+  .pagination__gap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--size-control-sm);
+    color: var(--fg-3);
+  }
 }

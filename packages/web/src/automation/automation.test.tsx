@@ -66,8 +66,8 @@ const SHELL_ROUTES: Record<string, StubRoute> = {
   '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
   '/api/setup': [200, { required: false }],
   '/api/status': [200, STATUS],
-  '/api/sessions': [200, { sessions: [] }],
-  '/api/notifications': [200, { notifications: [], unreadCount: 0 }],
+  '/api/sessions': [200, { sessions: [], total: 0 }],
+  '/api/notifications': [200, { notifications: [], unreadCount: 0, total: 0 }],
 };
 
 function mount(
@@ -84,7 +84,7 @@ function mount(
     'PATCH /api/settings': [200, SETTINGS],
     '/api/agents': [200, AGENTS],
     '/api/automation/jobs': [200, { jobs: [CRON_JOB] }],
-    '/api/automation/jobs/job-1/runs': [200, { runs: [RUN] }],
+    '/api/automation/jobs/job-1/runs': [200, { runs: [RUN], total: 1 }],
     ...overrides,
   });
 
@@ -429,7 +429,7 @@ describe('the job editor', () => {
     mount('/automation/job-1', {
       '/api/automation/jobs/job-1/runs': [
         200,
-        { runs: [{ ...RUN, warnings: ['no channel is wired yet'] }] },
+        { runs: [{ ...RUN, warnings: ['no channel is wired yet'] }], total: 1 },
       ],
     });
 
@@ -445,11 +445,11 @@ describe('the job editor', () => {
     mount('/automation/job-1', {
       '/api/automation/jobs/job-1/runs': [
         200,
-        { runs: [{ ...RUN, sessionKey: 'automation:job-1:run-1' }] },
+        { runs: [{ ...RUN, sessionKey: 'automation:job-1:run-1' }], total: 1 },
       ],
     });
 
-    const link = await screen.findByRole('link', { name: 'Open session' });
+    const link = await screen.findByRole('link', { name: 'Open conversation' });
     expect(link).toHaveAttribute(
       'href',
       expect.stringContaining(encodeURIComponent('automation:job-1:run-1')),
@@ -461,14 +461,17 @@ describe('the job editor', () => {
     // worse than no link.
     mount('/automation/job-1');
     expect(await screen.findByText('the build is green')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Open session' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Open conversation' })).not.toBeInTheDocument();
   });
 
   it('holds the in-flight wording still, which e2e cannot', async () => {
     mount('/automation/job-1', {
       '/api/automation/jobs/job-1/runs': [
         200,
-        { runs: [{ id: 'r2', jobId: 'job-1', startedAtMs: 1, status: 'pending', warnings: [] }] },
+        {
+          runs: [{ id: 'r2', jobId: 'job-1', startedAtMs: 1, status: 'pending', warnings: [] }],
+          total: 1,
+        },
       ],
     });
     expect(await screen.findByText('Pending')).toBeInTheDocument();

@@ -242,8 +242,45 @@ test('a run leaves a session that is listed like any other', async ({ app, harne
   // And the run history is a way in to it. The link is the whole path from
   // "this run went wrong" to the turn that says why.
   await app.goto(`${harness.url}/automation/${seeded.id}`);
-  await app.getByRole('link', { name: 'Open session' }).first().click();
+  await app.getByRole('link', { name: 'Open conversation' }).first().click();
   await expect(app.getByTestId('transcript')).toBeVisible();
+});
+
+/**
+ * A job's history outgrows one response long before anything else here does: a
+ * five-minute schedule appends ~288 runs a day, and until now the panel showed
+ * the newest 50 with no way to reach the rest.
+ *
+ * Seeded straight into the store rather than run through the loop — 26 real
+ * turns would take minutes and prove nothing this does not. What the browser is
+ * being asked is whether the panel pages, and the offset it sends is exercised
+ * against the real SQL either way.
+ */
+test('pages a run history longer than one page', async ({ app, harness }) => {
+  const seeded = await seedJob(app, harness.url);
+  for (let index = 0; index < 30; index += 1) {
+    const run = harness.server.automation.startRun({ jobId: seeded.id });
+    harness.server.automation.finishRun(run.id, { status: 'ok', output: `run ${String(index)}` });
+  }
+
+  await app.goto(`${harness.url}/automation/${seeded.id}`);
+
+  const pager = app.getByRole('navigation', { name: 'Runs' });
+  await expect(pager).toBeVisible();
+  // The count is the durable statement that the total came from a `COUNT(*)`
+  // rather than from the length of the page in front of it.
+  await expect(pager).toContainText('Showing 1–25 of 30');
+
+  const history = app.getByRole('list', { name: 'Runs' });
+  await expect(history.getByRole('listitem')).toHaveCount(25);
+
+  await pager.getByRole('button', { name: 'Next page' }).click();
+
+  await expect(pager).toContainText('Showing 26–30 of 30');
+  // Five rows on the last page rather than another full one, which is the
+  // offset having reached the SQL rather than being applied to a page the
+  // browser already held.
+  await expect(history.getByRole('listitem')).toHaveCount(5);
 });
 
 test('deleting a job takes its history with it', async ({ app, harness }) => {

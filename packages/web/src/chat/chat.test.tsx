@@ -140,8 +140,8 @@ beforeEach(() => {
     '/api/setup': [200, { required: false }],
     '/api/status': [200, STATUS],
     '/api/agents': [200, AGENTS],
-    '/api/sessions': [200, { sessions: [] }],
-    '/api/notifications': [200, { notifications: [], unreadCount: 0 }],
+    '/api/sessions': [200, { sessions: [], total: 0 }],
+    '/api/notifications': [200, { notifications: [], unreadCount: 0, total: 0 }],
     '/api/sessions/web%3A1/messages': [200, { sessionKey: SESSION, messages: [] }],
   });
 });
@@ -349,8 +349,8 @@ describe('an install with no model yet', () => {
       '/api/setup': [200, { required: false }],
       '/api/status': [200, UNCONFIGURED_STATUS],
       '/api/agents': [200, { agents: [] }],
-      '/api/sessions': [200, { sessions: [] }],
-      '/api/notifications': [200, { notifications: [], unreadCount: 0 }],
+      '/api/sessions': [200, { sessions: [], total: 0 }],
+      '/api/notifications': [200, { notifications: [], unreadCount: 0, total: 0 }],
       '/api/sessions/web%3A1/messages': [200, { sessionKey: SESSION, messages: [] }],
     });
     mount();
@@ -369,8 +369,8 @@ describe('an install with no model yet', () => {
       '/api/setup': [200, { required: false }],
       '/api/status': [200, UNCONFIGURED_STATUS],
       '/api/agents': [200, { agents: [] }],
-      '/api/sessions': [200, { sessions: [] }],
-      '/api/notifications': [200, { notifications: [], unreadCount: 0 }],
+      '/api/sessions': [200, { sessions: [], total: 0 }],
+      '/api/notifications': [200, { notifications: [], unreadCount: 0, total: 0 }],
       '/api/sessions/web%3A1/messages': [200, { sessionKey: SESSION, messages: [] }],
     });
     mount();
@@ -509,8 +509,8 @@ describe('a message that storage catches up with', () => {
       '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
       '/api/status': [200, STATUS],
       '/api/agents': [200, AGENTS],
-      '/api/sessions': [200, { sessions: [] }],
-      '/api/notifications': [200, { notifications: [], unreadCount: 0 }],
+      '/api/sessions': [200, { sessions: [], total: 0 }],
+      '/api/notifications': [200, { notifications: [], unreadCount: 0, total: 0 }],
       '/api/sessions/web%3A1/messages': [
         200,
         {
@@ -573,8 +573,8 @@ describe('where a conversation came from', () => {
       '/api/setup': [200, { required: false }],
       '/api/status': [200, STATUS],
       '/api/agents': [200, AGENTS],
-      '/api/sessions': [200, { sessions: [] }],
-      '/api/notifications': [200, { notifications: [], unreadCount: 0 }],
+      '/api/sessions': [200, { sessions: [], total: 0 }],
+      '/api/notifications': [200, { notifications: [], unreadCount: 0, total: 0 }],
       '/api/sessions/web%3A1/messages': [200, { sessionKey: SESSION, messages: [] }],
       '/api/sessions/web%3A1': [
         200,
@@ -641,7 +641,7 @@ describe('switching to a conversation whose history is already cached', () => {
       '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
       '/api/status': [200, STATUS],
       '/api/agents': [200, AGENTS],
-      '/api/notifications': [200, { notifications: [], unreadCount: 0 }],
+      '/api/notifications': [200, { notifications: [], unreadCount: 0, total: 0 }],
       '/api/sessions': [
         200,
         {
@@ -663,6 +663,7 @@ describe('switching to a conversation whose history is already cached', () => {
               messageCount: 1,
             },
           ],
+          total: 2,
         },
       ],
       '/api/sessions/web%3A1/messages': [200, storedIn(SESSION, 'the first conversation')],

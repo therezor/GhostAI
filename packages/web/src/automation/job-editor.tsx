@@ -31,6 +31,8 @@ import {
   type RunStatus,
 } from '@ghostai/protocol';
 
+import { Pagination } from '@/components/crud/pagination.js';
+import { usePagination } from '@/components/crud/use-pagination.js';
 import { Badge } from '@/components/ui/badge.js';
 import { Button } from '@/components/ui/button.js';
 import { api } from '@/lib/api.js';
@@ -177,7 +179,16 @@ function Editor({ job }: { readonly job?: AutomationJob }): JSX.Element {
   const save = useSaveJob(job?.id ?? '');
   const create = useCreateJob();
   const run = useRunJob();
-  const runs = useAutomationRuns(job?.id ?? '');
+  // The run history is paged on the *server*, unlike every other list in this
+  // app: a job on a five-minute schedule appends to it a few hundred times a
+  // day, and the panel exists to be looked back through.
+  //
+  // Page first, total after — the request needs a page number before there is a
+  // response to count. `resetOn` is the job's id, because opening a different
+  // job is the only thing here that changes which rows are being paged.
+  const runPage = usePagination({ resetOn: job?.id ?? '' });
+  const runs = useAutomationRuns(job?.id ?? '', runPage.page);
+  const runPagination = runPage.withTotal(runs.data?.total ?? 0);
 
   const update = <K extends keyof JobForm>(key: K, value: JobForm[K]): void => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -465,12 +476,23 @@ function Editor({ job }: { readonly job?: AutomationJob }): JSX.Element {
             (runs.data.runs.length === 0 ? (
               <p className="page__note">{t('automation.noRuns')}</p>
             ) : (
-              <ul className="settings-divided-list">
+              // Named, like every `DataList` is. It is the one list on this
+              // page, so an unnamed one is announced as "list" with nothing
+              // saying what is in it — and there is now a pager beneath it
+              // whose label has to match something.
+              <ul className="settings-divided-list" aria-label={t('automation.historyTitle')}>
                 {runs.data.runs.map((entry) => (
                   <RunItem key={entry.id} run={entry} />
                 ))}
               </ul>
             ))}
+          {runs.data !== undefined && (
+            <Pagination
+              pagination={runPagination}
+              total={runs.data.total}
+              label={t('automation.historyTitle')}
+            />
+          )}
         </Section>
       )}
     </div>
@@ -515,7 +537,7 @@ function RunItem({ run }: { readonly run: AutomationRun }): JSX.Element {
           search={{ session: run.sessionKey }}
           className="settings-divided-list__detail settings-divided-list__detail--link"
         >
-          {t('automation.openSession')}
+          {t('automation.openConversation')}
         </Link>
       )}
     </li>

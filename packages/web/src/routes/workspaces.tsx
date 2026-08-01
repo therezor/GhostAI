@@ -43,6 +43,8 @@ import { SearchFilter } from '@/components/ui/search-filter.js';
 import { RowActions } from '@/components/crud/row-actions.js';
 import { DataList, DataListRow } from '@/components/crud/data-list.js';
 import { ListSort } from '@/components/crud/list-sort.js';
+import { Pagination } from '@/components/crud/pagination.js';
+import { pageRows, usePagination } from '@/components/crud/use-pagination.js';
 import { filterRows, sortRows, type Comparators, type SortOrder } from '@/components/crud/sort.js';
 import { api } from '@/lib/api.js';
 import { useFormat } from '@/lib/use-format.js';
@@ -76,7 +78,7 @@ export function WorkspacesRoute(): JSX.Element {
   });
 
   const all = workspaces.data?.workspaces ?? [];
-  const rows = useMemo(
+  const matched = useMemo(
     () =>
       sortRows(
         // Filtering on the folder too: it is on screen under every name, and a
@@ -94,6 +96,13 @@ export function WorkspacesRoute(): JSX.Element {
       ),
     [all, filter, sort],
   );
+
+  // The whole registry is already in memory — this list is one request, not one
+  // page of one — so the page is a slice rather than a second fetch.
+  const pagination = usePagination({
+    resetOn: `${filter}|${sort.key}|${String(sort.descending)}`,
+  }).withTotal(matched.length);
+  const rows = pageRows(matched, pagination);
 
   const now = Date.now();
 
@@ -139,7 +148,7 @@ export function WorkspacesRoute(): JSX.Element {
       )}
 
       {workspaces.isSuccess &&
-        (rows.length === 0 ? (
+        (matched.length === 0 ? (
           <p className="page__note">{t('common.noMatches', { filter, count: all.length })}</p>
         ) : (
           <DataList label={t('workspaces.title')}>
@@ -219,6 +228,10 @@ export function WorkspacesRoute(): JSX.Element {
             ))}
           </DataList>
         ))}
+
+      {workspaces.isSuccess && (
+        <Pagination pagination={pagination} total={matched.length} label={t('workspaces.title')} />
+      )}
 
       <DeleteWorkspaceDialog
         workspace={pendingDelete}

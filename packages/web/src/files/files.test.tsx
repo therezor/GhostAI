@@ -70,8 +70,8 @@ const SHELL_ROUTES: Record<string, StubRoute> = {
   // otherwise be deciding whether to open on an unstubbed request.
   '/api/setup': [200, { required: false }],
   '/api/status': [200, { ...STATUS, model: 'llama3', toolCount: 0 }],
-  '/api/sessions': [200, { sessions: [] }],
-  '/api/notifications': [200, { notifications: [], unreadCount: 0 }],
+  '/api/sessions': [200, { sessions: [], total: 0 }],
+  '/api/notifications': [200, { notifications: [], unreadCount: 0, total: 0 }],
 };
 
 function mount(

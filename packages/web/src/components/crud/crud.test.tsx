@@ -11,6 +11,7 @@
 
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { JSX } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu.js';
@@ -19,7 +20,9 @@ import { ConfirmDialog } from './confirm-dialog.js';
 import { DataList, DataListRow } from './data-list.js';
 import { ListSort } from './list-sort.js';
 import { NameDialog } from './name-dialog.js';
+import { Pagination, pageItems } from './pagination.js';
 import { RowActions } from './row-actions.js';
+import { usePagination } from './use-pagination.js';
 
 describe('ConfirmDialog', () => {
   const props = {
@@ -284,5 +287,156 @@ describe('ListSort', () => {
     expect(await screen.findByRole('menuitemradio', { name: 'Name' })).toBeChecked();
     expect(screen.getByRole('menuitemradio', { name: 'Descending' })).toBeChecked();
     expect(screen.getByRole('menuitemradio', { name: 'Ascending' })).not.toBeChecked();
+  });
+});
+
+describe('pageItems', () => {
+  it('spells out a short run rather than eliding it', () => {
+    expect(pageItems(1, 1)).toEqual([1]);
+    expect(pageItems(2, 3)).toEqual([1, 2, 3]);
+  });
+
+  it('keeps the two ends and a window around where you are', () => {
+    expect(pageItems(6, 12)).toEqual([1, 'gap', 5, 6, 7, 'gap', 12]);
+    expect(pageItems(1, 12)).toEqual([1, 2, 'gap', 12]);
+    expect(pageItems(12, 12)).toEqual([1, 'gap', 11, 12]);
+  });
+
+  /**
+   * `1 … 3` is absurd: the ellipsis is as wide as the number it replaced, so it
+   * turns a destination into a mystery and saves nothing.
+   */
+  it('renders a lone hidden page instead of eliding one', () => {
+    expect(pageItems(1, 4)).toEqual([1, 2, 3, 4]);
+    expect(pageItems(4, 6)).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+});
+
+describe('usePagination', () => {
+  /** A probe that renders the hook's state and lets a test drive it. */
+  function Probe({ total, resetOn }: { total: number; resetOn: string }): JSX.Element {
+    const pagination = usePagination({ resetOn }).withTotal(total);
+    return (
+      <>
+        <output data-testid="state">
+          {pagination.page}/{pagination.pageCount} rows {pagination.start}-{pagination.end} offset{' '}
+          {pagination.offset}
+        </output>
+        <Pagination pagination={pagination} total={total} label="Rows" />
+      </>
+    );
+  }
+
+  const state = (): string => screen.getByTestId('state').textContent;
+
+  it('offsets by whole pages', async () => {
+    renderWithProviders(<Probe total={120} resetOn="" />);
+    expect(state()).toBe('1/5 rows 1-25 offset 0');
+
+    // Two steps rather than a jump: from page 1 the window reaches 2, and page
+    // 3 is behind the elision until you are next to it.
+    await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
+    expect(state()).toBe('3/5 rows 51-75 offset 50');
+  });
+
+  it('reports a short last page honestly', async () => {
+    renderWithProviders(<Probe total={52} resetOn="" />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Page 3' }));
+    // Not 51-75: there are two rows on it, and claiming a full page is how a
+    // reader concludes rows are missing.
+    expect(state()).toBe('3/3 rows 51-52 offset 50');
+  });
+
+  /**
+   * The bug this hook exists for. Typing into a search box while on page 4
+   * otherwise leaves you on page 4 of a result set that now has one page —
+   * an empty list under a control insisting there are matches.
+   */
+  it('returns to the first page when the filter changes', async () => {
+    // `update` rather than RTL's `rerender`: the latter swaps the provider stack
+    // out too, which remounts the subject and resets the state under test.
+    const { update } = renderWithProviders(<Probe total={120} resetOn="" />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Page 5' }));
+    expect(state()).toBe('5/5 rows 101-120 offset 100');
+
+    update(<Probe total={8} resetOn="login" />);
+    expect(state()).toBe('1/1 rows 1-8 offset 0');
+  });
+
+  /** Delete the only row on the last page and that page stops existing. */
+  it('pulls back into range when the total shrinks under it', async () => {
+    const { update } = renderWithProviders(<Probe total={120} resetOn="" />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Page 5' }));
+    expect(state()).toBe('5/5 rows 101-120 offset 100');
+
+    // Same filter — the rows themselves went away. One row left on page 5 is
+    // still a page 5.
+    update(<Probe total={101} resetOn="" />);
+    expect(state()).toBe('5/5 rows 101-101 offset 100');
+
+    // That row goes too, and page 5 stops existing.
+    update(<Probe total={100} resetOn="" />);
+    expect(state()).toBe('4/4 rows 76-100 offset 75');
+  });
+
+  it('calls an empty list page 1 of 1, not page 1 of 0', () => {
+    renderWithProviders(<Probe total={0} resetOn="" />);
+    expect(state()).toBe('1/1 rows 0-0 offset 0');
+  });
+});
+
+describe('Pagination', () => {
+  function render(total: number): void {
+    function Harness(): JSX.Element {
+      const pagination = usePagination({ resetOn: '' }).withTotal(total);
+      return <Pagination pagination={pagination} total={total} label="Sessions" />;
+    }
+    renderWithProviders(<Harness />);
+  }
+
+  /** A disabled Previous and Next under every short list is chrome that can never act. */
+  it('is absent when there is only one page', () => {
+    render(25);
+    expect(screen.queryByRole('navigation', { name: 'Sessions' })).not.toBeInTheDocument();
+  });
+
+  it('says how much there is, which is what a filter is judged by', () => {
+    render(287);
+    expect(screen.getByText('Showing 1–25 of 287')).toBeInTheDocument();
+  });
+
+  it('marks the current page for a screen reader as well as visually', async () => {
+    render(120);
+
+    const current = screen.getByRole('button', { name: 'Page 1' });
+    expect(current).toHaveAttribute('aria-current', 'page');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
+
+    expect(screen.getByRole('button', { name: 'Page 2' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: 'Page 1' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('disables the end it is already at', async () => {
+    render(60);
+
+    expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Next page' })).toBeEnabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Page 3' }));
+
+    expect(screen.getByRole('button', { name: 'Previous page' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
+  });
+
+  /** Reading "ellipsis" between two numbers says nothing anyone can act on. */
+  it('hides the elision from the accessibility tree', () => {
+    render(500);
+    expect(screen.getByRole('navigation', { name: 'Sessions' })).toHaveTextContent('…');
+    expect(screen.queryByRole('button', { name: '…' })).not.toBeInTheDocument();
   });
 });

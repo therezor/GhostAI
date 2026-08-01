@@ -47,8 +47,10 @@
     font-weight: var(--weight-medium);
   }
 
-  /* `sm`, matching `.sidebar__session-count` and `.data-list__meta`: this is
-     secondary metadata beside a name, which is the same job those do. The
+  /* `sm`, matching `.data-list__meta`: this is secondary metadata beside a
+     name, which is the same job that does. (It used to name
+     `.sidebar__session-count` too — a class deleted when the session row lost
+     its second line, and a reference that outlived what it pointed at.) The
      `2xs` step is budgeted for uppercase micro-labels and badge text, and
      `stylesheets.test.ts` caps how many rules may spend it. */
   .workspace-switcher__hint {

@@ -37,8 +37,6 @@
  * and its child process. There is no second cancellation path.
  */
 
-import { randomUUID } from 'node:crypto';
-
 import type { AgentEvent, TurnInput, TurnResult } from '@ghostai/agent';
 import {
   DEFAULT_WORKSPACE_ID,
@@ -56,6 +54,7 @@ import {
 import {
   ClientMessageSchema,
   PROTOCOL_VERSION,
+  newUuid,
   parseMentions,
   type Attachment,
   type ClientMessage,
@@ -361,7 +360,7 @@ export class SessionHub {
     this.#approvals = options.approvals;
     this.#clock = options.clock ?? systemClock;
     this.#logger = options.logger ?? silentLogger;
-    this.#newId = options.newId ?? randomUUID;
+    this.#newId = options.newId ?? newUuid;
     this.#maxQueueDepth = options.maxQueueDepth ?? DEFAULT_MAX_QUEUE_DEPTH;
     this.#maxSessions = options.maxSessions ?? DEFAULT_MAX_SESSIONS;
   }

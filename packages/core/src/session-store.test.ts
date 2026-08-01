@@ -26,7 +26,7 @@ const fixedClock: Clock = {
 
 /**
  * Deterministic ids. The prefix distinguishes two stores over the same file —
- * production uses `randomUUID`, so only a fixture can collide this way.
+ * production uses `newUuid`, so only a fixture can collide this way.
  */
 function counterIds(prefix = 'm'): () => string {
   let n = 0;
@@ -230,6 +230,126 @@ describe('sessions', () => {
 
     const rest = store.listSessions({ after: { updatedAtMs: NOW, key: 'a' } });
     expect(rest.map((session) => session.key)).toEqual(['b', 'c']);
+    store.close();
+  });
+
+  it('matches a title substring, case-insensitively', () => {
+    const store = makeStore();
+    store.ensureSession('a', { title: 'Fix the login throttle' });
+    store.ensureSession('b', { title: 'Nightly digest' });
+    store.ensureSession('c', { title: 'LOGIN rate limits' });
+
+    expect(
+      store
+        .listSessions({ query: 'login' })
+        .map((session) => session.key)
+        .sort(),
+    ).toEqual(['a', 'c']);
+    store.close();
+  });
+
+  it('treats a blank query as no query, rather than as LIKE %%', () => {
+    const store = makeStore();
+    store.ensureSession('a', { title: 'One' });
+    store.ensureSession('b', { title: '' });
+
+    for (const query of ['', '   ']) {
+      expect(
+        store
+          .listSessions({ query })
+          .map((session) => session.key)
+          .sort(),
+      ).toEqual(['a', 'b']);
+    }
+    store.close();
+  });
+
+  it('searches for a wildcard rather than with one', () => {
+    // Unescaped, `100%` is `LIKE '%100%%'` — which matches every title starting
+    // `100`, and `_` would match any single character.
+    const store = makeStore();
+    store.ensureSession('a', { title: 'Down to 100% coverage' });
+    store.ensureSession('b', { title: '100 tests and counting' });
+    store.ensureSession('c', { title: 'a_b' });
+    store.ensureSession('d', { title: 'axb' });
+
+    expect(store.listSessions({ query: '100%' }).map((session) => session.key)).toEqual(['a']);
+    expect(store.listSessions({ query: 'a_b' }).map((session) => session.key)).toEqual(['c']);
+    store.close();
+  });
+
+  it('orders by each column it offers, in both directions', () => {
+    let now = NOW;
+    const store = new SessionStore({
+      clock: { ...fixedClock, now: () => now },
+      file: ':memory:',
+    });
+
+    store.ensureSession('a', { title: 'Beta' });
+    now = NOW + 1;
+    store.ensureSession('b', { title: 'alpha' });
+    now = NOW + 2;
+    store.ensureSession('c', { title: 'Gamma' });
+
+    const keys = (options: Parameters<typeof store.listSessions>[0]): string[] =>
+      store.listSessions(options).map((session) => session.key);
+
+    expect(keys({})).toEqual(['c', 'b', 'a']);
+    expect(keys({ orderBy: 'created', descending: false })).toEqual(['a', 'b', 'c']);
+    // NOCASE, so `alpha` sorts with the capitals rather than after them.
+    expect(keys({ orderBy: 'title', descending: false })).toEqual(['b', 'a', 'c']);
+    expect(keys({ orderBy: 'title', descending: true })).toEqual(['c', 'a', 'b']);
+    store.close();
+  });
+
+  it('refuses a cursor under an ordering it does not address', () => {
+    const store = makeStore();
+    store.ensureSession('a');
+
+    expect(() =>
+      store.listSessions({ orderBy: 'title', after: { updatedAtMs: NOW, key: 'a' } }),
+    ).toThrow(/only valid in the default ordering/);
+    expect(() =>
+      store.listSessions({ descending: false, after: { updatedAtMs: NOW, key: 'a' } }),
+    ).toThrow(/only valid in the default ordering/);
+    store.close();
+  });
+
+  it('counts what the same filter lists, so a pager cannot disagree with its rows', () => {
+    const store = makeStore();
+    store.ensureSession('a', { title: 'login throttle', workspaceId: 'default' });
+    store.ensureSession('b', { title: 'login rate limit', workspaceId: 'default' });
+    store.ensureSession('c', { title: 'nightly digest', workspaceId: 'default' });
+    store.ensureSession('d', {
+      title: 'login elsewhere',
+      workspaceId: 'other',
+      origin: 'telegram',
+    });
+
+    for (const options of [
+      {},
+      { query: 'login' },
+      { workspaceId: 'default' },
+      { workspaceId: 'default', query: 'login' },
+      { origin: 'telegram' },
+      { query: 'nothing matches this' },
+    ]) {
+      // The page is capped well above the row count, so the two are comparable.
+      expect(store.countSessions(options)).toBe(
+        store.listSessions({ ...options, limit: 100 }).length,
+      );
+    }
+
+    expect(store.countSessions({ query: 'login' })).toBe(3);
+    store.close();
+  });
+
+  it('counts the whole match rather than the page in front of it', () => {
+    const store = makeStore();
+    for (const key of ['a', 'b', 'c', 'd', 'e']) store.ensureSession(key);
+
+    expect(store.listSessions({ limit: 2 })).toHaveLength(2);
+    expect(store.countSessions({ limit: 2 })).toBe(5);
     store.close();
   });
 

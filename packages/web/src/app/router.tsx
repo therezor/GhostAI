@@ -28,6 +28,7 @@ import { ProviderCreateRoute, ProviderEditorRoute } from '@/settings/provider-ed
 import { AutomationRoute } from '@/automation/automation-page.js';
 import { JobCreateRoute, JobEditorRoute } from '@/automation/job-editor.js';
 import { FilesRoute } from '@/routes/files.js';
+import { SessionsRoute } from '@/sessions/sessions-page.js';
 import { WorkspacesRoute } from '@/routes/workspaces.js';
 import { WorkspaceCreateRoute, WorkspaceEditorRoute } from '@/workspaces/workspace-editor.js';
 import { NotificationsRoute } from '@/routes/notifications.js';
@@ -123,6 +124,17 @@ const workspacesRoute = createRoute({
   component: WorkspacesRoute,
 });
 
+/**
+ * The conversations list. No search schema, for the same reason Workspaces has
+ * none: the filter, the sort and the page are how the list is being read rather
+ * than where the reader is.
+ */
+const sessionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/sessions',
+  component: SessionsRoute,
+});
+
 /** Creating an agent, on the same form that edits one. */
 const agentCreateRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -208,6 +220,7 @@ const routeTree = rootRoute.addChildren([
   agentsRoute,
   agentCreateRoute,
   agentEditorRoute,
+  sessionsRoute,
   workspacesRoute,
   workspaceCreateRoute,
   workspaceEditorRoute,

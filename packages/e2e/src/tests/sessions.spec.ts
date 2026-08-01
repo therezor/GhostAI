@@ -14,6 +14,8 @@
  * test of the derivation cannot see that.
  */
 
+import type { Page } from '@playwright/test';
+
 import { expect, test } from '../fixtures.js';
 
 test.describe('conversations', () => {
@@ -134,5 +136,109 @@ test.describe('conversations', () => {
 
     // Two rows now name the same thing: the fork inherits the source's title.
     await expect(sidebar.getByText('stream a long answer')).toHaveCount(2, { timeout: 15_000 });
+  });
+});
+
+/**
+ * The conversations page.
+ *
+ * What is asserted here and nowhere else is that the search and the page are the
+ * *server's*: a component test stubs the response, so it can only check that the
+ * right query went out. This drives a real SQLite table through a real route,
+ * which is the only place the `LIKE` predicate and the `OFFSET` are exercised
+ * against the schema they run on.
+ *
+ * Every assertion is on a state the page settles into — rows present, rows
+ * absent, a dialog. Nothing here waits for a "Saving…" or a "Deleting…": those
+ * are painted between an answer and a socket frame, so whether they are ever
+ * seen depends on how the runner interleaves the two. They are held still in
+ * `sessions.test.tsx` instead.
+ */
+test.describe('the conversations page', () => {
+  /**
+   * Says something in each conversation, so there are rows to search.
+   *
+   * A turn per row rather than a seeded database, because a session is written
+   * by the loop and not by the button — see "saves nothing until something is
+   * said" above. It is also what gives each row a title.
+   */
+  async function seed(app: Page, titles: readonly string[]): Promise<void> {
+    const sidebar = app.getByRole('complementary', { name: 'Sidebar' });
+    for (const title of titles) {
+      await sidebar.getByRole('button', { name: 'New session' }).click();
+      await app.getByRole('textbox', { name: 'Message' }).fill(title);
+      await app.getByRole('textbox', { name: 'Message' }).press('Enter');
+      await expect(sidebar.getByText(title)).toBeVisible({ timeout: 15_000 });
+    }
+  }
+
+  /** Through the link, which is also the assertion that the link goes there. */
+  async function openPage(app: Page): Promise<void> {
+    await app
+      .getByRole('complementary', { name: 'Sidebar' })
+      .getByRole('link', { name: 'All conversations' })
+      .click();
+    await expect(app.getByRole('heading', { name: 'Conversations' })).toBeVisible();
+  }
+
+  test('is reachable from the sidebar and lists what is there', async ({ app }) => {
+    await seed(app, ['stream a long answer']);
+    await openPage(app);
+
+    await expect(
+      app.getByRole('list', { name: 'Conversations' }).getByText('stream a long answer'),
+    ).toBeVisible();
+  });
+
+  test('searches every conversation, not the page in hand', async ({ app }) => {
+    await seed(app, ['stream a long answer', 'list the workspace']);
+    await openPage(app);
+
+    const list = app.getByRole('list', { name: 'Conversations' });
+    await expect(list.getByText('list the workspace')).toBeVisible();
+
+    await app.getByRole('searchbox', { name: 'Filter conversations' }).fill('workspace');
+
+    // The durable state: one row matches and the other is gone. A SQL `LIKE`
+    // decided that, not a filter over the rows the browser already had.
+    await expect(list.getByText('list the workspace')).toBeVisible();
+    await expect(list.getByText('stream a long answer')).toHaveCount(0);
+  });
+
+  test('renames a conversation, and the sidebar agrees', async ({ app }) => {
+    await seed(app, ['stream a long answer']);
+    await openPage(app);
+
+    const list = app.getByRole('list', { name: 'Conversations' });
+    await list.getByRole('button', { name: /^Actions for/u }).click();
+    await app.getByRole('menuitem', { name: 'Rename' }).click();
+
+    const dialog = app.getByRole('dialog');
+    await dialog.getByRole('textbox').fill('Renamed from the page');
+    await dialog.getByRole('button', { name: 'Rename' }).click();
+
+    await expect(list.getByText('Renamed from the page')).toBeVisible();
+    // One rename, two lists: both read the same query key, so one invalidation
+    // refreshes the column as well as the page.
+    await expect(
+      app.getByRole('complementary', { name: 'Sidebar' }).getByText('Renamed from the page'),
+    ).toBeVisible();
+  });
+
+  test('asks before deleting, and the row is gone once it is answered', async ({ app }) => {
+    await seed(app, ['stream a long answer']);
+    await openPage(app);
+
+    const list = app.getByRole('list', { name: 'Conversations' });
+    await list.getByRole('button', { name: /^Actions for/u }).click();
+    await app.getByRole('menuitem', { name: 'Delete' }).click();
+
+    // The question is itself a durable state, and the thing that changed here:
+    // the sidebar used to delete on one click with nothing in front of it.
+    const dialog = app.getByRole('dialog');
+    await expect(dialog).toContainText('There is no undo.');
+    await dialog.getByRole('button', { name: 'Delete' }).click();
+
+    await expect(app.getByText('No conversations yet.').first()).toBeVisible();
   });
 });

@@ -36,26 +36,59 @@ const pageShape = {
   limit: z.coerce.number().int().positive().max(MAX_PAGE_LIMIT).default(DEFAULT_PAGE_LIMIT),
   /** Opaque; echoed back from `nextCursor`. See `cursor.ts`. */
   cursor: z.string().optional(),
+  /**
+   * Rows to skip from the top, for a numbered pager.
+   *
+   * In the shared shape rather than on the one endpoint that needed it first,
+   * because every paged listing here answers the same two kinds of reader — see
+   * `PaginationQuerySchema` in the protocol for which wants which, and why
+   * sending both is a 400 rather than a precedence rule.
+   *
+   * Left `optional()` and defaulted in the handler rather than defaulted to `0`
+   * here: `0` and "absent" have to stay distinguishable, or a request carrying
+   * only a cursor arrives with an offset it never sent and trips the guard.
+   */
+  offset: z.coerce.number().int().nonnegative().optional(),
 };
 
 export interface PageQuery {
   readonly limit: number;
   readonly cursor?: string | undefined;
+  readonly offset?: number | undefined;
 }
 
 export const PageQuerySchema: z.ZodType<PageQuery> = z.object(pageShape);
+
+/** The columns `GET /api/sessions` will order by. Mirrors `SessionOrderBy`. */
+export const SESSION_SORT_KEYS = ['updated', 'created', 'title'] as const;
 
 export interface SessionListQuery extends PageQuery {
   /** `web`, `telegram`, `automation`, a plugin id. Absent means every origin. */
   readonly origin?: string | undefined;
   /** Absent means every workspace, which is what the unscoped sidebar asks for. */
   readonly workspace?: string | undefined;
+  /** A title substring. Blank is the same as absent — see `ListSessionsOptions.query`. */
+  readonly q?: string | undefined;
+  readonly sort?: (typeof SESSION_SORT_KEYS)[number] | undefined;
+  readonly desc?: boolean | undefined;
 }
 
 export const SessionListQuerySchema: z.ZodType<SessionListQuery> = z.object({
   ...pageShape,
   origin: z.string().min(1).optional(),
   workspace: z.string().min(1).optional(),
+  // No `.min(1)`: an empty box is a legal thing for a client to send, and the
+  // store already treats blank as "no filter". Rejecting it would make clearing
+  // the search field a 400.
+  q: z.string().optional(),
+  sort: z.enum(SESSION_SORT_KEYS).optional(),
+  // An enum rather than `z.stringbool()`, matching `NotificationListQuery`: the
+  // generated document then lists the two values a client may send instead of
+  // saying "string".
+  desc: z
+    .enum(['true', 'false'])
+    .transform((value) => value === 'true')
+    .optional(),
 });
 
 export interface NotificationListQuery extends PageQuery {

@@ -29,11 +29,11 @@
  */
 
 import { DatabaseSync, type SQLOutputValue, type StatementSync } from 'node:sqlite';
-import { randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 
 import {
   ChatMessageSchema,
+  newUuid,
   subagentRunsOf,
   type ChatMessage,
   type StopReason,
@@ -156,12 +156,40 @@ export interface UpdateSessionOptions {
   readonly lastLearnedSeq?: number;
 }
 
+/** Which column a session listing is ordered by. */
+export type SessionOrderBy = 'updated' | 'created' | 'title';
+
 export interface ListSessionsOptions {
   readonly limit?: number;
   readonly offset?: number;
   readonly origin?: string;
   /** Restricts the listing to one workspace. */
   readonly workspaceId?: string;
+  /**
+   * A case-insensitive substring of the title.
+   *
+   * Title only, and deliberately not message bodies: matching what was *said* in
+   * a conversation is an FTS5 index and a backfill, which is a feature rather
+   * than a clause. A blank or whitespace-only value is the same as none, so a
+   * cleared search box does not become `LIKE '%%'` on every row.
+   *
+   * `%` and `_` in the value are escaped, so searching for `100%` searches for
+   * `100%` rather than for everything.
+   *
+   * SQLite's `lower()` folds ASCII only, so a title outside it matches
+   * case-sensitively. Fixing that needs ICU, which is not compiled into
+   * `node:sqlite`.
+   */
+  readonly query?: string;
+  /**
+   * Defaults to `updated`, and `descending` defaults to true — together they are
+   * the recency order this list has always had.
+   *
+   * `messages` is deliberately not offered. The count is a correlated subquery,
+   * so ordering by it would run one scan of the messages table per session row.
+   */
+  readonly orderBy?: SessionOrderBy;
+  readonly descending?: boolean;
   /**
    * Keyset cursor: the `(updatedAtMs, key)` of the last row already seen.
    *
@@ -175,6 +203,10 @@ export interface ListSessionsOptions {
    *
    * Ignored unless both fields are present — half a cursor cannot address a
    * position in a two-column ordering.
+   *
+   * **Only meaningful in the default ordering**, because the predicate below
+   * *is* that ordering written as a comparison. Combining it with `orderBy` or
+   * an ascending sort throws rather than returning a plausible wrong page.
    */
   readonly after?: SessionCursor;
 }
@@ -398,6 +430,97 @@ function rowToSession(row: Row): SessionRecord {
   };
 }
 
+/**
+ * A `LIKE` operand that means "contains this literal text".
+ *
+ * `%`, `_` and the escape character itself are escaped, so a search for `100%`
+ * looks for `100%` rather than matching every row. Lowercased here to pair with
+ * the `lower(s.title)` on the other side of the comparison.
+ */
+function likePattern(query: string): string {
+  return `%${query.toLowerCase().replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+}
+
+/** The `WHERE` fragment a session listing runs under, and its bindings. */
+interface SessionFilter {
+  readonly sql: string;
+  readonly bindings: readonly (string | null)[];
+}
+
+/**
+ * The filter `listSessions` and `countSessions` share.
+ *
+ * One function rather than the same three clauses typed twice, because the two
+ * callers must agree about what they are looking at or a pager reports a total
+ * for a different set than the rows under it.
+ *
+ * **Every origin is listed unless one is named.** This used to hide `subagent`
+ * and `automation` unless asked for by name, on the reasoning that neither is a
+ * conversation a person had. What that actually produced was a transcript with
+ * no way in: a scheduled run's session was excluded from the sidebar, and the
+ * run history beside the job showed its *output* without linking to the turn
+ * that produced it — so the one place a stuck run could be diagnosed was
+ * unreachable from the UI. Provenance is a column, not a filter.
+ *
+ * The cost is real and worth naming: a job on a five-minute interval mints a
+ * session per run, so a list sorted by recency carries a lot of them. That is a
+ * presentation problem — a badge, a filter — and this is the wrong layer to
+ * solve it by pretending the rows are not there.
+ */
+function sessionFilter(options: ListSessionsOptions): SessionFilter {
+  const { origin, workspaceId } = options;
+  // Blank is the same as absent: a cleared search box must not become
+  // `LIKE '%%'`, which is a full scan that matches everything.
+  const query = options.query?.trim();
+  const pattern = query === undefined || query === '' ? null : likePattern(query);
+
+  return {
+    // Each clause is `? IS NULL OR …` so one prepared statement serves every
+    // combination — `node:sqlite` binds positionally, so the same value is
+    // bound twice rather than named once.
+    sql: `(? IS NULL OR s.origin = ?)
+          AND (? IS NULL OR s.workspace_id = ?)
+          AND (? IS NULL OR lower(s.title) LIKE ? ESCAPE '\\')`,
+    bindings: [
+      origin ?? null,
+      origin ?? null,
+      workspaceId ?? null,
+      workspaceId ?? null,
+      pattern,
+      pattern,
+    ],
+  };
+}
+
+/**
+ * The recency order this list has always had, and the only one a cursor
+ * addresses. See `ListSessionsOptions.after`.
+ */
+const DEFAULT_SESSION_ORDER = 's.updated_at_ms DESC, s.key ASC';
+
+/** The column each `SessionOrderBy` names. */
+const SESSION_ORDER_COLUMNS: Readonly<Record<SessionOrderBy, string>> = {
+  updated: 's.updated_at_ms',
+  created: 's.created_at_ms',
+  // `NOCASE` so `apollo` and `Apollo` sort together rather than in two runs,
+  // matching how `WorkspaceStore` orders names.
+  title: 's.title COLLATE NOCASE',
+};
+
+/**
+ * The `ORDER BY` clause, always with `s.key ASC` behind it.
+ *
+ * The tiebreak is not decoration: without it, rows equal on the chosen column
+ * come back in whatever order the query planner produced last, so a refetch
+ * reshuffles them under the reader. It is the same reasoning `sortRows` in the
+ * web package states for its own `tiebreak`.
+ */
+function sessionOrder(options: ListSessionsOptions): { readonly sql: string } {
+  const column = SESSION_ORDER_COLUMNS[options.orderBy ?? 'updated'];
+  const direction = (options.descending ?? true) ? 'DESC' : 'ASC';
+  return { sql: `${column} ${direction}, s.key ASC` };
+}
+
 export class SessionStore {
   readonly #db: DatabaseSync;
   readonly #ownsDb: boolean;
@@ -409,7 +532,7 @@ export class SessionStore {
 
   constructor(options: SessionStoreOptions = {}) {
     this.#clock = options.clock ?? systemClock;
-    this.#newId = options.newId ?? randomUUID;
+    this.#newId = options.newId ?? newUuid;
 
     if (options.database === undefined) {
       const file = options.file ?? ':memory:';
@@ -531,41 +654,35 @@ export class SessionStore {
 
   listSessions(options: ListSessionsOptions = {}): SessionSummaryRecord[] {
     this.#assertOpen();
-    const { limit = 50, offset = 0, origin, workspaceId, after } = options;
+    const { limit = 50, offset = 0, after } = options;
+    const filter = sessionFilter(options);
+    const order = sessionOrder(options);
 
-    // The predicate is the sort order written as a comparison: strictly older,
-    // or the same instant and a key that sorts later. Bound as `?` twice each
-    // rather than named, because `node:sqlite` binds positionally.
-    //
-    // **Every origin is listed.** This used to hide `subagent` and `automation`
-    // unless asked for by name, on the reasoning that neither is a conversation
-    // a person had. What that actually produced was a transcript with no way in:
-    // a scheduled run's session was excluded from the sidebar, and the run
-    // history beside the job showed its *output* without linking to the turn
-    // that produced it — so the one place a stuck run could be diagnosed was
-    // unreachable from the UI. Provenance is a column, not a filter: `origin`
-    // still records who started each session, and a caller that wants one kind
-    // still passes `origin`.
-    //
-    // The cost is real and worth naming: a job on a five-minute interval mints a
-    // session per run, so a sidebar sorted by recency will carry a lot of them.
-    // That is a presentation problem — a badge, a filter — and this is the wrong
-    // layer to solve it by pretending the rows are not there.
+    if (after !== undefined && order.sql !== DEFAULT_SESSION_ORDER) {
+      // The keyset predicate below is the *default* ordering written as a
+      // comparison. Applied under any other one it addresses a position that
+      // does not exist there, and the page that comes back looks entirely
+      // plausible — which is why this throws instead of quietly ignoring one of
+      // the two arguments.
+      throw new GhostError('storage', 'A session cursor is only valid in the default ordering', {
+        details: { orderBy: options.orderBy ?? 'updated', descending: options.descending ?? true },
+      });
+    }
+
+    // The keyset predicate is that order written as a comparison: strictly
+    // older, or the same instant and a key that sorts later. Bound as `?` twice
+    // each rather than named, because `node:sqlite` binds positionally.
     const rows = this.#stmt(
       `SELECT s.*, (SELECT COUNT(*) FROM messages m WHERE m.session_key = s.key) AS message_count
          FROM sessions s
-        WHERE (? IS NULL OR s.origin = ?)
-          AND (? IS NULL OR s.workspace_id = ?)
+        WHERE ${filter.sql}
           AND (? IS NULL
                OR s.updated_at_ms < ?
                OR (s.updated_at_ms = ? AND s.key > ?))
-        ORDER BY s.updated_at_ms DESC, s.key ASC
+        ORDER BY ${order.sql}
         LIMIT ? OFFSET ?`,
     ).all(
-      origin ?? null,
-      origin ?? null,
-      workspaceId ?? null,
-      workspaceId ?? null,
+      ...filter.bindings,
       after?.updatedAtMs ?? null,
       after?.updatedAtMs ?? null,
       after?.updatedAtMs ?? null,
@@ -578,6 +695,25 @@ export class SessionStore {
       ...rowToSession(row),
       messageCount: readInt(row, 'message_count'),
     }));
+  }
+
+  /**
+   * How many sessions the same filter matches, ignoring the page.
+   *
+   * What a numbered pager needs and a cursor does not: "Page 3 of 12" cannot be
+   * derived from a page of rows. It shares `sessionFilter` with `listSessions`
+   * rather than restating the predicate, because a count and a page that
+   * disagree about what they are counting produce a "Page 4 of 3" that only
+   * appears once a filter is applied — a bug that is invisible in every test
+   * that does not filter.
+   */
+  countSessions(options: ListSessionsOptions = {}): number {
+    this.#assertOpen();
+    const filter = sessionFilter(options);
+    const row = this.#stmt(`SELECT COUNT(*) AS n FROM sessions s WHERE ${filter.sql}`).get(
+      ...filter.bindings,
+    );
+    return row === undefined ? 0 : readInt(row, 'n');
   }
 
   /**

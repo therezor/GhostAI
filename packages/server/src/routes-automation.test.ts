@@ -494,6 +494,57 @@ describe('automation run history', () => {
     expect(response.statusCode).toBe(400);
   });
 
+  /**
+   * The run history is read by a numbered pager, not by a sequential reader: a
+   * job on a five-minute schedule produces a few hundred runs a day, and the
+   * question being asked of the panel is "how long has this been failing",
+   * which is answered by jumping back through pages.
+   */
+  it('pages runs over an offset and reports the whole history', async () => {
+    const test = await start();
+    const job = (
+      await test.server.app.inject({
+        method: 'POST',
+        url: '/api/automation/jobs',
+        headers: test.headers,
+        payload: CRON_BODY,
+      })
+    ).json<AutomationJob>();
+
+    for (let i = 0; i < 5; i += 1) test.automation.startRun({ jobId: job.id });
+
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: `/api/automation/jobs/${job.id}/runs?limit=2&offset=2`,
+      headers: test.headers,
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json<AutomationRunListResponse>();
+    expect(body.runs).toHaveLength(2);
+    // The count is of the history, not of the page standing in front of it.
+    expect(body.total).toBe(5);
+  });
+
+  it('refuses a run listing that names both paging modes', async () => {
+    const test = await start();
+    const job = (
+      await test.server.app.inject({
+        method: 'POST',
+        url: '/api/automation/jobs',
+        headers: test.headers,
+        payload: CRON_BODY,
+      })
+    ).json<AutomationJob>();
+
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: `/api/automation/jobs/${job.id}/runs?cursor=abc&offset=25`,
+      headers: test.headers,
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toMatch(/cursor or an offset/i);
+  });
+
   it('carries a run′s warnings through, so a caveat is visible without being a failure', async () => {
     const test = await start();
     const job = (

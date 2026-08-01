@@ -37,6 +37,8 @@ import { SearchFilter } from '@/components/ui/search-filter.js';
 import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';
 import { DataList, DataListRow } from '@/components/crud/data-list.js';
 import { ListSort } from '@/components/crud/list-sort.js';
+import { Pagination } from '@/components/crud/pagination.js';
+import { pageRows, usePagination } from '@/components/crud/use-pagination.js';
 import { RowActions } from '@/components/crud/row-actions.js';
 import { filterRows, sortRows, type Comparators, type SortOrder } from '@/components/crud/sort.js';
 import { useAppLocale } from '@/i18n/i18n-context.js';
@@ -242,7 +244,7 @@ export function AutomationRoute(): JSX.Element {
 
   const jobs = useAutomationJobs();
 
-  const rows = useMemo(
+  const matched = useMemo(
     () =>
       sortRows(
         filterRows(jobs.data?.jobs ?? [], filter, (job) => `${job.name} ${job.payload.kind}`),
@@ -252,6 +254,15 @@ export function AutomationRoute(): JSX.Element {
       ),
     [jobs.data, filter, sort, describe],
   );
+
+  // The job list arrives whole — `automation.list` is unpaged — so the page is
+  // a slice of what is already here rather than a second request. The run
+  // history inside a job is the one that pages on the server, because a job on
+  // a five-minute schedule outgrows any single response.
+  const pagination = usePagination({
+    resetOn: `${filter}|${sort.key}|${String(sort.descending)}`,
+  }).withTotal(matched.length);
+  const rows = pageRows(matched, pagination);
 
   return (
     <div className="stack page page--wide">
@@ -293,7 +304,7 @@ export function AutomationRoute(): JSX.Element {
       )}
 
       {jobs.isSuccess &&
-        (rows.length === 0 ? (
+        (matched.length === 0 ? (
           <p className="page__note">
             {filter === '' ? t('automation.none') : t('automation.noMatch', { filter })}
           </p>
@@ -304,6 +315,10 @@ export function AutomationRoute(): JSX.Element {
             ))}
           </DataList>
         ))}
+
+      {jobs.isSuccess && (
+        <Pagination pagination={pagination} total={matched.length} label={t('automation.title')} />
+      )}
     </div>
   );
 }

@@ -132,6 +132,10 @@ const MANIFEST = [
     auth: 'required',
   },
   { id: 'notifications.delete', method: 'DELETE', url: '/api/notifications/:id', auth: 'required' },
+  // Before the `:id` form would be ambiguous — it is not, because the paths
+  // differ in segment count — but it is listed after it to read in the order a
+  // person would expect: the one, then all of them.
+  { id: 'notifications.deleteAll', method: 'DELETE', url: '/api/notifications', auth: 'required' },
 
   // Automation. `/api/automation/jobs` rather than `/api/jobs`: "job" alone is
   // too general a noun to own a top-level surface — a turn is a job and an

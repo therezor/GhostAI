@@ -117,8 +117,14 @@
     min-height: 8rem;
   }
 
+  /* `--space-1` between rows rather than `--space-0-5`, and the extra sixteenth
+   * of a rem is for the focus ring. An outline is painted *outside* the border
+   * box — `--ring-width` plus `--ring-offset` beyond it — so at the old gap a
+   * focused row's ring ended up under the background of the row after it, which
+   * paints later. A step of the scale, not a number chosen to clear a ring by
+   * exactly enough. */
   .sidebar__session-list {
-    --gap: var(--space-0-5);
+    --gap: var(--space-1);
 
     padding-right: var(--space-1);
   }
@@ -165,19 +171,54 @@
 
   /* Hidden until the row is hovered or something inside it has focus.
    * `opacity` rather than `display: none`, so the trigger keeps its place in
-   * the tab order and a keyboard user can still reach it. */
+   * the tab order and a keyboard user can still reach it.
+   *
+   * **Sized to the row it sits in.** `.btn--icon` is `--size-control-md`, which
+   * is taller than this row's `--size-control-sm` — so the hover fill spilled
+   * past the row on both edges and read as a control belonging to the list
+   * rather than to the conversation. `sm` is that token's stated purpose: a
+   * control that sits inside a row of text.
+   *
+   * The geometry is overridden here rather than by adding a small icon variant
+   * to `button.css`, because it would have exactly one caller — which is what
+   * this design system means by a special case wearing a scale's clothes. The
+   * `screens` layer wins over `components`, so no specificity is needed to do
+   * it. `--icon` is the same custom property `.btn > svg` already reads, so the
+   * glyph follows the box instead of being set twice and drifting from it. */
   .sidebar__session-actions {
+    --icon: var(--size-icon-sm);
+
     position: absolute;
     top: 50%;
     translate: 0 -50%;
     right: var(--space-1);
+    width: var(--size-control-sm);
+    height: var(--size-control-sm);
     opacity: 0;
     transition: opacity var(--duration-fast) var(--ease-out-quint);
   }
 
+  /* The third selector is not redundant with `:focus-within`, and leaving it out
+   * is why the trigger appeared to have no focus ring when you pressed it.
+   * `DropdownMenuContent` is portalled to the end of `<body>`, so the moment the
+   * menu opens the focused element is outside this row: `:focus-within` goes
+   * false, and the trigger — along with its ring — fades to nothing while its
+   * own menu is standing open beside it.
+   *
+   * `[data-state='open']` is the idiom this codebase already uses for exactly
+   * this, on `.select-trigger`. */
   .sidebar__session-row:hover .sidebar__session-actions,
-  .sidebar__session-row:focus-within .sidebar__session-actions {
+  .sidebar__session-row:focus-within .sidebar__session-actions,
+  .sidebar__session-actions[data-state='open'] {
     opacity: 1;
+  }
+
+  /* The open trigger also takes the surface its menu belongs to, so the row
+   * being acted on is identifiable while the menu covers part of the column.
+   * The same statement selection makes everywhere else here. */
+  .sidebar__session-actions[data-state='open'] {
+    background-color: var(--surface-3);
+    color: var(--fg-1);
   }
 
   /* A pointer that cannot hover has no way to reveal anything. */
@@ -202,6 +243,30 @@
   .sidebar__rename input {
     min-width: 0;
     flex: 1 1 auto;
+  }
+
+  /* The way to the rest of the conversations, under the ones that fit.
+   *
+   * Deliberately quieter than a `.sidebar__link`: it is not a destination this
+   * column is *offering*, it is the end of the list saying there is more. Same
+   * indent as the rows above it so it reads as part of the same column, the
+   * muted tier, and the small size the section label is — the two of them
+   * bracket the list. */
+  .sidebar__see-all {
+    display: block;
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
+    color: var(--fg-3);
+    transition:
+      background-color var(--duration-fast) var(--ease-out-quint),
+      color var(--duration-fast) var(--ease-out-quint);
+  }
+
+  .sidebar__see-all:hover {
+    background-color: var(--hover);
+    color: var(--fg-1);
   }
 
   .sidebar__note {

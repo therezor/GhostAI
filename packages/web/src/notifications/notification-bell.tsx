@@ -50,7 +50,7 @@ export function NotificationBell(): JSX.Element {
 
   const notifications = useQuery({
     queryKey: queryKeys.notifications,
-    queryFn: ({ signal }) => api.notifications(signal),
+    queryFn: ({ signal }) => api.notifications({ signal }),
   });
 
   const unreadCount = notifications.data?.unreadCount ?? 0;

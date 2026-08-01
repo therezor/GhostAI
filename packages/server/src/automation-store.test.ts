@@ -339,6 +339,40 @@ describe('AutomationStore runs', () => {
     expect(second.map((r) => r.id)).toEqual([ids[2], ids[1]]);
   });
 
+  it('pages runs over an offset, for a numbered pager', () => {
+    const clock = manualClock();
+    const jobs = store(clock);
+    const created = jobs.createJob(job());
+
+    const ids: string[] = [];
+    for (let i = 0; i < 5; i += 1) {
+      ids.push(jobs.startRun({ jobId: created.id }).id);
+      clock.advance(1000);
+    }
+
+    // Newest first, so page two of two is the third and fourth newest.
+    expect(jobs.listRuns(created.id, { limit: 2, offset: 2 }).map((r) => r.id)).toEqual([
+      ids[2],
+      ids[1],
+    ]);
+    // Past the end is empty rather than a wrapped page.
+    expect(jobs.listRuns(created.id, { limit: 2, offset: 10 })).toEqual([]);
+  });
+
+  it('counts every run of a job, not the page in front of it', () => {
+    const jobs = store();
+    const created = jobs.createJob(job());
+    const other = jobs.createJob(job({ name: 'other' }));
+    for (let i = 0; i < 5; i += 1) jobs.startRun({ jobId: created.id });
+    jobs.startRun({ jobId: other.id });
+
+    expect(jobs.listRuns(created.id, { limit: 2 })).toHaveLength(2);
+    expect(jobs.countRuns(created.id)).toBe(5);
+    // Scoped to its own job, like the listing beside it.
+    expect(jobs.countRuns(other.id)).toBe(1);
+    expect(jobs.countRuns('no-such-job')).toBe(0);
+  });
+
   it('separates one job′s runs from another′s', () => {
     const jobs = store();
     const a = jobs.createJob(job({ name: 'a' }));

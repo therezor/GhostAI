@@ -43,6 +43,7 @@ function texts(messages: { message: ChatMessage }[]): string[] {
 interface Page {
   readonly ids: string[];
   readonly nextCursor: string | undefined;
+  readonly total: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -277,6 +278,7 @@ describe('GET /api/sessions', () => {
     return {
       ids: body.sessions.map((session) => session.key),
       nextCursor: body.nextCursor,
+      total: body.total,
     };
   }
 
@@ -363,6 +365,109 @@ describe('GET /api/sessions', () => {
     const response = await server.app.inject({
       method: 'GET',
       url: '/api/sessions?limit=1000',
+      headers,
+    });
+
+    expect(response.statusCode).toBe(422);
+  });
+
+  // -------------------------------------------------------------------------
+  // Offset mode — the numbered pager on the sessions management screen
+  // -------------------------------------------------------------------------
+
+  it('pages over an offset, for a reader that jumps rather than walks', async () => {
+    const clock = manualClock();
+    const test = await start({ clock });
+    for (const key of ['a', 'b', 'c', 'd', 'e']) {
+      test.runtime.store.ensureSession(key);
+      clock.advance(1000);
+    }
+
+    // Newest first, so page two of two is the third and fourth newest.
+    expect((await page(test, '?limit=2&offset=2')).ids).toEqual(['c', 'b']);
+    // Past the end is an empty page, not a wrapped one.
+    expect((await page(test, '?limit=2&offset=99')).ids).toEqual([]);
+  });
+
+  it('reports the whole match, not the page in front of it', async () => {
+    const test = await start();
+    for (const key of ['a', 'b', 'c', 'd', 'e']) test.runtime.store.ensureSession(key);
+
+    const first = await page(test, '?limit=2');
+    expect(first.ids).toHaveLength(2);
+    expect(first.total).toBe(5);
+  });
+
+  it('counts what it filtered, so a pager cannot outrun its own total', async () => {
+    const test = await start();
+    test.runtime.store.ensureSession('a', { title: 'login throttle' });
+    test.runtime.store.ensureSession('b', { title: 'login rate limit' });
+    test.runtime.store.ensureSession('c', { title: 'nightly digest' });
+
+    const filtered = await page(test, '?q=login&limit=1');
+    expect(filtered.ids).toHaveLength(1);
+    // Not 3. A total describing the unfiltered table would offer pages that are
+    // empty when reached — the "Page 4 of 3" this pairing exists to prevent.
+    expect(filtered.total).toBe(2);
+  });
+
+  it('searches titles case-insensitively', async () => {
+    const test = await start();
+    test.runtime.store.ensureSession('a', { title: 'Fix the LOGIN throttle' });
+    test.runtime.store.ensureSession('b', { title: 'Nightly digest' });
+
+    expect((await page(test, '?q=login')).ids).toEqual(['a']);
+    expect((await page(test, '?q=')).ids.sort()).toEqual(['a', 'b']);
+  });
+
+  it('orders by a column other than recency', async () => {
+    const clock = manualClock();
+    const test = await start({ clock });
+    test.runtime.store.ensureSession('a', { title: 'Beta' });
+    clock.advance(1000);
+    test.runtime.store.ensureSession('b', { title: 'alpha' });
+
+    expect((await page(test, '?sort=title&desc=false')).ids).toEqual(['b', 'a']);
+    expect((await page(test, '?sort=title&desc=true')).ids).toEqual(['a', 'b']);
+  });
+
+  /**
+   * A cursor encodes `(updatedAtMs, key)` — a position in the default ordering
+   * and in no other. Handing one back while the caller has sorted by title would
+   * be handing back a cursor that cannot be followed, so under any other
+   * ordering the pager gets `total` and no cursor.
+   */
+  it('issues no cursor under an ordering a cursor cannot address', async () => {
+    const test = await start();
+    for (const key of ['a', 'b']) test.runtime.store.ensureSession(key);
+
+    expect((await page(test, '?limit=1')).nextCursor).toEqual(expect.any(String));
+    expect((await page(test, '?limit=1&sort=title')).nextCursor).toBeUndefined();
+    expect((await page(test, '?limit=1&desc=false')).nextCursor).toBeUndefined();
+  });
+
+  /**
+   * There is no reading of "page 3 relative to this position" that is more
+   * correct than the others, and a precedence rule would silently ignore one of
+   * the two parameters — which looks exactly like a server that paged wrongly.
+   */
+  it('refuses a request that names both paging modes', async () => {
+    const { server, headers } = await start();
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/sessions?cursor=abc&offset=25',
+      headers,
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toMatch(/cursor or an offset/i);
+  });
+
+  it('refuses a negative offset', async () => {
+    const { server, headers } = await start();
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/sessions?offset=-1',
       headers,
     });
 

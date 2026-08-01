@@ -28,12 +28,10 @@
  * terminal's selection *is* its copy mechanism.
  */
 
-import { randomUUID } from 'node:crypto';
-
 import { describeContext, type ContextReport } from '@ghostai/agent';
 import { GhostError, isGhostError, textOf, type SessionStore } from '@ghostai/core';
 import { formatNumber } from '@ghostai/i18n';
-import type { ContentPart } from '@ghostai/protocol';
+import { newUuid, type ContentPart } from '@ghostai/protocol';
 
 import type { CliKey, CliT } from './i18n.js';
 import { recentMessages, resolveSeq, DEFAULT_MESSAGE_LINES } from './messages.js';
@@ -531,5 +529,5 @@ function clip(text: string, max = 72): string {
 
 /** The same shape the REST create route mints: an origin and a uuid. */
 function randomKey(): string {
-  return randomUUID();
+  return newUuid();
 }

@@ -45,8 +45,6 @@
  * this is it.
  */
 
-import { randomUUID } from 'node:crypto';
-
 import {
   DEFAULT_AGENT_ID,
   DEFAULT_MAX_TOOL_RESULT_CHARS,
@@ -75,6 +73,7 @@ import {
   AgentDefaultsSchema,
   SUBAGENT_METADATA_KEY,
   SUBAGENT_ORIGIN,
+  newUuid,
   withSubagentRun,
   type AgentDefaults,
   type AgentToolbox,
@@ -613,7 +612,7 @@ export class AgentLoop {
     this.#clock = options.clock ?? systemClock;
     this.#logger = options.logger ?? silentLogger;
     this.#random = options.random ?? systemRandom;
-    this.#newId = options.newId ?? randomUUID;
+    this.#newId = options.newId ?? newUuid;
     this.#env = options.env ?? process.env;
     this.#heartbeatMs = options.toolHeartbeatMs ?? TOOL_HEARTBEAT_MS;
     this.#maxToolResultChars = options.maxToolResultChars ?? DEFAULT_MAX_TOOL_RESULT_CHARS;

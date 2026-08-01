@@ -5,8 +5,11 @@
  * The API reference is generated from them and never hand-maintained, so it
  * cannot drift from the routes it documents.
  *
- * Cursor pagination throughout, not offset: sessions and messages are
- * append-only, so an offset shifts under a reader whenever a turn lands.
+ * Cursor pagination for anything read sequentially: sessions and messages are
+ * append-only, so an offset shifts under a reader whenever a turn lands. The
+ * three listings that a numbered pager also reads — sessions, automation runs,
+ * notifications — accept an `offset` as well, and carry a `total` a page of rows
+ * cannot supply. The two modes are alternatives; see `PaginationQuerySchema`.
  */
 
 import { z } from 'zod';
@@ -35,10 +38,28 @@ export const ErrorResponseSchema = z.object({
 });
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 
+/**
+ * How a client asks for one page, in either of the two ways.
+ *
+ * **`cursor` and `offset` are alternatives, never a pair.** A cursor addresses a
+ * position in the sort order and an offset counts rows from the top, so sending
+ * both asks for a page relative to a page; the endpoints refuse the combination
+ * with a 400 rather than letting one silently win.
+ *
+ * Which to send is a property of the reader, not of the endpoint. A sequential
+ * one — the sidebar, an infinite scroll — wants `cursor`, because these tables
+ * move under it: a turn landing between two requests bumps a session to the
+ * front, which shifts every offset behind it and makes the reader see one row
+ * twice and miss another. A numbered pager wants `offset`, because "page 7"
+ * cannot be expressed as a position it has not visited, and it is jumping around
+ * a list rather than reading through it.
+ */
 export const PaginationQuerySchema = z.object({
   limit: z.number().int().positive().max(200).default(50),
   /** Opaque; echo back `nextCursor` verbatim. */
   cursor: z.string().optional(),
+  /** Rows to skip from the top. Mutually exclusive with `cursor`. */
+  offset: z.number().int().nonnegative().default(0),
 });
 export type PaginationQuery = z.infer<typeof PaginationQuerySchema>;
 
@@ -343,6 +364,16 @@ export type SessionSummary = z.infer<typeof SessionSummarySchema>;
 export const SessionListResponseSchema = z.object({
   sessions: z.array(SessionSummarySchema),
   nextCursor: z.string().optional(),
+  /**
+   * Every session the filter matches, not the length of `sessions`.
+   *
+   * Required rather than optional, and present on the cursor path too. An
+   * optional total is a field every client has to branch on before it can render
+   * anything, to save one `COUNT(*)` over an indexed column — and a caller that
+   * does not need it can ignore a number far more cheaply than it can handle its
+   * absence.
+   */
+  total: z.number().int().nonnegative(),
 });
 export type SessionListResponse = z.infer<typeof SessionListResponseSchema>;
 
@@ -797,6 +828,14 @@ export const NotificationListResponseSchema = z.object({
   notifications: z.array(NotificationSchema),
   unreadCount: z.number().int().nonnegative(),
   nextCursor: z.string().optional(),
+  /**
+   * Every notification the filter matches — which is *not* `unreadCount` unless
+   * `unread=true` was asked for. The bell wants the unread tally; the pager
+   * under the list wants how many rows it is paging. Two numbers because they
+   * are two questions, and conflating them is how a list of 200 read
+   * notifications reported that it had none.
+   */
+  total: z.number().int().nonnegative(),
 });
 export type NotificationListResponse = z.infer<typeof NotificationListResponseSchema>;
 
@@ -812,6 +851,8 @@ export type AutomationJobListResponse = z.infer<typeof AutomationJobListResponse
 export const AutomationRunListResponseSchema = z.object({
   runs: z.array(AutomationRunSchema),
   nextCursor: z.string().optional(),
+  /** Every run the job has kept, bounded by its retention knob. See `total` on `SessionListResponse`. */
+  total: z.number().int().nonnegative(),
 });
 export type AutomationRunListResponse = z.infer<typeof AutomationRunListResponseSchema>;
 

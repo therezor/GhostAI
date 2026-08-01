@@ -42,8 +42,6 @@
  * next boot.
  */
 
-import { randomUUID } from 'node:crypto';
-
 import {
   GhostError,
   nextCronRun,
@@ -57,6 +55,7 @@ import {
 } from '@ghostai/core';
 import {
   AUTOMATION_ORIGIN,
+  newUuid,
   type AutomationJob,
   type AutomationPayload,
   type AutomationRun,
@@ -359,7 +358,7 @@ export class Scheduler implements SchedulerPort {
     this.#readFile = options.readFile;
     this.#clock = options.clock ?? systemClock;
     this.#logger = options.logger ?? silentLogger;
-    this.#newId = options.newId ?? randomUUID;
+    this.#newId = options.newId ?? newUuid;
     this.#runTimeoutMs = options.runTimeoutMs ?? DEFAULT_RUN_TIMEOUT_MS;
   }
 

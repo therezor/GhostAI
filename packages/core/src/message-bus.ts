@@ -14,8 +14,7 @@
  * edit interval, a websocket's backpressure) with rules the bus cannot know.
  */
 
-import type { ContentPart } from '@ghostai/protocol';
-import { randomUUID } from 'node:crypto';
+import { newUuid, type ContentPart } from '@ghostai/protocol';
 
 import { systemClock, type Clock } from './clock.js';
 
@@ -298,7 +297,7 @@ export class MessageBus {
 
   constructor(options: MessageBusOptions = {}) {
     this.#clock = options.clock ?? systemClock;
-    this.#newId = options.newId ?? randomUUID;
+    this.#newId = options.newId ?? newUuid;
     const capacity = options.capacity ?? 1_000;
     this.#inbound = new AsyncQueue<InboundMessage>(capacity);
     this.#outbound = new AsyncQueue<OutboundMessage>(capacity);

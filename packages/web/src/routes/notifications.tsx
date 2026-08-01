@@ -18,10 +18,10 @@
  * useful if the answer is one press away.
  */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Bell, CheckCheck, Trash2 } from 'lucide-react';
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { Notification, NotificationListResponse } from '@ghostai/protocol';
@@ -30,6 +30,9 @@ import { cn } from '@/lib/cn.js';
 import { api } from '@/lib/api.js';
 import { useFormat } from '@/lib/use-format.js';
 import { queryKeys } from '@/lib/query.js';
+import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';
+import { Pagination } from '@/components/crud/pagination.js';
+import { PAGE_SIZE, usePagination } from '@/components/crud/use-pagination.js';
 import { Button } from '@/components/ui/button.js';
 import { toast } from '@/components/ui/toast.js';
 import { LEVEL_CLASSES, LEVEL_ICONS } from '@/notifications/levels.js';
@@ -37,17 +40,25 @@ import { LEVEL_CLASSES, LEVEL_ICONS } from '@/notifications/levels.js';
 export function NotificationsRoute(): JSX.Element {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const [confirmingClear, setConfirmingClear] = useState(false);
+
+  // Page first, total after: the request needs a page number before there is a
+  // response to count. Nothing here filters or sorts, so nothing sends the
+  // reader back to page 1 — the key is constant.
+  const page = usePagination({ resetOn: '' });
 
   const notifications = useQuery({
-    queryKey: queryKeys.notifications,
-    queryFn: ({ signal }) => api.notifications(signal),
+    queryKey: queryKeys.notificationPage(page.page),
+    queryFn: ({ signal }) =>
+      api.notifications({ limit: PAGE_SIZE, offset: (page.page - 1) * PAGE_SIZE, signal }),
+    placeholderData: keepPreviousData,
   });
 
   const markRead = useMutation({
     mutationFn: (id: string) => api.readNotification(id),
     onSuccess: (updated) => {
       queryClient.setQueryData(
-        queryKeys.notifications,
+        queryKeys.notificationPage(page.page),
         (current: NotificationListResponse | undefined) =>
           current === undefined ? current : replaceRow(current, updated),
       );
@@ -77,7 +88,20 @@ export function NotificationsRoute(): JSX.Element {
     },
   });
 
+  const removeAll = useMutation({
+    mutationFn: () => api.deleteAllNotifications(),
+    onSuccess: () => {
+      setConfirmingClear(false);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+    },
+    onError: (error: Error) => {
+      toast.error(t('notifications.clearFailed'), error.message);
+    },
+  });
+
   const unreadCount = notifications.data?.unreadCount ?? 0;
+  const total = notifications.data?.total ?? 0;
+  const pagination = page.withTotal(total);
   const rows = notifications.data?.notifications ?? [];
   // One instant for the whole list: two rows measured against two `Date.now()`
   // calls can disagree about which is older.
@@ -85,11 +109,14 @@ export function NotificationsRoute(): JSX.Element {
 
   return (
     <div className="stack page page--reading">
+      {/* The title and the one routine action, and nothing else competing for
+          that line. The status sentence used to sit inline here, which is the
+          arrangement `data-list.css` calls "a slow-motion disaster" — a
+          paragraph and a fixed-width box on one line have no arrangement that
+          works at every width, and on a phone it pushed the controls onto a
+          ragged second row. */}
       <div className="cluster page__header">
         <h1 className="page__title">{t('notifications.title')}</h1>
-        <span className="page__note">
-          {unreadCount === 0 ? 'All caught up' : `${String(unreadCount)} unread`}
-        </span>
         <span className="spacer" />
         <Button
           variant="secondary"
@@ -100,6 +127,34 @@ export function NotificationsRoute(): JSX.Element {
         >
           <CheckCheck />
           {t('common.markAllRead')}
+        </Button>
+      </div>
+
+      {/* How much is here on the left, and the one act that changes all of it
+          on the right — the same left-to-right split `.list-toolbar` uses for
+          the filter and the sort, and for the same reason. What the count says
+          is exactly what Clear all would remove, so the two belong on one line
+          reading across to each other rather than stacked.
+
+          Ghost, and the quietest control on the page. What makes it safe is the
+          question in front of it, not its weight — and a page of alerts should
+          not have its loudest element be the chrome. */}
+      <div className="row">
+        <p className="page__note">
+          {unreadCount === 0
+            ? t('notifications.allRead')
+            : t('notifications.unreadCount', { count: unreadCount })}
+        </p>
+        <span className="spacer" />
+        <Button
+          variant="ghost"
+          disabled={total === 0 || removeAll.isPending}
+          onClick={() => {
+            setConfirmingClear(true);
+          }}
+        >
+          <Trash2 />
+          {t('notifications.clearAll')}
         </Button>
       </div>
 
@@ -135,6 +190,33 @@ export function NotificationsRoute(): JSX.Element {
             ))}
           </ul>
         ))}
+
+      {notifications.data !== undefined && (
+        // Previous and Next only. A page number is a destination on a list of
+        // records — "the agents starting with M are on page 3" — and means
+        // nothing on a feed ordered by when things happened, where page 4 is
+        // only "further back".
+        <Pagination
+          pagination={pagination}
+          total={total}
+          label={t('notifications.title')}
+          numbered={false}
+        />
+      )}
+
+      <ConfirmDialog
+        open={confirmingClear}
+        onOpenChange={setConfirmingClear}
+        title={t('notifications.clearTitle')}
+        description={t('notifications.clearHint', { count: total })}
+        confirmLabel={t('notifications.clearAll')}
+        pending={removeAll.isPending}
+        onConfirm={() => {
+          // Closed in `onSuccess`, so a failed clear leaves the question on
+          // screen with its error rather than looking like it worked.
+          removeAll.mutate();
+        }}
+      />
     </div>
   );
 }
@@ -182,7 +264,7 @@ function NotificationRow({
               search={{ session: notification.sessionKey }}
               className="notification__link"
             >
-              {t('notifications.openSession')}
+              {t('notifications.openConversation')}
             </Link>
           )}
           {unread && (

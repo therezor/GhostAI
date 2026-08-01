@@ -35,6 +35,7 @@ const SESSIONS = {
       origin: 'web',
     },
   ],
+  total: 1,
 };
 
 const MESSAGES = {
@@ -80,6 +81,7 @@ function renderApp(
           },
         ],
         unreadCount: 3,
+        total: 1,
       },
     ],
     '/api/sessions/web%3A7/messages': [200, MESSAGES],
@@ -135,6 +137,24 @@ describe('the shell', () => {
     ).toBeInTheDocument();
   });
 
+  /**
+   * The column is a shortlist, not the archive. It used to take whatever the
+   * server's default page was — fifty — which read as the whole list while being
+   * the newest fraction of it, and had no way to the rest.
+   */
+  it('asks for a shortlist of conversations, and offers a way to the rest', async () => {
+    const { calls } = renderApp();
+
+    await screen.findByText('First conversation');
+
+    const listed = calls.find((call) => call.method === 'GET' && call.path === '/api/sessions');
+    expect(listed?.query.get('limit')).toBe('30');
+    expect(screen.getByRole('link', { name: 'All conversations' })).toHaveAttribute(
+      'href',
+      '/sessions',
+    );
+  });
+
   it('opens recent notifications from the header, with a way to the full list', async () => {
     const { user } = renderApp();
 
@@ -173,6 +193,7 @@ describe('the shell', () => {
             },
           ],
           unreadCount: 1,
+          total: 1,
         },
       ],
     });
@@ -211,6 +232,7 @@ describe('the shell', () => {
             },
           ],
           unreadCount: 1,
+          total: 1,
         },
       ],
       'POST /api/notifications/n1/read': [

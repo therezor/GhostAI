@@ -43,6 +43,8 @@ import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';
 import { RowActions } from '@/components/crud/row-actions.js';
 import { DataList, DataListRow } from '@/components/crud/data-list.js';
 import { ListSort } from '@/components/crud/list-sort.js';
+import { Pagination } from '@/components/crud/pagination.js';
+import { pageRows, usePagination } from '@/components/crud/use-pagination.js';
 import { filterRows, sortRows, type Comparators, type SortOrder } from '@/components/crud/sort.js';
 import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
@@ -167,7 +169,7 @@ export function AgentsRoute(): JSX.Element {
     });
   }, [ids, list, agents.data]);
 
-  const rows = useMemo(
+  const matched = useMemo(
     () =>
       sortRows(
         filterRows(all, filter, (row) => `${row.id} ${row.label}`),
@@ -183,6 +185,13 @@ export function AgentsRoute(): JSX.Element {
       ),
     [all, filter, sort],
   );
+
+  // The agent list is a slice of the settings tree, so it arrives whole — the
+  // page is a slice of what is already here rather than a second request.
+  const pagination = usePagination({
+    resetOn: `${filter}|${sort.key}|${String(sort.descending)}`,
+  }).withTotal(matched.length);
+  const rows = pageRows(matched, pagination);
 
   const taken = useMemo(() => new Set(ids), [ids]);
 
@@ -287,7 +296,7 @@ export function AgentsRoute(): JSX.Element {
       )}
 
       {settings.isSuccess &&
-        (rows.length === 0 ? (
+        (matched.length === 0 ? (
           <p className="page__note">No agent matches “{filter}”.</p>
         ) : (
           <DataList label={t('agents.title')}>
@@ -377,6 +386,10 @@ export function AgentsRoute(): JSX.Element {
             ))}
           </DataList>
         ))}
+
+      {settings.isSuccess && (
+        <Pagination pagination={pagination} total={matched.length} label={t('agents.title')} />
+      )}
 
       <ConfirmDialog
         open={pendingDelete !== undefined}

@@ -37,7 +37,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import type { Attachment } from '@ghostai/protocol';
+import { newUuid, type Attachment } from '@ghostai/protocol';
 
 import { cn } from '@/lib/cn.js';
 import { api } from '@/lib/api.js';
@@ -418,7 +418,7 @@ async function stage(
   workspace: string,
   setFiles: (update: (current: readonly StagedFile[]) => readonly StagedFile[]) => void,
 ): Promise<void> {
-  const id = crypto.randomUUID();
+  const id = newUuid();
   const entry: StagedFile = {
     id,
     name: file.name,

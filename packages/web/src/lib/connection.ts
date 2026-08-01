@@ -22,7 +22,12 @@
  * for — a tab that reloaded mid-turn rebuilds the in-flight answer from it.
  */
 
-import type { ApprovalScope, Attachment, ServerMessage } from '@ghostai/protocol';
+import {
+  newUuid,
+  type ApprovalScope,
+  type Attachment,
+  type ServerMessage,
+} from '@ghostai/protocol';
 
 import { useTurnStore } from '@/state/turn.js';
 import { toast } from '@/components/ui/toast.js';
@@ -195,7 +200,7 @@ function attachWithCursor(sessionKey: string): number {
  * row's — moving it is an explicit `PATCH /api/sessions/:key`, not a frame.
  */
 export function newSession(workspaceId?: string, agentId?: string): string {
-  const sessionKey = crypto.randomUUID();
+  const sessionKey = newUuid();
   socket?.send({
     type: 'session.new',
     sessionKey,
@@ -226,7 +231,7 @@ export function sendUserMessage(
   // The idempotency key. A retry after a dropped socket — which the buffer in
   // `socket.ts` makes routine — is acked with the id the first attempt got,
   // and no second turn is queued.
-  const clientMessageId = crypto.randomUUID();
+  const clientMessageId = newUuid();
 
   store.appendPending({ clientMessageId, text, attachments });
   socket.send({
@@ -280,7 +285,7 @@ export function editMessage(
   const sessionKey = store.sessionKey;
   if (sessionKey === undefined || socket === undefined) return;
 
-  const clientMessageId = crypto.randomUUID();
+  const clientMessageId = newUuid();
   // Below the edited message, because the replacement is appended next: cutting
   // at `seq` would leave the old wording above the new one.
   store.truncateAfter(seq - 1);

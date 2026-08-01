@@ -21,11 +21,10 @@
  *    wrong, and it is also the case this table exists for.
  */
 
-import { randomUUID } from 'node:crypto';
 import type { DatabaseSync, SQLOutputValue, StatementSync } from 'node:sqlite';
 
 import { GhostError, systemClock, type Clock } from '@ghostai/core';
-import type { Notification } from '@ghostai/protocol';
+import { newUuid, type Notification } from '@ghostai/protocol';
 
 import type { NotificationCursor } from './cursor.js';
 
@@ -65,6 +64,13 @@ export interface CreateNotificationInput {
 
 export interface ListNotificationsOptions {
   readonly limit?: number;
+  /**
+   * For a numbered pager, where `after` is for a sequential reader.
+   *
+   * The two are alternatives and never combined — `notifications.list` refuses
+   * the pair with a 400. See `cursor.ts`.
+   */
+  readonly offset?: number;
   readonly after?: NotificationCursor;
   readonly unreadOnly?: boolean;
 }
@@ -131,7 +137,7 @@ export class NotificationStore {
   constructor(options: NotificationStoreOptions) {
     this.#db = options.database;
     this.#clock = options.clock ?? systemClock;
-    this.#newId = options.newId ?? randomUUID;
+    this.#newId = options.newId ?? newUuid;
     this.#db.exec(SCHEMA);
   }
 
@@ -184,7 +190,7 @@ export class NotificationStore {
    * the normal case for an automation run that finishes several jobs.
    */
   list(options: ListNotificationsOptions = {}): Notification[] {
-    const { limit = 50, after, unreadOnly = false } = options;
+    const { limit = 50, offset = 0, after, unreadOnly = false } = options;
     const rows = this.#stmt(
       `SELECT * FROM notifications
         WHERE (? = 0 OR read_at_ms IS NULL)
@@ -192,7 +198,7 @@ export class NotificationStore {
                OR created_at_ms < ?
                OR (created_at_ms = ? AND id > ?))
         ORDER BY created_at_ms DESC, id ASC
-        LIMIT ?`,
+        LIMIT ? OFFSET ?`,
     ).all(
       unreadOnly ? 1 : 0,
       after?.createdAtMs ?? null,
@@ -200,9 +206,24 @@ export class NotificationStore {
       after?.createdAtMs ?? null,
       after?.id ?? null,
       limit,
+      offset,
     );
 
     return rows.map(rowToNotification);
+  }
+
+  /**
+   * How many the same filter matches, ignoring the page.
+   *
+   * The `unreadOnly` predicate is repeated rather than shared through a helper
+   * the way `SessionStore` does: it is one clause with one binding, and a
+   * function wrapping it would be indirection protecting nothing.
+   */
+  count(options: { readonly unreadOnly?: boolean } = {}): number {
+    const row = this.#stmt(
+      'SELECT COUNT(*) AS n FROM notifications WHERE (? = 0 OR read_at_ms IS NULL)',
+    ).get(options.unreadOnly === true ? 1 : 0);
+    return row === undefined ? 0 : readInt(row, 'n');
   }
 
   unreadCount(): number {
@@ -238,5 +259,17 @@ export class NotificationStore {
 
   delete(id: string): boolean {
     return Number(this.#stmt('DELETE FROM notifications WHERE id = ?').run(id).changes) > 0;
+  }
+
+  /**
+   * Empties the table, and reports how many went.
+   *
+   * Read *and* unread, which is the whole point of it: an operator clearing a
+   * backlog is clearing the backlog, and a "delete all" that quietly kept the
+   * unread ones would leave the bell still counting after the list looked empty.
+   * The route in front of it is what asks first.
+   */
+  deleteAll(): number {
+    return Number(this.#stmt('DELETE FROM notifications').run().changes);
   }
 }

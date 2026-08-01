@@ -201,11 +201,41 @@ export const api = {
   status: (signal?: AbortSignal): Promise<StatusResponse> =>
     request('/api/status', StatusResponseSchema, { ...(signal ? { signal } : {}) }),
 
-  /** Every session, or only the ones in one workspace. */
-  sessions: (workspaceId?: string, signal?: AbortSignal): Promise<SessionListResponse> =>
+  /**
+   * A page of conversations.
+   *
+   * Two readers, and they ask differently. The sidebar wants the most recent
+   * few and passes little more than a workspace; the management screen searches
+   * and jumps to a page, so it sends `q`, `sort` and `offset`. Never a `cursor`
+   * *and* an `offset` — the route answers 400, deliberately, rather than
+   * silently honouring one. See `cursor.ts` on the server.
+   */
+  sessions: (
+    options: {
+      readonly workspaceId?: string;
+      readonly limit?: number;
+      readonly offset?: number;
+      /** A title substring. Blank is the same as absent. */
+      readonly q?: string;
+      readonly sort?: 'updated' | 'created' | 'title';
+      readonly desc?: boolean;
+      readonly signal?: AbortSignal;
+    } = {},
+  ): Promise<SessionListResponse> =>
     request('/api/sessions', SessionListResponseSchema, {
-      ...(workspaceId === undefined ? {} : { query: { workspace: workspaceId } }),
-      ...(signal ? { signal } : {}),
+      // `undefined` entries are dropped by `request`, so these are named plainly
+      // rather than spread-guarded one at a time.
+      query: {
+        workspace: options.workspaceId,
+        limit: options.limit,
+        offset: options.offset,
+        q: options.q,
+        sort: options.sort,
+        // The route takes the two words rather than a bare boolean, so the
+        // generated document lists what a client may send.
+        desc: options.desc === undefined ? undefined : String(options.desc),
+      },
+      ...(options.signal ? { signal: options.signal } : {}),
     }),
 
   messages: (key: string, signal?: AbortSignal): Promise<SessionMessagesResponse> =>
@@ -261,9 +291,18 @@ export const api = {
       ...(signal ? { signal } : {}),
     }),
 
-  notifications: (signal?: AbortSignal): Promise<NotificationListResponse> =>
+  notifications: (
+    options: {
+      readonly limit?: number;
+      readonly offset?: number;
+      readonly signal?: AbortSignal;
+    } = {},
+  ): Promise<NotificationListResponse> =>
     request('/api/notifications', NotificationListResponseSchema, {
-      ...(signal ? { signal } : {}),
+      // `undefined` entries are dropped by `request`. The bell asks for neither
+      // and takes the server's default page; the full list pages.
+      query: { limit: options.limit, offset: options.offset },
+      ...(options.signal ? { signal: options.signal } : {}),
     }),
 
   /** The updated row rather than a 204, so one item reconciles without a refetch. */
@@ -277,6 +316,10 @@ export const api = {
 
   deleteNotification: (id: string): Promise<void> =>
     requestVoid(`/api/notifications/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  /** Read and unread alike — the confirmation in front of it is the UI's job. */
+  deleteAllNotifications: (): Promise<void> =>
+    requestVoid('/api/notifications', { method: 'DELETE' }),
 
   automationJobs: (signal?: AbortSignal): Promise<AutomationJobListResponse> =>
     request('/api/automation/jobs', AutomationJobListResponseSchema, {
@@ -320,13 +363,21 @@ export const api = {
 
   automationRuns: (
     id: string,
-    options: { readonly cursor?: string; readonly signal?: AbortSignal } = {},
+    options: {
+      readonly limit?: number;
+      /** A numbered pager's position. Never sent alongside `cursor` — the route answers 400. */
+      readonly offset?: number;
+      readonly cursor?: string;
+      readonly signal?: AbortSignal;
+    } = {},
   ): Promise<AutomationRunListResponse> =>
     request(
       `/api/automation/jobs/${encodeURIComponent(id)}/runs`,
       AutomationRunListResponseSchema,
       {
-        ...(options.cursor === undefined ? {} : { query: { cursor: options.cursor } }),
+        // `undefined` entries are dropped by `request`, so the three are named
+        // plainly rather than spread-guarded one at a time.
+        query: { limit: options.limit, offset: options.offset, cursor: options.cursor },
         ...(options.signal ? { signal: options.signal } : {}),
       },
     ),

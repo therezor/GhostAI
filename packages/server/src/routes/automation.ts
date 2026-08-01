@@ -35,7 +35,11 @@ import {
 import { isGhostError } from '@ghostai/core';
 import type { FastifyReply } from 'fastify';
 
-import { decodeAutomationRunCursor, encodeAutomationRunCursor } from '../cursor.js';
+import {
+  assertOnePagingMode,
+  decodeAutomationRunCursor,
+  encodeAutomationRunCursor,
+} from '../cursor.js';
 import { conflict, notFound, unprocessable } from '../errors.js';
 import { IdParamsSchema, PageQuerySchema, type IdParams, type PageQuery } from '../queries.js';
 import { firstRunAt } from '../scheduler.js';
@@ -208,11 +212,13 @@ export function automationRoutes(deps: RouteDeps): RouteGroup<AutomationRouteId>
         const { id } = request.params as IdParams;
         if (store.getJob(id) === undefined) throw notFound(`No automation job "${id}"`);
         const query = request.query as PageQuery;
+        assertOnePagingMode(query);
 
         // One more than asked for, so "is there another page" is answered by
         // what came back rather than by a second count query.
         const rows: AutomationRun[] = store.listRuns(id, {
           limit: query.limit + 1,
+          ...(query.offset === undefined ? {} : { offset: query.offset }),
           ...(query.cursor === undefined ? {} : { after: decodeAutomationRunCursor(query.cursor) }),
         });
 
@@ -220,6 +226,11 @@ export function automationRoutes(deps: RouteDeps): RouteGroup<AutomationRouteId>
         const last = page.at(-1);
         return {
           runs: page,
+          // The panel this feeds is a numbered pager: a job on a five-minute
+          // schedule produces a few hundred runs a day, and "of 288" is the part
+          // a page of rows cannot say. Unlike sessions there is one ordering, so
+          // the cursor stays valid whatever the caller asked for.
+          total: store.countRuns(id),
           ...(rows.length > query.limit && last !== undefined
             ? {
                 nextCursor: encodeAutomationRunCursor({

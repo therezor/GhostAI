@@ -7,6 +7,14 @@
  * another row — a client never follows a cursor into an empty page, and never
  * stops one row early.
  *
+ * `sessions.list` *also* answers an offset, because it has a second kind of
+ * reader: the sessions management screen is a numbered pager that searches and
+ * jumps rather than walking the list, and page 7 is a position it has no cursor
+ * for. The two modes are alternatives — `assertOnePagingMode` refuses the pair —
+ * and a cursor is issued only while the listing is in the ordering a cursor
+ * addresses. `total` is returned either way, because a pager cannot derive
+ * "of 12" from the rows in front of it. See `cursor.ts` for the full argument.
+ *
  * `GET /api/sessions/:key/context` is the panel that makes the token budget
  * legible instead of a mystery. Two properties make it worth having rather than
  * misleading: the system prompt comes from the loop that would send it, and the
@@ -21,6 +29,7 @@ import {
   SessionListResponseSchema,
   SessionMessagesResponseSchema,
   SessionSummarySchema,
+  newUuid,
   TurnStatsResponseSchema,
   UpdateSessionRequestSchema,
   subagentRunsOf,
@@ -37,9 +46,9 @@ import {
 import { toStoredMessage, type SessionSummaryRecord } from '@ghostai/core';
 import { describeContext } from '@ghostai/agent';
 import type { FastifyReply } from 'fastify';
-import { randomUUID } from 'node:crypto';
 
 import {
+  assertOnePagingMode,
   decodeMessageCursor,
   decodeSessionCursor,
   encodeMessageCursor,
@@ -136,12 +145,25 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
       },
       handler: (request): SessionListResponse => {
         const query = request.query as SessionListQuery;
+        assertOnePagingMode(query);
+
+        // The predicate, named once: the page runs under it and so does the
+        // count, and a total describing a different set than the rows beneath it
+        // is a "Page 4 of 3" that only appears once someone searches.
+        const filter = {
+          ...(query.origin === undefined ? {} : { origin: query.origin }),
+          ...(query.workspace === undefined ? {} : { workspaceId: query.workspace }),
+          ...(query.q === undefined ? {} : { query: query.q }),
+        };
+
         const rows = store.listSessions({
           // One more than asked for: the extra row is what decides whether a
           // cursor is issued, and it is dropped rather than returned.
           limit: query.limit + 1,
-          ...(query.origin === undefined ? {} : { origin: query.origin }),
-          ...(query.workspace === undefined ? {} : { workspaceId: query.workspace }),
+          ...filter,
+          ...(query.offset === undefined ? {} : { offset: query.offset }),
+          ...(query.sort === undefined ? {} : { orderBy: query.sort }),
+          ...(query.desc === undefined ? {} : { descending: query.desc }),
           ...(query.cursor === undefined ? {} : { after: decodeSessionCursor(query.cursor) }),
         });
 
@@ -150,9 +172,18 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
         // One statement for the whole page. A per-row lookup here is the
         // difference between a listing and fifty of them.
         const usage = store.sessionUsage(page.map((record) => record.key));
+
+        // A cursor encodes `(updatedAtMs, key)`, which is a position in the
+        // default ordering and in no other. Issuing one while the caller has
+        // sorted by title would hand back a cursor that cannot be followed —
+        // the store refuses the combination — so under any other ordering there
+        // simply is no next cursor, and the pager uses `total` instead.
+        const defaultOrder = (query.sort ?? 'updated') === 'updated' && (query.desc ?? true);
+
         return {
           sessions: page.map((record) => toSummary(record, usage.get(record.key))),
-          ...(rows.length > query.limit && last !== undefined
+          total: store.countSessions(filter),
+          ...(defaultOrder && rows.length > query.limit && last !== undefined
             ? { nextCursor: encodeSessionCursor({ updatedAtMs: last.updatedAtMs, key: last.key }) }
             : {}),
         };
@@ -179,7 +210,7 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
         }
         requireAgent(body.agentId);
 
-        const record = store.ensureSession(body.key ?? randomUUID(), {
+        const record = store.ensureSession(body.key ?? newUuid(), {
           origin: 'web',
           ...(body.title === undefined ? {} : { title: body.title }),
           ...(body.workspaceId === undefined ? {} : { workspaceId: body.workspaceId }),

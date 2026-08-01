@@ -12,7 +12,13 @@
  * press with no feedback would read as a button that does nothing.
  */
 
-import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseQueryResult,
+} from '@tanstack/react-query';
 import type {
   AutomationJob,
   AutomationJobListResponse,
@@ -24,19 +30,9 @@ import type {
 
 import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
+import type { MutationHandle } from '@/components/crud/mutation.js';
+import { PAGE_SIZE } from '@/components/crud/use-pagination.js';
 import { toast } from '@/components/ui/toast.js';
-
-/**
- * `onSuccess` receives what the server returned, not nothing.
- *
- * The create dialog navigates into the editor for the job it just made, and
- * the id is assigned server-side — without the result there is nothing to
- * navigate to.
- */
-export interface MutationHandle<T, R = void> {
-  readonly mutate: (input: T, options?: { readonly onSuccess?: (result: R) => void }) => void;
-  readonly pending: boolean;
-}
 
 export function useAutomationJobs(): UseQueryResult<AutomationJobListResponse> {
   return useQuery({
@@ -46,17 +42,32 @@ export function useAutomationJobs(): UseQueryResult<AutomationJobListResponse> {
 }
 
 /**
- * One job's runs.
+ * One page of one job's runs.
  *
  * `enabled` is what lets the editor call this unconditionally: hooks cannot be
  * conditional, and a job being created has no id to ask about — without the
  * flag the create page would request `/api/automation/jobs//runs`.
+ *
+ * **Paged on the server, unlike every other list in this app.** The others hold
+ * a config list that arrives whole; this is a table a five-minute job appends to
+ * ~288 times a day, and the panel's whole purpose is looking back through it. It
+ * sends `offset` rather than following `nextCursor` for the reason `cursor.ts`
+ * gives: this is a reader that jumps to a page, not one walking the history.
+ *
+ * `placeholderData` holds the previous page on screen while the next one is in
+ * flight. Without it every page change blanks the list and the panel jumps to
+ * the height of its loading sentence, which on a full page is most of a screen.
  */
-export function useAutomationRuns(jobId: string): UseQueryResult<AutomationRunListResponse> {
+export function useAutomationRuns(
+  jobId: string,
+  page = 1,
+): UseQueryResult<AutomationRunListResponse> {
   return useQuery({
-    queryKey: queryKeys.automationRuns(jobId),
-    queryFn: ({ signal }) => api.automationRuns(jobId, { signal }),
+    queryKey: queryKeys.automationRuns(jobId, page),
+    queryFn: ({ signal }) =>
+      api.automationRuns(jobId, { limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE, signal }),
     enabled: jobId !== '',
+    placeholderData: keepPreviousData,
   });
 }
 
