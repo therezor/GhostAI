@@ -41,7 +41,16 @@ export interface FakeRuntimeOptions {
   readonly model?: string;
   /** `false` drives the routes as a fresh install with no provider or model. */
   readonly configured?: boolean;
+  /** What the default agent advertises — the context inspector's list. */
   readonly tools?: readonly ToolDefinition[];
+  /**
+   * What the registry holds, which is a superset in every real install.
+   *
+   * Defaults to `tools` so a test that only cares that a definition reaches a
+   * route says it once. A test about the *difference* — the tool-list route
+   * offering something no agent currently holds — sets both.
+   */
+  readonly registeredTools?: readonly ToolDefinition[];
   readonly toolboxes?: readonly ToolboxListing[];
   readonly credentialsPresent?: Readonly<Record<string, boolean>>;
   readonly systemPrompt?: string;
@@ -192,6 +201,8 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
       if (named === undefined) throw new GhostError('not_found', `No agent named "${agentId}"`);
       return { ...agent, id: named.id, label: named.label, model: named.model };
     },
+
+    registeredTools: () => options.registeredTools ?? options.tools ?? [],
 
     agents: agentsFor,
   };

@@ -250,12 +250,14 @@ export function subagentResult(
 /**
  * A session key for one delegated run.
  *
- * The `sub-` prefix is cosmetic — the origin is what `listSessions` filters on —
- * but it is what makes a key recognisable in a log line, which is where these
- * are usually read.
+ * A plain id, like every other session key. There was a `sub-` prefix here once
+ * and it carried nothing a reader could rely on: `sessions.origin` is what says
+ * a session is a delegation, it is what queries filter on, and it is what the UI
+ * shows. A second, cosmetic copy of that fact in the key is one that can only
+ * disagree with it.
  */
 export function subagentSessionKey(newId: () => string): string {
-  return `sub-${newId()}`;
+  return newId();
 }
 
 /**

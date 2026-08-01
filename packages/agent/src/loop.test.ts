@@ -2192,7 +2192,9 @@ describe('subagents', () => {
       expect(event.parentCallId).toBe('c1');
       expect(event.agentId).toBe('researcher');
       expect(event.depth).toBe(1);
-      expect(event.sessionKey).toMatch(/^sub-/);
+      // Its own session, not the caller's — the key is a plain id and says
+      // nothing about what made it; `sessions.origin` is where that lives.
+      expect(event.sessionKey).not.toBe(SESSION);
     }
   });
 
@@ -2232,12 +2234,17 @@ describe('subagents', () => {
     });
   });
 
-  it('keeps subagent sessions out of the conversation list', async () => {
+  it("lists a subagent's session, tagged with the origin that made it", async () => {
     const { parent, store } = delegationHarness();
     await runTurn(parent, { sessionKey: SESSION, content: 'go' });
 
-    expect(store.listSessions().map((session) => session.key)).toEqual([SESSION]);
-    // Still reachable when asked for by name — the transcript fetch needs it.
+    // Listed rather than hidden: the delegation's own turn is the thing anyone
+    // debugging a bad answer needs to read, and `origin` is what tells it apart
+    // from the conversation that caused it.
+    const listed = store.listSessions();
+    expect(listed.map((session) => session.key).sort()).toHaveLength(2);
+    expect(listed.filter((session) => session.origin === SUBAGENT_ORIGIN)).toHaveLength(1);
+    // Still narrowable by name — the transcript fetch relies on it.
     expect(store.listSessions({ origin: SUBAGENT_ORIGIN })).toHaveLength(1);
   });
 
@@ -2393,7 +2400,7 @@ describe('subagents', () => {
     expect(seen).toHaveLength(1);
     expect(seen[0]?.agentId).toBe('researcher');
     // Its own session for the record, the conversation for the scope.
-    expect(seen[0]?.sessionKey).toMatch(/^sub-/);
+    expect(seen[0]?.sessionKey).not.toBe(SESSION);
     expect(seen[0]?.rootSessionKey).toBe(SESSION);
   });
 
@@ -2503,7 +2510,7 @@ describe('subagents', () => {
     // Addressed to the *middle* agent's call, in the middle agent's session —
     // which is what lets one flat map nest a card at any depth.
     expect(deep[0]?.parentCallId).toBe('m1');
-    expect(deep[0]?.parentSessionKey).toMatch(/^sub-/);
+    expect(deep[0]?.parentSessionKey).not.toBe(SESSION);
     expect(deep[0]?.agentId).toBe('summariser');
   });
 });

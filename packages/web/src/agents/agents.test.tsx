@@ -925,6 +925,42 @@ describe('a named agent', () => {
     expect(startsWith[3]?.startsWith('read_file')).toBe(true);
   });
 
+  it('offers a registered tool this agent has never held, at Disabled', async () => {
+    // The `automation` case, and the reason `GET /api/tools` answers with the
+    // registry rather than the default agent's advertised list. No agent is
+    // seeded with `automation`, so under the old route it appeared in nobody's
+    // list — and a tool with no row is a tool no operator can ever grant.
+    const { user, calls } = mount('/agents/reviewer', {
+      '/api/tools': [
+        200,
+        {
+          tools: [
+            { name: 'automation', description: 'Schedule work.', risk: 'exec', parameters: {} },
+          ],
+        },
+      ],
+    });
+
+    const control = await screen.findByRole('combobox', { name: 'Permission for automation' });
+    // Absent from the stored map reads as off, not as missing: the row is the
+    // grant, and it starts in the position that grants nothing. The badge would
+    // be the other failure — a registered tool reported as one this install
+    // does not have.
+    const row = within(control.closest('li') as HTMLElement);
+    expect(control).toHaveTextContent('Disabled');
+    expect(row.queryByText('not installed')).not.toBeInTheDocument();
+
+    await pick(user, 'automation', 'Ask first');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => {
+      expect(patchesOf(calls)).toHaveLength(1);
+    });
+    expect(patchesOf(calls)[0]?.agents?.list?.reviewer?.tools).toMatchObject({
+      automation: 'ask',
+    });
+  });
+
   it('keeps a tool this install does not have registered', async () => {
     // `agents.list.*` is replaced wholesale on save, so a list built only from
     // the live registry would silently drop this agent's opinion about a tool

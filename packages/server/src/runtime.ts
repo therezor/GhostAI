@@ -214,6 +214,21 @@ export interface ServerRuntime {
    */
   agent(agentId?: string): AgentView;
 
+  /**
+   * Every tool the registry holds, whoever may call it.
+   *
+   * The catalogue, not a grant. `AgentView.tools` is one agent's *advertised*
+   * subset — what a turn on that agent would send — and the two are different
+   * questions that used to share one answer: the tool list route returned the
+   * default agent's subset, so the agent editor offered a tool only if the
+   * default agent already held it. `automation` is absent from
+   * `DEFAULT_AGENT_TOOLS` by design, which made it unreachable — the one tool
+   * nobody starts with was the one tool nobody could grant.
+   *
+   * Sorted by name, as the registry keeps it.
+   */
+  registeredTools(): readonly ToolDefinition[];
+
   /** Every agent that can run a turn, the default one first. */
   agents(): readonly AgentSummary[];
 

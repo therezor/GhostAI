@@ -130,6 +130,8 @@ export interface SchedulerConnectOptions {
   readonly sessionKey?: string;
   readonly channel?: string;
   readonly agentId?: string;
+  /** Always true here: nobody is on the other end of a scheduled run. */
+  readonly unattended?: boolean;
 }
 
 /** The notification frame, minus the `seq` the hub stamps per session. */
@@ -620,15 +622,21 @@ export class Scheduler implements SchedulerPort {
     const now = this.#clock.now();
     const run = this.#jobs.startRun({
       jobId: job.id,
-      sessionKey: job.payload.sessionKey ?? `${AUTOMATION_ORIGIN}:${job.id}:${this.#newId()}`,
+      // A plain id. The job it belongs to is `job_id` on this very row and the
+      // origin is `sessions.origin`, so a key that spelled either out was long
+      // without being more useful — nothing ever parsed it back.
+      sessionKey: job.payload.sessionKey ?? this.#newId(),
     });
 
     // A one-shot is unscheduled the instant it is dispatched. Anything else
     // gets a provisional time that completion will move.
-    this.#jobs.setNextRun(
-      job.id,
-      job.schedule.kind === 'at' ? 0 : nextRunAfter(job.schedule, now, this.#timezone()),
-    );
+    //
+    // A *disabled* job stays unscheduled, and that is `runNow`'s doing: it is
+    // the one caller that reaches a job the timer would never pick up. Writing a
+    // next-run time here left a row badged Disabled with a "Next run" beside
+    // it — a contradiction an operator has to work out for themselves, and a
+    // stale time the job would inherit whenever it was next switched on.
+    this.#jobs.setNextRun(job.id, this.#nextRunFor(job, now));
 
     const controller = new AbortController();
     this.#inFlight.set(job.id, controller);
@@ -763,11 +771,20 @@ export class Scheduler implements SchedulerPort {
     // rather than immediately due, which is what stops a slow job from
     // becoming a permanent backlog.
     if (job.schedule.kind !== 'at') {
-      this.#jobs.setNextRun(
-        job.id,
-        nextRunAfter(job.schedule, this.#clock.now(), this.#timezone()),
-      );
+      this.#jobs.setNextRun(job.id, this.#nextRunFor(job, this.#clock.now()));
     }
+  }
+
+  /**
+   * When this job should fire next, or 0 for "not scheduled".
+   *
+   * Zero for a one-shot, which has just used up its only occurrence, and zero
+   * for a disabled job, which has no next occurrence at all — an on-demand run
+   * must not quietly put one back on the timer's books.
+   */
+  #nextRunFor(job: AutomationJob, nowMs: number): number {
+    if (job.schedule.kind === 'at' || !job.enabled) return 0;
+    return nextRunAfter(job.schedule, nowMs, this.#timezone());
   }
 
   #notify(
@@ -810,11 +827,18 @@ export class Scheduler implements SchedulerPort {
     controller: AbortController,
   ): Promise<TurnOutcome> {
     const collector = new TurnCollector();
-    const sessionKey = run.sessionKey ?? `${AUTOMATION_ORIGIN}:${job.id}`;
+    // The fallback is for a run row written before `startRun` began recording a
+    // key. The job id, so such runs share one session rather than minting a
+    // fresh one each time.
+    const sessionKey = run.sessionKey ?? job.id;
 
     const connection = this.#connect({
       sessionKey,
       channel: AUTOMATION_ORIGIN,
+      // This connection drives the turn and collects its output; it cannot
+      // answer anything. Saying so is what lets the approval gate tell an
+      // unattended run from a conversation someone has open.
+      unattended: true,
       send: (event) => {
         collector.receive(event);
       },

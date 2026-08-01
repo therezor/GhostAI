@@ -195,7 +195,7 @@ function attachWithCursor(sessionKey: string): number {
  * row's — moving it is an explicit `PATCH /api/sessions/:key`, not a frame.
  */
 export function newSession(workspaceId?: string, agentId?: string): string {
-  const sessionKey = `web-${crypto.randomUUID()}`;
+  const sessionKey = crypto.randomUUID();
   socket?.send({
     type: 'session.new',
     sessionKey,

@@ -160,6 +160,21 @@
     color: var(--fg-3);
   }
 
+  /* A detail line that goes somewhere.
+   *
+   * Its own modifier rather than a global `a` rule: the dimmest text tier is
+   * right for a caption and wrong for the one thing on the row a reader is meant
+   * to click, so this lifts it a tier and underlines on hover. `--accent-fg`
+   * because it is text, not a fill. */
+  .settings-divided-list__detail--link {
+    display: inline-block;
+    color: var(--accent-fg);
+  }
+
+  .settings-divided-list__detail--link:hover {
+    text-decoration: underline;
+  }
+
   /* ── The approval matrix ───────────────────────────────────── */
 
   /* ── Providers ─────────────────────────────────────────────── */

@@ -16,14 +16,15 @@
  *
  * Everything this tool cannot be trusted with lives on the other side of
  * `AutomationPort`, which the composition root binds to the calling agent and
- * session: ownership, the per-agent cap, and the refusal to schedule from inside
- * a scheduled run. The tool passes arguments a model wrote; it does not get to
- * say who it is.
+ * session: ownership, the per-agent cap, the refusal to schedule from inside a
+ * scheduled run, and **which agent the scheduled turn runs as**. The tool passes
+ * arguments a model wrote; it does not get to say who it is, and so it does not
+ * get to say who the job will be.
  */
 
 import { z } from 'zod';
 
-import type { AutomationSchedule, CreateAutomationJob } from '@ghostai/protocol';
+import type { AutomationJob, AutomationSchedule, CreateAutomationJob } from '@ghostai/protocol';
 
 import type { AutomationOutcome, AutomationRefusal } from '../automation.js';
 import { assertNotAborted, defineTool, type AnyTool, type ToolResult } from '../define.js';
@@ -37,7 +38,7 @@ const schema = z.strictObject({
     .string()
     .optional()
     .describe(
-      'What to ask the agent when the job fires, written as if you were typing it. Required to create.',
+      'What to ask the agent when the job fires, written as if you were typing it into a new conversation that has no history. Self-contained: spell out what a reader who was not here would need. Required to create.',
     ),
   every_minutes: z.coerce
     .number()
@@ -61,10 +62,11 @@ const schema = z.strictObject({
 });
 
 /**
- * The description does two jobs beyond saying what the tool is.
+ * The description does three jobs beyond saying what the tool is.
  *
  * It points at the current time already in the system prompt rather than
- * restating it, and it says which clock a cron expression is read against.
+ * restating it, it says which clock a cron expression is read against, and it
+ * says that the run starts in a *fresh session*.
  *
  * That second sentence used to warn that a zoneless cron and the prompt's clock
  * disagreed, and to tell the model to pass `tz` when it meant local. There is no
@@ -72,12 +74,21 @@ const schema = z.strictObject({
  * every timestamp, so the warning has become a promise. It is still worth
  * stating — a model that has been trained on the old advice will otherwise
  * convert an hour it did not need to convert.
+ *
+ * The third is the one whose absence looked like the model not understanding the
+ * tool. A scheduled run gets its own `automation:{jobId}` session and cannot see
+ * the conversation that created it, so `message: "do the thing we discussed"`
+ * schedules a turn that has no idea what the thing is — and the failure lands a
+ * week later, on somebody who was not there. Nothing in the tool's surface said
+ * so, and a model has no way to discover it: the create succeeds, and the first
+ * run is the only evidence.
  */
 const DESCRIPTION = [
   'Schedule work for later, list what you have scheduled, or cancel it.',
   'To create, give a name, a message, and exactly one of: every_minutes, cron, or at.',
   'The current time is in your system prompt — compute an "at" instant from it yourself.',
   'A cron expression is read in the install timezone, which is the zone named beside the current time in your prompt; write the hour you mean on that clock and do not convert it.',
+  'The job runs in a fresh conversation that cannot see this one, so write the message so it stands alone — name the files, people and facts it needs instead of referring back to what was said here.',
   'You only ever see and delete jobs you created yourself.',
 ].join(' ');
 
@@ -122,9 +133,43 @@ function toSchedule(args: z.output<typeof schema>): AutomationSchedule | string 
   return { kind: 'at', atMs };
 }
 
-/** One job as a line a model can read back and act on. */
-function describe(job: { id: string; name: string; enabled: boolean }): string {
-  return `${job.id} — ${job.name}${job.enabled ? '' : ' (disabled)'}`;
+/**
+ * A schedule in the words the model wrote it in.
+ *
+ * No timezone anywhere, and that is not an omission. An `every` is a duration, a
+ * cron is echoed back verbatim as the operator's zone will read it, and an
+ * instant is ISO — which is unambiguous on its own. The tool has no zone to
+ * render in and should not grow one: the model's prompt already names the
+ * install's, beside a current time in both forms.
+ */
+function scheduleOf(schedule: AutomationSchedule): string {
+  if (schedule.kind === 'every') return `every ${String(schedule.everyMs / 60_000)} min`;
+  if (schedule.kind === 'cron') return `cron "${schedule.expr}"`;
+  return `once at ${isoOf(schedule.atMs)}`;
+}
+
+/** An instant the model can compare against the clock in its own prompt. */
+function isoOf(ms: number): string {
+  return new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+/**
+ * One job as a line a model can read back and act on.
+ *
+ * The schedule and the next run are on it because without them this tool has no
+ * feedback loop. It used to print `id — name`, which is enough to delete a job
+ * and not enough to answer "what is scheduled?", to notice that a cron was read
+ * differently than it was meant, or to see that a one-shot has already fired.
+ * A model that cannot check its own work re-creates it instead.
+ */
+function detailOf(job: AutomationJob): string {
+  const next =
+    job.state.nextRunAtMs === 0 ? 'not scheduled' : `next ${isoOf(job.state.nextRunAtMs)}`;
+  return `${scheduleOf(job.schedule)} · ${next}${job.enabled ? '' : ' · disabled'}`;
+}
+
+function describe(job: AutomationJob): string {
+  return `${job.id} — ${job.name} · ${detailOf(job)}`;
 }
 
 export const automationTool: AnyTool = defineTool({
@@ -181,6 +226,11 @@ export const automationTool: AnyTool = defineTool({
 
     const created = port.create(input);
     if (!created.ok || created.value === undefined) return refused(created);
-    return `Scheduled "${created.value.name}" (${created.value.id}).`;
+    // The resolved first run, not an echo of the arguments. A cron the model
+    // meant as 9am local and the scheduler read as something else is only
+    // visible here, on the one line the model reads before telling the user it
+    // is done — and it is the difference between a wrong job it can fix in the
+    // same turn and one that surprises somebody a week later.
+    return `Scheduled "${created.value.name}" (${created.value.id}) · ${detailOf(created.value)}`;
   },
 });

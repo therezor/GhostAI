@@ -179,7 +179,7 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
         }
         requireAgent(body.agentId);
 
-        const record = store.ensureSession(body.key ?? `web-${randomUUID()}`, {
+        const record = store.ensureSession(body.key ?? randomUUID(), {
           origin: 'web',
           ...(body.title === undefined ? {} : { title: body.title }),
           ...(body.workspaceId === undefined ? {} : { workspaceId: body.workspaceId }),

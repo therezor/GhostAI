@@ -227,6 +227,21 @@ describe('reconfigure', () => {
     expect(runtime.tools.has('exec')).toBe(true);
   });
 
+  it('re-registers the built-ins so a disabled scheduler drops automation', () => {
+    // Same rule as `exec`, and it reaches further now: the agent editor lists
+    // the registry, so a registered `automation` on a scheduler-less install
+    // would be a permission row that can never do anything.
+    const runtime = ollama();
+    expect(runtime.tools.has('automation')).toBe(true);
+
+    runtime.reconfigure({ scheduler: { enabled: false } });
+    expect(runtime.tools.has('automation')).toBe(false);
+    expect(runtime.tools.has('read_file')).toBe(true);
+
+    runtime.reconfigure({ scheduler: { enabled: true } });
+    expect(runtime.tools.has('automation')).toBe(true);
+  });
+
   it('keeps registrations that are not built-ins', () => {
     // The reason the registry survives a rebuild: an MCP server's tools are not
     // something the operator asked to drop by editing a temperature.

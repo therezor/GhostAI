@@ -232,8 +232,13 @@ describe('the Scheduled jobs page', () => {
   });
 
   it('starts a run on demand', async () => {
+    // The stub answers with a **run**, which is what the route sends. It used to
+    // answer with the job, matching the schema the client was parsing with —
+    // so the fixture and the bug agreed with each other and the test passed
+    // while every real press failed. A response fixture that is not the
+    // response is not a fixture.
     const { user, calls } = mount('/automation', {
-      'POST /api/automation/jobs/job-1/run': [202, CRON_JOB],
+      'POST /api/automation/jobs/job-1/run': [202, RUN],
     });
 
     await user.click(await screen.findByRole('button', { name: 'Actions for Nightly build' }));
@@ -243,6 +248,9 @@ describe('the Scheduled jobs page', () => {
       expect(writesOf(calls)).toHaveLength(1);
     });
     expect(writesOf(calls)[0]?.path).toBe('/api/automation/jobs/job-1/run');
+    // The press reported success. A shape the client cannot parse surfaces as
+    // "Could not start the run" over a run that in fact started and finished.
+    expect(screen.queryByText('Could not start the run')).not.toBeInTheDocument();
   });
 });
 
@@ -427,6 +435,33 @@ describe('the job editor', () => {
 
     expect(await screen.findByText(/no channel is wired yet/u)).toBeInTheDocument();
     expect(screen.getAllByText('Succeeded').length).toBeGreaterThan(0);
+  });
+
+  it('links a run to the turn that produced it', async () => {
+    // The output answers "what did it say"; the transcript answers "why". Until
+    // this link existed there was no route to the session from anywhere — it is
+    // not a key anyone can guess, and the run row was the only thing that knew
+    // it.
+    mount('/automation/job-1', {
+      '/api/automation/jobs/job-1/runs': [
+        200,
+        { runs: [{ ...RUN, sessionKey: 'automation:job-1:run-1' }] },
+      ],
+    });
+
+    const link = await screen.findByRole('link', { name: 'Open session' });
+    expect(link).toHaveAttribute(
+      'href',
+      expect.stringContaining(encodeURIComponent('automation:job-1:run-1')),
+    );
+  });
+
+  it('offers no transcript link for a run that never got a session', async () => {
+    // A run skipped before it started has nothing to open, and a dead link is
+    // worse than no link.
+    mount('/automation/job-1');
+    expect(await screen.findByText('the build is green')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Open session' })).not.toBeInTheDocument();
   });
 
   it('holds the in-flight wording still, which e2e cannot', async () => {

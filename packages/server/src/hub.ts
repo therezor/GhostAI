@@ -157,6 +157,22 @@ export interface ConnectOptions {
   /** Default agent for turns from this connection; a frame may override it. */
   readonly agentId?: string;
   /**
+   * There is no human on the other end of this one.
+   *
+   * The scheduler drives its turns *through* the hub — deliberately, because
+   * the hub is the only thing that serialises a session — so a scheduled run
+   * has a connection attached to it like any browser tab. It is not a watcher
+   * though: it forwards events into a collector and has no way to answer
+   * anything. Counting it as one made `watchers()` return 1 for every
+   * unattended run, which is precisely the case the approval gate uses it to
+   * detect, so the notification it exists to raise was never raised.
+   *
+   * A flag rather than a channel check: `telegram` is also not a browser and
+   * *can* answer an approval, so "which transport" is the wrong question. The
+   * right one is whether anybody is there, and only the caller knows.
+   */
+  readonly unattended?: boolean;
+  /**
    * The workspace a session *created* by this connection lands in.
    *
    * Never applied to a session that already exists — the loop reads the stored
@@ -245,6 +261,8 @@ interface Connection {
   workspaceId: string | undefined;
   sessionKey: string;
   closed: boolean;
+  /** No human on the other end — see `ConnectOptions.unattended`. */
+  readonly unattended: boolean;
 }
 
 /** A message accepted but not yet started. */
@@ -359,6 +377,28 @@ export class SessionHub {
   }
 
   /**
+   * How many clients are looking at this session right now.
+   *
+   * Exists for the approval gate, and the question it really answers is "can
+   * anyone answer a prompt on this session". Zero is the unattended case: a
+   * scheduled run, or a conversation whose tab was closed mid-turn. The gate
+   * turns that into a notification, because a request parked against nobody is
+   * a five-minute wait for a denial that was certain from the start.
+   *
+   * A count rather than a boolean so a caller can tell "nobody" from "one tab"
+   * without a second method, and because the set is already here.
+   */
+  watchers(sessionKey: string): number {
+    const clients = this.#sessions.get(sessionKey)?.clients;
+    if (clients === undefined) return 0;
+    let count = 0;
+    // Not `clients.size`. The scheduler's own connection is in this set for the
+    // whole of a run, so counting it made every unattended turn look watched.
+    for (const client of clients) if (!client.unattended) count += 1;
+    return count;
+  }
+
+  /**
    * One frame to every attached client, on every session.
    *
    * What this exists for: the scheduler raises notifications about turns nobody
@@ -399,8 +439,10 @@ export class SessionHub {
       channel: options.channel ?? 'web',
       agentId: options.agentId,
       workspaceId: options.workspaceId,
+      // A fresh tab with no `?session=` gets its key here.
       sessionKey: options.sessionKey ?? this.#newId(),
       closed: false,
+      unattended: options.unattended ?? false,
     };
 
     const state = this.#session(connection.sessionKey);

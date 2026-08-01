@@ -628,8 +628,27 @@ describe('Scheduler run lifecycle', () => {
     h.scheduler.start();
     await tick(60_000);
 
+    // The channel is the `origin` column, which is what queries filter on and
+    // what the UI shows. The key itself is a plain id and says nothing.
     expect(h.runs[0]?.options.channel).toBe('automation');
-    expect(h.runs[0]?.options.sessionKey).toMatch(/^automation:/u);
+    expect(h.runs[0]?.options.sessionKey).toBeTruthy();
+    // It no longer spells out the job: that is `automation_runs.job_id`, where
+    // it is indexed rather than embedded in a string nothing ever parsed.
+    expect(h.runs[0]?.options.sessionKey).not.toContain(':');
+  });
+
+  it('says nobody is on the end of the connection it opens', async () => {
+    // The turn goes through the hub, so the run has a connection attached to
+    // its session like a browser tab does. Left unmarked, that made
+    // `hub.watchers()` report 1 for every scheduled run — so the approval gate
+    // read an unattended turn as a watched one and never raised the
+    // notification that is the only way an operator learns a run is waiting.
+    const h = harness();
+    h.jobs.createJob(job());
+    h.scheduler.start();
+    await tick(60_000);
+
+    expect(h.runs[0]?.options.unattended).toBe(true);
     await h.scheduler.stop();
   });
 
@@ -757,7 +776,7 @@ describe('Scheduler run lifecycle', () => {
 
     expect(h.jobs.listRuns(created.id)).toHaveLength(1);
     expect(h.deletedSessions.length).toBeGreaterThan(0);
-    expect(h.deletedSessions.every((key) => key.startsWith('automation:'))).toBe(true);
+    expect(h.deletedSessions.every((key) => key !== '')).toBe(true);
     await h.scheduler.stop();
   });
 });
@@ -777,6 +796,27 @@ describe('Scheduler runNow', () => {
     const h = harness();
     h.scheduler.start();
     expect(() => h.scheduler.runNow('nope')).toThrow(/No automation job/u);
+  });
+
+  it('runs a disabled job on demand without putting it back on the timer', async () => {
+    // On-demand is the one caller that reaches a job the drain would never
+    // pick up, so it is the only place this can happen. Writing a next-run time
+    // left a row badged Disabled showing a "Next run" beside it, and a stale
+    // time waiting to be inherited whenever it was switched back on.
+    const h = harness();
+    const created = h.jobs.createJob(job({ enabled: false, nextRunAtMs: 0 }));
+    h.scheduler.start();
+
+    h.scheduler.runNow(created.id);
+    await tick(1000);
+
+    // It really ran — this is a manual override, not a refusal.
+    expect(h.runs).toHaveLength(1);
+    expect(h.jobs.listRuns(created.id)[0]?.status).toBe('ok');
+    // And it is still unscheduled, exactly as it was.
+    expect(h.jobs.getJob(created.id)?.state.nextRunAtMs).toBe(0);
+    expect(h.jobs.getJob(created.id)?.enabled).toBe(false);
+    await h.scheduler.stop();
   });
 
   it('refuses to start a second run of a job already running', () => {

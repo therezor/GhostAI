@@ -16,6 +16,7 @@ import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tan
 import type {
   AutomationJob,
   AutomationJobListResponse,
+  AutomationRun,
   AutomationRunListResponse,
   CreateAutomationJob,
   UpdateAutomationJob,
@@ -107,11 +108,14 @@ export function useRemoveJob(): MutationHandle<string> {
   return { mutate: mutation.mutate, pending: mutation.isPending };
 }
 
-export function useRunJob(): MutationHandle<string, AutomationJob> {
+// `AutomationRun`, because that is what the route answers with. Typed as the
+// job here, it agreed with a client that was parsing the wrong schema — so the
+// two halves of one mistake type-checked against each other.
+export function useRunJob(): MutationHandle<string, AutomationRun> {
   const queryClient = useQueryClient();
   const mutation = useMutation({
     mutationFn: (id: string) => api.runAutomationJob(id),
-    onSuccess: (_job, id: string) => {
+    onSuccess: (_run, id: string) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.automation });
       void queryClient.invalidateQueries({ queryKey: queryKeys.automationRuns(id) });
       // Said out loud because the run is invisible: the route answered the

@@ -33,9 +33,7 @@ import { randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 
 import {
-  AUTOMATION_ORIGIN,
   ChatMessageSchema,
-  SUBAGENT_ORIGIN,
   subagentRunsOf,
   type ChatMessage,
   type StopReason,
@@ -538,22 +536,25 @@ export class SessionStore {
     // The predicate is the sort order written as a comparison: strictly older,
     // or the same instant and a key that sorts later. Bound as `?` twice each
     // rather than named, because `node:sqlite` binds positionally.
-    // Subagent and automation sessions are excluded unless asked for by name.
-    // Both are real rows — that is what makes a delegation inspectable after a
-    // reload, and a scheduled run's transcript readable afterwards — but
-    // neither is a conversation: one turn, started by a model rather than by a
-    // person. A sidebar that listed them would bury the conversations someone
-    // actually had under the machinery of one of them, and in automation's case
-    // under about 105,000 rows a year from a single five-minute job.
     //
-    // Expressed as `origin = ?` winning over the exclusion rather than as a
-    // separate flag, so there is one way to ask and no combination that means
-    // two things.
+    // **Every origin is listed.** This used to hide `subagent` and `automation`
+    // unless asked for by name, on the reasoning that neither is a conversation
+    // a person had. What that actually produced was a transcript with no way in:
+    // a scheduled run's session was excluded from the sidebar, and the run
+    // history beside the job showed its *output* without linking to the turn
+    // that produced it — so the one place a stuck run could be diagnosed was
+    // unreachable from the UI. Provenance is a column, not a filter: `origin`
+    // still records who started each session, and a caller that wants one kind
+    // still passes `origin`.
+    //
+    // The cost is real and worth naming: a job on a five-minute interval mints a
+    // session per run, so a sidebar sorted by recency will carry a lot of them.
+    // That is a presentation problem — a badge, a filter — and this is the wrong
+    // layer to solve it by pretending the rows are not there.
     const rows = this.#stmt(
       `SELECT s.*, (SELECT COUNT(*) FROM messages m WHERE m.session_key = s.key) AS message_count
          FROM sessions s
         WHERE (? IS NULL OR s.origin = ?)
-          AND (? IS NOT NULL OR s.origin NOT IN ('${SUBAGENT_ORIGIN}', '${AUTOMATION_ORIGIN}'))
           AND (? IS NULL OR s.workspace_id = ?)
           AND (? IS NULL
                OR s.updated_at_ms < ?
@@ -561,7 +562,6 @@ export class SessionStore {
         ORDER BY s.updated_at_ms DESC, s.key ASC
         LIMIT ? OFFSET ?`,
     ).all(
-      origin ?? null,
       origin ?? null,
       origin ?? null,
       workspaceId ?? null,
@@ -1008,7 +1008,7 @@ export class SessionStore {
       const records = this.messages(sourceKey, { beforeSeq: cut + 1 });
       const now = this.#clock.now();
       const origin = options.origin ?? source.origin;
-      const key = options.key ?? `${origin}-${this.#newId()}`;
+      const key = options.key ?? this.#newId();
 
       if (this.getSession(key) !== undefined) {
         throw new GhostError('conflict', `Session already exists: ${key}`, {

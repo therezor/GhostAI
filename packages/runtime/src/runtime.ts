@@ -718,7 +718,15 @@ class Runtime implements GhostRuntime {
     // disappear from the definitions the model sees, and MCP and plugin tools
     // registered on this same registry must survive that.
     this.tools.unregisterBySource('builtin');
-    if (this.#options.tools !== false) registerBuiltins(this.tools, config.tools);
+    // `scheduler.enabled: false` drops `automation` for the same reason
+    // `exec.enable: false` drops `exec`: an install with no scheduler should not
+    // advertise a way to schedule, and a tool that can only answer "this
+    // installation has no scheduler" costs a turn to learn what its absence
+    // would have said for free. This is also what stops the agent editor —
+    // which now lists the registry — from offering a row nothing can honour.
+    if (this.#options.tools !== false) {
+      registerBuiltins(this.tools, config.tools, { scheduler: config.scheduler.enabled });
+    }
 
     // A fresh cache per build: every loop in the old one was derived from the
     // settings that just changed. A turn already running keeps the loop it

@@ -69,6 +69,25 @@ export function NotificationBell(): JSX.Element {
     },
   });
 
+  /**
+   * Opening one is reading it.
+   *
+   * `POST .../read` already existed and nothing called it, so the only way to
+   * clear the dot was Mark all read — which is the wrong tool for "I looked at
+   * that one", because it also clears the three the operator has not seen.
+   *
+   * Failure is deliberately silent. The click is a *navigation*, and the read
+   * flag is bookkeeping alongside it; a toast that says the badge did not
+   * update, over a page that opened correctly, reports a problem the reader
+   * cannot act on and did not ask about.
+   */
+  const markRead = useMutation({
+    mutationFn: (id: string) => api.readNotification(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+    },
+  });
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -111,6 +130,7 @@ export function NotificationBell(): JSX.Element {
                 now={now}
                 onOpen={() => {
                   setOpen(false);
+                  if (notification.readAtMs === undefined) markRead.mutate(notification.id);
                 }}
               />
             </li>
@@ -147,14 +167,22 @@ function NotificationRow({
   readonly now: number;
   readonly onOpen: () => void;
 }): JSX.Element {
+  const { t } = useTranslation();
   const fmt = useFormat();
   const Icon = LEVEL_ICONS[notification.level];
+  const unread = notification.readAtMs === undefined;
 
   const body = (
     <>
       <Icon className={cn('notification__icon', LEVEL_CLASSES[notification.level])} />
       <span className="notification-mini__text">
-        <span className="notification-mini__title truncate">{notification.title}</span>
+        <span className="notification-mini__title truncate">
+          {/* The word, for a reader who gets neither the surface nor the
+              weight. Unread is the state worth announcing; "read" is the
+              absence of it and would be noise on every other row. */}
+          {unread && <span className="sr-only">{t('notifications.unread')} </span>}
+          {notification.title}
+        </span>
         <span className="notification-mini__time">
           {fmt.relativeTime(notification.createdAtMs, now)}
         </span>
@@ -162,18 +190,20 @@ function NotificationRow({
     </>
   );
 
+  const className = cn('notification-mini', unread && 'notification-mini--unread');
+
   // A notification that names a conversation is a link into it — that is the
   // whole point of the field. One that names none is not a link pretending to
   // be one.
   if (notification.sessionKey === undefined) {
-    return <span className="notification-mini">{body}</span>;
+    return <span className={className}>{body}</span>;
   }
 
   return (
     <Link
       to="/"
       search={{ session: notification.sessionKey }}
-      className="notification-mini notification-mini--link"
+      className={cn(className, 'notification-mini--link')}
       onClick={onOpen}
     >
       {body}

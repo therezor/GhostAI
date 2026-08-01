@@ -103,7 +103,11 @@ export {
 
 export { DEFAULT_MIME_TYPE, inlineSafe, listDirectory, mimeTypeFor } from './workspace.js';
 
-export { HubApprovalGate, type HubApprovalGateOptions } from './approvals.js';
+export {
+  HubApprovalGate,
+  type HubApprovalGateOptions,
+  type UnattendedApproval,
+} from './approvals.js';
 
 export {
   DEFAULT_MAX_QUEUE_DEPTH,

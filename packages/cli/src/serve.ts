@@ -216,9 +216,6 @@ export async function startServer(options: ServeOptions = {}): Promise<RunningSe
   ensureDir(dirname(loaded.paths.dbFile));
   const database = new DatabaseSync(loaded.paths.dbFile);
 
-  // Before the runtime, because the runtime hands it to the loop.
-  const approvals = new HubApprovalGate({ logger });
-
   // The `automation` tool's reach into the scheduler, late-bound for the same
   // knot `scheduler` has: the store it writes through is built by
   // `createServer`, which needs a runtime that is built here. The loop resolves
@@ -235,6 +232,42 @@ export async function startServer(options: ServeOptions = {}): Promise<RunningSe
   // Declared out here so the catch below can stop a timer a later step failed
   // after arming.
   let scheduler: Scheduler | undefined;
+
+  // Before the runtime, because the runtime hands it to the loop — but after the
+  // bindings above, because it reads two things that do not exist yet. Both are
+  // reached through the closure rather than a holder object: they are already
+  // `let`s in this scope, and a second indirection would only be a second thing
+  // to keep in step.
+  const approvals = new HubApprovalGate({
+    logger,
+    // One watcher when the hub is not up: during boot there is no turn, and the
+    // safe reading of "I cannot tell" is "somebody is there", which raises
+    // nothing rather than raising a notification for every request.
+    watchers: (sessionKey) => hub?.watchers(sessionKey) ?? 1,
+    // A scheduled run's prompt goes to an empty room. This is what sends
+    // somebody to look at it while it is still open — the row so it survives a
+    // closed tab, the frame so an open one updates without a poll.
+    onUnattended: ({ sessionKey, agentId, toolName }) => {
+      const raised = server?.notifications.create({
+        title: `Approval needed for "${toolName}"`,
+        body:
+          `The "${agentId}" agent asked to run "${toolName}" on a session nobody was watching. ` +
+          'Open the session to answer it — an unanswered request is denied when it expires.',
+        level: 'warning',
+        sessionKey,
+      });
+      if (raised === undefined) return;
+      hub?.broadcast({
+        type: 'notification',
+        id: raised.id,
+        title: raised.title,
+        body: raised.body,
+        level: raised.level,
+        createdAtMs: raised.createdAtMs,
+        sessionKey,
+      });
+    },
+  });
 
   try {
     const built = createRuntime({

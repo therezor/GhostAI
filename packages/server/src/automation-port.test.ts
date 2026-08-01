@@ -101,6 +101,20 @@ describe('creating a job', () => {
     await Promise.resolve();
   });
 
+  it('runs the job as the agent that scheduled it, not as the default', () => {
+    // The payload used to carry no `agentId`, and the scheduler reads absent as
+    // "the default agent" — so a job a specialised agent wrote ran on a
+    // different prompt, a different model and a different tool grant than the
+    // one that wrote it. The tool cannot set this: it would be letting a model
+    // schedule a turn as somebody else.
+    const h = harness();
+    h.sessions.ensureSession('web:1', { origin: 'web' });
+
+    const created = h.port().create(JOB);
+
+    expect(created.value?.payload).toMatchObject({ agentId: 'reviewer' });
+  });
+
   it('re-arms the timer, so a job made mid-turn actually fires', () => {
     const h = harness();
     h.sessions.ensureSession('web:1', { origin: 'web' });

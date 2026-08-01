@@ -490,6 +490,10 @@ function harnessRuntime(runtime: GhostRuntime, configFile: string): ServerRuntim
       };
     },
 
+    // The catalogue the agent editor picks from, unnarrowed — including the
+    // harness's own `e2e_wait`, which is registered as a plugin tool.
+    registeredTools: () => runtime.tools.definitions(),
+
     // Wired here as well as in the real adapter, because this harness has its
     // own `RuntimePort` — the field is optional, so forgetting it breaks no
     // build and simply leaves the settings page with nothing to report.

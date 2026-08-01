@@ -501,6 +501,23 @@ function RunItem({ run }: { readonly run: AutomationRun }): JSX.Element {
           <Badge tone="warning">{t('automation.warning')}</Badge> {warning}
         </p>
       ))}
+
+      {/* The way in to the turn itself.
+          `output` is the answer the run produced, which is the wrong thing to
+          read when the question is why it produced that answer — or, for a run
+          still `pending`, why it has produced nothing. The transcript is where
+          the tool calls, the refusals and an approval still waiting all are, and
+          until this link existed there was no route to it from anywhere: the
+          session is not something anyone can guess the key of. */}
+      {run.sessionKey !== undefined && run.sessionKey !== '' && (
+        <Link
+          to="/"
+          search={{ session: run.sessionKey }}
+          className="settings-divided-list__detail settings-divided-list__detail--link"
+        >
+          {t('automation.openSession')}
+        </Link>
+      )}
     </li>
   );
 }

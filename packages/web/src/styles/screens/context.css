@@ -187,10 +187,21 @@
   .context__messages {
     --gap: var(--space-3);
 
-    max-height: 22rem;
-    overflow: auto;
     padding: 0;
     list-style: none;
+  }
+
+  /* No scroller of their own. Both lists sit inside a section that is already
+   * inside the dialog's scroller, and a capped list there is the third nested
+   * scrollbar in one column: the dialog's, the list's, and — inside a message —
+   * the `pre`'s. Reaching a message meant scrolling one box to find another box
+   * to scroll, with the wheel landing on whichever the pointer happened to be
+   * over. The disclosure is the control that hides this content; a height cap on
+   * an already-collapsed section is a second answer to a question that was asked
+   * once. */
+  .context__message .context__text {
+    max-height: none;
+    overflow: visible;
   }
 
   .context__tool,

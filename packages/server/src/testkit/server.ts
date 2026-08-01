@@ -33,7 +33,10 @@ export const TEST_PASSWORD = 'a-test-password';
 
 export interface TestServerOptions {
   readonly config?: Config;
+  /** What the default agent advertises — what a context inspector would list. */
   readonly tools?: readonly ToolDefinition[];
+  /** What the registry holds. Defaults to `tools`; see `FakeRuntimeOptions`. */
+  readonly registeredTools?: readonly ToolDefinition[];
   readonly credentialsPresent?: Readonly<Record<string, boolean>>;
   readonly provider?: string;
   readonly model?: string;
@@ -85,6 +88,7 @@ export async function startTestServer(options: TestServerOptions = {}): Promise<
     workspace,
     config,
     ...(options.tools === undefined ? {} : { tools: options.tools }),
+    ...(options.registeredTools === undefined ? {} : { registeredTools: options.registeredTools }),
     ...(options.provider === undefined ? {} : { provider: options.provider }),
     ...(options.model === undefined ? {} : { model: options.model }),
     ...(options.configured === undefined ? {} : { configured: options.configured }),

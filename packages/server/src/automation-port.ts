@@ -107,7 +107,17 @@ export function createAutomationResolver(options: AutomationPortOptions): Automa
           const created = options.jobs.createJob({
             name: input.name,
             schedule: input.schedule,
-            payload: input.payload,
+            // The run happens on the agent that asked for it. Stamped here and
+            // not in the tool, for the same reason `createdBy` is: the tool
+            // runs on arguments a model wrote, so letting it name an agent
+            // would be letting it schedule a turn as somebody else.
+            //
+            // Without this the payload carried no `agentId`, the scheduler read
+            // `undefined` as "the default agent", and every job any agent made
+            // ran on a different prompt and a different tool grant than the one
+            // that wrote it — which reads, from the outside, as the agent not
+            // understanding the tool.
+            payload: { ...input.payload, agentId },
             enabled: input.enabled,
             deleteAfterRun: input.deleteAfterRun,
             nextRunAtMs,

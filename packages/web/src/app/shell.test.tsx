@@ -145,6 +145,88 @@ describe('the shell', () => {
     expect(screen.getByRole('link', { name: 'See all' })).toHaveAttribute('href', '/notifications');
   });
 
+  it('tells the unread notifications from the read ones', async () => {
+    // The dot on the bell said *that* something was unread; the list could not
+    // say *which*, because every row rendered identically. Two visual signals
+    // carry it — a raised surface and a full-strength title, the same pair
+    // `/notifications` uses — and neither reaches a screen reader, so the word
+    // is on the row as well.
+    const { user } = renderApp('/', {
+      '/api/notifications': [
+        200,
+        {
+          notifications: [
+            {
+              id: 'n1',
+              title: 'Still unread',
+              body: '',
+              level: 'error',
+              createdAtMs: Date.now(),
+            },
+            {
+              id: 'n2',
+              title: 'Already read',
+              body: '',
+              level: 'info',
+              createdAtMs: Date.now(),
+              readAtMs: Date.now(),
+            },
+          ],
+          unreadCount: 1,
+        },
+      ],
+    });
+
+    await user.click(await screen.findByRole('button', { name: /^Notifications/ }));
+
+    const unread = (await screen.findByText('Still unread')).closest('.notification-mini');
+    const read = screen.getByText('Already read').closest('.notification-mini');
+    expect(unread).toHaveClass('notification-mini--unread');
+    expect(read).not.toHaveClass('notification-mini--unread');
+
+    // The part that does not depend on seeing either signal.
+    expect(within(unread as HTMLElement).getByText('Unread')).toBeInTheDocument();
+    expect(within(read as HTMLElement).queryByText('Unread')).not.toBeInTheDocument();
+  });
+
+  it('marks a notification read when it is opened', async () => {
+    // Opening one *is* reading it. `POST .../read` existed and nothing called
+    // it, so the only way to clear the dot was Mark all read — which also
+    // clears the ones the operator has not looked at yet.
+    const { user, calls } = renderApp('/', {
+      // A notification that names a conversation is the one that is a link —
+      // and a link is what an operator clicks. One with nowhere to go is not
+      // made into a button just so it can be dismissed.
+      '/api/notifications': [
+        200,
+        {
+          notifications: [
+            {
+              id: 'n1',
+              title: 'A turn failed',
+              body: 'The provider rate limited the request.',
+              level: 'error',
+              createdAtMs: Date.now(),
+              sessionKey: 'web:7',
+            },
+          ],
+          unreadCount: 1,
+        },
+      ],
+      'POST /api/notifications/n1/read': [
+        200,
+        { id: 'n1', title: 'A turn failed', body: '', level: 'error', createdAtMs: 1, readAtMs: 2 },
+      ],
+    });
+
+    await user.click(await screen.findByRole('button', { name: /^Notifications/ }));
+    await user.click(await screen.findByRole('link', { name: /A turn failed/u }));
+
+    await waitFor(() => {
+      expect(calls.some((call) => call.path === '/api/notifications/n1/read')).toBe(true);
+    });
+  });
+
   it('starts a conversation without saving an empty one', async () => {
     const { user, calls } = renderApp();
 
@@ -157,7 +239,7 @@ describe('the shell', () => {
     // survives someone changing their mind, and the sidebar fills with empty
     // conversations. The agent loop creates it when the first message lands.
     await waitFor(() => {
-      expect(useTurnStore.getState().sessionKey).toMatch(/^web-/u);
+      expect(useTurnStore.getState().sessionKey).toMatch(/^[0-9a-f-]{8,}/u);
     });
     expect(calls.slice(before).filter((call) => call.method === 'POST')).toEqual([]);
   });

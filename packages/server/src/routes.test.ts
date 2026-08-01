@@ -41,6 +41,15 @@ const READ_FILE: ToolDefinition = {
   source: 'builtin',
 };
 
+/** Registered on every install, seeded onto no agent. See the tools route. */
+const AUTOMATION: ToolDefinition = {
+  name: 'automation',
+  description: 'Schedule work for later',
+  parameters: { type: 'object', properties: {} },
+  risk: 'exec',
+  source: 'builtin',
+};
+
 // ---------------------------------------------------------------------------
 // Status
 // ---------------------------------------------------------------------------
@@ -587,7 +596,21 @@ describe('GET /api/tools', () => {
     expect(response.json()).toEqual({ tools: [READ_FILE] });
   });
 
-  it('answers with an empty list when the agent has no tools', async () => {
+  /**
+   * The one that matters, and the bug this route had: the only caller is the
+   * agent editor, which draws a permission row per entry. Answering with the
+   * default agent's *advertised* tools made a tool grantable only if the
+   * default agent already held it — so `automation`, which no agent is seeded
+   * with, had no row anywhere and could not be turned on from the UI at all.
+   */
+  it('offers a registered tool the default agent does not hold', async () => {
+    const { server, headers } = await start({ tools: [], registeredTools: [AUTOMATION] });
+    const response = await server.app.inject({ method: 'GET', url: '/api/tools', headers });
+
+    expect(response.json()).toEqual({ tools: [AUTOMATION] });
+  });
+
+  it('answers with an empty list when nothing is registered', async () => {
     const { server, headers } = await start();
     const response = await server.app.inject({ method: 'GET', url: '/api/tools', headers });
 

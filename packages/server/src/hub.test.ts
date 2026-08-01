@@ -707,6 +707,42 @@ describe('SessionHub', () => {
       expect(a.of('assistant.delta')).toHaveLength(1);
     });
 
+    it('counts who is looking at a session, which is what the approval gate asks', () => {
+      // Zero is the unattended case — a scheduled run, or a tab closed
+      // mid-turn — and it is the difference between a prompt somebody can
+      // answer and a five-minute wait for a certain denial.
+      const h = harness();
+      expect(h.hub.watchers(SESSION)).toBe(0);
+
+      const first = h.connect();
+      expect(h.hub.watchers(SESSION)).toBe(1);
+
+      const second = h.connect();
+      expect(h.hub.watchers(SESSION)).toBe(2);
+
+      second.close();
+      expect(h.hub.watchers(SESSION)).toBe(1);
+      first.close();
+      expect(h.hub.watchers(SESSION)).toBe(0);
+
+      // A session this process has never held is unattended, not an error.
+      expect(h.hub.watchers('web:never-seen')).toBe(0);
+    });
+
+    it('does not count a connection with nobody on the end of it', () => {
+      // The scheduler drives its turns through the hub, so a scheduled run has
+      // a connection attached exactly like a browser tab does — and that made
+      // every unattended run look watched, which is the one case `watchers`
+      // exists to detect.
+      const h = harness();
+      h.hub.connect({ send: () => undefined, sessionKey: SESSION, unattended: true });
+      expect(h.hub.watchers(SESSION)).toBe(0);
+
+      // A real tab on the same session still counts.
+      h.connect();
+      expect(h.hub.watchers(SESSION)).toBe(1);
+    });
+
     it('stops sending to a connection that closed', async () => {
       const h = harness();
       const staying = h.connect();

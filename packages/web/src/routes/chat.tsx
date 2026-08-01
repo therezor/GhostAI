@@ -36,6 +36,7 @@ import {
 } from '@/lib/connection.js';
 import { queryKeys } from '@/lib/query.js';
 import { useTurnStore } from '@/state/turn.js';
+import { Badge } from '@/components/ui/badge.js';
 import { toast } from '@/components/ui/toast.js';
 import { AgentPicker } from '@/agents/agent-picker.js';
 import { useAgent } from '@/agents/agent-context.js';
@@ -122,7 +123,20 @@ export function ChatRoute(): JSX.Element {
     // session's history into another's transcript.
     if (state.sessionKey !== session) return;
     state.mergeHistory(data.messages, data.subagentRuns);
-  }, [history.data, session]);
+    // `sessionKey` is a dependency because the guard above reads it, and it
+    // moves *after* this effect on a switch: the socket is attached by the
+    // shell, which is this route's parent, and React runs a child's effects
+    // first. So the first pass after switching to an already-fetched
+    // conversation sees the previous key and correctly declines to merge.
+    //
+    // Without it there was no second pass. React Query's structural sharing
+    // hands back the *same* `history.data` reference when a refetch is
+    // deep-equal to the cache, so a transcript that can no longer change —
+    // a finished automation run, any conversation nobody is adding to — never
+    // produced a new reference, the effect never re-ran, and the chat stayed
+    // empty until a reload. `mergeStoredHistory` dedupes by id and turn id, so
+    // the extra pass this adds on a cold open is a no-op.
+  }, [history.data, session, sessionKey]);
 
   // The welcome screen is for a conversation that is genuinely empty, not for
   // one whose history is still in flight — showing it and then replacing it
@@ -161,7 +175,12 @@ export function ChatRoute(): JSX.Element {
       <Composer
         // Which agent the next turn runs on. In the conversation rather than
         // the sidebar: choosing one is part of asking the question.
-        lead={<AgentPicker {...(sessionKey === undefined ? {} : { sessionKey })} />}
+        lead={
+          <>
+            <AgentPicker {...(sessionKey === undefined ? {} : { sessionKey })} />
+            <SessionOrigin sessionKey={sessionKey} />
+          </>
+        }
         // The line under the box is the budget's now: it is the one thing there
         // that changes, and it used to share the row with a keyboard hint that
         // never did. See `composer.tsx`.
@@ -186,4 +205,32 @@ export function ChatRoute(): JSX.Element {
       />
     </div>
   );
+}
+
+/**
+ * Where this conversation came from.
+ *
+ * Session keys are plain ids and say nothing about what made them — which is
+ * the right shape for a key and leaves this as the only place the answer can
+ * be read. It matters because the sidebar now lists every origin: a scheduled
+ * run and a conversation someone had look identical in that list, and opening
+ * one is the moment you need to know which you are looking at.
+ *
+ * Absent for a conversation with no row yet — a fresh tab that has not been
+ * spoken in has no origin to report, and inventing `web` for it would be a
+ * claim rather than a fact.
+ */
+function SessionOrigin({ sessionKey }: { readonly sessionKey: string | undefined }): JSX.Element {
+  const session = useQuery({
+    queryKey: queryKeys.session(sessionKey ?? ''),
+    queryFn: ({ signal }) => api.session(sessionKey ?? '', signal),
+    enabled: sessionKey !== undefined,
+    // A 404 until the first turn lands, which is the normal state of a new
+    // conversation rather than a failure worth retrying.
+    retry: false,
+  });
+
+  const origin = session.data?.origin;
+  if (origin === undefined || origin === '') return <></>;
+  return <Badge tone="neutral">{origin}</Badge>;
 }

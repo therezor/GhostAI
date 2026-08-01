@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { ApprovalRequest } from '@ghostai/agent';
 import type { Clock, TimerHandle } from '@ghostai/core';
 
-import { HubApprovalGate } from './approvals.js';
+import { HubApprovalGate, type UnattendedApproval } from './approvals.js';
 
 const START_MS = 1_700_000_000_000;
 const TIMEOUT_MS = 60_000;
@@ -232,6 +232,93 @@ describe('HubApprovalGate', () => {
     gate.clearSession('web:1');
     void gate.request(approvalRequest({ callId: 'c', sessionKey: 'web:1' }));
     expect(gate.pendingCount).toBe(1);
+  });
+});
+
+describe('HubApprovalGate when nobody is watching', () => {
+  /** A gate that records what it raised, over a watcher count the test sets. */
+  function watched(counts: Record<string, number>): {
+    gate: HubApprovalGate;
+    raised: UnattendedApproval[];
+  } {
+    const raised: UnattendedApproval[] = [];
+    const gate = new HubApprovalGate({
+      clock: manualClock(),
+      watchers: (sessionKey) => counts[sessionKey] ?? 0,
+      onUnattended: (approval) => raised.push(approval),
+    });
+    return { gate, raised };
+  }
+
+  it('raises the request that reached an empty room', () => {
+    // A scheduled run's session is its own and nothing subscribes to it, so the
+    // prompt goes nowhere and the turn waits out the whole timeout for a denial
+    // that was certain when it was raised. This is what sends someone to look.
+    const { gate, raised } = watched({});
+    void gate.request(approvalRequest({ sessionKey: 'automation:job-1:run-1', name: 'exec' }));
+
+    expect(raised).toEqual([
+      {
+        sessionKey: 'automation:job-1:run-1',
+        agentId: 'default',
+        toolName: 'exec',
+        expiresAtMs: START_MS + TIMEOUT_MS,
+      },
+    ]);
+  });
+
+  it('stays quiet when a tab is open on the session', () => {
+    const { gate, raised } = watched({ 'web:1': 1 });
+    void gate.request(approvalRequest({ sessionKey: 'web:1' }));
+    expect(raised).toHaveLength(0);
+  });
+
+  it('does not raise for a call answered from memory, which asks nobody', () => {
+    const { gate, raised } = watched({});
+    void gate.request(approvalRequest({ callId: 'a', sessionKey: 's' }));
+    gate.resolve('a', true, 'session');
+    raised.length = 0;
+
+    // Second call on the same session: settled by the remembered answer without
+    // ever being parked, so there is nothing for anyone to come and do.
+    void gate.request(approvalRequest({ callId: 'b', sessionKey: 's' }));
+    expect(raised).toHaveLength(0);
+  });
+
+  it('does not raise for a turn that was already cancelled', () => {
+    const controller = new AbortController();
+    controller.abort();
+    const { gate, raised } = watched({});
+
+    void gate.request(approvalRequest({ signal: controller.signal }));
+    expect(raised).toHaveLength(0);
+  });
+
+  it('raises once when it parks, not again when it expires', () => {
+    // A notification saying "this needed you five minutes ago" is worse than
+    // none: by the timeout the answer is already decided.
+    const raised: UnattendedApproval[] = [];
+    const clock = manualClock();
+    const gate = new HubApprovalGate({
+      clock,
+      watchers: () => 0,
+      onUnattended: (approval) => raised.push(approval),
+    });
+
+    void gate.request(approvalRequest());
+    expect(raised).toHaveLength(1);
+    clock.advance(TIMEOUT_MS);
+    expect(raised).toHaveLength(1);
+  });
+
+  it('treats an untracked deployment as attended, so a fixture raises nothing', () => {
+    // Neither hook wired is every path except the live server. Defaulting the
+    // other way would raise a notification for every prompt the CLI shows.
+    const raised: UnattendedApproval[] = [];
+    const gate = new HubApprovalGate({ clock: manualClock(), onUnattended: (a) => raised.push(a) });
+
+    void gate.request(approvalRequest());
+    expect(raised).toHaveLength(0);
   });
 });
 

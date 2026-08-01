@@ -102,12 +102,15 @@ async function connect(lastSeq = 0): Promise<void> {
   });
 }
 
-function mount(initial = `/?session=${encodeURIComponent(SESSION)}`): void {
+function mount(
+  initial = `/?session=${encodeURIComponent(SESSION)}`,
+  client = testQueryClient(),
+): void {
   const router = createAppRouter();
   router.update({ history: createMemoryHistory({ initialEntries: [initial] }) });
 
   render(
-    <Providers client={testQueryClient()}>
+    <Providers client={client}>
       <RouterProvider router={router} />
     </Providers>,
   );
@@ -557,6 +560,130 @@ describe('a message that storage catches up with', () => {
     // The bubble the client drew and the row the server stored are the same
     // sentence; the turn id is what joins them.
     expect(screen.getAllByText('hello there')).toHaveLength(1);
+  });
+});
+
+describe('where a conversation came from', () => {
+  it('names the origin, so a scheduled run is not mistaken for a chat', async () => {
+    // The sidebar lists every origin now, and a session key is a plain id that
+    // says nothing about what made it. This badge is the only place the answer
+    // is readable once a conversation is open.
+    stubFetch({
+      '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
+      '/api/setup': [200, { required: false }],
+      '/api/status': [200, STATUS],
+      '/api/agents': [200, AGENTS],
+      '/api/sessions': [200, { sessions: [] }],
+      '/api/notifications': [200, { notifications: [], unreadCount: 0 }],
+      '/api/sessions/web%3A1/messages': [200, { sessionKey: SESSION, messages: [] }],
+      '/api/sessions/web%3A1': [
+        200,
+        {
+          key: SESSION,
+          title: 'Nightly weather',
+          messageCount: 2,
+          createdAtMs: 1,
+          updatedAtMs: 2,
+          origin: 'automation',
+          workspaceId: 'default',
+        },
+      ],
+    });
+
+    mount();
+    await connect();
+
+    expect(await screen.findByText('automation')).toBeInTheDocument();
+  });
+
+  it('says nothing for a conversation that has no row yet', async () => {
+    // A fresh tab has no stored session, so there is no origin to report and
+    // inventing `web` would be a claim rather than a fact.
+    mount();
+    await connect();
+
+    await screen.findByRole('textbox', { name: 'Message' });
+    expect(screen.queryByText('automation')).not.toBeInTheDocument();
+    expect(screen.queryByText('web')).not.toBeInTheDocument();
+  });
+});
+
+describe('switching to a conversation whose history is already cached', () => {
+  const OTHER = 'automation:job-1:run-1';
+
+  function storedIn(sessionKey: string, text: string): unknown {
+    return {
+      sessionKey,
+      messages: [
+        {
+          id: `row-${text}`,
+          sessionKey,
+          seq: 1,
+          createdAtMs: 1,
+          turnId: 't1',
+          message: { role: 'user', content: [{ type: 'text', text }] },
+        },
+      ],
+      subagentRuns: {},
+    };
+  }
+
+  it('renders it instead of an empty transcript', async () => {
+    const user = userEvent.setup();
+    const client = testQueryClient();
+    // Fetched once already and unchanged since — a finished automation run, or
+    // any conversation nobody is adding to. React Query's structural sharing
+    // hands back the *same* `history.data` reference when the refetch is
+    // deep-equal, so a switch produces no new reference to react to.
+    client.setQueryData(['sessions', OTHER, 'messages'], storedIn(OTHER, 'the weather report'));
+
+    stubFetch({
+      '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
+      '/api/status': [200, STATUS],
+      '/api/agents': [200, AGENTS],
+      '/api/notifications': [200, { notifications: [], unreadCount: 0 }],
+      '/api/sessions': [
+        200,
+        {
+          sessions: [
+            {
+              key: SESSION,
+              title: 'First chat',
+              origin: 'web',
+              createdAtMs: 1,
+              updatedAtMs: 2,
+              messageCount: 1,
+            },
+            {
+              key: OTHER,
+              title: 'Weather run',
+              origin: 'automation',
+              createdAtMs: 1,
+              updatedAtMs: 1,
+              messageCount: 1,
+            },
+          ],
+        },
+      ],
+      '/api/sessions/web%3A1/messages': [200, storedIn(SESSION, 'the first conversation')],
+      [`/api/sessions/${encodeURIComponent(OTHER)}/messages`]: [
+        200,
+        storedIn(OTHER, 'the weather report'),
+      ],
+    });
+
+    mount();
+    await connect();
+    expect(await screen.findByText('the first conversation')).toBeInTheDocument();
+
+    // The switch. The route's history effect runs before the shell attaches the
+    // socket — a child's effects run first — so the first pass after this sees
+    // the previous session key and declines to merge. Something has to bring it
+    // back once the key has moved.
+    await user.click(screen.getByRole('link', { name: /Weather run/u }));
+
+    expect(await screen.findByText('the weather report')).toBeInTheDocument();
+    expect(screen.queryByText('the first conversation')).not.toBeInTheDocument();
   });
 });
 

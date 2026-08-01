@@ -217,12 +217,11 @@ test('running a job on demand produces a real turn that settles', async ({ app, 
   await expect.poll(async () => (await jobsOf(app, harness.url))[0]?.state.lastStatus).toBe('ok');
 });
 
-test('a run leaves a session that is reachable but not in the sidebar', async ({
-  app,
-  harness,
-}) => {
-  // ~105,000 sessions a year from one five-minute job is why they are excluded
-  // from the unscoped listing — and they still have to be openable afterwards.
+test('a run leaves a session that is listed like any other', async ({ app, harness }) => {
+  // Listed rather than hidden. A scheduled run that goes wrong is diagnosed by
+  // reading its turn, and while these were excluded from the unscoped listing
+  // the run history beside the job showed the output without linking to the
+  // session that produced it — so there was no way in at all.
   const seeded = await seedJob(app, harness.url);
   await app.request.post(`${harness.url}/api/automation/jobs/${seeded.id}/run`);
 
@@ -232,11 +231,19 @@ test('a run leaves a session that is reachable but not in the sidebar', async ({
 
   const unscoped = await app.request.get(`${harness.url}/api/sessions`);
   const listed = ((await unscoped.json()) as { sessions: { origin: string }[] }).sessions;
-  expect(listed.some((session) => session.origin === 'automation')).toBe(false);
+  expect(listed.some((session) => session.origin === 'automation')).toBe(true);
 
+  // Provenance survives as a column, so a caller that wants only these still
+  // has one question to ask.
   const scoped = await app.request.get(`${harness.url}/api/sessions?origin=automation`);
   const automation = ((await scoped.json()) as { sessions: unknown[] }).sessions;
   expect(automation.length).toBeGreaterThan(0);
+
+  // And the run history is a way in to it. The link is the whole path from
+  // "this run went wrong" to the turn that says why.
+  await app.goto(`${harness.url}/automation/${seeded.id}`);
+  await app.getByRole('link', { name: 'Open session' }).first().click();
+  await expect(app.getByTestId('transcript')).toBeVisible();
 });
 
 test('deleting a job takes its history with it', async ({ app, harness }) => {

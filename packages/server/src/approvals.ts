@@ -55,9 +55,39 @@ interface PendingApproval {
   readonly settle: (decision: ApprovalDecision) => void;
 }
 
+/**
+ * Told about a request nobody is looking at, so something can go and fetch a
+ * person.
+ *
+ * A separate concern from parking the promise, and deliberately a *sink* rather
+ * than a store: the gate is built before the server that owns the notification
+ * table — the same knot `scheduler` and `automation` have in `serve.ts` — and it
+ * has no business knowing what the other end does with this.
+ *
+ * Called once, when the request is parked. Not on the timeout: by then the
+ * answer is already decided and a notification saying "this needed you five
+ * minutes ago" is worse than none.
+ */
+export interface UnattendedApproval {
+  /** Zero watchers on this session at the moment the prompt was raised. */
+  readonly sessionKey: string;
+  readonly agentId: string;
+  readonly toolName: string;
+  readonly expiresAtMs: number;
+}
+
 export interface HubApprovalGateOptions {
   readonly clock?: Clock;
   readonly logger?: Logger;
+  /**
+   * How many clients can see this session. `undefined` means nothing is
+   * tracking that, which is every path except the live server — the CLI's
+   * one-shot runs and most tests — and those are treated as attended so a
+   * fixture does not have to wire a hub to test approvals.
+   */
+  readonly watchers?: (sessionKey: string) => number;
+  /** Raised when a prompt is parked against a session nobody is watching. */
+  readonly onUnattended?: (approval: UnattendedApproval) => void;
 }
 
 export class HubApprovalGate implements ApprovalGate {
@@ -78,10 +108,14 @@ export class HubApprovalGate implements ApprovalGate {
    * "Always" means for this agent, on every session, until the process ends.
    */
   readonly #always = new Map<string, Map<string, RememberedDecision>>();
+  readonly #watchers: ((sessionKey: string) => number) | undefined;
+  readonly #onUnattended: ((approval: UnattendedApproval) => void) | undefined;
 
   constructor(options: HubApprovalGateOptions = {}) {
     this.#clock = options.clock ?? systemClock;
     this.#logger = options.logger ?? silentLogger;
+    this.#watchers = options.watchers;
+    this.#onUnattended = options.onUnattended;
   }
 
   /**
@@ -160,6 +194,41 @@ export class HubApprovalGate implements ApprovalGate {
 
       request.signal.addEventListener('abort', onAbort, { once: true });
       this.#pending.set(request.callId, { request, settle });
+
+      // After the prompt is parked, not before: the sink is what goes looking
+      // for a person, and it must not be able to fire for a call that has
+      // already been settled by the abort check above.
+      this.#raiseIfUnattended(request);
+    });
+  }
+
+  /**
+   * Sends someone to find a human, when the socket cannot.
+   *
+   * A scheduled run is the case this exists for. Its session is its own —
+   * `automation:{jobId}:{runId}` — and nothing is subscribed to it, so
+   * `tool.approvalRequest` goes out to an empty room and the turn waits the full
+   * `approvalTimeoutMs` for a denial that was certain the moment it was raised.
+   * The same is true of a conversation whose tab was closed mid-turn.
+   *
+   * Deliberately *not* a change of policy. The request still parks, still times
+   * out, and still denies; this only makes it findable while it is open. An
+   * unattended run that pre-approved its own tools would be a much larger grant
+   * than any operator gave when they granted the tool.
+   */
+  #raiseIfUnattended(request: ApprovalRequest): void {
+    if (this.#watchers === undefined || this.#onUnattended === undefined) return;
+    if (this.#watchers(request.sessionKey) > 0) return;
+
+    this.#logger.info(
+      { sessionKey: request.sessionKey, tool: request.name, callId: request.callId },
+      'approval request raised on a session nobody is watching',
+    );
+    this.#onUnattended({
+      sessionKey: request.sessionKey,
+      agentId: request.agentId,
+      toolName: request.name,
+      expiresAtMs: request.expiresAtMs,
     });
   }
 

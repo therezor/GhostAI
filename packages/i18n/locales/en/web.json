@@ -212,6 +212,7 @@
     "noSuchJob": "There is no job called “{{id}}”.",
     "note": "Each job runs a turn on its own schedule and records what came back. Nothing here needs a browser open.",
     "notScheduled": "Not scheduled",
+    "openSession": "Open session",
     "panelDesc": "Run an agent turn on a schedule, and keep a history of what it did.",
     "payloadDesc": "What the agent is asked to do when the job fires.",
     "payloadKind": "What it does",
@@ -374,8 +375,9 @@
   "notifications": {
     "empty": "Automation runs and expired approvals report themselves here.",
     "loadFailed": "Could not load notifications.",
-    "openConversation": "Open the conversation",
-    "title": "Notifications"
+    "openSession": "Open session",
+    "title": "Notifications",
+    "unread": "Unread"
   },
   "providers": {
     "apiBase": "API base",

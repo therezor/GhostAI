@@ -23,6 +23,7 @@ import {
   AutomationJobListResponseSchema,
   AutomationJobSchema,
   AutomationRunListResponseSchema,
+  AutomationRunSchema,
   AuthSessionResponseSchema,
   ContextResponseSchema,
   ErrorResponseSchema,
@@ -53,6 +54,7 @@ import {
   type AuthSessionResponse,
   type AutomationJob,
   type AutomationJobListResponse,
+  type AutomationRun,
   type AutomationRunListResponse,
   type CreateAutomationJob,
   type UpdateAutomationJob,
@@ -305,8 +307,14 @@ export const api = {
    * rather than holding this open — which is also what the `notification` frame
    * arriving on the socket tells it to do.
    */
-  runAutomationJob: (id: string): Promise<AutomationJob> =>
-    request(`/api/automation/jobs/${encodeURIComponent(id)}/run`, AutomationJobSchema, {
+  runAutomationJob: (id: string): Promise<AutomationRun> =>
+    // `AutomationRunSchema`, not `AutomationJobSchema`. The route answers with
+    // the run it just started — a different shape entirely, sharing only `id` —
+    // so every press failed `safeParse` and surfaced as "Could not start the
+    // run" while the run itself started and finished perfectly well. A response
+    // schema that names the wrong type is worse than none: it turns a working
+    // endpoint into an error the operator has no way to act on.
+    request(`/api/automation/jobs/${encodeURIComponent(id)}/run`, AutomationRunSchema, {
       method: 'POST',
     }),
 

@@ -87,7 +87,7 @@ describe('the notification centre', () => {
     mount();
 
     const row = await screen.findByRole('article', { name: 'Nightly digest finished' });
-    const link = within(row).getByRole('link', { name: 'Open the conversation' });
+    const link = within(row).getByRole('link', { name: 'Open session' });
     expect(link).toHaveAttribute('href', expect.stringContaining('session=web%3A9'));
   });
 

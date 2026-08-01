@@ -80,7 +80,7 @@ describe('sessions CRUD', () => {
       payload: {},
     });
 
-    expect(response.json().key).toMatch(/^web-/);
+    expect(response.json().key).toMatch(/^[0-9a-f-]{8,}/);
   });
 
   // A retried create is a create whose response was lost, not a conflict.

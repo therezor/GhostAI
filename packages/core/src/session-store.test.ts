@@ -126,15 +126,24 @@ describe('sessions', () => {
     store.close();
   });
 
-  it('keeps machine-started sessions out of the unscoped listing', () => {
-    // Neither is a conversation a person had. Automation is the one that scales
-    // badly if it leaks: a five-minute job writes about 105,000 of these a year.
+  it('lists every origin, because a hidden transcript is an undiagnosable one', () => {
+    // This used to exclude `subagent` and `automation` on the grounds that
+    // neither is a conversation a person had. The result was a scheduled run
+    // whose turn could not be opened from anywhere: absent from the sidebar, and
+    // the job's run history showed its output without linking to the session.
+    // Provenance stays a column — `origin` still says who started each one.
     const store = makeStore();
     store.ensureSession('a', { origin: 'web' });
     store.ensureSession('sub', { origin: 'subagent' });
     store.ensureSession('auto', { origin: 'automation' });
 
-    expect(store.listSessions().map((s) => s.key)).toEqual(['a']);
+    expect(
+      store
+        .listSessions()
+        .map((s) => s.key)
+        .sort(),
+    ).toEqual(['a', 'auto', 'sub']);
+    expect(store.listSessions().find((s) => s.key === 'auto')?.origin).toBe('automation');
     store.close();
   });
 
@@ -725,7 +734,9 @@ describe('forking', () => {
     expect(fork.session.origin).toBe('cli');
     expect(fork.session.workspaceId).toBe('w2');
     expect(fork.session.agentId).toBe('p1');
-    expect(fork.session.key.startsWith('cli-')).toBe(true);
+    // A key of its own, and nothing encoded in it: the origin it inherited is
+    // the column above, which is what anything reads.
+    expect(fork.session.key).not.toBe('s');
     store.close();
   });
 

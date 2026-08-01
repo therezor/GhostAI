@@ -126,16 +126,18 @@ test.describe('a delegating agent', () => {
     await expect(run.getByText('There is one file: notes.md.')).toBeVisible();
   });
 
-  test('keeps the subagent out of the conversation list', async ({ app }) => {
+  test('leaves the subagent run in the sidebar, openable like any conversation', async ({
+    app,
+  }) => {
     await app.getByRole('textbox', { name: 'Message' }).fill('delegate this to the researcher');
     await app.getByRole('button', { name: 'Send' }).click();
     await expect(delegation(app).header.getByLabel('Succeeded')).toBeVisible();
 
-    // A subagent session is a real row — that is what makes the run
-    // inspectable — but it is not a conversation, and a sidebar that listed one
-    // per delegation would bury the conversations a person actually had.
+    // These used to be hidden on the grounds that a delegation is not a
+    // conversation. It is still not one — but it is the turn that produced the
+    // answer, and hiding it left no way to read it when the answer was wrong.
     const sidebar = app.getByRole('complementary', { name: 'Sidebar' });
-    await expect(sidebar.getByText(SUBAGENT_TASK)).toHaveCount(0);
+    await expect(sidebar.getByText(SUBAGENT_TASK)).toHaveCount(1);
   });
 });
 

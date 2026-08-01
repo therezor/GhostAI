@@ -45,6 +45,7 @@ import type {
   ProviderTestRequest,
   ProviderTestResponse,
   SetCredentialRequest,
+  ToolDefinition,
 } from '@ghostai/protocol';
 import {
   createProvider,
@@ -348,6 +349,12 @@ export function createServerRuntime(
         },
       };
     },
+
+    // The bare registry, narrowed by nobody. Built-ins, MCP registrations and
+    // plugin tools — everything an agent could be granted. Toolbox programs are
+    // absent because they belong to a toolbox rather than the registry, and the
+    // editor reads those from `GET /api/toolboxes` under their own heading.
+    registeredTools: (): readonly ToolDefinition[] => runtime.tools.definitions(),
 
     agents: (): readonly AgentSummary[] =>
       runtime.agents.map((agent) => ({

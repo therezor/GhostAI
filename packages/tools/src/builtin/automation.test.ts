@@ -84,6 +84,16 @@ describe('the automation tool', () => {
     expect(automationTool.description).toMatch(/do not convert it/u);
   });
 
+  it('warns that the run cannot see this conversation', async () => {
+    // The gap that looked like the model not understanding the tool: nothing in
+    // the surface said the job gets its own session, so "do the thing we
+    // discussed" scheduled a turn with no idea what the thing was — and the
+    // create succeeded, so there was no signal until the run a week later.
+    expect(automationTool.description).toMatch(/fresh conversation that cannot see this one/u);
+    const message = automationTool.definition('builtin').parameters.properties;
+    expect(JSON.stringify(message)).toMatch(/no history/u);
+  });
+
   it('is in the exec band, because of what it causes rather than what it does', () => {
     expect(automationTool.definition('builtin').risk).toBe('exec');
   });
@@ -238,7 +248,34 @@ describe('list and delete', () => {
       { action: 'list' },
       stub({ list: () => ({ ok: true, value: [job({ enabled: false })] }) }).port,
     );
-    expect(result.content).toContain('(disabled)');
+    expect(result.content).toContain('disabled');
+  });
+
+  it('says when each job runs, so the model can answer what is scheduled', async () => {
+    // `id — name` alone is enough to delete a job and not enough to check one.
+    // A model that cannot see that its cron was read as 09:00 has no way to
+    // notice it meant 21:00, and no reason not to schedule a second one.
+    const result = await run(
+      { action: 'list' },
+      stub({
+        list: () => ({
+          ok: true,
+          value: [
+            job({ state: { ...job().state, nextRunAtMs: Date.parse('2026-08-02T09:00:00Z') } }),
+          ],
+        }),
+      }).port,
+    );
+    expect(result.content).toContain('cron "0 9 * * *"');
+    expect(result.content).toContain('next 2026-08-02T09:00:00Z');
+  });
+
+  it('reports a fired one-shot as unscheduled rather than as due now', async () => {
+    // `nextRunAtMs: 0` is the store's "nothing more to do". Printed raw it would
+    // render as 1970, which a model reads as overdue.
+    const result = await run({ action: 'list' }, stub().port);
+    expect(result.content).toContain('not scheduled');
+    expect(result.content).not.toContain('1970');
   });
 
   it('deletes by id', async () => {
