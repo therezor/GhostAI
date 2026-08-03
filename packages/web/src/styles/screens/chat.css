@@ -107,9 +107,73 @@
   }
 
   .message-user__attachments {
-    --gap: var(--space-1);
+    --gap: var(--space-2);
 
     justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  /* The chip form: an icon, a name, a size and a download. Same surface and
+   * stroke as the composer's staged chip, because they are the same object at
+   * two moments in its life and a reader should recognise it. */
+  .message-attachment {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-2);
+    background-color: var(--surface-2);
+    border: var(--hairline) solid var(--line);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+  }
+
+  .message-attachment__icon {
+    width: var(--size-icon-sm);
+    height: var(--size-icon-sm);
+    flex-shrink: 0;
+    color: var(--fg-3);
+  }
+
+  .message-attachment__name {
+    max-width: 12rem;
+  }
+
+  .message-attachment__size {
+    color: var(--fg-3);
+  }
+
+  .message-attachment__download {
+    display: flex;
+    color: var(--fg-3);
+  }
+
+  .message-attachment__download:hover {
+    color: var(--fg-1);
+  }
+
+  .message-attachment__download > svg {
+    width: var(--size-icon-sm);
+    height: var(--size-icon-sm);
+  }
+
+  /* The image form is the picture and nothing else — no chip around it, which
+   * would be a second border inside the one the thumbnail already draws. The
+   * cap is on the block size rather than the inline size so a panorama and a
+   * portrait screenshot occupy the same band of the transcript instead of one
+   * of them taking half the column. */
+  .message-attachment--image {
+    display: block;
+    padding: 0;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+
+  .message-attachment--image img {
+    display: block;
+    max-block-size: 12rem;
+    max-inline-size: 100%;
+    width: auto;
+    object-fit: contain;
   }
 
   .message-user__pending {

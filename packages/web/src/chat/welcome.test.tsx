@@ -24,7 +24,7 @@ import { Welcome } from './welcome.js';
  */
 const STATUS = {
   version: '0.0.0',
-  protocolVersion: 1,
+  protocolVersion: 2,
   uptimeMs: 1,
   model: 'install-default-model',
   provider: 'ollama',

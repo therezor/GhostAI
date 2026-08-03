@@ -24,7 +24,7 @@ import type { AgentListResponse, StatusResponse } from '@ghostai/protocol';
 /** A configured install. Spread it to vary one field: `{ ...STATUS, configured: false }`. */
 export const STATUS = {
   version: '0.0.0',
-  protocolVersion: 1,
+  protocolVersion: 2,
   uptimeMs: 1,
   model: 'test-model',
   provider: 'ollama',

@@ -243,6 +243,8 @@
   "chat": {
     "approvalClosed": "The approval window closed. The call was refused.",
     "attachFile": "Attach a file",
+    "attachmentDownload": "Download {{name}}",
+    "attachTooLarge": "{{name}} is larger than {{limit}} and was not attached.",
     "branchHere": "Branch from here",
     "editMessage": "Edit message",
     "editThis": "Edit this message",

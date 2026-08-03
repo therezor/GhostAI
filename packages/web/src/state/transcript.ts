@@ -1275,20 +1275,44 @@ function replaceLast(items: TranscriptItem[], item: TranscriptItem): void {
   items[items.length - 1] = item;
 }
 
+/**
+ * The words in a message, which is what the bubble shows.
+ *
+ * File parts contribute nothing here on purpose — they are rendered as chips by
+ * `attachmentsOf` below. This is also what stopped `[Attachment: notes.csv
+ * (text/csv)]` from appearing as literal text inside a reloaded bubble: the
+ * server used to synthesise that line because a non-image attachment had
+ * nowhere else to go.
+ */
 function textOf(content: readonly ContentPart[]): string {
   return content.map((part) => (part.type === 'text' ? part.text : '')).join('');
 }
 
 /**
- * Image parts become attachment chips.
+ * File parts become attachment chips.
  *
- * Only the `url` form: an inline base64 part is the same bytes the model got,
- * and re-embedding a megabyte of them in the transcript to draw a chip that
- * says "image" is a trade nobody wants.
+ * `name` and `sizeBytes` survive the round trip through storage, so a reloaded
+ * transcript shows the same chip the composer did rather than falling back to a
+ * MIME type.
+ *
+ * Image parts are deliberately skipped. A stored one is either inline base64 —
+ * the same bytes the model got, and re-embedding a megabyte of them to draw a
+ * chip that says "image" is a trade nobody wants — or a legacy `/api/media/`
+ * URL whose token expired long ago, which would render as a broken image.
+ * Neither is worth showing.
  */
 function attachmentsOf(content: readonly ContentPart[]): readonly Attachment[] {
   return content.flatMap((part) =>
-    part.type === 'image' && part.url !== undefined ? [{ type: part.mimeType, url: part.url }] : [],
+    part.type === 'file'
+      ? [
+          {
+            mimeType: part.mimeType,
+            path: part.path,
+            ...(part.name === undefined ? {} : { name: part.name }),
+            ...(part.sizeBytes === undefined ? {} : { sizeBytes: part.sizeBytes }),
+          },
+        ]
+      : [],
   );
 }
 

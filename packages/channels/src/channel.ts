@@ -24,6 +24,34 @@
  *    in pieces and once whole. Rather than trusting every channel author to
  *    know that, `accepts` states it and the manager filters — so the default is
  *    the one that cannot look broken.
+ *
+ * ## Attachments
+ *
+ * **An attachment is a file in the workspace.** A channel that receives one
+ * writes the bytes there and publishes a `FilePart` naming the path; it does
+ * not publish inline bytes and it does not publish a URL. That is the same
+ * thing a browser upload produces, so a photo sent to a bot and a photo dropped
+ * on the web composer travel one code path from here down — and a path, unlike
+ * a URL, is still resolvable when the conversation is replayed next month.
+ *
+ * The gap this leaves is deliberate and not yet filled: `ChannelContext` has no
+ * filesystem, so a channel *cannot* write to the workspace today. The seam when
+ * one needs to is a fifth member here, supplied by the manager against a jail
+ * exactly as `publish` is supplied against the bus —
+ *
+ * ```ts
+ * readonly attach: (file: {
+ *   readonly name: string;
+ *   readonly mimeType: string;
+ *   readonly bytes: Uint8Array;
+ * }) => Promise<{ readonly path: string; readonly sizeBytes: number }>;
+ * ```
+ *
+ * — which keeps a channel as far from the filesystem as it is from the bus. A
+ * Telegram bot would then be: `getFile`, download, `attach`, publish a
+ * `FilePart`. It is written down rather than built because no channel produces
+ * an image yet, and an unused port with a wiring site and a test is cost with
+ * no reader.
  */
 
 import type {

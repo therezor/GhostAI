@@ -297,7 +297,13 @@ function MessageEntry({ stored }: { readonly stored: StoredMessage }): JSX.Eleme
     typeof message.content === 'string'
       ? message.content
       : message.content
-          .map((part) => (part.type === 'text' ? part.text : `[${part.type}]`))
+          .map((part) =>
+            part.type === 'text'
+              ? part.text
+              : part.type === 'file'
+                ? `[file: ${part.name ?? part.path}]`
+                : `[${part.type}]`,
+          )
           .join('');
 
   const calls = message.role === 'assistant' ? message.toolCalls : [];

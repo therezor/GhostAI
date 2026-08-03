@@ -190,7 +190,7 @@ describe('the @ autocomplete', () => {
 });
 
 describe('attachments', () => {
-  it('uploads on selection, not on send, and sends the signed URL', async () => {
+  it('uploads on selection, not on send, and sends the workspace path', async () => {
     const user = userEvent.setup();
     stubFetch({
       '/api/files/upload': [
@@ -214,10 +214,69 @@ describe('attachments', () => {
     await user.type(box(), 'look at this{Enter}');
 
     expect(sent[0]?.attachments).toEqual([
-      // The signed URL, not the workspace path: the path means nothing outside
-      // this machine, and a provider has to be able to fetch the bytes.
-      { type: 'text/plain', url: '/api/media/token', name: 'note.txt', sizeBytes: 5 },
+      // The workspace path, never the signed URL. The server reads the bytes
+      // off disk when it builds the provider request, which happens long after
+      // a ten-minute token would have expired -- and the file tools address
+      // this same path, which is what lets the model open what it cannot see.
+      {
+        mimeType: 'text/plain',
+        path: 'uploads/abc-note.txt',
+        name: 'note.txt',
+        sizeBytes: 5,
+      },
     ]);
+  });
+
+  it('refuses a file larger than the server would accept, without uploading it', async () => {
+    // The server's `bodyLimit` fires only after the whole body is on the wire,
+    // so a 60 MB video would spend a minute uploading to earn a 413 and a chip
+    // that says "failed". Refusing here costs nothing and can say why.
+    const user = userEvent.setup();
+    // No routes at all: `stubFetch` rejects anything it was not told about, so
+    // an upload that got as far as the network would surface as a "failed"
+    // chip rather than the refusal under test.
+    stubFetch({});
+    mount();
+
+    const huge = new File(['x'], 'huge.bin');
+    Object.defineProperty(huge, 'size', { value: 26 * 1024 * 1024 });
+    await user.upload(filePicker(), huge);
+
+    await waitFor(() => {
+      expect(screen.getByText(/larger than/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText('huge.bin')).not.toBeInTheDocument();
+  });
+
+  it('attaches a pasted screenshot', async () => {
+    const user = userEvent.setup();
+    stubFetch({
+      '/api/files/upload': [
+        201,
+        { path: 'uploads/abc-image.png', sizeBytes: 5, mimeType: 'image/png' },
+      ],
+    });
+    mount();
+
+    await user.click(box());
+    await user.paste({
+      files: [new File(['hello'], 'image.png', { type: 'image/png' })],
+    } as unknown as DataTransfer);
+
+    expect(await screen.findByText('image.png')).toBeInTheDocument();
+  });
+
+  it('leaves a text paste alone', async () => {
+    // The guard that makes the paste handler safe. Claiming every paste would
+    // break pasting a URL into the message, which is the far commoner gesture.
+    const user = userEvent.setup();
+    stubFetch({});
+    mount();
+
+    await user.click(box());
+    await user.paste('https://example.test/a-very-long-url');
+
+    expect(box()).toHaveValue('https://example.test/a-very-long-url');
   });
 
   it('reports a failed upload on the chip rather than losing it silently', async () => {

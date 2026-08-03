@@ -100,7 +100,7 @@ describe('GET /ws', () => {
     const connection = await connect(`${url}/ws`, test.headers);
     const greeting = await connection.next('connected');
 
-    expect(greeting).toMatchObject({ type: 'connected', protocolVersion: 1, lastSeq: 0 });
+    expect(greeting).toMatchObject({ type: 'connected', protocolVersion: 2, lastSeq: 0 });
   });
 
   it('opens on the session the query names, and runs a turn on it', async () => {

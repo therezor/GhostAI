@@ -72,6 +72,14 @@ export {
 } from './workspace-store.js';
 
 export {
+  DEFAULT_MIME_TYPE,
+  MAX_TEXT_BYTES,
+  mimeTypeFor,
+  readText,
+  type WorkspaceText,
+} from './workspace-files.js';
+
+export {
   loadConfig,
   parseConfig,
   saveConfig,
@@ -91,6 +99,7 @@ export {
 
 export {
   assistantMessage,
+  filePart,
   hasImages,
   imagePart,
   systemMessage,

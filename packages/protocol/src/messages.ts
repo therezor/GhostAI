@@ -31,9 +31,13 @@ export const TextPartSchema = z.object({
 export type TextPart = z.infer<typeof TextPartSchema>;
 
 /**
- * An image part carries either inline base64 (`data`) or a server-resolvable
- * reference (`url`). A `url` is always an HMAC-signed, short-lived link — see
- * `SignedUrlSchema` — never a bare workspace path on an open endpoint.
+ * An image as a *provider* takes it: inline base64 (`data`) or a URL it can
+ * fetch itself (`url`).
+ *
+ * `url` must be absolute and reachable from wherever the model runs. A
+ * workspace file is not that — it is a `FilePart`, and it becomes one of these
+ * only at request time, when `materialiseAttachments` reads the bytes. Putting
+ * a relative signed URL here is what silently sent every attachment nowhere.
  */
 export const ImagePartSchema = z.object({
   type: z.literal('image'),
@@ -43,7 +47,32 @@ export const ImagePartSchema = z.object({
 });
 export type ImagePart = z.infer<typeof ImagePartSchema>;
 
-export const ContentPartSchema = z.discriminatedUnion('type', [TextPartSchema, ImagePartSchema]);
+/**
+ * A workspace file somebody attached to a message.
+ *
+ * A reference, never bytes. The path outlives any signed URL, so history
+ * replayed a month later still resolves to the same file — and the same part
+ * describes a screenshot, a CSV and a 200 MB archive, so nothing upstream has
+ * to branch on the MIME type to decide what an attachment *is*. Turning it
+ * into something a provider accepts happens once, at request time, in
+ * `materialiseAttachments`.
+ */
+export const FilePartSchema = z.object({
+  type: z.literal('file'),
+  mimeType: z.string().min(1),
+  /** Workspace-relative, as returned by the upload endpoint. */
+  path: z.string().min(1),
+  /** What the user called it. The path is mangled for safety; this is not. */
+  name: z.string().optional(),
+  sizeBytes: z.number().int().nonnegative().optional(),
+});
+export type FilePart = z.infer<typeof FilePartSchema>;
+
+export const ContentPartSchema = z.discriminatedUnion('type', [
+  TextPartSchema,
+  ImagePartSchema,
+  FilePartSchema,
+]);
 export type ContentPart = z.infer<typeof ContentPartSchema>;
 
 /**

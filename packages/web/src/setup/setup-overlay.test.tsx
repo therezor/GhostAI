@@ -230,7 +230,7 @@ describe('a claimed, configured install', () => {
         200,
         {
           version: '0.0.0',
-          protocolVersion: 1,
+          protocolVersion: 2,
           uptimeMs: 1,
           model: 'llama3',
           provider: 'ollama',

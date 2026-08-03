@@ -40,6 +40,7 @@
 import type { AgentEvent, TurnInput, TurnResult } from '@ghostai/agent';
 import {
   DEFAULT_WORKSPACE_ID,
+  filePart,
   isAbortError,
   silentLogger,
   systemClock,
@@ -307,9 +308,15 @@ function decodeFrame(frame: unknown): unknown {
  * What the user sent, as the loop wants it.
  *
  * A plain string when there is nothing but text — the common case, and the one
- * `userMessage` is cheapest on. Non-image attachments become a text line rather
- * than being dropped: the model cannot see the bytes, but knowing a file was
- * attached is what lets it reach for a tool and read it.
+ * `userMessage` is cheapest on.
+ *
+ * Every attachment becomes a `FilePart`, with no branch on the MIME type. This
+ * layer's job is to record *what was attached*, and a path does that for a
+ * screenshot and a 200 MB archive alike; deciding what a model can be shown of
+ * it needs bytes off the disk and belongs in `materialiseAttachments`, at
+ * request time, where the jail is. Branching here is how images ended up
+ * carrying a signed URL that expired ten minutes later and that no provider
+ * could resolve in the first place.
  */
 function toContent(
   text: string,
@@ -320,13 +327,12 @@ function toContent(
   const parts: ContentPart[] = [];
   if (text !== '') parts.push(textPart(text));
   for (const attachment of attachments) {
-    if (attachment.type.startsWith('image/')) {
-      parts.push({ type: 'image', mimeType: attachment.type, url: attachment.url });
-    } else {
-      parts.push(
-        textPart(`[Attachment: ${attachment.name ?? attachment.url} (${attachment.type})]`),
-      );
-    }
+    parts.push(
+      filePart(attachment.path, attachment.mimeType, {
+        ...(attachment.name === undefined ? {} : { name: attachment.name }),
+        ...(attachment.sizeBytes === undefined ? {} : { sizeBytes: attachment.sizeBytes }),
+      }),
+    );
   }
   return parts;
 }

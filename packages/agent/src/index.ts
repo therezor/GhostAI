@@ -51,6 +51,15 @@ export {
 } from './approval.js';
 
 export {
+  MAX_INLINE_IMAGE_BYTES,
+  MAX_INLINE_TEXT_BYTES,
+  materialiseAttachments,
+  materialiseFilePart,
+  type AttachmentCache,
+  type MaterialiseOptions,
+} from './attachments.js';
+
+export {
   SECTION_SEPARATOR,
   type PromptToolbox,
   buildRuntimeBlock,

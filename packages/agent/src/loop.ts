@@ -122,6 +122,7 @@ import {
   type ApprovalRequest,
   type DenialReason,
 } from './approval.js';
+import { materialiseAttachments, type AttachmentCache } from './attachments.js';
 import type { AgentEvent } from './events.js';
 import {
   buildRawPrompt,
@@ -906,6 +907,11 @@ export class AgentLoop {
     // over this jail, so a workspace switch mid-turn cannot move it.
     const jail = this.#jails.forWorkspace(session.workspaceId);
 
+    // Attachments are read from disk on every iteration, because the request is
+    // rebuilt on every iteration. Scoped to the turn and discarded with it, so
+    // a six-tool turn reads one image once rather than six times.
+    const attachments: AttachmentCache = new Map();
+
     // The stored row wins, for the same reason the workspace does: a history
     // built under one agent's prompt and tools must not silently continue under
     // another's. `input.agentId` can only ever *create* a session's binding;
@@ -1062,7 +1068,19 @@ export class AgentLoop {
             // part of the next request, and reading them back from the store is
             // what keeps history and the request identical rather than merely
             // similar.
-            ...this.#store.history(sessionKey, { maxToolResultChars: 0 }),
+            //
+            // Attachments become readable here and nowhere else. Storage holds
+            // a path; a provider needs bytes or characters, and only this scope
+            // has the jail that resolves one to the other. Doing it before
+            // `#provider` — which is already wrapped in `withResilience` — is
+            // also what keeps `stripImages` looking at real image parts rather
+            // than at references it would delete without reading.
+            ...materialiseAttachments(
+              this.#store.history(sessionKey, { maxToolResultChars: 0 }),
+              jail,
+              {},
+              attachments,
+            ),
             // The volatile half, after the history rather than before it. A
             // provider's cache ends at the first byte that differs from the last
             // request, so a clock or an iteration counter placed ahead of the

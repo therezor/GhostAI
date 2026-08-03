@@ -110,7 +110,7 @@ describe('opening', () => {
     deliver({
       type: 'connected',
       workspaceId: 'default',
-      protocolVersion: 1,
+      protocolVersion: 2,
       sessionKey: 'web:minted',
       serverTimeMs: 0,
       lastSeq: 0,
@@ -154,7 +154,7 @@ describe('switching', () => {
     deliver({
       type: 'connected',
       workspaceId: 'default',
-      protocolVersion: 1,
+      protocolVersion: 2,
       sessionKey: 'web:minted',
       serverTimeMs: 0,
       lastSeq: 0,
@@ -182,14 +182,18 @@ describe('speaking', () => {
   it('sends a message with an idempotency key and shows it immediately', () => {
     open('web:1');
 
-    sendUserMessage('hello', [{ type: 'image/png', url: '/api/media/x' }]);
+    sendUserMessage('hello', [
+      { mimeType: 'image/png', path: 'uploads/ab12cd34-shot.png', name: 'shot.png' },
+    ]);
 
     const sent = socket().sent[0];
     expect(sent).toMatchObject({
       type: 'user.message',
       sessionKey: 'web:1',
       content: 'hello',
-      attachments: [{ type: 'image/png', url: '/api/media/x' }],
+      // The workspace path, not a signed URL: the server reads the bytes off
+      // disk when it builds the request, long after a token would have expired.
+      attachments: [{ mimeType: 'image/png', path: 'uploads/ab12cd34-shot.png', name: 'shot.png' }],
       clientMessageId: expect.any(String),
     });
     expect(useTurnStore.getState().transcript[0]).toMatchObject({ kind: 'user', pending: true });

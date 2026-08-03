@@ -205,7 +205,7 @@ describe('TurnProjection', () => {
       event({
         type: 'connected',
         workspaceId: 'default',
-        protocolVersion: 1,
+        protocolVersion: 2,
         sessionKey: 's',
         serverTimeMs: 0,
         lastSeq: 0,

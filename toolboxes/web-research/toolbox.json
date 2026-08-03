@@ -1,7 +1,7 @@
 {
   "schema": "ghostai.toolbox/1",
   "name": "web-research",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "label": "Web research",
   "tools": [
     {
@@ -21,18 +21,26 @@
       "requiresArgs": true
     },
     {
+      "name": "doc",
+      "use": "Read a file as text — PDF, Word, Excel, PowerPoint, an image, or anything text. This is how you open a file someone attached: attachments arrive as a path under uploads/ and are the one thing you cannot see without opening.",
+      "args": "One or more file paths. A scanned PDF or a photo of text is read with OCR automatically — add --lang deu (or fra, spa, ita, por, nld, rus, ukr, swe, nor, dan, fin) when it is not English. --max-chars 0 removes the 24,000-character cap, --save DIR also writes the text out.",
+      "example": ["uploads/ab12cd34-report.pdf"],
+      "permission": "allow",
+      "requiresArgs": true
+    },
+    {
       "name": "tools",
       "use": "Print this toolbox's reference — every command, its flags, and worked examples.",
-      "args": "Nothing for all of it, or a section name: search, fetch, files, pdf, limits, recipes.",
+      "args": "Nothing for all of it, or a section name: search, fetch, doc, files, pdf, limits, recipes.",
       "example": [],
       "permission": "allow",
       "requiresArgs": false
     },
     {
       "name": "rg",
-      "use": "Search inside pages you already saved to /workspace.",
-      "args": "A pattern and a path. -n prints line numbers, -i ignores case.",
-      "example": ["-n", "-i", "rate limit", "/workspace/sources"],
+      "use": "Search inside files you already saved to the workspace.",
+      "args": "A pattern and a path, relative to the workspace. -n prints line numbers, -i ignores case.",
+      "example": ["-n", "-i", "rate limit", "sources"],
       "permission": "allow",
       "requiresArgs": true
     },
@@ -55,13 +63,13 @@
     {
       "name": "python3",
       "use": "Run Python, for anything the other commands cannot express.",
-      "args": "-c and a program, or a script path. requests, lxml, beautifulsoup4 and trafilatura are installed.",
+      "args": "-c and a program, or a script path. requests, lxml, beautifulsoup4, trafilatura, python-docx, openpyxl, python-pptx and Pillow are installed.",
       "example": ["-c", "import requests; print(requests.get('https://example.com').status_code)"],
       "permission": "ask",
       "requiresArgs": true
     }
   ],
-  "notes": "Run `tools` for the full reference with worked examples. `search` already reads the top results for you, so answer from that page text rather than from the snippets — and one search is usually enough: if it did not answer the question, `fetch` one of the URLs it gave you for the full page instead of searching again with different words. There is no browser and no JavaScript engine, so a page that renders client-side comes back empty and says so. Write findings to /workspace and search them with rg rather than holding whole pages in context.",
+  "notes": "Run `tools` for the full reference with worked examples. `search` already reads the top results for you, so answer from that page text rather than from the snippets — and one search is usually enough: if it did not answer the question, `fetch` one of the URLs it gave you for the full page instead of searching again with different words. There is no browser and no JavaScript engine, so a page that renders client-side comes back empty and says so. Use `doc` on a file the user attached — those arrive as a path under uploads/, and for a PDF, a spreadsheet or a scan the path is all you are given. Paths are the same ones the file tools use: write `uploads/report.pdf`, not an absolute path. Write findings to the workspace and search them with rg rather than holding whole pages in context.",
   "expose": "tools",
   "image": "__IMAGE_ID__",
   "runtime": "runc",

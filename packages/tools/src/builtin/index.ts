@@ -31,6 +31,13 @@ import { readFileTool } from './read-file.js';
 import { writeFileTool } from './write-file.js';
 
 export { automationTool } from './automation.js';
+/**
+ * Exported because the agent loop formats attachment sizes with it, and the
+ * model reads both these strings and `list_dir`'s in the same context window —
+ * two spellings of "4.2 KB" is a difference it would be entitled to read
+ * meaning into.
+ */
+export { formatBytes } from './shared.js';
 export { editFileTool } from './edit-file.js';
 export { execTool } from './exec.js';
 export { listDirTool } from './list-dir.js';

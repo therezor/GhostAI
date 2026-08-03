@@ -9,7 +9,7 @@ import * as protocol from './index.js';
  */
 describe('public surface', () => {
   it('pins the wire protocol version', () => {
-    expect(protocol.PROTOCOL_VERSION).toBe(1);
+    expect(protocol.PROTOCOL_VERSION).toBe(2);
   });
 
   it.each([

@@ -2,13 +2,15 @@
 
 You are running commands inside a Linux container with internet access. This file
 is the reference for what is in it. Run `tools` for all of it, or `tools <topic>`
-for one section: `start`, `search`, `fetch`, `files`, `pdf`, `limits`, `recipes`.
+for one section: `start`, `search`, `fetch`, `doc`, `files`, `pdf`, `limits`,
+`recipes`.
 
 ## Start here
 
 ```
 search does sqlite wal work over nfs    search, and read the top 3 pages
 fetch https://sqlite.org/wal.html       read one page you already have a URL for
+doc uploads/ab12-spec.pdf               read a file the user attached
 ```
 
 `search <question>` answers most research questions in a single command: it returns
@@ -68,7 +70,7 @@ is no such reason, rephrase with fewer or more common words, or drop `--site`.
 ```
 fetch https://sqlite.org/wal.html                  main content, as markdown
 fetch --max-chars 0 <url>                          no cap: print all of it
-fetch --save /workspace <url>                      also write it to a .md file
+fetch --save . <url>                               also write it to a .md file
 fetch --links <url>                                the page's links, URL<TAB>text
 fetch <url1> <url2> <url3>                         several pages in one call
 fetch --no-cache <url>                             re-request instead of reusing
@@ -80,36 +82,101 @@ A documentation page is typically 80–95% of that boilerplate, so this is the
 difference between a page fitting in your context and not.
 
 Default cap is 24,000 characters per page. When it bites, the output says how much
-was dropped — add `--save /workspace` and the whole thing is written to a file you
+was dropped — add `--save .` and the whole thing is written to a file you
 can `rg` instead.
+
+## doc
+
+Reads a file that is already on disk, the way `fetch` reads a URL.
+
+```
+doc uploads/ab12cd34-report.pdf                a PDF, as text
+doc uploads/cd34ef56-books.xlsx                a spreadsheet, one CSV per sheet
+doc notes.docx deck.pptx                       several files in one call
+doc --lang deu uploads/scan.pdf                a scan that is not in English
+doc --max-chars 0 --save out.txt <path>
+```
+
+**Write paths the way the file tools do.** Commands start in the workspace, so
+`uploads/report.pdf` names the same file here that `read_file` calls
+`uploads/report.pdf`. There is no need to spell out the mount point, and no
+second naming scheme to keep straight.
+
+**This is how you open an attachment.** A file someone attaches to a message
+lands in `uploads/` and you are given its path. For a PDF, a spreadsheet or a
+scan the path is _all_ you are given — the contents are not in the conversation,
+so a question about "the document I sent" is answered by running `doc` on it,
+not by asking what it says.
+
+Reads `.pdf`, `.docx`, `.xlsx`, `.pptx`, images, and anything that is text —
+including `.py`, `.ts`, `.csv`, `.json` and files with no extension, which are
+decided by their bytes rather than their name.
+
+Same 24,000-character cap as `fetch`, and the same escape: `--max-chars 0` for
+all of it, or `--save` it and `rg` the result.
 
 ## pdf
 
 A URL that returns a PDF needs no special handling — `fetch` detects it and prints
 it as text with the page layout preserved, so a standard, a paper or a datasheet
-reads the same way a web page does.
+reads the same way a web page does. For a PDF on disk, `doc` does the same.
 
 ```
-fetch --save /workspace https://example.org/rfc9110.pdf
-rg -n -i 'idempotent' /workspace/example.org-rfc9110.pdf.md
+fetch --save . https://example.org/rfc9110.pdf
+rg -n -i 'idempotent' example.org-rfc9110.pdf.md
+doc uploads/ab12cd34-rfc9110.pdf
 ```
 
-A PDF that comes back empty is a scan — page images with no text layer — and
-`fetch` says so. There is no OCR here.
+A PDF with no text layer is a scan — page images — and `doc` runs OCR on it
+automatically, says that it did, and names the language it used.
+
+```
+doc uploads/scan.pdf                  OCR in English, up to 40 pages
+doc --lang deu uploads/vertrag.pdf    a German contract
+doc --lang rus+ukr uploads/akt.pdf    either of two languages
+doc --ocr-pages 120 uploads/long.pdf  a longer scan
+doc --no-ocr uploads/scan.pdf         just tell me if it has text
+```
+
+Installed languages: `eng` `deu` `fra` `spa` `ita` `por` `nld` `rus` `ukr` `swe`
+`nor` `dan` `fin`. Name only the ones the document actually uses — tesseract
+scores against every language it is given, so a long list is slower _and_ less
+accurate.
+
+OCR is much slower than reading a text layer: seconds per page against
+milliseconds. If the answer is on one page of a long scan, `--ocr-pages` keeps it
+from reading the rest.
+
+`fetch` on a PDF URL does not OCR. Save it first, then `doc` it:
+
+```
+fetch --save . https://example.org/scanned.pdf
+doc example.org-scanned.pdf
+```
 
 ## files
 
-Only `/workspace` exists outside this container. It is shared with the host, so
-anything written there is readable with `read_file` and visible in the Files UI.
-Everything else on this filesystem disappears when the session ends.
+Commands start in the workspace, and it is the only thing here that is shared
+with the host — so write paths relative (`notes.md`, `uploads/report.pdf`),
+exactly as the file tools do. Anything written there is readable with
+`read_file` and visible in the Files UI. Everything else on this filesystem
+disappears when the session ends.
+
+(The workspace is mounted at `/workspace`, so the absolute form works too. There
+is just no reason to type it.)
 
 ```
-rg -n 'rate limit' /workspace/spec.md      search saved pages
-jq -r '.items[].name' /workspace/api.json  filter JSON
-python3 -c '...'                           lxml, requests, bs4, trafilatura
+doc uploads/report.pdf                     read a document, whatever its format
+rg -n 'rate limit' spec.md                 search saved pages
+jq -r '.items[].name' api.json             filter JSON
+python3 -c '...'                           lxml, requests, bs4, trafilatura,
+                                           python-docx, openpyxl, python-pptx, PIL
 w3m -dump <url>                            a different text renderer, if fetch fails
 curl -sSL <url>                             raw bytes — for an API, not for reading
 ```
+
+Files someone attached to the conversation are under `uploads/`, named
+with a short prefix and their original filename.
 
 ## limits
 
@@ -128,6 +195,20 @@ That path is read-only and outside `/workspace`, so reach it with a shell comman
 
 ## recipes
 
+Answer a question about a file the user attached:
+
+```
+doc uploads/ab12cd34-contract.pdf
+```
+
+Pull one figure out of a long scanned document without OCR-ing all of it:
+
+```
+doc --ocr-pages 4 uploads/scan.pdf
+doc --max-chars 0 --save scan.txt uploads/scan.pdf
+rg -n -i 'total|amount due' scan.txt
+```
+
 Answer a question from the web, in one call:
 
 ```
@@ -145,8 +226,8 @@ Research something properly, keeping the sources:
 
 ```
 search -n 8 --read 5 postgres logical replication limits
-fetch --save /workspace/sources <url1> <url2> <url3>
-rg -n -i 'limitation|caveat|not supported' /workspace/sources
+fetch --save sources <url1> <url2> <url3>
+rg -n -i 'limitation|caveat|not supported' sources
 ```
 
 Read an API instead of a page:

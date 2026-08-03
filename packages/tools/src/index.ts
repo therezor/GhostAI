@@ -93,6 +93,7 @@ export {
   builtinTools,
   editFileTool,
   execTool,
+  formatBytes,
   listDirTool,
   readFileTool,
   registerBuiltins,

@@ -157,7 +157,7 @@ export class ToolboxStore {
       throw new GhostError(
         'config',
         `No toolbox is installed under "${name}".\n` +
-          `  Install one with \`ghost profiles install <path>\`, or clear the agent's toolbox.`,
+          `  Build and install one with \`toolboxes/build.sh ${name}\`, or clear the agent's toolbox.`,
         { details: { name } },
       );
     }
@@ -171,7 +171,7 @@ export class ToolboxStore {
       throw new GhostError(
         'config',
         `Toolbox "${name}" is installed but has never been approved.\n` +
-          `  Review it and run \`ghost profiles install\` to approve what it asks for.`,
+          `  Review what it asks for with \`ghost toolbox list\`, then \`ghost toolbox approve ${name}\`.`,
         { details: { name } },
       );
     }
@@ -180,7 +180,8 @@ export class ToolboxStore {
         'config',
         `Toolbox "${name}" has changed since it was approved.\n` +
           '  The manifest on disk no longer matches the one that was reviewed, so it will\n' +
-          '  not be used. Re-install it to review and approve the current contents.',
+          `  not be used. Review the change with \`ghost toolbox list\`, then approve it with\n` +
+          `  \`ghost toolbox approve ${name}\`.`,
         { details: { name, approved, actual: hash } },
       );
     }

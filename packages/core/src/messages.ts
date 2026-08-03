@@ -17,6 +17,7 @@ import type {
   AssistantMessage,
   ChatMessage,
   ContentPart,
+  FilePart,
   ImagePart,
   SystemMessage,
   TextPart,
@@ -30,15 +31,31 @@ export function textPart(text: string): TextPart {
 }
 
 /**
- * An image part.
+ * An image part, as a *provider* takes it.
  *
- * Exactly one of `data` (inline base64) or `url` is meaningful. A `url` is
- * always an HMAC-signed, short-lived link, never a bare workspace path: the
- * endpoint that serves it is authenticated, and a raw path would be an
- * unauthenticated read of anything the agent can see.
+ * Exactly one of `data` (inline base64) or `url` is meaningful, and a `url`
+ * must be absolute and reachable from wherever the model runs. A workspace
+ * file is neither — it is a `filePart`, and it becomes one of these only at
+ * request time. Putting a relative signed URL here is what used to send every
+ * attachment nowhere.
  */
 export function imagePart(mimeType: string, source: { data: string } | { url: string }): ImagePart {
   return { type: 'image', mimeType, ...source };
+}
+
+/** A workspace file, by reference. See `FilePartSchema` for why not by value. */
+export function filePart(
+  path: string,
+  mimeType: string,
+  details: { readonly name?: string; readonly sizeBytes?: number } = {},
+): FilePart {
+  return {
+    type: 'file',
+    path,
+    mimeType,
+    ...(details.name === undefined ? {} : { name: details.name }),
+    ...(details.sizeBytes === undefined ? {} : { sizeBytes: details.sizeBytes }),
+  };
 }
 
 export function systemMessage(content: string): SystemMessage {
@@ -92,12 +109,17 @@ export function toolMessage(
 }
 
 /**
- * The text of a message, with image parts dropped.
+ * The text of a message: the words, and only the words.
  *
  * Parts are joined with a newline rather than concatenated: a provider that
  * splits one answer across several text parts means them as separate blocks,
  * and gluing them together silently merges the last word of one paragraph into
  * the first word of the next.
+ *
+ * Image and file parts contribute nothing, deliberately. This feeds
+ * `deriveSessionTitle` and `parseMentions`, and a session titled
+ * `[file: uploads/ab12cd34-scan.pdf]` is worse than one left untitled — which
+ * is what an attachment-only first message now gets.
  */
 export function textOf(message: ChatMessage): string {
   if (message.role === 'system' || message.role === 'tool') return message.content;
@@ -107,21 +129,32 @@ export function textOf(message: ChatMessage): string {
     .join('\n');
 }
 
-/** Whether a message carries image parts — the check before a vision request. */
+/**
+ * Whether a message carries image parts — the check before a vision request.
+ *
+ * A `file` part is **not** an image, however it is going to be materialised.
+ * If it were, `stripImages` could fire on a request whose attachments have not
+ * been read yet and delete the references before anything looked at them.
+ */
 export function hasImages(message: ChatMessage): boolean {
   if (message.role === 'system' || message.role === 'tool') return false;
   return message.content.some((part) => part.type === 'image');
 }
 
 /**
- * Drops image parts, leaving the text.
+ * Drops image parts, keeping everything else.
  *
  * The `strip images` step of the provider degradation ladder: a model that
  * rejects an image should still answer the question that came with it, rather
  * than failing the turn outright.
+ *
+ * Phrased as "not an image" rather than "is text" because those stopped being
+ * the same thing when `file` parts arrived: keeping only text would delete an
+ * un-materialised attachment reference from the request as a side effect of a
+ * degradation that has nothing to do with it.
  */
 export function withoutImages(message: ChatMessage): ChatMessage {
   if (message.role === 'system' || message.role === 'tool') return message;
   if (!hasImages(message)) return message;
-  return { ...message, content: message.content.filter((part) => part.type === 'text') };
+  return { ...message, content: message.content.filter((part) => part.type !== 'image') };
 }

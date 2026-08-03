@@ -428,7 +428,10 @@ describe('SessionHub', () => {
       expect(client.of('session.status').map((frame) => frame.busy)).toEqual([true, false]);
     });
 
-    it('turns attachments into content parts and keeps the text', async () => {
+    it('turns every attachment into a file part, whatever its type', async () => {
+      // No branch on the MIME type here. Recording *what was attached* is a
+      // path either way; deciding what a model can be shown of it needs bytes
+      // off the disk and happens at request time, in `materialiseAttachments`.
       const h = harness();
       const client = h.connect();
 
@@ -437,15 +440,42 @@ describe('SessionHub', () => {
         sessionKey: SESSION,
         content: 'look at this',
         attachments: [
-          { type: 'image/png', url: '/media/abc' },
-          { type: 'text/csv', url: '/media/def', name: 'rows.csv' },
+          { mimeType: 'image/png', path: 'uploads/ab12cd34-shot.png' },
+          {
+            mimeType: 'text/csv',
+            path: 'uploads/ef56ab78-rows.csv',
+            name: 'rows.csv',
+            sizeBytes: 4096,
+          },
         ],
       });
 
       expect(h.runner.turn(0).input.content).toEqual([
         { type: 'text', text: 'look at this' },
-        { type: 'image', mimeType: 'image/png', url: '/media/abc' },
-        { type: 'text', text: '[Attachment: rows.csv (text/csv)]' },
+        { type: 'file', mimeType: 'image/png', path: 'uploads/ab12cd34-shot.png' },
+        {
+          type: 'file',
+          mimeType: 'text/csv',
+          path: 'uploads/ef56ab78-rows.csv',
+          name: 'rows.csv',
+          sizeBytes: 4096,
+        },
+      ]);
+    });
+
+    it('accepts an attachment-only message', async () => {
+      const h = harness();
+      const client = h.connect();
+
+      await send(client, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: '',
+        attachments: [{ mimeType: 'image/png', path: 'uploads/ab12cd34-shot.png' }],
+      });
+
+      expect(h.runner.turn(0).input.content).toEqual([
+        { type: 'file', mimeType: 'image/png', path: 'uploads/ab12cd34-shot.png' },
       ]);
     });
 

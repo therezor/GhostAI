@@ -1,11 +1,18 @@
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { GhostError, SessionStore, hasOrphanedToolResult, textOf } from '@ghostai/core';
+import {
+  GhostError,
+  SessionStore,
+  filePart,
+  hasOrphanedToolResult,
+  textOf,
+  textPart,
+} from '@ghostai/core';
 import {
   AgentDefaultsSchema,
   type AgentDefaults,
@@ -73,6 +80,7 @@ interface Harness {
   readonly provider: ScriptedProvider;
   readonly registry: ToolRegistry;
   readonly steering: SteeringQueue;
+  readonly jail: WorkspaceJail;
 }
 
 interface HarnessOptions {
@@ -133,7 +141,7 @@ function harness(options: HarnessOptions = {}): Harness {
     ...options.loop,
   });
 
-  return { loop, store, clock, provider, registry, steering };
+  return { loop, store, clock, provider, registry, steering, jail };
 }
 
 async function runTurn(
@@ -1931,6 +1939,72 @@ describe('AgentLoop workspaces', () => {
     expect((await loop.previewPrompt({ sessionKey: 'never-seen' })).staticPrompt).toContain(
       '`default` workspace',
     );
+  });
+});
+
+describe('AgentLoop attachments', () => {
+  /** Writes a file into the turn's workspace and returns its relative path. */
+  function upload(jail: WorkspaceJail, name: string, bytes: string | Buffer): string {
+    mkdirSync(join(jail.root, 'uploads'), { recursive: true });
+    writeFileSync(join(jail.root, 'uploads', name), bytes);
+    return `uploads/${name}`;
+  }
+
+  it('sends an attached image to the provider as inline bytes', async () => {
+    // The whole point of the change, asserted where it is provable: the request
+    // that actually reaches the provider carries the image, not a reference to
+    // one. The materialiser has its own unit tests; this pins the wiring.
+    const { loop, provider, jail } = harness();
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    const path = upload(jail, 'shot.png', bytes);
+
+    await runTurn(loop, {
+      sessionKey: SESSION,
+      content: [textPart('what is this?'), filePart(path, 'image/png')],
+    });
+
+    const question = provider.requests[0]?.messages.find((message) => message.role === 'user');
+    if (question?.role !== 'user') throw new Error('expected a user message');
+    expect(question.content).toContainEqual({
+      type: 'image',
+      mimeType: 'image/png',
+      data: bytes.toString('base64'),
+    });
+    expect(question.content.some((part) => part.type === 'file')).toBe(false);
+  });
+
+  it('stores the reference, not the bytes', async () => {
+    // Storage has to stay small and stable: base64 in `payload_json` is carried
+    // by every replay of the conversation, forever.
+    const { loop, store, jail } = harness();
+    const path = upload(jail, 'shot.png', Buffer.from([1, 2, 3]));
+
+    await runTurn(loop, {
+      sessionKey: SESSION,
+      content: [filePart(path, 'image/png')],
+    });
+
+    const stored = store.history(SESSION).find((message) => message.role === 'user');
+    if (stored?.role !== 'user') throw new Error('expected a stored user message');
+    expect(stored.content[0]).toMatchObject({ type: 'file', path });
+  });
+
+  it('tells the model where a file it cannot read lives', async () => {
+    const { loop, provider, jail } = harness();
+    const path = upload(jail, 'archive.bin', Buffer.from([0x1f, 0x00, 0x8b]));
+
+    await runTurn(loop, {
+      sessionKey: SESSION,
+      content: [textPart('open this'), filePart(path, 'application/octet-stream')],
+    });
+
+    const question = provider.requests[0]?.messages.find((message) => message.role === 'user');
+    if (question?.role !== 'user') throw new Error('expected a user message');
+    const text = question.content
+      .flatMap((part) => (part.type === 'text' ? [part.text] : []))
+      .join('\n');
+    expect(text).toContain(path);
+    expect(text).toContain('use the file tools');
   });
 });
 

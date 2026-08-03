@@ -1,7 +1,14 @@
 import { MockAgent, Response } from 'undici';
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { isGhostError, systemMessage, userMessage } from '@ghostai/core';
+import {
+  filePart,
+  imagePart,
+  isGhostError,
+  systemMessage,
+  textPart,
+  userMessage,
+} from '@ghostai/core';
 
 import { isProviderError } from './errors.js';
 import { assertUsableApiBase, createOpenAIChatProvider } from './openai-chat.js';
@@ -113,6 +120,46 @@ describe('openai-chat adapter', () => {
       'x-custom': 'yes',
       'content-type': 'application/json',
     });
+  });
+
+  it('sends an inline image as a data URI', async () => {
+    const transport = mockTransport().push(completion({ text: 'ok' }));
+    await createOpenAIChatProvider({
+      spec: specOf('ollama'),
+      fetchImpl: transport.fetchImpl,
+    }).chat({
+      model: 'test-model',
+      messages: [userMessage([textPart('what is this?'), imagePart('image/png', { data: 'AAA' })])],
+    });
+
+    const messages = transport.calls[0]?.body.messages as {
+      content: { type: string; image_url?: { url: string } }[];
+    }[];
+    expect(messages[0]?.content[1]).toEqual({
+      type: 'image_url',
+      image_url: { url: 'data:image/png;base64,AAA' },
+    });
+  });
+
+  it('renders a file part as text rather than dropping it', async () => {
+    // A `file` part should have been materialised into text or an image before
+    // it got here. Reaching this branch means a caller went straight to the
+    // provider, and a model told the path can still reach for a tool — whereas
+    // a silently missing attachment is the failure this all began as.
+    const transport = mockTransport().push(completion({ text: 'ok' }));
+    await createOpenAIChatProvider({
+      spec: specOf('ollama'),
+      fetchImpl: transport.fetchImpl,
+    }).chat({
+      model: 'test-model',
+      messages: [
+        userMessage([textPart('open this'), filePart('uploads/ab12-notes.csv', 'text/csv')]),
+      ],
+    });
+
+    const messages = transport.calls[0]?.body.messages as { content: string }[];
+    // Every part is text now, so the adapter collapses them to a plain string.
+    expect(messages[0]?.content).toContain('uploads/ab12-notes.csv');
   });
 
   it('omits authorization entirely for a keyless local server', async () => {

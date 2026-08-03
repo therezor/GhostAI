@@ -1,4 +1,5 @@
-# The web-research toolbox: search, fetch, and turn HTML into text.
+# The web-research toolbox: search, fetch, and turn HTML, PDFs and documents
+# into text.
 #
 # Built locally and referenced by image ID, never pulled at runtime — GhostAI has
 # to come up on a machine with no internet, so the only network this image needs
@@ -12,6 +13,23 @@
 # the image by twenty and hand the sandbox a JavaScript engine with a network
 # stack, which is a large attack surface to carry for the small number of pages
 # that need it. Text extraction handles the rest.
+#
+# ## On the size of the OCR data
+#
+# The paragraph above argues for a small image, and the language packs below are
+# the largest thing in this file — thirteen of them, well over a hundred
+# megabytes, most of which any given install never loads. That is a deliberate
+# reversal of an earlier decision, and the reason is what a toolbox is *for*.
+#
+# A file someone attaches reaches the model as a workspace path and nothing
+# else; if it is a scan, the path is the whole of what the model gets. "There is
+# no OCR here" meant every scanned contract, every phone photo of a page and
+# every faxed invoice was a dead end that cost a turn to discover. Unlike
+# Chromium, tesseract adds no network stack and no scripting engine — it is a
+# static binary over read-only data files, so the cost is disk and nothing else.
+#
+# The packs are one `apk add`, so trimming the list is a one-line edit for an
+# install that only ever sees English.
 FROM alpine:3.21
 
 # One layer, no cache, and versions unpinned on purpose: the image ID is the
@@ -34,7 +52,36 @@ RUN apk add --no-cache \
       py3-lxml \
       py3-requests \
       py3-beautifulsoup4 \
+      py3-pillow \
       tini \
+ && rm -rf /var/cache/apk/*
+
+# OCR, for the documents that have no text layer to extract.
+#
+# `poppler-utils` above already supplies `pdftoppm`, which renders a scanned page
+# to an image before tesseract reads it — rendering rather than `pdfimages`,
+# because a scanned page is often several stacked images plus a mask and pulling
+# them out individually hands tesseract fragments in the wrong order.
+#
+# English is the default and the rest are opt-in per call (`doc --lang deu`).
+# Loading every pack at once would be slower and *less* accurate: tesseract
+# scores against each language it is given, so naming twelve it does not need
+# costs time and invites wrong-alphabet matches.
+RUN apk add --no-cache \
+      tesseract-ocr \
+      tesseract-ocr-data-eng \
+      tesseract-ocr-data-deu \
+      tesseract-ocr-data-fra \
+      tesseract-ocr-data-spa \
+      tesseract-ocr-data-ita \
+      tesseract-ocr-data-por \
+      tesseract-ocr-data-nld \
+      tesseract-ocr-data-rus \
+      tesseract-ocr-data-ukr \
+      tesseract-ocr-data-swe \
+      tesseract-ocr-data-nor \
+      tesseract-ocr-data-dan \
+      tesseract-ocr-data-fin \
  && rm -rf /var/cache/apk/*
 
 # From pip because neither is in alpine's repos, and both are load-bearing:
@@ -55,8 +102,19 @@ RUN apk add --no-cache \
 # apk's `py3-lxml` is left in place and pip is told to reuse it: building lxml
 # from source needs a compiler toolchain and several minutes for a library that is
 # already installed.
+#
+# The three office readers are here for the same reason and are cheap — pure
+# Python over the zip archive each format really is. `py3-pillow` comes from apk
+# above rather than being pulled in here as a `python-pptx` dependency: building
+# Pillow from source needs a compiler toolchain and several minutes for a library
+# alpine already packages.
 RUN apk add --no-cache --virtual .build py3-pip \
- && pip install --break-system-packages --no-cache-dir trafilatura ddgs \
+ && pip install --break-system-packages --no-cache-dir \
+      trafilatura \
+      ddgs \
+      python-docx \
+      openpyxl \
+      python-pptx \
  && apk del .build \
  && rm -rf /root/.cache
 

@@ -7,41 +7,27 @@
  * time — is how a check and the filesystem call it guards end up looking at two
  * different files.
  *
- * The MIME table is small and deliberately so. It exists to make a browser
- * render an image inline, not to be a complete registry, and a type this table
- * does not know becomes `application/octet-stream` — which downloads rather than
- * executes.
+ * `mimeTypeFor` and `readText` moved down to `@ghostai/core` and are re-exported
+ * here so this module stays the one place the HTTP layer imports from. They had
+ * to move: the agent loop turns an attached file into something a model can read
+ * and has to reach the same verdict this route does, and `@ghostai/agent` cannot
+ * import a server.
  */
 
-import { closeSync, openSync, readdirSync, readSync, statSync, type Stats } from 'node:fs';
+import { readdirSync, statSync, type Stats } from 'node:fs';
 import { basename, extname, join, relative } from 'node:path';
 
+import { mimeTypeFor } from '@ghostai/core';
 import type { FileEntry } from '@ghostai/protocol';
 import type { WorkspaceJail } from '@ghostai/security';
 
-/** Extension → MIME type, for the types a chat UI actually renders. */
-const MIME_TYPES: Readonly<Record<string, string>> = {
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.webp': 'image/webp',
-  '.avif': 'image/avif',
-  '.bmp': 'image/bmp',
-  '.ico': 'image/x-icon',
-  '.pdf': 'application/pdf',
-  '.txt': 'text/plain; charset=utf-8',
-  '.md': 'text/markdown; charset=utf-8',
-  '.csv': 'text/csv; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.log': 'text/plain; charset=utf-8',
-  '.mp3': 'audio/mpeg',
-  '.wav': 'audio/wav',
-  '.ogg': 'audio/ogg',
-  '.m4a': 'audio/mp4',
-  '.mp4': 'video/mp4',
-  '.webm': 'video/webm',
-};
+export {
+  DEFAULT_MIME_TYPE,
+  MAX_TEXT_BYTES,
+  mimeTypeFor,
+  readText,
+  type WorkspaceText,
+} from '@ghostai/core';
 
 /**
  * Types a browser executes in the origin that served them.
@@ -63,12 +49,6 @@ const NEVER_INLINE: ReadonlySet<string> = new Set([
   '.mjs',
   '.wasm',
 ]);
-
-export const DEFAULT_MIME_TYPE = 'application/octet-stream';
-
-export function mimeTypeFor(path: string): string {
-  return MIME_TYPES[extname(path).toLowerCase()] ?? DEFAULT_MIME_TYPE;
-}
 
 /** Whether a browser may render this file in the page rather than download it. */
 export function inlineSafe(path: string): boolean {
@@ -134,59 +114,4 @@ export function listDirectory(jail: WorkspaceJail, directory: string): FileEntry
     if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
     return a.name.localeCompare(b.name);
   });
-}
-
-/**
- * The most bytes a text read returns.
- *
- * A workspace holds whatever the agent wrote to it, and "open the 400 MB log
- * the last turn produced" must not be a way to make the server allocate 400 MB
- * or the tab freeze rendering it. Past this the read returns a prefix and says
- * so, and the editor goes read-only — a saved prefix would delete the rest.
- */
-export const MAX_TEXT_BYTES: number = 512 * 1024;
-
-export interface WorkspaceText {
-  readonly content: string;
-  readonly truncated: boolean;
-}
-
-/**
- * One file as text, or `undefined` when the bytes are not text.
- *
- * "Not text" is a NUL byte in the prefix — the same heuristic `git` uses, and
- * for the same reason: it is the one signal that costs nothing and is almost
- * never wrong about a real file. The alternative, trusting the extension, is
- * wrong in both directions here, because the MIME table above is deliberately
- * small and answers `application/octet-stream` for `.py`, `.ts` and every other
- * source file a person would actually want to open.
- *
- * Only the first `MAX_TEXT_BYTES` are read, not the whole file and then a
- * slice: the size is whatever the agent wrote, and `readFileSync` on it is the
- * allocation this exists to avoid.
- */
-export function readText(absolutePath: string, sizeBytes: number): WorkspaceText | undefined {
-  const cap = Math.min(sizeBytes, MAX_TEXT_BYTES);
-  const buffer = Buffer.alloc(cap);
-
-  const descriptor = openSync(absolutePath, 'r');
-  let filled = 0;
-  try {
-    while (filled < cap) {
-      const read = readSync(descriptor, buffer, filled, cap - filled, filled);
-      if (read === 0) break;
-      filled += read;
-    }
-  } finally {
-    closeSync(descriptor);
-  }
-
-  const bytes = buffer.subarray(0, filled);
-  if (bytes.includes(0)) return undefined;
-
-  // Lossy on purpose. A cut at `MAX_TEXT_BYTES` can land mid-codepoint, which
-  // costs one replacement character at the very end of content that is already
-  // read-only for being truncated. A fatal decoder would turn that into a
-  // failure to open the file at all.
-  return { content: new TextDecoder('utf-8').decode(bytes), truncated: sizeBytes > cap };
 }

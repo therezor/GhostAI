@@ -217,4 +217,45 @@ test.describe('reworking a turn', () => {
     });
     await expect(app.getByTestId('transcript').getByText('Here is what I found.')).toHaveCount(0);
   });
+
+  test('an attached image is still on screen after a reload', async ({ app }) => {
+    // Two durable states, and the reload is the point of the test. An
+    // attachment used to be stored as a signed URL with a ten-minute life, so
+    // the transcript held a dead link the moment the tab sat idle -- and the
+    // name and size were never stored at all, so even the chip forgot what it
+    // was. Both are settled states with the turn finished, not the in-between
+    // wording of an upload.
+    const picker = app.locator('input[type="file"]');
+    await picker.setInputFiles([
+      { name: 'shot.png', mimeType: 'image/png', buffer: onePixelPng() },
+      { name: 'rows.csv', mimeType: 'text/csv', buffer: Buffer.from('date,amount\n') },
+    ]);
+
+    await app.getByRole('textbox', { name: 'Message' }).fill('stream a long answer');
+    await app.getByRole('button', { name: 'Send' }).click();
+    await expect(app.getByTestId('transcript').getByText('Here is what I found.')).toBeVisible({
+      timeout: 15_000,
+    });
+
+    const transcript = app.getByTestId('transcript');
+    await expect(transcript.getByRole('img', { name: 'shot.png' })).toBeVisible();
+    await expect(transcript.getByText('rows.csv')).toBeVisible();
+
+    await app.reload();
+
+    // Rebuilt from storage rather than from the socket's live frames: this is
+    // the assertion the old shape could not pass.
+    await expect(transcript.getByRole('img', { name: 'shot.png' })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(transcript.getByText('rows.csv')).toBeVisible();
+  });
 });
+
+/** The smallest valid PNG, so the fixture is bytes rather than a file on disk. */
+function onePixelPng(): Buffer {
+  return Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    'base64',
+  );
+}

@@ -61,7 +61,7 @@ class FakeSocket implements SocketLike {
 const CONNECTED: ServerMessage = {
   type: 'connected',
   workspaceId: 'default',
-  protocolVersion: 1,
+  protocolVersion: 2,
   sessionKey: 'web:1',
   serverTimeMs: 0,
   lastSeq: 0,

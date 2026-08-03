@@ -32,26 +32,53 @@
 import { z } from 'zod';
 
 import { ApprovalScopeSchema, ToolDefinitionSchema, ToolRiskSchema } from './tools.js';
-import { ImagePartSchema, StopReasonSchema, StoredMessageSchema, UsageSchema } from './messages.js';
+import {
+  FilePartSchema,
+  ImagePartSchema,
+  StopReasonSchema,
+  StoredMessageSchema,
+  UsageSchema,
+} from './messages.js';
 
 /** Version of the wire protocol. Bumped on any breaking envelope change. */
-export const PROTOCOL_VERSION = 1 as const;
+export const PROTOCOL_VERSION = 2 as const;
 export type ProtocolVersion = typeof PROTOCOL_VERSION;
 
 // ---------------------------------------------------------------------------
 // Client → server
 // ---------------------------------------------------------------------------
 
-/** An upload the user attached to a message. */
+/**
+ * An upload attached to a message: a file in the workspace, named by its path.
+ *
+ * The path, and only the path. The field this replaces was "signed URL *or*
+ * workspace-relative path", and that ambiguity is what broke attachments: the
+ * web sent a signed URL, the server put it where a provider would try to fetch
+ * it, and `/api/media/<token>` means nothing outside this origin — and expires
+ * ten minutes later even here. A path is stable, resolvable by the file tools,
+ * and signable on demand when a browser needs to draw it.
+ */
 export const AttachmentSchema = z.object({
-  /** MIME type. Anything `image/*` becomes an `ImagePart`. */
-  type: z.string().min(1),
-  /** Signed URL or workspace-relative path returned by the upload endpoint. */
-  url: z.string().min(1),
+  mimeType: z.string().min(1),
+  /** Workspace-relative, as returned by `POST /api/files/upload`. */
+  path: z.string().min(1),
   name: z.string().optional(),
   sizeBytes: z.number().int().nonnegative().optional(),
 });
 export type Attachment = z.infer<typeof AttachmentSchema>;
+
+/**
+ * The most files one message may carry.
+ *
+ * A bound on the *count*, which the upload route's byte limit is not: every
+ * attachment is read and inlined into the provider request on every iteration
+ * of the turn, so a frame naming one small image a few thousand times costs
+ * nothing to send and expands to thousands of base64 blocks in one body. Twenty
+ * is far past what a person attaches to a message and far short of what hurts.
+ */
+export const MAX_ATTACHMENTS = 20;
+
+const AttachmentsSchema = z.array(AttachmentSchema).max(MAX_ATTACHMENTS).default([]);
 
 export const PingMessageSchema = z.object({
   type: z.literal('ping'),
@@ -61,7 +88,7 @@ export const UserMessageRequestSchema = z.object({
   type: z.literal('user.message'),
   sessionKey: z.string().min(1),
   content: z.string(),
-  attachments: z.array(AttachmentSchema).default([]),
+  attachments: AttachmentsSchema,
   agentId: z.string().optional(),
   /**
    * Client-generated idempotency key. Lets a retry after a dropped socket avoid
@@ -177,7 +204,7 @@ export const EditMessageSchema = z.object({
   /** Must address a `user` message; the hub refuses anything else. */
   seq: z.number().int().positive(),
   content: z.string(),
-  attachments: z.array(AttachmentSchema).default([]),
+  attachments: AttachmentsSchema,
   agentId: z.string().optional(),
   clientMessageId: z.string().optional(),
 });
@@ -630,5 +657,10 @@ export function isSequencedServerMessage(
   return !(UNSEQUENCED_SERVER_EVENTS as readonly string[]).includes(message.type);
 }
 
-/** Re-exported so channels can build image parts without importing two modules. */
-export { ImagePartSchema };
+/**
+ * Re-exported so channels can build content parts without importing two
+ * modules. `FilePartSchema` is the one a channel reaches for now: an
+ * attachment is a workspace file, and `ImagePartSchema` survives for the
+ * request-time form that `materialiseAttachments` produces.
+ */
+export { FilePartSchema, ImagePartSchema };

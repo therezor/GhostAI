@@ -113,7 +113,7 @@ describe('startServer', () => {
     });
     socket.close();
 
-    expect(greeting).toMatchObject({ type: 'connected', protocolVersion: 1 });
+    expect(greeting).toMatchObject({ type: 'connected', protocolVersion: 2 });
   });
 
   it('writes a settings save to config.json and moves the running agent', async () => {

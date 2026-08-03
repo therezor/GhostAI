@@ -166,6 +166,15 @@ interface WireMessage {
 
 function encodePart(part: ContentPart): WireContentPart {
   if (part.type === 'text') return { type: 'text', text: part.text };
+  // A `file` part is a workspace reference, and this wire format has nowhere to
+  // put one — it is meant to have been turned into text or an image by
+  // `materialiseAttachments` before the request got here. Reaching this branch
+  // means a caller went straight to a provider, so render the reference rather
+  // than dropping it: a model told the path can still reach for a tool, and a
+  // silently missing attachment is the failure this whole change was about.
+  if (part.type === 'file') {
+    return { type: 'text', text: `[attachment: ${part.path} · ${part.mimeType}]` };
+  }
   // An inline image becomes a data URI; a signed URL is passed through for the
   // provider to fetch. Both are what `image_url` accepts.
   const url =

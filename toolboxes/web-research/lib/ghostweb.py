@@ -30,7 +30,6 @@ from __future__ import annotations
 import hashlib
 import os
 import re
-import subprocess
 from dataclasses import dataclass
 from html import unescape
 from pathlib import Path
@@ -267,22 +266,19 @@ def _pdf_text(body: bytes) -> str:
 
     Research targets are PDFs often enough — standards, papers, datasheets — that
     the alternative is an agent fetching one, getting mojibake, and concluding the
-    page is broken. `-layout` because a two-column paper interleaved line by line
-    is worse than no text at all.
+    page is broken.
+
+    The extraction itself lives in `ghostdoc`, which `doc` also calls. One
+    implementation on purpose: the same PDF reached over HTTP and sitting in
+    `/workspace` must not come back differently depending on which command
+    opened it.
     """
+    from ghostdoc import DocError, pdf_text
+
     try:
-        done = subprocess.run(
-            ["pdftotext", "-layout", "-nopgbrk", "-", "-"],
-            input=body,
-            capture_output=True,
-            timeout=60,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError) as error:
-        raise FetchError(f"pdftotext: {error}") from error
-    if done.returncode != 0:
-        raise FetchError(f"pdftotext: {done.stderr.decode('utf-8', 'replace').strip()}")
-    return done.stdout.decode("utf-8", errors="replace").strip()
+        return pdf_text(body)
+    except DocError as error:
+        raise FetchError(str(error)) from error
 
 
 def links_in(body: bytes, base_url: str) -> list[tuple[str, str]]:

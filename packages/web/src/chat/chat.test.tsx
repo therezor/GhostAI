@@ -96,7 +96,7 @@ async function connect(lastSeq = 0): Promise<void> {
   deliver({
     type: 'connected',
     workspaceId: 'default',
-    protocolVersion: 1,
+    protocolVersion: 2,
     sessionKey: SESSION,
     serverTimeMs: 0,
     lastSeq,
@@ -917,7 +917,7 @@ describe('a mid-stream reload', () => {
       {
         type: 'connected',
         workspaceId: 'default',
-        protocolVersion: 1,
+        protocolVersion: 2,
         sessionKey: SESSION,
         serverTimeMs: 0,
         lastSeq: applied,
@@ -956,7 +956,7 @@ describe('a mid-stream reload', () => {
       {
         type: 'connected',
         workspaceId: 'default',
-        protocolVersion: 1,
+        protocolVersion: 2,
         sessionKey: SESSION,
         serverTimeMs: 0,
         lastSeq: before + 50,
@@ -1118,6 +1118,62 @@ describe('reworking a session', () => {
       sessionKey: SESSION,
       seq: 1,
       content: 'a better question',
+    });
+  });
+
+  it('keeps the attachments when only the wording is edited', async () => {
+    // An edit *replaces* the stored message, so anything left out of the frame
+    // is deleted. This used to send `attachments: []` unconditionally, and the
+    // editor has no attachment affordance -- so a corrected typo silently threw
+    // away every file on the message and the next answer was about nothing.
+    const user = userEvent.setup();
+    mount();
+    await connect();
+
+    deliver({
+      type: 'session.replay',
+      sessionKey: SESSION,
+      complete: false,
+      messages: [
+        {
+          id: 'm1',
+          sessionKey: SESSION,
+          seq: 1,
+          createdAtMs: 1,
+          turnId: 't1',
+          message: {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'what is this' },
+              {
+                type: 'file',
+                mimeType: 'image/png',
+                path: 'uploads/ab12cd34-shot.png',
+                name: 'shot.png',
+                sizeBytes: 2048,
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Edit this message' }));
+    const editor = screen.getByRole('textbox', { name: 'Edit message' });
+    await user.clear(editor);
+    await user.type(editor, 'what is this, exactly');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(framesOf('user.edit')[0]).toMatchObject({
+      content: 'what is this, exactly',
+      attachments: [
+        {
+          mimeType: 'image/png',
+          path: 'uploads/ab12cd34-shot.png',
+          name: 'shot.png',
+          sizeBytes: 2048,
+        },
+      ],
     });
   });
 });

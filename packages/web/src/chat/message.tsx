@@ -19,14 +19,15 @@ import type { WebKey } from '@/i18n/keys.js';
 import { useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type { ApprovalScope } from '@ghostai/protocol';
+import type { ApprovalScope, Attachment } from '@ghostai/protocol';
 
 import { cn } from '@/lib/cn.js';
 import { useFormat } from '@/lib/use-format.js';
-import { Badge } from '@/components/ui/badge.js';
 import { Button } from '@/components/ui/button.js';
 import { AutoGrowTextarea } from '@/components/auto-grow-textarea.js';
+import { useWorkspace } from '@/workspaces/workspace-context.js';
 import type { TranscriptItem, TurnItem, UserItem } from '@/state/transcript.js';
+import { AttachmentList } from './attachment-list.js';
 import { MessageActions } from './message-actions.js';
 import { Notice } from './notice.js';
 import { TurnParts } from './tool-card.js';
@@ -41,7 +42,21 @@ import { TurnInfo } from './turn-info.js';
  * the message has it.
  */
 export type MessageAction =
-  | { readonly kind: 'edit'; readonly seq: number; readonly text: string }
+  | {
+      readonly kind: 'edit';
+      readonly seq: number;
+      readonly text: string;
+      /**
+       * The message's existing attachments, carried through unchanged.
+       *
+       * An edit replaces the stored message, so anything left out of it is
+       * deleted. Omitting these silently stripped every attachment from a
+       * message whose wording was corrected — the editor has no attachment
+       * affordance, so there was no way to notice until the answer came back
+       * without them.
+       */
+      readonly attachments: readonly Attachment[];
+    }
   | { readonly kind: 'regenerate'; readonly seq: number }
   | { readonly kind: 'branch'; readonly seq: number };
 
@@ -95,6 +110,7 @@ function UserMessage({
   readonly onAction: (action: MessageAction) => void;
 }): JSX.Element {
   const { t } = useTranslation();
+  const { workspaceId } = useWorkspace();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(item.text);
 
@@ -112,7 +128,7 @@ function UserMessage({
             event.preventDefault();
             if (draft.trim() === '') return;
             setEditing(false);
-            onAction({ kind: 'edit', seq, text: draft });
+            onAction({ kind: 'edit', seq, text: draft, attachments: item.attachments });
           }}
         >
           <AutoGrowTextarea
@@ -134,7 +150,7 @@ function UserMessage({
                 event.preventDefault();
                 if (draft.trim() === '') return;
                 setEditing(false);
-                onAction({ kind: 'edit', seq, text: draft });
+                onAction({ kind: 'edit', seq, text: draft, attachments: item.attachments });
               }
             }}
           />
@@ -165,15 +181,7 @@ function UserMessage({
         {item.text}
       </div>
 
-      {item.attachments.length > 0 && (
-        <ul className="cluster message-user__attachments">
-          {item.attachments.map((attachment) => (
-            <li key={attachment.url}>
-              <Badge tone="neutral">{attachment.name ?? attachment.type}</Badge>
-            </li>
-          ))}
-        </ul>
-      )}
+      <AttachmentList attachments={item.attachments} workspace={workspaceId} />
 
       {item.pending && (
         <span className="message-user__pending" role="status">

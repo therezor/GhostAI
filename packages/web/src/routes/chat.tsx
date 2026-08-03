@@ -82,7 +82,9 @@ export function ChatRoute(): JSX.Element {
   function runAction(action: MessageAction): void {
     switch (action.kind) {
       case 'edit':
-        editMessage(action.seq, action.text);
+        // The attachments come along: an edit *replaces* the stored message, so
+        // sending only the new wording deletes every file that was on it.
+        editMessage(action.seq, action.text, action.attachments);
         return;
       case 'regenerate':
         regenerateTurn(action.seq);

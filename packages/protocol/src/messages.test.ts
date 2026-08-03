@@ -27,6 +27,51 @@ describe('ChatMessageSchema', () => {
     expect(parsed.content).toHaveLength(2);
   });
 
+  it('parses a file part, keeping the name apart from the path', () => {
+    // The path is mangled for safety and the name is not, so a chip can show
+    // "Q3 report.csv" while the model is told `uploads/ab12cd34-Q3-report.csv`.
+    const parsed = ChatMessageSchema.parse({
+      role: 'user',
+      content: [
+        { type: 'text', text: 'summarise this' },
+        {
+          type: 'file',
+          mimeType: 'text/csv',
+          path: 'uploads/ab12cd34-Q3-report.csv',
+          name: 'Q3 report.csv',
+          sizeBytes: 4096,
+        },
+      ],
+    });
+    if (parsed.role !== 'user') throw new Error('unreachable');
+    expect(parsed.content[1]).toMatchObject({
+      type: 'file',
+      path: 'uploads/ab12cd34-Q3-report.csv',
+      name: 'Q3 report.csv',
+    });
+  });
+
+  it('still parses an image part written before file parts existed', () => {
+    // Sessions on disk hold these. The union only gained a member, so old
+    // `payload_json` has to keep loading — a parse failure here would be a
+    // conversation that no longer opens.
+    const parsed = ChatMessageSchema.parse({
+      role: 'user',
+      content: [{ type: 'image', mimeType: 'image/png', url: '/api/media/legacy' }],
+    });
+    if (parsed.role !== 'user') throw new Error('unreachable');
+    expect(parsed.content[0]).toMatchObject({ type: 'image' });
+  });
+
+  it('requires a path on a file part', () => {
+    expect(
+      ChatMessageSchema.safeParse({
+        role: 'user',
+        content: [{ type: 'file', mimeType: 'text/csv' }],
+      }).success,
+    ).toBe(false);
+  });
+
   it('rejects an unknown content part type', () => {
     expect(
       ChatMessageSchema.safeParse({ role: 'user', content: [{ type: 'audio', data: 'x' }] })

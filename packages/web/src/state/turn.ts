@@ -20,7 +20,7 @@
 
 import { create } from 'zustand';
 
-import type { ServerMessage, StoredMessage, SubagentRunRef } from '@ghostai/protocol';
+import type { Attachment, ServerMessage, StoredMessage, SubagentRunRef } from '@ghostai/protocol';
 
 import {
   appendPendingUserMessage,
@@ -65,7 +65,7 @@ export interface TurnState {
   readonly appendPending: (input: {
     readonly clientMessageId: string;
     readonly text: string;
-    readonly attachments?: readonly { readonly type: string; readonly url: string }[];
+    readonly attachments?: readonly Attachment[];
   }) => void;
   /**
    * Drops everything after `seq`, while a regenerate or edit is in flight.

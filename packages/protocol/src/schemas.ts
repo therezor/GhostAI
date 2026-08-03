@@ -27,6 +27,7 @@ export const PROTOCOL_SCHEMAS = {
   ChatRole: messages.ChatRoleSchema,
   TextPart: messages.TextPartSchema,
   ImagePart: messages.ImagePartSchema,
+  FilePart: messages.FilePartSchema,
   ContentPart: messages.ContentPartSchema,
   ToolCall: messages.ToolCallSchema,
   SystemMessage: messages.SystemMessageSchema,

@@ -32,6 +32,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type ClipboardEvent,
   type JSX,
   type KeyboardEvent,
   type ReactNode,
@@ -88,6 +89,17 @@ interface StagedFile {
   readonly attachment: Attachment | undefined;
   readonly failed: boolean;
 }
+
+/**
+ * The largest upload the server will take.
+ *
+ * Mirrored from `MAX_UPLOAD_BYTES` in `packages/server/src/routes/files.ts`,
+ * where it is a Fastify `bodyLimit` — enforced as the body arrives rather than
+ * after it is all in memory. The copy is deliberate: the browser bundle cannot
+ * import from the server, and a value that only exists there means the user
+ * finds out by waiting for a 413.
+ */
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 export function Composer({
   lead,
@@ -172,13 +184,50 @@ export function Composer({
     }
   };
 
+  /**
+   * The one way a file becomes an attachment, whichever gesture chose it.
+   *
+   * The size check is here rather than at the server's `bodyLimit` because
+   * that one fires *after* the whole body has been pushed up the wire: a 60 MB
+   * video spends a minute uploading to earn a 413 and a chip that says
+   * "failed". Refusing locally costs nothing and can say why.
+   */
+  const addFiles = useCallback(
+    (picked: readonly File[]): void => {
+      for (const file of picked) {
+        if (file.size > MAX_UPLOAD_BYTES) {
+          toast.error(
+            t('chat.attachTooLarge', { name: file.name, limit: formatBytes(MAX_UPLOAD_BYTES) }),
+          );
+          continue;
+        }
+        // The workspace the conversation is in, so an attachment lands beside
+        // the files the turn can already see rather than in the default tree.
+        void stage(file, workspaceId, setFiles);
+      }
+    },
+    [t, workspaceId],
+  );
+
   const onPickFiles = (event: ChangeEvent<HTMLInputElement>): void => {
     const picked = [...(event.target.files ?? [])];
     // Cleared so picking the same file twice in a row still fires `change`.
     event.target.value = '';
-    // The workspace the conversation is in, so an attachment lands beside
-    // the files the turn can already see rather than in the default tree.
-    for (const file of picked) void stage(file, workspaceId, setFiles);
+    addFiles(picked);
+  };
+
+  /**
+   * Pasting a screenshot attaches it; pasting text stays ordinary text.
+   *
+   * The guard is what makes that true. `preventDefault` unconditionally would
+   * break pasting a URL into the message, which is the far more common gesture
+   * — so the event is only claimed when the clipboard actually carries files.
+   */
+  const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>): void => {
+    const picked = [...event.clipboardData.files];
+    if (picked.length === 0) return;
+    event.preventDefault();
+    addFiles(picked);
   };
 
   /**
@@ -291,6 +340,7 @@ export function Composer({
                 setHighlight(0);
               }}
               onKeyDown={onKeyDown}
+              onPaste={onPaste}
               disabled={!configured}
               placeholder={
                 configured
@@ -439,11 +489,16 @@ async function stage(
           ? {
               ...staged,
               attachment: {
-                type: uploaded.mimeType,
-                // The signed URL, not the workspace path: a provider fetching
-                // an image needs something it can resolve, and the path means
-                // nothing outside this machine.
-                url: uploaded.signedUrl?.url ?? uploaded.path,
+                mimeType: uploaded.mimeType,
+                // The workspace path, never a signed URL. The server reads the
+                // bytes off disk when it builds the request, so this has to
+                // survive longer than a ten-minute token — and the file tools
+                // address the same path, which is what lets the model open a
+                // file it cannot be shown.
+                path: uploaded.path,
+                // The name the user knows it by. `path` is mangled by
+                // `safeName` and prefixed, so the two deliberately differ: this
+                // one is for the chip, that one is for the model.
                 name: file.name,
                 sizeBytes: uploaded.sizeBytes,
               },

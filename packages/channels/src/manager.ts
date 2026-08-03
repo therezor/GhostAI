@@ -177,9 +177,12 @@ function flagOf(source: Readonly<Record<string, unknown>>, key: string): boolean
 /**
  * The text and the attachments a `user.message` frame carries.
  *
- * An image with a `url` keeps it; one carrying bytes becomes a data URI, which
- * is the same thing the upload route would have produced and is what makes a
- * photo sent to a bot reach the model rather than being dropped on the way.
+ * A `file` part maps across one-for-one, because a frame attachment *is* a
+ * workspace file — see the contract in `channel.ts`. An `image` part carrying
+ * bytes has nowhere to go: a frame names a path, and this converter has no
+ * workspace to write those bytes into. It becomes a note rather than vanishing,
+ * so a channel author sees the omission instead of wondering why their photo
+ * never reached the model.
  */
 function toFrameContent(content: readonly ContentPart[]): {
   text: string;
@@ -192,10 +195,16 @@ function toFrameContent(content: readonly ContentPart[]): {
       texts.push(part.text);
       continue;
     }
-    const url =
-      part.url ??
-      (part.data === undefined ? undefined : `data:${part.mimeType};base64,${part.data}`);
-    if (url !== undefined) attachments.push({ type: part.mimeType, url });
+    if (part.type === 'file') {
+      attachments.push({
+        path: part.path,
+        mimeType: part.mimeType,
+        ...(part.name === undefined ? {} : { name: part.name }),
+        ...(part.sizeBytes === undefined ? {} : { sizeBytes: part.sizeBytes }),
+      });
+      continue;
+    }
+    texts.push(`[image omitted: ${part.mimeType} — publish a file part instead]`);
   }
   return { text: texts.join('\n'), attachments };
 }

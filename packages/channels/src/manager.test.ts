@@ -236,7 +236,7 @@ describe('ChannelManager', () => {
     expect(hub.only().sessionKey).toBe('loopback:1');
   });
 
-  it('carries an image through as an attachment', async () => {
+  it('carries a file part through as an attachment', async () => {
     const { hub, channel } = await harness();
 
     channel().context.publish({
@@ -244,16 +244,44 @@ describe('ChannelManager', () => {
       senderId: 'u1',
       content: [
         textPart('look'),
-        { type: 'image', mimeType: 'image/png', data: 'AAA' },
-        { type: 'image', mimeType: 'image/jpeg', url: 'https://example.test/a.jpg' },
+        {
+          type: 'file',
+          mimeType: 'image/png',
+          path: 'uploads/ab12cd34-shot.png',
+          name: 'shot.png',
+          sizeBytes: 2048,
+        },
       ],
     });
     await flush();
 
     expect(hub.only().frames[0]?.attachments).toEqual([
-      { type: 'image/png', url: 'data:image/png;base64,AAA' },
-      { type: 'image/jpeg', url: 'https://example.test/a.jpg' },
+      {
+        mimeType: 'image/png',
+        path: 'uploads/ab12cd34-shot.png',
+        name: 'shot.png',
+        sizeBytes: 2048,
+      },
     ]);
+  });
+
+  it('notes an inline image rather than dropping it silently', async () => {
+    // A frame attachment names a workspace path and this converter has no
+    // workspace to write bytes into. A channel with an image writes it itself
+    // and publishes a file part -- see the contract in `channel.ts`. Until it
+    // does, the omission has to be visible to the channel author.
+    const { hub, channel } = await harness();
+
+    channel().context.publish({
+      sessionKey: '1',
+      senderId: 'u1',
+      content: [textPart('look'), { type: 'image', mimeType: 'image/png', data: 'AAA' }],
+    });
+    await flush();
+
+    const frame = hub.only().frames[0];
+    expect(frame?.attachments).toEqual([]);
+    expect(frame?.content).toContain('[image omitted: image/png');
   });
 
   it('delivers the answer back to the address the message came from', async () => {

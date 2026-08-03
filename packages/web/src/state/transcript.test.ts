@@ -451,7 +451,7 @@ describe('session frames', () => {
       {
         type: 'connected',
         workspaceId: 'default',
-        protocolVersion: 1,
+        protocolVersion: 2,
         sessionKey: 'web:1',
         serverTimeMs: 0,
         lastSeq: 0,
@@ -619,24 +619,56 @@ describe('a stored history', () => {
     expect(items).toHaveLength(1);
   });
 
-  it('carries image attachments through as chips', () => {
+  it('carries file attachments through as chips, name and size intact', () => {
+    // The reload assertion. Before attachments were workspace files the stored
+    // form was a signed URL with a ten-minute life, and `name` and `sizeBytes`
+    // were not stored at all -- so a transcript reopened the next morning drew
+    // a chip labelled `image/png` pointing at a dead link.
     const items = fromStoredMessages([
       stored('m1', undefined, {
         role: 'user',
         content: [
           { type: 'text', text: 'look' },
-          { type: 'image', mimeType: 'image/png', url: '/api/media/abc' },
-          // Inline bytes are the same image; re-embedding a megabyte of them
-          // to draw a chip is a trade nobody wants.
-          { type: 'image', mimeType: 'image/png', data: 'AAAA' },
+          {
+            type: 'file',
+            mimeType: 'image/png',
+            path: 'uploads/ab12cd34-shot.png',
+            name: 'shot.png',
+            sizeBytes: 2048,
+          },
         ],
       }),
     ]);
 
     expect(items[0]).toMatchObject({
       text: 'look',
-      attachments: [{ type: 'image/png', url: '/api/media/abc' }],
+      attachments: [
+        {
+          mimeType: 'image/png',
+          path: 'uploads/ab12cd34-shot.png',
+          name: 'shot.png',
+          sizeBytes: 2048,
+        },
+      ],
     });
+  });
+
+  it('shows no chip for a legacy image part', () => {
+    // Both stored forms are unusable now: inline bytes are a megabyte to draw a
+    // chip that says "image", and a `/api/media/` token expired long ago and
+    // would render as a broken picture. Nothing is better than either.
+    const items = fromStoredMessages([
+      stored('m1', undefined, {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'look' },
+          { type: 'image', mimeType: 'image/png', url: '/api/media/abc' },
+          { type: 'image', mimeType: 'image/png', data: 'AAAA' },
+        ],
+      }),
+    ]);
+
+    expect(items[0]).toMatchObject({ text: 'look', attachments: [] });
   });
 
   it('renders a message with no turnId as a turn of one', () => {

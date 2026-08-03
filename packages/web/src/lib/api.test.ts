@@ -29,7 +29,7 @@ function respondWith(status: number, body: unknown): void {
 
 const STATUS = {
   version: '0.0.0',
-  protocolVersion: 1,
+  protocolVersion: 2,
   uptimeMs: 10,
   model: 'test-model',
   provider: 'ollama',

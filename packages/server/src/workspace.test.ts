@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { WorkspaceJail } from '@ghostai/security';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { DEFAULT_MIME_TYPE, inlineSafe, listDirectory, mimeTypeFor } from './workspace.js';
+import { inlineSafe, listDirectory } from './workspace.js';
 
 const roots: string[] = [];
 
@@ -27,21 +27,8 @@ function workspace(): { root: string; jail: WorkspaceJail } {
   return { root: jail.root, jail };
 }
 
-describe('mimeTypeFor', () => {
-  it.each([
-    ['photo.PNG', 'image/png'],
-    ['notes.md', 'text/markdown; charset=utf-8'],
-    ['data.json', 'application/json; charset=utf-8'],
-  ])('maps %s', (path, expected) => {
-    expect(mimeTypeFor(path)).toBe(expected);
-  });
-
-  // A type this table does not know downloads rather than executes, which is
-  // the safe direction for a tree a language model writes to.
-  it.each(['archive.7z', 'no-extension', 'script.sh'])('falls back for %s', (path) => {
-    expect(mimeTypeFor(path)).toBe(DEFAULT_MIME_TYPE);
-  });
-});
+// `mimeTypeFor` and `readText` moved to `@ghostai/core` and are covered by
+// `core/src/workspace-files.test.ts`.
 
 describe('inlineSafe', () => {
   it.each(['photo.png', 'notes.md', 'data.json'])('allows %s', (path) => {

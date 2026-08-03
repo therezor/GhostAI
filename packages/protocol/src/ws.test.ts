@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   ClientMessageSchema,
+  MAX_ATTACHMENTS,
   PROTOCOL_VERSION,
   ServerMessageSchema,
   UNSEQUENCED_SERVER_EVENTS,
+  UserMessageRequestSchema,
   isSequencedServerMessage,
 } from './ws.js';
 import { ChatMessageSchema } from './messages.js';
@@ -16,7 +18,7 @@ function variantTypes(union: typeof ClientMessageSchema | typeof ServerMessageSc
 
 describe('protocol version', () => {
   it('pins the wire protocol version', () => {
-    expect(PROTOCOL_VERSION).toBe(1);
+    expect(PROTOCOL_VERSION).toBe(2);
   });
 });
 
@@ -87,8 +89,8 @@ describe('ServerMessageSchema', () => {
 
   it('pins the version literal on the connected event', () => {
     const base = { type: 'connected', sessionKey: 's', serverTimeMs: 0, lastSeq: 0 };
-    expect(ServerMessageSchema.safeParse({ ...base, protocolVersion: 1 }).success).toBe(true);
-    expect(ServerMessageSchema.safeParse({ ...base, protocolVersion: 2 }).success).toBe(false);
+    expect(ServerMessageSchema.safeParse({ ...base, protocolVersion: 2 }).success).toBe(true);
+    expect(ServerMessageSchema.safeParse({ ...base, protocolVersion: 1 }).success).toBe(false);
   });
 
   it('requires seq on every session-scoped event', () => {
@@ -352,5 +354,43 @@ describe('turn.end reporting', () => {
     if (parsed.type !== 'turn.end') throw new Error('unreachable');
     expect(parsed.elapsedMs).toBeUndefined();
     expect(parsed.firstSeq).toBeUndefined();
+  });
+});
+
+describe('AttachmentSchema', () => {
+  const attachment = { mimeType: 'image/png', path: 'uploads/ab12cd34-shot.png' };
+
+  it('takes a workspace path and a mime type', () => {
+    expect(
+      UserMessageRequestSchema.parse({
+        type: 'user.message',
+        sessionKey: 's',
+        content: 'look',
+        attachments: [{ ...attachment, name: 'shot.png', sizeBytes: 2048 }],
+      }).attachments,
+    ).toHaveLength(1);
+  });
+
+  it('refuses more attachments than one message can carry', () => {
+    // Not a byte limit -- a count. Every attachment is read and inlined on
+    // every iteration of the turn, so a frame naming one small image a few
+    // thousand times costs nothing to send and expands to thousands of base64
+    // blocks in a single provider request.
+    const many = Array.from({ length: MAX_ATTACHMENTS + 1 }, () => attachment);
+    expect(
+      UserMessageRequestSchema.safeParse({
+        type: 'user.message',
+        sessionKey: 's',
+        content: 'look',
+        attachments: many,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('defaults to none', () => {
+    expect(
+      UserMessageRequestSchema.parse({ type: 'user.message', sessionKey: 's', content: 'hi' })
+        .attachments,
+    ).toEqual([]);
   });
 });
