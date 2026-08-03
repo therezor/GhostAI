@@ -128,6 +128,8 @@ export {
   truncateHeadTail,
   type HistoryForLLMOptions,
   type TruncationResult,
+  sessionHistory,
+  type SessionHistorySource,
 } from './history.js';
 
 export { MAX_TITLE_CHARS, deriveSessionTitle } from './session-title.js';

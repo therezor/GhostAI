@@ -44,7 +44,7 @@ import type { z } from 'zod';
 
 import { systemClock, type Clock } from './clock.js';
 import { GhostError } from './errors.js';
-import { findLegalEnd, historyForLLM, type HistoryForLLMOptions } from './history.js';
+import { findLegalEnd, sessionHistory, type HistoryForLLMOptions } from './history.js';
 import { textOf } from './messages.js';
 import { ensureDir } from './paths.js';
 import { parseMetadata, rowReader, type Row } from './sqlite-row.js';
@@ -858,29 +858,13 @@ export class SessionStore {
   /**
    * The message list to send to a provider.
    *
-   * Reads only past `last_consolidated_seq` — everything before it is already
-   * represented by the memory files, and replaying it would send the same
-   * content twice — then hands the window to `historyForLLM` for boundary
-   * alignment and tool-result truncation.
+   * A convenience over `sessionHistory`, which owns the decision — what a
+   * *model* is sent is not a persistence question, and this was the one method
+   * here that knew a provider existed. Kept as a method because every caller
+   * already has the store in hand.
    */
   history(sessionKey: string, options: HistoryForLLMOptions = {}): ChatMessage[] {
-    const session = this.getSession(sessionKey);
-    if (session === undefined) return [];
-
-    const { maxMessages, ...rest } = options;
-    const records = this.messages(sessionKey, {
-      afterSeq: session.lastConsolidatedSeq,
-      ...(maxMessages !== undefined && maxMessages > 0
-        ? { limit: maxMessages, fromEnd: true }
-        : {}),
-    });
-
-    return historyForLLM(
-      records.map((record) => record.message),
-      // `fromIndex` is already applied by the SQL bound above; re-applying it
-      // here would skip a second block of the same size.
-      { ...rest, fromIndex: 0, ...(maxMessages === undefined ? {} : { maxMessages }) },
-    );
+    return sessionHistory(this, sessionKey, options);
   }
 
   updateSession(sessionKey: string, patch: UpdateSessionOptions): SessionRecord {

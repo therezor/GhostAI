@@ -242,3 +242,54 @@ export function historyForLLM(
     return truncatedMessage;
   });
 }
+
+/**
+ * The narrow view of a session store that `sessionHistory` needs.
+ *
+ * Structural, so `SessionStore` satisfies it without knowing this exists and
+ * without this file importing it — `session-store.ts` already imports from
+ * here, and an arrow back would be a cycle.
+ */
+export interface SessionHistorySource {
+  getSession(sessionKey: string): { readonly lastConsolidatedSeq: number } | undefined;
+  messages(
+    sessionKey: string,
+    options: { readonly afterSeq: number; readonly limit?: number; readonly fromEnd?: boolean },
+  ): readonly { readonly message: ChatMessage }[];
+}
+
+/**
+ * The message list to send to a provider, read out of a store.
+ *
+ * Here rather than on `SessionStore` because the decision it encodes is about
+ * what a *model* should be sent, not about how rows are read — and that made
+ * `history()` the one method on a persistence class that knew a provider
+ * existed. The rows come from the store; the window is this file's, beside
+ * `historyForLLM` and the boundary rules it applies.
+ *
+ * Moving it also puts the two halves of one constraint next to each other. The
+ * SQL bound below and the `fromIndex: 0` that follows it must agree: the store
+ * has already dropped everything at or before `lastConsolidatedSeq`, so letting
+ * `historyForLLM` apply `fromIndex` again would skip a second block of the same
+ * size. That agreement used to be a comment in one file about an argument in
+ * another.
+ */
+export function sessionHistory(
+  source: SessionHistorySource,
+  sessionKey: string,
+  options: HistoryForLLMOptions = {},
+): ChatMessage[] {
+  const session = source.getSession(sessionKey);
+  if (session === undefined) return [];
+
+  const { maxMessages, ...rest } = options;
+  const records = source.messages(sessionKey, {
+    afterSeq: session.lastConsolidatedSeq,
+    ...(maxMessages !== undefined && maxMessages > 0 ? { limit: maxMessages, fromEnd: true } : {}),
+  });
+
+  return historyForLLM(
+    records.map((record) => record.message),
+    { ...rest, fromIndex: 0, ...(maxMessages === undefined ? {} : { maxMessages }) },
+  );
+}
