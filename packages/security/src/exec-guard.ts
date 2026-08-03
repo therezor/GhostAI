@@ -50,7 +50,12 @@ import { basename, extname } from 'node:path';
 import { GhostError } from '@ghostai/core';
 import { type ExecToolConfig, ExecToolConfigSchema } from '@ghostai/protocol';
 
-import { pathShapes, type JailRejection, type PathShape, type WorkspaceJail } from './jail.js';
+import {
+  pathShapes,
+  type JailRejection,
+  type PathShape,
+  type WorkspaceJail,
+} from './jail.js';
 
 /**
  * Binaries whose whole purpose is to interpret a string as a program.
@@ -141,7 +146,10 @@ export interface ExecPlan {
 
 const DEFAULT_EXEC_CONFIG: ExecToolConfig = ExecToolConfigSchema.parse({});
 
-function denied(message: string, details: Readonly<Record<string, unknown>>): GhostError {
+function denied(
+  message: string,
+  details: Readonly<Record<string, unknown>>,
+): GhostError {
   return new GhostError('permission_denied', message, { details });
 }
 
@@ -149,7 +157,9 @@ function denied(message: string, details: Readonly<Record<string, unknown>>): Gh
 export function binaryName(argv0: string): string {
   const name = basename(argv0.replaceAll('\\', '/'));
   const extension = extname(name).toLowerCase();
-  return EXECUTABLE_EXTENSIONS.has(extension) ? name.slice(0, -extension.length) : name;
+  return EXECUTABLE_EXTENSIONS.has(extension)
+    ? name.slice(0, -extension.length)
+    : name;
 }
 
 function isPathShaped(value: string): boolean {
@@ -189,7 +199,10 @@ function pathCandidate(argument: string): string | null {
  * commit because a message was long would be the guard inventing a rule nobody
  * asked for. Such an argument is only fatal if it is *shaped* like a path.
  */
-function isFatalRejection(rejection: JailRejection, candidate: string): boolean {
+function isFatalRejection(
+  rejection: JailRejection,
+  candidate: string,
+): boolean {
   return rejection !== 'unverifiable' || isPathShaped(candidate);
 }
 
@@ -222,7 +235,10 @@ function buildEnv(
   }
   if (config.pathAppend !== '') {
     const existing = env.PATH;
-    env.PATH = existing === undefined ? config.pathAppend : `${existing}:${config.pathAppend}`;
+    env.PATH =
+      existing === undefined
+        ? config.pathAppend
+        : `${existing}:${config.pathAppend}`;
   }
   return env;
 }
@@ -233,7 +249,10 @@ function buildEnv(
  * Throws rather than returning a verdict: there is no partially-acceptable
  * command, and a caller that forgot to check a boolean would spawn it anyway.
  */
-export function guardExec(argv: readonly string[], options: ExecGuardOptions): ExecPlan {
+export function guardExec(
+  argv: readonly string[],
+  options: ExecGuardOptions,
+): ExecPlan {
   const config = options.config ?? DEFAULT_EXEC_CONFIG;
   const jail = options.jail;
 
@@ -243,7 +262,10 @@ export function guardExec(argv: readonly string[], options: ExecGuardOptions): E
 
   const argv0 = argv[0];
   if (argv0 === undefined || argv0 === '') {
-    throw new GhostError('invalid_input', 'argv must start with a program to run');
+    throw new GhostError(
+      'invalid_input',
+      'argv must start with a program to run',
+    );
   }
   for (const argument of argv) {
     if (argument.includes('\0')) {
@@ -253,11 +275,16 @@ export function guardExec(argv: readonly string[], options: ExecGuardOptions): E
 
   const name = binaryName(argv0);
   if (config.deniedBinaries.includes(name)) {
-    throw denied(`Binary is denied by configuration: ${name}`, { binary: name });
+    throw denied(`Binary is denied by configuration: ${name}`, {
+      binary: name,
+    });
   }
   const allowed = config.allowedBinaries;
   if (allowed.length > 0 && !allowed.includes(name)) {
-    throw denied(`Binary is not in the allow-list: ${name}`, { binary: name, allowed });
+    throw denied(`Binary is not in the allow-list: ${name}`, {
+      binary: name,
+      allowed,
+    });
   }
   const sandboxed = options.sandboxed === true;
 
@@ -285,10 +312,16 @@ export function guardExec(argv: readonly string[], options: ExecGuardOptions): E
   // resolved from `PATH` by the OS, and an absolute path is a system binary the
   // allow/deny lists have already ruled on.
   let file = argv0;
-  if (!sandboxed && isPathShaped(argv0) && !argv0.startsWith('/') && !DRIVE_LETTER.test(argv0)) {
+  if (
+    !sandboxed &&
+    isPathShaped(argv0) &&
+    !argv0.startsWith('/') &&
+    !DRIVE_LETTER.test(argv0)
+  ) {
     assertInsideByShape(
       argv0,
-      (shapes) => `Program path points outside the workspace (${shapes.join(', ')}): ${argv0}`,
+      (shapes) =>
+        `Program path points outside the workspace (${shapes.join(', ')}): ${argv0}`,
       {},
     );
     const verdict = jail.check(argv0);
@@ -310,7 +343,8 @@ export function guardExec(argv: readonly string[], options: ExecGuardOptions): E
     if (candidate === null) continue;
     assertInsideByShape(
       candidate,
-      (shapes) => `Argument points outside the workspace (${shapes.join(', ')}): ${candidate}`,
+      (shapes) =>
+        `Argument points outside the workspace (${shapes.join(', ')}): ${candidate}`,
       { argument },
     );
     const verdict = jail.check(candidate);
@@ -328,7 +362,9 @@ export function guardExec(argv: readonly string[], options: ExecGuardOptions): E
     // caller actually wrote as paths are listed. A URL is excluded: it resolves
     // harmlessly inside the workspace, but reporting it as a file it touches
     // would be a lie.
-    if (isPathShaped(candidate) && !candidate.includes('://')) paths.push(verdict.path);
+    if (isPathShaped(candidate) && !candidate.includes('://')) {
+      paths.push(verdict.path);
+    }
   }
 
   return {
@@ -391,7 +427,11 @@ export function createOutputCap(maxBytes: number): OutputCap {
       return false;
     },
     done() {
-      return { text: Buffer.concat(chunks).toString('utf8'), truncated, bytes: kept };
+      return {
+        text: Buffer.concat(chunks).toString('utf8'),
+        truncated,
+        bytes: kept,
+      };
     },
   };
 }

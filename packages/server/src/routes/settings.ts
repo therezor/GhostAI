@@ -68,12 +68,14 @@ function assertServable(current: Config, patch: ConfigPatch): void {
     // A `config` GhostError is a 500 through the kind table, which is the right
     // answer for a config file the operator wrote and the wrong one for a body
     // this request just sent.
-    throw badRequest(error instanceof Error ? error.message : 'Settings cannot be served');
+    throw badRequest(
+      error instanceof Error ? error.message : 'Settings cannot be served',
+    );
   }
 }
 
 function settingsResponse(deps: RouteDeps): SettingsResponse {
-  const loadError = deps.runtime.loadError?.();
+  const loadError = deps.runtime.loadError();
   return {
     config: deps.runtime.config(),
     credentialsPresent: deps.runtime.credentialsPresent(),
@@ -81,7 +83,7 @@ function settingsResponse(deps: RouteDeps): SettingsResponse {
     // Read fresh on every response rather than only after a write: a warning
     // most often comes from the file as it was found at boot, and the first
     // request for the settings tree is where anyone would look for it.
-    warnings: [...(deps.runtime.configWarnings?.() ?? [])],
+    warnings: [...deps.runtime.configWarnings()],
   };
 }
 
@@ -102,7 +104,10 @@ function settingsResponse(deps: RouteDeps): SettingsResponse {
  * `agents.list.*` is replaced wholesale rather than merged, so every entry built
  * here is a complete agent and not a diff of one.
  */
-function renamePatch(current: Config, renames: readonly AgentRename[]): ConfigPatch {
+function renamePatch(
+  current: Config,
+  renames: readonly AgentRename[],
+): ConfigPatch {
   const list: Record<string, AgentEntry | null> = {};
   // Applied against a copy so a second rename in the same request sees the first
   // one's result — renaming a → b and b → c in one save is odd but expressible,
@@ -111,7 +116,9 @@ function renamePatch(current: Config, renames: readonly AgentRename[]): ConfigPa
 
   for (const { from, to } of renames) {
     if (from === DEFAULT_AGENT_ID) {
-      throw unprocessable('The default agent cannot be renamed.', { agentId: from });
+      throw unprocessable('The default agent cannot be renamed.', {
+        agentId: from,
+      });
     }
     const entry = pending[from];
     if (entry === undefined) throw notFound(`No such agent: ${from}`);
@@ -124,7 +131,9 @@ function renamePatch(current: Config, renames: readonly AgentRename[]): ConfigPa
         { agentId: to },
       );
     }
-    if (pending[to] !== undefined) throw conflict(`There is already an agent called "${to}".`);
+    if (pending[to] !== undefined) {
+      throw conflict(`There is already an agent called "${to}".`);
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- the key is the operator's
     delete pending[from];
@@ -140,7 +149,9 @@ function renamePatch(current: Config, renames: readonly AgentRename[]): ConfigPa
       if (!other.subagents.some((ref) => ref.id === from)) continue;
       const moved = {
         ...other,
-        subagents: other.subagents.map((ref) => (ref.id === from ? { ...ref, id: to } : ref)),
+        subagents: other.subagents.map((ref) =>
+          ref.id === from ? { ...ref, id: to } : ref,
+        ),
       };
       pending[id] = moved;
       list[id] = moved;
@@ -163,7 +174,9 @@ function renamePatch(current: Config, renames: readonly AgentRename[]): ConfigPa
  * allow" the first was ever granted.
  */
 function forgetDepartedAgents(deps: RouteDeps): void {
-  deps.hub.retainAgents(new Set(deps.runtime.agents().map((agent) => agent.id)));
+  deps.hub.retainAgents(
+    new Set(deps.runtime.agents().map((agent) => agent.id)),
+  );
 }
 
 export function settingsRoutes(deps: RouteDeps): RouteGroup<SettingsRouteId> {
@@ -180,9 +193,13 @@ export function settingsRoutes(deps: RouteDeps): RouteGroup<SettingsRouteId> {
       // `.partial()` leaves each field's `.default()` in place, so saving one
       // panel would rewrite every untouched field in the tree back to its
       // default.
-      schema: { body: SettingsPatchRequestSchema, response: { 200: SettingsResponseSchema } },
+      schema: {
+        body: SettingsPatchRequestSchema,
+        response: { 200: SettingsResponseSchema },
+      },
       handler: (request): SettingsResponse => {
-        const { renameAgents = [], ...patch } = request.body as SettingsPatchRequest;
+        const { renameAgents = [], ...patch } =
+          request.body as SettingsPatchRequest;
         assertServable(deps.runtime.config(), patch);
 
         // The renames and the patch go in as **one** merge, which is the whole

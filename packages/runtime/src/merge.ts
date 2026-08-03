@@ -77,11 +77,16 @@ const DELETE_BY_NULL: readonly string[] = [
   'agents.defaults.reasoningEffort',
 ];
 
-function matchesPath(patterns: readonly string[], path: readonly string[]): boolean {
+function matchesPath(
+  patterns: readonly string[],
+  path: readonly string[],
+): boolean {
   return patterns.some((pattern) => {
     const segments = pattern.split('.');
     if (segments.length !== path.length) return false;
-    return segments.every((segment, index) => segment === '*' || segment === path[index]);
+    return segments.every(
+      (segment, index) => segment === '*' || segment === path[index],
+    );
   });
 }
 
@@ -89,7 +94,11 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function mergeValue(base: unknown, patch: unknown, path: readonly string[]): unknown {
+function mergeValue(
+  base: unknown,
+  patch: unknown,
+  path: readonly string[],
+): unknown {
   if (!isPlainObject(base) || !isPlainObject(patch)) return patch;
   if (matchesPath(REPLACE_WHOLESALE, path)) return patch;
 
@@ -117,7 +126,9 @@ function mergeValue(base: unknown, patch: unknown, path: readonly string[]): unk
   }
 
   if (deleted.size === 0) return merged;
-  return Object.fromEntries(Object.entries(merged).filter(([key]) => !deleted.has(key)));
+  return Object.fromEntries(
+    Object.entries(merged).filter(([key]) => !deleted.has(key)),
+  );
 }
 
 /**
@@ -131,7 +142,8 @@ export function mergeConfigPatch(config: Config, patch: ConfigPatch): Config {
   const result = ConfigSchema.safeParse(merged);
   if (!result.success) {
     const issues = result.error.issues.map(
-      (issue) => `  ${issue.path.length === 0 ? '(root)' : issue.path.join('.')}: ${issue.message}`,
+      (issue) =>
+        `  ${issue.path.length === 0 ? '(root)' : issue.path.join('.')}: ${issue.message}`,
     );
     throw new GhostError(
       'config',

@@ -62,7 +62,11 @@ const OPTIONS: readonly Option[] = [
 
 const ICONS = { light: Sun, system: SunMoon, dark: Moon } as const;
 
-export function ThemeSwitcher({ className }: { readonly className?: string }): JSX.Element {
+export function ThemeSwitcher({
+  className,
+}: {
+  readonly className?: string;
+}): JSX.Element {
   const { preference, resolved, setPreference } = useAppTheme();
   const Icon = ICONS[preference];
 

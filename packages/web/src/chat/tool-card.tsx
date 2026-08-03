@@ -74,7 +74,10 @@ import { ReasoningBlock } from './reasoning.js';
  * wants to see before they happen — which is also why they are the two whose
  * default policy is `ask` — so they get the two loudest tones.
  */
-const RISK: Record<ToolRisk, { readonly label: string; readonly tone: BadgeProps['tone'] }> = {
+const RISK: Record<
+  ToolRisk,
+  { readonly label: string; readonly tone: BadgeProps['tone'] }
+> = {
   safe: { label: 'read', tone: 'neutral' },
   write: { label: 'write', tone: 'info' },
   exec: { label: 'exec', tone: 'danger' },
@@ -83,7 +86,11 @@ const RISK: Record<ToolRisk, { readonly label: string; readonly tone: BadgeProps
 
 export interface ToolCardProps {
   readonly tool: ToolPart;
-  readonly onApprove: (callId: string, approved: boolean, scope: ApprovalScope) => void;
+  readonly onApprove: (
+    callId: string,
+    approved: boolean,
+    scope: ApprovalScope,
+  ) => void;
 }
 
 export function ToolCard({ tool, onApprove }: ToolCardProps): JSX.Element {
@@ -117,7 +124,10 @@ export function ToolCard({ tool, onApprove }: ToolCardProps): JSX.Element {
       // turn with six calls in it can move between them instead of reading
       // through them.
       aria-label={`Tool call: ${tool.name}`}
-      className={cn('tool-card', tool.status === 'awaiting-approval' && 'tool-card--awaiting')}
+      className={cn(
+        'tool-card',
+        tool.status === 'awaiting-approval' && 'tool-card--awaiting',
+      )}
     >
       <h4 className="contents">
         <button
@@ -143,7 +153,9 @@ export function ToolCard({ tool, onApprove }: ToolCardProps): JSX.Element {
             {risk.label}
           </Badge>
 
-          {summary !== '' && <span className="tool-card__summary truncate">{summary}</span>}
+          {summary !== '' && (
+            <span className="tool-card__summary truncate">{summary}</span>
+          )}
 
           <span className="tool-card__timing">
             {tool.status === 'running' && formatDuration(elapsedMs)}
@@ -166,7 +178,11 @@ export function ToolCard({ tool, onApprove }: ToolCardProps): JSX.Element {
       {tool.notices.length > 0 && (
         <div className="stack tool-card__notices">
           {tool.notices.map((notice) => (
-            <Notice key={notice.id} kind={notice.notice} message={notice.message} />
+            <Notice
+              key={notice.id}
+              kind={notice.notice}
+              message={notice.message}
+            />
           ))}
         </div>
       )}
@@ -182,12 +198,20 @@ export function ToolCard({ tool, onApprove }: ToolCardProps): JSX.Element {
             </Labelled>
           )}
 
-          {subagent !== undefined && <SubagentRun run={subagent} onApprove={onApprove} />}
+          {subagent !== undefined && (
+            <SubagentRun run={subagent} onApprove={onApprove} />
+          )}
 
           {tool.content !== undefined && (
-            <Labelled label={tool.status === 'error' ? t('tool.error') : t('tool.output')}>
+            <Labelled
+              label={
+                tool.status === 'error' ? t('tool.error') : t('tool.output')
+              }
+            >
               <Output content={tool.content} terminal={tool.name === 'exec'} />
-              {tool.truncated && <p className="tool-card__note">{t('tool.truncated')}</p>}
+              {tool.truncated && (
+                <p className="tool-card__note">{t('tool.truncated')}</p>
+              )}
             </Labelled>
           )}
 
@@ -246,15 +270,24 @@ export function SubagentRun({
         : 'loading';
 
   return (
-    <section className="stack subagent" aria-label={t('tool.subagentRun', { agent: run.label })}>
+    <section
+      className="stack subagent"
+      aria-label={t('tool.subagentRun', { agent: run.label })}
+    >
       <p className="subagent__header">
         <Bot className="subagent__icon" aria-hidden="true" />
         <span className="subagent__name">{run.label}</span>
-        {run.model !== '' && <span className="subagent__model">{run.model}</span>}
-        {!run.done && <span className="subagent__status">{t('tool.subagentRunning')}</span>}
+        {run.model !== '' && (
+          <span className="subagent__model">{run.model}</span>
+        )}
+        {!run.done && (
+          <span className="subagent__status">{t('tool.subagentRunning')}</span>
+        )}
       </p>
 
-      {state === 'loading' && <p className="tool-card__note">{t('tool.subagentLoading')}</p>}
+      {state === 'loading' && (
+        <p className="tool-card__note">{t('tool.subagentLoading')}</p>
+      )}
       {state === 'unavailable' && (
         <p className="tool-card__note">{t('tool.subagentUnavailable')}</p>
       )}
@@ -275,7 +308,9 @@ export function SubagentRun({
  * make every delegation read as though it had been asked twice.
  */
 function partsOf(messages: readonly StoredMessage[]): readonly TurnPart[] {
-  return fromStoredMessages(messages).flatMap((item) => (item.kind === 'turn' ? item.parts : []));
+  return fromStoredMessages(messages).flatMap((item) =>
+    item.kind === 'turn' ? item.parts : [],
+  );
 }
 
 /**
@@ -324,7 +359,9 @@ export function TurnParts({
             return <ToolCard key={part.id} tool={part} onApprove={onApprove} />;
 
           case 'notice':
-            return <Notice key={part.id} kind={part.notice} message={part.message} />;
+            return (
+              <Notice key={part.id} kind={part.notice} message={part.message} />
+            );
         }
       })}
     </>
@@ -356,14 +393,25 @@ function Output({
 }): JSX.Element {
   return (
     <pre
-      className={cn('tool-card__pre tool-card__output', terminal && 'tool-card__output--terminal')}
+      className={cn(
+        'tool-card__pre tool-card__output',
+        terminal && 'tool-card__output--terminal',
+      )}
     >
-      {content === '' ? <span className="tool-card__empty">(no output)</span> : content}
+      {content === '' ? (
+        <span className="tool-card__empty">(no output)</span>
+      ) : (
+        content
+      )}
     </pre>
   );
 }
 
-function StatusIcon({ status }: { readonly status: ToolPart['status'] }): JSX.Element {
+function StatusIcon({
+  status,
+}: {
+  readonly status: ToolPart['status'];
+}): JSX.Element {
   const { t } = useTranslation();
   switch (status) {
     case 'running':

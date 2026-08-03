@@ -48,7 +48,10 @@ export function useSettings(): UseQueryResult<SettingsResponse> {
  * of the bug this used to be: every screen grew its own invalidation, fired one
  * line after the save, racing the request it was meant to follow.
  */
-export function afterSettingsWrite(queryClient: QueryClient, response: SettingsResponse): void {
+export function afterSettingsWrite(
+  queryClient: QueryClient,
+  response: SettingsResponse,
+): void {
   queryClient.setQueryData(queryKeys.settings, response);
   for (const key of [
     queryKeys.status,
@@ -67,7 +70,11 @@ export function afterSettingsWrite(queryClient: QueryClient, response: SettingsR
 
 /** The narrower set a credential write moves: only `credentialsPresent` flips. */
 export function afterCredentialWrite(queryClient: QueryClient): void {
-  for (const key of [queryKeys.settings, queryKeys.providers, queryKeys.status]) {
+  for (const key of [
+    queryKeys.settings,
+    queryKeys.providers,
+    queryKeys.status,
+  ]) {
     void queryClient.invalidateQueries({ queryKey: key });
   }
 }
@@ -83,7 +90,10 @@ export interface SaveHandle<T> {
    * "There is no agent called …"; the same shape of race is why a rename went
    * out and the composer's picker went on showing the old name.
    */
-  readonly save: (input: T, options?: { readonly onSuccess?: () => void }) => void;
+  readonly save: (
+    input: T,
+    options?: { readonly onSuccess?: () => void },
+  ) => void;
   readonly saving: boolean;
 }
 
@@ -122,7 +132,7 @@ export function useSaveCredential(): SaveHandle<SetCredentialRequest> {
 
   const mutation = useMutation({
     mutationFn: (input: SetCredentialRequest) => api.setCredential(input),
-    onSuccess: (_result, input) => {
+    onSuccess: (result, input) => {
       afterCredentialWrite(queryClient);
       toast.success(
         input.value === null ? 'Key removed' : 'Key saved',

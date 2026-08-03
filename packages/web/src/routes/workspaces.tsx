@@ -31,7 +31,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Folder, Pencil, Plus, Trash2 } from 'lucide-react';
-import { useMemo, useState, type JSX } from 'react';
+import { useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { WorkspaceSummary } from '@ghostai/protocol';
@@ -44,8 +44,8 @@ import { RowActions } from '@/components/crud/row-actions.js';
 import { DataList, DataListRow } from '@/components/crud/data-list.js';
 import { ListSort } from '@/components/crud/list-sort.js';
 import { Pagination } from '@/components/crud/pagination.js';
-import { pageRows, usePagination } from '@/components/crud/use-pagination.js';
-import { filterRows, sortRows, type Comparators, type SortOrder } from '@/components/crud/sort.js';
+import { useListPage } from '@/components/crud/use-list-page.js';
+import type { Comparators } from '@/components/crud/sort.js';
 import { api } from '@/lib/api.js';
 import { useFormat } from '@/lib/use-format.js';
 import { queryKeys } from '@/lib/query.js';
@@ -68,9 +68,9 @@ export function WorkspacesRoute(): JSX.Element {
   const fmt = useFormat();
   const navigate = useNavigate();
 
-  const [filter, setFilter] = useState('');
-  const [sort, setSort] = useState<SortOrder<SortKey>>({ key: 'name', descending: false });
-  const [pendingDelete, setPendingDelete] = useState<WorkspaceSummary | undefined>(undefined);
+  const [pendingDelete, setPendingDelete] = useState<
+    WorkspaceSummary | undefined
+  >(undefined);
 
   const workspaces = useQuery({
     queryKey: queryKeys.workspaces,
@@ -78,31 +78,22 @@ export function WorkspacesRoute(): JSX.Element {
   });
 
   const all = workspaces.data?.workspaces ?? [];
-  const matched = useMemo(
-    () =>
-      sortRows(
-        // Filtering on the folder too: it is on screen under every name, and a
-        // list that shows a value it will not match on reads as broken.
-        filterRows(all, filter, (workspace) => `${workspace.name} ${workspace.id}`),
-        sort,
-        COMPARE,
-        {
-          // The default workspace holds every other one, so it is the parent of
-          // the list rather than a peer in it. It stays at the top in both
-          // directions for the same reason a directory does in Files.
-          group: (workspace) => (workspace.isDefault ? 0 : 1),
-          tiebreak: (a, b) => a.name.localeCompare(b.name),
-        },
-      ),
-    [all, filter, sort],
-  );
-
   // The whole registry is already in memory — this list is one request, not one
   // page of one — so the page is a slice rather than a second fetch.
-  const pagination = usePagination({
-    resetOn: `${filter}|${sort.key}|${String(sort.descending)}`,
-  }).withTotal(matched.length);
-  const rows = pageRows(matched, pagination);
+  const { filter, setFilter, sort, setSort, matched, pagination, rows } =
+    useListPage({
+      rows: all,
+      initialSort: { key: 'name', descending: false },
+      // Filtering on the folder too: it is on screen under every name, and a list
+      // that shows a value it will not match on reads as broken.
+      haystack: (workspace) => `${workspace.name} ${workspace.id}`,
+      comparators: COMPARE,
+      // The default workspace holds every other one, so it is the parent of the
+      // list rather than a peer in it. It stays at the top in both directions for
+      // the same reason a directory does in Files.
+      group: (workspace) => (workspace.isDefault ? 0 : 1),
+      tiebreak: (a, b) => a.name.localeCompare(b.name),
+    });
 
   const now = Date.now();
 
@@ -127,7 +118,11 @@ export function WorkspacesRoute(): JSX.Element {
       <p className="page__note">{t('workspaces.note')}</p>
 
       <div className="row list-toolbar">
-        <SearchFilter value={filter} label={t('workspaces.filter')} onValueChange={setFilter} />
+        <SearchFilter
+          value={filter}
+          label={t('workspaces.filter')}
+          onValueChange={setFilter}
+        />
         <ListSort
           options={[
             { key: 'name', label: t('common.name') },
@@ -140,16 +135,20 @@ export function WorkspacesRoute(): JSX.Element {
         />
       </div>
 
-      {workspaces.isPending && <p className="page__note">{t('common.loading')}</p>}
+      {workspaces.isPending && (
+        <p className="page__note">{t('common.loading')}</p>
+      )}
       {workspaces.isError && (
         <p role="alert" className="page__error">
-          Could not load workspaces: {workspaces.error.message}
+          {t('workspaces.loadError', { message: workspaces.error.message })}
         </p>
       )}
 
       {workspaces.isSuccess &&
         (matched.length === 0 ? (
-          <p className="page__note">{t('common.noMatches', { filter, count: all.length })}</p>
+          <p className="page__note">
+            {t('common.noMatches', { filter, count: all.length })}
+          </p>
         ) : (
           <DataList label={t('workspaces.title')}>
             {rows.map((workspace) => (
@@ -180,7 +179,9 @@ export function WorkspacesRoute(): JSX.Element {
                             `workspace` either, which is the Files breadcrumb's
                             name for whichever workspace you are in. See
                             `workspaces/folder.ts`. */}
-                      <span className="workspaces__folder truncate">{folderLabel(workspace)}</span>
+                      <span className="workspaces__folder truncate">
+                        {folderLabel(workspace)}
+                      </span>
                     </span>
                   </Link>
                 }
@@ -189,7 +190,11 @@ export function WorkspacesRoute(): JSX.Element {
                     {/* The count carries its own noun. There is no column
                         heading above it any more, and a bare `12` beside a
                         timestamp is a number nobody can name. */}
-                    <span>{t('workspaces.sessionCount', { count: workspace.sessionCount })}</span>
+                    <span>
+                      {t('workspaces.sessionCount', {
+                        count: workspace.sessionCount,
+                      })}
+                    </span>
                     <span>{fmt.relativeTime(workspace.updatedAtMs, now)}</span>
                   </>
                 }
@@ -230,7 +235,11 @@ export function WorkspacesRoute(): JSX.Element {
         ))}
 
       {workspaces.isSuccess && (
-        <Pagination pagination={pagination} total={matched.length} label={t('workspaces.title')} />
+        <Pagination
+          pagination={pagination}
+          total={matched.length}
+          label={t('workspaces.title')}
+        />
       )}
 
       <DeleteWorkspaceDialog

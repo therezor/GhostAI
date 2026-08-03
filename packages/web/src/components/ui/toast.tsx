@@ -58,7 +58,9 @@ export const useToastStore = create<ToastStore>((set) => ({
     return id;
   },
   dismiss: (id) => {
-    set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) }));
+    set((state) => ({
+      toasts: state.toasts.filter((toast) => toast.id !== id),
+    }));
   },
 }));
 
@@ -68,10 +70,18 @@ export function toast(input: ToastInput): number {
 }
 
 toast.success = (title: string, description?: string): number =>
-  toast({ title, role: 'success', ...(description === undefined ? {} : { description }) });
+  toast({
+    title,
+    role: 'success',
+    ...(description === undefined ? {} : { description }),
+  });
 
 toast.error = (title: string, description?: string): number =>
-  toast({ title, role: 'danger', ...(description === undefined ? {} : { description }) });
+  toast({
+    title,
+    role: 'danger',
+    ...(description === undefined ? {} : { description }),
+  });
 
 const ICONS: Record<ToastRole, typeof Info> = {
   info: Info,
@@ -121,7 +131,9 @@ export function Toaster(): JSX.Element {
             <Icon className="toast__icon" />
 
             <div className="stack toast__body">
-              <ToastPrimitive.Title className="toast__title">{record.title}</ToastPrimitive.Title>
+              <ToastPrimitive.Title className="toast__title">
+                {record.title}
+              </ToastPrimitive.Title>
               {record.description !== undefined && (
                 <ToastPrimitive.Description className="toast__description">
                   {record.description}
@@ -139,7 +151,10 @@ export function Toaster(): JSX.Element {
               </ToastPrimitive.Action>
             )}
 
-            <ToastPrimitive.Close aria-label={t('common.dismiss')} className="toast__close">
+            <ToastPrimitive.Close
+              aria-label={t('common.dismiss')}
+              className="toast__close"
+            >
               <X />
             </ToastPrimitive.Close>
           </ToastPrimitive.Root>

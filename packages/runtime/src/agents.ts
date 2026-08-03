@@ -28,7 +28,12 @@
  *    half decidable from config is checked here; see `assertBuildable`.
  */
 
-import { DEFAULT_AGENT_ID, GhostError, RESERVED_AGENT_IDS, isAgentId } from '@ghostai/core';
+import {
+  DEFAULT_AGENT_ID,
+  GhostError,
+  RESERVED_AGENT_IDS,
+  isAgentId,
+} from '@ghostai/core';
 import type { SubagentBinding } from '@ghostai/agent';
 import {
   AgentDefaultsSchema,
@@ -44,6 +49,7 @@ import {
   type PromptMode,
   type ToolPromptOverrides,
   type ToolsConfig,
+  namesDelimiter,
 } from '@ghostai/protocol';
 import { parseCidr } from '@ghostai/security';
 
@@ -55,7 +61,9 @@ import { parseCidr } from '@ghostai/security';
  * from a parsed `agents.defaults` — and a key walk over that instance would
  * silently drop exactly the overrides an operator went out of their way to set.
  */
-const AGENT_DEFAULT_KEYS: readonly string[] = Object.keys(AgentDefaultsSchema.shape);
+const AGENT_DEFAULT_KEYS: readonly string[] = Object.keys(
+  AgentDefaultsSchema.shape,
+);
 
 /** One agent, with every inherited field already resolved. */
 export interface EffectiveAgent {
@@ -171,7 +179,10 @@ function defined<T extends object>(patch: T | undefined): Defined<T> {
  * to the loop. `workspace` is not among them: the schema omits it, so it can
  * only ever come from the defaults.
  */
-function mergeDefaults(defaults: AgentDefaults, entry: AgentEntry | undefined): AgentDefaults {
+function mergeDefaults(
+  defaults: AgentDefaults,
+  entry: AgentEntry | undefined,
+): AgentDefaults {
   if (entry === undefined) return defaults;
   const overrides = defined(entry) as Record<string, unknown>;
   const merged: Record<string, unknown> = { ...defaults };
@@ -183,7 +194,10 @@ function mergeDefaults(defaults: AgentDefaults, entry: AgentEntry | undefined): 
 }
 
 /** `config.tools`, narrowed by whatever this agent overrode. */
-function mergeToolsConfig(tools: ToolsConfig, entry: AgentEntry | undefined): ToolsConfig {
+function mergeToolsConfig(
+  tools: ToolsConfig,
+  entry: AgentEntry | undefined,
+): ToolsConfig {
   if (entry === undefined) return tools;
   return { ...tools, exec: { ...tools.exec, ...defined(entry.exec) } };
 }
@@ -240,9 +254,13 @@ function resolveSubagents(
 
   for (const ref of refs) {
     if (ref.id === id) {
-      throw new GhostError('invalid_input', `Agent "${id}" lists itself as a subagent.`, {
-        details: { agentId: id },
-      });
+      throw new GhostError(
+        'invalid_input',
+        `Agent "${id}" lists itself as a subagent.`,
+        {
+          details: { agentId: id },
+        },
+      );
     }
     if (seen.has(ref.id)) {
       throw new GhostError(
@@ -294,11 +312,6 @@ function resolveSubagents(
  * all-or-nothing, so a settings save naming an unapproved toolbox is still a 400
  * that changes nothing rather than a turn that dies later.
  */
-/** Whether a template spells out the turn's tool-output delimiter. */
-function namesDelimiter(template: string): boolean {
-  return template.includes('{{tag}}') || template.includes('{{nonce}}');
-}
-
 /**
  * The live-state template this agent actually renders.
  *
@@ -307,7 +320,9 @@ function namesDelimiter(template: string): boolean {
  * so the warning is about the prompt an agent will carry.
  */
 function liveTemplate(agent: EffectiveAgent): string {
-  return agent.livePrompt === '' ? DEFAULT_LIVE_STATE_TEMPLATE : agent.livePrompt;
+  return agent.livePrompt === ''
+    ? DEFAULT_LIVE_STATE_TEMPLATE
+    : agent.livePrompt;
 }
 
 function assertBuildable(agent: EffectiveAgent, warn: WarningSink): void {
@@ -324,7 +339,11 @@ function assertBuildable(agent: EffectiveAgent, warn: WarningSink): void {
   // turn's tag. What leaves the model unable to identify a fence is neither
   // template naming it, which takes two edits to reach.
   const policy = agent.toolPolicyPrompt;
-  if (policy.trim() !== '' && !namesDelimiter(policy) && !namesDelimiter(liveTemplate(agent))) {
+  if (
+    policy.trim() !== '' &&
+    !namesDelimiter(policy) &&
+    !namesDelimiter(liveTemplate(agent))
+  ) {
     warn({
       agentId: agent.id,
       code: 'tool_policy_missing_nonce',
@@ -379,7 +398,10 @@ function build(
     // here as well as the schema's, not only the schema's.
     tools: entry?.tools ?? { ...DEFAULT_AGENT_TOOLS },
     toolsConfig: mergeToolsConfig(config.tools, entry),
-    toolbox: entry?.toolbox ?? { name: '', network: { mode: 'none', allow: [] } },
+    toolbox: entry?.toolbox ?? {
+      name: '',
+      network: { mode: 'none', allow: [] },
+    },
     memory: entry?.memory ?? { shared: true },
     subagents: resolveSubagents(config, id, entry, warn),
   };
@@ -443,7 +465,10 @@ export function hasAgent(config: Config, id: string): boolean {
  * callers that expect to be handed an arbitrary string from the wire should ask
  * `hasAgent` first and report the miss in their own vocabulary.
  */
-export function resolveAgent(config: Config, id: string | undefined): EffectiveAgent {
+export function resolveAgent(
+  config: Config,
+  id: string | undefined,
+): EffectiveAgent {
   const agentId = id === undefined || id === '' ? DEFAULT_AGENT_ID : id;
   const entry = config.agents.list[agentId];
 
@@ -482,7 +507,10 @@ export function resolveAgent(config: Config, id: string | undefined): EffectiveA
  * context panel labels the figures it is showing, and the picker marks the
  * binding. A message written here would be wrong for two of the three.
  */
-export function resolveAgentOrDefault(config: Config, id: string | undefined): AgentResolution {
+export function resolveAgentOrDefault(
+  config: Config,
+  id: string | undefined,
+): AgentResolution {
   const requestedId = id === undefined || id === '' ? DEFAULT_AGENT_ID : id;
   const entry = config.agents.list[requestedId];
 
@@ -496,12 +524,18 @@ export function resolveAgentOrDefault(config: Config, id: string | undefined): A
 
   return {
     requestedId,
-    agent: build(config, DEFAULT_AGENT_ID, config.agents.list[DEFAULT_AGENT_ID], IGNORE_WARNINGS),
+    agent: build(
+      config,
+      DEFAULT_AGENT_ID,
+      config.agents.list[DEFAULT_AGENT_ID],
+      IGNORE_WARNINGS,
+    ),
     // An entry under an unusable key reads as `unknown` rather than `disabled`:
     // it is switched on, it just cannot be reached by that name, and telling
     // the operator it is disabled would send them to a toggle that is already
     // in the position they want.
-    miss: entry === undefined || !isAgentId(requestedId) ? 'unknown' : 'disabled',
+    miss:
+      entry === undefined || !isAgentId(requestedId) ? 'unknown' : 'disabled',
   };
 }
 
@@ -585,20 +619,30 @@ export function listAgents(config: Config): readonly EffectiveAgent[] {
  */
 export function pruneDanglingSubagents(config: Config): {
   readonly config: Config;
-  readonly removed: readonly { readonly agentId: string; readonly subagentId: string }[];
+  readonly removed: ReadonlyArray<{
+    readonly agentId: string;
+    readonly subagentId: string;
+  }>;
 } {
-  const removed: { readonly agentId: string; readonly subagentId: string }[] = [];
+  const removed: Array<{
+    readonly agentId: string;
+    readonly subagentId: string;
+  }> = [];
   const list: Record<string, AgentEntry> = {};
 
   for (const [id, entry] of Object.entries(config.agents.list)) {
     const kept = entry.subagents.filter((ref) => {
       // Present-but-disabled survives, so the test is the entry's existence
       // rather than `hasAgent`, which also answers false for a disabled agent.
-      const exists = ref.id === DEFAULT_AGENT_ID || config.agents.list[ref.id] !== undefined;
+      const exists =
+        ref.id === DEFAULT_AGENT_ID || config.agents.list[ref.id] !== undefined;
       if (!exists) removed.push({ agentId: id, subagentId: ref.id });
       return exists;
     });
-    list[id] = kept.length === entry.subagents.length ? entry : { ...entry, subagents: kept };
+    list[id] =
+      kept.length === entry.subagents.length
+        ? entry
+        : { ...entry, subagents: kept };
   }
 
   // The same object back when nothing changed, so a healthy config is not

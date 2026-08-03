@@ -32,7 +32,7 @@ import { ApiError, api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
 import { Button } from '@/components/ui/button.js';
 import { toast } from '@/components/ui/toast.js';
-import { Section, TextField } from './controls.js';
+import { Section, TextField } from '@/components/form/controls.js';
 
 export function AccountPanel(): JSX.Element {
   const { t } = useTranslation();
@@ -40,7 +40,10 @@ export function AccountPanel(): JSX.Element {
 
   // The name in force, which is the only place in the UI it can be read from —
   // it is on the authenticated `/api/auth/me` and nowhere public.
-  const me = useQuery({ queryKey: queryKeys.me, queryFn: ({ signal }) => api.me(signal) });
+  const me = useQuery({
+    queryKey: queryKeys.me,
+    queryFn: ({ signal }) => api.me(signal),
+  });
   const current = me.data?.username ?? DEFAULT_USERNAME;
 
   const [username, setUsername] = useState<string | null>(null);
@@ -106,8 +109,10 @@ export function AccountPanel(): JSX.Element {
           autoComplete="current-password"
           value={currentPassword}
           onValueChange={setCurrentPassword}
-          error={change.error === null ? undefined : errorMessageOf(change.error)}
-          hint="Required. Being signed in on its own is not enough to change the credential it was minted from."
+          error={
+            change.error === null ? undefined : errorMessageOf(change.error)
+          }
+          hint={t('account.currentPasswordHint')}
         />
 
         <TextField
@@ -117,7 +122,11 @@ export function AccountPanel(): JSX.Element {
           autoComplete="new-password"
           value={password}
           onValueChange={setPassword}
-          error={tooShort ? `At least ${String(PASSWORD_MIN_LENGTH)} characters.` : undefined}
+          error={
+            tooShort
+              ? `At least ${String(PASSWORD_MIN_LENGTH)} characters.`
+              : undefined
+          }
           hint={`At least ${String(PASSWORD_MIN_LENGTH)} characters. Behind it is an agent that can read files and run commands on this machine.`}
         />
 

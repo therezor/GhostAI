@@ -27,15 +27,22 @@ import { SUPPORTED_LOCALES } from '@ghostai/i18n';
 import { useAppLocale } from '@/i18n/i18n-context.js';
 import { useSaveSettings } from '@/settings/use-settings.js';
 
-import { DEFAULT_USERNAME, PASSWORD_MIN_LENGTH, type ProviderInfo } from '@ghostai/protocol';
+import {
+  DEFAULT_USERNAME,
+  PASSWORD_MIN_LENGTH,
+  type ProviderInfo,
+} from '@ghostai/protocol';
 
 import { ApiError, api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
 import { Button } from '@/components/ui/button.js';
 import { Field } from '@/components/ui/field.js';
 import { Wordmark } from '@/components/wordmark.js';
-import { SelectField, TextField } from '@/settings/controls.js';
-import { EMPTY_PROVIDER_FORM, toCreateProviderPatch } from '@/settings/provider-form.js';
+import { SelectField, TextField } from '@/components/form/controls.js';
+import {
+  EMPTY_PROVIDER_FORM,
+  toCreateProviderPatch,
+} from '@/settings/provider-form.js';
 import {
   initialStep,
   isSkippable,
@@ -53,7 +60,9 @@ export function SetupOverlay(): JSX.Element | null {
   const [from, setFrom] = useState<SetupStep>('language');
   // Held rather than saved: `config.ui.locale` needs a session, and the language
   // is chosen before there is one. Written once `password` authenticates.
-  const [pendingLocale, setPendingLocale] = useState<string | undefined>(undefined);
+  const [pendingLocale, setPendingLocale] = useState<string | undefined>(
+    undefined,
+  );
   const [instanceId, setInstanceId] = useState('');
   const locale = useAppLocale();
   const { t } = useTranslation();
@@ -108,12 +117,20 @@ export function SetupOverlay(): JSX.Element | null {
   return (
     // Not a Dialog: there is nothing behind it to return focus to, and its
     // "closed" state is a finished setup rather than an Escape key.
-    <div role="dialog" aria-modal="true" aria-labelledby="setup-title" className="setup-overlay">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="setup-title"
+      className="setup-overlay"
+    >
       <div className="stack setup-card">
         <div className="stack setup-card__header">
           <Wordmark className="eyebrow" />
           <p className="setup-card__progress">
-            {t('setup.progress', { current: progress.current, total: progress.total })}
+            {t('setup.progress', {
+              current: progress.current,
+              total: progress.total,
+            })}
           </p>
           <h1 id="setup-title" className="setup-card__title">
             {title}
@@ -143,7 +160,9 @@ export function SetupOverlay(): JSX.Element | null {
               // patch costs the *persistence* of the choice, not the choice —
               // and blocking the wizard on it would strand a claimed install
               // behind a settings write.
-              if (pendingLocale !== undefined) save({ ui: { locale: pendingLocale } });
+              if (pendingLocale !== undefined) {
+                save({ ui: { locale: pendingLocale } });
+              }
               advance();
             }}
           />
@@ -156,7 +175,9 @@ export function SetupOverlay(): JSX.Element | null {
             }}
           />
         )}
-        {step === 'model' && <ModelStep instanceId={instanceId} onDone={advance} />}
+        {step === 'model' && (
+          <ModelStep instanceId={instanceId} onDone={advance} />
+        )}
 
         <div className="row setup-card__actions">
           {back !== null && (
@@ -212,7 +233,10 @@ function LanguageStep({
       <SelectField
         label={t('setup.language')}
         value={value}
-        options={SUPPORTED_LOCALES.map((tag) => ({ value: tag, label: nameOf(tag) }))}
+        options={SUPPORTED_LOCALES.map((tag) => ({
+          value: tag,
+          label: nameOf(tag),
+        }))}
         onValueChange={onChange}
       />
       <Button type="submit">{t('setup.continue')}</Button>
@@ -223,7 +247,9 @@ function LanguageStep({
 /** A language named in its own language — see the note in `appearance-panel.tsx`. */
 function nameOf(locale: string): string {
   try {
-    return new Intl.DisplayNames([locale], { type: 'language' }).of(locale) ?? locale;
+    return (
+      new Intl.DisplayNames([locale], { type: 'language' }).of(locale) ?? locale
+    );
   } catch {
     return locale;
   }
@@ -259,16 +285,24 @@ function CodeStep({ onDone }: { readonly onDone: () => void }): JSX.Element {
           setCode(event.target.value);
         }}
         error={messageOf(claim.error, 'Incorrect or already-used setup code.')}
-        hint="Dashes and capitals are optional."
+        hint={t('setup.codeHint')}
       />
-      <Button type="submit" variant="primary" disabled={claim.isPending || code.trim() === ''}>
+      <Button
+        type="submit"
+        variant="primary"
+        disabled={claim.isPending || code.trim() === ''}
+      >
         {claim.isPending ? 'Checking…' : 'Continue'}
       </Button>
     </form>
   );
 }
 
-function PasswordStep({ onDone }: { readonly onDone: () => void }): JSX.Element {
+function PasswordStep({
+  onDone,
+}: {
+  readonly onDone: () => void;
+}): JSX.Element {
   const { t } = useTranslation();
   // Prefilled and editable rather than asked for. Naming the account is not a
   // decision a first run should have to stop for, and an empty field here would
@@ -278,7 +312,8 @@ function PasswordStep({ onDone }: { readonly onDone: () => void }): JSX.Element 
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const set = useMutation({
-    mutationFn: (value: { username: string; password: string }) => api.setSetupPassword(value),
+    mutationFn: (value: { username: string; password: string }) =>
+      api.setSetupPassword(value),
     onSuccess: onDone,
   });
 
@@ -308,7 +343,7 @@ function PasswordStep({ onDone }: { readonly onDone: () => void }): JSX.Element 
         onChange={(event) => {
           setUsername(event.target.value);
         }}
-        hint="Signing in takes this and the password below."
+        hint={t('setup.usernameHint')}
       />
       <Field
         label={t('setup.password')}
@@ -341,7 +376,11 @@ function PasswordStep({ onDone }: { readonly onDone: () => void }): JSX.Element 
         variant="primary"
         // The length is checked here as well as on the server, so the wizard
         // answers instantly instead of round-tripping to be told the rule.
-        disabled={set.isPending || password.length < PASSWORD_MIN_LENGTH || username.trim() === ''}
+        disabled={
+          set.isPending ||
+          password.length < PASSWORD_MIN_LENGTH ||
+          username.trim() === ''
+        }
       >
         {set.isPending ? 'Saving…' : 'Continue'}
       </Button>
@@ -349,7 +388,11 @@ function PasswordStep({ onDone }: { readonly onDone: () => void }): JSX.Element 
   );
 }
 
-function ProviderStep({ onDone }: { readonly onDone: (instanceId: string) => void }): JSX.Element {
+function ProviderStep({
+  onDone,
+}: {
+  readonly onDone: (instanceId: string) => void;
+}): JSX.Element {
   const { t } = useTranslation();
   const [type, setType] = useState('');
   const [apiBase, setApiBase] = useState('');
@@ -371,19 +414,29 @@ function ProviderStep({ onDone }: { readonly onDone: (instanceId: string) => voi
       // patch. An empty `apiBase` is read as "unset" and falls back to the
       // registry's default.
       await api.patchSettings(
-        toCreateProviderPatch(id, { ...EMPTY_PROVIDER_FORM, type: chosen.id, apiBase }),
+        toCreateProviderPatch(id, {
+          ...EMPTY_PROVIDER_FORM,
+          type: chosen.id,
+          apiBase,
+        }),
       );
       // After the instance exists, because the vault is keyed by instance id.
       const trimmedKey = key.trim();
       if (trimmedKey !== '') {
-        await api.setCredential({ namespace: 'providers', key: id, value: trimmedKey });
+        await api.setCredential({
+          namespace: 'providers',
+          key: id,
+          value: trimmedKey,
+        });
       }
       return id;
     },
     onSuccess: onDone,
   });
 
-  const chosen = providers.data?.types.find((candidate) => candidate.id === type);
+  const chosen = providers.data?.types.find(
+    (candidate) => candidate.id === type,
+  );
 
   return (
     <div className="stack setup-card__body">
@@ -413,7 +466,7 @@ function ProviderStep({ onDone }: { readonly onDone: (instanceId: string) => voi
             placeholder={chosen.defaultApiBase ?? 'Required for this provider'}
             spellCheck={false}
             onValueChange={setApiBase}
-            hint="Empty uses the default shown above."
+            hint={t('setup.apiBaseHint')}
           />
           <TextField
             label={chosen.isLocal ? 'API token (optional)' : 'API key'}
@@ -533,6 +586,8 @@ function ModelStep({
 function messageOf(error: unknown, fallback: string): string | undefined {
   if (error === null || error === undefined) return undefined;
   if (!(error instanceof ApiError)) return 'Could not reach the server.';
-  if (error.status === 429) return 'Too many attempts. Wait a minute and try again.';
+  if (error.status === 429) {
+    return 'Too many attempts. Wait a minute and try again.';
+  }
   return error.status === 401 ? fallback : error.message;
 }

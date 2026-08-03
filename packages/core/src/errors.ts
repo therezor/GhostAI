@@ -119,8 +119,15 @@ export class GhostError extends Error {
   readonly messageKey: SharedMessageKey | undefined;
   readonly messageParams: Readonly<Record<string, string | number>> | undefined;
 
-  constructor(kind: ErrorKind, message: string, options: GhostErrorOptions = {}) {
-    super(message, options.cause === undefined ? undefined : { cause: options.cause });
+  constructor(
+    kind: ErrorKind,
+    message: string,
+    options: GhostErrorOptions = {},
+  ) {
+    super(
+      message,
+      options.cause === undefined ? undefined : { cause: options.cause },
+    );
     this.kind = kind;
     this.retryable = options.retryable ?? RETRYABLE_BY_KIND[kind];
     this.details = options.details ?? {};
@@ -139,7 +146,10 @@ export class GhostError extends Error {
 export function isGhostError(value: unknown): value is GhostError {
   if (!(value instanceof Error)) return false;
   const kind: unknown = (value as { kind?: unknown }).kind;
-  return typeof kind === 'string' && (ERROR_KINDS as readonly string[]).includes(kind);
+  return (
+    typeof kind === 'string' &&
+    (ERROR_KINDS as readonly string[]).includes(kind)
+  );
 }
 
 /**
@@ -162,18 +172,84 @@ export function isAbortError(value: unknown): boolean {
  * Already-typed errors pass through untouched, so re-normalising at each layer
  * of a call stack cannot degrade a precise kind into `internal`.
  */
-export function toGhostError(value: unknown, fallbackKind: ErrorKind = 'internal'): GhostError {
+export function toGhostError(
+  value: unknown,
+  fallbackKind: ErrorKind = 'internal',
+): GhostError {
   if (isGhostError(value)) return value;
-  if (isAbortError(value)) return new GhostError('aborted', 'Operation aborted', { cause: value });
+  if (isAbortError(value)) {
+    return new GhostError('aborted', 'Operation aborted', { cause: value });
+  }
   if (value instanceof Error) {
     return new GhostError(fallbackKind, value.message, { cause: value });
   }
-  return new GhostError(fallbackKind, typeof value === 'string' ? value : String(value), {
-    cause: value,
-  });
+  return new GhostError(
+    fallbackKind,
+    typeof value === 'string' ? value : String(value),
+    {
+      cause: value,
+    },
+  );
 }
 
 /** Constructs an `aborted` error. The one kind produced from many places. */
 export function abortedError(what: string): GhostError {
   return new GhostError('aborted', `${what} aborted`);
+}
+
+/**
+ * The `errno` string on a Node system error, if that is what this is.
+ *
+ * Node types `code` as `string` on `ErrnoException`, but a `catch` binds
+ * `unknown` and the value may be anything a throw site chose — so the narrowing
+ * is the point, and it belongs in one place rather than beside each caller that
+ * wants to tell `ENOENT` from a real failure.
+ */
+export function errnoOf(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null) return undefined;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' ? code : undefined;
+}
+
+/** A listener that can be taken off the signal it was put on. */
+export interface AbortSubscription {
+  dispose(): void;
+}
+
+/**
+ * Runs `onAbort` when the signal fires, and hands back a way to stop listening.
+ *
+ * Two lines of it are load-bearing and both were rediscovered independently in
+ * `@ghostai/agent` and `@ghostai/tools`, each with a comment explaining it:
+ *
+ *  - **An already-aborted signal never fires `abort` again.** A watcher without
+ *    the check waits out its full deadline on a turn that was cancelled a
+ *    moment earlier.
+ *  - **The listener has to come off.** One turn can make dozens of tool calls
+ *    against a signal that lives as long as the request, and a listener left
+ *    behind per call is an accumulating leak on a long-lived object.
+ *
+ * Deliberately not a promise. The two callers want opposite things from one —
+ * the agent loop resolves with `'aborted'` so a race can report a cancellation,
+ * the tool registry rejects so a call unwinds — and a helper that picked one
+ * would leave the other writing this out anyway. Subscribing is the part that
+ * is the same.
+ */
+export function onAbort(
+  signal: AbortSignal,
+  run: () => void,
+): AbortSubscription {
+  if (signal.aborted) {
+    run();
+    return { dispose: () => undefined };
+  }
+  const listener = (): void => {
+    run();
+  };
+  signal.addEventListener('abort', listener, { once: true });
+  return {
+    dispose: () => {
+      signal.removeEventListener('abort', listener);
+    },
+  };
 }

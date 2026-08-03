@@ -25,8 +25,12 @@ const schema = z.strictObject({
   path: z
     .string()
     .min(1)
-    .describe('File to write. Rooted at the workspace. Parent directories are created.'),
-  content: z.string().describe('Full new contents of the file. Existing contents are replaced.'),
+    .describe(
+      'File to write. Rooted at the workspace. Parent directories are created.',
+    ),
+  content: z
+    .string()
+    .describe('Full new contents of the file. Existing contents are replaced.'),
 });
 
 export const writeFileTool: AnyTool = defineTool({
@@ -35,7 +39,11 @@ export const writeFileTool: AnyTool = defineTool({
     'Write a UTF-8 text file in the workspace, replacing it if it exists. The workspace is the root: "/x" and "../x" both resolve inside it, never outside. Use edit_file to change part of an existing file.',
   schema,
   risk: 'write',
-  annotations: { title: 'Write file', readOnlyHint: false, idempotentHint: true },
+  annotations: {
+    title: 'Write file',
+    readOnlyHint: false,
+    idempotentHint: true,
+  },
   async execute(args, context) {
     assertNotAborted(context.signal, 'write_file');
     const accepted = context.jail.accept(args.path);
@@ -47,7 +55,10 @@ export const writeFileTool: AnyTool = defineTool({
       await mkdir(dirname(accepted.path), { recursive: true });
       // `signal` is passed as well as checked: a large write cancelled midway is
       // better than one that completes after the turn it belonged to has ended.
-      await writeFile(accepted.path, args.content, { encoding: 'utf8', signal: context.signal });
+      await writeFile(accepted.path, args.content, {
+        encoding: 'utf8',
+        signal: context.signal,
+      });
     } catch (error) {
       throw fsFailure(error, where, note);
     }

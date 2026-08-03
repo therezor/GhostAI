@@ -20,7 +20,14 @@
     // nothing to declare, there is nothing for it to protect.
     "isolatedDeclarations": false,
 
-    "rootDir": "./src",
+    // `.` rather than `./src`, because `test/` is checked by this project too
+    // — the only package where that is true. Everywhere else the tests get a
+    // `test/tsconfig.json` of their own, to keep them out of `rootDir` and so
+    // out of the emitted `dist`. Here there is no emit to keep them out of, and
+    // a separate project could not reference this one anyway: `tsc -b` refuses
+    // a reference to a project that sets `noEmit` (TS6310), since a reference
+    // is a promise of declarations.
+    "rootDir": ".",
 
     // `@/` for anything outside the current directory. The repo bans
     // `../../*` imports because that is how one package reaches into another's
@@ -29,8 +36,9 @@
     // instead of loosening the rule that catches the real thing.
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@testkit/*": ["./test/testkit/*"]
     }
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "test/**/*"]
 }

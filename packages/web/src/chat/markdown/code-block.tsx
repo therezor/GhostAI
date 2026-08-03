@@ -36,7 +36,11 @@ export interface CodeBlockProps {
   readonly complete: boolean;
 }
 
-export function CodeBlock({ code, lang, complete }: CodeBlockProps): JSX.Element {
+export function CodeBlock({
+  code,
+  lang,
+  complete,
+}: CodeBlockProps): JSX.Element {
   const { resolved } = useAppTheme();
   const [lines, setLines] = useState<HighlightedLines | undefined>(undefined);
 

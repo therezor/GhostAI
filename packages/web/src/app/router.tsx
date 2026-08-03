@@ -24,13 +24,19 @@ import { Shell } from './shell.js';
 import { ChatRoute } from '@/routes/chat.js';
 import { AgentCreateRoute, AgentEditorRoute } from '@/agents/agent-editor.js';
 import { AgentsRoute } from '@/agents/agents-page.js';
-import { ProviderCreateRoute, ProviderEditorRoute } from '@/settings/provider-editor.js';
+import {
+  ProviderCreateRoute,
+  ProviderEditorRoute,
+} from '@/settings/provider-editor.js';
 import { AutomationRoute } from '@/automation/automation-page.js';
 import { JobCreateRoute, JobEditorRoute } from '@/automation/job-editor.js';
 import { FilesRoute } from '@/routes/files.js';
 import { SessionsRoute } from '@/sessions/sessions-page.js';
 import { WorkspacesRoute } from '@/routes/workspaces.js';
-import { WorkspaceCreateRoute, WorkspaceEditorRoute } from '@/workspaces/workspace-editor.js';
+import {
+  WorkspaceCreateRoute,
+  WorkspaceEditorRoute,
+} from '@/workspaces/workspace-editor.js';
 import { NotificationsRoute } from '@/routes/notifications.js';
 import { SettingsRoute } from '@/routes/settings.js';
 import { TokensRoute } from '@/routes/tokens.js';

@@ -25,7 +25,13 @@ import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import swagger from '@fastify/swagger';
 import websocket from '@fastify/websocket';
-import { GhostError, silentLogger, systemClock, type Clock, type Logger } from '@ghostai/core';
+import {
+  GhostError,
+  silentLogger,
+  systemClock,
+  type Clock,
+  type Logger,
+} from '@ghostai/core';
 import type { Config } from '@ghostai/protocol';
 import type { RandomSource } from '@ghostai/security';
 import Fastify, {
@@ -203,10 +209,15 @@ async function registerUi(app: FastifyInstance, ui: UiOptions): Promise<void> {
 }
 
 /** The fallback itself, installed into the one not-found handler. */
-function spaFallback(ui: UiOptions): (request: FastifyRequest, reply: FastifyReply) => boolean {
+function spaFallback(
+  ui: UiOptions,
+): (request: FastifyRequest, reply: FastifyReply) => boolean {
   const index = ui.index ?? 'index.html';
   return (request, reply) => {
-    if (request.method !== 'GET' || API_PREFIXES.some((prefix) => request.url.startsWith(prefix))) {
+    if (
+      request.method !== 'GET' ||
+      API_PREFIXES.some((prefix) => request.url.startsWith(prefix))
+    ) {
       return false;
     }
     void reply.sendFile(index);
@@ -218,7 +229,9 @@ function spaFallback(ui: UiOptions): (request: FastifyRequest, reply: FastifyRep
  * Builds the server. Throws rather than starting on a configuration that must
  * not be served — see `assertBootPolicy`.
  */
-export async function createServer(options: ServerOptions): Promise<GhostServer> {
+export async function createServer(
+  options: ServerOptions,
+): Promise<GhostServer> {
   const { config, database } = options;
   // Annotated as Fastify's own logger interface rather than pino's. Passing a
   // `pino.Logger` narrows the instance's logger type parameter, and every
@@ -287,9 +300,13 @@ export async function createServer(options: ServerOptions): Promise<GhostServer>
   // It is a catch-all, so it only ever sees a content type no other parser
   // claimed — and the global `bodyLimit` still applies to every route that did
   // not raise its own.
-  app.addContentTypeParser('*', { parseAs: 'buffer' }, (_request, body, done) => {
-    done(null, body);
-  });
+  app.addContentTypeParser(
+    '*',
+    { parseAs: 'buffer' },
+    (request, body, done) => {
+      done(null, body);
+    },
+  );
 
   await app.register(cookie);
 
@@ -310,7 +327,7 @@ export async function createServer(options: ServerOptions): Promise<GhostServer>
     // a plain body object arrives at the error handler as an unrecognised
     // value and becomes a 500. An `HttpError` carries the status and the code
     // through to the one place a response body is built.
-    errorResponseBuilder: (_request, context) =>
+    errorResponseBuilder: (request, context) =>
       new HttpError(
         429,
         'rate_limited',
@@ -381,7 +398,9 @@ export async function createServer(options: ServerOptions): Promise<GhostServer>
     database,
     openapiDocument: () => app.swagger(),
     startedAt: clock.monotonic(),
-    ...(options.scheduler === undefined ? {} : { scheduler: options.scheduler }),
+    ...(options.scheduler === undefined
+      ? {}
+      : { scheduler: options.scheduler }),
     ...(options.clock === undefined ? {} : { clock: options.clock }),
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   });
@@ -405,7 +424,10 @@ export async function createServer(options: ServerOptions): Promise<GhostServer>
         // means in OpenAPI. A `signed` route lists neither: its credential is
         // the path, and a document that named a scheme here would tell a client
         // to attach one that is not accepted.
-        security: spec.auth === 'required' ? [{ cookieAuth: [] }, { bearerAuth: [] }] : [],
+        security:
+          spec.auth === 'required'
+            ? [{ cookieAuth: [] }, { bearerAuth: [] }]
+            : [],
       },
       ...(hook === undefined ? {} : { onRequest: hook }),
       ...(route.wsHandler === undefined ? {} : { wsHandler: route.wsHandler }),
@@ -414,7 +436,10 @@ export async function createServer(options: ServerOptions): Promise<GhostServer>
         ? {}
         : {
             config: {
-              rateLimit: { max: route.rateLimit.max, timeWindow: route.rateLimit.timeWindowMs },
+              rateLimit: {
+                max: route.rateLimit.max,
+                timeWindow: route.rateLimit.timeWindowMs,
+              },
             },
           }),
       handler: route.handler,

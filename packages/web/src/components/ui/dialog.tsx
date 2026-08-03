@@ -31,7 +31,9 @@ export function DialogContent({
   children,
   showClose = true,
   ...props
-}: ComponentProps<typeof DialogPrimitive.Content> & { readonly showClose?: boolean }): JSX.Element {
+}: ComponentProps<typeof DialogPrimitive.Content> & {
+  readonly showClose?: boolean;
+}): JSX.Element {
   const { t } = useTranslation();
   return (
     <DialogPrimitive.Portal>
@@ -39,7 +41,10 @@ export function DialogContent({
       <DialogPrimitive.Content className={cn('dialog', className)} {...props}>
         {children}
         {showClose && (
-          <DialogPrimitive.Close aria-label={t('common.close')} className="dialog__close">
+          <DialogPrimitive.Close
+            aria-label={t('common.close')}
+            className="dialog__close"
+          >
             <X />
           </DialogPrimitive.Close>
         )}
@@ -48,11 +53,17 @@ export function DialogContent({
   );
 }
 
-export function DialogHeader({ className, ...props }: ComponentProps<'div'>): JSX.Element {
+export function DialogHeader({
+  className,
+  ...props
+}: ComponentProps<'div'>): JSX.Element {
   return <div className={cn('stack dialog__header', className)} {...props} />;
 }
 
-export function DialogFooter({ className, ...props }: ComponentProps<'div'>): JSX.Element {
+export function DialogFooter({
+  className,
+  ...props
+}: ComponentProps<'div'>): JSX.Element {
   return <div className={cn('dialog__footer', className)} {...props} />;
 }
 
@@ -60,7 +71,12 @@ export function DialogHeading({
   className,
   ...props
 }: ComponentProps<typeof DialogPrimitive.Title>): JSX.Element {
-  return <DialogPrimitive.Title className={cn('dialog__title', className)} {...props} />;
+  return (
+    <DialogPrimitive.Title
+      className={cn('dialog__title', className)}
+      {...props}
+    />
+  );
 }
 
 export function DialogSubheading({
@@ -68,6 +84,9 @@ export function DialogSubheading({
   ...props
 }: ComponentProps<typeof DialogPrimitive.Description>): JSX.Element {
   return (
-    <DialogPrimitive.Description className={cn('dialog__description', className)} {...props} />
+    <DialogPrimitive.Description
+      className={cn('dialog__description', className)}
+      {...props}
+    />
   );
 }

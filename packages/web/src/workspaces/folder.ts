@@ -35,6 +35,10 @@ import type { WorkspaceSummary } from '@ghostai/protocol';
 export const WORKSPACE_ROOT_PATH = '/';
 
 /** `/` for the default; `/<folder>` for every other one. */
-export function folderLabel(workspace: Pick<WorkspaceSummary, 'id' | 'isDefault'>): string {
-  return workspace.isDefault ? WORKSPACE_ROOT_PATH : `${WORKSPACE_ROOT_PATH}${workspace.id}`;
+export function folderLabel(
+  workspace: Pick<WorkspaceSummary, 'id' | 'isDefault'>,
+): string {
+  return workspace.isDefault
+    ? WORKSPACE_ROOT_PATH
+    : `${WORKSPACE_ROOT_PATH}${workspace.id}`;
 }

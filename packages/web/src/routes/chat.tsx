@@ -35,6 +35,7 @@ import {
   stopTurn,
 } from '@/lib/connection.js';
 import { queryKeys } from '@/lib/query.js';
+import { useTranslation } from 'react-i18next';
 import { useTurnStore } from '@/state/turn.js';
 import { toast } from '@/components/ui/toast.js';
 import { AgentPicker } from '@/agents/agent-picker.js';
@@ -46,6 +47,7 @@ import { TranscriptView } from '@/chat/transcript-view.js';
 import { Welcome } from '@/chat/welcome.js';
 
 export function ChatRoute(): JSX.Element {
+  const { t } = useTranslation();
   const { session } = useSearch({ from: '/' });
   const navigate = useNavigate();
   // What the picker in the composer is showing. Carried on the message so a
@@ -69,7 +71,8 @@ export function ChatRoute(): JSX.Element {
    * to the hub's queue.
    */
   const branch = useMutation({
-    mutationFn: ({ key, seq }: { key: string; seq: number }) => api.branchSession(key, seq),
+    mutationFn: ({ key, seq }: { key: string; seq: number }) =>
+      api.branchSession(key, seq),
     onSuccess: (fork) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
       void navigate({ to: '/', search: { session: fork.key } });
@@ -90,7 +93,9 @@ export function ChatRoute(): JSX.Element {
         regenerateTurn(action.seq);
         return;
       case 'branch':
-        if (sessionKey !== undefined) branch.mutate({ key: sessionKey, seq: action.seq });
+        if (sessionKey !== undefined) {
+          branch.mutate({ key: sessionKey, seq: action.seq });
+        }
         return;
     }
   }
@@ -174,11 +179,15 @@ export function ChatRoute(): JSX.Element {
           tests. The route is where a route knows how to be navigated to. */}
       {status.data?.configured === false && (
         <p role="status" className="chat__setup-notice">
-          No model is configured yet.{' '}
+          {/* Three keys rather than one, because the sentence has a link in the
+              middle of it. `Trans` would keep it whole and is the better answer
+              if a second sentence ever needs this — it is not worth introducing
+              the pattern, and teaching the extractor about it, for one. */}
+          {t('chat.noModelBefore')}{' '}
           <Link to="/settings" search={{ panel: 'providers' }}>
-            Add a provider
+            {t('chat.noModelLink')}
           </Link>{' '}
-          to start a session.
+          {t('chat.noModelAfter')}
         </p>
       )}
 
@@ -190,7 +199,9 @@ export function ChatRoute(): JSX.Element {
         // beside it as a badge, which put the word `web` under almost every
         // message box and said nothing — the same reason the list does not badge
         // it either (`sessions-page.tsx`). It reads from the turn details now.
-        lead={<AgentPicker {...(sessionKey === undefined ? {} : { sessionKey })} />}
+        lead={
+          <AgentPicker {...(sessionKey === undefined ? {} : { sessionKey })} />
+        }
         // The line under the box is the budget's now: it is the one thing there
         // that changes, and it used to share the row with a keyboard hint that
         // never did. See `composer.tsx`.
@@ -209,7 +220,11 @@ export function ChatRoute(): JSX.Element {
           // or a shared link lands on the same conversation. `replace`, because
           // sending a message is not a navigation the back button should undo.
           if (session === undefined && sessionKey !== undefined) {
-            void navigate({ to: '/', search: { session: sessionKey }, replace: true });
+            void navigate({
+              to: '/',
+              search: { session: sessionKey },
+              replace: true,
+            });
           }
         }}
       />

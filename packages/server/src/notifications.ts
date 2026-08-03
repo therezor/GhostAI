@@ -21,9 +21,9 @@
  *    wrong, and it is also the case this table exists for.
  */
 
-import type { DatabaseSync, SQLOutputValue, StatementSync } from 'node:sqlite';
+import type { DatabaseSync, StatementSync } from 'node:sqlite';
 
-import { GhostError, systemClock, type Clock } from '@ghostai/core';
+import { rowReader, systemClock, type Clock, type Row } from '@ghostai/core';
 import { newUuid, type Notification } from '@ghostai/protocol';
 
 import type { NotificationCursor } from './cursor.js';
@@ -45,7 +45,12 @@ CREATE INDEX IF NOT EXISTS notifications_unread ON notifications(created_at_ms D
 `;
 
 /** Every level the protocol's `Notification` allows. */
-const LEVELS: ReadonlySet<string> = new Set(['info', 'success', 'warning', 'error']);
+const LEVELS: ReadonlySet<string> = new Set([
+  'info',
+  'success',
+  'warning',
+  'error',
+]);
 
 export interface NotificationStoreOptions {
   /** Shared with `SessionStore` and `AuthStore`: one file, one WAL. */
@@ -75,32 +80,7 @@ export interface ListNotificationsOptions {
   readonly unreadOnly?: boolean;
 }
 
-type Row = Record<string, SQLOutputValue>;
-
-function readInt(row: Row, column: string): number {
-  const value = row[column];
-  if (typeof value === 'number') return value;
-  if (typeof value === 'bigint') return Number(value);
-  throw new GhostError('storage', `Expected an integer in notifications.${column}`);
-}
-
-function readOptionalInt(row: Row, column: string): number | undefined {
-  const value = row[column];
-  if (typeof value === 'number') return value;
-  if (typeof value === 'bigint') return Number(value);
-  return undefined;
-}
-
-function readString(row: Row, column: string): string {
-  const value = row[column];
-  if (typeof value === 'string') return value;
-  throw new GhostError('storage', `Expected text in notifications.${column}`);
-}
-
-function readOptionalString(row: Row, column: string): string | undefined {
-  const value = row[column];
-  return typeof value === 'string' ? value : undefined;
-}
+const read = rowReader('notifications');
 
 /**
  * A level written by something that predates a level being added, or by a
@@ -108,20 +88,20 @@ function readOptionalString(row: Row, column: string): string | undefined {
  * bad row making the whole notification list unreadable.
  */
 function readLevel(row: Row): Notification['level'] {
-  const value = readString(row, 'level');
+  const value = read.string(row, 'level');
   return LEVELS.has(value) ? (value as Notification['level']) : 'info';
 }
 
 function rowToNotification(row: Row): Notification {
-  const readAtMs = readOptionalInt(row, 'read_at_ms');
-  const sessionKey = readOptionalString(row, 'session_key');
-  const jobId = readOptionalString(row, 'job_id');
+  const readAtMs = read.optionalInt(row, 'read_at_ms');
+  const sessionKey = read.optionalString(row, 'session_key');
+  const jobId = read.optionalString(row, 'job_id');
   return {
-    id: readString(row, 'id'),
-    title: readString(row, 'title'),
-    body: readString(row, 'body'),
+    id: read.string(row, 'id'),
+    title: read.string(row, 'title'),
+    body: read.string(row, 'body'),
     level: readLevel(row),
-    createdAtMs: readInt(row, 'created_at_ms'),
+    createdAtMs: read.int(row, 'created_at_ms'),
     ...(readAtMs === undefined ? {} : { readAtMs }),
     ...(sessionKey === undefined ? {} : { sessionKey }),
     ...(jobId === undefined ? {} : { jobId }),
@@ -129,38 +109,40 @@ function rowToNotification(row: Row): Notification {
 }
 
 export class NotificationStore {
-  readonly #db: DatabaseSync;
-  readonly #clock: Clock;
-  readonly #newId: () => string;
-  readonly #statements = new Map<string, StatementSync>();
+  private readonly db: DatabaseSync;
+  private readonly clock: Clock;
+  private readonly newId: () => string;
+  private readonly statements = new Map<string, StatementSync>();
 
   constructor(options: NotificationStoreOptions) {
-    this.#db = options.database;
-    this.#clock = options.clock ?? systemClock;
-    this.#newId = options.newId ?? newUuid;
-    this.#db.exec(SCHEMA);
+    this.db = options.database;
+    this.clock = options.clock ?? systemClock;
+    this.newId = options.newId ?? newUuid;
+    this.db.exec(SCHEMA);
   }
 
-  #stmt(sql: string): StatementSync {
-    const cached = this.#statements.get(sql);
+  private stmt(sql: string): StatementSync {
+    const cached = this.statements.get(sql);
     if (cached !== undefined) return cached;
-    const prepared = this.#db.prepare(sql);
-    this.#statements.set(sql, prepared);
+    const prepared = this.db.prepare(sql);
+    this.statements.set(sql, prepared);
     return prepared;
   }
 
   create(input: CreateNotificationInput): Notification {
     const notification: Notification = {
-      id: this.#newId(),
+      id: this.newId(),
       title: input.title,
       body: input.body ?? '',
       level: input.level ?? 'info',
-      createdAtMs: this.#clock.now(),
-      ...(input.sessionKey === undefined ? {} : { sessionKey: input.sessionKey }),
+      createdAtMs: this.clock.now(),
+      ...(input.sessionKey === undefined
+        ? {}
+        : { sessionKey: input.sessionKey }),
       ...(input.jobId === undefined ? {} : { jobId: input.jobId }),
     };
 
-    this.#stmt(
+    this.stmt(
       `INSERT INTO notifications (id, title, body, level, created_at_ms, read_at_ms, session_key, job_id)
        VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`,
     ).run(
@@ -177,7 +159,7 @@ export class NotificationStore {
   }
 
   get(id: string): Notification | undefined {
-    const row = this.#stmt('SELECT * FROM notifications WHERE id = ?').get(id);
+    const row = this.stmt('SELECT * FROM notifications WHERE id = ?').get(id);
     return row === undefined ? undefined : rowToNotification(row);
   }
 
@@ -191,7 +173,7 @@ export class NotificationStore {
    */
   list(options: ListNotificationsOptions = {}): Notification[] {
     const { limit = 50, offset = 0, after, unreadOnly = false } = options;
-    const rows = this.#stmt(
+    const rows = this.stmt(
       `SELECT * FROM notifications
         WHERE (? = 0 OR read_at_ms IS NULL)
           AND (? IS NULL
@@ -220,17 +202,17 @@ export class NotificationStore {
    * function wrapping it would be indirection protecting nothing.
    */
   count(options: { readonly unreadOnly?: boolean } = {}): number {
-    const row = this.#stmt(
+    const row = this.stmt(
       'SELECT COUNT(*) AS n FROM notifications WHERE (? = 0 OR read_at_ms IS NULL)',
     ).get(options.unreadOnly === true ? 1 : 0);
-    return row === undefined ? 0 : readInt(row, 'n');
+    return row === undefined ? 0 : read.int(row, 'n');
   }
 
   unreadCount(): number {
-    const row = this.#stmt(
+    const row = this.stmt(
       'SELECT COUNT(*) AS n FROM notifications WHERE read_at_ms IS NULL',
     ).get();
-    return row === undefined ? 0 : readInt(row, 'n');
+    return row === undefined ? 0 : read.int(row, 'n');
   }
 
   /**
@@ -241,24 +223,27 @@ export class NotificationStore {
    * the last time a tab was refreshed.
    */
   markRead(id: string): Notification | undefined {
-    this.#stmt('UPDATE notifications SET read_at_ms = ? WHERE id = ? AND read_at_ms IS NULL').run(
-      this.#clock.now(),
-      id,
-    );
+    this.stmt(
+      'UPDATE notifications SET read_at_ms = ? WHERE id = ? AND read_at_ms IS NULL',
+    ).run(this.clock.now(), id);
     return this.get(id);
   }
 
   /** Marks everything unread as read. Returns how many rows changed. */
   markAllRead(): number {
     return Number(
-      this.#stmt('UPDATE notifications SET read_at_ms = ? WHERE read_at_ms IS NULL').run(
-        this.#clock.now(),
-      ).changes,
+      this.stmt(
+        'UPDATE notifications SET read_at_ms = ? WHERE read_at_ms IS NULL',
+      ).run(this.clock.now()).changes,
     );
   }
 
   delete(id: string): boolean {
-    return Number(this.#stmt('DELETE FROM notifications WHERE id = ?').run(id).changes) > 0;
+    return (
+      Number(
+        this.stmt('DELETE FROM notifications WHERE id = ?').run(id).changes,
+      ) > 0
+    );
   }
 
   /**
@@ -270,6 +255,6 @@ export class NotificationStore {
    * The route in front of it is what asks first.
    */
   deleteAll(): number {
-    return Number(this.#stmt('DELETE FROM notifications').run().changes);
+    return Number(this.stmt('DELETE FROM notifications').run().changes);
   }
 }

@@ -20,7 +20,12 @@
  * seqs, so the number in `/edit 12` is one that was read rather than counted.
  */
 
-import { GhostError, textOf, type SessionStore, type StoredMessageRecord } from '@ghostai/core';
+import {
+  GhostError,
+  textOf,
+  type SessionStore,
+  type StoredMessageRecord,
+} from '@ghostai/core';
 
 /** How many rows `/messages` prints when no count is given. */
 export const DEFAULT_MESSAGE_LINES = 12;
@@ -44,17 +49,28 @@ export function resolveSeq(
   const raw = trimmed === '' ? -1 : Number(trimmed);
 
   if (!Number.isInteger(raw) || raw === 0) {
-    throw new GhostError('invalid_input', `Not a message reference: ${trimmed}`, {
-      details: { ref: trimmed },
-    });
+    throw new GhostError(
+      'invalid_input',
+      `Not a message reference: ${trimmed}`,
+      {
+        details: { ref: trimmed },
+      },
+    );
   }
 
   if (raw > 0) {
-    const [record] = store.messages(sessionKey, { afterSeq: raw - 1, beforeSeq: raw + 1 });
+    const [record] = store.messages(sessionKey, {
+      afterSeq: raw - 1,
+      beforeSeq: raw + 1,
+    });
     if (record === undefined) {
-      throw new GhostError('not_found', `No message ${String(raw)} in this session`, {
-        details: { seq: raw },
-      });
+      throw new GhostError(
+        'not_found',
+        `No message ${String(raw)} in this session`,
+        {
+          details: { seq: raw },
+        },
+      );
     }
     return raw;
   }

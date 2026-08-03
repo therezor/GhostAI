@@ -71,7 +71,9 @@ export function subagentRunsOf(
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
 
   const runs: Record<string, SubagentRunRef> = {};
-  for (const [callId, value] of Object.entries(raw as Record<string, unknown>)) {
+  for (const [callId, value] of Object.entries(
+    raw as Record<string, unknown>,
+  )) {
     if (typeof value !== 'object' || value === null) continue;
     const { sessionKey, agentId, label } = value as Record<string, unknown>;
     if (typeof sessionKey !== 'string' || sessionKey === '') continue;
@@ -92,7 +94,10 @@ export function withSubagentRun(
 ): Readonly<Record<string, unknown>> {
   return {
     ...metadata,
-    [SUBAGENT_RUNS_METADATA_KEY]: { ...subagentRunsOf(metadata), [callId]: run },
+    [SUBAGENT_RUNS_METADATA_KEY]: {
+      ...subagentRunsOf(metadata),
+      [callId]: run,
+    },
   };
 }
 

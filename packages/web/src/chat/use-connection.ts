@@ -64,11 +64,15 @@ export function useConnection(sessionKey: string | undefined): void {
           case 'turn.end':
             // Unscoped: `['sessions']` is the prefix every workspace-scoped key
             // starts with, so one invalidation refreshes whichever is showing.
-            void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.sessions(),
+            });
             return;
 
           case 'notification':
-            void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.notifications,
+            });
             // The badge is the record; the toast is for the one that arrives
             // while the user is looking at something else.
             toast({
@@ -85,7 +89,9 @@ export function useConnection(sessionKey: string | undefined): void {
             void queryClient.invalidateQueries({
               queryKey: queryKeys.messages(message.sessionKey),
             });
-            void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.sessions(),
+            });
             return;
 
           case 'tools.changed':

@@ -87,7 +87,10 @@ export function WorkspaceSwitcher({
                 to be here was saying what the label above now says, and a
                 control with an icon at both ends reads as a button rather than
                 as the picker it is. */}
-            <ChevronDown className="workspace-switcher__caret" aria-hidden="true" />
+            <ChevronDown
+              className="workspace-switcher__caret"
+              aria-hidden="true"
+            />
           </Button>
         </DropdownMenuTrigger>
 
@@ -103,7 +106,9 @@ export function WorkspaceSwitcher({
               <DropdownMenuRadioItem key={workspace.id} value={workspace.id}>
                 <span className="truncate">{workspace.name}</span>
                 {workspace.isDefault && (
-                  <span className="workspace-switcher__hint">holds the others</span>
+                  <span className="workspace-switcher__hint">
+                    holds the others
+                  </span>
                 )}
               </DropdownMenuRadioItem>
             ))}

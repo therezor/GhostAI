@@ -64,7 +64,10 @@
       "name": "python3",
       "use": "Run Python, for anything the other commands cannot express.",
       "args": "-c and a program, or a script path. requests, lxml, beautifulsoup4, trafilatura, python-docx, openpyxl, python-pptx and Pillow are installed.",
-      "example": ["-c", "import requests; print(requests.get('https://example.com').status_code)"],
+      "example": [
+        "-c",
+        "import requests; print(requests.get('https://example.com').status_code)"
+      ],
       "permission": "ask",
       "requiresArgs": true
     }

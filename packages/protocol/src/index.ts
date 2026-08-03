@@ -44,4 +44,8 @@ export * from './toolbox.js';
 export * from './automation.js';
 export * from './ws.js';
 export * from './rest.js';
-export { PROTOCOL_SCHEMAS, SCHEMA_MODULES, type ProtocolSchemaName } from './schemas.js';
+export {
+  PROTOCOL_SCHEMAS,
+  SCHEMA_MODULES,
+  type ProtocolSchemaName,
+} from './schemas.js';

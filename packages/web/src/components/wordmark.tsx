@@ -21,7 +21,11 @@ import { Skull } from 'lucide-react';
 
 import { cn } from '@/lib/cn.js';
 
-export function Wordmark({ className }: { readonly className?: string }): JSX.Element {
+export function Wordmark({
+  className,
+}: {
+  readonly className?: string;
+}): JSX.Element {
   return (
     <span className={cn('wordmark', className)}>
       <Skull className="wordmark__mark" aria-hidden="true" />

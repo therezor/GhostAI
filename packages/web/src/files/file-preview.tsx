@@ -43,7 +43,11 @@ export interface FilePreviewProps {
   readonly onDirtyChange?: (dirty: boolean) => void;
 }
 
-export function FilePreview({ entry, workspace, onDirtyChange }: FilePreviewProps): JSX.Element {
+export function FilePreview({
+  entry,
+  workspace,
+  onDirtyChange,
+}: FilePreviewProps): JSX.Element {
   const { t } = useTranslation();
   const image = isImage(entry.mimeType);
 
@@ -72,7 +76,9 @@ export function FilePreview({ entry, workspace, onDirtyChange }: FilePreviewProp
     retry: false,
   });
 
-  if (signed.isPending) return <p className="file-preview__note">{t('files.preparingLink')}</p>;
+  if (signed.isPending) {
+    return <p className="file-preview__note">{t('files.preparingLink')}</p>;
+  }
   if (signed.isError) {
     return (
       <p role="alert" className="page__error">
@@ -85,7 +91,8 @@ export function FilePreview({ entry, workspace, onDirtyChange }: FilePreviewProp
   // Only a refusal to *read it as text* falls back to the download panel. A 403
   // or a 500 is a failure the editor should report as one, not a file quietly
   // reclassified as binary.
-  const notText = text.isError && text.error instanceof ApiError && text.error.status === 400;
+  const notText =
+    text.isError && text.error instanceof ApiError && text.error.status === 400;
 
   return (
     <div className="stack file-preview">
@@ -113,7 +120,12 @@ export function FilePreview({ entry, workspace, onDirtyChange }: FilePreviewProp
         <Button asChild variant="secondary">
           {/* `rel` on a `_blank` link: without it the opened tab gets a handle
               on this one through `window.opener`. */}
-          <a href={url} target="_blank" rel="noreferrer noopener" download={entry.name}>
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer noopener"
+            download={entry.name}
+          >
             <Download />
             Download
           </a>

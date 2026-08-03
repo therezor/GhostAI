@@ -24,16 +24,30 @@
 
 import { z } from 'zod';
 
-import type { AutomationJob, AutomationSchedule, CreateAutomationJob } from '@ghostai/protocol';
+import type {
+  AutomationJob,
+  AutomationSchedule,
+  CreateAutomationJob,
+} from '@ghostai/protocol';
 
 import type { AutomationOutcome, AutomationRefusal } from '../automation.js';
-import { assertNotAborted, defineTool, type AnyTool, type ToolResult } from '../define.js';
+import {
+  assertNotAborted,
+  defineTool,
+  type AnyTool,
+  type ToolResult,
+} from '../define.js';
 
 const schema = z.strictObject({
   action: z
     .enum(['create', 'list', 'delete'])
-    .describe('create schedules a job, list shows the ones you made, delete removes one.'),
-  name: z.string().optional().describe('Short label for the job. Required to create.'),
+    .describe(
+      'create schedules a job, list shows the ones you made, delete removes one.',
+    ),
+  name: z
+    .string()
+    .optional()
+    .describe('Short label for the job. Required to create.'),
   message: z
     .string()
     .optional()
@@ -49,16 +63,23 @@ const schema = z.strictObject({
   cron: z
     .string()
     .optional()
-    .describe('A 5-field cron expression: minute hour day-of-month month day-of-week.'),
+    .describe(
+      'A 5-field cron expression: minute hour day-of-month month day-of-week.',
+    ),
   at: z
     .string()
     .optional()
-    .describe('ISO instant for a one-off, such as 2026-08-01T09:00:00Z. Compute it yourself.'),
+    .describe(
+      'ISO instant for a one-off, such as 2026-08-01T09:00:00Z. Compute it yourself.',
+    ),
   delete_after_run: z
     .boolean()
     .optional()
     .describe('Remove the job once it has fired. Use for a one-off reminder.'),
-  job_id: z.string().optional().describe('Which job to delete. Required to delete.'),
+  job_id: z
+    .string()
+    .optional()
+    .describe('Which job to delete. Required to delete.'),
 });
 
 /**
@@ -115,11 +136,19 @@ function refused(outcome: AutomationOutcome<unknown>): ToolResult {
  * one silently is how a job ends up on a schedule nobody wrote, and the model
  * can simply be told to choose.
  */
-function toSchedule(args: z.output<typeof schema>): AutomationSchedule | string {
-  const given = [args.every_minutes !== undefined, args.cron !== undefined, args.at !== undefined];
+function toSchedule(
+  args: z.output<typeof schema>,
+): AutomationSchedule | string {
+  const given = [
+    args.every_minutes !== undefined,
+    args.cron !== undefined,
+    args.at !== undefined,
+  ];
   const count = given.filter(Boolean).length;
   if (count === 0) return 'Give exactly one of every_minutes, cron or at.';
-  if (count > 1) return 'Give only one of every_minutes, cron or at, not several.';
+  if (count > 1) {
+    return 'Give only one of every_minutes, cron or at, not several.';
+  }
 
   if (args.every_minutes !== undefined) {
     return { kind: 'every', everyMs: args.every_minutes * 60_000 };
@@ -129,7 +158,9 @@ function toSchedule(args: z.output<typeof schema>): AutomationSchedule | string 
   }
 
   const atMs = Date.parse(args.at ?? '');
-  if (Number.isNaN(atMs)) return 'at must be an ISO instant, such as 2026-08-01T09:00:00Z.';
+  if (Number.isNaN(atMs)) {
+    return 'at must be an ISO instant, such as 2026-08-01T09:00:00Z.';
+  }
   return { kind: 'at', atMs };
 }
 
@@ -143,7 +174,9 @@ function toSchedule(args: z.output<typeof schema>): AutomationSchedule | string 
  * install's, beside a current time in both forms.
  */
 function scheduleOf(schedule: AutomationSchedule): string {
-  if (schedule.kind === 'every') return `every ${String(schedule.everyMs / 60_000)} min`;
+  if (schedule.kind === 'every') {
+    return `every ${String(schedule.everyMs / 60_000)} min`;
+  }
   if (schedule.kind === 'cron') return `cron "${schedule.expr}"`;
   return `once at ${isoOf(schedule.atMs)}`;
 }
@@ -164,7 +197,9 @@ function isoOf(ms: number): string {
  */
 function detailOf(job: AutomationJob): string {
   const next =
-    job.state.nextRunAtMs === 0 ? 'not scheduled' : `next ${isoOf(job.state.nextRunAtMs)}`;
+    job.state.nextRunAtMs === 0
+      ? 'not scheduled'
+      : `next ${isoOf(job.state.nextRunAtMs)}`;
   return `${scheduleOf(job.schedule)} · ${next}${job.enabled ? '' : ' · disabled'}`;
 }
 
@@ -187,7 +222,8 @@ export const automationTool: AnyTool = defineTool({
     const port = context.automation;
     if (port === undefined) {
       return {
-        content: 'Refused: this installation has no scheduler, so nothing can be scheduled.',
+        content:
+          'Refused: this installation has no scheduler, so nothing can be scheduled.',
         isError: true,
       };
     }
@@ -203,18 +239,26 @@ export const automationTool: AnyTool = defineTool({
 
     if (args.action === 'delete') {
       const jobId = args.job_id?.trim() ?? '';
-      if (jobId === '') return { content: 'Give job_id to delete.', isError: true };
+      if (jobId === '') {
+        return { content: 'Give job_id to delete.', isError: true };
+      }
       const removed = port.delete(jobId);
       return removed.ok ? `Deleted ${jobId}.` : refused(removed);
     }
 
     const name = args.name?.trim() ?? '';
     const message = args.message?.trim() ?? '';
-    if (name === '') return { content: 'Give a name to create a job.', isError: true };
-    if (message === '') return { content: 'Give a message to create a job.', isError: true };
+    if (name === '') {
+      return { content: 'Give a name to create a job.', isError: true };
+    }
+    if (message === '') {
+      return { content: 'Give a message to create a job.', isError: true };
+    }
 
     const schedule = toSchedule(args);
-    if (typeof schedule === 'string') return { content: schedule, isError: true };
+    if (typeof schedule === 'string') {
+      return { content: schedule, isError: true };
+    }
 
     const input: CreateAutomationJob = {
       name,

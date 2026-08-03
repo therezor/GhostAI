@@ -95,7 +95,12 @@ export class ApiError extends Error {
   readonly code: string;
   readonly details: Readonly<Record<string, unknown>> | undefined;
 
-  constructor(status: number, code: string, message: string, details?: Record<string, unknown>) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    details?: Record<string, unknown>,
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
@@ -113,7 +118,9 @@ export interface RequestOptions {
   readonly method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   readonly body?: unknown;
   readonly signal?: AbortSignal;
-  readonly query?: Readonly<Record<string, string | number | boolean | undefined>>;
+  readonly query?: Readonly<
+    Record<string, string | number | boolean | undefined>
+  >;
 }
 
 /**
@@ -136,16 +143,24 @@ export async function request<T>(
   if (!parsed.success) {
     // A shape mismatch is a server the client cannot trust, so it is an error
     // rather than a cast. The issues go in `details` for the console.
-    throw new ApiError(response.status, 'invalid_response', `Unexpected response from ${path}`, {
-      issues: parsed.error.issues,
-    });
+    throw new ApiError(
+      response.status,
+      'invalid_response',
+      `Unexpected response from ${path}`,
+      {
+        issues: parsed.error.issues,
+      },
+    );
   }
 
   return parsed.data;
 }
 
 /** A request whose response body is not read — a 204, or a fire-and-forget POST. */
-export async function requestVoid(path: string, options: RequestOptions = {}): Promise<void> {
+export async function requestVoid(
+  path: string,
+  options: RequestOptions = {},
+): Promise<void> {
   const response = await send(path, options);
   if (response.ok) return;
 
@@ -168,7 +183,9 @@ export async function requestVoid(path: string, options: RequestOptions = {}): P
  */
 export const api = {
   me: (signal?: AbortSignal): Promise<AuthSessionResponse> =>
-    request('/api/auth/me', AuthSessionResponseSchema, { ...(signal ? { signal } : {}) }),
+    request('/api/auth/me', AuthSessionResponseSchema, {
+      ...(signal ? { signal } : {}),
+    }),
 
   login: (username: string, password: string): Promise<LoginResponse> =>
     request('/api/auth/login', LoginResponseSchema, {
@@ -178,11 +195,16 @@ export const api = {
 
   /** Public, and the one request the app makes before it knows anything else. */
   setupStatus: (signal?: AbortSignal): Promise<SetupStatusResponse> =>
-    request('/api/setup', SetupStatusResponseSchema, { ...(signal ? { signal } : {}) }),
+    request('/api/setup', SetupStatusResponseSchema, {
+      ...(signal ? { signal } : {}),
+    }),
 
   /** Spends the one-time code printed to the console on a first launch. */
   claimSetup: (code: string): Promise<LoginResponse> =>
-    request('/api/setup/claim', LoginResponseSchema, { method: 'POST', body: { code } }),
+    request('/api/setup/claim', LoginResponseSchema, {
+      method: 'POST',
+      body: { code },
+    }),
 
   /**
    * Sets the password and re-issues the session the server just revoked.
@@ -196,10 +218,15 @@ export const api = {
     readonly currentPassword?: string;
     readonly username?: string;
   }): Promise<LoginResponse> =>
-    request('/api/setup/password', LoginResponseSchema, { method: 'POST', body }),
+    request('/api/setup/password', LoginResponseSchema, {
+      method: 'POST',
+      body,
+    }),
 
   status: (signal?: AbortSignal): Promise<StatusResponse> =>
-    request('/api/status', StatusResponseSchema, { ...(signal ? { signal } : {}) }),
+    request('/api/status', StatusResponseSchema, {
+      ...(signal ? { signal } : {}),
+    }),
 
   /**
    * A page of conversations.
@@ -238,10 +265,17 @@ export const api = {
       ...(options.signal ? { signal: options.signal } : {}),
     }),
 
-  messages: (key: string, signal?: AbortSignal): Promise<SessionMessagesResponse> =>
-    request(`/api/sessions/${encodeURIComponent(key)}/messages`, SessionMessagesResponseSchema, {
-      ...(signal ? { signal } : {}),
-    }),
+  messages: (
+    key: string,
+    signal?: AbortSignal,
+  ): Promise<SessionMessagesResponse> =>
+    request(
+      `/api/sessions/${encodeURIComponent(key)}/messages`,
+      SessionMessagesResponseSchema,
+      {
+        ...(signal ? { signal } : {}),
+      },
+    ),
 
   renameSession: (key: string, title: string): Promise<SessionSummary> =>
     request(`/api/sessions/${encodeURIComponent(key)}`, SessionSummarySchema, {
@@ -270,14 +304,24 @@ export const api = {
     }),
 
   deleteSession: (key: string): Promise<void> =>
-    requestVoid(`/api/sessions/${encodeURIComponent(key)}`, { method: 'DELETE' }),
+    requestVoid(`/api/sessions/${encodeURIComponent(key)}`, {
+      method: 'DELETE',
+    }),
 
   /** Forks the conversation at `seq` into a new one, which the caller opens. */
-  branchSession: (key: string, seq: number, title?: string): Promise<SessionSummary> =>
-    request(`/api/sessions/${encodeURIComponent(key)}/branch`, SessionSummarySchema, {
-      method: 'POST',
-      body: { seq, ...(title === undefined ? {} : { title }) },
-    }),
+  branchSession: (
+    key: string,
+    seq: number,
+    title?: string,
+  ): Promise<SessionSummary> =>
+    request(
+      `/api/sessions/${encodeURIComponent(key)}/branch`,
+      SessionSummarySchema,
+      {
+        method: 'POST',
+        body: { seq, ...(title === undefined ? {} : { title }) },
+      },
+    ),
 
   /**
    * What each turn in a conversation cost.
@@ -287,9 +331,13 @@ export const api = {
    * would be a round trip to learn what it already knows.
    */
   turns: (key: string, signal?: AbortSignal): Promise<TurnStatsResponse> =>
-    request(`/api/sessions/${encodeURIComponent(key)}/turns`, TurnStatsResponseSchema, {
-      ...(signal ? { signal } : {}),
-    }),
+    request(
+      `/api/sessions/${encodeURIComponent(key)}/turns`,
+      TurnStatsResponseSchema,
+      {
+        ...(signal ? { signal } : {}),
+      },
+    ),
 
   notifications: (
     options: {
@@ -307,15 +355,21 @@ export const api = {
 
   /** The updated row rather than a 204, so one item reconciles without a refetch. */
   readNotification: (id: string): Promise<Notification> =>
-    request(`/api/notifications/${encodeURIComponent(id)}/read`, NotificationSchema, {
-      method: 'POST',
-    }),
+    request(
+      `/api/notifications/${encodeURIComponent(id)}/read`,
+      NotificationSchema,
+      {
+        method: 'POST',
+      },
+    ),
 
   readAllNotifications: (): Promise<void> =>
     requestVoid('/api/notifications/read', { method: 'POST' }),
 
   deleteNotification: (id: string): Promise<void> =>
-    requestVoid(`/api/notifications/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    requestVoid(`/api/notifications/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
 
   /** Read and unread alike — the confirmation in front of it is the UI's job. */
   deleteAllNotifications: (): Promise<void> =>
@@ -327,21 +381,37 @@ export const api = {
     }),
 
   automationJob: (id: string, signal?: AbortSignal): Promise<AutomationJob> =>
-    request(`/api/automation/jobs/${encodeURIComponent(id)}`, AutomationJobSchema, {
-      ...(signal ? { signal } : {}),
-    }),
+    request(
+      `/api/automation/jobs/${encodeURIComponent(id)}`,
+      AutomationJobSchema,
+      {
+        ...(signal ? { signal } : {}),
+      },
+    ),
 
   createAutomationJob: (body: CreateAutomationJob): Promise<AutomationJob> =>
-    request('/api/automation/jobs', AutomationJobSchema, { method: 'POST', body }),
-
-  updateAutomationJob: (id: string, body: UpdateAutomationJob): Promise<AutomationJob> =>
-    request(`/api/automation/jobs/${encodeURIComponent(id)}`, AutomationJobSchema, {
-      method: 'PATCH',
+    request('/api/automation/jobs', AutomationJobSchema, {
+      method: 'POST',
       body,
     }),
 
+  updateAutomationJob: (
+    id: string,
+    body: UpdateAutomationJob,
+  ): Promise<AutomationJob> =>
+    request(
+      `/api/automation/jobs/${encodeURIComponent(id)}`,
+      AutomationJobSchema,
+      {
+        method: 'PATCH',
+        body,
+      },
+    ),
+
   deleteAutomationJob: (id: string): Promise<void> =>
-    requestVoid(`/api/automation/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    requestVoid(`/api/automation/jobs/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
 
   /**
    * Starts a run and returns the `pending` row.
@@ -357,9 +427,13 @@ export const api = {
     // run" while the run itself started and finished perfectly well. A response
     // schema that names the wrong type is worse than none: it turns a working
     // endpoint into an error the operator has no way to act on.
-    request(`/api/automation/jobs/${encodeURIComponent(id)}/run`, AutomationRunSchema, {
-      method: 'POST',
-    }),
+    request(
+      `/api/automation/jobs/${encodeURIComponent(id)}/run`,
+      AutomationRunSchema,
+      {
+        method: 'POST',
+      },
+    ),
 
   automationRuns: (
     id: string,
@@ -377,13 +451,19 @@ export const api = {
       {
         // `undefined` entries are dropped by `request`, so the three are named
         // plainly rather than spread-guarded one at a time.
-        query: { limit: options.limit, offset: options.offset, cursor: options.cursor },
+        query: {
+          limit: options.limit,
+          offset: options.offset,
+          cursor: options.cursor,
+        },
         ...(options.signal ? { signal: options.signal } : {}),
       },
     ),
 
   tools: (signal?: AbortSignal): Promise<ToolListResponse> =>
-    request('/api/tools', ToolListResponseSchema, { ...(signal ? { signal } : {}) }),
+    request('/api/tools', ToolListResponseSchema, {
+      ...(signal ? { signal } : {}),
+    }),
 
   /**
    * Toolboxes installed on this machine.
@@ -392,7 +472,9 @@ export const api = {
    * being usable the moment it changes, and a stale list would keep offering it.
    */
   toolboxes: (signal?: AbortSignal): Promise<ToolboxListResponse> =>
-    request('/api/toolboxes', ToolboxListResponseSchema, { ...(signal ? { signal } : {}) }),
+    request('/api/toolboxes', ToolboxListResponseSchema, {
+      ...(signal ? { signal } : {}),
+    }),
 
   /**
    * The agents a turn can run on, resolved.
@@ -403,10 +485,14 @@ export const api = {
    * cannot answer — most agents inherit their model and store it as empty.
    */
   agents: (signal?: AbortSignal): Promise<AgentListResponse> =>
-    request('/api/agents', AgentListResponseSchema, { ...(signal ? { signal } : {}) }),
+    request('/api/agents', AgentListResponseSchema, {
+      ...(signal ? { signal } : {}),
+    }),
 
   settings: (signal?: AbortSignal): Promise<SettingsResponse> =>
-    request('/api/settings', SettingsResponseSchema, { ...(signal ? { signal } : {}) }),
+    request('/api/settings', SettingsResponseSchema, {
+      ...(signal ? { signal } : {}),
+    }),
 
   /**
    * A deep-partial patch, never the whole tree.
@@ -416,7 +502,10 @@ export const api = {
    * does not mention is a field the server does not touch.
    */
   patchSettings: (patch: SettingsPatchRequest): Promise<SettingsResponse> =>
-    request('/api/settings', SettingsResponseSchema, { method: 'PATCH', body: patch }),
+    request('/api/settings', SettingsResponseSchema, {
+      method: 'PATCH',
+      body: patch,
+    }),
 
   /**
    * Makes the server re-read `config.json` and rebuild what depends on it.
@@ -435,7 +524,9 @@ export const api = {
     requestVoid('/api/settings/credentials', { method: 'PUT', body }),
 
   providers: (signal?: AbortSignal): Promise<ProvidersResponse> =>
-    request('/api/providers', ProvidersResponseSchema, { ...(signal ? { signal } : {}) }),
+    request('/api/providers', ProvidersResponseSchema, {
+      ...(signal ? { signal } : {}),
+    }),
 
   /**
    * Asks one connection whether it answers. Writes nothing.
@@ -446,10 +537,15 @@ export const api = {
    * way a key sent to the vault does: out, and never back.
    */
   testProvider: (body: ProviderTestRequest): Promise<ProviderTestResponse> =>
-    request('/api/providers/test', ProviderTestResponseSchema, { method: 'POST', body }),
+    request('/api/providers/test', ProviderTestResponseSchema, {
+      method: 'POST',
+      body,
+    }),
 
   models: (signal?: AbortSignal): Promise<ModelsResponse> =>
-    request('/api/models', ModelsResponseSchema, { ...(signal ? { signal } : {}) }),
+    request('/api/models', ModelsResponseSchema, {
+      ...(signal ? { signal } : {}),
+    }),
 
   /**
    * Re-asks every configured endpoint, past both caches.
@@ -463,11 +559,19 @@ export const api = {
 
   /** What a turn on this session would actually send, for the context inspector. */
   context: (key: string, signal?: AbortSignal): Promise<ContextResponse> =>
-    request(`/api/sessions/${encodeURIComponent(key)}/context`, ContextResponseSchema, {
-      ...(signal ? { signal } : {}),
-    }),
+    request(
+      `/api/sessions/${encodeURIComponent(key)}/context`,
+      ContextResponseSchema,
+      {
+        ...(signal ? { signal } : {}),
+      },
+    ),
 
-  files: (workspace: string, path: string, signal?: AbortSignal): Promise<FileListResponse> =>
+  files: (
+    workspace: string,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<FileListResponse> =>
     request('/api/files', FileListResponseSchema, {
       query: { path, workspace },
       ...(signal ? { signal } : {}),
@@ -481,7 +585,11 @@ export const api = {
    * and refuses a full one — so emptying a tree is never something a request
    * happens to do.
    */
-  deleteFile: (workspace: string, path: string, recursive = false): Promise<void> =>
+  deleteFile: (
+    workspace: string,
+    path: string,
+    recursive = false,
+  ): Promise<void> =>
     requestVoid('/api/files', {
       method: 'DELETE',
       query: { path, workspace, ...(recursive ? { recursive: 'true' } : {}) },
@@ -517,7 +625,11 @@ export const api = {
    * answers for the source files the MIME table does not know — `.py`, `.ts`,
    * `.css` — which the media route serves as attachments.
    */
-  readText: (workspace: string, path: string, signal?: AbortSignal): Promise<FileTextResponse> =>
+  readText: (
+    workspace: string,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<FileTextResponse> =>
     request('/api/files/text', FileTextResponseSchema, {
       query: { path, workspace },
       ...(signal ? { signal } : {}),
@@ -559,14 +671,22 @@ export const api = {
    * the new last segment. Directories go the same way files do — the server does
    * not recurse, it asks the filesystem to move the tree.
    */
-  moveFile: (workspaceId: string, from: string, to: string): Promise<FileEntry> =>
+  moveFile: (
+    workspaceId: string,
+    from: string,
+    to: string,
+  ): Promise<FileEntry> =>
     request('/api/files/move', FileEntrySchema, {
       method: 'POST',
       body: { from, to, workspaceId },
     }),
 
   /** A short-lived signed URL for a workspace path an `<img>` will load. */
-  signUrl: (workspaceId: string, path: string, signal?: AbortSignal): Promise<SignedUrl> =>
+  signUrl: (
+    workspaceId: string,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<SignedUrl> =>
     request('/api/files/signed-url', SignedUrlSchema, {
       method: 'POST',
       body: { path, workspaceId },
@@ -578,7 +698,9 @@ export const api = {
   // -------------------------------------------------------------------------
 
   workspaces: (signal?: AbortSignal): Promise<WorkspaceListResponse> =>
-    request('/api/workspaces', WorkspaceListResponseSchema, { ...(signal ? { signal } : {}) }),
+    request('/api/workspaces', WorkspaceListResponseSchema, {
+      ...(signal ? { signal } : {}),
+    }),
 
   /** The id is derived from the name unless one is given. Never a path. */
   createWorkspace: (name: string, id?: string): Promise<WorkspaceSummary> =>
@@ -598,19 +720,28 @@ export const api = {
     id: string,
     changes: { readonly name?: string; readonly folder?: string },
   ): Promise<WorkspaceSummary> =>
-    request(`/api/workspaces/${encodeURIComponent(id)}`, WorkspaceSummarySchema, {
-      method: 'PATCH',
-      body: {
-        ...(changes.name === undefined ? {} : { name: changes.name }),
-        ...(changes.folder === undefined ? {} : { id: changes.folder }),
+    request(
+      `/api/workspaces/${encodeURIComponent(id)}`,
+      WorkspaceSummarySchema,
+      {
+        method: 'PATCH',
+        body: {
+          ...(changes.name === undefined ? {} : { name: changes.name }),
+          ...(changes.folder === undefined ? {} : { id: changes.folder }),
+        },
       },
-    }),
+    ),
 
   /** Detaches it. The folder and everything in it stays on disk. */
   deleteWorkspace: (id: string): Promise<void> =>
-    requestVoid(`/api/workspaces/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    requestVoid(`/api/workspaces/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
 
-  moveWorkspaceSessions: (from: string, to: string): Promise<MoveSessionsResponse> =>
+  moveWorkspaceSessions: (
+    from: string,
+    to: string,
+  ): Promise<MoveSessionsResponse> =>
     request(
       `/api/workspaces/${encodeURIComponent(from)}/sessions/move`,
       MoveSessionsResponseSchema,
@@ -631,7 +762,9 @@ async function send(path: string, options: RequestOptions): Promise<Response> {
     method,
     // The cookie is the credential, and it is `SameSite=Strict`.
     credentials: 'same-origin',
-    ...(hasBody && !raw ? { headers: { 'content-type': 'application/json' } } : {}),
+    ...(hasBody && !raw
+      ? { headers: { 'content-type': 'application/json' } }
+      : {}),
     ...(hasBody ? { body: raw ? body : JSON.stringify(body) } : {}),
     ...(signal ? { signal } : {}),
   });
@@ -666,5 +799,9 @@ function toApiError(status: number, body: unknown): ApiError {
 
   // A proxy, a gateway or a crash — anything that answered without going
   // through the error serialiser.
-  return new ApiError(status, 'http_error', `Request failed with ${status.toString()}`);
+  return new ApiError(
+    status,
+    'http_error',
+    `Request failed with ${status.toString()}`,
+  );
 }

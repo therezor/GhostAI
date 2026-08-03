@@ -26,7 +26,12 @@ export {
   type UiOptions,
 } from './app.js';
 
-export type { AgentSummary, AgentView, ExtensionCounts, ServerRuntime } from './runtime.js';
+export type {
+  AgentSummary,
+  AgentView,
+  ExtensionCounts,
+  ServerRuntime,
+} from './runtime.js';
 
 export {
   NotificationStore,
@@ -101,13 +106,20 @@ export {
   type SessionListCursor,
 } from './cursor.js';
 
-export { DEFAULT_MIME_TYPE, inlineSafe, listDirectory, mimeTypeFor } from './workspace.js';
+export {
+  DEFAULT_MIME_TYPE,
+  inlineSafe,
+  listDirectory,
+  mimeTypeFor,
+} from './workspace.js';
 
 export {
   HubApprovalGate,
   type HubApprovalGateOptions,
   type UnattendedApproval,
 } from './approvals.js';
+
+export { agentForTurn } from './agent-binding.js';
 
 export {
   DEFAULT_MAX_QUEUE_DEPTH,
@@ -120,7 +132,11 @@ export {
   type TurnRunner,
 } from './hub.js';
 
-export { ReplayBuffer, type ReplaySlice, type SequencedServerMessage } from './replay.js';
+export {
+  ReplayBuffer,
+  type ReplaySlice,
+  type SequencedServerMessage,
+} from './replay.js';
 
 export {
   AuthStore,

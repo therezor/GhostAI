@@ -98,61 +98,68 @@ export type PublishResult =
  * or four.
  */
 class AsyncQueue<T> {
-  readonly #items: T[] = [];
-  readonly #waiters: ((result: IteratorResult<T>) => void)[] = [];
-  readonly #capacity: number;
-  #closed = false;
+  private readonly items: T[] = [];
+  private readonly waiters: Array<(result: IteratorResult<T>) => void> = [];
+  private readonly capacity: number;
+  private isClosed = false;
 
   constructor(capacity: number) {
-    this.#capacity = capacity;
+    this.capacity = capacity;
   }
 
   get size(): number {
-    return this.#items.length;
+    return this.items.length;
   }
 
   get closed(): boolean {
-    return this.#closed;
+    return this.isClosed;
   }
 
   /** `false` when the queue is closed or at capacity. */
   push(item: T): boolean {
-    if (this.#closed) return false;
-    const waiter = this.#waiters.shift();
+    if (this.isClosed) return false;
+    const waiter = this.waiters.shift();
     if (waiter !== undefined) {
       waiter({ value: item, done: false });
       return true;
     }
-    if (this.#items.length >= this.#capacity) return false;
-    this.#items.push(item);
+    if (this.items.length >= this.capacity) return false;
+    this.items.push(item);
     return true;
   }
 
   close(): void {
-    if (this.#closed) return;
-    this.#closed = true;
+    if (this.isClosed) return;
+    this.isClosed = true;
     // Buffered items stay readable — a consumer draining after close still
     // gets them, so a graceful shutdown can flush replies already produced.
     // Waiting consumers are what must be released: an idle `for await` would
     // otherwise hold the process open forever.
-    while (this.#waiters.length > 0) {
-      this.#waiters.shift()?.({ value: undefined, done: true });
+    while (this.waiters.length > 0) {
+      this.waiters.shift()?.({ value: undefined, done: true });
     }
   }
 
   iterator(): AsyncIterableIterator<T> {
     const next = (): Promise<IteratorResult<T>> => {
-      const item = this.#items.shift();
-      if (item !== undefined) return Promise.resolve({ value: item, done: false });
-      if (this.#closed) return Promise.resolve({ value: undefined, done: true });
-      return new Promise<IteratorResult<T>>((resolve) => this.#waiters.push(resolve));
+      const item = this.items.shift();
+      if (item !== undefined) {
+        return Promise.resolve({ value: item, done: false });
+      }
+      if (this.isClosed) {
+        return Promise.resolve({ value: undefined, done: true });
+      }
+      return new Promise<IteratorResult<T>>((resolve) =>
+        this.waiters.push(resolve),
+      );
     };
 
     return {
       next,
       // Called when a consumer `break`s or `return`s out of `for await`. Only
       // this consumer stops; the queue and its other consumers are untouched.
-      return: (): Promise<IteratorResult<T>> => Promise.resolve({ value: undefined, done: true }),
+      return: (): Promise<IteratorResult<T>> =>
+        Promise.resolve({ value: undefined, done: true }),
       [Symbol.asyncIterator](): AsyncIterableIterator<T> {
         return this;
       },
@@ -184,10 +191,10 @@ interface TokenBucket {
  * sender a free reset or freeze one out for hours.
  */
 export class RateLimiter {
-  readonly #buckets = new Map<string, TokenBucket>();
-  readonly #perMinute: number;
-  readonly #capacity: number;
-  readonly #clock: Clock;
+  private readonly buckets = new Map<string, TokenBucket>();
+  private readonly perMinute: number;
+  private readonly capacity: number;
+  private readonly clock: Clock;
 
   /**
    * A hard ceiling on tracked senders, not a target.
@@ -201,29 +208,32 @@ export class RateLimiter {
   static readonly MAX_TRACKED_SENDERS = 10_000;
 
   constructor(options: RateLimitOptions = {}, clock: Clock = systemClock) {
-    this.#perMinute = Math.max(0, options.perMinute ?? 0);
-    this.#capacity = Math.max(1, options.burst ?? Math.min(this.#perMinute, 10));
-    this.#clock = clock;
+    this.perMinute = Math.max(0, options.perMinute ?? 0);
+    this.capacity = Math.max(1, options.burst ?? Math.min(this.perMinute, 10));
+    this.clock = clock;
   }
 
   get enabled(): boolean {
-    return this.#perMinute > 0;
+    return this.perMinute > 0;
   }
 
   get trackedSenders(): number {
-    return this.#buckets.size;
+    return this.buckets.size;
   }
 
   /** `undefined` when allowed; otherwise how long until one token is available. */
   consume(senderId: string): number | undefined {
     if (!this.enabled) return undefined;
 
-    const now = this.#clock.monotonic();
-    const perMs = this.#perMinute / 60_000;
-    const existing = this.#buckets.get(senderId);
-    const bucket = existing ?? { tokens: this.#capacity, lastRefillMs: now };
+    const now = this.clock.monotonic();
+    const perMs = this.perMinute / 60_000;
+    const existing = this.buckets.get(senderId);
+    const bucket = existing ?? { tokens: this.capacity, lastRefillMs: now };
 
-    bucket.tokens = Math.min(this.#capacity, bucket.tokens + (now - bucket.lastRefillMs) * perMs);
+    bucket.tokens = Math.min(
+      this.capacity,
+      bucket.tokens + (now - bucket.lastRefillMs) * perMs,
+    );
     bucket.lastRefillMs = now;
 
     const allowed = bucket.tokens >= 1;
@@ -231,9 +241,9 @@ export class RateLimiter {
 
     // Re-inserting moves the key to the end, so the map's own iteration order
     // is least-recently-used first and `#evict` needs no separate index.
-    if (existing !== undefined) this.#buckets.delete(senderId);
-    this.#buckets.set(senderId, bucket);
-    if (this.#buckets.size > RateLimiter.MAX_TRACKED_SENDERS) this.#evict();
+    if (existing !== undefined) this.buckets.delete(senderId);
+    this.buckets.set(senderId, bucket);
+    if (this.buckets.size > RateLimiter.MAX_TRACKED_SENDERS) this.evict();
 
     return allowed ? undefined : Math.ceil((1 - bucket.tokens) / perMs);
   }
@@ -253,22 +263,25 @@ export class RateLimiter {
    * lock out real users by flooding them out of the map, and unbounded growth
    * would let them take the process down outright.
    */
-  #evict(): void {
-    const now = this.#clock.monotonic();
-    const perMs = this.#perMinute / 60_000;
+  private evict(): void {
+    const now = this.clock.monotonic();
+    const perMs = this.perMinute / 60_000;
 
-    for (const [senderId, bucket] of this.#buckets) {
+    for (const [senderId, bucket] of this.buckets) {
       // Project the refill forward to now. `bucket.tokens` is only recomputed
       // when *that* sender sends, so a bucket idle long enough to be full
       // still holds the level it had at its last message — testing the stored
       // value directly would reclaim almost nothing.
-      if (bucket.tokens + (now - bucket.lastRefillMs) * perMs >= this.#capacity) {
-        this.#buckets.delete(senderId);
+      if (
+        bucket.tokens + (now - bucket.lastRefillMs) * perMs >=
+        this.capacity
+      ) {
+        this.buckets.delete(senderId);
       }
     }
-    for (const senderId of this.#buckets.keys()) {
-      if (this.#buckets.size <= RateLimiter.MAX_TRACKED_SENDERS) break;
-      this.#buckets.delete(senderId);
+    for (const senderId of this.buckets.keys()) {
+      if (this.buckets.size <= RateLimiter.MAX_TRACKED_SENDERS) break;
+      this.buckets.delete(senderId);
     }
   }
 }
@@ -289,87 +302,89 @@ export interface MessageBusOptions {
 }
 
 export class MessageBus {
-  readonly #inbound: AsyncQueue<InboundMessage>;
-  readonly #outbound: AsyncQueue<OutboundMessage>;
-  readonly #limiter: RateLimiter;
-  readonly #clock: Clock;
-  readonly #newId: () => string;
+  private readonly inboundQueue: AsyncQueue<InboundMessage>;
+  private readonly outboundQueue: AsyncQueue<OutboundMessage>;
+  private readonly limiter: RateLimiter;
+  private readonly clock: Clock;
+  private readonly newId: () => string;
 
   constructor(options: MessageBusOptions = {}) {
-    this.#clock = options.clock ?? systemClock;
-    this.#newId = options.newId ?? newUuid;
+    this.clock = options.clock ?? systemClock;
+    this.newId = options.newId ?? newUuid;
     const capacity = options.capacity ?? 1_000;
-    this.#inbound = new AsyncQueue<InboundMessage>(capacity);
-    this.#outbound = new AsyncQueue<OutboundMessage>(capacity);
-    this.#limiter = new RateLimiter(options.rateLimit ?? {}, this.#clock);
+    this.inboundQueue = new AsyncQueue<InboundMessage>(capacity);
+    this.outboundQueue = new AsyncQueue<OutboundMessage>(capacity);
+    this.limiter = new RateLimiter(options.rateLimit ?? {}, this.clock);
   }
 
   get inboundSize(): number {
-    return this.#inbound.size;
+    return this.inboundQueue.size;
   }
 
   get outboundSize(): number {
-    return this.#outbound.size;
+    return this.outboundQueue.size;
   }
 
   get closed(): boolean {
-    return this.#inbound.closed;
+    return this.inboundQueue.closed;
   }
 
   publishInbound(input: InboundMessageInput): PublishResult {
-    if (this.#inbound.closed) return { kind: 'closed' };
+    if (this.inboundQueue.closed) return { kind: 'closed' };
 
-    const retryAfterMs = this.#limiter.consume(input.senderId);
-    if (retryAfterMs !== undefined) return { kind: 'rate_limited', retryAfterMs };
+    const retryAfterMs = this.limiter.consume(input.senderId);
+    if (retryAfterMs !== undefined) {
+      return { kind: 'rate_limited', retryAfterMs };
+    }
 
     const message: InboundMessage = {
-      id: input.id ?? this.#newId(),
+      id: input.id ?? this.newId(),
       channelId: input.channelId,
       sessionKey: input.sessionKey,
       senderId: input.senderId,
       content: input.content,
-      receivedAtMs: this.#clock.now(),
+      receivedAtMs: this.clock.now(),
       metadata: input.metadata ?? {},
     };
 
-    return this.#inbound.push(message)
+    return this.inboundQueue.push(message)
       ? { kind: 'accepted', id: message.id }
-      : { kind: 'queue_full', queued: this.#inbound.size };
+      : { kind: 'queue_full', queued: this.inboundQueue.size };
   }
 
   /** Not rate limited — outbound pacing belongs to the channel that sends it. */
   publishOutbound(input: OutboundMessageInput): PublishResult {
-    if (this.#outbound.closed) return { kind: 'closed' };
+    if (this.outboundQueue.closed) return { kind: 'closed' };
 
     const message: OutboundMessage = {
-      id: input.id ?? this.#newId(),
+      id: input.id ?? this.newId(),
       channelId: input.channelId,
       sessionKey: input.sessionKey,
       target: input.target,
       content: input.content,
       kind: input.kind ?? 'reply',
-      createdAtMs: this.#clock.now(),
+      createdAtMs: this.clock.now(),
       metadata: input.metadata ?? {},
     };
 
-    return this.#outbound.push(message)
+    return this.outboundQueue.push(message)
       ? { kind: 'accepted', id: message.id }
-      : { kind: 'queue_full', queued: this.#outbound.size };
+      : { kind: 'queue_full', queued: this.outboundQueue.size };
   }
 
   /** Consumed by the agent. Ends when the bus closes. */
   inbound(): AsyncIterableIterator<InboundMessage> {
-    return this.#inbound.iterator();
+    return this.inboundQueue.iterator();
   }
 
   /** Consumed by the channel manager. Ends when the bus closes. */
   outbound(): AsyncIterableIterator<OutboundMessage> {
-    return this.#outbound.iterator();
+    return this.outboundQueue.iterator();
   }
 
   /** Ends every active iterator so shutdown does not hang on a `for await`. */
   close(): void {
-    this.#inbound.close();
-    this.#outbound.close();
+    this.inboundQueue.close();
+    this.outboundQueue.close();
   }
 }

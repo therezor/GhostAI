@@ -14,9 +14,18 @@
  * registry has no opinion about it.
  */
 
-import type { ProviderConfig, ProviderInstanceInfo, ProvidersConfig } from '@ghostai/protocol';
+import type {
+  ProviderConfig,
+  ProviderInstanceInfo,
+  ProvidersConfig,
+} from '@ghostai/protocol';
 
-import { findProvider, findGateway, findProviderByModel, type ProviderSpec } from './registry.js';
+import {
+  findProvider,
+  findGateway,
+  findProviderByModel,
+  type ProviderSpec,
+} from './registry.js';
 
 /** One configured endpoint, with its type resolved. */
 export interface ProviderInstance {
@@ -73,7 +82,9 @@ export function describeInstance(
  * typo in one instance, and refusing to list the other nine — or refusing to
  * boot — would make a single bad character take the whole install down.
  */
-export function listInstances(providers: ProvidersConfig): readonly ProviderInstance[] {
+export function listInstances(
+  providers: ProvidersConfig,
+): readonly ProviderInstance[] {
   const instances: ProviderInstance[] = [];
   for (const [id, config] of Object.entries(providers)) {
     const spec = findProvider(config.type);
@@ -82,7 +93,10 @@ export function listInstances(providers: ProvidersConfig): readonly ProviderInst
   return instances;
 }
 
-export function findInstance(providers: ProvidersConfig, id: string): ProviderInstance | null {
+export function findInstance(
+  providers: ProvidersConfig,
+  id: string,
+): ProviderInstance | null {
   const config = providers[id];
   if (config === undefined) return null;
   const spec = findProvider(config.type);
@@ -102,7 +116,13 @@ function syntheticInstance(spec: ProviderSpec): ProviderInstance {
   return {
     id: spec.id,
     spec,
-    config: { type: spec.id, label: '', extraHeaders: {}, models: [], enabled: true },
+    config: {
+      type: spec.id,
+      label: '',
+      extraHeaders: {},
+      models: [],
+      enabled: true,
+    },
   };
 }
 
@@ -140,8 +160,12 @@ export interface ResolveInstanceOptions {
  * Disabled instances are invisible to every step, including an explicit id: a
  * switch that still resolved would not be a switch.
  */
-export function resolveInstance(options: ResolveInstanceOptions): ProviderInstance | null {
-  const enabled = listInstances(options.providers).filter((instance) => instance.config.enabled);
+export function resolveInstance(
+  options: ResolveInstanceOptions,
+): ProviderInstance | null {
+  const enabled = listInstances(options.providers).filter(
+    (instance) => instance.config.enabled,
+  );
   const named = options.provider;
 
   if (named !== undefined && named !== '' && named !== 'auto') {
@@ -150,7 +174,10 @@ export function resolveInstance(options: ResolveInstanceOptions): ProviderInstan
 
     const spec = findProvider(named);
     if (spec !== null) {
-      return enabled.find((instance) => instance.spec.id === spec.id) ?? syntheticInstance(spec);
+      return (
+        enabled.find((instance) => instance.spec.id === spec.id) ??
+        syntheticInstance(spec)
+      );
     }
     // A name that is neither an instance nor a type is a typo, and falling
     // through to `auto` would silently answer with some other endpoint.
@@ -159,7 +186,8 @@ export function resolveInstance(options: ResolveInstanceOptions): ProviderInstan
 
   if (enabled.length === 0) return null;
 
-  const byModel = options.model === undefined ? null : findProviderByModel(options.model);
+  const byModel =
+    options.model === undefined ? null : findProviderByModel(options.model);
   if (byModel !== null) {
     const match = enabled.find((instance) => instance.spec.id === byModel.id);
     if (match !== undefined) return match;
@@ -168,14 +196,19 @@ export function resolveInstance(options: ResolveInstanceOptions): ProviderInstan
   const gateway = enabled.find((instance) => {
     const apiBase = instance.config.apiBase;
     if (apiBase === undefined || apiBase === '') return false;
-    return findGateway({ providerId: instance.spec.id, apiBase })?.id === instance.spec.id;
+    return (
+      findGateway({ providerId: instance.spec.id, apiBase })?.id ===
+      instance.spec.id
+    );
   });
   if (gateway !== undefined) return gateway;
 
   const credentialed =
     options.hasCredential === undefined
       ? undefined
-      : enabled.find((instance) => options.hasCredential?.(instance.id) === true);
+      : enabled.find(
+          (instance) => options.hasCredential?.(instance.id) === true,
+        );
 
   return credentialed ?? enabled[0] ?? null;
 }

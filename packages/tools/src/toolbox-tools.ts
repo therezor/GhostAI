@@ -34,7 +34,12 @@ import { guardExec } from '@ghostai/security';
 import type { Toolbox, ToolboxEntry, ToolPermission } from '@ghostai/protocol';
 import { z } from 'zod';
 
-import { TOOL_NAME_PATTERN, assertNotAborted, defineTool, type AnyTool } from './define.js';
+import {
+  TOOL_NAME_PATTERN,
+  assertNotAborted,
+  defineTool,
+  type AnyTool,
+} from './define.js';
 import { coerceArgv } from './argv.js';
 import { localRunner } from './runner.js';
 import { renderRun } from './builtin/exec.js';
@@ -52,7 +57,9 @@ function argsSchema(entry: ToolboxEntry): z.ZodType<string[]> {
     entry.args === '' ? 'Arguments as separate strings.' : entry.args,
     'The program name is already supplied — do not repeat it.',
   ];
-  if (entry.example.length > 0) parts.push(`Example: ${JSON.stringify(entry.example)}`);
+  if (entry.example.length > 0) {
+    parts.push(`Example: ${JSON.stringify(entry.example)}`);
+  }
   const description = parts.join(' ');
 
   // Always present, never defaulted — even for a program that takes none, where
@@ -83,7 +90,10 @@ function argsSchema(entry: ToolboxEntry): z.ZodType<string[]> {
  * 400 that reads like the model is broken — so it is dropped here, where the
  * install review can say so, rather than advertised and refused later.
  */
-export function toolboxTool(toolbox: Toolbox, entry: ToolboxEntry): AnyTool | undefined {
+export function toolboxTool(
+  toolbox: Toolbox,
+  entry: ToolboxEntry,
+): AnyTool | undefined {
   if (!TOOL_NAME_PATTERN.test(entry.name)) return undefined;
 
   // `use` alone. The toolbox is named once in the prompt section rather than
@@ -114,7 +124,9 @@ export function toolboxTool(toolbox: Toolbox, entry: ToolboxEntry): AnyTool | un
         jail: context.jail,
         config: context.config.exec,
         ...(context.env === undefined ? {} : { env: context.env }),
-        ...(context.sandboxed === undefined ? {} : { sandboxed: context.sandboxed }),
+        ...(context.sandboxed === undefined
+          ? {}
+          : { sandboxed: context.sandboxed }),
       });
 
       const outcome = await (context.runner ?? localRunner).run({
@@ -148,7 +160,9 @@ export function toolboxTools(toolbox: Toolbox): readonly AnyTool[] {
  * would accept is dropped from the callables, and a permission for a tool that
  * does not exist would read in the settings UI as a row nothing can call.
  */
-export function toolboxPermissions(toolbox: Toolbox): Record<string, ToolPermission> {
+export function toolboxPermissions(
+  toolbox: Toolbox,
+): Record<string, ToolPermission> {
   const permissions: Record<string, ToolPermission> = {};
   if (toolbox.expose !== 'tools') return permissions;
   for (const entry of toolbox.tools) {

@@ -28,27 +28,30 @@ export function toolboxRoutes(deps: RouteDeps): RouteGroup<'toolboxes.list'> {
       summary: 'Toolboxes installed on this machine',
       schema: { response: { 200: ToolboxListResponseSchema } },
       handler: (): ToolboxListResponse => {
-        const listed: ToolboxSummary[] = deps.runtime.toolboxes().map((entry) => ({
-          name: entry.name,
-          label: entry.toolbox?.label ?? '',
-          tools: (entry.toolbox?.tools ?? []).map((tool) => ({
-            name: tool.name,
-            use: tool.use,
-            permission: tool.permission,
-          })),
-          // Whether those names are callables the agent editor can permission
-          // one by one, or a prompt section reached through `exec`.
-          exposesTools: entry.toolbox?.expose === 'tools',
-          version: entry.toolbox?.version ?? '',
-          image: entry.toolbox?.image ?? '',
-          maxNetwork: entry.toolbox?.network.maxMode ?? 'none',
-          capsAdded: [...(entry.toolbox?.caps.add ?? [])],
-          // The same list the CLI review prints, so a browser and a terminal
-          // cannot disagree about what a toolbox is asking for.
-          weakened: entry.toolbox === undefined ? [] : [...weakenedIn(entry.toolbox)],
-          approved: entry.approved,
-          ...(entry.problem === undefined ? {} : { problem: entry.problem }),
-        }));
+        const listed: ToolboxSummary[] = deps.runtime
+          .toolboxes()
+          .map((entry) => ({
+            name: entry.name,
+            label: entry.toolbox?.label ?? '',
+            tools: (entry.toolbox?.tools ?? []).map((tool) => ({
+              name: tool.name,
+              use: tool.use,
+              permission: tool.permission,
+            })),
+            // Whether those names are callables the agent editor can permission
+            // one by one, or a prompt section reached through `exec`.
+            exposesTools: entry.toolbox?.expose === 'tools',
+            version: entry.toolbox?.version ?? '',
+            image: entry.toolbox?.image ?? '',
+            maxNetwork: entry.toolbox?.network.maxMode ?? 'none',
+            capsAdded: [...(entry.toolbox?.caps.add ?? [])],
+            // The same list the CLI review prints, so a browser and a terminal
+            // cannot disagree about what a toolbox is asking for.
+            weakened:
+              entry.toolbox === undefined ? [] : [...weakenedIn(entry.toolbox)],
+            approved: entry.approved,
+            ...(entry.problem === undefined ? {} : { problem: entry.problem }),
+          }));
 
         return { toolboxes: listed };
       },

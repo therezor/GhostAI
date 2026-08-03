@@ -36,7 +36,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowLeft, Plus, RotateCcw, SquarePen, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Wrench } from 'lucide-react';
 import { useMemo, useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -50,40 +50,27 @@ import {
   DEFAULT_TOOLBOX_TEMPLATE,
   DEFAULT_TOOL_POLICY_TEMPLATE,
   DEFAULT_WRAP_UP_TEMPLATE,
-  defaultSubagentPrompt,
   deriveAgentId,
   LIVE_PROMPT_PLACEHOLDERS,
   PLATFORM_PROMPT_PLACEHOLDERS,
   PROMPT_PLACEHOLDERS,
   RAW_PROMPT_PLACEHOLDERS,
-  subagentToolName,
   TOOL_POLICY_PLACEHOLDERS,
   TOOLBOX_PROMPT_PLACEHOLDERS,
-  unknownPlaceholders,
   type AgentDefaults,
   type AgentEntry,
   type SubagentRef,
   type ToolPermission,
   type ToolPromptOverride,
-  type ToolRisk,
+  namesDelimiter,
 } from '@ghostai/protocol';
 
-import type { WebKey } from '@/i18n/keys.js';
 import { Badge } from '@/components/ui/badge.js';
+import { NoticeBlock } from '@/components/ui/notice.js';
 import { Button } from '@/components/ui/button.js';
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogHeading,
-  DialogSubheading,
-} from '@/components/ui/dialog.js';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu.js';
 import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';
 import { RowActions } from '@/components/crud/row-actions.js';
-import { CodeEditor } from '@/files/code-editor.js';
 import { api } from '@/lib/api.js';
 import { cn } from '@/lib/cn.js';
 import { queryKeys } from '@/lib/query.js';
@@ -94,15 +81,12 @@ import {
   SelectField,
   SwitchRow,
   TextField,
-  TextareaField,
-} from '@/settings/controls.js';
-import { modelOptions } from '@/settings/fields.js';
+} from '@/components/form/controls.js';
+import { modelOptions } from '@/components/form/fields.js';
 import { useSaveSettings, useSettings } from '@/settings/use-settings.js';
 import {
   REASONING_EFFORTS,
-  TOOL_PERMISSIONS,
   UNSET_VALUE,
-  isToolPermission,
   toAgentDeletePatch,
   toAgentEntryForm,
   toAgentEntryPatch,
@@ -112,6 +96,9 @@ import {
   type AgentForm,
 } from './agents-form.js';
 import { useAgent } from './agent-context.js';
+import { SubagentRow } from './subagent-row.js';
+import { TemplateEditor } from './template-editor.js';
+import { ToolRow, parameterFields } from './tool-row.js';
 
 /**
  * The fields both halves of the form hold as strings under the same name.
@@ -217,9 +204,6 @@ function BoundField({
   );
 }
 
-/** Shared so an unopened row does not allocate one per render. */
-const EMPTY_OVERRIDE: ToolPromptOverride = { description: '', fields: {} };
-
 /**
  * The placeholders whose value differs between two requests in the same turn.
  *
@@ -239,459 +223,6 @@ const VOLATILE: readonly string[] = [
   'correction',
 ];
 
-/** One advertised argument, and what the tool itself says about it. */
-interface ToolField {
-  readonly name: string;
-  /** The built-in description, or empty when the schema gives none. */
-  readonly description: string;
-}
-
-/**
- * The top-level arguments in a tool's advertised JSON Schema, with their own
- * descriptions — which are what the boxes below show as placeholders.
- *
- * A generic "the built-in description" told an operator nothing: the whole
- * question they are answering is whether the built-in wording is good enough,
- * and they cannot answer it without reading it. Showing the real one means an
- * empty box is a legible statement about what the model is being told.
- *
- * Top level only, which is the same bound `applyToolPrompts` enforces: an
- * override reaching `argv.items` would need a path syntax to specify and to
- * validate, for a field whose parent can say the same thing in a sentence.
- */
-function parameterFields(parameters: Readonly<Record<string, unknown>>): ToolField[] {
-  const properties = parameters.properties;
-  if (typeof properties !== 'object' || properties === null || Array.isArray(properties)) return [];
-
-  return Object.entries(properties as Record<string, unknown>).map(([name, schema]) => {
-    const described =
-      typeof schema === 'object' && schema !== null && !Array.isArray(schema)
-        ? (schema as Record<string, unknown>).description
-        : undefined;
-    return { name, description: typeof described === 'string' ? described : '' };
-  });
-}
-
-/**
- * One template an agent owns, with the three states it can be in.
- *
- * Six boxes on this screen behave identically, and the behaviour is not obvious
- * enough to reimplement six times: **empty inherits the built-in, and a single
- * space deletes the section.** Both are real answers, and neither is expressible
- * by typing — an operator cannot type "inherit", and a space is invisible — so
- * each gets a button and a state the box says out loud.
- *
- * **Ownership is state, not `value !== ''`.** Deriving it made the box fight the
- * person typing in it: selecting all and deleting — the obvious way to start a
- * short prompt from scratch — emptied the field, which flipped it back to "not
- * owned", which refilled the box with the built-in. The next keystroke landed at
- * the end of a page of text nobody asked for.
- */
-function TemplateEditor({
-  name,
-  label,
-  builtIn,
-  value,
-  placeholders,
-  hint,
-  removable = true,
-  warning,
-  onChange,
-}: {
-  readonly name: string;
-  /** Typed `WebKey` rather than `string`, or a deleted key renders as itself. */
-  readonly label: WebKey;
-  /** What an empty value renders as. Shown in the box until the first keystroke. */
-  readonly builtIn: string;
-  readonly value: string;
-  readonly placeholders: readonly string[];
-  readonly hint?: WebKey;
-  /** `systemPrompt` is not: an agent with no identity is never what was meant. */
-  readonly removable?: boolean;
-  /** A second warning the caller decides, shown beside the stray-placeholder one. */
-  readonly warning?: string | undefined;
-  readonly onChange: (next: string) => void;
-}): JSX.Element {
-  const { t } = useTranslation();
-  const [owned, setOwned] = useState(() => value.trim() !== '');
-  // A stored value that is whitespace but not empty is the deletion. It is the
-  // one state with nothing to edit, so it renders as a sentence and a button
-  // rather than as a box holding a space nobody can see.
-  const removed = value !== '' && value.trim() === '';
-  const text = owned && !removed ? value : builtIn;
-  const stray = useMemo(() => unknownPlaceholders(text, placeholders), [text, placeholders]);
-
-  return (
-    <div className="stack agent-editor__template">
-      <div className="cluster agent-editor__prompt-bar">
-        <span className="micro-label">{t(label)}</span>
-        <span className="agent-editor__template-state">
-          {t(
-            removed ? 'agents.promptRemoved' : owned ? 'agents.promptOwn' : 'agents.promptBuiltIn',
-          )}
-        </span>
-        <span className="spacer" />
-        {/* Both buttons are named for their section. Six of each on this screen
-            read identically otherwise, which leaves a screen reader — and a
-            test — with no way to say which one it means. */}
-        {removable && !removed && (
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label={t('agents.promptRemoveFor', { label: t(label) })}
-            onClick={() => {
-              // A single space, because empty already means "inherit". See the
-              // asymmetry documented on `AgentEntry.livePrompt`.
-              onChange(' ');
-            }}
-          >
-            <Trash2 aria-hidden="true" />
-            {t('agents.promptRemove')}
-          </Button>
-        )}
-        {(owned || removed) && (
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label={t(removed ? 'agents.promptRestoreFor' : 'agents.promptResetFor', {
-              label: t(label),
-            })}
-            onClick={() => {
-              setOwned(false);
-              onChange('');
-            }}
-          >
-            <RotateCcw aria-hidden="true" />
-            {t(removed ? 'agents.promptRestore' : 'agents.resetBuiltin')}
-          </Button>
-        )}
-      </div>
-
-      {removed ? (
-        <p className="agent-editor__hint">{t('agents.promptRemovedHint')}</p>
-      ) : (
-        <>
-          <CodeEditor
-            value={text}
-            readOnly={false}
-            language="markdown"
-            label={t('agents.promptEditorFor', { label: t(label), name })}
-            onChange={(next) => {
-              // The first keystroke is the decision: from here the text is this
-              // agent's, including when it is emptied.
-              setOwned(true);
-              onChange(next);
-            }}
-          />
-          <p className="agent-editor__hint">
-            {hint === undefined ? '' : `${t(hint)} `}
-            {t(owned ? 'agents.promptPlaceholders' : 'agents.promptAdoptHint')}{' '}
-            {placeholders.map((placeholder) => `{{${placeholder}}}`).join(', ')}.
-          </p>
-          {stray.length > 0 && (
-            <p role="alert" className="notice notice--warning">
-              <span>
-                {t('agents.promptStray', {
-                  names: stray.map((placeholder) => `{{${placeholder}}}`).join(', '),
-                })}
-              </span>
-            </p>
-          )}
-          {warning !== undefined && (
-            <p role="alert" className="notice notice--warning">
-              <span>{warning}</span>
-            </p>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-/**
- * One tool, and the single control that decides everything about it.
- *
- * There is no on/off switch beside the select, because there is nothing for one
- * to say: `Disabled` *is* the off position, and a switch would let an operator
- * express "off, but ask" — a state the config cannot hold and the runtime would
- * silently read as off.
- *
- * The label is the tool's name in mono, which is what it is: an identifier the
- * model types, not prose. The risk badge is advisory — it is what seeded this
- * permission when the agent was created, and it decides nothing now.
- */
-function ToolRow({
-  name,
-  detail,
-  risk,
-  permission,
-  fields,
-  override,
-  disabled,
-  onChange,
-  onOverrideChange,
-}: {
-  readonly name: string;
-  /** The tool's own description. The row shows the override instead when there is one. */
-  readonly detail: string;
-  readonly risk: ToolRisk | undefined;
-  readonly permission: ToolPermission;
-  /** Top-level arguments from the live schema. Empty when it is not registered. */
-  readonly fields: readonly ToolField[];
-  readonly override: ToolPromptOverride | undefined;
-  /**
-   * The row is shown but not editable, because this model is sent no tools.
-   *
-   * Not required, and that is the point: the stored permission and wording are
-   * still rendered and still saved untouched, so switching the model back
-   * restores the toolset exactly as it was. A list that emptied itself would
-   * make the switch destructive.
-   */
-  readonly disabled: boolean;
-  readonly onChange: (next: ToolPermission) => void;
-  readonly onOverrideChange: (next: ToolPromptOverride) => void;
-}): JSX.Element {
-  const { t } = useTranslation();
-  const stored = override ?? EMPTY_OVERRIDE;
-  const [editing, setEditing] = useState(false);
-  const rewritten = stored.description !== '';
-
-  const setField = (field: string, text: string): void => {
-    onOverrideChange({ ...stored, fields: { ...stored.fields, [field]: text } });
-  };
-
-  return (
-    <li className="row agent-editor__tool">
-      <div className="agent-editor__tool-text">
-        <span className="agent-editor__tool-name truncate">{name}</span>
-        {/* The row says what the model is told, not what the tool shipped with.
-            Showing the built-in under a tool whose description an operator has
-            replaced would make the list disagree with the payload. */}
-        {(rewritten ? stored.description : detail) !== '' && (
-          <span className="agent-editor__tool-detail truncate">
-            {rewritten ? stored.description : detail}
-          </span>
-        )}
-      </div>
-      {risk === undefined ? (
-        // Named in the config but not registered right now — an MCP server that
-        // is down, or a tool that was removed. It stays on the list so a save
-        // cannot drop it.
-        <Badge tone="warning">{t('agents.toolNotInstalled')}</Badge>
-      ) : (
-        <Badge tone="neutral">{risk}</Badge>
-      )}
-      <Button
-        variant="ghost"
-        size="sm"
-        className="agent-editor__tool-edit"
-        disabled={disabled}
-        // Named for the tool: a list of ten rows has ten of these, and an icon
-        // called "Wording" tells a screen reader nothing about which.
-        aria-label={t('agents.toolWordingFor', { name })}
-        onClick={() => {
-          setEditing(true);
-        }}
-      >
-        <SquarePen aria-hidden="true" />
-      </Button>
-      <div className="agent-editor__tool-permission">
-        <SelectField
-          label={<span className="sr-only">{t('agents.toolPermissionFor', { name })}</span>}
-          value={permission}
-          disabled={disabled}
-          options={TOOL_PERMISSIONS.map((option) => ({
-            value: option,
-            label: t(PERMISSION_LABELS[option]),
-          }))}
-          onValueChange={(next) => {
-            if (isToolPermission(next)) onChange(next);
-          }}
-        />
-      </div>
-
-      {/* A dialog rather than an expander on the row. The list is a scrolling
-          box of one-line rows, and pushing a form into the middle of it moved
-          every row below the one being edited — while giving the form the width
-          of a column sized for a permission select. */}
-      <Dialog open={editing} onOpenChange={setEditing}>
-        <DialogContent className="agent-editor__wording-dialog">
-          <DialogHeader>
-            <DialogHeading>{t('agents.toolWordingTitle', { name })}</DialogHeading>
-            <DialogSubheading>{t('agents.toolWordingHint')}</DialogSubheading>
-          </DialogHeader>
-
-          <div className="stack agent-editor__wording-body">
-            <TextareaField
-              label={t('agents.toolWordingDesc')}
-              value={stored.description}
-              // The tool's real description, so an empty box is a legible
-              // statement about what the model is being told rather than a
-              // promise that something exists somewhere.
-              placeholder={detail}
-              rows={3}
-              onValueChange={(next) => {
-                onOverrideChange({ ...stored, description: next });
-              }}
-            />
-            {fields.length > 0 && (
-              <>
-                <h4 className="agent-editor__wording-heading">{t('agents.toolWordingArgs')}</h4>
-                {fields.map((field) => (
-                  <TextareaField
-                    key={field.name}
-                    label={field.name}
-                    value={stored.fields[field.name] ?? ''}
-                    placeholder={field.description}
-                    rows={2}
-                    onValueChange={(next) => {
-                      setField(field.name, next);
-                    }}
-                  />
-                ))}
-              </>
-            )}
-            {/* The boundary that stops an override from breaking the tool: the
-                model is told what these arguments mean, and the schema that
-                accepts them is still generated from the tool's own definition. */}
-            <p className="agent-editor__hint">{t('agents.toolWordingNote')}</p>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                onOverrideChange({ description: '', fields: {} });
-              }}
-            >
-              <RotateCcw aria-hidden="true" />
-              {t('agents.resetBuiltin')}
-            </Button>
-            <DialogClose asChild>
-              <Button>{t('common.done')}</Button>
-            </DialogClose>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </li>
-  );
-}
-
-/**
- * One agent this one may hand a task to.
- *
- * Three controls, in the order the decision is made: *who*, *when to use them*,
- * and *whether to ask first*. The middle one is the largest because it is the
- * one that matters — it becomes the tool description the model reads, and it is
- * the only part of this feature that decides when a delegation actually fires.
- *
- * The tool name is shown rather than asked for. It is derived from the agent id
- * so two subagents can never collide and none can shadow a built-in; showing it
- * is what makes an operator's prompt ("use `ask_researcher` when…") match what
- * the model is really offered.
- */
-function SubagentRow({
-  ref_,
-  index,
-  options,
-  onChange,
-  onRemove,
-}: {
-  readonly ref_: SubagentRef;
-  readonly index: number;
-  readonly options: readonly { readonly id: string; readonly label: string }[];
-  readonly onChange: (next: SubagentRef) => void;
-  readonly onRemove: () => void;
-}): JSX.Element {
-  const { t } = useTranslation();
-  const position = index + 1;
-  // The target's label, which is what the generated description names. Read off
-  // the option list rather than stored on the reference, for the same reason
-  // `labelOf` reads it off the target's entry: one place to rename an agent.
-  const targetLabel = options.find((agent) => agent.id === ref_.id)?.label ?? '';
-
-  return (
-    <li className="stack agent-editor__subagent">
-      <div className="row agent-editor__subagent-head">
-        {/* Wrapped, like the permission select beside it, so the stylesheet has
-            something to place. The two are the same kind of thing and the phone
-            layout has to address them both. */}
-        <div className="agent-editor__subagent-agent">
-          <SelectField
-            label={<span className="sr-only">{t('agents.subagentAgentFor', { position })}</span>}
-            value={ref_.id}
-            placeholder={t('agents.subagentChoose')}
-            options={options.map((agent) => ({
-              value: agent.id,
-              label: agent.label === '' ? agent.id : agent.label,
-            }))}
-            onValueChange={(next) => {
-              onChange({ ...ref_, id: next });
-            }}
-          />
-        </div>
-
-        {ref_.id !== '' && (
-          <code className="agent-editor__subagent-tool">{subagentToolName(ref_.id)}</code>
-        )}
-
-        <div className="agent-editor__subagent-permission">
-          <SelectField
-            label={
-              <span className="sr-only">{t('agents.subagentPermissionFor', { position })}</span>
-            }
-            value={ref_.permission}
-            options={TOOL_PERMISSIONS.map((option) => ({
-              value: option,
-              label: t(PERMISSION_LABELS[option]),
-            }))}
-            onValueChange={(next) => {
-              if (isToolPermission(next)) onChange({ ...ref_, permission: next });
-            }}
-          />
-        </div>
-
-        <Button
-          variant="ghost"
-          aria-label={t('agents.subagentRemove', { position })}
-          onClick={onRemove}
-        >
-          <Trash2 aria-hidden="true" />
-        </Button>
-      </div>
-
-      {/* The one box on this page that is not a single line, and it earns it by
-          what it has to *show* rather than by what gets typed into it. The
-          placeholder is the description the model reads when this is left
-          empty — a couple of sentences — and in an `<input>` an operator saw
-          about forty characters of it, which left the default as invisible as
-          having no placeholder at all. It grows with its content, so a one-word
-          answer still costs one line. */}
-      <TextareaField
-        label={<span className="sr-only">{t('agents.subagentPromptFor', { position })}</span>}
-        value={ref_.prompt}
-        // The sentence the model would actually read, not an invented example
-        // of one an operator might write — which is what this used to hold, and
-        // left "leave it empty for a generic one" as the only clue about a
-        // default nobody could see.
-        //
-        // A placeholder rather than a prefilled value on purpose: it is built
-        // from the *target's* current label, so it follows a rename. Written
-        // into the reference it would freeze the name the agent had on the day
-        // the delegation was added, and nothing would ever correct it.
-        placeholder={
-          ref_.id === '' ? '' : defaultSubagentPrompt(targetLabel === '' ? ref_.id : targetLabel)
-        }
-        hint={t('agents.subagentPromptHint')}
-        rows={2}
-        onValueChange={(next) => {
-          onChange({ ...ref_, prompt: next });
-        }}
-      />
-    </li>
-  );
-}
-
 /**
  * The tool pinned to the top of the list.
  *
@@ -701,13 +232,6 @@ function SubagentRow({
  * manifest order is the useful order.
  */
 const EXEC_TOOL = 'exec';
-
-const PERMISSION_LABELS: Readonly<Record<ToolPermission, WebKey>> = {
-  allow: 'agents.toolAllow',
-  ask: 'agents.toolAsk',
-  deny: 'agents.toolDisabled',
-};
-
 /**
  * The dropdown's stand-in for "no toolbox".
  *
@@ -730,11 +254,13 @@ export function AgentCreateRoute(): JSX.Element {
   const { t } = useTranslation();
   const settings = useSettings();
 
-  if (settings.isPending) return <p className="page__note">{t('agents.loading')}</p>;
+  if (settings.isPending) {
+    return <p className="page__note">{t('agents.loading')}</p>;
+  }
   if (settings.isError) {
     return (
       <p role="alert" className="page__error">
-        Could not load the defaults: {settings.error.message}
+        {t('agents.loadDefaultsError', { message: settings.error.message })}
       </p>
     );
   }
@@ -742,7 +268,8 @@ export function AgentCreateRoute(): JSX.Element {
   const { config } = settings.data;
   // The template a new agent is stamped from, and the same one `toNewAgentPatch`
   // used: the default agent as it actually stands, not the schema's defaults.
-  const template = config.agents.list[DEFAULT_AGENT_ID] ?? AgentEntrySchema.parse({});
+  const template =
+    config.agents.list[DEFAULT_AGENT_ID] ?? AgentEntrySchema.parse({});
 
   return (
     <Editor
@@ -760,11 +287,13 @@ export function AgentEditorRoute(): JSX.Element {
   const { agentId } = useParams({ from: '/agents/$agentId' });
   const settings = useSettings();
 
-  if (settings.isPending) return <p className="page__note">{t('agents.loading')}</p>;
+  if (settings.isPending) {
+    return <p className="page__note">{t('agents.loading')}</p>;
+  }
   if (settings.isError) {
     return (
       <p role="alert" className="page__error">
-        Could not load the agent: {settings.error.message}
+        {t('agents.loadOneError', { message: settings.error.message })}
       </p>
     );
   }
@@ -780,7 +309,7 @@ export function AgentEditorRoute(): JSX.Element {
     return (
       <div className="stack page page--wide">
         <p role="alert" className="page__error">
-          There is no agent called “{agentId}”.
+          {t('agents.noSuchAgent', { id: agentId })}
         </p>
         <Link to="/agents" className="page__back">
           <ArrowLeft aria-hidden="true" />
@@ -834,7 +363,9 @@ function Editor({
   const { agentId: active, select } = useAgent();
   const { save, saving } = useSaveSettings();
 
-  const [form, setForm] = useState<AgentEntryForm>(() => toAgentEntryForm(entry, defaults));
+  const [form, setForm] = useState<AgentEntryForm>(() =>
+    toAgentEntryForm(entry, defaults),
+  );
   const [base, setBase] = useState<AgentForm>(() => toAgentForm(defaults));
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   const [dirty, setDirty] = useState(false);
@@ -896,10 +427,12 @@ function Editor({
     // one-way door: the option that would take it back did not exist, and an
     // agent could not be moved off a container without hand-editing the config.
     { value: NO_TOOLBOX, label: t('agents.toolboxHost') },
-    ...(toolboxes.data?.toolboxes ?? []).map((box: { name: string; label: string }) => ({
-      value: box.name,
-      label: box.label === '' ? box.name : `${box.label} (${box.name})`,
-    })),
+    ...(toolboxes.data?.toolboxes ?? []).map(
+      (box: { name: string; label: string }) => ({
+        value: box.name,
+        label: box.label === '' ? box.name : `${box.label} (${box.name})`,
+      }),
+    ),
   ];
   const chosen = toolboxes.data?.toolboxes.find(
     (box: { name: string }) => box.name === form.toolboxName,
@@ -925,11 +458,17 @@ function Editor({
     return order.indexOf(option.value) <= order.indexOf(ceiling);
   });
 
-  const update = <K extends keyof AgentEntryForm>(key: K, value: AgentEntryForm[K]): void => {
+  const update = <K extends keyof AgentEntryForm>(
+    key: K,
+    value: AgentEntryForm[K],
+  ): void => {
     setForm((current) => ({ ...current, [key]: value }));
     setDirty(true);
   };
-  const updateBase = <K extends keyof AgentForm>(key: K, value: AgentForm[K]): void => {
+  const updateBase = <K extends keyof AgentForm>(
+    key: K,
+    value: AgentForm[K],
+  ): void => {
     setBase((current) => ({ ...current, [key]: value }));
     setDirty(true);
   };
@@ -1003,14 +542,17 @@ function Editor({
   /** Bumped by a revert, to remount the template editors. See `onRevert`. */
   const [formEpoch, setFormEpoch] = useState(0);
 
-  /**
-   * Whether the policy would leave the model unable to identify a tool-output
-   * fence. Mirrors `assertBuildable`, so the editor says it before the save
-   * rather than the settings response saying it after.
-   */
-  const namesDelimiter = (template: string): boolean =>
-    template.includes('{{nonce}}') || template.includes('{{tag}}');
+  // A clock or a counter in a raw template: not an error — it is a legitimate
+  // thing to want — but a price an operator cannot see on the bill, so it is
+  // said here.
+  const promptUncacheable =
+    raw && VOLATILE.some((hole) => form.systemPrompt.includes(`{{${hole}}}`));
 
+  // Whether the policy would leave the model unable to identify a tool-output
+  // fence. `namesDelimiter` is the protocol's, which is what `assertBuildable`
+  // asks on the server — so the editor says it before the save rather than the
+  // settings response saying it after, and the two cannot drift apart.
+  //
   // The delimiter has to be named somewhere, not specifically in the policy. The
   // built-in policy names none on purpose — it is prose that never changes, so it
   // caches, and the live-state section supplies the turn's tag. Both templates
@@ -1018,7 +560,9 @@ function Editor({
   const policyUnfenced =
     form.toolPolicyPrompt.trim() !== '' &&
     !namesDelimiter(form.toolPolicyPrompt) &&
-    !namesDelimiter(form.livePrompt === '' ? DEFAULT_LIVE_STATE_TEMPLATE : form.livePrompt);
+    !namesDelimiter(
+      form.livePrompt === '' ? DEFAULT_LIVE_STATE_TEMPLATE : form.livePrompt,
+    );
 
   // ── Tools ────────────────────────────────────────────────────────────────
   //
@@ -1046,7 +590,9 @@ function Editor({
    * wearing two rows that disagreed about whether it existed.
    */
   const toolNames = useMemo(() => {
-    const names = new Set<string>((tools.data?.tools ?? []).map((tool) => tool.name));
+    const names = new Set<string>(
+      (tools.data?.tools ?? []).map((tool) => tool.name),
+    );
     for (const name of Object.keys(form.tools)) {
       if (!toolboxToolNames.has(name)) names.add(name);
     }
@@ -1074,7 +620,10 @@ function Editor({
    */
   const toolsOff = !switches.toolsEnabled.checked;
 
-  const setToolPermission = (name: string, permission: ToolPermission): void => {
+  const setToolPermission = (
+    name: string,
+    permission: ToolPermission,
+  ): void => {
     update('tools', { ...form.tools, [name]: permission });
   };
 
@@ -1111,7 +660,9 @@ function Editor({
   );
 
   const providerOptions = useMemo(() => {
-    const instances = (providers.data?.instances ?? []).filter((instance) => instance.enabled);
+    const instances = (providers.data?.instances ?? []).filter(
+      (instance) => instance.enabled,
+    );
     return [
       { value: 'auto', label: 'auto — resolve from whichever has credentials' },
       ...instances.map((instance) => ({
@@ -1130,7 +681,12 @@ function Editor({
    * provider stopped listing, survives being looked at.
    */
   const modelChoices = useMemo(
-    () => modelOptions(models.data?.models ?? [], fields.provider.value, fields.model.value),
+    () =>
+      modelOptions(
+        models.data?.models ?? [],
+        fields.provider.value,
+        fields.model.value,
+      ),
     [models.data, fields.provider.value, fields.model.value],
   );
 
@@ -1186,12 +742,15 @@ function Editor({
   const proposedId = idSource.trim() === '' ? '' : deriveAgentId(idSource);
   // Creating is never renaming: there is no old id for the new one to move
   // away from, so the same box means "what this will be called" instead.
-  const renaming = !creating && !isDefault && proposedId !== '' && proposedId !== agentId;
+  const renaming =
+    !creating && !isDefault && proposedId !== '' && proposedId !== agentId;
 
   const idError = ((): string | undefined => {
     if (creating) {
       if (proposedId === '') return t('agents.idEmpty');
-      return list[proposedId] === undefined ? undefined : t('agents.idTaken', { id: proposedId });
+      return list[proposedId] === undefined
+        ? undefined
+        : t('agents.idTaken', { id: proposedId });
     }
     if (isDefault || idDraft.trim() === agentId) return undefined;
     if (proposedId === '') return t('agents.idEmpty');
@@ -1240,7 +799,10 @@ function Editor({
       // the write lands is the "There is no agent called…" path.
       save(result.patch, {
         onSuccess: () => {
-          void navigate({ to: '/agents/$agentId', params: { agentId: target } });
+          void navigate({
+            to: '/agents/$agentId',
+            params: { agentId: target },
+          });
         },
       });
       setDirty(false);
@@ -1270,7 +832,10 @@ function Editor({
               // an id that names *nothing*, and this one now names the renamed
               // agent.
               if (active === agentId) select(proposedId);
-              void navigate({ to: '/agents/$agentId', params: { agentId: proposedId } });
+              void navigate({
+                to: '/agents/$agentId',
+                params: { agentId: proposedId },
+              });
             },
           }
         : {},
@@ -1292,7 +857,12 @@ function Editor({
     setDirty(false);
   };
 
-  const name = form.label === '' ? (creating ? t('agents.newTitle') : agentId) : form.label;
+  const name =
+    form.label === ''
+      ? creating
+        ? t('agents.newTitle')
+        : agentId
+      : form.label;
 
   return (
     <div className="stack page page--wide agent-editor">
@@ -1340,7 +910,10 @@ function Editor({
         </p>
       </div>
 
-      <Section title={t('agents.identity')} description={t('agents.identityDesc')}>
+      <Section
+        title={t('agents.identity')}
+        description={t('agents.identityDesc')}
+      >
         <FieldGrid>
           <TextField
             label={t('common.name')}
@@ -1349,7 +922,7 @@ function Editor({
             onValueChange={(value) => {
               update('label', value);
             }}
-            hint="Fills {{name}} in the system prompt."
+            hint={t('agents.labelHint', { token: '{{name}}' })}
           />
           {!isDefault && (
             <TextField
@@ -1360,7 +933,9 @@ function Editor({
                 setIdDraft(value);
                 setDirty(true);
               }}
-              {...(errors.agentId === undefined || creating ? {} : { error: errors.agentId })}
+              {...(errors.agentId === undefined || creating
+                ? {}
+                : { error: errors.agentId })}
               hint={
                 // Creating shows what the id *will be* as it is typed, and says
                 // so inline rather than as an error — a name that collides is a
@@ -1376,7 +951,7 @@ function Editor({
           {!isDefault && (
             <SwitchRow
               label={t('agents.enabled')}
-              hint="A disabled agent cannot run a turn and is hidden from the picker."
+              hint={t('agents.enabledHint')}
               checked={form.enabled}
               onCheckedChange={(checked) => {
                 update('enabled', checked);
@@ -1410,8 +985,15 @@ function Editor({
           <SelectField
             label={t('agents.model')}
             value={fields.model.value}
-            placeholder={modelChoices.length === 0 ? 'No models to choose from' : 'Choose a model'}
-            options={modelChoices.map((model) => ({ value: model, label: model }))}
+            placeholder={
+              modelChoices.length === 0
+                ? 'No models to choose from'
+                : 'Choose a model'
+            }
+            options={modelChoices.map((model) => ({
+              value: model,
+              label: model,
+            }))}
             onValueChange={fields.model.set}
             error={errors.model}
             hint={
@@ -1428,7 +1010,7 @@ function Editor({
             inputMode="decimal"
             error={errors.temperature}
             placeholder={t('agents.providerDefault')}
-            hint="Leave empty to send none at all — which is the only thing that works for models that reject it."
+            hint={t('agents.temperatureHint')}
           />
           <OptionalSelect
             label={t('agents.reasoningEffort')}
@@ -1455,16 +1037,33 @@ function Editor({
         </FieldGrid>
       </Section>
 
-      <Section title={t('agents.toolsSection')} description={t('agents.toolsDesc')}>
-        {tools.isPending && <p className="page__note">{t('agents.loadingTools')}</p>}
-        {/* Shown above the list rather than in place of it. The rows say what
-            this agent is configured to do, and that is still true and still
-            saved — what has changed is only that this model is not being told
-            about any of it. Emptying the list would read as the config being
-            gone, which is the one thing the switch must not do. */}
-        {toolsOff && <p className="page__note page__warning">{t('agents.toolsOffNote')}</p>}
+      <Section
+        title={t('agents.toolsSection')}
+        description={t('agents.toolsDesc')}
+      >
+        {tools.isPending && (
+          <p className="page__note">{t('agents.loadingTools')}</p>
+        )}
+        {/* Above the list rather than in place of it. The rows say what this
+            agent is configured to do, and that is still true and still saved —
+            what has changed is only that this model is not being told about any
+            of it. Emptying the list would read as the config being gone, which
+            is the one thing the switch must not do. */}
+        {toolsOff && (
+          <NoticeBlock
+            tone="warning"
+            icon={Wrench}
+            title={t('agents.toolsOffTitle')}
+            message={t('agents.toolsOffNote')}
+          />
+        )}
         {toolNames.length > 0 && (
-          <ul className={cn('stack agent-editor__tools', toolsOff && 'agent-editor__tools--off')}>
+          <ul
+            className={cn(
+              'stack agent-editor__tools',
+              toolsOff && 'agent-editor__tools--off',
+            )}
+          >
             {toolNames.map((name) => {
               const tool = registered.get(name);
               return (
@@ -1474,7 +1073,9 @@ function Editor({
                   detail={tool?.description ?? ''}
                   risk={tool?.risk}
                   permission={form.tools[name] ?? 'deny'}
-                  fields={tool === undefined ? [] : parameterFields(tool.parameters)}
+                  fields={
+                    tool === undefined ? [] : parameterFields(tool.parameters)
+                  }
                   override={form.toolPrompts[name]}
                   disabled={toolsOff}
                   onChange={(next) => {
@@ -1495,9 +1096,16 @@ function Editor({
         {chosen?.exposesTools === true && chosen.tools.length > 0 && (
           <>
             <h3 className="agent-editor__tool-group">
-              {t('agents.toolboxToolsGroup', { name: chosen.label || chosen.name })}
+              {t('agents.toolboxToolsGroup', {
+                name: chosen.label || chosen.name,
+              })}
             </h3>
-            <ul className={cn('stack agent-editor__tools', toolsOff && 'agent-editor__tools--off')}>
+            <ul
+              className={cn(
+                'stack agent-editor__tools',
+                toolsOff && 'agent-editor__tools--off',
+              )}
+            >
               {chosen.tools.map((tool) => (
                 <ToolRow
                   key={tool.name}
@@ -1531,7 +1139,10 @@ function Editor({
       {/* After the tools, because delegating *is* a tool from the model's side —
           one per subagent, named after it — and an operator reading down the
           page has just decided what this agent may do on its own. */}
-      <Section title={t('agents.subagentsSection')} description={t('agents.subagentsDesc')}>
+      <Section
+        title={t('agents.subagentsSection')}
+        description={t('agents.subagentsDesc')}
+      >
         {delegable.length === 0 ? (
           <p className="page__note">{t('agents.subagentsNoneAvailable')}</p>
         ) : (
@@ -1547,19 +1158,22 @@ function Editor({
                   // yet has no id, and two of them would collide on `''` — which
                   // React resolves by reusing one input for both.
                   key={index}
-                  ref_={ref}
+                  subagentRef={ref}
                   index={index}
                   // The agent itself is never offered, and neither is one already
                   // chosen — both are refused at save, and a picker that offers
                   // what the save refuses teaches the wrong thing.
                   options={delegable.filter(
-                    (agent) => agent.id === ref.id || !chosenSubagents.has(agent.id),
+                    (agent) =>
+                      agent.id === ref.id || !chosenSubagents.has(agent.id),
                   )}
                   onChange={(next) => {
                     setSubagent(index, next);
                   }}
                   onRemove={() => {
-                    setSubagents(form.subagents.filter((_unused, at) => at !== index));
+                    setSubagents(
+                      form.subagents.filter((unused, at) => at !== index),
+                    );
                   }}
                 />
               ))}
@@ -1569,7 +1183,10 @@ function Editor({
               variant="secondary"
               disabled={form.subagents.length >= delegable.length}
               onClick={() => {
-                setSubagents([...form.subagents, { id: '', prompt: '', permission: 'allow' }]);
+                setSubagents([
+                  ...form.subagents,
+                  { id: '', prompt: '', permission: 'allow' },
+                ]);
               }}
             >
               <Plus aria-hidden="true" />
@@ -1582,8 +1199,13 @@ function Editor({
       {/* After the tools, because a profile decides *where* the tools it just
           listed actually run — and before the budget, which is a smaller
           decision. */}
-      <Section title={t('agents.toolboxSection')} description={t('agents.toolboxDesc')}>
-        {toolboxes.isPending && <p className="page__note">{t('agents.toolboxLoading')}</p>}
+      <Section
+        title={t('agents.toolboxSection')}
+        description={t('agents.toolboxDesc')}
+      >
+        {toolboxes.isPending && (
+          <p className="page__note">{t('agents.toolboxLoading')}</p>
+        )}
         {toolboxes.data?.toolboxes.length === 0 && (
           <p className="page__note">{t('agents.toolboxNoProfiles')}</p>
         )}
@@ -1658,7 +1280,7 @@ function Editor({
             bound={fields.toolTimeoutSeconds}
             inputMode="numeric"
             error={errors.toolTimeoutSeconds}
-            hint="0 disables the limit."
+            hint={t('agents.zeroDisablesHint')}
           />
           {isDefault && (
             <TextField
@@ -1680,13 +1302,16 @@ function Editor({
               onValueChange={(value) => {
                 updateBase('loopWallTimeoutSeconds', value);
               }}
-              hint="0 disables the limit."
+              hint={t('agents.zeroDisablesHint')}
             />
           )}
         </FieldGrid>
       </Section>
 
-      <Section title={t('agents.systemPrompt')} description={t('agents.promptDesc')}>
+      <Section
+        title={t('agents.systemPrompt')}
+        description={t('agents.promptDesc')}
+      >
         <div className="stack agent-editor__prompt">
           <TemplateEditor
             key={`${String(formEpoch)}-system`}
@@ -1696,13 +1321,18 @@ function Editor({
             value={form.systemPrompt}
             placeholders={raw ? RAW_PROMPT_PLACEHOLDERS : PROMPT_PLACEHOLDERS}
             removable={false}
-            hint={raw ? 'agents.promptSystemRawHint' : 'agents.promptSystemHint'}
-            {...(raw && VOLATILE.some((hole) => form.systemPrompt.includes(`{{${hole}}}`))
+            hint={
+              raw ? 'agents.promptSystemRawHint' : 'agents.promptSystemHint'
+            }
+            {...(promptUncacheable
               ? {
                   // Not an error: a clock in the prompt is a legitimate thing to
                   // want. It is a price, and one an operator cannot see on the
                   // bill, so it is said here instead.
-                  warning: t('agents.promptUncacheable'),
+                  warning: {
+                    title: t('agents.promptUncacheableTitle'),
+                    message: t('agents.promptUncacheable'),
+                  },
                 }
               : {})}
             onChange={(next) => {
@@ -1779,7 +1409,14 @@ function Editor({
                     // describes running a command, and the file tools it names
                     // are tools too. With none of them there is nothing left for
                     // the section to be about.
-                    {...(toolsOff ? { warning: t('agents.promptNotPlacedNoTools') } : {})}
+                    {...(toolsOff
+                      ? {
+                          warning: {
+                            title: t('agents.toolsOffTitle'),
+                            message: t('agents.promptNotPlacedNoTools'),
+                          },
+                        }
+                      : {})}
                     onChange={(next) => {
                       update('platformPrompt', next);
                     }}
@@ -1797,7 +1434,14 @@ function Editor({
                       // writing before the model that can use it is chosen, and
                       // a box that refuses keystrokes cannot say why as clearly
                       // as a line that says it is not being placed.
-                      {...(toolsOff ? { warning: t('agents.promptNotPlacedNoTools') } : {})}
+                      {...(toolsOff
+                        ? {
+                            warning: {
+                              title: t('agents.toolsOffTitle'),
+                              message: t('agents.promptNotPlacedNoTools'),
+                            },
+                          }
+                        : {})}
                       onChange={(next) => {
                         update('toolboxPrompt', next);
                       }}
@@ -1816,25 +1460,45 @@ function Editor({
                     // a box carrying three lines about a prompt nothing sends is
                     // three chances to act on the wrong one.
                     {...(toolsOff
-                      ? { warning: t('agents.promptNotPlacedNoTools') }
+                      ? {
+                          warning: {
+                            title: t('agents.toolsOffTitle'),
+                            message: t('agents.promptNotPlacedNoTools'),
+                          },
+                        }
                       : policyUnfenced
                         ? {
-                            warning: t('agents.promptToolPolicyUnfenced', {
-                              // Passed rather than written into the bundle: i18next
-                              // does not rescan an interpolated value, which is the
-                              // only way a literal `{{…}}` survives to the screen.
-                              tag: '{{tag}}',
-                              nonce: '{{nonce}}',
-                            }),
+                            warning: {
+                              title: t('agents.promptToolPolicyUnfencedTitle'),
+                              // Passed rather than written into the bundle:
+                              // i18next does not rescan an interpolated value,
+                              // which is the only way a literal `{{…}}` survives
+                              // to the screen.
+                              message: t('agents.promptToolPolicyUnfenced', {
+                                tag: '{{tag}}',
+                                nonce: '{{nonce}}',
+                              }),
+                            },
                           }
                         : namesDelimiter(form.toolPolicyPrompt)
                           ? {
                               // Naming the tag here is legal and costs the cache:
-                              // this section is otherwise identical for the life of
-                              // a session, so it rides the cached prefix — unless it
-                              // spells out a delimiter that changes every turn, at
-                              // which point the whole of it is re-sent per step.
-                              warning: t('agents.promptToolPolicyUncacheable', { tag: '{{tag}}' }),
+                              // this section is otherwise identical for the life
+                              // of a session, so it rides the cached prefix —
+                              // unless it spells out a delimiter that changes
+                              // every turn, at which point the whole of it is
+                              // re-sent per step.
+                              warning: {
+                                title: t(
+                                  'agents.promptToolPolicyUncacheableTitle',
+                                ),
+                                message: t(
+                                  'agents.promptToolPolicyUncacheable',
+                                  {
+                                    tag: '{{tag}}',
+                                  },
+                                ),
+                              },
                             }
                           : {})}
                     onChange={(next) => {
@@ -1848,7 +1512,12 @@ function Editor({
         </div>
       </Section>
 
-      <SaveBar dirty={dirty} saving={saving} onSave={onSave} onRevert={onRevert} />
+      <SaveBar
+        dirty={dirty}
+        saving={saving}
+        onSave={onSave}
+        onRevert={onRevert}
+      />
 
       <ConfirmDialog
         open={confirmingDelete}

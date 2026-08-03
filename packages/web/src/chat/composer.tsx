@@ -126,9 +126,14 @@ export function Composer({
   const suggestions = query === undefined ? [] : mentionSuggestions(query);
   const open = suggestions.length > 0;
 
-  const ready = files.every((file) => file.attachment !== undefined || file.failed);
-  const attachments = files.flatMap((file) => (file.attachment ? [file.attachment] : []));
-  const canSend = configured && ready && (text.trim() !== '' || attachments.length > 0);
+  const ready = files.every(
+    (file) => file.attachment !== undefined || file.failed,
+  );
+  const attachments = files.flatMap((file) =>
+    file.attachment ? [file.attachment] : [],
+  );
+  const canSend =
+    configured && ready && (text.trim() !== '' || attachments.length > 0);
 
   const submit = useCallback(() => {
     if (!canSend) return;
@@ -158,7 +163,9 @@ export function Composer({
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault();
         const step = event.key === 'ArrowDown' ? 1 : -1;
-        setHighlight((value) => (value + step + suggestions.length) % suggestions.length);
+        setHighlight(
+          (value) => (value + step + suggestions.length) % suggestions.length,
+        );
         return;
       }
       if (event.key === 'Enter' || event.key === 'Tab') {
@@ -178,7 +185,11 @@ export function Composer({
 
     // Shift+Enter is a newline; Enter sends. The other way round is what chat
     // apps that are also editors do, and this is a chat app.
-    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+    if (
+      event.key === 'Enter' &&
+      !event.shiftKey &&
+      !event.nativeEvent.isComposing
+    ) {
       event.preventDefault();
       submit();
     }
@@ -197,7 +208,10 @@ export function Composer({
       for (const file of picked) {
         if (file.size > MAX_UPLOAD_BYTES) {
           toast.error(
-            t('chat.attachTooLarge', { name: file.name, limit: formatBytes(MAX_UPLOAD_BYTES) }),
+            t('chat.attachTooLarge', {
+              name: file.name,
+              limit: formatBytes(MAX_UPLOAD_BYTES),
+            }),
           );
           continue;
         }
@@ -247,9 +261,14 @@ export function Composer({
             {files.map((file) => (
               <li
                 key={file.id}
-                className={cn('composer__file', file.failed && 'composer__file--failed')}
+                className={cn(
+                  'composer__file',
+                  file.failed && 'composer__file--failed',
+                )}
               >
-                <span className="composer__file-name truncate">{file.name}</span>
+                <span className="composer__file-name truncate">
+                  {file.name}
+                </span>
                 <span className="composer__file-state">
                   {file.failed
                     ? 'failed'
@@ -261,7 +280,9 @@ export function Composer({
                   type="button"
                   aria-label={`Remove ${file.name}`}
                   onClick={() => {
-                    setFiles((current) => current.filter((entry) => entry.id !== file.id));
+                    setFiles((current) =>
+                      current.filter((entry) => entry.id !== file.id),
+                    );
                   }}
                   className="composer__file-remove"
                 >
@@ -297,8 +318,12 @@ export function Composer({
                     index === highlight && 'composer__mention--active',
                   )}
                 >
-                  <span className="composer__mention-label">{suggestion.label}</span>
-                  <span className="composer__mention-hint truncate">{suggestion.hint}</span>
+                  <span className="composer__mention-label">
+                    {suggestion.label}
+                  </span>
+                  <span className="composer__mention-hint truncate">
+                    {suggestion.hint}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -368,7 +393,12 @@ export function Composer({
           </div>
 
           {busy ? (
-            <Button variant="danger" size="icon" aria-label={t('chat.stopTurn')} onClick={onStop}>
+            <Button
+              variant="danger"
+              size="icon"
+              aria-label={t('chat.stopTurn')}
+              onClick={onStop}
+            >
               <Square />
             </Button>
           ) : (
@@ -450,7 +480,9 @@ function composerStatus({
   }
 
   if (queueDepth > 0) {
-    parts.push(<span key="queued">{t('chat.queued', { count: queueDepth })}</span>);
+    parts.push(
+      <span key="queued">{t('chat.queued', { count: queueDepth })}</span>,
+    );
   }
 
   return parts.length === 0 ? undefined : parts;
@@ -466,7 +498,9 @@ function composerStatus({
 async function stage(
   file: File,
   workspace: string,
-  setFiles: (update: (current: readonly StagedFile[]) => readonly StagedFile[]) => void,
+  setFiles: (
+    update: (current: readonly StagedFile[]) => readonly StagedFile[],
+  ) => void,
 ): Promise<void> {
   const id = newUuid();
   const entry: StagedFile = {
@@ -508,7 +542,9 @@ async function stage(
     );
   } catch (error) {
     setFiles((current) =>
-      current.map((staged) => (staged.id === id ? { ...staged, failed: true } : staged)),
+      current.map((staged) =>
+        staged.id === id ? { ...staged, failed: true } : staged,
+      ),
     );
     toast.error(
       `Could not upload ${file.name}`,

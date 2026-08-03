@@ -25,7 +25,11 @@
  */
 
 import { GhostError } from '@ghostai/core';
-import { defaultSubagentPrompt, type ToolDefinition, type ToolPermission } from '@ghostai/protocol';
+import {
+  defaultSubagentPrompt,
+  type ToolDefinition,
+  type ToolPermission,
+} from '@ghostai/protocol';
 import type { ToolExecution } from '@ghostai/tools';
 
 /**
@@ -121,7 +125,9 @@ export function subagentDefinition(binding: SubagentBinding): ToolDefinition {
 export type DelegationRefusal = 'unconfigured' | 'cycle' | 'too-deep';
 
 /** The task string, as the model supplied it — or a refusal to parse it. */
-export function parseTask(args: unknown): { readonly ok: true; readonly task: string } | undefined {
+export function parseTask(
+  args: unknown,
+): { readonly ok: true; readonly task: string } | undefined {
   if (typeof args !== 'object' || args === null) return undefined;
   const task = (args as { task?: unknown }).task;
   if (typeof task !== 'string' || task.trim() === '') return undefined;
@@ -273,9 +279,13 @@ export function subagentMap(
   const map = new Map<string, SubagentBinding>();
   for (const binding of bindings) {
     if (map.has(binding.toolName)) {
-      throw new GhostError('config', `Two subagents resolve to the tool "${binding.toolName}"`, {
-        details: { toolName: binding.toolName, agentId: binding.agentId },
-      });
+      throw new GhostError(
+        'config',
+        `Two subagents resolve to the tool "${binding.toolName}"`,
+        {
+          details: { toolName: binding.toolName, agentId: binding.agentId },
+        },
+      );
     }
     map.set(binding.toolName, binding);
   }

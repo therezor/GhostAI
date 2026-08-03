@@ -68,7 +68,12 @@ export function ReasoningBlock({
         }}
         className="reasoning__toggle"
       >
-        <ChevronRight className={cn('disclosure-chevron', open && 'disclosure-chevron--open')} />
+        <ChevronRight
+          className={cn(
+            'disclosure-chevron',
+            open && 'disclosure-chevron--open',
+          )}
+        />
         <Brain />
         <span>{t('chat.reasoning')}</span>
         {live && <span className="reasoning__live">thinking…</span>}

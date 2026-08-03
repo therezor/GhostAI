@@ -28,7 +28,9 @@ export interface SortOrder<K extends string> {
 }
 
 /** One ascending comparison per sortable column. */
-export type Comparators<T, K extends string> = Readonly<Record<K, (a: T, b: T) => number>>;
+export type Comparators<T, K extends string> = Readonly<
+  Record<K, (a: T, b: T) => number>
+>;
 
 export interface SortRowsOptions<T> {
   /**
@@ -94,6 +96,9 @@ export function filterRows<T>(
  * is both the label and the toggle. `ListSort` asks the two questions
  * separately, so choosing a column is only ever choosing a column.
  */
-export function sortBy<K extends string>(key: K, ascendingFirst: readonly K[]): SortOrder<K> {
+export function sortBy<K extends string>(
+  key: K,
+  ascendingFirst: readonly K[],
+): SortOrder<K> {
   return { key, descending: !ascendingFirst.includes(key) };
 }

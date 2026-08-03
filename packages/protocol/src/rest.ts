@@ -15,7 +15,11 @@
 import { z } from 'zod';
 
 import { ConfigPatchSchema, ConfigSchema } from './config.js';
-import { StopReasonSchema, StoredMessageSchema, UsageSchema } from './messages.js';
+import {
+  StopReasonSchema,
+  StoredMessageSchema,
+  UsageSchema,
+} from './messages.js';
 import { SubagentRunRefSchema } from './subagent.js';
 import { ToolDefinitionSchema, ToolPermissionSchema } from './tools.js';
 import { AutomationJobSchema, AutomationRunSchema } from './automation.js';
@@ -208,7 +212,14 @@ export type SettingsPatchRequest = z.infer<typeof SettingsPatchRequestSchema>;
 
 /** Write-only credential update. */
 export const SetCredentialRequestSchema = z.object({
-  namespace: z.enum(['providers', 'tools', 'rag', 'audio', 'mcp_servers', 'plugins']),
+  namespace: z.enum([
+    'providers',
+    'tools',
+    'rag',
+    'audio',
+    'mcp_servers',
+    'plugins',
+  ]),
   key: z.string().min(1),
   /** `null` deletes the entry. */
   value: z.string().nullable(),
@@ -403,7 +414,9 @@ export const SessionMessagesResponseSchema = z.object({
    */
   failures: z.record(z.string(), z.string()).default({}),
 });
-export type SessionMessagesResponse = z.infer<typeof SessionMessagesResponseSchema>;
+export type SessionMessagesResponse = z.infer<
+  typeof SessionMessagesResponseSchema
+>;
 
 export const CreateSessionRequestSchema = z.object({
   key: z.string().min(1).optional(),
@@ -731,7 +744,9 @@ export const CreateDirectoryRequestSchema = z.object({
   /** Which workspace the path is relative to. Defaults to `default`. */
   workspaceId: z.string().min(1).optional(),
 });
-export type CreateDirectoryRequest = z.infer<typeof CreateDirectoryRequestSchema>;
+export type CreateDirectoryRequest = z.infer<
+  typeof CreateDirectoryRequestSchema
+>;
 
 /**
  * Moving a file or a directory within one workspace.
@@ -791,7 +806,9 @@ export const CreateWorkspaceRequestSchema = z.object({
   /** Derived from the name when absent. Lowercase; also the folder name. */
   id: z.string().min(1).max(40).optional(),
 });
-export type CreateWorkspaceRequest = z.infer<typeof CreateWorkspaceRequestSchema>;
+export type CreateWorkspaceRequest = z.infer<
+  typeof CreateWorkspaceRequestSchema
+>;
 
 /**
  * What an edit may change: the label, the folder, or both.
@@ -807,7 +824,9 @@ export const UpdateWorkspaceRequestSchema = z.object({
   /** The folder to move it to. Lowercase; see `WORKSPACE_ID_PATTERN`. */
   id: z.string().min(1).max(40).optional(),
 });
-export type UpdateWorkspaceRequest = z.infer<typeof UpdateWorkspaceRequestSchema>;
+export type UpdateWorkspaceRequest = z.infer<
+  typeof UpdateWorkspaceRequestSchema
+>;
 
 /** The way through a delete that was refused for having sessions. */
 export const MoveSessionsRequestSchema = z.object({
@@ -849,7 +868,9 @@ export const NotificationListResponseSchema = z.object({
    */
   total: z.number().int().nonnegative(),
 });
-export type NotificationListResponse = z.infer<typeof NotificationListResponseSchema>;
+export type NotificationListResponse = z.infer<
+  typeof NotificationListResponseSchema
+>;
 
 // ---------------------------------------------------------------------------
 // Automation
@@ -858,7 +879,9 @@ export type NotificationListResponse = z.infer<typeof NotificationListResponseSc
 export const AutomationJobListResponseSchema = z.object({
   jobs: z.array(AutomationJobSchema),
 });
-export type AutomationJobListResponse = z.infer<typeof AutomationJobListResponseSchema>;
+export type AutomationJobListResponse = z.infer<
+  typeof AutomationJobListResponseSchema
+>;
 
 export const AutomationRunListResponseSchema = z.object({
   runs: z.array(AutomationRunSchema),
@@ -866,7 +889,9 @@ export const AutomationRunListResponseSchema = z.object({
   /** Every run the job has kept, bounded by its retention knob. See `total` on `SessionListResponse`. */
   total: z.number().int().nonnegative(),
 });
-export type AutomationRunListResponse = z.infer<typeof AutomationRunListResponseSchema>;
+export type AutomationRunListResponse = z.infer<
+  typeof AutomationRunListResponseSchema
+>;
 
 // ---------------------------------------------------------------------------
 // Auth
@@ -930,7 +955,10 @@ export const UsernameSchema = z
  * something they never typed — after which the password manager that replays it
  * verbatim can never sign in.
  */
-export const NewPasswordSchema = z.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH);
+export const NewPasswordSchema = z
+  .string()
+  .min(PASSWORD_MIN_LENGTH)
+  .max(PASSWORD_MAX_LENGTH);
 
 /**
  * A password being *presented*, which is a different schema from one being set.
@@ -941,7 +969,10 @@ export const NewPasswordSchema = z.string().min(PASSWORD_MIN_LENGTH).max(PASSWOR
  * upper bound survives, and only because it caps the work an anonymous caller
  * can ask argon2id to do.
  */
-export const PresentedPasswordSchema = z.string().min(1).max(PASSWORD_MAX_LENGTH);
+export const PresentedPasswordSchema = z
+  .string()
+  .min(1)
+  .max(PASSWORD_MAX_LENGTH);
 
 export const LoginRequestSchema = z.object({
   username: UsernameSchema,

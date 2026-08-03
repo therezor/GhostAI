@@ -68,7 +68,9 @@ export function builtinTools(
   const dropped = new Set<AnyTool>();
   if (config?.exec.enable === false) dropped.add(execTool);
   if (options.scheduler === false) dropped.add(automationTool);
-  return dropped.size === 0 ? BUILTIN_TOOLS : BUILTIN_TOOLS.filter((tool) => !dropped.has(tool));
+  return dropped.size === 0
+    ? BUILTIN_TOOLS
+    : BUILTIN_TOOLS.filter((tool) => !dropped.has(tool));
 }
 
 /** Registers the built-ins under the `builtin` source. */

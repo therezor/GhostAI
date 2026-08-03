@@ -72,9 +72,148 @@ every time.
 
 Assert the **durable** state a step settles into — the card's `Succeeded`/`Failed`
 status, the text in the transcript — and cover the in-between wording in a component
-test, where the state can be held still (`packages/web/src/chat/approval.test.tsx`).
+test, where the state can be held still (`packages/web/test/chat/approval.test.tsx`).
 The rule of thumb: if the only reason you can see it is that the machine was slow,
 it does not belong in an `expect`.
+
+## The style guide is Google's, and the linter owns it
+
+This repo follows the [Google TypeScript Style Guide][gts]. You do not need to
+have read it: the parts a machine can check are in `eslint.config.js` and
+`.prettierrc.json`, so `pnpm lint` and `pnpm format:check` are the guide as far
+as a change is concerned. Read it when you want to know _why_ a rule is there.
+
+[gts]: https://google.github.io/styleguide/tsguide.html
+
+Two things about it that surprise people:
+
+- **80 columns, not 100.** This is the guide's, and it is the reason almost
+  every file was touched at once. That reformat is listed in
+  `.git-blame-ignore-revs`, so `git blame` can skip it — GitHub reads the file
+  by name, and locally it takes one command per clone:
+
+  ```bash
+  git config blame.ignoreRevsFile .git-blame-ignore-revs
+  ```
+
+- **No leading or trailing underscores, including on unused parameters.**
+  There is no `argsIgnorePattern`. A parameter that is not used is deleted; one
+  that cannot be deleted because it sits before a parameter that _is_ used just
+  gets an ordinary name. `_x` is not available as an escape hatch.
+
+### The deliberate deviations, and why
+
+Everything below is a place where the guide says one thing and this repo does
+another on purpose. If you are about to "fix" one of these, this is the
+argument you are arguing with.
+
+- **PascalCase is allowed for values, not only for types.** Two kinds of value
+  are PascalCase by an external convention and cannot be renamed without
+  breaking what reads them: a React component or context (JSX treats a
+  lowercase identifier as an intrinsic element), and a zod schema
+  (`ChatMessageSchema`), whose name mirrors the type it produces and which is
+  re-exported across every package.
+- **`export default` is allowed in `*.config.ts`.** vite, vitest, tsup and
+  playwright each load their config by taking the module's default export. The
+  guide's rule is about our modules; a file whose shape is dictated by the tool
+  reading it is not one. Everywhere else the rule is on.
+- **Object and type _properties_ are exempt from naming rules.** They are wire
+  formats, HTTP header names, route keys, CSS custom properties and i18n keys —
+  data whose spelling is fixed outside this repository, not identifiers.
+- **`ignoreRestSiblings` is on.** `const {password, ...rest} = user` has to name
+  the key it drops. Without this there is no way to omit a field at all, and the
+  guide's own advice is to use rest destructuring for exactly this.
+- **Tests may assert object literals.** `{matches: true} as MediaQueryListEvent`
+  is the point of a fixture: it supplies the one field under test and no other,
+  and the annotation the guide asks for instead would be a compile error. Only
+  the object-literal case is relaxed, and only under `test/` — `as` is still the
+  required syntax, and product code still annotates.
+
+### `#private` is gone; `private` is the spelling
+
+The guide bans `#ident` in favour of TypeScript's `private`, and converting the
+repo rewrote a little over 2,000 declarations and references across 30 files.
+Two consequences worth knowing before you reintroduce one by habit:
+
+- A `private` field is a real, enumerable own property. `#x` was invisible to
+  `Object.keys`, spread, `JSON.stringify` and a deep-equality assertion;
+  `private x` is not. If you write a test that deep-compares an instance, it now
+  sees the internals.
+- A private field can no longer share a name with a public getter. The pattern
+  `#items` + `get items()` does not compile, so the _private_ side gets the new
+  name — `private itemsByKey` + `get items()`. Fifteen of those were renamed
+  during the conversion; the public surface was left alone deliberately, because
+  a getter becoming a property is an API change and a rename of a private field
+  is not.
+
+## Where a test goes
+
+Every test lives in its package's `test/` directory, mirroring `src/`. The test for
+`packages/server/src/hub.ts` is `packages/server/test/hub.test.ts`; the test for
+`packages/web/src/chat/markdown/blocks.ts` is
+`packages/web/test/chat/markdown/blocks.test.ts`. Nothing under `src/` is a test.
+
+Tests reach source through an alias, never a relative path:
+
+- **`#src/…`** everywhere except web — a package.json `imports` entry, so
+  `#src/hub.js` resolves the same way for node, tsc and vitest with no extra config.
+- **`@/…`** in web, which already had the alias and uses it throughout.
+
+Two consequences worth knowing before you fight them:
+
+- **`test/` is its own TypeScript project** (`packages/<pkg>/test/tsconfig.json`,
+  referenced from the root `tsconfig.json`). That is what keeps tests out of
+  `rootDir` and so out of the emitted `dist`, and it is what ESLint's
+  `projectService` finds when it walks up from a test file. A new package needs
+  both of its references added at the root, not one.
+- **A test no longer shares a program with the rest of `src/`**, so a module
+  augmentation it used to inherit for free must now be imported by name. This is
+  why `test/schema.test.ts` carries `import type {} from '@fastify/swagger'`:
+  `summary` is not fastify's field, and `src/app.ts` is no longer in scope to
+  merge it on.
+
+**Web is the exception, deliberately.** Its tests are checked by
+`packages/web/tsconfig.json` itself rather than a separate project, because that
+config sets `noEmit` — and `tsc -b` refuses a reference to a project that disables
+emit (TS6310), a reference being a promise of declarations. There is no `dist` to
+keep tests out of there either, so the split would buy nothing.
+
+### A `testkit/` is never in `src/`
+
+`src/` is runtime code. A testkit is not runtime code, so every one of them lives in
+`test/testkit/` — including the two that other packages import.
+
+That last part is the bit worth stating, because "another package imports it" reads
+like it must be built and therefore must be in `src/`. It does not. The `exports`
+map can name TypeScript source directly:
+
+```json
+"./testkit": { "types": "./test/testkit/index.ts", "default": "./test/testkit/index.ts" }
+```
+
+Every consumer of a testkit is a test runner, and all of them read TypeScript —
+vitest for `examples/loopback-channel`, Playwright for
+`packages/e2e/src/harness/provider.ts`. Neither needs a build, so neither gets one:
+`agent` and `channels` have no `src/testkit/` tsup entry and emit no `dist/testkit/`
+at all. Their `files` array carries `test/testkit` beside `dist`, since the subpath
+export resolves outside `dist`.
+
+Reach a testkit by alias, never a relative path — `#testkit/server.js` (a
+package.json `imports` entry), and `@testkit/render.js` in web beside the existing
+`@/`. Both resolve from the package that _defines_ them, so they work unchanged
+when a test in another package imports across the boundary.
+
+Two things this arrangement bought, both of which had been quietly wrong:
+
+- **`packages/channels/tsup.config.ts` no longer needs `external: ['vitest']`.** That
+  line existed because a testkit under `src/` was a bundler entry point, and its
+  comment said "without this, half a megabyte of vitest ends up inside dist/". With
+  the testkit outside `src/`, tsup never sees it and the hazard is gone rather than
+  suppressed.
+- **Coverage stopped being padded.** A testkit runs on every test, so it scored
+  94–100% and inflated the ratio for whichever package held it. Nothing under
+  `test/` is inside `include: ['packages/*/src/**/*.ts']` any more, so the gates now
+  measure product code alone — they got stricter, and no threshold had to move.
 
 ## Auth changes touch more places than they look like they do
 

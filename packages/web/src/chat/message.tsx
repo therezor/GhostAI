@@ -67,7 +67,11 @@ export interface MessageProps {
   /** True while any turn is running — what disables everything destructive. */
   readonly busy: boolean;
   readonly sessionKey: string | undefined;
-  readonly onApprove: (callId: string, approved: boolean, scope: ApprovalScope) => void;
+  readonly onApprove: (
+    callId: string,
+    approved: boolean,
+    scope: ApprovalScope,
+  ) => void;
   readonly onAction: (action: MessageAction) => void;
 }
 
@@ -79,6 +83,8 @@ export function Message({
   onApprove,
   onAction,
 }: MessageProps): JSX.Element {
+  const { t } = useTranslation();
+
   switch (item.kind) {
     case 'user':
       return <UserMessage item={item} busy={busy} onAction={onAction} />;
@@ -94,7 +100,9 @@ export function Message({
         />
       );
     case 'steer':
-      return <p className="steer">Steered mid-turn: {item.text}</p>;
+      return (
+        <p className="steer">{t('chat.steeredMidTurn', { text: item.text })}</p>
+      );
     case 'notice':
       return <Notice kind={item.notice} message={item.message} />;
   }
@@ -128,7 +136,12 @@ function UserMessage({
             event.preventDefault();
             if (draft.trim() === '') return;
             setEditing(false);
-            onAction({ kind: 'edit', seq, text: draft, attachments: item.attachments });
+            onAction({
+              kind: 'edit',
+              seq,
+              text: draft,
+              attachments: item.attachments,
+            });
           }}
         >
           <AutoGrowTextarea
@@ -150,7 +163,12 @@ function UserMessage({
                 event.preventDefault();
                 if (draft.trim() === '') return;
                 setEditing(false);
-                onAction({ kind: 'edit', seq, text: draft, attachments: item.attachments });
+                onAction({
+                  kind: 'edit',
+                  seq,
+                  text: draft,
+                  attachments: item.attachments,
+                });
               }
             }}
           />
@@ -177,7 +195,12 @@ function UserMessage({
 
   return (
     <div className="stack message-user">
-      <div className={cn('message-user__bubble', item.pending && 'message-user__bubble--pending')}>
+      <div
+        className={cn(
+          'message-user__bubble',
+          item.pending && 'message-user__bubble--pending',
+        )}
+      >
         {item.text}
       </div>
 
@@ -267,11 +290,22 @@ function TurnMessage({
       {unanswered && (
         <p className="turn__unanswered">
           <AlertCircle />
-          <span>{t(hasReasoning ? 'chat.noAnswer.reasoningOnly' : 'chat.noAnswer.silent')}</span>
+          <span>
+            {t(
+              hasReasoning
+                ? 'chat.noAnswer.reasoningOnly'
+                : 'chat.noAnswer.silent',
+            )}
+          </span>
         </p>
       )}
 
-      <TurnFooter turn={turn} busy={busy} sessionKey={sessionKey} onAction={onAction} />
+      <TurnFooter
+        turn={turn}
+        busy={busy}
+        sessionKey={sessionKey}
+        onAction={onAction}
+      />
     </article>
   );
 }
@@ -304,8 +338,15 @@ function TurnMessage({
 function isUnanswered(turn: TurnItem): boolean {
   if (!turn.done || turn.failure !== undefined) return false;
   if (turn.stopReason === 'aborted') return false;
-  if (turn.stopReason === 'max_iterations' || turn.stopReason === 'wall_timeout') return false;
-  return !turn.parts.some((part) => part.kind === 'text' || part.kind === 'tool');
+  if (
+    turn.stopReason === 'max_iterations' ||
+    turn.stopReason === 'wall_timeout'
+  ) {
+    return false;
+  }
+  return !turn.parts.some(
+    (part) => part.kind === 'text' || part.kind === 'tool',
+  );
 }
 
 /**
@@ -347,7 +388,8 @@ function TurnFooter({
   // The key, then the sentence. `complete` is absent from the map on purpose,
   // so an unlisted reason stays `undefined` and renders no footer line at all
   // rather than resolving to a missing key.
-  const reasonKey = turn.stopReason === undefined ? undefined : STOP_REASONS[turn.stopReason];
+  const reasonKey =
+    turn.stopReason === undefined ? undefined : STOP_REASONS[turn.stopReason];
   const reason = reasonKey === undefined ? undefined : t(reasonKey);
   const usage = turn.usage;
   // Narrowed here rather than asserted inside the callbacks below: a `!` in a
@@ -360,10 +402,13 @@ function TurnFooter({
 
   return (
     <footer className="turn__footer">
-      {reason !== undefined && <span className="turn__stop-reason">{reason}</span>}
+      {reason !== undefined && (
+        <span className="turn__stop-reason">{reason}</span>
+      )}
       {usage !== undefined && (
         <span className="turn__usage">
-          {fmt.tokens(usage.promptTokens)} in · {fmt.tokens(usage.completionTokens)} out
+          {fmt.tokens(usage.promptTokens)} in ·{' '}
+          {fmt.tokens(usage.completionTokens)} out
           {usage.cachedTokens !== undefined &&
             usage.cachedTokens > 0 &&
             ` · ${fmt.tokens(usage.cachedTokens)} cached`}

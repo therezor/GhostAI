@@ -111,9 +111,17 @@ import {
   type AgentConfigWarning,
   type EffectiveAgent,
 } from './agents.js';
-import { PROVIDER_CREDENTIAL_NAMESPACE, findCredential, openVault } from './credentials.js';
+import {
+  PROVIDER_CREDENTIAL_NAMESPACE,
+  findCredential,
+  openVault,
+} from './credentials.js';
 import { JailCache } from './jail-cache.js';
-import { ToolboxPool, dockerEngine, type ContainerEngine } from './toolbox-pool.js';
+import {
+  ToolboxPool,
+  dockerEngine,
+  type ContainerEngine,
+} from './toolbox-pool.js';
 import { LoopCache } from './loop-cache.js';
 import { mergeConfigPatch } from './merge.js';
 import { ProviderCache } from './provider-cache.js';
@@ -368,7 +376,13 @@ function instanceFromEnv(
       return {
         id: spec.id,
         spec,
-        config: { type: spec.id, label: '', extraHeaders: {}, models: [], enabled: true },
+        config: {
+          type: spec.id,
+          label: '',
+          extraHeaders: {},
+          models: [],
+          enabled: true,
+        },
       };
     }
   }
@@ -386,7 +400,10 @@ function noProviderError(configFile: string): GhostError {
   );
 }
 
-function noModelError(instance: ProviderInstance, configFile: string): GhostError {
+function noModelError(
+  instance: ProviderInstance,
+  configFile: string,
+): GhostError {
   return new GhostError(
     'config',
     `No model configured for ${instance.spec.displayName}.\n` +
@@ -404,7 +421,8 @@ function noModelError(instance: ProviderInstance, configFile: string): GhostErro
  */
 function pathsFor(config: Config, options: RuntimeOptions): GhostPaths {
   const configured = config.agents.defaults.workspace;
-  const workspace = options.workspace ?? (configured === '' ? undefined : configured);
+  const workspace =
+    options.workspace ?? (configured === '' ? undefined : configured);
   return resolveGhostPaths({
     ...(options.home === undefined ? {} : { root: options.home }),
     ...(workspace === undefined ? {} : { workspace }),
@@ -419,25 +437,27 @@ class Runtime implements GhostRuntime {
   readonly steering: SteeringQueue;
   readonly file: string;
 
-  readonly #options: RuntimeOptions;
-  readonly #env: Readonly<Record<string, string | undefined>>;
-  readonly #logger: Logger;
-  readonly #providers: ProviderCache;
+  private readonly options: RuntimeOptions;
+  private readonly env: Readonly<Record<string, string | undefined>>;
+  private readonly logger: Logger;
+  private readonly providers: ProviderCache;
   /** An injected cache outlives this runtime; closing its adapters is not ours to do. */
-  readonly #ownsProviders: boolean;
-  #current: Resolved;
+  private readonly ownsProviders: boolean;
+  private current: Resolved;
 
   constructor(options: RuntimeOptions) {
-    this.#options = options;
-    this.#env = options.env ?? process.env;
-    this.#logger = options.logger ?? silentLogger;
-    this.#providers = options.providers ?? new ProviderCache();
-    this.#ownsProviders = options.providers === undefined;
+    this.options = options;
+    this.env = options.env ?? process.env;
+    this.logger = options.logger ?? silentLogger;
+    this.providers = options.providers ?? new ProviderCache();
+    this.ownsProviders = options.providers === undefined;
 
     const loaded = loadConfig({
       ...(options.home === undefined ? {} : { root: options.home }),
-      ...(options.workspace === undefined ? {} : { workspace: options.workspace }),
-      env: this.#env,
+      ...(options.workspace === undefined
+        ? {}
+        : { workspace: options.workspace }),
+      env: this.env,
     });
     this.file = loaded.file;
 
@@ -461,13 +481,13 @@ class Runtime implements GhostRuntime {
     });
     this.tools = new ToolRegistry({
       timeoutMs: loaded.config.agents.defaults.toolTimeoutMs,
-      logger: this.#logger,
+      logger: this.logger,
       ...(options.clock === undefined ? {} : { clock: options.clock }),
     });
-    this.steering = new SteeringQueue({ logger: this.#logger });
+    this.steering = new SteeringQueue({ logger: this.logger });
 
     try {
-      this.#current = this.#build(loaded.config, undefined);
+      this.current = this.build(loaded.config, undefined);
     } catch (error) {
       this.store.close();
       throw error;
@@ -475,46 +495,50 @@ class Runtime implements GhostRuntime {
   }
 
   get config(): Config {
-    return this.#current.config;
+    return this.current.config;
   }
 
   get paths(): GhostPaths {
-    return this.#current.paths;
+    return this.current.paths;
   }
 
   get jail(): WorkspaceJail {
-    return this.#current.jails.default;
+    return this.current.jails.default;
   }
 
   get jails(): JailResolver {
-    return this.#current.jails;
+    return this.current.jails;
   }
 
   evictWorkspace(workspaceId: string): void {
-    this.#current.jails.evict(workspaceId);
+    this.current.jails.evict(workspaceId);
   }
 
   get loop(): AgentLoop | null {
-    return this.#current.loop;
+    return this.current.loop;
   }
 
   get agents(): readonly EffectiveAgent[] {
-    return this.#current.agents;
+    return this.current.agents;
   }
 
   loopFor(agentId: string | undefined): AgentLoop | null {
-    if (agentId === undefined || agentId === '' || agentId === DEFAULT_AGENT_ID) {
-      return this.#current.loop;
+    if (
+      agentId === undefined ||
+      agentId === '' ||
+      agentId === DEFAULT_AGENT_ID
+    ) {
+      return this.current.loop;
     }
     // Throws for an unknown or disabled id, which is the caller's to catch —
     // the hub turns it into an error on one frame rather than a dead socket.
-    return this.#current.loops.get(agentId);
+    return this.current.loops.get(agentId);
   }
 
   requireLoopFor(agentId: string | undefined): AgentLoop {
     const loop = this.loopFor(agentId);
     if (loop !== null) return loop;
-    throw this.#current.unconfigured ?? noProviderError(this.file);
+    throw this.current.unconfigured ?? noProviderError(this.file);
   }
 
   /**
@@ -537,7 +561,7 @@ class Runtime implements GhostRuntime {
   ): { readonly provider: ChatProvider; readonly model: string } | null {
     const config = this.config;
     const agent = resolveAgent(config, agentId ?? DEFAULT_AGENT_ID);
-    const resolved = this.#resolveProvider(
+    const resolved = this.resolveProvider(
       config,
       model === undefined || model === ''
         ? agent
@@ -549,23 +573,23 @@ class Runtime implements GhostRuntime {
   }
 
   get instance(): ProviderInstance | null {
-    return this.#current.instance;
+    return this.current.instance;
   }
 
   get spec(): ProviderSpec | null {
-    return this.#current.instance?.spec ?? null;
+    return this.current.instance?.spec ?? null;
   }
 
   get model(): string {
-    return this.#current.model;
+    return this.current.model;
   }
 
   get configured(): boolean {
-    return this.#current.loop !== null;
+    return this.current.loop !== null;
   }
 
   get hasCredential(): boolean {
-    return this.#current.hasCredential;
+    return this.current.hasCredential;
   }
 
   /**
@@ -576,15 +600,15 @@ class Runtime implements GhostRuntime {
    * restart, so a warning nobody surfaced is one nobody ever sees.
    */
   get configWarnings(): readonly AgentConfigWarning[] {
-    return this.#current.warnings;
+    return this.current.warnings;
   }
 
   requireLoop(): AgentLoop {
-    const loop = this.#current.loop;
+    const loop = this.current.loop;
     if (loop !== null) return loop;
     // Prepared during `#build`, where it is still known *which* half is
     // missing. Reconstructing it here would have to re-derive that.
-    throw this.#current.unconfigured ?? noProviderError(this.file);
+    throw this.current.unconfigured ?? noProviderError(this.file);
   }
 
   /**
@@ -607,16 +631,16 @@ class Runtime implements GhostRuntime {
    * All-or-nothing throughout: any throw leaves `#current` exactly as it was.
    */
   reconfigure(patch: ConfigPatch): Config {
-    const merged = mergeConfigPatch(this.#current.config, patch);
-    assertWritableAgentIds(this.#current.config, merged);
+    const merged = mergeConfigPatch(this.current.config, patch);
+    assertWritableAgentIds(this.current.config, merged);
     const { config: next } = pruneDanglingSubagents(merged);
-    const previous = this.#current;
-    this.#current = this.#build(next, previous);
+    const previous = this.current;
+    this.current = this.build(next, previous);
     // After the build, never before: `#build` can throw, and a reconfigure that
     // failed must leave the runtime serving exactly what it was serving — with
     // its containers still alive. Stopping them first would make a *refused*
     // save kill the toolboxPool of every running session.
-    this.#retireToolboxes(previous);
+    this.retireToolboxes(previous);
     return next;
   }
 
@@ -625,20 +649,22 @@ class Runtime implements GhostRuntime {
     // workspace override re-reads the same file it was built from rather than
     // whichever one the environment happens to name now.
     const loaded = loadConfig({
-      ...(this.#options.home === undefined ? {} : { root: this.#options.home }),
-      ...(this.#options.workspace === undefined ? {} : { workspace: this.#options.workspace }),
-      env: this.#env,
+      ...(this.options.home === undefined ? {} : { root: this.options.home }),
+      ...(this.options.workspace === undefined
+        ? {}
+        : { workspace: this.options.workspace }),
+      env: this.env,
     });
-    const previous = this.#current;
-    this.#current = this.#build(loaded.config, previous);
-    this.#retireToolboxes(previous);
+    const previous = this.current;
+    this.current = this.build(loaded.config, previous);
+    this.retireToolboxes(previous);
     return loaded.config;
   }
 
   close(): void {
-    this.#current.toolboxPool?.close();
+    this.current.toolboxPool?.close();
     this.store.close();
-    if (this.#ownsProviders) this.#providers.clear();
+    if (this.ownsProviders) this.providers.clear();
   }
 
   /**
@@ -649,9 +675,15 @@ class Runtime implements GhostRuntime {
    * identity because `#build` reuses the pool when nothing about it moved, and
    * closing the one now in use would stop the toolboxPool it just kept.
    */
-  #retireToolboxes(previous: Resolved | undefined): void {
+  private retireToolboxes(previous: Resolved | undefined): void {
     const stale = previous?.toolboxPool;
-    if (stale !== undefined && stale !== null && stale !== this.#current.toolboxPool) stale.close();
+    if (
+      stale !== undefined &&
+      stale !== null &&
+      stale !== this.current.toolboxPool
+    ) {
+      stale.close();
+    }
   }
 
   /**
@@ -666,7 +698,7 @@ class Runtime implements GhostRuntime {
    * the tool registry, the paths — is useful without a model, and refusing to
    * build them is what used to make an unconfigured install unserveable.
    */
-  #build(config: Config, previous: Resolved | undefined): Resolved {
+  private build(config: Config, previous: Resolved | undefined): Resolved {
     // Every enabled agent, resolved. This is where an entry naming a sandbox
     // with no backend, or settings that will not merge, throws — before
     // anything below mutates, so a bad save leaves the runtime exactly as it
@@ -674,9 +706,13 @@ class Runtime implements GhostRuntime {
     // built on first use, because an install with six agents and one in use
     // should not open six provider connections at boot.
     const { agents, warnings } = resolveAgents(config);
-    const paths = pathsFor(config, this.#options);
+    const paths = pathsFor(config, this.options);
 
-    const resolved = this.#resolveProvider(config, resolveAgent(config, DEFAULT_AGENT_ID), paths);
+    const resolved = this.resolveProvider(
+      config,
+      resolveAgent(config, DEFAULT_AGENT_ID),
+      paths,
+    );
 
     // A jail canonicalises through `realpath` and creates its root, so keeping
     // the cache when nothing moved saves that work on every workspace already
@@ -687,13 +723,15 @@ class Runtime implements GhostRuntime {
     // workspace throws *here* — before any of the mutations below — which is
     // what keeps `reconfigure` all-or-nothing.
     const jails =
-      previous?.paths.workspace === paths.workspace ? previous.jails : new JailCache({ paths });
+      previous?.paths.workspace === paths.workspace
+        ? previous.jails
+        : new JailCache({ paths });
 
     // Before the mutations below, because every failure it can produce — an
     // unapproved profile, a manifest edited since approval, a capability the
     // machinery will not grant, an unreachable daemon — must leave the runtime
     // serving on the settings that worked a moment ago.
-    const built = this.#buildToolboxes(agents, paths);
+    const built = this.buildToolboxes(agents, paths);
     const toolboxPool = built.pool;
 
     // Here rather than in `resolveAgents`, because only now is the full set of
@@ -724,8 +762,10 @@ class Runtime implements GhostRuntime {
     // installation has no scheduler" costs a turn to learn what its absence
     // would have said for free. This is also what stops the agent editor —
     // which now lists the registry — from offering a row nothing can honour.
-    if (this.#options.tools !== false) {
-      registerBuiltins(this.tools, config.tools, { scheduler: config.scheduler.enabled });
+    if (this.options.tools !== false) {
+      registerBuiltins(this.tools, config.tools, {
+        scheduler: config.scheduler.enabled,
+      });
     }
 
     // A fresh cache per build: every loop in the old one was derived from the
@@ -738,8 +778,14 @@ class Runtime implements GhostRuntime {
     // inference cannot see that and gives up with an implicit `any`.
     const loops: LoopCache = new LoopCache({
       create: (agentId): AgentLoop | null =>
-        this.#createLoop(config, agentId, paths, jails, toolboxPool ?? undefined, built, (id) =>
-          loops.get(id),
+        this.createLoop(
+          config,
+          agentId,
+          paths,
+          jails,
+          toolboxPool ?? undefined,
+          built,
+          (id) => loops.get(id),
         ),
     });
     const loop = loops.get(DEFAULT_AGENT_ID);
@@ -747,7 +793,10 @@ class Runtime implements GhostRuntime {
     return {
       config,
       agents,
-      warnings: promptWarnings.length === 0 ? warnings : [...warnings, ...promptWarnings],
+      warnings:
+        promptWarnings.length === 0
+          ? warnings
+          : [...warnings, ...promptWarnings],
       paths,
       jails,
       toolboxPool,
@@ -772,7 +821,7 @@ class Runtime implements GhostRuntime {
    * just the default. `ghost chat --model x` is a statement about this process,
    * and an agent that quietly ignored it would be the more surprising rule.
    */
-  #resolveProvider(
+  private resolveProvider(
     config: Config,
     agent: EffectiveAgent,
     paths: GhostPaths,
@@ -784,16 +833,16 @@ class Runtime implements GhostRuntime {
     readonly hasCredential: boolean;
     readonly unconfigured: GhostError | null;
   } {
-    const model = this.#options.model ?? agent.defaults.model;
-    const providerId = this.#options.provider ?? agent.defaults.provider;
+    const model = this.options.model ?? agent.defaults.model;
+    const providerId = this.options.provider ?? agent.defaults.provider;
 
     const instance =
       resolveInstance({
         providers: config.providers,
         provider: providerId,
         model,
-        hasCredential: (id) => this.#hasStoredCredential(config, id),
-      }) ?? instanceFromEnv(this.#env);
+        hasCredential: (id) => this.hasStoredCredential(config, id),
+      }) ?? instanceFromEnv(this.env);
 
     const unconfigured =
       instance === null
@@ -807,25 +856,32 @@ class Runtime implements GhostRuntime {
     const apiKey =
       instance === null
         ? undefined
-        : findCredential(instance, paths, this.#env, this.#options.vault);
+        : findCredential(instance, paths, this.env, this.options.vault);
 
     const provider =
       instance === null || unconfigured !== null
         ? null
-        : this.#providers.get({
+        : this.providers.get({
             instanceId: instance.id,
             spec: instance.spec,
             model,
             ...resolveConnection(instance.spec, instance.config),
             apiKey,
-            fetchImpl: this.#options.fetchImpl,
+            fetchImpl: this.options.fetchImpl,
           });
 
-    return { agent, provider, instance, model, hasCredential: apiKey !== undefined, unconfigured };
+    return {
+      agent,
+      provider,
+      instance,
+      model,
+      hasCredential: apiKey !== undefined,
+      unconfigured,
+    };
   }
 
   /** The loop for one agent, or `null` when nothing can run a turn. */
-  #createLoop(
+  private createLoop(
     config: Config,
     agentId: string,
     paths: GhostPaths,
@@ -839,7 +895,7 @@ class Runtime implements GhostRuntime {
     resolveLoop: (agentId: string) => AgentLoop | null,
   ): AgentLoop | null {
     const agent = resolveAgent(config, agentId);
-    const { provider, model } = this.#resolveProvider(config, agent, paths);
+    const { provider, model } = this.resolveProvider(config, agent, paths);
     if (provider === null) return null;
 
     // One map, built once, used for both halves of the scope below — so a name
@@ -865,6 +921,12 @@ class Runtime implements GhostRuntime {
         this.tools.select(permissions),
         built.exposed.get(agent.id) ?? [],
         permissions,
+        {
+          logger: this.logger,
+          ...(this.options.clock === undefined
+            ? {}
+            : { clock: this.options.clock }),
+        },
       ),
       store: this.store,
       jails,
@@ -890,17 +952,23 @@ class Runtime implements GhostRuntime {
         promptMode: agent.promptMode,
         toolPrompts: agent.toolPrompts,
       },
-      logger: this.#logger,
+      logger: this.logger,
       steering: this.steering,
-      env: this.#env,
+      env: this.env,
       // Read per turn, so the clock the model is given is the same one the
       // scheduler reads cron expressions against and the UI renders timestamps
       // in — one zone, and no conversion asked of anybody.
       timeZone: () => this.config.ui.timezone,
-      ...(this.#options.approvals === undefined ? {} : { approvals: this.#options.approvals }),
-      ...(this.#options.clock === undefined ? {} : { clock: this.#options.clock }),
+      ...(this.options.approvals === undefined
+        ? {}
+        : { approvals: this.options.approvals }),
+      ...(this.options.clock === undefined
+        ? {}
+        : { clock: this.options.clock }),
       ...(runners === undefined ? {} : { runners }),
-      ...(this.#options.automation === undefined ? {} : { automation: this.#options.automation }),
+      ...(this.options.automation === undefined
+        ? {}
+        : { automation: this.options.automation }),
     });
   }
 
@@ -911,7 +979,7 @@ class Runtime implements GhostRuntime {
    * runtime on an install that has no sandboxed agent would turn "docker is not
    * running" into a boot failure for people who never asked for a container.
    */
-  #buildToolboxes(
+  private buildToolboxes(
     agents: readonly EffectiveAgent[],
     paths: GhostPaths,
   ): {
@@ -922,13 +990,20 @@ class Runtime implements GhostRuntime {
   } {
     const boxed = agents.filter((agent) => agent.toolbox.name !== '');
     if (boxed.length === 0) {
-      return { pool: null, prompts: new Map(), exposed: new Map(), toolboxPerms: new Map() };
+      return {
+        pool: null,
+        prompts: new Map(),
+        exposed: new Map(),
+        toolboxPerms: new Map(),
+      };
     }
 
     const toolboxes = new ToolboxStore({
       database: this.store.database,
       dir: paths.toolboxesDir,
-      ...(this.#options.clock === undefined ? {} : { clock: this.#options.clock }),
+      ...(this.options.clock === undefined
+        ? {}
+        : { clock: this.options.clock }),
     });
 
     // Every toolboxed agent resolved *here*, so an unapproved toolbox, one
@@ -940,7 +1015,11 @@ class Runtime implements GhostRuntime {
     const toolboxPerms = new Map<string, ToolPermissions>();
     for (const agent of boxed) {
       const approved = toolboxes.require(agent.toolbox.name);
-      assertNetworkWithinCeiling(approved.toolbox, agent.toolbox.network, agent.id);
+      assertNetworkWithinCeiling(
+        approved.toolbox,
+        agent.toolbox.network,
+        agent.id,
+      );
       exposed.set(agent.id, toolboxTools(approved.toolbox));
       toolboxPerms.set(agent.id, toolboxPermissions(approved.toolbox));
       prompts.set(agent.id, {
@@ -961,17 +1040,19 @@ class Runtime implements GhostRuntime {
     // did exactly that — an install with a research agent would not boot at all
     // without Docker. The pool probes on first use instead, and refuses that
     // turn.
-    const engine = this.#options.containerEngine ?? dockerEngine();
+    const engine = this.options.containerEngine ?? dockerEngine();
 
     const pool = new ToolboxPool({
       toolboxes,
       engine,
       runsDir: paths.runsDir,
-      ...(this.#options.hostWorkspacePath === undefined
+      ...(this.options.hostWorkspacePath === undefined
         ? {}
-        : { hostPath: this.#options.hostWorkspacePath }),
-      ...(this.#options.clock === undefined ? {} : { clock: this.#options.clock }),
-      logger: this.#logger,
+        : { hostPath: this.options.hostWorkspacePath }),
+      ...(this.options.clock === undefined
+        ? {}
+        : { clock: this.options.clock }),
+      logger: this.logger,
     });
 
     return { pool, prompts, exposed, toolboxPerms };
@@ -985,18 +1066,21 @@ class Runtime implements GhostRuntime {
    * the chosen one to report — with the message that names it — rather than a
    * reason to fail before anything has been chosen.
    */
-  #hasStoredCredential(config: Config, instanceId: string): boolean {
+  private hasStoredCredential(config: Config, instanceId: string): boolean {
     const entry = config.providers[instanceId];
     if (entry === undefined) return false;
     const envKey = PROVIDERS.find((spec) => spec.id === entry.type)?.envKey;
-    if (envKey !== undefined && (this.#env[envKey] ?? '') !== '') return true;
+    if (envKey !== undefined && (this.env[envKey] ?? '') !== '') return true;
 
-    const vault = this.#options.vault;
+    const vault = this.options.vault;
     if (vault === false) return false;
     try {
-      const paths = pathsFor(config, this.#options);
+      const paths = pathsFor(config, this.options);
       if (vault === undefined && !existsSync(paths.vaultFile)) return false;
-      return (vault ?? openVault(paths)).has(PROVIDER_CREDENTIAL_NAMESPACE, instanceId);
+      return (vault ?? openVault(paths)).has(
+        PROVIDER_CREDENTIAL_NAMESPACE,
+        instanceId,
+      );
     } catch {
       return false;
     }

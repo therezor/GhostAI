@@ -25,9 +25,13 @@
  * which is a panel of its own rather than a text field bolted to this one.
  */
 
-import type { ConfigPatch, ProviderConfig, ProviderTestRequest } from '@ghostai/protocol';
+import type {
+  ConfigPatch,
+  ProviderConfig,
+  ProviderTestRequest,
+} from '@ghostai/protocol';
 
-import { formatList, parseList } from './fields.js';
+import { formatList, parseList } from '@/components/form/fields.js';
 
 export interface ProviderForm {
   /**
@@ -57,7 +61,9 @@ export const EMPTY_PROVIDER_FORM: ProviderForm = {
   enabled: true,
 };
 
-export function toProviderForm(config: ProviderConfig | undefined): ProviderForm {
+export function toProviderForm(
+  config: ProviderConfig | undefined,
+): ProviderForm {
   return {
     type: config?.type ?? '',
     label: config?.label ?? '',
@@ -91,7 +97,10 @@ function editableFields(form: ProviderForm): {
   };
 }
 
-export function toProviderPatch(instanceId: string, form: ProviderForm): ConfigPatch {
+export function toProviderPatch(
+  instanceId: string,
+  form: ProviderForm,
+): ConfigPatch {
   return { providers: { [instanceId]: editableFields(form) } };
 }
 
@@ -102,8 +111,13 @@ export function toProviderPatch(instanceId: string, form: ProviderForm): ConfigP
  * validated against, and an instance that could change its type would be a
  * different endpoint wearing the same credential.
  */
-export function toCreateProviderPatch(instanceId: string, form: ProviderForm): ConfigPatch {
-  return { providers: { [instanceId]: { type: form.type, ...editableFields(form) } } };
+export function toCreateProviderPatch(
+  instanceId: string,
+  form: ProviderForm,
+): ConfigPatch {
+  return {
+    providers: { [instanceId]: { type: form.type, ...editableFields(form) } },
+  };
 }
 
 /**
@@ -115,7 +129,10 @@ export function toCreateProviderPatch(instanceId: string, form: ProviderForm): C
  * client's job. A collision is not silent if it happens: the patch would merge
  * into the existing instance, which is why the taken set is the live config.
  */
-export function proposeInstanceId(type: string, taken: readonly string[]): string {
+export function proposeInstanceId(
+  type: string,
+  taken: readonly string[],
+): string {
   const used = new Set(taken);
   if (!used.has(type)) return type;
   for (let n = 2; ; n += 1) {
@@ -179,7 +196,10 @@ export function toCredentialValue(
  *  - the typed value — probe with what is about to be saved, not with what is
  *    still in the vault.
  */
-export function toProbeKey(field: string, credentialsPresent: boolean): string | undefined {
+export function toProbeKey(
+  field: string,
+  credentialsPresent: boolean,
+): string | undefined {
   const value = toCredentialValue(field, credentialsPresent);
   if (value === undefined) return undefined;
   return value ?? '';
@@ -230,7 +250,10 @@ export function toProviderTestRequest({
  * than a round trip through the whole form, so the list can do it without
  * opening the editor — the same shape `toAgentEnabledPatch` has.
  */
-export function toProviderEnabledPatch(instanceId: string, enabled: boolean): ConfigPatch {
+export function toProviderEnabledPatch(
+  instanceId: string,
+  enabled: boolean,
+): ConfigPatch {
   return { providers: { [instanceId]: { enabled } } };
 }
 

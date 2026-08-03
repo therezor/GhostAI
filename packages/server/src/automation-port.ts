@@ -27,7 +27,11 @@
  * Origin is the only honest signal.
  */
 
-import { AUTOMATION_ORIGIN, type AutomationJob, type CreateAutomationJob } from '@ghostai/protocol';
+import {
+  AUTOMATION_ORIGIN,
+  type AutomationJob,
+  type CreateAutomationJob,
+} from '@ghostai/protocol';
 import type { SessionStore } from '@ghostai/core';
 import type {
   AutomationOutcome,
@@ -72,7 +76,9 @@ function refuse<T>(
   };
 }
 
-export function createAutomationResolver(options: AutomationPortOptions): AutomationResolver {
+export function createAutomationResolver(
+  options: AutomationPortOptions,
+): AutomationResolver {
   const now = options.now ?? ((): number => Date.now());
 
   return {
@@ -84,19 +90,28 @@ export function createAutomationResolver(options: AutomationPortOptions): Automa
         options.sessions.getSession(sessionKey)?.origin === AUTOMATION_ORIGIN;
 
       const mine = (): AutomationJob[] =>
-        options.jobs.listJobs().filter((job) => job.createdBy?.agentId === agentId);
+        options.jobs
+          .listJobs()
+          .filter((job) => job.createdBy?.agentId === agentId);
 
       return {
         create(input: CreateAutomationJob): AutomationOutcome<AutomationJob> {
           if (nested()) return refuse('nested');
-          if (options.jobs.countJobsBy(agentId) >= MAX_AGENT_JOBS) return refuse('at-capacity');
+          if (options.jobs.countJobsBy(agentId) >= MAX_AGENT_JOBS) {
+            return refuse('at-capacity');
+          }
 
           // The same validator the REST route uses, so a schedule the timer
           // could not honour cannot be created here either — and the model gets
           // the parser's own sentence rather than a generic refusal.
           let nextRunAtMs: number;
           try {
-            nextRunAtMs = firstRunAt(input.schedule, now(), input.enabled, options.timezone());
+            nextRunAtMs = firstRunAt(
+              input.schedule,
+              now(),
+              input.enabled,
+              options.timezone(),
+            );
           } catch (error) {
             if (isGhostError(error) && error.kind === 'config') {
               return refuse('unschedulable', error.message);
@@ -137,7 +152,9 @@ export function createAutomationResolver(options: AutomationPortOptions): Automa
           const job = options.jobs.getJob(jobId);
           // One answer for "no such job" and "not yours", so an agent cannot
           // map the operator's jobs by probing ids for the difference.
-          if (job === undefined || job.createdBy?.agentId !== agentId) return refuse('not-yours');
+          if (job === undefined || job.createdBy?.agentId !== agentId) {
+            return refuse('not-yours');
+          }
           options.jobs.deleteJob(jobId);
           options.refresh?.();
           return { ok: true };

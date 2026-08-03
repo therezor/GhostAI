@@ -16,9 +16,12 @@ export {
   ERROR_KINDS,
   GhostError,
   abortedError,
+  errnoOf,
   isAbortError,
+  onAbort,
   isGhostError,
   toGhostError,
+  type AbortSubscription,
   type ErrorKind,
   type GhostErrorOptions,
 } from './errors.js';
@@ -63,6 +66,13 @@ export {
   isSlugId,
   slugify,
 } from './slug-id.js';
+
+export {
+  parseMetadata,
+  rowReader,
+  type Row,
+  type RowReader,
+} from './sqlite-row.js';
 
 export {
   WorkspaceStore,
@@ -123,6 +133,8 @@ export {
   truncateHeadTail,
   type HistoryForLLMOptions,
   type TruncationResult,
+  sessionHistory,
+  type SessionHistorySource,
 } from './history.js';
 
 export { MAX_TITLE_CHARS, deriveSessionTitle } from './session-title.js';

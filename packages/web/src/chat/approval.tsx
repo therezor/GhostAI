@@ -38,12 +38,16 @@ export interface ApprovalPromptProps {
   readonly onAnswer: (approved: boolean, scope: ApprovalScope) => void;
 }
 
-const SCOPES: readonly {
+const SCOPES: ReadonlyArray<{
   readonly scope: ApprovalScope;
   readonly label: string;
   readonly hint: string;
-}[] = [
-  { scope: 'once', label: 'Once', hint: 'Run this one call. The next one asks again.' },
+}> = [
+  {
+    scope: 'once',
+    label: 'Once',
+    hint: 'Run this one call. The next one asks again.',
+  },
   {
     scope: 'session',
     label: 'This session',
@@ -70,11 +74,14 @@ export function ApprovalPrompt({
       <p
         className={cn(
           'row approval__resolved',
-          answered === 'approved' ? 'approval__resolved--approved' : 'approval__resolved--denied',
+          answered === 'approved'
+            ? 'approval__resolved--approved'
+            : 'approval__resolved--denied',
         )}
       >
         {answered === 'approved' ? <Check /> : <X />}
-        {answered === 'approved' ? 'Approved' : 'Denied'} — waiting for the agent.
+        {answered === 'approved' ? 'Approved' : 'Denied'} — waiting for the
+        agent.
       </p>
     );
   }

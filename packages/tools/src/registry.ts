@@ -33,8 +33,14 @@ import {
   systemClock,
   toGhostError,
   truncateHeadTail,
+  onAbort,
 } from '@ghostai/core';
-import type { Clock, ErrorKind, Logger } from '@ghostai/core';
+import type {
+  AbortSubscription,
+  Clock,
+  ErrorKind,
+  Logger,
+} from '@ghostai/core';
 import type {
   ToolDefinition,
   ToolPermission,
@@ -42,7 +48,12 @@ import type {
   ToolSource,
 } from '@ghostai/protocol';
 
-import { toToolResult, type AnyTool, type ToolContext, type ToolResult } from './define.js';
+import {
+  toToolResult,
+  type AnyTool,
+  type ToolContext,
+  type ToolResult,
+} from './define.js';
 import { isEnabled, permissionFor } from './scope.js';
 
 export interface ToolRegistryOptions {
@@ -108,6 +119,7 @@ export function withToolboxTools(
   base: ToolScope,
   tools: readonly AnyTool[],
   permissions: ToolPermissions,
+  options: ToolRegistryOptions = {},
 ): ToolScope {
   if (tools.length === 0) return base;
 
@@ -116,7 +128,23 @@ export function withToolboxTools(
   // never-throws contract come from one implementation rather than two. It gets
   // the same permission map the base was built from, so a toolbox program the
   // agent switched off is filtered here exactly as a built-in would be.
-  const registry = new ToolRegistry();
+  //
+  // The clock and the logger are handed in for the same reason: constructed
+  // bare, this registry silently took `systemClock` and `silentLogger` while
+  // the base ran on the injected ones, so a toolbox program's `durationMs` came
+  // off a different clock than a built-in's and its execution was logged
+  // nowhere.
+  //
+  // `timeoutMs` is deliberately *not* inherited. A toolbox program is a process
+  // and `guardExec` already gives it `plan.timeoutMs`; putting the agent's
+  // `toolTimeoutMs` on top would add a second, tighter cap and start killing
+  // container commands that run legitimately long. That is a product decision
+  // about what `toolTimeoutMs` means, not something a caller should acquire by
+  // passing an options bag through.
+  const registry = new ToolRegistry({
+    ...(options.clock === undefined ? {} : { clock: options.clock }),
+    ...(options.logger === undefined ? {} : { logger: options.logger }),
+  });
   for (const tool of tools) registry.register(tool, 'builtin');
   const scoped = registry.select(permissions);
 
@@ -133,7 +161,9 @@ export function withToolboxTools(
       const merged = [
         ...underneath.filter((definition) => !overlay.has(definition.name)),
         ...scoped.definitions(),
-      ].sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
+      ].sort((left, right) =>
+        left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
+      );
       cached = Object.freeze(merged);
       cachedFrom = underneath;
       return cached;
@@ -142,9 +172,14 @@ export function withToolboxTools(
       return overlay.has(name) ? scoped.get(name) : base.get(name);
     },
     permissionFor(name: string): ToolPermission {
-      return overlay.has(name) ? scoped.permissionFor(name) : base.permissionFor(name);
+      return overlay.has(name)
+        ? scoped.permissionFor(name)
+        : base.permissionFor(name);
     },
-    async execute(call: ToolInvocation, context: ToolContext): Promise<ToolExecution> {
+    async execute(
+      call: ToolInvocation,
+      context: ToolContext,
+    ): Promise<ToolExecution> {
       return overlay.has(call.name)
         ? await scoped.execute(call, context)
         : await base.execute(call, context);
@@ -178,8 +213,8 @@ export interface ToolScope {
  * is keyed on the registry's revision for exactly that reason.
  */
 class RegistryScope implements ToolScope {
-  #cached: readonly ToolDefinition[] | null = null;
-  #cachedRevision = -1;
+  private cached: readonly ToolDefinition[] | null = null;
+  private cachedRevision = -1;
 
   constructor(
     private readonly registry: ToolRegistry,
@@ -187,15 +222,18 @@ class RegistryScope implements ToolScope {
   ) {}
 
   definitions(): readonly ToolDefinition[] {
-    if (this.#cached !== null && this.#cachedRevision === this.registry.revision) {
-      return this.#cached;
+    if (
+      this.cached !== null &&
+      this.cachedRevision === this.registry.revision
+    ) {
+      return this.cached;
     }
     const definitions = this.registry
       .definitions()
       .filter((definition) => isEnabled(this.permissions, definition.name));
-    this.#cached = Object.freeze(definitions);
-    this.#cachedRevision = this.registry.revision;
-    return this.#cached;
+    this.cached = Object.freeze(definitions);
+    this.cachedRevision = this.registry.revision;
+    return this.cached;
   }
 
   get(name: string): AnyTool | undefined {
@@ -237,21 +275,19 @@ function rejectOnAbort(
   signal: AbortSignal,
   name: string,
 ): { readonly promise: Promise<never>; dispose(): void } {
-  let onAbort: (() => void) | undefined;
-  const promise = new Promise<never>((_resolve, reject) => {
-    onAbort = (): void => {
+  // Rejects rather than resolves: a cancelled call has to unwind out of
+  // `execute`, not report an outcome. `onAbort` owns the subscription — firing
+  // for a signal that already aborted, and detaching afterwards.
+  let subscription: AbortSubscription | undefined;
+  const promise = new Promise<never>((resolve, reject) => {
+    subscription = onAbort(signal, () => {
       reject(new GhostError('aborted', `Tool ${name} aborted`));
-    };
-    if (signal.aborted) {
-      onAbort();
-      return;
-    }
-    signal.addEventListener('abort', onAbort, { once: true });
+    });
   });
   return {
     promise,
     dispose(): void {
-      if (onAbort !== undefined) signal.removeEventListener('abort', onAbort);
+      subscription?.dispose();
     },
   };
 }
@@ -325,7 +361,9 @@ export class ToolRegistry {
       throw new GhostError(
         'conflict',
         `Tool ${tool.name} is already registered by ${existing.source}`,
-        { details: { tool: tool.name, source, existingSource: existing.source } },
+        {
+          details: { tool: tool.name, source, existingSource: existing.source },
+        },
       );
     }
     this.tools.set(tool.name, { tool, source });
@@ -408,7 +446,8 @@ export class ToolRegistry {
    * `allow`, always: an unscoped registry is the CLI's and the tests' view, and
    * it is not reachable from a turn. See `permissionFor` in `scope.ts`.
    */
-  permissionFor(_name: string): ToolPermission {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the name is part of the signature callers type against
+  permissionFor(name: string): ToolPermission {
     return 'allow';
   }
 
@@ -420,7 +459,9 @@ export class ToolRegistry {
     // between the developer's machine and the container it ships in.
     const definitions = [...this.tools.values()]
       .map((registration) => registration.tool.definition(registration.source))
-      .sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
+      .sort((left, right) =>
+        left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
+      );
     this.cachedDefinitions = Object.freeze(definitions);
     return this.cachedDefinitions;
   }
@@ -447,7 +488,9 @@ export class ToolRegistry {
     // it exists but is off-limits would invite the model to argue about it. The
     // available list is the scope's, so the suggestion is actionable.
     if (registration === undefined || !isEnabled(permissions, call.name)) {
-      const available = this.names().filter((name) => isEnabled(permissions, name));
+      const available = this.names().filter((name) =>
+        isEnabled(permissions, name),
+      );
       return this.failure(
         call.name,
         new GhostError(
@@ -463,7 +506,12 @@ export class ToolRegistry {
     try {
       raw = parseArguments(call.argumentsJson);
     } catch (error) {
-      return this.failure(call.name, toGhostError(error, 'invalid_input'), startedAt, context);
+      return this.failure(
+        call.name,
+        toGhostError(error, 'invalid_input'),
+        startedAt,
+        context,
+      );
     }
 
     // Checked before the handler is entered rather than left to the race below.
@@ -522,9 +570,17 @@ export class ToolRegistry {
     context: ToolContext,
   ): ToolExecution {
     const durationMs = this.clock.monotonic() - startedAt;
-    const capped = truncateHeadTail(result.content, context.config.maxOutputChars);
+    const capped = truncateHeadTail(
+      result.content,
+      context.config.maxOutputChars,
+    );
     this.logger.debug(
-      { tool: name, durationMs, truncated: capped.truncated, isError: result.isError ?? false },
+      {
+        tool: name,
+        durationMs,
+        truncated: capped.truncated,
+        isError: result.isError ?? false,
+      },
       'tool executed',
     );
     return {
@@ -544,7 +600,10 @@ export class ToolRegistry {
     context: ToolContext,
   ): ToolExecution {
     const durationMs = this.clock.monotonic() - startedAt;
-    const capped = truncateHeadTail(error.message, context.config.maxOutputChars);
+    const capped = truncateHeadTail(
+      error.message,
+      context.config.maxOutputChars,
+    );
     // An abort is the user pressing Stop. Logged at debug, not warn, or every
     // cancelled turn fills the log with things nobody needs to act on.
     const line = { tool: name, durationMs, kind: error.kind };
@@ -557,7 +616,9 @@ export class ToolRegistry {
       truncated: capped.truncated,
       durationMs,
       errorKind: error.kind,
-      ...(Object.keys(error.details).length === 0 ? {} : { details: error.details }),
+      ...(Object.keys(error.details).length === 0
+        ? {}
+        : { details: error.details }),
     };
   }
 }
@@ -574,8 +635,12 @@ function parseArguments(argumentsJson: string | undefined): unknown {
   try {
     return JSON.parse(argumentsJson);
   } catch (error) {
-    throw new GhostError('invalid_input', `Tool arguments are not valid JSON: ${argumentsJson}`, {
-      cause: error,
-    });
+    throw new GhostError(
+      'invalid_input',
+      `Tool arguments are not valid JSON: ${argumentsJson}`,
+      {
+        cause: error,
+      },
+    );
   }
 }

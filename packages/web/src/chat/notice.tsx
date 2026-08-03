@@ -29,8 +29,8 @@ import type { WebKey } from '@/i18n/keys.js';
 
 import type { NoticeKind } from '@ghostai/protocol';
 
-import { cn } from '@/lib/cn.js';
 import type { BadgeProps } from '@/components/ui/badge.js';
+import { NoticeBlock } from '@/components/ui/notice.js';
 
 const NOTICES: Record<
   NoticeKind,
@@ -40,30 +40,48 @@ const NOTICES: Record<
     readonly icon: typeof Info;
   }
 > = {
-  prompt_injection: { label: 'chat.notices.prompt_injection', tone: 'danger', icon: ShieldAlert },
-  approval_denied: { label: 'chat.notices.approval_denied', tone: 'danger', icon: ShieldX },
-  degraded: { label: 'chat.notices.degraded', tone: 'warning', icon: AlertTriangle },
-  truncated_history: { label: 'chat.notices.truncated_history', tone: 'warning', icon: Scissors },
-  provider_fallback: { label: 'chat.notices.provider_fallback', tone: 'info', icon: Info },
+  prompt_injection: {
+    label: 'chat.notices.prompt_injection',
+    tone: 'danger',
+    icon: ShieldAlert,
+  },
+  approval_denied: {
+    label: 'chat.notices.approval_denied',
+    tone: 'danger',
+    icon: ShieldX,
+  },
+  degraded: {
+    label: 'chat.notices.degraded',
+    tone: 'warning',
+    icon: AlertTriangle,
+  },
+  truncated_history: {
+    label: 'chat.notices.truncated_history',
+    tone: 'warning',
+    icon: Scissors,
+  },
+  provider_fallback: {
+    label: 'chat.notices.provider_fallback',
+    tone: 'info',
+    icon: Info,
+  },
   // Warning rather than info: the substituted agent may allow tools the one
   // this conversation names did not, so the turn ran with wider powers than
   // were configured for it.
-  agent_fallback: { label: 'chat.notices.agent_fallback', tone: 'warning', icon: BrainCircuit },
+  agent_fallback: {
+    label: 'chat.notices.agent_fallback',
+    tone: 'warning',
+    icon: BrainCircuit,
+  },
   // Warning rather than danger: nothing was blocked and nothing was at risk —
   // the model reached for a tool this model is not sent, which is a mismatch to
   // fix in the agent's settings rather than an incident.
-  tools_disabled: { label: 'chat.notices.tools_disabled', tone: 'warning', icon: Wrench },
+  tools_disabled: {
+    label: 'chat.notices.tools_disabled',
+    tone: 'warning',
+    icon: Wrench,
+  },
 };
-
-/** Neutral is the base rule in `chat.css`, so it needs no modifier. */
-const TONE_CLASSES = {
-  danger: 'notice--danger',
-  warning: 'notice--warning',
-  info: 'notice--info',
-  success: 'notice--success',
-  accent: 'notice--accent',
-  neutral: '',
-} as const;
 
 export function Notice({
   kind,
@@ -78,18 +96,15 @@ export function Notice({
   const { label, tone, icon: Icon } = NOTICES[kind];
   const text = t(label);
 
+  // The shape is `NoticeBlock`'s; this file's job is the vocabulary — which
+  // wire event gets which words, which tone and which icon.
   return (
-    <div
-      // Not a `Badge`: a notice carries a sentence, and a pill that wraps to
-      // three lines is not a pill. The tone vocabulary is shared, the shape is
-      // not.
-      className={cn('notice', TONE_CLASSES[tone], className)}
-    >
-      <Icon />
-      <span>
-        <span className="notice__label">{text}.</span>{' '}
-        <span className="notice__message">{message}</span>
-      </span>
-    </div>
+    <NoticeBlock
+      title={text}
+      message={message}
+      tone={tone}
+      icon={Icon}
+      {...(className === undefined ? {} : { className })}
+    />
   );
 }

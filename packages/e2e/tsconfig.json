@@ -23,5 +23,5 @@
   // Playwright's own config loader reads this file and rejects a reference it
   // cannot resolve. The root `tsconfig.json` lists this project last, which is
   // what orders the build.
-  "include": ["src/**/*", "playwright.config.ts"]
+  "include": ["src/**/*", "test/**/*", "playwright.config.ts"]
 }

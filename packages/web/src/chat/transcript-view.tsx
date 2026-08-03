@@ -15,7 +15,14 @@
  */
 
 import { ArrowDown } from 'lucide-react';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type JSX,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { ApprovalScope } from '@ghostai/protocol';
@@ -32,7 +39,11 @@ export interface TranscriptViewProps {
   readonly busy: boolean;
   /** Which conversation this is, for the turn-details lookup. */
   readonly sessionKey: string | undefined;
-  readonly onApprove: (callId: string, approved: boolean, scope: ApprovalScope) => void;
+  readonly onApprove: (
+    callId: string,
+    approved: boolean,
+    scope: ApprovalScope,
+  ) => void;
   readonly onAction: (action: MessageAction) => void;
 }
 
@@ -65,7 +76,8 @@ export function TranscriptView({
     if (viewport === null) return undefined;
 
     const onScroll = (): void => {
-      const distance = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+      const distance =
+        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
       setPinned(distance <= PIN_THRESHOLD);
     };
 
@@ -79,7 +91,11 @@ export function TranscriptView({
 
   return (
     <div className="transcript">
-      <div ref={viewportRef} className="transcript__viewport" data-testid="transcript">
+      <div
+        ref={viewportRef}
+        className="transcript__viewport"
+        data-testid="transcript"
+      >
         <ol className="stack transcript__list">
           {transcript.map((item) => (
             <li key={item.id} className="transcript__item">

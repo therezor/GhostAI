@@ -176,14 +176,20 @@ export function materialiseFilePart(
   jail: WorkspaceJail,
   options: MaterialiseOptions = {},
   cache?: AttachmentCache,
-  budget: Budget = { remaining: options.maxTotalBytes ?? MAX_TOTAL_INLINE_BYTES },
+  budget: Budget = {
+    remaining: options.maxTotalBytes ?? MAX_TOTAL_INLINE_BYTES,
+  },
 ): readonly ContentPart[] {
   const maxImageBytes = options.maxImageBytes ?? MAX_INLINE_IMAGE_BYTES;
   const maxTextBytes = options.maxTextBytes ?? MAX_INLINE_TEXT_BYTES;
 
   const found = locate(part, jail);
   if (found === undefined) {
-    return [textPart('[attachment: unavailable — the path is not inside this workspace]')];
+    return [
+      textPart(
+        '[attachment: unavailable — the path is not inside this workspace]',
+      ),
+    ];
   }
   const { absolute, relative } = found;
 
@@ -238,13 +244,19 @@ export function materialiseFilePart(
     // the model cannot read an image of any size, so spending budget on one
     // would take room away from the text attachments it *can* read.
     if (options.images === false) {
-      return remember([textPart(`${line} — this model cannot read images; use the file tools`)]);
+      return remember([
+        textPart(`${line} — this model cannot read images; use the file tools`),
+      ]);
     }
     if (sizeBytes > maxImageBytes) {
-      return remember([textPart(`${line} — too large to show; use the file tools to read it`)]);
+      return remember([
+        textPart(`${line} — too large to show; use the file tools to read it`),
+      ]);
     }
     if (sizeBytes > budget.remaining) {
-      return remember([textPart(`${line} — not shown inline; use the file tools to read it`)]);
+      return remember([
+        textPart(`${line} — not shown inline; use the file tools to read it`),
+      ]);
     }
     budget.remaining -= sizeBytes;
     try {
@@ -266,12 +278,18 @@ export function materialiseFilePart(
     }
     if (text !== undefined) {
       budget.remaining -= sizeBytes;
-      const note = text.truncated ? '\n\n[…truncated — read the file for the rest]' : '';
-      return remember([textPart(`${line}\n\n\`\`\`\n${text.content}\n\`\`\`${note}`)]);
+      const note = text.truncated
+        ? '\n\n[…truncated — read the file for the rest]'
+        : '';
+      return remember([
+        textPart(`${line}\n\n\`\`\`\n${text.content}\n\`\`\`${note}`),
+      ]);
     }
   }
 
-  return remember([textPart(`${line} — not shown inline; use the file tools to read it`)]);
+  return remember([
+    textPart(`${line} — not shown inline; use the file tools to read it`),
+  ]);
 }
 
 /**
@@ -297,7 +315,9 @@ function materialiseContent(
   cache: AttachmentCache | undefined,
   budget: Budget,
 ): readonly ContentPart[] | undefined {
-  if (!content.some((part) => part.type === 'file' || isUnfetchable(part))) return undefined;
+  if (!content.some((part) => part.type === 'file' || isUnfetchable(part))) {
+    return undefined;
+  }
 
   const parts: ContentPart[] = [];
   for (const part of content) {
@@ -306,7 +326,11 @@ function materialiseContent(
       continue;
     }
     if (isUnfetchable(part)) {
-      parts.push(textPart('[image: unavailable — this attachment predates workspace attachments]'));
+      parts.push(
+        textPart(
+          '[image: unavailable — this attachment predates workspace attachments]',
+        ),
+      );
       continue;
     }
     parts.push(part);
@@ -331,14 +355,22 @@ export function materialiseAttachments(
   let changed = false;
   // One budget for the whole request. The per-file caps bound a single read;
   // only this bounds the request, and without it they do not compose.
-  const budget: Budget = { remaining: options.maxTotalBytes ?? MAX_TOTAL_INLINE_BYTES };
+  const budget: Budget = {
+    remaining: options.maxTotalBytes ?? MAX_TOTAL_INLINE_BYTES,
+  };
 
   for (const message of messages) {
     if (message.role === 'system' || message.role === 'tool') {
       out.push(message);
       continue;
     }
-    const content = materialiseContent(message.content, jail, options, cache, budget);
+    const content = materialiseContent(
+      message.content,
+      jail,
+      options,
+      cache,
+      budget,
+    );
     if (content === undefined) {
       out.push(message);
       continue;

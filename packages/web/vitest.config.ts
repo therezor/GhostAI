@@ -8,6 +8,11 @@ import { defineConfig } from 'vitest/config';
  * reads `tokens.css` as text. The `@/` alias is duplicated from there for the
  * same reason — it is resolution, not bundling, and both configs need it.
  *
+ * `@testkit/` is this config's alone: it points at fixtures the app never
+ * imports, so `vite.config.ts` has no business resolving it. It is listed first
+ * only for legibility — `@` cannot swallow it, since an alias match has to end
+ * at a path separator.
+ *
  * `jsdom` everywhere rather than per file. The token gates and the contrast
  * assertion are file readers that do not need a DOM, but they still run on
  * node, so a jsdom environment costs them a few hundred milliseconds and buys
@@ -16,7 +21,12 @@ import { defineConfig } from 'vitest/config';
  * reads like a bug in the component.
  */
 export default defineConfig({
-  resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
+  resolve: {
+    alias: {
+      '@testkit': fileURLToPath(new URL('./test/testkit', import.meta.url)),
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
   test: {
     name: 'web',
     environment: 'jsdom',
@@ -26,7 +36,7 @@ export default defineConfig({
     // runner is another ~3x slower again — which is how it timed out at 5111ms
     // in the coverage job while the uninstrumented `check` job passed.
     testTimeout: 15_000,
-    include: ['src/**/*.test.{ts,tsx}'],
-    setupFiles: ['./src/test/setup.ts'],
+    include: ['test/**/*.test.{ts,tsx}'],
+    setupFiles: ['./test/testkit/setup.ts'],
   },
 });

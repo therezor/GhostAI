@@ -221,4 +221,12 @@ export const PROTOCOL_SCHEMAS = {
 export type ProtocolSchemaName = keyof typeof PROTOCOL_SCHEMAS;
 
 /** The modules the completeness test reflects over to catch unregistered exports. */
-export const SCHEMA_MODULES = { automation, config, messages, rest, subagent, tools, ws };
+export const SCHEMA_MODULES = {
+  automation,
+  config,
+  messages,
+  rest,
+  subagent,
+  tools,
+  ws,
+};

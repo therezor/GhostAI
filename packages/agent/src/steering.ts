@@ -34,7 +34,8 @@ import { silentLogger, type Logger } from '@ghostai/core';
  * frequently abandons what it was doing; with it, the common case — "no, the
  * other directory" — is understood as a correction to the task in flight.
  */
-export const STEERING_PREFIX = '[Steering — sent by the user while this task was running]';
+export const STEERING_PREFIX =
+  '[Steering — sent by the user while this task was running]';
 
 /**
  * How many pending messages one session may hold.
@@ -57,13 +58,13 @@ export interface SteeringQueueOptions {
 }
 
 export class SteeringQueue {
-  readonly #queues = new Map<string, SteeringMessage[]>();
-  readonly #maxPending: number;
-  readonly #logger: Logger;
+  private readonly queues = new Map<string, SteeringMessage[]>();
+  private readonly maxPending: number;
+  private readonly logger: Logger;
 
   constructor(options: SteeringQueueOptions = {}) {
-    this.#maxPending = options.maxPending ?? MAX_PENDING_STEER;
-    this.#logger = options.logger ?? silentLogger;
+    this.maxPending = options.maxPending ?? MAX_PENDING_STEER;
+    this.logger = options.logger ?? silentLogger;
   }
 
   /**
@@ -74,39 +75,39 @@ export class SteeringQueue {
    * the point of steering.
    */
   push(sessionKey: string, content: string, receivedAtMs: number): void {
-    const queue = this.#queues.get(sessionKey) ?? [];
+    const queue = this.queues.get(sessionKey) ?? [];
     queue.push({ content, receivedAtMs });
-    while (queue.length > this.#maxPending) {
+    while (queue.length > this.maxPending) {
       queue.shift();
-      this.#logger.warn(
-        { sessionKey, maxPending: this.#maxPending },
+      this.logger.warn(
+        { sessionKey, maxPending: this.maxPending },
         'steering queue full, dropped oldest message',
       );
     }
-    this.#queues.set(sessionKey, queue);
+    this.queues.set(sessionKey, queue);
   }
 
   /** Whether anything is waiting. Checked before the loop decides to end a turn. */
   hasPending(sessionKey: string): boolean {
-    return (this.#queues.get(sessionKey)?.length ?? 0) > 0;
+    return (this.queues.get(sessionKey)?.length ?? 0) > 0;
   }
 
   /** Takes everything queued for the session and empties it. */
   drain(sessionKey: string): readonly SteeringMessage[] {
-    const queue = this.#queues.get(sessionKey);
+    const queue = this.queues.get(sessionKey);
     if (queue === undefined || queue.length === 0) return [];
-    this.#queues.delete(sessionKey);
+    this.queues.delete(sessionKey);
     return queue;
   }
 
   /** Forgets a session's queue. The loop calls this when a turn ends. */
   clear(sessionKey: string): void {
-    this.#queues.delete(sessionKey);
+    this.queues.delete(sessionKey);
   }
 
   /** Sessions currently holding pending messages. */
   get size(): number {
-    return this.#queues.size;
+    return this.queues.size;
   }
 }
 

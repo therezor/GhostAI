@@ -18,7 +18,12 @@
  * useful if the answer is one press away.
  */
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Bell, CheckCheck, Trash2 } from 'lucide-react';
 import { useState, type JSX } from 'react';
@@ -50,7 +55,11 @@ export function NotificationsRoute(): JSX.Element {
   const notifications = useQuery({
     queryKey: queryKeys.notificationPage(page.page),
     queryFn: ({ signal }) =>
-      api.notifications({ limit: PAGE_SIZE, offset: (page.page - 1) * PAGE_SIZE, signal }),
+      api.notifications({
+        limit: PAGE_SIZE,
+        offset: (page.page - 1) * PAGE_SIZE,
+        signal,
+      }),
     placeholderData: keepPreviousData,
   });
 
@@ -158,10 +167,14 @@ export function NotificationsRoute(): JSX.Element {
         </Button>
       </div>
 
-      {notifications.isPending && <p className="page__note">{t('common.loading')}</p>}
+      {notifications.isPending && (
+        <p className="page__note">{t('common.loading')}</p>
+      )}
       {notifications.isError && (
         <p role="alert" className="page__error">
-          Could not load notifications: {notifications.error.message}
+          {t('notifications.loadError', {
+            message: notifications.error.message,
+          })}
         </p>
       )}
 
@@ -242,7 +255,9 @@ function NotificationRow({
       aria-label={notification.title}
       className={cn('notification', unread && 'notification--unread')}
     >
-      <Icon className={cn('notification__icon', LEVEL_CLASSES[notification.level])} />
+      <Icon
+        className={cn('notification__icon', LEVEL_CLASSES[notification.level])}
+      />
 
       <div className="stack notification__body">
         <div className="cluster notification__head">
@@ -255,7 +270,9 @@ function NotificationRow({
           </time>
         </div>
 
-        {notification.body !== '' && <p className="notification__text">{notification.body}</p>}
+        {notification.body !== '' && (
+          <p className="notification__text">{notification.body}</p>
+        )}
 
         <div className="cluster notification__actions">
           {notification.sessionKey !== undefined && (
@@ -292,12 +309,15 @@ function replaceRow(
   current: NotificationListResponse,
   updated: Notification,
 ): NotificationListResponse {
-  const notifications = current.notifications.map((row) => (row.id === updated.id ? updated : row));
+  const notifications = current.notifications.map((row) =>
+    row.id === updated.id ? updated : row,
+  );
   return {
     ...current,
     notifications,
     // Recounted rather than decremented: two tabs marking the same row read
     // would otherwise drive the badge below what is really unread.
-    unreadCount: notifications.filter((row) => row.readAtMs === undefined).length,
+    unreadCount: notifications.filter((row) => row.readAtMs === undefined)
+      .length,
   };
 }

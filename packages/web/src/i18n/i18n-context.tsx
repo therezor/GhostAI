@@ -15,16 +15,30 @@
  */
 
 import { createWebI18n } from '@ghostai/i18n/web';
-import { createContext, useContext, useState, type JSX, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useState,
+  type JSX,
+  type ReactNode,
+} from 'react';
 import { I18nextProvider } from 'react-i18next';
 
-import { browserLocales, readStoredPreference, resolvePreference } from './locale-preference.js';
+import {
+  browserLocales,
+  readStoredPreference,
+  resolvePreference,
+} from './locale-preference.js';
 import { useConfigLocale } from './use-config-locale.js';
 import { useLocale, type LocaleState } from './use-locale.js';
 
 const LocaleContext = createContext<LocaleState | undefined>(undefined);
 
-export function I18nProvider({ children }: { readonly children: ReactNode }): JSX.Element {
+export function I18nProvider({
+  children,
+}: {
+  readonly children: ReactNode;
+}): JSX.Element {
   // `useState` rather than a module constant: an instance created at import
   // time is shared by every test in a file, so one test's `changeLanguage`
   // leaks into the next one's expectations.
@@ -44,7 +58,11 @@ export function I18nProvider({ children }: { readonly children: ReactNode }): JS
  * `useTranslation` to drive `changeLanguage` — and that needs the instance the
  * provider above supplies.
  */
-function LocaleBridge({ children }: { readonly children: ReactNode }): JSX.Element {
+function LocaleBridge({
+  children,
+}: {
+  readonly children: ReactNode;
+}): JSX.Element {
   const locale = useLocale();
   // The install's own answer, once there is a session to read it with. Before
   // that the browser's language stands.
@@ -61,7 +79,8 @@ export function useAppLocale(): LocaleState {
 function detached(): LocaleState {
   const preference = readStoredPreference();
   const stamped = globalThis.document.documentElement.lang;
-  const resolved = stamped === '' ? resolvePreference(preference, browserLocales()) : stamped;
+  const resolved =
+    stamped === '' ? resolvePreference(preference, browserLocales()) : stamped;
 
   return {
     preference,

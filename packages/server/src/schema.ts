@@ -32,7 +32,9 @@ type JsonSchema = Record<string, unknown>;
 
 /** `$schema` is meaningful at the root of a document and noise inside `components`. */
 function convert(schema: z.ZodType, io: 'input' | 'output'): JsonSchema {
-  const { $schema: _schema, ...rest } = z.toJSONSchema(schema, { io }) as JsonSchema & {
+  const { $schema: dialect, ...rest } = z.toJSONSchema(schema, {
+    io,
+  }) as JsonSchema & {
     $schema?: unknown;
   };
   return rest;
@@ -47,7 +49,8 @@ function buildComponents(): Readonly<Record<string, JsonSchema>> {
 }
 
 /** The `$defs` pool. Every protocol schema, converted once at module load. */
-export const PROTOCOL_COMPONENTS: Readonly<Record<string, JsonSchema>> = buildComponents();
+export const PROTOCOL_COMPONENTS: Readonly<Record<string, JsonSchema>> =
+  buildComponents();
 
 /**
  * Identity, not structure.
@@ -82,25 +85,36 @@ function isZodType(value: unknown): value is z.ZodType {
  * Passed to `@fastify/swagger` as its `transform`, so conversion happens once,
  * when the document is first generated, rather than on every request.
  */
-export function jsonSchemaTransform({ schema, url }: { schema?: FastifySchema; url: string }): {
+export function jsonSchemaTransform({
+  schema,
+  url,
+}: {
+  schema?: FastifySchema;
+  url: string;
+}): {
   schema: JsonSchema;
   url: string;
 } {
   if (schema === undefined) return { schema: {}, url };
 
-  const { body, querystring, params, response, ...rest } = schema as FastifySchema & {
-    response?: Record<string, unknown>;
-  };
+  const { body, querystring, params, response, ...rest } =
+    schema as FastifySchema & {
+      response?: Record<string, unknown>;
+    };
   const out: JsonSchema = { ...rest };
 
   if (isZodType(body)) out.body = refOrInline(body, 'input');
-  if (isZodType(querystring)) out.querystring = refOrInline(querystring, 'input');
+  if (isZodType(querystring)) {
+    out.querystring = refOrInline(querystring, 'input');
+  }
   if (isZodType(params)) out.params = refOrInline(params, 'input');
 
   if (response !== undefined) {
     const responses: JsonSchema = {};
     for (const [status, value] of Object.entries(response)) {
-      responses[status] = isZodType(value) ? refOrInline(value, 'output') : value;
+      responses[status] = isZodType(value)
+        ? refOrInline(value, 'output')
+        : value;
     }
     out.response = responses;
   }
@@ -125,12 +139,18 @@ function detailsOf(error: z.ZodError): Record<string, string> {
  * the error handler with its own status and code intact rather than being
  * rewritten into a bare 400.
  */
-export const zodValidatorCompiler: FastifySchemaCompiler<z.ZodType> = ({ schema, httpPart }) => {
+export const zodValidatorCompiler: FastifySchemaCompiler<z.ZodType> = ({
+  schema,
+  httpPart,
+}) => {
   return (data: unknown) => {
     const result = schema.safeParse(data);
     if (result.success) return { value: result.data };
     return {
-      error: unprocessable(`Invalid ${httpPart ?? 'request'}`, detailsOf(result.error)),
+      error: unprocessable(
+        `Invalid ${httpPart ?? 'request'}`,
+        detailsOf(result.error),
+      ),
     };
   };
 };

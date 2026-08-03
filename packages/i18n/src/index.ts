@@ -39,9 +39,17 @@ export {
   type RelativeSpan,
 } from './format.js';
 
-export { instantFromZonedInput, isValidTimeZone, zonedInputValue } from './zoned-time.js';
+export {
+  instantFromZonedInput,
+  isValidTimeZone,
+  zonedInputValue,
+} from './zoned-time.js';
 
-export { createI18n, type CreateI18nOptions, type Namespace } from './instance.js';
+export {
+  createI18n,
+  type CreateI18nOptions,
+  type Namespace,
+} from './instance.js';
 
 export {
   EN,

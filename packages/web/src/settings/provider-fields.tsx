@@ -14,7 +14,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { ProviderTestResponse } from '@ghostai/protocol';
 
-import { TextField } from './controls.js';
+import { TextField } from '@/components/form/controls.js';
 import { describeProbe } from './use-provider.js';
 
 /**
@@ -56,7 +56,8 @@ export function KeyField({
       hint={
         <>
           {stored}
-          {envKey !== undefined && ` ${envKey} in the environment is used when none is saved.`}
+          {envKey !== undefined &&
+            ` ${envKey} in the environment is used when none is saved.`}
         </>
       }
     />

@@ -25,7 +25,13 @@
 import type { TFunction } from 'i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, FileWarning, Pencil, RotateCw, Save } from 'lucide-react';
-import { useEffect, useRef, useState, type JSX, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type JSX,
+  type KeyboardEvent,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { FileEntry } from '@ghostai/protocol';
@@ -46,7 +52,11 @@ export interface FileEditorProps {
   readonly onDirtyChange?: (dirty: boolean) => void;
 }
 
-export function FileEditor({ entry, workspace, onDirtyChange }: FileEditorProps): JSX.Element {
+export function FileEditor({
+  entry,
+  workspace,
+  onDirtyChange,
+}: FileEditorProps): JSX.Element {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<string | undefined>(undefined);
@@ -75,7 +85,12 @@ export function FileEditor({ entry, workspace, onDirtyChange }: FileEditorProps)
   const save = useMutation({
     mutationFn: async (text: string) => {
       if (loaded === undefined) throw new Error('The file is not loaded yet');
-      return await api.writeText(workspace, entry.path, text, loaded.modifiedAtMs);
+      return await api.writeText(
+        workspace,
+        entry.path,
+        text,
+        loaded.modifiedAtMs,
+      );
     },
     onSuccess: (written) => {
       setConflict(false);
@@ -83,7 +98,9 @@ export function FileEditor({ entry, workspace, onDirtyChange }: FileEditorProps)
       setEditing(false);
       // Both: the text query holds the new `modifiedAtMs` the next save has to
       // match, and the listing holds the size and time in the row behind this.
-      void queryClient.invalidateQueries({ queryKey: queryKeys.fileText(workspace, entry.path) });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.fileText(workspace, entry.path),
+      });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.files(workspace, parentOf(entry.path)),
       });
@@ -105,10 +122,14 @@ export function FileEditor({ entry, workspace, onDirtyChange }: FileEditorProps)
     setDraft(undefined);
     setConflict(false);
     setEditing(false);
-    void queryClient.invalidateQueries({ queryKey: queryKeys.fileText(workspace, entry.path) });
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.fileText(workspace, entry.path),
+    });
   };
 
-  if (file.isPending) return <p className="file-preview__note">{t('files.reading')}</p>;
+  if (file.isPending) {
+    return <p className="file-preview__note">{t('files.reading')}</p>;
+  }
   if (file.isError) {
     return (
       <p role="alert" className="page__error">
@@ -142,7 +163,12 @@ export function FileEditor({ entry, workspace, onDirtyChange }: FileEditorProps)
         </span>
         <span className="spacer" />
 
-        <Button variant="ghost" size="sm" onClick={reload} disabled={file.isFetching}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={reload}
+          disabled={file.isFetching}
+        >
           <RotateCw />
           Reload
         </Button>
@@ -160,7 +186,9 @@ export function FileEditor({ entry, workspace, onDirtyChange }: FileEditorProps)
             {...(editing && dirty ? { title: 'Save or reload first' } : {})}
             onClick={() => {
               setEditing(!editing);
-              if (!editing) requestAnimationFrame(() => textarea.current?.focus());
+              if (!editing) {
+                requestAnimationFrame(() => textarea.current?.focus());
+              }
             }}
           >
             {editing ? <Eye /> : <Pencil />}
@@ -186,7 +214,9 @@ export function FileEditor({ entry, workspace, onDirtyChange }: FileEditorProps)
       {truncated && (
         <p className="notice notice--warning">
           <FileWarning />
-          <span>{t('files.tooBig', { size: formatBytes(entry.sizeBytes) })}</span>
+          <span>
+            {t('files.tooBig', { size: formatBytes(entry.sizeBytes) })}
+          </span>
         </p>
       )}
 
@@ -208,8 +238,10 @@ export function FileEditor({ entry, workspace, onDirtyChange }: FileEditorProps)
       />
 
       <p className="micro-label">
-        {languageForFile(entry.name) === '' ? 'plain text' : languageForFile(entry.name)} ·{' '}
-        {lineLabel(content, t)}
+        {languageForFile(entry.name) === ''
+          ? 'plain text'
+          : languageForFile(entry.name)}{' '}
+        · {lineLabel(content, t)}
         {truncated ? ` of ${formatBytes(entry.sizeBytes)}` : ''}
       </p>
     </div>

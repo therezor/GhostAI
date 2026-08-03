@@ -61,8 +61,14 @@ function mac(secret: string, payload: string): Buffer {
  * path would make the signature the thing that authorised it.
  */
 export function signMediaToken(secret: string, claim: MediaClaim): string {
-  const payload: Payload = { p: claim.path, w: claim.workspaceId, e: claim.expiresAtMs };
-  const encoded = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  const payload: Payload = {
+    p: claim.path,
+    w: claim.workspaceId,
+    e: claim.expiresAtMs,
+  };
+  const encoded = Buffer.from(JSON.stringify(payload), 'utf8').toString(
+    'base64url',
+  );
   return `${encoded}.${mac(secret, encoded).toString('base64url')}`;
 }
 
@@ -100,7 +106,9 @@ export function verifyMediaToken(
   if (typeof payload !== 'object' || payload === null) return undefined;
 
   const { p, w, e } = payload as Partial<Payload>;
-  if (typeof p !== 'string' || p === '' || typeof e !== 'number') return undefined;
+  if (typeof p !== 'string' || p === '' || typeof e !== 'number') {
+    return undefined;
+  }
   // A workspace-less payload is refused rather than defaulted to `default`.
   // Defaulting would let a token minted before workspaces existed — or one
   // whose `w` an attacker stripped — be replayed against the default

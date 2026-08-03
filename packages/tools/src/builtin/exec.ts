@@ -54,7 +54,9 @@ const schema = z.strictObject({
     .int()
     .min(0)
     .optional()
-    .describe('Kill the process after this many milliseconds. Capped by the operator setting.'),
+    .describe(
+      'Kill the process after this many milliseconds. Capped by the operator setting.',
+    ),
 });
 
 export const execTool: AnyTool = defineTool({
@@ -78,7 +80,9 @@ export const execTool: AnyTool = defineTool({
       jail: context.jail,
       config: context.config.exec,
       ...(context.env === undefined ? {} : { env: context.env }),
-      ...(context.sandboxed === undefined ? {} : { sandboxed: context.sandboxed }),
+      ...(context.sandboxed === undefined
+        ? {}
+        : { sandboxed: context.sandboxed }),
     });
 
     // Where it runs is the context's to decide; whether it may run was settled
@@ -100,7 +104,10 @@ export const execTool: AnyTool = defineTool({
  * operator cap of 0 must not clamp a model's 30-second request to zero, and a
  * model's 0 must not lift a configured cap.
  */
-function effectiveTimeout(plan: ExecPlan, requested: number | undefined): number {
+function effectiveTimeout(
+  plan: ExecPlan,
+  requested: number | undefined,
+): number {
   if (requested === undefined || requested === 0) return plan.timeoutMs;
   if (plan.timeoutMs === 0) return requested;
   return Math.min(requested, plan.timeoutMs);
@@ -117,10 +124,16 @@ export function renderRun(
   argv: readonly string[],
   plan: ExecPlan,
   outcome: RunOutcome,
-): { content: string; isError: boolean; details: Readonly<Record<string, unknown>> } {
+): {
+  content: string;
+  isError: boolean;
+  details: Readonly<Record<string, unknown>>;
+} {
   const sections: string[] = [];
   if (outcome.stdout !== '') sections.push(outcome.stdout.trimEnd());
-  if (outcome.stderr !== '') sections.push(`[stderr]\n${outcome.stderr.trimEnd()}`);
+  if (outcome.stderr !== '') {
+    sections.push(`[stderr]\n${outcome.stderr.trimEnd()}`);
+  }
   if (sections.length === 0) sections.push('(no output)');
 
   if (outcome.truncated) {
@@ -145,7 +158,9 @@ export function renderRun(
     );
   }
   if (outcome.timedOut) {
-    sections.push('[exec: the command was killed after exceeding its time limit.]');
+    sections.push(
+      '[exec: the command was killed after exceeding its time limit.]',
+    );
   }
 
   // The exit status goes last, where a reader — and a model reading a
@@ -158,14 +173,17 @@ export function renderRun(
 
   return {
     content: sections.join('\n\n'),
-    isError: outcome.timedOut || outcome.signal !== null || (outcome.code ?? 0) !== 0,
+    isError:
+      outcome.timedOut || outcome.signal !== null || (outcome.code ?? 0) !== 0,
     details: {
       argv: [...argv],
       paths: [...plan.paths],
       exitCode: outcome.code,
       signal: outcome.signal,
       timedOut: outcome.timedOut,
-      ...(outcome.transcriptDir === undefined ? {} : { transcriptDir: outcome.transcriptDir }),
+      ...(outcome.transcriptDir === undefined
+        ? {}
+        : { transcriptDir: outcome.transcriptDir }),
     },
   };
 }

@@ -48,6 +48,8 @@ let counter: Promise<TokenCounter> | null = null;
  * the first load share one import rather than racing to start several.
  */
 export async function loadTokenCounter(): Promise<TokenCounter> {
-  counter ??= import('gpt-tokenizer').then((module) => (text: string) => module.countTokens(text));
+  counter ??= import('gpt-tokenizer').then(
+    (module) => (text: string) => module.countTokens(text),
+  );
   return await counter;
 }

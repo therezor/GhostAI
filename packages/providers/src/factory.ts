@@ -43,7 +43,8 @@ export interface CreateProviderOptions {
 export function createProvider(options: CreateProviderOptions): ChatProvider {
   const requested = options.provider;
   const id = typeof requested === 'string' ? requested : requested.id;
-  const spec = typeof requested === 'string' ? findProvider(requested) : requested;
+  const spec =
+    typeof requested === 'string' ? findProvider(requested) : requested;
   if (spec === null) throw new GhostError('config', `Unknown provider "${id}"`);
 
   if (spec.wire !== 'openai-chat') {
@@ -81,14 +82,19 @@ export function createProvider(options: CreateProviderOptions): ChatProvider {
 export function resolveConnection(
   spec: ProviderSpec,
   config: ProviderConfig | undefined,
-): { readonly apiBase: string; readonly extraHeaders: Readonly<Record<string, string>> } {
+): {
+  readonly apiBase: string;
+  readonly extraHeaders: Readonly<Record<string, string>>;
+} {
   // An empty string in config means "unset", not "the empty base URL": a
   // cleared text field in the settings panel must fall back to the default
   // rather than producing a provider that cannot resolve its own endpoint.
   const configured = config?.apiBase?.trim();
   return {
     apiBase:
-      configured === undefined || configured === '' ? (spec.defaultApiBase ?? '') : configured,
+      configured === undefined || configured === ''
+        ? (spec.defaultApiBase ?? '')
+        : configured,
     extraHeaders: { ...spec.defaultHeaders, ...config?.extraHeaders },
   };
 }

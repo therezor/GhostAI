@@ -21,7 +21,14 @@
 
 import type { TFunction } from 'i18next';
 
-export const SETUP_STEPS = ['language', 'code', 'password', 'provider', 'model', 'done'] as const;
+export const SETUP_STEPS = [
+  'language',
+  'code',
+  'password',
+  'provider',
+  'model',
+  'done',
+] as const;
 export type SetupStep = (typeof SETUP_STEPS)[number];
 
 /**
@@ -35,7 +42,11 @@ export type SetupStep = (typeof SETUP_STEPS)[number];
  * skipping means "yes, that one". A first step that *had* to be answered would
  * be a toll gate in front of the install.
  */
-const SKIPPABLE: ReadonlySet<SetupStep> = new Set<SetupStep>(['language', 'provider', 'model']);
+const SKIPPABLE: ReadonlySet<SetupStep> = new Set<SetupStep>([
+  'language',
+  'provider',
+  'model',
+]);
 
 export function isSkippable(step: SetupStep): boolean {
   return SKIPPABLE.has(step);
@@ -65,7 +76,10 @@ export function nextStep(step: SetupStep): SetupStep {
  * starts at `provider`, and a Back to `password` there would be offering to
  * rotate a password nobody came here to change.
  */
-export function previousStep(step: SetupStep, from: SetupStep = 'language'): SetupStep | null {
+export function previousStep(
+  step: SetupStep,
+  from: SetupStep = 'language',
+): SetupStep | null {
   // `password` still cannot go back to `code` — the code was single-use and is
   // already spent. `code` *can* go back to `language`, because nothing has been
   // spent at that point and the language is the one answer a user is most

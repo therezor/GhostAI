@@ -41,7 +41,9 @@ export const buttonVariants = cva('btn', {
 });
 
 export interface ButtonProps
-  extends ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
+  extends
+    ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
   /**
    * Render the child element instead of a `<button>`, keeping the classes.
    * The escape hatch for a link that looks like a button — which must stay an

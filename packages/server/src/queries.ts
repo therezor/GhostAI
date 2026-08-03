@@ -33,7 +33,12 @@ export const MAX_PAGE_LIMIT = 200;
 export const DEFAULT_PAGE_LIMIT = 50;
 
 const pageShape = {
-  limit: z.coerce.number().int().positive().max(MAX_PAGE_LIMIT).default(DEFAULT_PAGE_LIMIT),
+  limit: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(MAX_PAGE_LIMIT)
+    .default(DEFAULT_PAGE_LIMIT),
   /** Opaque; echoed back from `nextCursor`. See `cursor.ts`. */
   cursor: z.string().optional(),
   /**
@@ -95,15 +100,16 @@ export interface NotificationListQuery extends PageQuery {
   readonly unread?: boolean | undefined;
 }
 
-export const NotificationListQuerySchema: z.ZodType<NotificationListQuery> = z.object({
-  ...pageShape,
-  // An enum rather than `z.stringbool()`, so the generated document lists the
-  // two values a client may send instead of saying "string".
-  unread: z
-    .enum(['true', 'false'])
-    .transform((value) => value === 'true')
-    .optional(),
-});
+export const NotificationListQuerySchema: z.ZodType<NotificationListQuery> =
+  z.object({
+    ...pageShape,
+    // An enum rather than `z.stringbool()`, so the generated document lists the
+    // two values a client may send instead of saying "string".
+    unread: z
+      .enum(['true', 'false'])
+      .transform((value) => value === 'true')
+      .optional(),
+  });
 
 export interface WsQuery {
   /** The session to open on. Absent asks the hub to mint one. */
@@ -209,7 +215,12 @@ export interface TurnsQuery {
  * from.
  */
 export const TurnsQuerySchema: z.ZodType<TurnsQuery> = z.object({
-  limit: z.coerce.number().int().positive().max(MAX_PAGE_LIMIT).default(DEFAULT_PAGE_LIMIT),
+  limit: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(MAX_PAGE_LIMIT)
+    .default(DEFAULT_PAGE_LIMIT),
 });
 
 export interface SessionParams {

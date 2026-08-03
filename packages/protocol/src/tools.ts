@@ -163,7 +163,10 @@ export const ToolPromptOverrideSchema = z.strictObject({
 export type ToolPromptOverride = z.infer<typeof ToolPromptOverrideSchema>;
 
 /** Tool name → its prose overrides. Keyed the way permissions are, for the same reason. */
-export const ToolPromptOverridesSchema = z.record(z.string(), ToolPromptOverrideSchema);
+export const ToolPromptOverridesSchema = z.record(
+  z.string(),
+  ToolPromptOverrideSchema,
+);
 export type ToolPromptOverrides = z.infer<typeof ToolPromptOverridesSchema>;
 
 /** What `applyToolPrompts` could not apply, for the warning sink and the editor. */
@@ -179,9 +182,15 @@ export interface AppliedToolPrompts extends ToolPromptMisses {
 }
 
 /** The `properties` map of a JSON Schema object, when it has one. */
-function propertiesOf(parameters: Record<string, unknown>): Record<string, unknown> | undefined {
+function propertiesOf(
+  parameters: Record<string, unknown>,
+): Record<string, unknown> | undefined {
   const properties = parameters.properties;
-  if (typeof properties !== 'object' || properties === null || Array.isArray(properties)) {
+  if (
+    typeof properties !== 'object' ||
+    properties === null ||
+    Array.isArray(properties)
+  ) {
     return undefined;
   }
   return properties as Record<string, unknown>;
@@ -205,7 +214,9 @@ export function applyToolPrompts(
   overrides: ToolPromptOverrides,
 ): AppliedToolPrompts {
   const names = Object.keys(overrides);
-  if (names.length === 0) return { definitions, unknownTools: [], unknownFields: [] };
+  if (names.length === 0) {
+    return { definitions, unknownTools: [], unknownFields: [] };
+  }
 
   const seen = new Set<string>();
   const unknownFields: string[] = [];
@@ -216,7 +227,8 @@ export function applyToolPrompts(
     seen.add(definition.name);
 
     const fields = Object.entries(override.fields);
-    const properties = fields.length === 0 ? undefined : propertiesOf(definition.parameters);
+    const properties =
+      fields.length === 0 ? undefined : propertiesOf(definition.parameters);
 
     let parameters = definition.parameters;
     if (properties !== undefined) {
@@ -224,7 +236,11 @@ export function applyToolPrompts(
       let changed = false;
       for (const [field, description] of fields) {
         const property = next[field];
-        if (typeof property !== 'object' || property === null || Array.isArray(property)) {
+        if (
+          typeof property !== 'object' ||
+          property === null ||
+          Array.isArray(property)
+        ) {
           unknownFields.push(`${definition.name}.${field}`);
           continue;
         }
@@ -236,12 +252,16 @@ export function applyToolPrompts(
       // A tool whose schema has no `properties` at all — `z.strictObject({})`.
       // Every named field is unknown, and saying so once per field matches what
       // the operator wrote.
-      for (const [field] of fields) unknownFields.push(`${definition.name}.${field}`);
+      for (const [field] of fields) {
+        unknownFields.push(`${definition.name}.${field}`);
+      }
     }
 
     return {
       ...definition,
-      ...(override.description === '' ? {} : { description: override.description.trim() }),
+      ...(override.description === ''
+        ? {}
+        : { description: override.description.trim() }),
       parameters,
     };
   });

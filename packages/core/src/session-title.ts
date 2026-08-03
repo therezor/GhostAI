@@ -43,7 +43,8 @@ const BOUNDARY_FRACTION = 1 / 3;
 const FENCED_CODE = /```[\s\S]*?```/gu;
 const MENTION = /@(?:kb|mcp|skill):[\w./-]+/gu;
 /** Leading list markers, headings and quotes — per line, not per string. */
-const LINE_FURNITURE = /^[ \t]*(?:#{1,6}[ \t]+|>[ \t]*|[-*][ \t]+|\d+\.[ \t]+)/gmu;
+const LINE_FURNITURE =
+  /^[ \t]*(?:#{1,6}[ \t]+|>[ \t]*|[-*][ \t]+|\d+\.[ \t]+)/gmu;
 
 /**
  * A conversation title derived from its first message, or `''` when there is
@@ -52,7 +53,10 @@ const LINE_FURNITURE = /^[ \t]*(?:#{1,6}[ \t]+|>[ \t]*|[-*][ \t]+|\d+\.[ \t]+)/g
  * The empty return is meaningful: the caller writes nothing, leaving the stored
  * title empty so that a later message — or a manual rename — can still claim it.
  */
-export function deriveSessionTitle(text: string, maxChars: number = MAX_TITLE_CHARS): string {
+export function deriveSessionTitle(
+  text: string,
+  maxChars: number = MAX_TITLE_CHARS,
+): string {
   if (maxChars <= 0) return '';
 
   // Code first: it can contain anything the later passes look for, including
@@ -74,7 +78,8 @@ export function deriveSessionTitle(text: string, maxChars: number = MAX_TITLE_CH
   // a "60 character" title that renders 61 is a column that overflows by one.
   const room = maxChars - 1;
   const boundary = flat.lastIndexOf(' ', room);
-  const cut = boundary >= Math.floor(room * (1 - BOUNDARY_FRACTION)) ? boundary : room;
+  const cut =
+    boundary >= Math.floor(room * (1 - BOUNDARY_FRACTION)) ? boundary : room;
 
   return `${flat.slice(0, cut).trimEnd()}…`;
 }

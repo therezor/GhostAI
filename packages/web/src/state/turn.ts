@@ -20,7 +20,12 @@
 
 import { create } from 'zustand';
 
-import type { Attachment, ServerMessage, StoredMessage, SubagentRunRef } from '@ghostai/protocol';
+import type {
+  Attachment,
+  ServerMessage,
+  StoredMessage,
+  SubagentRunRef,
+} from '@ghostai/protocol';
 
 import {
   appendPendingUserMessage,
@@ -75,7 +80,10 @@ export interface TurnState {
    */
   readonly truncateAfter: (seq: number) => void;
   /** This tab answered an approval prompt; the buttons go now, not on the echo. */
-  readonly answerApproval: (callId: string, answered: 'approved' | 'denied') => void;
+  readonly answerApproval: (
+    callId: string,
+    answered: 'approved' | 'denied',
+  ) => void;
   /** Puts a fetched history under whatever the socket has already built. */
   readonly mergeHistory: (
     messages: readonly StoredMessage[],
@@ -134,7 +142,9 @@ export const useTurnStore = create<TurnState>((set) => ({
       // is assembled.
       const next: { -readonly [K in keyof TurnState]?: TurnState[K] } = {};
 
-      if ('seq' in message && message.seq > state.lastSeq) next.lastSeq = message.seq;
+      if ('seq' in message && message.seq > state.lastSeq) {
+        next.lastSeq = message.seq;
+      }
 
       switch (message.type) {
         case 'connected':
@@ -166,20 +176,31 @@ export const useTurnStore = create<TurnState>((set) => ({
   },
 
   appendPending: (input) => {
-    set((state) => ({ transcript: appendPendingUserMessage(state.transcript, input) }));
+    set((state) => ({
+      transcript: appendPendingUserMessage(state.transcript, input),
+    }));
   },
 
   truncateAfter: (seq) => {
-    set((state) => ({ transcript: truncateTranscriptAfter(state.transcript, seq) }));
+    set((state) => ({
+      transcript: truncateTranscriptAfter(state.transcript, seq),
+    }));
   },
 
   answerApproval: (callId, answered) => {
-    set((state) => ({ transcript: markApprovalAnswered(state.transcript, callId, answered) }));
+    set((state) => ({
+      transcript: markApprovalAnswered(state.transcript, callId, answered),
+    }));
   },
 
   mergeHistory: (messages, subagentRuns, failures) => {
     set((state) => ({
-      transcript: mergeStoredHistory(state.transcript, messages, subagentRuns, failures),
+      transcript: mergeStoredHistory(
+        state.transcript,
+        messages,
+        subagentRuns,
+        failures,
+      ),
     }));
   },
 

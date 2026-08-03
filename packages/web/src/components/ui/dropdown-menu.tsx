@@ -42,7 +42,12 @@ export function DropdownMenuItem({
   className,
   ...props
 }: ComponentProps<typeof DropdownMenuPrimitive.Item>): JSX.Element {
-  return <DropdownMenuPrimitive.Item className={cn('menu__item', className)} {...props} />;
+  return (
+    <DropdownMenuPrimitive.Item
+      className={cn('menu__item', className)}
+      {...props}
+    />
+  );
 }
 
 /**
@@ -79,7 +84,12 @@ export function DropdownMenuLabel({
   className,
   ...props
 }: ComponentProps<typeof DropdownMenuPrimitive.Label>): JSX.Element {
-  return <DropdownMenuPrimitive.Label className={cn('menu__label', className)} {...props} />;
+  return (
+    <DropdownMenuPrimitive.Label
+      className={cn('menu__label', className)}
+      {...props}
+    />
+  );
 }
 
 export function DropdownMenuSeparator({
@@ -87,6 +97,9 @@ export function DropdownMenuSeparator({
   ...props
 }: ComponentProps<typeof DropdownMenuPrimitive.Separator>): JSX.Element {
   return (
-    <DropdownMenuPrimitive.Separator className={cn('menu__separator', className)} {...props} />
+    <DropdownMenuPrimitive.Separator
+      className={cn('menu__separator', className)}
+      {...props}
+    />
   );
 }

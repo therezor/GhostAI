@@ -19,6 +19,9 @@
  * module is that the component does not know what library is underneath it.
  */
 export interface MutationHandle<T, R = void> {
-  readonly mutate: (input: T, options?: { readonly onSuccess?: (result: R) => void }) => void;
+  readonly mutate: (
+    input: T,
+    options?: { readonly onSuccess?: (result: R) => void },
+  ) => void;
   readonly pending: boolean;
 }

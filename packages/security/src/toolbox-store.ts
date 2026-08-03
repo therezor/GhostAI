@@ -96,30 +96,32 @@ export interface ToolboxStoreOptions {
 }
 
 export class ToolboxStore {
-  readonly #db: DatabaseSync;
-  readonly #dir: string;
-  readonly #clock: Clock;
+  private readonly db: DatabaseSync;
+  private readonly dir: string;
+  private readonly clock: Clock;
 
   constructor(options: ToolboxStoreOptions) {
-    this.#db = options.database;
-    this.#dir = options.dir;
-    this.#clock = options.clock ?? systemClock;
-    this.#db.exec(SCHEMA);
+    this.db = options.database;
+    this.dir = options.dir;
+    this.clock = options.clock ?? systemClock;
+    this.db.exec(SCHEMA);
   }
 
-  #stmt(sql: string): StatementSync {
-    return this.#db.prepare(sql);
+  private stmt(sql: string): StatementSync {
+    return this.db.prepare(sql);
   }
 
   manifestPathFor(name: string): string {
     if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(name)) {
-      throw new GhostError('invalid_input', `Not a toolbox name: ${name}`, { details: { name } });
+      throw new GhostError('invalid_input', `Not a toolbox name: ${name}`, {
+        details: { name },
+      });
     }
-    return join(this.#dir, name, 'toolbox.json');
+    return join(this.dir, name, 'toolbox.json');
   }
 
   /** Raw manifest bytes, or `undefined` when nothing is installed under that name. */
-  #read(name: string): Uint8Array | undefined {
+  private read(name: string): Uint8Array | undefined {
     // Outside the `try`: a name that is not a slug is a caller error with its own
     // message, and letting the catch below rewrap it as "could not be read"
     // would report a filesystem problem for what is really a rejected input.
@@ -136,10 +138,10 @@ export class ToolboxStore {
     }
   }
 
-  #approvedHash(name: string): string | undefined {
-    const row = this.#stmt('SELECT manifest_sha256 FROM toolbox_approvals WHERE name = ?').get(
-      name,
-    ) as { manifest_sha256: string } | undefined;
+  private approvedHash(name: string): string | undefined {
+    const row = this.stmt(
+      'SELECT manifest_sha256 FROM toolbox_approvals WHERE name = ?',
+    ).get(name) as { manifest_sha256: string } | undefined;
     return row?.manifest_sha256;
   }
 
@@ -152,7 +154,7 @@ export class ToolboxStore {
    * message turns a two-second fix into a hunt.
    */
   require(name: string): ApprovedToolbox {
-    const bytes = this.#read(name);
+    const bytes = this.read(name);
     if (bytes === undefined) {
       throw new GhostError(
         'config',
@@ -166,7 +168,7 @@ export class ToolboxStore {
     assertToolboxPolicy(toolbox);
 
     const hash = manifestHash(bytes);
-    const approved = this.#approvedHash(name);
+    const approved = this.approvedHash(name);
     if (approved === undefined) {
       throw new GhostError(
         'config',
@@ -190,36 +192,40 @@ export class ToolboxStore {
       toolbox,
       manifestPath: this.manifestPathFor(name),
       manifestSha256: hash,
-      docs: this.#docs(name),
+      docs: this.docs(name),
     };
   }
 
   /** Records the hash of what is on disk now. This *is* the approval. */
   approve(name: string): ApprovedToolbox {
-    const bytes = this.#read(name);
+    const bytes = this.read(name);
     if (bytes === undefined) {
-      throw new GhostError('config', `No toolbox is installed under "${name}"`, {
-        details: { name },
-      });
+      throw new GhostError(
+        'config',
+        `No toolbox is installed under "${name}"`,
+        {
+          details: { name },
+        },
+      );
     }
     const toolbox = parseToolbox(bytes);
     assertToolboxPolicy(toolbox);
     const hash = manifestHash(bytes);
 
-    this.#stmt(
+    this.stmt(
       `INSERT INTO toolbox_approvals (name, manifest_sha256, image, approved_at_ms)
        VALUES (?, ?, ?, ?)
        ON CONFLICT(name) DO UPDATE SET
          manifest_sha256 = excluded.manifest_sha256,
          image = excluded.image,
          approved_at_ms = excluded.approved_at_ms`,
-    ).run(name, hash, toolbox.image, this.#clock.now());
+    ).run(name, hash, toolbox.image, this.clock.now());
 
     return {
       toolbox,
       manifestPath: this.manifestPathFor(name),
       manifestSha256: hash,
-      docs: this.#docs(name),
+      docs: this.docs(name),
     };
   }
 
@@ -234,13 +240,15 @@ export class ToolboxStore {
    * the reference should take effect on the next turn, and this is one small file
    * read beside one the same code path already does.
    */
-  #docs(name: string): string {
+  private docs(name: string): string {
     try {
-      const bytes = readFileSync(join(this.#dir, name, 'TOOLS.md'));
+      const bytes = readFileSync(join(this.dir, name, 'TOOLS.md'));
       // Sliced on *bytes* before decoding, so a huge file is never fully held in
       // memory as a string. A cut in the middle of a multi-byte character decodes
       // to a replacement char, which is a cosmetic price for a hard bound.
-      return new TextDecoder().decode(bytes.subarray(0, TOOLBOX_DOCS_MAX_BYTES));
+      return new TextDecoder().decode(
+        bytes.subarray(0, TOOLBOX_DOCS_MAX_BYTES),
+      );
     } catch {
       return '';
     }
@@ -248,7 +256,7 @@ export class ToolboxStore {
 
   /** Forgets an approval. The manifest stays on disk; it simply stops resolving. */
   revoke(name: string): void {
-    this.#stmt('DELETE FROM toolbox_approvals WHERE name = ?').run(name);
+    this.stmt('DELETE FROM toolbox_approvals WHERE name = ?').run(name);
   }
 
   /**
@@ -261,7 +269,7 @@ export class ToolboxStore {
   list(): readonly ToolboxListing[] {
     let entries: readonly string[];
     try {
-      entries = readdirSync(this.#dir, { withFileTypes: true })
+      entries = readdirSync(this.dir, { withFileTypes: true })
         .filter((entry) => entry.isDirectory())
         .map((entry) => entry.name)
         .sort();
@@ -270,9 +278,9 @@ export class ToolboxStore {
     }
 
     return entries.map((name) => {
-      const manifestPath = join(this.#dir, name, 'toolbox.json');
+      const manifestPath = join(this.dir, name, 'toolbox.json');
       try {
-        const bytes = this.#read(name);
+        const bytes = this.read(name);
         if (bytes === undefined) {
           return {
             name,
@@ -284,13 +292,15 @@ export class ToolboxStore {
         }
         const toolbox = parseToolbox(bytes);
         assertToolboxPolicy(toolbox);
-        const approved = this.#approvedHash(name) === manifestHash(bytes);
+        const approved = this.approvedHash(name) === manifestHash(bytes);
         return {
           name,
           manifestPath,
           toolbox,
           approved,
-          problem: approved ? undefined : 'not approved, or changed since approval',
+          problem: approved
+            ? undefined
+            : 'not approved, or changed since approval',
         };
       } catch (error) {
         return {

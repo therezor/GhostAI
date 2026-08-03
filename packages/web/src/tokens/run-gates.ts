@@ -10,7 +10,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { checkFiles, formatViolation, type SourceFile } from './gates.js';
 
-const PACKAGE_ROOT: string = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const PACKAGE_ROOT: string = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+);
 
 const EXTENSIONS = ['.css', '.ts', '.tsx', '.html'];
 
@@ -23,7 +27,9 @@ const EXTENSIONS = ['.css', '.ts', '.tsx', '.html'];
  * is caught has to be able to write `13px`. Neither directory is reachable from
  * the bundle: nothing in `main.tsx`'s import graph leads here.
  */
-export function collectSources(root: string = PACKAGE_ROOT): readonly SourceFile[] {
+export function collectSources(
+  root: string = PACKAGE_ROOT,
+): readonly SourceFile[] {
   const files = [join(root, 'index.html'), ...walk(join(root, 'src'))];
 
   return files
@@ -38,7 +44,9 @@ function walk(directory: string): readonly string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) return walk(path);
-    return EXTENSIONS.some((extension) => entry.name.endsWith(extension)) ? [path] : [];
+    return EXTENSIONS.some((extension) => entry.name.endsWith(extension))
+      ? [path]
+      : [];
   });
 }
 
@@ -49,12 +57,19 @@ function main(): void {
     return;
   }
 
-  for (const violation of violations) process.stderr.write(`${formatViolation(violation)}\n`);
-  process.stderr.write(`\n${violations.length.toString()} token gate violation(s)\n`);
+  for (const violation of violations) {
+    process.stderr.write(`${formatViolation(violation)}\n`);
+  }
+  process.stderr.write(
+    `\n${violations.length.toString()} token gate violation(s)\n`,
+  );
   process.exitCode = 1;
 }
 
 // `tsx` runs this as the entry module; importing it from the test does not.
-if (process.argv[1] !== undefined && pathToFileURL(process.argv[1]).href === import.meta.url) {
+if (
+  process.argv[1] !== undefined &&
+  pathToFileURL(process.argv[1]).href === import.meta.url
+) {
   main();
 }

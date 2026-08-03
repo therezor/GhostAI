@@ -23,7 +23,12 @@ import { AlertTriangle } from 'lucide-react';
 import type { JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.js';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs.js';
 import { AppearancePanel } from '@/settings/appearance-panel.js';
 import { AccountPanel } from '@/settings/account-panel.js';
 import { PlannedPanel } from '@/settings/planned-panel.js';
@@ -50,7 +55,9 @@ export function SettingsRoute(): JSX.Element {
       {settings.data?.loadError !== undefined && (
         <p role="alert" className="settings-load-error">
           <AlertTriangle />
-          <span>{t('settings.loadError', { error: settings.data.loadError })}</span>
+          <span>
+            {t('settings.loadError', { error: settings.data.loadError })}
+          </span>
         </p>
       )}
 
@@ -76,7 +83,11 @@ export function SettingsRoute(): JSX.Element {
         onValueChange={(value) => {
           // `replace`, because switching panels is not a step the Back button
           // should have to walk through to leave Settings.
-          void navigate({ to: '/settings', search: { panel: value }, replace: true });
+          void navigate({
+            to: '/settings',
+            search: { panel: value },
+            replace: true,
+          });
         }}
       >
         {/* Scrolls rather than wraps: a tab strip that reflows to two rows moves
@@ -120,11 +131,13 @@ function PanelBody({ panelId }: { readonly panelId: string }): JSX.Element {
   // may well want to turn the lights on while they read the error.
   if (panel.id === 'appearance') return <AppearancePanel />;
 
-  if (settings.isPending) return <p className="page__note">{t('settings.loading')}</p>;
+  if (settings.isPending) {
+    return <p className="page__note">{t('settings.loading')}</p>;
+  }
   if (settings.isError) {
     return (
       <p role="alert" className="page__error">
-        Could not load settings: {settings.error.message}
+        {t('settings.loadFailed', { message: settings.error.message })}
       </p>
     );
   }

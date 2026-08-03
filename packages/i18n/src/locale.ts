@@ -103,7 +103,7 @@ export function resolveLocale(
  * value by resolving to the default ahead of it.
  */
 export function resolveFirstLocale(
-  requested: readonly (string | undefined)[],
+  requested: ReadonlyArray<string | undefined>,
   available: readonly Locale[] = SUPPORTED_LOCALES,
 ): Locale {
   for (const candidate of requested) {
@@ -127,4 +127,11 @@ export function isRtl(locale: Locale): boolean {
  * unevenly implemented and which returns `ltr` on the engines that do not have
  * it — a wrong answer being worse here than a maintained list of six.
  */
-const RTL_LANGUAGES: ReadonlySet<string> = new Set(['ar', 'fa', 'he', 'ps', 'ur', 'yi']);
+const RTL_LANGUAGES: ReadonlySet<string> = new Set([
+  'ar',
+  'fa',
+  'he',
+  'ps',
+  'ur',
+  'yi',
+]);

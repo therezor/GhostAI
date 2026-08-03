@@ -72,10 +72,18 @@ export const IMAGE_DIGEST_PATTERN: RegExp =
 export { BUILTIN_TOOL_NAMES };
 
 /** Capabilities a toolbox may never request. See the module header. */
-export const FORBIDDEN_CAPABILITIES: readonly string[] = ['NET_ADMIN', 'SYS_ADMIN', 'SYS_MODULE'];
+export const FORBIDDEN_CAPABILITIES: readonly string[] = [
+  'NET_ADMIN',
+  'SYS_ADMIN',
+  'SYS_MODULE',
+];
 
 /** Ordered weakest to strongest, which is what makes the ceiling a `min`. */
-const NETWORK_ORDER: readonly ToolboxNetworkMode[] = ['none', 'allowlist', 'open'];
+const NETWORK_ORDER: readonly ToolboxNetworkMode[] = [
+  'none',
+  'allowlist',
+  'open',
+];
 
 function rank(mode: ToolboxNetworkMode): number {
   return NETWORK_ORDER.indexOf(mode);
@@ -99,12 +107,17 @@ export function parseToolbox(bytes: Uint8Array): Toolbox {
   try {
     json = JSON.parse(Buffer.from(bytes).toString('utf8'));
   } catch (error) {
-    throw new GhostError('config', 'Profile manifest is not valid JSON', { cause: error });
+    throw new GhostError('config', 'Profile manifest is not valid JSON', {
+      cause: error,
+    });
   }
   const result = ToolboxSchema.safeParse(json);
   if (!result.success) {
     const detail = result.error.issues
-      .map((issue) => `${issue.path.map(String).join('.') || '(root)'}: ${issue.message}`)
+      .map(
+        (issue) =>
+          `${issue.path.map(String).join('.') || '(root)'}: ${issue.message}`,
+      )
       .join('; ');
     throw new GhostError('config', `Profile manifest is not valid: ${detail}`);
   }
@@ -150,7 +163,8 @@ export function assertToolboxPolicy(toolbox: Toolbox): void {
       throw new GhostError(
         'config',
         `Toolbox "${toolbox.name}" declares a program called "${entry.name}", which is the
-` + '  name of a built-in tool. Exposed as a callable it would shadow that tool.',
+` +
+          '  name of a built-in tool. Exposed as a callable it would shadow that tool.',
         { details: { toolbox: toolbox.name, entry: entry.name } },
       );
     }
@@ -158,9 +172,13 @@ export function assertToolboxPolicy(toolbox: Toolbox): void {
 
   for (const cidr of toolbox.network.proxyAllowHosts) {
     if (cidr.trim() === '') {
-      throw new GhostError('config', `Toolbox "${toolbox.name}" has an empty proxy host entry`, {
-        details: { toolbox: toolbox.name },
-      });
+      throw new GhostError(
+        'config',
+        `Toolbox "${toolbox.name}" has an empty proxy host entry`,
+        {
+          details: { toolbox: toolbox.name },
+        },
+      );
     }
   }
 }
@@ -233,7 +251,9 @@ export function effectiveNetwork(
   requested: AgentToolboxNetwork,
 ): EffectiveNetwork {
   const mode =
-    rank(requested.mode) < rank(toolbox.network.maxMode) ? requested.mode : toolbox.network.maxMode;
+    rank(requested.mode) < rank(toolbox.network.maxMode)
+      ? requested.mode
+      : toolbox.network.maxMode;
   return {
     mode,
     allow: mode === 'allowlist' ? [...requested.allow] : [],
@@ -256,17 +276,24 @@ export function effectiveNetwork(
 export function weakenedIn(toolbox: Toolbox): readonly string[] {
   const weakened: string[] = [];
   if (toolbox.security.devices.length > 0) {
-    weakened.push(`devices    ${toolbox.security.devices.join(', ')}  (host device access)`);
+    weakened.push(
+      `devices    ${toolbox.security.devices.join(', ')}  (host device access)`,
+    );
   }
   if (toolbox.user === '' || toolbox.user.startsWith('0:')) {
     weakened.push(
       `user       ${toolbox.user === '' ? 'image default' : toolbox.user}  (may be root)`,
     );
   }
-  if (toolbox.security.seccomp !== 'default')
+  if (toolbox.security.seccomp !== 'default') {
     weakened.push(`seccomp    ${toolbox.security.seccomp}`);
+  }
   if (!toolbox.security.readOnlyRoot) weakened.push('rootfs     writable');
-  if (toolbox.runtime !== 'runc') weakened.push(`runtime    ${toolbox.runtime}`);
-  if (toolbox.workdir === '/') weakened.push('workdir    / (mounts the workspace over the root)');
+  if (toolbox.runtime !== 'runc') {
+    weakened.push(`runtime    ${toolbox.runtime}`);
+  }
+  if (toolbox.workdir === '/') {
+    weakened.push('workdir    / (mounts the workspace over the root)');
+  }
   return weakened;
 }

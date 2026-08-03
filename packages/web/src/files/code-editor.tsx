@@ -43,7 +43,9 @@ export interface CodeEditorProps {
   /** Names the textarea for a screen reader; there is no visible label. */
   readonly label: string;
   readonly textareaRef?: Ref<HTMLTextAreaElement>;
-  readonly onKeyDown?: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  readonly onKeyDown?: (
+    event: React.KeyboardEvent<HTMLTextAreaElement>,
+  ) => void;
 }
 
 /** What was highlighted, kept with the text it was highlighted from. */
@@ -63,7 +65,9 @@ export function CodeEditor({
   onKeyDown,
 }: CodeEditorProps): JSX.Element {
   const { resolved } = useAppTheme();
-  const [highlighted, setHighlighted] = useState<Highlighted | undefined>(undefined);
+  const [highlighted, setHighlighted] = useState<Highlighted | undefined>(
+    undefined,
+  );
 
   useEffect(() => {
     if (language === '') return undefined;
@@ -101,7 +105,9 @@ export function CodeEditor({
   return (
     <div className="code-editor">
       <div aria-hidden="true" className="code-editor__gutter">
-        {Array.from({ length: lineCount }, (_, index) => String(index + 1)).join('\n')}
+        {Array.from({ length: lineCount }, (value, index) =>
+          String(index + 1),
+        ).join('\n')}
       </div>
 
       <div className="code-editor__code">
@@ -136,7 +142,10 @@ export function CodeEditor({
           aria-label={label}
           readOnly={readOnly}
           value={value}
-          className={cn('code-editor__input', fresh && 'code-editor__input--ghost')}
+          className={cn(
+            'code-editor__input',
+            fresh && 'code-editor__input--ghost',
+          )}
           onChange={(event) => {
             onChange(event.target.value);
           }}

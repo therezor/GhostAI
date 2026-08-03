@@ -23,18 +23,20 @@
     "./locales/*": "./locales/*",
     "./package.json": "./package.json"
   },
+  "imports": {
+    "#src/*": "./src/*"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
-    "locales",
-    "!dist/**/*.test.*"
+    "locales"
   ],
   "scripts": {
     "build": "tsup && tsc -b",
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "lint": "eslint src"
+    "lint": "eslint src test"
   },
   "dependencies": {
     "i18next": "^26.3.6"

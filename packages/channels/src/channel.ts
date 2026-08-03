@@ -104,7 +104,11 @@ export interface ChannelContext {
 }
 
 /** Kinds delivered to a channel that does not say which it renders. */
-export const DEFAULT_ACCEPTED_KINDS: readonly OutboundKind[] = ['reply', 'notice', 'error'];
+export const DEFAULT_ACCEPTED_KINDS: readonly OutboundKind[] = [
+  'reply',
+  'notice',
+  'error',
+];
 
 export interface Channel {
   /** Matches the factory's id and the `channelId` of everything it publishes. */

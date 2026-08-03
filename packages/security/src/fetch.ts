@@ -27,18 +27,30 @@
 import { lookup as dnsLookup } from 'node:dns/promises';
 import type { LookupFunction } from 'node:net';
 
-import { Agent, type RequestInit, Response, fetch as undiciFetch } from 'undici';
+import {
+  Agent,
+  type RequestInit,
+  Response,
+  fetch as undiciFetch,
+} from 'undici';
 
 import { GhostError } from '@ghostai/core';
 
-import { type AddressRange, type IpFamily, classifyAddress, parseIpLiteral } from './ip.js';
+import {
+  type AddressRange,
+  type IpFamily,
+  classifyAddress,
+  parseIpLiteral,
+} from './ip.js';
 
 export interface PinnedAddress {
   readonly address: string;
   readonly family: IpFamily;
 }
 
-export type DnsResolver = (hostname: string) => Promise<readonly PinnedAddress[]>;
+export type DnsResolver = (
+  hostname: string,
+) => Promise<readonly PinnedAddress[]>;
 
 export interface NetworkPolicy {
   /** Permit 127.0.0.0/8 and `::1`. Needed to reach a model server on this host. */
@@ -67,7 +79,10 @@ export const DEFAULT_MAX_REDIRECTS = 3;
 export const DEFAULT_MAX_BYTES: number = 5 * 1024 * 1024;
 export const DEFAULT_TIMEOUT_MS = 30_000;
 
-export type FetchImplementation = (url: string, init: RequestInit) => Promise<Response>;
+export type FetchImplementation = (
+  url: string,
+  init: RequestInit,
+) => Promise<Response>;
 
 export interface GuardedFetchOptions extends NetworkPolicy {
   readonly method?: string;
@@ -99,11 +114,19 @@ export interface GuardedFetchResult {
 }
 
 /** Headers that must not survive a change of origin. */
-const CREDENTIAL_HEADERS: ReadonlySet<string> = new Set(['authorization', 'cookie']);
+const CREDENTIAL_HEADERS: ReadonlySet<string> = new Set([
+  'authorization',
+  'cookie',
+]);
 
-const REDIRECT_STATUSES: ReadonlySet<number> = new Set([301, 302, 303, 307, 308]);
+const REDIRECT_STATUSES: ReadonlySet<number> = new Set([
+  301, 302, 303, 307, 308,
+]);
 
-function blocked(message: string, details: Readonly<Record<string, unknown>>): GhostError {
+function blocked(
+  message: string,
+  details: Readonly<Record<string, unknown>>,
+): GhostError {
   // Explicitly not retryable: `network` defaults to retryable because DNS and
   // TCP failures are transient, but a blocked target will be blocked again and
   // a retry loop against it is just a slower refusal.
@@ -124,7 +147,9 @@ function hostMatches(host: string, patterns: readonly string[]): boolean {
   return patterns.some((pattern) => {
     const entry = pattern.trim().toLowerCase();
     if (entry === '') return false;
-    if (entry.startsWith('.')) return needle === entry.slice(1) || needle.endsWith(entry);
+    if (entry.startsWith('.')) {
+      return needle === entry.slice(1) || needle.endsWith(entry);
+    }
     return needle === entry;
   });
 }
@@ -152,20 +177,27 @@ export async function validateTarget(
   try {
     url = new URL(rawUrl);
   } catch (error) {
-    throw new GhostError('invalid_input', `Not a URL: ${rawUrl}`, { cause: error });
+    throw new GhostError('invalid_input', `Not a URL: ${rawUrl}`, {
+      cause: error,
+    });
   }
 
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     // `file:`, `gopher:` and `data:` are the classic pivots out of an HTTP
     // client that accepts whatever scheme it is handed.
-    throw blocked(`Only http and https are allowed, got "${url.protocol}"`, { url: rawUrl });
+    throw blocked(`Only http and https are allowed, got "${url.protocol}"`, {
+      url: rawUrl,
+    });
   }
   // No empty-host check is needed below: `http` and `https` are special schemes,
   // for which the URL parser rejects an empty host outright — `new URL('http://')`
   // throws and is already handled above.
   const host = url.hostname;
   if (hostMatches(host, options.deniedHosts ?? [])) {
-    throw blocked(`Host is denied by configuration: ${host}`, { url: rawUrl, host });
+    throw blocked(`Host is denied by configuration: ${host}`, {
+      url: rawUrl,
+      host,
+    });
   }
   const exempt = hostMatches(host, options.allowedHosts ?? []);
 
@@ -174,12 +206,15 @@ export async function validateTarget(
     if (!exempt) {
       const range = classifyAddress(literal);
       if (range !== null && !isPermitted(range, options)) {
-        throw blocked(`Address ${literal.canonical} is in a blocked range (${range.label})`, {
-          url: rawUrl,
-          host,
-          address: literal.canonical,
-          range: range.cidr,
-        });
+        throw blocked(
+          `Address ${literal.canonical} is in a blocked range (${range.label})`,
+          {
+            url: rawUrl,
+            host,
+            address: literal.canonical,
+            range: range.cidr,
+          },
+        );
       }
     }
     return {
@@ -242,7 +277,9 @@ export async function validateTarget(
  * silently substituting an address that was validated for a different purpose
  * is exactly the confusion this function exists to prevent.
  */
-export function pinnedLookup(addresses: readonly PinnedAddress[]): LookupFunction {
+export function pinnedLookup(
+  addresses: readonly PinnedAddress[],
+): LookupFunction {
   return (hostname, options, callback) => {
     const family = options.family;
     const usable =
@@ -263,7 +300,10 @@ export function pinnedLookup(addresses: readonly PinnedAddress[]): LookupFunctio
     if (options.all === true) {
       callback(
         null,
-        usable.map((candidate) => ({ address: candidate.address, family: candidate.family })),
+        usable.map((candidate) => ({
+          address: candidate.address,
+          family: candidate.family,
+        })),
       );
       return;
     }
@@ -300,7 +340,9 @@ function capBody(response: Response, maxBytes: number): Response {
         seen += chunk.byteLength;
         if (seen > maxBytes) {
           controller.error(
-            blocked(`Response body exceeded ${String(maxBytes)} bytes`, { maxBytes }),
+            blocked(`Response body exceeded ${String(maxBytes)} bytes`, {
+              maxBytes,
+            }),
           );
           return;
         }
@@ -316,13 +358,19 @@ function capBody(response: Response, maxBytes: number): Response {
   });
 }
 
-function normaliseHeaders(headers: Readonly<Record<string, string>>): Record<string, string> {
+function normaliseHeaders(
+  headers: Readonly<Record<string, string>>,
+): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const [name, value] of Object.entries(headers)) out[name.toLowerCase()] = value;
+  for (const [name, value] of Object.entries(headers)) {
+    out[name.toLowerCase()] = value;
+  }
   return out;
 }
 
-function stripCredentials(headers: Record<string, string>): Record<string, string> {
+function stripCredentials(
+  headers: Record<string, string>,
+): Record<string, string> {
   return Object.fromEntries(
     Object.entries(headers).filter(([name]) => !CREDENTIAL_HEADERS.has(name)),
   );
@@ -342,7 +390,8 @@ export async function guardedFetch(
   const maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const fetchImpl = options.fetchImpl ?? ((url, init) => undiciFetch(url, init));
+  const fetchImpl =
+    options.fetchImpl ?? ((url, init) => undiciFetch(url, init));
 
   const signals: AbortSignal[] = [];
   if (options.signal !== undefined) signals.push(options.signal);
@@ -410,7 +459,9 @@ export async function guardedFetch(
       });
     }
 
-    if (next.origin !== new URL(target.url).origin) headers = stripCredentials(headers);
+    if (next.origin !== new URL(target.url).origin) {
+      headers = stripCredentials(headers);
+    }
     if (response.status === 303 && method !== 'GET' && method !== 'HEAD') {
       method = 'GET';
       body = undefined;

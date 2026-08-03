@@ -75,13 +75,19 @@ export function ContextDialog({
           <DialogSubheading>{t('context.intro')}</DialogSubheading>
         </DialogHeader>
 
-        {open && sessionKey !== undefined && <ContextBody sessionKey={sessionKey} />}
+        {open && sessionKey !== undefined && (
+          <ContextBody sessionKey={sessionKey} />
+        )}
       </DialogContent>
     </Dialog>
   );
 }
 
-export function ContextBody({ sessionKey }: { readonly sessionKey: string }): JSX.Element {
+export function ContextBody({
+  sessionKey,
+}: {
+  readonly sessionKey: string;
+}): JSX.Element {
   const { t } = useTranslation();
   const fmt = useFormat();
   const context = useQuery({
@@ -96,7 +102,9 @@ export function ContextBody({ sessionKey }: { readonly sessionKey: string }): JS
     // rather than by rebuilding the whole system prompt on a timer.
   });
 
-  if (context.isPending) return <p className="page__note">{t('context.measuring')}</p>;
+  if (context.isPending) {
+    return <p className="page__note">{t('context.measuring')}</p>;
+  }
   if (context.isError) {
     // A 404 here is not a failure. The socket mints a session key the moment a
     // tab connects, and the store does not hold a row for it until the first
@@ -109,7 +117,7 @@ export function ContextBody({ sessionKey }: { readonly sessionKey: string }): JS
 
     return (
       <p role="alert" className="page__error">
-        Could not read the context: {context.error.message}
+        {t('context.loadError', { message: context.error.message })}
       </p>
     );
   }
@@ -117,14 +125,16 @@ export function ContextBody({ sessionKey }: { readonly sessionKey: string }): JS
   const budget = summariseContext(context.data, t);
   // Past the window the segments are scaled to the bar so none is clipped; the
   // overflow is then said in words rather than drawn.
-  const scale = budget.over && budget.usedPercent > 0 ? 100 / budget.usedPercent : 1;
+  const scale =
+    budget.over && budget.usedPercent > 0 ? 100 / budget.usedPercent : 1;
 
   return (
     <div className="stack context">
       <div className="cluster context__headline">
         <span className="context__used">{fmt.tokens(budget.usedTokens)}</span>
         <span className="context__of">
-          of {fmt.tokens(budget.windowTokens)} tokens · {budget.usedPercent.toFixed(0)}%
+          of {fmt.tokens(budget.windowTokens)} tokens ·{' '}
+          {budget.usedPercent.toFixed(0)}%
         </span>
         <span className="spacer" />
         {budget.over ? (
@@ -136,7 +146,9 @@ export function ContextBody({ sessionKey }: { readonly sessionKey: string }): JS
             paid once for the conversation; this is paid again on every request
             of every turn, which is what makes it the number worth acting on. */}
         <Badge tone="neutral">
-          {t('context.perIteration', { tokens: fmt.tokens(budget.uncachedTokens) })}
+          {t('context.perIteration', {
+            tokens: fmt.tokens(budget.uncachedTokens),
+          })}
         </Badge>
       </div>
 
@@ -170,7 +182,11 @@ export function ContextBody({ sessionKey }: { readonly sessionKey: string }): JS
       </table>
 
       <div className="cluster context__meta">
-        <span>{t('context.messagesInWindow', { count: context.data.messages.length })}</span>
+        <span>
+          {t('context.messagesInWindow', {
+            count: context.data.messages.length,
+          })}
+        </span>
         <span>{sessionKey}</span>
       </div>
 
@@ -180,13 +196,18 @@ export function ContextBody({ sessionKey }: { readonly sessionKey: string }): JS
           1,240" and "which tools" are one click apart rather than a question for
           whoever wrote the agent. */}
       <div className="stack context__sections">
-        <Section fill={SEGMENT_FILLS.systemPrompt} label={t('context.systemPrompt')}>
+        <Section
+          fill={SEGMENT_FILLS.systemPrompt}
+          label={t('context.systemPrompt')}
+        >
           <pre className="context__text">{context.data.systemPrompt}</pre>
         </Section>
 
         <Section
           fill={SEGMENT_FILLS.tools}
-          label={t('context.toolDefinitions', { count: context.data.tools.length })}
+          label={t('context.toolDefinitions', {
+            count: context.data.tools.length,
+          })}
         >
           {context.data.tools.length === 0 ? (
             <p className="page__note">{t('context.noTools')}</p>
@@ -219,7 +240,10 @@ export function ContextBody({ sessionKey }: { readonly sessionKey: string }): JS
             Absent in `raw` mode, where the operator's one template is the whole
             system message and there is no second half to show. */}
         {context.data.runtimeBlock === '' ? null : (
-          <Section fill={SEGMENT_FILLS.runtimeBlock} label={t('context.runtimeBlock')}>
+          <Section
+            fill={SEGMENT_FILLS.runtimeBlock}
+            label={t('context.runtimeBlock')}
+          >
             <pre className="context__text">{context.data.runtimeBlock}</pre>
           </Section>
         )}
@@ -248,7 +272,10 @@ function Section({
   return (
     <details className="context__section">
       <summary>
-        <span aria-hidden="true" className={cn('context__swatch', fill ?? FALLBACK_FILL)} />
+        <span
+          aria-hidden="true"
+          className={cn('context__swatch', fill ?? FALLBACK_FILL)}
+        />
         {label}
       </summary>
       <div className="context__section-body">{children}</div>
@@ -270,12 +297,16 @@ function ToolEntry({ tool }: { readonly tool: ToolDefinition }): JSX.Element {
     <li className="stack context__tool">
       <p className="cluster context__tool-head">
         <code>{tool.name}</code>
-        <Badge tone={tool.risk === 'safe' ? 'neutral' : 'warning'}>{tool.risk}</Badge>
+        <Badge tone={tool.risk === 'safe' ? 'neutral' : 'warning'}>
+          {tool.risk}
+        </Badge>
       </p>
       <p className="context__tool-desc">{tool.description}</p>
       <details>
         <summary>{t('context.toolSchema', { name: tool.name })}</summary>
-        <pre className="context__text">{JSON.stringify(tool.parameters, null, 2)}</pre>
+        <pre className="context__text">
+          {JSON.stringify(tool.parameters, null, 2)}
+        </pre>
       </details>
     </li>
   );
@@ -288,7 +319,11 @@ function ToolEntry({ tool }: { readonly tool: ToolDefinition }): JSX.Element {
  * reason a window filled up, and this is the one screen where the envelope and
  * the full untruncated output are the point rather than noise.
  */
-function MessageEntry({ stored }: { readonly stored: StoredMessage }): JSX.Element {
+function MessageEntry({
+  stored,
+}: {
+  readonly stored: StoredMessage;
+}): JSX.Element {
   const { message } = stored;
   // `content` is a bare string for `system` and `tool`, and a part array for the
   // two that can carry images. One branch on the *shape* covers all four roles;
@@ -307,7 +342,8 @@ function MessageEntry({ stored }: { readonly stored: StoredMessage }): JSX.Eleme
           .join('');
 
   const calls = message.role === 'assistant' ? message.toolCalls : [];
-  const reasoning = message.role === 'assistant' ? (message.reasoning ?? '') : '';
+  const reasoning =
+    message.role === 'assistant' ? (message.reasoning ?? '') : '';
 
   return (
     <li className="stack context__message">
@@ -315,7 +351,9 @@ function MessageEntry({ stored }: { readonly stored: StoredMessage }): JSX.Eleme
         <Badge tone="neutral">{message.role}</Badge>
         <span className="context__message-seq">#{stored.seq}</span>
       </p>
-      {reasoning !== '' && <pre className="context__text context__text--dim">{reasoning}</pre>}
+      {reasoning !== '' && (
+        <pre className="context__text context__text--dim">{reasoning}</pre>
+      )}
       {text !== '' && <pre className="context__text">{text}</pre>}
       {calls.map((call) => (
         <pre key={call.id} className="context__text">
@@ -326,7 +364,11 @@ function MessageEntry({ stored }: { readonly stored: StoredMessage }): JSX.Eleme
   );
 }
 
-function SegmentRow({ segment }: { readonly segment: ContextSegment }): JSX.Element {
+function SegmentRow({
+  segment,
+}: {
+  readonly segment: ContextSegment;
+}): JSX.Element {
   const fmt = useFormat();
 
   return (
@@ -335,7 +377,10 @@ function SegmentRow({ segment }: { readonly segment: ContextSegment }): JSX.Elem
         <span className="row">
           <span
             aria-hidden="true"
-            className={cn('context__swatch', SEGMENT_FILLS[segment.key] ?? FALLBACK_FILL)}
+            className={cn(
+              'context__swatch',
+              SEGMENT_FILLS[segment.key] ?? FALLBACK_FILL,
+            )}
           />
           {segment.label}
         </span>

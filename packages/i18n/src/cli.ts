@@ -14,9 +14,14 @@ import { DEFAULT_LOCALE, type Locale } from './locale.js';
 import { EN } from './resources.js';
 
 /** Bundles a terminal needs, in the shape i18next wants them. */
-export const CLI_RESOURCES = { en: { cli: EN.cli, shared: EN.shared } } as const;
+export const CLI_RESOURCES = {
+  en: { cli: EN.cli, shared: EN.shared },
+} as const;
 
-export function createCliI18n(locale: Locale = DEFAULT_LOCALE, strict?: boolean): i18n {
+export function createCliI18n(
+  locale: Locale = DEFAULT_LOCALE,
+  strict?: boolean,
+): i18n {
   return createI18n({
     locale,
     resources: CLI_RESOURCES,

@@ -5,11 +5,14 @@
   "private": true,
   "type": "module",
   "license": "MIT",
+  "imports": {
+    "#src/*": "./src/*"
+  },
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "lint": "eslint src"
+    "lint": "eslint src test"
   },
   "dependencies": {
     "@ghostai/channels": "workspace:*",

@@ -48,14 +48,14 @@ export interface LoopCacheOptions {
 }
 
 export class LoopCache {
-  readonly #create: (agentId: string) => AgentLoop | null;
-  readonly #max: number;
+  private readonly create: (agentId: string) => AgentLoop | null;
+  private readonly max: number;
   /** Insertion-ordered, which is what makes the first key the LRU victim. */
-  readonly #loops = new Map<string, AgentLoop>();
+  private readonly loops = new Map<string, AgentLoop>();
 
   constructor(options: LoopCacheOptions) {
-    this.#create = options.create;
-    this.#max = options.max ?? MAX_CACHED_LOOPS;
+    this.create = options.create;
+    this.max = options.max ?? MAX_CACHED_LOOPS;
   }
 
   /**
@@ -68,30 +68,30 @@ export class LoopCache {
    * Nothing is gained by remembering "no".
    */
   get(agentId: string): AgentLoop | null {
-    const cached = this.#loops.get(agentId);
+    const cached = this.loops.get(agentId);
     if (cached !== undefined) {
       // Re-insert so the working set stays at the young end of the map.
-      this.#loops.delete(agentId);
-      this.#loops.set(agentId, cached);
+      this.loops.delete(agentId);
+      this.loops.set(agentId, cached);
       return cached;
     }
 
     // Outside the map on purpose: a throw here must not be remembered.
-    const loop = this.#create(agentId);
+    const loop = this.create(agentId);
     if (loop === null) return null;
 
-    this.#loops.set(agentId, loop);
-    this.#evictIfFull();
+    this.loops.set(agentId, loop);
+    this.evictIfFull();
     return loop;
   }
 
   /** How many loops are live. For tests and for a status page. */
   get size(): number {
-    return this.#loops.size;
+    return this.loops.size;
   }
 
   clear(): void {
-    this.#loops.clear();
+    this.loops.clear();
   }
 
   /**
@@ -101,11 +101,11 @@ export class LoopCache {
    * to make room for a named agent used once would guarantee a rebuild on the
    * very next turn.
    */
-  #evictIfFull(): void {
-    if (this.#loops.size <= this.#max) return;
-    for (const key of this.#loops.keys()) {
+  private evictIfFull(): void {
+    if (this.loops.size <= this.max) return;
+    for (const key of this.loops.keys()) {
       if (key === DEFAULT_AGENT_ID) continue;
-      this.#loops.delete(key);
+      this.loops.delete(key);
       return;
     }
   }

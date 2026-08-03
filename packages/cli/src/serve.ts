@@ -46,7 +46,11 @@ import {
   type Logger,
 } from '@ghostai/core';
 import { instanceLabel } from '@ghostai/providers';
-import { createRuntime, resolveAgentOrDefault, type GhostRuntime } from '@ghostai/runtime';
+import {
+  createRuntime,
+  resolveAgentOrDefault,
+  type GhostRuntime,
+} from '@ghostai/runtime';
 import {
   HubApprovalGate,
   Scheduler,
@@ -127,18 +131,26 @@ export interface RunningServer {
  * implicit path resolves `@ghostai/web` from this package's own dependencies,
  * so an install that shipped the bundle serves it and one that did not says so.
  */
-export function resolveUiRoot(explicit: string | undefined): string | undefined {
+export function resolveUiRoot(
+  explicit: string | undefined,
+): string | undefined {
   if (explicit !== undefined) {
     const root = resolve(explicit);
     if (!existsSync(join(root, 'index.html'))) {
-      throw new GhostError('config', `No index.html in ${root}. Is that the built UI directory?`);
+      throw new GhostError(
+        'config',
+        `No index.html in ${root}. Is that the built UI directory?`,
+      );
     }
     return root;
   }
 
   try {
     const require = createRequire(import.meta.url);
-    const root = join(dirname(require.resolve('@ghostai/web/package.json')), 'dist');
+    const root = join(
+      dirname(require.resolve('@ghostai/web/package.json')),
+      'dist',
+    );
     return existsSync(join(root, 'index.html')) ? root : undefined;
   } catch {
     // Not installed. Phase 2 builds the server before the UI exists, and a
@@ -169,9 +181,13 @@ async function readWorkspaceFile(
 ): Promise<string> {
   const verdict = runtime.jail.check(path);
   if (!verdict.ok) {
-    throw new GhostError('jail_escape', `Cannot read ${path}: ${verdict.message}`, {
-      details: { path },
-    });
+    throw new GhostError(
+      'jail_escape',
+      `Cannot read ${path}: ${verdict.message}`,
+      {
+        details: { path },
+      },
+    );
   }
 
   let handle;
@@ -179,7 +195,9 @@ async function readWorkspaceFile(
     handle = await open(verdict.path, 'r');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new GhostError('not_found', `No ${path} in the workspace.`, { details: { path } });
+      throw new GhostError('not_found', `No ${path} in the workspace.`, {
+        details: { path },
+      });
     }
     throw error;
   }
@@ -200,17 +218,23 @@ async function readWorkspaceFile(
  * shut it down — without a signal handler, a banner, or a process that never
  * returns.
  */
-export async function startServer(options: ServeOptions = {}): Promise<RunningServer> {
+export async function startServer(
+  options: ServeOptions = {},
+): Promise<RunningServer> {
   const logger =
     options.logger ??
-    (options.logLevel === undefined ? silentLogger : createLogger({ level: options.logLevel }));
+    (options.logLevel === undefined
+      ? silentLogger
+      : createLogger({ level: options.logLevel }));
   const env = options.env ?? process.env;
 
   // Read once, here, only for the database path: `createRuntime` loads it again
   // for itself, and the config it ends up with is the one everything else uses.
   const loaded = loadConfig({
     ...(options.home === undefined ? {} : { root: options.home }),
-    ...(options.workspace === undefined ? {} : { workspace: options.workspace }),
+    ...(options.workspace === undefined
+      ? {}
+      : { workspace: options.workspace }),
     env,
   });
   ensureDir(dirname(loaded.paths.dbFile));
@@ -220,7 +244,9 @@ export async function startServer(options: ServeOptions = {}): Promise<RunningSe
   // knot `scheduler` has: the store it writes through is built by
   // `createServer`, which needs a runtime that is built here. The loop resolves
   // through this indirection once per turn, so filling it in below is enough.
-  const automationHolder: { current: AutomationResolver | undefined } = { current: undefined };
+  const automationHolder: { current: AutomationResolver | undefined } = {
+    current: undefined,
+  };
   const automation: AutomationResolver = {
     forTurn: (request) => automationHolder.current?.forTurn(request),
   };
@@ -277,7 +303,9 @@ export async function startServer(options: ServeOptions = {}): Promise<RunningSe
       logger,
       env,
       ...(options.home === undefined ? {} : { home: options.home }),
-      ...(options.workspace === undefined ? {} : { workspace: options.workspace }),
+      ...(options.workspace === undefined
+        ? {}
+        : { workspace: options.workspace }),
     });
     runtime = built;
 
@@ -288,7 +316,9 @@ export async function startServer(options: ServeOptions = {}): Promise<RunningSe
     // the one check that exists to stop it. A port carries no such decision,
     // and `--port 0` (ask the OS for a free one) is not even expressible in the
     // config, whose schema requires a real port number.
-    if (options.host !== undefined) built.reconfigure({ server: { host: options.host } });
+    if (options.host !== undefined) {
+      built.reconfigure({ server: { host: options.host } });
+    }
 
     hub = new SessionHub({
       config: built.config,
@@ -353,7 +383,8 @@ export async function startServer(options: ServeOptions = {}): Promise<RunningSe
       deleteSession: (sessionKey) => {
         built.store.deleteSession(sessionKey);
       },
-      readFile: async (path, maxBytes) => await readWorkspaceFile(built, path, maxBytes),
+      readFile: async (path, maxBytes) =>
+        await readWorkspaceFile(built, path, maxBytes),
       ...(directChat === undefined ? {} : { chat: directChat }),
       logger,
     });
@@ -374,7 +405,9 @@ export async function startServer(options: ServeOptions = {}): Promise<RunningSe
         ? server.auth.issueSetupCode()
         : undefined;
 
-    const url = await server.listen(options.port === undefined ? {} : { port: options.port });
+    const url = await server.listen(
+      options.port === undefined ? {} : { port: options.port },
+    );
 
     // After `listen`, so a job that fires immediately — a missed one-shot the
     // boot sweep picks up — reaches a server that can already answer for it.
@@ -436,13 +469,17 @@ export interface ServeCommandOptions extends ServeOptions {
 }
 
 /** What an operator needs to know in the second after it starts. */
-export function banner(running: RunningServer, colors: boolean | undefined, t: CliT): string {
+export function banner(
+  running: RunningServer,
+  colors: boolean | undefined,
+  t: CliT,
+): string {
   const c = pc.createColors(colors);
   const authEnabled = running.server.config.server.auth.enabled;
   const host = running.server.config.server.host;
   const instance = running.runtime.instance;
 
-  const rows: [string, string][] = [
+  const rows: Array<[string, string]> = [
     [t('serve.url'), c.cyan(running.url)],
     [
       t('serve.auth'),
@@ -464,10 +501,14 @@ export function banner(running: RunningServer, colors: boolean | undefined, t: C
   ];
 
   const channels = running.channels.channels.map((channel) => channel.id);
-  if (channels.length > 0) rows.push([t('serve.channels'), channels.join(', ')]);
+  if (channels.length > 0) {
+    rows.push([t('serve.channels'), channels.join(', ')]);
+  }
 
   const width = Math.max(...rows.map(([label]) => label.length));
-  const lines = rows.map(([label, value]) => `  ${c.dim(label.padEnd(width))}  ${value}`);
+  const lines = rows.map(
+    ([label, value]) => `  ${c.dim(label.padEnd(width))}  ${value}`,
+  );
   const body = `${c.bold(t('serve.listening'))}\n\n${lines.join('\n')}\n`;
 
   // Below the table rather than in it, because it is the one thing the operator
@@ -492,12 +533,17 @@ export function banner(running: RunningServer, colors: boolean | undefined, t: C
  * subcommand — the listener has to close before the process ends, or the last
  * responses are dropped on a socket that is already gone.
  */
-export async function serveCommand(options: ServeCommandOptions = {}): Promise<number> {
+export async function serveCommand(
+  options: ServeCommandOptions = {},
+): Promise<number> {
   const out = options.out ?? process.stdout;
   const running = await startServer(options);
   // After the server, so the install's own `ui.locale` is available — the same
   // order `chatCommand` uses and for the same reason.
-  const { t } = translationsFor(options.env ?? process.env, running.runtime.config.ui.locale);
+  const { t } = translationsFor(
+    options.env ?? process.env,
+    running.runtime.config.ui.locale,
+  );
   out.write(banner(running, options.colors, t));
 
   await new Promise<void>((finish) => {

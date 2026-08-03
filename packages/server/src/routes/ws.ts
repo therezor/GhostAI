@@ -70,7 +70,9 @@ export function wsRoutes(deps: RouteDeps): RouteGroup<WsRouteId> {
             // A throw here is the hub's signal to detach this connection. Both
             // branches are that signal: a socket that is closing, and one that
             // has stopped reading what it asked for.
-            if (socket.readyState !== socket.OPEN) throw new Error('socket is not open');
+            if (socket.readyState !== socket.OPEN) {
+              throw new Error('socket is not open');
+            }
             if (socket.bufferedAmount > MAX_BUFFERED_BYTES) {
               socket.close(1013, 'client is not reading');
               throw new Error('socket backpressure limit exceeded');
@@ -92,7 +94,10 @@ export function wsRoutes(deps: RouteDeps): RouteGroup<WsRouteId> {
           client.close();
         });
         socket.on('error', (error: Error) => {
-          logger.debug({ err: error, connectionId: client.id }, 'websocket errored');
+          logger.debug(
+            { err: error, connectionId: client.id },
+            'websocket errored',
+          );
           client.close();
         });
       },

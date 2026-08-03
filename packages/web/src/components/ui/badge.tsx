@@ -49,6 +49,16 @@ export const badgeVariants = cva('badge', {
 export interface BadgeProps
   extends HTMLAttributes<HTMLSpanElement>, VariantProps<typeof badgeVariants> {}
 
-export function Badge({ className, tone, variant, ...props }: BadgeProps): JSX.Element {
-  return <span className={cn(badgeVariants({ tone, variant }), className)} {...props} />;
+export function Badge({
+  className,
+  tone,
+  variant,
+  ...props
+}: BadgeProps): JSX.Element {
+  return (
+    <span
+      className={cn(badgeVariants({ tone, variant }), className)}
+      {...props}
+    />
+  );
 }

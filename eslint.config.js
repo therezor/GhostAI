@@ -33,6 +33,157 @@ const crossPackageImportRule = {
   ],
 };
 
+/**
+ * The Google TypeScript Style Guide, reduced to the subset a linter can check.
+ *
+ * https://google.github.io/styleguide/tsguide.html
+ *
+ * Rules the guide states that are already covered elsewhere are not repeated
+ * here: `strictTypeChecked` supplies the bans on `any`, `namespace`, `require`,
+ * throwing non-`Error`s and empty object types, and prettier supplies quoting,
+ * indentation, semicolons and the 80-column limit. What follows is the
+ * remainder — the rules neither of those two would have given us.
+ *
+ * Four of the guide's rules are deliberately *not* checked here, so that "the
+ * guide says X and we don't check X" is an answered question rather than an
+ * open one:
+ *
+ *  - **An explanatory comment on every type assertion.** No linter can judge
+ *    whether a comment explains anything. Review catches this one or nothing
+ *    does.
+ *  - **`switch` must carry a `default`.** Omitting it is what makes TypeScript
+ *    treat a discriminated-union switch as exhaustive, so requiring one would
+ *    turn a compile error on a newly added variant into a silent fallthrough.
+ *    `@typescript-eslint/switch-exhaustiveness-check` is the version of this
+ *    rule worth adopting, and it is not on yet.
+ *  - **Function declarations over arrow-function consts for named functions.**
+ *    The guide states it as a preference; `func-style` states it as a law, and
+ *    the difference is thousands of call sites.
+ *  - **The `@fileoverview` and copyright header order.** Google-internal
+ *    convention that buys an OSS repo nothing.
+ */
+const googleStyleRules = {
+  // Source file structure: named exports only, and types re-exported as types.
+  // `no-default-export` is switched back off for tool config files, which the
+  // tools themselves require to have one.
+  'import-x/no-default-export': 'error',
+  '@typescript-eslint/consistent-type-exports': 'error',
+
+  // Local variable declarations: `const` by default, `let` when reassigned,
+  // never `var`, and one binding per statement.
+  'no-var': 'error',
+  'prefer-const': 'error',
+  'one-var': ['error', 'never'],
+
+  // Array and object literals.
+  'no-object-constructor': 'error',
+  'guard-for-in': 'error',
+  'prefer-spread': 'error',
+  'prefer-rest-params': 'error',
+
+  // Classes: no `public` (it is the default), `readonly` on anything never
+  // reassigned, and TypeScript's visibility annotations rather than `#private`
+  // — the guide prefers the annotation because it is erased rather than
+  // mangled, so it stays legible in the emitted output and in a debugger.
+  '@typescript-eslint/explicit-member-accessibility': [
+    'error',
+    { accessibility: 'no-public' },
+  ],
+  '@typescript-eslint/prefer-readonly': 'error',
+
+  // Functions: arrow functions instead of function expressions, and `this`
+  // only where it has a declared type.
+  'prefer-arrow-callback': 'error',
+  '@typescript-eslint/no-invalid-this': 'error',
+
+  // Control flow. `curly: multi-line` is the guide's rule exactly — braces are
+  // required except on an `if` that fits a single line.
+  curly: ['error', 'multi-line'],
+  eqeqeq: ['error', 'always', { null: 'ignore' }],
+  'no-extend-native': 'error',
+  'no-new-wrappers': 'error',
+  'no-eval': 'error',
+  '@typescript-eslint/no-implied-eval': 'error',
+
+  // Type system.
+  '@typescript-eslint/consistent-type-definitions': ['error', 'interface'],
+  '@typescript-eslint/consistent-type-assertions': [
+    'error',
+    { assertionStyle: 'as', objectLiteralTypeAssertions: 'never' },
+  ],
+  // `T[]` for simple element types, `Array<T>` for complex ones. This overrides
+  // `stylisticTypeChecked`, which asks for `T[]` unconditionally.
+  '@typescript-eslint/array-type': ['error', { default: 'array-simple' }],
+};
+
+/**
+ * Naming, which is the one part of the guide with no off-the-shelf preset.
+ *
+ * UpperCamelCase for types, lowerCamelCase for values, CONSTANT_CASE for
+ * module-level immutables, and no leading or trailing underscore anywhere —
+ * including on an unused parameter, which is why `no-unused-vars` below carries
+ * no `argsIgnorePattern`.
+ *
+ * Members whose spelling is fixed by something outside this repository are
+ * exempt: object and type properties and methods are wire formats, HTTP header
+ * names, route keys, CSS custom properties and i18n keys, not identifiers the
+ * guide is talking about.
+ *
+ * PascalCase is allowed for values as well as types, because two things in
+ * this codebase are PascalCase values by an external convention and cannot be
+ * renamed without breaking what reads them:
+ *
+ *  - a React component, a component passed as a prop and a context object,
+ *    which JSX resolves as an intrinsic element unless the identifier is
+ *    capitalised;
+ *  - a zod schema (`ChatMessageSchema`), whose name mirrors the type it
+ *    produces and which is re-exported across every package.
+ */
+const googleNamingRules = {
+  '@typescript-eslint/naming-convention': [
+    'error',
+    {
+      selector: 'default',
+      format: ['camelCase'],
+      leadingUnderscore: 'forbid',
+      trailingUnderscore: 'forbid',
+    },
+    {
+      selector: ['variable', 'function', 'parameter'],
+      format: ['camelCase', 'PascalCase', 'UPPER_CASE'],
+      leadingUnderscore: 'forbid',
+      trailingUnderscore: 'forbid',
+    },
+    // CONSTANT_CASE is the guide's own casing for an immutable constant; a
+    // `static readonly` on a class is one.
+    {
+      selector: 'classProperty',
+      modifiers: ['static', 'readonly'],
+      format: ['UPPER_CASE', 'camelCase'],
+      leadingUnderscore: 'forbid',
+      trailingUnderscore: 'forbid',
+    },
+    { selector: 'typeLike', format: ['PascalCase'] },
+    {
+      selector: 'interface',
+      format: ['PascalCase'],
+      custom: { regex: '^I[A-Z]', match: false },
+    },
+    { selector: 'typeParameter', format: ['PascalCase'] },
+    { selector: 'enumMember', format: ['UPPER_CASE'] },
+    { selector: 'import', format: ['camelCase', 'PascalCase'] },
+    // See the note above: these names are data, not identifiers.
+    {
+      selector: [
+        'objectLiteralProperty',
+        'objectLiteralMethod',
+        'typeProperty',
+      ],
+      format: null,
+    },
+  ],
+};
+
 export default tseslint.config(
   {
     ignores: [
@@ -61,6 +212,8 @@ export default tseslint.config(
     plugins: { 'import-x': importX },
     rules: {
       ...crossPackageImportRule,
+      ...googleStyleRules,
+      ...googleNamingRules,
 
       // An agent runtime spawns background consolidation, subagents, MCP
       // reconnects and heartbeats. Unhandled floating promises are the #1
@@ -81,9 +234,17 @@ export default tseslint.config(
         'error',
         { prefer: 'type-imports', fixStyle: 'inline-type-imports' },
       ],
+      // No ignore pattern. The guide forbids a leading underscore outright, so
+      // an unused parameter is removed, or moved after the ones that are used,
+      // rather than renamed to `_x`.
+      //
+      // `ignoreRestSiblings` is the one exception, and it is not really one:
+      // `const {password, ...rest} = user` has to name the key it drops, and
+      // the guide's own advice is to use rest destructuring for exactly this.
+      // Without it there is no way to omit a field at all.
       '@typescript-eslint/no-unused-vars': [
         'error',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+        { ignoreRestSiblings: true },
       ],
 
       // The exec tool takes argv: string[] and runs execFile with shell:false.
@@ -96,16 +257,43 @@ export default tseslint.config(
             'shell: true is banned. The exec tool takes argv: string[] and runs execFile with shell: false.',
         },
         {
-          selector: "MemberExpression[object.name='Math'][property.name='random']",
+          selector:
+            "MemberExpression[object.name='Math'][property.name='random']",
           message:
             'Math.random() breaks deterministic tests. Inject a generator, or use node:crypto for security-relevant randomness.',
+        },
+
+        // The rest of the Google guide's outright bans, none of which has a
+        // dedicated rule.
+        {
+          selector: "ExportNamedDeclaration > VariableDeclaration[kind='let']",
+          message:
+            'Mutable exports are banned. Export a const, or a function that returns the current value.',
+        },
+        {
+          selector: 'PropertyDefinition[key.type="PrivateIdentifier"]',
+          message:
+            "`#private` is banned. Use TypeScript's `private`, which is erased rather than mangled and so stays legible in a debugger.",
+        },
+        {
+          selector: 'TSEnumDeclaration[const=true]',
+          message:
+            '`const enum` is banned; it does not survive isolatedModules. Use a plain enum, or a union of literals.',
+        },
+        {
+          selector: 'WithStatement',
+          message: '`with` is banned.',
         },
       ],
     },
   },
   {
     // Tests may be looser: fixtures use non-null assertions and unsafe casts freely.
-    files: ['**/*.test.ts', '**/test/**/*.ts', '**/testkit/**/*.ts'],
+    files: [
+      '**/*.test.{ts,tsx}',
+      '**/test/**/*.{ts,tsx}',
+      '**/testkit/**/*.ts',
+    ],
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',
       // A scripted async generator — a stream fixture — legitimately has
@@ -115,17 +303,38 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-member-access': 'off',
       '@typescript-eslint/no-unsafe-argument': 'off',
       'no-restricted-syntax': 'off',
+      // `{matches: true} as MediaQueryListEvent` is the point of the fixture:
+      // it supplies the one field under test and no other. The annotation the
+      // guide asks for instead would be a compile error, so only the object
+      // literal case is relaxed — `as` is still the required syntax, and
+      // product code still has to annotate.
+      '@typescript-eslint/consistent-type-assertions': [
+        'error',
+        { assertionStyle: 'as', objectLiteralTypeAssertions: 'allow' },
+      ],
     },
   },
   {
     // Config files and scripts live outside every package tsconfig, so
     // type-aware rules cannot resolve them. Lint them syntactically only.
-    files: ['**/*.config.{js,mjs,ts}', 'scripts/**/*.{js,mjs,ts}', 'eslint.config.js'],
+    files: [
+      '**/*.config.{js,mjs,ts}',
+      'scripts/**/*.{js,mjs,ts}',
+      'eslint.config.js',
+    ],
     extends: [tseslint.configs.disableTypeChecked],
     languageOptions: { globals: { console: 'readonly', process: 'readonly' } },
     rules: {
       'no-restricted-syntax': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',
+      // vite, vitest, tsup and playwright each load their config by taking the
+      // module's default export. The guide's rule is about our own modules; a
+      // file whose shape is dictated by the tool reading it is not one.
+      'import-x/no-default-export': 'off',
+      // Type-aware, so unavailable to these files by definition.
+      '@typescript-eslint/consistent-type-exports': 'off',
+      '@typescript-eslint/prefer-readonly': 'off',
+      '@typescript-eslint/no-implied-eval': 'off',
     },
   },
 );

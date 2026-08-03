@@ -13,16 +13,25 @@ import { useId } from 'react';
 
 import { cn } from '@/lib/cn.js';
 
-export function Input({ className, ...props }: ComponentProps<'input'>): JSX.Element {
+export function Input({
+  className,
+  ...props
+}: ComponentProps<'input'>): JSX.Element {
   return <input className={cn('input', className)} {...props} />;
 }
 
 /** The same input, sized for a list — see `.textarea` for why it grows. */
-export function Textarea({ className, ...props }: ComponentProps<'textarea'>): JSX.Element {
+export function Textarea({
+  className,
+  ...props
+}: ComponentProps<'textarea'>): JSX.Element {
   return <textarea className={cn('textarea', className)} {...props} />;
 }
 
-export function Label({ className, ...props }: ComponentProps<'label'>): JSX.Element {
+export function Label({
+  className,
+  ...props
+}: ComponentProps<'label'>): JSX.Element {
   return <label className={cn('label', className)} {...props} />;
 }
 
@@ -33,7 +42,13 @@ export interface FieldProps extends Omit<ComponentProps<'input'>, 'id'> {
   readonly hint?: ReactNode;
 }
 
-export function Field({ label, error, hint, className, ...props }: FieldProps): JSX.Element {
+export function Field({
+  label,
+  error,
+  hint,
+  className,
+  ...props
+}: FieldProps): JSX.Element {
   const id = useId();
   const messageId = `${id}-message`;
   const message = error ?? hint;
@@ -54,7 +69,10 @@ export function Field({ label, error, hint, className, ...props }: FieldProps): 
           // `role="alert"` only when it *is* one: a hint announced as an alert
           // interrupts a screen reader mid-sentence for no reason.
           {...(error === undefined ? {} : { role: 'alert' })}
-          className={cn('field__message', error !== undefined && 'field__message--error')}
+          className={cn(
+            'field__message',
+            error !== undefined && 'field__message--error',
+          )}
         >
           {message}
         </p>

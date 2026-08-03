@@ -32,11 +32,26 @@ import { chromium, type Browser, type Page } from '@playwright/test';
 import pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
 
-import { startHarness, PASSWORD, USERNAME, type Harness } from '../harness/server.js';
+import {
+  startHarness,
+  PASSWORD,
+  USERNAME,
+  type Harness,
+} from '../harness/server.js';
 import { VIEWPORT } from '../viewport.js';
-import { DEFAULT_ORIGINAL_ROOT, referenceAvailable, serveReference } from './original.js';
+import {
+  DEFAULT_ORIGINAL_ROOT,
+  referenceAvailable,
+  serveReference,
+} from './original.js';
 
-const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'artifacts', 'fidelity');
+const OUT = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  'artifacts',
+  'fidelity',
+);
 
 interface Screen {
   readonly name: string;
@@ -81,8 +96,15 @@ async function shoot(page: Page): Promise<PNG> {
   return PNG.sync.read(await page.screenshot());
 }
 
-async function captureReference(browser: Browser, url: string, screen: Screen): Promise<PNG> {
-  const page = await browser.newPage({ colorScheme: 'dark', viewport: VIEWPORT });
+async function captureReference(
+  browser: Browser,
+  url: string,
+  screen: Screen,
+): Promise<PNG> {
+  const page = await browser.newPage({
+    colorScheme: 'dark',
+    viewport: VIEWPORT,
+  });
   try {
     await page.goto(url, { waitUntil: 'load' });
     await screen.reveal?.(page);
@@ -97,7 +119,10 @@ async function captureReplacement(
   harness: Harness,
   screen: Screen,
 ): Promise<PNG> {
-  const context = await browser.newContext({ colorScheme: 'dark', viewport: VIEWPORT });
+  const context = await browser.newContext({
+    colorScheme: 'dark',
+    viewport: VIEWPORT,
+  });
   try {
     const page = await context.newPage();
     await page.request.post(`${harness.url}/api/auth/login`, {
@@ -138,8 +163,14 @@ async function main(): Promise<void> {
       const theirs = await captureReference(browser, reference.url, screen);
       const mine = await captureReplacement(browser, harness, screen);
 
-      writeFileSync(join(OUT, `${screen.name}.reference.png`), PNG.sync.write(theirs));
-      writeFileSync(join(OUT, `${screen.name}.replacement.png`), PNG.sync.write(mine));
+      writeFileSync(
+        join(OUT, `${screen.name}.reference.png`),
+        PNG.sync.write(theirs),
+      );
+      writeFileSync(
+        join(OUT, `${screen.name}.replacement.png`),
+        PNG.sync.write(mine),
+      );
 
       if (theirs.width !== mine.width || theirs.height !== mine.height) {
         process.stdout.write(
@@ -150,16 +181,25 @@ async function main(): Promise<void> {
       }
 
       const diff = new PNG({ width: theirs.width, height: theirs.height });
-      const changed = pixelmatch(theirs.data, mine.data, diff.data, theirs.width, theirs.height, {
-        // Loose, because the subject is layout rather than antialiasing: a
-        // threshold tight enough to catch a shifted border would light up every
-        // glyph edge on the page.
-        threshold: 0.2,
-        includeAA: false,
-      });
+      const changed = pixelmatch(
+        theirs.data,
+        mine.data,
+        diff.data,
+        theirs.width,
+        theirs.height,
+        {
+          // Loose, because the subject is layout rather than antialiasing: a
+          // threshold tight enough to catch a shifted border would light up every
+          // glyph edge on the page.
+          threshold: 0.2,
+          includeAA: false,
+        },
+      );
       writeFileSync(join(OUT, `${screen.name}.diff.png`), PNG.sync.write(diff));
 
-      const share = ((changed / (theirs.width * theirs.height)) * 100).toFixed(1);
+      const share = ((changed / (theirs.width * theirs.height)) * 100).toFixed(
+        1,
+      );
       process.stdout.write(`${screen.name}: ${share}% of pixels differ\n`);
     }
   } finally {
@@ -168,7 +208,9 @@ async function main(): Promise<void> {
     await reference.close();
   }
 
-  process.stdout.write(`\nWritten to ${OUT}\nReview the pairs; the gate is fidelity.spec.ts.\n`);
+  process.stdout.write(
+    `\nWritten to ${OUT}\nReview the pairs; the gate is fidelity.spec.ts.\n`,
+  );
 }
 
 await main();

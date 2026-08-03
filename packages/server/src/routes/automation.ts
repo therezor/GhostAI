@@ -39,9 +39,15 @@ import {
   assertOnePagingMode,
   decodeAutomationRunCursor,
   encodeAutomationRunCursor,
+  paginate,
 } from '../cursor.js';
 import { conflict, notFound, unprocessable } from '../errors.js';
-import { IdParamsSchema, PageQuerySchema, type IdParams, type PageQuery } from '../queries.js';
+import {
+  IdParamsSchema,
+  PageQuerySchema,
+  type IdParams,
+  type PageQuery,
+} from '../queries.js';
 import { firstRunAt } from '../scheduler.js';
 import type { RouteDeps, RouteGroup } from './types.js';
 
@@ -77,7 +83,9 @@ function nextRunOrRefuse(
   }
 }
 
-export function automationRoutes(deps: RouteDeps): RouteGroup<AutomationRouteId> {
+export function automationRoutes(
+  deps: RouteDeps,
+): RouteGroup<AutomationRouteId> {
   const store = deps.automation;
   const now = (): number => deps.clock?.now() ?? Date.now();
   // Live, so a zone changed in Appearance applies to the next job saved rather
@@ -85,10 +93,14 @@ export function automationRoutes(deps: RouteDeps): RouteGroup<AutomationRouteId>
   const timezone = (): string => deps.runtime.config().ui.timezone;
 
   /** The engine, or a refusal naming which of the two reasons it is missing. */
-  const requireScheduler = (): NonNullable<ReturnType<NonNullable<RouteDeps['scheduler']>>> => {
+  const requireScheduler = (): NonNullable<
+    ReturnType<NonNullable<RouteDeps['scheduler']>>
+  > => {
     const scheduler = deps.scheduler?.();
     if (scheduler === undefined) {
-      throw notFound('This build has no scheduler, so a job cannot be run on demand.');
+      throw notFound(
+        'This build has no scheduler, so a job cannot be run on demand.',
+      );
     }
     if (!scheduler.enabled) {
       // Not a 404: the route exists and the job exists. The operator turned the
@@ -109,7 +121,10 @@ export function automationRoutes(deps: RouteDeps): RouteGroup<AutomationRouteId>
 
     'automation.create': {
       summary: 'Create a scheduled job',
-      schema: { body: CreateAutomationJobSchema, response: { 201: AutomationJobSchema } },
+      schema: {
+        body: CreateAutomationJobSchema,
+        response: { 201: AutomationJobSchema },
+      },
       handler: (request, reply): FastifyReply => {
         const body = request.body as CreateAutomationJob;
         const created = store.createJob({
@@ -118,7 +133,12 @@ export function automationRoutes(deps: RouteDeps): RouteGroup<AutomationRouteId>
           payload: body.payload,
           enabled: body.enabled,
           deleteAfterRun: body.deleteAfterRun,
-          nextRunAtMs: nextRunOrRefuse(body.schedule, now(), body.enabled, timezone()),
+          nextRunAtMs: nextRunOrRefuse(
+            body.schedule,
+            now(),
+            body.enabled,
+            timezone(),
+          ),
         });
         deps.scheduler?.()?.refresh();
         return reply.status(201).send(created);
@@ -127,7 +147,10 @@ export function automationRoutes(deps: RouteDeps): RouteGroup<AutomationRouteId>
 
     'automation.get': {
       summary: 'One scheduled job',
-      schema: { params: IdParamsSchema, response: { 200: AutomationJobSchema } },
+      schema: {
+        params: IdParamsSchema,
+        response: { 200: AutomationJobSchema },
+      },
       handler: (request): AutomationJob => {
         const { id } = request.params as IdParams;
         const job = store.getJob(id);
@@ -154,12 +177,20 @@ export function automationRoutes(deps: RouteDeps): RouteGroup<AutomationRouteId>
         // keeps firing at 3am until it happens to be restarted.
         const schedule = body.schedule ?? existing.schedule;
         const enabled = body.enabled ?? existing.enabled;
-        const rescheduled = body.schedule !== undefined || body.enabled !== undefined;
+        const rescheduled =
+          body.schedule !== undefined || body.enabled !== undefined;
 
         const updated = store.updateJob(id, {
           ...body,
           ...(rescheduled
-            ? { nextRunAtMs: nextRunOrRefuse(schedule, now(), enabled, timezone()) }
+            ? {
+                nextRunAtMs: nextRunOrRefuse(
+                  schedule,
+                  now(),
+                  enabled,
+                  timezone(),
+                ),
+              }
             : {}),
         });
         if (updated === undefined) throw notFound(`No automation job "${id}"`);
@@ -183,10 +214,15 @@ export function automationRoutes(deps: RouteDeps): RouteGroup<AutomationRouteId>
       summary: 'Run a scheduled job now',
       // The one route where a single HTTP call starts an unbounded agent turn.
       rateLimit: { max: 30, timeWindowMs: 60_000 },
-      schema: { params: IdParamsSchema, response: { 202: AutomationRunSchema } },
+      schema: {
+        params: IdParamsSchema,
+        response: { 202: AutomationRunSchema },
+      },
       handler: (request, reply): FastifyReply => {
         const { id } = request.params as IdParams;
-        if (store.getJob(id) === undefined) throw notFound(`No automation job "${id}"`);
+        if (store.getJob(id) === undefined) {
+          throw notFound(`No automation job "${id}"`);
+        }
         const scheduler = requireScheduler();
         try {
           // 202: the run has started, and its answer is minutes away. The
@@ -210,7 +246,9 @@ export function automationRoutes(deps: RouteDeps): RouteGroup<AutomationRouteId>
       },
       handler: (request): AutomationRunListResponse => {
         const { id } = request.params as IdParams;
-        if (store.getJob(id) === undefined) throw notFound(`No automation job "${id}"`);
+        if (store.getJob(id) === undefined) {
+          throw notFound(`No automation job "${id}"`);
+        }
         const query = request.query as PageQuery;
         assertOnePagingMode(query);
 
@@ -219,11 +257,17 @@ export function automationRoutes(deps: RouteDeps): RouteGroup<AutomationRouteId>
         const rows: AutomationRun[] = store.listRuns(id, {
           limit: query.limit + 1,
           ...(query.offset === undefined ? {} : { offset: query.offset }),
-          ...(query.cursor === undefined ? {} : { after: decodeAutomationRunCursor(query.cursor) }),
+          ...(query.cursor === undefined
+            ? {}
+            : { after: decodeAutomationRunCursor(query.cursor) }),
         });
 
-        const page = rows.slice(0, query.limit);
-        const last = page.at(-1);
+        const { page, next } = paginate(rows, query.limit, (last) =>
+          encodeAutomationRunCursor({
+            startedAtMs: last.startedAtMs,
+            id: last.id,
+          }),
+        );
         return {
           runs: page,
           // The panel this feeds is a numbered pager: a job on a five-minute
@@ -231,14 +275,7 @@ export function automationRoutes(deps: RouteDeps): RouteGroup<AutomationRouteId>
           // a page of rows cannot say. Unlike sessions there is one ordering, so
           // the cursor stays valid whatever the caller asked for.
           total: store.countRuns(id),
-          ...(rows.length > query.limit && last !== undefined
-            ? {
-                nextCursor: encodeAutomationRunCursor({
-                  startedAtMs: last.startedAtMs,
-                  id: last.id,
-                }),
-              }
-            : {}),
+          ...next,
         };
       },
     },

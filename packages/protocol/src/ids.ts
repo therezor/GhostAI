@@ -41,8 +41,8 @@ export const RESERVED_DEVICE_NAMES: ReadonlySet<string> = new Set([
   'prn',
   'aux',
   'nul',
-  ...Array.from({ length: 9 }, (_unused, index) => `com${String(index + 1)}`),
-  ...Array.from({ length: 9 }, (_unused, index) => `lpt${String(index + 1)}`),
+  ...Array.from({ length: 9 }, (unused, index) => `com${String(index + 1)}`),
+  ...Array.from({ length: 9 }, (unused, index) => `lpt${String(index + 1)}`),
 ]);
 
 /** Whether a string may be resolved to a directory name. */
@@ -60,7 +60,10 @@ export function isSlugId(value: string): boolean {
  */
 export function slugify(
   name: string,
-  options: { readonly reserved: ReadonlySet<string>; readonly fallback: string },
+  options: {
+    readonly reserved: ReadonlySet<string>;
+    readonly fallback: string;
+  },
 ): string {
   const slug = name
     .toLowerCase()
@@ -113,7 +116,10 @@ export function isWorkspaceId(value: string): boolean {
 
 /** A display name reduced to a legal workspace id. See `slugify`. */
 export function deriveWorkspaceId(name: string): string {
-  return slugify(name, { reserved: RESERVED_WORKSPACE_IDS, fallback: 'workspace' });
+  return slugify(name, {
+    reserved: RESERVED_WORKSPACE_IDS,
+    fallback: 'workspace',
+  });
 }
 
 // ---------------------------------------------------------------------------

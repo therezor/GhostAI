@@ -1,19 +1,34 @@
 {
   "files": [],
+  // Each package appears twice: the build project over `src`, and the checker
+  // over its `test` directory. The pairs are kept adjacent rather than grouped
+  // into two blocks so that a new package is one edit in one place.
   "references": [
     { "path": "packages/protocol" },
+    { "path": "packages/protocol/test" },
     { "path": "packages/i18n" },
+    { "path": "packages/i18n/test" },
     { "path": "packages/core" },
+    { "path": "packages/core/test" },
     { "path": "packages/security" },
+    { "path": "packages/security/test" },
     { "path": "packages/providers" },
+    { "path": "packages/providers/test" },
     { "path": "packages/tools" },
+    { "path": "packages/tools/test" },
     { "path": "packages/agent" },
+    { "path": "packages/agent/test" },
     { "path": "packages/runtime" },
+    { "path": "packages/runtime/test" },
     { "path": "packages/server" },
+    { "path": "packages/server/test" },
     { "path": "packages/channels" },
+    { "path": "packages/channels/test" },
     { "path": "packages/web" },
     { "path": "packages/cli" },
+    { "path": "packages/cli/test" },
     { "path": "packages/e2e" },
-    { "path": "examples/loopback-channel" }
+    { "path": "examples/loopback-channel" },
+    { "path": "examples/loopback-channel/test" }
   ]
 }

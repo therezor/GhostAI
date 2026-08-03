@@ -69,13 +69,16 @@ export function DeleteWorkspaceDialog({
 
   const remove = useMutation({
     mutationFn: (target: WorkspaceSummary) => api.deleteWorkspace(target.id),
-    onSuccess: (_result, target) => {
+    onSuccess: (result, target) => {
       // Moving off it first: staying on a workspace that no longer exists would
       // leave the Files page 404ing on every request.
       if (target.id === workspaceId) select(DEFAULT_WORKSPACE_ID);
       onOpenChange(false);
       refresh();
-      toast.success(`Deleted ${target.name}`, 'Its folder and files are still on disk.');
+      toast.success(
+        `Deleted ${target.name}`,
+        'Its folder and files are still on disk.',
+      );
       onDeleted?.(target);
     },
     onError: (error: Error) => {
@@ -93,7 +96,7 @@ export function DeleteWorkspaceDialog({
   const move = useMutation({
     mutationFn: (target: WorkspaceSummary) =>
       api.moveWorkspaceSessions(target.id, DEFAULT_WORKSPACE_ID),
-    onSuccess: (_result, target) => {
+    onSuccess: (result, target) => {
       remove.mutate(target);
     },
     onError: (error: Error) => {
@@ -107,7 +110,9 @@ export function DeleteWorkspaceDialog({
         open={workspace !== undefined && stage === 'confirm'}
         onOpenChange={onOpenChange}
         title={t('workspaces.deleteTitle')}
-        description={t('workspaces.deleteHint', { workspace: workspace?.name ?? '' })}
+        description={t('workspaces.deleteHint', {
+          workspace: workspace?.name ?? '',
+        })}
         confirmLabel="Delete"
         pending={remove.isPending}
         onConfirm={() => {
@@ -143,6 +148,7 @@ export function DeleteWorkspaceDialog({
  */
 function sessionCountOf(error: Error): number | undefined {
   if (!(error instanceof ApiError) || error.status !== 409) return undefined;
-  const count = (error.details as { sessionCount?: unknown } | undefined)?.sessionCount;
+  const count = (error.details as { sessionCount?: unknown } | undefined)
+    ?.sessionCount;
   return typeof count === 'number' ? count : undefined;
 }

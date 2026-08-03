@@ -123,17 +123,32 @@ export function checkFiles(files: readonly SourceFile[]): readonly Violation[] {
 }
 
 /** A violation as a line an editor can jump to. */
-export function formatViolation({ rule, file, line, match }: Violation): string {
+export function formatViolation({
+  rule,
+  file,
+  line,
+  match,
+}: Violation): string {
   return `${file}:${line.toString()}  [${rule}]  ${match.trim()}`;
 }
 
-function scan(file: string, source: string, pattern: RegExp, rule: GateRule): readonly Violation[] {
+function scan(
+  file: string,
+  source: string,
+  pattern: RegExp,
+  rule: GateRule,
+): readonly Violation[] {
   const out: Violation[] = [];
   const regex = new RegExp(pattern.source, pattern.flags);
 
   let match: RegExpExecArray | null;
   while ((match = regex.exec(source)) !== null) {
-    out.push({ rule, file, line: lineOf(source, match.index), match: match[0] });
+    out.push({
+      rule,
+      file,
+      line: lineOf(source, match.index),
+      match: match[0],
+    });
     if (match[0] === '') regex.lastIndex += 1; // a zero-width match would not advance
   }
 

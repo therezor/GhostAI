@@ -59,7 +59,8 @@ export function LoginOverlay(): JSX.Element | null {
     },
   });
 
-  const unauthenticated = me.error instanceof ApiError && me.error.isUnauthenticated;
+  const unauthenticated =
+    me.error instanceof ApiError && me.error.isUnauthenticated;
   if (!unauthenticated) return null;
   // Undefined while the question is still in flight: showing a login for a
   // second and then replacing it with a wizard is a flash of the wrong screen
@@ -74,7 +75,12 @@ export function LoginOverlay(): JSX.Element | null {
   return (
     // Not a Dialog: there is nothing behind it to return focus to, and its
     // "closed" state is a successful login rather than an Escape key.
-    <div role="dialog" aria-modal="true" aria-labelledby="login-title" className="login-overlay">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="login-title"
+      className="login-overlay"
+    >
       <form onSubmit={submit} className="stack login-card">
         <div className="stack login-card__header">
           <Wordmark className="eyebrow" />
@@ -114,7 +120,9 @@ export function LoginOverlay(): JSX.Element | null {
         <Button
           type="submit"
           variant="primary"
-          disabled={login.isPending || password === '' || username.trim() === ''}
+          disabled={
+            login.isPending || password === '' || username.trim() === ''
+          }
         >
           {login.isPending ? 'Signing in…' : 'Sign in'}
         </Button>

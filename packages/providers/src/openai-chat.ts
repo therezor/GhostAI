@@ -43,7 +43,11 @@ import type {
   Usage,
 } from '@ghostai/protocol';
 import { GhostError } from '@ghostai/core';
-import { classifyAddress, parseIpLiteral, type FetchImplementation } from '@ghostai/security';
+import {
+  classifyAddress,
+  parseIpLiteral,
+  type FetchImplementation,
+} from '@ghostai/security';
 
 import {
   ProviderError,
@@ -62,7 +66,11 @@ import {
   recordField,
   stringField,
 } from './json.js';
-import { modelOverrideFor, resolveModelId, type ProviderSpec } from './registry.js';
+import {
+  modelOverrideFor,
+  resolveModelId,
+  type ProviderSpec,
+} from './registry.js';
 import { parseSse, readByteStream } from './sse.js';
 import {
   emptyUsage,
@@ -120,10 +128,17 @@ export function assertUsableApiBase(rawBase: string, hasApiKey: boolean): URL {
   try {
     url = new URL(rawBase);
   } catch (error) {
-    throw new GhostError('config', `Provider apiBase is not a URL: ${rawBase}`, { cause: error });
+    throw new GhostError(
+      'config',
+      `Provider apiBase is not a URL: ${rawBase}`,
+      { cause: error },
+    );
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw new GhostError('config', `Provider apiBase must be http or https, got "${url.protocol}"`);
+    throw new GhostError(
+      'config',
+      `Provider apiBase must be http or https, got "${url.protocol}"`,
+    );
   }
   if (url.protocol === 'https:' || !hasApiKey) return url;
 
@@ -149,7 +164,8 @@ function joinPath(base: URL, path: string): string {
 // ---------------------------------------------------------------------------
 
 type WireContentPart =
-  { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } };
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
 
 interface WireToolCall {
   readonly id: string;
@@ -173,16 +189,23 @@ function encodePart(part: ContentPart): WireContentPart {
   // than dropping it: a model told the path can still reach for a tool, and a
   // silently missing attachment is the failure this whole change was about.
   if (part.type === 'file') {
-    return { type: 'text', text: `[attachment: ${part.path} · ${part.mimeType}]` };
+    return {
+      type: 'text',
+      text: `[attachment: ${part.path} · ${part.mimeType}]`,
+    };
   }
   // An inline image becomes a data URI; a signed URL is passed through for the
   // provider to fetch. Both are what `image_url` accepts.
   const url =
-    part.data === undefined ? (part.url ?? '') : `data:${part.mimeType};base64,${part.data}`;
+    part.data === undefined
+      ? (part.url ?? '')
+      : `data:${part.mimeType};base64,${part.data}`;
   return { type: 'image_url', image_url: { url } };
 }
 
-function encodeContent(parts: readonly ContentPart[]): string | readonly WireContentPart[] {
+function encodeContent(
+  parts: readonly ContentPart[],
+): string | readonly WireContentPart[] {
   const encoded = parts.map(encodePart);
   return encoded.every((part) => part.type === 'text')
     ? encoded.map((part) => part.text).join('\n')
@@ -196,7 +219,11 @@ export function encodeMessage(message: ChatMessage): WireMessage {
     case 'user':
       return { role: 'user', content: encodeContent(message.content) };
     case 'tool':
-      return { role: 'tool', content: message.content, tool_call_id: message.toolCallId };
+      return {
+        role: 'tool',
+        content: message.content,
+        tool_call_id: message.toolCallId,
+      };
     case 'assistant': {
       const content = encodeContent(message.content);
       const toolCalls = message.toolCalls.map<WireToolCall>((call) => ({
@@ -223,7 +250,9 @@ export function encodeMessage(message: ChatMessage): WireMessage {
  * of it answers with an `unsupported_param` or a bare 400, which is exactly the
  * shape `dropReasoningEffort` repairs.
  */
-const DEFAULT_REASONING_OFF_BODY: Readonly<Record<string, unknown>> = { reasoning_effort: 'none' };
+const DEFAULT_REASONING_OFF_BODY: Readonly<Record<string, unknown>> = {
+  reasoning_effort: 'none',
+};
 
 function buildBody(
   spec: ProviderSpec,
@@ -240,7 +269,9 @@ function buildBody(
     messages: request.messages.map(encodeMessage),
   };
 
-  if (maxTokens !== undefined) body[spec.maxTokensParam ?? 'max_tokens'] = Math.max(1, maxTokens);
+  if (maxTokens !== undefined) {
+    body[spec.maxTokensParam ?? 'max_tokens'] = Math.max(1, maxTokens);
+  }
   if (temperature !== undefined) body.temperature = temperature;
   // `off` is a value this project made up, not one any wire accepts, so it is
   // translated rather than sent. Everything else is already the wire's own
@@ -261,7 +292,11 @@ function buildBody(
   if (request.tools !== undefined && request.tools.length > 0) {
     body.tools = request.tools.map((tool) => ({
       type: 'function',
-      function: { name: tool.name, description: tool.description, parameters: tool.parameters },
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
+      },
     }));
     if (request.toolChoice !== undefined) body.tool_choice = request.toolChoice;
   }
@@ -294,7 +329,10 @@ const FINISH_REASONS: Readonly<Record<string, FinishReason>> = {
  * `stop` on a turn that emitted tool calls. The tool calls are the fact; the
  * label is a claim about them, so the fact wins.
  */
-function decodeFinishReason(raw: string | undefined, hasToolCalls: boolean): FinishReason {
+function decodeFinishReason(
+  raw: string | undefined,
+  hasToolCalls: boolean,
+): FinishReason {
   if (hasToolCalls) return 'tool_calls';
   return (raw === undefined ? undefined : FINISH_REASONS[raw]) ?? 'stop';
 }
@@ -313,14 +351,21 @@ function decodeContent(value: unknown): string {
 
 /** DeepSeek and friends use `reasoning_content`; OpenRouter uses `reasoning`. */
 function decodeReasoning(record: Record<string, unknown> | null): string {
-  return stringField(record, 'reasoning_content') ?? stringField(record, 'reasoning') ?? '';
+  return (
+    stringField(record, 'reasoning_content') ??
+    stringField(record, 'reasoning') ??
+    ''
+  );
 }
 
 function decodeUsage(record: Record<string, unknown> | null): Usage {
   if (record === null) return emptyUsage();
   const prompt = numberField(record, 'prompt_tokens') ?? 0;
   const completion = numberField(record, 'completion_tokens') ?? 0;
-  const cached = numberField(recordField(record, 'prompt_tokens_details'), 'cached_tokens');
+  const cached = numberField(
+    recordField(record, 'prompt_tokens_details'),
+    'cached_tokens',
+  );
   const reasoning = numberField(
     recordField(record, 'completion_tokens_details'),
     'reasoning_tokens',
@@ -351,9 +396,14 @@ function assistantOf(
 // The adapter
 // ---------------------------------------------------------------------------
 
-export function createOpenAIChatProvider(options: OpenAIChatOptions): ChatProvider {
+export function createOpenAIChatProvider(
+  options: OpenAIChatOptions,
+): ChatProvider {
   const { spec } = options;
-  const apiKey = options.apiKey === undefined || options.apiKey === '' ? undefined : options.apiKey;
+  const apiKey =
+    options.apiKey === undefined || options.apiKey === ''
+      ? undefined
+      : options.apiKey;
   const rawBase = options.apiBase ?? spec.defaultApiBase ?? '';
   if (rawBase === '') {
     throw new GhostError(
@@ -362,10 +412,13 @@ export function createOpenAIChatProvider(options: OpenAIChatOptions): ChatProvid
     );
   }
   const base = assertUsableApiBase(rawBase, apiKey !== undefined);
-  const requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
-  const streamIdleTimeoutMs = options.streamIdleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS;
+  const requestTimeoutMs =
+    options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  const streamIdleTimeoutMs =
+    options.streamIdleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS;
   const generateId =
-    options.generateId ?? (() => `call_${crypto.randomUUID().replaceAll('-', '').slice(0, 16)}`);
+    options.generateId ??
+    (() => `call_${crypto.randomUUID().replaceAll('-', '').slice(0, 16)}`);
 
   // Created lazily, and only when no dispatcher was supplied, so an injected
   // `fetchImpl` — every test — never opens a connection pool.
@@ -382,7 +435,8 @@ export function createOpenAIChatProvider(options: OpenAIChatOptions): ChatProvid
     return agent;
   };
   const doFetch: FetchImplementation =
-    options.fetchImpl ?? ((url, init) => undiciFetch(url, { ...init, dispatcher: dispatcher() }));
+    options.fetchImpl ??
+    ((url, init) => undiciFetch(url, { ...init, dispatcher: dispatcher() }));
 
   const headers = (): Record<string, string> => ({
     'content-type': 'application/json',
@@ -393,7 +447,10 @@ export function createOpenAIChatProvider(options: OpenAIChatOptions): ChatProvid
   });
 
   /** Turns a non-2xx into a typed error, reading the provider's own error object. */
-  const failure = async (response: Response, url: string): Promise<ProviderError> => {
+  const failure = async (
+    response: Response,
+    url: string,
+  ): Promise<ProviderError> => {
     const text = await response.text().catch(() => '');
     const body = asRecord(parseJson(text));
     const error = recordField(body, 'error') ?? body;
@@ -404,7 +461,10 @@ export function createOpenAIChatProvider(options: OpenAIChatOptions): ChatProvid
       param: stringField(error, 'param'),
     };
     const reason = classifyStatus(response.status, wire);
-    const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'), Date.now());
+    const retryAfterMs = parseRetryAfter(
+      response.headers.get('retry-after'),
+      Date.now(),
+    );
     // Bounded: an HTML error page from a proxy is not a useful log line, and the
     // full body would be one megabyte of it.
     const detail = wire.message ?? text.slice(0, 500);
@@ -475,23 +535,43 @@ export function createOpenAIChatProvider(options: OpenAIChatOptions): ChatProvid
     }
 
     const message = recordField(choice, 'message');
-    const toolCalls = decodeToolCalls(arrayField(message, 'tool_calls'), generateId);
+    const toolCalls = decodeToolCalls(
+      arrayField(message, 'tool_calls'),
+      generateId,
+    );
     const result: ChatResult = {
-      message: assistantOf(decodeContent(message?.content), decodeReasoning(message), toolCalls),
-      finishReason: decodeFinishReason(stringField(choice, 'finish_reason'), toolCalls.length > 0),
+      message: assistantOf(
+        decodeContent(message?.content),
+        decodeReasoning(message),
+        toolCalls,
+      ),
+      finishReason: decodeFinishReason(
+        stringField(choice, 'finish_reason'),
+        toolCalls.length > 0,
+      ),
       usage: decodeUsage(recordField(body, 'usage')),
       model: stringField(body, 'model') ?? request.model,
     };
     return result;
   };
 
-  async function* stream(request: ChatRequest): AsyncGenerator<ChatStreamEvent, void, undefined> {
-    const response = await post('chat/completions', buildBody(spec, request, true), request.signal);
+  async function* stream(
+    request: ChatRequest,
+  ): AsyncGenerator<ChatStreamEvent, void, undefined> {
+    const response = await post(
+      'chat/completions',
+      buildBody(spec, request, true),
+      request.signal,
+    );
     if (response.body === null) {
-      throw new ProviderError('stream_parse', `${spec.id} returned an empty stream`, {
-        providerId: spec.id,
-        status: response.status,
-      });
+      throw new ProviderError(
+        'stream_parse',
+        `${spec.id} returned an empty stream`,
+        {
+          providerId: spec.id,
+          status: response.status,
+        },
+      );
     }
 
     let text = '';
@@ -514,10 +594,14 @@ export function createOpenAIChatProvider(options: OpenAIChatOptions): ChatProvid
 
       const chunk = asRecord(parseJson(event.data));
       if (chunk === null) {
-        throw new ProviderError('stream_parse', `${spec.id} sent a stream frame that is not JSON`, {
-          providerId: spec.id,
-          details: { frame: event.data.slice(0, 200) },
-        });
+        throw new ProviderError(
+          'stream_parse',
+          `${spec.id} sent a stream frame that is not JSON`,
+          {
+            providerId: spec.id,
+            details: { frame: event.data.slice(0, 200) },
+          },
+        );
       }
       // An error can arrive *inside* a 200 stream — providers do this when the
       // failure is discovered after the headers are already on the wire.
@@ -647,7 +731,8 @@ function decodeToolCalls(
       name,
       // Verbatim. Some providers send an object here rather than a string;
       // re-serialising keeps the field's contract without judging its contents.
-      argumentsJson: stringField(fn, 'arguments') ?? JSON.stringify(fn?.arguments ?? {}),
+      argumentsJson:
+        stringField(fn, 'arguments') ?? JSON.stringify(fn?.arguments ?? {}),
     });
   }
   return calls;
@@ -672,7 +757,11 @@ function accumulateToolCalls(
     // A provider that omits `index` sends one call per delta, so appending is
     // the only reading that does not merge two distinct calls into one.
     const index = numberField(record, 'index') ?? partials.size;
-    const partial = partials.get(index) ?? { id: '', name: '', argumentsJson: '' };
+    const partial = partials.get(index) ?? {
+      id: '',
+      name: '',
+      argumentsJson: '',
+    };
     const id = stringField(record, 'id');
     if (id !== undefined && id !== '') partial.id = id;
     const fn = recordField(record, 'function');

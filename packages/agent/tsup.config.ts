@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts', 'src/testkit/index.ts'],
+  entry: ['src/index.ts'],
   format: ['esm'],
   target: 'node22',
   // tsc -b writes its declarations and .tsbuildinfo into this same dist, so

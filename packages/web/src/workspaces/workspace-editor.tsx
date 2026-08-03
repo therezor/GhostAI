@@ -54,7 +54,12 @@ import { RowActions } from '@/components/crud/row-actions.js';
 import { api } from '@/lib/api.js';
 import { useFormat } from '@/lib/use-format.js';
 import { queryKeys } from '@/lib/query.js';
-import { FieldGrid, SaveBar, Section, TextField } from '@/settings/controls.js';
+import {
+  FieldGrid,
+  SaveBar,
+  Section,
+  TextField,
+} from '@/components/form/controls.js';
 import { DeleteWorkspaceDialog } from './delete-workspace.js';
 import { WORKSPACE_ROOT_PATH, folderLabel } from './folder.js';
 import { useWorkspace } from './workspace-context.js';
@@ -79,11 +84,13 @@ export function WorkspaceCreateRoute(): JSX.Element {
     queryFn: ({ signal }) => api.workspaces(signal),
   });
 
-  if (workspaces.isPending) return <p className="page__note">{t('workspaces.loadingOne')}</p>;
+  if (workspaces.isPending) {
+    return <p className="page__note">{t('workspaces.loadingOne')}</p>;
+  }
   if (workspaces.isError) {
     return (
       <p role="alert" className="page__error">
-        Could not load the workspaces: {workspaces.error.message}
+        {t('workspaces.loadListError', { message: workspaces.error.message })}
       </p>
     );
   }
@@ -100,16 +107,20 @@ export function WorkspaceEditorRoute(): JSX.Element {
     queryFn: ({ signal }) => api.workspaces(signal),
   });
 
-  if (workspaces.isPending) return <p className="page__note">{t('workspaces.loadingOne')}</p>;
+  if (workspaces.isPending) {
+    return <p className="page__note">{t('workspaces.loadingOne')}</p>;
+  }
   if (workspaces.isError) {
     return (
       <p role="alert" className="page__error">
-        Could not load the workspace: {workspaces.error.message}
+        {t('workspaces.loadOneError', { message: workspaces.error.message })}
       </p>
     );
   }
 
-  const workspace = workspaces.data.workspaces.find((candidate) => candidate.id === workspaceId);
+  const workspace = workspaces.data.workspaces.find(
+    (candidate) => candidate.id === workspaceId,
+  );
 
   // A stale link — a bookmark to one that was detached or moved, or a hand-typed
   // id. Saying so beats an empty form that silently creates it on the first save.
@@ -117,7 +128,7 @@ export function WorkspaceEditorRoute(): JSX.Element {
     return (
       <div className="stack page page--wide">
         <p role="alert" className="page__error">
-          There is no workspace called “{workspaceId}”.
+          {t('workspaces.noSuchWorkspace', { id: workspaceId })}
         </p>
         <Link to="/workspaces" className="page__back">
           <ArrowLeft aria-hidden="true" />
@@ -130,7 +141,13 @@ export function WorkspaceEditorRoute(): JSX.Element {
   // Remounts on a change of workspace, so one workspace's edits cannot survive
   // into the next one's boxes — including after a move, where the id in the URL
   // is the thing that changed.
-  return <Editor key={workspace.id} workspace={workspace} others={workspaces.data.workspaces} />;
+  return (
+    <Editor
+      key={workspace.id}
+      workspace={workspace}
+      others={workspaces.data.workspaces}
+    />
+  );
 }
 
 function Editor({
@@ -162,7 +179,10 @@ function Editor({
     mutationFn: () =>
       workspace === undefined
         ? // Empty folder means "derive it from the name", which the server does.
-          api.createWorkspace(name.trim(), folder.trim() === '' ? undefined : folder.trim())
+          api.createWorkspace(
+            name.trim(),
+            folder.trim() === '' ? undefined : folder.trim(),
+          )
         : api.updateWorkspace(workspace.id, {
             ...(nameChanged ? { name: name.trim() } : {}),
             ...(folderChanged ? { folder: folder.trim() } : {}),
@@ -184,7 +204,10 @@ function Editor({
           params: { workspaceId: updated.id },
           replace: true,
         });
-        toast.success(`Created ${updated.name}`, `Its folder is ${folderLabel(updated)}.`);
+        toast.success(
+          `Created ${updated.name}`,
+          `Its folder is ${folderLabel(updated)}.`,
+        );
         return;
       }
 
@@ -198,7 +221,10 @@ function Editor({
           params: { workspaceId: updated.id },
           replace: true,
         });
-        toast.success(`Moved to ${folderLabel(updated)}`, 'Its sessions came with it.');
+        toast.success(
+          `Moved to ${folderLabel(updated)}`,
+          'Its sessions came with it.',
+        );
         return;
       }
       toast.success(`Renamed to ${updated.name}`);
@@ -227,7 +253,9 @@ function Editor({
         </Link>
 
         <div className="cluster editor__title">
-          <h1 className="page__title">{workspace?.name ?? t('workspaces.newTitle')}</h1>
+          <h1 className="page__title">
+            {workspace?.name ?? t('workspaces.newTitle')}
+          </h1>
           {workspace?.isDefault === true && <Badge>default</Badge>}
           <span className="spacer" />
           {/* The default is the parent of every other workspace; there is no
@@ -260,14 +288,17 @@ function Editor({
         </p>
       </div>
 
-      <Section title={t('workspaces.identity')} description={t('workspaces.identityDesc')}>
+      <Section
+        title={t('workspaces.identity')}
+        description={t('workspaces.identityDesc')}
+      >
         <FieldGrid>
           <TextField
             label={t('common.name')}
             value={name}
             placeholder={workspace?.id ?? t('workspaces.namePlaceholder')}
             onValueChange={setName}
-            hint="A label. Changing it moves nothing on disk and breaks no link."
+            hint={t('workspaces.nameHint')}
           />
 
           <TextField
@@ -344,10 +375,14 @@ function folderProblem(
   // Creating with an empty box is legal — the server derives the folder from
   // the name — so there is nothing to judge until something is typed.
   if (workspace === undefined && folder === '') return undefined;
-  if (workspace?.isDefault === true || folder === workspace?.id) return undefined;
+  if (workspace?.isDefault === true || folder === workspace?.id) {
+    return undefined;
+  }
   if (folder === '') return t('workspaces.folderShape');
   if (!isWorkspaceId(folder)) return t('workspaces.folderShape');
   if (RESERVED_WORKSPACE_IDS.has(folder)) return t('workspaces.folderReserved');
-  if (others.some((candidate) => candidate.id === folder)) return t('workspaces.folderTaken');
+  if (others.some((candidate) => candidate.id === folder)) {
+    return t('workspaces.folderTaken');
+  }
   return undefined;
 }

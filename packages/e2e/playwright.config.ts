@@ -19,7 +19,7 @@ import { VIEWPORT } from './src/viewport.js';
  * particular is a setting two specs want opposite answers from.
  */
 export default defineConfig({
-  testDir: './src/tests',
+  testDir: './test',
   fullyParallel: true,
   // A `.only` left in a spec silently reduces CI to that one test.
   forbidOnly: process.env['CI'] === 'true',
@@ -46,11 +46,19 @@ export default defineConfig({
     // sidebar inline or in a drawer" depend on the runner's defaults.
     {
       name: 'dark',
-      use: { ...devices['Desktop Chrome'], colorScheme: 'dark', viewport: VIEWPORT },
+      use: {
+        ...devices['Desktop Chrome'],
+        colorScheme: 'dark',
+        viewport: VIEWPORT,
+      },
     },
     {
       name: 'light',
-      use: { ...devices['Desktop Chrome'], colorScheme: 'light', viewport: VIEWPORT },
+      use: {
+        ...devices['Desktop Chrome'],
+        colorScheme: 'light',
+        viewport: VIEWPORT,
+      },
     },
   ],
 });

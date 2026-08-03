@@ -59,7 +59,12 @@ import {
   type ToolPromptOverride,
 } from '@ghostai/protocol';
 
-import { msToSeconds, parseNumber, secondsToMs, type PatchResult } from '@/settings/fields.js';
+import {
+  msToSeconds,
+  parseNumber,
+  secondsToMs,
+  type PatchResult,
+} from '@/components/form/fields.js';
 
 export type { PatchResult };
 
@@ -85,7 +90,8 @@ export const UNSET_VALUE = '__unset__';
  * So the option was offering an unconfigured install as though it were a
  * setting. Blank is now a state the form refuses rather than one it saves.
  */
-export const MODEL_REQUIRED = 'Choose a model — an agent with none cannot run a turn.';
+export const MODEL_REQUIRED =
+  'Choose a model — an agent with none cannot run a turn.';
 
 /** `agents.defaults` — what an install runs as, and what a new agent is seeded from. */
 export interface AgentForm {
@@ -125,7 +131,8 @@ export function toAgentForm(defaults: AgentDefaults): AgentForm {
     model: defaults.model,
     maxTokens: String(defaults.maxTokens),
     contextWindowTokens: String(defaults.contextWindowTokens),
-    temperature: defaults.temperature === undefined ? '' : String(defaults.temperature),
+    temperature:
+      defaults.temperature === undefined ? '' : String(defaults.temperature),
     maxToolIterations: String(defaults.maxToolIterations),
     reasoningEffort: defaults.reasoningEffort ?? '',
     toolTimeoutSeconds: msToSeconds(defaults.toolTimeoutMs),
@@ -150,7 +157,10 @@ export function toAgentPatch(form: AgentForm, t: TFunction): PatchResult {
   const errors: Record<string, string> = {};
 
   const maxTokens = parseNumber(form.maxTokens, t, { integer: true, min: 1 });
-  const contextWindowTokens = parseNumber(form.contextWindowTokens, t, { integer: true, min: 1 });
+  const contextWindowTokens = parseNumber(form.contextWindowTokens, t, {
+    integer: true,
+    min: 1,
+  });
   // Blank is a value here, not a mistake: it means "send no temperature and
   // let the provider apply its own", which is the only thing that works for a
   // model that rejects the parameter.
@@ -158,12 +168,23 @@ export function toAgentPatch(form: AgentForm, t: TFunction): PatchResult {
     form.temperature.trim() === ''
       ? undefined
       : parseNumber(form.temperature, t, { min: 0, max: 2 });
-  const maxToolIterations = parseNumber(form.maxToolIterations, t, { integer: true, min: 1 });
+  const maxToolIterations = parseNumber(form.maxToolIterations, t, {
+    integer: true,
+    min: 1,
+  });
   const toolTimeout = parseNumber(form.toolTimeoutSeconds, t, { min: 0 });
-  const loopWallTimeout = parseNumber(form.loopWallTimeoutSeconds, t, { min: 0 });
-  const learningInterval = parseNumber(form.learningInterval, t, { integer: true, min: 1 });
+  const loopWallTimeout = parseNumber(form.loopWallTimeoutSeconds, t, {
+    min: 0,
+  });
+  const learningInterval = parseNumber(form.learningInterval, t, {
+    integer: true,
+    min: 1,
+  });
 
-  const collect = (field: string, result: ReturnType<typeof parseNumber>): void => {
+  const collect = (
+    field: string,
+    result: ReturnType<typeof parseNumber>,
+  ): void => {
     if (!result.ok) errors[field] = result.error;
   };
   collect('maxTokens', maxTokens);
@@ -222,7 +243,9 @@ export function toAgentPatch(form: AgentForm, t: TFunction): PatchResult {
           // the old value came straight back on the next load. `null` is the
           // token `DELETE_BY_NULL` reads as "remove this key".
           temperature: temperature?.ok === true ? temperature.value : null,
-          reasoningEffort: isReasoningEffort(form.reasoningEffort) ? form.reasoningEffort : null,
+          reasoningEffort: isReasoningEffort(form.reasoningEffort)
+            ? form.reasoningEffort
+            : null,
         },
       },
     },
@@ -308,7 +331,11 @@ export interface AgentEntryForm {
  * that reads `deny, allow, ask` makes the operator work out the ordering
  * themselves every time they open it.
  */
-export const TOOL_PERMISSIONS: readonly ToolPermission[] = ['allow', 'ask', 'deny'];
+export const TOOL_PERMISSIONS: readonly ToolPermission[] = [
+  'allow',
+  'ask',
+  'deny',
+];
 
 /**
  * One agent's stored settings, with the defaults filled in where it stored none.
@@ -319,7 +346,10 @@ export const TOOL_PERMISSIONS: readonly ToolPermission[] = ['allow', 'ask', 'den
  * about what the agent actually runs on. They arrive as the values a turn would
  * use, and the first save writes them down.
  */
-export function toAgentEntryForm(entry: AgentEntry, defaults: AgentDefaults): AgentEntryForm {
+export function toAgentEntryForm(
+  entry: AgentEntry,
+  defaults: AgentDefaults,
+): AgentEntryForm {
   const temperature = entry.temperature ?? defaults.temperature;
   const toolTimeoutMs = entry.toolTimeoutMs ?? defaults.toolTimeoutMs;
 
@@ -341,7 +371,9 @@ export function toAgentEntryForm(entry: AgentEntry, defaults: AgentDefaults): Ag
     provider: entry.provider ?? defaults.provider,
     model: entry.model ?? defaults.model,
     maxTokens: String(entry.maxTokens ?? defaults.maxTokens),
-    contextWindowTokens: String(entry.contextWindowTokens ?? defaults.contextWindowTokens),
+    contextWindowTokens: String(
+      entry.contextWindowTokens ?? defaults.contextWindowTokens,
+    ),
     // Not `?? ''` on the whole expression: `0` is a temperature, and a falsy
     // check here would render it as "the provider's own".
     temperature: temperature === undefined ? '' : String(temperature),
@@ -401,7 +433,9 @@ export function pruneToolPrompts(
     const fields = Object.fromEntries(
       Object.entries(override.fields).filter(([, text]) => text !== ''),
     );
-    if (override.description === '' && Object.keys(fields).length === 0) continue;
+    if (override.description === '' && Object.keys(fields).length === 0) {
+      continue;
+    }
     kept[name] = { description: override.description, fields };
   }
   return kept;
@@ -429,6 +463,22 @@ type AgentOwnFields = Omit<
   | 'temperature'
   | 'reasoningEffort'
   | 'toolTimeoutMs'
+> &
+  StatedFields;
+
+/**
+ * The fields an entry must state outright rather than inherit.
+ *
+ * `Required`, rather than a comment saying so. `AgentEntry` is
+ * `patchOf(AgentDefaultsSchema)`, so every field on it is optional and an entry
+ * that leaves these out follows `agents.defaults` instead. Both default to
+ * `true` there, so an omission does not read as "unset" — it reads as "on".
+ * That is how Duplicate turned vision back on for the copy: `ownFields` had a
+ * comment insisting they are always written, and nothing said it to the other
+ * builder. A type says it to both.
+ */
+type StatedFields = Required<
+  Pick<AgentEntry, 'visionEnabled' | 'toolsEnabled'>
 >;
 
 function ownFields(form: AgentEntryForm, entry: AgentEntry): AgentOwnFields {
@@ -437,15 +487,15 @@ function ownFields(form: AgentEntryForm, entry: AgentEntry): AgentOwnFields {
   // would make an unset field impossible to express, since omitting a key is
   // the only way this patch format can clear one.
   const {
-    provider: _provider,
-    model: _model,
-    maxTokens: _maxTokens,
-    contextWindowTokens: _contextWindowTokens,
-    temperature: _temperature,
-    reasoningEffort: _reasoningEffort,
-    toolTimeoutMs: _toolTimeoutMs,
-    toolbox: _toolbox,
-    subagents: _subagents,
+    provider,
+    model,
+    maxTokens,
+    contextWindowTokens,
+    temperature,
+    reasoningEffort,
+    toolTimeoutMs,
+    toolbox,
+    subagents,
     ...carried
   } = entry;
 
@@ -508,11 +558,14 @@ function toToolbox(form: AgentEntryForm): AgentEntry['toolbox'] {
   const mode = name === '' ? 'none' : networkMode(form.toolboxNetworkMode);
   return {
     name,
-    network: { mode, allow: mode === 'allowlist' ? parseList(form.toolboxAllow) : [] },
+    network: {
+      mode,
+      allow: mode === 'allowlist' ? parseList(form.toolboxAllow) : [],
+    },
   };
 }
 
-const NETWORK_MODES: readonly AgentEntry['toolbox']['network']['mode'][] = [
+const NETWORK_MODES: ReadonlyArray<AgentEntry['toolbox']['network']['mode']> = [
   'none',
   'allowlist',
   'open',
@@ -571,13 +624,25 @@ export function toAgentEntryPatch(
     return required(field, value, options);
   };
 
-  const maxTokens = required('maxTokens', form.maxTokens, { integer: true, min: 1 });
-  const contextWindowTokens = required('contextWindowTokens', form.contextWindowTokens, {
+  const maxTokens = required('maxTokens', form.maxTokens, {
     integer: true,
     min: 1,
   });
-  const toolTimeout = required('toolTimeoutSeconds', form.toolTimeoutSeconds, { min: 0 });
-  const temperature = optional('temperature', form.temperature, { min: 0, max: 2 });
+  const contextWindowTokens = required(
+    'contextWindowTokens',
+    form.contextWindowTokens,
+    {
+      integer: true,
+      min: 1,
+    },
+  );
+  const toolTimeout = required('toolTimeoutSeconds', form.toolTimeoutSeconds, {
+    min: 0,
+  });
+  const temperature = optional('temperature', form.temperature, {
+    min: 0,
+    max: 2,
+  });
 
   if (
     maxTokens === undefined ||
@@ -688,6 +753,12 @@ export function toNewAgentPatch(
           promptMode: template.promptMode,
           toolPrompts: structuredClone(template.toolPrompts),
           tools: { ...template.tools },
+          // Written, not left to inheritance — the same rule `ownFields` states
+          // for the editor's save, and for the same reason. Omitting them makes
+          // the copy follow `agents.defaults`, so duplicating an agent with
+          // vision switched off produced one with vision switched on.
+          visionEnabled: template.visionEnabled ?? defaults.visionEnabled,
+          toolsEnabled: template.toolsEnabled ?? defaults.toolsEnabled,
           // The one thing deliberately *not* copied. Everything else here is a
           // setting — how the agent thinks, what it may touch, what it costs —
           // and inheriting those is what "a copy of the default agent" means.
@@ -705,12 +776,19 @@ export function toNewAgentPatch(
           provider: template.provider ?? defaults.provider,
           model: template.model ?? defaults.model,
           maxTokens: template.maxTokens ?? defaults.maxTokens,
-          contextWindowTokens: template.contextWindowTokens ?? defaults.contextWindowTokens,
+          contextWindowTokens:
+            template.contextWindowTokens ?? defaults.contextWindowTokens,
           toolTimeoutMs: template.toolTimeoutMs ?? defaults.toolTimeoutMs,
           ...(temperature === undefined ? {} : { temperature }),
           ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
-          ...(template.exec === undefined ? {} : { exec: { ...template.exec } }),
-        },
+          ...(template.exec === undefined
+            ? {}
+            : { exec: { ...template.exec } }),
+          // `satisfies`, so leaving out a stated field is a compile error here
+          // as well as in `ownFields`. The two builders write the same entry
+          // from different sources — a form and a stored template — which is
+          // exactly how they came to disagree.
+        } satisfies AgentEntry & StatedFields,
       },
     },
   };
@@ -728,7 +806,11 @@ export function toNewAgentPatch(
  * when it is switched back on. That is the difference between this and Delete,
  * and it is why both are in the row menu.
  */
-export function toAgentEnabledPatch(id: string, entry: AgentEntry, enabled: boolean): ConfigPatch {
+export function toAgentEnabledPatch(
+  id: string,
+  entry: AgentEntry,
+  enabled: boolean,
+): ConfigPatch {
   return { agents: { list: { [id]: { ...entry, enabled } } } };
 }
 

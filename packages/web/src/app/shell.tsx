@@ -33,7 +33,12 @@ import { useTurnStore } from '@/state/turn.js';
 import { useConnection } from '@/chat/use-connection.js';
 import { Button } from '@/components/ui/button.js';
 import { toast } from '@/components/ui/toast.js';
-import { Dialog, DialogContent, DialogHeading, DialogTrigger } from '@/components/ui/dialog.js';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeading,
+  DialogTrigger,
+} from '@/components/ui/dialog.js';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,7 +52,11 @@ import { ThemeSwitcher } from '@/components/theme-switcher.js';
 import { Wordmark } from '@/components/wordmark.js';
 import { Sidebar } from './sidebar.js';
 
-export function Shell({ children }: { readonly children: ReactNode }): JSX.Element {
+export function Shell({
+  children,
+}: {
+  readonly children: ReactNode;
+}): JSX.Element {
   const { t } = useTranslation();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -98,7 +107,9 @@ function Header({
           </Button>
         </DialogTrigger>
         <DialogContent className="dialog--drawer">
-          <DialogHeading className="sr-only">{t('common.navigation')}</DialogHeading>
+          <DialogHeading className="sr-only">
+            {t('common.navigation')}
+          </DialogHeading>
           <Sidebar
             onNavigate={() => {
               onOpenDrawer(false);
@@ -189,7 +200,12 @@ function ConnectionBadge({
   const label = t(CONNECTION_LABELS[connection]);
 
   return (
-    <span role="status" aria-live="polite" className="conn" data-connection={connection}>
+    <span
+      role="status"
+      aria-live="polite"
+      className="conn"
+      data-connection={connection}
+    >
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="sm" className="conn__trigger">

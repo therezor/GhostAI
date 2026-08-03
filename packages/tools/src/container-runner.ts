@@ -42,7 +42,12 @@ import { GhostError } from '@ghostai/core';
 import type { Toolbox } from '@ghostai/protocol';
 import type { EffectiveNetwork, ExecPlan } from '@ghostai/security';
 
-import { localRunner, type CommandRunner, type RunOutcome, type RunRequest } from './runner.js';
+import {
+  localRunner,
+  type CommandRunner,
+  type RunOutcome,
+  type RunRequest,
+} from './runner.js';
 
 /**
  * Where a container sees its own transcripts, read-only.
@@ -141,9 +146,13 @@ export interface ContainerCreateOptions {
 function capabilityFlags(toolbox: Toolbox): string[] {
   const flags = ['--cap-drop=ALL'];
   for (const capability of toolbox.caps.drop) {
-    if (capability.toUpperCase() !== 'ALL') flags.push(`--cap-drop=${capability}`);
+    if (capability.toUpperCase() !== 'ALL') {
+      flags.push(`--cap-drop=${capability}`);
+    }
   }
-  for (const capability of toolbox.caps.add) flags.push(`--cap-add=${capability}`);
+  for (const capability of toolbox.caps.add) {
+    flags.push(`--cap-add=${capability}`);
+  }
   return flags;
 }
 
@@ -208,14 +217,26 @@ export function containerCreateArgv(options: ContainerCreateOptions): string[] {
 
   if (toolbox.runtime !== 'runc') argv.push(`--runtime=${toolbox.runtime}`);
 
-  if (toolbox.limits.memoryMb > 0) argv.push(`--memory=${String(toolbox.limits.memoryMb)}m`);
-  if (toolbox.limits.cpus > 0) argv.push(`--cpus=${String(toolbox.limits.cpus)}`);
-  if (toolbox.limits.pidsMax > 0) argv.push(`--pids-limit=${String(toolbox.limits.pidsMax)}`);
-  if (toolbox.limits.shmSizeMb > 0) argv.push(`--shm-size=${String(toolbox.limits.shmSizeMb)}m`);
+  if (toolbox.limits.memoryMb > 0) {
+    argv.push(`--memory=${String(toolbox.limits.memoryMb)}m`);
+  }
+  if (toolbox.limits.cpus > 0) {
+    argv.push(`--cpus=${String(toolbox.limits.cpus)}`);
+  }
+  if (toolbox.limits.pidsMax > 0) {
+    argv.push(`--pids-limit=${String(toolbox.limits.pidsMax)}`);
+  }
+  if (toolbox.limits.shmSizeMb > 0) {
+    argv.push(`--shm-size=${String(toolbox.limits.shmSizeMb)}m`);
+  }
 
   argv.push(...capabilityFlags(toolbox));
-  if (toolbox.security.noNewPrivileges) argv.push('--security-opt=no-new-privileges');
-  if (toolbox.security.seccomp === 'unconfined') argv.push('--security-opt=seccomp=unconfined');
+  if (toolbox.security.noNewPrivileges) {
+    argv.push('--security-opt=no-new-privileges');
+  }
+  if (toolbox.security.seccomp === 'unconfined') {
+    argv.push('--security-opt=seccomp=unconfined');
+  }
   if (toolbox.security.readOnlyRoot) argv.push('--read-only');
   for (const spec of toolbox.security.tmpfs) argv.push(`--tmpfs=${spec}`);
   for (const spec of toolbox.security.devices) argv.push(`--device=${spec}`);
@@ -228,7 +249,10 @@ export function containerCreateArgv(options: ContainerCreateOptions): string[] {
   // mount table rather than by anyone remembering to check it. The profile's
   // *directory*, and outside the workdir — see `TOOLBOX_MOUNT_DIR`.
   if (options.manifestPath !== undefined) {
-    argv.push('--mount', bindMount(dirname(options.manifestPath), TOOLBOX_MOUNT_DIR, true));
+    argv.push(
+      '--mount',
+      bindMount(dirname(options.manifestPath), TOOLBOX_MOUNT_DIR, true),
+    );
   }
   // Read-only, so the agent can read its own truncated output and cannot plant a
   // symlink where the host is about to write the next one.
@@ -239,7 +263,13 @@ export function containerCreateArgv(options: ContainerCreateOptions): string[] {
 
   // Idle forever as PID 1's child. `tail -f /dev/null` rather than `sleep
   // infinity`, which busybox does not always accept.
-  argv.push('--entrypoint', '/bin/sh', toolbox.image, '-c', 'exec tail -f /dev/null');
+  argv.push(
+    '--entrypoint',
+    '/bin/sh',
+    toolbox.image,
+    '-c',
+    'exec tail -f /dev/null',
+  );
   return argv;
 }
 
@@ -347,7 +377,11 @@ export interface Transcript {
  * unhandled `error` on a `WriteStream` is an uncaught exception that takes the
  * process with it. A disk filling up must not end the turn.
  */
-export function openTranscript(runsRoot: string, containerName: string, runId: string): Transcript {
+export function openTranscript(
+  runsRoot: string,
+  containerName: string,
+  runId: string,
+): Transcript {
   const hostDir = join(runsRoot, containerName, runId);
   mkdirSync(hostDir, { recursive: true });
 
@@ -406,7 +440,9 @@ export function containerIsGone(outcome: RunOutcome): boolean {
   const stderr = outcome.stderr.trimStart();
   return (
     // Docker: removed, or stopped but still present.
-    /^Error response from daemon: (No such container|Container \S+ is not running)/i.test(stderr) ||
+    /^Error response from daemon: (No such container|Container \S+ is not running)/i.test(
+      stderr,
+    ) ||
     /^Error: No such container/i.test(stderr) ||
     // Podman phrases both cases differently again.
     /^Error: no container with name or ID .* found/i.test(stderr) ||
@@ -440,14 +476,20 @@ export interface ContainerRunnerOptions {
  * SIGTERM→SIGKILL escalation and abort threading all stay in one implementation
  * rather than being reimplemented slightly differently here.
  */
-export function containerRunner(options: ContainerRunnerOptions): CommandRunner {
+export function containerRunner(
+  options: ContainerRunnerOptions,
+): CommandRunner {
   const bin = options.bin ?? 'docker';
   const inner = options.inner ?? localRunner;
 
   return {
     async run(request: RunRequest): Promise<RunOutcome> {
       const runId = options.nextRunId();
-      const transcript = openTranscript(options.runsRoot, options.containerName, runId);
+      const transcript = openTranscript(
+        options.runsRoot,
+        options.containerName,
+        runId,
+      );
       const execArgv = containerExecArgv({
         plan: request.plan,
         toolbox: options.toolbox,
@@ -471,7 +513,11 @@ export function containerRunner(options: ContainerRunnerOptions): CommandRunner 
 
       const signalInside = (signal: 'TERM' | 'KILL'): void => {
         const killArgv = containerKillArgv(
-          { toolbox: options.toolbox, containerName: options.containerName, runId },
+          {
+            toolbox: options.toolbox,
+            containerName: options.containerName,
+            runId,
+          },
           signal,
         );
         void inner

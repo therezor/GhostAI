@@ -146,3 +146,35 @@ export function decodeAutomationRunCursor(cursor: string): AutomationRunCursor {
   if (!isRecord(raw)) throw badRequest('Malformed pagination cursor');
   return { startedAtMs: integer(raw.s), id: text(raw.i) };
 }
+
+/**
+ * One over-fetched page, split into the rows to send and the cursor to follow.
+ *
+ * Every listing here asks its store for `limit + 1` rows. The extra row is not
+ * data — it is the answer to "is there a next page", which a keyset cursor
+ * cannot know any other way, and it is dropped rather than returned. That rule
+ * was written out at four call sites, three lines each, and the failure mode if
+ * one of them drifts is a pager that offers a next page that is empty or hides
+ * one that is not.
+ *
+ * `issue` is for the one listing that can page under more than one ordering.
+ * A cursor encodes a position in *an* ordering; handing one back for a
+ * different sort would hand back a cursor that cannot be followed, so sessions
+ * sorted by title issue none and the pager uses `total` instead.
+ */
+export function paginate<T>(
+  rows: readonly T[],
+  limit: number,
+  encode: (last: T) => string,
+  issue = true,
+): { readonly page: T[]; readonly next: { readonly nextCursor?: string } } {
+  const page = rows.slice(0, limit);
+  const last = page.at(-1);
+  return {
+    page,
+    next:
+      issue && rows.length > limit && last !== undefined
+        ? { nextCursor: encode(last) }
+        : {},
+  };
+}

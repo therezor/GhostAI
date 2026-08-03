@@ -56,7 +56,11 @@ export function inlineSafe(path: string): boolean {
 }
 
 /** One entry, for a path a caller already has stats for. */
-export function entryAt(jail: WorkspaceJail, absolutePath: string, stats: Stats): FileEntry {
+export function entryAt(
+  jail: WorkspaceJail,
+  absolutePath: string,
+  stats: Stats,
+): FileEntry {
   return entryFor(jail, absolutePath, basename(absolutePath), stats);
 }
 
@@ -91,11 +95,16 @@ function entryFor(
  * would advertise a file the jail then refuses to open, which reads as a bug in
  * the UI rather than as the refusal it is.
  */
-export function listDirectory(jail: WorkspaceJail, directory: string): FileEntry[] {
+export function listDirectory(
+  jail: WorkspaceJail,
+  directory: string,
+): FileEntry[] {
   const entries: FileEntry[] = [];
 
   for (const dirent of readdirSync(directory, { withFileTypes: true })) {
-    const verdict = jail.check(relative(jail.root, join(directory, dirent.name)));
+    const verdict = jail.check(
+      relative(jail.root, join(directory, dirent.name)),
+    );
     if (!verdict.ok) continue;
 
     let stats: Stats;

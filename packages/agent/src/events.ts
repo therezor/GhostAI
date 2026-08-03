@@ -23,7 +23,13 @@
  * 1:1 property stays visible at every call site instead of living in a comment.
  */
 
-import type { ErrorCode, NoticeKind, StopReason, ToolRisk, Usage } from '@ghostai/protocol';
+import type {
+  ErrorCode,
+  NoticeKind,
+  StopReason,
+  ToolRisk,
+  Usage,
+} from '@ghostai/protocol';
 
 export interface TurnStartEvent {
   readonly type: 'turn.start';

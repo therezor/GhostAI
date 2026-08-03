@@ -12,10 +12,14 @@ import type { JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Badge } from '@/components/ui/badge.js';
-import { Section } from './controls.js';
+import { Section } from '@/components/form/controls.js';
 import { PLANNED_SYSTEMS, type SettingsPanel } from './panels.js';
 
-export function PlannedPanel({ panel }: { readonly panel: SettingsPanel }): JSX.Element {
+export function PlannedPanel({
+  panel,
+}: {
+  readonly panel: SettingsPanel;
+}): JSX.Element {
   const { t } = useTranslation();
   const systems = PLANNED_SYSTEMS[panel.id] ?? [];
 
@@ -25,8 +29,12 @@ export function PlannedPanel({ panel }: { readonly panel: SettingsPanel }): JSX.
         {systems.map((system) => (
           <li key={system.name}>
             <div className="settings-divided-list__text">
-              <span className="settings-divided-list__name">{t(system.name)}</span>
-              <span className="settings-divided-list__detail">{t(system.detail)}</span>
+              <span className="settings-divided-list__name">
+                {t(system.name)}
+              </span>
+              <span className="settings-divided-list__detail">
+                {t(system.detail)}
+              </span>
             </div>
             <Badge tone="info">Phase {system.phase}</Badge>
           </li>

@@ -80,7 +80,12 @@ export const SECTION_SEPARATOR = '\n\n---\n\n';
  * `RAW_PROMPT_PLACEHOLDERS` keeps it, because raw mode places every section
  * itself and has to be able to name this one.
  */
-export const PROMPT_PLACEHOLDERS = ['name', 'workspaceId', 'workspaceRoot', 'runtime'] as const;
+export const PROMPT_PLACEHOLDERS = [
+  'name',
+  'workspaceId',
+  'workspaceRoot',
+  'runtime',
+] as const;
 
 export type PromptPlaceholder = (typeof PROMPT_PLACEHOLDERS)[number];
 
@@ -138,7 +143,8 @@ export function unknownPlaceholders(
   // now and each has its own vocabulary — `{{time}}` is a typo in the identity
   // half and correct in the live one. An editor that warned from one list would
   // be wrong about whichever template it was not looking at.
-  const vocabulary = known === PROMPT_PLACEHOLDERS ? KNOWN : new Set<string>(known);
+  const vocabulary =
+    known === PROMPT_PLACEHOLDERS ? KNOWN : new Set<string>(known);
   const seen = new Set<string>();
   for (const match of template.matchAll(PLACEHOLDER)) {
     const name = match[1] ?? '';
@@ -251,6 +257,54 @@ export const DEFAULT_WRAP_UP_TEMPLATE = `Tool iterations left in this turn: {{it
  * — contributes no break either, which is what keeps the live-state block one
  * line for the whole of a turn that never approaches its cap.
  */
+/**
+ * Matches the placeholder syntax `renderPromptTemplate` fills with the turn's
+ * tool-output delimiter.
+ */
+const DELIMITER_PLACEHOLDER: RegExp = /\{\{(?:nonce|tag)\}\}/;
+
+/**
+ * Whether a template spells out the turn's tool-output delimiter.
+ *
+ * Here rather than beside any one caller because three of them asked the
+ * question and two had already answered it differently: `@ghostai/security`
+ * tested a regex against the *effective* template, while `@ghostai/runtime` and
+ * the agent editor each did `.includes('{{tag}}') || .includes('{{nonce}}')` on
+ * the raw string and papered over the difference with an `=== '' ? DEFAULT : …`
+ * at the call site. Three spellings of one rule, and the placeholders they are
+ * looking for are defined in this file — so this is where the rule belongs.
+ *
+ * Deliberately raw: it answers "does this text name the delimiter", nothing
+ * more. A caller that means "does the policy this agent will actually run name
+ * it" composes it with `effectiveToolPolicy`, which is what `toolPolicyUsesNonce`
+ * does — and stating that composition beats three functions disagreeing about
+ * whether an empty string counts.
+ */
+export function namesDelimiter(template: string): boolean {
+  return DELIMITER_PLACEHOLDER.test(template);
+}
+
+/** The tool-output policy an agent runs, with the built-in standing in for an unset one. */
+export function effectiveToolPolicy(template?: string): string {
+  return template === undefined || template === ''
+    ? DEFAULT_TOOL_POLICY_TEMPLATE
+    : template;
+}
+
+/**
+ * Whether the policy an agent will actually run names the turn's delimiter.
+ *
+ * The placement rule, in one predicate: a policy that spells out the tag changes
+ * every turn and belongs in the runtime half; one that does not is identical for
+ * the life of a session and belongs in the cached prefix. Deriving it beats
+ * declaring it, because an operator who customised the template with `{{tag}}`
+ * then keeps working with no migration — they simply keep paying for it, which
+ * is what the editor's warning tells them.
+ */
+export function toolPolicyUsesNonce(template?: string): boolean {
+  return namesDelimiter(effectiveToolPolicy(template));
+}
+
 export function renderWrapUp(template: string, iterationsLeft: number): string {
   const rendered = renderPromptTemplate(template, {
     iterationsLeft: String(Math.max(iterationsLeft, 0)),
@@ -350,7 +404,8 @@ export const PLATFORM_PROMPT_PLACEHOLDERS = [
   'shellPolicy',
 ] as const;
 
-export type PlatformPromptPlaceholder = (typeof PLATFORM_PROMPT_PLACEHOLDERS)[number];
+export type PlatformPromptPlaceholder =
+  (typeof PLATFORM_PROMPT_PLACEHOLDERS)[number];
 
 /**
  * What a *toolbox* template may ask for.
@@ -375,7 +430,8 @@ export const TOOLBOX_PROMPT_PLACEHOLDERS = [
   'docs',
 ] as const;
 
-export type ToolboxPromptPlaceholder = (typeof TOOLBOX_PROMPT_PLACEHOLDERS)[number];
+export type ToolboxPromptPlaceholder =
+  (typeof TOOLBOX_PROMPT_PLACEHOLDERS)[number];
 
 /**
  * What a *tool-output policy* template may ask for.

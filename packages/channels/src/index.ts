@@ -12,10 +12,13 @@
  * path to the agent loop, the session store or a Fastify instance — only the
  * `publish` function it was handed.
  *
- * `channelConformance` lives in `src/testkit/` and is deliberately not exported
- * here: it imports `vitest`, and shipping a test framework in the runtime graph
- * is the same mistake the provider and tool suites already avoid. Channels
- * import it by path.
+ * `channelConformance` is deliberately absent from this entry point. It imports
+ * `vitest`, and shipping a test framework in the runtime graph is the same
+ * mistake the provider and tool suites already avoid. It lives in
+ * `test/testkit/` — outside `src` entirely, so `tsup` never sees it and there is
+ * nothing for a bundler to pull in by accident — and reaches implementors as the
+ * `@ghostai/channels/testkit` subpath, which resolves straight to TypeScript
+ * source. `examples/loopback-channel` is what runs it.
  */
 
 export {
@@ -35,4 +38,8 @@ export {
   type ChannelManagerOptions,
 } from './manager.js';
 
-export { TurnProjection, type OutboundDraft, type TurnProjectionOptions } from './projection.js';
+export {
+  TurnProjection,
+  type OutboundDraft,
+  type TurnProjectionOptions,
+} from './projection.js';

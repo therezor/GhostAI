@@ -70,14 +70,19 @@ export function writeCursor(
   storage: Storage | undefined = safeStorage(),
 ): void {
   try {
-    storage?.setItem(KEY, JSON.stringify({ sessionKey, lastSeq } satisfies Cursor));
+    storage?.setItem(
+      KEY,
+      JSON.stringify({ sessionKey, lastSeq } satisfies Cursor),
+    );
   } catch {
     // A tab that cannot rebuild its in-flight turn after a reload beats a tab
     // that throws while rendering one.
   }
 }
 
-export function clearCursor(storage: Storage | undefined = safeStorage()): void {
+export function clearCursor(
+  storage: Storage | undefined = safeStorage(),
+): void {
   try {
     storage?.removeItem(KEY);
   } catch {

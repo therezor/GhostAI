@@ -28,17 +28,14 @@
  *  - **An error response is never appended to history.** A provider 400 written
  *    into the transcript is replayed on every subsequent request in that
  *    session, so one malformed turn becomes a permanently poisoned session.
- *  - **A cancelled tool call still gets a `tool` message.** Providers reject an
- *    `assistant` turn whose `tool_calls` were never answered, so stopping mid-
- *    tool without writing a result would make the *next* turn fail on history
- *    the user cannot see — the failure surfaces long after the Ctrl-C that
- *    caused it. A *denied* call is the same case: no execution, still a result.
- *  - **Permission is checked between the `tool.call` event and execution**,
- *    which is the only place it can be checked once for every transport. The
- *    answer comes from the scope — `tools.permissionFor(name)` — because the
- *    scope is what knows whether a name resolved to a built-in or to a program
- *    in this agent's toolbox. What the loop decides is whether to ask; what the
- *    answer is, and how long it holds, belong to the gate. See `approval.ts`.
+ *  - **The results of one assistant turn are appended in one transaction.** A
+ *    partial write is an orphaned tool result, and `findLegalStart` then has to
+ *    repair it on every later request.
+ *
+ * Running the tools themselves lives in `dispatch.ts` — authorisation, the
+ * approval gate, the heartbeat, truncation and the envelope — along with the
+ * two invariants that only that file can hold: every call gets an answer, and
+ * permission is checked in exactly one place.
  *
  * The signal threads from the caller through the provider request, tool
  * execution and any child process. There is one cancellation mechanism, and
@@ -59,14 +56,11 @@ import {
   systemMessage,
   textOf,
   toGhostError,
-  truncateHeadTail,
   userMessage,
-  type ChatMessageInput,
   type Clock,
   type ErrorKind,
   type Logger,
   type SessionStore,
-  type TimerHandle,
   type TurnStatsRecord,
 } from '@ghostai/core';
 import {
@@ -87,7 +81,6 @@ import {
   type ToolCall,
   type ToolDefinition,
   type ToolPromptOverrides,
-  type ToolRisk,
   type ToolsConfig,
   type Usage,
 } from '@ghostai/protocol';
@@ -99,9 +92,7 @@ import {
 } from '@ghostai/providers';
 import {
   createToolOutputNonce,
-  describeInjectionFindings,
   systemRandom,
-  wrapToolOutput,
   type JailResolver,
   type RandomSource,
 } from '@ghostai/security';
@@ -115,14 +106,14 @@ import {
   type ToolScope,
 } from '@ghostai/tools';
 
-import {
-  deniedNotice,
-  deniedToolResult,
-  type ApprovalGate,
-  type ApprovalRequest,
-  type DenialReason,
-} from './approval.js';
+import type { ApprovalGate } from './approval.js';
 import { materialiseAttachments, type AttachmentCache } from './attachments.js';
+import {
+  TOOL_HEARTBEAT_MS,
+  ToolDispatcher,
+  parseToolArgs,
+  type TurnScope,
+} from './dispatch.js';
 import type { AgentEvent } from './events.js';
 import {
   buildRawPrompt,
@@ -148,19 +139,6 @@ import {
   type SubagentBinding,
 } from './subagent.js';
 import { textToolCallCorrection, textToolCallName } from './text-tool-call.js';
-
-/**
- * How often a running tool reports that it is still running.
- *
- * Long enough that a normal tool call never emits one, short enough that a UI
- * showing a spinner is never left guessing whether the process died. The tools
- * this exists for — a build under `exec`, a slow MCP server — produce no output
- * at all until they finish, so the loop is the only thing that can say.
- */
-export const TOOL_HEARTBEAT_MS = 15_000;
-
-/** What a cancelled call records, so the `assistant` turn stays answered. */
-export const CANCELLED_TOOL_RESULT = 'Cancelled: the turn was stopped before this tool finished.';
 
 function maxIterationsText(maxIterations: number): string {
   return (
@@ -201,24 +179,10 @@ function errorCodeFor(kind: ErrorKind): ErrorCode {
   return ERROR_CODES[kind] ?? 'internal';
 }
 
-/**
- * The model's arguments, as the UI should see them.
- *
- * Parsing is best-effort on purpose: malformed JSON from a model is common
- * enough that it must not break the event stream, and the registry is the thing
- * that turns it into a typed tool error the model can recover from. Here it is
- * only being displayed.
- */
-function parseToolArgs(argumentsJson: string): unknown {
-  if (argumentsJson.trim() === '') return {};
-  try {
-    return JSON.parse(argumentsJson) as unknown;
-  } catch {
-    return argumentsJson;
-  }
-}
-
-function sumOptional(a: number | undefined, b: number | undefined): number | undefined {
+function sumOptional(
+  a: number | undefined,
+  b: number | undefined,
+): number | undefined {
   if (a === undefined) return b;
   if (b === undefined) return a;
   return a + b;
@@ -227,97 +191,16 @@ function sumOptional(a: number | undefined, b: number | undefined): number | und
 /** Adds one request's usage to the turn's running total. */
 function accumulateUsage(total: Usage, next: Usage): Usage {
   const cachedTokens = sumOptional(total.cachedTokens, next.cachedTokens);
-  const reasoningTokens = sumOptional(total.reasoningTokens, next.reasoningTokens);
+  const reasoningTokens = sumOptional(
+    total.reasoningTokens,
+    next.reasoningTokens,
+  );
   return {
     promptTokens: total.promptTokens + next.promptTokens,
     completionTokens: total.completionTokens + next.completionTokens,
     totalTokens: total.totalTokens + next.totalTokens,
     ...(cachedTokens === undefined ? {} : { cachedTokens }),
     ...(reasoningTokens === undefined ? {} : { reasoningTokens }),
-  };
-}
-
-function cancelledExecution(name: string): ToolExecution {
-  return {
-    name,
-    content: CANCELLED_TOOL_RESULT,
-    isError: true,
-    truncated: false,
-    durationMs: 0,
-    errorKind: 'aborted',
-  };
-}
-
-/**
- * A call that arrived on an agent whose tools are switched off.
- *
- * `config` rather than `permission_denied`: nothing was denied. The agent's
- * permission map is untouched and still says `allow`; this model was simply
- * never sent a tool list, so the call is one it invented. The wording says the
- * tool did not run, because the alternative reading — that it ran and the
- * output was lost — is the one that has a model retry the same command.
- */
-function toolsDisabledExecution(name: string): ToolExecution {
-  return {
-    name,
-    content:
-      `Refused: tool calling is switched off for this model, so "${name}" did not run and ` +
-      `nothing happened. No tools are available on this turn — answer from the conversation, ` +
-      `or tell the user what you would need to do and why you cannot.`,
-    isError: true,
-    truncated: false,
-    durationMs: 0,
-    errorKind: 'config',
-  };
-}
-
-/** A call that was refused. `durationMs` is zero because nothing ran. */
-function deniedExecution(name: string, reason: DenialReason): ToolExecution {
-  return {
-    name,
-    content: deniedToolResult(name, reason),
-    isError: true,
-    truncated: false,
-    durationMs: 0,
-    errorKind: 'permission_denied',
-  };
-}
-
-/** How an awaited approval ended. */
-type ApprovalOutcome = 'approved' | 'aborted' | DenialReason;
-
-/** A promise that settles when a signal fires, and a way to stop listening. */
-interface AbortWatch {
-  readonly promise: Promise<'aborted'>;
-  dispose(): void;
-}
-
-function watchAbort(signal: AbortSignal): AbortWatch {
-  // A second controller purely to remove the listener: a turn making dozens of
-  // approved calls would otherwise leave one listener per call attached to a
-  // signal that lives as long as the turn.
-  const listening = new AbortController();
-  const promise = new Promise<'aborted'>((resolve) => {
-    // An `abort` listener added to a signal that has *already* fired is never
-    // called, so a watcher without this line waits out the full approval
-    // deadline on a turn that was cancelled a moment earlier.
-    if (signal.aborted) {
-      resolve('aborted');
-      return;
-    }
-    signal.addEventListener(
-      'abort',
-      () => {
-        resolve('aborted');
-      },
-      { once: true, signal: listening.signal },
-    );
-  });
-  return {
-    promise,
-    dispose: () => {
-      listening.abort();
-    },
   };
 }
 
@@ -571,111 +454,109 @@ export interface TurnResult {
   readonly text: string;
 }
 
-/** A timer that can be abandoned without leaving the clock holding a callback. */
-interface Tick {
-  readonly promise: Promise<null>;
-  cancel(): void;
-}
-
-/**
- * What the tool half of a turn needs from the half above it.
- *
- * Named rather than inlined because it grew past the point where an inline
- * object literal in two signatures is one shape: `#runToolCalls` and
- * `#runSubagent` must agree about it, and a subagent needs the workspace and the
- * chain that `#authorize` does not.
- */
-interface TurnScope {
-  readonly sessionKey: string;
-  readonly turnId: string;
-  readonly nonce: string;
-  readonly signal: AbortSignal;
-  readonly toolContext: ToolContext;
-  /** The session's, so a subagent works in the folder its caller does. */
-  readonly workspaceId: string;
-  /** Ancestor agent ids, oldest first. See `refuseDelegation`. */
-  readonly chain: readonly string[];
-  /** The conversation a person is watching. See `ApprovalRequest`. */
-  readonly rootSessionKey: string;
-}
-
 export class AgentLoop {
-  readonly #provider: ChatProvider;
-  readonly #tools: ToolScope;
-  readonly #agent: LoopAgent | undefined;
-  readonly #agentId: string;
-  readonly #store: SessionStore;
-  readonly #jails: JailResolver;
-  readonly #runners: RunnerResolver | undefined;
-  readonly #automation: AutomationResolver | undefined;
-  readonly #toolbox: AgentToolbox;
-  readonly #toolboxPrompt: PromptToolbox | undefined;
-  readonly #config: AgentDefaults;
-  readonly #toolsConfig: ToolsConfig;
-  readonly #model: string;
-  readonly #contributors: readonly ContextContributor[];
-  readonly #timeZone: (() => string) | undefined;
-  readonly #approvals: ApprovalGate | undefined;
-  readonly #subagents: ReadonlyMap<string, SubagentBinding>;
-  readonly #resolveLoop: ((agentId: string) => AgentLoop | null) | undefined;
-  readonly #steering: SteeringQueue;
-  readonly #clock: Clock;
-  readonly #logger: Logger;
-  readonly #random: RandomSource;
-  readonly #newId: () => string;
-  readonly #env: Readonly<Record<string, string | undefined>>;
-  readonly #heartbeatMs: number;
-  readonly #maxToolResultChars: number;
+  private readonly chatProvider: ChatProvider;
+  private readonly tools: ToolScope;
+  private readonly agent: LoopAgent | undefined;
+  private readonly agentId: string;
+  private readonly store: SessionStore;
+  private readonly jails: JailResolver;
+  private readonly runners: RunnerResolver | undefined;
+  private readonly automation: AutomationResolver | undefined;
+  private readonly toolbox: AgentToolbox;
+  private readonly toolboxPrompt: PromptToolbox | undefined;
+  private readonly config: AgentDefaults;
+  private readonly toolsConfig: ToolsConfig;
+  private readonly modelId: string;
+  private readonly contributors: readonly ContextContributor[];
+  private readonly timeZone: (() => string) | undefined;
+  private readonly approvals: ApprovalGate | undefined;
+  private readonly subagents: ReadonlyMap<string, SubagentBinding>;
+  private readonly resolveLoop:
+    ((agentId: string) => AgentLoop | null) | undefined;
+  private readonly steeringQueue: SteeringQueue;
+  private readonly clock: Clock;
+  private readonly logger: Logger;
+  private readonly random: RandomSource;
+  private readonly newId: () => string;
+  private readonly env: Readonly<Record<string, string | undefined>>;
+  private readonly heartbeatMs: number;
+  private readonly maxToolResultChars: number;
+  private readonly dispatcher: ToolDispatcher;
 
   constructor(options: AgentLoopOptions) {
-    this.#provider = options.provider;
-    this.#tools = options.tools;
-    this.#store = options.store;
-    this.#jails = options.jails;
-    this.#runners = options.runners;
-    this.#automation = options.automation;
-    this.#toolbox = options.toolbox ?? { name: '', network: { mode: 'none', allow: [] } };
-    this.#toolboxPrompt = options.toolboxPrompt;
-    this.#config = options.config ?? AgentDefaultsSchema.parse({});
-    this.#toolsConfig = options.toolsConfig ?? DEFAULT_TOOLS_CONFIG;
-    this.#agent = options.agent;
-    this.#agentId = options.agent?.id ?? DEFAULT_AGENT_ID;
-    this.#contributors = options.contributors ?? [];
-    this.#timeZone = options.timeZone;
-    this.#approvals = options.approvals;
-    this.#subagents = options.subagents ?? new Map();
-    this.#resolveLoop = options.resolveLoop;
-    this.#steering =
-      options.steering ?? new SteeringQueue({ logger: options.logger ?? silentLogger });
-    this.#clock = options.clock ?? systemClock;
-    this.#logger = options.logger ?? silentLogger;
-    this.#random = options.random ?? systemRandom;
-    this.#newId = options.newId ?? newUuid;
-    this.#env = options.env ?? process.env;
-    this.#heartbeatMs = options.toolHeartbeatMs ?? TOOL_HEARTBEAT_MS;
-    this.#maxToolResultChars = options.maxToolResultChars ?? DEFAULT_MAX_TOOL_RESULT_CHARS;
+    this.chatProvider = options.provider;
+    this.tools = options.tools;
+    this.store = options.store;
+    this.jails = options.jails;
+    this.runners = options.runners;
+    this.automation = options.automation;
+    this.toolbox = options.toolbox ?? {
+      name: '',
+      network: { mode: 'none', allow: [] },
+    };
+    this.toolboxPrompt = options.toolboxPrompt;
+    this.config = options.config ?? AgentDefaultsSchema.parse({});
+    this.toolsConfig = options.toolsConfig ?? DEFAULT_TOOLS_CONFIG;
+    this.agent = options.agent;
+    this.agentId = options.agent?.id ?? DEFAULT_AGENT_ID;
+    this.contributors = options.contributors ?? [];
+    this.timeZone = options.timeZone;
+    this.approvals = options.approvals;
+    this.subagents = options.subagents ?? new Map();
+    this.resolveLoop = options.resolveLoop;
+    this.steeringQueue =
+      options.steering ??
+      new SteeringQueue({ logger: options.logger ?? silentLogger });
+    this.clock = options.clock ?? systemClock;
+    this.logger = options.logger ?? silentLogger;
+    this.random = options.random ?? systemRandom;
+    this.newId = options.newId ?? newUuid;
+    this.env = options.env ?? process.env;
+    this.heartbeatMs = options.toolHeartbeatMs ?? TOOL_HEARTBEAT_MS;
+    this.maxToolResultChars =
+      options.maxToolResultChars ?? DEFAULT_MAX_TOOL_RESULT_CHARS;
 
-    const model = options.model ?? this.#config.model;
+    const model = options.model ?? this.config.model;
     if (model === '') {
       throw new GhostError('config', 'No model configured for the agent loop', {
-        details: { provider: this.#provider.id },
+        details: { provider: this.chatProvider.id },
       });
     }
-    this.#model = model;
+    this.modelId = model;
+
+    // Last, so a loop that refused to construct never has one. Every value
+    // here is already resolved above — the dispatcher defaults nothing itself,
+    // which is what keeps it free of branches no turn takes. The delegate is an
+    // arrow rather than the method: a bare `this.runSubagent` typechecks and
+    // then cannot read its own private fields at the first delegation.
+    this.dispatcher = new ToolDispatcher({
+      tools: this.tools,
+      subagents: this.subagents,
+      approvals: this.approvals,
+      toolsConfig: this.toolsConfig,
+      toolsEnabled: this.config.toolsEnabled,
+      maxToolResultChars: this.maxToolResultChars,
+      heartbeatMs: this.heartbeatMs,
+      agentId: this.agentId,
+      clock: this.clock,
+      logger: this.logger,
+      delegate: (call, binding, turn) => this.runSubagent(call, binding, turn),
+    });
   }
 
   get model(): string {
-    return this.#model;
+    return this.modelId;
   }
 
   /** The provider a turn on this loop would reach. Reported by `GET /api/status`. */
   get provider(): string {
-    return this.#provider.id;
+    return this.chatProvider.id;
   }
 
   /** The queue this loop drains. Exposed so a transport can push into it. */
   get steering(): SteeringQueue {
-    return this.#steering;
+    return this.steeringQueue;
   }
 
   /**
@@ -697,9 +578,9 @@ export class AgentLoop {
    * leave the panel listing tools the model was never offered.
    */
   get toolDefinitions(): readonly ToolDefinition[] {
-    if (!this.#config.toolsEnabled) return [];
+    if (!this.config.toolsEnabled) return [];
 
-    const tools = this.#tools.definitions();
+    const tools = this.tools.definitions();
 
     // Appended rather than merged and re-sorted. The registry's list is already
     // sorted, and keeping the subagents in the operator's configured order at
@@ -707,13 +588,13 @@ export class AgentLoop {
     // see as one thing.
     const registered = new Set(tools.map((tool) => tool.name));
     const subagents: ToolDefinition[] = [];
-    for (const binding of this.#subagents.values()) {
+    for (const binding of this.subagents.values()) {
       // The registry wins. A name can only collide with one an MCP server or a
       // plugin registered — no built-in starts with the subagent prefix — and
       // silently shadowing it would take a tool away from the model with
       // nothing anywhere saying so.
       if (registered.has(binding.toolName)) {
-        this.#logger.warn(
+        this.logger.warn(
           { tool: binding.toolName, agentId: binding.agentId },
           'subagent hidden by a registered tool of the same name',
         );
@@ -722,7 +603,9 @@ export class AgentLoop {
       subagents.push(subagentDefinition(binding));
     }
 
-    return this.#withToolPrompts(subagents.length === 0 ? tools : [...tools, ...subagents]);
+    return this.withToolPrompts(
+      subagents.length === 0 ? tools : [...tools, ...subagents],
+    );
   }
 
   /**
@@ -734,14 +617,14 @@ export class AgentLoop {
    * command wording to render from. Nothing downstream is told why, and nothing
    * downstream needs a branch to find out.
    */
-  get #promptTools(): PromptTools | undefined {
-    if (!this.#config.toolsEnabled) return undefined;
+  private get promptTools(): PromptTools | undefined {
+    if (!this.config.toolsEnabled) return undefined;
 
     return {
-      toolbox: this.#toolboxPrompt,
-      toolboxPrompt: this.#agent?.toolboxPrompt,
-      policyPrompt: this.#agent?.toolPolicyPrompt,
-      platformPrompt: this.#agent?.platformPrompt,
+      toolbox: this.toolboxPrompt,
+      toolboxPrompt: this.agent?.toolboxPrompt,
+      policyPrompt: this.agent?.toolPolicyPrompt,
+      platformPrompt: this.agent?.platformPrompt,
     };
   }
 
@@ -759,28 +642,20 @@ export class AgentLoop {
    * operator at save time; this is the backstop for a tool that left the list
    * afterwards, because a toolbox was uninstalled or `exec` was switched off.
    */
-  #withToolPrompts(definitions: readonly ToolDefinition[]): readonly ToolDefinition[] {
-    const overrides = this.#agent?.toolPrompts;
+  private withToolPrompts(
+    definitions: readonly ToolDefinition[],
+  ): readonly ToolDefinition[] {
+    const overrides = this.agent?.toolPrompts;
     if (overrides === undefined) return definitions;
 
     const applied = applyToolPrompts(definitions, overrides);
     if (applied.unknownTools.length > 0 || applied.unknownFields.length > 0) {
-      this.#logger.warn(
+      this.logger.warn(
         { tools: applied.unknownTools, fields: applied.unknownFields },
         'tool prompt override names something this agent does not advertise',
       );
     }
     return applied.definitions;
-  }
-
-  /** The binding for a call, or `undefined` when a registered tool wins. */
-  #subagentFor(name: string): SubagentBinding | undefined {
-    const binding = this.#subagents.get(name);
-    if (binding === undefined) return undefined;
-    // The same precedence the definitions apply, asked the same way — so a
-    // shadowed subagent is not advertised *and* is not reachable, rather than
-    // being invisible to the model and callable by a lucky guess.
-    return this.#tools.get(name) === undefined ? binding : undefined;
   }
 
   /**
@@ -807,9 +682,12 @@ export class AgentLoop {
     // The stored session decides, exactly as it does in `run`. A preview that
     // reported the default workspace's root for a session bound to another one
     // would describe a prompt no turn on it will ever carry.
-    const stored = this.#store.getSession(input.sessionKey);
+    const stored = this.store.getSession(input.sessionKey);
     const workspaceId = stored?.workspaceId ?? DEFAULT_WORKSPACE_ID;
-    const jail = stored === undefined ? this.#jails.default : this.#jails.forWorkspace(workspaceId);
+    const jail =
+      stored === undefined
+        ? this.jails.default
+        : this.jails.forWorkspace(workspaceId);
 
     const context: StaticPromptContext = {
       workspaceRoot: jail.root,
@@ -819,15 +697,15 @@ export class AgentLoop {
       channel: input.channel ?? 'web',
     };
 
-    return this.#composePrompt(
-      await this.#preamble(context),
+    return this.composePrompt(
+      await this.preamble(context),
       {
         ...context,
         iteration: 1,
-        maxIterations: this.#config.maxToolIterations,
-        nowMs: this.#clock.now(),
+        maxIterations: this.config.maxToolIterations,
+        nowMs: this.clock.now(),
       },
-      createToolOutputNonce(this.#random),
+      createToolOutputNonce(this.random),
     );
   }
 
@@ -840,35 +718,37 @@ export class AgentLoop {
    * static prompt; raw mode wants the contributor sections on their own, because
    * a raw template places them itself through `{{contributors}}`.
    */
-  async #preamble(context: StaticPromptContext): Promise<PromptPreamble> {
-    if (this.#agent?.promptMode === 'raw') {
+  private async preamble(
+    context: StaticPromptContext,
+  ): Promise<PromptPreamble> {
+    if (this.agent?.promptMode === 'raw') {
       return {
         staticPrompt: '',
-        staticSections: await contributorSections(this.#contributors, context),
+        staticSections: await contributorSections(this.contributors, context),
       };
     }
 
-    const tools = this.#promptTools;
+    const tools = this.promptTools;
     return {
       staticPrompt: await buildStaticPrompt({
         context,
         ...(tools === undefined ? {} : { tools }),
-        ...(this.#agent === undefined ? {} : { agent: this.#agent }),
-        contributors: this.#contributors,
+        ...(this.agent === undefined ? {} : { agent: this.agent }),
+        contributors: this.contributors,
       }),
       staticSections: [],
     };
   }
 
   /** The prompt for one iteration. One function, so the preview cannot drift from the turn. */
-  #composePrompt(
+  private composePrompt(
     preamble: PromptPreamble,
     context: RuntimePromptContext,
     nonce: string,
     correction?: string,
   ): PromptPreview {
-    const agent = this.#agent;
-    const tools = this.#promptTools;
+    const agent = this.agent;
+    const tools = this.promptTools;
 
     if (agent?.promptMode === 'raw') {
       // One blob, and it stays in the system message. There is no cached prefix
@@ -880,7 +760,7 @@ export class AgentLoop {
           nonce,
           agent,
           staticSections: preamble.staticSections,
-          contributors: this.#contributors,
+          contributors: this.contributors,
           ...(tools === undefined ? {} : { tools }),
           ...(correction === undefined ? {} : { correction }),
         }),
@@ -893,10 +773,14 @@ export class AgentLoop {
       runtimeBlock: buildRuntimeBlock({
         context,
         nonce,
-        contributors: this.#contributors,
-        ...(this.#timeZone === undefined ? {} : { timeZone: this.#timeZone() }),
-        ...(agent?.livePrompt === undefined ? {} : { livePrompt: agent.livePrompt }),
-        ...(agent?.wrapUpPrompt === undefined ? {} : { wrapUpPrompt: agent.wrapUpPrompt }),
+        contributors: this.contributors,
+        ...(this.timeZone === undefined ? {} : { timeZone: this.timeZone() }),
+        ...(agent?.livePrompt === undefined
+          ? {}
+          : { livePrompt: agent.livePrompt }),
+        ...(agent?.wrapUpPrompt === undefined
+          ? {}
+          : { wrapUpPrompt: agent.wrapUpPrompt }),
         ...(tools === undefined ? {} : { tools }),
         ...(correction === undefined ? {} : { correction }),
       }),
@@ -905,7 +789,7 @@ export class AgentLoop {
 
   /** Queues a correction for the turn currently running on `sessionKey`. */
   steer(sessionKey: string, content: string): void {
-    this.#steering.push(sessionKey, content, this.#clock.now());
+    this.steeringQueue.push(sessionKey, content, this.clock.now());
   }
 
   /**
@@ -921,11 +805,11 @@ export class AgentLoop {
    * An abandoned iterator records nothing, and also yields no `turn.end`. The
    * two agree, and neither is a turn that finished.
    */
-  #recordStats(stats: TurnStatsRecord): void {
+  private recordStats(stats: TurnStatsRecord): void {
     try {
-      this.#store.recordTurnStats(stats);
+      this.store.recordTurnStats(stats);
     } catch (error) {
-      this.#logger.warn(
+      this.logger.warn(
         { err: error, sessionKey: stats.sessionKey, turnId: stats.turnId },
         'failed to record turn stats',
       );
@@ -941,7 +825,7 @@ export class AgentLoop {
    */
   async *run(input: TurnInput): AsyncGenerator<AgentEvent, TurnResult> {
     const { sessionKey } = input;
-    const turnId = input.turnId ?? this.#newId();
+    const turnId = input.turnId ?? this.newId();
     const channel = input.channel ?? 'cli';
     const chain = input.chain ?? [];
     const rootSessionKey = input.rootSessionKey ?? sessionKey;
@@ -949,11 +833,11 @@ export class AgentLoop {
     // rather than re-deriving what "no cancellation" means.
     const signal = input.signal ?? new AbortController().signal;
 
-    const maxIterations = this.#config.maxToolIterations;
-    const wallTimeoutMs = this.#config.loopWallTimeoutMs;
+    const maxIterations = this.config.maxToolIterations;
+    const wallTimeoutMs = this.config.loopWallTimeoutMs;
 
     // Once per turn, both of them: see the module header.
-    const nonce = createToolOutputNonce(this.#random);
+    const nonce = createToolOutputNonce(this.random);
     const toolDefinitions = this.toolDefinitions;
 
     // Ensure first, then read what came back. `input.workspaceId` can only ever
@@ -963,14 +847,16 @@ export class AgentLoop {
     // That is what makes switching workspaces in the UI safe while a turn is
     // running, and what stops a crafted frame from pointing an existing
     // session's tools at another workspace's files.
-    const session = this.#store.ensureSession(sessionKey, {
+    const session = this.store.ensureSession(sessionKey, {
       origin: channel,
-      ...(input.workspaceId === undefined ? {} : { workspaceId: input.workspaceId }),
+      ...(input.workspaceId === undefined
+        ? {}
+        : { workspaceId: input.workspaceId }),
       ...(input.agentId === undefined ? {} : { agentId: input.agentId }),
     });
     // Captured once, for the life of the turn: every tool call below closes
     // over this jail, so a workspace switch mid-turn cannot move it.
-    const jail = this.#jails.forWorkspace(session.workspaceId);
+    const jail = this.jails.forWorkspace(session.workspaceId);
 
     // Attachments are read from disk on every iteration, because the request is
     // rebuilt on every iteration. Scoped to the turn and discarded with it, so
@@ -989,7 +875,9 @@ export class AgentLoop {
       channel,
     };
 
-    const opening = this.#store.append(sessionKey, userMessage(input.content), { turnId });
+    const opening = this.store.append(sessionKey, userMessage(input.content), {
+      turnId,
+    });
     const firstSeq = opening.seq;
     let lastSeq = opening.seq;
 
@@ -1005,15 +893,15 @@ export class AgentLoop {
     // them is a title all of them show.
     if (session.title === '') {
       const title = deriveSessionTitle(textOf(userMessage(input.content)));
-      if (title !== '') this.#store.updateSession(sessionKey, { title });
+      if (title !== '') this.store.updateSession(sessionKey, { title });
     }
 
-    const startedAt = this.#clock.monotonic();
+    const startedAt = this.clock.monotonic();
     // Both clocks, deliberately. The monotonic one caps the wall timeout and
     // must stay monotonic — an NTP step backwards through a `now()`-based cap
     // would end a turn that had barely started. This one is what a human reads,
     // and is only ever subtracted from another reading of itself.
-    const startedAtMs = this.#clock.now();
+    const startedAtMs = this.clock.now();
     let iteration = 0;
     let elapsedMs = 0;
     let stopReason: StopReason | undefined;
@@ -1048,16 +936,16 @@ export class AgentLoop {
         type: 'turn.start',
         sessionKey,
         turnId,
-        agentId: this.#agentId,
-        model: this.#model,
-        provider: this.#provider.id,
+        agentId: this.agentId,
+        model: this.modelId,
+        provider: this.chatProvider.id,
         // Here as well as on `turn.end`: a turn that throws never reaches its
         // end, and a failed turn with no seq is a failed turn nothing can
         // re-run.
         firstSeq,
       };
 
-      const preamble = await this.#preamble(promptContext);
+      const preamble = await this.preamble(promptContext);
 
       // Resolved once per turn, beside the jail and for the same reason: a
       // sandbox is a property of (agent, workspace, session), and re-deriving it
@@ -1066,30 +954,32 @@ export class AgentLoop {
         agentId: session.agentId ?? DEFAULT_AGENT_ID,
         workspaceId: session.workspaceId,
         sessionKey,
-        toolbox: this.#toolbox.name,
-        network: this.#toolbox.network,
+        toolbox: this.toolbox.name,
+        network: this.toolbox.network,
         workspaceRoot: jail.root,
       };
-      const runner = this.#runners?.forTurn(sandbox);
+      const runner = this.runners?.forTurn(sandbox);
       // Beside the runner and off the same request, for the same reason: which
       // agent and which session is a property of the turn, and re-deriving it per
       // tool call would let a mid-turn change move it.
-      const automation = this.#automation?.forTurn(sandbox);
+      const automation = this.automation?.forTurn(sandbox);
 
       const toolContext: ToolContext = {
         jail,
         signal,
-        config: this.#toolsConfig,
-        clock: this.#clock,
-        logger: this.#logger,
-        env: this.#env,
+        config: this.toolsConfig,
+        clock: this.clock,
+        logger: this.logger,
+        env: this.env,
         ...(runner === undefined ? {} : { runner, sandboxed: true }),
         ...(automation === undefined ? {} : { automation }),
       };
 
       while (iteration < maxIterations) {
-        for (const message of this.#steering.drain(sessionKey)) {
-          this.#store.append(sessionKey, userMessage(steeringText(message)), { turnId });
+        for (const message of this.steeringQueue.drain(sessionKey)) {
+          this.store.append(sessionKey, userMessage(steeringText(message)), {
+            turnId,
+          });
         }
 
         if (signal.aborted) {
@@ -1097,25 +987,30 @@ export class AgentLoop {
           break;
         }
 
-        elapsedMs = this.#clock.monotonic() - startedAt;
+        elapsedMs = this.clock.monotonic() - startedAt;
         if (wallTimeoutMs > 0 && elapsedMs >= wallTimeoutMs) {
-          this.#logger.warn({ sessionKey, turnId, elapsedMs, wallTimeoutMs }, 'turn wall timeout');
+          this.logger.warn(
+            { sessionKey, turnId, elapsedMs, wallTimeoutMs },
+            'turn wall timeout',
+          );
           stopReason = 'wall_timeout';
           break;
         }
 
         iteration += 1;
 
-        const prompt = this.#composePrompt(
+        const prompt = this.composePrompt(
           preamble,
           {
             ...promptContext,
             iteration,
             maxIterations,
-            nowMs: this.#clock.now(),
+            nowMs: this.clock.now(),
             // Turn-scoped, so it belongs to the half of the prompt that is
             // rebuilt every iteration and never to the cached prefix.
-            ...(input.mentions === undefined ? {} : { mentions: input.mentions }),
+            ...(input.mentions === undefined
+              ? {}
+              : { mentions: input.mentions }),
           },
           nonce,
           correction,
@@ -1126,7 +1021,7 @@ export class AgentLoop {
         correction = undefined;
 
         const request: ChatRequest = {
-          model: this.#model,
+          model: this.modelId,
           messages: [
             systemMessage(prompt.staticPrompt),
             // Re-read every iteration: the tool results this turn just wrote are
@@ -1137,16 +1032,16 @@ export class AgentLoop {
             // Attachments become readable here and nowhere else. Storage holds
             // a path; a provider needs bytes or characters, and only this scope
             // has the jail that resolves one to the other. Doing it before
-            // `#provider` — which is already wrapped in `withResilience` — is
+            // `#chatProvider` — which is already wrapped in `withResilience` — is
             // also what keeps `stripImages` looking at real image parts rather
             // than at references it would delete without reading.
             ...materialiseAttachments(
-              this.#store.history(sessionKey, { maxToolResultChars: 0 }),
+              this.store.history(sessionKey, { maxToolResultChars: 0 }),
               jail,
               // Constant for the life of the turn, which is what makes it safe
               // against the `attachments` cache beside it: that key is path,
               // size and mtime, and does not know about this.
-              { images: this.#config.visionEnabled },
+              { images: this.config.visionEnabled },
               attachments,
             ),
             // The volatile half, after the history rather than before it. A
@@ -1164,27 +1059,31 @@ export class AgentLoop {
           // same cache shard. Providers that do not know the field ignore it, and
           // the one that rejects it is handled by the degradation ladder.
           cacheKey: sessionKey,
-          maxTokens: this.#config.maxTokens,
+          maxTokens: this.config.maxTokens,
           // Both omitted rather than sent as `undefined` when unset: an adapter
           // that spreads the request into a JSON body would otherwise emit
           // `"temperature": null`, which is not the same as saying nothing, and
           // is rejected by the providers that accept no temperature at all.
-          ...(this.#config.temperature === undefined
+          ...(this.config.temperature === undefined
             ? {}
-            : { temperature: this.#config.temperature }),
-          ...(this.#config.reasoningEffort === undefined
+            : { temperature: this.config.temperature }),
+          ...(this.config.reasoningEffort === undefined
             ? {}
-            : { reasoningEffort: this.#config.reasoningEffort }),
+            : { reasoningEffort: this.config.reasoningEffort }),
           signal,
         };
 
         let result: ChatResult | undefined;
         try {
-          for await (const event of this.#provider.stream(request)) {
+          for await (const event of this.chatProvider.stream(request)) {
             if (event.type === 'text') {
-              if (event.text !== '') yield { type: 'assistant.delta', turnId, text: event.text };
+              if (event.text !== '') {
+                yield { type: 'assistant.delta', turnId, text: event.text };
+              }
             } else if (event.type === 'reasoning') {
-              if (event.text !== '') yield { type: 'reasoning.delta', turnId, text: event.text };
+              if (event.text !== '') {
+                yield { type: 'reasoning.delta', turnId, text: event.text };
+              }
             } else {
               result = event.result;
             }
@@ -1195,8 +1094,14 @@ export class AgentLoop {
             stopReason = 'aborted';
             break;
           }
-          this.#logger.error(
-            { sessionKey, turnId, iteration, kind: ghost.kind, err: ghost.message },
+          this.logger.error(
+            {
+              sessionKey,
+              turnId,
+              iteration,
+              kind: ghost.kind,
+              err: ghost.message,
+            },
             'provider request failed',
           );
           yield {
@@ -1231,7 +1136,9 @@ export class AgentLoop {
         usage = accumulateUsage(usage, result.usage);
 
         if (result.message.toolCalls.length === 0) {
-          lastSeq = this.#store.append(sessionKey, result.message, { turnId }).seq;
+          lastSeq = this.store.append(sessionKey, result.message, {
+            turnId,
+          }).seq;
           finalText = textOf(result.message);
 
           // A call the model wrote out instead of making. Left alone, this ends
@@ -1249,7 +1156,7 @@ export class AgentLoop {
           if (attempted !== undefined) {
             correctedOnce = true;
             correction = textToolCallCorrection(attempted);
-            this.#logger.warn(
+            this.logger.warn(
               { sessionKey, turnId, iteration, tool: attempted },
               'model wrote a tool call as text; correcting it',
             );
@@ -1269,7 +1176,7 @@ export class AgentLoop {
             // model do it. Logged because the turn is otherwise indistinguishable
             // from a successful one in every record it leaves — the UI derives
             // the same conclusion from the transcript and says so on the turn.
-            this.#logger.warn(
+            this.logger.warn(
               {
                 sessionKey,
                 turnId,
@@ -1282,12 +1189,12 @@ export class AgentLoop {
           // The correction arrived while this answer was being composed. Keep
           // going so it is answered, rather than ending a turn the user has
           // already asked to change.
-          if (this.#steering.hasPending(sessionKey)) continue;
+          if (this.steeringQueue.hasPending(sessionKey)) continue;
           stopReason = 'complete';
           break;
         }
 
-        const tools = yield* this.#runToolCalls(result, {
+        const tools = yield* this.dispatcher.dispatch(result, {
           sessionKey,
           turnId,
           nonce,
@@ -1297,7 +1204,13 @@ export class AgentLoop {
           chain,
           rootSessionKey,
         });
-        lastSeq = tools.lastSeq;
+        // One transaction, and the store stays the turn's to write. A partial
+        // write is exactly the orphaned tool result `findLegalStart` then has
+        // to repair on every later request.
+        const written = this.store.appendMany(sessionKey, tools.pending, {
+          turnId,
+        });
+        lastSeq = written.at(-1)?.seq ?? 0;
         if (tools.cancelled) {
           stopReason = 'aborted';
           break;
@@ -1306,7 +1219,7 @@ export class AgentLoop {
     } finally {
       // Whatever ended the turn — completion, a cap, an abandoned iterator —
       // nothing queued for it may leak into the next one.
-      this.#steering.clear(sessionKey);
+      this.steeringQueue.clear(sessionKey);
     }
 
     stopReason ??= 'max_iterations';
@@ -1319,17 +1232,19 @@ export class AgentLoop {
         stopReason === 'max_iterations'
           ? maxIterationsText(maxIterations)
           : wallTimeoutText(elapsedMs, wallTimeoutMs);
-      lastSeq = this.#store.append(sessionKey, assistantMessage(finalText), { turnId }).seq;
+      lastSeq = this.store.append(sessionKey, assistantMessage(finalText), {
+        turnId,
+      }).seq;
       yield { type: 'assistant.delta', turnId, text: finalText };
     }
 
-    const endedAtMs = this.#clock.now();
-    this.#recordStats({
+    const endedAtMs = this.clock.now();
+    this.recordStats({
       turnId,
       sessionKey,
       agentId: session.agentId ?? '',
-      provider: this.#provider.id,
-      model: this.#model,
+      provider: this.chatProvider.id,
+      model: this.modelId,
       startedAtMs,
       endedAtMs,
       iterations: iteration,
@@ -1349,306 +1264,13 @@ export class AgentLoop {
       lastSeq,
     };
 
-    return { turnId, stopReason, iterations: iteration, usage, text: finalText };
-  }
-
-  /**
-   * Runs every tool the model asked for. Returns whether the turn was cancelled.
-   *
-   * The assistant message and all of its results are appended in one
-   * transaction at the end, because a partial write is exactly the orphaned
-   * tool result that `findLegalStart` then has to repair on every later
-   * request. Once cancelled, the remaining calls are not executed — but each
-   * still gets a result, so the `assistant` turn is never left with an
-   * unanswered `tool_call`.
-   */
-  async *#runToolCalls(
-    result: ChatResult,
-    turn: TurnScope,
-  ): AsyncGenerator<AgentEvent, { cancelled: boolean; lastSeq: number }> {
-    const pending: ChatMessageInput[] = [result.message];
-    let cancelled = turn.signal.aborted;
-
-    for (const call of result.message.toolCalls) {
-      const risk = this.#riskOf(call.name);
-      yield {
-        type: 'tool.call',
-        turnId: turn.turnId,
-        callId: call.id,
-        name: call.name,
-        args: parseToolArgs(call.argumentsJson),
-        risk,
-      };
-
-      let execution: ToolExecution;
-      if (cancelled) {
-        execution = cancelledExecution(call.name);
-      } else {
-        // Between the event and the execution, and nowhere else: a transport
-        // that gated it for itself would be one `if` away from an ungated one.
-        // A subagent is authorised here too — its binding carries a permission
-        // exactly as the scope carries a tool's, so `ask` gets the same prompt.
-        const refusal = yield* this.#authorize(call, risk, turn);
-        const binding = this.#subagentFor(call.name);
-        execution =
-          refusal ??
-          (binding === undefined
-            ? yield* this.#executeWithHeartbeat(call, turn.toolContext, turn.turnId)
-            : yield* this.#runSubagent(call, binding, turn));
-      }
-
-      if (execution.errorKind === 'aborted') cancelled = true;
-
-      // Truncate first, wrap second. The other order cuts the closing delimiter
-      // off the envelope, and a tool result the model cannot see the end of is
-      // a tool result it reads as continuing into the conversation.
-      const truncation = truncateHeadTail(execution.content, this.#maxToolResultChars);
-      const wrapped = wrapToolOutput(truncation.text, { toolName: call.name, nonce: turn.nonce });
-      const truncated = truncation.truncated || execution.truncated;
-
-      pending.push({
-        role: 'tool',
-        toolCallId: call.id,
-        name: call.name,
-        content: wrapped.text,
-        isError: execution.isError,
-        truncated,
-      });
-
-      yield {
-        type: 'tool.result',
-        turnId: turn.turnId,
-        callId: call.id,
-        ok: !execution.isError,
-        content: truncation.text,
-        truncated,
-        // Whole milliseconds, because this event *is* a `ServerMessage` and the
-        // protocol says `z.number().int()`. `monotonic()` is `performance.now()`,
-        // which returns fractions — and a client that validates its frames drops
-        // the one that says the call finished, leaving a tool card spinning
-        // forever over a tool that returned in a millisecond.
-        durationMs: Math.round(execution.durationMs),
-      };
-
-      if (wrapped.findings.length > 0) {
-        this.#logger.warn(
-          { tool: call.name, signals: wrapped.findings.map((finding) => finding.signal) },
-          'prompt injection signals in tool output',
-        );
-        yield {
-          type: 'notice',
-          kind: 'prompt_injection',
-          message: describeInjectionFindings(wrapped.findings),
-          turnId: turn.turnId,
-          callId: call.id,
-        };
-      }
-    }
-
-    const written = this.#store.appendMany(turn.sessionKey, pending, { turnId: turn.turnId });
-    return { cancelled, lastSeq: written.at(-1)?.seq ?? 0 };
-  }
-
-  /**
-   * Whether this call may run — and, if not, the result that says so.
-   *
-   * Returning `undefined` means proceed. Anything else is a `ToolExecution`
-   * that never executed, which is what keeps the "every tool call gets a `tool`
-   * message" rule true for a call the user refused: a denial the model cannot
-   * see is an unanswered `tool_call`, and that is a provider 400 on the next
-   * turn rather than a refusal it can work around.
-   *
-   * An abort during an approval is a cancellation, not a denial. The difference
-   * matters to the caller: a denial lets the turn continue so the model can
-   * respond to it, while a cancellation stops the turn and the remaining calls.
-   */
-  async *#authorize(
-    call: ToolCall,
-    risk: ToolRisk,
-    turn: {
-      sessionKey: string;
-      rootSessionKey: string;
-      turnId: string;
-      signal: AbortSignal;
-    },
-  ): AsyncGenerator<AgentEvent, ToolExecution | undefined> {
-    // Before the permission lookup, and deliberately not expressed as one: the
-    // agent's map is untouched and still says `allow`, so asking it would run
-    // the call. The request carried no `tools` at all, which makes anything
-    // arriving here a name the model invented — and this is the one enforcement
-    // point every call passes through, including a subagent's, so gating it
-    // here is what makes "nothing executes" true rather than mostly true.
-    //
-    // A refusal rather than a silent drop, because every `tool_call` must be
-    // answered by a `tool` message: an unanswered one is a dangling call the
-    // model waits on and a provider 400 on the next request.
-    if (!this.#config.toolsEnabled) {
-      this.#logger.warn(
-        { sessionKey: turn.sessionKey, turnId: turn.turnId, tool: call.name, risk },
-        'tool call refused: tools are switched off for this model',
-      );
-      yield {
-        type: 'notice',
-        kind: 'tools_disabled',
-        message: `Refused "${call.name}": tool calling is off for this model, so nothing ran.`,
-        turnId: turn.turnId,
-        callId: call.id,
-      };
-      return toolsDisabledExecution(call.name);
-    }
-
-    // The binding first, and only when the registry has no such name — the same
-    // precedence `#subagentFor` and `toolDefinitions` apply, asked once here so
-    // a shadowed subagent is gated as the registered tool it actually is.
-    const permission =
-      this.#subagentFor(call.name)?.permission ?? this.#tools.permissionFor(call.name);
-    if (permission === 'allow') return undefined;
-
-    let denial: DenialReason;
-    if (permission === 'deny') {
-      // Belt and braces. A denied tool is not in the definitions the model was
-      // sent and `execute` would report it as `not_found`, so reaching here
-      // means something advertised a tool this scope does not permit — which is
-      // exactly the case an enforcement point exists to catch.
-      denial = 'policy';
-    } else {
-      const gate = this.#approvals;
-      // `ask` with nobody to ask. Denying here would make the default config
-      // refuse every `exec` in a terminal session, where the operator asking
-      // for the command *is* the approval.
-      if (gate === undefined) return undefined;
-
-      const timeoutMs = this.#toolsConfig.approvalTimeoutMs;
-      const expiresAtMs = this.#clock.now() + timeoutMs;
-      const request: ApprovalRequest = {
-        sessionKey: turn.sessionKey,
-        rootSessionKey: turn.rootSessionKey,
-        agentId: this.#agentId,
-        turnId: turn.turnId,
-        callId: call.id,
-        name: call.name,
-        args: parseToolArgs(call.argumentsJson),
-        risk,
-        expiresAtMs,
-        signal: turn.signal,
-      };
-
-      yield {
-        type: 'tool.approvalRequest',
-        turnId: turn.turnId,
-        callId: call.id,
-        name: call.name,
-        args: request.args,
-        risk,
-        expiresAtMs,
-      };
-
-      const outcome = await this.#decide(gate, request, timeoutMs);
-      if (outcome === 'approved') return undefined;
-      if (outcome === 'aborted') return cancelledExecution(call.name);
-      denial = outcome;
-    }
-
-    this.#logger.warn(
-      {
-        sessionKey: turn.sessionKey,
-        turnId: turn.turnId,
-        tool: call.name,
-        risk,
-        permission,
-        denial,
-      },
-      'tool call denied',
-    );
-    yield {
-      type: 'notice',
-      kind: 'approval_denied',
-      message: deniedNotice(call.name, denial),
-      turnId: turn.turnId,
-      callId: call.id,
+    return {
+      turnId,
+      stopReason,
+      iterations: iteration,
+      usage,
+      text: finalText,
     };
-    return deniedExecution(call.name, denial);
-  }
-
-  /**
-   * Waits for a decision, a deadline, or the turn ending — whichever is first.
-   *
-   * The deadline is enforced here rather than left to the gate because the case
-   * it exists for is a gate that never answers: a browser tab closed on an open
-   * prompt, or a channel that has no way to render one. The timer is on the
-   * injected clock, so a test advances time instead of waiting five minutes.
-   *
-   * A gate that throws denies. There is no failure mode of an approval
-   * mechanism where the safe reading is "go ahead".
-   */
-  async #decide(
-    gate: ApprovalGate,
-    request: ApprovalRequest,
-    timeoutMs: number,
-  ): Promise<ApprovalOutcome> {
-    const deadline = this.#tick(timeoutMs);
-    const abort = watchAbort(request.signal);
-    try {
-      return await Promise.race<ApprovalOutcome>([
-        gate.request(request).then(
-          (decision) => {
-            this.#logger.info(
-              { tool: request.name, approved: decision.approved, scope: decision.scope },
-              'approval decision',
-            );
-            return decision.approved ? 'approved' : 'declined';
-          },
-          (error: unknown) => {
-            if (isAbortError(error)) return 'aborted';
-            this.#logger.error(
-              { tool: request.name, err: toGhostError(error, 'internal').message },
-              'approval gate failed',
-            );
-            return 'declined';
-          },
-        ),
-        deadline.promise.then((): ApprovalOutcome => 'timeout'),
-        abort.promise,
-      ]);
-    } finally {
-      deadline.cancel();
-      abort.dispose();
-    }
-  }
-
-  /**
-   * One tool call, with a liveness event on a fixed cadence while it runs.
-   *
-   * The heartbeat is driven by the injected clock and raced against the call,
-   * so a test advances fake timers instead of waiting 15 real seconds. The
-   * timeout itself is not enforced here — `ToolRegistry` owns it, and owning it
-   * in two places is how a call ends up with two different deadlines.
-   */
-  async *#executeWithHeartbeat(
-    call: ToolCall,
-    context: ToolContext,
-    turnId: string,
-  ): AsyncGenerator<AgentEvent, ToolExecution> {
-    const started = this.#clock.monotonic();
-    const running = this.#tools.execute(call, context).then((execution) => ({ execution }));
-
-    if (this.#heartbeatMs <= 0) return (await running).execution;
-
-    for (;;) {
-      const beat = this.#tick(this.#heartbeatMs);
-      const outcome = await Promise.race([running, beat.promise]);
-      beat.cancel();
-      if (outcome !== null) return outcome.execution;
-      yield {
-        type: 'tool.progress',
-        turnId,
-        callId: call.id,
-        // Whole milliseconds — see `tool.result` above for why a fraction here
-        // is a frame the client throws away rather than a rounding detail.
-        elapsedMs: Math.round(this.#clock.monotonic() - started),
-        message: `${call.name} is still running`,
-      };
-    }
   }
 
   /**
@@ -1677,23 +1299,28 @@ export class AgentLoop {
    *    the child's alone, so the caller gets a tool result saying the subagent
    *    was cut short and can carry on — which is what the cap is for.
    */
-  async *#runSubagent(
+  private async *runSubagent(
     call: ToolCall,
     binding: SubagentBinding,
     turn: TurnScope,
   ): AsyncGenerator<AgentEvent, ToolExecution> {
     const refusal = refuseDelegation(turn.chain, binding.agentId);
     if (refusal !== undefined) {
-      this.#logger.warn(
-        { tool: call.name, agentId: binding.agentId, chain: turn.chain, refusal },
+      this.logger.warn(
+        {
+          tool: call.name,
+          agentId: binding.agentId,
+          chain: turn.chain,
+          refusal,
+        },
         'delegation refused',
       );
       return refusedExecution(refusal, binding, turn.chain);
     }
 
-    const child = this.#resolveLoop?.(binding.agentId) ?? null;
+    const child = this.resolveLoop?.(binding.agentId) ?? null;
     if (child === null) {
-      this.#logger.warn(
+      this.logger.warn(
         { tool: call.name, agentId: binding.agentId },
         'delegation refused: the subagent cannot run',
       );
@@ -1715,8 +1342,8 @@ export class AgentLoop {
     }
 
     const depth = turn.chain.length + 1;
-    const sessionKey = subagentSessionKey(this.#newId);
-    this.#store.ensureSession(sessionKey, {
+    const sessionKey = subagentSessionKey(this.newId);
+    this.store.ensureSession(sessionKey, {
       origin: SUBAGENT_ORIGIN,
       workspaceId: turn.workspaceId,
       agentId: binding.agentId,
@@ -1730,7 +1357,7 @@ export class AgentLoop {
         } satisfies SubagentLineage,
       },
     });
-    this.#rememberSubagentRun(turn.sessionKey, call.id, {
+    this.rememberSubagentRun(turn.sessionKey, call.id, {
       sessionKey,
       agentId: binding.agentId,
       // The label too, so a reloaded transcript can name the card before the
@@ -1738,8 +1365,8 @@ export class AgentLoop {
       label: binding.label,
     });
 
-    const timeout = this.#subagentTimeout(turn.signal);
-    const started = this.#clock.monotonic();
+    const timeout = this.subagentTimeout(turn.signal);
+    const started = this.clock.monotonic();
     try {
       const run = child.run({
         sessionKey,
@@ -1748,7 +1375,7 @@ export class AgentLoop {
         channel: SUBAGENT_ORIGIN,
         agentId: binding.agentId,
         workspaceId: turn.workspaceId,
-        chain: [...turn.chain, this.#agentId],
+        chain: [...turn.chain, this.agentId],
         rootSessionKey: turn.rootSessionKey,
       });
 
@@ -1757,11 +1384,22 @@ export class AgentLoop {
       // way past would need a wrapper generator anyway.
       let next = await run.next();
       while (next.done !== true) {
-        yield this.#wrapSubagentEvent(turn, call.id, binding, sessionKey, depth, next.value);
+        yield this.wrapSubagentEvent(
+          turn,
+          call.id,
+          binding,
+          sessionKey,
+          depth,
+          next.value,
+        );
         next = await run.next();
       }
 
-      return subagentResult(binding, next.value, this.#clock.monotonic() - started);
+      return subagentResult(
+        binding,
+        next.value,
+        this.clock.monotonic() - started,
+      );
     } finally {
       timeout.dispose();
     }
@@ -1775,7 +1413,7 @@ export class AgentLoop {
    * of its address already names the grandchild's delegating call. That is what
    * keeps the payload non-recursive at any depth — see `SubagentEventSchema`.
    */
-  #wrapSubagentEvent(
+  private wrapSubagentEvent(
     turn: TurnScope,
     callId: string,
     binding: SubagentBinding,
@@ -1783,7 +1421,9 @@ export class AgentLoop {
     depth: number,
     event: AgentEvent,
   ): AgentEvent {
-    if (event.type === 'subagent.event') return { ...event, turnId: turn.turnId };
+    if (event.type === 'subagent.event') {
+      return { ...event, turnId: turn.turnId };
+    }
     return {
       type: 'subagent.event',
       turnId: turn.turnId,
@@ -1804,15 +1444,19 @@ export class AgentLoop {
    * reloaded transcript finds the run again, which is worth a write and is not
    * worth failing a turn that has otherwise worked.
    */
-  #rememberSubagentRun(parentSessionKey: string, callId: string, run: SubagentRunRef): void {
+  private rememberSubagentRun(
+    parentSessionKey: string,
+    callId: string,
+    run: SubagentRunRef,
+  ): void {
     try {
-      const parent = this.#store.getSession(parentSessionKey);
+      const parent = this.store.getSession(parentSessionKey);
       if (parent === undefined) return;
-      this.#store.updateSession(parentSessionKey, {
+      this.store.updateSession(parentSessionKey, {
         metadata: withSubagentRun(parent.metadata, callId, run),
       });
     } catch (error) {
-      this.#logger.warn(
+      this.logger.warn(
         { err: error, sessionKey: parentSessionKey, callId },
         'failed to record the subagent session pointer',
       );
@@ -1826,45 +1470,22 @@ export class AgentLoop {
    * with the timer and nothing stays attached to a turn signal that outlives
    * dozens of calls.
    */
-  #subagentTimeout(parent: AbortSignal): { signal: AbortSignal; dispose(): void } {
-    const capMs = this.#config.subagentTimeoutMs;
+  private subagentTimeout(parent: AbortSignal): {
+    signal: AbortSignal;
+    dispose(): void;
+  } {
+    const capMs = this.config.subagentTimeoutMs;
     if (capMs <= 0) return { signal: parent, dispose: () => undefined };
 
     const cap = new AbortController();
-    const handle = this.#clock.setTimeout(() => {
-      cap.abort(abortedError(`the ${this.#agentId} agent's delegation cap`));
+    const handle = this.clock.setTimeout(() => {
+      cap.abort(abortedError(`the ${this.agentId} agent's delegation cap`));
     }, capMs);
 
     return {
       signal: AbortSignal.any([parent, cap.signal]),
       dispose: () => {
-        this.#clock.clearTimeout(handle);
-      },
-    };
-  }
-
-  #riskOf(name: string): ToolRisk {
-    return this.#tools.get(name)?.risk ?? 'safe';
-  }
-
-  /**
-   * A promise that resolves once the clock advances, and a way to stop waiting.
-   *
-   * Cancelling matters more than it looks: one turn can make dozens of tool
-   * calls, and a timer left armed on a real clock keeps the event loop alive
-   * after the turn that created it has ended.
-   */
-  #tick(delayMs: number): Tick {
-    let handle: TimerHandle | undefined;
-    const promise = new Promise<null>((resolve) => {
-      handle = this.#clock.setTimeout(() => {
-        resolve(null);
-      }, delayMs);
-    });
-    return {
-      promise,
-      cancel: () => {
-        if (handle !== undefined) this.#clock.clearTimeout(handle);
+        this.clock.clearTimeout(handle);
       },
     };
   }

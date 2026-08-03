@@ -32,7 +32,12 @@ import type { WebKey } from '@/i18n/keys.js';
  * can serve from its prefix cache, then the trailing turn that is re-read at
  * full price on every iteration of every turn.
  */
-const KNOWN_ORDER: readonly string[] = ['systemPrompt', 'tools', 'messages', 'runtimeBlock'];
+const KNOWN_ORDER: readonly string[] = [
+  'systemPrompt',
+  'tools',
+  'messages',
+  'runtimeBlock',
+];
 
 const LABELS: Readonly<Record<string, WebKey>> = {
   systemPrompt: 'context.labels.systemPrompt',
@@ -50,7 +55,11 @@ const LABELS: Readonly<Record<string, WebKey>> = {
  * is unattributed by construction and counted as uncached — the honest side to
  * err on for a number nobody can point at.
  */
-const CACHEABLE: ReadonlySet<string> = new Set(['systemPrompt', 'tools', 'messages']);
+const CACHEABLE: ReadonlySet<string> = new Set([
+  'systemPrompt',
+  'tools',
+  'messages',
+]);
 
 export interface ContextSegment {
   /** The breakdown key, or `other` for the unaccounted remainder. */
@@ -101,7 +110,8 @@ export function summariseContext(
 
   const accounted = named.reduce((total, section) => total + section.tokens, 0);
   const remainder = Math.max(0, estimatedTokens - accounted);
-  const sections = remainder > 0 ? [...named, { key: 'other', tokens: remainder }] : named;
+  const sections =
+    remainder > 0 ? [...named, { key: 'other', tokens: remainder }] : named;
 
   const segments = sections.map(({ key, tokens }) => ({
     key,

@@ -187,7 +187,10 @@ export type Usage = z.infer<typeof UsageSchema>;
  * infinity. A turn that produced no tokens has no rate, and a turn measured at
  * zero milliseconds was not measured.
  */
-export function tokensPerSecond(usage: Usage, elapsedMs: number): number | undefined {
+export function tokensPerSecond(
+  usage: Usage,
+  elapsedMs: number,
+): number | undefined {
   if (elapsedMs <= 0 || usage.completionTokens <= 0) return undefined;
   return (usage.completionTokens * 1000) / elapsedMs;
 }

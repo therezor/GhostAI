@@ -155,14 +155,22 @@ One JSON file, `~/.ghostai/config.json`. A missing file is normal — the schema
     "list": {
       "researcher": {
         "label": "Researcher",
-        "tools": { "read_file": "allow", "write_file": "allow", "exec": "allow" },
+        "tools": {
+          "read_file": "allow",
+          "write_file": "allow",
+          "exec": "allow"
+        },
         "toolbox": { "name": "web-research", "network": { "mode": "open" } }
       }
     }
   },
   "providers": {
     "ollama": { "type": "ollama" },
-    "ollama-gpu": { "type": "ollama", "label": "GPU box", "apiBase": "http://gpu.lan:11434/v1" }
+    "ollama-gpu": {
+      "type": "ollama",
+      "label": "GPU box",
+      "apiBase": "http://gpu.lan:11434/v1"
+    }
   },
   "server": { "host": "127.0.0.1", "port": 3000 }
 }

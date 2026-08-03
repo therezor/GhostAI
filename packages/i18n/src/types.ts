@@ -18,7 +18,11 @@
  * ship nothing. This one is in `index.ts`'s import graph, so it lands in `dist`.
  */
 
-import type { CliResources, SharedResources, WebResources } from './resources.js';
+import type {
+  CliResources,
+  SharedResources,
+  WebResources,
+} from './resources.js';
 
 declare module 'i18next' {
   interface CustomTypeOptions {

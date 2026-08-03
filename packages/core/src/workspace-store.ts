@@ -29,11 +29,17 @@
  */
 
 import { renameSync, statSync } from 'node:fs';
-import type { DatabaseSync, SQLOutputValue, StatementSync } from 'node:sqlite';
+import type { DatabaseSync, StatementSync } from 'node:sqlite';
 
 import { systemClock, type Clock } from './clock.js';
 import { GhostError } from './errors.js';
-import { ensureDir, sharedDirFor, workspaceDirFor, type GhostPaths } from './paths.js';
+import {
+  ensureDir,
+  sharedDirFor,
+  workspaceDirFor,
+  type GhostPaths,
+} from './paths.js';
+import { parseMetadata, rowReader, type Row } from './sqlite-row.js';
 import {
   DEFAULT_WORKSPACE_ID,
   RESERVED_WORKSPACE_IDS,
@@ -80,74 +86,53 @@ CREATE TABLE IF NOT EXISTS workspaces (
 CREATE UNIQUE INDEX IF NOT EXISTS workspaces_default ON workspaces(is_default) WHERE is_default = 1;
 `;
 
-type Row = Record<string, SQLOutputValue>;
-
-function readString(row: Row, column: string): string {
-  const value = row[column];
-  return typeof value === 'string' ? value : '';
-}
-
-function readInt(row: Row, column: string): number {
-  const value = row[column];
-  return typeof value === 'number' ? value : 0;
-}
-
-function parseMetadata(json: string): Readonly<Record<string, unknown>> {
-  try {
-    const parsed: unknown = JSON.parse(json);
-    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
-}
+const read = rowReader('workspaces');
 
 function rowToWorkspace(row: Row): WorkspaceRecord {
   return {
-    id: readString(row, 'id'),
-    name: readString(row, 'name'),
-    createdAtMs: readInt(row, 'created_at_ms'),
-    updatedAtMs: readInt(row, 'updated_at_ms'),
-    isDefault: readInt(row, 'is_default') === 1,
-    metadata: parseMetadata(readString(row, 'metadata_json')),
+    id: read.string(row, 'id'),
+    name: read.string(row, 'name'),
+    createdAtMs: read.int(row, 'created_at_ms'),
+    updatedAtMs: read.int(row, 'updated_at_ms'),
+    isDefault: read.int(row, 'is_default') === 1,
+    metadata: parseMetadata(read.string(row, 'metadata_json')),
   };
 }
 
 export class WorkspaceStore {
-  readonly #db: DatabaseSync;
-  readonly #paths: GhostPaths;
-  readonly #clock: Clock;
-  readonly #statements = new Map<string, StatementSync>();
+  private readonly db: DatabaseSync;
+  private readonly paths: GhostPaths;
+  private readonly clock: Clock;
+  private readonly statements = new Map<string, StatementSync>();
 
   constructor(options: WorkspaceStoreOptions) {
-    this.#db = options.database;
-    this.#paths = options.paths;
-    this.#clock = options.clock ?? systemClock;
+    this.db = options.database;
+    this.paths = options.paths;
+    this.clock = options.clock ?? systemClock;
 
-    this.#db.exec(SCHEMA);
+    this.db.exec(SCHEMA);
 
     // `INSERT OR IGNORE` for the same reason `ensureSession` uses it: two
     // processes opening the same file both end up with one row rather than one
     // of them failing on the primary key.
-    const now = this.#clock.now();
-    this.#stmt(
+    const now = this.clock.now();
+    this.stmt(
       `INSERT OR IGNORE INTO workspaces (id, name, created_at_ms, updated_at_ms, is_default)
        VALUES (?, ?, ?, ?, 1)`,
     ).run(DEFAULT_WORKSPACE_ID, 'Default', now, now);
   }
 
-  #stmt(sql: string): StatementSync {
-    const cached = this.#statements.get(sql);
+  private stmt(sql: string): StatementSync {
+    const cached = this.statements.get(sql);
     if (cached !== undefined) return cached;
-    const prepared = this.#db.prepare(sql);
-    this.#statements.set(sql, prepared);
+    const prepared = this.db.prepare(sql);
+    this.statements.set(sql, prepared);
     return prepared;
   }
 
   /** The default first, then by name — the order the switcher renders. */
   list(): WorkspaceRecord[] {
-    return this.#stmt(
+    return this.stmt(
       'SELECT * FROM workspaces ORDER BY is_default DESC, name COLLATE NOCASE ASC, id ASC',
     )
       .all()
@@ -155,7 +140,7 @@ export class WorkspaceStore {
   }
 
   get(id: string): WorkspaceRecord | undefined {
-    const row = this.#stmt('SELECT * FROM workspaces WHERE id = ?').get(id);
+    const row = this.stmt('SELECT * FROM workspaces WHERE id = ?').get(id);
     return row === undefined ? undefined : rowToWorkspace(row);
   }
 
@@ -175,7 +160,7 @@ export class WorkspaceStore {
       throw new GhostError('invalid_input', 'A workspace needs a name');
     }
 
-    const id = options.id ?? this.#uniqueSlug(deriveWorkspaceId(name));
+    const id = options.id ?? this.uniqueSlug(deriveWorkspaceId(name));
     if (!isWorkspaceId(id)) {
       throw new GhostError(
         'invalid_input',
@@ -184,17 +169,25 @@ export class WorkspaceStore {
       );
     }
     if (RESERVED_WORKSPACE_IDS.has(id)) {
-      throw new GhostError('invalid_input', `"${id}" is reserved and cannot name a workspace`, {
-        details: { id },
-      });
+      throw new GhostError(
+        'invalid_input',
+        `"${id}" is reserved and cannot name a workspace`,
+        {
+          details: { id },
+        },
+      );
     }
     if (this.get(id) !== undefined) {
-      throw new GhostError('conflict', `A workspace called "${id}" already exists`, {
-        details: { id },
-      });
+      throw new GhostError(
+        'conflict',
+        `A workspace called "${id}" already exists`,
+        {
+          details: { id },
+        },
+      );
     }
 
-    const directory = workspaceDirFor(this.#paths, id);
+    const directory = workspaceDirFor(this.paths, id);
     const existing = statSync(directory, { throwIfNoEntry: false });
     if (existing !== undefined && !existing.isDirectory()) {
       throw new GhostError(
@@ -205,15 +198,18 @@ export class WorkspaceStore {
     }
     ensureDir(directory);
 
-    const now = this.#clock.now();
-    this.#stmt(
+    const now = this.clock.now();
+    this.stmt(
       `INSERT INTO workspaces (id, name, created_at_ms, updated_at_ms, is_default, metadata_json)
        VALUES (?, ?, ?, ?, 0, ?)`,
     ).run(id, name, now, now, JSON.stringify(options.metadata ?? {}));
 
     const created = this.get(id);
     if (created === undefined) {
-      throw new GhostError('storage', `Workspace ${id} vanished immediately after creation`);
+      throw new GhostError(
+        'storage',
+        `Workspace ${id} vanished immediately after creation`,
+      );
     }
     return created;
   }
@@ -225,13 +221,13 @@ export class WorkspaceStore {
     }
     const existing = this.get(id);
     if (existing === undefined) {
-      throw new GhostError('not_found', `No workspace called "${id}"`, { details: { id } });
+      throw new GhostError('not_found', `No workspace called "${id}"`, {
+        details: { id },
+      });
     }
-    this.#stmt('UPDATE workspaces SET name = ?, updated_at_ms = ? WHERE id = ?').run(
-      trimmed,
-      this.#clock.now(),
-      id,
-    );
+    this.stmt(
+      'UPDATE workspaces SET name = ?, updated_at_ms = ? WHERE id = ?',
+    ).run(trimmed, this.clock.now(), id);
     return { ...existing, name: trimmed };
   }
 
@@ -268,7 +264,9 @@ export class WorkspaceStore {
   relocate(id: string, folder: string): WorkspaceRecord {
     const existing = this.get(id);
     if (existing === undefined) {
-      throw new GhostError('not_found', `No workspace called "${id}"`, { details: { id } });
+      throw new GhostError('not_found', `No workspace called "${id}"`, {
+        details: { id },
+      });
     }
     if (existing.isDefault) {
       throw new GhostError(
@@ -287,25 +285,37 @@ export class WorkspaceStore {
       );
     }
     if (RESERVED_WORKSPACE_IDS.has(folder)) {
-      throw new GhostError('invalid_input', `"${folder}" is reserved and cannot name a folder`, {
-        details: { id: folder },
-      });
+      throw new GhostError(
+        'invalid_input',
+        `"${folder}" is reserved and cannot name a folder`,
+        {
+          details: { id: folder },
+        },
+      );
     }
     if (this.get(folder) !== undefined) {
-      throw new GhostError('conflict', `A workspace called "${folder}" already exists`, {
-        details: { id: folder },
-      });
+      throw new GhostError(
+        'conflict',
+        `A workspace called "${folder}" already exists`,
+        {
+          details: { id: folder },
+        },
+      );
     }
 
-    const from = workspaceDirFor(this.#paths, id);
-    const to = workspaceDirFor(this.#paths, folder);
+    const from = workspaceDirFor(this.paths, id);
+    const to = workspaceDirFor(this.paths, folder);
     // Checked rather than left to `rename(2)`, which happily replaces an empty
     // directory at the destination — and the thing it would replace is a folder
     // the user or the agent put there.
     if (statSync(to, { throwIfNoEntry: false }) !== undefined) {
-      throw new GhostError('conflict', `"${folder}" already exists in the default workspace`, {
-        details: { id: folder },
-      });
+      throw new GhostError(
+        'conflict',
+        `"${folder}" already exists in the default workspace`,
+        {
+          details: { id: folder },
+        },
+      );
     }
 
     // The directory first. A row updated before a `rename(2)` that then fails —
@@ -315,30 +325,35 @@ export class WorkspaceStore {
     try {
       renameSync(from, to);
     } catch (error) {
-      throw new GhostError('storage', `Could not move the workspace folder to "${folder}"`, {
-        details: { id: folder },
-        cause: error,
-      });
+      throw new GhostError(
+        'storage',
+        `Could not move the workspace folder to "${folder}"`,
+        {
+          details: { id: folder },
+          cause: error,
+        },
+      );
     }
 
     // The layer agents working in one folder share is keyed by workspace id too,
     // and lives outside the jail. Nothing writes it yet — it arrives with the
     // memory tools — so this is usually a no-op, and the alternative when it is
     // not is a workspace that silently loses what it had pooled.
-    const sharedFrom = sharedDirFor(this.#paths, id);
+    const sharedFrom = sharedDirFor(this.paths, id);
     if (statSync(sharedFrom, { throwIfNoEntry: false }) !== undefined) {
-      renameSync(sharedFrom, sharedDirFor(this.#paths, folder));
+      renameSync(sharedFrom, sharedDirFor(this.paths, folder));
     }
 
-    this.#stmt('UPDATE workspaces SET id = ?, updated_at_ms = ? WHERE id = ?').run(
-      folder,
-      this.#clock.now(),
-      id,
-    );
+    this.stmt(
+      'UPDATE workspaces SET id = ?, updated_at_ms = ? WHERE id = ?',
+    ).run(folder, this.clock.now(), id);
 
     const moved = this.get(folder);
     if (moved === undefined) {
-      throw new GhostError('storage', `Workspace ${id} vanished while being moved to ${folder}`);
+      throw new GhostError(
+        'storage',
+        `Workspace ${id} vanished while being moved to ${folder}`,
+      );
     }
     return moved;
   }
@@ -359,19 +374,27 @@ export class WorkspaceStore {
   delete(id: string): void {
     const existing = this.get(id);
     if (existing === undefined) {
-      throw new GhostError('not_found', `No workspace called "${id}"`, { details: { id } });
-    }
-    if (existing.isDefault) {
-      throw new GhostError('conflict', 'The default workspace cannot be deleted', {
+      throw new GhostError('not_found', `No workspace called "${id}"`, {
         details: { id },
       });
     }
-    this.#stmt('DELETE FROM workspaces WHERE id = ?').run(id);
+    if (existing.isDefault) {
+      throw new GhostError(
+        'conflict',
+        'The default workspace cannot be deleted',
+        {
+          details: { id },
+        },
+      );
+    }
+    this.stmt('DELETE FROM workspaces WHERE id = ?').run(id);
   }
 
   /** `base`, or `base-2`, `base-3`… — the first that is free. */
-  #uniqueSlug(base: string): string {
-    if (this.get(base) === undefined && !RESERVED_WORKSPACE_IDS.has(base)) return base;
+  private uniqueSlug(base: string): string {
+    if (this.get(base) === undefined && !RESERVED_WORKSPACE_IDS.has(base)) {
+      return base;
+    }
     for (let suffix = 2; ; suffix += 1) {
       // Truncate the stem rather than the suffix, so a long name cannot produce
       // an id that fails the length rule.

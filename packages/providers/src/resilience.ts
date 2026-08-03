@@ -30,12 +30,22 @@
  * error propagates, which is the truthful outcome.
  */
 
-import { type Clock, hasImages, systemClock, withoutImages } from '@ghostai/core';
+import {
+  type Clock,
+  hasImages,
+  systemClock,
+  withoutImages,
+} from '@ghostai/core';
 import type { ChatMessage } from '@ghostai/protocol';
 
 import { type ProviderError, toProviderError } from './errors.js';
 import { estimateTokens } from './tokens.js';
-import type { ChatProvider, ChatRequest, ChatResult, ChatStreamEvent } from './types.js';
+import type {
+  ChatProvider,
+  ChatRequest,
+  ChatResult,
+  ChatStreamEvent,
+} from './types.js';
 
 /**
  * A repair the ladder can apply to a rejected request.
@@ -63,7 +73,9 @@ export interface DegradationStep {
  * error surfaces.
  */
 function isRepairable(error: ProviderError): boolean {
-  return error.reason === 'unsupported_param' || error.reason === 'invalid_request';
+  return (
+    error.reason === 'unsupported_param' || error.reason === 'invalid_request'
+  );
 }
 
 /**
@@ -74,8 +86,15 @@ function isRepairable(error: ProviderError): boolean {
  * `reasoning` by OpenRouter, and a step that only knew the first name would
  * decline to fire on exactly the endpoint that named the second.
  */
-function blamesOther(error: ProviderError, ...params: readonly string[]): boolean {
-  return error.param !== undefined && error.param !== '' && !params.includes(error.param);
+function blamesOther(
+  error: ProviderError,
+  ...params: readonly string[]
+): boolean {
+  return (
+    error.param !== undefined &&
+    error.param !== '' &&
+    !params.includes(error.param)
+  );
 }
 
 const dropReasoningEffort: DegradationStep = {
@@ -86,25 +105,32 @@ const dropReasoningEffort: DegradationStep = {
     !blamesOther(error, 'reasoning_effort', 'reasoning') &&
     request.reasoningEffort !== undefined,
   apply: (request) =>
-    request.reasoningEffort === undefined ? null : { ...request, reasoningEffort: undefined },
+    request.reasoningEffort === undefined
+      ? null
+      : { ...request, reasoningEffort: undefined },
 };
 
 const dropToolChoice: DegradationStep = {
   id: 'drop_tool_choice',
   description: 'retrying without tool_choice',
   applies: (error, request) =>
-    isRepairable(error) && !blamesOther(error, 'tool_choice') && request.toolChoice !== undefined,
+    isRepairable(error) &&
+    !blamesOther(error, 'tool_choice') &&
+    request.toolChoice !== undefined,
   // Only `tool_choice` goes, never `tools`. Removing the tools would produce a
   // turn where the model cannot act and answers from memory instead — a wrong
   // answer rather than a failed request, which is worse.
   apply: (request) =>
-    request.toolChoice === undefined ? null : { ...request, toolChoice: undefined },
+    request.toolChoice === undefined
+      ? null
+      : { ...request, toolChoice: undefined },
 };
 
 const stripImages: DegradationStep = {
   id: 'strip_images',
   description: 'retrying with images removed',
-  applies: (error, request) => isRepairable(error) && request.messages.some(hasImages),
+  applies: (error, request) =>
+    isRepairable(error) && request.messages.some(hasImages),
   apply: (request) => {
     if (!request.messages.some(hasImages)) return null;
     // The question that came with the image is still worth asking; a text-only
@@ -137,7 +163,8 @@ export function truncateOldestTurns(
   if (body.length <= 1) return null;
 
   const sizes = body.map((message) => estimateTokens(JSON.stringify(message)));
-  const target = sizes.reduce((total, size) => total + size, 0) * TRUNCATION_FRACTION;
+  const target =
+    sizes.reduce((total, size) => total + size, 0) * TRUNCATION_FRACTION;
 
   let dropped = 0;
   let cut = 0;
@@ -148,7 +175,9 @@ export function truncateOldestTurns(
   // whole run: two consecutive user turns is that shape, and more than two is
   // ordinary history nobody promised to keep.
   const trailingPair =
-    body.length >= 2 && body.at(-1)?.role === 'user' && body.at(-2)?.role === 'user';
+    body.length >= 2 &&
+    body.at(-1)?.role === 'user' &&
+    body.at(-2)?.role === 'user';
   const floor = body.length - (trailingPair ? 2 : 1);
   while (cut < floor && dropped < target) {
     dropped += sizes[cut] ?? 0;
@@ -170,7 +199,9 @@ export function truncateOldestTurns(
  * around it — that path owns consolidation and tool-output caps, neither of
  * which applies to a request already on its way out.
  */
-function alignToLegalStart(messages: readonly ChatMessage[]): readonly ChatMessage[] {
+function alignToLegalStart(
+  messages: readonly ChatMessage[],
+): readonly ChatMessage[] {
   const declared = new Set<string>();
   let start = 0;
   for (const [index, message] of messages.entries()) {
@@ -195,7 +226,8 @@ const dropPromptCacheKey: DegradationStep = {
   // field is a routing hint for the provider's prompt cache; without it requests
   // still cache, they just may not land on the machine already holding the
   // prefix. Everything below this point costs the answer something.
-  apply: (request) => (request.cacheKey === undefined ? null : { ...request, cacheKey: undefined }),
+  apply: (request) =>
+    request.cacheKey === undefined ? null : { ...request, cacheKey: undefined },
 };
 
 /**
@@ -213,7 +245,8 @@ const dropPromptCacheKey: DegradationStep = {
 const mergeTrailingUserTurn: DegradationStep = {
   id: 'merge_trailing_user',
   description: 'retrying with the trailing turn merged',
-  applies: (error, request) => isRepairable(error) && lastTwoAreUser(request.messages),
+  applies: (error, request) =>
+    isRepairable(error) && lastTwoAreUser(request.messages),
   apply: (request) => {
     const messages = request.messages;
     if (!lastTwoAreUser(messages)) return null;
@@ -306,8 +339,13 @@ export function backoffDelayMs(
   error: ProviderError,
   options: { baseDelayMs: number; maxDelayMs: number; jitter: () => number },
 ): number {
-  if (error.retryAfterMs !== undefined) return Math.min(error.retryAfterMs, options.maxDelayMs);
-  const exponential = Math.min(options.baseDelayMs * 2 ** (attempt - 1), options.maxDelayMs);
+  if (error.retryAfterMs !== undefined) {
+    return Math.min(error.retryAfterMs, options.maxDelayMs);
+  }
+  const exponential = Math.min(
+    options.baseDelayMs * 2 ** (attempt - 1),
+    options.maxDelayMs,
+  );
   return Math.round(exponential * options.jitter());
 }
 
@@ -489,7 +527,9 @@ async function* streamWithResilience(
           error,
         });
         yield* synthesiseStream(
-          await attempt(recovery.request, provider.id, config, (req) => provider.chat(req)),
+          await attempt(recovery.request, provider.id, config, (req) =>
+            provider.chat(req),
+          ),
         );
         return;
       }
@@ -500,12 +540,19 @@ async function* streamWithResilience(
 }
 
 /** Replays a non-streaming result as the events a streaming consumer expects. */
-export function* synthesiseStream(result: ChatResult): Generator<ChatStreamEvent, void, undefined> {
-  if (result.message.reasoning !== undefined && result.message.reasoning !== '') {
+export function* synthesiseStream(
+  result: ChatResult,
+): Generator<ChatStreamEvent, void, undefined> {
+  if (
+    result.message.reasoning !== undefined &&
+    result.message.reasoning !== ''
+  ) {
     yield { type: 'reasoning', text: result.message.reasoning };
   }
   for (const part of result.message.content) {
-    if (part.type === 'text' && part.text !== '') yield { type: 'text', text: part.text };
+    if (part.type === 'text' && part.text !== '') {
+      yield { type: 'text', text: part.text };
+    }
   }
   yield { type: 'done', result };
 }

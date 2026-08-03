@@ -15,7 +15,11 @@
 
 import { isLoopbackHost, type Config } from '@ghostai/protocol';
 import { systemClock, type Clock } from '@ghostai/core';
-import type { FastifyReply, FastifyRequest, onRequestHookHandler } from 'fastify';
+import type {
+  FastifyReply,
+  FastifyRequest,
+  onRequestHookHandler,
+} from 'fastify';
 
 // Loads `@fastify/cookie`'s augmentation of FastifyRequest/FastifyReply without
 // pulling the module into this file's runtime graph.
@@ -23,7 +27,11 @@ import type {} from '@fastify/cookie';
 
 import type { AuthSession, AuthStore } from './auth-store.js';
 import { unauthorized } from './errors.js';
-import { MEDIA_SECRET_NAME, verifyMediaToken, type MediaClaim } from './signing.js';
+import {
+  MEDIA_SECRET_NAME,
+  verifyMediaToken,
+  type MediaClaim,
+} from './signing.js';
 
 export const SESSION_COOKIE = 'ghost_session';
 const BEARER_PREFIX = 'bearer ';
@@ -51,7 +59,10 @@ export function sessionOf(request: FastifyRequest): AuthSession | undefined {
  */
 export function readCredential(request: FastifyRequest): string | undefined {
   const header = request.headers.authorization;
-  if (typeof header === 'string' && header.toLowerCase().startsWith(BEARER_PREFIX)) {
+  if (
+    typeof header === 'string' &&
+    header.toLowerCase().startsWith(BEARER_PREFIX)
+  ) {
     const token = header.slice(BEARER_PREFIX.length).trim();
     if (token !== '') return token;
   }
@@ -92,7 +103,10 @@ export function setSessionCookie(
   });
 }
 
-export function clearSessionCookie(request: FastifyRequest, reply: FastifyReply): void {
+export function clearSessionCookie(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): void {
   // The attributes have to match the ones it was set with or the browser keeps
   // the original cookie and clears nothing.
   reply.clearCookie(SESSION_COOKIE, {
@@ -116,7 +130,7 @@ export interface AuthHookOptions {
  * megabyte of JSON.
  */
 export function createAuthHook(options: AuthHookOptions): onRequestHookHandler {
-  return function authenticate(request, _reply, done) {
+  return function authenticate(request, reply, done) {
     // Disabling authentication is a boot-time decision, not a request-time one:
     // `assertBootPolicy` has already refused the combination that makes this
     // dangerous, so a loopback-only server can be reached without a login.
@@ -135,7 +149,9 @@ export function createAuthHook(options: AuthHookOptions): onRequestHookHandler {
     if (session === undefined) {
       // One message for a malformed token, an unknown one and an expired one.
       // Distinguishing them tells a caller which half of a guess was right.
-      done(unauthorized('You have been signed out. Sign in again to continue.'));
+      done(
+        unauthorized('You have been signed out. Sign in again to continue.'),
+      );
       return;
     }
 
@@ -176,10 +192,12 @@ export interface SignedHookOptions {
  * is enabled. A signature is checked whether or not the server has a password,
  * because it is not standing in for a login — it is naming a file.
  */
-export function createSignedHook(options: SignedHookOptions): onRequestHookHandler {
+export function createSignedHook(
+  options: SignedHookOptions,
+): onRequestHookHandler {
   const clock = options.clock ?? systemClock;
 
-  return function verifySignature(request, _reply, done) {
+  return function verifySignature(request, reply, done) {
     const token = (request.params as { token?: unknown } | undefined)?.token;
     if (typeof token !== 'string' || token === '') {
       done(unauthorized('A signed URL is required'));

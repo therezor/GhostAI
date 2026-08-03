@@ -34,7 +34,12 @@ export function AutoGrowTextarea({
       <div aria-hidden="true" className="auto-grow__mirror">
         {`${value}\n`}
       </div>
-      <textarea {...props} value={value} rows={1} className={cn('auto-grow__input', className)} />
+      <textarea
+        {...props}
+        value={value}
+        rows={1}
+        className={cn('auto-grow__input', className)}
+      />
     </div>
   );
 }
