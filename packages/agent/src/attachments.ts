@@ -81,6 +81,16 @@ export interface MaterialiseOptions {
   readonly maxImageBytes?: number;
   readonly maxTextBytes?: number;
   readonly maxTotalBytes?: number;
+  /**
+   * Whether images may be inlined at all. Defaults to yes.
+   *
+   * `false` is the agent's `visionEnabled` switched off, and it lands here
+   * rather than anywhere downstream because this is the only place an
+   * `ImagePart` is produced for a request. It is not a cap — the size the
+   * attachment happens to be is irrelevant — so it is answered before the two
+   * byte checks and never touches the shared budget.
+   */
+  readonly images?: boolean;
 }
 
 /**
@@ -224,6 +234,12 @@ export function materialiseFilePart(
   // holding no NUL byte, and `readText` would then happily fence a screenful of
   // binary as if it were the file's contents.
   if (mimeType.startsWith('image/')) {
+    // Before the byte checks and before the budget, because this is not a cap:
+    // the model cannot read an image of any size, so spending budget on one
+    // would take room away from the text attachments it *can* read.
+    if (options.images === false) {
+      return remember([textPart(`${line} — this model cannot read images; use the file tools`)]);
+    }
     if (sizeBytes > maxImageBytes) {
       return remember([textPart(`${line} — too large to show; use the file tools to read it`)]);
     }

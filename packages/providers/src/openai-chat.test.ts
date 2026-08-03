@@ -243,6 +243,39 @@ describe('openai-chat adapter', () => {
     expect(transport.calls[1]?.body.tool_choice).toBe('required');
   });
 
+  it('sends an effort straight through, and translates the one that is ours', async () => {
+    const transport = mockTransport().push(completion({ text: 'ok' }), completion({ text: 'ok' }));
+    const provider = createOpenAIChatProvider({
+      spec: specOf('ollama'),
+      fetchImpl: transport.fetchImpl,
+    });
+
+    await provider.chat({ ...base, reasoningEffort: 'high' });
+    expect(transport.calls[0]?.body.reasoning_effort).toBe('high');
+
+    // `off` is this project's word, not a wire value, so it may never reach the
+    // body verbatim. Absent a spec saying otherwise it becomes OpenAI's `none`.
+    await provider.chat({ ...base, reasoningEffort: 'off' });
+    expect(transport.calls[1]?.body.reasoning_effort).toBe('none');
+  });
+
+  it('spells `off` the way the table says, where a provider disagrees', async () => {
+    const transport = mockTransport().push(completion({ text: 'ok' }));
+    const provider = createOpenAIChatProvider({
+      spec: specOf('openrouter'),
+      apiKey: 'sk-or-test',
+      fetchImpl: transport.fetchImpl,
+    });
+
+    await provider.chat({ ...base, reasoningEffort: 'off' });
+
+    // OpenRouter normalises reasoning into its own object and ignores the effort
+    // string, so sending `reasoning_effort` as well would be a field it has no
+    // use for — which is the thing `reasoningOffBody` exists to avoid.
+    expect(transport.calls[0]?.body.reasoning).toEqual({ enabled: false });
+    expect(transport.calls[0]?.body.reasoning_effort).toBeUndefined();
+  });
+
   it('classifies a 200 with no choices as a server-side glitch', async () => {
     const transport = mockTransport().push(
       new Response(JSON.stringify({ choices: [] }), {

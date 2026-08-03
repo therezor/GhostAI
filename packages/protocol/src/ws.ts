@@ -426,6 +426,17 @@ export const NoticeKindSchema = z.enum([
    * the turn could do rather than narrowing it.
    */
   'agent_fallback',
+  /**
+   * The model called a tool on an agent whose `toolsEnabled` is off.
+   *
+   * Separate from `approval_denied`, which it would otherwise be filed under,
+   * because nothing was denied: the agent's permission map still says `allow`
+   * and would run the call the moment this agent is pointed at a model that can
+   * take a tool list. What happened is that the model invented a call it was
+   * never offered — the request carried no `tools` at all — so the notice is
+   * about a capability, not about a decision anyone made.
+   */
+  'tools_disabled',
 ]);
 export type NoticeKind = z.infer<typeof NoticeKindSchema>;
 

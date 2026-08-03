@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_SYSTEM_PROMPT_TEMPLATE,
   PROMPT_PLACEHOLDERS,
+  RAW_PROMPT_PLACEHOLDERS,
   renderPromptTemplate,
   unknownPlaceholders,
   type PromptValues,
@@ -22,7 +23,6 @@ const VALUES: PromptValues = {
   workspaceId: 'acme',
   workspaceRoot: '/home/ghost/.ghostai/workspace/acme',
   runtime: 'Linux x64, Node 22.0.0',
-  platformPolicy: '## Platform policy (POSIX)\n\n- Standard shell tools are available.',
 };
 
 describe('renderPromptTemplate', () => {
@@ -108,12 +108,24 @@ describe('DEFAULT_SYSTEM_PROMPT_TEMPLATE', () => {
     expect(DEFAULT_SYSTEM_PROMPT_TEMPLATE).not.toContain('{{workspaceRoot}}');
     expect(DEFAULT_SYSTEM_PROMPT_TEMPLATE).not.toContain('{{runtime}}');
 
-    // The three it does use, so this test fails if one is dropped by accident
+    // The two it does use, so this test fails if one is dropped by accident
     // rather than silently rendering a prompt with a hole in it.
-    for (const placeholder of ['name', 'workspaceId', 'platformPolicy'] as const) {
+    for (const placeholder of ['name', 'workspaceId'] as const) {
       expect(PROMPT_PLACEHOLDERS).toContain(placeholder);
       expect(DEFAULT_SYSTEM_PROMPT_TEMPLATE).toContain(`{{${placeholder}}}`);
     }
+  });
+
+  it('names no section it cannot leave out', () => {
+    // `{{platformPolicy}}` used to be here, and the command policy is now a
+    // section beside the toolbox and the tool-output policy instead. A
+    // placeholder always renders to *something* — an empty string still leaves
+    // the blank lines the template wrote around it — so a section that may not
+    // apply cannot be one. Raw mode keeps the placeholder, because it places
+    // every section itself and has nowhere else to ask.
+    expect(DEFAULT_SYSTEM_PROMPT_TEMPLATE).not.toContain('{{platformPolicy}}');
+    expect(PROMPT_PLACEHOLDERS).not.toContain('platformPolicy');
+    expect(RAW_PROMPT_PLACEHOLDERS).toContain('platformPolicy');
   });
 
   it('renders to a prompt with no braces left in it', () => {
@@ -121,10 +133,7 @@ describe('DEFAULT_SYSTEM_PROMPT_TEMPLATE', () => {
 
     expect(rendered).not.toContain('{{');
     expect(rendered).toContain('# Reviewer');
-    expect(rendered).toContain('To the file tools it is the');
+    expect(rendered).toContain('It is the only place you');
     expect(rendered).toContain('## Guidelines');
-    // Whatever `platformPolicy` was rendered with. The wording is the agent
-    // package's, because it is the half that knows where `exec` lands.
-    expect(rendered).toContain(VALUES.platformPolicy);
   });
 });

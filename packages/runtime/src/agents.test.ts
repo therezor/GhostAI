@@ -101,6 +101,25 @@ describe('resolveAgent', () => {
     expect(resolveAgent(config, undefined).defaults.reasoningEffort).toBeUndefined();
   });
 
+  it('lets one agent turn off a capability the rest of the install keeps', () => {
+    // The reason these are per agent: two agents on one install routinely run on
+    // two models, and "this model cannot see" is a fact about one of them.
+    const config = configWith({
+      agents: {
+        defaults: { model: 'claude-opus-5' },
+        list: { local: { model: 'qwen3:8b', visionEnabled: false, toolsEnabled: false } },
+      },
+    });
+
+    const local = resolveAgent(config, 'local');
+    expect(local.defaults.visionEnabled).toBe(false);
+    expect(local.defaults.toolsEnabled).toBe(false);
+
+    const fallback = resolveAgent(config, undefined);
+    expect(fallback.defaults.visionEnabled).toBe(true);
+    expect(fallback.defaults.toolsEnabled).toBe(true);
+  });
+
   it('never lets an agent move its own workspace', () => {
     const config = configWith({
       agents: { defaults: { workspace: '/tmp/shared' }, list: { reviewer: {} } },

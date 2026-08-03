@@ -396,7 +396,7 @@ test.describe('agents', () => {
     const body = (await context.json()) as { systemPrompt: string };
 
     expect(body.systemPrompt).toContain('# Plain');
-    expect(body.systemPrompt).toContain('To the file tools it is the');
+    expect(body.systemPrompt).toContain('It is the only place you');
     expect(body.systemPrompt).toContain('## Guidelines');
   });
 

@@ -42,7 +42,7 @@
 export const SECTION_SEPARATOR = '\n\n---\n\n';
 
 /**
- * The five values a prompt template may ask for.
+ * The four values the identity template may ask for.
  *
  * Deliberately short, and deliberately without a `{{date}}` or an
  * `{{iteration}}`. The static half of the prompt is the provider's cached
@@ -62,19 +62,25 @@ export const SECTION_SEPARATOR = '\n\n---\n\n';
  *    prompt that leaks the operator's home directory layout to the provider.
  *  - `runtime` names the host OS, which is where `exec` runs only when the agent
  *    has no toolbox. For a toolboxed agent it describes a machine none of its
- *    commands touch, and `{{platformPolicy}}` now states the correct one.
+ *    commands touch, and the command policy section states the correct one.
  *
  * They stay in this list because a custom prompt may reasonably want them — an
  * agent whose job is to talk about the host, say — and removing a placeholder
  * silently changes every stored template that uses it.
+ *
+ * **`platformPolicy` is deliberately absent, and used to be here.** The command
+ * policy is a *section* now, placed beside the toolbox advertisement and the
+ * tool-output policy rather than interpolated into this template. A placeholder
+ * cannot express "this section does not apply": it renders to a string, and an
+ * empty one leaves the blank lines the template wrote around it. A section that
+ * does not apply is simply not in the list. It is still the operator's to edit —
+ * `DEFAULT_PLATFORM_HOST_TEMPLATE` and its toolbox twin, on the Running commands
+ * box in the agent editor — it is just no longer this template's variable.
+ *
+ * `RAW_PROMPT_PLACEHOLDERS` keeps it, because raw mode places every section
+ * itself and has to be able to name this one.
  */
-export const PROMPT_PLACEHOLDERS = [
-  'name',
-  'workspaceId',
-  'workspaceRoot',
-  'runtime',
-  'platformPolicy',
-] as const;
+export const PROMPT_PLACEHOLDERS = ['name', 'workspaceId', 'workspaceRoot', 'runtime'] as const;
 
 export type PromptPlaceholder = (typeof PROMPT_PLACEHOLDERS)[number];
 
@@ -268,6 +274,16 @@ const GUIDELINES = `## Guidelines
  * with the five varying values turned into placeholders. It is the seed every
  * customised prompt starts from, so the wording matters more than it did when
  * it was unreachable: an operator's first edit is a diff against this.
+ *
+ * **Nothing here names a tool, and the Workspace section is why the rule is
+ * worth stating.** This template is the identity, so it is sent on every turn
+ * — including a turn on a model with `toolsEnabled` off, which is offered no
+ * tools at all. The tool-shaped sections are withdrawn for that turn; this one
+ * cannot be, because an agent always has an identity. So it describes the
+ * workspace as a place rather than as something the file tools address, and
+ * stays true either way. It used to open "To the file tools it is the whole
+ * filesystem", which on a tools-off turn was a sentence about equipment the
+ * model did not have.
  */
 export const DEFAULT_SYSTEM_PROMPT_TEMPLATE = `# {{name}}
 
@@ -276,12 +292,10 @@ their files and their shell. You work on their behalf and answer to them alone.
 
 ## Workspace
 
-You are working in the \`{{workspaceId}}\` workspace. To the file tools it is the
-whole filesystem: \`/notes/todo.md\`, \`notes/todo.md\` and \`../notes/todo.md\`
-all name the same file in it, and no path you can write reaches outside it.
-Prefer the plain relative form — say \`notes/todo.md\`.
-
-{{platformPolicy}}
+You are working in the \`{{workspaceId}}\` workspace. It is the only place you
+can read or write, and it behaves as the whole filesystem: \`/notes/todo.md\`,
+\`notes/todo.md\` and \`../notes/todo.md\` all name one file inside it. Write the
+plain relative form — \`notes/todo.md\`.
 
 ${GUIDELINES}`;
 
@@ -484,6 +498,14 @@ its slash, and is part of the data.`;
 export const RAW_PROMPT_PLACEHOLDERS = [
   ...PROMPT_PLACEHOLDERS,
   ...LIVE_PROMPT_PLACEHOLDERS,
+  /**
+   * The rendered command policy. Empty on a turn with no tools.
+   *
+   * Named here and not in `PROMPT_PLACEHOLDERS`, which is the difference between
+   * the two modes: template mode places this section itself and can leave it
+   * out, raw mode places nothing and so has to be able to ask for it.
+   */
+  'platformPolicy',
   /** The rendered toolbox section, with a leading blank line. Empty without one. */
   'toolbox',
   /** The rendered tool-output policy. No leading blank line — it is usually placed alone. */

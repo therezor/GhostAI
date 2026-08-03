@@ -49,6 +49,36 @@
  * definition. This module owns the *facts* it is rendered with, which are the
  * ones only the host knows: the platform, the architecture and the Node
  * version. Protocol owns the shape; agent owns the values.
+ *
+ * ## Who decides what
+ *
+ * Three jobs, and they belong to three different places. Fusing any two of them
+ * is what produced the mess this note now guards against.
+ *
+ *  1. **What a section says** — the operator, through the config. Their wording
+ *     carries three states in one string: empty inherits the built-in, a single
+ *     space deletes the section, anything else replaces it. That encoding is the
+ *     config's, it is decoded here at `templateOr` and `renderToolPolicy`, and
+ *     nothing above this module should be writing values into it.
+ *  2. **Whether a section applies to this turn** — the caller, and only the
+ *     caller. `AgentLoop` knows whether the model is being sent tools; this
+ *     module never asks and is never told. It is expressed by handing over
+ *     `PromptTools` or not handing it over, so the answer arrives as the
+ *     presence of an input rather than as a flag to branch on.
+ *  3. **What the prompt looks like** — this module. Render each section from its
+ *     inputs, place it in the half that fits, join.
+ *
+ * The rule that falls out, and the one worth holding: **a section that does not
+ * apply has no input, and a section with no input renders nothing.** No builder
+ * below takes a boolean saying a feature is off, and none of them needs one —
+ * which is what stops "tools are off" from having to be repeated in each of
+ * them, and stops the next such switch from having to be repeated again.
+ *
+ * The tool-output policy is the case that proves it. Which half emits it is
+ * decided by the operator's own template, so *two* builders place it — and any
+ * gate written as a condition inside a builder would have had to be written
+ * twice, correctly, forever. Withdrawn at the input, neither half has anything
+ * to place and neither knows why.
  */
 
 import { arch, platform as hostPlatform, versions } from 'node:process';
@@ -143,8 +173,15 @@ export interface ContextContributor {
 /**
  * Who the turn is being run by.
  *
- * Both fields come from the resolved agent, and both are stable for the life of
- * a session — which is what lets them sit in the cached half of the prompt.
+ * Every field comes from the resolved agent and is stable for the life of a
+ * session, which is what lets them sit in the cached half of the prompt.
+ *
+ * The tool-shaped templates are deliberately **not** here — they are
+ * `PromptTools`, a separate argument. An agent always has an identity; it does
+ * not always have tools, and the sections that describe tools have to be
+ * absent, not merely empty, on a turn that has none. Splitting them is what
+ * lets a builder answer "is this section placed?" from its own inputs instead
+ * of from a flag someone remembered to thread through.
  */
 export interface PromptAgent {
   /** Empty falls back to `GhostAI`. Fills `{{name}}`. */
@@ -158,17 +195,6 @@ export interface PromptAgent {
    */
   readonly livePrompt?: string;
   readonly wrapUpPrompt?: string;
-  /**
-   * The three sections that used to be composed in code with no way to reach
-   * them: the platform note, the toolbox advertisement and the tool-output
-   * policy. Empty means the built-in; a single space removes the section.
-   *
-   * They sit here rather than being derived, so "what does this agent send"
-   * has one answer held by one object — the same reason `systemPrompt` does.
-   */
-  readonly platformPrompt?: string;
-  readonly toolboxPrompt?: string;
-  readonly toolPolicyPrompt?: string;
   /**
    * Whether `systemPrompt` is the static half or the entire system message.
    *
@@ -217,11 +243,30 @@ export interface PromptToolbox {
   readonly docs?: string;
 }
 
-export interface BuildStaticPromptOptions {
-  readonly context: StaticPromptContext;
-  /** Absent is the unnamed default agent: the built-in template, rendered as `GhostAI`. */
-  readonly agent?: PromptAgent;
-  readonly contributors?: readonly ContextContributor[];
+/**
+ * Everything the prompt says about tools — or, when absent, that it says none of
+ * it.
+ *
+ * **Absence is the meaning.** A turn whose model is sent no tools passes no
+ * `tools` at all, and the three sections that describe tools then have no inputs
+ * to render from: the toolbox advertisement, the tool-output policy, and the
+ * command policy that says where `exec` lands. None of them needs to be told
+ * why. That is the whole reason this is a group rather than three optional
+ * fields beside `agent`, and it is why there is no boolean anywhere below —
+ * a builder that branched on "are tools on" would be a builder that has to be
+ * told twice, once per half of the prompt the policy can land in.
+ *
+ * Each field is the *operator's wording* for its section and keeps the config's
+ * three states: absent or empty inherits the built-in, a single space removes
+ * the section, anything else replaces it. Those are decisions a person made
+ * about a section that exists. Whether it exists at all is this object.
+ *
+ * Written `?: T | undefined` rather than `?: T`, against the repo's
+ * `exactOptionalPropertyTypes`, for the reason `ChatRequest` is: the caller
+ * assembles this by copying fields straight off a resolved agent, and with a
+ * bare `?:` every one of them would need a spread to express "not set".
+ */
+export interface PromptTools {
   /**
    * The toolbox this agent works in, when it has one.
    *
@@ -230,8 +275,27 @@ export interface BuildStaticPromptOptions {
    * of programs the model already knows from pretraining, and declaring them as
    * schemas would cost thousands of tokens every turn to say what forty say
    * here. It sits in the static half so a provider caches it once per session.
+   *
+   * Absent means this agent runs its commands on the host — which is a different
+   * statement from the whole object being absent, and the command policy below
+   * reads both.
    */
-  readonly toolbox?: PromptToolbox;
+  readonly toolbox?: PromptToolbox | undefined;
+  /** Wording for the toolbox advertisement. Only placed when `toolbox` is set. */
+  readonly toolboxPrompt?: string | undefined;
+  /** Wording for the tool-output policy — what the delimiters around a result mean. */
+  readonly policyPrompt?: string | undefined;
+  /** Wording for the command policy — where `exec` lands, and what is available there. */
+  readonly platformPrompt?: string | undefined;
+}
+
+export interface BuildStaticPromptOptions {
+  readonly context: StaticPromptContext;
+  /** Absent is the unnamed default agent: the built-in template, rendered as `GhostAI`. */
+  readonly agent?: PromptAgent;
+  readonly contributors?: readonly ContextContributor[];
+  /** Absent means this model is sent no tools, so no tool-shaped section is placed. */
+  readonly tools?: PromptTools | undefined;
   /** Injected so the prompt is assertable without depending on the test host. */
   readonly platform?: NodeJS.Platform;
   /** Overrides the derived `<os> <arch>, Node <version>` line. */
@@ -251,11 +315,16 @@ export interface BuildRuntimeBlockOptions {
   readonly livePrompt?: string;
   readonly wrapUpPrompt?: string;
   /**
-   * The tool-output policy, as a template. Empty means the built-in; a single
-   * space removes the section, leaving the envelopes unexplained but still in
-   * place — `wrapToolOutput` does not read this.
+   * Absent means this model is sent no tools, so no tool-shaped section is
+   * placed. Only `policyPrompt` is read here — and only when it names the
+   * delimiter, which is what moves it out of the cached half and into this one.
+   *
+   * The same object the static half receives, rather than the one field this
+   * half happens to use, because which half emits the policy is the operator's
+   * decision and not this signature's. Passing them the same thing is what
+   * makes "the two conditions are exact complements" checkable.
    */
-  readonly toolPolicyPrompt?: string;
+  readonly tools?: PromptTools | undefined;
   /** This turn's tool-output nonce. See the module header for why it lives here. */
   readonly nonce: string;
   readonly contributors?: readonly ContextContributor[];
@@ -329,9 +398,10 @@ function osLabel(platform: NodeJS.Platform): string {
 /**
  * Where commands run, and what that place is like.
  *
- * This fills `{{platformPolicy}}`, and it is generated rather than written into
- * the template because it is the one part of the identity half that depends on
- * *placement*. The same agent text has to be true whether `exec` lands on the
+ * Its own section in template mode, and `{{platformPolicy}}` in raw mode. It is
+ * generated rather than written into the identity because it is the one part of
+ * the static half that depends on *placement*. The same agent text has to be
+ * true whether `exec` lands on the
  * host or in a container, and those two are opposite on every point that matters:
  * whether the workspace confines the command, whether a shell is available, and
  * which OS's tools exist.
@@ -352,9 +422,14 @@ function commandPolicy(
   platform: NodeJS.Platform,
   runtimeLabel: string,
   workspaceId: string,
-  toolbox: PromptToolbox | undefined,
-  template: string | undefined,
+  tools: PromptTools | undefined,
 ): string {
+  // No tools, no commands, nothing to say about where they land. First, because
+  // every line below describes running one — including the sentence about the
+  // file tools, which are tools too.
+  if (tools === undefined) return '';
+
+  const { toolbox, platformPrompt: template } = tools;
   const boxed = toolbox !== undefined && toolbox.name !== '';
 
   // The branch survives only to pick which default applies. An *override* needs
@@ -378,6 +453,12 @@ function commandPolicy(
       : `\n\n- Standard shell tools and UTF-8 are available.
 - Prefer the file tools where they are simpler or more reliable than a command.`;
 
+  // Bare text, no leading break. It is a section now, and the separator between
+  // sections is `buildStaticPrompt`'s to write — which is the whole reason it
+  // stopped being a `{{platformPolicy}}` placeholder in the identity template.
+  // A placeholder renders to a string and an empty one leaves the blank lines
+  // the template wrote around it; a section that does not apply is simply not
+  // in the list.
   return renderPromptTemplate(stored, {
     runtime: runtimeLabel,
     platform,
@@ -439,7 +520,6 @@ function identity(
   platform: NodeJS.Platform,
   runtimeLabel: string,
   agent: PromptAgent | undefined,
-  toolbox: PromptToolbox | undefined,
 ): string {
   const label = agent?.label ?? '';
   const stored = agent?.systemPrompt ?? '';
@@ -456,13 +536,6 @@ function identity(
     // than withholding it. A custom prompt that asks for it still gets it.
     workspaceRoot,
     runtime: runtimeLabel,
-    platformPolicy: commandPolicy(
-      platform,
-      runtimeLabel,
-      workspaceId,
-      toolbox,
-      agent?.platformPrompt,
-    ),
   });
 }
 
@@ -488,15 +561,26 @@ export async function buildStaticPrompt(options: BuildStaticPromptOptions): Prom
     platform,
     runtimeLabel,
     options.agent,
-    options.toolbox,
   ).trim();
 
   const sections: string[] = rendered === '' ? [] : [rendered];
 
+  // Ahead of the toolbox advertisement, which says "the container described
+  // below" and means this one: the policy states where commands land, the
+  // advertisement says what is in the box. Reversing them makes the second
+  // sentence point backwards.
+  const commands = commandPolicy(
+    platform,
+    runtimeLabel,
+    options.context.workspaceId,
+    options.tools,
+  );
+  if (commands !== '') sections.push(commands);
+
   // Before contributors, after the identity: it describes the environment every
   // later section is talking about, and a model told what it can run before it
   // is told what to do needs fewer turns to discover the difference.
-  const toolbox = renderToolbox(options.toolbox, options.agent?.toolboxPrompt);
+  const toolbox = renderToolbox(options.tools?.toolbox, options.tools?.toolboxPrompt);
   if (toolbox !== '') sections.push(toolbox);
 
   // The tool-output policy, when it names no delimiter — which the default does
@@ -505,10 +589,8 @@ export async function buildStaticPrompt(options: BuildStaticPromptOptions): Prom
   // request of every turn to say something the model had already been told.
   // `buildRuntimeBlock` places it instead when a custom template asks for the
   // tag, and the two conditions are exact complements, so it appears once.
-  if (toolPolicyIsStatic(options.agent?.toolPolicyPrompt)) {
-    const policy = renderToolPolicy(options.agent?.toolPolicyPrompt);
-    if (policy !== '') sections.push(policy);
-  }
+  const policy = staticToolPolicy(options.tools);
+  if (policy !== '') sections.push(policy);
 
   sections.push(...(await contributorSections(options.contributors, options.context)));
 
@@ -588,6 +670,28 @@ function toolPolicyIsStatic(template: string | undefined): boolean {
   const stored = template ?? '';
   if (stored !== '' && stored.trim() === '') return false;
   return !toolPolicyUsesNonce(stored);
+}
+
+/**
+ * The policy as the cached half should carry it — nothing, when it belongs to
+ * the other half or when there are no tools to have output.
+ *
+ * A pair with `runtimeToolPolicy` below, and they are exact complements on the
+ * `toolPolicyIsStatic` test, so between them the section appears once or not at
+ * all. Written as two named functions rather than as a condition at each call
+ * site because "not placed here" has three causes — no tools, a deleted
+ * template, the other half owns it — and a reader should have to hold one name
+ * rather than three.
+ */
+function staticToolPolicy(tools: PromptTools | undefined): string {
+  if (tools === undefined || !toolPolicyIsStatic(tools.policyPrompt)) return '';
+  return renderToolPolicy(tools.policyPrompt);
+}
+
+/** The policy as the per-iteration half should carry it. See `staticToolPolicy`. */
+function runtimeToolPolicy(tools: PromptTools | undefined, nonce: string): string {
+  if (tools === undefined || toolPolicyIsStatic(tools.policyPrompt)) return '';
+  return renderToolPolicy(tools.policyPrompt, nonce);
 }
 
 function liveTime(nowMs: number, timeZone: string): string {
@@ -681,10 +785,8 @@ export function buildRuntimeBlock(options: BuildRuntimeBlockOptions): string {
   // `buildStaticPrompt`, so exactly one of the two places emits it. A default
   // policy is prose about a mechanism and belongs in the cached half; one that
   // spells the tag out has to be rebuilt with the turn.
-  if (!toolPolicyIsStatic(options.toolPolicyPrompt)) {
-    const policy = renderToolPolicy(options.toolPolicyPrompt, options.nonce);
-    if (policy !== '') sections.push(policy);
-  }
+  const policy = runtimeToolPolicy(options.tools, options.nonce);
+  if (policy !== '') sections.push(policy);
 
   // Last, so it is the final thing read before the model answers. A correction
   // buried above a few hundred tokens of policy is a correction competing with
@@ -731,7 +833,15 @@ export function runtimeReminder(block: string): string {
 export interface BuildRawPromptOptions {
   readonly context: RuntimePromptContext;
   readonly agent?: PromptAgent;
-  readonly toolbox?: PromptToolbox;
+  /**
+   * Absent means this model is sent no tools, so `{{toolbox}}`, `{{toolPolicy}}`
+   * and `{{platformPolicy}}` render to nothing.
+   *
+   * Rendering to nothing rather than being dropped is the only answer raw mode
+   * can give: the operator placed those placeholders, so the layout around them
+   * is theirs and this is not free to remove a line they wrote.
+   */
+  readonly tools?: PromptTools | undefined;
   readonly platform?: NodeJS.Platform;
   readonly runtimeLabel?: string;
   readonly nonce: string;
@@ -784,7 +894,7 @@ export function buildRawPrompt(options: BuildRawPromptOptions): string {
   const template = stored.trim() === '' ? DEFAULT_SYSTEM_PROMPT_TEMPLATE : stored;
 
   const left = context.maxIterations - context.iteration + 1;
-  const toolbox = renderToolbox(options.toolbox, options.agent?.toolboxPrompt);
+  const toolbox = renderToolbox(options.tools?.toolbox, options.tools?.toolboxPrompt);
 
   const runtimeSections: string[] = [];
   for (const contributor of options.contributors ?? []) {
@@ -799,13 +909,7 @@ export function buildRawPrompt(options: BuildRawPromptOptions): string {
     workspaceId: context.workspaceId,
     workspaceRoot: context.workspaceRoot,
     runtime: runtimeLabel,
-    platformPolicy: commandPolicy(
-      platform,
-      runtimeLabel,
-      context.workspaceId,
-      options.toolbox,
-      options.agent?.platformPrompt,
-    ),
+    platformPolicy: commandPolicy(platform, runtimeLabel, context.workspaceId, options.tools),
     time: liveTime(context.nowMs, timeZone),
     wrapUp:
       context.maxIterations > 0 && left <= ITERATION_WARNING_AT
@@ -828,7 +932,8 @@ export function buildRawPrompt(options: BuildRawPromptOptions): string {
     // anyway, and a `{{toolPolicy}}` that named no delimiter would quietly stop
     // saying what it used to — the placeholder means "the tool-output policy",
     // not "most of it".
-    toolPolicy: rawToolPolicy(options.agent?.toolPolicyPrompt, options.nonce),
+    toolPolicy:
+      options.tools === undefined ? '' : rawToolPolicy(options.tools.policyPrompt, options.nonce),
     nonce: options.nonce,
     tag: toolOutputTag(options.nonce),
     contributors: statics === '' ? '' : `${SECTION_SEPARATOR}${statics}`,

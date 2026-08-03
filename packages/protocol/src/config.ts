@@ -31,7 +31,17 @@ import {
 /** A duration in milliseconds where `0` disables the limit. */
 const OptionalDurationMs = z.number().int().nonnegative();
 
-export const ReasoningEffortSchema = z.enum(['minimal', 'low', 'medium', 'high']);
+/**
+ * How hard to ask the model to think, where `off` is a value and unset is not.
+ *
+ * The distinction is the whole point of having `off` at all. Unset means the
+ * request carries no reasoning parameter and the provider applies its own —
+ * which is the only thing that works against an endpoint that rejects the field
+ * outright. `off` is a statement: this model thinks by default and I do not
+ * want it to, so send whatever this wire spells that as. What that is per
+ * endpoint lives in `ProviderSpec.reasoningOffBody`.
+ */
+export const ReasoningEffortSchema = z.enum(['off', 'minimal', 'low', 'medium', 'high']);
 export type ReasoningEffort = z.infer<typeof ReasoningEffortSchema>;
 
 /**
@@ -153,6 +163,34 @@ export const AgentDefaultsSchema = z.object({
   loopWallTimeoutMs: OptionalDurationMs.default(0),
   subagentTimeoutMs: OptionalDurationMs.default(0),
   reasoningEffort: ReasoningEffortSchema.optional(),
+  /**
+   * Whether attached images are sent to the model as images.
+   *
+   * Off, an attachment still reaches the model — as the path line it always
+   * carries, which `read_file` and the rest resolve — but never as an `image`
+   * part. That is the difference between a text-only model answering "I cannot
+   * see it, let me open it" and the request being rejected outright.
+   *
+   * The reactive half of this already existed: `stripImages` in
+   * `@ghostai/providers` removes images *after* an endpoint has refused them.
+   * This is the same repair moved to before the round trip, for the case where
+   * the operator already knows.
+   */
+  visionEnabled: z.boolean().default(true),
+  /**
+   * Whether the request advertises any tools at all.
+   *
+   * Off is not the same as denying every tool: the agent's permissions are left
+   * exactly as configured and simply not offered to *this* model. Switch the
+   * agent to a model that can call tools and its toolset is still there.
+   *
+   * It has no reactive counterpart, which is why it is here. The degradation
+   * ladder deliberately never strips `tools` — a turn where the model cannot
+   * act and answers from memory is a wrong answer rather than a failed request
+   * — so an endpoint that cannot take a tool list has, until now, had no way to
+   * be used at all.
+   */
+  toolsEnabled: z.boolean().default(true),
   learningEnabled: z.boolean().default(true),
   /** Turns between proactive-learning passes. */
   learningInterval: z.number().int().positive().default(10),

@@ -270,6 +270,13 @@
     color: var(--danger-fg);
   }
 
+  /* Beside `page__error` rather than in a screen's own stylesheet, so a note
+     about a state the screen survives has one answer everywhere. Colour only —
+     it composes with `page__note`, which owns the size and the measure. */
+  .page__warning {
+    color: var(--warning-fg);
+  }
+
   .page__empty {
     --gap: var(--space-2);
 

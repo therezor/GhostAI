@@ -1,5 +1,5 @@
 /**
- * The five advisory notices, as badges.
+ * The advisory notices, as badges.
  *
  * `prompt_injection` is the one that shaped the rest. Detection in GhostAI is
  * **non-destructive**: the tool output passes through intact and the nonce
@@ -14,7 +14,15 @@
  * an image dropped to fit a context window are not the same news.
  */
 
-import { AlertTriangle, BrainCircuit, Info, ShieldAlert, Scissors, ShieldX } from 'lucide-react';
+import {
+  AlertTriangle,
+  BrainCircuit,
+  Info,
+  ShieldAlert,
+  Scissors,
+  ShieldX,
+  Wrench,
+} from 'lucide-react';
 import type { JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { WebKey } from '@/i18n/keys.js';
@@ -41,6 +49,10 @@ const NOTICES: Record<
   // this conversation names did not, so the turn ran with wider powers than
   // were configured for it.
   agent_fallback: { label: 'chat.notices.agent_fallback', tone: 'warning', icon: BrainCircuit },
+  // Warning rather than danger: nothing was blocked and nothing was at risk —
+  // the model reached for a tool this model is not sent, which is a mismatch to
+  // fix in the agent's settings rather than an incident.
+  tools_disabled: { label: 'chat.notices.tools_disabled', tone: 'warning', icon: Wrench },
 };
 
 /** Neutral is the base rule in `chat.css`, so it needs no modifier. */

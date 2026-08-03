@@ -66,9 +66,16 @@ function isRepairable(error: ProviderError): boolean {
   return error.reason === 'unsupported_param' || error.reason === 'invalid_request';
 }
 
-/** Whether the provider blamed a specific parameter other than this one. */
-function blamesOther(error: ProviderError, param: string): boolean {
-  return error.param !== undefined && error.param !== '' && error.param !== param;
+/**
+ * Whether the provider blamed a specific parameter other than this step's.
+ *
+ * Plural because one setting does not always reach the wire under one name:
+ * `reasoningEffort` is sent as `reasoning_effort` almost everywhere and as
+ * `reasoning` by OpenRouter, and a step that only knew the first name would
+ * decline to fire on exactly the endpoint that named the second.
+ */
+function blamesOther(error: ProviderError, ...params: readonly string[]): boolean {
+  return error.param !== undefined && error.param !== '' && !params.includes(error.param);
 }
 
 const dropReasoningEffort: DegradationStep = {
@@ -76,7 +83,7 @@ const dropReasoningEffort: DegradationStep = {
   description: 'retrying without reasoning_effort',
   applies: (error, request) =>
     isRepairable(error) &&
-    !blamesOther(error, 'reasoning_effort') &&
+    !blamesOther(error, 'reasoning_effort', 'reasoning') &&
     request.reasoningEffort !== undefined,
   apply: (request) =>
     request.reasoningEffort === undefined ? null : { ...request, reasoningEffort: undefined },

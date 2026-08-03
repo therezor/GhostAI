@@ -128,6 +128,26 @@ describe('ConfigSchema', () => {
   it('rejects an unknown reasoning effort', () => {
     expect(AgentDefaultsSchema.safeParse({ reasoningEffort: 'extreme' }).success).toBe(false);
   });
+
+  it('takes `off` as a reasoning effort, which is not the same as unset', () => {
+    // Unset means the request carries no reasoning parameter and the provider
+    // decides; `off` means it carries one asking for none. On a model that
+    // thinks unless told otherwise those are two different turns, so the enum
+    // has to be able to say the second.
+    const config = AgentDefaultsSchema.parse({ reasoningEffort: 'off' });
+
+    expect(config.reasoningEffort).toBe('off');
+    expect(AgentDefaultsSchema.parse({})).not.toHaveProperty('reasoningEffort');
+  });
+
+  it('leaves vision and tool calling on, so an existing install is unchanged', () => {
+    // Both are opt-*out*. Defaulting either to false would silently take a
+    // capability away from every agent already configured on a model that has it.
+    const config = AgentDefaultsSchema.parse({});
+
+    expect(config.visionEnabled).toBe(true);
+    expect(config.toolsEnabled).toBe(true);
+  });
 });
 
 describe('DEFAULT_AGENT_TOOLS', () => {

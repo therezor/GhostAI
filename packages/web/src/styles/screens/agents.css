@@ -190,6 +190,22 @@
     background-color: var(--hover);
   }
 
+  /* The list with tool calling switched off for the model.
+
+     Said with the text tiers, never with `opacity`: fading a row and the
+     surface under it by the same factor leaves the ratio exactly where it
+     started, so the measurement that passed the contrast suite stops meaning
+     anything. The name drops to `--fg-3` — the tier the description beside it
+     already uses on this surface, so it is a pairing that has been measured —
+     and the hover goes, because nothing in the row answers a pointer any more. */
+  .agent-editor__tools--off .agent-editor__tool-name {
+    color: var(--fg-3);
+  }
+
+  .agent-editor__tools--off .agent-editor__tool:hover {
+    background-color: transparent;
+  }
+
   /* A tool's wording is edited in a dialog rather than in the row. The list is
      a scrolling box of one-line rows, and a form opened inside it moved every
      row below the one being edited while giving itself the width of a column

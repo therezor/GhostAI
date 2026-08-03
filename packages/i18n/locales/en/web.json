@@ -52,6 +52,7 @@
     "promptEditorFor": "{{label}} for {{name}}",
     "promptLive": "Live state",
     "promptLiveHint": "Rebuilt every request and never cached, so every line here is paid for five or ten times a turn.",
+    "promptNotPlacedNoTools": "Not sent while tool calling is off for this model. Your wording is kept and applies again when you turn it back on.",
     "promptOnlySystem": "Send only the system prompt",
     "promptOnlySystemHint": "Nothing is added around it: no live state, no toolbox section, no tool-output policy. A template that wants one names its placeholder. Note that a placeholder which changes between requests — the clock, above all — makes the provider re-read the whole prompt each time instead of only the last few lines, which costs more on every request of every turn.",
     "promptOwn": "This agent’s own",
@@ -125,6 +126,9 @@
     "toolNotInstalled": "not installed",
     "toolPermissionFor": "Permission for {{name}}",
     "toolsDesc": "Which tools this agent may call, and what happens when it does. A tool set to Disabled is not offered to the model at all.",
+    "toolsEnabled": "Tool calling",
+    "toolsEnabledHint": "Off sends no tool list at all, for a model that cannot take one. The tools below stay as you set them and come back the moment this agent runs on a model that can call them.",
+    "toolsOffNote": "Tool calling is off for this model so these aren’t being sent. Turn it back on and the list applies again.",
     "toolsSection": "Tools",
     "toolTimeout": "Tool timeout (seconds)",
     "toolWording": "Wording",
@@ -134,7 +138,9 @@
     "toolWordingHint": "Each box shows the built-in wording until you replace it. This is what decides when the model reaches for the tool.",
     "toolWordingNote": "Wording only. Each argument’s type, and whether it is required, come from the tool itself and cannot drift from what it will accept.",
     "toolWordingTitle": "What {{name}} tells the model",
-    "turnTimeout": "Turn timeout (seconds)"
+    "turnTimeout": "Turn timeout (seconds)",
+    "vision": "Reading images",
+    "visionHint": "Off sends an attached image as its file path instead of its contents, for a model that cannot see. The agent can still open it with its file tools."
   },
   "automation": {
     "agentDefault": "Default agent",
@@ -263,6 +269,7 @@
       "degraded": "Degraded request",
       "prompt_injection": "Possible prompt injection",
       "provider_fallback": "Provider fallback",
+      "tools_disabled": "Tool calling is off",
       "truncated_history": "History trimmed"
     },
     "offline": "Offline — messages will be sent when the connection returns.",

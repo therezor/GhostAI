@@ -93,6 +93,35 @@ describe('materialiseFilePart', () => {
     expect(text).toContain('use the file tools');
   });
 
+  it('names an image by its path when the model cannot read images', () => {
+    const jail = workspace();
+    const path = upload(jail, 'shot.png', Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+
+    const parts = materialiseFilePart(filePart(path, 'image/png'), jail, { images: false });
+
+    // Degraded, not dropped: the path is still there, so "open it with a tool"
+    // remains available and the turn is not silently missing an attachment.
+    expect(parts).toHaveLength(1);
+    expect(onlyText(parts)).toContain(path);
+    expect(onlyText(parts)).toContain('file tools');
+  });
+
+  it('spends no inline budget on an image it is not going to send', () => {
+    // The refusal is answered before the byte checks, so a 4 MB screenshot on a
+    // text-only model must not take that room away from the CSV beside it,
+    // which the model genuinely can read.
+    const jail = workspace();
+    const image = upload(jail, 'shot.png', Buffer.alloc(64, 7));
+    const csv = upload(jail, 'q3.csv', 'date,amount\n2026-01-01,42\n');
+    const budget = { remaining: 64 };
+
+    materialiseFilePart(filePart(image, 'image/png'), jail, { images: false }, undefined, budget);
+    const parts = materialiseFilePart(filePart(csv, 'text/csv'), jail, {}, undefined, budget);
+
+    expect(budget.remaining).toBe(64 - 26);
+    expect(onlyText(parts)).toContain('2026-01-01');
+  });
+
   it('inlines a source file the MIME table calls a binary', () => {
     // The assertion that pins "decide from the bytes, not the extension".
     // `mimeTypeFor` answers `application/octet-stream` for `.py`, and a

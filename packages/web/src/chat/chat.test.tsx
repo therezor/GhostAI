@@ -302,6 +302,38 @@ describe('a turn with tool calls', () => {
     expect(await screen.findByText('Possible prompt injection.')).toBeInTheDocument();
   });
 
+  it('says why a call did nothing when the model has no tools', async () => {
+    // The shape a turn takes when the model invents a call it was never offered:
+    // the card is there, the result is an error, and the notice says the reason
+    // is the agent's setting rather than anything that went wrong.
+    mount();
+    await connect();
+
+    deliver(
+      START,
+      { type: 'tool.call', turnId: 't1', callId: 'c1', name: 'exec', args: {}, risk: 'exec' },
+      {
+        type: 'tool.result',
+        turnId: 't1',
+        callId: 'c1',
+        ok: false,
+        content: 'Refused: tool calling is switched off for this model',
+        truncated: false,
+        durationMs: 0,
+      },
+      {
+        type: 'notice',
+        kind: 'tools_disabled',
+        message: 'Refused "exec": tool calling is off for this model, so nothing ran.',
+        turnId: 't1',
+        callId: 'c1',
+      },
+    );
+
+    expect(await screen.findByText('Tool calling is off.')).toBeInTheDocument();
+    expect(screen.getByText(/so nothing ran/)).toBeInTheDocument();
+  });
+
   it('shows a fallback notice that belongs to no turn, before the turn it precedes', async () => {
     // The hub raises this *before* asking for a loop, so it names no turn — the
     // turn it would name has not started, and a notice addressed to one the

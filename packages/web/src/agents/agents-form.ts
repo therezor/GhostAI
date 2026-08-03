@@ -95,15 +95,29 @@ export interface AgentForm {
   readonly contextWindowTokens: string;
   readonly temperature: string;
   readonly maxToolIterations: string;
-  /** `''` means the provider's own default — see the note above. */
+  /**
+   * `''` means the provider's own default — see the note above.
+   *
+   * Which is not `'off'`. Blank sends no reasoning parameter at all; `off`
+   * sends one that asks for none. The select shows both, because on a model
+   * that thinks unless told otherwise they are different turns.
+   */
   readonly reasoningEffort: string;
   readonly toolTimeoutSeconds: string;
   readonly loopWallTimeoutSeconds: string;
+  readonly visionEnabled: boolean;
+  readonly toolsEnabled: boolean;
   readonly learningEnabled: boolean;
   readonly learningInterval: string;
 }
 
-export const REASONING_EFFORTS: readonly ReasoningEffort[] = ['minimal', 'low', 'medium', 'high'];
+export const REASONING_EFFORTS: readonly ReasoningEffort[] = [
+  'off',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+];
 
 export function toAgentForm(defaults: AgentDefaults): AgentForm {
   return {
@@ -116,6 +130,8 @@ export function toAgentForm(defaults: AgentDefaults): AgentForm {
     reasoningEffort: defaults.reasoningEffort ?? '',
     toolTimeoutSeconds: msToSeconds(defaults.toolTimeoutMs),
     loopWallTimeoutSeconds: msToSeconds(defaults.loopWallTimeoutMs),
+    visionEnabled: defaults.visionEnabled,
+    toolsEnabled: defaults.toolsEnabled,
     learningEnabled: defaults.learningEnabled,
     learningInterval: String(defaults.learningInterval),
   };
@@ -195,6 +211,8 @@ export function toAgentPatch(form: AgentForm, t: TFunction): PatchResult {
           maxToolIterations: maxToolIterations.value,
           toolTimeoutMs: secondsToMs(toolTimeout.value),
           loopWallTimeoutMs: secondsToMs(loopWallTimeout.value),
+          visionEnabled: form.visionEnabled,
+          toolsEnabled: form.toolsEnabled,
           learningEnabled: form.learningEnabled,
           learningInterval: learningInterval.value,
           // `null` when blank rather than omitted, and that is the whole of
@@ -245,6 +263,18 @@ export interface AgentEntryForm {
   /** Empty sends no temperature at all, so the provider applies its own. */
   readonly temperature: string;
   readonly reasoningEffort: string;
+  /**
+   * The two capability switches, per agent for the reason `model` above is: an
+   * agent that pins its own model needs its own answer about what that model
+   * can do.
+   *
+   * `toolsEnabled` is not `tools` below and does not overlap it. That one is
+   * which tools this agent may use; this one is whether the model is told about
+   * any of them. Switching it off leaves the permission map exactly as it is,
+   * so moving the agent back to a capable model restores its toolset intact.
+   */
+  readonly visionEnabled: boolean;
+  readonly toolsEnabled: boolean;
   readonly toolTimeoutSeconds: string;
   /**
    * Tool name → permission. A name absent from the map is not enabled.
@@ -316,6 +346,8 @@ export function toAgentEntryForm(entry: AgentEntry, defaults: AgentDefaults): Ag
     // check here would render it as "the provider's own".
     temperature: temperature === undefined ? '' : String(temperature),
     reasoningEffort: entry.reasoningEffort ?? defaults.reasoningEffort ?? '',
+    visionEnabled: entry.visionEnabled ?? defaults.visionEnabled,
+    toolsEnabled: entry.toolsEnabled ?? defaults.toolsEnabled,
     toolTimeoutSeconds: msToSeconds(toolTimeoutMs),
     tools: { ...entry.tools },
     subagents: entry.subagents.map((ref) => ({ ...ref })),
@@ -437,6 +469,11 @@ function ownFields(form: AgentEntryForm, entry: AgentEntry): AgentOwnFields {
     // deliberate.
     toolPrompts: pruneToolPrompts(form.toolPrompts),
     enabled: form.enabled,
+    // Always written, never inherited-by-omission. The form arrived holding the
+    // default agent's answer, so leaving these out would make the agent follow
+    // a later change to the default it had already been shown disagreeing with.
+    visionEnabled: form.visionEnabled,
+    toolsEnabled: form.toolsEnabled,
     // Sent whole, every time. The merge replaces `agents.list.*` wholesale, so
     // this is also the only way a tool can be removed from an agent — a patch
     // that mentioned only what changed could never express a deletion.

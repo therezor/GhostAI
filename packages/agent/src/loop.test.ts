@@ -483,6 +483,35 @@ describe('AgentLoop', () => {
     expect(provider.requests[0]?.tools).toEqual(loop.toolDefinitions);
   });
 
+  it('advertises nothing when the agent has tool calling switched off', async () => {
+    // Gated at `toolDefinitions` rather than at the request, so the panel and the
+    // wire cannot disagree: the assertion that matters is that both are empty
+    // from the same source, not that the request happens to omit the field.
+    const { loop, provider } = harness({
+      tools: [echoTool],
+      config: { toolsEnabled: false },
+      turns: [{ deltas: ['ok'] }],
+    });
+
+    await runTurn(loop, { sessionKey: SESSION, content: 'hi' });
+
+    expect(loop.toolDefinitions).toEqual([]);
+    expect(provider.requests[0]).not.toHaveProperty('tools');
+  });
+
+  it('leaves the agent’s permissions alone while its tools are switched off', async () => {
+    // Off is "this model is not told about them", not "this agent may not use
+    // them". Switching back has to restore the toolset intact, or the operator
+    // has to reconstruct it every time they try a smaller model.
+    const { loop, registry } = harness({
+      tools: [echoTool],
+      config: { toolsEnabled: false },
+    });
+
+    expect(loop.toolDefinitions).toEqual([]);
+    expect(registry.definitions().map((definition) => definition.name)).toEqual(['echo']);
+  });
+
   it('reports a toolbox overlay as part of its tools', async () => {
     // `withToolboxTools` composes the container's programs on top of the agent's
     // scope, which is exactly the part `tools.select(agent.tools)` cannot see.
@@ -594,6 +623,71 @@ describe('AgentLoop', () => {
       'tool',
       'assistant',
     ]);
+  });
+
+  it('refuses a call the model invented while tools are off, and never runs it', async () => {
+    // The model was sent no `tools`, so a call arriving at all is one it made up
+    // — and `exec` is the reason this matters: the agent's permission map still
+    // says `allow`, so without a gate the loop authorises it and runs a command
+    // on the machine for a model that was told it had no tools.
+    let ran = 0;
+    const sideEffect = defineTool({
+      name: 'exec',
+      description: 'Runs a command.',
+      schema: z.strictObject({ command: z.string() }),
+      execute: (args) => {
+        ran += 1;
+        return `ran ${args.command}`;
+      },
+    });
+
+    const { loop, store } = harness({
+      tools: [sideEffect],
+      config: { toolsEnabled: false },
+      turns: [
+        { toolCalls: [toolCall('c1', 'exec', { command: 'rm -rf .' })] },
+        { deltas: ['Understood — I have no tools.'] },
+      ],
+    });
+
+    const { events, result } = await runTurn(loop, { sessionKey: SESSION, content: 'go' });
+
+    expect(ran).toBe(0);
+
+    // Answered, not dropped. Every `tool_call` must be met by a `tool` message:
+    // an unanswered one leaves the model waiting on an observation that is never
+    // coming, and is a provider 400 on the next request.
+    const results = events.filter((event) => event.type === 'tool.result');
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ callId: 'c1', ok: false });
+    expect(results[0]).toMatchObject({ content: expect.stringContaining('did not run') });
+    expect(events.find((event) => event.type === 'notice')).toMatchObject({
+      kind: 'tools_disabled',
+    });
+
+    expect(messagesOf(store).map((message) => message.role)).toEqual([
+      'user',
+      'assistant',
+      'tool',
+      'assistant',
+    ]);
+    expect(result.stopReason).toBe('complete');
+  });
+
+  it('leaves the agent’s permissions untouched while refusing', async () => {
+    // Off is a statement about the model, not an edit to the agent. The registry
+    // still answers `allow` for the tool it just refused, which is what makes
+    // switching back restore the toolset rather than rebuild it.
+    const { loop, registry } = harness({
+      tools: [echoTool],
+      config: { toolsEnabled: false },
+      turns: [{ toolCalls: [toolCall('c1', 'echo', { text: 'hi' })] }, { deltas: ['ok'] }],
+    });
+
+    await runTurn(loop, { sessionKey: SESSION, content: 'go' });
+
+    expect(registry.permissionFor('echo')).toBe('allow');
+    expect(loop.toolDefinitions).toEqual([]);
   });
 
   it('turns an unreachable sandbox into a failed tool, not a failed turn', async () => {
@@ -1652,6 +1746,97 @@ describe('AgentLoop.previewPrompt', () => {
       '## Toolbox: research',
     );
   });
+
+  it('describes no toolbox when the model is not being told about tools', async () => {
+    // The other half of `toolsEnabled`. Emptying the `tools` array alone left
+    // the prompt still naming the container's programs, so a model with no way
+    // to call anything was reading prose about `search` and spending the turn
+    // trying to use it.
+    const { loop, provider } = harness({
+      config: { toolsEnabled: false },
+      loop: {
+        toolboxPrompt: {
+          name: 'research',
+          workdir: '/workspace',
+          tools: [{ name: 'search', use: 'Search the web.' }],
+          notes: '',
+        },
+      },
+    });
+
+    await runTurn(loop, { sessionKey: SESSION, content: 'hi' });
+
+    // Asserted on the request as well as the preview: they are built from one
+    // function precisely so the panel cannot report a prompt the turn did not send.
+    const preview = await loop.previewPrompt({ sessionKey: SESSION });
+    expect(preview.staticPrompt).not.toContain('## Toolbox: research');
+    expect(preview.staticPrompt).not.toContain('search');
+    expect(systemPromptOf(provider.requests[0]!)).not.toContain('## Toolbox: research');
+  });
+
+  it('drops the tool-output policy when there will be no tool output', async () => {
+    // The third thing the prompt said about tools. It survived the first two
+    // gates because it is placed from the agent's own template rather than from
+    // anything the loop hands in — so a model with no tools was still reading a
+    // careful account of how the results it will never receive are delimited.
+    const { loop, provider } = harness({ config: { toolsEnabled: false } });
+    const { loop: normal } = harness();
+
+    await runTurn(loop, { sessionKey: SESSION, content: 'hi' });
+
+    // The control, so this asserts the gate rather than a section that never
+    // appears in this harness to begin with.
+    expect((await normal.previewPrompt({ sessionKey: SESSION })).staticPrompt).toContain(
+      '## Tool output',
+    );
+    expect((await loop.previewPrompt({ sessionKey: SESSION })).staticPrompt).not.toContain(
+      '## Tool output',
+    );
+    expect(systemPromptOf(provider.requests[0]!)).not.toContain('## Tool output');
+  });
+
+  it('says nothing about running commands when there are no commands to run', async () => {
+    // `## Running commands` is tool-shaped too, and it was the one left behind:
+    // every line of it describes `exec` landing somewhere, and the sentence it
+    // exists for — that the file tools act on this machine whatever exec does —
+    // is about tools the model is not being offered either.
+    const { loop, provider } = harness({ config: { toolsEnabled: false } });
+    const { loop: normal } = harness();
+
+    await runTurn(loop, { sessionKey: SESSION, content: 'hi' });
+
+    expect((await normal.previewPrompt({ sessionKey: SESSION })).staticPrompt).toContain(
+      '`exec` runs on this machine',
+    );
+    const off = (await loop.previewPrompt({ sessionKey: SESSION })).staticPrompt;
+    expect(off).not.toContain('`exec` runs on this machine');
+    expect(off).not.toContain('Standard shell tools');
+    expect(systemPromptOf(provider.requests[0]!)).not.toContain('`exec` runs on this machine');
+  });
+
+  it('withdraws the tool sections without editing the agent it was handed', async () => {
+    // Withdrawing is a read, not a write, and this is what turns that into a
+    // rule. The agent object is the caller's and outlives the loop — a runtime
+    // builds one loop per turn from the same resolved config — so a resolution
+    // that reached in and blanked the tool templates would make switching the
+    // model back give an agent whose sections are gone for good. Toggling on
+    // has to reproduce the prompt exactly, and the object is how it does.
+    const agent = { id: 'a', label: 'A', systemPrompt: '', toolPolicyPrompt: '' };
+
+    const off = harness({ config: { toolsEnabled: false }, loop: { agent } });
+    await runTurn(off.loop, { sessionKey: SESSION, content: 'hi' });
+    expect((await off.loop.previewPrompt({ sessionKey: SESSION })).staticPrompt).not.toContain(
+      '## Tool output',
+    );
+
+    // Untouched, so the same object builds the same prompt it always did.
+    expect(agent).toEqual({ id: 'a', label: 'A', systemPrompt: '', toolPolicyPrompt: '' });
+
+    const on = harness({ loop: { agent } });
+    expect((await on.loop.previewPrompt({ sessionKey: SESSION })).staticPrompt).toContain(
+      '## Tool output',
+    );
+  });
 });
 
 describe('promptMode: raw', () => {
@@ -1689,6 +1874,29 @@ describe('promptMode: raw', () => {
     const sent = systemPromptOf(provider.requests[0]!);
     expect(sent).toContain('Rules.');
     expect(sent).toContain('## Tool output policy');
+  });
+
+  it('empties the tool sections it names when the model gets no tools', async () => {
+    // A raw template owns its own layout, so the gate cannot work by declining
+    // to place a section — the operator placed it. The placeholder still
+    // resolves; it resolves to nothing, which is the same answer.
+    const { loop, provider } = harness({
+      config: { toolsEnabled: false },
+      loop: {
+        agent: {
+          id: 'raw',
+          label: 'Raw',
+          promptMode: 'raw',
+          systemPrompt: 'Rules.\n\n{{toolPolicy}}',
+        },
+      },
+    });
+
+    await runTurn(loop, { sessionKey: SESSION, content: 'hi' });
+
+    const sent = systemPromptOf(provider.requests[0]!);
+    expect(sent).toContain('Rules.');
+    expect(sent).not.toContain('## Tool output policy');
   });
 
   it('previews what it sends, the way template mode does', async () => {
@@ -1971,6 +2179,26 @@ describe('AgentLoop attachments', () => {
       data: bytes.toString('base64'),
     });
     expect(question.content.some((part) => part.type === 'file')).toBe(false);
+  });
+
+  it('sends an attached image as a path when the agent has vision switched off', async () => {
+    // The pre-emptive half of `stripImages`. That step repairs a request the
+    // provider has already refused; this one never builds the refusable request,
+    // which is what an operator who already knows the model is asking for.
+    const { loop, provider, jail } = harness({ config: { visionEnabled: false } });
+    const path = upload(jail, 'shot.png', Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+
+    await runTurn(loop, {
+      sessionKey: SESSION,
+      content: [textPart('what is this?'), filePart(path, 'image/png')],
+    });
+
+    const question = provider.requests[0]?.messages.find((message) => message.role === 'user');
+    if (question?.role !== 'user') throw new Error('expected a user message');
+    expect(question.content.some((part) => part.type === 'image')).toBe(false);
+    expect(
+      question.content.map((part) => (part.type === 'text' ? part.text : '')).join('\n'),
+    ).toContain(path);
   });
 
   it('stores the reference, not the bytes', async () => {

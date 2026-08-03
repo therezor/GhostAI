@@ -480,7 +480,10 @@ function harnessRuntime(runtime: GhostRuntime, configFile: string): ServerRuntim
         configured: agent.id === DEFAULT_AGENT_ID ? runtime.configured : loop !== null,
         jail: runtime.jail,
         jailFor: (workspaceId) => runtime.jails.forWorkspace(workspaceId),
-        tools: runtime.tools.select(agent.tools).definitions(),
+        // Empty when the agent advertises no tools, matching the real adapter:
+        // a harness that reported a toolset the model would never be sent would
+        // make the context panel pass here and be wrong in a browser.
+        tools: agent.defaults.toolsEnabled ? runtime.tools.select(agent.tools).definitions() : [],
         contextWindowTokens: agent.defaults.contextWindowTokens,
         systemPrompt: async (input) =>
           (await loop?.previewPrompt(input)) ?? {

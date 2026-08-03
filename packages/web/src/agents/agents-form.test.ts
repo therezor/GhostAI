@@ -144,6 +144,17 @@ describe('toAgentEntryPatch', () => {
     expect(entry).toMatchObject({ model: 'qwen3:32b', temperature: 0, reasoningEffort: 'high' });
   });
 
+  it('writes both capability switches down rather than leaving them to inherit', () => {
+    // The form arrived holding the default agent's answer, so an omitted key
+    // would quietly re-point this agent at a default it had already been shown
+    // disagreeing with the next time somebody changed it.
+    const entry = parsed(
+      toAgentEntryPatch('reviewer', form({ visionEnabled: false, toolsEnabled: false }), EMPTY, t),
+    );
+
+    expect(entry).toMatchObject({ visionEnabled: false, toolsEnabled: false });
+  });
+
   it('keeps the settings this screen does not render', () => {
     // `agents.list.*` is replaced wholesale, so an entry rebuilt from the form
     // alone would drop the exec allow-list every time the prompt was saved —

@@ -129,6 +129,7 @@ import {
   buildRuntimeBlock,
   buildStaticPrompt,
   type PromptToolbox,
+  type PromptTools,
   contributorSections,
   runtimeReminder,
   type ContextContributor,
@@ -247,6 +248,29 @@ function cancelledExecution(name: string): ToolExecution {
   };
 }
 
+/**
+ * A call that arrived on an agent whose tools are switched off.
+ *
+ * `config` rather than `permission_denied`: nothing was denied. The agent's
+ * permission map is untouched and still says `allow`; this model was simply
+ * never sent a tool list, so the call is one it invented. The wording says the
+ * tool did not run, because the alternative reading — that it ran and the
+ * output was lost — is the one that has a model retry the same command.
+ */
+function toolsDisabledExecution(name: string): ToolExecution {
+  return {
+    name,
+    content:
+      `Refused: tool calling is switched off for this model, so "${name}" did not run and ` +
+      `nothing happened. No tools are available on this turn — answer from the conversation, ` +
+      `or tell the user what you would need to do and why you cannot.`,
+    isError: true,
+    truncated: false,
+    durationMs: 0,
+    errorKind: 'config',
+  };
+}
+
 /** A call that was refused. `durationMs` is zero because nothing ran. */
 function deniedExecution(name: string, reason: DenialReason): ToolExecution {
   return {
@@ -332,6 +356,19 @@ export interface LoopAgent extends PromptAgent {
    * process, so this cannot be applied there.
    */
   readonly toolPrompts?: ToolPromptOverrides;
+  /**
+   * The operator's wording for the three sections that describe tools.
+   *
+   * Here rather than on `PromptAgent` because an agent always has an identity
+   * and does not always have tools: the prompt layer receives these as
+   * `PromptTools`, which it is handed or is not. Keeping them on the resolved
+   * agent — where the config puts them — and routing them across that boundary
+   * is the loop's job, and is the only thing that knows whether this turn has
+   * tools at all.
+   */
+  readonly platformPrompt?: string;
+  readonly toolboxPrompt?: string;
+  readonly toolPolicyPrompt?: string;
 }
 
 export interface AgentLoopOptions {
@@ -652,8 +689,16 @@ export class AgentLoop {
    * scope by `withToolboxTools`, so they were missing from the panel and, worse,
    * missing from its token count: seven entries the model is really sent, absent
    * from the one screen whose job is to say what the model is sent.
+   *
+   * `toolsEnabled: false` empties it here rather than at the request, and that
+   * placement is the point: every consumer — the request, the text-tool-call
+   * correction, the context inspector's count — then agrees on the same answer
+   * without any of them learning about the setting. A gate at the request would
+   * leave the panel listing tools the model was never offered.
    */
   get toolDefinitions(): readonly ToolDefinition[] {
+    if (!this.#config.toolsEnabled) return [];
+
     const tools = this.#tools.definitions();
 
     // Appended rather than merged and re-sorted. The registry's list is already
@@ -678,6 +723,26 @@ export class AgentLoop {
     }
 
     return this.#withToolPrompts(subagents.length === 0 ? tools : [...tools, ...subagents]);
+  }
+
+  /**
+   * The tool-shaped prompt inputs for this turn, or nothing when there are none.
+   *
+   * The one place `toolsEnabled` crosses into prompt assembly, and it crosses as
+   * presence rather than as a flag: off, the prompt layer is handed no
+   * `PromptTools` at all and therefore has no toolbox, no policy wording and no
+   * command wording to render from. Nothing downstream is told why, and nothing
+   * downstream needs a branch to find out.
+   */
+  get #promptTools(): PromptTools | undefined {
+    if (!this.#config.toolsEnabled) return undefined;
+
+    return {
+      toolbox: this.#toolboxPrompt,
+      toolboxPrompt: this.#agent?.toolboxPrompt,
+      policyPrompt: this.#agent?.toolPolicyPrompt,
+      platformPrompt: this.#agent?.platformPrompt,
+    };
   }
 
   /**
@@ -783,10 +848,11 @@ export class AgentLoop {
       };
     }
 
+    const tools = this.#promptTools;
     return {
       staticPrompt: await buildStaticPrompt({
         context,
-        ...(this.#toolboxPrompt === undefined ? {} : { toolbox: this.#toolboxPrompt }),
+        ...(tools === undefined ? {} : { tools }),
         ...(this.#agent === undefined ? {} : { agent: this.#agent }),
         contributors: this.#contributors,
       }),
@@ -802,6 +868,7 @@ export class AgentLoop {
     correction?: string,
   ): PromptPreview {
     const agent = this.#agent;
+    const tools = this.#promptTools;
 
     if (agent?.promptMode === 'raw') {
       // One blob, and it stays in the system message. There is no cached prefix
@@ -814,7 +881,7 @@ export class AgentLoop {
           agent,
           staticSections: preamble.staticSections,
           contributors: this.#contributors,
-          ...(this.#toolboxPrompt === undefined ? {} : { toolbox: this.#toolboxPrompt }),
+          ...(tools === undefined ? {} : { tools }),
           ...(correction === undefined ? {} : { correction }),
         }),
         runtimeBlock: '',
@@ -830,9 +897,7 @@ export class AgentLoop {
         ...(this.#timeZone === undefined ? {} : { timeZone: this.#timeZone() }),
         ...(agent?.livePrompt === undefined ? {} : { livePrompt: agent.livePrompt }),
         ...(agent?.wrapUpPrompt === undefined ? {} : { wrapUpPrompt: agent.wrapUpPrompt }),
-        ...(agent?.toolPolicyPrompt === undefined
-          ? {}
-          : { toolPolicyPrompt: agent.toolPolicyPrompt }),
+        ...(tools === undefined ? {} : { tools }),
         ...(correction === undefined ? {} : { correction }),
       }),
     };
@@ -1078,7 +1143,10 @@ export class AgentLoop {
             ...materialiseAttachments(
               this.#store.history(sessionKey, { maxToolResultChars: 0 }),
               jail,
-              {},
+              // Constant for the life of the turn, which is what makes it safe
+              // against the `attachments` cache beside it: that key is path,
+              // size and mtime, and does not know about this.
+              { images: this.#config.visionEnabled },
               attachments,
             ),
             // The volatile half, after the history rather than before it. A
@@ -1404,6 +1472,31 @@ export class AgentLoop {
       signal: AbortSignal;
     },
   ): AsyncGenerator<AgentEvent, ToolExecution | undefined> {
+    // Before the permission lookup, and deliberately not expressed as one: the
+    // agent's map is untouched and still says `allow`, so asking it would run
+    // the call. The request carried no `tools` at all, which makes anything
+    // arriving here a name the model invented — and this is the one enforcement
+    // point every call passes through, including a subagent's, so gating it
+    // here is what makes "nothing executes" true rather than mostly true.
+    //
+    // A refusal rather than a silent drop, because every `tool_call` must be
+    // answered by a `tool` message: an unanswered one is a dangling call the
+    // model waits on and a provider 400 on the next request.
+    if (!this.#config.toolsEnabled) {
+      this.#logger.warn(
+        { sessionKey: turn.sessionKey, turnId: turn.turnId, tool: call.name, risk },
+        'tool call refused: tools are switched off for this model',
+      );
+      yield {
+        type: 'notice',
+        kind: 'tools_disabled',
+        message: `Refused "${call.name}": tool calling is off for this model, so nothing ran.`,
+        turnId: turn.turnId,
+        callId: call.id,
+      };
+      return toolsDisabledExecution(call.name);
+    }
+
     // The binding first, and only when the registry has no such name — the same
     // precedence `#subagentFor` and `toolDefinitions` apply, asked once here so
     // a shadowed subagent is gated as the registered tool it actually is.

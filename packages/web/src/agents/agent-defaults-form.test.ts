@@ -40,6 +40,20 @@ describe('toAgentForm', () => {
   it('shows an unset reasoning effort as empty rather than inventing one', () => {
     expect(toAgentForm(defaults()).reasoningEffort).toBe('');
   });
+
+  it('keeps `off` distinct from the empty box the select also offers', () => {
+    // Blank sends no reasoning parameter; `off` sends one asking for none. If
+    // this collapsed to `''` the switch would look like it worked and change
+    // nothing about the request.
+    expect(toAgentForm(defaults({ reasoningEffort: 'off' })).reasoningEffort).toBe('off');
+  });
+
+  it('carries the two capability switches through as booleans', () => {
+    const form = toAgentForm(defaults({ visionEnabled: false }));
+
+    expect(form.visionEnabled).toBe(false);
+    expect(form.toolsEnabled).toBe(true);
+  });
 });
 
 describe('toAgentPatch', () => {
@@ -167,6 +181,31 @@ describe('toAgentPatch', () => {
     if (!result.ok) return;
 
     expect(result.patch.agents?.defaults?.reasoningEffort).toBe('high');
+  });
+
+  it('sends `off` as a value rather than clearing the field', () => {
+    // The one that would go wrong quietly: `off` is falsy-adjacent enough that a
+    // truthiness check anywhere on the way through turns it into the `null` that
+    // means "no reasoning parameter at all" — the opposite request.
+    const result = toAgentPatch({ ...toAgentForm(defaults()), reasoningEffort: 'off' }, t);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.patch.agents?.defaults?.reasoningEffort).toBe('off');
+    expect(ConfigPatchSchema.safeParse(result.patch).success).toBe(true);
+  });
+
+  it('sends both capability switches, so turning one off survives a reload', () => {
+    const result = toAgentPatch(
+      { ...toAgentForm(defaults()), visionEnabled: false, toolsEnabled: false },
+      t,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.patch.agents?.defaults?.visionEnabled).toBe(false);
+    expect(result.patch.agents?.defaults?.toolsEnabled).toBe(false);
+    expect(ConfigPatchSchema.safeParse(result.patch).success).toBe(true);
   });
 
   it('produces a patch the protocol accepts', () => {

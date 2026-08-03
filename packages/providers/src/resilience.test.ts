@@ -203,6 +203,23 @@ describe('the degradation ladder', () => {
     expect(notices.map((notice) => notice.kind)).toEqual(['degraded']);
   });
 
+  it('drops the effort when the provider blames it under its other name', async () => {
+    // One setting, two spellings on the wire: `reasoning_effort` almost
+    // everywhere, and `reasoning` on OpenRouter, which is also the endpoint
+    // `off` is translated for. A step that only knew the first name would
+    // decline to fire on exactly the provider that named the second, leaving
+    // the turn to fail with a repair sitting unused.
+    const inner = scripted(
+      new ProviderError('unsupported_param', 'no', { param: 'reasoning' }),
+      resultOf('ok'),
+    );
+    const { provider } = wrap(inner);
+
+    await provider.chat(request({ reasoningEffort: 'off' }));
+
+    expect(inner.seen[1]?.reasoningEffort).toBeUndefined();
+  });
+
   it('skips a step the provider blamed a different parameter for', async () => {
     const inner = scripted(
       new ProviderError('unsupported_param', 'no', { param: 'tool_choice' }),

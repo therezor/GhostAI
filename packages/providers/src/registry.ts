@@ -81,6 +81,24 @@ export interface ProviderSpec {
   readonly modelOverrides?: readonly ModelOverride[];
   readonly supportsPromptCaching?: boolean;
   /**
+   * What `reasoningEffort: 'off'` becomes on this wire, merged into the body in
+   * place of `reasoning_effort`.
+   *
+   * Per entry because there is no agreed spelling. OpenAI added `none` to
+   * `reasoning_effort` itself, which is the default here; OpenRouter takes a
+   * `reasoning` object instead and ignores the effort string entirely. Local
+   * servers are all over the place — Qwen3 under llama.cpp wants a template
+   * kwarg — so they are left on the default rather than guessed at, and an
+   * operator who knows better has `custom`.
+   *
+   * The honest limit: an endpoint that rejects whatever this sends falls to
+   * `dropReasoningEffort`, which removes the parameter altogether. So `off`
+   * degrades to *unset* — the provider's own default — with the usual
+   * `degraded` notice saying so. There is no way to stop a model thinking from
+   * out here; this only ever asks.
+   */
+  readonly reasoningOffBody?: Readonly<Record<string, unknown>>;
+  /**
    * The endpoint answers `GET /models` with a catalogue.
    *
    * True for the whole OpenAI-compatible range, including every local server —
@@ -119,6 +137,9 @@ const PROVIDER_TABLE = [
     defaultHeaders: { 'X-Title': 'GhostAI' },
     supportsPromptCaching: true,
     supportsModelListing: true,
+    // OpenRouter normalises reasoning across every upstream model behind it, so
+    // this one object covers models that would each spell it differently.
+    reasoningOffBody: { reasoning: { enabled: false } },
   },
   {
     id: 'ollama',

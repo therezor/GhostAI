@@ -329,8 +329,13 @@ export function createServerRuntime(
         // from the context inspector and from its token count.
         //
         // The fallback covers an unconfigured install, where there is no loop and
-        // so no turn to describe; the narrowed registry is the honest answer there.
-        tools: loop?.toolDefinitions ?? runtime.tools.select(agent.tools).definitions(),
+        // so no turn to describe; the narrowed registry is the honest answer
+        // there — except when the agent advertises no tools at all, which the
+        // registry cannot know and which would otherwise have the panel list a
+        // toolset no turn on this agent would ever send.
+        tools:
+          loop?.toolDefinitions ??
+          (agent.defaults.toolsEnabled ? runtime.tools.select(agent.tools).definitions() : []),
         contextWindowTokens: agent.defaults.contextWindowTokens,
         // The loop's own composition, not a second assembly of it: memory and
         // skills arrive as contributors attached to that object, and a

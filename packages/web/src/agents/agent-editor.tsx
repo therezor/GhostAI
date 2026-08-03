@@ -85,6 +85,7 @@ import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';
 import { RowActions } from '@/components/crud/row-actions.js';
 import { CodeEditor } from '@/files/code-editor.js';
 import { api } from '@/lib/api.js';
+import { cn } from '@/lib/cn.js';
 import { queryKeys } from '@/lib/query.js';
 import {
   FieldGrid,
@@ -127,10 +128,31 @@ type StringField = {
     : never;
 }[keyof AgentForm & keyof AgentEntryForm];
 
+/**
+ * The same intersection for the switches.
+ *
+ * `learningEnabled` is on the defaults form only, so it falls out here exactly
+ * as it does above — which is the point of writing the constraint twice rather
+ * than loosening `StringField` to cover both.
+ */
+type BooleanField = {
+  [K in keyof AgentForm & keyof AgentEntryForm]: AgentForm[K] extends boolean
+    ? AgentEntryForm[K] extends boolean
+      ? K
+      : never
+    : never;
+}[keyof AgentForm & keyof AgentEntryForm];
+
 /** One field, wherever this agent happens to keep it. */
 interface Bound {
   readonly value: string;
   readonly set: (value: string) => void;
+}
+
+/** The same, for a field that is on or off. */
+interface Toggle {
+  readonly checked: boolean;
+  readonly set: (checked: boolean) => void;
 }
 
 /**
@@ -405,6 +427,7 @@ function ToolRow({
   permission,
   fields,
   override,
+  disabled,
   onChange,
   onOverrideChange,
 }: {
@@ -416,6 +439,15 @@ function ToolRow({
   /** Top-level arguments from the live schema. Empty when it is not registered. */
   readonly fields: readonly ToolField[];
   readonly override: ToolPromptOverride | undefined;
+  /**
+   * The row is shown but not editable, because this model is sent no tools.
+   *
+   * Not required, and that is the point: the stored permission and wording are
+   * still rendered and still saved untouched, so switching the model back
+   * restores the toolset exactly as it was. A list that emptied itself would
+   * make the switch destructive.
+   */
+  readonly disabled: boolean;
   readonly onChange: (next: ToolPermission) => void;
   readonly onOverrideChange: (next: ToolPromptOverride) => void;
 }): JSX.Element {
@@ -453,6 +485,7 @@ function ToolRow({
         variant="ghost"
         size="sm"
         className="agent-editor__tool-edit"
+        disabled={disabled}
         // Named for the tool: a list of ten rows has ten of these, and an icon
         // called "Wording" tells a screen reader nothing about which.
         aria-label={t('agents.toolWordingFor', { name })}
@@ -466,6 +499,7 @@ function ToolRow({
         <SelectField
           label={<span className="sr-only">{t('agents.toolPermissionFor', { name })}</span>}
           value={permission}
+          disabled={disabled}
           options={TOOL_PERMISSIONS.map((option) => ({
             value: option,
             label: t(PERMISSION_LABELS[option]),
@@ -923,6 +957,22 @@ function Editor({
           },
         };
 
+  /** `bind`, for the two model-capability switches. Same split, same reason. */
+  const bindToggle = (key: BooleanField): Toggle =>
+    isDefault
+      ? {
+          checked: base[key],
+          set: (checked) => {
+            updateBase(key, checked);
+          },
+        }
+      : {
+          checked: form[key],
+          set: (checked) => {
+            update(key, checked);
+          },
+        };
+
   const fields = {
     provider: bind('provider'),
     model: bind('model'),
@@ -932,6 +982,11 @@ function Editor({
     contextWindowTokens: bind('contextWindowTokens'),
     toolTimeoutSeconds: bind('toolTimeoutSeconds'),
   } satisfies Record<string, Bound>;
+
+  const switches = {
+    visionEnabled: bindToggle('visionEnabled'),
+    toolsEnabled: bindToggle('toolsEnabled'),
+  } satisfies Record<string, Toggle>;
 
   // ── The prompt ───────────────────────────────────────────────────────────
   //
@@ -1010,6 +1065,14 @@ function Editor({
     () => new Map((tools.data?.tools ?? []).map((tool) => [tool.name, tool])),
     [tools.data],
   );
+
+  /**
+   * Read from the switch rather than from the saved config, so the list greys
+   * out as it is flipped rather than a save later. It is the same value the
+   * request is built from, which is what lets this section say something true
+   * about the next turn instead of about the last one.
+   */
+  const toolsOff = !switches.toolsEnabled.checked;
 
   const setToolPermission = (name: string, permission: ToolPermission): void => {
     update('tools', { ...form.tools, [name]: permission });
@@ -1373,13 +1436,35 @@ function Editor({
             options={REASONING_EFFORTS}
             unsetLabel="The provider’s own"
           />
+          {/* Below the model rather than beside the toolset, because that is
+              what they are about: what this model can be asked to do, not what
+              this agent is allowed to do. Both default on, so an operator only
+              comes here once they have met a model that cannot keep up. */}
+          <SwitchRow
+            label={t('agents.vision')}
+            hint={t('agents.visionHint')}
+            checked={switches.visionEnabled.checked}
+            onCheckedChange={switches.visionEnabled.set}
+          />
+          <SwitchRow
+            label={t('agents.toolsEnabled')}
+            hint={t('agents.toolsEnabledHint')}
+            checked={switches.toolsEnabled.checked}
+            onCheckedChange={switches.toolsEnabled.set}
+          />
         </FieldGrid>
       </Section>
 
       <Section title={t('agents.toolsSection')} description={t('agents.toolsDesc')}>
         {tools.isPending && <p className="page__note">{t('agents.loadingTools')}</p>}
+        {/* Shown above the list rather than in place of it. The rows say what
+            this agent is configured to do, and that is still true and still
+            saved — what has changed is only that this model is not being told
+            about any of it. Emptying the list would read as the config being
+            gone, which is the one thing the switch must not do. */}
+        {toolsOff && <p className="page__note page__warning">{t('agents.toolsOffNote')}</p>}
         {toolNames.length > 0 && (
-          <ul className="stack agent-editor__tools">
+          <ul className={cn('stack agent-editor__tools', toolsOff && 'agent-editor__tools--off')}>
             {toolNames.map((name) => {
               const tool = registered.get(name);
               return (
@@ -1391,6 +1476,7 @@ function Editor({
                   permission={form.tools[name] ?? 'deny'}
                   fields={tool === undefined ? [] : parameterFields(tool.parameters)}
                   override={form.toolPrompts[name]}
+                  disabled={toolsOff}
                   onChange={(next) => {
                     setToolPermission(name, next);
                   }}
@@ -1411,13 +1497,14 @@ function Editor({
             <h3 className="agent-editor__tool-group">
               {t('agents.toolboxToolsGroup', { name: chosen.label || chosen.name })}
             </h3>
-            <ul className="stack agent-editor__tools">
+            <ul className={cn('stack agent-editor__tools', toolsOff && 'agent-editor__tools--off')}>
               {chosen.tools.map((tool) => (
                 <ToolRow
                   key={tool.name}
                   name={tool.name}
                   detail={tool.use}
                   risk="exec"
+                  disabled={toolsOff}
                   // The manifest's default until this agent overrides it. It is
                   // a suggestion from the box's author, not a ceiling — the
                   // programs are reachable through `exec` either way.
@@ -1688,6 +1775,11 @@ function Editor({
                     value={form.platformPrompt}
                     placeholders={PLATFORM_PROMPT_PLACEHOLDERS}
                     hint="agents.promptPlatformHint"
+                    // Tool-shaped like the two below it: every line it renders
+                    // describes running a command, and the file tools it names
+                    // are tools too. With none of them there is nothing left for
+                    // the section to be about.
+                    {...(toolsOff ? { warning: t('agents.promptNotPlacedNoTools') } : {})}
                     onChange={(next) => {
                       update('platformPrompt', next);
                     }}
@@ -1701,6 +1793,11 @@ function Editor({
                       value={form.toolboxPrompt}
                       placeholders={TOOLBOX_PROMPT_PLACEHOLDERS}
                       hint="agents.promptToolboxHint"
+                      // Left editable rather than disabled: the wording is worth
+                      // writing before the model that can use it is chosen, and
+                      // a box that refuses keystrokes cannot say why as clearly
+                      // as a line that says it is not being placed.
+                      {...(toolsOff ? { warning: t('agents.promptNotPlacedNoTools') } : {})}
                       onChange={(next) => {
                         update('toolboxPrompt', next);
                       }}
@@ -1714,26 +1811,32 @@ function Editor({
                     value={form.toolPolicyPrompt}
                     placeholders={TOOL_POLICY_PLACEHOLDERS}
                     hint="agents.promptToolPolicyHint"
-                    {...(policyUnfenced
-                      ? {
-                          warning: t('agents.promptToolPolicyUnfenced', {
-                            // Passed rather than written into the bundle: i18next
-                            // does not rescan an interpolated value, which is the
-                            // only way a literal `{{…}}` survives to the screen.
-                            tag: '{{tag}}',
-                            nonce: '{{nonce}}',
-                          }),
-                        }
-                      : namesDelimiter(form.toolPolicyPrompt)
+                    // Ahead of the two delimiter warnings, and it replaces them:
+                    // neither says anything while the section is not placed, and
+                    // a box carrying three lines about a prompt nothing sends is
+                    // three chances to act on the wrong one.
+                    {...(toolsOff
+                      ? { warning: t('agents.promptNotPlacedNoTools') }
+                      : policyUnfenced
                         ? {
-                            // Naming the tag here is legal and costs the cache:
-                            // this section is otherwise identical for the life of
-                            // a session, so it rides the cached prefix — unless it
-                            // spells out a delimiter that changes every turn, at
-                            // which point the whole of it is re-sent per step.
-                            warning: t('agents.promptToolPolicyUncacheable', { tag: '{{tag}}' }),
+                            warning: t('agents.promptToolPolicyUnfenced', {
+                              // Passed rather than written into the bundle: i18next
+                              // does not rescan an interpolated value, which is the
+                              // only way a literal `{{…}}` survives to the screen.
+                              tag: '{{tag}}',
+                              nonce: '{{nonce}}',
+                            }),
                           }
-                        : {})}
+                        : namesDelimiter(form.toolPolicyPrompt)
+                          ? {
+                              // Naming the tag here is legal and costs the cache:
+                              // this section is otherwise identical for the life of
+                              // a session, so it rides the cached prefix — unless it
+                              // spells out a delimiter that changes every turn, at
+                              // which point the whole of it is re-sent per step.
+                              warning: t('agents.promptToolPolicyUncacheable', { tag: '{{tag}}' }),
+                            }
+                          : {})}
                     onChange={(next) => {
                       update('toolPolicyPrompt', next);
                     }}

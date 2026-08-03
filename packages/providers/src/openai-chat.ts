@@ -215,6 +215,16 @@ export function encodeMessage(message: ChatMessage): WireMessage {
   }
 }
 
+/**
+ * What "do not think" is, absent a `reasoningOffBody` on the spec.
+ *
+ * OpenAI's own extension of `reasoning_effort`, and the closest thing the
+ * OpenAI-compatible range has to a convention. An endpoint that has never heard
+ * of it answers with an `unsupported_param` or a bare 400, which is exactly the
+ * shape `dropReasoningEffort` repairs.
+ */
+const DEFAULT_REASONING_OFF_BODY: Readonly<Record<string, unknown>> = { reasoning_effort: 'none' };
+
 function buildBody(
   spec: ProviderSpec,
   request: ChatRequest,
@@ -232,7 +242,14 @@ function buildBody(
 
   if (maxTokens !== undefined) body[spec.maxTokensParam ?? 'max_tokens'] = Math.max(1, maxTokens);
   if (temperature !== undefined) body.temperature = temperature;
-  if (request.reasoningEffort !== undefined) body.reasoning_effort = request.reasoningEffort;
+  // `off` is a value this project made up, not one any wire accepts, so it is
+  // translated rather than sent. Everything else is already the wire's own
+  // vocabulary and goes through as it is.
+  if (request.reasoningEffort === 'off') {
+    Object.assign(body, spec.reasoningOffBody ?? DEFAULT_REASONING_OFF_BODY);
+  } else if (request.reasoningEffort !== undefined) {
+    body.reasoning_effort = request.reasoningEffort;
+  }
   // Only where the table says the provider caches prompts. It is an optional
   // routing hint everywhere it is understood and an unknown field everywhere
   // else, and sending unknown fields to endpoints that have no use for them is
