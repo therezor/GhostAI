@@ -12,7 +12,6 @@ import {
   type ChatMessageInput,
   type Clock,
   type Logger,
-  type SessionStore,
   type TimerHandle,
 } from '@ghostai/core';
 import type { ToolCall, ToolRisk, ToolsConfig } from '@ghostai/protocol';
@@ -203,7 +202,18 @@ export interface ToolDispatcherOptions {
   readonly clock: Clock;
   readonly logger: Logger;
   readonly delegate: SubagentDelegate;
-  readonly store: SessionStore;
+}
+
+/** What one assistant turn's tool calls produced. */
+export interface ToolCallOutcome {
+  readonly cancelled: boolean;
+  /**
+   * The assistant message and one `tool` message per call, in the order the
+   * model asked. The caller appends them — in one transaction, because a
+   * partial write is exactly the orphaned tool result `findLegalStart` then
+   * has to repair on every later request.
+   */
+  readonly pending: readonly ChatMessageInput[];
 }
 
 /**
@@ -225,7 +235,6 @@ export class ToolDispatcher {
   readonly #clock: Clock;
   readonly #logger: Logger;
   readonly #delegate: SubagentDelegate;
-  readonly #store: SessionStore;
 
   constructor(options: ToolDispatcherOptions) {
     this.#tools = options.tools;
@@ -239,7 +248,6 @@ export class ToolDispatcher {
     this.#clock = options.clock;
     this.#logger = options.logger;
     this.#delegate = options.delegate;
-    this.#store = options.store;
   }
 
   /** The binding for a call, or `undefined` when a registered tool wins. */
@@ -253,19 +261,19 @@ export class ToolDispatcher {
   }
 
   /**
-   * Runs every tool the model asked for. Returns whether the turn was cancelled.
+   * Runs every tool the model asked for.
    *
-   * The assistant message and all of its results are appended in one
-   * transaction at the end, because a partial write is exactly the orphaned
-   * tool result that `findLegalStart` then has to repair on every later
-   * request. Once cancelled, the remaining calls are not executed — but each
-   * still gets a result, so the `assistant` turn is never left with an
-   * unanswered `tool_call`.
+   * Returns the messages to append rather than appending them: the store is the
+   * turn's to write, and handing back one array is what keeps "the assistant
+   * message and all of its results land in one transaction" a property of the
+   * shape rather than a rule to remember. Once cancelled, the remaining calls
+   * are not executed — but each still gets a result, so the `assistant` turn is
+   * never left with an unanswered `tool_call`.
    */
   async *dispatch(
     result: ChatResult,
     turn: TurnScope,
-  ): AsyncGenerator<AgentEvent, { cancelled: boolean; lastSeq: number }> {
+  ): AsyncGenerator<AgentEvent, ToolCallOutcome> {
     const pending: ChatMessageInput[] = [result.message];
     let cancelled = turn.signal.aborted;
 
@@ -345,8 +353,7 @@ export class ToolDispatcher {
       }
     }
 
-    const written = this.#store.appendMany(turn.sessionKey, pending, { turnId: turn.turnId });
-    return { cancelled, lastSeq: written.at(-1)?.seq ?? 0 };
+    return { cancelled, pending };
   }
 
   /**

@@ -528,7 +528,6 @@ export class AgentLoop {
       clock: this.#clock,
       logger: this.#logger,
       delegate: (call, binding, turn) => this.#runSubagent(call, binding, turn),
-      store: this.#store,
     });
   }
 
@@ -1155,7 +1154,11 @@ export class AgentLoop {
           chain,
           rootSessionKey,
         });
-        lastSeq = tools.lastSeq;
+        // One transaction, and the store stays the turn's to write. A partial
+        // write is exactly the orphaned tool result `findLegalStart` then has
+        // to repair on every later request.
+        const written = this.#store.appendMany(sessionKey, tools.pending, { turnId });
+        lastSeq = written.at(-1)?.seq ?? 0;
         if (tools.cancelled) {
           stopReason = 'aborted';
           break;
