@@ -7,6 +7,7 @@ import {
   isAbortError,
   isGhostError,
   toGhostError,
+  onAbort,
 } from './errors.js';
 
 describe('GhostError', () => {
@@ -147,5 +148,54 @@ describe('abortedError', () => {
     expect(error.kind).toBe('aborted');
     expect(error.retryable).toBe(false);
     expect(error.message).toBe('Turn aborted');
+  });
+});
+
+describe('onAbort', () => {
+  it('fires when the signal aborts, once', () => {
+    const controller = new AbortController();
+    let fired = 0;
+    onAbort(controller.signal, () => {
+      fired += 1;
+    });
+
+    controller.abort();
+    controller.abort();
+
+    expect(fired).toBe(1);
+  });
+
+  it('fires immediately for a signal that has already aborted', () => {
+    // The line both hand-rolled copies had a comment about: an `abort` listener
+    // added after the fact is never called, so a watcher without this waits out
+    // its whole deadline on a turn that was cancelled a moment earlier.
+    const controller = new AbortController();
+    controller.abort();
+
+    let fired = false;
+    const subscription = onAbort(controller.signal, () => {
+      fired = true;
+    });
+
+    expect(fired).toBe(true);
+    expect(() => {
+      subscription.dispose();
+    }).not.toThrow();
+  });
+
+  it('stops listening once disposed', () => {
+    // The other load-bearing line. One turn makes dozens of tool calls against a
+    // signal that lives as long as the request, and a listener left behind per
+    // call is an accumulating leak on a long-lived object.
+    const controller = new AbortController();
+    let fired = false;
+    const subscription = onAbort(controller.signal, () => {
+      fired = true;
+    });
+
+    subscription.dispose();
+    controller.abort();
+
+    expect(fired).toBe(false);
   });
 });

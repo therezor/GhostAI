@@ -191,3 +191,43 @@ export function errnoOf(error: unknown): string | undefined {
   const code = (error as { code?: unknown }).code;
   return typeof code === 'string' ? code : undefined;
 }
+
+/** A listener that can be taken off the signal it was put on. */
+export interface AbortSubscription {
+  dispose(): void;
+}
+
+/**
+ * Runs `onAbort` when the signal fires, and hands back a way to stop listening.
+ *
+ * Two lines of it are load-bearing and both were rediscovered independently in
+ * `@ghostai/agent` and `@ghostai/tools`, each with a comment explaining it:
+ *
+ *  - **An already-aborted signal never fires `abort` again.** A watcher without
+ *    the check waits out its full deadline on a turn that was cancelled a
+ *    moment earlier.
+ *  - **The listener has to come off.** One turn can make dozens of tool calls
+ *    against a signal that lives as long as the request, and a listener left
+ *    behind per call is an accumulating leak on a long-lived object.
+ *
+ * Deliberately not a promise. The two callers want opposite things from one —
+ * the agent loop resolves with `'aborted'` so a race can report a cancellation,
+ * the tool registry rejects so a call unwinds — and a helper that picked one
+ * would leave the other writing this out anyway. Subscribing is the part that
+ * is the same.
+ */
+export function onAbort(signal: AbortSignal, run: () => void): AbortSubscription {
+  if (signal.aborted) {
+    run();
+    return { dispose: () => undefined };
+  }
+  const listener = (): void => {
+    run();
+  };
+  signal.addEventListener('abort', listener, { once: true });
+  return {
+    dispose: () => {
+      signal.removeEventListener('abort', listener);
+    },
+  };
+}

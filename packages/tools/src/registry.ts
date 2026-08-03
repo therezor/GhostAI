@@ -33,8 +33,9 @@ import {
   systemClock,
   toGhostError,
   truncateHeadTail,
+  onAbort,
 } from '@ghostai/core';
-import type { Clock, ErrorKind, Logger } from '@ghostai/core';
+import type { AbortSubscription, Clock, ErrorKind, Logger } from '@ghostai/core';
 import type {
   ToolDefinition,
   ToolPermission,
@@ -237,21 +238,19 @@ function rejectOnAbort(
   signal: AbortSignal,
   name: string,
 ): { readonly promise: Promise<never>; dispose(): void } {
-  let onAbort: (() => void) | undefined;
+  // Rejects rather than resolves: a cancelled call has to unwind out of
+  // `execute`, not report an outcome. `onAbort` owns the subscription — firing
+  // for a signal that already aborted, and detaching afterwards.
+  let subscription: AbortSubscription | undefined;
   const promise = new Promise<never>((_resolve, reject) => {
-    onAbort = (): void => {
+    subscription = onAbort(signal, () => {
       reject(new GhostError('aborted', `Tool ${name} aborted`));
-    };
-    if (signal.aborted) {
-      onAbort();
-      return;
-    }
-    signal.addEventListener('abort', onAbort, { once: true });
+    });
   });
   return {
     promise,
     dispose(): void {
-      if (onAbort !== undefined) signal.removeEventListener('abort', onAbort);
+      subscription?.dispose();
     },
   };
 }

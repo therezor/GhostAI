@@ -18,8 +18,10 @@ export {
   abortedError,
   errnoOf,
   isAbortError,
+  onAbort,
   isGhostError,
   toGhostError,
+  type AbortSubscription,
   type ErrorKind,
   type GhostErrorOptions,
 } from './errors.js';

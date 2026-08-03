@@ -36,8 +36,10 @@
 
 import {
   isAbortError,
+  onAbort,
   toGhostError,
   truncateHeadTail,
+  type AbortSubscription,
   type ChatMessageInput,
   type Clock,
   type Logger,
@@ -144,30 +146,20 @@ interface AbortWatch {
 }
 
 function watchAbort(signal: AbortSignal): AbortWatch {
-  // A second controller purely to remove the listener: a turn making dozens of
-  // approved calls would otherwise leave one listener per call attached to a
-  // signal that lives as long as the turn.
-  const listening = new AbortController();
+  // Resolves rather than rejects: this races an approval, and a cancellation is
+  // an outcome the race reports rather than an error it throws. `onAbort` owns
+  // the two parts that are the same everywhere — firing for a signal that has
+  // already aborted, and coming back off a signal that outlives this call.
+  let subscription: AbortSubscription | undefined;
   const promise = new Promise<'aborted'>((resolve) => {
-    // An `abort` listener added to a signal that has *already* fired is never
-    // called, so a watcher without this line waits out the full approval
-    // deadline on a turn that was cancelled a moment earlier.
-    if (signal.aborted) {
+    subscription = onAbort(signal, () => {
       resolve('aborted');
-      return;
-    }
-    signal.addEventListener(
-      'abort',
-      () => {
-        resolve('aborted');
-      },
-      { once: true, signal: listening.signal },
-    );
+    });
   });
   return {
     promise,
     dispose: () => {
-      listening.abort();
+      subscription?.dispose();
     },
   };
 }
