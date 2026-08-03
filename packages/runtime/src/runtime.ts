@@ -865,6 +865,10 @@ class Runtime implements GhostRuntime {
         this.tools.select(permissions),
         built.exposed.get(agent.id) ?? [],
         permissions,
+        {
+          logger: this.#logger,
+          ...(this.#options.clock === undefined ? {} : { clock: this.#options.clock }),
+        },
       ),
       store: this.store,
       jails,

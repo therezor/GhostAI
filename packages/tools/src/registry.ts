@@ -109,6 +109,7 @@ export function withToolboxTools(
   base: ToolScope,
   tools: readonly AnyTool[],
   permissions: ToolPermissions,
+  options: ToolRegistryOptions = {},
 ): ToolScope {
   if (tools.length === 0) return base;
 
@@ -117,7 +118,23 @@ export function withToolboxTools(
   // never-throws contract come from one implementation rather than two. It gets
   // the same permission map the base was built from, so a toolbox program the
   // agent switched off is filtered here exactly as a built-in would be.
-  const registry = new ToolRegistry();
+  //
+  // The clock and the logger are handed in for the same reason: constructed
+  // bare, this registry silently took `systemClock` and `silentLogger` while
+  // the base ran on the injected ones, so a toolbox program's `durationMs` came
+  // off a different clock than a built-in's and its execution was logged
+  // nowhere.
+  //
+  // `timeoutMs` is deliberately *not* inherited. A toolbox program is a process
+  // and `guardExec` already gives it `plan.timeoutMs`; putting the agent's
+  // `toolTimeoutMs` on top would add a second, tighter cap and start killing
+  // container commands that run legitimately long. That is a product decision
+  // about what `toolTimeoutMs` means, not something a caller should acquire by
+  // passing an options bag through.
+  const registry = new ToolRegistry({
+    ...(options.clock === undefined ? {} : { clock: options.clock }),
+    ...(options.logger === undefined ? {} : { logger: options.logger }),
+  });
   for (const tool of tools) registry.register(tool, 'builtin');
   const scoped = registry.select(permissions);
 
