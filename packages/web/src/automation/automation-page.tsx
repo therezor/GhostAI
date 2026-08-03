@@ -38,9 +38,9 @@ import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';
 import { DataList, DataListRow } from '@/components/crud/data-list.js';
 import { ListSort } from '@/components/crud/list-sort.js';
 import { Pagination } from '@/components/crud/pagination.js';
-import { pageRows, usePagination } from '@/components/crud/use-pagination.js';
+import { useListPage } from '@/components/crud/use-list-page.js';
 import { RowActions } from '@/components/crud/row-actions.js';
-import { filterRows, sortRows, type Comparators, type SortOrder } from '@/components/crud/sort.js';
+import type { Comparators } from '@/components/crud/sort.js';
 import { useAppLocale } from '@/i18n/i18n-context.js';
 import { useFormat } from '@/lib/use-format.js';
 import { useAppTimezone } from '@/timezone/timezone-context.js';
@@ -239,30 +239,26 @@ function JobRow({ job }: { readonly job: AutomationJob }): JSX.Element {
 export function AutomationRoute(): JSX.Element {
   const { t } = useTranslation();
   const describe = useDescribeSchedule();
-  const [filter, setFilter] = useState('');
-  const [sort, setSort] = useState<SortOrder<SortKey>>({ key: 'nextRun', descending: false });
 
   const jobs = useAutomationJobs();
 
-  const matched = useMemo(
-    () =>
-      sortRows(
-        filterRows(jobs.data?.jobs ?? [], filter, (job) => `${job.name} ${job.payload.kind}`),
-        sort,
-        comparators(describe),
-        { tiebreak: (a, b) => a.name.localeCompare(b.name) },
-      ),
-    [jobs.data, filter, sort, describe],
-  );
+  // Both memoised because `useListPage` compares them: `jobs.data?.jobs ?? []`
+  // is a fresh array on every render, and the comparators are built from a
+  // formatter that changes with the locale.
+  const all = useMemo(() => jobs.data?.jobs ?? [], [jobs.data]);
+  const compare = useMemo(() => comparators(describe), [describe]);
 
   // The job list arrives whole — `automation.list` is unpaged — so the page is
   // a slice of what is already here rather than a second request. The run
   // history inside a job is the one that pages on the server, because a job on
   // a five-minute schedule outgrows any single response.
-  const pagination = usePagination({
-    resetOn: `${filter}|${sort.key}|${String(sort.descending)}`,
-  }).withTotal(matched.length);
-  const rows = pageRows(matched, pagination);
+  const { filter, setFilter, sort, setSort, matched, pagination, rows } = useListPage({
+    rows: all,
+    initialSort: { key: 'nextRun', descending: false },
+    haystack: (job) => `${job.name} ${job.payload.kind}`,
+    comparators: compare,
+    tiebreak: (a, b) => a.name.localeCompare(b.name),
+  });
 
   return (
     <div className="stack page page--wide">

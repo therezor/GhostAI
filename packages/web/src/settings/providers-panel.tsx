@@ -27,7 +27,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { Pencil, Plug, Plus, Power, PowerOff, Trash2 } from 'lucide-react';
-import { useMemo, useState, type JSX } from 'react';
+import { useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -43,8 +43,8 @@ import { DataList, DataListRow } from '@/components/crud/data-list.js';
 import { ListSort } from '@/components/crud/list-sort.js';
 import { Pagination } from '@/components/crud/pagination.js';
 import { RowActions } from '@/components/crud/row-actions.js';
-import { filterRows, sortRows, type Comparators, type SortOrder } from '@/components/crud/sort.js';
-import { pageRows, usePagination } from '@/components/crud/use-pagination.js';
+import type { Comparators } from '@/components/crud/sort.js';
+import { useListPage } from '@/components/crud/use-list-page.js';
 import { SearchFilter } from '@/components/ui/search-filter.js';
 import { Section } from '@/components/form/controls.js';
 import { toProviderEnabledPatch } from './provider-form.js';
@@ -67,8 +67,6 @@ const COMPARE: Comparators<ProviderInstanceInfo, SortKey> = {
 export function ProvidersPanel(): JSX.Element {
   const { t } = useTranslation();
   const [pendingDelete, setPendingDelete] = useState<ProviderInstanceInfo | undefined>(undefined);
-  const [filter, setFilter] = useState('');
-  const [sort, setSort] = useState<SortOrder<SortKey>>({ key: 'name', descending: false });
   const { save, saving } = useSaveSettings();
   const { remove, removing } = useRemoveProvider();
   const navigate = useNavigate();
@@ -79,23 +77,15 @@ export function ProvidersPanel(): JSX.Element {
   });
 
   const all = providers.data?.instances ?? [];
-  const matched = useMemo(
-    () =>
-      sortRows(
-        // The endpoint is in the haystack because it is on screen under every
-        // name: a list that shows a value it will not match on reads as broken.
-        filterRows(all, filter, (instance) => `${instance.displayName} ${instance.apiBase}`),
-        sort,
-        COMPARE,
-        { tiebreak: (a, b) => a.displayName.localeCompare(b.displayName) },
-      ),
-    [all, filter, sort],
-  );
-
-  const pagination = usePagination({
-    resetOn: `${filter}|${sort.key}|${String(sort.descending)}`,
-  }).withTotal(matched.length);
-  const rows = pageRows(matched, pagination);
+  const { filter, setFilter, sort, setSort, matched, pagination, rows } = useListPage({
+    rows: all,
+    initialSort: { key: 'name', descending: false },
+    // The endpoint is in the haystack because it is on screen under every name:
+    // a list that shows a value it will not match on reads as broken.
+    haystack: (instance) => `${instance.displayName} ${instance.apiBase}`,
+    comparators: COMPARE,
+    tiebreak: (a, b) => a.displayName.localeCompare(b.displayName),
+  });
 
   if (providers.isPending) {
     return <p className="page__note">{t('providers.loading')}</p>;

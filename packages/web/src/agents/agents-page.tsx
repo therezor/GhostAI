@@ -44,8 +44,8 @@ import { RowActions } from '@/components/crud/row-actions.js';
 import { DataList, DataListRow } from '@/components/crud/data-list.js';
 import { ListSort } from '@/components/crud/list-sort.js';
 import { Pagination } from '@/components/crud/pagination.js';
-import { pageRows, usePagination } from '@/components/crud/use-pagination.js';
-import { filterRows, sortRows, type Comparators, type SortOrder } from '@/components/crud/sort.js';
+import { useListPage } from '@/components/crud/use-list-page.js';
+import type { Comparators } from '@/components/crud/sort.js';
 import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
 import { useSaveSettings, useSettings } from '@/settings/use-settings.js';
@@ -112,8 +112,6 @@ export function AgentsRoute(): JSX.Element {
   const navigate = useNavigate();
   const { agentId: active, select } = useAgent();
 
-  const [filter, setFilter] = useState('');
-  const [sort, setSort] = useState<SortOrder<SortKey>>({ key: 'name', descending: false });
   const [pendingDelete, setPendingDelete] = useState<AgentRow | undefined>(undefined);
 
   const agents = useQuery({
@@ -169,29 +167,19 @@ export function AgentsRoute(): JSX.Element {
     });
   }, [ids, list, agents.data]);
 
-  const matched = useMemo(
-    () =>
-      sortRows(
-        filterRows(all, filter, (row) => `${row.id} ${row.label}`),
-        sort,
-        COMPARE,
-        {
-          // The default is the agent every other one was created as a copy of,
-          // so it heads the list in both directions rather than sorting among
-          // the agents it seeded.
-          group: (row) => (row.isDefault ? 0 : 1),
-          tiebreak: (a, b) => a.label.localeCompare(b.label),
-        },
-      ),
-    [all, filter, sort],
-  );
-
   // The agent list is a slice of the settings tree, so it arrives whole — the
   // page is a slice of what is already here rather than a second request.
-  const pagination = usePagination({
-    resetOn: `${filter}|${sort.key}|${String(sort.descending)}`,
-  }).withTotal(matched.length);
-  const rows = pageRows(matched, pagination);
+  const { filter, setFilter, sort, setSort, matched, pagination, rows } = useListPage({
+    rows: all,
+    initialSort: { key: 'name', descending: false },
+    haystack: (row) => `${row.id} ${row.label}`,
+    comparators: COMPARE,
+    // The default is the agent every other one was created as a copy of, so it
+    // heads the list in both directions rather than sorting among the agents it
+    // seeded.
+    group: (row) => (row.isDefault ? 0 : 1),
+    tiebreak: (a, b) => a.label.localeCompare(b.label),
+  });
 
   const taken = useMemo(() => new Set(ids), [ids]);
 
