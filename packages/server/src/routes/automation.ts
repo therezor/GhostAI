@@ -39,6 +39,7 @@ import {
   assertOnePagingMode,
   decodeAutomationRunCursor,
   encodeAutomationRunCursor,
+  paginate,
 } from '../cursor.js';
 import { conflict, notFound, unprocessable } from '../errors.js';
 import { IdParamsSchema, PageQuerySchema, type IdParams, type PageQuery } from '../queries.js';
@@ -222,8 +223,9 @@ export function automationRoutes(deps: RouteDeps): RouteGroup<AutomationRouteId>
           ...(query.cursor === undefined ? {} : { after: decodeAutomationRunCursor(query.cursor) }),
         });
 
-        const page = rows.slice(0, query.limit);
-        const last = page.at(-1);
+        const { page, next } = paginate(rows, query.limit, (last) =>
+          encodeAutomationRunCursor({ startedAtMs: last.startedAtMs, id: last.id }),
+        );
         return {
           runs: page,
           // The panel this feeds is a numbered pager: a job on a five-minute
@@ -231,14 +233,7 @@ export function automationRoutes(deps: RouteDeps): RouteGroup<AutomationRouteId>
           // a page of rows cannot say. Unlike sessions there is one ordering, so
           // the cursor stays valid whatever the caller asked for.
           total: store.countRuns(id),
-          ...(rows.length > query.limit && last !== undefined
-            ? {
-                nextCursor: encodeAutomationRunCursor({
-                  startedAtMs: last.startedAtMs,
-                  id: last.id,
-                }),
-              }
-            : {}),
+          ...next,
         };
       },
     },

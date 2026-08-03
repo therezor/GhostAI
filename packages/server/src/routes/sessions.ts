@@ -53,6 +53,7 @@ import {
   decodeSessionCursor,
   encodeMessageCursor,
   encodeSessionCursor,
+  paginate,
 } from '../cursor.js';
 import { conflict, notFound } from '../errors.js';
 import {
@@ -167,12 +168,6 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
           ...(query.cursor === undefined ? {} : { after: decodeSessionCursor(query.cursor) }),
         });
 
-        const page = rows.slice(0, query.limit);
-        const last = page.at(-1);
-        // One statement for the whole page. A per-row lookup here is the
-        // difference between a listing and fifty of them.
-        const usage = store.sessionUsage(page.map((record) => record.key));
-
         // A cursor encodes `(updatedAtMs, key)`, which is a position in the
         // default ordering and in no other. Issuing one while the caller has
         // sorted by title would hand back a cursor that cannot be followed —
@@ -180,12 +175,21 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
         // simply is no next cursor, and the pager uses `total` instead.
         const defaultOrder = (query.sort ?? 'updated') === 'updated' && (query.desc ?? true);
 
+        const { page, next } = paginate(
+          rows,
+          query.limit,
+          (last) => encodeSessionCursor({ updatedAtMs: last.updatedAtMs, key: last.key }),
+          defaultOrder,
+        );
+
+        // One statement for the whole page. A per-row lookup here is the
+        // difference between a listing and fifty of them.
+        const usage = store.sessionUsage(page.map((record) => record.key));
+
         return {
           sessions: page.map((record) => toSummary(record, usage.get(record.key))),
           total: store.countSessions(filter),
-          ...(defaultOrder && rows.length > query.limit && last !== undefined
-            ? { nextCursor: encodeSessionCursor({ updatedAtMs: last.updatedAtMs, key: last.key }) }
-            : {}),
+          ...next,
         };
       },
     },
@@ -278,8 +282,9 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
           limit: query.limit + 1,
         });
 
-        const page = rows.slice(0, query.limit);
-        const last = page.at(-1);
+        const { page, next } = paginate(rows, query.limit, (last) =>
+          encodeMessageCursor({ seq: last.seq }),
+        );
         return {
           sessionKey: key,
           messages: page.map(toStoredMessage),
@@ -297,9 +302,7 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
               .turnStats(key)
               .flatMap((turn) => (turn.error === undefined ? [] : [[turn.turnId, turn.error]])),
           ),
-          ...(rows.length > query.limit && last !== undefined
-            ? { nextCursor: encodeMessageCursor({ seq: last.seq }) }
-            : {}),
+          ...next,
         };
       },
     },

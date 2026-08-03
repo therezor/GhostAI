@@ -20,6 +20,7 @@ import {
   assertOnePagingMode,
   decodeNotificationCursor,
   encodeNotificationCursor,
+  paginate,
 } from '../cursor.js';
 import { notFound } from '../errors.js';
 import {
@@ -59,8 +60,9 @@ export function notificationRoutes(deps: RouteDeps): RouteGroup<NotificationRout
           ...(query.cursor === undefined ? {} : { after: decodeNotificationCursor(query.cursor) }),
         });
 
-        const page = rows.slice(0, query.limit);
-        const last = page.at(-1);
+        const { page, next } = paginate(rows, query.limit, (last) =>
+          encodeNotificationCursor({ createdAtMs: last.createdAtMs, id: last.id }),
+        );
         return {
           notifications: page,
           // Always the total, never the count of what this page happened to
@@ -70,14 +72,7 @@ export function notificationRoutes(deps: RouteDeps): RouteGroup<NotificationRout
           // and the pager needs this one: how many rows it is paging through,
           // not how many of them are still unread.
           total: store.count({ unreadOnly }),
-          ...(rows.length > query.limit && last !== undefined
-            ? {
-                nextCursor: encodeNotificationCursor({
-                  createdAtMs: last.createdAtMs,
-                  id: last.id,
-                }),
-              }
-            : {}),
+          ...next,
         };
       },
     },
