@@ -28,17 +28,14 @@
  *  - **An error response is never appended to history.** A provider 400 written
  *    into the transcript is replayed on every subsequent request in that
  *    session, so one malformed turn becomes a permanently poisoned session.
- *  - **A cancelled tool call still gets a `tool` message.** Providers reject an
- *    `assistant` turn whose `tool_calls` were never answered, so stopping mid-
- *    tool without writing a result would make the *next* turn fail on history
- *    the user cannot see — the failure surfaces long after the Ctrl-C that
- *    caused it. A *denied* call is the same case: no execution, still a result.
- *  - **Permission is checked between the `tool.call` event and execution**,
- *    which is the only place it can be checked once for every transport. The
- *    answer comes from the scope — `tools.permissionFor(name)` — because the
- *    scope is what knows whether a name resolved to a built-in or to a program
- *    in this agent's toolbox. What the loop decides is whether to ask; what the
- *    answer is, and how long it holds, belong to the gate. See `approval.ts`.
+ *  - **The results of one assistant turn are appended in one transaction.** A
+ *    partial write is an orphaned tool result, and `findLegalStart` then has to
+ *    repair it on every later request.
+ *
+ * Running the tools themselves lives in `dispatch.ts` — authorisation, the
+ * approval gate, the heartbeat, truncation and the envelope — along with the
+ * two invariants that only that file can hold: every call gets an answer, and
+ * permission is checked in exactly one place.
  *
  * The signal threads from the caller through the provider request, tool
  * execution and any child process. There is one cancellation mechanism, and

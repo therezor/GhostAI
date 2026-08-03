@@ -1,8 +1,37 @@
 /**
  * The tool half of a turn: authorise, run, answer.
  *
- * Extracted from `loop.ts`, which drives it. See the header there for the turn
- * as a whole.
+ * `loop.ts` owns the turn — the prompt, the provider, the stream, the caps —
+ * and hands each assistant message that asked for tools to `dispatch`. What
+ * comes back is the events the operator sees and the messages the turn should
+ * append. The store is not this file's to write.
+ *
+ * Two invariants live here rather than upstairs, because this is the only place
+ * that can hold them:
+ *
+ *  - **Every tool call gets a `tool` message.** Providers reject an `assistant`
+ *    turn whose `tool_calls` were never answered, so a call that was cancelled,
+ *    denied, or arrived on an agent with tools switched off still produces a
+ *    result — no execution, still an answer. Stopping mid-tool without writing
+ *    one would make the *next* turn fail on history the user cannot see, long
+ *    after the Ctrl-C that caused it. That is also why `dispatch` returns the
+ *    whole batch: one `appendMany` upstairs, never a partial write.
+ *  - **Permission is checked between the `tool.call` event and execution**,
+ *    which is the only place it can be checked once for every transport. A
+ *    transport that gated it for itself would be one `if` away from an ungated
+ *    one. The answer comes from the scope — `tools.permissionFor(name)` —
+ *    because the scope is what knows whether a name resolved to a built-in or
+ *    to a program in this agent's toolbox. What this file decides is whether to
+ *    ask; what the answer is, and how long it holds, belong to the gate. See
+ *    `approval.ts`.
+ *
+ * A subagent call is authorised here too, on the same path, and then handed
+ * back to the loop through `SubagentDelegate` — delegation needs the loop
+ * resolver, the store and the lineage, none of which belong to a dispatcher.
+ *
+ * Nothing here falls back to a default. Every collaborator is resolved by
+ * `AgentLoop` and passed in, so there is no branch in this file that a turn
+ * does not take.
  */
 
 import {

@@ -38,4 +38,5 @@ page is a bug. The highest-value files to read directly:
 - `packages/protocol/src/config.ts` — the settings tree, with a paragraph per decision
 - `packages/protocol/src/prompt.ts` — the prompt templates and substitution rules
 - `packages/agent/src/loop.ts` — the turn, and the invariants it maintains
+- `packages/agent/src/dispatch.ts` — the tool half of a turn: authorise, run, answer
 - `packages/security/src/` — the guards, each explaining its own threat model
