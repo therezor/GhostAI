@@ -123,7 +123,10 @@ export interface CreateJobInput {
   /** 0 when the job is disabled or its schedule has no next occurrence. */
   readonly nextRunAtMs: number;
   /** Absent means the operator made it through the panel. */
-  readonly createdBy?: { readonly agentId: string; readonly sessionKey: string };
+  readonly createdBy?: {
+    readonly agentId: string;
+    readonly sessionKey: string;
+  };
 }
 
 /**
@@ -192,7 +195,9 @@ function readWarnings(row: Row): string[] {
   if (raw === undefined) return [];
   try {
     const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((v): v is string => typeof v === 'string')
+      : [];
   } catch {
     return [];
   }
@@ -220,10 +225,18 @@ function rowToRun(row: Row): AutomationRun {
 
 /** The parse failure a bad row produces, or `null` when it is fine. */
 function jobParseError(row: Row): string | null {
-  const schedule = AutomationScheduleSchema.safeParse(safeJson(read.string(row, 'schedule_json')));
-  if (!schedule.success) return `schedule: ${schedule.error.issues[0]?.message ?? 'unparseable'}`;
-  const payload = AutomationPayloadSchema.safeParse(safeJson(read.string(row, 'payload_json')));
-  if (!payload.success) return `payload: ${payload.error.issues[0]?.message ?? 'unparseable'}`;
+  const schedule = AutomationScheduleSchema.safeParse(
+    safeJson(read.string(row, 'schedule_json')),
+  );
+  if (!schedule.success) {
+    return `schedule: ${schedule.error.issues[0]?.message ?? 'unparseable'}`;
+  }
+  const payload = AutomationPayloadSchema.safeParse(
+    safeJson(read.string(row, 'payload_json')),
+  );
+  if (!payload.success) {
+    return `payload: ${payload.error.issues[0]?.message ?? 'unparseable'}`;
+  }
   return null;
 }
 
@@ -246,8 +259,12 @@ function rowToJob(row: Row): AutomationJob {
   return {
     id: read.string(row, 'id'),
     name: read.string(row, 'name'),
-    schedule: AutomationScheduleSchema.parse(safeJson(read.string(row, 'schedule_json'))),
-    payload: AutomationPayloadSchema.parse(safeJson(read.string(row, 'payload_json'))),
+    schedule: AutomationScheduleSchema.parse(
+      safeJson(read.string(row, 'schedule_json')),
+    ),
+    payload: AutomationPayloadSchema.parse(
+      safeJson(read.string(row, 'payload_json')),
+    ),
     enabled: read.int(row, 'enabled') === 1,
     deleteAfterRun: read.int(row, 'delete_after_run') === 1,
     ...createdByOf(row),
@@ -264,25 +281,25 @@ function rowToJob(row: Row): AutomationJob {
 }
 
 export class AutomationStore {
-  readonly #db: DatabaseSync;
-  readonly #clock: Clock;
-  readonly #newId: () => string;
-  readonly #logger: Logger;
-  readonly #statements = new Map<string, StatementSync>();
+  private readonly db: DatabaseSync;
+  private readonly clock: Clock;
+  private readonly newId: () => string;
+  private readonly logger: Logger;
+  private readonly statements = new Map<string, StatementSync>();
 
   constructor(options: AutomationStoreOptions) {
-    this.#db = options.database;
-    this.#clock = options.clock ?? systemClock;
-    this.#newId = options.newId ?? newUuid;
-    this.#logger = options.logger ?? silentLogger;
+    this.db = options.database;
+    this.clock = options.clock ?? systemClock;
+    this.newId = options.newId ?? newUuid;
+    this.logger = options.logger ?? silentLogger;
     // Connection-level and idempotent. `SessionStore` already sets it on the
     // shared connection, but this store's cascade is the only thing standing
     // between deleting a job and orphaning its entire run history — so it does
     // not inherit that guarantee from a construction order nothing enforces.
-    this.#db.exec('PRAGMA foreign_keys = ON');
-    this.#db.exec(SCHEMA);
-    this.#addMissingColumns();
-    this.#dropLegacyScheduleTz();
+    this.db.exec('PRAGMA foreign_keys = ON');
+    this.db.exec(SCHEMA);
+    this.addMissingColumns();
+    this.dropLegacyScheduleTz();
   }
 
   /**
@@ -303,13 +320,17 @@ export class AutomationStore {
    * instant; an operator who is told which zones were dropped can go and check
    * the jobs that moved. Silence here would be the same change made invisibly.
    */
-  #dropLegacyScheduleTz(): void {
-    const rows = this.#db
-      .prepare(`SELECT id, schedule_json FROM automation_jobs WHERE schedule_json LIKE '%"tz"%'`)
+  private dropLegacyScheduleTz(): void {
+    const rows = this.db
+      .prepare(
+        `SELECT id, schedule_json FROM automation_jobs WHERE schedule_json LIKE '%"tz"%'`,
+      )
       .all();
     if (rows.length === 0) return;
 
-    const update = this.#stmt('UPDATE automation_jobs SET schedule_json = ? WHERE id = ?');
+    const update = this.stmt(
+      'UPDATE automation_jobs SET schedule_json = ? WHERE id = ?',
+    );
     const zones = new Set<string>();
     let changed = 0;
 
@@ -324,7 +345,9 @@ export class AutomationStore {
         // Leaving it is what lets the schema report it against the job it is on.
         continue;
       }
-      if (typeof parsed !== 'object' || parsed === null || !('tz' in parsed)) continue;
+      if (typeof parsed !== 'object' || parsed === null || !('tz' in parsed)) {
+        continue;
+      }
 
       const { tz, ...rest } = parsed as Record<string, unknown>;
       if (typeof tz === 'string' && tz !== '') zones.add(tz);
@@ -333,7 +356,7 @@ export class AutomationStore {
     }
 
     if (changed > 0) {
-      this.#logger.warn(
+      this.logger.warn(
         { jobs: changed, zones: [...zones].sort((a, b) => a.localeCompare(b)) },
         'dropped per-job automation timezones; these jobs now use the install timezone (ui.timezone) and may fire at a different instant',
       );
@@ -353,9 +376,9 @@ export class AutomationStore {
    * that case, once, for two columns, and a versioned ledger for it would be a
    * mechanism with a single caller.
    */
-  #addMissingColumns(): void {
+  private addMissingColumns(): void {
     const present = new Set(
-      this.#db
+      this.db
         .prepare('PRAGMA table_info(automation_jobs)')
         .all()
         .map((row) => read.optionalString(row, 'name') ?? ''),
@@ -371,23 +394,23 @@ export class AutomationStore {
         "ALTER TABLE automation_jobs ADD COLUMN created_by_session TEXT NOT NULL DEFAULT ''",
       ],
     ] as const) {
-      if (!present.has(column)) this.#db.exec(ddl);
+      if (!present.has(column)) this.db.exec(ddl);
     }
   }
 
-  #stmt(sql: string): StatementSync {
-    const cached = this.#statements.get(sql);
+  private stmt(sql: string): StatementSync {
+    const cached = this.statements.get(sql);
     if (cached !== undefined) return cached;
-    const prepared = this.#db.prepare(sql);
-    this.#statements.set(sql, prepared);
+    const prepared = this.db.prepare(sql);
+    this.statements.set(sql, prepared);
     return prepared;
   }
 
   /** Parses a row, or logs and returns undefined. Never throws on bad JSON. */
-  #tolerate(row: Row): AutomationJob | undefined {
+  private tolerate(row: Row): AutomationJob | undefined {
     const problem = jobParseError(row);
     if (problem === null) return rowToJob(row);
-    this.#logger.warn(
+    this.logger.warn(
       { jobId: read.optionalString(row, 'id'), problem },
       'Skipping an automation job whose stored shape does not parse',
     );
@@ -399,9 +422,9 @@ export class AutomationStore {
   // -------------------------------------------------------------------------
 
   createJob(input: CreateJobInput): AutomationJob {
-    const now = this.#clock.now();
-    const id = this.#newId();
-    this.#stmt(
+    const now = this.clock.now();
+    const id = this.newId();
+    this.stmt(
       `INSERT INTO automation_jobs
          (id, name, schedule_json, payload_json, enabled, delete_after_run,
           next_run_at_ms, last_run_at_ms, last_status, last_error, run_count,
@@ -423,16 +446,20 @@ export class AutomationStore {
 
     const created = this.getJob(id);
     if (created === undefined) {
-      throw new GhostError('storage', 'Automation job vanished immediately after insert', {
-        details: { id },
-      });
+      throw new GhostError(
+        'storage',
+        'Automation job vanished immediately after insert',
+        {
+          details: { id },
+        },
+      );
     }
     return created;
   }
 
   getJob(id: string): AutomationJob | undefined {
-    const row = this.#stmt('SELECT * FROM automation_jobs WHERE id = ?').get(id);
-    return row === undefined ? undefined : this.#tolerate(row);
+    const row = this.stmt('SELECT * FROM automation_jobs WHERE id = ?').get(id);
+    return row === undefined ? undefined : this.tolerate(row);
   }
 
   /**
@@ -444,19 +471,21 @@ export class AutomationStore {
    * where it goes.
    */
   listJobs(): AutomationJob[] {
-    const rows = this.#stmt(
+    const rows = this.stmt(
       'SELECT * FROM automation_jobs ORDER BY created_at_ms DESC, id ASC',
     ).all();
     return rows
-      .map((row) => this.#tolerate(row))
+      .map((row) => this.tolerate(row))
       .filter((job): job is AutomationJob => job !== undefined);
   }
 
   updateJob(id: string, patch: UpdateJobInput): AutomationJob | undefined {
-    const existing = this.#stmt('SELECT * FROM automation_jobs WHERE id = ?').get(id);
+    const existing = this.stmt(
+      'SELECT * FROM automation_jobs WHERE id = ?',
+    ).get(id);
     if (existing === undefined) return undefined;
 
-    this.#stmt(
+    this.stmt(
       `UPDATE automation_jobs
           SET name           = COALESCE(?, name),
               schedule_json  = COALESCE(?, schedule_json),
@@ -473,7 +502,7 @@ export class AutomationStore {
       patch.enabled === undefined ? null : patch.enabled ? 1 : 0,
       patch.deleteAfterRun === undefined ? null : patch.deleteAfterRun ? 1 : 0,
       patch.nextRunAtMs ?? null,
-      this.#clock.now(),
+      this.clock.now(),
       id,
     );
 
@@ -481,7 +510,11 @@ export class AutomationStore {
   }
 
   deleteJob(id: string): boolean {
-    return Number(this.#stmt('DELETE FROM automation_jobs WHERE id = ?').run(id).changes) > 0;
+    return (
+      Number(
+        this.stmt('DELETE FROM automation_jobs WHERE id = ?').run(id).changes,
+      ) > 0
+    );
   }
 
   /**
@@ -492,7 +525,7 @@ export class AutomationStore {
    * parse and discard every job in the table on every attempt.
    */
   countJobsBy(agentId: string): number {
-    const row = this.#stmt(
+    const row = this.stmt(
       'SELECT COUNT(*) AS n FROM automation_jobs WHERE created_by_agent = ?',
     ).get(agentId);
     return row === undefined ? 0 : read.int(row, 'n');
@@ -504,7 +537,7 @@ export class AutomationStore {
 
   /** When the timer should next wake, or undefined when nothing is scheduled. */
   earliestDueMs(): number | undefined {
-    const row = this.#stmt(
+    const row = this.stmt(
       `SELECT MIN(next_run_at_ms) AS at FROM automation_jobs
         WHERE enabled = 1 AND next_run_at_ms > 0`,
     ).get();
@@ -522,7 +555,7 @@ export class AutomationStore {
    */
   dueJobs(nowMs: number, limit: number): AutomationJob[] {
     if (limit <= 0) return [];
-    const rows = this.#stmt(
+    const rows = this.stmt(
       `SELECT * FROM automation_jobs
         WHERE enabled = 1 AND next_run_at_ms > 0 AND next_run_at_ms <= ?
         ORDER BY next_run_at_ms ASC, id ASC
@@ -537,13 +570,20 @@ export class AutomationStore {
         continue;
       }
       const id = read.string(row, 'id');
-      this.#logger.error({ jobId: id, problem }, 'Disabling an automation job that does not parse');
-      this.#stmt(
+      this.logger.error(
+        { jobId: id, problem },
+        'Disabling an automation job that does not parse',
+      );
+      this.stmt(
         `UPDATE automation_jobs
             SET enabled = 0, next_run_at_ms = 0, last_status = 'error',
                 last_error = ?, updated_at_ms = ?
           WHERE id = ?`,
-      ).run(`This job's stored shape does not parse (${problem}).`, this.#clock.now(), id);
+      ).run(
+        `This job's stored shape does not parse (${problem}).`,
+        this.clock.now(),
+        id,
+      );
     }
     return due;
   }
@@ -554,24 +594,32 @@ export class AutomationStore {
   }
 
   setNextRun(id: string, nextRunAtMs: number): void {
-    this.#stmt('UPDATE automation_jobs SET next_run_at_ms = ?, updated_at_ms = ? WHERE id = ?').run(
-      nextRunAtMs,
-      this.#clock.now(),
-      id,
-    );
+    this.stmt(
+      'UPDATE automation_jobs SET next_run_at_ms = ?, updated_at_ms = ? WHERE id = ?',
+    ).run(nextRunAtMs, this.clock.now(), id);
   }
 
   /** Folds one finished run into the job's `state`. */
   recordOutcome(
     id: string,
-    outcome: { readonly ranAtMs: number; readonly status: RunStatus; readonly error?: string },
+    outcome: {
+      readonly ranAtMs: number;
+      readonly status: RunStatus;
+      readonly error?: string;
+    },
   ): void {
-    this.#stmt(
+    this.stmt(
       `UPDATE automation_jobs
           SET last_run_at_ms = ?, last_status = ?, last_error = ?,
               run_count = run_count + 1, updated_at_ms = ?
         WHERE id = ?`,
-    ).run(outcome.ranAtMs, outcome.status, outcome.error ?? '', this.#clock.now(), id);
+    ).run(
+      outcome.ranAtMs,
+      outcome.status,
+      outcome.error ?? '',
+      this.clock.now(),
+      id,
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -580,15 +628,17 @@ export class AutomationStore {
 
   startRun(input: StartRunInput): AutomationRun {
     const run: AutomationRun = {
-      id: this.#newId(),
+      id: this.newId(),
       jobId: input.jobId,
-      startedAtMs: this.#clock.now(),
+      startedAtMs: this.clock.now(),
       status: 'pending',
       warnings: [],
-      ...(input.sessionKey === undefined ? {} : { sessionKey: input.sessionKey }),
+      ...(input.sessionKey === undefined
+        ? {}
+        : { sessionKey: input.sessionKey }),
     };
 
-    this.#stmt(
+    this.stmt(
       `INSERT INTO automation_runs
          (id, job_id, started_at_ms, finished_at_ms, status, skip_reason, error, output, warnings_json, session_key)
        VALUES (?, ?, ?, NULL, 'pending', NULL, NULL, NULL, '[]', ?)`,
@@ -598,13 +648,13 @@ export class AutomationStore {
   }
 
   finishRun(runId: string, input: FinishRunInput): AutomationRun | undefined {
-    this.#stmt(
+    this.stmt(
       `UPDATE automation_runs
           SET finished_at_ms = ?, status = ?, skip_reason = ?, error = ?,
               output = ?, warnings_json = ?
         WHERE id = ?`,
     ).run(
-      this.#clock.now(),
+      this.clock.now(),
       input.status,
       input.skipReason ?? null,
       input.error ?? null,
@@ -616,7 +666,7 @@ export class AutomationStore {
   }
 
   getRun(id: string): AutomationRun | undefined {
-    const row = this.#stmt('SELECT * FROM automation_runs WHERE id = ?').get(id);
+    const row = this.stmt('SELECT * FROM automation_runs WHERE id = ?').get(id);
     return row === undefined ? undefined : rowToRun(row);
   }
 
@@ -629,7 +679,7 @@ export class AutomationStore {
    */
   listRuns(jobId: string, options: ListRunsOptions = {}): AutomationRun[] {
     const { limit = 50, offset = 0, after } = options;
-    const rows = this.#stmt(
+    const rows = this.stmt(
       `SELECT * FROM automation_runs
         WHERE job_id = ?
           AND (? IS NULL
@@ -662,7 +712,9 @@ export class AutomationStore {
    * been running.
    */
   countRuns(jobId: string): number {
-    const row = this.#stmt('SELECT COUNT(*) AS n FROM automation_runs WHERE job_id = ?').get(jobId);
+    const row = this.stmt(
+      'SELECT COUNT(*) AS n FROM automation_runs WHERE job_id = ?',
+    ).get(jobId);
     return row === undefined ? 0 : read.int(row, 'n');
   }
 
@@ -674,7 +726,7 @@ export class AutomationStore {
    * sessions table stays bounded by the same knob.
    */
   trimRuns(jobId: string, keep: number): TrimmedRun[] {
-    const doomed = this.#stmt(
+    const doomed = this.stmt(
       `SELECT id, session_key FROM automation_runs
         WHERE job_id = ?
           AND id NOT IN (SELECT id FROM automation_runs
@@ -690,7 +742,7 @@ export class AutomationStore {
       sessionKey: read.optionalString(row, 'session_key'),
     }));
 
-    const remove = this.#stmt('DELETE FROM automation_runs WHERE id = ?');
+    const remove = this.stmt('DELETE FROM automation_runs WHERE id = ?');
     for (const run of trimmed) remove.run(run.id);
     return trimmed;
   }
@@ -704,11 +756,11 @@ export class AutomationStore {
    */
   reconcilePending(message: string): number {
     return Number(
-      this.#stmt(
+      this.stmt(
         `UPDATE automation_runs
             SET status = 'error', error = ?, finished_at_ms = ?
           WHERE status = 'pending'`,
-      ).run(message, this.#clock.now()).changes,
+      ).run(message, this.clock.now()).changes,
     );
   }
 }

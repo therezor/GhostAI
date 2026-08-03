@@ -39,7 +39,9 @@ describe('parseCron', () => {
   it('refuses a six-field expression by name rather than absorbing it', () => {
     // The failure this prevents is not "slightly wrong": read as five fields
     // plus a stray, `0 * * * * *` runs sixty times more often than asked.
-    expect(() => parseCron('0 * * * * *')).toThrow(/Seconds and years are not supported/u);
+    expect(() => parseCron('0 * * * * *')).toThrow(
+      /Seconds and years are not supported/u,
+    );
     expect(() => parseCron('* * * *')).toThrow(/expected 5 fields/u);
   });
 
@@ -73,10 +75,18 @@ describe('parseCron', () => {
   });
 
   it('refuses out-of-range values, backwards ranges and bad steps', () => {
-    expect(() => parseCron('60 * * * *')).toThrow(/minute must be between 0 and 59/u);
-    expect(() => parseCron('* 24 * * *')).toThrow(/hour must be between 0 and 23/u);
-    expect(() => parseCron('* * 0 * *')).toThrow(/day-of-month must be between 1 and 31/u);
-    expect(() => parseCron('* * * 13 *')).toThrow(/month must be between 1 and 12/u);
+    expect(() => parseCron('60 * * * *')).toThrow(
+      /minute must be between 0 and 59/u,
+    );
+    expect(() => parseCron('* 24 * * *')).toThrow(
+      /hour must be between 0 and 23/u,
+    );
+    expect(() => parseCron('* * 0 * *')).toThrow(
+      /day-of-month must be between 1 and 31/u,
+    );
+    expect(() => parseCron('* * * 13 *')).toThrow(
+      /month must be between 1 and 12/u,
+    );
     expect(() => parseCron('20-10 * * * *')).toThrow(/runs backwards/u);
     expect(() => parseCron('*/0 * * * *')).toThrow(/positive whole number/u);
     expect(() => parseCron('*/-2 * * * *')).toThrow(/positive whole number/u);
@@ -84,7 +94,9 @@ describe('parseCron', () => {
   });
 
   it('refuses a value that is not a number or a known name', () => {
-    expect(() => parseCron('* * * * funday')).toThrow(/not a value day-of-week accepts/u);
+    expect(() => parseCron('* * * * funday')).toThrow(
+      /not a value day-of-week accepts/u,
+    );
   });
 
   it('throws a config GhostError, so the route can answer 422 instead of 500', () => {
@@ -112,8 +124,12 @@ describe('parseCron', () => {
 describe('nextCronRun', () => {
   it('finds the next daily occurrence in the named zone, not the host zone', () => {
     // 08:00 UTC is 09:00 in Kyiv in winter, so a 09:00 Kyiv job is already past.
-    expect(nextLocal('0 9 * * *', 'Europe/Kyiv', '2026-01-15T08:00:00Z')).toBe('2026-01-16 09:00');
-    expect(nextLocal('0 9 * * *', 'Europe/Kyiv', '2026-01-15T06:00:00Z')).toBe('2026-01-15 09:00');
+    expect(nextLocal('0 9 * * *', 'Europe/Kyiv', '2026-01-15T08:00:00Z')).toBe(
+      '2026-01-16 09:00',
+    );
+    expect(nextLocal('0 9 * * *', 'Europe/Kyiv', '2026-01-15T06:00:00Z')).toBe(
+      '2026-01-15 09:00',
+    );
   });
 
   it('is strictly after the instant given, so a job does not refire on its own tick', () => {
@@ -123,12 +139,18 @@ describe('nextCronRun', () => {
   });
 
   it('rolls over a month and a year boundary', () => {
-    expect(nextLocal('0 0 1 * *', 'UTC', '2026-12-15T00:00:00Z')).toBe('2027-01-01 00:00');
-    expect(nextLocal('0 0 * * *', 'UTC', '2026-02-28T12:00:00Z')).toBe('2026-03-01 00:00');
+    expect(nextLocal('0 0 1 * *', 'UTC', '2026-12-15T00:00:00Z')).toBe(
+      '2027-01-01 00:00',
+    );
+    expect(nextLocal('0 0 * * *', 'UTC', '2026-02-28T12:00:00Z')).toBe(
+      '2026-03-01 00:00',
+    );
   });
 
   it('finds 29 February only in a leap year', () => {
-    expect(nextLocal('0 0 29 2 *', 'UTC', '2026-03-01T00:00:00Z')).toBe('2028-02-29 00:00');
+    expect(nextLocal('0 0 29 2 *', 'UTC', '2026-03-01T00:00:00Z')).toBe(
+      '2028-02-29 00:00',
+    );
   });
 
   describe('the day-of-month / day-of-week OR rule', () => {
@@ -139,17 +161,25 @@ describe('nextCronRun', () => {
       const first = nextCronRun(spec, from)!;
       // 6 November 2026 is a Friday and comes before the 13th.
       expect(localOf(first, 'UTC')).toBe('2026-11-06 00:00');
-      expect(localOf(nextCronRun(spec, first)!, 'UTC')).toBe('2026-11-13 00:00');
+      expect(localOf(nextCronRun(spec, first)!, 'UTC')).toBe(
+        '2026-11-13 00:00',
+      );
     });
 
     it('applies only the restricted one when the other is `*`', () => {
-      expect(nextLocal('0 0 13 * *', 'UTC', '2026-11-01T00:00:00Z')).toBe('2026-11-13 00:00');
-      expect(nextLocal('0 0 * * 5', 'UTC', '2026-11-01T00:00:00Z')).toBe('2026-11-06 00:00');
+      expect(nextLocal('0 0 13 * *', 'UTC', '2026-11-01T00:00:00Z')).toBe(
+        '2026-11-13 00:00',
+      );
+      expect(nextLocal('0 0 * * 5', 'UTC', '2026-11-01T00:00:00Z')).toBe(
+        '2026-11-06 00:00',
+      );
     });
 
     it('treats an explicit full weekday range as restricted, so the OR applies', () => {
       // `0-6` covers every weekday, so ORing it with the 13th matches daily.
-      expect(nextLocal('0 0 13 * 0-6', 'UTC', '2026-11-01T12:00:00Z')).toBe('2026-11-02 00:00');
+      expect(nextLocal('0 0 13 * 0-6', 'UTC', '2026-11-01T12:00:00Z')).toBe(
+        '2026-11-02 00:00',
+      );
     });
   });
 
@@ -157,14 +187,18 @@ describe('nextCronRun', () => {
     // London springs forward at 01:00 UTC on 29 March 2026: 01:00 -> 02:00
     // local, so 01:30 local does not exist that day.
     it('skips a wall-clock time the zone never reaches', () => {
-      const next = nextLocal('30 1 * * *', 'Europe/London', '2026-03-28T12:00:00Z');
+      const next = nextLocal(
+        '30 1 * * *',
+        'Europe/London',
+        '2026-03-28T12:00:00Z',
+      );
       expect(next).toBe('2026-03-30 01:30');
     });
 
     it('still fires on a day whose skipped hour is not the scheduled one', () => {
-      expect(nextLocal('30 3 * * *', 'Europe/London', '2026-03-28T12:00:00Z')).toBe(
-        '2026-03-29 03:30',
-      );
+      expect(
+        nextLocal('30 3 * * *', 'Europe/London', '2026-03-28T12:00:00Z'),
+      ).toBe('2026-03-29 03:30');
     });
 
     // New York falls back at 06:00 UTC on 1 November 2026: 02:00 -> 01:00
@@ -242,14 +276,20 @@ describe('nextCronRun', () => {
   it('returns null for an expression that can never match', () => {
     // 30 February is legal to write and impossible to reach.
     expect(
-      nextCronRun(parseCron('0 0 30 2 *', 'UTC'), Date.parse('2026-01-01T00:00:00Z')),
+      nextCronRun(
+        parseCron('0 0 30 2 *', 'UTC'),
+        Date.parse('2026-01-01T00:00:00Z'),
+      ),
     ).toBeNull();
   });
 
   it('returns null rather than searching forever past the bound', () => {
     // 29 February on a Monday in January — the month rules it out entirely.
     expect(
-      nextCronRun(parseCron('0 0 31 4 *', 'UTC'), Date.parse('2026-01-01T00:00:00Z')),
+      nextCronRun(
+        parseCron('0 0 31 4 *', 'UTC'),
+        Date.parse('2026-01-01T00:00:00Z'),
+      ),
     ).toBeNull();
   });
 
@@ -293,11 +333,17 @@ describe('nextCronRun', () => {
         get('minute'),
       ] as [number, number, number, number, number];
 
-      if (!spec.minutes.includes(minute) || !spec.hours.includes(hour)) return false;
+      if (!spec.minutes.includes(minute) || !spec.hours.includes(hour)) {
+        return false;
+      }
       if (!spec.months.includes(month)) return false;
       const domHit = spec.daysOfMonth.includes(day);
-      const dowHit = spec.daysOfWeek.includes(new Date(Date.UTC(year, month - 1, day)).getUTCDay());
-      return spec.domRestricted && spec.dowRestricted ? domHit || dowHit : domHit && dowHit;
+      const dowHit = spec.daysOfWeek.includes(
+        new Date(Date.UTC(year, month - 1, day)).getUTCDay(),
+      );
+      return spec.domRestricted && spec.dowRestricted
+        ? domHit || dowHit
+        : domHit && dowHit;
     }
 
     it('returns an instant that satisfies the expression', () => {
@@ -339,7 +385,12 @@ describe('nextCronRun', () => {
     it('gives the same answer asked again from anywhere inside the gap', () => {
       fc.assert(
         fc.property(
-          fc.constantFrom('30 9 * * 1-5', '0 0 13 * 5', '*/7 * * * *', '0 2 * * *'),
+          fc.constantFrom(
+            '30 9 * * 1-5',
+            '0 0 13 * 5',
+            '*/7 * * * *',
+            '0 2 * * *',
+          ),
           fc.constantFrom('UTC', 'Europe/London', 'America/New_York'),
           fc.integer({
             min: Date.parse('2026-01-01T00:00:00Z'),

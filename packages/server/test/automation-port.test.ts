@@ -15,7 +15,10 @@ import type { CreateAutomationJob } from '@ghostai/protocol';
 import type { AutomationPort, ToolboxRequest } from '@ghostai/tools';
 
 import { AutomationStore } from '#src/automation-store.js';
-import { MAX_AGENT_JOBS, createAutomationResolver } from '#src/automation-port.js';
+import {
+  MAX_AGENT_JOBS,
+  createAutomationResolver,
+} from '#src/automation-port.js';
 import { manualClock } from '#testkit/clock.js';
 
 const opened: DatabaseSync[] = [];
@@ -29,7 +32,12 @@ afterEach(() => {
 const JOB: CreateAutomationJob = {
   name: 'Nightly build',
   schedule: { kind: 'cron', expr: '0 9 * * *' },
-  payload: { kind: 'scheduled', message: 'check the build', deliver: false, targets: {} },
+  payload: {
+    kind: 'scheduled',
+    message: 'check the build',
+    deliver: false,
+    targets: {},
+  },
   enabled: true,
   deleteAfterRun: false,
 };
@@ -97,7 +105,10 @@ describe('creating a job', () => {
     const created = h.port().create(JOB);
 
     expect(created.ok).toBe(true);
-    expect(created.value?.createdBy).toEqual({ agentId: 'reviewer', sessionKey: 'web:1' });
+    expect(created.value?.createdBy).toEqual({
+      agentId: 'reviewer',
+      sessionKey: 'web:1',
+    });
     await Promise.resolve();
   });
 
@@ -128,7 +139,9 @@ describe('creating a job', () => {
     const h = harness();
     h.sessions.ensureSession('web:1', { origin: 'web' });
 
-    const bad = h.port().create({ ...JOB, schedule: { kind: 'cron', expr: '99 * * * *' } });
+    const bad = h
+      .port()
+      .create({ ...JOB, schedule: { kind: 'cron', expr: '99 * * * *' } });
 
     expect(bad).toMatchObject({ ok: false, refusal: 'unschedulable' });
     expect(bad.detail).toMatch(/minute must be between 0 and 59/u);
@@ -151,9 +164,13 @@ describe('the nested guard', () => {
     // on things" can create another job that says the same, and the install
     // grows jobs geometrically with nobody watching.
     const h = harness();
-    h.sessions.ensureSession('automation:job-1:run-1', { origin: 'automation' });
+    h.sessions.ensureSession('automation:job-1:run-1', {
+      origin: 'automation',
+    });
 
-    const refused = h.port({ sessionKey: 'automation:job-1:run-1' }).create(JOB);
+    const refused = h
+      .port({ sessionKey: 'automation:job-1:run-1' })
+      .create(JOB);
 
     expect(refused).toMatchObject({ ok: false, refusal: 'nested' });
     expect(h.jobs.listJobs()).toHaveLength(0);
@@ -166,7 +183,9 @@ describe('the nested guard', () => {
     const h = harness();
     h.sessions.ensureSession('automation:looks-like-it', { origin: 'web' });
 
-    const allowed = h.port({ sessionKey: 'automation:looks-like-it' }).create(JOB);
+    const allowed = h
+      .port({ sessionKey: 'automation:looks-like-it' })
+      .create(JOB);
 
     expect(allowed.ok).toBe(true);
   });
@@ -175,7 +194,9 @@ describe('the nested guard', () => {
     // Listing creates nothing, and a job knowing what it already set up is
     // useful rather than dangerous.
     const h = harness();
-    h.sessions.ensureSession('automation:job-1:run-1', { origin: 'automation' });
+    h.sessions.ensureSession('automation:job-1:run-1', {
+      origin: 'automation',
+    });
 
     const listed = h.port({ sessionKey: 'automation:job-1:run-1' }).list();
 
@@ -193,7 +214,10 @@ describe('the per-agent cap', () => {
       expect(port.create({ ...JOB, name: `job ${String(i)}` }).ok).toBe(true);
     }
 
-    expect(port.create(JOB)).toMatchObject({ ok: false, refusal: 'at-capacity' });
+    expect(port.create(JOB)).toMatchObject({
+      ok: false,
+      refusal: 'at-capacity',
+    });
     expect(h.jobs.listJobs()).toHaveLength(MAX_AGENT_JOBS);
   });
 
@@ -212,7 +236,11 @@ describe('the per-agent cap', () => {
     const h = harness();
     h.sessions.ensureSession('web:1', { origin: 'web' });
     for (let i = 0; i < MAX_AGENT_JOBS; i += 1) {
-      h.jobs.createJob({ ...JOB, name: `operator ${String(i)}`, nextRunAtMs: 1 });
+      h.jobs.createJob({
+        ...JOB,
+        name: `operator ${String(i)}`,
+        nextRunAtMs: 1,
+      });
     }
 
     expect(h.port().create(JOB).ok).toBe(true);
@@ -235,9 +263,16 @@ describe('ownership', () => {
   it('refuses to delete a job it did not create', () => {
     const h = harness();
     h.sessions.ensureSession('web:1', { origin: 'web' });
-    const operators = h.jobs.createJob({ ...JOB, name: 'the operator′s', nextRunAtMs: 1 });
+    const operators = h.jobs.createJob({
+      ...JOB,
+      name: 'the operator′s',
+      nextRunAtMs: 1,
+    });
 
-    expect(h.port().delete(operators.id)).toMatchObject({ ok: false, refusal: 'not-yours' });
+    expect(h.port().delete(operators.id)).toMatchObject({
+      ok: false,
+      refusal: 'not-yours',
+    });
     expect(h.jobs.getJob(operators.id)).toBeDefined();
   });
 
@@ -246,9 +281,15 @@ describe('ownership', () => {
     // probing ids and watching which refusal comes back.
     const h = harness();
     h.sessions.ensureSession('web:1', { origin: 'web' });
-    const operators = h.jobs.createJob({ ...JOB, name: 'theirs', nextRunAtMs: 1 });
+    const operators = h.jobs.createJob({
+      ...JOB,
+      name: 'theirs',
+      nextRunAtMs: 1,
+    });
 
-    expect(h.port().delete('no-such-job').refusal).toBe(h.port().delete(operators.id).refusal);
+    expect(h.port().delete('no-such-job').refusal).toBe(
+      h.port().delete(operators.id).refusal,
+    );
   });
 
   it('deletes its own', () => {

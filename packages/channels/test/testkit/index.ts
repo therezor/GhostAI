@@ -9,7 +9,10 @@
  * is a contract that only holds for the channels that were already here.
  */
 
-export { channelConformance, type ChannelConformanceOptions } from './conformance.js';
+export {
+  channelConformance,
+  type ChannelConformanceOptions,
+} from './conformance.js';
 
 export {
   ScriptedConnection,

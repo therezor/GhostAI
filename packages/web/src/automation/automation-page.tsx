@@ -24,7 +24,16 @@
  */
 
 import { Link, useNavigate } from '@tanstack/react-router';
-import { CalendarClock, Copy, Pencil, Play, Plus, Power, PowerOff, Trash2 } from 'lucide-react';
+import {
+  CalendarClock,
+  Copy,
+  Pencil,
+  Play,
+  Plus,
+  Power,
+  PowerOff,
+  Trash2,
+} from 'lucide-react';
 import { useCallback, useMemo, useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -56,10 +65,17 @@ import {
 type SortKey = 'name' | 'schedule' | 'status' | 'nextRun';
 
 /** Every text column reads from A; the next-run column reads soonest first. */
-const ASCENDING_FIRST: readonly SortKey[] = ['name', 'schedule', 'status', 'nextRun'];
+const ASCENDING_FIRST: readonly SortKey[] = [
+  'name',
+  'schedule',
+  'status',
+  'nextRun',
+];
 
 /** Tones chosen so the word carries the meaning and the colour only agrees. */
-const STATUS_TONE: Readonly<Record<RunStatus, 'neutral' | 'success' | 'warning' | 'danger'>> = {
+const STATUS_TONE: Readonly<
+  Record<RunStatus, 'neutral' | 'success' | 'warning' | 'danger'>
+> = {
   pending: 'neutral',
   ok: 'success',
   skipped: 'neutral',
@@ -81,8 +97,12 @@ function comparators(
     // Unscheduled sorts last in both directions rather than as zero, which would
     // put every switched-off job at the top of "soonest first".
     nextRun: (a, b) =>
-      (a.state.nextRunAtMs === 0 ? Number.MAX_SAFE_INTEGER : a.state.nextRunAtMs) -
-      (b.state.nextRunAtMs === 0 ? Number.MAX_SAFE_INTEGER : b.state.nextRunAtMs),
+      (a.state.nextRunAtMs === 0
+        ? Number.MAX_SAFE_INTEGER
+        : a.state.nextRunAtMs) -
+      (b.state.nextRunAtMs === 0
+        ? Number.MAX_SAFE_INTEGER
+        : b.state.nextRunAtMs),
   };
 }
 
@@ -98,7 +118,8 @@ function useDescribeSchedule(): (job: AutomationJob) => string {
   const { resolved } = useAppLocale();
   const timeZone = useAppTimezone();
   return useCallback(
-    (job: AutomationJob) => describeSchedule(job.schedule, t, resolved, timeZone),
+    (job: AutomationJob) =>
+      describeSchedule(job.schedule, t, resolved, timeZone),
     [t, resolved, timeZone],
   );
 }
@@ -158,7 +179,9 @@ function JobRow({ job }: { readonly job: AutomationJob }): JSX.Element {
                 page computed — which is what makes it worth showing at all. */}
             <span>
               {job.state.nextRunAtMs > 0
-                ? t('automation.nextRun', { when: format.dateTime(job.state.nextRunAtMs) })
+                ? t('automation.nextRun', {
+                    when: format.dateTime(job.state.nextRunAtMs),
+                  })
                 : t('automation.notScheduled')}
             </span>
           </>
@@ -167,7 +190,10 @@ function JobRow({ job }: { readonly job: AutomationJob }): JSX.Element {
           <RowActions label={job.name}>
             <DropdownMenuItem
               onSelect={() => {
-                void navigate({ to: '/automation/$jobId', params: { jobId: job.id } });
+                void navigate({
+                  to: '/automation/$jobId',
+                  params: { jobId: job.id },
+                });
               }}
             >
               <Pencil />
@@ -252,13 +278,14 @@ export function AutomationRoute(): JSX.Element {
   // a slice of what is already here rather than a second request. The run
   // history inside a job is the one that pages on the server, because a job on
   // a five-minute schedule outgrows any single response.
-  const { filter, setFilter, sort, setSort, matched, pagination, rows } = useListPage({
-    rows: all,
-    initialSort: { key: 'nextRun', descending: false },
-    haystack: (job) => `${job.name} ${job.payload.kind}`,
-    comparators: compare,
-    tiebreak: (a, b) => a.name.localeCompare(b.name),
-  });
+  const { filter, setFilter, sort, setSort, matched, pagination, rows } =
+    useListPage({
+      rows: all,
+      initialSort: { key: 'nextRun', descending: false },
+      haystack: (job) => `${job.name} ${job.payload.kind}`,
+      comparators: compare,
+      tiebreak: (a, b) => a.name.localeCompare(b.name),
+    });
 
   return (
     <div className="stack page page--wide">
@@ -278,7 +305,11 @@ export function AutomationRoute(): JSX.Element {
       <p className="page__note">{t('automation.note')}</p>
 
       <div className="row list-toolbar">
-        <SearchFilter value={filter} label={t('automation.filter')} onValueChange={setFilter} />
+        <SearchFilter
+          value={filter}
+          label={t('automation.filter')}
+          onValueChange={setFilter}
+        />
         <ListSort
           options={[
             { key: 'nextRun', label: t('automation.nextRunColumn') },
@@ -292,7 +323,9 @@ export function AutomationRoute(): JSX.Element {
         />
       </div>
 
-      {jobs.isPending && <p className="page__note">{t('automation.loading')}</p>}
+      {jobs.isPending && (
+        <p className="page__note">{t('automation.loading')}</p>
+      )}
       {jobs.isError && (
         <p role="alert" className="page__error">
           {t('automation.loadError', { message: jobs.error.message })}
@@ -302,7 +335,9 @@ export function AutomationRoute(): JSX.Element {
       {jobs.isSuccess &&
         (matched.length === 0 ? (
           <p className="page__note">
-            {filter === '' ? t('automation.none') : t('automation.noMatch', { filter })}
+            {filter === ''
+              ? t('automation.none')
+              : t('automation.noMatch', { filter })}
           </p>
         ) : (
           <DataList label={t('automation.title')}>
@@ -313,7 +348,11 @@ export function AutomationRoute(): JSX.Element {
         ))}
 
       {jobs.isSuccess && (
-        <Pagination pagination={pagination} total={matched.length} label={t('automation.title')} />
+        <Pagination
+          pagination={pagination}
+          total={matched.length}
+          label={t('automation.title')}
+        />
       )}
     </div>
   );

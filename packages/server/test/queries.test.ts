@@ -25,9 +25,12 @@ describe('PageQuerySchema', () => {
     expect(PageQuerySchema.parse({})).toEqual({ limit: DEFAULT_PAGE_LIMIT });
   });
 
-  it.each(['0', '-1', '1.5', 'lots', String(MAX_PAGE_LIMIT + 1)])('refuses limit=%s', (limit) => {
-    expect(PageQuerySchema.safeParse({ limit }).success).toBe(false);
-  });
+  it.each(['0', '-1', '1.5', 'lots', String(MAX_PAGE_LIMIT + 1)])(
+    'refuses limit=%s',
+    (limit) => {
+      expect(PageQuerySchema.safeParse({ limit }).success).toBe(false);
+    },
+  );
 
   /**
    * The reason these schemas are allowed to exist twice.
@@ -40,8 +43,12 @@ describe('PageQuerySchema', () => {
   it('agrees with the protocol about the bounds', () => {
     const fromProtocol = PaginationQuerySchema.parse({});
     expect(fromProtocol.limit).toBe(DEFAULT_PAGE_LIMIT);
-    expect(PaginationQuerySchema.safeParse({ limit: MAX_PAGE_LIMIT }).success).toBe(true);
-    expect(PaginationQuerySchema.safeParse({ limit: MAX_PAGE_LIMIT + 1 }).success).toBe(false);
+    expect(
+      PaginationQuerySchema.safeParse({ limit: MAX_PAGE_LIMIT }).success,
+    ).toBe(true);
+    expect(
+      PaginationQuerySchema.safeParse({ limit: MAX_PAGE_LIMIT + 1 }).success,
+    ).toBe(false);
   });
 
   it('coerces an offset the same way', () => {
@@ -62,7 +69,9 @@ describe('PageQuerySchema', () => {
    */
   it('leaves an absent offset absent rather than defaulting it to zero', () => {
     expect(PageQuerySchema.parse({})).toEqual({ limit: DEFAULT_PAGE_LIMIT });
-    expect(PageQuerySchema.parse({ cursor: 'abc' })).not.toHaveProperty('offset');
+    expect(PageQuerySchema.parse({ cursor: 'abc' })).not.toHaveProperty(
+      'offset',
+    );
   });
 
   it.each(['-1', '1.5', 'lots'])('refuses offset=%s', (offset) => {
@@ -79,7 +88,9 @@ describe('SessionListQuerySchema', () => {
   });
 
   it('refuses an empty origin, which would filter to nothing', () => {
-    expect(SessionListQuerySchema.safeParse({ origin: '' }).success).toBe(false);
+    expect(SessionListQuerySchema.safeParse({ origin: '' }).success).toBe(
+      false,
+    );
   });
 
   /**
@@ -98,18 +109,24 @@ describe('SessionListQuerySchema', () => {
   it('refuses a column it cannot order by', () => {
     // `messages` in particular: the count is a correlated subquery, so ordering
     // by it would scan the messages table once per session row.
-    expect(SessionListQuerySchema.safeParse({ sort: 'messages' }).success).toBe(false);
+    expect(SessionListQuerySchema.safeParse({ sort: 'messages' }).success).toBe(
+      false,
+    );
   });
 
   it.each([
     ['true', true],
     ['false', false],
   ])('reads desc=%s as a boolean', (input, expected) => {
-    expect(SessionListQuerySchema.parse({ desc: input })).toMatchObject({ desc: expected });
+    expect(SessionListQuerySchema.parse({ desc: input })).toMatchObject({
+      desc: expected,
+    });
   });
 
   it('refuses a direction that is neither', () => {
-    expect(SessionListQuerySchema.safeParse({ desc: 'maybe' }).success).toBe(false);
+    expect(SessionListQuerySchema.safeParse({ desc: 'maybe' }).success).toBe(
+      false,
+    );
   });
 });
 
@@ -126,7 +143,9 @@ describe('NotificationListQuerySchema', () => {
   // Not "anything that is not `false`": `unread=maybe` is a client bug, and
   // answering it with the full list hides the bug behind a plausible response.
   it('refuses a value that is neither', () => {
-    expect(NotificationListQuerySchema.safeParse({ unread: 'maybe' }).success).toBe(false);
+    expect(
+      NotificationListQuerySchema.safeParse({ unread: 'maybe' }).success,
+    ).toBe(false);
   });
 });
 
@@ -140,6 +159,9 @@ describe('path queries', () => {
   });
 
   it('defaults a listing to the workspace root', () => {
-    expect(OptionalPathQuerySchema.parse({})).toEqual({ path: '.', workspace: 'default' });
+    expect(OptionalPathQuerySchema.parse({})).toEqual({
+      path: '.',
+      workspace: 'default',
+    });
   });
 });

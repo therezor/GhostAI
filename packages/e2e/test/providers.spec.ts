@@ -25,7 +25,11 @@ interface SettingsView {
   readonly config: {
     readonly providers: Record<
       string,
-      { readonly label?: string; readonly apiBase?: string; readonly enabled?: boolean }
+      {
+        readonly label?: string;
+        readonly apiBase?: string;
+        readonly enabled?: boolean;
+      }
     >;
   };
   readonly credentialsPresent: Record<string, boolean>;
@@ -44,10 +48,17 @@ const settingsOf = async (app: Page, url: string): Promise<SettingsView> => {
  * `getByRole('listitem')` picks them up too.
  */
 const providerRow = (app: Page, name: string) =>
-  app.getByRole('list', { name: 'Providers' }).getByRole('listitem').filter({ hasText: name });
+  app
+    .getByRole('list', { name: 'Providers' })
+    .getByRole('listitem')
+    .filter({ hasText: name });
 
 /** One endpoint, so a spec that edits has something to open. */
-async function seedOllama(app: Page, url: string, withKey = false): Promise<void> {
+async function seedOllama(
+  app: Page,
+  url: string,
+  withKey = false,
+): Promise<void> {
   await app.request.patch(`${url}/api/settings`, {
     data: { providers: { ollama: { type: 'ollama' } } },
   });
@@ -59,7 +70,10 @@ async function seedOllama(app: Page, url: string, withKey = false): Promise<void
 }
 
 test.describe('providers', () => {
-  test('creating one asks for the type on the form that edits it', async ({ app, harness }) => {
+  test('creating one asks for the type on the form that edits it', async ({
+    app,
+    harness,
+  }) => {
     // The same shape as "New agent": one form for create and edit, with the one
     // question the editor cannot ask afterwards — the type is fixed for the
     // life of an instance — asked here and only here.
@@ -72,7 +86,9 @@ test.describe('providers', () => {
 
     // Nothing has been written yet — the dialog this replaced had already
     // created the endpoint by now.
-    expect((await settingsOf(app, harness.url)).config.providers.ollama).toBeUndefined();
+    expect(
+      (await settingsOf(app, harness.url)).config.providers.ollama,
+    ).toBeUndefined();
 
     await app.getByRole('button', { name: 'Save changes' }).click();
 
@@ -81,7 +97,10 @@ test.describe('providers', () => {
     await expect(app.getByRole('heading', { level: 1 })).toHaveText('GPU box');
 
     await expect
-      .poll(async () => (await settingsOf(app, harness.url)).config.providers.ollama?.label)
+      .poll(
+        async () =>
+          (await settingsOf(app, harness.url)).config.providers.ollama?.label,
+      )
       .toBe('GPU box');
   });
 
@@ -101,13 +120,21 @@ test.describe('providers', () => {
       .poll(async () => await settingsOf(app, harness.url))
       .toMatchObject({
         config: {
-          providers: { ollama: { label: 'Workstation', apiBase: 'http://gpu.lan:11434/v1' } },
+          providers: {
+            ollama: {
+              label: 'Workstation',
+              apiBase: 'http://gpu.lan:11434/v1',
+            },
+          },
         },
         credentialsPresent: { ollama: true },
       });
   });
 
-  test('is saved even though the check cannot reach anything', async ({ app, harness }) => {
+  test('is saved even though the check cannot reach anything', async ({
+    app,
+    harness,
+  }) => {
     // The rule the whole design turns on: an endpoint that is not answering yet
     // is the ordinary case on this screen. Refusing to store it would break the
     // screen for exactly the situation it exists to fix.
@@ -118,11 +145,17 @@ test.describe('providers', () => {
     await app.getByRole('button', { name: 'Save changes' }).click();
 
     await expect
-      .poll(async () => (await settingsOf(app, harness.url)).config.providers.ollama?.apiBase)
+      .poll(
+        async () =>
+          (await settingsOf(app, harness.url)).config.providers.ollama?.apiBase,
+      )
       .toBe('http://127.0.0.1:1/v1');
   });
 
-  test('clearing the key field and saving removes the stored key', async ({ app, harness }) => {
+  test('clearing the key field and saving removes the stored key', async ({
+    app,
+    harness,
+  }) => {
     await seedOllama(app, harness.url, true);
     await app.goto(`${harness.url}/settings/providers/ollama`);
 
@@ -132,11 +165,18 @@ test.describe('providers', () => {
     await app.getByRole('button', { name: 'Save changes' }).click();
 
     await expect
-      .poll(async () => (await settingsOf(app, harness.url)).credentialsPresent.ollama ?? false)
+      .poll(
+        async () =>
+          (await settingsOf(app, harness.url)).credentialsPresent.ollama ??
+          false,
+      )
       .toBe(false);
   });
 
-  test('a rename leaves a key that was never typed at alone', async ({ app, harness }) => {
+  test('a rename leaves a key that was never typed at alone', async ({
+    app,
+    harness,
+  }) => {
     // The accident the placeholder exists to prevent, and one only a real round
     // trip can rule out: the field is filled from a *boolean*, and a save that
     // never went near it must not reach the vault.
@@ -154,7 +194,10 @@ test.describe('providers', () => {
       });
   });
 
-  test('the list switches one off without opening it', async ({ app, harness }) => {
+  test('the list switches one off without opening it', async ({
+    app,
+    harness,
+  }) => {
     await seedOllama(app, harness.url);
     await app.goto(`${harness.url}/settings?panel=providers`);
 
@@ -164,7 +207,10 @@ test.describe('providers', () => {
     await app.getByRole('menuitem', { name: 'Disable' }).click();
 
     await expect
-      .poll(async () => (await settingsOf(app, harness.url)).config.providers.ollama?.enabled)
+      .poll(
+        async () =>
+          (await settingsOf(app, harness.url)).config.providers.ollama?.enabled,
+      )
       .toBe(false);
     // And the list says so rather than dropping the row.
     await expect(providerRow(app, 'Ollama')).toContainText('Disabled');
@@ -179,7 +225,10 @@ test.describe('providers', () => {
 
     await app.getByRole('button', { name: 'Actions for Ollama' }).click();
     await app.getByRole('menuitem', { name: 'Delete this provider' }).click();
-    await app.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
+    await app
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Delete' })
+      .click();
 
     await expect(app).toHaveURL(/\/settings/u);
     await expect
@@ -204,12 +253,18 @@ test.describe('providers', () => {
     // Gone from the list: one closed laptop made the all-at-once version look
     // broken, and fetching a catalogue is a thing you do *to* an endpoint.
     await app.goto(`${harness.url}/settings?panel=providers`);
-    await expect(app.getByRole('button', { name: /Refresh model lists/ })).toHaveCount(0);
+    await expect(
+      app.getByRole('button', { name: /Refresh model lists/ }),
+    ).toHaveCount(0);
 
     // And present on the one endpoint it belongs to, where it is also the
     // connection test — one button, one round trip.
     await app.goto(`${harness.url}/settings/providers/ollama`);
-    await expect(app.getByRole('button', { name: 'Fetch models' })).toBeVisible();
-    await expect(app.getByRole('button', { name: 'Test connection' })).toHaveCount(0);
+    await expect(
+      app.getByRole('button', { name: 'Fetch models' }),
+    ).toBeVisible();
+    await expect(
+      app.getByRole('button', { name: 'Test connection' }),
+    ).toHaveCount(0);
   });
 });

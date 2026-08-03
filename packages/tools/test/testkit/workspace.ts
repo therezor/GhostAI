@@ -27,14 +27,20 @@ export interface TestWorkspace {
   dispose(): void;
 }
 
-export function createTestWorkspace(config: Partial<ToolsConfig> = {}): TestWorkspace {
+export function createTestWorkspace(
+  config: Partial<ToolsConfig> = {},
+): TestWorkspace {
   const base = realpathSync(mkdtempSync(join(tmpdir(), 'ghostai-tools-')));
   const root = join(base, 'workspace');
   const jail = new WorkspaceJail({ root });
   const controller = new AbortController();
   const merged: ToolsConfig = { ...DEFAULT_TOOLS_CONFIG, ...config };
 
-  const context: ToolContext = { jail, signal: controller.signal, config: merged };
+  const context: ToolContext = {
+    jail,
+    signal: controller.signal,
+    config: merged,
+  };
 
   return {
     root: jail.root,

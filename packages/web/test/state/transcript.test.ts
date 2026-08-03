@@ -33,10 +33,13 @@ import {
 type Unsequenced<T> = T extends unknown ? Omit<T, 'seq'> : never;
 
 /** Frames in order, with the sequence numbers the hub would have stamped. */
-function play(...frames: readonly Unsequenced<ServerMessage>[]): Transcript {
+function play(
+  ...frames: ReadonlyArray<Unsequenced<ServerMessage>>
+): Transcript {
   let seq = 0;
   return frames.reduce<Transcript>(
-    (items, frame) => applyServerMessage(items, { ...frame, seq: (seq += 1) } as ServerMessage),
+    (items, frame) =>
+      applyServerMessage(items, { ...frame, seq: (seq += 1) } as ServerMessage),
     [],
   );
 }
@@ -67,14 +70,23 @@ describe('accumulating a turn', () => {
       { type: 'assistant.delta', turnId: 't1', text: ', world' },
     );
 
-    expect(turnOf(items).parts).toEqual([{ kind: 'text', id: 't1#0', text: 'Hello, world' }]);
+    expect(turnOf(items).parts).toEqual([
+      { kind: 'text', id: 't1#0', text: 'Hello, world' },
+    ]);
   });
 
   it('starts a new text part after a tool call rather than merging across it', () => {
     const items = play(
       START,
       { type: 'assistant.delta', turnId: 't1', text: 'Let me look.' },
-      { type: 'tool.call', turnId: 't1', callId: 'c1', name: 'read', args: {}, risk: 'safe' },
+      {
+        type: 'tool.call',
+        turnId: 't1',
+        callId: 'c1',
+        name: 'read',
+        args: {},
+        risk: 'safe',
+      },
       {
         type: 'tool.result',
         turnId: 't1',
@@ -89,7 +101,11 @@ describe('accumulating a turn', () => {
 
     // Merging the second answer into the first would render the card below
     // text that was written before it.
-    expect(turnOf(items).parts.map((part) => part.kind)).toEqual(['text', 'tool', 'text']);
+    expect(turnOf(items).parts.map((part) => part.kind)).toEqual([
+      'text',
+      'tool',
+      'text',
+    ]);
   });
 
   it('keeps reasoning in its own part', () => {
@@ -106,13 +122,21 @@ describe('accumulating a turn', () => {
   });
 
   it('ignores an empty delta', () => {
-    const items = play(START, { type: 'assistant.delta', turnId: 't1', text: '' });
+    const items = play(START, {
+      type: 'assistant.delta',
+      turnId: 't1',
+      text: '',
+    });
 
     expect(turnOf(items).parts).toEqual([]);
   });
 
   it('does not open a second turn when the ring replays its start', () => {
-    const items = play(START, { type: 'assistant.delta', turnId: 't1', text: 'hi' }, START);
+    const items = play(
+      START,
+      { type: 'assistant.delta', turnId: 't1', text: 'hi' },
+      START,
+    );
 
     // Every resume re-delivers frames the client may already hold. Appending
     // would leave an empty turn above the real one on each one.
@@ -129,7 +153,11 @@ describe('accumulating a turn', () => {
       usage: { promptTokens: 10, completionTokens: 4, totalTokens: 14 },
     });
 
-    expect(turnOf(items)).toMatchObject({ done: true, stopReason: 'aborted', iterations: 2 });
+    expect(turnOf(items)).toMatchObject({
+      done: true,
+      stopReason: 'aborted',
+      iterations: 2,
+    });
   });
 
   it('records a turn-scoped error on the turn and leaves a connection error alone', () => {
@@ -230,7 +258,11 @@ describe('tool calls', () => {
       durationMs: 1,
     });
 
-    expect(toolsOf(items)[0]).toMatchObject({ id: 'orphan', name: 'tool', status: 'ok' });
+    expect(toolsOf(items)[0]).toMatchObject({
+      id: 'orphan',
+      name: 'tool',
+      status: 'ok',
+    });
   });
 
   it('gates on an approval request and clears it when the result lands', () => {
@@ -250,7 +282,10 @@ describe('tool calls', () => {
     });
 
     const answered = markApprovalAnswered(gated, 'c1', 'approved');
-    expect(toolsOf(answered)[0]?.approval).toEqual({ expiresAtMs: 1_000, answered: 'approved' });
+    expect(toolsOf(answered)[0]?.approval).toEqual({
+      expiresAtMs: 1_000,
+      answered: 'approved',
+    });
 
     const resolved = applyServerMessage(answered, {
       type: 'tool.result',
@@ -276,7 +311,14 @@ describe('notices', () => {
   it('puts a call-scoped notice inside that call, not below the turn', () => {
     const items = play(
       START,
-      { type: 'tool.call', turnId: 't1', callId: 'c1', name: 'fetch', args: {}, risk: 'network' },
+      {
+        type: 'tool.call',
+        turnId: 't1',
+        callId: 'c1',
+        name: 'fetch',
+        args: {},
+        risk: 'network',
+      },
       {
         type: 'notice',
         kind: 'prompt_injection',
@@ -307,22 +349,39 @@ describe('notices', () => {
     });
 
     expect(turnOf(items).parts).toEqual([
-      { kind: 'notice', id: 't1#0', notice: 'truncated_history', message: 'dropped 3 messages' },
+      {
+        kind: 'notice',
+        id: 't1#0',
+        notice: 'truncated_history',
+        message: 'dropped 3 messages',
+      },
     ]);
   });
 
   it('puts a notice with no turn at the top level', () => {
-    const items = play({ type: 'notice', kind: 'degraded', message: 'dropped images' });
+    const items = play({
+      type: 'notice',
+      kind: 'degraded',
+      message: 'dropped images',
+    });
 
     expect(items).toEqual([
-      { kind: 'notice', id: 'notice:1', notice: 'degraded', message: 'dropped images' },
+      {
+        kind: 'notice',
+        id: 'notice:1',
+        notice: 'degraded',
+        message: 'dropped images',
+      },
     ]);
   });
 });
 
 describe('the user bubble', () => {
   it('appears before the ack and settles on it', () => {
-    const pending = appendPendingUserMessage([], { clientMessageId: 'c-1', text: 'hi' });
+    const pending = appendPendingUserMessage([], {
+      clientMessageId: 'c-1',
+      text: 'hi',
+    });
     expect(pending[0]).toMatchObject({ id: 'c-1', pending: true });
 
     const acked = applyServerMessage(pending, {
@@ -343,7 +402,13 @@ describe('the user bubble', () => {
   it('never shares an id with the turn it started', () => {
     const acked = applyServerMessage(
       appendPendingUserMessage([], { clientMessageId: 'c-1', text: 'hi' }),
-      { type: 'message.ack', seq: 1, sessionKey: 'web:1', messageId: 't1', clientMessageId: 'c-1' },
+      {
+        type: 'message.ack',
+        seq: 1,
+        sessionKey: 'web:1',
+        messageId: 't1',
+        clientMessageId: 'c-1',
+      },
     );
 
     const withTurn = applyServerMessage(acked, { ...START, seq: 2 });
@@ -356,7 +421,10 @@ describe('the user bubble', () => {
     // The order a reload produces: the REST history lands before the ack. Both
     // describe the same sentence, and the turn id is the only key they share.
     const withHistory = fromStoredMessages([
-      stored('row-1', 't1', { role: 'user', content: [{ type: 'text', text: 'hi' }] }),
+      stored('row-1', 't1', {
+        role: 'user',
+        content: [{ type: 'text', text: 'hi' }],
+      }),
     ]);
     const pending = appendPendingUserMessage(withHistory, {
       clientMessageId: 'c-1',
@@ -376,7 +444,10 @@ describe('the user bubble', () => {
   });
 
   it('records the turn id, so a history that lands later recognises it', () => {
-    const pending = appendPendingUserMessage([], { clientMessageId: 'c-1', text: 'hi' });
+    const pending = appendPendingUserMessage([], {
+      clientMessageId: 'c-1',
+      text: 'hi',
+    });
 
     const acked = applyServerMessage(pending, {
       type: 'message.ack',
@@ -390,7 +461,10 @@ describe('the user bubble', () => {
   });
 
   it('ignores an ack for someone else’s message', () => {
-    const pending = appendPendingUserMessage([], { clientMessageId: 'c-1', text: 'hi' });
+    const pending = appendPendingUserMessage([], {
+      clientMessageId: 'c-1',
+      text: 'hi',
+    });
 
     const other = applyServerMessage(pending, {
       type: 'message.ack',
@@ -412,13 +486,25 @@ describe('session frames', () => {
   });
 
   it('records a steer so every tab sees what was injected', () => {
-    const items = play(START, { type: 'steer', sessionKey: 'web:1', content: 'be brief' });
+    const items = play(START, {
+      type: 'steer',
+      sessionKey: 'web:1',
+      content: 'be brief',
+    });
 
-    expect(items.at(-1)).toEqual({ kind: 'steer', id: 'steer:2', text: 'be brief' });
+    expect(items.at(-1)).toEqual({
+      kind: 'steer',
+      id: 'steer:2',
+      text: 'be brief',
+    });
   });
 
   it('leaves the transcript alone when a replay was covered by the ring', () => {
-    const items = play(START, { type: 'assistant.delta', turnId: 't1', text: 'hi' });
+    const items = play(START, {
+      type: 'assistant.delta',
+      turnId: 't1',
+      text: 'hi',
+    });
 
     const replayed = applyServerMessage(items, {
       type: 'session.replay',
@@ -437,7 +523,12 @@ describe('session frames', () => {
       type: 'session.replay',
       seq: 9,
       sessionKey: 'web:1',
-      messages: [stored('m1', 'user', { role: 'user', content: [{ type: 'text', text: 'q' }] })],
+      messages: [
+        stored('m1', 'user', {
+          role: 'user',
+          content: [{ type: 'text', text: 'q' }],
+        }),
+      ],
       complete: false,
     });
 
@@ -488,11 +579,21 @@ describe('the mid-stream reload', () => {
     const items = play(
       { type: 'assistant.delta', turnId: 't1', text: 'half an ' },
       { type: 'assistant.delta', turnId: 't1', text: 'answer' },
-      { type: 'tool.call', turnId: 't1', callId: 'c1', name: 'read', args: {}, risk: 'safe' },
+      {
+        type: 'tool.call',
+        turnId: 't1',
+        callId: 'c1',
+        name: 'read',
+        args: {},
+        risk: 'safe',
+      },
     );
 
     expect(turnOf(items)).toMatchObject({ id: 't1', done: false });
-    expect(turnOf(items).parts.map((part) => part.kind)).toEqual(['text', 'tool']);
+    expect(turnOf(items).parts.map((part) => part.kind)).toEqual([
+      'text',
+      'tool',
+    ]);
   });
 });
 
@@ -515,21 +616,26 @@ describe('the nonce envelope', () => {
 
   it('leaves content that is not an envelope untouched', () => {
     expect(unwrapToolOutput('plain output')).toBe('plain output');
-    expect(unwrapToolOutput('<tool_output_short name="x">\na\n</tool_output_short>')).toBe(
-      '<tool_output_short name="x">\na\n</tool_output_short>',
-    );
+    expect(
+      unwrapToolOutput('<tool_output_short name="x">\na\n</tool_output_short>'),
+    ).toBe('<tool_output_short name="x">\na\n</tool_output_short>');
   });
 });
 
 describe('a stored history', () => {
   it('groups a turn and pairs its tool results by id', () => {
     const items = fromStoredMessages([
-      stored('m1', 't1', { role: 'user', content: [{ type: 'text', text: 'run it' }] }),
+      stored('m1', 't1', {
+        role: 'user',
+        content: [{ type: 'text', text: 'run it' }],
+      }),
       stored('m2', 't1', {
         role: 'assistant',
         content: [{ type: 'text', text: 'running' }],
         reasoning: 'I should run it',
-        toolCalls: [{ id: 'c1', name: 'exec', argumentsJson: '{"command":"ls"}' }],
+        toolCalls: [
+          { id: 'c1', name: 'exec', argumentsJson: '{"command":"ls"}' },
+        ],
       }),
       stored('m3', 't1', {
         role: 'tool',
@@ -546,7 +652,11 @@ describe('a stored history', () => {
 
     const turn = turnOf(items);
     expect(turn.done).toBe(true);
-    expect(turn.parts.map((part) => part.kind)).toEqual(['reasoning', 'text', 'tool']);
+    expect(turn.parts.map((part) => part.kind)).toEqual([
+      'reasoning',
+      'text',
+      'tool',
+    ]);
     expect(toolsOf(items)[0]).toMatchObject({
       name: 'exec',
       args: { command: 'ls' },
@@ -560,7 +670,14 @@ describe('a stored history', () => {
     // else. An error is never appended to history — it would be replayed into
     // every later provider request — so the reason travels beside the rows.
     const items = fromStoredMessages(
-      [stored('m1', 't1', { role: 'user', content: [{ type: 'text', text: 'hi' }] }, 7)],
+      [
+        stored(
+          'm1',
+          't1',
+          { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+          7,
+        ),
+      ],
       {},
       { t1: 'No container runtime is reachable.' },
     );
@@ -581,7 +698,10 @@ describe('a stored history', () => {
   it('does not open a second turn when a failed turn also answered', () => {
     const items = fromStoredMessages(
       [
-        stored('m1', 't1', { role: 'user', content: [{ type: 'text', text: 'hi' }] }),
+        stored('m1', 't1', {
+          role: 'user',
+          content: [{ type: 'text', text: 'hi' }],
+        }),
         stored('m2', 't1', {
           role: 'assistant',
           content: [{ type: 'text', text: 'partly' }],
@@ -593,7 +713,9 @@ describe('a stored history', () => {
     );
 
     expect(items.filter((item) => item.kind === 'turn')).toHaveLength(1);
-    expect(turnOf(items)).toMatchObject({ failure: { message: 'the stream ended early' } });
+    expect(turnOf(items)).toMatchObject({
+      failure: { message: 'the stream ended early' },
+    });
   });
 
   it('keeps malformed tool arguments as the string the model emitted', () => {
@@ -613,7 +735,10 @@ describe('a stored history', () => {
   it('never renders a system message', () => {
     const items = fromStoredMessages([
       stored('m0', undefined, { role: 'system', content: 'you are an agent' }),
-      stored('m1', undefined, { role: 'user', content: [{ type: 'text', text: 'hi' }] }),
+      stored('m1', undefined, {
+        role: 'user',
+        content: [{ type: 'text', text: 'hi' }],
+      }),
     ]);
 
     expect(items).toHaveLength(1);
@@ -720,7 +845,10 @@ describe('a stored history', () => {
       }),
     ]);
 
-    expect(toolsOf(items)[0]).toMatchObject({ status: 'error', truncated: true });
+    expect(toolsOf(items)[0]).toMatchObject({
+      status: 'error',
+      truncated: true,
+    });
   });
 });
 
@@ -731,7 +859,11 @@ describe('merging a fetched history', () => {
   });
 
   it('puts storage underneath what the socket has already built', () => {
-    const live = play(START, { type: 'assistant.delta', turnId: 't1', text: 'half an answer' });
+    const live = play(START, {
+      type: 'assistant.delta',
+      turnId: 't1',
+      text: 'half an answer',
+    });
 
     const merged = mergeStoredHistory(live, [row]);
 
@@ -799,7 +931,13 @@ describe('merging a fetched history', () => {
       stored('row-2', 't1', {
         role: 'assistant',
         content: [],
-        toolCalls: [{ id: 'c1', name: 'exec', argumentsJson: '{"argv":["node","--version"]}' }],
+        toolCalls: [
+          {
+            id: 'c1',
+            name: 'exec',
+            argumentsJson: '{"argv":["node","--version"]}',
+          },
+        ],
       }),
     ]);
 
@@ -812,8 +950,17 @@ describe('merging a fetched history', () => {
 
   it('recognises an acked bubble as the message storage just returned', () => {
     const acked = applyServerMessage(
-      appendPendingUserMessage([], { clientMessageId: 'c-1', text: 'the question' }),
-      { type: 'message.ack', seq: 1, sessionKey: 'web:1', messageId: 't1', clientMessageId: 'c-1' },
+      appendPendingUserMessage([], {
+        clientMessageId: 'c-1',
+        text: 'the question',
+      }),
+      {
+        type: 'message.ack',
+        seq: 1,
+        sessionKey: 'web:1',
+        messageId: 't1',
+        clientMessageId: 'c-1',
+      },
     );
 
     const merged = mergeStoredHistory(acked, [row]);
@@ -823,7 +970,10 @@ describe('merging a fetched history', () => {
   });
 
   it('keeps a bubble that has not been acked yet', () => {
-    const pending = appendPendingUserMessage([], { clientMessageId: 'c-2', text: 'a second one' });
+    const pending = appendPendingUserMessage([], {
+      clientMessageId: 'c-2',
+      text: 'a second one',
+    });
 
     const merged = mergeStoredHistory(pending, [row]);
 
@@ -832,7 +982,11 @@ describe('merging a fetched history', () => {
   });
 
   it('is idempotent, because the history query can resolve more than once', () => {
-    const live = play(START, { type: 'assistant.delta', turnId: 't1', text: 'answer' });
+    const live = play(START, {
+      type: 'assistant.delta',
+      turnId: 't1',
+      text: 'answer',
+    });
 
     const once = mergeStoredHistory(live, [row]);
     const twice = mergeStoredHistory(once, [row]);
@@ -871,11 +1025,20 @@ function stored(
 describe('truncation', () => {
   it('rebuilds from the tail a session.truncated carries', () => {
     const before = fromStoredMessages([
-      stored('m1', 't1', { role: 'user', content: [{ type: 'text', text: 'first' }] }, 1),
+      stored(
+        'm1',
+        't1',
+        { role: 'user', content: [{ type: 'text', text: 'first' }] },
+        1,
+      ),
       stored(
         'm2',
         't1',
-        { role: 'assistant', content: [{ type: 'text', text: 'answer' }], toolCalls: [] },
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'answer' }],
+          toolCalls: [],
+        },
         2,
       ),
     ]);
@@ -886,7 +1049,12 @@ describe('truncation', () => {
       sessionKey: 'web:1',
       upToSeq: 1,
       messages: [
-        stored('m1', 't1', { role: 'user', content: [{ type: 'text', text: 'first' }] }, 1),
+        stored(
+          'm1',
+          't1',
+          { role: 'user', content: [{ type: 'text', text: 'first' }] },
+          1,
+        ),
       ],
     });
 
@@ -897,7 +1065,12 @@ describe('truncation', () => {
 
   it('empties the transcript when everything was cut', () => {
     const before = fromStoredMessages([
-      stored('m1', 't1', { role: 'user', content: [{ type: 'text', text: 'first' }] }, 1),
+      stored(
+        'm1',
+        't1',
+        { role: 'user', content: [{ type: 'text', text: 'first' }] },
+        1,
+      ),
     ]);
 
     expect(
@@ -914,14 +1087,28 @@ describe('truncation', () => {
 
 describe('truncateTranscriptAfter', () => {
   const items = fromStoredMessages([
-    stored('m1', 't1', { role: 'user', content: [{ type: 'text', text: 'one' }] }, 1),
+    stored(
+      'm1',
+      't1',
+      { role: 'user', content: [{ type: 'text', text: 'one' }] },
+      1,
+    ),
     stored(
       'm2',
       't1',
-      { role: 'assistant', content: [{ type: 'text', text: 'answer' }], toolCalls: [] },
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'answer' }],
+        toolCalls: [],
+      },
       2,
     ),
-    stored('m3', 't2', { role: 'user', content: [{ type: 'text', text: 'two' }] }, 3),
+    stored(
+      'm3',
+      't2',
+      { role: 'user', content: [{ type: 'text', text: 'two' }] },
+      3,
+    ),
   ]);
 
   it('keeps everything at or below the cut', () => {
@@ -939,7 +1126,10 @@ describe('truncateTranscriptAfter', () => {
   it('stops at the first item it cannot address', () => {
     // An optimistic bubble has no seq, so nothing after it can be shown to be
     // on the surviving side of a cut.
-    const withPending = appendPendingUserMessage(items, { clientMessageId: 'c1', text: 'three' });
+    const withPending = appendPendingUserMessage(items, {
+      clientMessageId: 'c1',
+      text: 'three',
+    });
     expect(truncateTranscriptAfter(withPending, 99)).toHaveLength(4);
     expect(truncateTranscriptAfter(withPending, 2)).toHaveLength(2);
   });
@@ -968,14 +1158,22 @@ describe('turn.end reporting', () => {
       lastSeq: 6,
     });
 
-    expect(turn).toMatchObject({ kind: 'turn', elapsedMs: 1200, firstSeq: 3, lastSeq: 6 });
+    expect(turn).toMatchObject({
+      kind: 'turn',
+      elapsedMs: 1200,
+      firstSeq: 3,
+      lastSeq: 6,
+    });
   });
 
   it('gives the message that started the turn its storage address', () => {
     // The reason `firstSeq` is on the wire: without it, a bubble this tab drew
     // optimistically could not be edited or branched until a refetch — and a
     // refetch would also replace the live turn's tool timings.
-    const sent = appendPendingUserMessage([], { clientMessageId: 'c1', text: 'hello' });
+    const sent = appendPendingUserMessage([], {
+      clientMessageId: 'c1',
+      text: 'hello',
+    });
     const acked = applyServerMessage(sent, {
       type: 'message.ack',
       seq: 1,
@@ -1023,7 +1221,10 @@ describe('a turn that failed', () => {
   it('stamps the optimistic user bubble at turn.start', () => {
     // Regenerate addresses the *user* message, so the bubble needs its seq even
     // when nothing after the start ever arrives.
-    const pending = appendPendingUserMessage([], { clientMessageId: 'c-1', text: 'search' });
+    const pending = appendPendingUserMessage([], {
+      clientMessageId: 'c-1',
+      text: 'search',
+    });
     const acked = applyServerMessage(pending, {
       type: 'message.ack',
       seq: 1,
@@ -1031,7 +1232,11 @@ describe('a turn that failed', () => {
       messageId: 't1',
       clientMessageId: 'c-1',
     });
-    const started = applyServerMessage(acked, { ...START, seq: 2, firstSeq: 7 });
+    const started = applyServerMessage(acked, {
+      ...START,
+      seq: 2,
+      firstSeq: 7,
+    });
 
     const bubble = started.find((item) => item.kind === 'user');
     expect(bubble?.kind === 'user' && bubble.seq).toBe(7);
@@ -1042,7 +1247,13 @@ describe('a turn that failed', () => {
     // that storage has already supplied.
     const items = play(
       { ...START, firstSeq: 7 },
-      { type: 'turn.end', turnId: 't1', stopReason: 'complete', iterations: 1, firstSeq: 9 },
+      {
+        type: 'turn.end',
+        turnId: 't1',
+        stopReason: 'complete',
+        iterations: 1,
+        firstSeq: 9,
+      },
     );
 
     expect(turnOf(items).firstSeq).toBe(9);
@@ -1058,7 +1269,9 @@ describe('subagents', () => {
   /** One nested frame, addressed as the loop addresses it. */
   const nest = (
     event: Extract<ServerMessage, { type: 'subagent.event' }>['event'],
-    over: Partial<Omit<Extract<ServerMessage, { type: 'subagent.event' }>, 'type' | 'seq'>> = {},
+    over: Partial<
+      Omit<Extract<ServerMessage, { type: 'subagent.event' }>, 'type' | 'seq'>
+    > = {},
   ): Unsequenced<ServerMessage> => ({
     type: 'subagent.event',
     turnId: 't1',
@@ -1110,7 +1323,9 @@ describe('subagents', () => {
       done: false,
       loaded: true,
     });
-    expect(run?.parts).toEqual([{ kind: 'text', id: 'sub-1#0', text: 'Found it.' }]);
+    expect(run?.parts).toEqual([
+      { kind: 'text', id: 'sub-1#0', text: 'Found it.' },
+    ]);
   });
 
   it("renders a subagent's tool call with the same shape as its caller's", () => {
@@ -1179,7 +1394,14 @@ describe('subagents', () => {
       { ...DELEGATE, callId: 'x' },
       nest(CHILD_START, { parentCallId: 'x' }),
       nest(
-        { type: 'tool.call', turnId: 't2', callId: 'x', name: 'echo', args: {}, risk: 'safe' },
+        {
+          type: 'tool.call',
+          turnId: 't2',
+          callId: 'x',
+          name: 'echo',
+          args: {},
+          risk: 'safe',
+        },
         {
           parentCallId: 'x',
         },
@@ -1211,7 +1433,10 @@ describe('subagents', () => {
     const outer = toolsOf(items)[0];
     expect(outer?.content).toBe('outer');
     expect(outer?.subagent?.parts).toHaveLength(1);
-    expect(outer?.subagent?.parts[0]).toMatchObject({ id: 'x', content: 'inner' });
+    expect(outer?.subagent?.parts[0]).toMatchObject({
+      id: 'x',
+      content: 'inner',
+    });
   });
 
   it('nests a subagent of a subagent inside it', () => {
@@ -1245,7 +1470,9 @@ describe('subagents', () => {
     const middle = toolsOf(items)[0]?.subagent;
     const grandchildCard = middle?.parts[0];
     expect(grandchildCard).toMatchObject({ kind: 'tool', id: 'm1' });
-    expect(grandchildCard?.kind === 'tool' ? grandchildCard.subagent : undefined).toMatchObject({
+    expect(
+      grandchildCard?.kind === 'tool' ? grandchildCard.subagent : undefined,
+    ).toMatchObject({
       agentId: 'summariser',
       sessionKey: 'sub-2',
     });

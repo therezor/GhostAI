@@ -2,7 +2,10 @@
 <html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
     <meta name="color-scheme" content="dark light" />
     <title>GhostAI</title>
 
@@ -51,7 +54,8 @@
         var stored = read('ghostai.theme');
         var light =
           stored === 'light' ||
-          (stored !== 'dark' && window.matchMedia('(prefers-color-scheme: light)').matches);
+          (stored !== 'dark' &&
+            window.matchMedia('(prefers-color-scheme: light)').matches);
 
         document.documentElement.dataset.theme = light ? 'light' : 'dark';
 
@@ -60,7 +64,10 @@
            subtag is compared, so `de-AT` matches a `de` bundle. */
         var locale = read('ghostai.locale');
         var supported = ['en'];
-        var wanted = locale && locale !== 'system' ? [locale] : (navigator.languages || []).slice();
+        var wanted =
+          locale && locale !== 'system'
+            ? [locale]
+            : (navigator.languages || []).slice();
 
         var resolved = 'en';
         for (var i = 0; i < wanted.length; i += 1) {
@@ -76,7 +83,9 @@
 
         document.documentElement.lang = resolved;
         document.documentElement.dir =
-          ['ar', 'fa', 'he', 'ps', 'ur', 'yi'].indexOf(resolved.split('-')[0]) === -1
+          ['ar', 'fa', 'he', 'ps', 'ur', 'yi'].indexOf(
+            resolved.split('-')[0],
+          ) === -1
             ? 'ltr'
             : 'rtl';
       })();

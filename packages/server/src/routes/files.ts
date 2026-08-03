@@ -48,7 +48,12 @@ import {
   type SignedUrlRequest,
   type UploadResponse,
 } from '@ghostai/protocol';
-import { DEFAULT_WORKSPACE_ID, ensureDir, errnoOf, systemClock } from '@ghostai/core';
+import {
+  DEFAULT_WORKSPACE_ID,
+  ensureDir,
+  errnoOf,
+  systemClock,
+} from '@ghostai/core';
 import type { WorkspaceJail } from '@ghostai/security';
 import type { FastifyReply } from 'fastify';
 
@@ -141,7 +146,8 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
   };
 
   function sign(path: string, workspaceId: string): SignedUrl {
-    const expiresAtMs = clock.now() + deps.runtime.config().server.auth.signedUrlTtlMs;
+    const expiresAtMs =
+      clock.now() + deps.runtime.config().server.auth.signedUrlTtlMs;
     const token = signMediaToken(deps.auth.ensureSecret(MEDIA_SECRET_NAME), {
       path,
       workspaceId,
@@ -194,7 +200,9 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
         // directory has no contents to lose and needs no ceremony.
         const contents = readdirSync(absolute);
         if (contents.length > 0 && recursive !== true) {
-          throw conflict(`Directory is not empty: ${path}`, { entryCount: contents.length });
+          throw conflict(`Directory is not empty: ${path}`, {
+            entryCount: contents.length,
+          });
         }
 
         rmSync(absolute, { recursive: true });
@@ -207,7 +215,10 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
       // The body is raw bytes, not JSON: a browser sends a `File` as-is and a
       // base64 envelope would inflate every upload by a third to describe what
       // `Content-Type` already says. See `app.ts` for the parser.
-      schema: { querystring: PathQuerySchema, response: { 201: UploadResponseSchema } },
+      schema: {
+        querystring: PathQuerySchema,
+        response: { 201: UploadResponseSchema },
+      },
       bodyLimit: MAX_UPLOAD_BYTES,
       handler: (request, reply): UploadResponse => {
         const { path, workspace } = request.query as PathQuery;
@@ -239,7 +250,10 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
 
     'files.read': {
       summary: 'One workspace file, as text',
-      schema: { querystring: PathQuerySchema, response: { 200: FileTextResponseSchema } },
+      schema: {
+        querystring: PathQuerySchema,
+        response: { 200: FileTextResponseSchema },
+      },
       handler: (request): FileTextResponse => {
         const { path, workspace } = request.query as PathQuery;
         const jail = jailFor(workspace);
@@ -266,7 +280,10 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
 
     'files.write': {
       summary: 'Write text to a workspace file',
-      schema: { body: FileWriteRequestSchema, response: { 200: FileEntrySchema } },
+      schema: {
+        body: FileWriteRequestSchema,
+        response: { 200: FileEntrySchema },
+      },
       bodyLimit: MAX_TEXT_BODY_BYTES,
       handler: (request): FileEntry => {
         const { path, content, expectedModifiedAtMs, workspaceId } =
@@ -274,7 +291,9 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
         const jail = jailFor(workspaceId ?? DEFAULT_WORKSPACE_ID);
         const absolute = jail.resolve(path);
         const before = statOrUndefined(absolute);
-        if (before?.isDirectory() === true) throw badRequest(`Not a file: ${path}`);
+        if (before?.isDirectory() === true) {
+          throw badRequest(`Not a file: ${path}`);
+        }
 
         // The workspace is a tree a language model writes to while somebody is
         // looking at it. An editor that loaded the file, sat open through a
@@ -305,7 +324,10 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
 
     'files.mkdir': {
       summary: 'Create a workspace directory',
-      schema: { body: CreateDirectoryRequestSchema, response: { 201: FileEntrySchema } },
+      schema: {
+        body: CreateDirectoryRequestSchema,
+        response: { 201: FileEntrySchema },
+      },
       handler: (request, reply): FileEntry => {
         const { path, workspaceId } = request.body as CreateDirectoryRequest;
         const jail = jailFor(workspaceId ?? DEFAULT_WORKSPACE_ID);
@@ -313,7 +335,9 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
         // Not idempotent, deliberately: "New folder" that quietly returns an
         // existing one is how two things end up sharing a directory nobody
         // meant to share.
-        if (statOrUndefined(absolute) !== undefined) throw conflict(`Already exists: ${path}`);
+        if (statOrUndefined(absolute) !== undefined) {
+          throw conflict(`Already exists: ${path}`);
+        }
 
         mkdirSync(absolute, { recursive: true });
         void reply.status(201);
@@ -323,7 +347,10 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
 
     'files.move': {
       summary: 'Rename or move a workspace entry',
-      schema: { body: MoveFileRequestSchema, response: { 200: FileEntrySchema } },
+      schema: {
+        body: MoveFileRequestSchema,
+        response: { 200: FileEntrySchema },
+      },
       handler: (request): FileEntry => {
         const { from, to, workspaceId } = request.body as MoveFileRequest;
         const jail = jailFor(workspaceId ?? DEFAULT_WORKSPACE_ID);
@@ -347,7 +374,9 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
         // Refused rather than overwritten. `renameSync` will happily replace a
         // file, and a rename that destroys whatever was already at the target is
         // a data loss the operator did not ask for and cannot see afterwards.
-        if (statOrUndefined(target) !== undefined) throw conflict(`Already exists: ${to}`);
+        if (statOrUndefined(target) !== undefined) {
+          throw conflict(`Already exists: ${to}`);
+        }
 
         // A move into a folder that does not exist yet is a typo far more often
         // than it is an intention, and `renameSync` reports it as a bare ENOENT
@@ -374,7 +403,10 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
 
     'files.sign': {
       summary: 'Mint a short-lived URL an <img> can load',
-      schema: { body: SignedUrlRequestSchema, response: { 200: SignedUrlSchema } },
+      schema: {
+        body: SignedUrlRequestSchema,
+        response: { 200: SignedUrlSchema },
+      },
       handler: (request): SignedUrl => {
         const { path, workspaceId } = request.body as SignedUrlRequest;
         const workspace = workspaceId ?? DEFAULT_WORKSPACE_ID;
@@ -406,7 +438,10 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
         // authorised against. It deliberately does *not* consult the registry —
         // a live token against a workspace detached a minute ago keeps working
         // until it expires, which is consistent with detaching keeping files.
-        const absolute = resolveWithin(deps.runtime.agent().jailFor(claim.workspaceId), claim.path);
+        const absolute = resolveWithin(
+          deps.runtime.agent().jailFor(claim.workspaceId),
+          claim.path,
+        );
         if (absolute === undefined) throw notFound('No such media');
         const stats = statOr404(absolute, claim.path);
         if (stats.isDirectory()) throw notFound('No such media');
@@ -414,7 +449,10 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
         const inline = inlineSafe(claim.path);
         return (
           reply
-            .header('content-type', inline ? mimeTypeFor(claim.path) : 'application/octet-stream')
+            .header(
+              'content-type',
+              inline ? mimeTypeFor(claim.path) : 'application/octet-stream',
+            )
             .header('content-length', stats.size)
             // Without this a browser may sniff a text file into HTML and run it.
             .header('x-content-type-options', 'nosniff')
@@ -430,7 +468,10 @@ export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {
 }
 
 /** The absolute path a claim names, or `undefined` if it is no longer inside. */
-function resolveWithin(jail: WorkspaceJail, relativePath: string): string | undefined {
+function resolveWithin(
+  jail: WorkspaceJail,
+  relativePath: string,
+): string | undefined {
   const check = jail.check(relativePath);
   return check.ok ? check.path : undefined;
 }

@@ -280,7 +280,9 @@ export type ProviderId = (typeof PROVIDER_TABLE)[number]['id'];
  */
 export const PROVIDERS: readonly ProviderSpec[] = PROVIDER_TABLE;
 
-export const PROVIDER_IDS: readonly ProviderId[] = PROVIDER_TABLE.map((spec) => spec.id);
+export const PROVIDER_IDS: readonly ProviderId[] = PROVIDER_TABLE.map(
+  (spec) => spec.id,
+);
 
 export function isProviderId(value: string): value is ProviderId {
   return PROVIDERS.some((spec) => spec.id === value);
@@ -307,7 +309,9 @@ function normalise(value: string): string {
  * accident — so it is identified by key or base URL instead.
  */
 export function findProviderByModel(model: string): ProviderSpec | null {
-  const direct = PROVIDERS.filter((spec) => spec.isGateway !== true && spec.isLocal !== true);
+  const direct = PROVIDERS.filter(
+    (spec) => spec.isGateway !== true && spec.isLocal !== true,
+  );
   const normalised = normalise(model);
   const slash = normalised.indexOf('/');
 
@@ -342,15 +346,24 @@ export interface GatewayHints {
 export function findGateway(hints: GatewayHints): ProviderSpec | null {
   if (hints.providerId !== undefined) {
     const named = findProvider(hints.providerId);
-    if (named !== null && (named.isGateway === true || named.isLocal === true)) return named;
+    if (
+      named !== null &&
+      (named.isGateway === true || named.isLocal === true)
+    ) {
+      return named;
+    }
   }
 
   const apiBase = hints.apiBase?.toLowerCase();
   for (const spec of PROVIDERS) {
     const prefix = spec.detectByKeyPrefix;
-    if (prefix !== undefined && hints.apiKey?.startsWith(prefix) === true) return spec;
+    if (prefix !== undefined && hints.apiKey?.startsWith(prefix) === true) {
+      return spec;
+    }
     const keyword = spec.detectByBaseKeyword;
-    if (keyword !== undefined && apiBase?.includes(keyword) === true) return spec;
+    if (keyword !== undefined && apiBase?.includes(keyword) === true) {
+      return spec;
+    }
   }
   return null;
 }
@@ -374,7 +387,9 @@ export interface ResolveProviderOptions {
  * caller can report "no provider configured" instead of failing at the first
  * request with a 401 from somewhere unexpected.
  */
-export function resolveProvider(options: ResolveProviderOptions): ProviderSpec | null {
+export function resolveProvider(
+  options: ResolveProviderOptions,
+): ProviderSpec | null {
   const named = options.provider;
   if (named !== undefined && named !== '' && named !== 'auto') {
     const spec = findProvider(named);
@@ -414,9 +429,13 @@ export function resolveModelId(spec: ProviderSpec, model: string): string {
   const slash = model.indexOf('/');
   if (slash <= 0) return model;
 
-  if (spec.stripModelPrefix === true) return model.slice(model.lastIndexOf('/') + 1);
+  if (spec.stripModelPrefix === true) {
+    return model.slice(model.lastIndexOf('/') + 1);
+  }
 
-  return normalise(model.slice(0, slash)) === normalise(spec.id) ? model.slice(slash + 1) : model;
+  return normalise(model.slice(0, slash)) === normalise(spec.id)
+    ? model.slice(slash + 1)
+    : model;
 }
 
 /**
@@ -443,9 +462,14 @@ export function describeProvider(spec: ProviderSpec): ProviderInfo {
 }
 
 /** The first override whose `match` appears in the model id, if any. */
-export function modelOverrideFor(spec: ProviderSpec, model: string): ModelOverride | null {
+export function modelOverrideFor(
+  spec: ProviderSpec,
+  model: string,
+): ModelOverride | null {
   const needle = model.toLowerCase();
   return (
-    spec.modelOverrides?.find((override) => needle.includes(override.match.toLowerCase())) ?? null
+    spec.modelOverrides?.find((override) =>
+      needle.includes(override.match.toLowerCase()),
+    ) ?? null
   );
 }

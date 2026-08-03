@@ -12,7 +12,9 @@ import {
 import { ChatMessageSchema } from '#src/messages.js';
 
 /** Reads the `type` literal off a discriminated-union variant. */
-function variantTypes(union: typeof ClientMessageSchema | typeof ServerMessageSchema): string[] {
+function variantTypes(
+  union: typeof ClientMessageSchema | typeof ServerMessageSchema,
+): string[] {
   return union.options.map((option) => option.shape.type.value);
 }
 
@@ -37,10 +39,13 @@ describe('ClientMessageSchema', () => {
   });
 
   it('rejects a known type with the wrong payload', () => {
-    expect(ClientMessageSchema.safeParse({ type: 'turn.stop' }).success).toBe(false);
-    expect(ClientMessageSchema.safeParse({ type: 'turn.stop', sessionKey: '' }).success).toBe(
+    expect(ClientMessageSchema.safeParse({ type: 'turn.stop' }).success).toBe(
       false,
     );
+    expect(
+      ClientMessageSchema.safeParse({ type: 'turn.stop', sessionKey: '' })
+        .success,
+    ).toBe(false);
   });
 
   it('defaults an approval to the narrowest scope', () => {
@@ -55,17 +60,23 @@ describe('ClientMessageSchema', () => {
   });
 
   it('requires a cursor on resume so replay has a lower bound', () => {
-    expect(ClientMessageSchema.safeParse({ type: 'session.resume', sessionKey: 's' }).success).toBe(
-      false,
-    );
     expect(
-      ClientMessageSchema.safeParse({ type: 'session.resume', sessionKey: 's', lastSeq: 0 })
+      ClientMessageSchema.safeParse({ type: 'session.resume', sessionKey: 's' })
         .success,
+    ).toBe(false);
+    expect(
+      ClientMessageSchema.safeParse({
+        type: 'session.resume',
+        sessionKey: 's',
+        lastSeq: 0,
+      }).success,
     ).toBe(true);
   });
 
   it('lets session.new omit a key for the server to generate', () => {
-    expect(ClientMessageSchema.safeParse({ type: 'session.new' }).success).toBe(true);
+    expect(ClientMessageSchema.safeParse({ type: 'session.new' }).success).toBe(
+      true,
+    );
   });
 
   it('covers every declared client message type exactly once', () => {
@@ -88,9 +99,18 @@ describe('ServerMessageSchema', () => {
   });
 
   it('pins the version literal on the connected event', () => {
-    const base = { type: 'connected', sessionKey: 's', serverTimeMs: 0, lastSeq: 0 };
-    expect(ServerMessageSchema.safeParse({ ...base, protocolVersion: 2 }).success).toBe(true);
-    expect(ServerMessageSchema.safeParse({ ...base, protocolVersion: 1 }).success).toBe(false);
+    const base = {
+      type: 'connected',
+      sessionKey: 's',
+      serverTimeMs: 0,
+      lastSeq: 0,
+    };
+    expect(
+      ServerMessageSchema.safeParse({ ...base, protocolVersion: 2 }).success,
+    ).toBe(true);
+    expect(
+      ServerMessageSchema.safeParse({ ...base, protocolVersion: 1 }).success,
+    ).toBe(false);
   });
 
   it('requires seq on every session-scoped event', () => {
@@ -100,7 +120,9 @@ describe('ServerMessageSchema', () => {
     const missing = ServerMessageSchema.options
       .filter(
         (option) =>
-          !(UNSEQUENCED_SERVER_EVENTS as readonly string[]).includes(option.shape.type.value),
+          !(UNSEQUENCED_SERVER_EVENTS as readonly string[]).includes(
+            option.shape.type.value,
+          ),
       )
       .filter((option) => !('seq' in option.shape))
       .map((option) => option.shape.type.value);
@@ -111,7 +133,9 @@ describe('ServerMessageSchema', () => {
   it('omits seq on connection-level events', () => {
     const withSeq = ServerMessageSchema.options
       .filter((option) =>
-        (UNSEQUENCED_SERVER_EVENTS as readonly string[]).includes(option.shape.type.value),
+        (UNSEQUENCED_SERVER_EVENTS as readonly string[]).includes(
+          option.shape.type.value,
+        ),
       )
       .filter((option) => 'seq' in option.shape)
       .map((option) => option.shape.type.value);
@@ -141,7 +165,11 @@ describe('ServerMessageSchema', () => {
 
   it('rejects an untyped error code', () => {
     expect(
-      ServerMessageSchema.safeParse({ type: 'error', code: 'kaboom', message: 'x' }).success,
+      ServerMessageSchema.safeParse({
+        type: 'error',
+        code: 'kaboom',
+        message: 'x',
+      }).success,
     ).toBe(false);
   });
 
@@ -220,7 +248,9 @@ describe('session replay', () => {
     const assistant = ChatMessageSchema.parse({
       role: 'assistant',
       content: [{ type: 'text', text: 'calling' }],
-      toolCalls: [{ id: 'call_1', name: 'read_file', argumentsJson: '{"path":"a.txt"}' }],
+      toolCalls: [
+        { id: 'call_1', name: 'read_file', argumentsJson: '{"path":"a.txt"}' },
+      ],
     });
     const tool = ChatMessageSchema.parse({
       role: 'tool',
@@ -234,7 +264,13 @@ describe('session replay', () => {
       seq: 1,
       sessionKey: 's',
       messages: [
-        { id: 'm1', sessionKey: 's', seq: 1, createdAtMs: 1, message: assistant },
+        {
+          id: 'm1',
+          sessionKey: 's',
+          seq: 1,
+          createdAtMs: 1,
+          message: assistant,
+        },
         { id: 'm2', sessionKey: 's', seq: 2, createdAtMs: 2, message: tool },
       ],
     });
@@ -242,14 +278,21 @@ describe('session replay', () => {
     expect(parsed.type).toBe('session.replay');
     if (parsed.type !== 'session.replay') throw new Error('unreachable');
     const [first, second] = parsed.messages;
-    expect(first!.message.role === 'assistant' && first!.message.toolCalls[0]?.id).toBe('call_1');
-    expect(second!.message.role === 'tool' && second!.message.toolCallId).toBe('call_1');
+    expect(
+      first!.message.role === 'assistant' && first!.message.toolCalls[0]?.id,
+    ).toBe('call_1');
+    expect(second!.message.role === 'tool' && second!.message.toolCallId).toBe(
+      'call_1',
+    );
   });
 });
 
 describe('regenerate and edit', () => {
   it('accepts a regenerate that names no message', () => {
-    const parsed = ClientMessageSchema.parse({ type: 'turn.regenerate', sessionKey: 's' });
+    const parsed = ClientMessageSchema.parse({
+      type: 'turn.regenerate',
+      sessionKey: 's',
+    });
     expect(parsed.type).toBe('turn.regenerate');
     if (parsed.type !== 'turn.regenerate') throw new Error('unreachable');
     expect(parsed.seq).toBeUndefined();
@@ -267,7 +310,11 @@ describe('regenerate and edit', () => {
 
   it('rejects a seq that cannot address a message', () => {
     expect(() =>
-      ClientMessageSchema.parse({ type: 'turn.regenerate', sessionKey: 's', seq: 0 }),
+      ClientMessageSchema.parse({
+        type: 'turn.regenerate',
+        sessionKey: 's',
+        seq: 0,
+      }),
     ).toThrow();
   });
 
@@ -285,7 +332,11 @@ describe('regenerate and edit', () => {
 
   it('requires an edit to name the message it replaces', () => {
     expect(() =>
-      ClientMessageSchema.parse({ type: 'user.edit', sessionKey: 's', content: 'x' }),
+      ClientMessageSchema.parse({
+        type: 'user.edit',
+        sessionKey: 's',
+        content: 'x',
+      }),
     ).toThrow();
   });
 });
@@ -302,7 +353,10 @@ describe('session.truncated', () => {
         sessionKey: 's',
         seq: 1,
         createdAtMs: 1,
-        message: { role: 'user' as const, content: [{ type: 'text' as const, text: 'hi' }] },
+        message: {
+          role: 'user' as const,
+          content: [{ type: 'text' as const, text: 'hi' }],
+        },
       },
     ],
   };
@@ -315,13 +369,19 @@ describe('session.truncated', () => {
   });
 
   it('accepts a cut to zero', () => {
-    const parsed = ServerMessageSchema.parse({ ...frame, upToSeq: 0, messages: [] });
+    const parsed = ServerMessageSchema.parse({
+      ...frame,
+      upToSeq: 0,
+      messages: [],
+    });
     if (parsed.type !== 'session.truncated') throw new Error('unreachable');
     expect(parsed.upToSeq).toBe(0);
   });
 
   it('is sequenced, so it replays to a reconnecting tab', () => {
-    expect(isSequencedServerMessage(ServerMessageSchema.parse(frame))).toBe(true);
+    expect(isSequencedServerMessage(ServerMessageSchema.parse(frame))).toBe(
+      true,
+    );
   });
 });
 
@@ -358,7 +418,10 @@ describe('turn.end reporting', () => {
 });
 
 describe('AttachmentSchema', () => {
-  const attachment = { mimeType: 'image/png', path: 'uploads/ab12cd34-shot.png' };
+  const attachment = {
+    mimeType: 'image/png',
+    path: 'uploads/ab12cd34-shot.png',
+  };
 
   it('takes a workspace path and a mime type', () => {
     expect(
@@ -389,8 +452,11 @@ describe('AttachmentSchema', () => {
 
   it('defaults to none', () => {
     expect(
-      UserMessageRequestSchema.parse({ type: 'user.message', sessionKey: 's', content: 'hi' })
-        .attachments,
+      UserMessageRequestSchema.parse({
+        type: 'user.message',
+        sessionKey: 's',
+        content: 'hi',
+      }).attachments,
     ).toEqual([]);
   });
 });

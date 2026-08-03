@@ -28,7 +28,10 @@ export function SelectTrigger({
   ...props
 }: ComponentProps<typeof SelectPrimitive.Trigger>): JSX.Element {
   return (
-    <SelectPrimitive.Trigger className={cn('select-trigger', className)} {...props}>
+    <SelectPrimitive.Trigger
+      className={cn('select-trigger', className)}
+      {...props}
+    >
       {children}
       <SelectPrimitive.Icon asChild>
         <ChevronDown className="select-trigger__icon" />
@@ -68,7 +71,10 @@ export function SelectItem({
   ...props
 }: ComponentProps<typeof SelectPrimitive.Item>): JSX.Element {
   return (
-    <SelectPrimitive.Item className={cn('menu__item menu__item--checkable', className)} {...props}>
+    <SelectPrimitive.Item
+      className={cn('menu__item menu__item--checkable', className)}
+      {...props}
+    >
       {/* Label first, tick last — the same order as the dropdown's radio row,
           so a listbox and a menu do not mark their selection in two different
           places. See `menu.css`. */}
@@ -86,5 +92,10 @@ export function SelectLabel({
   className,
   ...props
 }: ComponentProps<typeof SelectPrimitive.Label>): JSX.Element {
-  return <SelectPrimitive.Label className={cn('menu__label', className)} {...props} />;
+  return (
+    <SelectPrimitive.Label
+      className={cn('menu__label', className)}
+      {...props}
+    />
+  );
 }

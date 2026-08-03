@@ -22,7 +22,11 @@ function buffer(): RenderTarget & { text: string } {
 
 function render(
   events: readonly AgentEvent[],
-  options: { showReasoning?: boolean; showUsage?: boolean; toolResultLines?: number } = {},
+  options: {
+    showReasoning?: boolean;
+    showUsage?: boolean;
+    toolResultLines?: number;
+  } = {},
 ): string {
   const out = buffer();
   const renderer = new TurnRenderer({ out, colors: false, ...options });
@@ -57,7 +61,9 @@ describe('clip', () => {
 
 describe('summariseArgs', () => {
   it('renders an object as key=value pairs rather than JSON', () => {
-    expect(summariseArgs({ path: 'src', recursive: true })).toBe('path="src" recursive=true');
+    expect(summariseArgs({ path: 'src', recursive: true })).toBe(
+      'path="src" recursive=true',
+    );
   });
 
   it('passes a raw string through — that is a model that emitted bad JSON', () => {
@@ -120,7 +126,14 @@ describe('TurnRenderer', () => {
     const text = render([
       START,
       { type: 'assistant.delta', turnId: 't1', text: 'Let me look' },
-      { type: 'tool.call', turnId: 't1', callId: 'c1', name: 'list_dir', args: {}, risk: 'safe' },
+      {
+        type: 'tool.call',
+        turnId: 't1',
+        callId: 'c1',
+        name: 'list_dir',
+        args: {},
+        risk: 'safe',
+      },
     ]);
     expect(text).toContain('Let me look\n');
     expect(text).toMatch(/\n⚙ list_dir/u);
@@ -130,7 +143,14 @@ describe('TurnRenderer', () => {
     const text = render([
       START,
       { type: 'assistant.delta', turnId: 't1', text: 'Done.\n' },
-      { type: 'tool.call', turnId: 't1', callId: 'c1', name: 'exec', args: {}, risk: 'exec' },
+      {
+        type: 'tool.call',
+        turnId: 't1',
+        callId: 'c1',
+        name: 'exec',
+        args: {},
+        risk: 'exec',
+      },
     ]);
     expect(text).not.toContain('\n\n');
   });
@@ -192,7 +212,14 @@ describe('TurnRenderer', () => {
   it('names the running tool in a heartbeat', () => {
     const text = render([
       START,
-      { type: 'tool.call', turnId: 't1', callId: 'c1', name: 'exec', args: {}, risk: 'exec' },
+      {
+        type: 'tool.call',
+        turnId: 't1',
+        callId: 'c1',
+        name: 'exec',
+        args: {},
+        risk: 'exec',
+      },
       { type: 'tool.progress', turnId: 't1', callId: 'c1', elapsedMs: 15_000 },
     ]);
     expect(text).toContain('… exec 15.0s');
@@ -201,7 +228,12 @@ describe('TurnRenderer', () => {
   it('falls back to a generic label for a heartbeat it never saw the call for', () => {
     const text = render([
       START,
-      { type: 'tool.progress', turnId: 't1', callId: 'unknown', elapsedMs: 1000 },
+      {
+        type: 'tool.progress',
+        turnId: 't1',
+        callId: 'unknown',
+        elapsedMs: 1000,
+      },
     ]);
     expect(text).toContain('… tool 1.0s');
   });
@@ -218,9 +250,12 @@ describe('TurnRenderer', () => {
   });
 
   it('hides reasoning entirely when asked to', () => {
-    const text = render([START, { type: 'reasoning.delta', turnId: 't1', text: 'secret' }], {
-      showReasoning: false,
-    });
+    const text = render(
+      [START, { type: 'reasoning.delta', turnId: 't1', text: 'secret' }],
+      {
+        showReasoning: false,
+      },
+    );
     expect(text).not.toContain('secret');
     expect(text).not.toContain('thinking');
   });
@@ -256,7 +291,12 @@ describe('TurnRenderer', () => {
   it('explains a turn that hit a cap', () => {
     const text = render([
       START,
-      { type: 'turn.end', turnId: 't1', stopReason: 'max_iterations', iterations: 40 },
+      {
+        type: 'turn.end',
+        turnId: 't1',
+        stopReason: 'max_iterations',
+        iterations: 40,
+      },
     ]);
     expect(text).toContain('stopped at the tool-iteration cap');
     expect(text).toContain('40 steps');
@@ -285,7 +325,15 @@ describe('TurnRenderer', () => {
 
   it('omits the summary line when usage is switched off', () => {
     const text = render(
-      [START, { type: 'turn.end', turnId: 't1', stopReason: 'complete', iterations: 2 }],
+      [
+        START,
+        {
+          type: 'turn.end',
+          turnId: 't1',
+          stopReason: 'complete',
+          iterations: 2,
+        },
+      ],
       { showUsage: false },
     );
     expect(text).not.toContain('steps');
@@ -312,7 +360,11 @@ describe('TurnRenderer', () => {
   it('writes its own notes in the same line discipline', () => {
     const out = buffer();
     const renderer = new TurnRenderer({ out, colors: false });
-    renderer.handle({ type: 'assistant.delta', turnId: 't1', text: 'mid-line' });
+    renderer.handle({
+      type: 'assistant.delta',
+      turnId: 't1',
+      text: 'mid-line',
+    });
     renderer.note('a note');
     renderer.warn('a warning');
     expect(out.text).toBe('mid-line\na note\n⚠ a warning\n');
@@ -336,7 +388,10 @@ describe('formatRate', () => {
 
   it('reports nothing for a turn that produced no tokens', () => {
     expect(
-      formatRate({ promptTokens: 10, completionTokens: 0, totalTokens: 10 }, 500),
+      formatRate(
+        { promptTokens: 10, completionTokens: 0, totalTokens: 10 },
+        500,
+      ),
     ).toBeUndefined();
   });
 });
@@ -379,7 +434,12 @@ describe('subagents', () => {
       },
       nested(CHILD_START),
       nested({ type: 'assistant.delta', turnId: 't2', text: 'Found it.' }),
-      nested({ type: 'turn.end', turnId: 't2', stopReason: 'complete', iterations: 1 }),
+      nested({
+        type: 'turn.end',
+        turnId: 't2',
+        stopReason: 'complete',
+        iterations: 1,
+      }),
     ]);
 
     expect(text).toContain('┄ asking Researcher');
@@ -457,7 +517,12 @@ describe('subagents', () => {
         risk: 'safe',
       },
       nested(CHILD_START),
-      nested({ type: 'turn.end', turnId: 't2', stopReason: 'complete', iterations: 1 }),
+      nested({
+        type: 'turn.end',
+        turnId: 't2',
+        stopReason: 'complete',
+        iterations: 1,
+      }),
       // The caller's own progress event still knows what `c1` was.
       { type: 'tool.progress', turnId: 't1', callId: 'c1', elapsedMs: 15_000 },
     ]);

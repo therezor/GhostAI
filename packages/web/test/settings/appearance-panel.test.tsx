@@ -27,7 +27,12 @@ import { ConfigSchema } from '@ghostai/protocol';
 
 import { Providers } from '@/app/providers.js';
 import { createAppRouter } from '@/app/router.js';
-import { stubApi, testQueryClient, type RecordedRequest, type StubRoute } from '@testkit/render.js';
+import {
+  stubApi,
+  testQueryClient,
+  type RecordedRequest,
+  type StubRoute,
+} from '@testkit/render.js';
 import { STATUS } from '@testkit/fixtures.js';
 
 const SETTINGS = { config: ConfigSchema.parse({}), credentialsPresent: {} };
@@ -53,7 +58,9 @@ function mount(): {
   const user = userEvent.setup();
   const router = createAppRouter();
   router.update({
-    history: createMemoryHistory({ initialEntries: ['/settings?panel=appearance'] }),
+    history: createMemoryHistory({
+      initialEntries: ['/settings?panel=appearance'],
+    }),
   });
   render(
     <Providers client={testQueryClient()}>
@@ -85,7 +92,8 @@ async function choose(
  * same string. Asking for the `combobox` role names the control rather than
  * whatever else happens to carry the word.
  */
-const select = (name: string): HTMLElement => screen.getByRole('combobox', { name });
+const select = (name: string): HTMLElement =>
+  screen.getByRole('combobox', { name });
 
 /**
  * The `Date and time` section, as a query scope.
@@ -117,7 +125,9 @@ describe('the Appearance panel', () => {
     mount();
     await screen.findByRole('combobox', { name: 'Timezone' });
     await waitFor(() => {
-      expect(screen.getByRole('combobox', { name: 'Timezone' })).toHaveTextContent('UTC');
+      expect(
+        screen.getByRole('combobox', { name: 'Timezone' }),
+      ).toHaveTextContent('UTC');
     });
   });
 
@@ -126,7 +136,9 @@ describe('the Appearance panel', () => {
 
     await screen.findByRole('combobox', { name: 'Timezone' });
     await choose(user, 'Timezone', 'Asia/Tokyo');
-    await user.click(within(timeSection()).getByRole('button', { name: 'Save changes' }));
+    await user.click(
+      within(timeSection()).getByRole('button', { name: 'Save changes' }),
+    );
 
     await waitFor(() => {
       expect(patchesOf(calls)).toHaveLength(1);
@@ -143,7 +155,9 @@ describe('the Appearance panel', () => {
 
     await screen.findByRole('combobox', { name: 'Timezone' });
     await choose(user, 'Timezone', /^System \(/u);
-    await user.click(within(timeSection()).getByRole('button', { name: 'Save changes' }));
+    await user.click(
+      within(timeSection()).getByRole('button', { name: 'Save changes' }),
+    );
 
     await waitFor(() => {
       expect(patchesOf(calls)).toHaveLength(1);
@@ -152,7 +166,9 @@ describe('the Appearance panel', () => {
     expect(patch.ui.timezone).not.toBe('system');
     // Whatever this runtime is in, it is a zone `Intl` accepts — which is the
     // only property that matters and the only one a CI runner can promise.
-    expect(() => new Intl.DateTimeFormat('en', { timeZone: patch.ui.timezone })).not.toThrow();
+    expect(
+      () => new Intl.DateTimeFormat('en', { timeZone: patch.ui.timezone }),
+    ).not.toThrow();
   });
 
   it('names the zone that `System` would resolve to, before the click', async () => {
@@ -181,9 +197,13 @@ describe('the Appearance panel', () => {
 
     await screen.findByRole('combobox', { name: 'Timezone' });
     await choose(user, 'Timezone', 'Asia/Tokyo');
-    await user.click(within(timeSection()).getByRole('button', { name: 'Revert' }));
+    await user.click(
+      within(timeSection()).getByRole('button', { name: 'Revert' }),
+    );
 
-    expect(await screen.findByRole('combobox', { name: 'Timezone' })).toHaveTextContent('UTC');
+    expect(
+      await screen.findByRole('combobox', { name: 'Timezone' }),
+    ).toHaveTextContent('UTC');
     expect(patchesOf(calls)).toHaveLength(0);
   });
 });

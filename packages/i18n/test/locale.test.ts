@@ -64,7 +64,9 @@ describe('resolveLocale', () => {
   it('falls back rather than failing, so a bad tag is never a blank page', () => {
     expect(resolveLocale('ja', AVAILABLE)).toBe(DEFAULT_LOCALE);
     expect(resolveLocale(undefined, AVAILABLE)).toBe(DEFAULT_LOCALE);
-    expect(resolveLocale('not a locale at all', AVAILABLE)).toBe(DEFAULT_LOCALE);
+    expect(resolveLocale('not a locale at all', AVAILABLE)).toBe(
+      DEFAULT_LOCALE,
+    );
   });
 
   it('defaults to what the product actually ships', () => {
@@ -75,7 +77,9 @@ describe('resolveLocale', () => {
 
 describe('resolveFirstLocale', () => {
   it('takes the first source that names a language we have', () => {
-    expect(resolveFirstLocale([undefined, 'de-AT', 'ar'], AVAILABLE)).toBe('de-AT');
+    expect(resolveFirstLocale([undefined, 'de-AT', 'ar'], AVAILABLE)).toBe(
+      'de-AT',
+    );
   });
 
   it('skips a source naming a language nobody has translated', () => {
@@ -85,7 +89,9 @@ describe('resolveFirstLocale', () => {
   });
 
   it('falls back when no source says anything usable', () => {
-    expect(resolveFirstLocale([undefined, '', 'ja'], AVAILABLE)).toBe(DEFAULT_LOCALE);
+    expect(resolveFirstLocale([undefined, '', 'ja'], AVAILABLE)).toBe(
+      DEFAULT_LOCALE,
+    );
     expect(resolveFirstLocale([], AVAILABLE)).toBe(DEFAULT_LOCALE);
   });
 });

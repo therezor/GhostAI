@@ -91,7 +91,14 @@ function partsOf(instantMs: number, timeZone: string): ZonedParts {
 /** Milliseconds to add to UTC to reach the wall clock in this zone at this instant. */
 function offsetAt(instantMs: number, timeZone: string): number {
   const p = partsOf(instantMs, timeZone);
-  const asIfUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+  const asIfUtc = Date.UTC(
+    p.year,
+    p.month - 1,
+    p.day,
+    p.hour,
+    p.minute,
+    p.second,
+  );
   return asIfUtc - Math.floor(instantMs / 1000) * 1000;
 }
 
@@ -138,11 +145,21 @@ export function zonedInputValue(atMs: number, timeZone: string): string {
  * the loop below runs once for nothing; across one they disagree, which is
  * exactly when more than one candidate is worth testing.
  */
-export function instantFromZonedInput(value: string, timeZone: string): number | null {
+export function instantFromZonedInput(
+  value: string,
+  timeZone: string,
+): number | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/u.exec(value.trim());
   if (match === null) return null;
 
-  const [, rawYear = '', rawMonth = '', rawDay = '', rawHour = '', rawMinute = ''] = match;
+  const [
+    ,
+    rawYear = '',
+    rawMonth = '',
+    rawDay = '',
+    rawHour = '',
+    rawMinute = '',
+  ] = match;
   const year = Number.parseInt(rawYear, 10);
   const month = Number.parseInt(rawMonth, 10);
   const day = Number.parseInt(rawDay, 10);
@@ -152,7 +169,16 @@ export function instantFromZonedInput(value: string, timeZone: string): number |
   // Cheap range rejection before any `Intl` work. `2026-13-40T99:99` parses as
   // five integers and would otherwise round-trip through `Date.UTC`'s overflow
   // into a real instant in a month the operator did not type.
-  if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59) return null;
+  if (
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31 ||
+    hour > 23 ||
+    minute > 59
+  ) {
+    return null;
+  }
 
   const asIfUtc = Date.UTC(year, month - 1, day, hour, minute, 0);
   const candidates = new Set<number>();

@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { textPart, type OutboundKind, type OutboundMessage } from '@ghostai/core';
+import {
+  textPart,
+  type OutboundKind,
+  type OutboundMessage,
+} from '@ghostai/core';
 import type { ServerMessage } from '@ghostai/protocol';
 
 import {
@@ -29,13 +33,13 @@ async function flush(): Promise<void> {
 
 class FakeConnection implements ChannelHubConnection {
   readonly sessionKey: string;
-  readonly frames: Record<string, unknown>[] = [];
+  readonly frames: Array<Record<string, unknown>> = [];
   closed = false;
-  readonly #send: (message: ServerMessage) => void;
+  private readonly send: (message: ServerMessage) => void;
 
   constructor(options: ChannelHubConnectOptions) {
     this.sessionKey = options.sessionKey ?? 'minted';
-    this.#send = options.send;
+    this.send = options.send;
   }
 
   receive(frame: unknown): void {
@@ -48,7 +52,7 @@ class FakeConnection implements ChannelHubConnection {
 
   /** What the hub would have broadcast to this connection. */
   emit(message: ServerMessage): void {
-    this.#send(message);
+    this.send(message);
   }
 
   /** A whole turn, as the hub emits one. */
@@ -63,13 +67,19 @@ class FakeConnection implements ChannelHubConnection {
       provider: 'p',
     });
     this.emit({ type: 'assistant.delta', seq: 2, turnId, text });
-    this.emit({ type: 'turn.end', seq: 3, turnId, stopReason: 'complete', iterations: 1 });
+    this.emit({
+      type: 'turn.end',
+      seq: 3,
+      turnId,
+      stopReason: 'complete',
+      iterations: 1,
+    });
   }
 }
 
 class FakeHub implements ChannelHub {
   readonly connections: FakeConnection[] = [];
-  readonly channels: (string | undefined)[] = [];
+  readonly channels: Array<string | undefined> = [];
 
   connect(options: ChannelHubConnectOptions): ChannelHubConnection {
     const connection = new FakeConnection(options);
@@ -80,7 +90,9 @@ class FakeHub implements ChannelHub {
 
   only(): FakeConnection {
     const connection = this.connections[0];
-    if (connection === undefined) throw new Error('No hub connection was opened');
+    if (connection === undefined) {
+      throw new Error('No hub connection was opened');
+    }
     return connection;
   }
 }
@@ -121,7 +133,9 @@ class FakeChannel implements Channel {
 
   texts(): string[] {
     return this.sent.map((message) =>
-      message.content.map((part) => (part.type === 'text' ? part.text : '')).join(''),
+      message.content
+        .map((part) => (part.type === 'text' ? part.text : ''))
+        .join(''),
     );
   }
 }
@@ -144,20 +158,24 @@ const managers: ChannelManager[] = [];
 async function harness(options: HarnessOptions = {}): Promise<Harness> {
   const hub = new FakeHub();
   const built = new Map<string, FakeChannel>();
-  const factories: ChannelFactory[] = (options.ids ?? ['loopback']).map((id) => ({
-    id,
-    create: (context) => {
-      const channel = new FakeChannel(id, context, options.accepts);
-      built.set(id, channel);
-      return channel;
-    },
-  }));
+  const factories: ChannelFactory[] = (options.ids ?? ['loopback']).map(
+    (id) => ({
+      id,
+      create: (context) => {
+        const channel = new FakeChannel(id, context, options.accepts);
+        built.set(id, channel);
+        return channel;
+      },
+    }),
+  );
 
   const manager = new ChannelManager({
     hub,
     factories,
     ...(options.channels === undefined ? {} : { channels: options.channels }),
-    ...(options.maxSessions === undefined ? {} : { maxSessions: options.maxSessions }),
+    ...(options.maxSessions === undefined
+      ? {}
+      : { maxSessions: options.maxSessions }),
   });
   managers.push(manager);
   await manager.start();
@@ -167,7 +185,9 @@ async function harness(options: HarnessOptions = {}): Promise<Harness> {
     manager,
     channel: (id = 'loopback') => {
       const channel = built.get(id);
-      if (channel === undefined) throw new Error(`Channel "${id}" was never created`);
+      if (channel === undefined) {
+        throw new Error(`Channel "${id}" was never created`);
+      }
       return channel;
     },
   };
@@ -187,7 +207,11 @@ describe('ChannelManager', () => {
   it('turns a published message into the frame a browser would have sent', async () => {
     const { hub, channel } = await harness();
 
-    channel().context.publish({ sessionKey: '4471', senderId: 'u1', content: [textPart('hello')] });
+    channel().context.publish({
+      sessionKey: '4471',
+      senderId: 'u1',
+      content: [textPart('hello')],
+    });
     await flush();
 
     expect(hub.channels).toEqual(['loopback']);
@@ -205,7 +229,11 @@ describe('ChannelManager', () => {
   it('namespaces a session key the channel chose, and leaves its own prefix alone', async () => {
     const { hub, channel } = await harness();
 
-    channel().context.publish({ sessionKey: 'web:1', senderId: 'u1', content: [textPart('a')] });
+    channel().context.publish({
+      sessionKey: 'web:1',
+      senderId: 'u1',
+      content: [textPart('a')],
+    });
     channel().context.publish({
       sessionKey: 'loopback:7',
       senderId: 'u1',
@@ -275,7 +303,10 @@ describe('ChannelManager', () => {
     channel().context.publish({
       sessionKey: '1',
       senderId: 'u1',
-      content: [textPart('look'), { type: 'image', mimeType: 'image/png', data: 'AAA' }],
+      content: [
+        textPart('look'),
+        { type: 'image', mimeType: 'image/png', data: 'AAA' },
+      ],
     });
     await flush();
 
@@ -310,7 +341,11 @@ describe('ChannelManager', () => {
   it('falls back to the sender as the reply address', async () => {
     const { hub, channel } = await harness();
 
-    channel().context.publish({ sessionKey: '1', senderId: 'u1', content: [textPart('hi')] });
+    channel().context.publish({
+      sessionKey: '1',
+      senderId: 'u1',
+      content: [textPart('hi')],
+    });
     await flush();
     hub.only().turn('there');
     await flush();
@@ -320,7 +355,11 @@ describe('ChannelManager', () => {
 
   it('withholds progress from a channel that did not ask for it', async () => {
     const quiet = await harness({ channels: { sendProgress: true } });
-    quiet.channel().context.publish({ sessionKey: '1', senderId: 'u1', content: [textPart('hi')] });
+    quiet.channel().context.publish({
+      sessionKey: '1',
+      senderId: 'u1',
+      content: [textPart('hi')],
+    });
     await flush();
     const connection = quiet.hub.only();
     connection.emit({
@@ -332,7 +371,12 @@ describe('ChannelManager', () => {
       model: 'm',
       provider: 'p',
     });
-    connection.emit({ type: 'assistant.delta', seq: 2, turnId: 't1', text: 'so far' });
+    connection.emit({
+      type: 'assistant.delta',
+      seq: 2,
+      turnId: 't1',
+      text: 'so far',
+    });
     connection.emit({
       type: 'tool.call',
       seq: 3,
@@ -352,7 +396,11 @@ describe('ChannelManager', () => {
       accepts: ['reply', 'progress'],
       channels: { sendProgress: true },
     });
-    loud.channel().context.publish({ sessionKey: '1', senderId: 'u1', content: [textPart('hi')] });
+    loud.channel().context.publish({
+      sessionKey: '1',
+      senderId: 'u1',
+      content: [textPart('hi')],
+    });
     await flush();
     const connection = loud.hub.only();
     connection.emit({
@@ -364,7 +412,12 @@ describe('ChannelManager', () => {
       model: 'm',
       provider: 'p',
     });
-    connection.emit({ type: 'assistant.delta', seq: 2, turnId: 't1', text: 'so far' });
+    connection.emit({
+      type: 'assistant.delta',
+      seq: 2,
+      turnId: 't1',
+      text: 'so far',
+    });
     connection.emit({
       type: 'tool.call',
       seq: 3,
@@ -376,14 +429,24 @@ describe('ChannelManager', () => {
     });
     await flush();
 
-    expect(loud.channel().sent.map((message) => message.kind)).toEqual(['progress']);
+    expect(loud.channel().sent.map((message) => message.kind)).toEqual([
+      'progress',
+    ]);
     expect(loud.channel().sent[0]?.metadata).toEqual({ turnId: 't1' });
   });
 
   it('keeps one channel’s order without making it another channel’s problem', async () => {
     const { hub, channel } = await harness({ ids: ['slow', 'fast'] });
-    channel('slow').context.publish({ sessionKey: '1', senderId: 'u1', content: [textPart('a')] });
-    channel('fast').context.publish({ sessionKey: '1', senderId: 'u2', content: [textPart('b')] });
+    channel('slow').context.publish({
+      sessionKey: '1',
+      senderId: 'u1',
+      content: [textPart('a')],
+    });
+    channel('fast').context.publish({
+      sessionKey: '1',
+      senderId: 'u2',
+      content: [textPart('b')],
+    });
     await flush();
 
     // Hold `slow` inside its first send.
@@ -405,7 +468,11 @@ describe('ChannelManager', () => {
   it('evicts the least recently used session, and never a busy one', async () => {
     const { hub, manager, channel } = await harness({ maxSessions: 1 });
 
-    channel().context.publish({ sessionKey: 'a', senderId: 'u1', content: [textPart('1')] });
+    channel().context.publish({
+      sessionKey: 'a',
+      senderId: 'u1',
+      content: [textPart('1')],
+    });
     await flush();
     hub.only().emit({
       type: 'session.status',
@@ -416,7 +483,11 @@ describe('ChannelManager', () => {
       queueDepth: 0,
     });
 
-    channel().context.publish({ sessionKey: 'b', senderId: 'u2', content: [textPart('2')] });
+    channel().context.publish({
+      sessionKey: 'b',
+      senderId: 'u2',
+      content: [textPart('2')],
+    });
     await flush();
 
     // `a` is mid-turn, so the cap yields rather than dropping its reply.
@@ -431,21 +502,37 @@ describe('ChannelManager', () => {
       busy: false,
       queueDepth: 0,
     });
-    channel().context.publish({ sessionKey: 'c', senderId: 'u3', content: [textPart('3')] });
+    channel().context.publish({
+      sessionKey: 'c',
+      senderId: 'u3',
+      content: [textPart('3')],
+    });
     await flush();
 
     // With nothing running, the cap is enforced properly again: `a` and `b` go,
     // oldest first, and only the session that just spoke is left.
-    expect(hub.connections.map((connection) => connection.closed)).toEqual([true, true, false]);
+    expect(hub.connections.map((connection) => connection.closed)).toEqual([
+      true,
+      true,
+      false,
+    ]);
     expect(manager.sessionCount).toBe(1);
   });
 
   it('reuses the connection for a session it has already seen', async () => {
     const { hub, channel } = await harness();
 
-    channel().context.publish({ sessionKey: '1', senderId: 'u1', content: [textPart('a')] });
+    channel().context.publish({
+      sessionKey: '1',
+      senderId: 'u1',
+      content: [textPart('a')],
+    });
     await flush();
-    channel().context.publish({ sessionKey: '1', senderId: 'u1', content: [textPart('b')] });
+    channel().context.publish({
+      sessionKey: '1',
+      senderId: 'u1',
+      content: [textPart('b')],
+    });
     await flush();
 
     expect(hub.connections).toHaveLength(1);
@@ -453,7 +540,9 @@ describe('ChannelManager', () => {
   });
 
   it('does not start a channel its config disabled', async () => {
-    const { manager } = await harness({ channels: { loopback: { enabled: false } } });
+    const { manager } = await harness({
+      channels: { loopback: { enabled: false } },
+    });
 
     expect(manager.channels).toEqual([]);
   });
@@ -469,7 +558,10 @@ describe('ChannelManager', () => {
       manager.register(other);
     }).toThrow(/after the manager started/);
 
-    const fresh = new ChannelManager({ hub: new FakeHub(), factories: [other] });
+    const fresh = new ChannelManager({
+      hub: new FakeHub(),
+      factories: [other],
+    });
     expect(() => {
       fresh.register(other);
     }).toThrow(/already registered/);
@@ -478,10 +570,14 @@ describe('ChannelManager', () => {
   it('fails to start when a factory builds a channel under another id', async () => {
     const manager = new ChannelManager({
       hub: new FakeHub(),
-      factories: [{ id: 'a', create: () => ({ id: 'b', send: () => undefined }) }],
+      factories: [
+        { id: 'a', create: () => ({ id: 'b', send: () => undefined }) },
+      ],
     });
 
-    await expect(manager.start()).rejects.toThrow(/created a channel with id "b"/);
+    await expect(manager.start()).rejects.toThrow(
+      /created a channel with id "b"/,
+    );
     expect(manager.channels).toEqual([]);
   });
 
@@ -518,7 +614,11 @@ describe('ChannelManager', () => {
 
   it('closes its connections and stops its channels on stop', async () => {
     const { hub, manager, channel } = await harness();
-    channel().context.publish({ sessionKey: '1', senderId: 'u1', content: [textPart('hi')] });
+    channel().context.publish({
+      sessionKey: '1',
+      senderId: 'u1',
+      content: [textPart('hi')],
+    });
     await flush();
     const target = channel();
 
@@ -557,7 +657,11 @@ describe('ChannelManager', () => {
     managers.push(manager);
     await manager.start();
 
-    context?.publish({ sessionKey: '1', senderId: 'u1', content: [textPart('hi')] });
+    context?.publish({
+      sessionKey: '1',
+      senderId: 'u1',
+      content: [textPart('hi')],
+    });
     await flush();
     hub.only().turn('answer');
     await flush();

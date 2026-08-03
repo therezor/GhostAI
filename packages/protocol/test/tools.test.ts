@@ -24,7 +24,10 @@ function definition(overrides: Partial<ToolDefinition> = {}): ToolDefinition {
       additionalProperties: false,
       required: ['path'],
       properties: Object.freeze({
-        path: Object.freeze({ type: 'string', description: 'Workspace-relative path.' }),
+        path: Object.freeze({
+          type: 'string',
+          description: 'Workspace-relative path.',
+        }),
         limit: Object.freeze({ type: 'number' }),
       }),
     }),
@@ -45,10 +48,15 @@ describe('applyToolPrompts', () => {
 
   it('replaces a description', () => {
     const applied = applyToolPrompts([definition()], {
-      read_file: { description: 'Read a file. Prefer this over `cat`.', fields: {} },
+      read_file: {
+        description: 'Read a file. Prefer this over `cat`.',
+        fields: {},
+      },
     });
 
-    expect(applied.definitions[0]?.description).toBe('Read a file. Prefer this over `cat`.');
+    expect(applied.definitions[0]?.description).toBe(
+      'Read a file. Prefer this over `cat`.',
+    );
   });
 
   it('inherits the built-in description when the override is empty', () => {
@@ -56,7 +64,9 @@ describe('applyToolPrompts', () => {
       read_file: { description: '', fields: {} },
     });
 
-    expect(applied.definitions[0]?.description).toBe('Reads a file in the workspace.');
+    expect(applied.definitions[0]?.description).toBe(
+      'Reads a file in the workspace.',
+    );
   });
 
   it('advertises no description at all when the override is a single space', () => {
@@ -71,7 +81,10 @@ describe('applyToolPrompts', () => {
 
   it('replaces a field description without touching its type', () => {
     const applied = applyToolPrompts([definition()], {
-      read_file: { description: '', fields: { path: 'Relative to the workspace root.' } },
+      read_file: {
+        description: '',
+        fields: { path: 'Relative to the workspace root.' },
+      },
     });
 
     const properties = applied.definitions[0]?.parameters.properties as Record<
@@ -90,14 +103,20 @@ describe('applyToolPrompts', () => {
 
   it('adds a description to a field that had none', () => {
     const applied = applyToolPrompts([definition()], {
-      read_file: { description: '', fields: { limit: 'Maximum lines to return.' } },
+      read_file: {
+        description: '',
+        fields: { limit: 'Maximum lines to return.' },
+      },
     });
 
     const properties = applied.definitions[0]?.parameters.properties as Record<
       string,
       Record<string, unknown>
     >;
-    expect(properties.limit).toEqual({ type: 'number', description: 'Maximum lines to return.' });
+    expect(properties.limit).toEqual({
+      type: 'number',
+      description: 'Maximum lines to return.',
+    });
   });
 
   it('never mutates the frozen definition it was given', () => {
@@ -108,7 +127,10 @@ describe('applyToolPrompts', () => {
     const before = JSON.stringify(original);
 
     applyToolPrompts([original], {
-      read_file: { description: 'Different.', fields: { path: 'Different too.' } },
+      read_file: {
+        description: 'Different.',
+        fields: { path: 'Different too.' },
+      },
     });
 
     expect(JSON.stringify(original)).toBe(before);
@@ -120,7 +142,9 @@ describe('applyToolPrompts', () => {
     });
 
     expect(applied.unknownTools).toEqual(['exec']);
-    expect(applied.definitions[0]?.description).toBe('Reads a file in the workspace.');
+    expect(applied.definitions[0]?.description).toBe(
+      'Reads a file in the workspace.',
+    );
   });
 
   it('drops a field naming no property rather than inventing one', () => {
@@ -130,14 +154,22 @@ describe('applyToolPrompts', () => {
       read_file: { description: '', fields: { pat: 'A typo.' } },
     });
 
-    const properties = applied.definitions[0]?.parameters.properties as Record<string, unknown>;
+    const properties = applied.definitions[0]?.parameters.properties as Record<
+      string,
+      unknown
+    >;
     expect(properties.pat).toBeUndefined();
     expect(applied.unknownFields).toEqual(['read_file.pat']);
   });
 
   it('reports every field of a tool whose schema has no properties', () => {
     const applied = applyToolPrompts(
-      [definition({ name: 'ping', parameters: { type: 'object', additionalProperties: false } })],
+      [
+        definition({
+          name: 'ping',
+          parameters: { type: 'object', additionalProperties: false },
+        }),
+      ],
       { ping: { description: '', fields: { host: 'Where to ping.' } } },
     );
 

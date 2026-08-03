@@ -45,7 +45,10 @@ describe('defineTool', () => {
 
   it('defaults risk to safe and source to builtin', () => {
     expect(echo.risk).toBe('safe');
-    expect(echo.definition()).toMatchObject({ risk: 'safe', source: 'builtin' });
+    expect(echo.definition()).toMatchObject({
+      risk: 'safe',
+      source: 'builtin',
+    });
   });
 
   it('carries the source it is asked for', () => {
@@ -139,7 +142,9 @@ describe('parseArgs', () => {
     if (!parsed.ok) {
       expect(parsed.message).toContain('echo');
       expect(parsed.message).toContain('text');
-      expect(parsed.issues).toEqual([{ path: 'text', message: expect.any(String) }]);
+      expect(parsed.issues).toEqual([
+        { path: 'text', message: expect.any(String) },
+      ]);
     }
   });
 
@@ -152,7 +157,9 @@ describe('run', () => {
   it('validates then executes', async () => {
     const workspace = createTestWorkspace();
     try {
-      await expect(echo.run({ text: 'ab', times: 2 }, workspace.context)).resolves.toBe('abab');
+      await expect(
+        echo.run({ text: 'ab', times: 2 }, workspace.context),
+      ).resolves.toBe('abab');
     } finally {
       workspace.dispose();
     }
@@ -161,7 +168,9 @@ describe('run', () => {
   it('throws invalid_input carrying the issues', async () => {
     const workspace = createTestWorkspace();
     try {
-      const error = await echo.run({}, workspace.context).catch((value: unknown) => value);
+      const error = await echo
+        .run({}, workspace.context)
+        .catch((value: unknown) => value);
       expect(isGhostError(error)).toBe(true);
       if (isGhostError(error)) {
         expect(error.kind).toBe('invalid_input');

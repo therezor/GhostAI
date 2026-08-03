@@ -196,7 +196,10 @@ function sha256(value: string): Buffer {
 function readNumber(value: unknown): number {
   if (typeof value === 'number') return value;
   if (typeof value === 'bigint') return Number(value);
-  throw new GhostError('storage', 'Expected an integer column in auth_sessions');
+  throw new GhostError(
+    'storage',
+    'Expected an integer column in auth_sessions',
+  );
 }
 
 function readText(value: unknown): string {
@@ -244,30 +247,30 @@ function assertPasswordPolicy(password: string): void {
 }
 
 export class AuthStore {
-  readonly #db: DatabaseSync;
-  readonly #clock: Clock;
-  readonly #random: RandomSource;
-  readonly #hasher: PasswordHasher;
-  readonly #ttlMs: number;
+  private readonly db: DatabaseSync;
+  private readonly clock: Clock;
+  private readonly random: RandomSource;
+  private readonly hasher: PasswordHasher;
+  private readonly ttlMs: number;
   /** The in-flight or settled promise, so the decoy is hashed at most once. */
-  #decoyDigest: Promise<string> | undefined;
+  private decoyDigest: Promise<string> | undefined;
 
   constructor(options: AuthStoreOptions) {
-    this.#db = options.database;
-    this.#clock = options.clock ?? systemClock;
-    this.#random = options.random ?? systemRandom;
-    this.#hasher = options.hasher ?? argon2Hasher;
-    this.#ttlMs = options.sessionTtlMs;
-    this.#db.exec(SCHEMA);
+    this.db = options.database;
+    this.clock = options.clock ?? systemClock;
+    this.random = options.random ?? systemRandom;
+    this.hasher = options.hasher ?? argon2Hasher;
+    this.ttlMs = options.sessionTtlMs;
+    this.db.exec(SCHEMA);
   }
 
   hasPassword(): boolean {
-    return this.#readSecret(PASSWORD_SECRET) !== undefined;
+    return this.readSecret(PASSWORD_SECRET) !== undefined;
   }
 
   /** The login name in force, which is `DEFAULT_USERNAME` until one is set. */
   username(): string {
-    return this.#readSecret(USERNAME_SECRET) ?? DEFAULT_USERNAME;
+    return this.readSecret(USERNAME_SECRET) ?? DEFAULT_USERNAME;
   }
 
   /**
@@ -284,7 +287,7 @@ export class AuthStore {
    */
   async setPassword(password: string, username?: string): Promise<void> {
     assertPasswordPolicy(password);
-    const now = this.#clock.now();
+    const now = this.clock.now();
 
     // Validated before anything is written. The schema is the same one the
     // route body is parsed with, so a name the HTTP layer would have refused
@@ -303,22 +306,29 @@ export class AuthStore {
         // Not a strength heuristic — those belong in a password manager, not
         // here. This is the one case where a "password" is a value the operator
         // has already typed into a field that is not masked and may be in a log.
-        throw new GhostError('invalid_input', 'The password must not be the username');
+        throw new GhostError(
+          'invalid_input',
+          'The password must not be the username',
+        );
       }
     }
 
-    const digest = await this.#hasher.hash(password);
-    const write = this.#db.prepare(
+    const digest = await this.hasher.hash(password);
+    const write = this.db.prepare(
       `INSERT INTO auth_secrets (name, value, updated_at_ms) VALUES (?, ?, ?)
        ON CONFLICT(name) DO UPDATE SET value = excluded.value, updated_at_ms = excluded.updated_at_ms`,
     );
     write.run(PASSWORD_SECRET, digest, now);
-    if (normalisedName !== undefined) write.run(USERNAME_SECRET, normalisedName, now);
+    if (normalisedName !== undefined) {
+      write.run(USERNAME_SECRET, normalisedName, now);
+    }
 
     // The setup code is a stand-in for a password that does not exist yet. The
     // moment one does, an outstanding code is a second way in that nobody is
     // watching — and it was printed to a terminal whose scrollback outlives it.
-    this.#db.prepare('DELETE FROM auth_secrets WHERE name = ?').run(SETUP_CODE_SECRET);
+    this.db
+      .prepare('DELETE FROM auth_secrets WHERE name = ?')
+      .run(SETUP_CODE_SECRET);
     this.revokeAll();
   }
 
@@ -337,10 +347,13 @@ export class AuthStore {
    */
   issueSetupCode(): string {
     if (this.hasPassword()) {
-      throw new GhostError('invalid_input', 'A password is already set; there is nothing to claim');
+      throw new GhostError(
+        'invalid_input',
+        'A password is already set; there is nothing to claim',
+      );
     }
 
-    const bytes = this.#random(SETUP_CODE_BYTES);
+    const bytes = this.random(SETUP_CODE_BYTES);
     let code = '';
     for (const [index, byte] of bytes.entries()) {
       // Grouped for transcription, not for entropy: a person reading this off a
@@ -349,18 +362,22 @@ export class AuthStore {
       code += CODE_ALPHABET[byte % CODE_ALPHABET.length] ?? '0';
     }
 
-    this.#db
+    this.db
       .prepare(
         `INSERT INTO auth_secrets (name, value, updated_at_ms) VALUES (?, ?, ?)
          ON CONFLICT(name) DO UPDATE SET value = excluded.value, updated_at_ms = excluded.updated_at_ms`,
       )
-      .run(SETUP_CODE_SECRET, sha256(normaliseCode(code)).toString('base64'), this.#clock.now());
+      .run(
+        SETUP_CODE_SECRET,
+        sha256(normaliseCode(code)).toString('base64'),
+        this.clock.now(),
+      );
     return code;
   }
 
   /** Whether an unspent code is outstanding — never the code itself. */
   hasSetupCode(): boolean {
-    return this.#readSecret(SETUP_CODE_SECRET) !== undefined;
+    return this.readSecret(SETUP_CODE_SECRET) !== undefined;
   }
 
   /**
@@ -369,7 +386,7 @@ export class AuthStore {
    * so a typo does not lock the operator out of their own install.
    */
   consumeSetupCode(code: string): boolean {
-    const stored = this.#readSecret(SETUP_CODE_SECRET);
+    const stored = this.readSecret(SETUP_CODE_SECRET);
     if (stored === undefined) return false;
 
     const expected = Buffer.from(stored, 'base64');
@@ -379,7 +396,9 @@ export class AuthStore {
     if (expected.byteLength !== presented.byteLength) return false;
     if (!timingSafeEqual(expected, presented)) return false;
 
-    this.#db.prepare('DELETE FROM auth_secrets WHERE name = ?').run(SETUP_CODE_SECRET);
+    this.db
+      .prepare('DELETE FROM auth_secrets WHERE name = ?')
+      .run(SETUP_CODE_SECRET);
     return true;
   }
 
@@ -389,9 +408,9 @@ export class AuthStore {
    * password they are replacing. A login must use `verifyLogin` instead.
    */
   async verifyPassword(password: string): Promise<boolean> {
-    const digest = this.#readSecret(PASSWORD_SECRET);
+    const digest = this.readSecret(PASSWORD_SECRET);
     if (digest === undefined) return false;
-    return await this.#hasher.verify(digest, password);
+    return await this.hasher.verify(digest, password);
   }
 
   /**
@@ -410,7 +429,7 @@ export class AuthStore {
    * `timingSafeEqual`, so the *name* does not leak a matching prefix either.
    */
   async verifyLogin(username: string, password: string): Promise<boolean> {
-    const digest = this.#readSecret(PASSWORD_SECRET);
+    const digest = this.readSecret(PASSWORD_SECRET);
     const nameMatches = equalsConstantTime(
       this.username(),
       UsernameSchema.catch('').parse(username),
@@ -418,7 +437,10 @@ export class AuthStore {
     // Deliberately not short-circuited on `nameMatches`, and deliberately not
     // skipped when no password is set: an unclaimed install must not answer
     // faster than a claimed one.
-    const passwordMatches = await this.#hasher.verify(digest ?? (await this.#decoy()), password);
+    const passwordMatches = await this.hasher.verify(
+      digest ?? (await this.decoy()),
+      password,
+    );
     return digest !== undefined && nameMatches && passwordMatches;
   }
 
@@ -431,9 +453,11 @@ export class AuthStore {
    * unclaimed install — paying 50 ms at every boot to cover that case would be
    * the more expensive mistake.
    */
-  async #decoy(): Promise<string> {
-    this.#decoyDigest ??= this.#hasher.hash(this.#random(TOKEN_SECRET_BYTES).toString('base64url'));
-    return await this.#decoyDigest;
+  private async decoy(): Promise<string> {
+    this.decoyDigest ??= this.hasher.hash(
+      this.random(TOKEN_SECRET_BYTES).toString('base64url'),
+    );
+    return await this.decoyDigest;
   }
 
   /**
@@ -443,12 +467,12 @@ export class AuthStore {
    * the only thing that makes a session list worth showing.
    */
   issue(label = ''): IssuedToken {
-    const now = this.#clock.now();
-    const id = this.#random(TOKEN_ID_BYTES).toString('base64url');
-    const secret = this.#random(TOKEN_SECRET_BYTES).toString('base64url');
-    const expiresAtMs = now + this.#ttlMs;
+    const now = this.clock.now();
+    const id = this.random(TOKEN_ID_BYTES).toString('base64url');
+    const secret = this.random(TOKEN_SECRET_BYTES).toString('base64url');
+    const expiresAtMs = now + this.ttlMs;
 
-    this.#db
+    this.db
       .prepare(
         `INSERT INTO auth_sessions (id, token_sha256, label, created_at_ms, expires_at_ms, last_seen_at_ms)
          VALUES (?, ?, ?, ?, ?, ?)`,
@@ -472,7 +496,11 @@ export class AuthStore {
    * whatever asked for a signing key.
    */
   ensureSecret(name: string): string {
-    if (name === PASSWORD_SECRET || name === SETUP_CODE_SECRET || name === USERNAME_SECRET) {
+    if (
+      name === PASSWORD_SECRET ||
+      name === SETUP_CODE_SECRET ||
+      name === USERNAME_SECRET
+    ) {
       // The first two are stored as one-way digests, and a caller that got one
       // back here would be handing a hash to whatever asked for a signing key.
       // The username is refused for the opposite reason: it is *not* a secret,
@@ -481,19 +509,19 @@ export class AuthStore {
       // 32 random bytes.
       throw new GhostError('invalid_input', `${name} is not a readable secret`);
     }
-    const existing = this.#readSecret(name);
+    const existing = this.readSecret(name);
     if (existing !== undefined) return existing;
 
-    const secret = this.#random(SECRET_BYTES).toString('base64url');
+    const secret = this.random(SECRET_BYTES).toString('base64url');
     // `DO NOTHING` rather than `DO UPDATE`: two requests racing to serve the
     // first signed URL must end up with the same key, not the second one's.
-    this.#db
+    this.db
       .prepare(
         `INSERT INTO auth_secrets (name, value, updated_at_ms) VALUES (?, ?, ?)
          ON CONFLICT(name) DO NOTHING`,
       )
-      .run(name, secret, this.#clock.now());
-    return this.#readSecret(name) ?? secret;
+      .run(name, secret, this.clock.now());
+    return this.readSecret(name) ?? secret;
   }
 
   /** `undefined` for anything that is not a live session — never a reason why. */
@@ -503,7 +531,7 @@ export class AuthStore {
     const id = token.slice(0, separator);
     const secret = token.slice(separator + 1);
 
-    const row = this.#db
+    const row = this.db
       .prepare(
         `SELECT id, token_sha256, label, created_at_ms, expires_at_ms, last_seen_at_ms
          FROM auth_sessions WHERE id = ?`,
@@ -517,12 +545,15 @@ export class AuthStore {
     // belt and braces — but `timingSafeEqual` *throws* on a length mismatch
     // rather than returning false, and a row that somehow got there must not
     // turn a bad credential into a 500.
-    if (!(stored instanceof Uint8Array) || stored.byteLength !== presented.byteLength) {
+    if (
+      !(stored instanceof Uint8Array) ||
+      stored.byteLength !== presented.byteLength
+    ) {
       return undefined;
     }
     if (!timingSafeEqual(stored, presented)) return undefined;
 
-    const now = this.#clock.now();
+    const now = this.clock.now();
     const expiresAtMs = readNumber(row.expires_at_ms);
     if (expiresAtMs <= now) {
       this.revokeById(id);
@@ -530,7 +561,9 @@ export class AuthStore {
     }
 
     if (now - readNumber(row.last_seen_at_ms) > TOUCH_INTERVAL_MS) {
-      this.#db.prepare('UPDATE auth_sessions SET last_seen_at_ms = ? WHERE id = ?').run(now, id);
+      this.db
+        .prepare('UPDATE auth_sessions SET last_seen_at_ms = ? WHERE id = ?')
+        .run(now, id);
     }
 
     return {
@@ -542,23 +575,30 @@ export class AuthStore {
   }
 
   revokeById(id: string): boolean {
-    return Number(this.#db.prepare('DELETE FROM auth_sessions WHERE id = ?').run(id).changes) > 0;
+    return (
+      Number(
+        this.db.prepare('DELETE FROM auth_sessions WHERE id = ?').run(id)
+          .changes,
+      ) > 0
+    );
   }
 
   revokeAll(): number {
-    return Number(this.#db.prepare('DELETE FROM auth_sessions').run().changes);
+    return Number(this.db.prepare('DELETE FROM auth_sessions').run().changes);
   }
 
   /** Called at boot so a long-down instance does not accumulate dead rows. */
   purgeExpired(): number {
-    const run = this.#db
+    const run = this.db
       .prepare('DELETE FROM auth_sessions WHERE expires_at_ms <= ?')
-      .run(this.#clock.now());
+      .run(this.clock.now());
     return Number(run.changes);
   }
 
-  #readSecret(name: string): string | undefined {
-    const row = this.#db.prepare('SELECT value FROM auth_secrets WHERE name = ?').get(name);
+  private readSecret(name: string): string | undefined {
+    const row = this.db
+      .prepare('SELECT value FROM auth_secrets WHERE name = ?')
+      .get(name);
     if (row === undefined) return undefined;
     const value = row.value;
     return typeof value === 'string' ? value : undefined;

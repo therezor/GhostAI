@@ -40,7 +40,9 @@ function form(overrides: Partial<AgentEntryForm> = {}): AgentEntryForm {
 
 /** Every patch this form produces has to survive the schema the server applies. */
 function parsed(result: ReturnType<typeof toAgentEntryPatch>): unknown {
-  if (!result.ok) throw new Error(`expected a patch, got ${JSON.stringify(result.errors)}`);
+  if (!result.ok) {
+    throw new Error(`expected a patch, got ${JSON.stringify(result.errors)}`);
+  }
   return ConfigPatchSchema.parse(result.patch).agents?.list?.reviewer;
 }
 
@@ -78,7 +80,11 @@ describe('toAgentEntryForm', () => {
 
   it('prefers what the agent stored over what the defaults say', () => {
     const shown = toAgentEntryForm(
-      AgentEntrySchema.parse({ model: 'qwen3:32b', temperature: 0, toolTimeoutMs: 30_000 }),
+      AgentEntrySchema.parse({
+        model: 'qwen3:32b',
+        temperature: 0,
+        toolTimeoutMs: 30_000,
+      }),
       DEFAULTS,
     );
 
@@ -90,11 +96,17 @@ describe('toAgentEntryForm', () => {
 
   it('carries the tool permissions across as stored', () => {
     const shown = toAgentEntryForm(
-      AgentEntrySchema.parse({ tools: { read_file: 'allow', exec: 'ask', write_file: 'deny' } }),
+      AgentEntrySchema.parse({
+        tools: { read_file: 'allow', exec: 'ask', write_file: 'deny' },
+      }),
       DEFAULTS,
     );
 
-    expect(shown.tools).toEqual({ read_file: 'allow', exec: 'ask', write_file: 'deny' });
+    expect(shown.tools).toEqual({
+      read_file: 'allow',
+      exec: 'ask',
+      write_file: 'deny',
+    });
   });
 });
 
@@ -124,7 +136,12 @@ describe('toAgentEntryPatch', () => {
   it('refuses a required box the operator emptied', () => {
     // It arrived holding a number. A blank one is a deletion, not an unset —
     // and there is nothing left for it to fall through to.
-    const result = toAgentEntryPatch('reviewer', form({ maxTokens: '' }), EMPTY, t);
+    const result = toAgentEntryPatch(
+      'reviewer',
+      form({ maxTokens: '' }),
+      EMPTY,
+      t,
+    );
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('unreachable');
@@ -141,7 +158,11 @@ describe('toAgentEntryPatch', () => {
       ),
     );
 
-    expect(entry).toMatchObject({ model: 'qwen3:32b', temperature: 0, reasoningEffort: 'high' });
+    expect(entry).toMatchObject({
+      model: 'qwen3:32b',
+      temperature: 0,
+      reasoningEffort: 'high',
+    });
   });
 
   it('writes both capability switches down rather than leaving them to inherit', () => {
@@ -149,7 +170,12 @@ describe('toAgentEntryPatch', () => {
     // would quietly re-point this agent at a default it had already been shown
     // disagreeing with the next time somebody changed it.
     const entry = parsed(
-      toAgentEntryPatch('reviewer', form({ visionEnabled: false, toolsEnabled: false }), EMPTY, t),
+      toAgentEntryPatch(
+        'reviewer',
+        form({ visionEnabled: false, toolsEnabled: false }),
+        EMPTY,
+        t,
+      ),
     );
 
     expect(entry).toMatchObject({ visionEnabled: false, toolsEnabled: false });
@@ -159,7 +185,9 @@ describe('toAgentEntryPatch', () => {
     // `agents.list.*` is replaced wholesale, so an entry rebuilt from the form
     // alone would drop the exec allow-list every time the prompt was saved —
     // silently, and with no way to notice from the screen.
-    const stored = AgentEntrySchema.parse({ exec: { allowedBinaries: ['git'] } });
+    const stored = AgentEntrySchema.parse({
+      exec: { allowedBinaries: ['git'] },
+    });
 
     const entry = parsed(toAgentEntryPatch('reviewer', form(), stored, t));
 
@@ -171,7 +199,10 @@ describe('toAgentEntryPatch', () => {
     // a field the screen shows must come from the screen, or clearing it in the
     // UI would silently keep the stored value.
     const stored = AgentEntrySchema.parse({
-      toolbox: { name: 'kali-pentest', network: { mode: 'allowlist', allow: ['10.0.0.0/8'] } },
+      toolbox: {
+        name: 'kali-pentest',
+        network: { mode: 'allowlist', allow: ['10.0.0.0/8'] },
+      },
     });
 
     const entry = parsed(
@@ -205,7 +236,9 @@ describe('toAgentEntryPatch', () => {
       ),
     );
 
-    expect((entry as { toolbox: Record<string, unknown> }).toolbox.network).toEqual({
+    expect(
+      (entry as { toolbox: Record<string, unknown> }).toolbox.network,
+    ).toEqual({
       mode: 'none',
       allow: [],
     });
@@ -256,7 +289,12 @@ describe('toAgentEntryPatch', () => {
   });
 
   it('refuses an empty provider, which would resolve to nothing', () => {
-    const result = toAgentEntryPatch('reviewer', form({ provider: '  ' }), EMPTY, t);
+    const result = toAgentEntryPatch(
+      'reviewer',
+      form({ provider: '  ' }),
+      EMPTY,
+      t,
+    );
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('unreachable');
@@ -268,7 +306,12 @@ describe('toAgentEntryPatch', () => {
     // the registry to resolve one. It does not: `Runtime#resolveProvider` turns
     // an empty model into `noModelError` and hands the loop a `null` provider,
     // so what the form was writing down was an agent with no way to take a turn.
-    const result = toAgentEntryPatch('reviewer', form({ model: '  ' }), EMPTY, t);
+    const result = toAgentEntryPatch(
+      'reviewer',
+      form({ model: '  ' }),
+      EMPTY,
+      t,
+    );
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('unreachable');
@@ -277,14 +320,24 @@ describe('toAgentEntryPatch', () => {
 
   it('converts seconds to milliseconds, matching the defaults form', () => {
     const entry = parsed(
-      toAgentEntryPatch('reviewer', form({ toolTimeoutSeconds: '45' }), EMPTY, t),
+      toAgentEntryPatch(
+        'reviewer',
+        form({ toolTimeoutSeconds: '45' }),
+        EMPTY,
+        t,
+      ),
     );
     expect(entry).toMatchObject({ toolTimeoutMs: 45_000 });
   });
 
   it('ignores a reasoning effort that is not one of the four', () => {
     const entry = parsed(
-      toAgentEntryPatch('reviewer', form({ reasoningEffort: 'extreme' }), EMPTY, t),
+      toAgentEntryPatch(
+        'reviewer',
+        form({ reasoningEffort: 'extreme' }),
+        EMPTY,
+        t,
+      ),
     );
     expect(entry).not.toHaveProperty('reasoningEffort');
   });
@@ -293,14 +346,23 @@ describe('toAgentEntryPatch', () => {
     // The merge replaces this object wholesale; sending only what changed would
     // make "this agent no longer has that tool" impossible to express.
     const entry = parsed(
-      toAgentEntryPatch('reviewer', form({ tools: { read_file: 'allow' } }), EMPTY, t),
+      toAgentEntryPatch(
+        'reviewer',
+        form({ tools: { read_file: 'allow' } }),
+        EMPTY,
+        t,
+      ),
     );
     expect(entry).toMatchObject({ tools: { read_file: 'allow' } });
-    expect((entry as { tools: Record<string, unknown> }).tools).not.toHaveProperty('exec');
+    expect(
+      (entry as { tools: Record<string, unknown> }).tools,
+    ).not.toHaveProperty('exec');
   });
 
   it('lets an agent hold no tools at all', () => {
-    const entry = parsed(toAgentEntryPatch('reviewer', form({ tools: {} }), EMPTY, t));
+    const entry = parsed(
+      toAgentEntryPatch('reviewer', form({ tools: {} }), EMPTY, t),
+    );
     expect(entry).toMatchObject({ tools: {} });
   });
 
@@ -308,7 +370,12 @@ describe('toAgentEntryPatch', () => {
     // `deny` and absent mean the same thing to the runtime, but only `deny`
     // survives a round trip through the editor as a row with an off position.
     const entry = parsed(
-      toAgentEntryPatch('reviewer', form({ tools: { exec: 'deny' } }), EMPTY, t),
+      toAgentEntryPatch(
+        'reviewer',
+        form({ tools: { exec: 'deny' } }),
+        EMPTY,
+        t,
+      ),
     );
     expect(entry).toMatchObject({ tools: { exec: 'deny' } });
   });
@@ -333,7 +400,10 @@ describe('toDefaultAgentPatch', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('unreachable');
-    expect(result.patch.agents?.defaults).toMatchObject({ model: 'llama3', maxTokens: 4096 });
+    expect(result.patch.agents?.defaults).toMatchObject({
+      model: 'llama3',
+      maxTokens: 4096,
+    });
   });
 
   it('never pins the default agent against its own defaults', () => {
@@ -404,7 +474,10 @@ describe('toNewAgentPatch', () => {
     // optional and `agents.defaults` says `true`, so an omitted `false` reads
     // as "ask the default" and comes back on. Duplicating an agent with vision
     // switched off produced one with vision switched on.
-    const restricted = AgentEntrySchema.parse({ visionEnabled: false, toolsEnabled: false });
+    const restricted = AgentEntrySchema.parse({
+      visionEnabled: false,
+      toolsEnabled: false,
+    });
     const patch = toNewAgentPatch('copy', 'Copy', restricted, DEFAULTS);
 
     expect(patch.agents?.list?.copy).toMatchObject({
@@ -426,10 +499,16 @@ describe('toNewAgentPatch', () => {
   });
 
   it('takes the template’s own value over the default where it has one', () => {
-    const pinned = AgentEntrySchema.parse({ model: 'qwen3:32b', maxTokens: 512 });
+    const pinned = AgentEntrySchema.parse({
+      model: 'qwen3:32b',
+      maxTokens: 512,
+    });
     const patch = toNewAgentPatch('copy', 'Copy', pinned, DEFAULTS);
 
-    expect(patch.agents?.list?.copy).toMatchObject({ model: 'qwen3:32b', maxTokens: 512 });
+    expect(patch.agents?.list?.copy).toMatchObject({
+      model: 'qwen3:32b',
+      maxTokens: 512,
+    });
   });
 
   it('does not copy who the template delegates to', () => {
@@ -438,7 +517,9 @@ describe('toNewAgentPatch', () => {
     // copied there would put that tool in front of every agent created
     // afterwards — and the model would use it.
     const delegating = AgentEntrySchema.parse({
-      subagents: [{ id: 'researcher', prompt: 'Ask for facts.', permission: 'allow' }],
+      subagents: [
+        { id: 'researcher', prompt: 'Ask for facts.', permission: 'allow' },
+      ],
     });
 
     const patch = toNewAgentPatch('copy', 'Copy', delegating, DEFAULTS);
@@ -484,7 +565,12 @@ describe('the templates an agent owns', () => {
 
   it('sends a single space through untrimmed, because that is the deletion', () => {
     const patch = parsed(
-      toAgentEntryPatch('reviewer', form({ platformPrompt: ' ', toolboxPrompt: ' ' }), EMPTY, t),
+      toAgentEntryPatch(
+        'reviewer',
+        form({ platformPrompt: ' ', toolboxPrompt: ' ' }),
+        EMPTY,
+        t,
+      ),
     );
 
     expect(patch).toMatchObject({ platformPrompt: ' ', toolboxPrompt: ' ' });
@@ -497,7 +583,10 @@ describe('the templates an agent owns', () => {
         form({
           toolPrompts: {
             read_file: { description: '', fields: { path: '' } },
-            exec: { description: 'Run a program.', fields: { argv: '', timeoutMs: 'In ms.' } },
+            exec: {
+              description: 'Run a program.',
+              fields: { argv: '', timeoutMs: 'In ms.' },
+            },
           },
         }),
         EMPTY,
@@ -506,7 +595,12 @@ describe('the templates an agent owns', () => {
     );
 
     expect(patch).toMatchObject({
-      toolPrompts: { exec: { description: 'Run a program.', fields: { timeoutMs: 'In ms.' } } },
+      toolPrompts: {
+        exec: {
+          description: 'Run a program.',
+          fields: { timeoutMs: 'In ms.' },
+        },
+      },
     });
     expect(
       (patch as { toolPrompts: Record<string, unknown> }).toolPrompts.read_file,
@@ -514,7 +608,9 @@ describe('the templates an agent owns', () => {
   });
 
   it('falls back to template for a mode nothing recognises', () => {
-    const patch = parsed(toAgentEntryPatch('reviewer', form({ promptMode: 'weird' }), EMPTY, t));
+    const patch = parsed(
+      toAgentEntryPatch('reviewer', form({ promptMode: 'weird' }), EMPTY, t),
+    );
 
     expect(patch).toMatchObject({ promptMode: 'template' });
   });
@@ -543,7 +639,9 @@ describe('toAgentEnabledPatch', () => {
 
   it('switches one back on', () => {
     const off = AgentEntrySchema.parse({ label: 'Reviewer', enabled: false });
-    expect(toAgentEnabledPatch('reviewer', off, true).agents?.list?.reviewer).toMatchObject({
+    expect(
+      toAgentEnabledPatch('reviewer', off, true).agents?.list?.reviewer,
+    ).toMatchObject({
       enabled: true,
     });
   });
@@ -581,7 +679,11 @@ describe('toAgentDeletePatch', () => {
 });
 
 describe('subagents', () => {
-  const RESEARCHER = { id: 'researcher', prompt: 'Ask for facts.', permission: 'ask' } as const;
+  const RESEARCHER = {
+    id: 'researcher',
+    prompt: 'Ask for facts.',
+    permission: 'ask',
+  } as const;
 
   it('round-trips a stored ref through the form', () => {
     const entry = AgentEntrySchema.parse({ subagents: [RESEARCHER] });
@@ -599,9 +701,17 @@ describe('subagents', () => {
 
   it('sends the whole list, so removing one is expressible', () => {
     const entry = AgentEntrySchema.parse({
-      subagents: [RESEARCHER, { id: 'reviewer', prompt: '', permission: 'allow' }],
+      subagents: [
+        RESEARCHER,
+        { id: 'reviewer', prompt: '', permission: 'allow' },
+      ],
     });
-    const result = toAgentEntryPatch('main', form({ subagents: [RESEARCHER] }), entry, t);
+    const result = toAgentEntryPatch(
+      'main',
+      form({ subagents: [RESEARCHER] }),
+      entry,
+      t,
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -613,7 +723,9 @@ describe('subagents', () => {
     // error from `assertBuildable` about an agent named "".
     const result = toAgentEntryPatch(
       'main',
-      form({ subagents: [RESEARCHER, { id: '', prompt: '', permission: 'allow' }] }),
+      form({
+        subagents: [RESEARCHER, { id: '', prompt: '', permission: 'allow' }],
+      }),
       EMPTY,
       t,
     );
@@ -633,11 +745,18 @@ describe('subagents', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.patch.agents?.list?.main?.subagents?.[0]?.prompt).toBe('Ask for facts.');
+    expect(result.patch.agents?.list?.main?.subagents?.[0]?.prompt).toBe(
+      'Ask for facts.',
+    );
   });
 
   it('produces a patch the server would accept', () => {
-    const result = toAgentEntryPatch('main', form({ subagents: [RESEARCHER] }), EMPTY, t);
+    const result = toAgentEntryPatch(
+      'main',
+      form({ subagents: [RESEARCHER] }),
+      EMPTY,
+      t,
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;

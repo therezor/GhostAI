@@ -43,7 +43,8 @@ export interface LocaleState {
 
 export function useLocale(): LocaleState {
   const { i18n } = useTranslation();
-  const [preference, setPreferenceState] = useState<LocalePreference>(readStoredPreference);
+  const [preference, setPreferenceState] =
+    useState<LocalePreference>(readStoredPreference);
   const [resolved, setResolved] = useState<Locale>(() =>
     resolvePreference(readStoredPreference(), browserLocales()),
   );
@@ -57,7 +58,9 @@ export function useLocale(): LocaleState {
     // A no-op when the config agrees with what is already showing, so a
     // settings refetch on window focus does not re-render the whole tree.
     setPreferenceState((current) => (current === locale ? current : locale));
-    setResolved((current) => (current === locale ? current : applyLocale(locale)));
+    setResolved((current) =>
+      current === locale ? current : applyLocale(locale),
+    );
   }, []);
 
   // i18next owns the strings; this owns the preference. Keeping the two in step

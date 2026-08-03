@@ -31,7 +31,11 @@
 
 import { z } from 'zod';
 
-import { ApprovalScopeSchema, ToolDefinitionSchema, ToolRiskSchema } from './tools.js';
+import {
+  ApprovalScopeSchema,
+  ToolDefinitionSchema,
+  ToolRiskSchema,
+} from './tools.js';
 import {
   FilePartSchema,
   ImagePartSchema,
@@ -78,7 +82,10 @@ export type Attachment = z.infer<typeof AttachmentSchema>;
  */
 export const MAX_ATTACHMENTS = 20;
 
-const AttachmentsSchema = z.array(AttachmentSchema).max(MAX_ATTACHMENTS).default([]);
+const AttachmentsSchema = z
+  .array(AttachmentSchema)
+  .max(MAX_ATTACHMENTS)
+  .default([]);
 
 export const PingMessageSchema = z.object({
   type: z.literal('ping'),
@@ -653,9 +660,14 @@ export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 export type ServerMessageType = ServerMessage['type'];
 
 /** Server events that are not part of a session's replayable history. */
-export const UNSEQUENCED_SERVER_EVENTS = ['connected', 'pong', 'error'] as const;
+export const UNSEQUENCED_SERVER_EVENTS = [
+  'connected',
+  'pong',
+  'error',
+] as const;
 
-export type UnsequencedServerEventType = (typeof UNSEQUENCED_SERVER_EVENTS)[number];
+export type UnsequencedServerEventType =
+  (typeof UNSEQUENCED_SERVER_EVENTS)[number];
 
 /**
  * Narrows to the events a replay buffer stores. Used by the WS hub to decide
@@ -665,7 +677,9 @@ export type UnsequencedServerEventType = (typeof UNSEQUENCED_SERVER_EVENTS)[numb
 export function isSequencedServerMessage(
   message: ServerMessage,
 ): message is Extract<ServerMessage, { seq: number }> {
-  return !(UNSEQUENCED_SERVER_EVENTS as readonly string[]).includes(message.type);
+  return !(UNSEQUENCED_SERVER_EVENTS as readonly string[]).includes(
+    message.type,
+  );
 }
 
 /**

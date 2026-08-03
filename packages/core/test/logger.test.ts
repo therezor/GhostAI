@@ -4,7 +4,7 @@ import { REDACT_CENSOR, createLogger, silentLogger } from '#src/logger.js';
 
 interface Capture {
   readonly destination: { write(chunk: string): void };
-  readonly lines: () => Record<string, unknown>[];
+  readonly lines: () => Array<Record<string, unknown>>;
 }
 
 function capture(): Capture {
@@ -15,16 +15,23 @@ function capture(): Capture {
         chunks.push(chunk);
       },
     },
-    lines: () => chunks.map((chunk) => JSON.parse(chunk) as Record<string, unknown>),
+    lines: () =>
+      chunks.map((chunk) => JSON.parse(chunk) as Record<string, unknown>),
   };
 }
 
 describe('createLogger', () => {
   it('emits structured JSON', () => {
     const sink = capture();
-    createLogger({ destination: sink.destination }).info({ tool: 'read_file' }, 'executing');
+    createLogger({ destination: sink.destination }).info(
+      { tool: 'read_file' },
+      'executing',
+    );
 
-    expect(sink.lines()[0]).toMatchObject({ msg: 'executing', tool: 'read_file' });
+    expect(sink.lines()[0]).toMatchObject({
+      msg: 'executing',
+      tool: 'read_file',
+    });
   });
 
   it('tags lines with a component name', () => {
@@ -35,11 +42,16 @@ describe('createLogger', () => {
 
   it('adds base fields to every line', () => {
     const sink = capture();
-    const log = createLogger({ base: { sessionKey: 'web:1' }, destination: sink.destination });
+    const log = createLogger({
+      base: { sessionKey: 'web:1' },
+      destination: sink.destination,
+    });
     log.info('one');
     log.info('two');
 
-    expect(sink.lines().every((line) => line.sessionKey === 'web:1')).toBe(true);
+    expect(sink.lines().every((line) => line.sessionKey === 'web:1')).toBe(
+      true,
+    );
   });
 
   it('stamps epoch milliseconds so log time matches stored time', () => {
@@ -62,13 +74,19 @@ describe('createLogger', () => {
 
   it('reads the level from the environment', () => {
     const sink = capture();
-    createLogger({ destination: sink.destination, env: { GHOSTAI_LOG_LEVEL: 'debug' } }).debug('d');
+    createLogger({
+      destination: sink.destination,
+      env: { GHOSTAI_LOG_LEVEL: 'debug' },
+    }).debug('d');
     expect(sink.lines()).toHaveLength(1);
   });
 
   it('falls back to LOG_LEVEL', () => {
     const sink = capture();
-    createLogger({ destination: sink.destination, env: { LOG_LEVEL: 'debug' } }).debug('d');
+    createLogger({
+      destination: sink.destination,
+      env: { LOG_LEVEL: 'debug' },
+    }).debug('d');
     expect(sink.lines()).toHaveLength(1);
   });
 
@@ -88,7 +106,10 @@ describe('createLogger', () => {
   it('survives an unrecognised level rather than failing at boot', () => {
     const sink = capture();
     // Losing the logger to a typo also loses the diagnostics needed to find it.
-    const log = createLogger({ destination: sink.destination, env: { LOG_LEVEL: 'chatty' } });
+    const log = createLogger({
+      destination: sink.destination,
+      env: { LOG_LEVEL: 'chatty' },
+    });
     log.info('still works');
     expect(sink.lines()).toHaveLength(1);
   });
@@ -97,13 +118,19 @@ describe('createLogger', () => {
 describe('redaction', () => {
   it('redacts a top-level secret', () => {
     const sink = capture();
-    createLogger({ destination: sink.destination }).info({ apiKey: 'sk-live-123' }, 'x');
+    createLogger({ destination: sink.destination }).info(
+      { apiKey: 'sk-live-123' },
+      'x',
+    );
     expect(sink.lines()[0]?.apiKey).toBe(REDACT_CENSOR);
   });
 
   it('redacts one level down', () => {
     const sink = capture();
-    createLogger({ destination: sink.destination }).info({ provider: { apiKey: 'sk-1' } }, 'x');
+    createLogger({ destination: sink.destination }).info(
+      { provider: { apiKey: 'sk-1' } },
+      'x',
+    );
     expect(sink.lines()[0]?.provider).toEqual({ apiKey: REDACT_CENSOR });
   });
 
@@ -113,13 +140,20 @@ describe('redaction', () => {
       { providers: { openai: { apiKey: 'sk-1' } } },
       'x',
     );
-    expect(sink.lines()[0]?.providers).toEqual({ openai: { apiKey: REDACT_CENSOR } });
+    expect(sink.lines()[0]?.providers).toEqual({
+      openai: { apiKey: REDACT_CENSOR },
+    });
   });
 
   it('redacts request headers', () => {
     const sink = capture();
     createLogger({ destination: sink.destination }).info(
-      { headers: { authorization: 'Bearer abc', 'content-type': 'application/json' } },
+      {
+        headers: {
+          authorization: 'Bearer abc',
+          'content-type': 'application/json',
+        },
+      },
       'x',
     );
 
@@ -160,7 +194,10 @@ describe('redaction', () => {
 
   it('leaves ordinary fields untouched', () => {
     const sink = capture();
-    createLogger({ destination: sink.destination }).info({ model: 'qwen3', tokens: 42 }, 'x');
+    createLogger({ destination: sink.destination }).info(
+      { model: 'qwen3', tokens: 42 },
+      'x',
+    );
     expect(sink.lines()[0]).toMatchObject({ model: 'qwen3', tokens: 42 });
   });
 

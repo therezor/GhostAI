@@ -41,7 +41,12 @@ import {
   SelectValue,
 } from '@/components/ui/select.js';
 import { Switch } from '@/components/ui/switch.js';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.js';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs.js';
 import { Tooltip } from '@/components/ui/tooltip.js';
 import { toast } from '@/components/ui/toast.js';
 
@@ -52,7 +57,13 @@ const ROLES = ['accent', 'success', 'warning', 'danger', 'info'] as const;
 const SIZES = ['2xs', 'sm', 'base', 'md', 'lg', 'xl'] as const;
 const RADII = ['sm', 'md', 'full'] as const;
 const ROLE_VARIANTS = ['soft', 'solid', 'outline'] as const;
-const BUTTON_VARIANTS = ['primary', 'secondary', 'ghost', 'danger', 'link'] as const;
+const BUTTON_VARIANTS = [
+  'primary',
+  'secondary',
+  'ghost',
+  'danger',
+  'link',
+] as const;
 
 /**
  * A custom property, as an inline style.
@@ -72,12 +83,16 @@ export function TokensRoute(): JSX.Element {
       <header className="style-guide__header">
         <h1 className="style-guide__title">Tokens and primitives</h1>
         <p className="style-guide__lede">
-          The living style guide. Flip the theme in the header and everything here has to hold —
-          which is what makes reviewing in both themes something you can actually do.
+          The living style guide. Flip the theme in the header and everything
+          here has to hold — which is what makes reviewing in both themes
+          something you can actually do.
         </p>
       </header>
 
-      <Section title="Surfaces" hint="An even OKLCH ramp: page, sunken, card, elevated.">
+      <Section
+        title="Surfaces"
+        hint="An even OKLCH ramp: page, sunken, card, elevated."
+      >
         <div className="style-guide__grid">
           {SURFACES.map((name) => (
             <div
@@ -91,7 +106,10 @@ export function TokensRoute(): JSX.Element {
         </div>
       </Section>
 
-      <Section title="Text" hint="Every tier meets WCAG AA on every surface, in both themes.">
+      <Section
+        title="Text"
+        hint="Every tier meets WCAG AA on every surface, in both themes."
+      >
         <div className="style-guide__grid--single">
           {SURFACES.map((surface) => (
             <div
@@ -163,7 +181,10 @@ export function TokensRoute(): JSX.Element {
         </div>
       </Section>
 
-      <Section title="Type" hint="rem throughout; the root font size is never overridden.">
+      <Section
+        title="Type"
+        hint="rem throughout; the root font size is never overridden."
+      >
         <div className="stack style-guide__panel">
           {SIZES.map((size) => (
             <p
@@ -174,8 +195,8 @@ export function TokensRoute(): JSX.Element {
                 '--swatch-leading': `var(--leading-${size})`,
               })}
             >
-              <span className="style-guide__type-name">text-{size}</span> — The quick brown fox
-              jumps over the lazy dog
+              <span className="style-guide__type-name">text-{size}</span> — The
+              quick brown fox jumps over the lazy dog
             </p>
           ))}
           <p className="style-guide__mono-line">
@@ -220,7 +241,10 @@ export function TokensRoute(): JSX.Element {
         </div>
       </Section>
 
-      <Section title="Badges" hint="One recipe parameterised on role — not twenty-five pills.">
+      <Section
+        title="Badges"
+        hint="One recipe parameterised on role — not twenty-five pills."
+      >
         <div className="stack">
           {ROLE_VARIANTS.map((variant) => (
             <div key={variant} className="cluster style-guide__stack">
@@ -249,11 +273,14 @@ export function TokensRoute(): JSX.Element {
               <DialogHeader>
                 <DialogHeading>A modal dialog</DialogHeading>
                 <DialogSubheading>
-                  Focus is trapped here, Escape closes it, and focus returns to the button that
-                  opened it.
+                  Focus is trapped here, Escape closes it, and focus returns to
+                  the button that opened it.
                 </DialogSubheading>
               </DialogHeader>
-              <Field label="Something to focus" placeholder="Tab cycles inside the dialog" />
+              <Field
+                label="Something to focus"
+                placeholder="Tab cycles inside the dialog"
+              />
               <DialogFooter>
                 <Button variant="ghost">Cancel</Button>
                 <Button variant="primary">Confirm</Button>
@@ -286,7 +313,9 @@ export function TokensRoute(): JSX.Element {
             <SelectContent>
               <SelectItem value="anthropic">Anthropic</SelectItem>
               <SelectItem value="ollama">Ollama</SelectItem>
-              <SelectItem value="openai-compatible">OpenAI-compatible</SelectItem>
+              <SelectItem value="openai-compatible">
+                OpenAI-compatible
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -303,13 +332,21 @@ export function TokensRoute(): JSX.Element {
             Arrow keys move between tabs; the panel follows.
           </TabsContent>
           <TabsContent value="two" className="style-guide__tab-body">
-            The active tab is a surface change and a text tier, never colour alone.
+            The active tab is a surface change and a text tier, never colour
+            alone.
           </TabsContent>
         </Tabs>
 
         <div className="stack style-guide__fields">
-          <Field label="Text field" placeholder="Label, input and message are wired together" />
-          <Field label="Invalid field" defaultValue="not-an-email" error="That is not valid." />
+          <Field
+            label="Text field"
+            placeholder="Label, input and message are wired together"
+          />
+          <Field
+            label="Invalid field"
+            defaultValue="not-an-email"
+            error="That is not valid."
+          />
         </div>
       </Section>
 
@@ -333,7 +370,7 @@ export function TokensRoute(): JSX.Element {
             <ToolCard
               key={tool.id}
               tool={tool}
-              onApprove={(_callId, approved) => {
+              onApprove={(callId, approved) => {
                 toast(
                   approved
                     ? { title: 'Approved', role: 'success' }
@@ -348,12 +385,15 @@ export function TokensRoute(): JSX.Element {
   );
 }
 
-const NOTICES: readonly (readonly [NoticeKind, string])[] = [
+const NOTICES: ReadonlyArray<readonly [NoticeKind, string]> = [
   ['prompt_injection', 'The fetched page contained instruction_override text.'],
   ['approval_denied', 'exec was refused by the operator.'],
   ['degraded', 'Dropped images to fit the provider’s request limit.'],
   ['truncated_history', 'Trimmed 12 older messages to fit the context window.'],
-  ['provider_fallback', 'The streaming request failed; retried without streaming.'],
+  [
+    'provider_fallback',
+    'The streaming request failed; retried without streaming.',
+  ],
 ];
 
 /**

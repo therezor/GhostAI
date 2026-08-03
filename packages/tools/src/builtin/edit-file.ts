@@ -31,7 +31,9 @@ const schema = z.strictObject({
     .describe(
       'Exact text to replace, including whitespace. Must occur exactly once unless replaceAll is true.',
     ),
-  newText: z.string().describe('Replacement text. Use an empty string to delete.'),
+  newText: z
+    .string()
+    .describe('Replacement text. Use an empty string to delete.'),
   // Deliberately not `z.coerce.boolean()`, which is `Boolean(value)` and so
   // turns the string `"false"` into `true`. On a flag that decides between one
   // replacement and every replacement, a coercion that inverts the model's
@@ -48,13 +50,21 @@ export const editFileTool: AnyTool = defineTool({
     'Replace an exact string in an existing workspace file. The workspace is the root: "/x" and "../x" both resolve inside it, never outside. oldText must appear exactly once unless replaceAll is set, so read the file first and include enough surrounding context to be unambiguous.',
   schema,
   risk: 'write',
-  annotations: { title: 'Edit file', readOnlyHint: false, idempotentHint: false },
+  annotations: {
+    title: 'Edit file',
+    readOnlyHint: false,
+    idempotentHint: false,
+  },
   async execute(args, context) {
     assertNotAborted(context.signal, 'edit_file');
     if (args.oldText === args.newText) {
-      throw new GhostError('invalid_input', 'oldText and newText are identical; nothing to do.', {
-        details: { path: args.path },
-      });
+      throw new GhostError(
+        'invalid_input',
+        'oldText and newText are identical; nothing to do.',
+        {
+          details: { path: args.path },
+        },
+      );
     }
     const accepted = context.jail.accept(args.path);
     const resolved = accepted.path;
@@ -94,7 +104,10 @@ export const editFileTool: AnyTool = defineTool({
 
     assertNotAborted(context.signal, 'edit_file');
     try {
-      await writeFile(resolved, updated, { encoding: 'utf8', signal: context.signal });
+      await writeFile(resolved, updated, {
+        encoding: 'utf8',
+        signal: context.signal,
+      });
     } catch (error) {
       throw fsFailure(error, where, note);
     }

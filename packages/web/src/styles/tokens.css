@@ -223,10 +223,18 @@
  * ------------------------------------------------------------------ */
 
 :root {
-  --surface-0: oklch(var(--seed-surface-0) var(--seed-neutral-c) var(--seed-neutral-h));
-  --surface-1: oklch(var(--seed-surface-1) var(--seed-neutral-c) var(--seed-neutral-h));
-  --surface-2: oklch(var(--seed-surface-2) var(--seed-neutral-c) var(--seed-neutral-h));
-  --surface-3: oklch(var(--seed-surface-3) var(--seed-neutral-c) var(--seed-neutral-h));
+  --surface-0: oklch(
+    var(--seed-surface-0) var(--seed-neutral-c) var(--seed-neutral-h)
+  );
+  --surface-1: oklch(
+    var(--seed-surface-1) var(--seed-neutral-c) var(--seed-neutral-h)
+  );
+  --surface-2: oklch(
+    var(--seed-surface-2) var(--seed-neutral-c) var(--seed-neutral-h)
+  );
+  --surface-3: oklch(
+    var(--seed-surface-3) var(--seed-neutral-c) var(--seed-neutral-h)
+  );
 
   --fg-1: oklch(var(--seed-text-1) var(--seed-neutral-c) var(--seed-neutral-h));
   --fg-2: oklch(var(--seed-text-2) var(--seed-neutral-c) var(--seed-neutral-h));
@@ -236,46 +244,73 @@
   --line: rgb(var(--seed-overlay-rgb) / var(--seed-line-a));
   --line-strong: rgb(var(--seed-overlay-rgb) / var(--seed-line-strong-a));
 
-  --accent: oklch(var(--seed-accent-l) var(--seed-accent-c) var(--seed-accent-h));
-  --accent-fg: oklch(var(--seed-accent-fg-l) var(--seed-accent-fg-c) var(--seed-accent-h));
+  --accent: oklch(
+    var(--seed-accent-l) var(--seed-accent-c) var(--seed-accent-h)
+  );
+  --accent-fg: oklch(
+    var(--seed-accent-fg-l) var(--seed-accent-fg-c) var(--seed-accent-h)
+  );
   --accent-soft: oklch(
-    var(--seed-accent-l) var(--seed-accent-c) var(--seed-accent-h) / var(--seed-soft-a)
+    var(--seed-accent-l) var(--seed-accent-c) var(--seed-accent-h) /
+      var(--seed-soft-a)
   );
 
   /* Hues chosen for the four roles the protocol already speaks in: a tool that
    * succeeded, a `degraded` notice, a `prompt_injection` refusal, and a hint. */
   --success: oklch(var(--seed-semantic-l) var(--seed-semantic-c) 148);
   --success-fg: oklch(var(--seed-semantic-fg-l) var(--seed-semantic-fg-c) 148);
-  --success-soft: oklch(var(--seed-semantic-l) var(--seed-semantic-c) 148 / var(--seed-soft-a));
+  --success-soft: oklch(
+    var(--seed-semantic-l) var(--seed-semantic-c) 148 / var(--seed-soft-a)
+  );
 
   --warning: oklch(var(--seed-semantic-l) var(--seed-semantic-c) 78);
   --warning-fg: oklch(var(--seed-semantic-fg-l) var(--seed-semantic-fg-c) 78);
-  --warning-soft: oklch(var(--seed-semantic-l) var(--seed-semantic-c) 78 / var(--seed-soft-a));
+  --warning-soft: oklch(
+    var(--seed-semantic-l) var(--seed-semantic-c) 78 / var(--seed-soft-a)
+  );
 
   --danger: oklch(var(--seed-semantic-l) var(--seed-semantic-c) 25);
   --danger-fg: oklch(var(--seed-semantic-fg-l) var(--seed-semantic-fg-c) 25);
-  --danger-soft: oklch(var(--seed-semantic-l) var(--seed-semantic-c) 25 / var(--seed-soft-a));
+  --danger-soft: oklch(
+    var(--seed-semantic-l) var(--seed-semantic-c) 25 / var(--seed-soft-a)
+  );
 
   --info: oklch(var(--seed-semantic-l) var(--seed-semantic-c) 250);
   --info-fg: oklch(var(--seed-semantic-fg-l) var(--seed-semantic-fg-c) 250);
-  --info-soft: oklch(var(--seed-semantic-l) var(--seed-semantic-c) 250 / var(--seed-soft-a));
+  --info-soft: oklch(
+    var(--seed-semantic-l) var(--seed-semantic-c) 250 / var(--seed-soft-a)
+  );
 
   /* The edge of a soft-filled block — a notice, a highlighted tool card. The
    * `-fg` hue at 40% rather than the full-strength stroke, which on a soft fill
    * of the same hue reads as a warning label rather than as a boundary. Not
    * seeded: a border is not text, so it has no contrast floor to tune against. */
-  --accent-edge: oklch(var(--seed-accent-fg-l) var(--seed-accent-fg-c) var(--seed-accent-h) / 0.4);
-  --success-edge: oklch(var(--seed-semantic-fg-l) var(--seed-semantic-fg-c) 148 / 0.4);
-  --warning-edge: oklch(var(--seed-semantic-fg-l) var(--seed-semantic-fg-c) 78 / 0.4);
-  --danger-edge: oklch(var(--seed-semantic-fg-l) var(--seed-semantic-fg-c) 25 / 0.4);
-  --info-edge: oklch(var(--seed-semantic-fg-l) var(--seed-semantic-fg-c) 250 / 0.4);
+  --accent-edge: oklch(
+    var(--seed-accent-fg-l) var(--seed-accent-fg-c) var(--seed-accent-h) / 0.4
+  );
+  --success-edge: oklch(
+    var(--seed-semantic-fg-l) var(--seed-semantic-fg-c) 148 / 0.4
+  );
+  --warning-edge: oklch(
+    var(--seed-semantic-fg-l) var(--seed-semantic-fg-c) 78 / 0.4
+  );
+  --danger-edge: oklch(
+    var(--seed-semantic-fg-l) var(--seed-semantic-fg-c) 25 / 0.4
+  );
+  --info-edge: oklch(
+    var(--seed-semantic-fg-l) var(--seed-semantic-fg-c) 250 / 0.4
+  );
 
-  --on-fill: oklch(var(--seed-on-fill-l) var(--seed-neutral-c) var(--seed-neutral-h));
+  --on-fill: oklch(
+    var(--seed-on-fill-l) var(--seed-neutral-c) var(--seed-neutral-h)
+  );
 
   /* The backdrop behind a modal. Page-coloured rather than black: in light it
    * dims towards near-white, which reads as the page receding instead of as a
    * black sheet laid over a white app. */
-  --scrim: oklch(var(--seed-surface-0) var(--seed-neutral-c) var(--seed-neutral-h) / 0.7);
+  --scrim: oklch(
+    var(--seed-surface-0) var(--seed-neutral-c) var(--seed-neutral-h) / 0.7
+  );
 }
 
 /* ------------------------------------------------------------------ *
@@ -327,8 +362,11 @@
   /* Self-hosted, loaded from `dist/assets`. A font CDN in a self-hosted
    * privacy-first product leaks every user's IP to a third party on first
    * paint and leaves an air-gapped install rendering in Times New Roman. */
-  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', 'Menlo', monospace;
+  --font-sans:
+    'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+    sans-serif;
+  --font-mono:
+    'JetBrains Mono Variable', ui-monospace, 'SF Mono', 'Menlo', monospace;
 
   --text-2xs: 0.75rem;
   --text-sm: 0.875rem;

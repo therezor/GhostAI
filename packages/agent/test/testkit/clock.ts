@@ -44,8 +44,9 @@ export function manualClock(startMs = 1_700_000_000_000): ManualClock {
       timers.delete(handle as unknown as number);
     },
     sleep: (delayMs, signal) => {
-      if (signal?.aborted === true)
+      if (signal?.aborted === true) {
         return Promise.reject(new GhostError('aborted', 'Sleep aborted'));
+      }
       monotonic += delayMs;
       return Promise.resolve();
     },

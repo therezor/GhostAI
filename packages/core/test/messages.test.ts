@@ -70,11 +70,17 @@ describe('message constructors', () => {
   });
 
   it('wraps a plain string as a user message', () => {
-    expect(userMessage('hello')).toEqual({ role: 'user', content: [textPart('hello')] });
+    expect(userMessage('hello')).toEqual({
+      role: 'user',
+      content: [textPart('hello')],
+    });
   });
 
   it('accepts explicit parts for multimodal input', () => {
-    expect(userMessage([textPart('look'), png]).content).toEqual([textPart('look'), png]);
+    expect(userMessage([textPart('look'), png]).content).toEqual([
+      textPart('look'),
+      png,
+    ]);
   });
 
   it('copies the parts array so the caller cannot mutate the message', () => {
@@ -94,7 +100,9 @@ describe('message constructors', () => {
 
   it('carries tool calls and reasoning', () => {
     const call = { id: 'a', name: 'read_file', argumentsJson: '{}' };
-    expect(assistantMessage('', { toolCalls: [call], reasoning: 'thinking' })).toMatchObject({
+    expect(
+      assistantMessage('', { toolCalls: [call], reasoning: 'thinking' }),
+    ).toMatchObject({
       toolCalls: [call],
       reasoning: 'thinking',
     });
@@ -118,7 +126,9 @@ describe('message constructors', () => {
   it('flags a failed tool result explicitly', () => {
     // An explicit flag, because inspecting the content for an "Error" prefix
     // misfires on any tool whose legitimate output starts with that word.
-    expect(toolMessage('a', 'exec', 'Error: nope', { isError: true }).isError).toBe(true);
+    expect(
+      toolMessage('a', 'exec', 'Error: nope', { isError: true }).isError,
+    ).toBe(true);
   });
 });
 
@@ -136,11 +146,15 @@ describe('textOf', () => {
   });
 
   it('joins several parts with a newline rather than gluing them', () => {
-    expect(textOf(assistantMessage([textPart('first'), textPart('second')]))).toBe('first\nsecond');
+    expect(
+      textOf(assistantMessage([textPart('first'), textPart('second')])),
+    ).toBe('first\nsecond');
   });
 
   it('drops image parts', () => {
-    expect(textOf(userMessage([textPart('look at this'), png]))).toBe('look at this');
+    expect(textOf(userMessage([textPart('look at this'), png]))).toBe(
+      'look at this',
+    );
   });
 
   it('returns an empty string for an image-only message', () => {
@@ -154,7 +168,9 @@ describe('textOf', () => {
   it('ignores file parts', () => {
     // Deliberate: this feeds `deriveSessionTitle`, and a session named after a
     // mangled upload path is worse than one left untitled.
-    expect(textOf(userMessage([textPart('summarise'), attached]))).toBe('summarise');
+    expect(textOf(userMessage([textPart('summarise'), attached]))).toBe(
+      'summarise',
+    );
     expect(textOf(userMessage([attached]))).toBe('');
   });
 });
@@ -182,7 +198,9 @@ describe('hasImages', () => {
 describe('withoutImages', () => {
   it('strips images and keeps the text', () => {
     const stripped = withoutImages(userMessage([textPart('look'), png]));
-    expect(stripped.role === 'user' && stripped.content).toEqual([textPart('look')]);
+    expect(stripped.role === 'user' && stripped.content).toEqual([
+      textPart('look'),
+    ]);
   });
 
   it('returns the same object when there is nothing to strip', () => {
@@ -201,13 +219,20 @@ describe('withoutImages', () => {
     // The degradation removes images because a model rejected one. An
     // attachment reference is not what it rejected, and deleting it would lose
     // the only pointer the model has to the file.
-    const stripped = withoutImages(userMessage([textPart('look'), png, attached]));
-    expect(stripped.role === 'user' && stripped.content).toEqual([textPart('look'), attached]);
+    const stripped = withoutImages(
+      userMessage([textPart('look'), png, attached]),
+    );
+    expect(stripped.role === 'user' && stripped.content).toEqual([
+      textPart('look'),
+      attached,
+    ]);
   });
 
   it('preserves tool calls while stripping images', () => {
     const call = { id: 'a', name: 't', argumentsJson: '{}' };
-    const stripped = withoutImages(assistantMessage([textPart('x'), png], { toolCalls: [call] }));
+    const stripped = withoutImages(
+      assistantMessage([textPart('x'), png], { toolCalls: [call] }),
+    );
     expect(stripped).toMatchObject({ toolCalls: [call] });
   });
 });

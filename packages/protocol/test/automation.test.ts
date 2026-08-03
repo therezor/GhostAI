@@ -10,13 +10,19 @@ import {
 
 describe('AutomationScheduleSchema', () => {
   it('parses each schedule kind', () => {
-    expect(AutomationScheduleSchema.parse({ kind: 'at', atMs: 1_700_000_000_000 })).toMatchObject({
+    expect(
+      AutomationScheduleSchema.parse({ kind: 'at', atMs: 1_700_000_000_000 }),
+    ).toMatchObject({
       kind: 'at',
     });
-    expect(AutomationScheduleSchema.parse({ kind: 'every', everyMs: 60_000 })).toMatchObject({
+    expect(
+      AutomationScheduleSchema.parse({ kind: 'every', everyMs: 60_000 }),
+    ).toMatchObject({
       kind: 'every',
     });
-    expect(AutomationScheduleSchema.parse({ kind: 'cron', expr: '0 9 * * 1' })).toMatchObject({
+    expect(
+      AutomationScheduleSchema.parse({ kind: 'cron', expr: '0 9 * * 1' }),
+    ).toMatchObject({
       kind: 'cron',
     });
   });
@@ -24,20 +30,34 @@ describe('AutomationScheduleSchema', () => {
   it('rejects fields belonging to a different kind', () => {
     // The whole point of the discriminated union: `{kind: 'cron', atMs: 5}` was
     // representable when every variant's fields sat side by side.
-    expect(AutomationScheduleSchema.safeParse({ kind: 'cron', atMs: 5 }).success).toBe(false);
     expect(
-      AutomationScheduleSchema.safeParse({ kind: 'at', atMs: 1, expr: '* * * * *' }).success,
+      AutomationScheduleSchema.safeParse({ kind: 'cron', atMs: 5 }).success,
+    ).toBe(false);
+    expect(
+      AutomationScheduleSchema.safeParse({
+        kind: 'at',
+        atMs: 1,
+        expr: '* * * * *',
+      }).success,
     ).toBe(false);
   });
 
   it('requires the field its kind implies', () => {
-    expect(AutomationScheduleSchema.safeParse({ kind: 'at' }).success).toBe(false);
-    expect(AutomationScheduleSchema.safeParse({ kind: 'every' }).success).toBe(false);
-    expect(AutomationScheduleSchema.safeParse({ kind: 'cron' }).success).toBe(false);
+    expect(AutomationScheduleSchema.safeParse({ kind: 'at' }).success).toBe(
+      false,
+    );
+    expect(AutomationScheduleSchema.safeParse({ kind: 'every' }).success).toBe(
+      false,
+    );
+    expect(AutomationScheduleSchema.safeParse({ kind: 'cron' }).success).toBe(
+      false,
+    );
   });
 
   it('rejects a zero interval that would spin the timer', () => {
-    expect(AutomationScheduleSchema.safeParse({ kind: 'every', everyMs: 0 }).success).toBe(false);
+    expect(
+      AutomationScheduleSchema.safeParse({ kind: 'every', everyMs: 0 }).success,
+    ).toBe(false);
   });
 
   it('refuses a per-job timezone rather than ignoring it', () => {
@@ -46,27 +66,41 @@ describe('AutomationScheduleSchema', () => {
     // an importer written against the old shape fails loudly, instead of being
     // silently rescheduled onto a different clock than the one it names.
     expect(
-      AutomationScheduleSchema.safeParse({ kind: 'cron', expr: '* * * * *', tz: 'Europe/Kyiv' })
-        .success,
+      AutomationScheduleSchema.safeParse({
+        kind: 'cron',
+        expr: '* * * * *',
+        tz: 'Europe/Kyiv',
+      }).success,
     ).toBe(false);
 
-    const parsed = AutomationScheduleSchema.parse({ kind: 'cron', expr: '* * * * *' });
+    const parsed = AutomationScheduleSchema.parse({
+      kind: 'cron',
+      expr: '* * * * *',
+    });
     expect(parsed).not.toHaveProperty('tz');
   });
 
   it('rejects an unknown kind', () => {
-    expect(AutomationScheduleSchema.safeParse({ kind: 'hourly' }).success).toBe(false);
+    expect(AutomationScheduleSchema.safeParse({ kind: 'hourly' }).success).toBe(
+      false,
+    );
   });
 });
 
 describe('AutomationPayloadSchema', () => {
   it('requires a message for a scheduled payload', () => {
-    expect(AutomationPayloadSchema.safeParse({ kind: 'scheduled' }).success).toBe(false);
-    expect(AutomationPayloadSchema.safeParse({ kind: 'scheduled', message: '' }).success).toBe(
-      false,
-    );
     expect(
-      AutomationPayloadSchema.safeParse({ kind: 'scheduled', message: 'check the build' }).success,
+      AutomationPayloadSchema.safeParse({ kind: 'scheduled' }).success,
+    ).toBe(false);
+    expect(
+      AutomationPayloadSchema.safeParse({ kind: 'scheduled', message: '' })
+        .success,
+    ).toBe(false);
+    expect(
+      AutomationPayloadSchema.safeParse({
+        kind: 'scheduled',
+        message: 'check the build',
+      }).success,
     ).toBe(true);
   });
 
@@ -78,7 +112,9 @@ describe('AutomationPayloadSchema', () => {
   it('does not deliver by default', () => {
     // A job that fires silently into its run history is the safe default; opting
     // in is what makes a notification a deliberate choice.
-    expect(AutomationPayloadSchema.parse({ kind: 'heartbeat' })).toMatchObject({ deliver: false });
+    expect(AutomationPayloadSchema.parse({ kind: 'heartbeat' })).toMatchObject({
+      deliver: false,
+    });
   });
 
   it('carries delivery fields on both kinds', () => {
@@ -89,7 +125,11 @@ describe('AutomationPayloadSchema', () => {
       channel: 'telegram',
       to: '12345',
     });
-    expect(scheduled).toMatchObject({ deliver: true, channel: 'telegram', to: '12345' });
+    expect(scheduled).toMatchObject({
+      deliver: true,
+      channel: 'telegram',
+      to: '12345',
+    });
 
     const heartbeat = AutomationPayloadSchema.parse({
       kind: 'heartbeat',
@@ -102,7 +142,9 @@ describe('AutomationPayloadSchema', () => {
   it('leaves sessionKey unset so each run gets an isolated session', () => {
     // Pinning a sessionKey is how a nightly job grows an unbounded context
     // window, so it must be explicit.
-    expect(AutomationPayloadSchema.parse({ kind: 'heartbeat' })).not.toHaveProperty('sessionKey');
+    expect(
+      AutomationPayloadSchema.parse({ kind: 'heartbeat' }),
+    ).not.toHaveProperty('sessionKey');
   });
 });
 
@@ -111,22 +153,36 @@ describe('AutomationJobSchema', () => {
   const payload = { kind: 'scheduled' as const, message: 'good morning' };
 
   it('fills in state and flags', () => {
-    const job = AutomationJobSchema.parse({ id: 'j1', name: 'Morning', schedule, payload });
+    const job = AutomationJobSchema.parse({
+      id: 'j1',
+      name: 'Morning',
+      schedule,
+      payload,
+    });
     expect(job).toMatchObject({
       enabled: true,
       deleteAfterRun: false,
-      state: { nextRunAtMs: 0, lastStatus: 'pending', runCount: 0, lastError: '' },
+      state: {
+        nextRunAtMs: 0,
+        lastStatus: 'pending',
+        runCount: 0,
+        lastError: '',
+      },
     });
   });
 
   it('requires an id and a name', () => {
-    expect(AutomationJobSchema.safeParse({ name: 'x', schedule, payload }).success).toBe(false);
-    expect(AutomationJobSchema.safeParse({ id: '', name: 'x', schedule, payload }).success).toBe(
-      false,
-    );
-    expect(AutomationJobSchema.safeParse({ id: 'j', name: '', schedule, payload }).success).toBe(
-      false,
-    );
+    expect(
+      AutomationJobSchema.safeParse({ name: 'x', schedule, payload }).success,
+    ).toBe(false);
+    expect(
+      AutomationJobSchema.safeParse({ id: '', name: 'x', schedule, payload })
+        .success,
+    ).toBe(false);
+    expect(
+      AutomationJobSchema.safeParse({ id: 'j', name: '', schedule, payload })
+        .success,
+    ).toBe(false);
   });
 
   it('rejects an unknown run status', () => {
@@ -154,7 +210,12 @@ describe('AutomationJobSchema', () => {
 });
 
 describe('AutomationRunSchema', () => {
-  const base = { id: 'r1', jobId: 'j1', startedAtMs: 1_700_000_000_000, status: 'ok' as const };
+  const base = {
+    id: 'r1',
+    jobId: 'j1',
+    startedAtMs: 1_700_000_000_000,
+    status: 'ok' as const,
+  };
 
   it('defaults to no warnings', () => {
     expect(AutomationRunSchema.parse(base).warnings).toEqual([]);

@@ -29,14 +29,16 @@ afterEach(async () => {
   while (running.length > 0) await running.pop()?.close();
 });
 
-async function start(...args: Parameters<typeof startTestServer>): Promise<TestServer> {
+async function start(
+  ...args: Parameters<typeof startTestServer>
+): Promise<TestServer> {
   const started = await startTestServer(...args);
   running.push(started);
   return started;
 }
 
 /** The text of each stored message, which is what the assertions are about. */
-function texts(messages: { message: ChatMessage }[]): string[] {
+function texts(messages: Array<{ message: ChatMessage }>): string[] {
   return messages.map((stored) => textOf(stored.message));
 }
 
@@ -88,7 +90,12 @@ describe('sessions CRUD', () => {
   it('is idempotent on a repeated key', async () => {
     const { server, headers } = await start();
     const payload = { key: 'web-1', title: 'First' };
-    await server.app.inject({ method: 'POST', url: '/api/sessions', headers, payload });
+    await server.app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      headers,
+      payload,
+    });
     const second = await server.app.inject({
       method: 'POST',
       url: '/api/sessions',
@@ -148,7 +155,9 @@ describe('sessions CRUD', () => {
 
   it('refuses a disabled agent too, which is absent from every listing', async () => {
     const { server, headers } = await start({
-      config: ConfigSchema.parse({ agents: { list: { reviewer: { enabled: false } } } }),
+      config: ConfigSchema.parse({
+        agents: { list: { reviewer: { enabled: false } } },
+      }),
     });
 
     const response = await server.app.inject({
@@ -163,7 +172,9 @@ describe('sessions CRUD', () => {
 
   it('binds a new session to an agent that does exist', async () => {
     const { server, headers, runtime } = await start({
-      config: ConfigSchema.parse({ agents: { list: { reviewer: { label: 'Reviewer' } } } }),
+      config: ConfigSchema.parse({
+        agents: { list: { reviewer: { label: 'Reviewer' } } },
+      }),
     });
 
     const response = await server.app.inject({
@@ -195,7 +206,9 @@ describe('sessions CRUD', () => {
     // never the stored one. A conversation bound to a deleted agent has to stay
     // fixable, or the fallback becomes a state nobody can leave.
     const { server, headers, runtime } = await start({
-      config: ConfigSchema.parse({ agents: { list: { writer: { label: 'Writer' } } } }),
+      config: ConfigSchema.parse({
+        agents: { list: { writer: { label: 'Writer' } } },
+      }),
     });
     runtime.store.ensureSession('web-1', { agentId: 'reviewer' });
 
@@ -306,7 +319,9 @@ describe('GET /api/sessions', () => {
     const test = await start();
     for (const key of ['a', 'b']) test.runtime.store.ensureSession(key);
 
-    expect((await page(test, '?limit=1')).nextCursor).toEqual(expect.any(String));
+    expect((await page(test, '?limit=1')).nextCursor).toEqual(
+      expect.any(String),
+    );
     expect((await page(test, '?limit=2')).nextCursor).toBeUndefined();
   });
 
@@ -391,7 +406,9 @@ describe('GET /api/sessions', () => {
 
   it('reports the whole match, not the page in front of it', async () => {
     const test = await start();
-    for (const key of ['a', 'b', 'c', 'd', 'e']) test.runtime.store.ensureSession(key);
+    for (const key of ['a', 'b', 'c', 'd', 'e']) {
+      test.runtime.store.ensureSession(key);
+    }
 
     const first = await page(test, '?limit=2');
     expect(first.ids).toHaveLength(2);
@@ -427,7 +444,10 @@ describe('GET /api/sessions', () => {
     clock.advance(1000);
     test.runtime.store.ensureSession('b', { title: 'alpha' });
 
-    expect((await page(test, '?sort=title&desc=false')).ids).toEqual(['b', 'a']);
+    expect((await page(test, '?sort=title&desc=false')).ids).toEqual([
+      'b',
+      'a',
+    ]);
     expect((await page(test, '?sort=title&desc=true')).ids).toEqual(['a', 'b']);
   });
 
@@ -441,9 +461,15 @@ describe('GET /api/sessions', () => {
     const test = await start();
     for (const key of ['a', 'b']) test.runtime.store.ensureSession(key);
 
-    expect((await page(test, '?limit=1')).nextCursor).toEqual(expect.any(String));
-    expect((await page(test, '?limit=1&sort=title')).nextCursor).toBeUndefined();
-    expect((await page(test, '?limit=1&desc=false')).nextCursor).toBeUndefined();
+    expect((await page(test, '?limit=1')).nextCursor).toEqual(
+      expect.any(String),
+    );
+    expect(
+      (await page(test, '?limit=1&sort=title')).nextCursor,
+    ).toBeUndefined();
+    expect(
+      (await page(test, '?limit=1&desc=false')).nextCursor,
+    ).toBeUndefined();
   });
 
   /**
@@ -593,10 +619,16 @@ describe('GET /api/sessions/:key/context', () => {
     expect(body.messages).toHaveLength(2);
     // Stored messages, so each one carries the id the transcript uses — which is
     // what lets the inspector point at a row rather than describe it.
-    expect(body.messages[0]).toMatchObject({ id: expect.any(String), sessionKey: 'web-1' });
+    expect(body.messages[0]).toMatchObject({
+      id: expect.any(String),
+      sessionKey: 'web-1',
+    });
     expect(body.contextWindowTokens).toBe(65_536);
     expect(body.estimatedTokens).toBe(
-      Object.values(body.breakdown).reduce((total, tokens) => total + tokens, 0),
+      Object.values(body.breakdown).reduce(
+        (total, tokens) => total + tokens,
+        0,
+      ),
     );
     // The trailing turn, reported apart from the system prompt because it is the
     // only section billed again on every step. Asserted on the wire and not just
@@ -617,7 +649,12 @@ describe('GET /api/sessions/:key/context', () => {
   it('shows the repaired window rather than the raw rows', async () => {
     const test = await start();
     test.runtime.store.appendMany('web-1', [
-      { role: 'tool', content: 'orphaned', toolCallId: 'call-1', name: 'read_file' },
+      {
+        role: 'tool',
+        content: 'orphaned',
+        toolCallId: 'call-1',
+        name: 'read_file',
+      },
       userMessage('hello'),
     ]);
 
@@ -628,7 +665,9 @@ describe('GET /api/sessions/:key/context', () => {
     });
 
     const body = response.json<ContextResponse>();
-    expect(body.messages.map((stored) => stored.message.role)).toEqual(['user']);
+    expect(body.messages.map((stored) => stored.message.role)).toEqual([
+      'user',
+    ]);
   });
 
   it('skips messages already folded into the memory files', async () => {
@@ -643,7 +682,9 @@ describe('GET /api/sessions/:key/context', () => {
       headers: test.headers,
     });
 
-    expect(texts(response.json<ContextResponse>().messages)).toEqual(['still here']);
+    expect(texts(response.json<ContextResponse>().messages)).toEqual([
+      'still here',
+    ]);
   });
 
   it('names the agent it measured, and says nothing was substituted', async () => {
@@ -702,7 +743,10 @@ describe('branching a session', () => {
     const fork = response.json<SessionSummary>();
     expect(fork.messageCount).toBe(2);
     expect(fork.key).not.toBe('web-1');
-    expect(texts(test.runtime.store.messages(fork.key))).toEqual(['one', 'two']);
+    expect(texts(test.runtime.store.messages(fork.key))).toEqual([
+      'one',
+      'two',
+    ]);
     expect(test.runtime.store.messageCount('web-1')).toBe(3);
   });
 
@@ -717,7 +761,10 @@ describe('branching a session', () => {
       payload: { seq: 1, key: 'chosen', title: 'A fork' },
     });
 
-    expect(response.json<SessionSummary>()).toMatchObject({ key: 'chosen', title: 'A fork' });
+    expect(response.json<SessionSummary>()).toMatchObject({
+      key: 'chosen',
+      title: 'A fork',
+    });
   });
 
   it('reports a cut that had to snap to a legal boundary', async () => {
@@ -762,8 +809,15 @@ describe('branching a session', () => {
     const test = await start({ runner: hangingRunner() });
     test.runtime.store.append('web-1', userMessage('one'));
 
-    const client = test.hub.connect({ send: () => undefined, sessionKey: 'web-1' });
-    client.receive({ type: 'user.message', sessionKey: 'web-1', content: 'go' });
+    const client = test.hub.connect({
+      send: () => undefined,
+      sessionKey: 'web-1',
+    });
+    client.receive({
+      type: 'user.message',
+      sessionKey: 'web-1',
+      content: 'go',
+    });
 
     const response = await test.server.app.inject({
       method: 'POST',
@@ -808,7 +862,10 @@ describe('turn stats', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json<TurnStatsResponse>()).toEqual({ sessionKey: 'web-1', turns: [] });
+    expect(response.json<TurnStatsResponse>()).toEqual({
+      sessionKey: 'web-1',
+      turns: [],
+    });
   });
 
   it('returns the recorded turns, newest first', async () => {
@@ -856,7 +913,9 @@ describe('turn stats', () => {
       headers: test.headers,
     });
 
-    expect(listed.json<SessionListResponse>().sessions[0]?.totalUsage?.totalTokens).toBe(240);
+    expect(
+      listed.json<SessionListResponse>().sessions[0]?.totalUsage?.totalTokens,
+    ).toBe(240);
     expect(one.json<SessionSummary>().totalUsage?.totalTokens).toBe(240);
   });
 

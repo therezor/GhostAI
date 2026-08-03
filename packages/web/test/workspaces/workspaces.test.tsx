@@ -33,7 +33,11 @@ import {
 import { WorkspaceSwitcher } from '@/workspaces/workspace-switcher.js';
 import { DEFAULT_WORKSPACE_ID } from '@/workspaces/workspace-context.js';
 
-function workspace(id: string, name: string, extra: Record<string, unknown> = {}): unknown {
+function workspace(
+  id: string,
+  name: string,
+  extra: Record<string, unknown> = {},
+): unknown {
   return {
     id,
     name,
@@ -46,7 +50,10 @@ function workspace(id: string, name: string, extra: Record<string, unknown> = {}
 }
 
 const TWO = {
-  workspaces: [workspace('default', 'Default'), workspace('acme', 'Client Acme')],
+  workspaces: [
+    workspace('default', 'Default'),
+    workspace('acme', 'Client Acme'),
+  ],
 };
 
 /**
@@ -86,7 +93,9 @@ describe('query keys', () => {
     expect(queryKeys.fileText('acme', 'notes.md')).not.toEqual(
       queryKeys.fileText('research', 'notes.md'),
     );
-    expect(queryKeys.fileUrl('acme', 'x.png')).not.toEqual(queryKeys.fileUrl('research', 'x.png'));
+    expect(queryKeys.fileUrl('acme', 'x.png')).not.toEqual(
+      queryKeys.fileUrl('research', 'x.png'),
+    );
   });
 
   it('keep the workspace at index 1, so a prefix invalidation still means something', () => {
@@ -142,9 +151,13 @@ describe('the workspace switcher', () => {
     renderSwitcher();
 
     await screen.findByRole('button', { name: /Workspace: Default/ });
-    await userEvent.click(screen.getByRole('button', { name: /Workspace: Default/ }));
+    await userEvent.click(
+      screen.getByRole('button', { name: /Workspace: Default/ }),
+    );
 
-    expect(await screen.findByRole('menuitemradio', { name: /Client Acme/ })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('menuitemradio', { name: /Client Acme/ }),
+    ).toBeInTheDocument();
   });
 
   it('does not repeat what the workspaces page already explains', async () => {
@@ -154,7 +167,9 @@ describe('the workspace switcher', () => {
     stubApi({ 'GET /api/workspaces': [200, TWO] });
     renderSwitcher();
 
-    expect(await screen.findByRole('button', { name: /^Workspace: / })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('button', { name: /^Workspace: / }),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/reach their files/)).not.toBeInTheDocument();
   });
 
@@ -162,22 +177,27 @@ describe('the workspace switcher', () => {
     stubApi({ 'GET /api/workspaces': [200, TWO] });
     renderSwitcher();
 
-    await userEvent.click(await screen.findByRole('button', { name: /^Workspace: / }));
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^Workspace: / }),
+    );
 
     // A link, so it can be middle-clicked and opened in a new tab — which a
     // `<button>` that set some state could never be.
-    expect(await screen.findByRole('menuitem', { name: /Manage workspaces/ })).toHaveAttribute(
-      'href',
-      '/workspaces',
-    );
+    expect(
+      await screen.findByRole('menuitem', { name: /Manage workspaces/ }),
+    ).toHaveAttribute('href', '/workspaces');
   });
 
   it('remembers the choice across a remount', async () => {
     stubApi({ 'GET /api/workspaces': [200, TWO] });
     const first = renderSwitcher();
 
-    await userEvent.click(await screen.findByRole('button', { name: /Workspace: Default/ }));
-    await userEvent.click(await screen.findByRole('menuitemradio', { name: /Client Acme/ }));
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Workspace: Default/ }),
+    );
+    await userEvent.click(
+      await screen.findByRole('menuitemradio', { name: /Client Acme/ }),
+    );
     first.unmount();
 
     renderSwitcher();
@@ -225,7 +245,9 @@ function mount(
 describe('the workspaces page', () => {
   /** Opens the kebab for one row and returns nothing — the menu is on screen. */
   async function openActions(name: string): Promise<void> {
-    await userEvent.click(await screen.findByRole('button', { name: `Actions for ${name}` }));
+    await userEvent.click(
+      await screen.findByRole('button', { name: `Actions for ${name}` }),
+    );
   }
 
   it('creates one from a name, never a path', async () => {
@@ -233,7 +255,9 @@ describe('the workspaces page', () => {
       'POST /api/workspaces': [201, workspace('research', 'Research')],
     });
 
-    await userEvent.click(await screen.findByRole('link', { name: 'New workspace' }));
+    await userEvent.click(
+      await screen.findByRole('link', { name: 'New workspace' }),
+    );
     await userEvent.type(await screen.findByLabelText('Name'), 'Research');
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
@@ -242,7 +266,9 @@ describe('the workspaces page', () => {
     });
     // No `id`: a blank folder box means "derive it", and the derivation is the
     // registry's — it is the only thing that can settle a collision.
-    expect(calls.find((call) => call.method === 'POST')?.body).toEqual({ name: 'Research' });
+    expect(calls.find((call) => call.method === 'POST')?.body).toEqual({
+      name: 'Research',
+    });
   });
 
   it('lets the folder be chosen apart from the name', async () => {
@@ -250,11 +276,19 @@ describe('the workspaces page', () => {
     // otherwise have to live in `/client-acme-2024-rebuild`, and the only way
     // to get the short folder was to create it under a name nobody wanted.
     const { calls } = mount('/workspaces', {
-      'POST /api/workspaces': [201, workspace('acme24', 'Client Acme (2024 rebuild)')],
+      'POST /api/workspaces': [
+        201,
+        workspace('acme24', 'Client Acme (2024 rebuild)'),
+      ],
     });
 
-    await userEvent.click(await screen.findByRole('link', { name: 'New workspace' }));
-    await userEvent.type(await screen.findByLabelText('Name'), 'Client Acme (2024 rebuild)');
+    await userEvent.click(
+      await screen.findByRole('link', { name: 'New workspace' }),
+    );
+    await userEvent.type(
+      await screen.findByLabelText('Name'),
+      'Client Acme (2024 rebuild)',
+    );
     await userEvent.type(await screen.findByLabelText('Folder'), 'acme24');
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
@@ -269,30 +303,40 @@ describe('the workspaces page', () => {
   it('shows the folder the name would derive, before it is created', async () => {
     mount();
 
-    await userEvent.click(await screen.findByRole('link', { name: 'New workspace' }));
+    await userEvent.click(
+      await screen.findByRole('link', { name: 'New workspace' }),
+    );
     await userEvent.type(await screen.findByLabelText('Name'), 'Client Acme');
 
     // The derived slug, live. It is what pressing Create would actually produce,
     // and seeing it change while the name is typed is what explains the field.
-    expect(await screen.findByText(/Creates \/client-acme/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Creates \/client-acme/),
+    ).toBeInTheDocument();
   });
 
   it('refuses a folder the browser can already tell is wrong', async () => {
     const { calls } = mount();
 
-    await userEvent.click(await screen.findByRole('link', { name: 'New workspace' }));
+    await userEvent.click(
+      await screen.findByRole('link', { name: 'New workspace' }),
+    );
     await userEvent.type(await screen.findByLabelText('Name'), 'Research');
 
     const folder = await screen.findByLabelText('Folder');
     await userEvent.type(folder, 'Not A Slug');
-    expect(await screen.findByRole('alert')).toHaveTextContent(/lowercase letters/);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /lowercase letters/,
+    );
 
     // A folder another workspace already occupies, checked here so the message
     // can point at the box rather than arriving as a toast after the directory
     // was not created.
     await userEvent.clear(folder);
     await userEvent.type(folder, 'acme');
-    expect(await screen.findByRole('alert')).toHaveTextContent(/already uses that folder/);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /already uses that folder/,
+    );
 
     // Nothing has been sent while any of that was on screen.
     expect(calls.some((call) => call.method === 'POST')).toBe(false);
@@ -311,12 +355,18 @@ describe('the workspaces page', () => {
     // No Rename item: the name is a field on the screen the row opens, and a
     // second way to edit one field is a shortcut kept correct twice.
     await openActions('Client Acme');
-    expect(await screen.findByRole('menuitem', { name: 'Edit' })).toBeInTheDocument();
-    expect(screen.queryByRole('menuitem', { name: 'Rename' })).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole('menuitem', { name: 'Edit' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('menuitem', { name: 'Rename' }),
+    ).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
 
-    expect(await screen.findByRole('heading', { name: 'Client Acme' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Client Acme' }),
+    ).toBeInTheDocument();
   });
 
   it('says which folder each workspace is in, without opening it', async () => {
@@ -332,8 +382,12 @@ describe('the workspaces page', () => {
 
     await openActions('Default');
 
-    expect(await screen.findByRole('menuitem', { name: 'Edit' })).toBeInTheDocument();
-    expect(screen.queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole('menuitem', { name: 'Edit' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('menuitem', { name: 'Delete' }),
+    ).not.toBeInTheDocument();
   });
 
   it('asks before deleting, and sends nothing until the answer is yes', async () => {
@@ -342,9 +396,13 @@ describe('the workspaces page', () => {
     const { calls } = mount();
 
     await openActions('Client Acme');
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+    await userEvent.click(
+      await screen.findByRole('menuitem', { name: 'Delete' }),
+    );
 
-    expect(await screen.findByText(/Its folder and everything in it stays on disk/)).toBeVisible();
+    expect(
+      await screen.findByText(/Its folder and everything in it stays on disk/),
+    ).toBeVisible();
     expect(calls.some((call) => call.method === 'DELETE')).toBe(false);
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -375,25 +433,37 @@ describe('the workspaces page', () => {
     });
 
     await openActions('Client Acme');
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+    await userEvent.click(
+      await screen.findByRole('menuitem', { name: 'Delete' }),
+    );
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Delete' }),
+    );
 
     // The 409 is a question, not a failure: the count it carries is what the
     // offer is made out of.
-    expect(await screen.findByText(/2 sessions still belong to Client Acme/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/2 sessions still belong to Client Acme/),
+    ).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Move and delete' }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Move and delete' }),
+    );
 
     await waitFor(() => {
       expect(calls.filter((call) => call.method === 'DELETE')).toHaveLength(2);
     });
-    expect(calls.some((call) => call.path === '/api/workspaces/acme/sessions/move')).toBe(true);
+    expect(
+      calls.some((call) => call.path === '/api/workspaces/acme/sessions/move'),
+    ).toBe(true);
   });
 
   it('explains what a workspace is, once, where someone is reading about them', async () => {
     mount();
 
-    expect(await screen.findByText(/cannot reach each other/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/cannot reach each other/),
+    ).toBeInTheDocument();
   });
 
   it('keeps the default at the top however the list is sorted', async () => {
@@ -406,8 +476,12 @@ describe('the workspaces page', () => {
 
     expect(await firstRow()).toContain('Default');
 
-    await userEvent.click(await screen.findByRole('button', { name: /Sort by/ }));
-    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Descending' }));
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Sort by/ }),
+    );
+    await userEvent.click(
+      await screen.findByRole('menuitemradio', { name: 'Descending' }),
+    );
     expect(await firstRow()).toContain('Default');
   });
 });
@@ -425,12 +499,16 @@ describe('the workspace editor', () => {
     await userEvent.type(folder, 'acme24');
     // Said before it is done, because a rename under a tree someone is working
     // in is not something to discover from a toast afterwards.
-    expect(await screen.findByText(/Moves the folder to \/acme24/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Moves the folder to \/acme24/),
+    ).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => {
-      expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({ id: 'acme24' });
+      expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({
+        id: 'acme24',
+      });
     });
   });
 
@@ -476,7 +554,9 @@ describe('the workspace editor', () => {
 
     // Clean on arrival: a Save that is always pressable invites a rename to the
     // name it already has.
-    expect(await screen.findByRole('button', { name: 'Save changes' })).toBeDisabled();
+    expect(
+      await screen.findByRole('button', { name: 'Save changes' }),
+    ).toBeDisabled();
 
     await userEvent.clear(await screen.findByLabelText('Name'));
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
@@ -487,7 +567,9 @@ describe('the workspace editor', () => {
   it('offers no delete for the default, and one for the others', async () => {
     mount('/workspaces/default');
     await screen.findByRole('heading', { name: 'Default' });
-    expect(screen.queryByRole('button', { name: /^Actions for/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /^Actions for/ }),
+    ).not.toBeInTheDocument();
   });
 
   it('renames without touching the folder, and sends only the name', async () => {
@@ -501,15 +583,21 @@ describe('the workspace editor', () => {
 
     await waitFor(() => {
       // No `id`: an unchanged box is not an instruction to move a directory.
-      expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({ name: 'Acme Ltd' });
+      expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({
+        name: 'Acme Ltd',
+      });
     });
   });
 
   it('says so rather than showing an empty form for a workspace that is gone', async () => {
     mount('/workspaces/vanished');
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/no workspace called/);
-    expect(screen.getByRole('link', { name: /Back to workspaces/ })).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /no workspace called/,
+    );
+    expect(
+      screen.getByRole('link', { name: /Back to workspaces/ }),
+    ).toBeInTheDocument();
   });
 });
 

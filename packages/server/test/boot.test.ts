@@ -16,7 +16,9 @@ describe('assertBootPolicy', () => {
 
   it('allows authentication off on loopback', () => {
     expect(() => {
-      assertBootPolicy({ config: config({ host: '127.0.0.1', auth: { enabled: false } }) });
+      assertBootPolicy({
+        config: config({ host: '127.0.0.1', auth: { enabled: false } }),
+      });
     }).not.toThrow();
   });
 
@@ -26,7 +28,9 @@ describe('assertBootPolicy', () => {
     'refuses to serve %s without authentication',
     (host) => {
       expect(() => {
-        assertBootPolicy({ config: config({ host, auth: { enabled: false } }) });
+        assertBootPolicy({
+          config: config({ host, auth: { enabled: false } }),
+        });
       }).toThrow(/Refusing to start/);
     },
   );
@@ -35,7 +39,11 @@ describe('assertBootPolicy', () => {
     let message = '';
     try {
       assertBootPolicy({
-        config: config({ host: '0.0.0.0', port: 8080, auth: { enabled: false } }),
+        config: config({
+          host: '0.0.0.0',
+          port: 8080,
+          auth: { enabled: false },
+        }),
       });
     } catch (error) {
       message = (error as Error).message;
@@ -50,7 +58,9 @@ describe('assertBootPolicy', () => {
     'treats %s as loopback',
     (host) => {
       expect(() => {
-        assertBootPolicy({ config: config({ host, auth: { enabled: false } }) });
+        assertBootPolicy({
+          config: config({ host, auth: { enabled: false } }),
+        });
       }).not.toThrow();
     },
   );
@@ -68,7 +78,11 @@ describe('assertBootPolicy', () => {
   it('carries the host and port as structured detail, not only in the message', () => {
     try {
       assertBootPolicy({
-        config: config({ host: '0.0.0.0', port: 8080, auth: { enabled: false } }),
+        config: config({
+          host: '0.0.0.0',
+          port: 8080,
+          auth: { enabled: false },
+        }),
       });
       expect.unreachable('should have refused');
     } catch (error) {

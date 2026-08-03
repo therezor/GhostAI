@@ -9,10 +9,14 @@ describe('mergeConfigPatch', () => {
   it('leaves every field the patch does not mention', () => {
     // The whole point of `patchOf` over `.partial()`: saving one settings panel
     // must not rewrite the siblings back to their defaults.
-    const merged = mergeConfigPatch(base, { agents: { defaults: { temperature: 0.7 } } });
+    const merged = mergeConfigPatch(base, {
+      agents: { defaults: { temperature: 0.7 } },
+    });
 
     expect(merged.agents.defaults.temperature).toBe(0.7);
-    expect(merged.agents.defaults.maxTokens).toBe(base.agents.defaults.maxTokens);
+    expect(merged.agents.defaults.maxTokens).toBe(
+      base.agents.defaults.maxTokens,
+    );
     expect(merged.tools).toEqual(base.tools);
   });
 
@@ -41,7 +45,12 @@ describe('mergeConfigPatch', () => {
 
   it('replaces extraHeaders wholesale, so a header can be deleted', () => {
     const withHeaders = mergeConfigPatch(base, {
-      providers: { openai: { type: 'openai', extraHeaders: { 'X-One': '1', 'X-Two': '2' } } },
+      providers: {
+        openai: {
+          type: 'openai',
+          extraHeaders: { 'X-One': '1', 'X-Two': '2' },
+        },
+      },
     });
     const replaced = mergeConfigPatch(withHeaders, {
       providers: { openai: { extraHeaders: { 'X-One': '1' } } },
@@ -95,7 +104,15 @@ describe('mergeConfigPatch', () => {
     // merge kept the fields a patch left out, emptying the model box in the
     // editor would silently keep the model that was just deleted.
     const pinned = mergeConfigPatch(base, {
-      agents: { list: { reviewer: { label: 'Reviewer', model: 'claude-opus-5', temperature: 0 } } },
+      agents: {
+        list: {
+          reviewer: {
+            label: 'Reviewer',
+            model: 'claude-opus-5',
+            temperature: 0,
+          },
+        },
+      },
     });
     const cleared = mergeConfigPatch(pinned, {
       agents: { list: { reviewer: { label: 'Reviewer' } } },
@@ -125,7 +142,11 @@ describe('mergeConfigPatch', () => {
     // would be no way to express "this agent has one tool".
     const wide = mergeConfigPatch(base, {
       agents: {
-        list: { reviewer: { tools: { read_file: 'allow', write_file: 'allow', exec: 'deny' } } },
+        list: {
+          reviewer: {
+            tools: { read_file: 'allow', write_file: 'allow', exec: 'deny' },
+          },
+        },
       },
     });
     const narrowed = mergeConfigPatch(wide, {
@@ -154,7 +175,9 @@ describe('mergeConfigPatch', () => {
     expect(cleared.agents.defaults.reasoningEffort).toBeUndefined();
     // The neighbouring fields are untouched — this is a deletion, not a reset.
     expect(cleared.agents.defaults.model).toBe(base.agents.defaults.model);
-    expect(cleared.agents.defaults.maxTokens).toBe(base.agents.defaults.maxTokens);
+    expect(cleared.agents.defaults.maxTokens).toBe(
+      base.agents.defaults.maxTokens,
+    );
   });
 
   it('ignores a null on a path where deletion is not meaningful', () => {
@@ -181,7 +204,9 @@ describe('mergeConfigPatch', () => {
   });
 
   it('keeps a channel plugin block the schema does not name', () => {
-    const merged = mergeConfigPatch(base, { channels: { telegram: { token: 'abc' } } });
+    const merged = mergeConfigPatch(base, {
+      channels: { telegram: { token: 'abc' } },
+    });
     expect(merged.channels.telegram).toEqual({ token: 'abc' });
   });
 
@@ -189,9 +214,9 @@ describe('mergeConfigPatch', () => {
     // The patch schema validates field by field; only the full schema knows the
     // result is a `Config`. This one gets past `ConfigPatchSchema` because the
     // caller bypassed it — which a JS caller can, and a route will not.
-    expect(() => mergeConfigPatch(base, { agents: { defaults: { temperature: 9 } } })).toThrow(
-      /agents\.defaults\.temperature/,
-    );
+    expect(() =>
+      mergeConfigPatch(base, { agents: { defaults: { temperature: 9 } } }),
+    ).toThrow(/agents\.defaults\.temperature/);
   });
 
   it('does not cascade a delete into another agent’s delegations', () => {
@@ -203,14 +228,20 @@ describe('mergeConfigPatch', () => {
       agents: {
         list: {
           researcher: { label: 'Researcher' },
-          main: { subagents: [{ id: 'researcher', prompt: '', permission: 'allow' }] },
+          main: {
+            subagents: [{ id: 'researcher', prompt: '', permission: 'allow' }],
+          },
         },
       },
     });
 
-    const merged = mergeConfigPatch(before, { agents: { list: { researcher: null } } });
+    const merged = mergeConfigPatch(before, {
+      agents: { list: { researcher: null } },
+    });
 
     expect(merged.agents.list.researcher).toBeUndefined();
-    expect(merged.agents.list.main?.subagents.map((ref) => ref.id)).toEqual(['researcher']);
+    expect(merged.agents.list.main?.subagents.map((ref) => ref.id)).toEqual([
+      'researcher',
+    ]);
   });
 });

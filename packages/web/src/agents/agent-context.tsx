@@ -20,7 +20,14 @@
  * that agent, and starting a new one from there keeps it.
  */
 
-import { createContext, useCallback, useContext, useState, type JSX, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useState,
+  type JSX,
+  type ReactNode,
+} from 'react';
 
 import { DEFAULT_AGENT_ID } from '@ghostai/protocol';
 
@@ -68,7 +75,11 @@ function remember(agentId: string): void {
 
 const AgentContext = createContext<AgentState | undefined>(undefined);
 
-export function AgentProvider({ children }: { readonly children: ReactNode }): JSX.Element {
+export function AgentProvider({
+  children,
+}: {
+  readonly children: ReactNode;
+}): JSX.Element {
   const [agentId, setAgentId] = useState<string>(stored);
 
   const move = useCallback((next: string): void => {
@@ -85,6 +96,8 @@ export function AgentProvider({ children }: { readonly children: ReactNode }): J
 
 export function useAgent(): AgentState {
   const state = useContext(AgentContext);
-  if (state === undefined) throw new Error('useAgent must be used inside an AgentProvider');
+  if (state === undefined) {
+    throw new Error('useAgent must be used inside an AgentProvider');
+  }
   return state;
 }

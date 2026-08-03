@@ -14,7 +14,9 @@
 
 import { expect, test } from '../src/fixtures.js';
 
-test('a reload rebuilds an in-flight turn from the replay buffer', async ({ app }) => {
+test('a reload rebuilds an in-flight turn from the replay buffer', async ({
+  app,
+}) => {
   await app.getByRole('textbox', { name: 'Message' }).fill('wait for me');
   await app.getByRole('button', { name: 'Send' }).click();
 
@@ -30,11 +32,15 @@ test('a reload rebuilds an in-flight turn from the replay buffer', async ({ app 
 
   // Rebuilt: the user's message, the tool card, and the fact that a turn is
   // still running — none of which is in the database yet.
-  await expect(app.getByTestId('transcript').getByText('wait for me')).toBeVisible();
+  await expect(
+    app.getByTestId('transcript').getByText('wait for me'),
+  ).toBeVisible();
   const rebuilt = app.getByRole('region', { name: 'Tool call: e2e_wait' });
   await expect(rebuilt).toBeVisible();
   await expect(rebuilt.getByLabel('Running')).toBeVisible();
-  await expect(app.getByRole('button', { name: 'Stop the current turn' })).toBeVisible();
+  await expect(
+    app.getByRole('button', { name: 'Stop the current turn' }),
+  ).toBeVisible();
 
   // And the rebuilt page can still drive the turn it did not start.
   await app.getByRole('button', { name: 'Stop the current turn' }).click();
@@ -54,12 +60,16 @@ test('a reload rebuilds an in-flight turn from the replay buffer', async ({ app 
  * sent, and an app that is usable after the navigation. "Reloading" is not a
  * state this waits for — it lasts exactly as long as one fetch.
  */
-test('reloads the server from the status indicator, then the page', async ({ app }) => {
+test('reloads the server from the status indicator, then the page', async ({
+  app,
+}) => {
   const reloaded = app.waitForResponse((response) =>
     response.url().endsWith('/api/settings/reload'),
   );
 
-  await app.getByRole('button', { name: /Connected|Connecting|Reconnecting|Offline/ }).click();
+  await app
+    .getByRole('button', { name: /Connected|Connecting|Reconnecting|Offline/ })
+    .click();
   await app.getByRole('menuitem', { name: 'Reload app' }).click();
 
   expect((await reloaded).status()).toBe(200);
@@ -77,18 +87,28 @@ test.describe('a completed session', () => {
         {
           key: 'seeded',
           title: 'A session from before',
-          turns: ['What did we decide?', 'To ship the gate before the feature.'],
+          turns: [
+            'What did we decide?',
+            'To ship the gate before the feature.',
+          ],
         },
       ],
     },
   });
 
-  test('is fetched from storage rather than replayed', async ({ app, harness }) => {
+  test('is fetched from storage rather than replayed', async ({
+    app,
+    harness,
+  }) => {
     await app.goto(`${harness.url}/?session=seeded`);
 
-    await expect(app.getByTestId('transcript').getByText('What did we decide?')).toBeVisible();
     await expect(
-      app.getByTestId('transcript').getByText('To ship the gate before the feature.'),
+      app.getByTestId('transcript').getByText('What did we decide?'),
+    ).toBeVisible();
+    await expect(
+      app
+        .getByTestId('transcript')
+        .getByText('To ship the gate before the feature.'),
     ).toBeVisible();
     // Nothing is running, so the composer is in its resting state.
     await expect(app.getByRole('button', { name: 'Send' })).toBeVisible();

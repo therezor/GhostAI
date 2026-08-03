@@ -17,7 +17,11 @@ describe('coerceArgv', () => {
     // bracket at the back, the query in the middle. Refusing it is correct and
     // also a wasted turn: the model answers a validation error with another
     // broken string until the iteration cap.
-    expect(coerceArgv('[0] SUFFOLK wildfire 2024 fires reports UK US news updates"]')).toEqual([
+    expect(
+      coerceArgv(
+        '[0] SUFFOLK wildfire 2024 fires reports UK US news updates"]',
+      ),
+    ).toEqual([
       'SUFFOLK',
       'wildfire',
       '2024',
@@ -46,7 +50,11 @@ describe('coerceArgv', () => {
       'docs.python.org',
       'async task group',
     ]);
-    expect(coerceArgv("--query 'two words' --json")).toEqual(['--query', 'two words', '--json']);
+    expect(coerceArgv("--query 'two words' --json")).toEqual([
+      '--query',
+      'two words',
+      '--json',
+    ]);
   });
 
   it('treats an empty quoted string as an argument', () => {
@@ -57,7 +65,15 @@ describe('coerceArgv', () => {
     // The argv contract is what keeps `guardExec`'s allow-list meaningful. Shell
     // operators survive as literal text inside whichever argument they landed in,
     // and are never interpreted.
-    expect(coerceArgv('a | b > c ; d')).toEqual(['a', '|', 'b', '>', 'c', ';', 'd']);
+    expect(coerceArgv('a | b > c ; d')).toEqual([
+      'a',
+      '|',
+      'b',
+      '>',
+      'c',
+      ';',
+      'd',
+    ]);
     expect(coerceArgv('echo $HOME')).toEqual(['echo', '$HOME']);
   });
 

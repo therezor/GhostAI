@@ -53,7 +53,11 @@ describe('the turn store', () => {
 
     state().attach('web:2');
 
-    expect(state()).toMatchObject({ sessionKey: 'web:2', lastSeq: 0, busy: false });
+    expect(state()).toMatchObject({
+      sessionKey: 'web:2',
+      lastSeq: 0,
+      busy: false,
+    });
   });
 
   it('leaves everything alone when re-attaching to the same session', () => {
@@ -65,6 +69,10 @@ describe('the turn store', () => {
     // discard the cursor of a turn that is still streaming.
     state().attach('web:1');
 
-    expect(state()).toMatchObject({ sessionKey: 'web:1', lastSeq: 12, busy: true });
+    expect(state()).toMatchObject({
+      sessionKey: 'web:1',
+      lastSeq: 12,
+      busy: true,
+    });
   });
 });

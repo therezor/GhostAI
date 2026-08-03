@@ -62,7 +62,11 @@ import {
   toProviderTestRequest,
   type ProviderForm,
 } from './provider-form.js';
-import { useRemoveProvider, useSaveProvider, useTestProvider } from './use-provider.js';
+import {
+  useRemoveProvider,
+  useSaveProvider,
+  useTestProvider,
+} from './use-provider.js';
 import { useSettings } from './use-settings.js';
 
 /**
@@ -84,7 +88,9 @@ export function ProviderCreateRoute(): JSX.Element {
     queryFn: ({ signal }) => api.providers(signal),
   });
 
-  if (providers.isPending) return <p className="page__note">{t('providers.loadingOne')}</p>;
+  if (providers.isPending) {
+    return <p className="page__note">{t('providers.loadingOne')}</p>;
+  }
   if (providers.isError) {
     return (
       <p role="alert" className="page__error">
@@ -123,13 +129,20 @@ export function ProviderCreateRoute(): JSX.Element {
     return (
       <div className="stack page page--wide">
         <div className="cluster page__header">
-          <Link to="/settings" search={{ panel: 'providers' }} className="page__back">
+          <Link
+            to="/settings"
+            search={{ panel: 'providers' }}
+            className="page__back"
+          >
             <ArrowLeft aria-hidden="true" />
             {t('providers.backToProviders')}
           </Link>
         </div>
         <h2 className="page__title">{t('providers.newTitle')}</h2>
-        <Section title={t('providers.identity')} description={t('providers.newHint')}>
+        <Section
+          title={t('providers.identity')}
+          description={t('providers.newHint')}
+        >
           {typeField}
         </Section>
       </div>
@@ -156,7 +169,11 @@ export function ProviderCreateRoute(): JSX.Element {
         supportsModelListing: chosen.supportsModelListing,
         ...(chosen.envKey === undefined ? {} : { envKey: chosen.envKey }),
       }}
-      form={{ ...EMPTY_PROVIDER_FORM, type: chosen.id, apiBase: chosen.defaultApiBase ?? '' }}
+      form={{
+        ...EMPTY_PROVIDER_FORM,
+        type: chosen.id,
+        apiBase: chosen.defaultApiBase ?? '',
+      }}
       extraHeaders={{}}
     />
   );
@@ -184,7 +201,9 @@ export function ProviderEditorRoute(): JSX.Element {
     );
   }
 
-  const instance = providers.data.instances.find((candidate) => candidate.id === instanceId);
+  const instance = providers.data.instances.find(
+    (candidate) => candidate.id === instanceId,
+  );
 
   // A stale link — a bookmark to an endpoint that was deleted, or a hand-typed
   // id. Saying so beats an empty form that silently creates one on first save.
@@ -194,7 +213,11 @@ export function ProviderEditorRoute(): JSX.Element {
         <p role="alert" className="page__error">
           {t('providers.noSuchProvider', { id: instanceId })}
         </p>
-        <Link to="/settings" search={{ panel: 'providers' }} className="page__back">
+        <Link
+          to="/settings"
+          search={{ panel: 'providers' }}
+          className="page__back"
+        >
           <ArrowLeft aria-hidden="true" />
           {t('providers.backToProviders')}
         </Link>
@@ -210,7 +233,9 @@ export function ProviderEditorRoute(): JSX.Element {
       mode="edit"
       instance={instance}
       form={toProviderForm(settings.data.config.providers[instance.id])}
-      extraHeaders={settings.data.config.providers[instance.id]?.extraHeaders ?? {}}
+      extraHeaders={
+        settings.data.config.providers[instance.id]?.extraHeaders ?? {}
+      }
     />
   );
 }
@@ -240,15 +265,26 @@ function Editor({
   const creating = mode === 'create';
 
   const [form, setForm] = useState<ProviderForm>(stored);
-  const [keyField, setKeyField] = useState(() => initialKeyField(instance.credentialsPresent));
+  const [keyField, setKeyField] = useState(() =>
+    initialKeyField(instance.credentialsPresent),
+  );
   const [dirty, setDirty] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
-  const { save, saving, result: afterSave, probing: probingSave, clear } = useSaveProvider();
+  const {
+    save,
+    saving,
+    result: afterSave,
+    probing: probingSave,
+    clear,
+  } = useSaveProvider();
   const probe = useTestProvider();
   const { remove, removing } = useRemoveProvider();
 
-  const update = <K extends keyof ProviderForm>(key: K, next: ProviderForm[K]): void => {
+  const update = <K extends keyof ProviderForm>(
+    key: K,
+    next: ProviderForm[K],
+  ): void => {
     setForm((current) => ({ ...current, [key]: next }));
     setDirty(true);
     // A catalogue fetched from the endpoint as it was is worse than none from
@@ -325,13 +361,19 @@ function Editor({
   return (
     <div className="stack page page--wide">
       <div className="editor__head">
-        <Link to="/settings" search={{ panel: 'providers' }} className="page__back">
+        <Link
+          to="/settings"
+          search={{ panel: 'providers' }}
+          className="page__back"
+        >
           <ArrowLeft aria-hidden="true" />
           Providers
         </Link>
 
         <div className="cluster editor__title">
-          <h1 className="page__title">{form.label === '' ? instance.displayName : form.label}</h1>
+          <h1 className="page__title">
+            {form.label === '' ? instance.displayName : form.label}
+          </h1>
           {instance.isLocal && <Badge tone="neutral">local</Badge>}
           {instance.isGateway && <Badge tone="info">gateway</Badge>}
           {!form.enabled && <Badge tone="warning">off</Badge>}
@@ -354,10 +396,15 @@ function Editor({
           )}
         </div>
 
-        <p className="page__note">{t('providers.typeFixedNote', { type: instance.type })}</p>
+        <p className="page__note">
+          {t('providers.typeFixedNote', { type: instance.type })}
+        </p>
       </div>
 
-      <Section title={t('providers.identity')} description={t('providers.identityDesc')}>
+      <Section
+        title={t('providers.identity')}
+        description={t('providers.identityDesc')}
+      >
         <FieldGrid>
           {/* Only while creating. Afterwards the type is a fact rather than a
               control — changing an endpoint's protocol is not an edit, it is a
@@ -383,7 +430,10 @@ function Editor({
         </FieldGrid>
       </Section>
 
-      <Section title={t('providers.connection')} description={t('providers.connectionDesc')}>
+      <Section
+        title={t('providers.connection')}
+        description={t('providers.connectionDesc')}
+      >
         <TextField
           label={t('providers.apiBase')}
           value={form.apiBase}

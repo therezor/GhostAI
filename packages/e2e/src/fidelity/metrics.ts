@@ -86,7 +86,9 @@ export const REPLACEMENT_LAYOUT: Layout = {
   chat: { selectors: ['.composer__inner'] },
   // Any element painted in the muted tier. The welcome screen's note is the
   // first one on the chat screen; the page note is the first on the others.
-  muted: { selectors: ['.welcome__note', '.page__note', '.sidebar__section-title'] },
+  muted: {
+    selectors: ['.welcome__note', '.page__note', '.sidebar__section-title'],
+  },
 };
 
 /**
@@ -97,7 +99,9 @@ export const REPLACEMENT_LAYOUT: Layout = {
  * passed as an argument for exactly that reason.
  */
 export function readMetrics(layout: Layout): Metrics {
-  const find = (probe: { readonly selectors: readonly string[] }): Element | null => {
+  const find = (probe: {
+    readonly selectors: readonly string[];
+  }): Element | null => {
     for (const selector of probe.selectors) {
       const element = document.querySelector(selector);
       if (element !== null) return element;
@@ -133,8 +137,11 @@ export function readMetrics(layout: Layout): Metrics {
     chatWidth: width(find(layout.chat)),
     baseFontSize: parseFloat(getComputedStyle(document.body).fontSize),
     surface0: rgb(getComputedStyle(document.body).backgroundColor),
-    surface1: rgb(getComputedStyle(find(layout.sidebar) ?? document.body).backgroundColor),
+    surface1: rgb(
+      getComputedStyle(find(layout.sidebar) ?? document.body).backgroundColor,
+    ),
     foreground: rgb(getComputedStyle(document.body).color),
-    foregroundMuted: muted === null ? 0 : luminance(rgb(getComputedStyle(muted).color)),
+    foregroundMuted:
+      muted === null ? 0 : luminance(rgb(getComputedStyle(muted).color)),
   };
 }

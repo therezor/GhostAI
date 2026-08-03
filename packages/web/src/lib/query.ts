@@ -34,7 +34,9 @@ export const queryKeys = {
    * invalidation after a turn still refreshes whichever workspace is showing.
    */
   sessions: (workspaceId?: string) =>
-    workspaceId === undefined ? (['sessions'] as const) : (['sessions', { workspaceId }] as const),
+    workspaceId === undefined
+      ? (['sessions'] as const)
+      : (['sessions', { workspaceId }] as const),
   /**
    * One page of the sessions management screen.
    *
@@ -69,7 +71,8 @@ export const queryKeys = {
    * still sits under the `['notifications']` prefix, so one invalidation after a
    * write refreshes the badge and the list together.
    */
-  notificationPage: (page: number) => ['notifications', 'page', { page }] as const,
+  notificationPage: (page: number) =>
+    ['notifications', 'page', { page }] as const,
   settings: ['settings'] as const,
   providers: ['providers'] as const,
   models: ['models'] as const,
@@ -80,12 +83,15 @@ export const queryKeys = {
   // moved — the single most likely bug in this half of the feature. Putting it
   // at index 1 also keeps `invalidateQueries({ queryKey: ['files', workspace] })`
   // meaningful.
-  files: (workspace: string, path: string) => ['files', workspace, path] as const,
+  files: (workspace: string, path: string) =>
+    ['files', workspace, path] as const,
   // Their own roots rather than `['files', 'text', …]`: invalidation matches by
   // prefix, so nesting them under `files` would make refreshing a directory
   // that happens to be named `text` drop every open file's buffer.
-  fileText: (workspace: string, path: string) => ['file-text', workspace, path] as const,
-  fileUrl: (workspace: string, path: string) => ['file-url', workspace, path] as const,
+  fileText: (workspace: string, path: string) =>
+    ['file-text', workspace, path] as const,
+  fileUrl: (workspace: string, path: string) =>
+    ['file-url', workspace, path] as const,
   context: (key: string) => ['sessions', key, 'context'] as const,
   automation: ['automation'] as const,
   automationJob: (id: string) => ['automation', id] as const,
@@ -95,7 +101,8 @@ export const queryKeys = {
   // The page is *in* the key rather than beside it, because two pages of runs
   // are two different answers: a shared key would serve page 1's rows for
   // page 2 until the refetch landed, which is the same row twice on screen.
-  automationRuns: (id: string, page = 1) => ['automation', id, 'runs', { page }] as const,
+  automationRuns: (id: string, page = 1) =>
+    ['automation', id, 'runs', { page }] as const,
 };
 
 export function createQueryClient(): QueryClient {
@@ -103,7 +110,10 @@ export function createQueryClient(): QueryClient {
     defaultOptions: {
       queries: {
         retry: (failureCount, error) => {
-          if (error instanceof ApiError && (error.isUnauthenticated || error.status < 500)) {
+          if (
+            error instanceof ApiError &&
+            (error.isUnauthenticated || error.status < 500)
+          ) {
             return false;
           }
           return failureCount < 2;

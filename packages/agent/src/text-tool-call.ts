@@ -46,12 +46,18 @@ const BARE = /\{[^{}]*"name"\s*:\s*"([A-Za-z0-9_.-]{1,64})"[\s\S]{0,400}?\}/g;
  * `undefined` covers every ordinary answer, which is almost all of them — so this
  * runs the cheap `includes` guards before any regex work.
  */
-export function textToolCallName(text: string, known: readonly string[]): string | undefined {
+export function textToolCallName(
+  text: string,
+  known: readonly string[],
+): string | undefined {
   if (text === '' || known.length === 0) return undefined;
   // A call, however it is wrapped, always names the tool in a `"name"` field or
   // sits in one of the tag forms. Without one of those there is nothing to find,
   // and this is the path every normal answer takes.
-  if (!text.includes('"name"') && !/<(tool_call|function_call|tool_use)>/i.test(text)) {
+  if (
+    !text.includes('"name"') &&
+    !/<(tool_call|function_call|tool_use)>/i.test(text)
+  ) {
     return undefined;
   }
 

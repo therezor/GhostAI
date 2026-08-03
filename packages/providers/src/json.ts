@@ -33,7 +33,9 @@ export function asString(value: unknown): string | undefined {
  * arithmetic silently and only surface once a usage total reaches the database.
  */
 export function asNumber(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 /** Reads a nested field, returning `null` unless every level is an object. */

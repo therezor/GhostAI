@@ -59,7 +59,8 @@ export function TemplateEditor({
    * A title and a message rather than one string: it renders as a `NoticeBlock`
    * like every other warning in the app, and that shape wants both.
    */
-  readonly warning?: { readonly title: string; readonly message: string } | undefined;
+  readonly warning?:
+    { readonly title: string; readonly message: string } | undefined;
   readonly onChange: (next: string) => void;
 }): JSX.Element {
   const { t } = useTranslation();
@@ -69,7 +70,10 @@ export function TemplateEditor({
   // rather than as a box holding a space nobody can see.
   const removed = value !== '' && value.trim() === '';
   const text = owned && !removed ? value : builtIn;
-  const stray = useMemo(() => unknownPlaceholders(text, placeholders), [text, placeholders]);
+  const stray = useMemo(
+    () => unknownPlaceholders(text, placeholders),
+    [text, placeholders],
+  );
 
   return (
     <div className="stack agent-editor__template">
@@ -77,7 +81,11 @@ export function TemplateEditor({
         <span className="micro-label">{t(label)}</span>
         <span className="agent-editor__template-state">
           {t(
-            removed ? 'agents.promptRemoved' : owned ? 'agents.promptOwn' : 'agents.promptBuiltIn',
+            removed
+              ? 'agents.promptRemoved'
+              : owned
+                ? 'agents.promptOwn'
+                : 'agents.promptBuiltIn',
           )}
         </span>
         <span className="spacer" />
@@ -103,9 +111,12 @@ export function TemplateEditor({
           <Button
             variant="ghost"
             size="sm"
-            aria-label={t(removed ? 'agents.promptRestoreFor' : 'agents.promptResetFor', {
-              label: t(label),
-            })}
+            aria-label={t(
+              removed ? 'agents.promptRestoreFor' : 'agents.promptResetFor',
+              {
+                label: t(label),
+              },
+            )}
             onClick={() => {
               setOwned(false);
               onChange('');
@@ -131,7 +142,9 @@ export function TemplateEditor({
               icon={AlertTriangle}
               title={t('agents.promptStrayTitle')}
               message={t('agents.promptStray', {
-                names: stray.map((placeholder) => `{{${placeholder}}}`).join(', '),
+                names: stray
+                  .map((placeholder) => `{{${placeholder}}}`)
+                  .join(', '),
               })}
             />
           )}
@@ -158,8 +171,11 @@ export function TemplateEditor({
           />
           <p className="agent-editor__hint">
             {hint === undefined ? '' : `${t(hint)} `}
-            {t(owned ? 'agents.promptPlaceholders' : 'agents.promptAdoptHint')}{' '}
-            {placeholders.map((placeholder) => `{{${placeholder}}}`).join(', ')}.
+            {t(
+              owned ? 'agents.promptPlaceholders' : 'agents.promptAdoptHint',
+            )}{' '}
+            {placeholders.map((placeholder) => `{{${placeholder}}}`).join(', ')}
+            .
           </p>
         </>
       )}

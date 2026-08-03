@@ -49,7 +49,9 @@ class FakeSocket implements SocketLike {
   }
 
   deliver(message: unknown): void {
-    this.onmessage?.({ data: typeof message === 'string' ? message : JSON.stringify(message) });
+    this.onmessage?.({
+      data: typeof message === 'string' ? message : JSON.stringify(message),
+    });
   }
 
   drop(): void {
@@ -74,7 +76,9 @@ interface Harness {
   readonly invalid: string[];
 }
 
-function harness(options: { readonly onOpen?: ReconnectingSocketOptions['onOpen'] } = {}): Harness {
+function harness(
+  options: { readonly onOpen?: ReconnectingSocketOptions['onOpen'] } = {},
+): Harness {
   const messages: ServerMessage[] = [];
   const statuses: string[] = [];
   const invalid: string[] = [];
@@ -112,16 +116,18 @@ afterEach(() => {
 
 describe('socketUrl', () => {
   it('follows the page from http to ws and https to wss', () => {
-    expect(socketUrl(undefined, { protocol: 'http:', host: 'a:3000' } as Location)).toBe(
-      'ws://a:3000/ws',
-    );
-    expect(socketUrl(undefined, { protocol: 'https:', host: 'a' } as Location)).toBe('wss://a/ws');
+    expect(
+      socketUrl(undefined, { protocol: 'http:', host: 'a:3000' } as Location),
+    ).toBe('ws://a:3000/ws');
+    expect(
+      socketUrl(undefined, { protocol: 'https:', host: 'a' } as Location),
+    ).toBe('wss://a/ws');
   });
 
   it('encodes the session, because a key contains a colon', () => {
-    expect(socketUrl('web:1', { protocol: 'http:', host: 'a' } as Location)).toBe(
-      'ws://a/ws?session=web%3A1',
-    );
+    expect(
+      socketUrl('web:1', { protocol: 'http:', host: 'a' } as Location),
+    ).toBe('ws://a/ws?session=web%3A1');
   });
 });
 
@@ -214,10 +220,11 @@ describe('the reconnecting socket', () => {
 
     latest().open();
 
-    expect(latest().sent.map((frame) => (JSON.parse(frame) as { type: string }).type)).toEqual([
-      'ping',
-      'turn.stop',
-    ]);
+    expect(
+      latest().sent.map(
+        (frame) => (JSON.parse(frame) as { type: string }).type,
+      ),
+    ).toEqual(['ping', 'turn.stop']);
     expect(socket.buffered).toBe(0);
   });
 
@@ -226,7 +233,11 @@ describe('the reconnecting socket', () => {
     socket.open();
 
     for (let index = 0; index < 40; index += 1) {
-      socket.send({ type: 'turn.steer', sessionKey: 'web:1', content: String(index) });
+      socket.send({
+        type: 'turn.steer',
+        sessionKey: 'web:1',
+        content: String(index),
+      });
     }
 
     expect(socket.buffered).toBe(32);
@@ -249,10 +260,11 @@ describe('the reconnecting socket', () => {
 
     // A resume that arrived behind the messages it was meant to contextualise
     // would be a resume the server answers after replaying nothing.
-    expect(latest().sent.map((frame) => (JSON.parse(frame) as { type: string }).type)).toEqual([
-      'session.resume',
-      'ping',
-    ]);
+    expect(
+      latest().sent.map(
+        (frame) => (JSON.parse(frame) as { type: string }).type,
+      ),
+    ).toEqual(['session.resume', 'ping']);
   });
 
   it('stays closed after close(), and drops what was buffered', () => {

@@ -50,7 +50,10 @@ const VAULT_ALGORITHM = 'aes-256-gcm';
  * Bound into the authentication tag, so a file from an older format or another
  * application cannot be replayed into this one even with the right key.
  */
-const VAULT_AAD = Buffer.from(`ghostai-vault-v${String(VAULT_VERSION)}`, 'utf8');
+const VAULT_AAD = Buffer.from(
+  `ghostai-vault-v${String(VAULT_VERSION)}`,
+  'utf8',
+);
 
 const KEYCHAIN_SERVICE = 'ghostai-vault';
 const KEYCHAIN_ACCOUNT = 'master-key';
@@ -159,7 +162,10 @@ export function keyFileStore(options: KeyFileStoreOptions): KeyStore {
     },
     save(key): boolean {
       mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
-      writeFileSync(file, key.toString('base64'), { encoding: 'utf8', mode: 0o600 });
+      writeFileSync(file, key.toString('base64'), {
+        encoding: 'utf8',
+        mode: 0o600,
+      });
       if (platform !== 'win32') chmodSync(file, 0o600);
       return true;
     },
@@ -197,7 +203,14 @@ export function keychainStore(options: KeychainStoreOptions = {}): KeyStore {
 
   if (platform === 'darwin') {
     const load = (): Buffer | null => {
-      const result = run('security', ['find-generic-password', '-s', service, '-a', account, '-w']);
+      const result = run('security', [
+        'find-generic-password',
+        '-s',
+        service,
+        '-a',
+        account,
+        '-w',
+      ]);
       return result.status === 0 ? decode(result.stdout) : null;
     };
 
@@ -238,13 +251,26 @@ export function keychainStore(options: KeychainStoreOptions = {}): KeyStore {
     return {
       name: 'keychain:linux',
       load(): Buffer | null {
-        const result = run('secret-tool', ['lookup', 'service', service, 'account', account]);
+        const result = run('secret-tool', [
+          'lookup',
+          'service',
+          service,
+          'account',
+          account,
+        ]);
         return result.status === 0 ? decode(result.stdout) : null;
       },
       save(key): boolean {
         const result = run(
           'secret-tool',
-          ['store', '--label=GhostAI vault key', 'service', service, 'account', account],
+          [
+            'store',
+            '--label=GhostAI vault key',
+            'service',
+            service,
+            'account',
+            account,
+          ],
           key.toString('base64'),
         );
         return result.status === 0;
@@ -280,7 +306,9 @@ export interface ResolvedVaultKey {
  * are lost at the next restart, and discovering that later is worse than not
  * starting now.
  */
-export function resolveVaultKey(options: ResolveVaultKeyOptions): ResolvedVaultKey {
+export function resolveVaultKey(
+  options: ResolveVaultKeyOptions,
+): ResolvedVaultKey {
   for (const store of options.stores) {
     const key = store.load();
     if (key !== null) return { key, source: store.name, created: false };
@@ -376,7 +404,10 @@ export class CredentialVault {
   /** Writes through to disk. A credential that only reached memory is not stored. */
   set(namespace: string, key: string, value: string): void {
     if (namespace === '' || key === '') {
-      throw new GhostError('invalid_input', 'Vault namespace and key must be non-empty');
+      throw new GhostError(
+        'invalid_input',
+        'Vault namespace and key must be non-empty',
+      );
     }
     const bucket = this.contents.get(namespace) ?? new Map<string, string>();
     bucket.set(key, value);
@@ -427,7 +458,10 @@ export class CredentialVault {
    */
   describe(): Readonly<Record<string, readonly string[]>> {
     return Object.fromEntries(
-      [...this.contents].map(([namespace, bucket]) => [namespace, [...bucket.keys()]]),
+      [...this.contents].map(([namespace, bucket]) => [
+        namespace,
+        [...bucket.keys()],
+      ]),
     );
   }
 
@@ -459,7 +493,11 @@ export class CredentialVault {
       // mistaken for a first run, because the next `set` would overwrite a file
       // full of credentials with one holding a single entry.
       if (code === 'ENOENT') return new Map();
-      throw corrupt(this.file, `cannot be opened: ${code ?? 'unknown error'}`, error);
+      throw corrupt(
+        this.file,
+        `cannot be opened: ${code ?? 'unknown error'}`,
+        error,
+      );
     }
 
     let envelope: unknown;
@@ -468,9 +506,14 @@ export class CredentialVault {
     } catch (error) {
       throw corrupt(this.file, 'not valid JSON', error);
     }
-    if (!isEnvelope(envelope)) throw corrupt(this.file, 'missing envelope fields');
+    if (!isEnvelope(envelope)) {
+      throw corrupt(this.file, 'missing envelope fields');
+    }
     if (envelope.v !== VAULT_VERSION || envelope.alg !== VAULT_ALGORITHM) {
-      throw corrupt(this.file, `unsupported format v${String(envelope.v)}/${envelope.alg}`);
+      throw corrupt(
+        this.file,
+        `unsupported format v${String(envelope.v)}/${envelope.alg}`,
+      );
     }
 
     let plaintext: string;
@@ -483,8 +526,11 @@ export class CredentialVault {
       decipher.setAAD(VAULT_AAD);
       decipher.setAuthTag(Buffer.from(envelope.tag, 'base64'));
       plaintext =
-        decipher.update(Buffer.from(envelope.data, 'base64'), undefined, 'utf8') +
-        decipher.final('utf8');
+        decipher.update(
+          Buffer.from(envelope.data, 'base64'),
+          undefined,
+          'utf8',
+        ) + decipher.final('utf8');
     } catch (error) {
       throw corrupt(this.file, 'authentication failed', error);
     }
@@ -495,13 +541,23 @@ export class CredentialVault {
     } catch (error) {
       throw corrupt(this.file, 'decrypted payload is not JSON', error);
     }
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
       throw corrupt(this.file, 'decrypted payload is not an object');
     }
 
     const contents: VaultContents = new Map();
-    for (const [namespace, bucket] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof bucket !== 'object' || bucket === null || Array.isArray(bucket)) {
+    for (const [namespace, bucket] of Object.entries(
+      parsed as Record<string, unknown>,
+    )) {
+      if (
+        typeof bucket !== 'object' ||
+        bucket === null ||
+        Array.isArray(bucket)
+      ) {
         throw corrupt(this.file, `namespace "${namespace}" is not an object`);
       }
       const values = new Map<string, string>();
@@ -509,7 +565,10 @@ export class CredentialVault {
         // A non-string value would come back from `get` typed as `string` and
         // reach an Authorization header as "[object Object]".
         if (typeof value !== 'string') {
-          throw corrupt(this.file, `value at ${namespace}.${key} is not a string`);
+          throw corrupt(
+            this.file,
+            `value at ${namespace}.${key} is not a string`,
+          );
         }
         values.set(key, value);
       }
@@ -528,7 +587,10 @@ export class CredentialVault {
   private serialise(): string {
     return JSON.stringify(
       Object.fromEntries(
-        [...this.contents].map(([namespace, bucket]) => [namespace, Object.fromEntries(bucket)]),
+        [...this.contents].map(([namespace, bucket]) => [
+          namespace,
+          Object.fromEntries(bucket),
+        ]),
       ),
     );
   }
@@ -537,7 +599,10 @@ export class CredentialVault {
     const iv = this.random(IV_BYTES);
     const cipher = createCipheriv(VAULT_ALGORITHM, this.key, iv);
     cipher.setAAD(VAULT_AAD);
-    const data = Buffer.concat([cipher.update(this.serialise(), 'utf8'), cipher.final()]);
+    const data = Buffer.concat([
+      cipher.update(this.serialise(), 'utf8'),
+      cipher.final(),
+    ]);
 
     const envelope: VaultEnvelope = {
       v: VAULT_VERSION,
@@ -553,7 +618,10 @@ export class CredentialVault {
     // `0600` and rename preserves it.
     const temporary = `${this.file}.tmp`;
     try {
-      writeFileSync(temporary, JSON.stringify(envelope), { encoding: 'utf8', mode: 0o600 });
+      writeFileSync(temporary, JSON.stringify(envelope), {
+        encoding: 'utf8',
+        mode: 0o600,
+      });
       renameSync(temporary, this.file);
     } catch (error) {
       try {
@@ -561,10 +629,14 @@ export class CredentialVault {
       } catch {
         // Nothing useful to do: the original file is still intact either way.
       }
-      throw new GhostError('storage', `Cannot write the vault at ${this.file}`, {
-        cause: error,
-        details: { file: this.file },
-      });
+      throw new GhostError(
+        'storage',
+        `Cannot write the vault at ${this.file}`,
+        {
+          cause: error,
+          details: { file: this.file },
+        },
+      );
     }
   }
 }

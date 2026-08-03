@@ -56,7 +56,8 @@ function resultFor(turn: ScriptedTurn, model: string): ChatResult {
   const text = (turn.deltas ?? []).join('');
   const toolCalls = turn.toolCalls ?? [];
   const reasoning = (turn.reasoning ?? []).join('');
-  const finishReason: FinishReason = toolCalls.length > 0 ? 'tool_calls' : 'stop';
+  const finishReason: FinishReason =
+    toolCalls.length > 0 ? 'tool_calls' : 'stop';
 
   return {
     message: assistantMessage(text, {
@@ -76,7 +77,9 @@ function resultFor(turn: ScriptedTurn, model: string): ChatResult {
  * the iteration cap is a test about a model that never stops calling tools, and
  * writing that as forty identical script entries would only obscure it.
  */
-export function scriptedProvider(turns: readonly ScriptedTurn[]): ScriptedProvider {
+export function scriptedProvider(
+  turns: readonly ScriptedTurn[],
+): ScriptedProvider {
   const requests: ChatRequest[] = [];
   let index = 0;
 

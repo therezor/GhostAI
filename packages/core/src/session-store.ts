@@ -44,7 +44,11 @@ import type { z } from 'zod';
 
 import { systemClock, type Clock } from './clock.js';
 import { GhostError } from './errors.js';
-import { findLegalEnd, sessionHistory, type HistoryForLLMOptions } from './history.js';
+import {
+  findLegalEnd,
+  sessionHistory,
+  type HistoryForLLMOptions,
+} from './history.js';
 import { textOf } from './messages.js';
 import { ensureDir } from './paths.js';
 import { parseMetadata, rowReader, type Row } from './sqlite-row.js';
@@ -410,7 +414,7 @@ function likePattern(query: string): string {
 /** The `WHERE` fragment a session listing runs under, and its bindings. */
 interface SessionFilter {
   readonly sql: string;
-  readonly bindings: readonly (string | null)[];
+  readonly bindings: ReadonlyArray<string | null>;
 }
 
 /**
@@ -438,7 +442,8 @@ function sessionFilter(options: ListSessionsOptions): SessionFilter {
   // Blank is the same as absent: a cleared search box must not become
   // `LIKE '%%'`, which is a full scan that matches everything.
   const query = options.query?.trim();
-  const pattern = query === undefined || query === '' ? null : likePattern(query);
+  const pattern =
+    query === undefined || query === '' ? null : likePattern(query);
 
   return {
     // Each clause is `? IS NULL OR …` so one prepared statement serves every
@@ -488,40 +493,40 @@ function sessionOrder(options: ListSessionsOptions): { readonly sql: string } {
 }
 
 export class SessionStore {
-  readonly #db: DatabaseSync;
-  readonly #ownsDb: boolean;
-  readonly #clock: Clock;
-  readonly #newId: () => string;
-  readonly #statements = new Map<string, StatementSync>();
-  #transactionDepth = 0;
-  #closed = false;
+  private readonly db: DatabaseSync;
+  private readonly ownsDb: boolean;
+  private readonly clock: Clock;
+  private readonly newId: () => string;
+  private readonly statements = new Map<string, StatementSync>();
+  private transactionDepth = 0;
+  private closed = false;
 
   constructor(options: SessionStoreOptions = {}) {
-    this.#clock = options.clock ?? systemClock;
-    this.#newId = options.newId ?? newUuid;
+    this.clock = options.clock ?? systemClock;
+    this.newId = options.newId ?? newUuid;
 
     if (options.database === undefined) {
       const file = options.file ?? ':memory:';
       if (file !== ':memory:') ensureDir(dirname(file));
-      this.#db = new DatabaseSync(file);
-      this.#ownsDb = true;
+      this.db = new DatabaseSync(file);
+      this.ownsDb = true;
       // WAL lets the UI read a session while a turn is still writing to it.
       // A no-op for `:memory:`, which SQLite keeps on its own journal mode.
-      this.#db.exec('PRAGMA journal_mode = WAL');
+      this.db.exec('PRAGMA journal_mode = WAL');
       // NORMAL trades an fsync per commit for one per checkpoint. Under WAL
       // that risks only the last commits on power loss, never corruption, and
       // the alternative is an fsync per streamed message.
-      this.#db.exec('PRAGMA synchronous = NORMAL');
-      this.#db.exec('PRAGMA busy_timeout = 5000');
+      this.db.exec('PRAGMA synchronous = NORMAL');
+      this.db.exec('PRAGMA busy_timeout = 5000');
     } else {
-      this.#db = options.database;
-      this.#ownsDb = false;
+      this.db = options.database;
+      this.ownsDb = false;
     }
 
     // Without this, deleting a session silently orphans its messages —
     // SQLite defaults foreign keys *off* for backwards compatibility.
-    this.#db.exec('PRAGMA foreign_keys = ON');
-    this.#db.exec(SCHEMA);
+    this.db.exec('PRAGMA foreign_keys = ON');
+    this.db.exec(SCHEMA);
   }
 
   /**
@@ -534,15 +539,15 @@ export class SessionStore {
    * here still only closes a connection this store opened.
    */
   get database(): DatabaseSync {
-    return this.#db;
+    return this.db;
   }
 
   /** Prepared once and reused; re-preparing per call dominates append cost. */
-  #stmt(sql: string): StatementSync {
-    const cached = this.#statements.get(sql);
+  private stmt(sql: string): StatementSync {
+    const cached = this.statements.get(sql);
     if (cached !== undefined) return cached;
-    const prepared = this.#db.prepare(sql);
-    this.#statements.set(sql, prepared);
+    const prepared = this.db.prepare(sql);
+    this.statements.set(sql, prepared);
     return prepared;
   }
 
@@ -553,29 +558,31 @@ export class SessionStore {
    * level deep by construction (`appendMany` calling `ensureSession`), and a
    * savepoint stack would add a rollback path with no caller able to reach it.
    */
-  #transaction<T>(fn: () => T): T {
-    if (this.#transactionDepth > 0) return fn();
-    this.#db.exec('BEGIN');
-    this.#transactionDepth += 1;
+  private transaction<T>(fn: () => T): T {
+    if (this.transactionDepth > 0) return fn();
+    this.db.exec('BEGIN');
+    this.transactionDepth += 1;
     try {
       const result = fn();
-      this.#db.exec('COMMIT');
+      this.db.exec('COMMIT');
       return result;
     } catch (error) {
-      this.#db.exec('ROLLBACK');
+      this.db.exec('ROLLBACK');
       throw error;
     } finally {
-      this.#transactionDepth -= 1;
+      this.transactionDepth -= 1;
     }
   }
 
-  #assertOpen(): void {
-    if (this.#closed) throw new GhostError('storage', 'Session store is closed');
+  private assertOpen(): void {
+    if (this.closed) {
+      throw new GhostError('storage', 'Session store is closed');
+    }
   }
 
   getSession(key: string): SessionRecord | undefined {
-    this.#assertOpen();
-    const row = this.#stmt('SELECT * FROM sessions WHERE key = ?').get(key);
+    this.assertOpen();
+    const row = this.stmt('SELECT * FROM sessions WHERE key = ?').get(key);
     return row === undefined ? undefined : rowToSession(row);
   }
 
@@ -586,12 +593,17 @@ export class SessionStore {
    * open the same session key both get the existing row rather than one of them
    * failing on the primary key.
    */
-  ensureSession(key: string, options: CreateSessionOptions = {}): SessionRecord {
-    this.#assertOpen();
-    if (key.length === 0) throw new GhostError('invalid_input', 'Session key must not be empty');
+  ensureSession(
+    key: string,
+    options: CreateSessionOptions = {},
+  ): SessionRecord {
+    this.assertOpen();
+    if (key.length === 0) {
+      throw new GhostError('invalid_input', 'Session key must not be empty');
+    }
 
-    const now = this.#clock.now();
-    this.#stmt(
+    const now = this.clock.now();
+    this.stmt(
       `INSERT OR IGNORE INTO sessions
          (key, title, origin, workspace_id, agent_id, created_at_ms, updated_at_ms, metadata_json)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -611,15 +623,19 @@ export class SessionStore {
 
     const session = this.getSession(key);
     if (session === undefined) {
-      throw new GhostError('storage', 'Session vanished immediately after insert', {
-        details: { key },
-      });
+      throw new GhostError(
+        'storage',
+        'Session vanished immediately after insert',
+        {
+          details: { key },
+        },
+      );
     }
     return session;
   }
 
   listSessions(options: ListSessionsOptions = {}): SessionSummaryRecord[] {
-    this.#assertOpen();
+    this.assertOpen();
     const { limit = 50, offset = 0, after } = options;
     const filter = sessionFilter(options);
     const order = sessionOrder(options);
@@ -630,15 +646,22 @@ export class SessionStore {
       // does not exist there, and the page that comes back looks entirely
       // plausible — which is why this throws instead of quietly ignoring one of
       // the two arguments.
-      throw new GhostError('storage', 'A session cursor is only valid in the default ordering', {
-        details: { orderBy: options.orderBy ?? 'updated', descending: options.descending ?? true },
-      });
+      throw new GhostError(
+        'storage',
+        'A session cursor is only valid in the default ordering',
+        {
+          details: {
+            orderBy: options.orderBy ?? 'updated',
+            descending: options.descending ?? true,
+          },
+        },
+      );
     }
 
     // The keyset predicate is that order written as a comparison: strictly
     // older, or the same instant and a key that sorts later. Bound as `?` twice
     // each rather than named, because `node:sqlite` binds positionally.
-    const rows = this.#stmt(
+    const rows = this.stmt(
       `SELECT s.*, (SELECT COUNT(*) FROM messages m WHERE m.session_key = s.key) AS message_count
          FROM sessions s
         WHERE ${filter.sql}
@@ -674,11 +697,11 @@ export class SessionStore {
    * that does not filter.
    */
   countSessions(options: ListSessionsOptions = {}): number {
-    this.#assertOpen();
+    this.assertOpen();
     const filter = sessionFilter(options);
-    const row = this.#stmt(`SELECT COUNT(*) AS n FROM sessions s WHERE ${filter.sql}`).get(
-      ...filter.bindings,
-    );
+    const row = this.stmt(
+      `SELECT COUNT(*) AS n FROM sessions s WHERE ${filter.sql}`,
+    ).get(...filter.bindings);
     return row === undefined ? 0 : read.int(row, 'n');
   }
 
@@ -691,10 +714,10 @@ export class SessionStore {
    * workspace is refused while this is non-zero.
    */
   countByWorkspace(workspaceId: string): number {
-    this.#assertOpen();
-    const row = this.#stmt('SELECT COUNT(*) AS n FROM sessions WHERE workspace_id = ?').get(
-      workspaceId,
-    );
+    this.assertOpen();
+    const row = this.stmt(
+      'SELECT COUNT(*) AS n FROM sessions WHERE workspace_id = ?',
+    ).get(workspaceId);
     return row === undefined ? 0 : read.int(row, 'n');
   }
 
@@ -707,19 +730,18 @@ export class SessionStore {
    * not activity, and bumping every row would reorder the session list.
    */
   reassignWorkspace(from: string, to: string): number {
-    this.#assertOpen();
-    const result = this.#stmt('UPDATE sessions SET workspace_id = ? WHERE workspace_id = ?').run(
-      to,
-      from,
-    );
+    this.assertOpen();
+    const result = this.stmt(
+      'UPDATE sessions SET workspace_id = ? WHERE workspace_id = ?',
+    ).run(to, from);
     return Number(result.changes);
   }
 
   messageCount(sessionKey: string): number {
-    this.#assertOpen();
-    const row = this.#stmt('SELECT COUNT(*) AS n FROM messages WHERE session_key = ?').get(
-      sessionKey,
-    );
+    this.assertOpen();
+    const row = this.stmt(
+      'SELECT COUNT(*) AS n FROM messages WHERE session_key = ?',
+    ).get(sessionKey);
     return row === undefined ? 0 : read.int(row, 'n');
   }
 
@@ -738,7 +760,9 @@ export class SessionStore {
   ): StoredMessageRecord {
     const [record] = this.appendMany(sessionKey, [message], options);
     if (record === undefined) {
-      throw new GhostError('storage', 'Append returned no record', { details: { sessionKey } });
+      throw new GhostError('storage', 'Append returned no record', {
+        details: { sessionKey },
+      });
     }
     return record;
   }
@@ -755,24 +779,28 @@ export class SessionStore {
     messages: readonly ChatMessageInput[],
     options: AppendOptions = {},
   ): StoredMessageRecord[] {
-    this.#assertOpen();
+    this.assertOpen();
     if (messages.length === 0) return [];
 
     const parsed = messages.map((message, index) => {
       const result = ChatMessageSchema.safeParse(message);
       if (!result.success) {
-        throw new GhostError('invalid_input', 'Message failed schema validation', {
-          details: { sessionKey, index, issues: result.error.issues },
-        });
+        throw new GhostError(
+          'invalid_input',
+          'Message failed schema validation',
+          {
+            details: { sessionKey, index, issues: result.error.issues },
+          },
+        );
       }
       return result.data;
     });
 
-    return this.#transaction(() => {
+    return this.transaction(() => {
       this.ensureSession(sessionKey);
-      const now = this.#clock.now();
+      const now = this.clock.now();
 
-      const reserve = this.#stmt(
+      const reserve = this.stmt(
         'UPDATE sessions SET next_seq = next_seq + ? WHERE key = ? RETURNING next_seq',
       ).get(parsed.length, sessionKey);
       if (reserve === undefined) {
@@ -783,13 +811,13 @@ export class SessionStore {
       // `next_seq` now points past the block just reserved.
       const firstSeq = read.int(reserve, 'next_seq') - parsed.length;
 
-      const insert = this.#stmt(
+      const insert = this.stmt(
         `INSERT INTO messages (id, session_key, seq, created_at_ms, turn_id, role, payload_json)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
       );
 
       const records = parsed.map((message, index): StoredMessageRecord => {
-        const id = this.#newId();
+        const id = this.newId();
         const seq = firstSeq + index;
         insert.run(
           id,
@@ -810,7 +838,10 @@ export class SessionStore {
         };
       });
 
-      this.#stmt('UPDATE sessions SET updated_at_ms = ? WHERE key = ?').run(now, sessionKey);
+      this.stmt('UPDATE sessions SET updated_at_ms = ? WHERE key = ?').run(
+        now,
+        sessionKey,
+      );
       return records;
     });
   }
@@ -823,26 +854,41 @@ export class SessionStore {
    * would break tool-call pairing for the turn it belonged to, and a loud
    * failure at read time is far cheaper to diagnose than a provider 400 later.
    */
-  messages(sessionKey: string, options: ReadMessagesOptions = {}): StoredMessageRecord[] {
-    this.#assertOpen();
+  messages(
+    sessionKey: string,
+    options: ReadMessagesOptions = {},
+  ): StoredMessageRecord[] {
+    this.assertOpen();
     const { afterSeq = 0, beforeSeq, limit, fromEnd = false } = options;
 
-    const rows = this.#stmt(
+    const rows = this.stmt(
       `SELECT * FROM messages
         WHERE session_key = ? AND seq > ? AND (? IS NULL OR seq < ?)
         ORDER BY seq ${fromEnd ? 'DESC' : 'ASC'}
         LIMIT ?`,
-    ).all(sessionKey, afterSeq, beforeSeq ?? null, beforeSeq ?? null, limit ?? -1);
+    ).all(
+      sessionKey,
+      afterSeq,
+      beforeSeq ?? null,
+      beforeSeq ?? null,
+      limit ?? -1,
+    );
 
     if (fromEnd) rows.reverse();
 
     return rows.map((row): StoredMessageRecord => {
       const seq = read.int(row, 'seq');
-      const parsed = ChatMessageSchema.safeParse(JSON.parse(read.string(row, 'payload_json')));
+      const parsed = ChatMessageSchema.safeParse(
+        JSON.parse(read.string(row, 'payload_json')),
+      );
       if (!parsed.success) {
-        throw new GhostError('storage', 'Stored message failed schema validation', {
-          details: { sessionKey, seq, issues: parsed.error.issues },
-        });
+        throw new GhostError(
+          'storage',
+          'Stored message failed schema validation',
+          {
+            details: { sessionKey, seq, issues: parsed.error.issues },
+          },
+        );
       }
       return {
         id: read.string(row, 'id'),
@@ -863,27 +909,37 @@ export class SessionStore {
    * here that knew a provider existed. Kept as a method because every caller
    * already has the store in hand.
    */
-  history(sessionKey: string, options: HistoryForLLMOptions = {}): ChatMessage[] {
+  history(
+    sessionKey: string,
+    options: HistoryForLLMOptions = {},
+  ): ChatMessage[] {
     return sessionHistory(this, sessionKey, options);
   }
 
-  updateSession(sessionKey: string, patch: UpdateSessionOptions): SessionRecord {
-    this.#assertOpen();
+  updateSession(
+    sessionKey: string,
+    patch: UpdateSessionOptions,
+  ): SessionRecord {
+    this.assertOpen();
     const existing = this.ensureSession(sessionKey);
-    const now = this.#clock.now();
+    const now = this.clock.now();
 
     const next = {
       title: patch.title ?? existing.title,
       // `null` clears the agent, `undefined` leaves it alone — the two have
       // to stay distinguishable, or unsetting an agent becomes impossible
       // through a patch that also touches any other field.
-      agentId: patch.agentId === undefined ? existing.agentId : (patch.agentId ?? undefined),
+      agentId:
+        patch.agentId === undefined
+          ? existing.agentId
+          : (patch.agentId ?? undefined),
       metadata: patch.metadata ?? existing.metadata,
-      lastConsolidatedSeq: patch.lastConsolidatedSeq ?? existing.lastConsolidatedSeq,
+      lastConsolidatedSeq:
+        patch.lastConsolidatedSeq ?? existing.lastConsolidatedSeq,
       lastLearnedSeq: patch.lastLearnedSeq ?? existing.lastLearnedSeq,
     };
 
-    this.#stmt(
+    this.stmt(
       `UPDATE sessions
           SET title = ?, agent_id = ?, metadata_json = ?,
               last_consolidated_seq = ?, last_learned_seq = ?, updated_at_ms = ?
@@ -939,13 +995,15 @@ export class SessionStore {
    * record why, which nothing could repair because nothing would say it had
    * happened.
    */
-  reassignAgents(renames: readonly { readonly from: string; readonly to: string }[]): number {
-    this.#assertOpen();
+  reassignAgents(
+    renames: ReadonlyArray<{ readonly from: string; readonly to: string }>,
+  ): number {
+    this.assertOpen();
     if (renames.length === 0) return 0;
 
-    return this.#transaction(() => {
-      const now = this.#clock.now();
-      const update = this.#stmt(
+    return this.transaction(() => {
+      const now = this.clock.now();
+      const update = this.stmt(
         'UPDATE sessions SET agent_id = ?, updated_at_ms = ? WHERE agent_id = ?',
       );
       let moved = 0;
@@ -966,12 +1024,12 @@ export class SessionStore {
    * lifetime, and the gap is the point.
    */
   clearMessages(sessionKey: string): void {
-    this.#assertOpen();
-    this.#transaction(() => {
-      this.#stmt('DELETE FROM messages WHERE session_key = ?').run(sessionKey);
-      this.#stmt(
+    this.assertOpen();
+    this.transaction(() => {
+      this.stmt('DELETE FROM messages WHERE session_key = ?').run(sessionKey);
+      this.stmt(
         'UPDATE sessions SET last_consolidated_seq = 0, last_learned_seq = 0, updated_at_ms = ? WHERE key = ?',
-      ).run(this.#clock.now(), sessionKey);
+      ).run(this.clock.now(), sessionKey);
     });
   }
 
@@ -986,9 +1044,12 @@ export class SessionStore {
    * replayed, so pairing across that boundary is not a thing a provider ever
    * sees.
    */
-  #legalSeq(session: SessionRecord, seq: number): number {
+  private legalSeq(session: SessionRecord, seq: number): number {
     const floor = Math.min(session.lastConsolidatedSeq, seq);
-    const records = this.messages(session.key, { afterSeq: floor, beforeSeq: seq + 1 });
+    const records = this.messages(session.key, {
+      afterSeq: floor,
+      beforeSeq: seq + 1,
+    });
     const end = findLegalEnd(records.map((record) => record.message));
 
     if (end === records.length) return seq;
@@ -1020,9 +1081,9 @@ export class SessionStore {
    * this at an idle prompt.
    */
   truncateAfter(sessionKey: string, seq: number): TruncateResult {
-    this.#assertOpen();
+    this.assertOpen();
 
-    return this.#transaction(() => {
+    return this.transaction(() => {
       const session = this.getSession(sessionKey);
       if (session === undefined) {
         throw new GhostError('not_found', `No such session: ${sessionKey}`, {
@@ -1030,10 +1091,12 @@ export class SessionStore {
         });
       }
 
-      const cut = Math.max(0, this.#legalSeq(session, seq));
+      const cut = Math.max(0, this.legalSeq(session, seq));
       const deleted = Number(
-        this.#stmt('DELETE FROM messages WHERE session_key = ? AND seq > ?').run(sessionKey, cut)
-          .changes,
+        this.stmt('DELETE FROM messages WHERE session_key = ? AND seq > ?').run(
+          sessionKey,
+          cut,
+        ).changes,
       );
 
       // Nothing moved, so nothing should be bumped to the top of the session
@@ -1045,13 +1108,13 @@ export class SessionStore {
         // that visibly has messages. It does not un-summarise the memory files;
         // it restores `marker <= max(seq)`, and the rows it would have skipped
         // are gone regardless.
-        this.#stmt(
+        this.stmt(
           `UPDATE sessions
               SET last_consolidated_seq = MIN(last_consolidated_seq, ?),
                   last_learned_seq      = MIN(last_learned_seq, ?),
                   updated_at_ms         = ?
             WHERE key = ?`,
-        ).run(cut, cut, this.#clock.now(), sessionKey);
+        ).run(cut, cut, this.clock.now(), sessionKey);
       }
 
       return { seq: cut, deleted };
@@ -1079,10 +1142,14 @@ export class SessionStore {
    * Lineage goes in the metadata bag rather than a column: it costs no schema,
    * no index and no query surface, and nothing needs to search by it.
    */
-  forkSession(sourceKey: string, uptoSeq: number, options: ForkSessionOptions = {}): ForkResult {
-    this.#assertOpen();
+  forkSession(
+    sourceKey: string,
+    uptoSeq: number,
+    options: ForkSessionOptions = {},
+  ): ForkResult {
+    this.assertOpen();
 
-    return this.#transaction(() => {
+    return this.transaction(() => {
       const source = this.getSession(sourceKey);
       if (source === undefined) {
         throw new GhostError('not_found', `No such session: ${sourceKey}`, {
@@ -1090,11 +1157,11 @@ export class SessionStore {
         });
       }
 
-      const cut = Math.max(0, this.#legalSeq(source, uptoSeq));
+      const cut = Math.max(0, this.legalSeq(source, uptoSeq));
       const records = this.messages(sourceKey, { beforeSeq: cut + 1 });
-      const now = this.#clock.now();
+      const now = this.clock.now();
       const origin = options.origin ?? source.origin;
-      const key = options.key ?? this.#newId();
+      const key = options.key ?? this.newId();
 
       if (this.getSession(key) !== undefined) {
         throw new GhostError('conflict', `Session already exists: ${key}`, {
@@ -1102,7 +1169,9 @@ export class SessionStore {
         });
       }
 
-      const firstUser = records.find((record) => record.message.role === 'user');
+      const firstUser = records.find(
+        (record) => record.message.role === 'user',
+      );
       const title =
         options.title ??
         (source.title !== ''
@@ -1116,9 +1185,11 @@ export class SessionStore {
       const consolidated = records.filter(
         (record) => record.seq <= source.lastConsolidatedSeq,
       ).length;
-      const learned = records.filter((record) => record.seq <= source.lastLearnedSeq).length;
+      const learned = records.filter(
+        (record) => record.seq <= source.lastLearnedSeq,
+      ).length;
 
-      this.#stmt(
+      this.stmt(
         `INSERT INTO sessions
            (key, title, origin, workspace_id, agent_id, created_at_ms, updated_at_ms,
             metadata_json, last_consolidated_seq, last_learned_seq, next_seq)
@@ -1144,13 +1215,13 @@ export class SessionStore {
 
       // `appendMany` cannot be reused: it stamps one `now` and one `turnId`
       // across the block, and both are being preserved per row here.
-      const insert = this.#stmt(
+      const insert = this.stmt(
         `INSERT INTO messages (id, session_key, seq, created_at_ms, turn_id, role, payload_json)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
       );
       for (const [index, record] of records.entries()) {
         insert.run(
-          this.#newId(),
+          this.newId(),
           key,
           index + 1,
           record.createdAtMs,
@@ -1164,9 +1235,13 @@ export class SessionStore {
 
       const session = this.getSession(key);
       if (session === undefined) {
-        throw new GhostError('storage', 'Fork vanished immediately after insert', {
-          details: { sessionKey: key },
-        });
+        throw new GhostError(
+          'storage',
+          'Fork vanished immediately after insert',
+          {
+            details: { sessionKey: key },
+          },
+        );
       }
 
       return { session, copied: records.length, seq: cut };
@@ -1180,8 +1255,8 @@ export class SessionStore {
    * hub's own failure path can produce — must not throw on the primary key.
    */
   recordTurnStats(stats: TurnStatsRecord): void {
-    this.#assertOpen();
-    this.#stmt(
+    this.assertOpen();
+    this.stmt(
       `INSERT INTO turn_stats
          (turn_id, session_key, agent_id, provider, model, started_at_ms, ended_at_ms,
           iterations, stop_reason, prompt_tokens, completion_tokens, total_tokens,
@@ -1217,9 +1292,12 @@ export class SessionStore {
   }
 
   /** A session's turns, most recent first. */
-  turnStats(sessionKey: string, options: { readonly limit?: number } = {}): TurnStatsRecord[] {
-    this.#assertOpen();
-    const rows = this.#stmt(
+  turnStats(
+    sessionKey: string,
+    options: { readonly limit?: number } = {},
+  ): TurnStatsRecord[] {
+    this.assertOpen();
+    const rows = this.stmt(
       `SELECT * FROM turn_stats
         WHERE session_key = ?
         ORDER BY ended_at_ms DESC, turn_id ASC
@@ -1239,12 +1317,12 @@ export class SessionStore {
    * the SQL.
    */
   sessionUsage(sessionKeys: readonly string[]): Map<string, Usage> {
-    this.#assertOpen();
+    this.assertOpen();
     const totals = new Map<string, Usage>();
     if (sessionKeys.length === 0) return totals;
 
     const placeholders = sessionKeys.map(() => '?').join(', ');
-    const rows = this.#stmt(
+    const rows = this.stmt(
       `SELECT session_key,
               SUM(prompt_tokens)     AS prompt_tokens,
               SUM(completion_tokens) AS completion_tokens,
@@ -1277,9 +1355,9 @@ export class SessionStore {
    * reason delegation does.
    */
   deleteSession(sessionKey: string): boolean {
-    this.#assertOpen();
+    this.assertOpen();
 
-    return this.#transaction(() => {
+    return this.transaction(() => {
       const session = this.getSession(sessionKey);
       if (session === undefined) return false;
 
@@ -1289,15 +1367,18 @@ export class SessionStore {
         this.deleteSession(run.sessionKey);
       }
 
-      return this.#stmt('DELETE FROM sessions WHERE key = ?').run(sessionKey).changes > 0;
+      return (
+        this.stmt('DELETE FROM sessions WHERE key = ?').run(sessionKey)
+          .changes > 0
+      );
     });
   }
 
   /** Idempotent, and a no-op for a connection this store did not open. */
   close(): void {
-    if (this.#closed) return;
-    this.#closed = true;
-    this.#statements.clear();
-    if (this.#ownsDb) this.#db.close();
+    if (this.closed) return;
+    this.closed = true;
+    this.statements.clear();
+    if (this.ownsDb) this.db.close();
   }
 }

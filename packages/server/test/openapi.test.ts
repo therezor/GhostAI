@@ -22,7 +22,10 @@ afterEach(async () => {
 
 interface Document {
   readonly openapi: string;
-  readonly paths: Record<string, Record<string, { operationId?: string; responses?: unknown }>>;
+  readonly paths: Record<
+    string,
+    Record<string, { operationId?: string; responses?: unknown }>
+  >;
   readonly components: { schemas: Record<string, unknown> };
 }
 
@@ -83,7 +86,9 @@ describe('the generated document', () => {
       ROUTE_MANIFEST.map((spec) => spec.id).sort(),
     );
     for (const spec of ROUTE_MANIFEST) {
-      expect(doc.paths[documentPath(spec.url)]?.[spec.method.toLowerCase()]).toBeDefined();
+      expect(
+        doc.paths[documentPath(spec.url)]?.[spec.method.toLowerCase()],
+      ).toBeDefined();
     }
   });
 
@@ -100,12 +105,18 @@ describe('the generated document', () => {
   it('documents a query parameter the route actually enforces', async () => {
     const doc = await document();
     const operation = doc.paths['/api/sessions']?.get as unknown as {
-      parameters: { name: string; schema: Record<string, unknown> }[];
+      parameters: Array<{ name: string; schema: Record<string, unknown> }>;
     };
 
-    const limit = operation.parameters.find((parameter) => parameter.name === 'limit');
+    const limit = operation.parameters.find(
+      (parameter) => parameter.name === 'limit',
+    );
     // Coerced from a string at the door, and documented as the integer it
     // becomes — with the cap, so a client knows before it is refused.
-    expect(limit?.schema).toMatchObject({ type: 'integer', maximum: 200, default: 50 });
+    expect(limit?.schema).toMatchObject({
+      type: 'integer',
+      maximum: 200,
+      default: 50,
+    });
   });
 });

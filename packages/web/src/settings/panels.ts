@@ -90,21 +90,35 @@ export interface PlannedSystem {
  * within one screen: MCP arrives in Phase 3 and the plugin host in Phase 4, and
  * a single "coming in Phase 3" over both would be wrong about one of them.
  */
-export const PLANNED_SYSTEMS: Readonly<Record<string, readonly PlannedSystem[]>> = {
+export const PLANNED_SYSTEMS: Readonly<
+  Record<string, readonly PlannedSystem[]>
+> = {
   extensions: [
     {
       name: 'settings.planned.mcpServers.name',
       detail: 'settings.planned.mcpServers.detail',
       phase: 3,
     },
-    { name: 'settings.planned.skills.name', detail: 'settings.planned.skills.detail', phase: 3 },
-    { name: 'settings.planned.oauth.name', detail: 'settings.planned.oauth.detail', phase: 3 },
+    {
+      name: 'settings.planned.skills.name',
+      detail: 'settings.planned.skills.detail',
+      phase: 3,
+    },
+    {
+      name: 'settings.planned.oauth.name',
+      detail: 'settings.planned.oauth.detail',
+      phase: 3,
+    },
     {
       name: 'settings.planned.channels.name',
       detail: 'settings.planned.channels.detail',
       phase: 3,
     },
-    { name: 'settings.planned.plugins.name', detail: 'settings.planned.plugins.detail', phase: 4 },
+    {
+      name: 'settings.planned.plugins.name',
+      detail: 'settings.planned.plugins.detail',
+      phase: 4,
+    },
   ],
   knowledge: [
     {

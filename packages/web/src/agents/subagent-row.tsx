@@ -8,7 +8,11 @@ import { Trash2 } from 'lucide-react';
 import type { JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { defaultSubagentPrompt, subagentToolName, type SubagentRef } from '@ghostai/protocol';
+import {
+  defaultSubagentPrompt,
+  subagentToolName,
+  type SubagentRef,
+} from '@ghostai/protocol';
 
 import { Button } from '@/components/ui/button.js';
 import { SelectField, TextareaField } from '@/components/form/controls.js';
@@ -30,15 +34,18 @@ import { PERMISSION_LABELS } from './tool-permissions.js';
  * the model is really offered.
  */
 export function SubagentRow({
-  ref_,
+  subagentRef,
   index,
   options,
   onChange,
   onRemove,
 }: {
-  readonly ref_: SubagentRef;
+  readonly subagentRef: SubagentRef;
   readonly index: number;
-  readonly options: readonly { readonly id: string; readonly label: string }[];
+  readonly options: ReadonlyArray<{
+    readonly id: string;
+    readonly label: string;
+  }>;
   readonly onChange: (next: SubagentRef) => void;
   readonly onRemove: () => void;
 }): JSX.Element {
@@ -47,7 +54,8 @@ export function SubagentRow({
   // The target's label, which is what the generated description names. Read off
   // the option list rather than stored on the reference, for the same reason
   // `labelOf` reads it off the target's entry: one place to rename an agent.
-  const targetLabel = options.find((agent) => agent.id === ref_.id)?.label ?? '';
+  const targetLabel =
+    options.find((agent) => agent.id === subagentRef.id)?.label ?? '';
 
   return (
     <li className="stack agent-editor__subagent">
@@ -57,35 +65,45 @@ export function SubagentRow({
             layout has to address them both. */}
         <div className="agent-editor__subagent-agent">
           <SelectField
-            label={<span className="sr-only">{t('agents.subagentAgentFor', { position })}</span>}
-            value={ref_.id}
+            label={
+              <span className="sr-only">
+                {t('agents.subagentAgentFor', { position })}
+              </span>
+            }
+            value={subagentRef.id}
             placeholder={t('agents.subagentChoose')}
             options={options.map((agent) => ({
               value: agent.id,
               label: agent.label === '' ? agent.id : agent.label,
             }))}
             onValueChange={(next) => {
-              onChange({ ...ref_, id: next });
+              onChange({ ...subagentRef, id: next });
             }}
           />
         </div>
 
-        {ref_.id !== '' && (
-          <code className="agent-editor__subagent-tool">{subagentToolName(ref_.id)}</code>
+        {subagentRef.id !== '' && (
+          <code className="agent-editor__subagent-tool">
+            {subagentToolName(subagentRef.id)}
+          </code>
         )}
 
         <div className="agent-editor__subagent-permission">
           <SelectField
             label={
-              <span className="sr-only">{t('agents.subagentPermissionFor', { position })}</span>
+              <span className="sr-only">
+                {t('agents.subagentPermissionFor', { position })}
+              </span>
             }
-            value={ref_.permission}
+            value={subagentRef.permission}
             options={TOOL_PERMISSIONS.map((option) => ({
               value: option,
               label: t(PERMISSION_LABELS[option]),
             }))}
             onValueChange={(next) => {
-              if (isToolPermission(next)) onChange({ ...ref_, permission: next });
+              if (isToolPermission(next)) {
+                onChange({ ...subagentRef, permission: next });
+              }
             }}
           />
         </div>
@@ -107,8 +125,12 @@ export function SubagentRow({
           having no placeholder at all. It grows with its content, so a one-word
           answer still costs one line. */}
       <TextareaField
-        label={<span className="sr-only">{t('agents.subagentPromptFor', { position })}</span>}
-        value={ref_.prompt}
+        label={
+          <span className="sr-only">
+            {t('agents.subagentPromptFor', { position })}
+          </span>
+        }
+        value={subagentRef.prompt}
         // The sentence the model would actually read, not an invented example
         // of one an operator might write — which is what this used to hold, and
         // left "leave it empty for a generic one" as the only clue about a
@@ -119,12 +141,16 @@ export function SubagentRow({
         // into the reference it would freeze the name the agent had on the day
         // the delegation was added, and nothing would ever correct it.
         placeholder={
-          ref_.id === '' ? '' : defaultSubagentPrompt(targetLabel === '' ? ref_.id : targetLabel)
+          subagentRef.id === ''
+            ? ''
+            : defaultSubagentPrompt(
+                targetLabel === '' ? subagentRef.id : targetLabel,
+              )
         }
         hint={t('agents.subagentPromptHint')}
         rows={2}
         onValueChange={(next) => {
-          onChange({ ...ref_, prompt: next });
+          onChange({ ...subagentRef, prompt: next });
         }}
       />
     </li>

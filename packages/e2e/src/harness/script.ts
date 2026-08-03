@@ -39,7 +39,11 @@ export const waitTool: AnyTool = defineTool({
   name: 'e2e_wait',
   description: 'Wait for a while, then report that the wait finished.',
   schema: z.strictObject({
-    ms: z.coerce.number().int().min(0).describe('How long to wait, in milliseconds.'),
+    ms: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .describe('How long to wait, in milliseconds.'),
   }),
   risk: 'safe',
   annotations: { title: 'Wait', readOnlyHint: true, destructiveHint: false },
@@ -124,7 +128,11 @@ export const ROUTES: readonly Route[] = [
     // not the transport's.
     match: /\brun\b/i,
     turns: [
-      { toolCalls: [toolCall('call-exec', 'exec', { argv: ['node', '--version'] })] },
+      {
+        toolCalls: [
+          toolCall('call-exec', 'exec', { argv: ['node', '--version'] }),
+        ],
+      },
       { deltas: ['That is the runtime version.'] },
     ],
   },
@@ -141,14 +149,20 @@ export const ROUTES: readonly Route[] = [
     // shortest path to "a turn is running" for a spec that only needs the
     // composer to be showing Stop.
     match: /\bstall\b/i,
-    turns: [{ onStream: never, deltas: ['Unreachable unless the stall ends.'] }],
+    turns: [
+      { onStream: never, deltas: ['Unreachable unless the stall ends.'] },
+    ],
   },
   {
     // The caller's half of a delegation. It hands the researcher a task and
     // then answers from whatever comes back.
     match: /\bdelegate\b/i,
     turns: [
-      { toolCalls: [toolCall('call-sub', 'ask_researcher', { task: SUBAGENT_TASK })] },
+      {
+        toolCalls: [
+          toolCall('call-sub', 'ask_researcher', { task: SUBAGENT_TASK }),
+        ],
+      },
       { deltas: ['The researcher found ', '`notes.md`.'] },
     ],
   },

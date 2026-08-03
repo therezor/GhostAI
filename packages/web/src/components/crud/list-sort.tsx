@@ -49,7 +49,7 @@ export function ListSort<K extends string>({
   ascendingFirst,
   onChange,
 }: {
-  readonly options: readonly { readonly key: K; readonly label: string }[];
+  readonly options: ReadonlyArray<{ readonly key: K; readonly label: string }>;
   readonly sort: SortOrder<K>;
   /** The columns that open ascending — the text ones. See `sortBy`. */
   readonly ascendingFirst: readonly K[];
@@ -57,7 +57,9 @@ export function ListSort<K extends string>({
 }): JSX.Element {
   const { t } = useTranslation();
   const active = options.find((option) => option.key === sort.key);
-  const direction = sort.descending ? t('common.descending') : t('common.ascending');
+  const direction = sort.descending
+    ? t('common.descending')
+    : t('common.ascending');
 
   return (
     <DropdownMenu>
@@ -73,11 +75,18 @@ export function ListSort<K extends string>({
         <Button
           variant="ghost"
           className="list-sort"
-          aria-label={t('common.sortedBy', { column: active?.label ?? sort.key, direction })}
+          aria-label={t('common.sortedBy', {
+            column: active?.label ?? sort.key,
+            direction,
+          })}
         >
           <ArrowUpDown aria-hidden="true" />
           <span className="truncate">{active?.label ?? sort.key}</span>
-          {sort.descending ? <ArrowDown aria-hidden="true" /> : <ArrowUp aria-hidden="true" />}
+          {sort.descending ? (
+            <ArrowDown aria-hidden="true" />
+          ) : (
+            <ArrowUp aria-hidden="true" />
+          )}
         </Button>
       </DropdownMenuTrigger>
 
@@ -107,8 +116,12 @@ export function ListSort<K extends string>({
             onChange({ key: sort.key, descending: next === 'descending' });
           }}
         >
-          <DropdownMenuRadioItem value="ascending">{t('common.ascending')}</DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="descending">{t('common.descending')}</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="ascending">
+            {t('common.ascending')}
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="descending">
+            {t('common.descending')}
+          </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>

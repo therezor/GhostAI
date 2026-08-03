@@ -56,7 +56,11 @@ describe('AutomationStore jobs', () => {
       payload: MESSAGE,
       enabled: true,
       deleteAfterRun: false,
-      state: { nextRunAtMs: 1_700_000_100_000, runCount: 0, lastStatus: 'pending' },
+      state: {
+        nextRunAtMs: 1_700_000_100_000,
+        runCount: 0,
+        lastStatus: 'pending',
+      },
     });
     expect(jobs.getJob(created.id)).toEqual(created);
   });
@@ -66,10 +70,15 @@ describe('AutomationStore jobs', () => {
     // ones: `{kind: 'cron', atMs: 5}` must stay unrepresentable.
     const jobs = store();
     const at = jobs.createJob(job({ schedule: { kind: 'at', atMs: 42 } }));
-    const every = jobs.createJob(job({ schedule: { kind: 'every', everyMs: 60_000 } }));
+    const every = jobs.createJob(
+      job({ schedule: { kind: 'every', everyMs: 60_000 } }),
+    );
 
     expect(jobs.getJob(at.id)?.schedule).toEqual({ kind: 'at', atMs: 42 });
-    expect(jobs.getJob(every.id)?.schedule).toEqual({ kind: 'every', everyMs: 60_000 });
+    expect(jobs.getJob(every.id)?.schedule).toEqual({
+      kind: 'every',
+      everyMs: 60_000,
+    });
   });
 
   it('patches only the fields named', () => {
@@ -85,7 +94,10 @@ describe('AutomationStore jobs', () => {
   it('can disable a job without losing its schedule', () => {
     const jobs = store();
     const created = jobs.createJob(job());
-    const updated = jobs.updateJob(created.id, { enabled: false, nextRunAtMs: 0 });
+    const updated = jobs.updateJob(created.id, {
+      enabled: false,
+      nextRunAtMs: 0,
+    });
 
     expect(updated?.enabled).toBe(false);
     expect(updated?.state.nextRunAtMs).toBe(0);
@@ -130,7 +142,10 @@ describe('AutomationStore scheduling', () => {
     jobs.createJob(job({ name: 'first', nextRunAtMs: 1000 }));
     jobs.createJob(job({ name: 'second', nextRunAtMs: 2000 }));
 
-    expect(jobs.dueJobs(5000, 2).map((j) => j.name)).toEqual(['first', 'second']);
+    expect(jobs.dueJobs(5000, 2).map((j) => j.name)).toEqual([
+      'first',
+      'second',
+    ]);
   });
 
   it('does not return a job whose time has not come', () => {
@@ -146,7 +161,11 @@ describe('AutomationStore scheduling', () => {
     const created = jobs.createJob(job());
 
     jobs.recordOutcome(created.id, { ranAtMs: 1234, status: 'ok' });
-    jobs.recordOutcome(created.id, { ranAtMs: 5678, status: 'error', error: 'boom' });
+    jobs.recordOutcome(created.id, {
+      ranAtMs: 5678,
+      status: 'error',
+      error: 'boom',
+    });
 
     expect(jobs.getJob(created.id)?.state).toMatchObject({
       lastRunAtMs: 5678,
@@ -159,7 +178,11 @@ describe('AutomationStore scheduling', () => {
 
 describe('AutomationStore and a row it cannot read', () => {
   /** Writes a job row straight past the store, the way an import or a hand edit would. */
-  function corrupt(database: DatabaseSync, id: string, scheduleJson: string): void {
+  function corrupt(
+    database: DatabaseSync,
+    id: string,
+    scheduleJson: string,
+  ): void {
     database
       .prepare(
         `INSERT INTO automation_jobs
@@ -200,7 +223,9 @@ describe('AutomationStore and a row it cannot read', () => {
 
     expect(jobs.dueJobs(2000, 10)).toEqual([]);
 
-    const row = database.prepare('SELECT * FROM automation_jobs WHERE id = ?').get('bad');
+    const row = database
+      .prepare('SELECT * FROM automation_jobs WHERE id = ?')
+      .get('bad');
     expect(row?.enabled).toBe(0);
     expect(row?.next_run_at_ms).toBe(0);
     expect(row?.last_status).toBe('error');
@@ -236,11 +261,18 @@ describe('AutomationStore and a row it cannot read', () => {
       // not parse — and `listJobs` would drop every job on an install that has
       // one, which reads as "the automation page is empty".
       const { database } = withRawAccess();
-      corrupt(database, 'legacy', JSON.stringify({ kind: 'cron', expr: '0 9 * * *', tz: 'UTC' }));
+      corrupt(
+        database,
+        'legacy',
+        JSON.stringify({ kind: 'cron', expr: '0 9 * * *', tz: 'UTC' }),
+      );
 
       const jobs = reopen(database);
       expect(jobs.listJobs().map((j) => j.id)).toEqual(['legacy']);
-      expect(jobs.getJob('legacy')?.schedule).toEqual({ kind: 'cron', expr: '0 9 * * *' });
+      expect(jobs.getJob('legacy')?.schedule).toEqual({
+        kind: 'cron',
+        expr: '0 9 * * *',
+      });
     });
 
     it('rewrites the stored blob rather than tolerating it on every read', () => {
@@ -258,7 +290,10 @@ describe('AutomationStore and a row it cannot read', () => {
         .prepare('SELECT schedule_json FROM automation_jobs WHERE id = ?')
         .get('legacy');
       expect(String(row?.schedule_json)).not.toContain('tz');
-      expect(JSON.parse(String(row?.schedule_json))).toEqual({ kind: 'cron', expr: '0 9 * * *' });
+      expect(JSON.parse(String(row?.schedule_json))).toEqual({
+        kind: 'cron',
+        expr: '0 9 * * *',
+      });
     });
 
     it('leaves a row whose JSON never parsed for the schema to report', () => {
@@ -287,8 +322,15 @@ describe('AutomationStore runs', () => {
     const jobs = store(clock);
     const created = jobs.createJob(job());
 
-    const run = jobs.startRun({ jobId: created.id, sessionKey: 'automation:1' });
-    expect(run).toMatchObject({ status: 'pending', sessionKey: 'automation:1', warnings: [] });
+    const run = jobs.startRun({
+      jobId: created.id,
+      sessionKey: 'automation:1',
+    });
+    expect(run).toMatchObject({
+      status: 'pending',
+      sessionKey: 'automation:1',
+      warnings: [],
+    });
     expect(run.finishedAtMs).toBeUndefined();
 
     clock.advance(5000);
@@ -312,7 +354,10 @@ describe('AutomationStore runs', () => {
     const created = jobs.createJob(job());
     const run = jobs.startRun({ jobId: created.id });
 
-    const done = jobs.finishRun(run.id, { status: 'skipped', skipReason: 'No TASK.md' });
+    const done = jobs.finishRun(run.id, {
+      status: 'skipped',
+      skipReason: 'No TASK.md',
+    });
     expect(done).toMatchObject({ status: 'skipped', skipReason: 'No TASK.md' });
     expect(done).not.toHaveProperty('error');
   });
@@ -351,10 +396,9 @@ describe('AutomationStore runs', () => {
     }
 
     // Newest first, so page two of two is the third and fourth newest.
-    expect(jobs.listRuns(created.id, { limit: 2, offset: 2 }).map((r) => r.id)).toEqual([
-      ids[2],
-      ids[1],
-    ]);
+    expect(
+      jobs.listRuns(created.id, { limit: 2, offset: 2 }).map((r) => r.id),
+    ).toEqual([ids[2], ids[1]]);
     // Past the end is empty rather than a wrapped page.
     expect(jobs.listRuns(created.id, { limit: 2, offset: 10 })).toEqual([]);
   });
@@ -388,9 +432,12 @@ describe('AutomationStore runs', () => {
     const jobs = store();
     const created = jobs.createJob(job());
     const run = jobs.startRun({ jobId: created.id });
-    expect(typeof encodeAutomationRunCursor({ startedAtMs: run.startedAtMs, id: run.id })).toBe(
-      'string',
-    );
+    expect(
+      typeof encodeAutomationRunCursor({
+        startedAtMs: run.startedAtMs,
+        id: run.id,
+      }),
+    ).toBe('string');
   });
 
   it('takes a job′s runs with it when the job is deleted', () => {
@@ -411,13 +458,18 @@ describe('AutomationStore retention', () => {
 
     const ids: string[] = [];
     for (let i = 0; i < 5; i += 1) {
-      const run = jobs.startRun({ jobId: created.id, sessionKey: `automation:${String(i)}` });
+      const run = jobs.startRun({
+        jobId: created.id,
+        sessionKey: `automation:${String(i)}`,
+      });
       ids.push(run.id);
       clock.advance(1000);
     }
 
     const trimmed = jobs.trimRuns(created.id, 2);
-    expect(trimmed.map((t) => t.id).sort()).toEqual([ids[0], ids[1], ids[2]].sort());
+    expect(trimmed.map((t) => t.id).sort()).toEqual(
+      [ids[0], ids[1], ids[2]].sort(),
+    );
     // The session keys come back so the caller can delete the sessions too —
     // the run row was the only thing naming them.
     expect(trimmed.map((t) => t.sessionKey).sort()).toEqual([
@@ -425,7 +477,10 @@ describe('AutomationStore retention', () => {
       'automation:1',
       'automation:2',
     ]);
-    expect(jobs.listRuns(created.id).map((r) => r.id)).toEqual([ids[4], ids[3]]);
+    expect(jobs.listRuns(created.id).map((r) => r.id)).toEqual([
+      ids[4],
+      ids[3],
+    ]);
   });
 
   it('trims per job, so a busy job does not evict a quiet one', () => {

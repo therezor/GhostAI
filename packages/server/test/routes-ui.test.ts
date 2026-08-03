@@ -20,21 +20,28 @@ const roots: string[] = [];
 
 afterEach(async () => {
   while (running.length > 0) await running.pop()?.close();
-  while (roots.length > 0) rmSync(roots.pop() ?? '', { recursive: true, force: true });
+  while (roots.length > 0) {
+    rmSync(roots.pop() ?? '', { recursive: true, force: true });
+  }
 });
 
 /** A `dist/` as Vite would leave one: a shell and a hashed asset. */
 function bundle(): string {
   const root = mkdtempSync(join(tmpdir(), 'ghostai-ui-'));
   roots.push(root);
-  writeFileSync(join(root, 'index.html'), '<!doctype html><title>GhostAI</title>');
+  writeFileSync(
+    join(root, 'index.html'),
+    '<!doctype html><title>GhostAI</title>',
+  );
   mkdirSync(join(root, 'assets'));
   writeFileSync(join(root, 'assets', 'app-abc123.js'), 'console.log(1);\n');
   return root;
 }
 
 async function start(ui?: string): Promise<TestServer> {
-  const test = await startTestServer(ui === undefined ? {} : { ui: { root: ui } });
+  const test = await startTestServer(
+    ui === undefined ? {} : { ui: { root: ui } },
+  );
   running.push(test);
   return test;
 }
@@ -52,7 +59,10 @@ describe('the built UI', () => {
   it('serves the shell for a path only the client knows about', async () => {
     const test = await start(bundle());
 
-    const response = await test.server.app.inject({ method: 'GET', url: '/session/abc-123' });
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: '/session/abc-123',
+    });
 
     expect(response.statusCode).toBe(200);
     expect(response.body).toContain('<title>GhostAI</title>');
@@ -61,7 +71,10 @@ describe('the built UI', () => {
   it('serves the asset bundle from disk', async () => {
     const test = await start(bundle());
 
-    const response = await test.server.app.inject({ method: 'GET', url: '/assets/app-abc123.js' });
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: '/assets/app-abc123.js',
+    });
 
     expect(response.statusCode).toBe(200);
     expect(response.body).toBe('console.log(1);\n');
@@ -70,7 +83,10 @@ describe('the built UI', () => {
   it('leaves an unknown API path as a JSON 404', async () => {
     const test = await start(bundle());
 
-    const response = await test.server.app.inject({ method: 'GET', url: '/api/nope' });
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: '/api/nope',
+    });
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toEqual({
@@ -81,7 +97,10 @@ describe('the built UI', () => {
   it('does not answer a POST with the shell', async () => {
     const test = await start(bundle());
 
-    const response = await test.server.app.inject({ method: 'POST', url: '/anything' });
+    const response = await test.server.app.inject({
+      method: 'POST',
+      url: '/anything',
+    });
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toEqual({
@@ -103,7 +122,10 @@ describe('the built UI', () => {
   it('serves the shell without a credential, since the app itself is the login', async () => {
     const test = await start(bundle());
 
-    const response = await test.server.app.inject({ method: 'GET', url: '/settings' });
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: '/settings',
+    });
 
     // The UI is a static asset; every byte of data behind it is authenticated,
     // and a login screen that needed a session to load could never be reached.

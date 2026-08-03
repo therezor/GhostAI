@@ -331,7 +331,9 @@ function toContent(
     parts.push(
       filePart(attachment.path, attachment.mimeType, {
         ...(attachment.name === undefined ? {} : { name: attachment.name }),
-        ...(attachment.sizeBytes === undefined ? {} : { sizeBytes: attachment.sizeBytes }),
+        ...(attachment.sizeBytes === undefined
+          ? {}
+          : { sizeBytes: attachment.sizeBytes }),
       }),
     );
   }
@@ -339,7 +341,9 @@ function toContent(
 }
 
 /** The first schema complaint, short enough to put on a wire. */
-function describeParseFailure(issues: readonly { path: PropertyKey[]; message: string }[]): string {
+function describeParseFailure(
+  issues: ReadonlyArray<{ path: PropertyKey[]; message: string }>,
+): string {
   const first = issues[0];
   if (first === undefined) return 'Frame did not match any client message';
   const path = first.path.map(String).join('.');
@@ -347,39 +351,39 @@ function describeParseFailure(issues: readonly { path: PropertyKey[]; message: s
 }
 
 export class SessionHub {
-  readonly #config: Config;
-  readonly #loop: (agentId: string | undefined) => TurnRunner | null;
-  readonly #resolveAgentId: SessionHubOptions['resolveAgentId'];
-  readonly #store: SessionStore;
-  readonly #approvals: HubApprovalGate;
-  readonly #clock: Clock;
-  readonly #logger: Logger;
-  readonly #newId: () => string;
-  readonly #maxQueueDepth: number;
-  readonly #maxSessions: number;
-  readonly #sessions = new Map<string, SessionState>();
+  private readonly config: Config;
+  private readonly loop: (agentId: string | undefined) => TurnRunner | null;
+  private readonly resolveAgentId: SessionHubOptions['resolveAgentId'];
+  private readonly store: SessionStore;
+  private readonly approvals: HubApprovalGate;
+  private readonly clock: Clock;
+  private readonly logger: Logger;
+  private readonly newId: () => string;
+  private readonly maxQueueDepth: number;
+  private readonly maxSessions: number;
+  private readonly sessions = new Map<string, SessionState>();
 
   constructor(options: SessionHubOptions) {
-    this.#config = options.config;
-    this.#loop = options.loop;
-    this.#resolveAgentId = options.resolveAgentId;
-    this.#store = options.store;
-    this.#approvals = options.approvals;
-    this.#clock = options.clock ?? systemClock;
-    this.#logger = options.logger ?? silentLogger;
-    this.#newId = options.newId ?? newUuid;
-    this.#maxQueueDepth = options.maxQueueDepth ?? DEFAULT_MAX_QUEUE_DEPTH;
-    this.#maxSessions = options.maxSessions ?? DEFAULT_MAX_SESSIONS;
+    this.config = options.config;
+    this.loop = options.loop;
+    this.resolveAgentId = options.resolveAgentId;
+    this.store = options.store;
+    this.approvals = options.approvals;
+    this.clock = options.clock ?? systemClock;
+    this.logger = options.logger ?? silentLogger;
+    this.newId = options.newId ?? newUuid;
+    this.maxQueueDepth = options.maxQueueDepth ?? DEFAULT_MAX_QUEUE_DEPTH;
+    this.maxSessions = options.maxSessions ?? DEFAULT_MAX_SESSIONS;
   }
 
   /** Sessions holding state in this process. Includes idle ones, for their rings. */
   get sessionCount(): number {
-    return this.#sessions.size;
+    return this.sessions.size;
   }
 
   /** Whether a turn is running on this session. */
   busy(sessionKey: string): boolean {
-    return this.#sessions.get(sessionKey)?.running !== undefined;
+    return this.sessions.get(sessionKey)?.running !== undefined;
   }
 
   /**
@@ -395,7 +399,7 @@ export class SessionHub {
    * without a second method, and because the set is already here.
    */
   watchers(sessionKey: string): number {
-    const clients = this.#sessions.get(sessionKey)?.clients;
+    const clients = this.sessions.get(sessionKey)?.clients;
     if (clients === undefined) return 0;
     let count = 0;
     // Not `clients.size`. The scheduler's own connection is in this set for the
@@ -425,9 +429,9 @@ export class SessionHub {
    * is worth less than a false gap.
    */
   broadcast(event: HubEvent): void {
-    for (const state of this.#sessions.values()) {
+    for (const state of this.sessions.values()) {
       if (state.clients.size === 0) continue;
-      this.#emit(state, event);
+      this.emit(state, event);
     }
   }
 
@@ -440,31 +444,31 @@ export class SessionHub {
    */
   connect(options: ConnectOptions): HubClient {
     const connection: Connection = {
-      id: this.#newId(),
+      id: this.newId(),
       send: options.send,
       channel: options.channel ?? 'web',
       agentId: options.agentId,
       workspaceId: options.workspaceId,
       // A fresh tab with no `?session=` gets its key here.
-      sessionKey: options.sessionKey ?? this.#newId(),
+      sessionKey: options.sessionKey ?? this.newId(),
       closed: false,
       unattended: options.unattended ?? false,
     };
 
-    const state = this.#session(connection.sessionKey);
+    const state = this.session(connection.sessionKey);
     state.clients.add(connection);
-    this.#logger.debug(
+    this.logger.debug(
       { connectionId: connection.id, sessionKey: connection.sessionKey },
       'hub connection opened',
     );
 
-    this.#deliver(connection, {
+    this.deliver(connection, {
       type: 'connected',
       protocolVersion: PROTOCOL_VERSION,
       sessionKey: connection.sessionKey,
-      serverTimeMs: this.#clock.now(),
+      serverTimeMs: this.clock.now(),
       lastSeq: state.seq,
-      workspaceId: this.#workspaceOf(connection),
+      workspaceId: this.workspaceOf(connection),
     });
 
     return {
@@ -473,10 +477,10 @@ export class SessionHub {
         return connection.sessionKey;
       },
       receive: (frame: unknown): void => {
-        this.#receive(connection, frame);
+        this.receive(connection, frame);
       },
       close: (): void => {
-        this.#disconnect(connection);
+        this.disconnect(connection);
       },
     };
   }
@@ -488,12 +492,12 @@ export class SessionHub {
    * a hub that closed them would race the server's own shutdown.
    */
   close(): void {
-    for (const state of this.#sessions.values()) {
+    for (const state of this.sessions.values()) {
       state.running?.controller.abort();
       state.queue.length = 0;
-      this.#approvals.clearSession(state.key);
+      this.approvals.clearSession(state.key);
     }
-    this.#sessions.clear();
+    this.sessions.clear();
   }
 
   /**
@@ -504,19 +508,19 @@ export class SessionHub {
    * rather than being handed the gate as a second dependency.
    */
   retainAgents(agentIds: ReadonlySet<string>): void {
-    this.#approvals.retainAgents(agentIds);
+    this.approvals.retainAgents(agentIds);
   }
 
   /** Carries one agent's standing tool approvals to its new id. */
   renameAgent(from: string, to: string): void {
-    this.#approvals.renameAgent(from, to);
+    this.approvals.renameAgent(from, to);
   }
 
   // -------------------------------------------------------------------------
   // Inbound
   // -------------------------------------------------------------------------
 
-  #receive(connection: Connection, frame: unknown): void {
+  private receive(connection: Connection, frame: unknown): void {
     if (connection.closed) return;
 
     const decoded = decodeFrame(frame);
@@ -525,45 +529,52 @@ export class SessionHub {
       try {
         value = JSON.parse(decoded);
       } catch {
-        this.#error(connection, 'bad_request', 'Frame is not valid JSON');
+        this.error(connection, 'bad_request', 'Frame is not valid JSON');
         return;
       }
     }
 
     const parsed = ClientMessageSchema.safeParse(value);
     if (!parsed.success) {
-      this.#error(connection, 'bad_request', describeParseFailure(parsed.error.issues));
+      this.error(
+        connection,
+        'bad_request',
+        describeParseFailure(parsed.error.issues),
+      );
       return;
     }
 
-    this.#dispatch(connection, parsed.data);
+    this.dispatch(connection, parsed.data);
   }
 
   /** Exhaustive on purpose: a client message added without a handler is a type error. */
-  #dispatch(connection: Connection, message: ClientMessage): void {
+  private dispatch(connection: Connection, message: ClientMessage): void {
     switch (message.type) {
       case 'ping':
-        this.#deliver(connection, { type: 'pong', serverTimeMs: this.#clock.now() });
+        this.deliver(connection, {
+          type: 'pong',
+          serverTimeMs: this.clock.now(),
+        });
         return;
 
       case 'user.message':
-        this.#submit(connection, message);
+        this.submit(connection, message);
         return;
 
       case 'turn.regenerate':
-        this.#regenerate(connection, message);
+        this.regenerate(connection, message);
         return;
 
       case 'user.edit':
-        this.#edit(connection, message);
+        this.edit(connection, message);
         return;
 
       case 'turn.stop': {
-        const state = this.#sessions.get(message.sessionKey);
+        const state = this.sessions.get(message.sessionKey);
         // A stop with nothing running is the user clicking as the turn ends.
         // Answering it with an error would be reporting a race as a mistake.
         if (state?.running === undefined) return;
-        this.#logger.info(
+        this.logger.info(
           { sessionKey: state.key, turnId: state.running.turnId },
           'turn stopped by client',
         );
@@ -572,16 +583,20 @@ export class SessionHub {
       }
 
       case 'turn.steer': {
-        const state = this.#sessions.get(message.sessionKey);
+        const state = this.sessions.get(message.sessionKey);
         if (state?.running === undefined) {
-          this.#error(connection, 'bad_request', 'No turn is running on this session to steer');
+          this.error(
+            connection,
+            'bad_request',
+            'No turn is running on this session to steer',
+          );
           return;
         }
         // The loop the turn started on, not the current one: after a
         // reconfigure those differ, and the queue the running loop drains is
         // the only one it will ever read.
         state.running.runner.steer(state.key, message.content);
-        this.#emit(state, {
+        this.emit(state, {
           type: 'steer',
           sessionKey: state.key,
           content: message.content,
@@ -593,36 +608,45 @@ export class SessionHub {
         // A `session.new` naming a workspace re-points this connection, so the
         // conversation it is about to start lands there rather than in whatever
         // the tab was opened with.
-        if (message.workspaceId !== undefined) connection.workspaceId = message.workspaceId;
+        if (message.workspaceId !== undefined) {
+          connection.workspaceId = message.workspaceId;
+        }
         // And the same for the agent it names. Without this the field was read
         // off the frame and dropped: `connection.agentId` was only ever set at
         // connect time, so the fallback at `#submit` could never see anything a
         // client chose later. The web UI happens to resend `agentId` on every
         // message, which is what hid it — a channel does not.
         if (message.agentId !== undefined) connection.agentId = message.agentId;
-        this.#move(connection, message.sessionKey ?? this.#newId());
+        this.move(connection, message.sessionKey ?? this.newId());
         return;
 
       case 'session.switch':
-        this.#move(connection, message.sessionKey);
+        this.move(connection, message.sessionKey);
         return;
 
       case 'session.resume':
-        this.#resume(connection, message.sessionKey, message.lastSeq);
+        this.resume(connection, message.sessionKey, message.lastSeq);
         return;
 
       case 'tool.approve': {
-        const answered = this.#approvals.resolve(message.callId, message.approved, message.scope);
+        const answered = this.approvals.resolve(
+          message.callId,
+          message.approved,
+          message.scope,
+        );
         // An unanswered `callId` is the normal two-tab race, or an answer to a
         // call whose turn was stopped. Neither is worth an error frame.
         if (!answered) {
-          this.#logger.debug({ callId: message.callId }, 'approval answered too late');
+          this.logger.debug(
+            { callId: message.callId },
+            'approval answered too late',
+          );
         }
         return;
       }
 
       case 'audio.transcribe':
-        this.#error(
+        this.error(
           connection,
           'config_invalid',
           'Audio transcription is not configured on this server',
@@ -639,8 +663,11 @@ export class SessionHub {
    * an ack that waited for persistence would be an ack that waits for the turn
    * in front of it to finish, which is the one moment the client needs it.
    */
-  #submit(connection: Connection, message: Extract<ClientMessage, { type: 'user.message' }>): void {
-    const state = this.#session(message.sessionKey);
+  private submit(
+    connection: Connection,
+    message: Extract<ClientMessage, { type: 'user.message' }>,
+  ): void {
+    const state = this.session(message.sessionKey);
     const clientMessageId = message.clientMessageId;
 
     if (clientMessageId !== undefined) {
@@ -650,11 +677,11 @@ export class SessionHub {
         // first attempt got and no second turn queued — the ack is idempotent
         // because the client keys on `messageId`, and re-acking is what tells a
         // reconnecting tab its message did land.
-        this.#logger.debug(
+        this.logger.debug(
           { sessionKey: state.key, clientMessageId },
           'duplicate client message id, not re-queued',
         );
-        this.#emit(state, {
+        this.emit(state, {
           type: 'message.ack',
           sessionKey: state.key,
           messageId: known,
@@ -665,11 +692,11 @@ export class SessionHub {
     }
 
     if (message.content === '' && message.attachments.length === 0) {
-      this.#error(connection, 'bad_request', 'Message is empty');
+      this.error(connection, 'bad_request', 'Message is empty');
       return;
     }
 
-    this.#enqueue(connection, state, {
+    this.enqueue(connection, state, {
       content: toContent(message.content, message.attachments),
       // Here, and only here. Parsing mentions in the WebSocket handler would
       // make `@kb:` a browser feature: a channel bridging through this hub
@@ -689,7 +716,7 @@ export class SessionHub {
    * are the contract a client renders against, and three copies of it would be
    * three chances for a retry path to behave unlike the path it retries.
    */
-  #enqueue(
+  private enqueue(
     connection: Connection,
     state: SessionState,
     turn: {
@@ -699,8 +726,8 @@ export class SessionHub {
       readonly agentId?: string;
     },
   ): void {
-    if (state.queue.length >= this.#maxQueueDepth) {
-      this.#error(
+    if (state.queue.length >= this.maxQueueDepth) {
+      this.error(
         connection,
         'session_busy',
         `This session already has ${String(state.queue.length)} messages waiting. Let it catch up.`,
@@ -709,8 +736,10 @@ export class SessionHub {
       return;
     }
 
-    const id = this.#newId();
-    if (turn.clientMessageId !== undefined) this.#remember(state, turn.clientMessageId, id);
+    const id = this.newId();
+    if (turn.clientMessageId !== undefined) {
+      this.remember(state, turn.clientMessageId, id);
+    }
 
     state.queue.push({
       id,
@@ -721,24 +750,26 @@ export class SessionHub {
       mentions: turn.mentions,
     });
 
-    this.#emit(state, {
+    this.emit(state, {
       type: 'message.ack',
       sessionKey: state.key,
       messageId: id,
-      ...(turn.clientMessageId === undefined ? {} : { clientMessageId: turn.clientMessageId }),
+      ...(turn.clientMessageId === undefined
+        ? {}
+        : { clientMessageId: turn.clientMessageId }),
     });
 
     if (state.running !== undefined) {
-      this.#emit(state, {
+      this.emit(state, {
         type: 'message.queued',
         sessionKey: state.key,
         queueDepth: state.queue.length,
       });
-      this.#status(state);
+      this.status(state);
       return;
     }
 
-    this.#drain(state);
+    this.drain(state);
   }
 
   /**
@@ -749,21 +780,21 @@ export class SessionHub {
    * deleting the answer would destroy what the user had and give nothing back,
    * and it is the one ordering mistake here that is not recoverable.
    */
-  #regenerate(
+  private regenerate(
     connection: Connection,
     message: Extract<ClientMessage, { type: 'turn.regenerate' }>,
   ): void {
-    const state = this.#session(message.sessionKey);
+    const state = this.session(message.sessionKey);
 
-    if (this.#loop(undefined) === null) {
-      this.#error(connection, 'not_configured', NO_MODEL_MESSAGE, false);
+    if (this.loop(undefined) === null) {
+      this.error(connection, 'not_configured', NO_MODEL_MESSAGE, false);
       return;
     }
 
     // A queued message would otherwise run against a history that is about to
     // change underneath it.
     if (state.running !== undefined || state.queue.length > 0) {
-      this.#error(
+      this.error(
         connection,
         'session_busy',
         'A turn is running on this session. Stop it, then try again.',
@@ -774,17 +805,22 @@ export class SessionHub {
 
     const target =
       message.seq === undefined
-        ? this.#lastQuestion(state.key)
-        : this.#userMessageAt(state.key, message.seq);
+        ? this.lastQuestion(state.key)
+        : this.userMessageAt(state.key, message.seq);
     if (target === undefined) {
-      this.#error(connection, 'bad_request', 'There is nothing to regenerate on this session.');
+      this.error(
+        connection,
+        'bad_request',
+        'There is nothing to regenerate on this session.',
+      );
       return;
     }
 
     // Read before the delete, because the delete is what removes it.
-    const content = target.message.role === 'user' ? target.message.content : [];
-    this.#rewind(state, target.seq);
-    this.#enqueue(connection, state, {
+    const content =
+      target.message.role === 'user' ? target.message.content : [];
+    this.rewind(state, target.seq);
+    this.enqueue(connection, state, {
       content,
       mentions: parseMentions(textOf(target.message)),
       // Forwarded exactly as `#edit` does. The rewind above deletes the question
@@ -797,16 +833,19 @@ export class SessionHub {
   }
 
   /** Replaces a message and re-runs from it. Same guards as `#regenerate`. */
-  #edit(connection: Connection, message: Extract<ClientMessage, { type: 'user.edit' }>): void {
-    const state = this.#session(message.sessionKey);
+  private edit(
+    connection: Connection,
+    message: Extract<ClientMessage, { type: 'user.edit' }>,
+  ): void {
+    const state = this.session(message.sessionKey);
 
-    if (this.#loop(undefined) === null) {
-      this.#error(connection, 'not_configured', NO_MODEL_MESSAGE, false);
+    if (this.loop(undefined) === null) {
+      this.error(connection, 'not_configured', NO_MODEL_MESSAGE, false);
       return;
     }
 
     if (state.running !== undefined || state.queue.length > 0) {
-      this.#error(
+      this.error(
         connection,
         'session_busy',
         'A turn is running on this session. Stop it, then try again.',
@@ -815,18 +854,18 @@ export class SessionHub {
       return;
     }
 
-    if (this.#userMessageAt(state.key, message.seq) === undefined) {
-      this.#error(connection, 'bad_request', 'That message cannot be edited.');
+    if (this.userMessageAt(state.key, message.seq) === undefined) {
+      this.error(connection, 'bad_request', 'That message cannot be edited.');
       return;
     }
 
     if (message.content === '' && message.attachments.length === 0) {
-      this.#error(connection, 'bad_request', 'Message is empty');
+      this.error(connection, 'bad_request', 'Message is empty');
       return;
     }
 
-    this.#rewind(state, message.seq);
-    this.#enqueue(connection, state, {
+    this.rewind(state, message.seq);
+    this.enqueue(connection, state, {
       content: toContent(message.content, message.attachments),
       mentions: parseMentions(message.content),
       ...(message.clientMessageId === undefined
@@ -844,24 +883,30 @@ export class SessionHub {
    * re-running would write the same question twice — once from history and once
    * from the loop. The question is deleted here and rewritten there.
    */
-  #rewind(state: SessionState, seq: number): void {
-    const result = this.#store.truncateAfter(state.key, seq - 1);
-    this.#emit(state, {
+  private rewind(state: SessionState, seq: number): void {
+    const result = this.store.truncateAfter(state.key, seq - 1);
+    this.emit(state, {
       type: 'session.truncated',
       sessionKey: state.key,
       upToSeq: result.seq,
       // The surviving tail, so a client rebuilds from this frame rather than
       // racing a refetch against the turn that is about to start. Sequenced, so
       // every other attached tab corrects itself with no code of its own.
-      messages: this.#store
+      messages: this.store
         .messages(state.key, { limit: RESUME_MESSAGE_LIMIT, fromEnd: true })
         .map(toStoredMessage),
     });
   }
 
   /** The stored row at `seq`, if it is a message the user wrote. */
-  #userMessageAt(sessionKey: string, seq: number): StoredMessageRecord | undefined {
-    const [record] = this.#store.messages(sessionKey, { afterSeq: seq - 1, beforeSeq: seq + 1 });
+  private userMessageAt(
+    sessionKey: string,
+    seq: number,
+  ): StoredMessageRecord | undefined {
+    const [record] = this.store.messages(sessionKey, {
+      afterSeq: seq - 1,
+      beforeSeq: seq + 1,
+    });
     return record?.message.role === 'user' ? record : undefined;
   }
 
@@ -872,14 +917,23 @@ export class SessionHub {
    * rows mid-turn under the same turn id, and the last of those is a correction
    * to the answer rather than the question that asked for it.
    */
-  #lastQuestion(sessionKey: string): StoredMessageRecord | undefined {
-    const tail = this.#store.messages(sessionKey, { limit: RESUME_MESSAGE_LIMIT, fromEnd: true });
+  private lastQuestion(sessionKey: string): StoredMessageRecord | undefined {
+    const tail = this.store.messages(sessionKey, {
+      limit: RESUME_MESSAGE_LIMIT,
+      fromEnd: true,
+    });
     const turnId = tail.at(-1)?.turnId;
     if (turnId === undefined) return undefined;
-    return tail.find((record) => record.turnId === turnId && record.message.role === 'user');
+    return tail.find(
+      (record) => record.turnId === turnId && record.message.role === 'user',
+    );
   }
 
-  #remember(state: SessionState, clientMessageId: string, messageId: string): void {
+  private remember(
+    state: SessionState,
+    clientMessageId: string,
+    messageId: string,
+  ): void {
     state.acked.set(clientMessageId, messageId);
     for (const oldest of state.acked.keys()) {
       if (state.acked.size <= MAX_TRACKED_CLIENT_MESSAGE_IDS) break;
@@ -892,13 +946,13 @@ export class SessionHub {
   // -------------------------------------------------------------------------
 
   /** Starts the next queued turn if the session is free. Returns whether it did. */
-  #drain(state: SessionState): boolean {
+  private drain(state: SessionState): boolean {
     if (state.running !== undefined) return false;
     const next = state.queue.shift();
     if (next === undefined) return false;
     // The turn is set up synchronously before the first `await`, so `running` is
     // populated by the time this returns.
-    void this.#runTurn(state, next);
+    void this.runTurn(state, next);
     return true;
   }
 
@@ -910,7 +964,7 @@ export class SessionHub {
    * render as a spinner forever, so the failure path emits both the error and
    * the close.
    */
-  async #runTurn(state: SessionState, turn: QueuedTurn): Promise<void> {
+  private async runTurn(state: SessionState, turn: QueuedTurn): Promise<void> {
     const controller = new AbortController();
     /**
      * Set once the loop's `turn.start` has reached the clients.
@@ -928,11 +982,11 @@ export class SessionHub {
       // The rule lives in `agent-binding.ts`: sixty lines of domain policy do
       // not belong in the file that frames sockets.
       const requested = agentForTurn({
-        stored: this.#store.getSession(state.key)?.agentId,
+        stored: this.store.getSession(state.key)?.agentId,
         requested: turn.agentId,
-        resolves: (agentId) => this.#resolveAgentId(agentId).miss === undefined,
+        resolves: (agentId) => this.resolveAgentId(agentId).miss === undefined,
       });
-      const { agentId, miss } = this.#resolveAgentId(requested);
+      const { agentId, miss } = this.resolveAgentId(requested);
       if (miss !== undefined) {
         // Said out loud every turn, not once. The fallback is re-decided each
         // time — nothing is written to make it stick — so a notice that fired
@@ -947,7 +1001,7 @@ export class SessionHub {
         // conversation's binding rather than about anything the turn did, and
         // the turn it would name has not started yet — a notice addressed to a
         // turn the transcript has no item for is one the client silently drops.
-        this.#emit(state, {
+        this.emit(state, {
           type: 'notice',
           kind: 'agent_fallback',
           message:
@@ -959,13 +1013,13 @@ export class SessionHub {
 
       let runner: TurnRunner | null;
       try {
-        runner = this.#loop(agentId);
+        runner = this.loop(agentId);
       } catch (error) {
         // Not a missing agent any more — `resolveAgentId` just ruled that out —
         // but an agent that exists and cannot be built, which is a real fault.
         // Reported on the frame that asked for it: the connection is fine, and
         // every other session on it keeps working.
-        this.#failTurn(state, turn.id, error);
+        this.failTurn(state, turn.id, error);
         return;
       }
       if (runner === null) {
@@ -973,7 +1027,7 @@ export class SessionHub {
         // where the turn would have been, and `turn.end` is *not* emitted,
         // because no turn ever started — a client that saw one close would
         // render an empty assistant message for a request nothing ran.
-        this.#broadcast(state, {
+        this.broadcastToSession(state, {
           type: 'error',
           code: 'not_configured',
           message: NO_MODEL_MESSAGE,
@@ -983,8 +1037,8 @@ export class SessionHub {
         return;
       }
       state.running = { turnId: turn.id, controller, runner };
-      state.touchedAtMs = this.#clock.now();
-      this.#status(state);
+      state.touchedAtMs = this.clock.now();
+      this.status(state);
 
       const events = runner.run({
         sessionKey: state.key,
@@ -993,7 +1047,9 @@ export class SessionHub {
         channel: turn.channel,
         turnId: turn.id,
         mentions: turn.mentions,
-        ...(turn.workspaceId === undefined ? {} : { workspaceId: turn.workspaceId }),
+        ...(turn.workspaceId === undefined
+          ? {}
+          : { workspaceId: turn.workspaceId }),
         // The *resolved* id, so the loop that runs and the binding it writes
         // agree. Passing the frame's raw id would let a turn run on `default`
         // while `ensureSession` recorded a session bound to an agent that does
@@ -1010,16 +1066,16 @@ export class SessionHub {
         // the client already has. The loop opens the turn before anything that
         // can throw, so in practice this is set whenever the loop ran at all.
         if (event.type === 'turn.start') opened = { firstSeq: event.firstSeq };
-        this.#forward(state, event);
+        this.forward(state, event);
       }
     } catch (error) {
-      this.#failTurn(state, turn.id, error, opened);
+      this.failTurn(state, turn.id, error, opened);
     } finally {
       state.running = undefined;
-      state.touchedAtMs = this.#clock.now();
+      state.touchedAtMs = this.clock.now();
       // The next turn's own `turn.start` and status say the session is busy
       // again; announcing idle first would make a queue look like a gap.
-      if (!this.#drain(state)) this.#status(state);
+      if (!this.drain(state)) this.status(state);
     }
   }
 
@@ -1032,18 +1088,21 @@ export class SessionHub {
    * so a replay that has lost the original `turn.start` out of the ring buffer
    * would otherwise rebuild a turn with no address and offer no Regenerate.
    */
-  #failTurn(
+  private failTurn(
     state: SessionState,
     turnId: string,
     error: unknown,
     opened?: { readonly firstSeq: number | undefined },
   ): void {
-    const address = opened?.firstSeq === undefined ? {} : ({ firstSeq: opened.firstSeq } as const);
+    const address =
+      opened?.firstSeq === undefined
+        ? {}
+        : ({ firstSeq: opened.firstSeq } as const);
 
     if (isAbortError(error)) {
       // The loop normally yields `turn.end` with `aborted` itself; a throw here
       // means it unwound before it could, and the turn still has to close.
-      this.#emit(state, {
+      this.emit(state, {
         type: 'turn.end',
         turnId,
         stopReason: 'aborted',
@@ -1058,15 +1117,18 @@ export class SessionHub {
     // route. It also decides what is safe to say: an unexpected throw's message
     // was written for a stack trace, not for whoever is connected.
     const resolved = resolveError(error);
-    this.#logger.error({ sessionKey: state.key, turnId, err: resolved.cause }, 'turn failed');
-    this.#broadcast(state, {
+    this.logger.error(
+      { sessionKey: state.key, turnId, err: resolved.cause },
+      'turn failed',
+    );
+    this.broadcastToSession(state, {
       type: 'error',
       code: resolved.code,
       message: resolved.body.error.message,
       retryable: resolved.cause.retryable,
       turnId,
     });
-    this.#emit(state, {
+    this.emit(state, {
       type: 'turn.end',
       turnId,
       stopReason: 'error',
@@ -1082,71 +1144,78 @@ export class SessionHub {
    * a connection or a turn rather than to a session's replayable history — so it
    * broadcasts without a counter and never enters the ring.
    */
-  #forward(state: SessionState, event: AgentEvent): void {
+  private forward(state: SessionState, event: AgentEvent): void {
     if (event.type === 'error') {
-      this.#broadcast(state, event);
+      this.broadcastToSession(state, event);
       return;
     }
-    this.#emit(state, event);
+    this.emit(state, event);
   }
 
   // -------------------------------------------------------------------------
   // Sessions and replay
   // -------------------------------------------------------------------------
 
-  #session(key: string): SessionState {
-    const existing = this.#sessions.get(key);
+  private session(key: string): SessionState {
+    const existing = this.sessions.get(key);
     if (existing !== undefined) {
-      existing.touchedAtMs = this.#clock.now();
+      existing.touchedAtMs = this.clock.now();
       return existing;
     }
 
     const state: SessionState = {
       key,
       seq: 0,
-      ring: new ReplayBuffer(this.#config.server.replayBufferSize),
+      ring: new ReplayBuffer(this.config.server.replayBufferSize),
       clients: new Set(),
       queue: [],
       running: undefined,
       acked: new Map(),
-      touchedAtMs: this.#clock.now(),
+      touchedAtMs: this.clock.now(),
     };
-    this.#sessions.set(key, state);
+    this.sessions.set(key, state);
     // Excluded from its own eviction: nothing has attached to it yet, so by
     // every measure of "idle" it is the best victim in the map — and evicting
     // the session a client is in the middle of opening would drop the state
     // that call is about to use.
-    this.#evict(key);
+    this.evict(key);
     return state;
   }
 
   /** Drops the oldest idle sessions until the cap holds, or nothing is idle. */
-  #evict(exclude: string): void {
-    while (this.#sessions.size > this.#maxSessions) {
+  private evict(exclude: string): void {
+    while (this.sessions.size > this.maxSessions) {
       let victim: SessionState | undefined;
-      for (const state of this.#sessions.values()) {
+      for (const state of this.sessions.values()) {
         if (state.key === exclude) continue;
         const idle =
-          state.clients.size === 0 && state.running === undefined && state.queue.length === 0;
+          state.clients.size === 0 &&
+          state.running === undefined &&
+          state.queue.length === 0;
         if (!idle) continue;
-        if (victim === undefined || state.touchedAtMs < victim.touchedAtMs) victim = state;
+        if (victim === undefined || state.touchedAtMs < victim.touchedAtMs) {
+          victim = state;
+        }
       }
       if (victim === undefined) return;
-      this.#sessions.delete(victim.key);
-      this.#approvals.clearSession(victim.key);
-      this.#logger.debug({ sessionKey: victim.key }, 'evicted idle session state');
+      this.sessions.delete(victim.key);
+      this.approvals.clearSession(victim.key);
+      this.logger.debug(
+        { sessionKey: victim.key },
+        'evicted idle session state',
+      );
     }
   }
 
   /** Moves a connection onto another session and reports where it landed. */
-  #move(connection: Connection, sessionKey: string): SessionState {
-    const target = this.#session(sessionKey);
+  private move(connection: Connection, sessionKey: string): SessionState {
+    const target = this.session(sessionKey);
     if (connection.sessionKey !== sessionKey) {
-      this.#sessions.get(connection.sessionKey)?.clients.delete(connection);
+      this.sessions.get(connection.sessionKey)?.clients.delete(connection);
       connection.sessionKey = sessionKey;
       target.clients.add(connection);
     }
-    this.#status(target);
+    this.status(target);
     return target;
   }
 
@@ -1160,23 +1229,27 @@ export class SessionHub {
    * REST. Never both, because a stored assistant message and the deltas that
    * produced it are the same text twice.
    */
-  #resume(connection: Connection, sessionKey: string, lastSeq: number): void {
-    const state = this.#move(connection, sessionKey);
+  private resume(
+    connection: Connection,
+    sessionKey: string,
+    lastSeq: number,
+  ): void {
+    const state = this.move(connection, sessionKey);
     const slice = state.ring.after(lastSeq);
 
-    this.#emit(state, {
+    this.emit(state, {
       type: 'session.replay',
       sessionKey: state.key,
       messages: slice.complete
         ? []
-        : this.#store
+        : this.store
             .messages(state.key, { limit: RESUME_MESSAGE_LIMIT, fromEnd: true })
             .map(toStoredMessage),
       complete: slice.complete,
     });
 
     if (!slice.complete) {
-      this.#logger.info(
+      this.logger.info(
         { sessionKey: state.key, lastSeq, ringSize: state.ring.size },
         'resume fell outside the replay buffer',
       );
@@ -1187,23 +1260,23 @@ export class SessionHub {
     // connection that missed them. They therefore arrive *after* an envelope
     // carrying a higher number, which is why a client tracks the maximum `seq`
     // it has seen rather than the last one it was handed.
-    for (const message of slice.messages) this.#deliver(connection, message);
+    for (const message of slice.messages) this.deliver(connection, message);
   }
 
-  #status(state: SessionState): void {
-    this.#emit(state, {
+  private status(state: SessionState): void {
+    this.emit(state, {
       type: 'session.status',
       sessionKey: state.key,
       busy: state.running !== undefined,
       queueDepth: state.queue.length,
-      workspaceId: this.#storedWorkspace(state.key) ?? DEFAULT_WORKSPACE_ID,
+      workspaceId: this.storedWorkspace(state.key) ?? DEFAULT_WORKSPACE_ID,
       ...(state.running === undefined ? {} : { turnId: state.running.turnId }),
     });
   }
 
   /** The workspace a session is bound to, or `undefined` before its first turn. */
-  #storedWorkspace(sessionKey: string): string | undefined {
-    return this.#store.getSession(sessionKey)?.workspaceId;
+  private storedWorkspace(sessionKey: string): string | undefined {
+    return this.store.getSession(sessionKey)?.workspaceId;
   }
 
   /**
@@ -1214,9 +1287,11 @@ export class SessionHub {
    * workspace from drifting from the session's. Before a session has a row,
    * the answer is what this connection would create it in.
    */
-  #workspaceOf(connection: Connection): string {
+  private workspaceOf(connection: Connection): string {
     return (
-      this.#storedWorkspace(connection.sessionKey) ?? connection.workspaceId ?? DEFAULT_WORKSPACE_ID
+      this.storedWorkspace(connection.sessionKey) ??
+      connection.workspaceId ??
+      DEFAULT_WORKSPACE_ID
     );
   }
 
@@ -1224,7 +1299,7 @@ export class SessionHub {
   // Outbound
   // -------------------------------------------------------------------------
 
-  #emit(state: SessionState, event: HubEvent): void {
+  private emit(state: SessionState, event: HubEvent): void {
     state.seq += 1;
     // `AgentEvent` and every hub-originated event above is a `ServerMessage`
     // minus its `seq`; stamping the counter completes it, and the compiler
@@ -1232,36 +1307,46 @@ export class SessionHub {
     // through `ServerMessageSchema`, so the runtime shape is checked too.
     const message: SequencedServerMessage = { ...event, seq: state.seq };
     state.ring.push(message);
-    this.#broadcast(state, message);
+    this.broadcastToSession(state, message);
   }
 
   /** A copy of the set, because a failing send detaches the connection mid-loop. */
-  #broadcast(state: SessionState, message: ServerMessage): void {
-    for (const connection of [...state.clients]) this.#deliver(connection, message);
+  private broadcastToSession(
+    state: SessionState,
+    message: ServerMessage,
+  ): void {
+    for (const connection of [...state.clients]) {
+      this.deliver(connection, message);
+    }
   }
 
-  #deliver(connection: Connection, message: ServerMessage): void {
+  private deliver(connection: Connection, message: ServerMessage): void {
     if (connection.closed) return;
     try {
       connection.send(message);
     } catch (error) {
-      this.#logger.warn(
+      this.logger.warn(
         { connectionId: connection.id, err: error, type: message.type },
         'connection send failed, detaching',
       );
-      this.#disconnect(connection);
+      this.disconnect(connection);
     }
   }
 
-  #error(connection: Connection, code: ErrorCode, message: string, retryable = false): void {
-    this.#deliver(connection, { type: 'error', code, message, retryable });
+  private error(
+    connection: Connection,
+    code: ErrorCode,
+    message: string,
+    retryable = false,
+  ): void {
+    this.deliver(connection, { type: 'error', code, message, retryable });
   }
 
-  #disconnect(connection: Connection): void {
+  private disconnect(connection: Connection): void {
     if (connection.closed) return;
     connection.closed = true;
-    this.#sessions.get(connection.sessionKey)?.clients.delete(connection);
-    this.#logger.debug(
+    this.sessions.get(connection.sessionKey)?.clients.delete(connection);
+    this.logger.debug(
       { connectionId: connection.id, sessionKey: connection.sessionKey },
       'hub connection closed',
     );

@@ -43,7 +43,9 @@ export function formatDuration(ms: number): string {
     case 'ms':
       return `${String(parts.value)}ms`;
     case 'second':
-      return parts.fractional ? `${parts.value.toFixed(1)}s` : `${String(parts.value)}s`;
+      return parts.fractional
+        ? `${parts.value.toFixed(1)}s`
+        : `${String(parts.value)}s`;
     case 'minute':
       return `${String(parts.value)}m ${String(parts.remainder).padStart(2, '0')}s`;
     case 'hour':
@@ -93,7 +95,10 @@ export function formatRelativeTime(
  * through to days.
  */
 const AGO_KEYS: Partial<
-  Record<Intl.RelativeTimeFormatUnit, 'time.minutesAgo' | 'time.hoursAgo' | 'time.daysAgo'>
+  Record<
+    Intl.RelativeTimeFormatUnit,
+    'time.minutesAgo' | 'time.hoursAgo' | 'time.daysAgo'
+  >
 > = {
   minute: 'time.minutesAgo',
   hour: 'time.hoursAgo',
@@ -101,7 +106,11 @@ const AGO_KEYS: Partial<
 };
 
 /** An absolute date, in the install's locale and zone, for anything older than a week. */
-export function formatDate(atMs: number, locale: string, timeZone?: string): string {
+export function formatDate(
+  atMs: number,
+  locale: string,
+  timeZone?: string,
+): string {
   return formatDateIn(atMs, locale, timeZone);
 }
 
@@ -114,7 +123,11 @@ export function formatDate(atMs: number, locale: string, timeZone?: string): str
  * "Next run", where it rendered `8 Aug 2026` for a field that exists to say
  * *when*.
  */
-export function formatDateTime(atMs: number, locale: string, timeZone?: string): string {
+export function formatDateTime(
+  atMs: number,
+  locale: string,
+  timeZone?: string,
+): string {
   return formatDateTimeIn(atMs, locale, timeZone);
 }
 
@@ -162,7 +175,9 @@ export function summariseArgs(args: unknown, maxChars = 80): string {
 
   const text = typeof args === 'string' ? args : stringify(args);
   const oneLine = text.replace(/\s+/g, ' ').trim();
-  return oneLine.length <= maxChars ? oneLine : `${oneLine.slice(0, maxChars - 1)}…`;
+  return oneLine.length <= maxChars
+    ? oneLine
+    : `${oneLine.slice(0, maxChars - 1)}…`;
 }
 
 /** Pretty JSON when it is JSON, and the string itself when it never was. */

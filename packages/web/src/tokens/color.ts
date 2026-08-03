@@ -26,7 +26,12 @@ export interface Rgba {
 }
 
 /** OKLCH → sRGB. `l` is 0–1, `c` is absolute, `h` is degrees. */
-export function oklchToRgba(l: number, c: number, h: number, alpha: number = 1): Rgba {
+export function oklchToRgba(
+  l: number,
+  c: number,
+  h: number,
+  alpha: number = 1,
+): Rgba {
   const hRad = (h * Math.PI) / 180;
   const a = c * Math.cos(hRad);
   const b = c * Math.sin(hRad);
@@ -53,7 +58,12 @@ export function oklchToRgba(l: number, c: number, h: number, alpha: number = 1):
 }
 
 /** sRGB channels 0–255 → the same structure, so `rgb()` tokens compare directly. */
-export function rgb255ToRgba(r: number, g: number, b: number, alpha: number = 1): Rgba {
+export function rgb255ToRgba(
+  r: number,
+  g: number,
+  b: number,
+  alpha: number = 1,
+): Rgba {
   return { r: r / 255, g: g / 255, b: b / 255, a: alpha, outOfGamut: false };
 }
 
@@ -77,7 +87,9 @@ export function composite(fg: Rgba, bg: Rgba): Rgba {
 
 /** WCAG 2.1 relative luminance. Expects an opaque colour. */
 export function relativeLuminance({ r, g, b }: Rgba): number {
-  return 0.2126 * decodeSrgb(r) + 0.7152 * decodeSrgb(g) + 0.0722 * decodeSrgb(b);
+  return (
+    0.2126 * decodeSrgb(r) + 0.7152 * decodeSrgb(g) + 0.0722 * decodeSrgb(b)
+  );
 }
 
 /** WCAG 2.1 contrast ratio, 1–21. Both colours must be opaque. */

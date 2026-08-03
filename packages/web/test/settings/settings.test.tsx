@@ -28,18 +28,32 @@ import { ConfigSchema, type ConfigPatch } from '@ghostai/protocol';
 
 import { Providers } from '@/app/providers.js';
 import { createAppRouter } from '@/app/router.js';
-import { stubApi, testQueryClient, type RecordedRequest, type StubRoute } from '@testkit/render.js';
+import {
+  stubApi,
+  testQueryClient,
+  type RecordedRequest,
+  type StubRoute,
+} from '@testkit/render.js';
 import { STATUS } from '@testkit/fixtures.js';
 
 const CONFIG = ConfigSchema.parse({
-  agents: { defaults: { model: 'llama3', provider: 'ollama', maxTokens: 4096 } },
+  agents: {
+    defaults: { model: 'llama3', provider: 'ollama', maxTokens: 4096 },
+  },
   providers: {
-    ollama: { type: 'ollama', apiBase: 'http://127.0.0.1:11434/v1', models: ['llama3'] },
+    ollama: {
+      type: 'ollama',
+      apiBase: 'http://127.0.0.1:11434/v1',
+      models: ['llama3'],
+    },
     openai: { type: 'openai' },
   },
 });
 
-const SETTINGS = { config: CONFIG, credentialsPresent: { ollama: false, openai: true } };
+const SETTINGS = {
+  config: CONFIG,
+  credentialsPresent: { ollama: false, openai: true },
+};
 
 /**
  * Both halves of the response: the registry catalogue an endpoint is added
@@ -108,7 +122,13 @@ const TOOLS = {
       risk: 'safe',
       source: 'builtin',
     },
-    { name: 'exec', description: 'Run a command', parameters: {}, risk: 'exec', source: 'builtin' },
+    {
+      name: 'exec',
+      description: 'Run a command',
+      parameters: {},
+      risk: 'exec',
+      source: 'builtin',
+    },
   ],
 };
 
@@ -136,7 +156,10 @@ function mount(
     'PATCH /api/settings': [200, SETTINGS],
     'PUT /api/settings/credentials': [204, null],
     '/api/providers': [200, PROVIDERS],
-    '/api/models': [200, { models: [{ id: 'llama3', providerId: 'ollama' }], errors: {} }],
+    '/api/models': [
+      200,
+      { models: [{ id: 'llama3', providerId: 'ollama' }], errors: {} },
+    ],
     '/api/tools': [200, TOOLS],
     ...overrides,
   });
@@ -154,7 +177,9 @@ function mount(
 }
 
 const patchesOf = (calls: readonly RecordedRequest[]): ConfigPatch[] =>
-  calls.filter((call) => call.method === 'PATCH').map((call) => call.body as ConfigPatch);
+  calls
+    .filter((call) => call.method === 'PATCH')
+    .map((call) => call.body as ConfigPatch);
 
 beforeEach(() => {
   // Nothing to reset here beyond what `test/setup.ts` already does; the stub is
@@ -167,7 +192,9 @@ describe('the settings screen', () => {
       '/api/settings': [200, { ...SETTINGS, loadError: 'Unexpected token }' }],
     });
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('could not be read');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'could not be read',
+    );
   });
 });
 
@@ -177,7 +204,9 @@ async function rowAction(
   row: string,
   action: string,
 ): Promise<void> {
-  await user.click(await screen.findByRole('button', { name: `Actions for ${row}` }));
+  await user.click(
+    await screen.findByRole('button', { name: `Actions for ${row}` }),
+  );
   await user.click(await screen.findByRole('menuitem', { name: action }));
 }
 
@@ -193,9 +222,9 @@ describe('the providers panel', () => {
   it('reports each endpoint\u2019s key and status in words rather than in colour', async () => {
     mount('/settings?panel=providers');
 
-    const rows = within(await screen.findByRole('list', { name: 'Providers' })).getAllByRole(
-      'listitem',
-    );
+    const rows = within(
+      await screen.findByRole('list', { name: 'Providers' }),
+    ).getAllByRole('listitem');
     // One per endpoint. There is no heading row any more — the list is cards.
     expect(rows).toHaveLength(2);
     expect(rows[0]).toHaveTextContent('no key');
@@ -209,14 +238,17 @@ describe('the providers panel', () => {
         200,
         {
           types: PROVIDERS.types,
-          instances: [{ ...PROVIDERS.instances[0], enabled: false }, PROVIDERS.instances[1]],
+          instances: [
+            { ...PROVIDERS.instances[0], enabled: false },
+            PROVIDERS.instances[1],
+          ],
         },
       ],
     });
 
-    const rows = within(await screen.findByRole('list', { name: 'Providers' })).getAllByRole(
-      'listitem',
-    );
+    const rows = within(
+      await screen.findByRole('list', { name: 'Providers' }),
+    ).getAllByRole('listitem');
     expect(rows[0]).toHaveTextContent('Disabled');
   });
 
@@ -230,7 +262,9 @@ describe('the providers panel', () => {
     await waitFor(() => {
       expect(patchesOf(calls)).toHaveLength(1);
     });
-    expect(patchesOf(calls)[0]?.providers).toEqual({ ollama: { enabled: false } });
+    expect(patchesOf(calls)[0]?.providers).toEqual({
+      ollama: { enabled: false },
+    });
   });
 
   it('offers Enable on one that is already off', async () => {
@@ -249,7 +283,9 @@ describe('the providers panel', () => {
     await waitFor(() => {
       expect(patchesOf(calls)).toHaveLength(1);
     });
-    expect(patchesOf(calls)[0]?.providers).toEqual({ ollama: { enabled: true } });
+    expect(patchesOf(calls)[0]?.providers).toEqual({
+      ollama: { enabled: true },
+    });
   });
 
   it('creates an endpoint on the same form that edits one, writing nothing early', async () => {
@@ -287,7 +323,9 @@ describe('the providers panel', () => {
     // On success, not on the press: navigating early lands the editor on a
     // settings cache that has never seen the endpoint it was sent to.
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/settings/providers/ollama-2');
+      expect(router.state.location.pathname).toBe(
+        '/settings/providers/ollama-2',
+      );
     });
   });
 
@@ -303,7 +341,9 @@ describe('the providers panel', () => {
     const { user, calls } = mount('/settings?panel=providers');
 
     await rowAction(user, 'OpenAI', 'Delete');
-    expect(await screen.findByRole('dialog')).toHaveTextContent('its saved key is deleted with it');
+    expect(await screen.findByRole('dialog')).toHaveTextContent(
+      'its saved key is deleted with it',
+    );
     // Asking is not doing.
     expect(patchesOf(calls)).toHaveLength(0);
 
@@ -322,8 +362,12 @@ describe('the providers panel', () => {
     mount('/settings?panel=providers');
 
     await screen.findByRole('list', { name: 'Providers' });
-    expect(screen.queryByRole('button', { name: /Refresh model lists/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Check for models/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Refresh model lists/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Check for models/ }),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -336,16 +380,26 @@ describe('the tools panel', () => {
 
     await screen.findByLabelText('Approval timeout (seconds)');
 
-    expect(screen.queryByRole('region', { name: 'Registered tools' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('combobox', { name: /policy/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'Ask first' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('region', { name: 'Registered tools' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('combobox', { name: /policy/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('option', { name: 'Ask first' }),
+    ).not.toBeInTheDocument();
   });
 
   it('says how the install-wide exec switch differs from a per-agent one', async () => {
     mount('/settings?panel=tools');
 
-    expect(await screen.findByLabelText('Let agents run commands')).toBeInTheDocument();
-    expect(screen.getByText(/removes exec from every agent/)).toBeInTheDocument();
+    expect(
+      await screen.findByLabelText('Let agents run commands'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/removes exec from every agent/),
+    ).toBeInTheDocument();
   });
 
   it('refuses an approval timeout of zero', async () => {
@@ -356,7 +410,9 @@ describe('the tools panel', () => {
     await user.type(timeout, '0');
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Must be at least 1');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Must be at least 1',
+    );
     expect(patchesOf(calls)).toHaveLength(0);
   });
 });
@@ -366,8 +422,12 @@ describe('a panel whose system lands in a later phase', () => {
     mount('/settings?panel=extensions');
 
     expect(await screen.findByText('MCP servers')).toBeInTheDocument();
-    expect(screen.getByText('Plugins').closest('li')?.textContent).toContain('Phase 4');
-    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+    expect(screen.getByText('Plugins').closest('li')?.textContent).toContain(
+      'Phase 4',
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Save changes' }),
+    ).not.toBeInTheDocument();
   });
 
   it('is reachable from the tab strip and lands in the URL', async () => {
@@ -393,20 +453,31 @@ describe('a panel whose system lands in a later phase', () => {
  */
 describe('the account panel', () => {
   const ACCOUNT_ROUTES: Record<string, StubRoute> = {
-    '/api/auth/me': [200, { authenticated: true, authEnabled: true, username: 'ghost' }],
+    '/api/auth/me': [
+      200,
+      { authenticated: true, authEnabled: true, username: 'ghost' },
+    ],
     'POST /api/setup/password': [200, { ok: true, expiresAtMs: 99 }],
   };
 
   it('changes the password without touching the settings tree', async () => {
     const { user, calls } = mount('/settings?panel=account', ACCOUNT_ROUTES);
 
-    await user.type(await screen.findByLabelText('Current password'), 'the old password');
+    await user.type(
+      await screen.findByLabelText('Current password'),
+      'the old password',
+    );
     await user.type(screen.getByLabelText('New password'), 'the new password');
-    await user.type(screen.getByLabelText('Confirm new password'), 'the new password');
+    await user.type(
+      screen.getByLabelText('Confirm new password'),
+      'the new password',
+    );
     await user.click(screen.getByRole('button', { name: 'Change password' }));
 
     await waitFor(() => {
-      expect(calls.find((call) => call.path === '/api/setup/password')?.body).toEqual({
+      expect(
+        calls.find((call) => call.path === '/api/setup/password')?.body,
+      ).toEqual({
         currentPassword: 'the old password',
         password: 'the new password',
       });
@@ -425,13 +496,21 @@ describe('the account panel', () => {
     });
     await user.clear(username);
     await user.type(username, 'operator');
-    await user.type(screen.getByLabelText('Current password'), 'the old password');
+    await user.type(
+      screen.getByLabelText('Current password'),
+      'the old password',
+    );
     await user.type(screen.getByLabelText('New password'), 'the new password');
-    await user.type(screen.getByLabelText('Confirm new password'), 'the new password');
+    await user.type(
+      screen.getByLabelText('Confirm new password'),
+      'the new password',
+    );
     await user.click(screen.getByRole('button', { name: 'Change password' }));
 
     await waitFor(() => {
-      expect(calls.find((call) => call.path === '/api/setup/password')?.body).toEqual({
+      expect(
+        calls.find((call) => call.path === '/api/setup/password')?.body,
+      ).toEqual({
         username: 'operator',
         currentPassword: 'the old password',
         password: 'the new password',
@@ -444,22 +523,38 @@ describe('the account panel', () => {
   it('will not submit without the current password', async () => {
     const { user } = mount('/settings?panel=account', ACCOUNT_ROUTES);
 
-    await user.type(await screen.findByLabelText('New password'), 'the new password');
-    await user.type(screen.getByLabelText('Confirm new password'), 'the new password');
+    await user.type(
+      await screen.findByLabelText('New password'),
+      'the new password',
+    );
+    await user.type(
+      screen.getByLabelText('Confirm new password'),
+      'the new password',
+    );
 
-    expect(screen.getByRole('button', { name: 'Change password' })).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: 'Change password' }),
+    ).toBeDisabled();
   });
 
   it('refuses two new passwords that differ, without asking the server', async () => {
     const { user, calls } = mount('/settings?panel=account', ACCOUNT_ROUTES);
 
-    await user.type(await screen.findByLabelText('Current password'), 'the old password');
+    await user.type(
+      await screen.findByLabelText('Current password'),
+      'the old password',
+    );
     await user.type(screen.getByLabelText('New password'), 'the new password');
-    await user.type(screen.getByLabelText('Confirm new password'), 'a different one');
+    await user.type(
+      screen.getByLabelText('Confirm new password'),
+      'a different one',
+    );
     await user.click(screen.getByRole('button', { name: 'Change password' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('do not match');
-    expect(calls.some((call) => call.path === '/api/setup/password')).toBe(false);
+    expect(calls.some((call) => call.path === '/api/setup/password')).toBe(
+      false,
+    );
   });
 
   it('says the current password was wrong rather than reporting a generic failure', async () => {
@@ -467,15 +562,28 @@ describe('the account panel', () => {
       ...ACCOUNT_ROUTES,
       'POST /api/setup/password': [
         401,
-        { error: { code: 'unauthorized', message: 'Incorrect current password' } },
+        {
+          error: {
+            code: 'unauthorized',
+            message: 'Incorrect current password',
+          },
+        },
       ],
     });
 
-    await user.type(await screen.findByLabelText('Current password'), 'not the old one');
+    await user.type(
+      await screen.findByLabelText('Current password'),
+      'not the old one',
+    );
     await user.type(screen.getByLabelText('New password'), 'the new password');
-    await user.type(screen.getByLabelText('Confirm new password'), 'the new password');
+    await user.type(
+      screen.getByLabelText('Confirm new password'),
+      'the new password',
+    );
     await user.click(screen.getByRole('button', { name: 'Change password' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('not the current password');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'not the current password',
+    );
   });
 });

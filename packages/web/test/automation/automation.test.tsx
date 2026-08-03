@@ -17,11 +17,20 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
-import { ConfigSchema, type AutomationJob, type AutomationRun } from '@ghostai/protocol';
+import {
+  ConfigSchema,
+  type AutomationJob,
+  type AutomationRun,
+} from '@ghostai/protocol';
 
 import { Providers } from '@/app/providers.js';
 import { createAppRouter } from '@/app/router.js';
-import { stubApi, testQueryClient, type RecordedRequest, type StubRoute } from '@testkit/render.js';
+import {
+  stubApi,
+  testQueryClient,
+  type RecordedRequest,
+  type StubRoute,
+} from '@testkit/render.js';
 import { STATUS } from '@testkit/fixtures.js';
 
 const CONFIG = ConfigSchema.parse({});
@@ -31,7 +40,12 @@ const CRON_JOB: AutomationJob = {
   id: 'job-1',
   name: 'Nightly build',
   schedule: { kind: 'cron', expr: '0 9 * * *' },
-  payload: { kind: 'scheduled', message: 'check the build', deliver: false, targets: {} },
+  payload: {
+    kind: 'scheduled',
+    message: 'check the build',
+    deliver: false,
+    targets: {},
+  },
   enabled: true,
   deleteAfterRun: false,
   createdAtMs: 1,
@@ -122,9 +136,9 @@ describe('the sidebar', () => {
 describe('the Automation page', () => {
   it('shows a job with its schedule, its last outcome and when it runs next', async () => {
     mount();
-    const row = within(await screen.findByRole('list', { name: 'Automation' })).getByRole(
-      'listitem',
-    );
+    const row = within(
+      await screen.findByRole('list', { name: 'Automation' }),
+    ).getByRole('listitem');
 
     expect(row).toHaveTextContent('Nightly build');
     // The bare expression — the zone is the install's now, so repeating it on
@@ -140,9 +154,9 @@ describe('the Automation page', () => {
     // with no time, on the one line whose entire job is saying *when* — and
     // nothing on screen said which clock it was.
     mount();
-    const row = within(await screen.findByRole('list', { name: 'Automation' })).getByRole(
-      'listitem',
-    );
+    const row = within(
+      await screen.findByRole('list', { name: 'Automation' }),
+    ).getByRole('listitem');
 
     expect(row).toHaveTextContent('08:00');
     expect(row).toHaveTextContent('UTC');
@@ -161,14 +175,21 @@ describe('the Automation page', () => {
 
   it('says so plainly when there are no jobs at all', async () => {
     mount('/automation', { '/api/automation/jobs': [200, { jobs: [] }] });
-    expect(await screen.findByText('No scheduled jobs yet.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('No scheduled jobs yet.'),
+    ).toBeInTheDocument();
   });
 
   it('surfaces a load failure rather than rendering an empty list', async () => {
     mount('/automation', {
-      '/api/automation/jobs': [500, { error: { code: 'internal', message: 'boom' } }],
+      '/api/automation/jobs': [
+        500,
+        { error: { code: 'internal', message: 'boom' } },
+      ],
     });
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load automation');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not load automation',
+    );
   });
 
   it('opens the create page rather than a dialog', async () => {
@@ -186,7 +207,9 @@ describe('the Automation page', () => {
       'POST /api/automation/jobs': [201, { ...CRON_JOB, id: 'job-2' }],
     });
 
-    await user.click(await screen.findByRole('button', { name: 'Actions for Nightly build' }));
+    await user.click(
+      await screen.findByRole('button', { name: 'Actions for Nightly build' }),
+    );
     await user.click(screen.getByRole('menuitem', { name: 'Duplicate' }));
 
     await waitFor(() => {
@@ -203,7 +226,9 @@ describe('the Automation page', () => {
       'PATCH /api/automation/jobs/job-1': [200, CRON_JOB],
     });
 
-    await user.click(await screen.findByRole('button', { name: 'Actions for Nightly build' }));
+    await user.click(
+      await screen.findByRole('button', { name: 'Actions for Nightly build' }),
+    );
     await user.click(screen.getByRole('menuitem', { name: 'Disable' }));
 
     await waitFor(() => {
@@ -221,13 +246,19 @@ describe('the Automation page', () => {
       'DELETE /api/automation/jobs/job-1': [204, null],
     });
 
-    await user.click(await screen.findByRole('button', { name: 'Actions for Nightly build' }));
+    await user.click(
+      await screen.findByRole('button', { name: 'Actions for Nightly build' }),
+    );
     await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
     expect(writesOf(calls)).toHaveLength(0);
 
-    await user.click(await screen.findByRole('button', { name: 'Delete', hidden: false }));
+    await user.click(
+      await screen.findByRole('button', { name: 'Delete', hidden: false }),
+    );
     await waitFor(() => {
-      expect(writesOf(calls).some((call) => call.method === 'DELETE')).toBe(true);
+      expect(writesOf(calls).some((call) => call.method === 'DELETE')).toBe(
+        true,
+      );
     });
   });
 
@@ -241,7 +272,9 @@ describe('the Automation page', () => {
       'POST /api/automation/jobs/job-1/run': [202, RUN],
     });
 
-    await user.click(await screen.findByRole('button', { name: 'Actions for Nightly build' }));
+    await user.click(
+      await screen.findByRole('button', { name: 'Actions for Nightly build' }),
+    );
     await user.click(screen.getByRole('menuitem', { name: 'Run now' }));
 
     await waitFor(() => {
@@ -250,7 +283,9 @@ describe('the Automation page', () => {
     expect(writesOf(calls)[0]?.path).toBe('/api/automation/jobs/job-1/run');
     // The press reported success. A shape the client cannot parse surfaces as
     // "Could not start the run" over a run that in fact started and finished.
-    expect(screen.queryByText('Could not start the run')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Could not start the run'),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -262,7 +297,9 @@ describe('the create page', () => {
     expect(await screen.findByLabelText('Name')).toHaveValue('');
     expect(screen.getByLabelText('Cron expression')).toBeInTheDocument();
     expect(screen.getByLabelText('Agent')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Save changes' }),
+    ).toBeInTheDocument();
   });
 
   it('writes nothing until Save', async () => {
@@ -281,7 +318,9 @@ describe('the create page', () => {
     mount('/automation/new');
 
     await screen.findByLabelText('Name');
-    expect(screen.queryByRole('button', { name: 'Run now' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Run now' }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText('Runs')).not.toBeInTheDocument();
   });
 
@@ -297,7 +336,10 @@ describe('the create page', () => {
     await waitFor(() => {
       expect(writesOf(calls)).toHaveLength(1);
     });
-    expect(writesOf(calls)[0]).toMatchObject({ method: 'POST', path: '/api/automation/jobs' });
+    expect(writesOf(calls)[0]).toMatchObject({
+      method: 'POST',
+      path: '/api/automation/jobs',
+    });
     await waitFor(() => {
       expect(router.state.location.pathname).toBe('/automation/job-1');
     });
@@ -321,7 +363,9 @@ describe('the job editor', () => {
   it('opens on a job and shows the fields its schedule kind has', async () => {
     mount('/automation/job-1');
 
-    expect(await screen.findByLabelText('Cron expression')).toHaveValue('0 9 * * *');
+    expect(await screen.findByLabelText('Cron expression')).toHaveValue(
+      '0 9 * * *',
+    );
     // The other kinds' boxes are absent, not disabled: two controls describing
     // one thing is a state the schema itself refuses.
     expect(screen.queryByLabelText('Every (minutes)')).not.toBeInTheDocument();
@@ -334,7 +378,9 @@ describe('the job editor', () => {
 
     expect(agent).toHaveTextContent('Default agent');
     await userEvent.setup().click(agent);
-    expect(await screen.findByRole('option', { name: 'Reviewer' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('option', { name: 'Reviewer' }),
+    ).toBeInTheDocument();
   });
 
   it('shows a bound agent that no longer exists rather than reading as the default', async () => {
@@ -354,7 +400,9 @@ describe('the job editor', () => {
       ],
     });
 
-    expect(await screen.findByLabelText('Agent')).toHaveTextContent('no longer exists');
+    expect(await screen.findByLabelText('Agent')).toHaveTextContent(
+      'no longer exists',
+    );
   });
 
   it('names the install zone on the cron field rather than offering a per-job one', async () => {
@@ -364,7 +412,11 @@ describe('the job editor', () => {
     mount('/automation/job-1', {
       '/api/automation/jobs': [
         200,
-        { jobs: [{ ...CRON_JOB, schedule: { kind: 'cron', expr: '0 9 * * *' } }] },
+        {
+          jobs: [
+            { ...CRON_JOB, schedule: { kind: 'cron', expr: '0 9 * * *' } },
+          ],
+        },
       ],
     });
 
@@ -375,7 +427,9 @@ describe('the job editor', () => {
 
   it('says so on a stale link rather than showing an empty form', async () => {
     mount('/automation/gone');
-    expect(await screen.findByRole('alert')).toHaveTextContent('There is no job called');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'There is no job called',
+    );
   });
 
   it('sends only what the operator changed', async () => {
@@ -403,7 +457,12 @@ describe('the job editor', () => {
     const { user, calls } = mount('/automation/job-1', {
       'PATCH /api/automation/jobs/job-1': [
         422,
-        { error: { code: 'bad_request', message: 'minute must be between 0 and 59' } },
+        {
+          error: {
+            code: 'bad_request',
+            message: 'minute must be between 0 and 59',
+          },
+        },
       ],
     });
 
@@ -415,7 +474,9 @@ describe('the job editor', () => {
     await waitFor(() => {
       expect(writesOf(calls)).toHaveLength(1);
     });
-    expect(await screen.findByText(/minute must be between 0 and 59/u)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/minute must be between 0 and 59/u),
+    ).toBeInTheDocument();
   });
 
   it('shows a run′s outcome and its output', async () => {
@@ -433,7 +494,9 @@ describe('the job editor', () => {
       ],
     });
 
-    expect(await screen.findByText(/no channel is wired yet/u)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/no channel is wired yet/u),
+    ).toBeInTheDocument();
     expect(screen.getAllByText('Succeeded').length).toBeGreaterThan(0);
   });
 
@@ -461,7 +524,9 @@ describe('the job editor', () => {
     // worse than no link.
     mount('/automation/job-1');
     expect(await screen.findByText('the build is green')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Open session' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Open session' }),
+    ).not.toBeInTheDocument();
   });
 
   it('holds the in-flight wording still, which e2e cannot', async () => {
@@ -469,7 +534,15 @@ describe('the job editor', () => {
       '/api/automation/jobs/job-1/runs': [
         200,
         {
-          runs: [{ id: 'r2', jobId: 'job-1', startedAtMs: 1, status: 'pending', warnings: [] }],
+          runs: [
+            {
+              id: 'r2',
+              jobId: 'job-1',
+              startedAtMs: 1,
+              status: 'pending',
+              warnings: [],
+            },
+          ],
           total: 1,
         },
       ],
@@ -482,7 +555,11 @@ describe('the job editor', () => {
 
     expect(await screen.findByLabelText('Message')).toBeInTheDocument();
     await user.click(screen.getByRole('combobox', { name: 'What it does' }));
-    await user.click(await screen.findByRole('option', { name: 'Read a task file and decide' }));
+    await user.click(
+      await screen.findByRole('option', {
+        name: 'Read a task file and decide',
+      }),
+    );
 
     expect(await screen.findByLabelText('Task file')).toBeInTheDocument();
     expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();

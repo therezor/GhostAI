@@ -48,7 +48,7 @@ import {
   type ConfigPatch,
   type SetCredentialRequest,
 } from '@ghostai/protocol';
-import type { ChatProvider, CreateProviderOptions } from '@ghostai/providers';
+import type { ChatProvider } from '@ghostai/providers';
 import type { AutomationResolver } from '@ghostai/tools';
 import {
   ProviderCache,
@@ -76,7 +76,8 @@ import { ROUTES, waitTool } from './script.js';
 /** argon2id is ~50 ms a call by design; a suite cannot pay it per login. */
 const HASHER = {
   hash: (password: string) => Promise.resolve(`fake:${password}`),
-  verify: (digest: string, password: string) => Promise.resolve(digest === `fake:${password}`),
+  verify: (digest: string, password: string) =>
+    Promise.resolve(digest === `fake:${password}`),
 };
 
 export const PASSWORD = 'e2e-password';
@@ -172,7 +173,10 @@ export interface Harness {
  */
 export function uiRoot(): string {
   const require = createRequire(import.meta.url);
-  const root = join(dirname(require.resolve('@ghostai/web/package.json')), 'dist');
+  const root = join(
+    dirname(require.resolve('@ghostai/web/package.json')),
+    'dist',
+  );
   return root;
 }
 
@@ -184,7 +188,9 @@ function seedWorkspace(root: string): void {
   }
 }
 
-export async function startHarness(options: HarnessOptions = {}): Promise<Harness> {
+export async function startHarness(
+  options: HarnessOptions = {},
+): Promise<Harness> {
   const home = mkdtempSync(join(tmpdir(), 'ghostai-e2e-home-'));
   const workspace = mkdtempSync(join(tmpdir(), 'ghostai-e2e-work-'));
   seedWorkspace(workspace);
@@ -234,7 +240,9 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
   // Late-bound exactly as `serve.ts` binds it, and wired here for the reason the
   // scheduler is: this file is the *other* composition root, and anything only
   // `serve.ts` knows about is invisible to every e2e run.
-  const automationHolder: { current: AutomationResolver | undefined } = { current: undefined };
+  const automationHolder: { current: AutomationResolver | undefined } = {
+    current: undefined,
+  };
   const automation: AutomationResolver = {
     forTurn: (request) => automationHolder.current?.forTurn(request),
   };
@@ -243,7 +251,9 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
   // panel can move the model mid-suite, and a second script would then be
   // answering while the first held the session.
   const provider: ChatProvider = routedProvider(ROUTES);
-  const providers = new ProviderCache({ create: (_options: CreateProviderOptions) => provider });
+  const providers = new ProviderCache({
+    create: () => provider,
+  });
 
   const runtime = createRuntime({
     home,
@@ -296,7 +306,9 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
     logger: silentLogger,
     hasher: HASHER,
     scheduler: () => engine.current,
-    ...(options.password === null ? {} : { password: options.password ?? PASSWORD }),
+    ...(options.password === null
+      ? {}
+      : { password: options.password ?? PASSWORD }),
     ui: { root: uiRoot() },
   });
 
@@ -323,7 +335,8 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
     // Over the scripted provider, which is what lets a spec cover a heartbeat
     // without an endpoint.
     ...(directChat === undefined ? {} : { chat: directChat }),
-    readFile: async (path, maxBytes) => await readJailed(runtime, path, maxBytes),
+    readFile: async (path, maxBytes) =>
+      await readJailed(runtime, path, maxBytes),
     logger: silentLogger,
   });
   engine.current = scheduler;
@@ -331,10 +344,14 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
 
   // The same condition `ghost serve` mints on, so a spec sees the code the
   // terminal would have printed.
-  const setupCode = server.auth.hasPassword() ? undefined : server.auth.issueSetupCode();
+  const setupCode = server.auth.hasPassword()
+    ? undefined
+    : server.auth.issueSetupCode();
 
   for (const session of options.sessions ?? []) seedSession(runtime, session);
-  for (const notification of options.notifications ?? []) server.notifications.create(notification);
+  for (const notification of options.notifications ?? []) {
+    server.notifications.create(notification);
+  }
 
   const url = await server.listen({ host: '127.0.0.1', port: 0 });
 
@@ -400,7 +417,10 @@ const CREDENTIAL_SEPARATOR = '\0';
 const credentialKey = (namespace: string, key: string): string =>
   `${namespace}${CREDENTIAL_SEPARATOR}${key}`;
 
-function harnessRuntime(runtime: GhostRuntime, configFile: string): ServerRuntime {
+function harnessRuntime(
+  runtime: GhostRuntime,
+  configFile: string,
+): ServerRuntime {
   const credentials = new Map<string, string>();
 
   return {
@@ -422,7 +442,9 @@ function harnessRuntime(runtime: GhostRuntime, configFile: string): ServerRuntim
       // After the rebuild, so a patch that could not be built has not already
       // destroyed a credential on its way to failing.
       for (const id of before) {
-        if (!(id in merged.providers)) credentials.delete(credentialKey('providers', id));
+        if (!(id in merged.providers)) {
+          credentials.delete(credentialKey('providers', id));
+        }
       }
 
       return saveConfig(configFile, merged);
@@ -438,7 +460,9 @@ function harnessRuntime(runtime: GhostRuntime, configFile: string): ServerRuntim
       const present: Record<string, boolean> = {};
       for (const key of credentials.keys()) {
         const [namespace, name] = key.split(CREDENTIAL_SEPARATOR);
-        if (namespace === 'providers' && name !== undefined) present[name] = true;
+        if (namespace === 'providers' && name !== undefined) {
+          present[name] = true;
+        }
       }
       return present;
     },
@@ -478,17 +502,21 @@ function harnessRuntime(runtime: GhostRuntime, configFile: string): ServerRuntim
         // a browser would.
         provider: runtime.instance?.id ?? '',
         model: loop?.model ?? (runtime.configured ? runtime.model : ''),
-        configured: agent.id === DEFAULT_AGENT_ID ? runtime.configured : loop !== null,
+        configured:
+          agent.id === DEFAULT_AGENT_ID ? runtime.configured : loop !== null,
         jail: runtime.jail,
         jailFor: (workspaceId) => runtime.jails.forWorkspace(workspaceId),
         // Empty when the agent advertises no tools, matching the real adapter:
         // a harness that reported a toolset the model would never be sent would
         // make the context panel pass here and be wrong in a browser.
-        tools: agent.defaults.toolsEnabled ? runtime.tools.select(agent.tools).definitions() : [],
+        tools: agent.defaults.toolsEnabled
+          ? runtime.tools.select(agent.tools).definitions()
+          : [],
         contextWindowTokens: agent.defaults.contextWindowTokens,
         systemPrompt: async (input) =>
           (await loop?.previewPrompt(input)) ?? {
-            staticPrompt: 'No model is configured, so no system prompt has been assembled yet.',
+            staticPrompt:
+              'No model is configured, so no system prompt has been assembled yet.',
             runtimeBlock: '',
           },
       };
@@ -504,7 +532,10 @@ function harnessRuntime(runtime: GhostRuntime, configFile: string): ServerRuntim
     // See `createServerRuntime`: declared capabilities with no source. Stated
     // here too, so the harness and the real thing answer alike.
     loadError: (): string | undefined => undefined,
-    extensions: (): ExtensionCounts => ({ mcpServersConnected: 0, pluginsLoaded: 0 }),
+    extensions: (): ExtensionCounts => ({
+      mcpServersConnected: 0,
+      pluginsLoaded: 0,
+    }),
 
     configWarnings: () => runtime.configWarnings,
 
@@ -524,14 +555,19 @@ function harnessRuntime(runtime: GhostRuntime, configFile: string): ServerRuntim
     chat: async (input) => {
       const resolved = runtime.providerFor(input.agentId, input.model);
       if (resolved === null) {
-        throw new GhostError('not_found', 'No provider is configured to answer with.');
+        throw new GhostError(
+          'not_found',
+          'No provider is configured to answer with.',
+        );
       }
       return await resolved.provider.chat({
         model: resolved.model,
         messages: input.messages,
         tools: input.tools,
         toolChoice: input.toolChoice,
-        ...(input.maxTokens === undefined ? {} : { maxTokens: input.maxTokens }),
+        ...(input.maxTokens === undefined
+          ? {}
+          : { maxTokens: input.maxTokens }),
         ...(input.signal === undefined ? {} : { signal: input.signal }),
       });
     },
@@ -546,10 +582,17 @@ function harnessRuntime(runtime: GhostRuntime, configFile: string): ServerRuntim
  * *policy* (a heartbeat's file goes through the jail, a missing one is
  * `not_found` rather than a fault), which a spec has to see hold here too.
  */
-async function readJailed(runtime: GhostRuntime, path: string, maxBytes: number): Promise<string> {
+async function readJailed(
+  runtime: GhostRuntime,
+  path: string,
+  maxBytes: number,
+): Promise<string> {
   const verdict = runtime.jail.check(path);
   if (!verdict.ok) {
-    throw new GhostError('jail_escape', `Cannot read ${path}: ${verdict.message}`);
+    throw new GhostError(
+      'jail_escape',
+      `Cannot read ${path}: ${verdict.message}`,
+    );
   }
   try {
     return (await readFile(verdict.path, 'utf8')).slice(0, maxBytes);

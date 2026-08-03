@@ -71,7 +71,8 @@ import type { SubagentBinding } from './subagent.js';
 export const TOOL_HEARTBEAT_MS = 15_000;
 
 /** What a cancelled call records, so the `assistant` turn stays answered. */
-export const CANCELLED_TOOL_RESULT = 'Cancelled: the turn was stopped before this tool finished.';
+export const CANCELLED_TOOL_RESULT =
+  'Cancelled: the turn was stopped before this tool finished.';
 
 /**
  * The model's arguments, as the UI should see them.
@@ -245,40 +246,40 @@ export interface ToolCallOutcome {
  * not take.
  */
 export class ToolDispatcher {
-  readonly #tools: ToolScope;
-  readonly #subagents: ReadonlyMap<string, SubagentBinding>;
-  readonly #approvals: ApprovalGate | undefined;
-  readonly #toolsConfig: ToolsConfig;
-  readonly #toolsEnabled: boolean;
-  readonly #maxToolResultChars: number;
-  readonly #heartbeatMs: number;
-  readonly #agentId: string;
-  readonly #clock: Clock;
-  readonly #logger: Logger;
-  readonly #delegate: SubagentDelegate;
+  private readonly tools: ToolScope;
+  private readonly subagents: ReadonlyMap<string, SubagentBinding>;
+  private readonly approvals: ApprovalGate | undefined;
+  private readonly toolsConfig: ToolsConfig;
+  private readonly toolsEnabled: boolean;
+  private readonly maxToolResultChars: number;
+  private readonly heartbeatMs: number;
+  private readonly agentId: string;
+  private readonly clock: Clock;
+  private readonly logger: Logger;
+  private readonly delegate: SubagentDelegate;
 
   constructor(options: ToolDispatcherOptions) {
-    this.#tools = options.tools;
-    this.#subagents = options.subagents;
-    this.#approvals = options.approvals;
-    this.#toolsConfig = options.toolsConfig;
-    this.#toolsEnabled = options.toolsEnabled;
-    this.#maxToolResultChars = options.maxToolResultChars;
-    this.#heartbeatMs = options.heartbeatMs;
-    this.#agentId = options.agentId;
-    this.#clock = options.clock;
-    this.#logger = options.logger;
-    this.#delegate = options.delegate;
+    this.tools = options.tools;
+    this.subagents = options.subagents;
+    this.approvals = options.approvals;
+    this.toolsConfig = options.toolsConfig;
+    this.toolsEnabled = options.toolsEnabled;
+    this.maxToolResultChars = options.maxToolResultChars;
+    this.heartbeatMs = options.heartbeatMs;
+    this.agentId = options.agentId;
+    this.clock = options.clock;
+    this.logger = options.logger;
+    this.delegate = options.delegate;
   }
 
   /** The binding for a call, or `undefined` when a registered tool wins. */
-  #subagentFor(name: string): SubagentBinding | undefined {
-    const binding = this.#subagents.get(name);
+  private subagentFor(name: string): SubagentBinding | undefined {
+    const binding = this.subagents.get(name);
     if (binding === undefined) return undefined;
     // The same precedence `AgentLoop.toolDefinitions` applies, asked the same
     // way — so a shadowed subagent is not advertised *and* is not reachable,
     // rather than being invisible to the model and callable by a lucky guess.
-    return this.#tools.get(name) === undefined ? binding : undefined;
+    return this.tools.get(name) === undefined ? binding : undefined;
   }
 
   /**
@@ -299,7 +300,7 @@ export class ToolDispatcher {
     let cancelled = turn.signal.aborted;
 
     for (const call of result.message.toolCalls) {
-      const risk = this.#riskOf(call.name);
+      const risk = this.riskOf(call.name);
       yield {
         type: 'tool.call',
         turnId: turn.turnId,
@@ -317,13 +318,17 @@ export class ToolDispatcher {
         // that gated it for itself would be one `if` away from an ungated one.
         // A subagent is authorised here too — its binding carries a permission
         // exactly as the scope carries a tool's, so `ask` gets the same prompt.
-        const refusal = yield* this.#authorize(call, risk, turn);
-        const binding = this.#subagentFor(call.name);
+        const refusal = yield* this.authorize(call, risk, turn);
+        const binding = this.subagentFor(call.name);
         execution =
           refusal ??
           (binding === undefined
-            ? yield* this.#executeWithHeartbeat(call, turn.toolContext, turn.turnId)
-            : yield* this.#delegate(call, binding, turn));
+            ? yield* this.executeWithHeartbeat(
+                call,
+                turn.toolContext,
+                turn.turnId,
+              )
+            : yield* this.delegate(call, binding, turn));
       }
 
       if (execution.errorKind === 'aborted') cancelled = true;
@@ -331,8 +336,14 @@ export class ToolDispatcher {
       // Truncate first, wrap second. The other order cuts the closing delimiter
       // off the envelope, and a tool result the model cannot see the end of is
       // a tool result it reads as continuing into the conversation.
-      const truncation = truncateHeadTail(execution.content, this.#maxToolResultChars);
-      const wrapped = wrapToolOutput(truncation.text, { toolName: call.name, nonce: turn.nonce });
+      const truncation = truncateHeadTail(
+        execution.content,
+        this.maxToolResultChars,
+      );
+      const wrapped = wrapToolOutput(truncation.text, {
+        toolName: call.name,
+        nonce: turn.nonce,
+      });
       const truncated = truncation.truncated || execution.truncated;
 
       pending.push({
@@ -360,8 +371,11 @@ export class ToolDispatcher {
       };
 
       if (wrapped.findings.length > 0) {
-        this.#logger.warn(
-          { tool: call.name, signals: wrapped.findings.map((finding) => finding.signal) },
+        this.logger.warn(
+          {
+            tool: call.name,
+            signals: wrapped.findings.map((finding) => finding.signal),
+          },
           'prompt injection signals in tool output',
         );
         yield {
@@ -390,7 +404,7 @@ export class ToolDispatcher {
    * matters to the caller: a denial lets the turn continue so the model can
    * respond to it, while a cancellation stops the turn and the remaining calls.
    */
-  async *#authorize(
+  private async *authorize(
     call: ToolCall,
     risk: ToolRisk,
     turn: {
@@ -410,9 +424,14 @@ export class ToolDispatcher {
     // A refusal rather than a silent drop, because every `tool_call` must be
     // answered by a `tool` message: an unanswered one is a dangling call the
     // model waits on and a provider 400 on the next request.
-    if (!this.#toolsEnabled) {
-      this.#logger.warn(
-        { sessionKey: turn.sessionKey, turnId: turn.turnId, tool: call.name, risk },
+    if (!this.toolsEnabled) {
+      this.logger.warn(
+        {
+          sessionKey: turn.sessionKey,
+          turnId: turn.turnId,
+          tool: call.name,
+          risk,
+        },
         'tool call refused: tools are switched off for this model',
       );
       yield {
@@ -429,7 +448,8 @@ export class ToolDispatcher {
     // precedence `#subagentFor` and `toolDefinitions` apply, asked once here so
     // a shadowed subagent is gated as the registered tool it actually is.
     const permission =
-      this.#subagentFor(call.name)?.permission ?? this.#tools.permissionFor(call.name);
+      this.subagentFor(call.name)?.permission ??
+      this.tools.permissionFor(call.name);
     if (permission === 'allow') return undefined;
 
     let denial: DenialReason;
@@ -440,18 +460,18 @@ export class ToolDispatcher {
       // exactly the case an enforcement point exists to catch.
       denial = 'policy';
     } else {
-      const gate = this.#approvals;
+      const gate = this.approvals;
       // `ask` with nobody to ask. Denying here would make the default config
       // refuse every `exec` in a terminal session, where the operator asking
       // for the command *is* the approval.
       if (gate === undefined) return undefined;
 
-      const timeoutMs = this.#toolsConfig.approvalTimeoutMs;
-      const expiresAtMs = this.#clock.now() + timeoutMs;
+      const timeoutMs = this.toolsConfig.approvalTimeoutMs;
+      const expiresAtMs = this.clock.now() + timeoutMs;
       const request: ApprovalRequest = {
         sessionKey: turn.sessionKey,
         rootSessionKey: turn.rootSessionKey,
-        agentId: this.#agentId,
+        agentId: this.agentId,
         turnId: turn.turnId,
         callId: call.id,
         name: call.name,
@@ -471,13 +491,13 @@ export class ToolDispatcher {
         expiresAtMs,
       };
 
-      const outcome = await this.#decide(gate, request, timeoutMs);
+      const outcome = await this.decide(gate, request, timeoutMs);
       if (outcome === 'approved') return undefined;
       if (outcome === 'aborted') return cancelledExecution(call.name);
       denial = outcome;
     }
 
-    this.#logger.warn(
+    this.logger.warn(
       {
         sessionKey: turn.sessionKey,
         turnId: turn.turnId,
@@ -509,27 +529,34 @@ export class ToolDispatcher {
    * A gate that throws denies. There is no failure mode of an approval
    * mechanism where the safe reading is "go ahead".
    */
-  async #decide(
+  private async decide(
     gate: ApprovalGate,
     request: ApprovalRequest,
     timeoutMs: number,
   ): Promise<ApprovalOutcome> {
-    const deadline = this.#tick(timeoutMs);
+    const deadline = this.tick(timeoutMs);
     const abort = watchAbort(request.signal);
     try {
       return await Promise.race<ApprovalOutcome>([
         gate.request(request).then(
           (decision) => {
-            this.#logger.info(
-              { tool: request.name, approved: decision.approved, scope: decision.scope },
+            this.logger.info(
+              {
+                tool: request.name,
+                approved: decision.approved,
+                scope: decision.scope,
+              },
               'approval decision',
             );
             return decision.approved ? 'approved' : 'declined';
           },
           (error: unknown) => {
             if (isAbortError(error)) return 'aborted';
-            this.#logger.error(
-              { tool: request.name, err: toGhostError(error, 'internal').message },
+            this.logger.error(
+              {
+                tool: request.name,
+                err: toGhostError(error, 'internal').message,
+              },
               'approval gate failed',
             );
             return 'declined';
@@ -552,18 +579,20 @@ export class ToolDispatcher {
    * timeout itself is not enforced here — `ToolRegistry` owns it, and owning it
    * in two places is how a call ends up with two different deadlines.
    */
-  async *#executeWithHeartbeat(
+  private async *executeWithHeartbeat(
     call: ToolCall,
     context: ToolContext,
     turnId: string,
   ): AsyncGenerator<AgentEvent, ToolExecution> {
-    const started = this.#clock.monotonic();
-    const running = this.#tools.execute(call, context).then((execution) => ({ execution }));
+    const started = this.clock.monotonic();
+    const running = this.tools
+      .execute(call, context)
+      .then((execution) => ({ execution }));
 
-    if (this.#heartbeatMs <= 0) return (await running).execution;
+    if (this.heartbeatMs <= 0) return (await running).execution;
 
     for (;;) {
-      const beat = this.#tick(this.#heartbeatMs);
+      const beat = this.tick(this.heartbeatMs);
       const outcome = await Promise.race([running, beat.promise]);
       beat.cancel();
       if (outcome !== null) return outcome.execution;
@@ -573,14 +602,14 @@ export class ToolDispatcher {
         callId: call.id,
         // Whole milliseconds — see `tool.result` above for why a fraction here
         // is a frame the client throws away rather than a rounding detail.
-        elapsedMs: Math.round(this.#clock.monotonic() - started),
+        elapsedMs: Math.round(this.clock.monotonic() - started),
         message: `${call.name} is still running`,
       };
     }
   }
 
-  #riskOf(name: string): ToolRisk {
-    return this.#tools.get(name)?.risk ?? 'safe';
+  private riskOf(name: string): ToolRisk {
+    return this.tools.get(name)?.risk ?? 'safe';
   }
 
   /**
@@ -590,17 +619,17 @@ export class ToolDispatcher {
    * calls, and a timer left armed on a real clock keeps the event loop alive
    * after the turn that created it has ended.
    */
-  #tick(delayMs: number): Tick {
+  private tick(delayMs: number): Tick {
     let handle: TimerHandle | undefined;
     const promise = new Promise<null>((resolve) => {
-      handle = this.#clock.setTimeout(() => {
+      handle = this.clock.setTimeout(() => {
         resolve(null);
       }, delayMs);
     });
     return {
       promise,
       cancel: () => {
-        if (handle !== undefined) this.#clock.clearTimeout(handle);
+        if (handle !== undefined) this.clock.clearTimeout(handle);
       },
     };
   }

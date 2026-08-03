@@ -45,21 +45,31 @@ export function parseNumber(
   constraint: NumberConstraint = {},
 ): ParseResult<number> {
   const trimmed = raw.trim();
-  if (trimmed === '') return { ok: false, error: t('settings.fields.required') };
+  if (trimmed === '') {
+    return { ok: false, error: t('settings.fields.required') };
+  }
 
   const value = Number(trimmed);
   // `Number('')` is 0 and `Number(' ')` is 0, both already handled above;
   // what is left that `Number` accepts and this must not is `Infinity`.
-  if (!Number.isFinite(value)) return { ok: false, error: t('settings.fields.mustBeNumber') };
+  if (!Number.isFinite(value)) {
+    return { ok: false, error: t('settings.fields.mustBeNumber') };
+  }
 
   if (constraint.integer === true && !Number.isInteger(value)) {
     return { ok: false, error: t('settings.fields.mustBeWhole') };
   }
   if (constraint.min !== undefined && value < constraint.min) {
-    return { ok: false, error: t('settings.fields.mustBeAtLeast', { min: constraint.min }) };
+    return {
+      ok: false,
+      error: t('settings.fields.mustBeAtLeast', { min: constraint.min }),
+    };
   }
   if (constraint.max !== undefined && value > constraint.max) {
-    return { ok: false, error: t('settings.fields.mustBeAtMost', { max: constraint.max }) };
+    return {
+      ok: false,
+      error: t('settings.fields.mustBeAtMost', { max: constraint.max }),
+    };
   }
 
   return { ok: true, value };
@@ -77,7 +87,9 @@ export function parseNumber(
 export function msToSeconds(ms: number): string {
   if (!Number.isFinite(ms)) return '0';
   const seconds = ms / 1000;
-  return Number.isInteger(seconds) ? String(seconds) : String(Number(seconds.toFixed(3)));
+  return Number.isInteger(seconds)
+    ? String(seconds)
+    : String(Number(seconds.toFixed(3)));
 }
 
 export function secondsToMs(seconds: number): number {
@@ -138,7 +150,9 @@ export function modelOptions(
     .filter((model) => providerId === 'auto' || model.providerId === providerId)
     .map((model) => model.id);
 
-  const unique = [...new Set(current === '' ? matching : [current, ...matching])];
+  const unique = [
+    ...new Set(current === '' ? matching : [current, ...matching]),
+  ];
   return unique.sort((a, b) => a.localeCompare(b));
 }
 

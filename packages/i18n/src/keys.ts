@@ -14,11 +14,12 @@
  */
 
 /** Strips i18next's CLDR plural suffixes back to the base key. */
-type WithoutPluralSuffix<K extends string> = K extends `${infer Base}_${infer Suffix}`
-  ? Suffix extends 'zero' | 'one' | 'two' | 'few' | 'many' | 'other'
-    ? Base
-    : K
-  : K;
+type WithoutPluralSuffix<K extends string> =
+  K extends `${infer Base}_${infer Suffix}`
+    ? Suffix extends 'zero' | 'one' | 'two' | 'few' | 'many' | 'other'
+      ? Base
+      : K
+    : K;
 
 /**
  * Every leaf path in a nested resource object.

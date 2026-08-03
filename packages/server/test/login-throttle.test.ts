@@ -55,7 +55,11 @@ function build(): Built {
 }
 
 /** Fails `count` times from one address, ignoring the blocks that result. */
-function failTimes(throttle: LoginThrottle, address: string, count: number): void {
+function failTimes(
+  throttle: LoginThrottle,
+  address: string,
+  count: number,
+): void {
   for (let index = 0; index < count; index += 1) throttle.fail(address);
 }
 
@@ -75,7 +79,9 @@ describe('delayFor', () => {
 
   it('clamps at the cap rather than overflowing to Infinity', () => {
     expect(delayFor(1_000, MAX_ADDRESS_DELAY_MS)).toBe(MAX_ADDRESS_DELAY_MS);
-    expect(delayFor(Number.MAX_SAFE_INTEGER, MAX_ACCOUNT_DELAY_MS)).toBe(MAX_ACCOUNT_DELAY_MS);
+    expect(delayFor(Number.MAX_SAFE_INTEGER, MAX_ACCOUNT_DELAY_MS)).toBe(
+      MAX_ACCOUNT_DELAY_MS,
+    );
   });
 });
 
@@ -159,7 +165,9 @@ describe('the account scope', () => {
     const { throttle } = build();
     // A hundred failures from a hundred addresses: enough to drive the account
     // counter far past anything the exponent would otherwise survive.
-    for (let index = 0; index < 100; index += 1) throttle.fail(`10.0.0.${String(index)}`);
+    for (let index = 0; index < 100; index += 1) {
+      throttle.fail(`10.0.0.${String(index)}`);
+    }
 
     const block = throttle.check('203.0.113.7');
     expect(block?.retryAfterMs).toBeLessThanOrEqual(MAX_ACCOUNT_DELAY_MS);

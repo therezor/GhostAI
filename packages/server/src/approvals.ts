@@ -39,8 +39,17 @@
  * nothing can revoke would be worse than one that expires with the server.
  */
 
-import { silentLogger, systemClock, type Clock, type Logger } from '@ghostai/core';
-import type { ApprovalDecision, ApprovalGate, ApprovalRequest } from '@ghostai/agent';
+import {
+  silentLogger,
+  systemClock,
+  type Clock,
+  type Logger,
+} from '@ghostai/core';
+import type {
+  ApprovalDecision,
+  ApprovalGate,
+  ApprovalRequest,
+} from '@ghostai/agent';
 import type { ApprovalScope } from '@ghostai/protocol';
 
 /** What a client answered, kept past the call that produced it. */
@@ -91,12 +100,15 @@ export interface HubApprovalGateOptions {
 }
 
 export class HubApprovalGate implements ApprovalGate {
-  readonly #clock: Clock;
-  readonly #logger: Logger;
+  private readonly clock: Clock;
+  private readonly logger: Logger;
   /** Parked promises, keyed by the tool call the client will name in its answer. */
-  readonly #pending = new Map<string, PendingApproval>();
+  private readonly pending = new Map<string, PendingApproval>();
   /** `session` scope: session key → tool name → decision. */
-  readonly #bySession = new Map<string, Map<string, RememberedDecision>>();
+  private readonly bySession = new Map<
+    string,
+    Map<string, RememberedDecision>
+  >();
   /**
    * `always` scope: agent id → tool name → decision, across every session.
    *
@@ -107,15 +119,16 @@ export class HubApprovalGate implements ApprovalGate {
    * locked-down one, silently undoing the restriction an operator set up.
    * "Always" means for this agent, on every session, until the process ends.
    */
-  readonly #always = new Map<string, Map<string, RememberedDecision>>();
-  readonly #watchers: ((sessionKey: string) => number) | undefined;
-  readonly #onUnattended: ((approval: UnattendedApproval) => void) | undefined;
+  private readonly always = new Map<string, Map<string, RememberedDecision>>();
+  private readonly watchers: ((sessionKey: string) => number) | undefined;
+  private readonly onUnattended:
+    ((approval: UnattendedApproval) => void) | undefined;
 
   constructor(options: HubApprovalGateOptions = {}) {
-    this.#clock = options.clock ?? systemClock;
-    this.#logger = options.logger ?? silentLogger;
-    this.#watchers = options.watchers;
-    this.#onUnattended = options.onUnattended;
+    this.clock = options.clock ?? systemClock;
+    this.logger = options.logger ?? silentLogger;
+    this.watchers = options.watchers;
+    this.onUnattended = options.onUnattended;
   }
 
   /**
@@ -130,24 +143,28 @@ export class HubApprovalGate implements ApprovalGate {
    * It is also what makes `clearSession` on a conversation settle a prompt its
    * subagent parked, rather than leaving one behind for a session that has gone.
    */
-  static #scopeOf(request: ApprovalRequest): string {
+  private static scopeOf(request: ApprovalRequest): string {
     return request.rootSessionKey ?? request.sessionKey;
   }
 
   /** Calls waiting on an answer. A leak assertion, and a status field. */
   get pendingCount(): number {
-    return this.#pending.size;
+    return this.pending.size;
   }
 
   async request(request: ApprovalRequest): Promise<ApprovalDecision> {
-    const remembered = this.#recall(
-      HubApprovalGate.#scopeOf(request),
+    const remembered = this.recall(
+      HubApprovalGate.scopeOf(request),
       request.agentId,
       request.name,
     );
     if (remembered !== undefined) {
-      this.#logger.debug(
-        { sessionKey: request.sessionKey, tool: request.name, scope: remembered.scope },
+      this.logger.debug(
+        {
+          sessionKey: request.sessionKey,
+          tool: request.name,
+          scope: remembered.scope,
+        },
         'approval answered from memory',
       );
       return remembered;
@@ -156,13 +173,16 @@ export class HubApprovalGate implements ApprovalGate {
     // A turn already cancelled has nobody left to show a prompt to. Parking one
     // would rely on the abort listener below firing for an event that already
     // happened, which it never does.
-    if (request.signal.aborted) return { approved: false, reason: 'the turn was cancelled' };
+    if (request.signal.aborted) {
+      return { approved: false, reason: 'the turn was cancelled' };
+    }
 
     // A `callId` is the model's, so a collision is not impossible. The older
     // prompt is the one nothing will answer — its turn has moved on.
-    this.#pending
-      .get(request.callId)
-      ?.settle({ approved: false, reason: 'superseded by another call with the same id' });
+    this.pending.get(request.callId)?.settle({
+      approved: false,
+      reason: 'superseded by another call with the same id',
+    });
 
     return await new Promise<ApprovalDecision>((resolve) => {
       const onAbort = (): void => {
@@ -172,16 +192,20 @@ export class HubApprovalGate implements ApprovalGate {
       // Declared before the timer it clears and after the listener it removes:
       // neither is read until this runs, which is never before both exist.
       const settle = (decision: ApprovalDecision): void => {
-        this.#clock.clearTimeout(timer);
+        this.clock.clearTimeout(timer);
         request.signal.removeEventListener('abort', onAbort);
-        this.#pending.delete(request.callId);
+        this.pending.delete(request.callId);
         resolve(decision);
       };
 
-      const timer = this.#clock.setTimeout(
+      const timer = this.clock.setTimeout(
         () => {
-          this.#logger.warn(
-            { sessionKey: request.sessionKey, tool: request.name, callId: request.callId },
+          this.logger.warn(
+            {
+              sessionKey: request.sessionKey,
+              tool: request.name,
+              callId: request.callId,
+            },
             'approval request expired unanswered',
           );
           settle({ approved: false, reason: 'the approval request expired' });
@@ -189,16 +213,16 @@ export class HubApprovalGate implements ApprovalGate {
         // A deadline already past fires on the next tick rather than never: the
         // loop hands this a wall-clock instant, and a clock that has moved is
         // not a reason to wait forever.
-        Math.max(0, request.expiresAtMs - this.#clock.now()),
+        Math.max(0, request.expiresAtMs - this.clock.now()),
       );
 
       request.signal.addEventListener('abort', onAbort, { once: true });
-      this.#pending.set(request.callId, { request, settle });
+      this.pending.set(request.callId, { request, settle });
 
       // After the prompt is parked, not before: the sink is what goes looking
       // for a person, and it must not be able to fire for a call that has
       // already been settled by the abort check above.
-      this.#raiseIfUnattended(request);
+      this.raiseIfUnattended(request);
     });
   }
 
@@ -216,15 +240,21 @@ export class HubApprovalGate implements ApprovalGate {
    * unattended run that pre-approved its own tools would be a much larger grant
    * than any operator gave when they granted the tool.
    */
-  #raiseIfUnattended(request: ApprovalRequest): void {
-    if (this.#watchers === undefined || this.#onUnattended === undefined) return;
-    if (this.#watchers(request.sessionKey) > 0) return;
+  private raiseIfUnattended(request: ApprovalRequest): void {
+    if (this.watchers === undefined || this.onUnattended === undefined) {
+      return;
+    }
+    if (this.watchers(request.sessionKey) > 0) return;
 
-    this.#logger.info(
-      { sessionKey: request.sessionKey, tool: request.name, callId: request.callId },
+    this.logger.info(
+      {
+        sessionKey: request.sessionKey,
+        tool: request.name,
+        callId: request.callId,
+      },
       'approval request raised on a session nobody is watching',
     );
-    this.#onUnattended({
+    this.onUnattended({
       sessionKey: request.sessionKey,
       agentId: request.agentId,
       toolName: request.name,
@@ -241,17 +271,22 @@ export class HubApprovalGate implements ApprovalGate {
    * between "you were second" and "it worked".
    */
   resolve(callId: string, approved: boolean, scope: ApprovalScope): boolean {
-    const pending = this.#pending.get(callId);
+    const pending = this.pending.get(callId);
     if (pending === undefined) return false;
 
-    this.#remember(
-      HubApprovalGate.#scopeOf(pending.request),
+    this.remember(
+      HubApprovalGate.scopeOf(pending.request),
       pending.request.agentId,
       pending.request.name,
       { approved, scope },
     );
-    this.#logger.info(
-      { sessionKey: pending.request.sessionKey, tool: pending.request.name, approved, scope },
+    this.logger.info(
+      {
+        sessionKey: pending.request.sessionKey,
+        tool: pending.request.name,
+        approved,
+        scope,
+      },
       'approval answered',
     );
     pending.settle({ approved, scope });
@@ -271,9 +306,9 @@ export class HubApprovalGate implements ApprovalGate {
    * watching this conversation, and closing it is what took the answer away.
    */
   clearSession(sessionKey: string): void {
-    this.#bySession.delete(sessionKey);
-    for (const pending of [...this.#pending.values()]) {
-      if (HubApprovalGate.#scopeOf(pending.request) !== sessionKey) continue;
+    this.bySession.delete(sessionKey);
+    for (const pending of [...this.pending.values()]) {
+      if (HubApprovalGate.scopeOf(pending.request) !== sessionKey) continue;
       pending.settle({ approved: false, reason: 'the session was closed' });
     }
   }
@@ -292,8 +327,8 @@ export class HubApprovalGate implements ApprovalGate {
    * conversation does not stop existing because an agent did.
    */
   retainAgents(agentIds: ReadonlySet<string>): void {
-    for (const agentId of [...this.#always.keys()]) {
-      if (!agentIds.has(agentId)) this.#always.delete(agentId);
+    for (const agentId of [...this.always.keys()]) {
+      if (!agentIds.has(agentId)) this.always.delete(agentId);
     }
   }
 
@@ -305,31 +340,45 @@ export class HubApprovalGate implements ApprovalGate {
    * recreate is a different agent and its permissions must not.
    */
   renameAgent(from: string, to: string): void {
-    const decisions = this.#always.get(from);
+    const decisions = this.always.get(from);
     if (decisions === undefined) return;
-    this.#always.delete(from);
-    this.#always.set(to, decisions);
+    this.always.delete(from);
+    this.always.set(to, decisions);
   }
 
-  #recall(sessionKey: string, agentId: string, tool: string): RememberedDecision | undefined {
+  private recall(
+    sessionKey: string,
+    agentId: string,
+    tool: string,
+  ): RememberedDecision | undefined {
     // The session's own answer wins over the standing one: it is the more
     // specific of the two, and the more recently given. A session is bound to
     // one agent, so the session-scoped map needs no agent dimension — and a
     // subagent's turn carries its own `agentId`, so the standing half stays
     // per-agent even though the session half is the conversation's.
-    return this.#bySession.get(sessionKey)?.get(tool) ?? this.#always.get(agentId)?.get(tool);
+    return (
+      this.bySession.get(sessionKey)?.get(tool) ??
+      this.always.get(agentId)?.get(tool)
+    );
   }
 
-  #remember(sessionKey: string, agentId: string, tool: string, decision: RememberedDecision): void {
+  private remember(
+    sessionKey: string,
+    agentId: string,
+    tool: string,
+    decision: RememberedDecision,
+  ): void {
     if (decision.scope === 'once') return;
     if (decision.scope === 'always') {
-      const agent = this.#always.get(agentId) ?? new Map<string, RememberedDecision>();
+      const agent =
+        this.always.get(agentId) ?? new Map<string, RememberedDecision>();
       agent.set(tool, decision);
-      this.#always.set(agentId, agent);
+      this.always.set(agentId, agent);
       return;
     }
-    const session = this.#bySession.get(sessionKey) ?? new Map<string, RememberedDecision>();
+    const session =
+      this.bySession.get(sessionKey) ?? new Map<string, RememberedDecision>();
     session.set(tool, decision);
-    this.#bySession.set(sessionKey, session);
+    this.bySession.set(sessionKey, session);
   }
 }

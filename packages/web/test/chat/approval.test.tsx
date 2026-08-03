@@ -25,7 +25,10 @@ const OPEN: ToolApprovalState = { expiresAtMs: 0, answered: undefined };
 // Through the real provider stack, because the scope buttons are wrapped in
 // `Tooltip` and a bare `render` throws on the missing provider rather than
 // telling you anything about the prompt.
-const promptWith = (approval: Partial<ToolApprovalState>, onAnswer = vi.fn()) => {
+const promptWith = (
+  approval: Partial<ToolApprovalState>,
+  onAnswer = vi.fn(),
+) => {
   renderWithProviders(
     <ApprovalPrompt
       toolName="exec"

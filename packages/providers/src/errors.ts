@@ -124,13 +124,19 @@ export class ProviderError extends GhostError {
   readonly code: string | undefined;
   readonly retryAfterMs: number | undefined;
 
-  constructor(reason: ProviderErrorReason, message: string, options: ProviderErrorOptions = {}) {
+  constructor(
+    reason: ProviderErrorReason,
+    message: string,
+    options: ProviderErrorOptions = {},
+  ) {
     super(KIND_BY_REASON[reason], message, {
       retryable: options.retryable ?? RETRYABLE_BY_REASON[reason],
       ...(options.cause === undefined ? {} : { cause: options.cause }),
       details: {
         reason,
-        ...(options.providerId === undefined ? {} : { providerId: options.providerId }),
+        ...(options.providerId === undefined
+          ? {}
+          : { providerId: options.providerId }),
         ...(options.status === undefined ? {} : { status: options.status }),
         ...(options.code === undefined ? {} : { code: options.code }),
         ...(options.param === undefined ? {} : { param: options.param }),
@@ -155,7 +161,8 @@ export function isProviderError(value: unknown): value is ProviderError {
   if (!(value instanceof Error)) return false;
   const reason: unknown = (value as { reason?: unknown }).reason;
   return (
-    typeof reason === 'string' && (PROVIDER_ERROR_REASONS as readonly string[]).includes(reason)
+    typeof reason === 'string' &&
+    (PROVIDER_ERROR_REASONS as readonly string[]).includes(reason)
   );
 }
 
@@ -204,7 +211,10 @@ const MODEL_NOT_FOUND_CODES: ReadonlySet<string> = new Set([
  * the time — the reason stays `invalid_request` and the ladder falls back to
  * dropping whatever optional parameters the request happened to carry.
  */
-export function classifyStatus(status: number, body: WireErrorBody | null): ProviderErrorReason {
+export function classifyStatus(
+  status: number,
+  body: WireErrorBody | null,
+): ProviderErrorReason {
   const code = body?.code;
 
   if (status === 401 || status === 403) return 'auth';
@@ -221,12 +231,16 @@ export function classifyStatus(status: number, body: WireErrorBody | null): Prov
     if (UNSUPPORTED_PARAM_CODES.has(code)) return 'unsupported_param';
     if (MODEL_NOT_FOUND_CODES.has(code)) return 'model_not_found';
     if (code === 'content_filter') return 'content_filter';
-    if (code === 'rate_limit_exceeded' || code === 'insufficient_quota') return 'rate_limit';
+    if (code === 'rate_limit_exceeded' || code === 'insufficient_quota') {
+      return 'rate_limit';
+    }
   }
 
   // A named parameter on a 4xx is the provider pointing at the field it rejected,
   // which is exactly what the degradation ladder needs to know.
-  if (body?.param !== undefined && body.param !== '') return 'unsupported_param';
+  if (body?.param !== undefined && body.param !== '') {
+    return 'unsupported_param';
+  }
 
   if (status >= 400) return 'invalid_request';
   return 'unknown';
@@ -239,7 +253,10 @@ export function classifyStatus(status: number, body: WireErrorBody | null): Prov
  * both. `null` for anything else, so a malformed header falls back to the
  * decorator's own backoff rather than to `NaN`.
  */
-export function parseRetryAfter(value: string | null, nowMs: number): number | null {
+export function parseRetryAfter(
+  value: string | null,
+  nowMs: number,
+): number | null {
   if (value === null) return null;
   const trimmed = value.trim();
   if (trimmed === '') return null;
@@ -268,7 +285,9 @@ export function parseRetryAfter(value: string | null, nowMs: number): number | n
  * library controls, and one that loops would hang the error path.
  */
 function transportCode(value: unknown, depth = 0): string | undefined {
-  if (depth > 4 || typeof value !== 'object' || value === null) return undefined;
+  if (depth > 4 || typeof value !== 'object' || value === null) {
+    return undefined;
+  }
 
   const code: unknown = (value as { code?: unknown }).code;
   if (typeof code === 'string' && code !== '') return code;
@@ -308,20 +327,42 @@ const TRANSPORT_FAULTS: Readonly<
 > = {
   ECONNREFUSED: { detail: 'nothing is listening there', retryable: false },
   ENOTFOUND: { detail: 'that host name does not resolve', retryable: false },
-  EAI_AGAIN: { detail: 'the host name could not be looked up', retryable: true },
+  EAI_AGAIN: {
+    detail: 'the host name could not be looked up',
+    retryable: true,
+  },
   EHOSTUNREACH: { detail: 'there is no route to that host', retryable: true },
   ENETUNREACH: { detail: 'that network is unreachable', retryable: true },
   ETIMEDOUT: { detail: 'the connection timed out', retryable: true },
-  UND_ERR_CONNECT_TIMEOUT: { detail: 'the connection timed out', retryable: true },
-  UND_ERR_HEADERS_TIMEOUT: { detail: 'it accepted the request and never replied', retryable: true },
-  UND_ERR_BODY_TIMEOUT: { detail: 'it stopped sending mid-answer', retryable: true },
-  ECONNRESET: { detail: 'it closed the connection before answering', retryable: true },
-  EPIPE: { detail: 'it closed the connection before answering', retryable: true },
-  UND_ERR_SOCKET: { detail: 'it closed the connection before answering', retryable: true },
+  UND_ERR_CONNECT_TIMEOUT: {
+    detail: 'the connection timed out',
+    retryable: true,
+  },
+  UND_ERR_HEADERS_TIMEOUT: {
+    detail: 'it accepted the request and never replied',
+    retryable: true,
+  },
+  UND_ERR_BODY_TIMEOUT: {
+    detail: 'it stopped sending mid-answer',
+    retryable: true,
+  },
+  ECONNRESET: {
+    detail: 'it closed the connection before answering',
+    retryable: true,
+  },
+  EPIPE: {
+    detail: 'it closed the connection before answering',
+    retryable: true,
+  },
+  UND_ERR_SOCKET: {
+    detail: 'it closed the connection before answering',
+    retryable: true,
+  },
 };
 
 /** TLS refusals, which are all the same sentence with a different code in it. */
-const TLS_CODE = /^(CERT_|ERR_TLS_|DEPTH_ZERO|SELF_SIGNED|UNABLE_TO_(GET|VERIFY))/u;
+const TLS_CODE =
+  /^(CERT_|ERR_TLS_|DEPTH_ZERO|SELF_SIGNED|UNABLE_TO_(GET|VERIFY))/u;
 
 /** Where the request was aimed, so the message can name it. */
 export interface TransportContext {
@@ -355,17 +396,24 @@ export function toProviderError(
   if (isProviderError(value)) return value;
 
   if (value instanceof Error && value.name === 'AbortError') {
-    return new ProviderError('aborted', 'Request aborted', { providerId, cause: value });
+    return new ProviderError('aborted', 'Request aborted', {
+      providerId,
+      cause: value,
+    });
   }
   if (value instanceof Error && value.name === 'TimeoutError') {
-    return new ProviderError('timeout', 'Request timed out', { providerId, cause: value });
+    return new ProviderError('timeout', 'Request timed out', {
+      providerId,
+      cause: value,
+    });
   }
 
   // Everything else on this path is a failed connection.
   const raw = value instanceof Error ? value.message : String(value);
   const code = transportCode(value);
   const name = context.label ?? providerId;
-  const target = context.url === undefined ? name : `${name} at ${originOf(context.url)}`;
+  const target =
+    context.url === undefined ? name : `${name} at ${originOf(context.url)}`;
 
   const fault = code === undefined ? undefined : TRANSPORT_FAULTS[code];
   const detail =
@@ -376,13 +424,17 @@ export function toProviderError(
         // is at least specific when it is not literally "fetch failed".
         (code ?? raw));
 
-  return new ProviderError('transport', `Could not reach ${target} — ${detail}.`, {
-    providerId,
-    cause: value,
-    ...(fault === undefined ? {} : { retryable: fault.retryable }),
-    details: {
-      ...(code === undefined ? {} : { code }),
-      ...(context.url === undefined ? {} : { url: context.url }),
+  return new ProviderError(
+    'transport',
+    `Could not reach ${target} — ${detail}.`,
+    {
+      providerId,
+      cause: value,
+      ...(fault === undefined ? {} : { retryable: fault.retryable }),
+      details: {
+        ...(code === undefined ? {} : { code }),
+        ...(context.url === undefined ? {} : { url: context.url }),
+      },
     },
-  });
+  );
 }

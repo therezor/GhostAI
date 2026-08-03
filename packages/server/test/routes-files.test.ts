@@ -34,7 +34,9 @@ afterEach(async () => {
   while (running.length > 0) await running.pop()?.close();
 });
 
-async function start(...args: Parameters<typeof startTestServer>): Promise<TestServer> {
+async function start(
+  ...args: Parameters<typeof startTestServer>
+): Promise<TestServer> {
   const started = await startTestServer(...args);
   running.push(started);
   return started;
@@ -95,29 +97,37 @@ describe('GET /api/files', () => {
     });
 
     expect(response.json().entries).toEqual([
-      expect.objectContaining({ path: 'notes/todo.md', mimeType: 'text/markdown; charset=utf-8' }),
+      expect.objectContaining({
+        path: 'notes/todo.md',
+        mimeType: 'text/markdown; charset=utf-8',
+      }),
     ]);
   });
 
   // The workspace is a chroot, so none of these escapes — each names the
   // workspace root itself. The response echoes the path the jail agreed to, so
   // a client that re-sends it addresses the same directory.
-  it.each(['..', '../..', '/', '~'])('clamps %s to the workspace root', async (path) => {
-    const test = await start();
-    write(test, 'inside.txt', 'x');
-    writeFileSync(join(test.workspace, '..', 'outside-the-jail.txt'), 'x');
+  it.each(['..', '../..', '/', '~'])(
+    'clamps %s to the workspace root',
+    async (path) => {
+      const test = await start();
+      write(test, 'inside.txt', 'x');
+      writeFileSync(join(test.workspace, '..', 'outside-the-jail.txt'), 'x');
 
-    const response = await test.server.app.inject({
-      method: 'GET',
-      url: `/api/files?path=${encodeURIComponent(path)}`,
-      headers: test.headers,
-    });
+      const response = await test.server.app.inject({
+        method: 'GET',
+        url: `/api/files?path=${encodeURIComponent(path)}`,
+        headers: test.headers,
+      });
 
-    expect(response.statusCode).toBe(200);
-    const names = (response.json().entries as { name: string }[]).map((entry) => entry.name);
-    expect(names).toContain('inside.txt');
-    expect(names).not.toContain('outside-the-jail.txt');
-  });
+      expect(response.statusCode).toBe(200);
+      const names = (response.json().entries as Array<{ name: string }>).map(
+        (entry) => entry.name,
+      );
+      expect(names).toContain('inside.txt');
+      expect(names).not.toContain('outside-the-jail.txt');
+    },
+  );
 
   it('still refuses a symlink that leads out of the workspace', async () => {
     // The one escape clamping cannot see, and the reason the realpath check
@@ -195,7 +205,10 @@ describe('POST /api/files/upload', () => {
       path: 'uploads/hello.png',
       sizeBytes: 16,
       mimeType: 'image/png',
-      signedUrl: { url: expect.stringContaining('/api/media/'), expiresAtMs: expect.any(Number) },
+      signedUrl: {
+        url: expect.stringContaining('/api/media/'),
+        expiresAtMs: expect.any(Number),
+      },
     });
 
     // And the URL works without a session, which is the whole point of it.
@@ -387,7 +400,10 @@ describe('GET /api/files/text', () => {
 
   it('refuses a binary file rather than answering with mojibake', async () => {
     const test = await start();
-    writeFileSync(join(test.workspace, 'blob.dat'), Buffer.from([0x89, 0x50, 0x00, 0x01]));
+    writeFileSync(
+      join(test.workspace, 'blob.dat'),
+      Buffer.from([0x89, 0x50, 0x00, 0x01]),
+    );
 
     const response = await read(test, 'blob.dat');
 
@@ -436,7 +452,10 @@ describe('PUT /api/files/text', () => {
     const test = await start();
     write(test, 'note.md', 'old');
 
-    const response = await save(test, { path: 'note.md', content: 'new content' });
+    const response = await save(test, {
+      path: 'note.md',
+      content: 'new content',
+    });
 
     expect(response.statusCode).toBe(200);
     expect(response.json<FileEntry>()).toEqual({
@@ -447,16 +466,23 @@ describe('PUT /api/files/text', () => {
       modifiedAtMs: expect.any(Number),
       mimeType: 'text/markdown; charset=utf-8',
     });
-    expect(readFileSync(join(test.workspace, 'note.md'), 'utf8')).toBe('new content');
+    expect(readFileSync(join(test.workspace, 'note.md'), 'utf8')).toBe(
+      'new content',
+    );
   });
 
   it('creates a file that is not there yet, and the directory over it', async () => {
     const test = await start();
 
-    const response = await save(test, { path: 'drafts/new.txt', content: 'first' });
+    const response = await save(test, {
+      path: 'drafts/new.txt',
+      content: 'first',
+    });
 
     expect(response.statusCode).toBe(200);
-    expect(readFileSync(join(test.workspace, 'drafts/new.txt'), 'utf8')).toBe('first');
+    expect(readFileSync(join(test.workspace, 'drafts/new.txt'), 'utf8')).toBe(
+      'first',
+    );
   });
 
   /**
@@ -489,7 +515,9 @@ describe('PUT /api/files/text', () => {
 
     expect(response.statusCode).toBe(409);
     // And the agent's work is still there.
-    expect(readFileSync(join(test.workspace, 'note.md'), 'utf8')).toBe('what the agent wrote');
+    expect(readFileSync(join(test.workspace, 'note.md'), 'utf8')).toBe(
+      'what the agent wrote',
+    );
   });
 
   it('refuses a save whose file was deleted since it was read', async () => {
@@ -508,16 +536,24 @@ describe('PUT /api/files/text', () => {
     const test = await start();
     write(test, 'note.md', 'old');
 
-    expect((await save(test, { path: 'note.md', content: 'clobbered' })).statusCode).toBe(200);
-    expect(readFileSync(join(test.workspace, 'note.md'), 'utf8')).toBe('clobbered');
+    expect(
+      (await save(test, { path: 'note.md', content: 'clobbered' })).statusCode,
+    ).toBe(200);
+    expect(readFileSync(join(test.workspace, 'note.md'), 'utf8')).toBe(
+      'clobbered',
+    );
   });
 
   it('refuses a directory, and clamps a path that tried to leave', async () => {
     const test = await start();
     mkdirSync(join(test.workspace, 'notes'));
 
-    expect((await save(test, { path: 'notes', content: 'x' })).statusCode).toBe(400);
-    expect((await save(test, { path: '../escaped.txt', content: 'x' })).statusCode).toBe(200);
+    expect((await save(test, { path: 'notes', content: 'x' })).statusCode).toBe(
+      400,
+    );
+    expect(
+      (await save(test, { path: '../escaped.txt', content: 'x' })).statusCode,
+    ).toBe(200);
     expect(existsSync(join(test.workspace, 'escaped.txt'))).toBe(true);
     expect(existsSync(join(test.workspace, '..', 'escaped.txt'))).toBe(false);
   });
@@ -591,7 +627,10 @@ describe('POST /api/files/move', () => {
     const response = await move(test, 'notes.md', 'todo.md');
 
     expect(response.statusCode).toBe(200);
-    expect(response.json<FileEntry>()).toMatchObject({ path: 'todo.md', name: 'todo.md' });
+    expect(response.json<FileEntry>()).toMatchObject({
+      path: 'todo.md',
+      name: 'todo.md',
+    });
     expect(readFileSync(join(test.workspace, 'todo.md'), 'utf8')).toBe('hello');
     expect(existsSync(join(test.workspace, 'notes.md'))).toBe(false);
   });
@@ -606,7 +645,9 @@ describe('POST /api/files/move', () => {
 
     expect((await move(test, 'drafts', 'published')).statusCode).toBe(200);
 
-    expect(readFileSync(join(test.workspace, 'published', 'one.md'), 'utf8')).toBe('first');
+    expect(
+      readFileSync(join(test.workspace, 'published', 'one.md'), 'utf8'),
+    ).toBe('first');
     expect(existsSync(join(test.workspace, 'drafts'))).toBe(false);
   });
 
@@ -615,7 +656,9 @@ describe('POST /api/files/move', () => {
     mkdirSync(join(test.workspace, 'archive'));
     write(test, 'notes.md', 'hello');
 
-    expect((await move(test, 'notes.md', 'archive/notes.md')).statusCode).toBe(200);
+    expect((await move(test, 'notes.md', 'archive/notes.md')).statusCode).toBe(
+      200,
+    );
     expect(existsSync(join(test.workspace, 'archive', 'notes.md'))).toBe(true);
   });
 
@@ -627,7 +670,9 @@ describe('POST /api/files/move', () => {
     write(test, 'todo.md', 'and me');
 
     expect((await move(test, 'notes.md', 'todo.md')).statusCode).toBe(409);
-    expect(readFileSync(join(test.workspace, 'todo.md'), 'utf8')).toBe('and me');
+    expect(readFileSync(join(test.workspace, 'todo.md'), 'utf8')).toBe(
+      'and me',
+    );
     expect(existsSync(join(test.workspace, 'notes.md'))).toBe(true);
   });
 
@@ -645,7 +690,9 @@ describe('POST /api/files/move', () => {
     const response = await move(test, 'notes.md', 'nowhere/notes.md');
 
     expect(response.statusCode).toBe(400);
-    expect(response.json<{ error: { message: string } }>().error.message).toContain('nowhere');
+    expect(
+      response.json<{ error: { message: string } }>().error.message,
+    ).toContain('nowhere');
   });
 
   it('refuses to move a directory inside itself', async () => {
@@ -663,7 +710,9 @@ describe('POST /api/files/move', () => {
     write(test, 'notes.md', 'hello');
 
     expect((await move(test, 'notes.md', 'notes.md')).statusCode).toBe(200);
-    expect(readFileSync(join(test.workspace, 'notes.md'), 'utf8')).toBe('hello');
+    expect(readFileSync(join(test.workspace, 'notes.md'), 'utf8')).toBe(
+      'hello',
+    );
   });
 
   it('clamps both ends into the workspace', async () => {
@@ -672,7 +721,9 @@ describe('POST /api/files/move', () => {
     const test = await start();
     write(test, 'notes.md', 'hello');
 
-    expect((await move(test, 'notes.md', '../escaped.md')).statusCode).toBe(200);
+    expect((await move(test, 'notes.md', '../escaped.md')).statusCode).toBe(
+      200,
+    );
     expect(existsSync(join(test.workspace, 'escaped.md'))).toBe(true);
     expect(existsSync(join(test.workspace, '..', 'escaped.md'))).toBe(false);
   });
@@ -728,7 +779,9 @@ describe('signed media', () => {
     // unguessable.
     const edited = Buffer.from(
       JSON.stringify({
-        ...(JSON.parse(Buffer.from(payload ?? '', 'base64url').toString('utf8')) as object),
+        ...(JSON.parse(
+          Buffer.from(payload ?? '', 'base64url').toString('utf8'),
+        ) as object),
         p: 'secret.txt',
       }),
       'utf8',
@@ -746,15 +799,21 @@ describe('signed media', () => {
     const clock = manualClock();
     const test = await start({
       clock,
-      config: ConfigSchema.parse({ server: { auth: { signedUrlTtlMs: 60_000 } } }),
+      config: ConfigSchema.parse({
+        server: { auth: { signedUrlTtlMs: 60_000 } },
+      }),
     });
     write(test, 'photo.png', 'pixels');
 
     const url = await signed(test, 'photo.png');
-    expect((await test.server.app.inject({ method: 'GET', url })).statusCode).toBe(200);
+    expect(
+      (await test.server.app.inject({ method: 'GET', url })).statusCode,
+    ).toBe(200);
 
     clock.advance(60_001);
-    expect((await test.server.app.inject({ method: 'GET', url })).statusCode).toBe(401);
+    expect(
+      (await test.server.app.inject({ method: 'GET', url })).statusCode,
+    ).toBe(401);
   });
 
   it('refuses a signature made with another key', async () => {
@@ -766,7 +825,10 @@ describe('signed media', () => {
       workspaceId: 'default',
       expiresAtMs: Date.now() + 60_000,
     });
-    const response = await test.server.app.inject({ method: 'GET', url: mediaUrl(token) });
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: mediaUrl(token),
+    });
 
     expect(response.statusCode).toBe(401);
   });
@@ -813,7 +875,9 @@ describe('signed media', () => {
 
     // A valid signature for a file that is gone: authorised, and nothing to
     // serve. Distinct from the 401 a bad signature gets.
-    expect((await test.server.app.inject({ method: 'GET', url })).statusCode).toBe(404);
+    expect(
+      (await test.server.app.inject({ method: 'GET', url })).statusCode,
+    ).toBe(404);
   });
 
   it('refuses a signed path that became a symlink out of the workspace', async () => {
@@ -830,7 +894,9 @@ describe('signed media', () => {
     });
     symlinkSync('/etc/hosts', join(test.workspace, 'photo.png'));
 
-    expect((await test.server.app.inject({ method: 'GET', url })).statusCode).toBe(404);
+    expect(
+      (await test.server.app.inject({ method: 'GET', url })).statusCode,
+    ).toBe(404);
   });
 
   it('mints a token the server can also verify directly', async () => {
@@ -871,7 +937,9 @@ describe('the file routes are workspace-scoped', () => {
       headers: test.headers,
     });
 
-    const names = (response.json().entries as { name: string }[]).map((entry) => entry.name);
+    const names = (response.json().entries as Array<{ name: string }>).map(
+      (entry) => entry.name,
+    );
     expect(names).toEqual(['other.md']);
   });
 
@@ -934,7 +1002,9 @@ describe('the file routes are workspace-scoped', () => {
       headers: test.headers,
     });
 
-    const names = (response.json().entries as { name: string }[]).map((entry) => entry.name);
+    const names = (response.json().entries as Array<{ name: string }>).map(
+      (entry) => entry.name,
+    );
     expect(names).toContain('root-level.md');
   });
 

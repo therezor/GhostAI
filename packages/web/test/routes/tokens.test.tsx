@@ -19,7 +19,15 @@ describe('the style guide', () => {
   it('renders every surface, text tier and role', () => {
     renderWithProviders(<TokensRoute />);
 
-    for (const token of ['surface-0', 'surface-3', 'fg-1', 'fg-3', 'accent', 'danger', 'info']) {
+    for (const token of [
+      'surface-0',
+      'surface-3',
+      'fg-1',
+      'fg-3',
+      'accent',
+      'danger',
+      'info',
+    ]) {
       expect(screen.getAllByText(new RegExp(token)).length).toBeGreaterThan(0);
     }
   });
@@ -28,7 +36,9 @@ describe('the style guide', () => {
     renderWithProviders(<TokensRoute />);
 
     for (const variant of ['primary', 'secondary', 'ghost', 'danger', 'link']) {
-      expect(screen.getByRole('button', { name: `${variant} md` })).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: `${variant} md` }),
+      ).toBeInTheDocument();
     }
     // soft, solid and outline × six roles.
     expect(screen.getAllByText('warning')).toHaveLength(4);
@@ -56,11 +66,17 @@ describe('the style guide', () => {
   it('names only tokens the sheet actually declares', () => {
     const { container } = renderWithProviders(<TokensRoute />);
     const declared = new Set(
-      [...readTokensCss().matchAll(/^\s+(--[a-z0-9-]+):/gm)].map((match) => match[1]),
+      [...readTokensCss().matchAll(/^\s+(--[a-z0-9-]+):/gm)].map(
+        (match) => match[1],
+      ),
     );
 
     const referenced = [
-      ...new Set([...container.innerHTML.matchAll(/var\((--[a-z0-9-]+)\)/g)].map((m) => m[1])),
+      ...new Set(
+        [...container.innerHTML.matchAll(/var\((--[a-z0-9-]+)\)/g)].map(
+          (m) => m[1],
+        ),
+      ),
     ];
 
     // Guards the assertion below against an innerHTML that stopped carrying

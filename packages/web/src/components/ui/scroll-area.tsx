@@ -27,8 +27,14 @@ export function ScrollArea({
   readonly viewportRef?: React.Ref<HTMLDivElement>;
 }): JSX.Element {
   return (
-    <ScrollAreaPrimitive.Root className={cn('scroll-area', className)} {...props}>
-      <ScrollAreaPrimitive.Viewport ref={viewportRef} className="scroll-area__viewport">
+    <ScrollAreaPrimitive.Root
+      className={cn('scroll-area', className)}
+      {...props}
+    >
+      <ScrollAreaPrimitive.Viewport
+        ref={viewportRef}
+        className="scroll-area__viewport"
+      >
         {children}
       </ScrollAreaPrimitive.Viewport>
       <ScrollBar />
@@ -41,7 +47,9 @@ export function ScrollBar({
   className,
   orientation = 'vertical',
   ...props
-}: ComponentProps<typeof ScrollAreaPrimitive.ScrollAreaScrollbar>): JSX.Element {
+}: ComponentProps<
+  typeof ScrollAreaPrimitive.ScrollAreaScrollbar
+>): JSX.Element {
   return (
     <ScrollAreaPrimitive.ScrollAreaScrollbar
       orientation={orientation}

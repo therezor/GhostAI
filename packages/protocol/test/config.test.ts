@@ -55,11 +55,15 @@ describe('ConfigSchema', () => {
   it('does not share mutable defaults between parses', () => {
     const a = ConfigSchema.parse({});
     const b = ConfigSchema.parse({});
-    expect(a.agents.defaults.pinnedSkills).not.toBe(b.agents.defaults.pinnedSkills);
+    expect(a.agents.defaults.pinnedSkills).not.toBe(
+      b.agents.defaults.pinnedSkills,
+    );
   });
 
   it('preserves a partial override without dropping siblings', () => {
-    const config = ConfigSchema.parse({ agents: { defaults: { temperature: 0.7 } } });
+    const config = ConfigSchema.parse({
+      agents: { defaults: { temperature: 0.7 } },
+    });
     expect(config.agents.defaults.temperature).toBe(0.7);
     expect(config.agents.defaults.maxTokens).toBe(8192);
   });
@@ -68,7 +72,10 @@ describe('ConfigSchema', () => {
     const config = ConfigSchema.parse({
       channels: { telegram: { token: 'x', allowlist: ['1|me'] } },
     });
-    expect(config.channels.telegram).toEqual({ token: 'x', allowlist: ['1|me'] });
+    expect(config.channels.telegram).toEqual({
+      token: 'x',
+      allowlist: ['1|me'],
+    });
   });
 
   it('keys providers by instance id rather than a fixed field list', () => {
@@ -88,7 +95,11 @@ describe('ConfigSchema', () => {
     const config = ConfigSchema.parse({
       providers: {
         ollama: { type: 'ollama' },
-        'ollama-gpu': { type: 'ollama', label: 'GPU box', apiBase: 'http://gpu.lan:11434/v1' },
+        'ollama-gpu': {
+          type: 'ollama',
+          label: 'GPU box',
+          apiBase: 'http://gpu.lan:11434/v1',
+        },
       },
     });
     expect(Object.keys(config.providers)).toEqual(['ollama', 'ollama-gpu']);
@@ -97,26 +108,40 @@ describe('ConfigSchema', () => {
   });
 
   it('refuses an instance that does not name a type', () => {
-    expect(ConfigSchema.safeParse({ providers: { ollama: {} } }).success).toBe(false);
+    expect(ConfigSchema.safeParse({ providers: { ollama: {} } }).success).toBe(
+      false,
+    );
   });
 
   it('rejects an out-of-range port', () => {
-    expect(ConfigSchema.safeParse({ server: { port: 70_000 } }).success).toBe(false);
+    expect(ConfigSchema.safeParse({ server: { port: 70_000 } }).success).toBe(
+      false,
+    );
     expect(ConfigSchema.safeParse({ server: { port: 0 } }).success).toBe(false);
   });
 
   it('rejects a negative timeout but allows 0 as "no limit"', () => {
-    expect(AgentDefaultsSchema.safeParse({ toolTimeoutMs: -1 }).success).toBe(false);
-    expect(AgentDefaultsSchema.parse({ toolTimeoutMs: 0 }).toolTimeoutMs).toBe(0);
+    expect(AgentDefaultsSchema.safeParse({ toolTimeoutMs: -1 }).success).toBe(
+      false,
+    );
+    expect(AgentDefaultsSchema.parse({ toolTimeoutMs: 0 }).toolTimeoutMs).toBe(
+      0,
+    );
   });
 
   it('rejects a non-integer iteration cap', () => {
-    expect(AgentDefaultsSchema.safeParse({ maxToolIterations: 2.5 }).success).toBe(false);
+    expect(
+      AgentDefaultsSchema.safeParse({ maxToolIterations: 2.5 }).success,
+    ).toBe(false);
   });
 
   it('constrains temperature to a sane range', () => {
-    expect(AgentDefaultsSchema.safeParse({ temperature: 3 }).success).toBe(false);
-    expect(AgentDefaultsSchema.safeParse({ temperature: -0.1 }).success).toBe(false);
+    expect(AgentDefaultsSchema.safeParse({ temperature: 3 }).success).toBe(
+      false,
+    );
+    expect(AgentDefaultsSchema.safeParse({ temperature: -0.1 }).success).toBe(
+      false,
+    );
   });
 
   it('omits an unset reasoning effort rather than defaulting it', () => {
@@ -126,7 +151,9 @@ describe('ConfigSchema', () => {
   });
 
   it('rejects an unknown reasoning effort', () => {
-    expect(AgentDefaultsSchema.safeParse({ reasoningEffort: 'extreme' }).success).toBe(false);
+    expect(
+      AgentDefaultsSchema.safeParse({ reasoningEffort: 'extreme' }).success,
+    ).toBe(false);
   });
 
   it('takes `off` as a reasoning effort, which is not the same as unset', () => {
@@ -178,12 +205,17 @@ describe('McpServerConfigSchema', () => {
   });
 
   it('rejects an unknown transport', () => {
-    expect(McpServerConfigSchema.safeParse({ type: 'grpc' }).success).toBe(false);
+    expect(McpServerConfigSchema.safeParse({ type: 'grpc' }).success).toBe(
+      false,
+    );
   });
 
   it('requires the full triad when oauth is present', () => {
     expect(
-      McpServerConfigSchema.safeParse({ url: 'https://x', oauth: { clientId: 'a' } }).success,
+      McpServerConfigSchema.safeParse({
+        url: 'https://x',
+        oauth: { clientId: 'a' },
+      }).success,
     ).toBe(false);
     expect(
       McpServerConfigSchema.safeParse({
@@ -255,12 +287,16 @@ describe('AgentEntrySchema', () => {
   });
 
   it('rejects an unknown permission', () => {
-    expect(AgentEntrySchema.safeParse({ tools: { exec: 'maybe' } }).success).toBe(false);
+    expect(
+      AgentEntrySchema.safeParse({ tools: { exec: 'maybe' } }).success,
+    ).toBe(false);
   });
 
   it('still validates an inherited field it is given', () => {
     expect(AgentEntrySchema.safeParse({ temperature: 9 }).success).toBe(false);
-    expect(AgentEntrySchema.safeParse({ reasoningEffort: 'nope' }).success).toBe(false);
+    expect(
+      AgentEntrySchema.safeParse({ reasoningEffort: 'nope' }).success,
+    ).toBe(false);
   });
 });
 
@@ -310,12 +346,16 @@ describe('AgentsConfigSchema', () => {
 
 describe('ConfigPatchSchema', () => {
   it('accepts a null to delete a named agent', () => {
-    const patch = ConfigPatchSchema.parse({ agents: { list: { reviewer: null } } });
+    const patch = ConfigPatchSchema.parse({
+      agents: { list: { reviewer: null } },
+    });
     expect(patch.agents?.list?.reviewer).toBeNull();
   });
 
   it('patches one agent without restating the others or its own siblings', () => {
-    const patch = ConfigPatchSchema.parse({ agents: { list: { reviewer: { temperature: 0 } } } });
+    const patch = ConfigPatchSchema.parse({
+      agents: { list: { reviewer: { temperature: 0 } } },
+    });
 
     expect(patch.agents?.list?.reviewer?.temperature).toBe(0);
     expect(patch.agents?.list?.reviewer).not.toHaveProperty('label');
@@ -323,7 +363,9 @@ describe('ConfigPatchSchema', () => {
   });
 
   it('accepts a single deeply nested field', () => {
-    const patch = ConfigPatchSchema.parse({ agents: { defaults: { temperature: 0.5 } } });
+    const patch = ConfigPatchSchema.parse({
+      agents: { defaults: { temperature: 0.5 } },
+    });
     expect(patch.agents?.defaults?.temperature).toBe(0.5);
   });
 
@@ -334,33 +376,49 @@ describe('ConfigPatchSchema', () => {
   });
 
   it('patches a nested block without its siblings', () => {
-    const patch = ConfigPatchSchema.parse({ server: { auth: { enabled: false } } });
+    const patch = ConfigPatchSchema.parse({
+      server: { auth: { enabled: false } },
+    });
     expect(patch.server?.auth?.enabled).toBe(false);
     expect(patch.server).not.toHaveProperty('port');
   });
 
   it('still validates the fields it is given', () => {
-    expect(ConfigPatchSchema.safeParse({ server: { port: -1 } }).success).toBe(false);
+    expect(ConfigPatchSchema.safeParse({ server: { port: -1 } }).success).toBe(
+      false,
+    );
     expect(
-      ConfigPatchSchema.safeParse({ agents: { list: { a: { tools: { exec: 'nope' } } } } }).success,
+      ConfigPatchSchema.safeParse({
+        agents: { list: { a: { tools: { exec: 'nope' } } } },
+      }).success,
     ).toBe(false);
   });
 });
 
 describe('isLoopbackHost', () => {
-  it.each(['127.0.0.1', '127.1.2.3', '127.255.255.255', 'localhost', 'LOCALHOST', '::1', '[::1]'])(
-    'treats %s as loopback',
-    (host) => {
-      expect(isLoopbackHost(host)).toBe(true);
-    },
-  );
+  it.each([
+    '127.0.0.1',
+    '127.1.2.3',
+    '127.255.255.255',
+    'localhost',
+    'LOCALHOST',
+    '::1',
+    '[::1]',
+  ])('treats %s as loopback', (host) => {
+    expect(isLoopbackHost(host)).toBe(true);
+  });
 
-  it.each(['0.0.0.0', '::', '', '192.168.1.10', '10.0.0.1', 'example.com', '128.0.0.1'])(
-    'treats %s as remote',
-    (host) => {
-      expect(isLoopbackHost(host)).toBe(false);
-    },
-  );
+  it.each([
+    '0.0.0.0',
+    '::',
+    '',
+    '192.168.1.10',
+    '10.0.0.1',
+    'example.com',
+    '128.0.0.1',
+  ])('treats %s as remote', (host) => {
+    expect(isLoopbackHost(host)).toBe(false);
+  });
 
   it('ignores surrounding whitespace', () => {
     expect(isLoopbackHost('  127.0.0.1 ')).toBe(true);
@@ -381,7 +439,9 @@ describe('ConfigPatchSchema: the toolbox', () => {
       agents: { list: { boxed: { toolbox: { network: { mode: 'open' } } } } },
     });
 
-    expect(patch.agents?.list?.boxed?.toolbox?.network).toEqual({ mode: 'open' });
+    expect(patch.agents?.list?.boxed?.toolbox?.network).toEqual({
+      mode: 'open',
+    });
   });
 
   it('accepts a toolbox patch that names only the box', () => {

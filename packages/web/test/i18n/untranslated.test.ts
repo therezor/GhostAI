@@ -34,12 +34,13 @@ const sources = collectSources().filter(({ file }) => file.endsWith('.tsx'));
  * Stated as decisions rather than omissions — an allowlist nobody can explain
  * becomes the place strings go to avoid the gate.
  */
-const ALLOWED: readonly { readonly file: string; readonly why: string }[] = [
-  {
-    file: 'src/routes/tokens.tsx',
-    why: 'The design-system style guide. A developer-only surface, and its copy names tokens and CSS values rather than addressing a user.',
-  },
-];
+const ALLOWED: ReadonlyArray<{ readonly file: string; readonly why: string }> =
+  [
+    {
+      file: 'src/routes/tokens.tsx',
+      why: 'The design-system style guide. A developer-only surface, and its copy names tokens and CSS values rather than addressing a user.',
+    },
+  ];
 
 const ALLOWED_FILES = new Set(ALLOWED.map((entry) => entry.file));
 
@@ -79,17 +80,22 @@ const EXPRESSION = /\{[^{}]*\}/g;
  * rest. The gate only checks what it is told to check, which makes the contents
  * of this list the whole of the rule.
  */
-const COPY_ATTRIBUTES = /\b(?:aria-label|placeholder|title|alt|description|label|hint)="([^"]+)"/g;
+const COPY_ATTRIBUTES =
+  /\b(?:aria-label|placeholder|title|alt|description|label|hint)="([^"]+)"/g;
 
 function offendersIn(file: string, rawSource: string): string[] {
   const found: string[] = [];
   const source = rawSource.replace(EXPRESSION, '…');
 
   for (const [, text] of source.matchAll(JSX_TEXT)) {
-    if (text !== undefined && PROSE.test(text)) found.push(`${file}: >${text}<`);
+    if (text !== undefined && PROSE.test(text)) {
+      found.push(`${file}: >${text}<`);
+    }
   }
   for (const [, text] of source.matchAll(COPY_ATTRIBUTES)) {
-    if (text !== undefined && PROSE.test(text)) found.push(`${file}: "${text}"`);
+    if (text !== undefined && PROSE.test(text)) {
+      found.push(`${file}: "${text}"`);
+    }
   }
 
   return found;
@@ -98,7 +104,9 @@ function offendersIn(file: string, rawSource: string): string[] {
 describe('user-facing copy', () => {
   it('goes through the translation layer rather than sitting in the source', () => {
     const offenders = sources
-      .filter(({ file }) => !ALLOWED_FILES.has(file) && !file.includes('.test.'))
+      .filter(
+        ({ file }) => !ALLOWED_FILES.has(file) && !file.includes('.test.'),
+      )
       .flatMap(({ file, source }) => offendersIn(file, source));
 
     expect(offenders).toEqual([]);
@@ -115,7 +123,10 @@ describe('user-facing copy', () => {
         `${file} is not a source file`,
       ).toBe(true);
       expect(
-        offendersIn(file, sources.find((entry) => entry.file === file)?.source ?? '').length,
+        offendersIn(
+          file,
+          sources.find((entry) => entry.file === file)?.source ?? '',
+        ).length,
         `${file} no longer holds untranslated copy — drop it from the allowlist`,
       ).toBeGreaterThan(0);
     }

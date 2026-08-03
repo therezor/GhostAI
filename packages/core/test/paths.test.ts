@@ -37,7 +37,9 @@ describe('expandHome', () => {
   });
 
   it('expands a tilde-rooted path', () => {
-    expect(expandHome('~/.ghostai/workspace', HOME)).toBe(join(HOME, '.ghostai/workspace'));
+    expect(expandHome('~/.ghostai/workspace', HOME)).toBe(
+      join(HOME, '.ghostai/workspace'),
+    );
   });
 
   it('leaves ~user alone rather than guessing', () => {
@@ -68,7 +70,9 @@ describe('resolvePath', () => {
   });
 
   it('normalises traversal', () => {
-    expect(resolvePath('../sibling', '/base/dir')).toBe(resolve('/base/sibling'));
+    expect(resolvePath('../sibling', '/base/dir')).toBe(
+      resolve('/base/sibling'),
+    );
   });
 });
 
@@ -96,13 +100,19 @@ describe('resolveGhostPaths', () => {
   });
 
   it('honours the home environment variable', () => {
-    const paths = resolveGhostPaths({ home: HOME, env: { [HOME_ENV_VAR]: '/srv/ghost' } });
+    const paths = resolveGhostPaths({
+      home: HOME,
+      env: { [HOME_ENV_VAR]: '/srv/ghost' },
+    });
     expect(paths.root).toBe(resolve('/srv/ghost'));
     expect(paths.dbFile).toBe(resolve('/srv/ghost/ghost.db'));
   });
 
   it('expands a tilde in the environment variable', () => {
-    const paths = resolveGhostPaths({ home: HOME, env: { [HOME_ENV_VAR]: '~/ghost-data' } });
+    const paths = resolveGhostPaths({
+      home: HOME,
+      env: { [HOME_ENV_VAR]: '~/ghost-data' },
+    });
     expect(paths.root).toBe(resolve(HOME, 'ghost-data'));
   });
 
@@ -118,12 +128,20 @@ describe('resolveGhostPaths', () => {
   it('resolves a relative workspace against the root, not the cwd', () => {
     // A service restarted from a different directory must not end up with a
     // different workspace while the database still points at the old one.
-    const paths = resolveGhostPaths({ ...options, root: '/srv/ghost', workspace: 'files' });
+    const paths = resolveGhostPaths({
+      ...options,
+      root: '/srv/ghost',
+      workspace: 'files',
+    });
     expect(paths.workspace).toBe(resolve('/srv/ghost/files'));
   });
 
   it('accepts an absolute workspace outside the root', () => {
-    const paths = resolveGhostPaths({ ...options, root: '/srv/ghost', workspace: '/mnt/data' });
+    const paths = resolveGhostPaths({
+      ...options,
+      root: '/srv/ghost',
+      workspace: '/mnt/data',
+    });
     expect(paths.workspace).toBe(resolve('/mnt/data'));
   });
 
@@ -159,20 +177,26 @@ describe('agentDirFor', () => {
   const paths = resolveGhostPaths({ home: HOME, env: {} });
 
   it('gives each agent a directory of its own', () => {
-    expect(agentDirFor(paths, 'reviewer')).toBe(join(paths.agentsDir, 'reviewer'));
+    expect(agentDirFor(paths, 'reviewer')).toBe(
+      join(paths.agentsDir, 'reviewer'),
+    );
   });
 
   it('gives the default one too, rather than the parent', () => {
     // Unlike a workspace, `default` is not the parent of the others — an agent
     // whose memory sat one level up would see every other agent's.
-    expect(agentDirFor(paths, 'default')).toBe(join(paths.agentsDir, 'default'));
+    expect(agentDirFor(paths, 'default')).toBe(
+      join(paths.agentsDir, 'default'),
+    );
   });
 
   it('keeps every agent out of the workspace the tools can reach', () => {
     // The jail root is the workspace, so memory kept inside it would be
     // writable by `write_file` — prompt injection as a way to rewrite the
     // agent's own system prompt.
-    expect(agentDirFor(paths, 'reviewer').startsWith(paths.workspace)).toBe(false);
+    expect(agentDirFor(paths, 'reviewer').startsWith(paths.workspace)).toBe(
+      false,
+    );
   });
 
   it.each(['..', 'a/b', 'Reviewer', '', '~evil'])('refuses %j', (id) => {
@@ -184,12 +208,18 @@ describe('sharedDirFor', () => {
   const paths = resolveGhostPaths({ home: HOME, env: {} });
 
   it('keys the shared layer by workspace, not by agent', () => {
-    expect(sharedDirFor(paths, 'default')).toBe(join(paths.sharedDir, 'default'));
-    expect(sharedDirFor(paths, 'client-acme')).toBe(join(paths.sharedDir, 'client-acme'));
+    expect(sharedDirFor(paths, 'default')).toBe(
+      join(paths.sharedDir, 'default'),
+    );
+    expect(sharedDirFor(paths, 'client-acme')).toBe(
+      join(paths.sharedDir, 'client-acme'),
+    );
   });
 
   it('stays outside the workspace too', () => {
-    expect(sharedDirFor(paths, 'default').startsWith(paths.workspace)).toBe(false);
+    expect(sharedDirFor(paths, 'default').startsWith(paths.workspace)).toBe(
+      false,
+    );
   });
 
   it.each(['..', 'a/b', 'Work', ''])('refuses %j', (id) => {

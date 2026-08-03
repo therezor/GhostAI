@@ -28,7 +28,14 @@ import { Badge, badgeVariants } from '@/components/ui/badge.js';
 import { Button } from '@/components/ui/button.js';
 import { STYLES } from '@testkit/paths.js';
 
-const TONES = ['neutral', 'accent', 'success', 'warning', 'danger', 'info'] as const;
+const TONES = [
+  'neutral',
+  'accent',
+  'success',
+  'warning',
+  'danger',
+  'info',
+] as const;
 const VARIANTS = ['soft', 'solid', 'outline'] as const;
 
 const read = (file: string): string => readFileSync(join(STYLES, file), 'utf8');
@@ -36,12 +43,18 @@ const read = (file: string): string => readFileSync(join(STYLES, file), 'utf8');
 describe('Button', () => {
   it('defaults to type=button, so it cannot submit a form by accident', () => {
     render(<Button>Save</Button>);
-    expect(screen.getByRole('button', { name: 'Save' })).toHaveAttribute('type', 'button');
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveAttribute(
+      'type',
+      'button',
+    );
   });
 
   it('still submits when asked to', () => {
     render(<Button type="submit">Save</Button>);
-    expect(screen.getByRole('button', { name: 'Save' })).toHaveAttribute('type', 'submit');
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveAttribute(
+      'type',
+      'submit',
+    );
   });
 
   it("keeps a caller's class beside the recipe's, for the cascade to resolve", () => {
@@ -62,7 +75,9 @@ describe('Button', () => {
     // silently stops taking effect.
     expect(layers).toContain('components');
     expect(layers).toContain('screens');
-    expect(layers.indexOf('screens')).toBeGreaterThan(layers.indexOf('components'));
+    expect(layers.indexOf('screens')).toBeGreaterThan(
+      layers.indexOf('components'),
+    );
   });
 
   it('renders as its child, keeping the classes, so a link stays a link', () => {
@@ -132,7 +147,9 @@ describe('Badge', () => {
         expect(classes, `${tone}/${variant}`).toContain(`badge--${tone}`);
         expect(classes, `${tone}/${variant}`).toContain(`badge--${variant}`);
         expect(badgeCss, `${tone} has no rule`).toContain(`.badge--${tone} {`);
-        expect(badgeCss, `${variant} has no rule`).toContain(`.badge--${variant} {`);
+        expect(badgeCss, `${variant} has no rule`).toContain(
+          `.badge--${variant} {`,
+        );
       }
     }
   });
@@ -145,13 +162,19 @@ describe('Badge', () => {
       for (const [, value] of badgeCss.matchAll(
         new RegExp(String.raw`${property}:\s*var\((--[\w-]+)\)`, 'g'),
       )) {
-        expect(value, `${property} is a text position`).toMatch(/-fg$|^--fg-|^--on-fill$/);
+        expect(value, `${property} is a text position`).toMatch(
+          /-fg$|^--fg-|^--on-fill$/,
+        );
       }
     }
   });
 
   it('is soft and neutral by default, because a badge annotates', () => {
     render(<Badge>queued</Badge>);
-    expect(screen.getByText('queued')).toHaveClass('badge', 'badge--neutral', 'badge--soft');
+    expect(screen.getByText('queued')).toHaveClass(
+      'badge',
+      'badge--neutral',
+      'badge--soft',
+    );
   });
 });

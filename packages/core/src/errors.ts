@@ -119,8 +119,15 @@ export class GhostError extends Error {
   readonly messageKey: SharedMessageKey | undefined;
   readonly messageParams: Readonly<Record<string, string | number>> | undefined;
 
-  constructor(kind: ErrorKind, message: string, options: GhostErrorOptions = {}) {
-    super(message, options.cause === undefined ? undefined : { cause: options.cause });
+  constructor(
+    kind: ErrorKind,
+    message: string,
+    options: GhostErrorOptions = {},
+  ) {
+    super(
+      message,
+      options.cause === undefined ? undefined : { cause: options.cause },
+    );
     this.kind = kind;
     this.retryable = options.retryable ?? RETRYABLE_BY_KIND[kind];
     this.details = options.details ?? {};
@@ -139,7 +146,10 @@ export class GhostError extends Error {
 export function isGhostError(value: unknown): value is GhostError {
   if (!(value instanceof Error)) return false;
   const kind: unknown = (value as { kind?: unknown }).kind;
-  return typeof kind === 'string' && (ERROR_KINDS as readonly string[]).includes(kind);
+  return (
+    typeof kind === 'string' &&
+    (ERROR_KINDS as readonly string[]).includes(kind)
+  );
 }
 
 /**
@@ -162,15 +172,24 @@ export function isAbortError(value: unknown): boolean {
  * Already-typed errors pass through untouched, so re-normalising at each layer
  * of a call stack cannot degrade a precise kind into `internal`.
  */
-export function toGhostError(value: unknown, fallbackKind: ErrorKind = 'internal'): GhostError {
+export function toGhostError(
+  value: unknown,
+  fallbackKind: ErrorKind = 'internal',
+): GhostError {
   if (isGhostError(value)) return value;
-  if (isAbortError(value)) return new GhostError('aborted', 'Operation aborted', { cause: value });
+  if (isAbortError(value)) {
+    return new GhostError('aborted', 'Operation aborted', { cause: value });
+  }
   if (value instanceof Error) {
     return new GhostError(fallbackKind, value.message, { cause: value });
   }
-  return new GhostError(fallbackKind, typeof value === 'string' ? value : String(value), {
-    cause: value,
-  });
+  return new GhostError(
+    fallbackKind,
+    typeof value === 'string' ? value : String(value),
+    {
+      cause: value,
+    },
+  );
 }
 
 /** Constructs an `aborted` error. The one kind produced from many places. */
@@ -216,7 +235,10 @@ export interface AbortSubscription {
  * would leave the other writing this out anyway. Subscribing is the part that
  * is the same.
  */
-export function onAbort(signal: AbortSignal, run: () => void): AbortSubscription {
+export function onAbort(
+  signal: AbortSignal,
+  run: () => void,
+): AbortSubscription {
   if (signal.aborted) {
     run();
     return { dispose: () => undefined };

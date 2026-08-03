@@ -15,7 +15,12 @@ describe('helpText', () => {
   });
 
   it('groups the commands under headings', () => {
-    for (const heading of ['sessions', 'messages', 'context and cost', 'workspaces']) {
+    for (const heading of [
+      'sessions',
+      'messages',
+      'context and cost',
+      'workspaces',
+    ]) {
       expect(help).toContain(`\n  ${heading}\n`);
     }
   });
@@ -24,8 +29,12 @@ describe('helpText', () => {
     // The bug this replaces: the column was a fixed number of spaces typed in
     // by hand, so it held only while every description was English — and the
     // first row was two characters out even then.
-    const described = lines.filter((line) => / {2,}\S/u.test(line.trimStart().slice(1)));
-    const columns = new Set(described.map((line) => line.search(/\S(?!.*\s\s)/u)));
+    const described = lines.filter((line) =>
+      / {2,}\S/u.test(line.trimStart().slice(1)),
+    );
+    const columns = new Set(
+      described.map((line) => line.search(/\S(?!.*\s\s)/u)),
+    );
 
     expect(described.length).toBeGreaterThan(15);
     expect(columns.size).toBe(1);

@@ -45,9 +45,9 @@ describe('construction', () => {
   });
 
   it('refuses a missing root when create is off', () => {
-    expect(() => new WorkspaceJail({ root: join(base, 'nope'), create: false })).toThrow(
-      /Workspace root is unusable/,
-    );
+    expect(
+      () => new WorkspaceJail({ root: join(base, 'nope'), create: false }),
+    ).toThrow(/Workspace root is unusable/);
   });
 
   it('reports an unusable root as a config error', () => {
@@ -67,7 +67,9 @@ describe('resolve', () => {
   });
 
   it('accepts a nested path where no segment exists yet', () => {
-    expect(jail.resolve('a/b/c/d.txt')).toBe(join(root, 'a', 'b', 'c', 'd.txt'));
+    expect(jail.resolve('a/b/c/d.txt')).toBe(
+      join(root, 'a', 'b', 'c', 'd.txt'),
+    );
   });
 
   it('accepts an existing file', () => {
@@ -95,13 +97,18 @@ describe('clamping', () => {
    * caller can tell the model what happened rather than leaving it to believe
    * it read the host's file.
    */
-  const cases: readonly {
+  const cases: ReadonlyArray<{
     readonly name: string;
     readonly input: string;
     readonly segments: readonly string[];
     readonly rewrites: readonly string[];
-  }[] = [
-    { name: 'a bare tilde', input: '~', segments: [], rewrites: ['home_prefix'] },
+  }> = [
+    {
+      name: 'a bare tilde',
+      input: '~',
+      segments: [],
+      rewrites: ['home_prefix'],
+    },
     {
       name: 'a tilde path',
       input: '~/.ssh/id_ed25519',
@@ -276,15 +283,23 @@ describe('clamping', () => {
 });
 
 describe('refusals', () => {
-  const cases: readonly {
+  const cases: ReadonlyArray<{
     readonly name: string;
     readonly input: string;
     readonly rejection: string;
-  }[] = [
+  }> = [
     { name: 'an empty path', input: '', rejection: 'empty' },
     { name: 'a NUL byte', input: 'notes\0.md', rejection: 'nul_byte' },
-    { name: 'a NUL used to truncate an extension', input: 'ok.txt\0.png', rejection: 'nul_byte' },
-    { name: 'a name too long to verify', input: 'x'.repeat(4096), rejection: 'unverifiable' },
+    {
+      name: 'a NUL used to truncate an extension',
+      input: 'ok.txt\0.png',
+      rejection: 'nul_byte',
+    },
+    {
+      name: 'a name too long to verify',
+      input: 'x'.repeat(4096),
+      rejection: 'unverifiable',
+    },
   ];
 
   for (const { name, input, rejection } of cases) {
@@ -386,7 +401,14 @@ describe('pathShapes', () => {
   });
 
   it('agrees with what check() reports having rewritten', () => {
-    for (const input of ['/etc/passwd', '~/x', '../x', 'a/../b', 'src/a.ts', 'C:\\x']) {
+    for (const input of [
+      '/etc/passwd',
+      '~/x',
+      '../x',
+      'a/../b',
+      'src/a.ts',
+      'C:\\x',
+    ]) {
       const verdict = jail.check(input);
       expect(verdict.ok).toBe(true);
       if (verdict.ok) expect(verdict.rewrites).toEqual(pathShapes(input));
@@ -480,11 +502,16 @@ describe('property: nothing escapes', () => {
 
   it('holds for adversarial fragment sequences', () => {
     fc.assert(
-      fc.property(fc.array(escapeFragments, { minLength: 1, maxLength: 8 }), (fragments) => {
-        const verdict = jail.check(fragments.join(''));
-        if (!verdict.ok) return;
-        expect(verdict.path === root || verdict.path.startsWith(root + sep)).toBe(true);
-      }),
+      fc.property(
+        fc.array(escapeFragments, { minLength: 1, maxLength: 8 }),
+        (fragments) => {
+          const verdict = jail.check(fragments.join(''));
+          if (!verdict.ok) return;
+          expect(
+            verdict.path === root || verdict.path.startsWith(root + sep),
+          ).toBe(true);
+        },
+      ),
       { numRuns: 2000 },
     );
   });
@@ -494,7 +521,9 @@ describe('property: nothing escapes', () => {
       fc.property(fc.string(), (input) => {
         const verdict = jail.check(input);
         if (!verdict.ok) return;
-        expect(verdict.path === root || verdict.path.startsWith(root + sep)).toBe(true);
+        expect(
+          verdict.path === root || verdict.path.startsWith(root + sep),
+        ).toBe(true);
       }),
       { numRuns: 1000 },
     );
@@ -503,13 +532,18 @@ describe('property: nothing escapes', () => {
   it('clamps every traversal into the workspace instead of refusing it', () => {
     fc.assert(
       fc.property(
-        fc.array(fc.constantFrom('a', 'b', '..'), { minLength: 1, maxLength: 6 }),
+        fc.array(fc.constantFrom('a', 'b', '..'), {
+          minLength: 1,
+          maxLength: 6,
+        }),
         (segments) => {
           fc.pre(segments.includes('..'));
           const verdict = jail.check(segments.join('/'));
           expect(verdict.ok).toBe(true);
           if (!verdict.ok) return;
-          expect(verdict.path === root || verdict.path.startsWith(root + sep)).toBe(true);
+          expect(
+            verdict.path === root || verdict.path.startsWith(root + sep),
+          ).toBe(true);
           expect(verdict.rewrites).toContain('traversal');
         },
       ),
@@ -524,13 +558,18 @@ describe('property: nothing escapes', () => {
    */
   it('is idempotent: re-checking the clamped form lands in the same place', () => {
     fc.assert(
-      fc.property(fc.array(escapeFragments, { minLength: 1, maxLength: 8 }), (fragments) => {
-        const first = jail.check(fragments.join(''));
-        if (!first.ok) return;
-        const again = jail.check(first.relative === '' ? '.' : first.relative);
-        expect(again.ok).toBe(true);
-        if (again.ok) expect(again.path).toBe(first.path);
-      }),
+      fc.property(
+        fc.array(escapeFragments, { minLength: 1, maxLength: 8 }),
+        (fragments) => {
+          const first = jail.check(fragments.join(''));
+          if (!first.ok) return;
+          const again = jail.check(
+            first.relative === '' ? '.' : first.relative,
+          );
+          expect(again.ok).toBe(true);
+          if (again.ok) expect(again.path).toBe(first.path);
+        },
+      ),
       { numRuns: 2000 },
     );
   });

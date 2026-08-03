@@ -30,7 +30,11 @@ import { useTheme, type ThemeState } from './use-theme.js';
 
 const ThemeContext = createContext<ThemeState | undefined>(undefined);
 
-export function ThemeProvider({ children }: { readonly children: ReactNode }): JSX.Element {
+export function ThemeProvider({
+  children,
+}: {
+  readonly children: ReactNode;
+}): JSX.Element {
   const theme = useTheme();
   return <ThemeContext value={theme}>{children}</ThemeContext>;
 }

@@ -33,7 +33,9 @@ interface Connection {
   send(frame: unknown): void;
 }
 
-async function listening(options: Parameters<typeof startTestServer>[0] = {}): Promise<{
+async function listening(
+  options: Parameters<typeof startTestServer>[0] = {},
+): Promise<{
   test: TestServer;
   url: string;
 }> {
@@ -44,11 +46,17 @@ async function listening(options: Parameters<typeof startTestServer>[0] = {}): P
 }
 
 /** Opens a socket and collects what arrives on it. */
-async function connect(url: string, headers: Record<string, string> = {}): Promise<Connection> {
+async function connect(
+  url: string,
+  headers: Record<string, string> = {},
+): Promise<Connection> {
   const socket = new WebSocket(url, { headers });
   sockets.push(socket);
   const frames: ServerMessage[] = [];
-  const waiters: { type: string; resolve: (message: ServerMessage) => void }[] = [];
+  const waiters: Array<{
+    type: string;
+    resolve: (message: ServerMessage) => void;
+  }> = [];
 
   socket.on('message', (data: Buffer) => {
     const message = JSON.parse(data.toString('utf8')) as ServerMessage;
@@ -100,7 +108,11 @@ describe('GET /ws', () => {
     const connection = await connect(`${url}/ws`, test.headers);
     const greeting = await connection.next('connected');
 
-    expect(greeting).toMatchObject({ type: 'connected', protocolVersion: 2, lastSeq: 0 });
+    expect(greeting).toMatchObject({
+      type: 'connected',
+      protocolVersion: 2,
+      lastSeq: 0,
+    });
   });
 
   it('opens on the session the query names, and runs a turn on it', async () => {
@@ -108,13 +120,23 @@ describe('GET /ws', () => {
 
     const connection = await connect(`${url}/ws?session=web:42`, test.headers);
     await connection.next('connected');
-    connection.send({ type: 'user.message', sessionKey: 'web:42', content: 'a question' });
+    connection.send({
+      type: 'user.message',
+      sessionKey: 'web:42',
+      content: 'a question',
+    });
 
     const delta = await connection.next('assistant.delta');
     await connection.next('turn.end');
 
-    expect(delta).toMatchObject({ type: 'assistant.delta', text: 'the answer' });
-    expect(test.runner.inputs[0]).toMatchObject({ sessionKey: 'web:42', content: 'a question' });
+    expect(delta).toMatchObject({
+      type: 'assistant.delta',
+      text: 'the answer',
+    });
+    expect(test.runner.inputs[0]).toMatchObject({
+      sessionKey: 'web:42',
+      content: 'a question',
+    });
     // The origin every session list and every prompt reads.
     expect(test.runner.inputs[0]?.channel).toBe('web');
   });
@@ -135,7 +157,9 @@ describe('GET /ws', () => {
     const { test, url } = await listening();
 
     // 422, the same code every other route answers a failed schema with.
-    await expect(connect(`${url}/ws?session=`, test.headers)).rejects.toThrow(/422/);
+    await expect(connect(`${url}/ws?session=`, test.headers)).rejects.toThrow(
+      /422/,
+    );
   });
 
   it('tells an ordinary GET what the endpoint actually speaks', async () => {
@@ -149,7 +173,10 @@ describe('GET /ws', () => {
 
     expect(response.statusCode).toBe(426);
     expect(response.json()).toEqual({
-      error: { code: 'bad_request', message: expect.stringContaining('WebSocket') },
+      error: {
+        code: 'bad_request',
+        message: expect.stringContaining('WebSocket'),
+      },
     });
   });
 

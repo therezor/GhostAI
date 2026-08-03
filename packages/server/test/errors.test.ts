@@ -14,7 +14,9 @@ import {
 
 describe('errorBody', () => {
   it('produces the protocol envelope', () => {
-    expect(ErrorResponseSchema.safeParse(errorBody('not_found', 'gone')).success).toBe(true);
+    expect(
+      ErrorResponseSchema.safeParse(errorBody('not_found', 'gone')).success,
+    ).toBe(true);
   });
 
   it('omits an empty details object rather than sending one', () => {
@@ -27,12 +29,17 @@ describe('errorBody', () => {
 describe('resolveError', () => {
   // The whole point of the kind taxonomy: a status is derived from a flag, never
   // from the text of a message.
-  it.each(ERROR_KINDS)('maps the %s kind to a status without reading the message', (kind) => {
-    const resolved = resolveError(new GhostError(kind, 'rate limit not found internal 429'));
+  it.each(ERROR_KINDS)(
+    'maps the %s kind to a status without reading the message',
+    (kind) => {
+      const resolved = resolveError(
+        new GhostError(kind, 'rate limit not found internal 429'),
+      );
 
-    expect(resolved.status).toBeGreaterThanOrEqual(400);
-    expect(ErrorResponseSchema.safeParse(resolved.body).success).toBe(true);
-  });
+      expect(resolved.status).toBeGreaterThanOrEqual(400);
+      expect(ErrorResponseSchema.safeParse(resolved.body).success).toBe(true);
+    },
+  );
 
   it.each([
     ['not_found', 404, 'not_found'],
@@ -51,27 +58,42 @@ describe('resolveError', () => {
   // A `GhostError` is written for an operator to act on; a stray `TypeError`
   // carries a file path, a SQL fragment or a stringified row.
   it('shows an operator error at 500 and hides anything else', () => {
-    expect(resolveError(new GhostError('storage', 'the database file is read-only')).body).toEqual({
+    expect(
+      resolveError(new GhostError('storage', 'the database file is read-only'))
+        .body,
+    ).toEqual({
       error: { code: 'internal', message: 'the database file is read-only' },
     });
     expect(
-      resolveError(new TypeError("Cannot read 'x' of undefined at /Users/me/secret")).body,
-    ).toEqual({ error: { code: 'internal', message: 'Internal server error' } });
+      resolveError(
+        new TypeError("Cannot read 'x' of undefined at /Users/me/secret"),
+      ).body,
+    ).toEqual({
+      error: { code: 'internal', message: 'Internal server error' },
+    });
   });
 
   it('keeps an HttpError status, code and details', () => {
-    const resolved = resolveError(unprocessable('Invalid body', { '/password': 'Required' }));
+    const resolved = resolveError(
+      unprocessable('Invalid body', { '/password': 'Required' }),
+    );
 
     expect(resolved.status).toBe(422);
     expect(resolved.body).toEqual({
-      error: { code: 'bad_request', message: 'Invalid body', details: { '/password': 'Required' } },
+      error: {
+        code: 'bad_request',
+        message: 'Invalid body',
+        details: { '/password': 'Required' },
+      },
     });
   });
 
   // Fastify's own 4xx — malformed JSON, an unsupported content type. Mapping
   // these through the kind table would report a client mistake as a 500.
   it('honours a 4xx statusCode from a plain error', () => {
-    const error = Object.assign(new Error('Unexpected token'), { statusCode: 400 });
+    const error = Object.assign(new Error('Unexpected token'), {
+      statusCode: 400,
+    });
     expect(resolveError(error).status).toBe(400);
     expect(resolveError(error).body.error.code).toBe('bad_request');
   });
@@ -88,13 +110,19 @@ describe('resolveError', () => {
   });
 
   it('does not honour a 5xx statusCode from a plugin', () => {
-    const error = Object.assign(new Error('internal plugin detail'), { statusCode: 503 });
+    const error = Object.assign(new Error('internal plugin detail'), {
+      statusCode: 503,
+    });
     expect(resolveError(error).status).toBe(500);
-    expect(resolveError(error).body.error.message).toBe('Internal server error');
+    expect(resolveError(error).body.error.message).toBe(
+      'Internal server error',
+    );
   });
 
   it('classifies an abort as neither a failure nor a success', () => {
-    const abort = Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
+    const abort = Object.assign(new Error('The operation was aborted'), {
+      name: 'AbortError',
+    });
     expect(resolveError(abort).status).toBe(499);
   });
 

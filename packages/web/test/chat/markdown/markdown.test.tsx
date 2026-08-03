@@ -54,7 +54,9 @@ describe('untrusted markdown', () => {
   });
 
   it('shows raw HTML as source rather than mounting it', () => {
-    const { container } = render(<Markdown text={'<img src=x onerror="alert(1)">'} />);
+    const { container } = render(
+      <Markdown text={'<img src=x onerror="alert(1)">'} />,
+    );
 
     expect(container.querySelector('img')).toBeNull();
     expect(screen.getByText(/onerror/)).toBeInTheDocument();
@@ -84,7 +86,9 @@ describe('the block renderer', () => {
       />,
     );
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Title' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Title' }),
+    ).toBeInTheDocument();
     expect(screen.getByText('bold').tagName).toBe('STRONG');
     expect(screen.getByText('code').tagName).toBe('CODE');
     expect(screen.getByText('gone').tagName).toBe('DEL');
@@ -98,7 +102,10 @@ describe('the block renderer', () => {
     render(<Markdown text={'- [x] done\n- [ ] not done'} />);
 
     const boxes = screen.getAllByRole('checkbox');
-    expect(boxes.map((box) => (box as HTMLInputElement).checked)).toEqual([true, false]);
+    expect(boxes.map((box) => (box as HTMLInputElement).checked)).toEqual([
+      true,
+      false,
+    ]);
     // The model's rendering of its own plan, not a control: there is nothing a
     // press could change.
     expect(boxes[0]).toHaveAttribute('readonly');
@@ -124,17 +131,23 @@ describe('a code block', () => {
   });
 
   it('is highlighted once the fence has closed', async () => {
-    const { container } = render(<Markdown text={'```ts\nconst a = 1;\n```'} />);
+    const { container } = render(
+      <Markdown text={'```ts\nconst a = 1;\n```'} />,
+    );
 
     await waitFor(() => {
       // Colour arrives as spans with an inline colour from the theme; before
       // it, the `<code>` holds one text node.
-      expect(container.querySelectorAll('code span[style]').length).toBeGreaterThan(0);
+      expect(
+        container.querySelectorAll('code span[style]').length,
+      ).toBeGreaterThan(0);
     });
   });
 
   it('is not highlighted while the fence is still being written', async () => {
-    const { container } = render(<Markdown text={'```ts\nconst a = 1;'} streaming />);
+    const { container } = render(
+      <Markdown text={'```ts\nconst a = 1;'} streaming />,
+    );
 
     // Re-tokenising a half-written string flickers between two colourings on
     // every delta, which is worse than no colour at all.

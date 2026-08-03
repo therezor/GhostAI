@@ -10,13 +10,22 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { applyMention, mentionAtCaret, mentionSuggestions } from '@/chat/mentions.js';
+import {
+  applyMention,
+  mentionAtCaret,
+  mentionSuggestions,
+} from '@/chat/mentions.js';
 
-const at = (text: string): ReturnType<typeof mentionAtCaret> => mentionAtCaret(text, text.length);
+const at = (text: string): ReturnType<typeof mentionAtCaret> =>
+  mentionAtCaret(text, text.length);
 
 describe('mentionAtCaret', () => {
   it('finds a namespace being typed', () => {
-    expect(at('scope this to @k')).toMatchObject({ start: 14, kind: undefined, query: 'k' });
+    expect(at('scope this to @k')).toMatchObject({
+      start: 14,
+      kind: undefined,
+      query: 'k',
+    });
   });
 
   it('finds a value being typed once the colon is in', () => {
@@ -45,7 +54,11 @@ describe('mentionAtCaret', () => {
   it('reads the caret rather than the end of the text', () => {
     const text = '@kb:docs trailing words';
 
-    expect(mentionAtCaret(text, 6)).toMatchObject({ kind: 'kb', query: 'do', end: 6 });
+    expect(mentionAtCaret(text, 6)).toMatchObject({
+      kind: 'kb',
+      query: 'do',
+      end: 6,
+    });
   });
 });
 
@@ -53,16 +66,14 @@ describe('mentionSuggestions', () => {
   it('offers the namespaces that match what has been typed', () => {
     const query = at('@');
     expect(query).toBeDefined();
-    expect(mentionSuggestions(query!).map((suggestion) => suggestion.insert)).toEqual([
-      '@kb:',
-      '@mcp:',
-      '@skill:',
-    ]);
+    expect(
+      mentionSuggestions(query!).map((suggestion) => suggestion.insert),
+    ).toEqual(['@kb:', '@mcp:', '@skill:']);
 
     const narrowed = at('@sk');
-    expect(mentionSuggestions(narrowed!).map((suggestion) => suggestion.insert)).toEqual([
-      '@skill:',
-    ]);
+    expect(
+      mentionSuggestions(narrowed!).map((suggestion) => suggestion.insert),
+    ).toEqual(['@skill:']);
   });
 
   it('offers nothing once a namespace is chosen', () => {

@@ -20,7 +20,11 @@
  * subpath export.
  */
 
-import { scriptedProvider, toolCall, type ScriptedTurn } from '@ghostai/agent/testkit';
+import {
+  scriptedProvider,
+  toolCall,
+  type ScriptedTurn,
+} from '@ghostai/agent/testkit';
 import { textOf } from '@ghostai/core';
 import type { ChatMessage } from '@ghostai/protocol';
 import {
@@ -78,7 +82,9 @@ export function turnIndex(messages: readonly ChatMessage[]): number {
  * without this check every request would look like the user had typed a clock.
  */
 function isRuntimeReminder(message: ChatMessage): boolean {
-  return message.role === 'user' && textOf(message).startsWith('<system-reminder>');
+  return (
+    message.role === 'user' && textOf(message).startsWith('<system-reminder>')
+  );
 }
 
 /** The last thing the user said, or `''` before they have said anything. */
@@ -122,7 +128,10 @@ function aborted(signal: AbortSignal | undefined): Promise<void> {
  * cancelled, and `scriptedProvider` then raises the `AbortError` it always
  * would have.
  */
-function endsOnAbort(turn: ScriptedTurn, signal: AbortSignal | undefined): ScriptedTurn {
+function endsOnAbort(
+  turn: ScriptedTurn,
+  signal: AbortSignal | undefined,
+): ScriptedTurn {
   const { onStream } = turn;
   if (onStream === undefined) return turn;
   return {
@@ -145,7 +154,8 @@ export function routedProvider(routes: readonly Route[]): ChatProvider {
   // One instance per request, holding exactly the turn that request maps to.
   // `scriptedProvider` repeats its last entry forever, so a single-entry script
   // is a provider that can only produce the turn it was handed.
-  const delegate = (request: ChatRequest): ChatProvider => scriptedProvider([turnFor(request)]);
+  const delegate = (request: ChatRequest): ChatProvider =>
+    scriptedProvider([turnFor(request)]);
 
   return {
     id: SPEC.id,

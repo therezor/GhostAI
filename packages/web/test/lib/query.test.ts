@@ -17,18 +17,26 @@ function retryOf(): (failureCount: number, error: Error) => boolean {
   const client = createQueryClient();
   const retry = client.getDefaultOptions().queries?.retry;
 
-  if (typeof retry !== 'function') throw new Error('Expected a retry predicate');
+  if (typeof retry !== 'function') {
+    throw new Error('Expected a retry predicate');
+  }
   return retry;
 }
 
 describe('the query client', () => {
   it('never retries an unauthenticated request', () => {
-    expect(retryOf()(0, new ApiError(401, 'unauthorized', 'No session'))).toBe(false);
+    expect(retryOf()(0, new ApiError(401, 'unauthorized', 'No session'))).toBe(
+      false,
+    );
   });
 
   it('never retries a request the server refused on its merits', () => {
-    expect(retryOf()(0, new ApiError(422, 'invalid_request', 'Bad path'))).toBe(false);
-    expect(retryOf()(0, new ApiError(404, 'not_found', 'No such session'))).toBe(false);
+    expect(retryOf()(0, new ApiError(422, 'invalid_request', 'Bad path'))).toBe(
+      false,
+    );
+    expect(
+      retryOf()(0, new ApiError(404, 'not_found', 'No such session')),
+    ).toBe(false);
   });
 
   it('retries a server-side failure, twice', () => {
@@ -45,12 +53,16 @@ describe('the query client', () => {
   });
 
   it('does not refetch on window focus, because the socket is the live channel', () => {
-    expect(createQueryClient().getDefaultOptions().queries?.refetchOnWindowFocus).toBe(false);
+    expect(
+      createQueryClient().getDefaultOptions().queries?.refetchOnWindowFocus,
+    ).toBe(false);
   });
 
   it('keys a session-scoped query by its session', () => {
     // Two sessions must not share a cache entry — the whole reason the keys are
     // functions rather than constants.
-    expect(queryKeys.messages('web:1')).not.toEqual(queryKeys.messages('web:2'));
+    expect(queryKeys.messages('web:1')).not.toEqual(
+      queryKeys.messages('web:2'),
+    );
   });
 });

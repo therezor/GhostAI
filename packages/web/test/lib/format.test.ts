@@ -79,7 +79,9 @@ describe('formatBytes', () => {
 
 describe('tool arguments', () => {
   it('collapse to one line for the collapsed header', () => {
-    expect(summariseArgs({ command: 'ls\n-la' })).toBe('{"command":"ls\\n-la"}');
+    expect(summariseArgs({ command: 'ls\n-la' })).toBe(
+      '{"command":"ls\\n-la"}',
+    );
   });
 
   it('truncate rather than wrap', () => {

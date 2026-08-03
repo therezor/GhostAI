@@ -88,7 +88,11 @@ export {
 } from './container-runner.js';
 
 export { coerceArgv } from './argv.js';
-export { toolboxPermissions, toolboxTool, toolboxTools } from './toolbox-tools.js';
+export {
+  toolboxPermissions,
+  toolboxTool,
+  toolboxTools,
+} from './toolbox-tools.js';
 
 export {
   BUILTIN_TOOLS,

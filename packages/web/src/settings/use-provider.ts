@@ -20,7 +20,11 @@
 import type { TFunction } from 'i18next';
 import { useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import type { ConfigPatch, ProviderTestRequest, ProviderTestResponse } from '@ghostai/protocol';
+import type {
+  ConfigPatch,
+  ProviderTestRequest,
+  ProviderTestResponse,
+} from '@ghostai/protocol';
 
 import { api } from '@/lib/api.js';
 import { toast } from '@/components/ui/toast.js';
@@ -89,7 +93,11 @@ function useProbe(): {
   readonly probing: boolean;
   readonly clear: () => void;
 } {
-  const mutation = useMutation<ProviderTestResponse, Error, ProviderTestRequest>({
+  const mutation = useMutation<
+    ProviderTestResponse,
+    Error,
+    ProviderTestRequest
+  >({
     mutationFn: async (request) => {
       try {
         return await api.testProvider(request);
@@ -108,7 +116,9 @@ function useProbe(): {
     // `onSuccess` rather than `onSettled`: the mutation function above cannot
     // reject, so success is the only way this finishes.
     run: (request, options) => {
-      mutation.mutate(request, { ...(options?.onSettled && { onSuccess: options.onSettled }) });
+      mutation.mutate(request, {
+        ...(options?.onSettled && { onSuccess: options.onSettled }),
+      });
     },
     result: mutation.data ?? null,
     probing: mutation.isPending,
@@ -135,7 +145,9 @@ export function useSaveProvider(): SaveProviderHandle {
   // the per-call options the caller passed to `save`. A ref rather than state:
   // nothing renders from it, and setting state here would re-render the panel
   // between the save landing and the check starting.
-  const onProbe = useRef<((result: ProviderTestResponse) => void) | undefined>(undefined);
+  const onProbe = useRef<((result: ProviderTestResponse) => void) | undefined>(
+    undefined,
+  );
 
   const mutation = useMutation({
     mutationFn: async (input: SaveProviderInput) => {
@@ -165,7 +177,9 @@ export function useSaveProvider(): SaveProviderHandle {
             : 'The next turn will use the new key.',
       );
       if (input.test !== null) {
-        probe.run(input.test, { ...(onProbe.current && { onSettled: onProbe.current }) });
+        probe.run(input.test, {
+          ...(onProbe.current && { onSettled: onProbe.current }),
+        });
       }
     },
     onError: (error: Error) => {
@@ -181,7 +195,9 @@ export function useSaveProvider(): SaveProviderHandle {
       // The previous verdict describes the previous connection. Leaving it up
       // while the new one saves is the one moment it is actively misleading.
       probe.clear();
-      mutation.mutate(input, { ...(options?.onSuccess && { onSuccess: options.onSuccess }) });
+      mutation.mutate(input, {
+        ...(options?.onSuccess && { onSuccess: options.onSuccess }),
+      });
     },
     saving: mutation.isPending,
     result: probe.result,
@@ -200,13 +216,17 @@ export function useSaveProvider(): SaveProviderHandle {
  * the editor, which both offer it.
  */
 export function useRemoveProvider(): {
-  readonly remove: (instanceId: string, options?: { readonly onSuccess?: () => void }) => void;
+  readonly remove: (
+    instanceId: string,
+    options?: { readonly onSuccess?: () => void },
+  ) => void;
   readonly removing: boolean;
 } {
   const queryClient = useQueryClient();
 
   const mutation = useMutation<unknown, Error, string>({
-    mutationFn: (instanceId) => api.patchSettings(toDeleteProviderPatch(instanceId)),
+    mutationFn: (instanceId) =>
+      api.patchSettings(toDeleteProviderPatch(instanceId)),
     onSuccess: async () => {
       await queryClient.invalidateQueries();
       toast.success('Provider removed', 'Its saved key was deleted with it.');
@@ -218,7 +238,9 @@ export function useRemoveProvider(): {
 
   return {
     remove: (instanceId, options) => {
-      mutation.mutate(instanceId, { ...(options?.onSuccess && { onSuccess: options.onSuccess }) });
+      mutation.mutate(instanceId, {
+        ...(options?.onSuccess && { onSuccess: options.onSuccess }),
+      });
     },
     removing: mutation.isPending,
   };
@@ -234,12 +256,18 @@ export function useRemoveProvider(): {
  * for a transport fault it is already a full sentence naming the host and the
  * fault, so it is used as-is.
  */
-export function describeProbe(result: ProviderTestResponse, saved: boolean, t: TFunction): string {
+export function describeProbe(
+  result: ProviderTestResponse,
+  saved: boolean,
+  t: TFunction,
+): string {
   const prefix = saved ? 'Saved — but ' : '';
 
   if (result.ok) {
     const count = result.models.length;
-    return count === 0 ? t('providers.reachableNoModels') : t('providers.reachable', { count });
+    return count === 0
+      ? t('providers.reachableNoModels')
+      : t('providers.reachable', { count });
   }
 
   switch (result.reason) {

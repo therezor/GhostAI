@@ -54,7 +54,9 @@ function fakeScheduler(over: Partial<SchedulerPort> = {}): FakeScheduler {
   };
 }
 
-async function start(options: Parameters<typeof startTestServer>[0] = {}): Promise<TestServer> {
+async function start(
+  options: Parameters<typeof startTestServer>[0] = {},
+): Promise<TestServer> {
   const started = await startTestServer(options);
   running.push(started);
   return started;
@@ -102,7 +104,9 @@ describe('automation jobs CRUD', () => {
       headers: test.headers,
     });
     expect(response.statusCode).toBe(200);
-    expect(response.json<AutomationJobListResponse>().jobs.map((j) => j.name)).toEqual(['Morning']);
+    expect(
+      response.json<AutomationJobListResponse>().jobs.map((j) => j.name),
+    ).toEqual(['Morning']);
   });
 
   it('reads one job back by id, so a deep link resolves', async () => {
@@ -171,7 +175,9 @@ describe('automation jobs CRUD', () => {
       payload: { schedule: { kind: 'every', everyMs: 60_000 } },
     });
 
-    expect(response.json<AutomationJob>().state.nextRunAtMs).not.toBe(created.state.nextRunAtMs);
+    expect(response.json<AutomationJob>().state.nextRunAtMs).not.toBe(
+      created.state.nextRunAtMs,
+    );
   });
 
   it('unschedules a job that is switched off, and reschedules one switched on', async () => {
@@ -261,8 +267,13 @@ describe('automation validation', () => {
     });
 
     expect(response.statusCode).toBe(422);
-    expect(response.json<{ error: { details?: Record<string, unknown> } }>().error.details).toEqual(
-      expect.objectContaining({ '/schedule': expect.stringContaining('cron') as unknown }),
+    expect(
+      response.json<{ error: { details?: Record<string, unknown> } }>().error
+        .details,
+    ).toEqual(
+      expect.objectContaining({
+        '/schedule': expect.stringContaining('cron') as unknown,
+      }),
     );
   });
 
@@ -292,7 +303,10 @@ describe('automation validation', () => {
       method: 'POST',
       url: '/api/automation/jobs',
       headers: test.headers,
-      payload: { ...CRON_BODY, schedule: { kind: 'cron', expr: '0 9 * * *', tz: 'Europe/Kyiv' } },
+      payload: {
+        ...CRON_BODY,
+        schedule: { kind: 'cron', expr: '0 9 * * *', tz: 'Europe/Kyiv' },
+      },
     });
     expect(response.statusCode).toBe(422);
   });
@@ -302,7 +316,9 @@ describe('automation validation', () => {
     // different instant in a different install zone, and nothing about the job
     // changed between these two.
     const at = async (timezone: string): Promise<number> => {
-      const test = await start({ config: ConfigSchema.parse({ ui: { timezone } }) });
+      const test = await start({
+        config: ConfigSchema.parse({ ui: { timezone } }),
+      });
       const response = await test.server.app.inject({
         method: 'POST',
         url: '/api/automation/jobs',
@@ -326,7 +342,10 @@ describe('automation validation', () => {
       method: 'POST',
       url: '/api/automation/jobs',
       headers: test.headers,
-      payload: { ...CRON_BODY, schedule: { kind: 'cron', expr: '0 9 * * *', atMs: 5 } },
+      payload: {
+        ...CRON_BODY,
+        schedule: { kind: 'cron', expr: '0 9 * * *', atMs: 5 },
+      },
     });
     // 422 rather than 400: the body was well-formed JSON that failed its
     // schema, which is what the repo's `unprocessable` is for.
@@ -415,14 +434,18 @@ describe('automation run on demand', () => {
       headers: test.headers,
     });
     expect(response.statusCode).toBe(422);
-    expect(response.json<{ error: { message: string } }>().error.message).toMatch(/disabled/u);
+    expect(
+      response.json<{ error: { message: string } }>().error.message,
+    ).toMatch(/disabled/u);
   });
 
   it('answers 409 when the job is already running', async () => {
     const { test, job } = await withJob(
       fakeScheduler({
         runNow: () => {
-          throw Object.assign(new Error('"Morning" is already running.'), { kind: 'conflict' });
+          throw Object.assign(new Error('"Morning" is already running.'), {
+            kind: 'conflict',
+          });
         },
       }),
     );
@@ -472,7 +495,9 @@ describe('automation run history', () => {
     const rest = second.json<AutomationRunListResponse>();
     expect(rest.runs).toHaveLength(1);
     expect(rest.nextCursor).toBeUndefined();
-    expect([...page.runs, ...rest.runs].map((r) => r.id).sort()).toEqual([...ids].sort());
+    expect([...page.runs, ...rest.runs].map((r) => r.id).sort()).toEqual(
+      [...ids].sort(),
+    );
   });
 
   it('refuses a cursor this server did not issue', async () => {
@@ -557,7 +582,10 @@ describe('automation run history', () => {
     ).json<AutomationJob>();
 
     const run = test.automation.startRun({ jobId: job.id });
-    test.automation.finishRun(run.id, { status: 'ok', warnings: ['no channel is wired yet'] });
+    test.automation.finishRun(run.id, {
+      status: 'ok',
+      warnings: ['no channel is wired yet'],
+    });
 
     const response = await test.server.app.inject({
       method: 'GET',

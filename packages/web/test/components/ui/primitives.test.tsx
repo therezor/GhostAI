@@ -33,11 +33,20 @@ import {
 } from '@/components/ui/dropdown-menu.js';
 import { Field } from '@/components/ui/field.js';
 import { Switch } from '@/components/ui/switch.js';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.js';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs.js';
 import { Toaster, resetToasts, toast } from '@/components/ui/toast.js';
 
 describe('Dialog', () => {
-  function Example({ onConfirm = vi.fn() }: { readonly onConfirm?: () => void }) {
+  function Example({
+    onConfirm = vi.fn(),
+  }: {
+    readonly onConfirm?: () => void;
+  }) {
     return (
       <Dialog>
         <DialogTrigger asChild>
@@ -169,7 +178,13 @@ describe('Switch', () => {
 
     function Example() {
       const [on, setOn] = useState(false);
-      return <Switch checked={on} onCheckedChange={setOn} aria-label="Stream responses" />;
+      return (
+        <Switch
+          checked={on}
+          onCheckedChange={setOn}
+          aria-label="Stream responses"
+        />
+      );
     }
     render(<Example />);
 
@@ -203,7 +218,10 @@ describe('Tabs', () => {
     await user.tab();
     await user.keyboard('{ArrowRight}');
 
-    expect(screen.getByRole('tab', { name: 'Second' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Second' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     expect(screen.getByText('Second panel')).toBeInTheDocument();
   });
 });

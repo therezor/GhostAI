@@ -42,7 +42,11 @@ export function browserTimezone(): string {
   }
 }
 
-export function TimezoneProvider({ children }: { readonly children: ReactNode }): JSX.Element {
+export function TimezoneProvider({
+  children,
+}: {
+  readonly children: ReactNode;
+}): JSX.Element {
   // The same query key the Settings screen uses, so a session that visits it
   // makes no second request — and an unclaimed install pays exactly one 401,
   // which `query.ts` does not retry. Identical reasoning to `useConfigLocale`.

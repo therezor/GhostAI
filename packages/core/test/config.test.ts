@@ -1,4 +1,11 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -17,7 +24,10 @@ function tempHome(): string {
 
 function writeConfig(root: string, value: unknown): string {
   const file = join(root, 'config.json');
-  writeFileSync(file, typeof value === 'string' ? value : JSON.stringify(value));
+  writeFileSync(
+    file,
+    typeof value === 'string' ? value : JSON.stringify(value),
+  );
   return file;
 }
 
@@ -53,7 +63,10 @@ describe('parseConfig', () => {
     // The point of the flattening: `agents.defaults.temperature` is a string an
     // operator can search their config file for.
     try {
-      parseConfig(JSON.stringify({ agents: { defaults: { temperature: 9 } } }), 'config.json');
+      parseConfig(
+        JSON.stringify({ agents: { defaults: { temperature: 9 } } }),
+        'config.json',
+      );
       expect.unreachable('should have thrown');
     } catch (error) {
       expect(isGhostError(error)).toBe(true);
@@ -87,7 +100,9 @@ describe('loadConfig', () => {
 
   it('reads the file when there is one', () => {
     const root = tempHome();
-    writeConfig(root, { agents: { defaults: { model: 'qwen3:8b', provider: 'ollama' } } });
+    writeConfig(root, {
+      agents: { defaults: { model: 'qwen3:8b', provider: 'ollama' } },
+    });
 
     const loaded = loadConfig({ root });
     expect(loaded.fromFile).toBe(true);
@@ -100,7 +115,9 @@ describe('loadConfig', () => {
     // in, so a file written against an older one is an error that names the key
     // rather than something quietly rewritten underneath the operator.
     const root = tempHome();
-    writeConfig(root, { providers: { ollama: { apiBase: 'http://gpu.lan:11434/v1' } } });
+    writeConfig(root, {
+      providers: { ollama: { apiBase: 'http://gpu.lan:11434/v1' } },
+    });
 
     expect(() => loadConfig({ root })).toThrow(/providers\.ollama\.type/);
   });
@@ -126,7 +143,9 @@ describe('loadConfig', () => {
 
   it('folds the config workspace into the resolved paths', () => {
     const root = tempHome();
-    writeConfig(root, { agents: { defaults: { workspace: 'projects/alpha' } } });
+    writeConfig(root, {
+      agents: { defaults: { workspace: 'projects/alpha' } },
+    });
 
     const loaded = loadConfig({ root });
     // Relative to the root, not the process cwd: a workspace that moved because
@@ -236,9 +255,9 @@ describe('saveConfig', () => {
     // rename that would have replaced the real file never runs.
     mkdirSync(`${file}.tmp`);
 
-    expect(() => saveConfig(file, parseConfig('{"server":{"port":4242}}', file))).toThrow(
-      /could not be written/,
-    );
+    expect(() =>
+      saveConfig(file, parseConfig('{"server":{"port":4242}}', file)),
+    ).toThrow(/could not be written/);
     expect(readFileSync(file, 'utf8')).toBe(before);
   });
 });

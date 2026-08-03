@@ -189,7 +189,9 @@ describe('the pre-paint script in index.html', () => {
   });
 
   it('agrees with resolvePreference on every combination', () => {
-    const combinations: readonly (readonly [string | null, readonly string[]])[] = [
+    const combinations: ReadonlyArray<
+      readonly [string | null, readonly string[]]
+    > = [
       ['en', ['en']],
       ['en', ['de']],
       ['system', ['en']],
@@ -270,6 +272,8 @@ function runScript(source: string): void {
 
 function extractInlineScript(source: string): string {
   const match = /<script>([\s\S]*?)<\/script>/.exec(source);
-  if (match?.[1] === undefined) throw new Error('No inline script in index.html');
+  if (match?.[1] === undefined) {
+    throw new Error('No inline script in index.html');
+  }
   return match[1];
 }

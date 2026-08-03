@@ -19,12 +19,15 @@ import { expect, test } from '../src/fixtures.js';
 /** Long enough to scroll several times over, and syntactic enough to colour. */
 const LONG_FILE = Array.from(
   { length: 300 },
-  (_unused, index) =>
+  (unused, index) =>
     `export const value${String(index)} = ${String(index)}; // line ${String(index)}`,
 ).join('\n');
 
 test.describe('the text editor', () => {
-  test('paints the whole file, not just the first screenful', async ({ app, harness }) => {
+  test('paints the whole file, not just the first screenful', async ({
+    app,
+    harness,
+  }) => {
     await app.request.put(`${harness.url}/api/files/text`, {
       data: { path: 'long.ts', content: LONG_FILE, workspaceId: 'default' },
     });
@@ -65,7 +68,10 @@ test.describe('the text editor', () => {
     expect(geometry.gutter).toBeGreaterThanOrEqual(geometry.input - 2);
   });
 
-  test('still shows text after scrolling to the bottom', async ({ app, harness }) => {
+  test('still shows text after scrolling to the bottom', async ({
+    app,
+    harness,
+  }) => {
     await app.request.put(`${harness.url}/api/files/text`, {
       data: { path: 'long.ts', content: LONG_FILE, workspaceId: 'default' },
     });
@@ -85,7 +91,9 @@ test.describe('the text editor', () => {
     // line of the file, and the only thing that can render it down there is a
     // highlight layer that reached the bottom. Scoped to that layer because the
     // textarea holds the same string and would match too.
-    const last = editor.locator('.code-editor__highlight').getByText('value299', { exact: true });
+    const last = editor
+      .locator('.code-editor__highlight')
+      .getByText('value299', { exact: true });
     await expect(last).toBeVisible();
 
     // And it is inside the part of the box the reader can see, rather than
@@ -111,7 +119,10 @@ test.describe('the text editor', () => {
  * component test can prove the request; only this can prove the round trip.
  */
 test.describe('renaming', () => {
-  test('renames a folder and everything inside it comes along', async ({ app, harness }) => {
+  test('renames a folder and everything inside it comes along', async ({
+    app,
+    harness,
+  }) => {
     await app.request.put(`${harness.url}/api/files/text`, {
       data: { path: 'drafts/one.md', content: 'first', workspaceId: 'default' },
     });
@@ -125,8 +136,12 @@ test.describe('renaming', () => {
     await app.getByRole('button', { name: 'Rename' }).click();
 
     // The durable result: the listing holds the new name and not the old one.
-    await expect(app.getByRole('link', { name: 'published', exact: true })).toBeVisible();
-    await expect(app.getByRole('link', { name: 'drafts', exact: true })).toHaveCount(0);
+    await expect(
+      app.getByRole('link', { name: 'published', exact: true }),
+    ).toBeVisible();
+    await expect(
+      app.getByRole('link', { name: 'drafts', exact: true }),
+    ).toHaveCount(0);
 
     // And the tree moved rather than being recreated empty.
     const moved = await app.request.get(
@@ -136,7 +151,10 @@ test.describe('renaming', () => {
     expect(((await moved.json()) as { content: string }).content).toBe('first');
   });
 
-  test('refuses to rename onto something that is already there', async ({ app, harness }) => {
+  test('refuses to rename onto something that is already there', async ({
+    app,
+    harness,
+  }) => {
     await app.request.put(`${harness.url}/api/files/text`, {
       data: { path: 'keep.md', content: 'keep me', workspaceId: 'default' },
     });
@@ -157,12 +175,14 @@ test.describe('renaming', () => {
     // is only visible because the machine was slow does not belong in an
     // `expect`, and this spec failed exactly that way under a loaded runner
     // while passing on its own.
-    await expect(app.getByRole('textbox', { name: 'New name' })).toHaveValue('keep.md');
+    await expect(app.getByRole('textbox', { name: 'New name' })).toHaveValue(
+      'keep.md',
+    );
 
     // The durable half: neither file moved and neither was overwritten. A
     // rename that silently replaced the file already there would be a loss the
     // operator could not see afterwards.
-    const untouched: readonly (readonly [string, string])[] = [
+    const untouched: ReadonlyArray<readonly [string, string]> = [
       ['keep.md', 'keep me'],
       ['other.md', 'and me'],
     ];
@@ -172,7 +192,9 @@ test.describe('renaming', () => {
         `${harness.url}/api/files/text?path=${path}&workspace=default`,
       );
       expect(response.ok(), `${path} should still be there`).toBe(true);
-      expect(((await response.json()) as { content: string }).content).toBe(content);
+      expect(((await response.json()) as { content: string }).content).toBe(
+        content,
+      );
     }
   });
 });

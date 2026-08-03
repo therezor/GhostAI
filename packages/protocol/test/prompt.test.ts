@@ -38,9 +38,9 @@ describe('renderPromptTemplate', () => {
   });
 
   it('fills a placeholder used more than once', () => {
-    expect(renderPromptTemplate('# {{name}}\n\nYou are {{name}}.', VALUES)).toBe(
-      '# Reviewer\n\nYou are Reviewer.',
-    );
+    expect(
+      renderPromptTemplate('# {{name}}\n\nYou are {{name}}.', VALUES),
+    ).toBe('# Reviewer\n\nYou are Reviewer.');
   });
 
   it('leaves an unknown placeholder verbatim rather than deleting it', () => {
@@ -52,9 +52,9 @@ describe('renderPromptTemplate', () => {
   });
 
   it('treats spaced braces as a literal, which is the escape hatch', () => {
-    expect(renderPromptTemplate('write {{ name }} to mean the placeholder', VALUES)).toBe(
-      'write {{ name }} to mean the placeholder',
-    );
+    expect(
+      renderPromptTemplate('write {{ name }} to mean the placeholder', VALUES),
+    ).toBe('write {{ name }} to mean the placeholder');
   });
 
   it('never rescans what it substituted', () => {
@@ -68,7 +68,9 @@ describe('renderPromptTemplate', () => {
   });
 
   it('returns a template with no placeholders untouched', () => {
-    expect(renderPromptTemplate('Just be helpful.', VALUES)).toBe('Just be helpful.');
+    expect(renderPromptTemplate('Just be helpful.', VALUES)).toBe(
+      'Just be helpful.',
+    );
   });
 
   it('does not throw on an empty template', () => {
@@ -82,7 +84,9 @@ describe('unknownPlaceholders', () => {
   });
 
   it('reports a typo once, however often it appears', () => {
-    expect(unknownPlaceholders('{{nmae}} and {{nmae}} again')).toEqual(['nmae']);
+    expect(unknownPlaceholders('{{nmae}} and {{nmae}} again')).toEqual([
+      'nmae',
+    ]);
   });
 
   it('reports several in the order they appear', () => {
@@ -129,7 +133,10 @@ describe('DEFAULT_SYSTEM_PROMPT_TEMPLATE', () => {
   });
 
   it('renders to a prompt with no braces left in it', () => {
-    const rendered = renderPromptTemplate(DEFAULT_SYSTEM_PROMPT_TEMPLATE, VALUES);
+    const rendered = renderPromptTemplate(
+      DEFAULT_SYSTEM_PROMPT_TEMPLATE,
+      VALUES,
+    );
 
     expect(rendered).not.toContain('{{');
     expect(rendered).toContain('# Reviewer');

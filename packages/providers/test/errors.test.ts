@@ -21,7 +21,9 @@ describe('ProviderError', () => {
   });
 
   it('is a GhostError, so it survives normalisation at a boundary', () => {
-    const error = new ProviderError('rate_limit', 'slow down', { providerId: 'groq' });
+    const error = new ProviderError('rate_limit', 'slow down', {
+      providerId: 'groq',
+    });
     expect(isGhostError(error)).toBe(true);
     // The important half: `toGhostError` must not downgrade it to `internal`.
     expect(toGhostError(error)).toBe(error);
@@ -31,7 +33,9 @@ describe('ProviderError', () => {
   it('decides retryability from the reason, and lets a caller override', () => {
     expect(new ProviderError('server', 'x').retryable).toBe(true);
     expect(new ProviderError('invalid_request', 'x').retryable).toBe(false);
-    expect(new ProviderError('invalid_request', 'x', { retryable: true }).retryable).toBe(true);
+    expect(
+      new ProviderError('invalid_request', 'x', { retryable: true }).retryable,
+    ).toBe(true);
   });
 
   it('puts the diagnosis in structured details, not in the message', () => {
@@ -50,7 +54,9 @@ describe('ProviderError', () => {
     });
     // Redaction and log filtering work by path, so absent fields must be
     // absent rather than present-and-undefined.
-    expect(Object.keys(new ProviderError('server', 'x').details)).toEqual(['reason']);
+    expect(Object.keys(new ProviderError('server', 'x').details)).toEqual([
+      'reason',
+    ]);
   });
 
   it('is recognised structurally, across class identities', () => {
@@ -86,15 +92,27 @@ describe('classifyStatus', () => {
   });
 
   it('reads the provider error code on a 400', () => {
-    expect(classifyStatus(400, { code: 'context_length_exceeded' })).toBe('context_length');
-    expect(classifyStatus(400, { code: 'unsupported_parameter' })).toBe('unsupported_param');
-    expect(classifyStatus(400, { code: 'invalid_model' })).toBe('model_not_found');
-    expect(classifyStatus(400, { code: 'content_filter' })).toBe('content_filter');
-    expect(classifyStatus(400, { code: 'insufficient_quota' })).toBe('rate_limit');
+    expect(classifyStatus(400, { code: 'context_length_exceeded' })).toBe(
+      'context_length',
+    );
+    expect(classifyStatus(400, { code: 'unsupported_parameter' })).toBe(
+      'unsupported_param',
+    );
+    expect(classifyStatus(400, { code: 'invalid_model' })).toBe(
+      'model_not_found',
+    );
+    expect(classifyStatus(400, { code: 'content_filter' })).toBe(
+      'content_filter',
+    );
+    expect(classifyStatus(400, { code: 'insufficient_quota' })).toBe(
+      'rate_limit',
+    );
   });
 
   it('treats a named parameter as the provider pointing at the field', () => {
-    expect(classifyStatus(400, { param: 'reasoning_effort' })).toBe('unsupported_param');
+    expect(classifyStatus(400, { param: 'reasoning_effort' })).toBe(
+      'unsupported_param',
+    );
     expect(classifyStatus(400, { param: '' })).toBe('invalid_request');
   });
 
@@ -103,7 +121,9 @@ describe('classifyStatus', () => {
     // carries no code is an ordinary bad request, and a model that writes
     // "rate limit" in an answer must not become a retry.
     expect(
-      classifyStatus(400, { message: 'context length exceeded, rate limit, overloaded' }),
+      classifyStatus(400, {
+        message: 'context length exceeded, rate limit, overloaded',
+      }),
     ).toBe('invalid_request');
   });
 
@@ -149,16 +169,22 @@ describe('toProviderError', () => {
   });
 
   it('recognises a timeout signal', () => {
-    const timeout = Object.assign(new Error('timed out'), { name: 'TimeoutError' });
+    const timeout = Object.assign(new Error('timed out'), {
+      name: 'TimeoutError',
+    });
     expect(toProviderError(timeout, 'openai').reason).toBe('timeout');
   });
 
   it('treats anything else on the request path as transport', () => {
-    expect(toProviderError(new TypeError('fetch failed'), 'openai').reason).toBe('transport');
+    expect(
+      toProviderError(new TypeError('fetch failed'), 'openai').reason,
+    ).toBe('transport');
     expect(toProviderError('a string', 'openai').message).toBe(
       'Could not reach openai — a string.',
     );
-    expect(toProviderError(new TypeError('x'), 'openai').providerId).toBe('openai');
+    expect(toProviderError(new TypeError('x'), 'openai').providerId).toBe(
+      'openai',
+    );
   });
 });
 
@@ -175,10 +201,15 @@ describe('a connection that never reached the provider', () => {
   /** `TypeError: fetch failed` with the real reason nested, as undici throws it. */
   const undici = (code: string, message = 'fetch failed'): TypeError =>
     Object.assign(new TypeError(message), {
-      cause: Object.assign(new Error(`connect ${code} 127.0.0.1:11434`), { code }),
+      cause: Object.assign(new Error(`connect ${code} 127.0.0.1:11434`), {
+        code,
+      }),
     });
 
-  const context = { url: 'http://127.0.0.1:11434/v1/chat/completions', label: 'Ollama' };
+  const context = {
+    url: 'http://127.0.0.1:11434/v1/chat/completions',
+    label: 'Ollama',
+  };
 
   it('names the endpoint and says nothing is listening', () => {
     const error = toProviderError(undici('ECONNREFUSED'), 'ollama', context);
@@ -207,7 +238,11 @@ describe('a connection that never reached the provider', () => {
   });
 
   it('keeps a timeout retryable, because the same request can succeed', () => {
-    const error = toProviderError(undici('UND_ERR_CONNECT_TIMEOUT'), 'ollama', context);
+    const error = toProviderError(
+      undici('UND_ERR_CONNECT_TIMEOUT'),
+      'ollama',
+      context,
+    );
 
     expect(error.message).toMatch(/the connection timed out\.$/u);
     expect(error.retryable).toBe(true);
@@ -218,8 +253,12 @@ describe('a connection that never reached the provider', () => {
     // and undici reports the set rather than the first.
     const failures = new AggregateError(
       [
-        Object.assign(new Error('connect ECONNREFUSED ::1:11434'), { code: 'ECONNREFUSED' }),
-        Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:11434'), { code: 'ECONNREFUSED' }),
+        Object.assign(new Error('connect ECONNREFUSED ::1:11434'), {
+          code: 'ECONNREFUSED',
+        }),
+        Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:11434'), {
+          code: 'ECONNREFUSED',
+        }),
       ],
       'all attempts failed',
     );
@@ -233,10 +272,14 @@ describe('a connection that never reached the provider', () => {
   });
 
   it('says a certificate was rejected rather than printing the code alone', () => {
-    const error = toProviderError(undici('DEPTH_ZERO_SELF_SIGNED_CERT'), 'custom', {
-      url: 'https://box.local:8443/v1',
-      label: 'Custom',
-    });
+    const error = toProviderError(
+      undici('DEPTH_ZERO_SELF_SIGNED_CERT'),
+      'custom',
+      {
+        url: 'https://box.local:8443/v1',
+        label: 'Custom',
+      },
+    );
 
     expect(error.message).toBe(
       'Could not reach Custom at https://box.local:8443 — its TLS certificate was rejected (DEPTH_ZERO_SELF_SIGNED_CERT).',
@@ -249,9 +292,9 @@ describe('a connection that never reached the provider', () => {
     );
     // No code anywhere in the chain: undici's own message is all there is, and
     // saying it beside the endpoint is still better than saying it alone.
-    expect(toProviderError(new TypeError('fetch failed'), 'ollama', context).message).toBe(
-      'Could not reach Ollama at http://127.0.0.1:11434 — fetch failed.',
-    );
+    expect(
+      toProviderError(new TypeError('fetch failed'), 'ollama', context).message,
+    ).toBe('Could not reach Ollama at http://127.0.0.1:11434 — fetch failed.');
   });
 
   it('names the provider when there is no URL to name', () => {

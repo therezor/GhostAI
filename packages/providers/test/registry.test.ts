@@ -37,7 +37,9 @@ describe('the table', () => {
 
   it('lists gateways before the direct providers they front', () => {
     const gateway = PROVIDERS.findIndex((spec) => spec.isGateway === true);
-    const direct = PROVIDERS.findIndex((spec) => spec.isGateway !== true && spec.isLocal !== true);
+    const direct = PROVIDERS.findIndex(
+      (spec) => spec.isGateway !== true && spec.isLocal !== true,
+    );
     expect(gateway).toBeLessThan(direct);
   });
 
@@ -52,7 +54,9 @@ describe('findProviderByModel', () => {
   it('honours an explicit provider prefix over any keyword', () => {
     // "gpt" is OpenAI's keyword and appears in the model name, but the prefix
     // is an assertion by whoever wrote it and outranks the guess.
-    expect(findProviderByModel('deepseek/gpt-style-model')?.id).toBe('deepseek');
+    expect(findProviderByModel('deepseek/gpt-style-model')?.id).toBe(
+      'deepseek',
+    );
   });
 
   it('matches on a keyword when there is no prefix', () => {
@@ -85,7 +89,9 @@ describe('findGateway', () => {
   });
 
   it('recognises a local server by its port in the base URL', () => {
-    expect(findGateway({ apiBase: 'http://127.0.0.1:11434/v1' })?.id).toBe('ollama');
+    expect(findGateway({ apiBase: 'http://127.0.0.1:11434/v1' })?.id).toBe(
+      'ollama',
+    );
   });
 
   it('accepts a named gateway directly', () => {
@@ -99,28 +105,40 @@ describe('findGateway', () => {
   it('does not mistake a direct provider behind a proxy for a local server', () => {
     // The failure this replaces: an unrecognised base URL treated as vLLM, so a
     // DeepSeek key gets sent to whatever the proxy is.
-    expect(findGateway({ apiBase: 'https://proxy.corp.example/deepseek/v1' })).toBeNull();
+    expect(
+      findGateway({ apiBase: 'https://proxy.corp.example/deepseek/v1' }),
+    ).toBeNull();
   });
 });
 
 describe('resolveProvider', () => {
   it('prefers an explicit id', () => {
-    expect(resolveProvider({ provider: 'groq', model: 'claude-sonnet-4' })?.id).toBe('groq');
+    expect(
+      resolveProvider({ provider: 'groq', model: 'claude-sonnet-4' })?.id,
+    ).toBe('groq');
   });
 
   it('falls through "auto" to detection', () => {
-    expect(resolveProvider({ provider: 'auto', apiKey: 'sk-or-x' })?.id).toBe('openrouter');
-    expect(resolveProvider({ provider: 'auto', model: 'gpt-4o' })?.id).toBe('openai');
+    expect(resolveProvider({ provider: 'auto', apiKey: 'sk-or-x' })?.id).toBe(
+      'openrouter',
+    );
+    expect(resolveProvider({ provider: 'auto', model: 'gpt-4o' })?.id).toBe(
+      'openai',
+    );
   });
 
   it('falls through an unknown id rather than failing outright', () => {
-    expect(resolveProvider({ provider: 'typo', model: 'claude-3' })?.id).toBe('anthropic');
+    expect(resolveProvider({ provider: 'typo', model: 'claude-3' })?.id).toBe(
+      'anthropic',
+    );
   });
 
   it('prefers gateway detection over the model name', () => {
     // The key says OpenRouter; the model says Anthropic. The key is the thing
     // the request will actually be authenticated with.
-    expect(resolveProvider({ apiKey: 'sk-or-x', model: 'claude-sonnet-4' })?.id).toBe('openrouter');
+    expect(
+      resolveProvider({ apiKey: 'sk-or-x', model: 'claude-sonnet-4' })?.id,
+    ).toBe('openrouter');
   });
 
   it('returns null when nothing identifies a provider', () => {
@@ -143,21 +161,24 @@ describe('resolveModelId', () => {
   });
 
   it('keeps a prefix naming someone else', () => {
-    expect(resolveModelId(spec({ id: 'openrouter' }), 'anthropic/claude-sonnet-4')).toBe(
-      'anthropic/claude-sonnet-4',
-    );
+    expect(
+      resolveModelId(spec({ id: 'openrouter' }), 'anthropic/claude-sonnet-4'),
+    ).toBe('anthropic/claude-sonnet-4');
   });
 
   it('reduces to the bare id for a gateway that demands one', () => {
     expect(
-      resolveModelId(spec({ id: 'gw', stripModelPrefix: true }), 'openrouter/anthropic/claude'),
+      resolveModelId(
+        spec({ id: 'gw', stripModelPrefix: true }),
+        'openrouter/anthropic/claude',
+      ),
     ).toBe('claude');
   });
 
   it('leaves everything alone when the prefix is part of the name', () => {
-    expect(resolveModelId(spec({ id: 'nv', preserveModelPrefix: true }), 'nv/model')).toBe(
-      'nv/model',
-    );
+    expect(
+      resolveModelId(spec({ id: 'nv', preserveModelPrefix: true }), 'nv/model'),
+    ).toBe('nv/model');
   });
 
   it('leaves an unprefixed model and a leading slash alone', () => {
@@ -182,7 +203,10 @@ describe('modelOverrideFor', () => {
 
   it('returns null when the table declares none', () => {
     expect(
-      modelOverrideFor({ id: 'x', displayName: 'X', wire: 'openai-chat', keywords: [] }, 'm'),
+      modelOverrideFor(
+        { id: 'x', displayName: 'X', wire: 'openai-chat', keywords: [] },
+        'm',
+      ),
     ).toBeNull();
   });
 });
@@ -205,6 +229,8 @@ describe('describeProvider', () => {
   });
 
   it('reports every provider without throwing', () => {
-    expect(PROVIDERS.map((spec) => describeProvider(spec))).toHaveLength(PROVIDERS.length);
+    expect(PROVIDERS.map((spec) => describeProvider(spec))).toHaveLength(
+      PROVIDERS.length,
+    );
   });
 });

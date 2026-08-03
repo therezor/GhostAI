@@ -19,9 +19,14 @@ import type { Page } from '@playwright/test';
 import { expect, test } from '../src/fixtures.js';
 
 /** Every workspace as the registry has it, reduced to what an assertion reads. */
-async function workspacesOf(app: Page, url: string): Promise<{ id: string; name: string }[]> {
+async function workspacesOf(
+  app: Page,
+  url: string,
+): Promise<Array<{ id: string; name: string }>> {
   const response = await app.request.get(`${url}/api/workspaces`);
-  const body = (await response.json()) as { workspaces: { id: string; name: string }[] };
+  const body = (await response.json()) as {
+    workspaces: Array<{ id: string; name: string }>;
+  };
   return body.workspaces.map((row) => ({ id: row.id, name: row.name }));
 }
 
@@ -32,7 +37,10 @@ async function switchTo(app: Page, name: string): Promise<void> {
 }
 
 test.describe('workspaces', () => {
-  test('a workspace is created under a folder of its own choosing', async ({ app, harness }) => {
+  test('a workspace is created under a folder of its own choosing', async ({
+    app,
+    harness,
+  }) => {
     // The two are separate answers, and the registry has always stored them in
     // separate columns — what only a browser shows is that the second box
     // actually reaches the request rather than being decoration over a slug the
@@ -58,7 +66,10 @@ test.describe('workspaces', () => {
     await expect(app).toHaveURL(/\/workspaces\/acme24$/u);
   });
 
-  test('an abandoned create makes no directory at all', async ({ app, harness }) => {
+  test('an abandoned create makes no directory at all', async ({
+    app,
+    harness,
+  }) => {
     // The reason create is a page rather than the dialog it replaced: that
     // dialog ran the `mkdir` the moment it was submitted.
     const before = await workspacesOf(app, harness.url);
@@ -127,17 +138,26 @@ test.describe('workspaces', () => {
 
     // The files came with it, and are reachable under the new folder alone.
     await app.goto(`${harness.url}/files?workspace=acme24`);
-    await expect(app.getByRole('link', { name: 'brief.md', exact: true })).toBeVisible();
+    await expect(
+      app.getByRole('link', { name: 'brief.md', exact: true }),
+    ).toBeVisible();
 
     // And so did the session, which would otherwise resolve to a folder
     // that is not there any more.
-    const sessions = await app.request.get(`${harness.url}/api/sessions?workspace=acme24`);
+    const sessions = await app.request.get(
+      `${harness.url}/api/sessions?workspace=acme24`,
+    );
     expect(
-      ((await sessions.json()) as { sessions: { key: string }[] }).sessions.map((row) => row.key),
+      (
+        (await sessions.json()) as { sessions: Array<{ key: string }> }
+      ).sessions.map((row) => row.key),
     ).toContain('web-acme-1');
   });
 
-  test('the default workspace has no folder to move', async ({ app, harness }) => {
+  test('the default workspace has no folder to move', async ({
+    app,
+    harness,
+  }) => {
     await app.goto(`${harness.url}/workspaces/default`);
 
     // Its directory *is* the root every other workspace sits inside, so the box
@@ -171,20 +191,33 @@ test.describe('workspaces', () => {
 
     // Default is the parent of the others, so it sees them as folders — which
     // is the layout working, not a leak.
-    await expect(app.getByRole('link', { name: 'acme', exact: true })).toBeVisible();
+    await expect(
+      app.getByRole('link', { name: 'acme', exact: true }),
+    ).toBeVisible();
 
     await switchTo(app, 'Acme');
-    await expect(app.getByRole('link', { name: 'acme-only.md', exact: true })).toBeVisible();
-    await expect(app.getByRole('link', { name: 'research-only.md', exact: true })).toHaveCount(0);
+    await expect(
+      app.getByRole('link', { name: 'acme-only.md', exact: true }),
+    ).toBeVisible();
+    await expect(
+      app.getByRole('link', { name: 'research-only.md', exact: true }),
+    ).toHaveCount(0);
 
     await switchTo(app, 'Research');
-    await expect(app.getByRole('link', { name: 'research-only.md', exact: true })).toBeVisible();
+    await expect(
+      app.getByRole('link', { name: 'research-only.md', exact: true }),
+    ).toBeVisible();
     // The assertion the query key exists for: a cached listing from the
     // previous workspace would still be on screen here.
-    await expect(app.getByRole('link', { name: 'acme-only.md', exact: true })).toHaveCount(0);
+    await expect(
+      app.getByRole('link', { name: 'acme-only.md', exact: true }),
+    ).toHaveCount(0);
   });
 
-  test('the workspace survives a reload, because it is in the URL', async ({ app, harness }) => {
+  test('the workspace survives a reload, because it is in the URL', async ({
+    app,
+    harness,
+  }) => {
     const created = await app.request.post(`${harness.url}/api/workspaces`, {
       data: { name: 'Acme', id: 'acme' },
     });
@@ -194,13 +227,20 @@ test.describe('workspaces', () => {
     });
 
     await app.goto(`${harness.url}/files?workspace=acme`);
-    await expect(app.getByRole('link', { name: 'acme-only.md', exact: true })).toBeVisible();
+    await expect(
+      app.getByRole('link', { name: 'acme-only.md', exact: true }),
+    ).toBeVisible();
 
     await app.reload();
-    await expect(app.getByRole('link', { name: 'acme-only.md', exact: true })).toBeVisible();
+    await expect(
+      app.getByRole('link', { name: 'acme-only.md', exact: true }),
+    ).toBeVisible();
   });
 
-  test('a workspace with sessions cannot be deleted until they move', async ({ app, harness }) => {
+  test('a workspace with sessions cannot be deleted until they move', async ({
+    app,
+    harness,
+  }) => {
     await app.request.post(`${harness.url}/api/workspaces`, {
       data: { name: 'Acme', id: 'acme' },
     });
@@ -208,22 +248,34 @@ test.describe('workspaces', () => {
       data: { key: 'web-acme-1', workspaceId: 'acme' },
     });
 
-    const refused = await app.request.delete(`${harness.url}/api/workspaces/acme`);
+    const refused = await app.request.delete(
+      `${harness.url}/api/workspaces/acme`,
+    );
     expect(refused.status()).toBe(409);
     // The count is what the dialog turns into its offer.
     expect(
-      ((await refused.json()) as { error: { details: { sessionCount: number } } }).error.details
-        .sessionCount,
+      (
+        (await refused.json()) as {
+          error: { details: { sessionCount: number } };
+        }
+      ).error.details.sessionCount,
     ).toBe(1);
 
-    const moved = await app.request.post(`${harness.url}/api/workspaces/acme/sessions/move`, {
-      data: { to: 'default' },
-    });
+    const moved = await app.request.post(
+      `${harness.url}/api/workspaces/acme/sessions/move`,
+      {
+        data: { to: 'default' },
+      },
+    );
     expect(moved.ok()).toBe(true);
-    expect((await app.request.delete(`${harness.url}/api/workspaces/acme`)).status()).toBe(204);
+    expect(
+      (await app.request.delete(`${harness.url}/api/workspaces/acme`)).status(),
+    ).toBe(204);
   });
 
-  test('is not sitting under the drawer close button on a phone', async ({ app }) => {
+  test('is not sitting under the drawer close button on a phone', async ({
+    app,
+  }) => {
     await app.setViewportSize({ width: 420, height: 840 });
     await app.getByRole('button', { name: 'Open menu' }).click();
 
@@ -235,7 +287,9 @@ test.describe('workspaces', () => {
 
     const closeBox = await close.boundingBox();
     const pickerBox = await picker.boundingBox();
-    if (closeBox === null || pickerBox === null) throw new Error('no layout to measure');
+    if (closeBox === null || pickerBox === null) {
+      throw new Error('no layout to measure');
+    }
 
     // The drawer is a dialog with no padding of its own, so its absolutely
     // positioned close button landed squarely on the first control in the
@@ -245,10 +299,14 @@ test.describe('workspaces', () => {
       closeBox.x + closeBox.width > pickerBox.x &&
       closeBox.y < pickerBox.y + pickerBox.height &&
       closeBox.y + closeBox.height > pickerBox.y;
-    expect(overlaps, 'the close button overlaps the workspace picker').toBe(false);
+    expect(overlaps, 'the close button overlaps the workspace picker').toBe(
+      false,
+    );
   });
 
-  test('reads as a labelled picker rather than another nav row', async ({ app }) => {
+  test('reads as a labelled picker rather than another nav row', async ({
+    app,
+  }) => {
     const sidebar = app.getByRole('complementary', { name: 'Sidebar' });
 
     // The label names the group the way the session list's does, so the control
@@ -263,7 +321,9 @@ test.describe('workspaces', () => {
     // The chevron is what says it opens something.
     const [triggerBox, rowBox] = await Promise.all([
       trigger.evaluate((el) => getComputedStyle(el).height),
-      sidebar.getByRole('link', { name: 'Files' }).evaluate((el) => getComputedStyle(el).height),
+      sidebar
+        .getByRole('link', { name: 'Files' })
+        .evaluate((el) => getComputedStyle(el).height),
     ]);
     expect(triggerBox).toBe(rowBox);
   });

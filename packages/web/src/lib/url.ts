@@ -23,14 +23,20 @@
 const LINK_SCHEMES = new Set(['http:', 'https:', 'mailto:']);
 
 /** The href to use, or `undefined` when this is not a scheme worth linking. */
-export function safeHref(href: string, base: string = documentBase()): string | undefined {
+export function safeHref(
+  href: string,
+  base: string = documentBase(),
+): string | undefined {
   const url = parse(href, base);
   if (url === undefined) return undefined;
   return LINK_SCHEMES.has(url.protocol) ? url.href : undefined;
 }
 
 /** True when this URL is served by the same origin as the page. */
-export function isSameOrigin(href: string, base: string = documentBase()): boolean {
+export function isSameOrigin(
+  href: string,
+  base: string = documentBase(),
+): boolean {
   const url = parse(href, base);
   if (url === undefined) return false;
   return url.origin === new URL(base).origin;

@@ -41,7 +41,11 @@ export function formatCompactNumber(value: number, locale: string): string {
  * an implicit zone is whatever the machine happens to be set to, and two
  * machines then disagree about a date that is a single instant.
  */
-export function formatDate(atMs: number, locale: string, timeZone?: string): string {
+export function formatDate(
+  atMs: number,
+  locale: string,
+  timeZone?: string,
+): string {
   if (!Number.isFinite(atMs)) return '—';
   return dateFormat(locale, timeZone).format(new Date(atMs));
 }
@@ -59,7 +63,11 @@ export function formatDate(atMs: number, locale: string, timeZone?: string): str
  * zone that is not the reader's own, an unlabelled `09:00` is a number the
  * reader will assume is their clock. The label is what makes it checkable.
  */
-export function formatDateTime(atMs: number, locale: string, timeZone?: string): string {
+export function formatDateTime(
+  atMs: number,
+  locale: string,
+  timeZone?: string,
+): string {
   if (!Number.isFinite(atMs)) return '—';
   return dateTimeFormat(locale, timeZone).format(new Date(atMs));
 }
@@ -84,7 +92,11 @@ export type RelativeSpan =
   | { readonly kind: 'date' }
   /** Not a timestamp at all. */
   | { readonly kind: 'unknown' }
-  | { readonly kind: 'ago'; readonly value: number; readonly unit: Intl.RelativeTimeFormatUnit };
+  | {
+      readonly kind: 'ago';
+      readonly value: number;
+      readonly unit: Intl.RelativeTimeFormatUnit;
+    };
 
 export function relativeSpan(atMs: number, now: number): RelativeSpan {
   if (!Number.isFinite(atMs)) return { kind: 'unknown' };
@@ -105,7 +117,9 @@ export function relativeSpan(atMs: number, now: number): RelativeSpan {
   const days = Math.floor(hours / 24);
   // Past a week the relative form stops being informative — "23d ago" is worse
   // than a date, because nobody counts back three weeks in their head.
-  return days < 7 ? { kind: 'ago', value: days, unit: 'day' } : { kind: 'date' };
+  return days < 7
+    ? { kind: 'ago', value: days, unit: 'day' }
+    : { kind: 'date' };
 }
 
 /**
@@ -145,7 +159,14 @@ export interface DurationParts {
 
 export function durationParts(ms: number): DurationParts | undefined {
   if (!Number.isFinite(ms) || ms < 0) return undefined;
-  if (ms < 1000) return { unit: 'ms', value: Math.round(ms), remainder: 0, fractional: false };
+  if (ms < 1000) {
+    return {
+      unit: 'ms',
+      value: Math.round(ms),
+      remainder: 0,
+      fractional: false,
+    };
+  }
 
   const totalSeconds = Math.floor(ms / 1000);
   if (totalSeconds < 60) {
@@ -161,11 +182,21 @@ export function durationParts(ms: number): DurationParts | undefined {
 
   const minutes = Math.floor(totalSeconds / 60);
   if (minutes < 60) {
-    return { unit: 'minute', value: minutes, remainder: totalSeconds % 60, fractional: false };
+    return {
+      unit: 'minute',
+      value: minutes,
+      remainder: totalSeconds % 60,
+      fractional: false,
+    };
   }
 
   const hours = Math.floor(minutes / 60);
-  return { unit: 'hour', value: hours, remainder: minutes % 60, fractional: false };
+  return {
+    unit: 'hour',
+    value: hours,
+    remainder: minutes % 60,
+    fractional: false,
+  };
 }
 
 /**
@@ -175,7 +206,10 @@ export function durationParts(ms: number): DurationParts | undefined {
  * for the places that build a string outside a resource — not as a second
  * pluralisation scheme.
  */
-export function pluralCategory(count: number, locale: string): Intl.LDMLPluralRule {
+export function pluralCategory(
+  count: number,
+  locale: string,
+): Intl.LDMLPluralRule {
   return pluralRules(locale).select(count);
 }
 
@@ -238,7 +272,10 @@ function dateFormat(locale: string, timeZone?: string): Intl.DateTimeFormat {
   );
 }
 
-function dateTimeFormat(locale: string, timeZone?: string): Intl.DateTimeFormat {
+function dateTimeFormat(
+  locale: string,
+  timeZone?: string,
+): Intl.DateTimeFormat {
   return cached(
     dateTimeFormats,
     formatterKey(locale, timeZone),

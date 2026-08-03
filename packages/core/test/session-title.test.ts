@@ -13,43 +13,57 @@ describe('deriveSessionTitle', () => {
   });
 
   it('collapses newlines and runs of whitespace', () => {
-    expect(deriveSessionTitle('fix   the\n\nlogin\tbug')).toBe('fix the login bug');
+    expect(deriveSessionTitle('fix   the\n\nlogin\tbug')).toBe(
+      'fix the login bug',
+    );
   });
 
   it('drops fenced code and keeps the prose around it', () => {
-    const text = 'why does this throw?\n\n```ts\nconst x: number = "no";\n```\n';
+    const text =
+      'why does this throw?\n\n```ts\nconst x: number = "no";\n```\n';
     expect(deriveSessionTitle(text)).toBe('why does this throw?');
   });
 
   it('names a code-only message after the code', () => {
     // Nothing else is available, and an unnamed conversation is worse than one
     // named after the snippet it is about.
-    expect(deriveSessionTitle('```\nrg --files | wc -l\n```')).toBe('rg --files | wc -l');
+    expect(deriveSessionTitle('```\nrg --files | wc -l\n```')).toBe(
+      'rg --files | wc -l',
+    );
   });
 
   it('strips mention tokens', () => {
     expect(deriveSessionTitle('@kb:runbooks how do I rotate the key')).toBe(
       'how do I rotate the key',
     );
-    expect(deriveSessionTitle('check @mcp:github/issues and @skill:review please')).toBe(
-      'check and please',
-    );
+    expect(
+      deriveSessionTitle('check @mcp:github/issues and @skill:review please'),
+    ).toBe('check and please');
   });
 
   it('strips leading markdown furniture', () => {
-    expect(deriveSessionTitle('## Plan the migration')).toBe('Plan the migration');
-    expect(deriveSessionTitle('- first item\n- second item')).toBe('first item second item');
-    expect(deriveSessionTitle('1. step one\n2. step two')).toBe('step one step two');
+    expect(deriveSessionTitle('## Plan the migration')).toBe(
+      'Plan the migration',
+    );
+    expect(deriveSessionTitle('- first item\n- second item')).toBe(
+      'first item second item',
+    );
+    expect(deriveSessionTitle('1. step one\n2. step two')).toBe(
+      'step one step two',
+    );
     expect(deriveSessionTitle('> quoted question')).toBe('quoted question');
   });
 
   it('leaves a mid-line hash alone', () => {
     // Only *leading* furniture is markup; `#4` in a sentence is content.
-    expect(deriveSessionTitle('look at issue #4 again')).toBe('look at issue #4 again');
+    expect(deriveSessionTitle('look at issue #4 again')).toBe(
+      'look at issue #4 again',
+    );
   });
 
   it('cuts on a word boundary and keeps the ellipsis inside the budget', () => {
-    const text = 'the quick brown fox jumps over the lazy dog and keeps on running forever';
+    const text =
+      'the quick brown fox jumps over the lazy dog and keeps on running forever';
     const title = deriveSessionTitle(text, 30);
 
     expect(title.length).toBeLessThanOrEqual(30);

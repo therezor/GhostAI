@@ -131,9 +131,15 @@ const UNTITLED = 'sessions.untitled';
  */
 const SIDEBAR_SESSIONS = 30;
 
-export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): JSX.Element {
+export function Sidebar({
+  onNavigate,
+}: {
+  readonly onNavigate?: () => void;
+}): JSX.Element {
   const { t } = useTranslation();
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
   const { workspaceId } = useWorkspace();
   const { agentId } = useAgent();
   const navigate = useNavigate();
@@ -144,7 +150,9 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
   const attached = useTurnStore((state) => state.sessionKey);
 
   const [renaming, setRenaming] = useState<string | undefined>(undefined);
-  const [pendingDelete, setPendingDelete] = useState<SessionSummary | undefined>(undefined);
+  const [pendingDelete, setPendingDelete] = useState<
+    SessionSummary | undefined
+  >(undefined);
 
   function startChat(): void {
     // Nothing is written yet: the row appears in the list below when the first
@@ -162,7 +170,8 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
   // navigate. The switcher sits directly above it for the same reason.
   const sessions = useQuery({
     queryKey: queryKeys.sessions(workspaceId),
-    queryFn: ({ signal }) => api.sessions({ workspaceId, limit: SIDEBAR_SESSIONS, signal }),
+    queryFn: ({ signal }) =>
+      api.sessions({ workspaceId, limit: SIDEBAR_SESSIONS, signal }),
   });
 
   const rows = sessions.data?.sessions ?? [];
@@ -182,7 +191,8 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
   const inNewSession =
     pathname === '/' &&
     sessions.isSuccess &&
-    (attached === undefined || !rows.some((session) => session.key === attached));
+    (attached === undefined ||
+      !rows.some((session) => session.key === attached));
 
   // Shared with the conversations page rather than written out here. Two
   // implementations of "rename a session" is two sets of toasts and two answers
@@ -213,12 +223,17 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
             it has been pressed. */}
         <button
           type="button"
-          className={cn('sidebar__link', inNewSession && 'sidebar__link--active')}
+          className={cn(
+            'sidebar__link',
+            inNewSession && 'sidebar__link--active',
+          )}
           {...(inNewSession ? { 'aria-current': 'page' as const } : {})}
           onClick={startChat}
         >
           <Plus />
-          <span className="sidebar__link-label truncate">{t('sessions.newSession')}</span>
+          <span className="sidebar__link-label truncate">
+            {t('sessions.newSession')}
+          </span>
         </button>
 
         {NAV.map(({ to, label, icon: Icon }) => (
@@ -228,8 +243,13 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
             onClick={onNavigate}
             // `aria-current` is the accessible half of the same statement the
             // surface change makes visually.
-            className={cn('sidebar__link', isActive(pathname, to) && 'sidebar__link--active')}
-            {...(isActive(pathname, to) ? { 'aria-current': 'page' as const } : {})}
+            className={cn(
+              'sidebar__link',
+              isActive(pathname, to) && 'sidebar__link--active',
+            )}
+            {...(isActive(pathname, to)
+              ? { 'aria-current': 'page' as const }
+              : {})}
           >
             <Icon />
             <span className="sidebar__link-label truncate">{t(label)}</span>
@@ -251,7 +271,9 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
                       className="sidebar__rename"
                       onSubmit={(event) => {
                         event.preventDefault();
-                        const value = new FormData(event.currentTarget).get('title');
+                        const value = new FormData(event.currentTarget).get(
+                          'title',
+                        );
                         if (typeof value === 'string' && value.trim() !== '') {
                           // Closed on success rather than on submit: a rename
                           // that failed should leave the box open with what was
@@ -267,7 +289,10 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
                         }
                       }}
                     >
-                      <Label htmlFor={`rename-${session.key}`} className="sr-only">
+                      <Label
+                        htmlFor={`rename-${session.key}`}
+                        className="sr-only"
+                      >
                         {t('sessions.renameLabel', { title })}
                       </Label>
                       <Input
@@ -293,7 +318,10 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
                     to="/"
                     search={{ session: session.key }}
                     onClick={onNavigate}
-                    className={cn('sidebar__session', current && 'sidebar__session--active')}
+                    className={cn(
+                      'sidebar__session',
+                      current && 'sidebar__session--active',
+                    )}
                     {...(current ? { 'aria-current': 'page' as const } : {})}
                   >
                     <span className="truncate">{title}</span>
@@ -338,7 +366,9 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
               <li className="sidebar__note">{t('sessions.none')}</li>
             )}
             {sessions.isError && (
-              <li className="sidebar__note sidebar__note--error">{t('sessions.loadFailed')}</li>
+              <li className="sidebar__note sidebar__note--error">
+                {t('sessions.loadFailed')}
+              </li>
             )}
           </ul>
         </ScrollArea>
@@ -350,7 +380,9 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
           if (!open) setPendingDelete(undefined);
         }}
         title={t('sessions.deleteTitle')}
-        description={t('sessions.deleteHint', { title: titleOf(pendingDelete, t) })}
+        description={t('sessions.deleteHint', {
+          title: titleOf(pendingDelete, t),
+        })}
         confirmLabel={t('sessions.delete')}
         pending={remove.pending}
         onConfirm={() => {
@@ -372,7 +404,10 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
 }
 
 /** A conversation nobody has spoken in has no title of its own. See `UNTITLED`. */
-function titleOf(session: SessionSummary | undefined, t: (key: WebKey) => string): string {
+function titleOf(
+  session: SessionSummary | undefined,
+  t: (key: WebKey) => string,
+): string {
   if (session === undefined) return '';
   return session.title === '' ? t(UNTITLED) : session.title;
 }

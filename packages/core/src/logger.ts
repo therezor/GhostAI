@@ -83,7 +83,9 @@ function resolveLevel(
   // An unrecognised level must not take the process down at boot; pino would
   // throw on an unknown level, and losing the logger loses the diagnostics
   // needed to work out why.
-  if (fromEnv !== undefined && fromEnv in pino.levels.values) return fromEnv as LogLevel;
+  if (fromEnv !== undefined && fromEnv in pino.levels.values) {
+    return fromEnv as LogLevel;
+  }
   return 'info';
 }
 

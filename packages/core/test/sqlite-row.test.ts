@@ -25,7 +25,9 @@ describe('rowReader', () => {
   it('takes a bigint where an integer is wanted', () => {
     // `node:sqlite` hands back a bigint for a value outside the safe-integer
     // range. A counter that has been running for years is not a corrupt row.
-    expect(read.int({ seq: 9_007_199_254_740_993n }, 'seq')).toBe(9_007_199_254_740_992);
+    expect(read.int({ seq: 9_007_199_254_740_993n }, 'seq')).toBe(
+      9_007_199_254_740_992,
+    );
     expect(read.optionalInt({ seq: 7n }, 'seq')).toBe(7);
   });
 
@@ -33,7 +35,9 @@ describe('rowReader', () => {
     // The whole point of the shared reader. `WorkspaceStore` used to return
     // `''` and `0` here, so a damaged row became a workspace named "" created
     // at the epoch — indexed, sorted and shown as fact.
-    expect(kindOf(() => read.int({ created_at_ms: 'nope' }, 'created_at_ms'))).toBe('storage');
+    expect(
+      kindOf(() => read.int({ created_at_ms: 'nope' }, 'created_at_ms')),
+    ).toBe('storage');
     expect(kindOf(() => read.string({ key: 7 }, 'key'))).toBe('storage');
     expect(kindOf(() => read.int({}, 'missing'))).toBe('storage');
     expect(kindOf(() => read.string({ key: null }, 'key'))).toBe('storage');
@@ -55,11 +59,15 @@ describe('rowReader', () => {
   it('reads a nullable column as absent rather than as a zero', () => {
     // `SUM` over an all-`NULL` column returns `NULL`, and a provider that never
     // reported cached tokens is not one that reported zero.
-    expect(read.optionalInt({ cached_tokens: null }, 'cached_tokens')).toBeUndefined();
+    expect(
+      read.optionalInt({ cached_tokens: null }, 'cached_tokens'),
+    ).toBeUndefined();
     expect(read.optionalInt({}, 'cached_tokens')).toBeUndefined();
     expect(read.optionalInt({ cached_tokens: 0 }, 'cached_tokens')).toBe(0);
     expect(read.optionalString({ agent_id: null }, 'agent_id')).toBeUndefined();
-    expect(read.optionalString({ agent_id: 'writer' }, 'agent_id')).toBe('writer');
+    expect(read.optionalString({ agent_id: 'writer' }, 'agent_id')).toBe(
+      'writer',
+    );
   });
 });
 

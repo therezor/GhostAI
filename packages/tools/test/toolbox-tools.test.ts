@@ -9,7 +9,11 @@ import { WorkspaceJail } from '@ghostai/security';
 
 import { DEFAULT_TOOLS_CONFIG, type ToolContext } from '#src/define.js';
 import { ToolRegistry, withToolboxTools } from '#src/registry.js';
-import { toolboxPermissions, toolboxTool, toolboxTools } from '#src/toolbox-tools.js';
+import {
+  toolboxPermissions,
+  toolboxTool,
+  toolboxTools,
+} from '#src/toolbox-tools.js';
 import { registerBuiltins } from '#src/builtin/index.js';
 import type { CommandRunner } from '#src/runner.js';
 
@@ -60,8 +64,9 @@ describe('toolboxTools', () => {
     // generic "arguments as separate strings" says nothing about the flag this
     // program insists on.
     const [ddgr] = toolboxTools(toolboxOf({ expose: 'tools' }));
-    const described = (ddgr?.parameters as { properties: { args: { description: string } } })
-      .properties.args.description;
+    const described = (
+      ddgr?.parameters as { properties: { args: { description: string } } }
+    ).properties.args.description;
 
     expect(described).toContain('--json is required');
     expect(described).toContain('["--json","-n","3","sqlite wal mode"]');
@@ -79,7 +84,10 @@ describe('toolboxTools', () => {
 
   it('still accepts an empty array for a program that takes none', () => {
     const tools = toolboxTools(
-      toolboxOf({ expose: 'tools', tools: [{ name: 'uptime', use: 'Show load.' }] }),
+      toolboxOf({
+        expose: 'tools',
+        tools: [{ name: 'uptime', use: 'Show load.' }],
+      }),
     );
 
     expect(tools[0]?.parseArgs({ args: [] }).ok).toBe(true);
@@ -95,7 +103,10 @@ describe('toolboxTools', () => {
     // A manifest is data. `foo bar` would be a mid-turn 400 that reads like the
     // model is broken, so it never reaches the wire.
     const tools = toolboxTools(
-      toolboxOf({ expose: 'tools', tools: [{ name: 'foo bar' }, { name: 'ok' }] }),
+      toolboxOf({
+        expose: 'tools',
+        tools: [{ name: 'foo bar' }, { name: 'ok' }],
+      }),
     );
 
     expect(tools.map((tool) => tool.name)).toEqual(['ok']);
@@ -162,7 +173,11 @@ describe('withToolboxTools', () => {
   const permissionsOf = toolboxPermissions;
 
   it('lays the toolbox over the built-ins, sorted as one list', () => {
-    const scope = withToolboxTools(base(), toolboxTools(box), permissionsOf(box));
+    const scope = withToolboxTools(
+      base(),
+      toolboxTools(box),
+      permissionsOf(box),
+    );
     const names = scope.definitions().map((definition) => definition.name);
 
     expect(names).toContain('ddgr');
@@ -176,7 +191,11 @@ describe('withToolboxTools', () => {
   });
 
   it('resolves a toolbox name to the toolbox tool, not the registry', () => {
-    const scope = withToolboxTools(base(), toolboxTools(box), permissionsOf(box));
+    const scope = withToolboxTools(
+      base(),
+      toolboxTools(box),
+      permissionsOf(box),
+    );
 
     expect(scope.get('ddgr')?.name).toBe('ddgr');
     expect(scope.get('read_file')?.name).toBe('read_file');
@@ -203,7 +222,9 @@ describe('withToolboxTools', () => {
       ddgr: 'deny',
     });
 
-    expect(scope.definitions().map((definition) => definition.name)).not.toContain('ddgr');
+    expect(
+      scope.definitions().map((definition) => definition.name),
+    ).not.toContain('ddgr');
     expect(scope.get('ddgr')).toBeUndefined();
   });
 
@@ -225,8 +246,8 @@ describe('withToolboxTools', () => {
       },
     };
 
-    const base_ = mkdtempSync(join(tmpdir(), 'ghostai-tbt-'));
-    const root = join(realpathSync(base_), 'workspace');
+    const tempDir = mkdtempSync(join(tmpdir(), 'ghostai-tbt-'));
+    const root = join(realpathSync(tempDir), 'workspace');
     try {
       const context: ToolContext = {
         jail: new WorkspaceJail({ root }),
@@ -235,17 +256,24 @@ describe('withToolboxTools', () => {
         runner,
         sandboxed: true,
       };
-      const scope = withToolboxTools(base(), toolboxTools(box), permissionsOf(box));
+      const scope = withToolboxTools(
+        base(),
+        toolboxTools(box),
+        permissionsOf(box),
+      );
 
       const result = await scope.execute(
-        { name: 'ddgr', argumentsJson: JSON.stringify({ args: ['--json', 'q'] }) },
+        {
+          name: 'ddgr',
+          argumentsJson: JSON.stringify({ args: ['--json', 'q'] }),
+        },
         context,
       );
 
       expect(result.isError).toBe(false);
       expect(seen[0]).toEqual(['ddgr', '--json', 'q']);
     } finally {
-      rmSync(base_, { recursive: true, force: true });
+      rmSync(tempDir, { recursive: true, force: true });
     }
   });
 });
@@ -274,7 +302,9 @@ describe('toolboxTool: a model that sends args as a string', () => {
     });
 
     expect(parsed.ok).toBe(true);
-    expect(parsed.ok && (parsed.args as { args: string[] }).args[0]).toBe('SUFFOLK');
+    expect(parsed.ok && (parsed.args as { args: string[] }).args[0]).toBe(
+      'SUFFOLK',
+    );
   });
 
   it('still refuses a call with nothing in it', () => {

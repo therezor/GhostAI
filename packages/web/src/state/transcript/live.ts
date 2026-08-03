@@ -72,7 +72,10 @@ export function appendPendingUserMessage(
  * — return the transcript unchanged; the store reads those for connection and
  * busy state.
  */
-export function applyServerMessage(items: Transcript, message: ServerMessage): Transcript {
+export function applyServerMessage(
+  items: Transcript,
+  message: ServerMessage,
+): Transcript {
   // A turn that has already finished never grows again. The case this exists
   // for is a reload: the client resumes from its cursor and the ring re-sends
   // the tail of a turn that was persisted in the meantime, so the same text
@@ -89,9 +92,13 @@ export function applyServerMessage(items: Transcript, message: ServerMessage): T
       // would leave an empty turn above the real one for every resume. It is
       // still worth the session key it carries, which a turn reconstructed from
       // a mid-turn resume does not have.
-      if (items.some((item) => item.kind === 'turn' && item.id === message.turnId)) {
+      if (
+        items.some((item) => item.kind === 'turn' && item.id === message.turnId)
+      ) {
         return updateTurn(items, message.turnId, (turn) =>
-          turn.sessionKey === '' ? { ...turn, sessionKey: message.sessionKey } : turn,
+          turn.sessionKey === ''
+            ? { ...turn, sessionKey: message.sessionKey }
+            : turn,
         );
       }
       // The optimistic bubble this tab drew has no storage address until the
@@ -177,7 +184,11 @@ export function applyServerMessage(items: Transcript, message: ServerMessage): T
     case 'steer':
       return [
         ...items,
-        { kind: 'steer', id: `steer:${String(message.seq)}`, text: message.content },
+        {
+          kind: 'steer',
+          id: `steer:${String(message.seq)}`,
+          text: message.content,
+        },
       ];
 
     case 'session.reset':
@@ -200,7 +211,9 @@ export function applyServerMessage(items: Transcript, message: ServerMessage): T
       // optimistic bubble up for exactly that gap, and rebuilding over it is
       // what made the message look lost. A tab that did not ask has no pending
       // items, so this is a no-op there.
-      const pending = items.filter((item) => item.kind === 'user' && item.pending);
+      const pending = items.filter(
+        (item) => item.kind === 'user' && item.pending,
+      );
       return [...fromStoredMessages(message.messages), ...pending];
     }
 
@@ -228,7 +241,9 @@ export function markApprovalAnswered(
   answered: 'approved' | 'denied',
 ): Transcript {
   return items.map((item) =>
-    item.kind === 'turn' ? { ...item, parts: answerIn(item.parts, callId, answered) } : item,
+    item.kind === 'turn'
+      ? { ...item, parts: answerIn(item.parts, callId, answered) }
+      : item,
   );
 }
 
@@ -241,13 +256,18 @@ function answerIn(
     if (part.kind !== 'tool') return part;
 
     if (part.id === callId && part.approval !== undefined) {
-      return { ...part, approval: { expiresAtMs: part.approval.expiresAtMs, answered } };
+      return {
+        ...part,
+        approval: { expiresAtMs: part.approval.expiresAtMs, answered },
+      };
     }
 
     const subagent = part.subagent;
     if (subagent === undefined) return part;
     const nested = answerIn(subagent.parts, callId, answered);
-    return nested === subagent.parts ? part : { ...part, subagent: { ...subagent, parts: nested } };
+    return nested === subagent.parts
+      ? part
+      : { ...part, subagent: { ...subagent, parts: nested } };
   });
 }
 
@@ -276,12 +296,16 @@ function growsATurn(
   message: ServerMessage,
 ): message is Extract<ServerMessage, { turnId?: string }> & { turnId: string } {
   return (
-    GROWTH_EVENTS.has(message.type) && 'turnId' in message && typeof message.turnId === 'string'
+    GROWTH_EVENTS.has(message.type) &&
+    'turnId' in message &&
+    typeof message.turnId === 'string'
   );
 }
 
 function isFinished(items: Transcript, turnId: string): boolean {
-  const turn = items.findLast((item) => item.kind === 'turn' && item.id === turnId);
+  const turn = items.findLast(
+    (item) => item.kind === 'turn' && item.id === turnId,
+  );
   return turn?.kind === 'turn' && turn.done;
 }
 
@@ -297,12 +321,19 @@ function isFinished(items: Transcript, turnId: string): boolean {
  * kept only while they precede the cut, because an item that has no address
  * cannot be shown to be on the surviving side of one.
  */
-export function truncateTranscriptAfter(items: Transcript, seq: number): Transcript {
+export function truncateTranscriptAfter(
+  items: Transcript,
+  seq: number,
+): Transcript {
   const kept: TranscriptItem[] = [];
 
   for (const item of items) {
     const address =
-      item.kind === 'user' ? item.seq : item.kind === 'turn' ? item.firstSeq : undefined;
+      item.kind === 'user'
+        ? item.seq
+        : item.kind === 'turn'
+          ? item.firstSeq
+          : undefined;
     if (address !== undefined && address > seq) break;
     kept.push(item);
   }
@@ -330,15 +361,19 @@ function acknowledge(
   clientMessageId: string | undefined,
 ): Transcript {
   const pending = items.findIndex(
-    (item) => item.kind === 'user' && item.pending && item.clientMessageId === clientMessageId,
+    (item) =>
+      item.kind === 'user' &&
+      item.pending &&
+      item.clientMessageId === clientMessageId,
   );
   if (pending === -1) return items;
 
   const alreadyStored = items.some(
-    (item, index) => index !== pending && item.kind === 'user' && item.turnId === messageId,
+    (item, index) =>
+      index !== pending && item.kind === 'user' && item.turnId === messageId,
   );
 
-  if (alreadyStored) return items.filter((_item, index) => index !== pending);
+  if (alreadyStored) return items.filter((item, index) => index !== pending);
 
   const copy = [...items];
   const item = copy[pending];
@@ -354,10 +389,18 @@ function applyNotice(
   message: Extract<ServerMessage, { type: 'notice' }>,
 ): Transcript {
   const id = `notice:${String(message.seq)}`;
-  const notice: NoticePart = { kind: 'notice', id, notice: message.kind, message: message.message };
+  const notice: NoticePart = {
+    kind: 'notice',
+    id,
+    notice: message.kind,
+    message: message.message,
+  };
 
   if (message.turnId === undefined) {
-    return [...items, { kind: 'notice', id, notice: message.kind, message: message.message }];
+    return [
+      ...items,
+      { kind: 'notice', id, notice: message.kind, message: message.message },
+    ];
   }
 
   return updateTurn(items, message.turnId, (turn) => ({
@@ -385,15 +428,25 @@ function applySubagentEvent(
   message: Extract<ServerMessage, { type: 'subagent.event' }>,
 ): Transcript {
   return updateTurn(items, message.turnId, (turn) => {
-    const parts = updateNestedTool(turn.parts, turn.sessionKey, message, (tool) => {
-      const subagent = tool.subagent ?? seedSubagent(message);
-      return { ...tool, subagent: applySubagentPart(subagent, message.event) };
-    });
+    const parts = updateNestedTool(
+      turn.parts,
+      turn.sessionKey,
+      message,
+      (tool) => {
+        const subagent = tool.subagent ?? seedSubagent(message);
+        return {
+          ...tool,
+          subagent: applySubagentPart(subagent, message.event),
+        };
+      },
+    );
     return parts === turn.parts ? turn : { ...turn, parts };
   });
 }
 
-function seedSubagent(message: Extract<ServerMessage, { type: 'subagent.event' }>): SubagentPart {
+function seedSubagent(
+  message: Extract<ServerMessage, { type: 'subagent.event' }>,
+): SubagentPart {
   return {
     agentId: message.agentId,
     label: message.label === '' ? message.agentId : message.label,
@@ -476,15 +529,25 @@ function updateNestedTool(
   const next = parts.map((part) => {
     if (part.kind !== 'tool') return part;
 
-    if (sessionKey === message.parentSessionKey && part.id === message.parentCallId) {
+    if (
+      sessionKey === message.parentSessionKey &&
+      part.id === message.parentCallId
+    ) {
       return update(part);
     }
 
     // One level down: this call's own subagent, whose parts may hold the target.
     const subagent = part.subagent;
     if (subagent === undefined) return part;
-    const nested = updateNestedTool(subagent.parts, subagent.sessionKey, message, update);
-    return nested === subagent.parts ? part : { ...part, subagent: { ...subagent, parts: nested } };
+    const nested = updateNestedTool(
+      subagent.parts,
+      subagent.sessionKey,
+      message,
+      update,
+    );
+    return nested === subagent.parts
+      ? part
+      : { ...part, subagent: { ...subagent, parts: nested } };
   });
 
   // Identity, not a flag: a `let` assigned inside the callback is not something
@@ -586,7 +649,10 @@ function applyPartEvent(
       // call: the ids are unique per turn and the ring re-sends.
       return findTool(parts, event.callId) !== undefined
         ? parts
-        : [...parts, seedTool(event.callId, event.name, event.args, event.risk)];
+        : [
+            ...parts,
+            seedTool(event.callId, event.name, event.args, event.risk),
+          ];
 
     case 'tool.progress':
       return upsertTool(parts, event.callId, (tool) => ({
@@ -628,7 +694,9 @@ function updateTurn(
   turnId: string,
   update: (turn: TurnItem) => TurnItem,
 ): Transcript {
-  const index = items.findLastIndex((item) => item.kind === 'turn' && item.id === turnId);
+  const index = items.findLastIndex(
+    (item) => item.kind === 'turn' && item.id === turnId,
+  );
 
   if (index === -1) {
     return [...items, update(orphanTurn(turnId))];

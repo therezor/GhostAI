@@ -2,7 +2,12 @@ import { createHmac } from 'node:crypto';
 
 import { describe, expect, it } from 'vitest';
 
-import { assertSigningKey, mediaUrl, signMediaToken, verifyMediaToken } from '#src/signing.js';
+import {
+  assertSigningKey,
+  mediaUrl,
+  signMediaToken,
+  verifyMediaToken,
+} from '#src/signing.js';
 
 const KEY = 'a-signing-key';
 const NOW = 1_700_000_000_000;
@@ -45,13 +50,17 @@ describe('media tokens', () => {
     const [payload, signature] = token().split('.');
     const edited = Buffer.from(
       JSON.stringify({
-        ...(JSON.parse(Buffer.from(payload ?? '', 'base64url').toString('utf8')) as object),
+        ...(JSON.parse(
+          Buffer.from(payload ?? '', 'base64url').toString('utf8'),
+        ) as object),
         p: '../../etc/passwd',
       }),
       'utf8',
     ).toString('base64url');
 
-    expect(verifyMediaToken(KEY, `${edited}.${signature ?? ''}`, NOW)).toBeUndefined();
+    expect(
+      verifyMediaToken(KEY, `${edited}.${signature ?? ''}`, NOW),
+    ).toBeUndefined();
   });
 
   it.each([
@@ -60,7 +69,7 @@ describe('media tokens', () => {
     ['nothing before the separator', '.signature'],
     ['nothing after the separator', 'payload.'],
     ['a truncated signature', token().slice(0, -4)],
-  ])('refuses a %s token without throwing', (_name, value) => {
+  ])('refuses a %s token without throwing', (name, value) => {
     // A malformed token must not turn into a 500: it is the shape a scanner
     // sends, and an exception there is a way to find the code path.
     expect(() => verifyMediaToken(KEY, value, NOW)).not.toThrow();
@@ -93,7 +102,9 @@ describe('media tokens: the workspace claim', () => {
     // without saying where would be a token for that filename everywhere.
     const claim = verifyMediaToken(KEY, token({ workspaceId: 'acme' }), NOW);
     expect(claim?.workspaceId).toBe('acme');
-    expect(verifyMediaToken(KEY, token({ workspaceId: 'acme' }), NOW)).not.toEqual(
+    expect(
+      verifyMediaToken(KEY, token({ workspaceId: 'acme' }), NOW),
+    ).not.toEqual(
       verifyMediaToken(KEY, token({ workspaceId: 'research' }), NOW),
     );
   });
@@ -106,7 +117,9 @@ describe('media tokens: the workspace claim', () => {
       JSON.stringify({ p: 'notes/photo.png', e: NOW + 60_000 }),
       'utf8',
     ).toString('base64url');
-    const mac = createHmac('sha256', KEY).update(legacy, 'utf8').digest('base64url');
+    const mac = createHmac('sha256', KEY)
+      .update(legacy, 'utf8')
+      .digest('base64url');
 
     expect(verifyMediaToken(KEY, `${legacy}.${mac}`, NOW)).toBeUndefined();
   });

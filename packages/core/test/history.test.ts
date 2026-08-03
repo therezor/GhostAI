@@ -12,9 +12,16 @@ import {
   historyForLLM,
   truncateHeadTail,
 } from '#src/history.js';
-import { assistantMessage, systemMessage, toolMessage, userMessage } from '#src/messages.js';
+import {
+  assistantMessage,
+  systemMessage,
+  toolMessage,
+  userMessage,
+} from '#src/messages.js';
 
-const call = (id: string): { id: string; name: string; argumentsJson: string } => ({
+const call = (
+  id: string,
+): { id: string; name: string; argumentsJson: string } => ({
   id,
   name: 'read_file',
   argumentsJson: '{}',
@@ -29,7 +36,9 @@ describe('findLegalStart', () => {
   });
 
   it('accepts a history with no tool traffic', () => {
-    expect(findLegalStart([userMessage('hi'), assistantMessage('hello')])).toBe(0);
+    expect(findLegalStart([userMessage('hi'), assistantMessage('hello')])).toBe(
+      0,
+    );
   });
 
   it('accepts a well-paired exchange', () => {
@@ -44,7 +53,10 @@ describe('findLegalStart', () => {
 
   it('cuts past a leading orphan', () => {
     // The window opened mid-turn: the assistant that declared `a` fell off.
-    const messages = [toolMessage('a', 'read_file', 'contents'), assistantMessage('done')];
+    const messages = [
+      toolMessage('a', 'read_file', 'contents'),
+      assistantMessage('done'),
+    ];
     expect(findLegalStart(messages)).toBe(1);
   });
 
@@ -95,7 +107,12 @@ describe('findLegalStart', () => {
 
 describe('hasOrphanedToolResult', () => {
   it('is false for a paired exchange', () => {
-    expect(hasOrphanedToolResult([assistantCalling('a'), toolMessage('a', 't', 'x')])).toBe(false);
+    expect(
+      hasOrphanedToolResult([
+        assistantCalling('a'),
+        toolMessage('a', 't', 'x'),
+      ]),
+    ).toBe(false);
   });
 
   it('is true for a leading tool result', () => {
@@ -110,7 +127,9 @@ describe('findLegalStart properties', () => {
     fc.constant(userMessage('hi')),
     fc.constant(assistantMessage('plain answer')),
     fc.constant(systemMessage('you are a ghost')),
-    fc.uniqueArray(idArb, { minLength: 1, maxLength: 3 }).map((ids) => assistantCalling(...ids)),
+    fc
+      .uniqueArray(idArb, { minLength: 1, maxLength: 3 })
+      .map((ids) => assistantCalling(...ids)),
     idArb.map((id) => toolMessage(id, 'read_file', 'result')),
   );
 
@@ -155,9 +174,15 @@ describe('findLegalStart properties', () => {
 
   it('produces a legal window through the full historyForLLM pipeline', () => {
     fc.assert(
-      fc.property(historyArb, fc.integer({ min: 0, max: 24 }), (messages, maxMessages) => {
-        expect(hasOrphanedToolResult(historyForLLM(messages, { maxMessages }))).toBe(false);
-      }),
+      fc.property(
+        historyArb,
+        fc.integer({ min: 0, max: 24 }),
+        (messages, maxMessages) => {
+          expect(
+            hasOrphanedToolResult(historyForLLM(messages, { maxMessages })),
+          ).toBe(false);
+        },
+      ),
     );
   });
 });
@@ -168,7 +193,9 @@ describe('findLegalEnd', () => {
   });
 
   it('accepts a history with no tool traffic', () => {
-    expect(findLegalEnd([userMessage('hi'), assistantMessage('hello')])).toBe(2);
+    expect(findLegalEnd([userMessage('hi'), assistantMessage('hello')])).toBe(
+      2,
+    );
   });
 
   it('accepts a well-paired exchange', () => {
@@ -189,7 +216,10 @@ describe('findLegalEnd', () => {
   });
 
   it('cuts before the assistant when only some of its calls were answered', () => {
-    const messages = [assistantCalling('a', 'b'), toolMessage('a', 'read_file', 'contents')];
+    const messages = [
+      assistantCalling('a', 'b'),
+      toolMessage('a', 'read_file', 'contents'),
+    ];
     expect(findLegalEnd(messages)).toBe(0);
   });
 
@@ -232,9 +262,12 @@ describe('hasUnansweredToolCall', () => {
   });
 
   it('is false for a well-paired exchange', () => {
-    expect(hasUnansweredToolCall([assistantCalling('a'), toolMessage('a', 'read_file', 'x')])).toBe(
-      false,
-    );
+    expect(
+      hasUnansweredToolCall([
+        assistantCalling('a'),
+        toolMessage('a', 'read_file', 'x'),
+      ]),
+    ).toBe(false);
   });
 
   it('is true when an answer never arrives', () => {
@@ -243,9 +276,12 @@ describe('hasUnansweredToolCall', () => {
 
   it('is true when the answer precedes the call', () => {
     // Order matters: a `tool` row before its `assistant` answers nothing.
-    expect(hasUnansweredToolCall([toolMessage('a', 'read_file', 'x'), assistantCalling('a')])).toBe(
-      true,
-    );
+    expect(
+      hasUnansweredToolCall([
+        toolMessage('a', 'read_file', 'x'),
+        assistantCalling('a'),
+      ]),
+    ).toBe(true);
   });
 });
 
@@ -256,7 +292,9 @@ describe('findLegalEnd properties', () => {
     fc.constant(userMessage('hi')),
     fc.constant(assistantMessage('plain answer')),
     fc.constant(systemMessage('you are a ghost')),
-    fc.uniqueArray(idArb, { minLength: 1, maxLength: 3 }).map((ids) => assistantCalling(...ids)),
+    fc
+      .uniqueArray(idArb, { minLength: 1, maxLength: 3 })
+      .map((ids) => assistantCalling(...ids)),
     idArb.map((id) => toolMessage(id, 'read_file', 'result')),
   );
 
@@ -341,21 +379,31 @@ describe('truncateHeadTail', () => {
 
   it('always retains exactly the budgeted number of source characters', () => {
     fc.assert(
-      fc.property(fc.string(), fc.integer({ min: 1, max: 64 }), (text, maxChars) => {
-        const result = truncateHeadTail(text, maxChars);
-        if (!result.truncated) return;
-        const head = text.slice(0, Math.ceil(maxChars / 2));
-        expect(result.text.startsWith(head)).toBe(true);
-        expect(result.omitted).toBe(text.length - maxChars);
-      }),
+      fc.property(
+        fc.string(),
+        fc.integer({ min: 1, max: 64 }),
+        (text, maxChars) => {
+          const result = truncateHeadTail(text, maxChars);
+          if (!result.truncated) return;
+          const head = text.slice(0, Math.ceil(maxChars / 2));
+          expect(result.text.startsWith(head)).toBe(true);
+          expect(result.omitted).toBe(text.length - maxChars);
+        },
+      ),
     );
   });
 });
 
 describe('historyForLLM', () => {
   it('drops consolidated messages', () => {
-    const messages = [userMessage('one'), assistantMessage('two'), userMessage('three')];
-    expect(historyForLLM(messages, { fromIndex: 2 })).toEqual([userMessage('three')]);
+    const messages = [
+      userMessage('one'),
+      assistantMessage('two'),
+      userMessage('three'),
+    ];
+    expect(historyForLLM(messages, { fromIndex: 2 })).toEqual([
+      userMessage('three'),
+    ]);
   });
 
   it('ignores a negative fromIndex rather than slicing from the end', () => {
@@ -406,7 +454,11 @@ describe('historyForLLM', () => {
 
   it('truncates long tool results and flags them', () => {
     const long = 'x'.repeat(DEFAULT_MAX_TOOL_RESULT_CHARS + 100);
-    const messages = [userMessage('go'), assistantCalling('a'), toolMessage('a', 't', long)];
+    const messages = [
+      userMessage('go'),
+      assistantCalling('a'),
+      toolMessage('a', 't', long),
+    ];
     const result = historyForLLM(messages);
     const tool = result[2];
 
@@ -417,7 +469,11 @@ describe('historyForLLM', () => {
   });
 
   it('leaves tool results within the cap untouched', () => {
-    const messages = [userMessage('go'), assistantCalling('a'), toolMessage('a', 't', 'small')];
+    const messages = [
+      userMessage('go'),
+      assistantCalling('a'),
+      toolMessage('a', 't', 'small'),
+    ];
     const tool = historyForLLM(messages)[2];
     if (tool?.role !== 'tool') throw new Error('expected a tool message');
     expect(tool.truncated).toBe(false);
@@ -425,7 +481,11 @@ describe('historyForLLM', () => {
 
   it('disables truncation when the cap is zero', () => {
     const long = 'x'.repeat(20_000);
-    const messages = [userMessage('go'), assistantCalling('a'), toolMessage('a', 't', long)];
+    const messages = [
+      userMessage('go'),
+      assistantCalling('a'),
+      toolMessage('a', 't', long),
+    ];
     const tool = historyForLLM(messages, { maxToolResultChars: 0 })[2];
     if (tool?.role !== 'tool') throw new Error('expected a tool message');
     expect(tool.content).toHaveLength(20_000);

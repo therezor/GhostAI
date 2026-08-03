@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { SessionStore, assistantMessage, toolMessage, userMessage } from '@ghostai/core';
+import {
+  SessionStore,
+  assistantMessage,
+  toolMessage,
+  userMessage,
+} from '@ghostai/core';
 import type { ToolDefinition } from '@ghostai/protocol';
 
 import { describeContext } from '#src/context.js';
@@ -21,7 +26,8 @@ const TOOLS: readonly ToolDefinition[] = [
 
 /** The one method `describeContext` needs, so no jail or provider is built. */
 const loop = {
-  previewPrompt: () => Promise.resolve({ staticPrompt: PROMPT, runtimeBlock: RUNTIME }),
+  previewPrompt: () =>
+    Promise.resolve({ staticPrompt: PROMPT, runtimeBlock: RUNTIME }),
 };
 
 function makeStore(): SessionStore {
@@ -74,16 +80,19 @@ describe('describeContext', () => {
       sessionKey: SESSION,
       contextWindowTokens: 10_000,
     });
-    const { systemPrompt, tools, messages, runtimeBlock } = report?.breakdown ?? {
-      systemPrompt: 0,
-      tools: 0,
-      messages: 0,
-      runtimeBlock: 0,
-    };
+    const { systemPrompt, tools, messages, runtimeBlock } =
+      report?.breakdown ?? {
+        systemPrompt: 0,
+        tools: 0,
+        messages: 0,
+        runtimeBlock: 0,
+      };
 
     // Every section, including the trailing turn — a total that omitted it would
     // under-report the request by exactly the part billed on every iteration.
-    expect(report?.estimatedTokens).toBe(systemPrompt + tools + messages + runtimeBlock);
+    expect(report?.estimatedTokens).toBe(
+      systemPrompt + tools + messages + runtimeBlock,
+    );
     expect(runtimeBlock).toBeGreaterThan(0);
     store.close();
   });
@@ -103,7 +112,10 @@ describe('describeContext', () => {
 
     // The identity trick this is built on: every message in the window maps
     // back to the row it came from, ids and seqs intact.
-    expect(report?.messages.map((record) => record.id)).toEqual([first.id, second.id]);
+    expect(report?.messages.map((record) => record.id)).toEqual([
+      first.id,
+      second.id,
+    ]);
     expect(report?.messages.map((record) => record.seq)).toEqual([1, 2]);
     store.close();
   });
@@ -114,7 +126,9 @@ describe('describeContext', () => {
     store.append(SESSION, userMessage('read it'));
     store.append(
       SESSION,
-      assistantMessage('', { toolCalls: [{ id: 'a', name: 'read_file', argumentsJson: '{}' }] }),
+      assistantMessage('', {
+        toolCalls: [{ id: 'a', name: 'read_file', argumentsJson: '{}' }],
+      }),
     );
     store.append(SESSION, toolMessage('a', 'read_file', long));
 
@@ -125,11 +139,15 @@ describe('describeContext', () => {
       sessionKey: SESSION,
       contextWindowTokens: 10_000,
     });
-    const tool = report?.messages.find((record) => record.message.role === 'tool');
+    const tool = report?.messages.find(
+      (record) => record.message.role === 'tool',
+    );
 
     // Truncating here would understate the budget the panel exists to explain,
     // and would break the object identity the mapping above depends on.
-    expect(tool?.message.role === 'tool' && tool.message.content).toHaveLength(20_000);
+    expect(tool?.message.role === 'tool' && tool.message.content).toHaveLength(
+      20_000,
+    );
     store.close();
   });
 

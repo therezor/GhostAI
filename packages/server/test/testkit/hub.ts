@@ -20,7 +20,7 @@ import { SessionHub, type TurnRunner } from '#src/hub.js';
 export interface FakeRunner extends TurnRunner {
   /** Every turn this runner was asked to run, in order. */
   readonly inputs: TurnInput[];
-  readonly steers: { sessionKey: string; content: string }[];
+  readonly steers: Array<{ sessionKey: string; content: string }>;
 }
 
 /**
@@ -32,12 +32,14 @@ export interface FakeRunner extends TurnRunner {
  */
 export function hangingRunner(): FakeRunner {
   const inputs: TurnInput[] = [];
-  const steers: { sessionKey: string; content: string }[] = [];
+  const steers: Array<{ sessionKey: string; content: string }> = [];
 
   return {
     inputs,
     steers,
-    run: async function* (input: TurnInput): AsyncGenerator<AgentEvent, TurnResult> {
+    run: async function* (
+      input: TurnInput,
+    ): AsyncGenerator<AgentEvent, TurnResult> {
       inputs.push(input);
       const turnId = input.turnId ?? 'turn-1';
       yield {
@@ -62,12 +64,14 @@ export function hangingRunner(): FakeRunner {
 /** A turn that says one thing and ends. */
 export function fakeRunner(answer = 'ok'): FakeRunner {
   const inputs: TurnInput[] = [];
-  const steers: { sessionKey: string; content: string }[] = [];
+  const steers: Array<{ sessionKey: string; content: string }> = [];
 
   return {
     inputs,
     steers,
-    run: async function* (input: TurnInput): AsyncGenerator<AgentEvent, TurnResult> {
+    run: async function* (
+      input: TurnInput,
+    ): AsyncGenerator<AgentEvent, TurnResult> {
       inputs.push(input);
       const turnId = input.turnId ?? 'turn-1';
       yield {
@@ -115,11 +119,15 @@ export function createTestHub(
     // Reimplementing it as "everything resolves" would make the fallback the
     // one thing these tests could never see.
     resolveAgentId: (agentId) => {
-      const id = agentId === undefined || agentId === '' ? DEFAULT_AGENT_ID : agentId;
+      const id =
+        agentId === undefined || agentId === '' ? DEFAULT_AGENT_ID : agentId;
       if (id === DEFAULT_AGENT_ID) return { agentId: id, miss: undefined };
       const entry = resolved.agents.list[id];
       if (entry?.enabled === true) return { agentId: id, miss: undefined };
-      return { agentId: DEFAULT_AGENT_ID, miss: entry === undefined ? 'unknown' : 'disabled' };
+      return {
+        agentId: DEFAULT_AGENT_ID,
+        miss: entry === undefined ? 'unknown' : 'disabled',
+      };
     },
     store,
     approvals: new HubApprovalGate(),

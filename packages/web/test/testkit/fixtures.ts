@@ -58,7 +58,17 @@ export const UNCONFIGURED_STATUS = {
  */
 export const AGENTS = {
   agents: [
-    { id: 'default', label: 'Default', model: 'test-model', provider: 'ollama' },
-    { id: 'researcher', label: 'Researcher', model: 'pinned-research-model', provider: 'lmstudio' },
+    {
+      id: 'default',
+      label: 'Default',
+      model: 'test-model',
+      provider: 'ollama',
+    },
+    {
+      id: 'researcher',
+      label: 'Researcher',
+      model: 'pinned-research-model',
+      provider: 'lmstudio',
+    },
   ],
 } satisfies AgentListResponse;

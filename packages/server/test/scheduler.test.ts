@@ -11,7 +11,12 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ConfigSchema, type Config, type ConfigPatch, type ServerMessage } from '@ghostai/protocol';
+import {
+  ConfigSchema,
+  type Config,
+  type ConfigPatch,
+  type ServerMessage,
+} from '@ghostai/protocol';
 import type { ChatResult } from '@ghostai/providers';
 
 import { AutomationStore, type CreateJobInput } from '#src/automation-store.js';
@@ -64,25 +69,44 @@ function fakeClock(): {
     clearTimeout: (h) => {
       globalThis.clearTimeout(h);
     },
-    sleep: (ms) => new Promise<void>((resolve) => globalThis.setTimeout(resolve, ms)),
+    sleep: (ms) =>
+      new Promise<void>((resolve) => globalThis.setTimeout(resolve, ms)),
   };
 }
 
 /** One scripted turn: what the hub sends back when a message arrives. */
-type TurnScript = (options: SchedulerConnectOptions, message: unknown) => ServerMessage[];
+type TurnScript = (
+  options: SchedulerConnectOptions,
+  message: unknown,
+) => ServerMessage[];
 
 function answers(text: string, stopReason = 'complete'): TurnScript {
   return () => [
-    { type: 'turn.start', seq: 1, turnId: 't1', sessionKey: 'k' } as unknown as ServerMessage,
-    { type: 'assistant.delta', seq: 2, turnId: 't1', text } as unknown as ServerMessage,
-    { type: 'turn.end', seq: 3, turnId: 't1', stopReason } as unknown as ServerMessage,
+    {
+      type: 'turn.start',
+      seq: 1,
+      turnId: 't1',
+      sessionKey: 'k',
+    } as unknown as ServerMessage,
+    {
+      type: 'assistant.delta',
+      seq: 2,
+      turnId: 't1',
+      text,
+    } as unknown as ServerMessage,
+    {
+      type: 'turn.end',
+      seq: 3,
+      turnId: 't1',
+      stopReason,
+    } as unknown as ServerMessage,
   ];
 }
 
 interface Harness {
   scheduler: Scheduler;
   readonly jobs: AutomationStore;
-  readonly runs: { options: SchedulerConnectOptions; message: unknown }[];
+  readonly runs: Array<{ options: SchedulerConnectOptions; message: unknown }>;
   readonly notifications: CreateNotificationInput[];
   readonly broadcasts: NotificationBroadcast[];
   readonly deletedSessions: string[];
@@ -111,7 +135,8 @@ function harness(options: HarnessOptions = {}): Harness {
     newId: () => `x${String(++counter).padStart(3, '0')}`,
   });
 
-  const runs: { options: SchedulerConnectOptions; message: unknown }[] = [];
+  const runs: Array<{ options: SchedulerConnectOptions; message: unknown }> =
+    [];
   const notifications: CreateNotificationInput[] = [];
   const broadcasts: NotificationBroadcast[] = [];
   const deletedSessions: string[] = [];
@@ -147,7 +172,9 @@ function harness(options: HarnessOptions = {}): Harness {
         if (frame.type !== 'user.message') return;
         runs.push({ options: connectOptions, message });
         if (options.hang === true) return;
-        for (const event of script(connectOptions, message)) connectOptions.send(event);
+        for (const event of script(connectOptions, message)) {
+          connectOptions.send(event);
+        }
       },
       close: () => undefined,
     }),
@@ -160,7 +187,9 @@ function harness(options: HarnessOptions = {}): Harness {
         body: input.body ?? '',
         level: input.level ?? 'info',
         createdAtMs: Date.now(),
-        ...(input.sessionKey === undefined ? {} : { sessionKey: input.sessionKey }),
+        ...(input.sessionKey === undefined
+          ? {}
+          : { sessionKey: input.sessionKey }),
         ...(input.jobId === undefined ? {} : { jobId: input.jobId }),
       };
     },
@@ -197,12 +226,16 @@ async function tick(ms: number): Promise<void> {
 
 describe('nextRunAfter', () => {
   it('keeps a future one-shot and unschedules a past one', () => {
-    expect(nextRunAfter({ kind: 'at', atMs: START + 1000 }, START)).toBe(START + 1000);
+    expect(nextRunAfter({ kind: 'at', atMs: START + 1000 }, START)).toBe(
+      START + 1000,
+    );
     expect(nextRunAfter({ kind: 'at', atMs: START - 1000 }, START)).toBe(0);
   });
 
   it('adds the interval', () => {
-    expect(nextRunAfter({ kind: 'every', everyMs: 5000 }, START)).toBe(START + 5000);
+    expect(nextRunAfter({ kind: 'every', everyMs: 5000 }, START)).toBe(
+      START + 5000,
+    );
   });
 
   it('reads a cron expression in the zone it is given', () => {
@@ -219,20 +252,26 @@ describe('nextRunAfter', () => {
     // the server does, so the same expression would fire at a different real
     // instant after a migration nobody connected to it.
     const from = Date.parse('2026-01-15T08:00:00Z');
-    expect(new Date(nextRunAfter({ kind: 'cron', expr: '0 9 * * *' }, from)).toISOString()).toBe(
-      '2026-01-15T09:00:00.000Z',
-    );
+    expect(
+      new Date(
+        nextRunAfter({ kind: 'cron', expr: '0 9 * * *' }, from),
+      ).toISOString(),
+    ).toBe('2026-01-15T09:00:00.000Z');
     // And the install's zone is honoured: 08:00 UTC is already 17:00 in Tokyo,
     // so that day's 09:00 has gone and the answer is the next one.
     expect(
-      new Date(nextRunAfter({ kind: 'cron', expr: '0 9 * * *' }, from, 'Asia/Tokyo')).toISOString(),
+      new Date(
+        nextRunAfter({ kind: 'cron', expr: '0 9 * * *' }, from, 'Asia/Tokyo'),
+      ).toISOString(),
     ).toBe('2026-01-16T00:00:00.000Z');
   });
 
   it('is 0 for a cron expression that can never match', () => {
     // Legal to write, impossible to reach. The column's 0 means "unscheduled",
     // which is the same thing to the timer as a fired one-shot.
-    expect(nextRunAfter({ kind: 'cron', expr: '0 0 30 2 *' }, START, 'UTC')).toBe(0);
+    expect(
+      nextRunAfter({ kind: 'cron', expr: '0 0 30 2 *' }, START, 'UTC'),
+    ).toBe(0);
   });
 });
 
@@ -244,7 +283,9 @@ describe('firstRunAt', () => {
   it('keeps a one-shot whose time has already passed, leaving catch-up to decide', () => {
     // Pushing it forward here would take the decision away from
     // `catchUpOnBoot`, which is the flag that owns it.
-    expect(firstRunAt({ kind: 'at', atMs: START - 5000 }, START, true)).toBe(START - 5000);
+    expect(firstRunAt({ kind: 'at', atMs: START - 5000 }, START, true)).toBe(
+      START - 5000,
+    );
   });
 });
 
@@ -284,7 +325,12 @@ describe('Scheduler timer', () => {
     // months out would run now, and then again, and again.
     const h = harness();
     const farFuture = START + 90 * 24 * 60 * 60 * 1000;
-    h.jobs.createJob(job({ schedule: { kind: 'at', atMs: farFuture }, nextRunAtMs: farFuture }));
+    h.jobs.createJob(
+      job({
+        schedule: { kind: 'at', atMs: farFuture },
+        nextRunAtMs: farFuture,
+      }),
+    );
     h.scheduler.start();
 
     await tick(MAX_ARM_MS);
@@ -347,7 +393,10 @@ describe('Scheduler timer', () => {
 describe('Scheduler and a change of timezone', () => {
   /** A cron job whose next run the scheduler will have settled against the zone. */
   function cronJob(): CreateJobInput {
-    return job({ schedule: { kind: 'cron', expr: '0 9 * * *' }, nextRunAtMs: START + 60_000 });
+    return job({
+      schedule: { kind: 'cron', expr: '0 9 * * *' },
+      nextRunAtMs: START + 60_000,
+    });
   }
 
   it('reschedules an existing cron job when `ui.timezone` moves', async () => {
@@ -372,7 +421,9 @@ describe('Scheduler and a change of timezone', () => {
     // Recomputing it would push the next run a full interval into the future on
     // every unrelated save, which is a job that quietly never runs.
     const h = harness();
-    const created = h.jobs.createJob(job({ schedule: { kind: 'every', everyMs: 60_000 } }));
+    const created = h.jobs.createJob(
+      job({ schedule: { kind: 'every', everyMs: 60_000 } }),
+    );
     h.scheduler.start();
     const before = h.jobs.getJob(created.id)?.state.nextRunAtMs;
 
@@ -400,7 +451,11 @@ describe('Scheduler and a change of timezone', () => {
 
   it('leaves a disabled cron job unscheduled rather than waking it', async () => {
     const h = harness();
-    const created = h.jobs.createJob({ ...cronJob(), enabled: false, nextRunAtMs: 0 });
+    const created = h.jobs.createJob({
+      ...cronJob(),
+      enabled: false,
+      nextRunAtMs: 0,
+    });
     h.scheduler.start();
 
     h.config = ConfigSchema.parse({ ui: { timezone: 'Asia/Tokyo' } });
@@ -418,7 +473,9 @@ describe('Scheduler and a change of timezone', () => {
 describe('Scheduler concurrency', () => {
   it('runs at most `concurrency` jobs at once', async () => {
     const h = harness({ hang: true, patch: { scheduler: { concurrency: 2 } } });
-    for (let i = 0; i < 4; i += 1) h.jobs.createJob(job({ name: `j${String(i)}` }));
+    for (let i = 0; i < 4; i += 1) {
+      h.jobs.createJob(job({ name: `j${String(i)}` }));
+    }
     h.scheduler.start();
 
     await tick(60_000);
@@ -431,7 +488,10 @@ describe('Scheduler concurrency', () => {
     // outlasts its own interval is left due rather than started twice.
     const h = harness({ hang: true });
     h.jobs.createJob(
-      job({ schedule: { kind: 'every', everyMs: 1000 }, nextRunAtMs: START + 1000 }),
+      job({
+        schedule: { kind: 'every', everyMs: 1000 },
+        nextRunAtMs: START + 1000,
+      }),
     );
     h.scheduler.start();
 
@@ -445,7 +505,9 @@ describe('Scheduler concurrency', () => {
     // earliest due job" is zero for as long as the slots are full. Re-arming at
     // zero would burn the event loop for the whole length of a slow run.
     const h = harness({ hang: true, patch: { scheduler: { concurrency: 1 } } });
-    for (let i = 0; i < 3; i += 1) h.jobs.createJob(job({ name: `j${String(i)}` }));
+    for (let i = 0; i < 3; i += 1) {
+      h.jobs.createJob(job({ name: `j${String(i)}` }));
+    }
     h.scheduler.start();
     await tick(60_000);
     expect(h.runs).toHaveLength(1);
@@ -461,7 +523,9 @@ describe('Scheduler concurrency', () => {
 
   it('reads the concurrency limit live, so a settings save moves the next drain', async () => {
     const h = harness({ hang: true, patch: { scheduler: { concurrency: 1 } } });
-    for (let i = 0; i < 3; i += 1) h.jobs.createJob(job({ name: `j${String(i)}` }));
+    for (let i = 0; i < 3; i += 1) {
+      h.jobs.createJob(job({ name: `j${String(i)}` }));
+    }
     h.scheduler.start();
 
     await tick(60_000);
@@ -499,7 +563,9 @@ describe('Scheduler catch-up', () => {
 
   it('runs a missed one-shot once when catch-up is on', async () => {
     const h = harness();
-    h.jobs.createJob(job({ schedule: { kind: 'at', atMs: past }, nextRunAtMs: past }));
+    h.jobs.createJob(
+      job({ schedule: { kind: 'at', atMs: past }, nextRunAtMs: past }),
+    );
     h.scheduler.start();
     await tick(0);
 
@@ -513,7 +579,9 @@ describe('Scheduler catch-up', () => {
     // Ten minutes down on a one-minute interval is ten missed ticks. Running
     // ten times at boot is the failure this rule exists to prevent.
     const h = harness();
-    h.jobs.createJob(job({ schedule: { kind: 'every', everyMs: 60_000 }, nextRunAtMs: past }));
+    h.jobs.createJob(
+      job({ schedule: { kind: 'every', everyMs: 60_000 }, nextRunAtMs: past }),
+    );
     h.scheduler.start();
     await tick(0);
 
@@ -523,7 +591,9 @@ describe('Scheduler catch-up', () => {
 
   it('coalesces missed cron occurrences the same way', async () => {
     const h = harness();
-    h.jobs.createJob(job({ schedule: { kind: 'cron', expr: '* * * * *' }, nextRunAtMs: past }));
+    h.jobs.createJob(
+      job({ schedule: { kind: 'cron', expr: '* * * * *' }, nextRunAtMs: past }),
+    );
     h.scheduler.start();
     await tick(0);
 
@@ -533,12 +603,16 @@ describe('Scheduler catch-up', () => {
 
   it('says so on the run, rather than letting a boot run look scheduled', async () => {
     const h = harness();
-    h.jobs.createJob(job({ schedule: { kind: 'every', everyMs: 60_000 }, nextRunAtMs: past }));
+    h.jobs.createJob(
+      job({ schedule: { kind: 'every', everyMs: 60_000 }, nextRunAtMs: past }),
+    );
     h.scheduler.start();
     await tick(0);
 
     const [run] = h.jobs.listRuns(h.jobs.listJobs()[0]!.id);
-    expect(run?.warnings.join(' ')).toMatch(/passed while the server was down/u);
+    expect(run?.warnings.join(' ')).toMatch(
+      /passed while the server was down/u,
+    );
     await h.scheduler.stop();
   });
 
@@ -564,7 +638,11 @@ describe('Scheduler catch-up', () => {
     // learning it was missed.
     const h = harness({ patch: { scheduler: { catchUpOnBoot: false } } });
     const created = h.jobs.createJob(
-      job({ schedule: { kind: 'at', atMs: past }, nextRunAtMs: past, deleteAfterRun: true }),
+      job({
+        schedule: { kind: 'at', atMs: past },
+        nextRunAtMs: past,
+        deleteAfterRun: true,
+      }),
     );
     h.scheduler.start();
     await tick(0);
@@ -616,9 +694,15 @@ describe('Scheduler run lifecycle', () => {
       status: 'ok',
       output: 'the build is green',
     });
-    expect(h.jobs.getJob(created.id)?.state).toMatchObject({ lastStatus: 'ok', runCount: 1 });
+    expect(h.jobs.getJob(created.id)?.state).toMatchObject({
+      lastStatus: 'ok',
+      runCount: 1,
+    });
     expect(h.notifications).toHaveLength(1);
-    expect(h.broadcasts[0]).toMatchObject({ type: 'notification', jobId: created.id });
+    expect(h.broadcasts[0]).toMatchObject({
+      type: 'notification',
+      jobId: created.id,
+    });
     await h.scheduler.stop();
   });
 
@@ -679,7 +763,9 @@ describe('Scheduler run lifecycle', () => {
     await tick(60_000);
 
     const run = h.jobs.listRuns(created.id)[0];
-    expect((h.runs[0]?.message as { clientMessageId?: string }).clientMessageId).toBe(run?.id);
+    expect(
+      (h.runs[0]?.message as { clientMessageId?: string }).clientMessageId,
+    ).toBe(run?.id);
     await h.scheduler.stop();
   });
 
@@ -711,21 +797,36 @@ describe('Scheduler run lifecycle', () => {
   it('records a hub refusal as an error rather than hanging', async () => {
     const h = harness({
       script: () => [
-        { type: 'error', code: 'not_configured', message: 'No model', retryable: false },
+        {
+          type: 'error',
+          code: 'not_configured',
+          message: 'No model',
+          retryable: false,
+        },
       ],
     });
     const created = h.jobs.createJob(job());
     h.scheduler.start();
     await tick(60_000);
 
-    expect(h.jobs.listRuns(created.id)[0]).toMatchObject({ status: 'error', error: 'No model' });
+    expect(h.jobs.listRuns(created.id)[0]).toMatchObject({
+      status: 'error',
+      error: 'No model',
+    });
     await h.scheduler.stop();
   });
 
   it('warns rather than silently swallowing a delivery nothing can carry', async () => {
     const h = harness();
     const created = h.jobs.createJob(
-      job({ payload: { kind: 'scheduled', message: 'go', deliver: true, targets: {} } }),
+      job({
+        payload: {
+          kind: 'scheduled',
+          message: 'go',
+          deliver: true,
+          targets: {},
+        },
+      }),
     );
     h.scheduler.start();
     await tick(60_000);
@@ -755,7 +856,10 @@ describe('Scheduler run lifecycle', () => {
   it('unschedules a one-shot that is not self-destructing', async () => {
     const h = harness();
     const created = h.jobs.createJob(
-      job({ schedule: { kind: 'at', atMs: START + 1000 }, nextRunAtMs: START + 1000 }),
+      job({
+        schedule: { kind: 'at', atMs: START + 1000 },
+        nextRunAtMs: START + 1000,
+      }),
     );
     h.scheduler.start();
     await tick(600_000);
@@ -768,7 +872,10 @@ describe('Scheduler run lifecycle', () => {
   it('trims history and deletes the sessions it minted, but not one the operator pinned', async () => {
     const h = harness({ patch: { scheduler: { runRetention: 1 } } });
     const created = h.jobs.createJob(
-      job({ schedule: { kind: 'every', everyMs: 1000 }, nextRunAtMs: START + 1000 }),
+      job({
+        schedule: { kind: 'every', everyMs: 1000 },
+        nextRunAtMs: START + 1000,
+      }),
     );
     h.scheduler.start();
     await tick(1000);
@@ -862,7 +969,11 @@ describe('Scheduler stop', () => {
 
 function completion(name: string, argumentsJson: string): ChatResult {
   return {
-    message: { role: 'assistant', content: [], toolCalls: [{ id: 'c0', name, argumentsJson }] },
+    message: {
+      role: 'assistant',
+      content: [],
+      toolCalls: [{ id: 'c0', name, argumentsJson }],
+    },
     finishReason: 'tool_calls',
     usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
     model: 'cheap',
@@ -871,7 +982,12 @@ function completion(name: string, argumentsJson: string): ChatResult {
 
 function heartbeatJob(over: Partial<CreateJobInput> = {}): CreateJobInput {
   return job({
-    payload: { kind: 'heartbeat', file: 'TASK.md', deliver: false, targets: {} },
+    payload: {
+      kind: 'heartbeat',
+      file: 'TASK.md',
+      deliver: false,
+      targets: {},
+    },
     ...over,
   });
 }
@@ -909,11 +1025,19 @@ describe('Scheduler heartbeat', () => {
           input.tools[0]?.name === HEARTBEAT_TOOL.name
             ? completion(
                 HEARTBEAT_TOOL.name,
-                JSON.stringify({ action: 'run', reason: 'Due.', instruction: 'Fix the build' }),
+                JSON.stringify({
+                  action: 'run',
+                  reason: 'Due.',
+                  instruction: 'Fix the build',
+                }),
               )
             : completion(
                 HEARTBEAT_RESULT_TOOL.name,
-                JSON.stringify({ notify: true, title: 'Build fixed', summary: 'One test.' }),
+                JSON.stringify({
+                  notify: true,
+                  title: 'Build fixed',
+                  summary: 'One test.',
+                }),
               ),
         ),
     });
@@ -922,8 +1046,14 @@ describe('Scheduler heartbeat', () => {
     await tick(60_000);
 
     expect(h.runs).toHaveLength(1);
-    expect(h.jobs.listRuns(created.id)[0]).toMatchObject({ status: 'ok', output: 'I fixed it' });
-    expect(h.notifications[0]).toMatchObject({ title: 'Build fixed', body: 'One test.' });
+    expect(h.jobs.listRuns(created.id)[0]).toMatchObject({
+      status: 'ok',
+      output: 'I fixed it',
+    });
+    expect(h.notifications[0]).toMatchObject({
+      title: 'Build fixed',
+      body: 'One test.',
+    });
     await h.scheduler.stop();
   });
 
@@ -938,7 +1068,11 @@ describe('Scheduler heartbeat', () => {
           input.tools[0]?.name === HEARTBEAT_TOOL.name
             ? completion(
                 HEARTBEAT_TOOL.name,
-                JSON.stringify({ action: 'run', reason: 'Due.', instruction: 'Check' }),
+                JSON.stringify({
+                  action: 'run',
+                  reason: 'Due.',
+                  instruction: 'Check',
+                }),
               )
             : completion(
                 HEARTBEAT_RESULT_TOOL.name,
@@ -969,13 +1103,20 @@ describe('Scheduler heartbeat', () => {
           return Promise.resolve(
             completion(
               HEARTBEAT_TOOL.name,
-              JSON.stringify({ action: 'run', reason: 'Due.', instruction: 'Fix it' }),
+              JSON.stringify({
+                action: 'run',
+                reason: 'Due.',
+                instruction: 'Fix it',
+              }),
             ),
           );
         }
         evaluated += 1;
         return Promise.resolve(
-          completion(HEARTBEAT_RESULT_TOOL.name, JSON.stringify({ notify: false, title: 'Quiet' })),
+          completion(
+            HEARTBEAT_RESULT_TOOL.name,
+            JSON.stringify({ notify: false, title: 'Quiet' }),
+          ),
         );
       },
     });
@@ -986,7 +1127,10 @@ describe('Scheduler heartbeat', () => {
     expect(evaluated).toBe(0);
     expect(h.jobs.listRuns(created.id)[0]?.status).toBe('error');
     expect(h.notifications).toHaveLength(1);
-    expect(h.notifications[0]).toMatchObject({ level: 'error', jobId: created.id });
+    expect(h.notifications[0]).toMatchObject({
+      level: 'error',
+      jobId: created.id,
+    });
     await h.scheduler.stop();
   });
 
@@ -1031,7 +1175,9 @@ describe('Scheduler heartbeat', () => {
     await tick(60_000);
 
     expect(asked).toBe(0);
-    expect(h.jobs.listRuns(created.id)[0]?.skipReason).toBe('TASK.md is empty.');
+    expect(h.jobs.listRuns(created.id)[0]?.skipReason).toBe(
+      'TASK.md is empty.',
+    );
     await h.scheduler.stop();
   });
 
@@ -1061,19 +1207,28 @@ describe('Scheduler heartbeat', () => {
   });
 
   it('passes the cheaper model through to the decision', async () => {
-    const seen: (string | undefined)[] = [];
+    const seen: Array<string | undefined> = [];
     const h = harness({
       readFile: () => Promise.resolve('x'),
       chat: (input) => {
         seen.push(input.model);
         return Promise.resolve(
-          completion(HEARTBEAT_TOOL.name, JSON.stringify({ action: 'skip', reason: 'no' })),
+          completion(
+            HEARTBEAT_TOOL.name,
+            JSON.stringify({ action: 'skip', reason: 'no' }),
+          ),
         );
       },
     });
     h.jobs.createJob(
       heartbeatJob({
-        payload: { kind: 'heartbeat', file: 'TASK.md', model: 'tiny', deliver: false, targets: {} },
+        payload: {
+          kind: 'heartbeat',
+          file: 'TASK.md',
+          model: 'tiny',
+          deliver: false,
+          targets: {},
+        },
       }),
     );
     h.scheduler.start();

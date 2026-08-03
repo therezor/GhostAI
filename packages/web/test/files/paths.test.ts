@@ -46,7 +46,9 @@ describe('normalisePath', () => {
 
 describe('breadcrumbs', () => {
   it('starts at the workspace even at the root', () => {
-    expect(breadcrumbs(ROOT_PATH)).toEqual([{ label: 'workspace', path: ROOT_PATH }]);
+    expect(breadcrumbs(ROOT_PATH)).toEqual([
+      { label: 'workspace', path: ROOT_PATH },
+    ]);
   });
 
   it('accumulates a clickable path per segment', () => {
@@ -109,7 +111,10 @@ describe('isImage', () => {
 });
 
 describe('sortEntries', () => {
-  const entry = (name: string, overrides: Partial<FileEntry> = {}): FileEntry => ({
+  const entry = (
+    name: string,
+    overrides: Partial<FileEntry> = {},
+  ): FileEntry => ({
     path: name,
     name,
     isDirectory: false,
@@ -130,18 +135,34 @@ describe('sortEntries', () => {
     sortEntries(listing, order).map((item) => item.name);
 
   it('matches the order the server already answered with, by default', () => {
-    expect(names(DEFAULT_SORT)).toEqual(['docs', 'src', 'a.txt', 'big.log', 'm.md']);
+    expect(names(DEFAULT_SORT)).toEqual([
+      'docs',
+      'src',
+      'a.txt',
+      'big.log',
+      'm.md',
+    ]);
   });
 
   it('keeps directories first even when the order is reversed', () => {
     // They are not big files or old files, they are where to go next. A
     // "largest first" that scattered them would turn navigating into searching.
-    expect(names({ key: 'size', descending: true }).slice(0, 2)).toEqual(['docs', 'src']);
-    expect(names({ key: 'name', descending: true }).slice(0, 2)).toEqual(['src', 'docs']);
+    expect(names({ key: 'size', descending: true }).slice(0, 2)).toEqual([
+      'docs',
+      'src',
+    ]);
+    expect(names({ key: 'name', descending: true }).slice(0, 2)).toEqual([
+      'src',
+      'docs',
+    ]);
   });
 
   it('sorts by size and by time within the files', () => {
-    expect(names({ key: 'size', descending: true }).slice(2)).toEqual(['big.log', 'm.md', 'a.txt']);
+    expect(names({ key: 'size', descending: true }).slice(2)).toEqual([
+      'big.log',
+      'm.md',
+      'a.txt',
+    ]);
     expect(names({ key: 'modified', descending: true }).slice(2)).toEqual([
       'a.txt',
       'm.md',
@@ -152,11 +173,11 @@ describe('sortEntries', () => {
   it('breaks ties by name rather than leaving them to the sort', () => {
     // Eight zero-byte files a turn just created must not shuffle on refetch.
     const tied = [entry('c'), entry('a'), entry('b')];
-    expect(sortEntries(tied, { key: 'size', descending: true }).map((item) => item.name)).toEqual([
-      'a',
-      'b',
-      'c',
-    ]);
+    expect(
+      sortEntries(tied, { key: 'size', descending: true }).map(
+        (item) => item.name,
+      ),
+    ).toEqual(['a', 'b', 'c']);
   });
 
   it('does not reorder the array it was given', () => {
@@ -168,13 +189,29 @@ describe('sortEntries', () => {
 
 describe('filterEntries', () => {
   const entries: readonly FileEntry[] = [
-    { path: 'Notes.md', name: 'Notes.md', isDirectory: false, sizeBytes: 1, modifiedAtMs: 0 },
-    { path: 'report.csv', name: 'report.csv', isDirectory: false, sizeBytes: 1, modifiedAtMs: 0 },
+    {
+      path: 'Notes.md',
+      name: 'Notes.md',
+      isDirectory: false,
+      sizeBytes: 1,
+      modifiedAtMs: 0,
+    },
+    {
+      path: 'report.csv',
+      name: 'report.csv',
+      isDirectory: false,
+      sizeBytes: 1,
+      modifiedAtMs: 0,
+    },
   ];
 
   it('matches anywhere in the name, ignoring case', () => {
-    expect(filterEntries(entries, 'note').map((item) => item.name)).toEqual(['Notes.md']);
-    expect(filterEntries(entries, 'CSV').map((item) => item.name)).toEqual(['report.csv']);
+    expect(filterEntries(entries, 'note').map((item) => item.name)).toEqual([
+      'Notes.md',
+    ]);
+    expect(filterEntries(entries, 'CSV').map((item) => item.name)).toEqual([
+      'report.csv',
+    ]);
   });
 
   it('is the whole listing when nothing was typed', () => {

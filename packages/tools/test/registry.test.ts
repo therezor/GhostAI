@@ -68,7 +68,11 @@ const flagged = defineTool({
   name: 'flagged',
   description: 'Reports a failure without throwing.',
   schema: z.strictObject({}),
-  execute: () => ({ content: 'Error: not found', isError: true, details: { code: 7 } }),
+  execute: () => ({
+    content: 'Error: not found',
+    isError: true,
+    details: { code: 7 },
+  }),
 });
 
 /**
@@ -83,8 +87,8 @@ function blocking(name: string, deaf: boolean): AnyTool {
     name,
     description: 'Blocks until aborted.',
     schema: z.strictObject({}),
-    execute: async (_args, context) =>
-      await new Promise<string>((_resolve, reject) => {
+    execute: async (args, context) =>
+      await new Promise<string>((resolve, reject) => {
         if (deaf) return;
         context.signal.addEventListener(
           'abort',
@@ -172,11 +176,9 @@ describe('definitions', () => {
     registry.register(flagged);
     registry.register(echo);
     registry.register(failing);
-    expect(registry.definitions().map((definition) => definition.name)).toEqual([
-      'echo',
-      'failing',
-      'flagged',
-    ]);
+    expect(registry.definitions().map((definition) => definition.name)).toEqual(
+      ['echo', 'failing', 'flagged'],
+    );
   });
 
   it('memoises until the registry changes', () => {
@@ -232,7 +234,10 @@ describe('execute', () => {
     registry.register(flagged);
     for (const argumentsJson of [undefined, '', '   ']) {
       const execution = await registry.execute(
-        { name: 'flagged', ...(argumentsJson === undefined ? {} : { argumentsJson }) },
+        {
+          name: 'flagged',
+          ...(argumentsJson === undefined ? {} : { argumentsJson }),
+        },
         context,
       );
       expect(execution.content).toBe('Error: not found');
@@ -260,8 +265,14 @@ describe('execute', () => {
   it('never throws on malformed argument JSON', async () => {
     const registry = new ToolRegistry();
     registry.register(echo);
-    const execution = await registry.execute({ name: 'echo', argumentsJson: '{oops' }, context);
-    expect(execution).toMatchObject({ isError: true, errorKind: 'invalid_input' });
+    const execution = await registry.execute(
+      { name: 'echo', argumentsJson: '{oops' },
+      context,
+    );
+    expect(execution).toMatchObject({
+      isError: true,
+      errorKind: 'invalid_input',
+    });
   });
 
   it('never throws on schema-invalid arguments', async () => {
@@ -271,7 +282,10 @@ describe('execute', () => {
       { name: 'echo', argumentsJson: '{"text":1}' },
       context,
     );
-    expect(execution).toMatchObject({ isError: true, errorKind: 'invalid_input' });
+    expect(execution).toMatchObject({
+      isError: true,
+      errorKind: 'invalid_input',
+    });
     expect(execution.details).toMatchObject({ tool: 'echo' });
   });
 
@@ -279,7 +293,11 @@ describe('execute', () => {
     const registry = new ToolRegistry();
     registry.register(failing);
     const execution = await registry.execute({ name: 'failing' }, context);
-    expect(execution).toMatchObject({ isError: true, errorKind: 'tool', content: 'boom' });
+    expect(execution).toMatchObject({
+      isError: true,
+      errorKind: 'tool',
+      content: 'boom',
+    });
   });
 
   it('truncates to the configured budget', async () => {
@@ -320,7 +338,10 @@ describe('execute', () => {
     registry.register(blocking('waiting', false));
     const running = registry.execute({ name: 'waiting' }, context);
     workspace.controller.abort();
-    await expect(running).resolves.toMatchObject({ isError: true, errorKind: 'aborted' });
+    await expect(running).resolves.toMatchObject({
+      isError: true,
+      errorKind: 'aborted',
+    });
   });
 
   it('times a handler out on the injected clock', async () => {
@@ -351,7 +372,10 @@ describe('execute', () => {
     await Promise.resolve();
     clock.advance(1_000);
 
-    await expect(running).resolves.toMatchObject({ isError: true, errorKind: 'timeout' });
+    await expect(running).resolves.toMatchObject({
+      isError: true,
+      errorKind: 'timeout',
+    });
   });
 
   it('refuses a timeout that is not a duration', () => {
@@ -381,13 +405,21 @@ describe('execute', () => {
     const registry = new ToolRegistry();
     registry.register(echo);
     const added = vi.spyOn(workspace.controller.signal, 'addEventListener');
-    const removed = vi.spyOn(workspace.controller.signal, 'removeEventListener');
+    const removed = vi.spyOn(
+      workspace.controller.signal,
+      'removeEventListener',
+    );
     for (let index = 0; index < 5; index += 1) {
-      await registry.execute({ name: 'echo', argumentsJson: '{"text":"x"}' }, context);
+      await registry.execute(
+        { name: 'echo', argumentsJson: '{"text":"x"}' },
+        context,
+      );
     }
     // `AbortSignal.any` adds one of its own per call; what matters is that the
     // count of removals keeps pace with the count of additions.
-    expect(removed.mock.calls.length).toBeGreaterThanOrEqual(added.mock.calls.length);
+    expect(removed.mock.calls.length).toBeGreaterThanOrEqual(
+      added.mock.calls.length,
+    );
   });
 
   it('does not surface a late handler rejection as an unhandled rejection', async () => {
@@ -400,7 +432,7 @@ describe('execute', () => {
         description: 'Fails after the registry has given up.',
         schema: z.strictObject({}),
         execute: async () =>
-          await new Promise<string>((_resolve, reject) => {
+          await new Promise<string>((resolve, reject) => {
             rejectLate = reject;
           }),
       }),

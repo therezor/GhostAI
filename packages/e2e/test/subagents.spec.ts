@@ -34,7 +34,9 @@ function delegation(app: Page): { card: Locator; header: Locator } {
 
 /** Opens the disclosure if it is closed, so a test never depends on auto-open. */
 async function expand(header: Locator): Promise<void> {
-  if ((await header.getAttribute('aria-expanded')) === 'false') await header.click();
+  if ((await header.getAttribute('aria-expanded')) === 'false') {
+    await header.click();
+  }
 }
 
 test.use({
@@ -69,8 +71,12 @@ test.use({
 });
 
 test.describe('a delegating agent', () => {
-  test('runs the subagent and answers from what it returned', async ({ app }) => {
-    await app.getByRole('textbox', { name: 'Message' }).fill('delegate this to the researcher');
+  test('runs the subagent and answers from what it returned', async ({
+    app,
+  }) => {
+    await app
+      .getByRole('textbox', { name: 'Message' })
+      .fill('delegate this to the researcher');
     await app.getByRole('button', { name: 'Send' }).click();
 
     // The delegation is a tool call like any other, named after the agent.
@@ -84,8 +90,12 @@ test.describe('a delegating agent', () => {
     ).toBeVisible();
   });
 
-  test('shows what the subagent did, nested inside the card', async ({ app }) => {
-    await app.getByRole('textbox', { name: 'Message' }).fill('delegate this to the researcher');
+  test('shows what the subagent did, nested inside the card', async ({
+    app,
+  }) => {
+    await app
+      .getByRole('textbox', { name: 'Message' })
+      .fill('delegate this to the researcher');
     await app.getByRole('button', { name: 'Send' }).click();
 
     const { card, header } = delegation(app);
@@ -108,7 +118,9 @@ test.describe('a delegating agent', () => {
   });
 
   test('can still show the run after a reload', async ({ app }) => {
-    await app.getByRole('textbox', { name: 'Message' }).fill('delegate this to the researcher');
+    await app
+      .getByRole('textbox', { name: 'Message' })
+      .fill('delegate this to the researcher');
     await app.getByRole('button', { name: 'Send' }).click();
     await expect(delegation(app).header.getByLabel('Succeeded')).toBeVisible();
 
@@ -122,12 +134,18 @@ test.describe('a delegating agent', () => {
 
     const run = card.getByRole('region', { name: 'Subagent run: Researcher' });
     await expect(run).toBeVisible();
-    await expect(run.getByRole('region', { name: 'Tool call: list_dir' })).toBeVisible();
+    await expect(
+      run.getByRole('region', { name: 'Tool call: list_dir' }),
+    ).toBeVisible();
     await expect(run.getByText('There is one file: notes.md.')).toBeVisible();
   });
 
-  test('leaves the subagent run in the sidebar, openable like any session', async ({ app }) => {
-    await app.getByRole('textbox', { name: 'Message' }).fill('delegate this to the researcher');
+  test('leaves the subagent run in the sidebar, openable like any session', async ({
+    app,
+  }) => {
+    await app
+      .getByRole('textbox', { name: 'Message' })
+      .fill('delegate this to the researcher');
     await app.getByRole('button', { name: 'Send' }).click();
     await expect(delegation(app).header.getByLabel('Succeeded')).toBeVisible();
 
@@ -144,9 +162,9 @@ test.describe('the agent editor', () => {
     await app.getByRole('link', { name: 'Agents' }).click();
     await app.getByRole('link', { name: 'default' }).click();
 
-    await expect(app.getByRole('combobox', { name: 'Agent for subagent 1' })).toHaveText(
-      'Researcher',
-    );
+    await expect(
+      app.getByRole('combobox', { name: 'Agent for subagent 1' }),
+    ).toHaveText('Researcher');
     // The derived name, which is what the model is really offered.
     await expect(app.getByText('ask_researcher')).toBeVisible();
   });

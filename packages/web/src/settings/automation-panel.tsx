@@ -28,27 +28,49 @@ import { useTranslation } from 'react-i18next';
 
 import type { Config } from '@ghostai/protocol';
 
-import { FieldGrid, SaveBar, Section, SwitchRow, TextField } from '@/components/form/controls.js';
+import {
+  FieldGrid,
+  SaveBar,
+  Section,
+  SwitchRow,
+  TextField,
+} from '@/components/form/controls.js';
 import { parseNumber, type PatchResult } from '@/components/form/fields.js';
 import { useSaveSettings } from './use-settings.js';
 
-export function AutomationPanel({ config }: { readonly config: Config }): JSX.Element {
+export function AutomationPanel({
+  config,
+}: {
+  readonly config: Config;
+}): JSX.Element {
   const { t } = useTranslation();
   const { save, saving } = useSaveSettings();
   const [enabled, setEnabled] = useState(config.scheduler.enabled);
   const [catchUp, setCatchUp] = useState(config.scheduler.catchUpOnBoot);
-  const [concurrency, setConcurrency] = useState(String(config.scheduler.concurrency));
-  const [retention, setRetention] = useState(String(config.scheduler.runRetention));
+  const [concurrency, setConcurrency] = useState(
+    String(config.scheduler.concurrency),
+  );
+  const [retention, setRetention] = useState(
+    String(config.scheduler.runRetention),
+  );
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   const [dirty, setDirty] = useState(false);
 
   const build = (): PatchResult => {
-    const parsedConcurrency = parseNumber(concurrency, t, { min: 1, integer: true });
-    const parsedRetention = parseNumber(retention, t, { min: 1, integer: true });
+    const parsedConcurrency = parseNumber(concurrency, t, {
+      min: 1,
+      integer: true,
+    });
+    const parsedRetention = parseNumber(retention, t, {
+      min: 1,
+      integer: true,
+    });
     const next: Record<string, string> = {};
     if (!parsedConcurrency.ok) next.concurrency = parsedConcurrency.error;
     if (!parsedRetention.ok) next.retention = parsedRetention.error;
-    if (!parsedConcurrency.ok || !parsedRetention.ok) return { ok: false, errors: next };
+    if (!parsedConcurrency.ok || !parsedRetention.ok) {
+      return { ok: false, errors: next };
+    }
 
     return {
       ok: true,
@@ -64,7 +86,10 @@ export function AutomationPanel({ config }: { readonly config: Config }): JSX.El
   };
 
   return (
-    <Section title={t('automation.engineTitle')} description={t('automation.engineDesc')}>
+    <Section
+      title={t('automation.engineTitle')}
+      description={t('automation.engineDesc')}
+    >
       <SwitchRow
         label={t('automation.engineEnabled')}
         hint={t('automation.engineEnabledHint')}

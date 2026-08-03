@@ -46,11 +46,19 @@ export default defineConfig({
     // sidebar inline or in a drawer" depend on the runner's defaults.
     {
       name: 'dark',
-      use: { ...devices['Desktop Chrome'], colorScheme: 'dark', viewport: VIEWPORT },
+      use: {
+        ...devices['Desktop Chrome'],
+        colorScheme: 'dark',
+        viewport: VIEWPORT,
+      },
     },
     {
       name: 'light',
-      use: { ...devices['Desktop Chrome'], colorScheme: 'light', viewport: VIEWPORT },
+      use: {
+        ...devices['Desktop Chrome'],
+        colorScheme: 'light',
+        viewport: VIEWPORT,
+      },
     },
   ],
 });

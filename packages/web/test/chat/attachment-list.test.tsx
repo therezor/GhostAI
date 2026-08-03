@@ -21,14 +21,20 @@ const SIGNED = { url: '/api/media/token', expiresAtMs: 2_000 };
 
 function show(...attachments: readonly Attachment[]): void {
   stubFetch({ '/api/files/signed-url': [200, SIGNED] });
-  renderWithProviders(<AttachmentList attachments={attachments} workspace="default" />);
+  renderWithProviders(
+    <AttachmentList attachments={attachments} workspace="default" />,
+  );
 }
 
 describe('an image attachment', () => {
   it('renders the picture, not a text chip', () => {
     // The whole visible half of the bug: every attachment used to be a neutral
     // badge with the filename in it, image or not.
-    show({ mimeType: 'image/png', path: 'uploads/ab12cd34-shot.png', name: 'shot.png' });
+    show({
+      mimeType: 'image/png',
+      path: 'uploads/ab12cd34-shot.png',
+      name: 'shot.png',
+    });
 
     return waitFor(() => {
       const image = screen.getByRole('img', { name: 'shot.png' });
@@ -41,7 +47,9 @@ describe('an image attachment', () => {
     show({ mimeType: 'image/png', path: 'uploads/ab12cd34-shot.png' });
 
     return waitFor(() => {
-      expect(screen.getByRole('img', { name: 'ab12cd34-shot.png' })).toBeInTheDocument();
+      expect(
+        screen.getByRole('img', { name: 'ab12cd34-shot.png' }),
+      ).toBeInTheDocument();
     });
   });
 });
@@ -59,20 +67,30 @@ describe('any other attachment', () => {
     expect(screen.getByText('2.0 kB')).toBeInTheDocument();
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
 
-    const download = await screen.findByRole('link', { name: 'Download scan.pdf' });
+    const download = await screen.findByRole('link', {
+      name: 'Download scan.pdf',
+    });
     expect(download).toHaveAttribute('href', SIGNED.url);
   });
 
   it('shows the name before the URL is signed, rather than a spinner', () => {
     // A thumbnail that appears a moment later is fine. A spinner per attachment
     // in a scrolling transcript is not.
-    show({ mimeType: 'application/pdf', path: 'uploads/ef56ab78-scan.pdf', name: 'scan.pdf' });
+    show({
+      mimeType: 'application/pdf',
+      path: 'uploads/ef56ab78-scan.pdf',
+      name: 'scan.pdf',
+    });
 
     expect(screen.getByText('scan.pdf')).toBeInTheDocument();
   });
 
   it('omits the size when the message did not record one', () => {
-    show({ mimeType: 'text/csv', path: 'uploads/ab12cd34-rows.csv', name: 'rows.csv' });
+    show({
+      mimeType: 'text/csv',
+      path: 'uploads/ab12cd34-rows.csv',
+      name: 'rows.csv',
+    });
 
     expect(screen.getByText('rows.csv')).toBeInTheDocument();
     expect(screen.queryByText(/ B$/)).not.toBeInTheDocument();
@@ -81,7 +99,9 @@ describe('any other attachment', () => {
 
 describe('no attachments', () => {
   it('renders nothing at all', () => {
-    renderWithProviders(<AttachmentList attachments={[]} workspace="default" />);
+    renderWithProviders(
+      <AttachmentList attachments={[]} workspace="default" />,
+    );
 
     // Not an empty `<ul>`: the list sits inside a `.stack`, which would give a
     // gap to a row that has no height.

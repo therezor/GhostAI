@@ -22,7 +22,10 @@ const IDLE_TIMEOUT_MS = 500;
 const FALLBACK_DELAY_MS = 32;
 
 interface IdleWindow {
-  requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+  requestIdleCallback?: (
+    callback: () => void,
+    options?: { timeout: number },
+  ) => number;
   cancelIdleCallback?: (handle: number) => void;
 }
 
@@ -32,7 +35,10 @@ interface IdleWindow {
  * The `timeout` matters: without it a tab that is never idle — one streaming a
  * long answer, say — would never highlight anything at all.
  */
-export function onIdle(task: () => void, view: IdleWindow = globalThis): IdleHandle {
+export function onIdle(
+  task: () => void,
+  view: IdleWindow = globalThis,
+): IdleHandle {
   const request = view.requestIdleCallback;
   const cancel = view.cancelIdleCallback;
 

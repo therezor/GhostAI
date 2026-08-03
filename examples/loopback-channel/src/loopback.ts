@@ -18,7 +18,11 @@
  * channels that come later.
  */
 
-import type { Channel, ChannelContext, ChannelFactory } from '@ghostai/channels';
+import type {
+  Channel,
+  ChannelContext,
+  ChannelFactory,
+} from '@ghostai/channels';
 import {
   textPart,
   type OutboundKind,
@@ -46,7 +50,10 @@ export interface LoopbackOptions {
 
 export interface LoopbackChannel extends Channel {
   /** A user typing. Returns what the bus made of it, rate limit included. */
-  say(text: string, options?: { conversation?: string; senderId?: string }): PublishResult;
+  say(
+    text: string,
+    options?: { conversation?: string; senderId?: string },
+  ): PublishResult;
   /** Everything said, both directions. */
   readonly transcript: readonly LoopbackEntry[];
   /** Just what the agent said, oldest first — what a test usually asserts on. */
@@ -65,45 +72,53 @@ class Loopback implements LoopbackChannel {
    * case `progress` exists for. A channel that can only post should leave this
    * out and get replies alone.
    */
-  readonly accepts: readonly OutboundKind[] = ['reply', 'notice', 'error', 'progress'];
+  readonly accepts: readonly OutboundKind[] = [
+    'reply',
+    'notice',
+    'error',
+    'progress',
+  ];
   readonly transcript: LoopbackEntry[] = [];
 
-  readonly #context: ChannelContext;
-  readonly #conversation: string;
-  readonly #senderId: string;
-  readonly #listeners = new Set<(entry: LoopbackEntry) => void>();
-  #open = false;
+  private readonly context: ChannelContext;
+  private readonly conversation: string;
+  private readonly senderId: string;
+  private readonly listeners = new Set<(entry: LoopbackEntry) => void>();
+  private open = false;
 
   constructor(context: ChannelContext, options: LoopbackOptions) {
     this.id = context.id;
-    this.#context = context;
-    this.#conversation = options.conversation ?? 'default';
-    this.#senderId = options.senderId ?? 'local';
+    this.context = context;
+    this.conversation = options.conversation ?? 'default';
+    this.senderId = options.senderId ?? 'local';
   }
 
   start(): void {
-    this.#open = true;
+    this.open = true;
   }
 
   stop(): void {
-    this.#open = false;
-    this.#listeners.clear();
+    this.open = false;
+    this.listeners.clear();
   }
 
-  say(text: string, options: { conversation?: string; senderId?: string } = {}): PublishResult {
+  say(
+    text: string,
+    options: { conversation?: string; senderId?: string } = {},
+  ): PublishResult {
     // A transport that kept accepting input after `stop()` would produce turns
     // whose replies have nowhere to land. The manager's `signal` says the same
     // thing a socket's `close` would.
-    if (!this.#open || this.#context.signal.aborted) return { kind: 'closed' };
+    if (!this.open || this.context.signal.aborted) return { kind: 'closed' };
 
-    const conversation = options.conversation ?? this.#conversation;
+    const conversation = options.conversation ?? this.conversation;
     this.transcript.push({ direction: 'in', text, sessionKey: conversation });
 
-    return this.#context.publish({
+    return this.context.publish({
       // The conversation, not the message: a channel that minted a fresh key
       // per message would start a new session for every line the user typed.
       sessionKey: conversation,
-      senderId: options.senderId ?? this.#senderId,
+      senderId: options.senderId ?? this.senderId,
       content: [textPart(text)],
       // Where the answer goes. A real channel puts its chat id here.
       metadata: { target: conversation },
@@ -121,7 +136,7 @@ class Loopback implements LoopbackChannel {
       sessionKey: message.sessionKey,
     };
     this.transcript.push(entry);
-    for (const listener of [...this.#listeners]) listener(entry);
+    for (const listener of [...this.listeners]) listener(entry);
   }
 
   replies(): string[] {
@@ -131,8 +146,8 @@ class Loopback implements LoopbackChannel {
   }
 
   onMessage(listener: (entry: LoopbackEntry) => void): () => void {
-    this.#listeners.add(listener);
-    return () => this.#listeners.delete(listener);
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
   }
 }
 

@@ -24,7 +24,10 @@
  * empty string for every agent that inherits its model, which is most of them.
  */
 
-import { AgentListResponseSchema, type AgentListResponse } from '@ghostai/protocol';
+import {
+  AgentListResponseSchema,
+  type AgentListResponse,
+} from '@ghostai/protocol';
 
 import type { RouteDeps, RouteGroup } from './types.js';
 
@@ -35,7 +38,9 @@ export function agentRoutes(deps: RouteDeps): RouteGroup<'agents.list'> {
       schema: { response: { 200: AgentListResponseSchema } },
       // Already ordered — the default first, then the operator's own order —
       // so a picker never has to sort and never renders a different order twice.
-      handler: (): AgentListResponse => ({ agents: [...deps.runtime.agents()] }),
+      handler: (): AgentListResponse => ({
+        agents: [...deps.runtime.agents()],
+      }),
     },
   };
 }

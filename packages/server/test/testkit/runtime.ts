@@ -75,7 +75,11 @@ export interface FakeRuntime extends ServerRuntime {
   /** What each `reload()` produced, in order. Empty until one is asked for. */
   readonly reloads: Config[];
   /** Every credential write, with the value it was handed. */
-  readonly credentialWrites: { namespace: string; key: string; value: string | null }[];
+  readonly credentialWrites: Array<{
+    namespace: string;
+    key: string;
+    value: string | null;
+  }>;
 }
 
 /**
@@ -89,8 +93,12 @@ export interface FakeRuntime extends ServerRuntime {
  * this is a fixture, and the paths it would need are exactly the ones tests use.
  */
 function merge(base: unknown, patch: unknown): unknown {
-  if (typeof patch !== 'object' || patch === null || Array.isArray(patch)) return patch;
-  if (typeof base !== 'object' || base === null || Array.isArray(base)) return patch;
+  if (typeof patch !== 'object' || patch === null || Array.isArray(patch)) {
+    return patch;
+  }
+  if (typeof base !== 'object' || base === null || Array.isArray(base)) {
+    return patch;
+  }
 
   const out: Record<string, unknown> = { ...(base as Record<string, unknown>) };
   for (const [key, value] of Object.entries(patch as Record<string, unknown>)) {
@@ -110,12 +118,17 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
     database: options.database,
     ...(options.clock === undefined ? {} : { clock: options.clock }),
   });
-  const paths = resolveGhostPaths({ root: options.workspace, workspace: options.workspace });
+  const paths = resolveGhostPaths({
+    root: options.workspace,
+    workspace: options.workspace,
+  });
   const jails = new Map<string, WorkspaceJail>();
   const jailFor = (workspaceId: string): WorkspaceJail => {
     const cached = jails.get(workspaceId);
     if (cached !== undefined) return cached;
-    const made = new WorkspaceJail({ root: workspaceDirFor(paths, workspaceId) });
+    const made = new WorkspaceJail({
+      root: workspaceDirFor(paths, workspaceId),
+    });
     jails.set(workspaceId, made);
     return made;
   };
@@ -123,10 +136,16 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
   const workspaces = new WorkspaceStore({ database: options.database, paths });
   const patches: ConfigPatch[] = [];
   const reloads: Config[] = [];
-  const credentialWrites: { namespace: string; key: string; value: string | null }[] = [];
+  const credentialWrites: Array<{
+    namespace: string;
+    key: string;
+    value: string | null;
+  }> = [];
 
   let config = options.config ?? ConfigSchema.parse({});
-  const credentials: Record<string, boolean> = { ...options.credentialsPresent };
+  const credentials: Record<string, boolean> = {
+    ...options.credentialsPresent,
+  };
 
   const agent: AgentView = {
     id: DEFAULT_AGENT_ID,
@@ -141,8 +160,10 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
     tools: options.tools ?? [],
     contextWindowTokens: config.agents.defaults.contextWindowTokens,
     systemPrompt: async ({ sessionKey }) => ({
-      staticPrompt: options.systemPrompt ?? `# GhostAI\n\nSession: ${sessionKey}`,
-      runtimeBlock: options.runtimeBlock ?? '## Live state\n\nCurrent time: whenever',
+      staticPrompt:
+        options.systemPrompt ?? `# GhostAI\n\nSession: ${sessionKey}`,
+      runtimeBlock:
+        options.runtimeBlock ?? '## Live state\n\nCurrent time: whenever',
     }),
   };
 
@@ -154,7 +175,12 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
    * fixture knob that could disagree with the settings tree.
    */
   const agentsFor = (): readonly AgentSummary[] => [
-    { id: DEFAULT_AGENT_ID, label: DEFAULT_AGENT_ID, model: agent.model, provider: agent.provider },
+    {
+      id: DEFAULT_AGENT_ID,
+      label: DEFAULT_AGENT_ID,
+      model: agent.model,
+      provider: agent.provider,
+    },
     ...Object.entries(config.agents.list)
       .filter(([id, entry]) => id !== DEFAULT_AGENT_ID && entry.enabled)
       .map(([id, entry]) => ({
@@ -208,7 +234,9 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
     agent: (agentId?: string) => {
       if (agentId === undefined || agentId === DEFAULT_AGENT_ID) return agent;
       const named = agentsFor().find((candidate) => candidate.id === agentId);
-      if (named === undefined) throw new GhostError('not_found', `No agent named "${agentId}"`);
+      if (named === undefined) {
+        throw new GhostError('not_found', `No agent named "${agentId}"`);
+      }
       return { ...agent, id: named.id, label: named.label, model: named.model };
     },
 

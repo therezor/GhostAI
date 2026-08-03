@@ -13,7 +13,11 @@
  * shared connection) are simply unused from here.
  */
 
-import { createRuntime, type GhostRuntime, type RuntimeOptions } from '@ghostai/runtime';
+import {
+  createRuntime,
+  type GhostRuntime,
+  type RuntimeOptions,
+} from '@ghostai/runtime';
 
 export {
   PROVIDER_CREDENTIAL_NAMESPACE,

@@ -79,7 +79,10 @@ export interface WorkspaceText {
  * slice: the size is whatever the agent wrote, and `readFileSync` on it is the
  * allocation this exists to avoid.
  */
-export function readText(absolutePath: string, sizeBytes: number): WorkspaceText | undefined {
+export function readText(
+  absolutePath: string,
+  sizeBytes: number,
+): WorkspaceText | undefined {
   const cap = Math.min(sizeBytes, MAX_TEXT_BYTES);
   const buffer = Buffer.alloc(cap);
 
@@ -102,5 +105,8 @@ export function readText(absolutePath: string, sizeBytes: number): WorkspaceText
   // costs one replacement character at the very end of content that is already
   // read-only for being truncated. A fatal decoder would turn that into a
   // failure to open the file at all.
-  return { content: new TextDecoder('utf-8').decode(bytes), truncated: sizeBytes > cap };
+  return {
+    content: new TextDecoder('utf-8').decode(bytes),
+    truncated: sizeBytes > cap,
+  };
 }

@@ -37,7 +37,7 @@ const INDEX_HTML = join(PACKAGE_ROOT, 'index.html');
 const html = readFileSync(INDEX_HTML, 'utf8');
 
 /** Every listener the current `matchMedia` stub handed out, so a test can fire one. */
-let listeners: ((event: MediaQueryListEvent) => void)[] = [];
+let listeners: Array<(event: MediaQueryListEvent) => void> = [];
 
 /**
  * A real `Storage`, stubbed in rather than taken from the environment: jsdom's
@@ -70,10 +70,16 @@ function stubMatchMedia(prefersLight: boolean): void {
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: query.includes('prefers-color-scheme: light') && prefersLight,
     media: query,
-    addEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) => {
+    addEventListener: (
+      type: string,
+      listener: (event: MediaQueryListEvent) => void,
+    ) => {
       listeners.push(listener);
     },
-    removeEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) => {
+    removeEventListener: (
+      type: string,
+      listener: (event: MediaQueryListEvent) => void,
+    ) => {
       listeners = listeners.filter((existing) => existing !== listener);
     },
   }));
@@ -102,7 +108,9 @@ function runScript(source: string): void {
 /** The inline script, taken from the file that ships rather than a copy of it. */
 function extractInlineScript(source: string): string {
   const match = /<script>([\s\S]*?)<\/script>/.exec(source);
-  if (match?.[1] === undefined) throw new Error('No inline script in index.html');
+  if (match?.[1] === undefined) {
+    throw new Error('No inline script in index.html');
+  }
   return match[1];
 }
 
@@ -208,7 +216,9 @@ describe('the pre-paint script in index.html', () => {
     // Anything `defer`, `async`, `type="module"` or external paints the default
     // theme first and corrects it a frame later. That frame is the flash.
     expect(script).not.toContain('src=');
-    expect(html.indexOf('<script>')).toBeLessThan(html.indexOf('type="module"'));
+    expect(html.indexOf('<script>')).toBeLessThan(
+      html.indexOf('type="module"'),
+    );
     expect(html.indexOf('<script>')).toBeLessThan(html.indexOf('</head>'));
   });
 
@@ -217,7 +227,9 @@ describe('the pre-paint script in index.html', () => {
   });
 
   it('agrees with resolveTheme on every combination', () => {
-    const combinations: readonly (readonly [ThemePreference | null, boolean])[] = [
+    const combinations: ReadonlyArray<
+      readonly [ThemePreference | null, boolean]
+    > = [
       ['dark', false],
       ['dark', true],
       ['light', false],
@@ -236,7 +248,10 @@ describe('the pre-paint script in index.html', () => {
 
       runScript(script);
 
-      const expected: ResolvedTheme = resolveTheme(stored ?? 'system', prefersLight);
+      const expected: ResolvedTheme = resolveTheme(
+        stored ?? 'system',
+        prefersLight,
+      );
       expect(
         document.documentElement.dataset.theme,
         `stored=${String(stored)} prefersLight=${String(prefersLight)}`,

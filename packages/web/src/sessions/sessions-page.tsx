@@ -48,7 +48,11 @@ import { newSession } from '@/lib/connection.js';
 import { useFormat } from '@/lib/use-format.js';
 import { useAgent } from '@/agents/agent-context.js';
 import { useWorkspace } from '@/workspaces/workspace-context.js';
-import { useDeleteSession, useRenameSession, useSessionPage } from './use-sessions.js';
+import {
+  useDeleteSession,
+  useRenameSession,
+  useSessionPage,
+} from './use-sessions.js';
 import type { SessionSortKey } from './use-sessions.js';
 
 /** Only the title reads from A. A time is asked "which is newest". */
@@ -72,12 +76,19 @@ export function SessionsRoute(): JSX.Element {
   const { agentId } = useAgent();
 
   const [filter, setFilter] = useState('');
-  const [sort, setSort] = useState<{ key: SessionSortKey; descending: boolean }>({
+  const [sort, setSort] = useState<{
+    key: SessionSortKey;
+    descending: boolean;
+  }>({
     key: 'updated',
     descending: true,
   });
-  const [renaming, setRenaming] = useState<SessionSummary | undefined>(undefined);
-  const [pendingDelete, setPendingDelete] = useState<SessionSummary | undefined>(undefined);
+  const [renaming, setRenaming] = useState<SessionSummary | undefined>(
+    undefined,
+  );
+  const [pendingDelete, setPendingDelete] = useState<
+    SessionSummary | undefined
+  >(undefined);
 
   // Page first, total after: the request needs a page number before there is a
   // response to count. Changing the workspace, the search or the order changes
@@ -128,7 +139,11 @@ export function SessionsRoute(): JSX.Element {
       <p className="page__note">{t('sessions.note')}</p>
 
       <div className="row list-toolbar">
-        <SearchFilter value={filter} label={t('sessions.filter')} onValueChange={setFilter} />
+        <SearchFilter
+          value={filter}
+          label={t('sessions.filter')}
+          onValueChange={setFilter}
+        />
         <ListSort
           options={[
             { key: 'updated', label: t('sessions.updated') },
@@ -141,7 +156,9 @@ export function SessionsRoute(): JSX.Element {
         />
       </div>
 
-      {sessions.isPending && <p className="page__note">{t('common.loading')}</p>}
+      {sessions.isPending && (
+        <p className="page__note">{t('common.loading')}</p>
+      )}
       {sessions.isError && (
         <p role="alert" className="page__error">
           {t('sessions.loadFailed')}
@@ -151,7 +168,9 @@ export function SessionsRoute(): JSX.Element {
       {sessions.data !== undefined &&
         (rows.length === 0 ? (
           <p className="page__note">
-            {filter === '' ? t('sessions.none') : t('sessions.noMatch', { filter })}
+            {filter === ''
+              ? t('sessions.none')
+              : t('sessions.noMatch', { filter })}
           </p>
         ) : (
           <DataList label={t('sessions.title')}>
@@ -177,7 +196,11 @@ export function SessionsRoute(): JSX.Element {
                     {/* The count carries its own noun: there is no column
                         heading above it any more, and a bare `12` beside a
                         timestamp is a number nobody can name. */}
-                    <span>{t('sessions.messageCount', { count: session.messageCount })}</span>
+                    <span>
+                      {t('sessions.messageCount', {
+                        count: session.messageCount,
+                      })}
+                    </span>
                     <span>{fmt.relativeTime(session.updatedAtMs, now)}</span>
                   </>
                 }
@@ -208,7 +231,11 @@ export function SessionsRoute(): JSX.Element {
         ))}
 
       {sessions.data !== undefined && (
-        <Pagination pagination={pagination} total={total} label={t('sessions.title')} />
+        <Pagination
+          pagination={pagination}
+          total={total}
+          label={t('sessions.title')}
+        />
       )}
 
       <NameDialog

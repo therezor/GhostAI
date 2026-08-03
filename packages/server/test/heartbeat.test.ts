@@ -20,14 +20,17 @@ import {
 } from '#src/heartbeat.js';
 
 function completion(
-  toolCalls: readonly { name: string; argumentsJson: string }[],
+  toolCalls: ReadonlyArray<{ name: string; argumentsJson: string }>,
   text = '',
 ): ChatResult {
   return {
     message: {
       role: 'assistant',
       content: text === '' ? [] : [{ type: 'text', text }],
-      toolCalls: toolCalls.map((call, index) => ({ id: `c${String(index)}`, ...call })),
+      toolCalls: toolCalls.map((call, index) => ({
+        id: `c${String(index)}`,
+        ...call,
+      })),
     },
     finishReason: toolCalls.length > 0 ? 'tool_calls' : 'stop',
     usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
@@ -65,7 +68,11 @@ describe('buildDecideMessages', () => {
   });
 
   it('names the file, so the fallback instruction can point at it', () => {
-    const messages = buildDecideMessages({ file: 'NOTES.md', contents: 'x', nowIso: 'now' });
+    const messages = buildDecideMessages({
+      file: 'NOTES.md',
+      contents: 'x',
+      nowIso: 'now',
+    });
     expect(textOf(messages[1])).toContain('NOTES.md');
   });
 });
@@ -73,7 +80,12 @@ describe('buildDecideMessages', () => {
 describe('readDecision', () => {
   it('reads a clean skip and keeps the model′s reason', () => {
     const result = readDecision(
-      decision(JSON.stringify({ action: 'skip', reason: 'Nothing is due until Friday.' })),
+      decision(
+        JSON.stringify({
+          action: 'skip',
+          reason: 'Nothing is due until Friday.',
+        }),
+      ),
       'TASK.md',
     );
     expect(result).toMatchObject({
@@ -105,7 +117,10 @@ describe('readDecision', () => {
     // Not defensive programming: `withResilience`'s `drop_tool_choice` rung
     // strips `toolChoice: 'required'` whenever a provider objects to it, so this
     // is a normal outcome of a normal degradation.
-    const result = readDecision(completion([], 'I think you should probably run it.'), 'TASK.md');
+    const result = readDecision(
+      completion([], 'I think you should probably run it.'),
+      'TASK.md',
+    );
     expect(result.action).toBe('skip');
     expect(result.warnings).toHaveLength(1);
     expect(result.warnings[0]).toMatch(/without calling the decision tool/u);
@@ -129,7 +144,14 @@ describe('readDecision', () => {
   it('never fails open to run, whatever the model sends', () => {
     // The rule the module exists to hold: an unreliable cheap model must not be
     // able to start an unbounded agent turn by answering badly.
-    for (const bad of ['', '{}', 'null', '[]', '{"reason":"go"}', '{"action":null}']) {
+    for (const bad of [
+      '',
+      '{}',
+      'null',
+      '[]',
+      '{"reason":"go"}',
+      '{"action":null}',
+    ]) {
       expect(readDecision(decision(bad), 'TASK.md').action).toBe('skip');
     }
   });
@@ -148,7 +170,9 @@ describe('readDecision', () => {
 
   it('treats a blank instruction the same as a missing one', () => {
     const result = readDecision(
-      decision(JSON.stringify({ action: 'run', reason: 'Due.', instruction: '   ' })),
+      decision(
+        JSON.stringify({ action: 'run', reason: 'Due.', instruction: '   ' }),
+      ),
       'NOTES.md',
     );
     expect(result.instruction).toBe('Read `NOTES.md` and do what it asks.');
@@ -156,7 +180,10 @@ describe('readDecision', () => {
 
   it('fills in a reason when the model left it empty, so the card is not blank', () => {
     expect(
-      readDecision(decision(JSON.stringify({ action: 'skip', reason: '' })), 'T.md').reason,
+      readDecision(
+        decision(JSON.stringify({ action: 'skip', reason: '' })),
+        'T.md',
+      ).reason,
     ).toBe('Nothing due.');
   });
 
@@ -171,7 +198,9 @@ describe('readDecision', () => {
 
   it('ignores a tool call that is not the decision tool', () => {
     const result = readDecision(
-      completion([{ name: 'something_else', argumentsJson: '{"action":"run"}' }]),
+      completion([
+        { name: 'something_else', argumentsJson: '{"action":"run"}' },
+      ]),
       'TASK.md',
     );
     expect(result.action).toBe('skip');
@@ -180,7 +209,10 @@ describe('readDecision', () => {
 
 describe('buildEvaluateMessages', () => {
   it('shows the model what was asked and what came back', () => {
-    const messages = buildEvaluateMessages({ instruction: 'Run the build', output: 'It failed' });
+    const messages = buildEvaluateMessages({
+      instruction: 'Run the build',
+      output: 'It failed',
+    });
     expect(textOf(messages[1])).toContain('Run the build');
     expect(textOf(messages[1])).toContain('It failed');
   });
@@ -192,13 +224,21 @@ describe('readEvaluation', () => {
       evaluation(JSON.stringify({ notify: false, title: 'Nothing changed' })),
       'fallback',
     );
-    expect(result).toMatchObject({ notify: false, title: 'Nothing changed', warnings: [] });
+    expect(result).toMatchObject({
+      notify: false,
+      title: 'Nothing changed',
+      warnings: [],
+    });
   });
 
   it('reads a decision to notify, with its summary', () => {
     const result = readEvaluation(
       evaluation(
-        JSON.stringify({ notify: true, title: 'Build broken', summary: 'Two tests fail.' }),
+        JSON.stringify({
+          notify: true,
+          title: 'Build broken',
+          summary: 'Two tests fail.',
+        }),
       ),
       'fallback',
     );
@@ -221,7 +261,10 @@ describe('readEvaluation', () => {
   });
 
   it('defaults to notifying when there is no tool call at all, keeping the prose', () => {
-    const result = readEvaluation(completion([], 'It went fine.'), 'The job finished');
+    const result = readEvaluation(
+      completion([], 'It went fine.'),
+      'The job finished',
+    );
     expect(result).toMatchObject({
       notify: true,
       title: 'The job finished',

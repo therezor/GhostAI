@@ -29,12 +29,21 @@
  */
 
 import { describeContext, type ContextReport } from '@ghostai/agent';
-import { GhostError, isGhostError, textOf, type SessionStore } from '@ghostai/core';
+import {
+  GhostError,
+  isGhostError,
+  textOf,
+  type SessionStore,
+} from '@ghostai/core';
 import { formatNumber } from '@ghostai/i18n';
 import { newUuid, type ContentPart } from '@ghostai/protocol';
 
 import type { CliKey, CliT } from './i18n.js';
-import { recentMessages, resolveSeq, DEFAULT_MESSAGE_LINES } from './messages.js';
+import {
+  recentMessages,
+  resolveSeq,
+  DEFAULT_MESSAGE_LINES,
+} from './messages.js';
 import type { TurnRenderer } from './render.js';
 import type { ChatRuntime } from './runtime.js';
 
@@ -45,7 +54,10 @@ export type SlashOutcome =
   /** Attach the prompt to another conversation. */
   | { readonly kind: 'attach'; readonly sessionKey: string }
   /** Run this content as a turn, through the REPL's own path. */
-  | { readonly kind: 'turn'; readonly content: string | readonly ContentPart[] };
+  | {
+      readonly kind: 'turn';
+      readonly content: string | readonly ContentPart[];
+    };
 
 const CONTINUE: SlashOutcome = { kind: 'continue' };
 
@@ -126,7 +138,10 @@ const HELP_LAYOUT: readonly HelpSection[] = [
       { syntax: '/workspace new <name>' },
       { syntax: '/workspace rename <id> <name>' },
       { syntax: '/workspace rm <id>', key: 'slash.help.workspaceRm' },
-      { syntax: '/workspace move <from> <to>', key: 'slash.help.workspaceMove' },
+      {
+        syntax: '/workspace move <from> <to>',
+        key: 'slash.help.workspaceMove',
+      },
     ],
   },
 ];
@@ -147,18 +162,24 @@ const HELP_LAYOUT: readonly HelpSection[] = [
 export function helpText(t: CliT): string {
   const width = Math.max(
     ...HELP_LAYOUT.flatMap((section) =>
-      section.rows.filter((row) => row.key !== undefined).map((row) => row.syntax.length),
+      section.rows
+        .filter((row) => row.key !== undefined)
+        .map((row) => row.syntax.length),
     ),
   );
 
   const blocks = HELP_LAYOUT.map((section) => {
     const rows = section.rows
       .map((row) =>
-        row.key === undefined ? `  ${row.syntax}` : `  ${row.syntax.padEnd(width)}  ${t(row.key)}`,
+        row.key === undefined
+          ? `  ${row.syntax}`
+          : `  ${row.syntax.padEnd(width)}  ${t(row.key)}`,
       )
       .join('\n');
 
-    return section.heading === undefined ? rows : `  ${t(section.heading)}\n${rows}`;
+    return section.heading === undefined
+      ? rows
+      : `  ${t(section.heading)}\n${rows}`;
   });
 
   return `${blocks.join('\n\n')}\n\n  ${t('slash.refNote')}`;
@@ -171,7 +192,10 @@ export function helpText(t: CliT): string {
  * rendered as a warning and the prompt comes back. A REPL that exits on a
  * mistyped session key would be worse than the mistyped key.
  */
-export async function runSlashCommand(input: string, ctx: SlashContext): Promise<SlashOutcome> {
+export async function runSlashCommand(
+  input: string,
+  ctx: SlashContext,
+): Promise<SlashOutcome> {
   const [word = input, ...rest] = input.trim().split(/\s+/u);
   const name = word.slice(1);
   const argv = rest;
@@ -219,7 +243,9 @@ async function dispatch(
         return CONTINUE;
       }
       renderer.note(
-        rows.map((row) => `${pad(row.seq)}  ${row.role}  ${clip(row.text)}`).join('\n'),
+        rows
+          .map((row) => `${pad(row.seq)}  ${row.role}  ${clip(row.text)}`)
+          .join('\n'),
       );
       return CONTINUE;
     }
@@ -254,7 +280,9 @@ async function dispatch(
       store.ensureSession(key, {
         origin: 'cli',
         ...(tail === '' ? {} : { title: tail }),
-        ...(ctx.workspaceId === undefined ? {} : { workspaceId: ctx.workspaceId }),
+        ...(ctx.workspaceId === undefined
+          ? {}
+          : { workspaceId: ctx.workspaceId }),
       });
       return { kind: 'attach', sessionKey: key };
     }
@@ -263,7 +291,10 @@ async function dispatch(
       const target = argv[0];
       if (target === undefined) {
         const session = store.getSession(ctx.sessionKey);
-        const title = session === undefined || session.title === '' ? '(unnamed)' : session.title;
+        const title =
+          session === undefined || session.title === ''
+            ? '(unnamed)'
+            : session.title;
         // The session's *own* workspace, not the pending one. They differ after
         // a `/workspace` switch, and showing the pending one here would report
         // where the next conversation lands as though it were where this one is.
@@ -278,7 +309,9 @@ async function dispatch(
     }
 
     case 'rename': {
-      if (tail === '') throw new GhostError('invalid_input', t('slash.errors.usageRename'));
+      if (tail === '') {
+        throw new GhostError('invalid_input', t('slash.errors.usageRename'));
+      }
       store.updateSession(ctx.sessionKey, { title: tail });
       renderer.note(t('slash.notes.renamedTo', { title: tail }));
       return CONTINUE;
@@ -333,8 +366,13 @@ async function dispatch(
         resolveSeq(store, ctx.sessionKey, argv[0]),
         t,
       );
-      const [record] = store.messages(ctx.sessionKey, { afterSeq: seq - 1, beforeSeq: seq + 1 });
-      if (record === undefined) throw new GhostError('not_found', t('slash.errors.messageGone'));
+      const [record] = store.messages(ctx.sessionKey, {
+        afterSeq: seq - 1,
+        beforeSeq: seq + 1,
+      });
+      if (record === undefined) {
+        throw new GhostError('not_found', t('slash.errors.messageGone'));
+      }
       const content = textOf(record.message);
       // Minus one, and for the same reason as the hub's: `AgentLoop.run`
       // appends the question unconditionally, so truncating *to* `seq` and
@@ -377,7 +415,8 @@ async function dispatch(
     // ── Workspaces ────────────────────────────────────────────
 
     case 'workspaces': {
-      const current = ctx.workspaceId ?? store.getSession(ctx.sessionKey)?.workspaceId;
+      const current =
+        ctx.workspaceId ?? store.getSession(ctx.sessionKey)?.workspaceId;
       renderer.note(
         runtime.workspaces
           .list()
@@ -400,7 +439,10 @@ async function dispatch(
   }
 }
 
-function workspaceCommand(argv: readonly string[], ctx: SlashContext): SlashOutcome {
+function workspaceCommand(
+  argv: readonly string[],
+  ctx: SlashContext,
+): SlashOutcome {
   const { renderer, runtime, t } = ctx;
   const [verb, ...rest] = argv;
 
@@ -413,7 +455,12 @@ function workspaceCommand(argv: readonly string[], ctx: SlashContext): SlashOutc
 
     case 'new': {
       const name = rest.join(' ').trim();
-      if (name === '') throw new GhostError('invalid_input', t('slash.errors.usageWorkspaceNew'));
+      if (name === '') {
+        throw new GhostError(
+          'invalid_input',
+          t('slash.errors.usageWorkspaceNew'),
+        );
+      }
       const created = runtime.workspaces.create({ name });
       renderer.note(t('slash.notes.created', { id: created.id }));
       return CONTINUE;
@@ -423,7 +470,10 @@ function workspaceCommand(argv: readonly string[], ctx: SlashContext): SlashOutc
       const [id, ...words] = rest;
       const name = words.join(' ').trim();
       if (id === undefined || name === '') {
-        throw new GhostError('invalid_input', t('slash.errors.usageWorkspaceRename'));
+        throw new GhostError(
+          'invalid_input',
+          t('slash.errors.usageWorkspaceRename'),
+        );
       }
       runtime.workspaces.rename(id, name);
       renderer.note(t('slash.notes.renamedWorkspace', { id, name }));
@@ -432,14 +482,21 @@ function workspaceCommand(argv: readonly string[], ctx: SlashContext): SlashOutc
 
     case 'rm': {
       const id = rest[0];
-      if (id === undefined)
-        throw new GhostError('invalid_input', t('slash.errors.usageWorkspaceRm'));
+      if (id === undefined) {
+        throw new GhostError(
+          'invalid_input',
+          t('slash.errors.usageWorkspaceRm'),
+        );
+      }
       // The same refusal the web manager makes, and for the same reason: a
       // detached workspace whose conversations still name it would leave them
       // resolving to files nothing lists. Two explicit steps, not one silent one.
       const count = runtime.store.countByWorkspace(id);
       if (count > 0) {
-        throw new GhostError('conflict', t('slash.errors.workspaceInUse', { count, id }));
+        throw new GhostError(
+          'conflict',
+          t('slash.errors.workspaceInUse', { count, id }),
+        );
       }
       runtime.workspaces.delete(id);
       renderer.note(t('slash.notes.detached', { id }));
@@ -450,10 +507,16 @@ function workspaceCommand(argv: readonly string[], ctx: SlashContext): SlashOutc
     case 'move': {
       const [from, to] = rest;
       if (from === undefined || to === undefined) {
-        throw new GhostError('invalid_input', t('slash.errors.usageWorkspaceMove'));
+        throw new GhostError(
+          'invalid_input',
+          t('slash.errors.usageWorkspaceMove'),
+        );
       }
       if (runtime.workspaces.get(to) === undefined) {
-        throw new GhostError('not_found', t('slash.errors.noWorkspace', { id: to }));
+        throw new GhostError(
+          'not_found',
+          t('slash.errors.noWorkspace', { id: to }),
+        );
       }
       const moved = runtime.store.reassignWorkspace(from, to);
       renderer.note(t('slash.notes.moved', { count: moved, from, to }));
@@ -463,7 +526,10 @@ function workspaceCommand(argv: readonly string[], ctx: SlashContext): SlashOutc
     default: {
       // Not a verb, so it is an id: `/workspace <id>` switches.
       if (runtime.workspaces.get(verb) === undefined) {
-        throw new GhostError('not_found', t('slash.errors.noWorkspace', { id: verb }));
+        throw new GhostError(
+          'not_found',
+          t('slash.errors.noWorkspace', { id: verb }),
+        );
       }
       ctx.setWorkspace(verb);
       // Worth stating rather than leaving to be discovered: a session's
@@ -475,8 +541,16 @@ function workspaceCommand(argv: readonly string[], ctx: SlashContext): SlashOutc
 }
 
 /** Only a message the user wrote can be edited or re-run. */
-function requireUserMessage(store: SessionStore, sessionKey: string, seq: number, t: CliT): number {
-  const [record] = store.messages(sessionKey, { afterSeq: seq - 1, beforeSeq: seq + 1 });
+function requireUserMessage(
+  store: SessionStore,
+  sessionKey: string,
+  seq: number,
+  t: CliT,
+): number {
+  const [record] = store.messages(sessionKey, {
+    afterSeq: seq - 1,
+    beforeSeq: seq + 1,
+  });
   if (record?.message.role !== 'user') {
     throw new GhostError('invalid_input', t('slash.errors.notYours', { seq }));
   }
@@ -494,7 +568,9 @@ function requireUserMessage(store: SessionStore, sessionKey: string, seq: number
  * the browser printed `8,192`. One install, two answers.
  */
 function formatContext(report: ContextReport, locale: string): string {
-  const percent = Math.round((report.estimatedTokens / report.contextWindowTokens) * 100);
+  const percent = Math.round(
+    (report.estimatedTokens / report.contextWindowTokens) * 100,
+  );
   const n = (value: number): string => formatNumber(value, locale);
   // Named rather than iterated: the sections are a fixed set with a meaningful
   // order, and `Object.entries` would print them in whatever order the object

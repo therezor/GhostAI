@@ -71,21 +71,30 @@ export function parseConfig(text: string, file: string): Config {
   try {
     raw = JSON.parse(text) as unknown;
   } catch (error) {
-    throw new GhostError('config', `${file} is not valid JSON: ${describeJsonError(error)}`, {
-      cause: error,
-      details: { file },
-    });
+    throw new GhostError(
+      'config',
+      `${file} is not valid JSON: ${describeJsonError(error)}`,
+      {
+        cause: error,
+        details: { file },
+      },
+    );
   }
 
   const result = ConfigSchema.safeParse(raw);
   if (!result.success) {
     const issues = result.error.issues.map(
-      (issue) => `  ${issue.path.length === 0 ? '(root)' : issue.path.join('.')}: ${issue.message}`,
+      (issue) =>
+        `  ${issue.path.length === 0 ? '(root)' : issue.path.join('.')}: ${issue.message}`,
     );
-    throw new GhostError('config', `${file} has invalid settings:\n${issues.join('\n')}`, {
-      cause: result.error,
-      details: { file, issues },
-    });
+    throw new GhostError(
+      'config',
+      `${file} has invalid settings:\n${issues.join('\n')}`,
+      {
+        cause: result.error,
+        details: { file, issues },
+      },
+    );
   }
   return result.data;
 }
@@ -117,10 +126,14 @@ function describeJsonError(error: unknown): string {
 export function saveConfig(file: string, config: Config): Config {
   const parsed = ConfigSchema.safeParse(config);
   if (!parsed.success) {
-    throw new GhostError('config', `Refusing to write invalid settings to ${file}`, {
-      cause: parsed.error,
-      details: { file },
-    });
+    throw new GhostError(
+      'config',
+      `Refusing to write invalid settings to ${file}`,
+      {
+        cause: parsed.error,
+        details: { file },
+      },
+    );
   }
 
   ensureDir(dirname(file));
@@ -128,7 +141,9 @@ export function saveConfig(file: string, config: Config): Config {
   // which is not atomic and is exactly what this is avoiding.
   const temporary = `${file}.tmp`;
   try {
-    writeFileSync(temporary, `${JSON.stringify(parsed.data, null, 2)}\n`, { mode: 0o600 });
+    writeFileSync(temporary, `${JSON.stringify(parsed.data, null, 2)}\n`, {
+      mode: 0o600,
+    });
     renameSync(temporary, file);
   } catch (error) {
     throw new GhostError('config', `${file} could not be written`, {
@@ -165,10 +180,12 @@ export function loadConfig(options: LoadConfigOptions = {}): LoadedConfig {
     }
   }
 
-  const config = text === undefined ? ConfigSchema.parse({}) : parseConfig(text, file);
+  const config =
+    text === undefined ? ConfigSchema.parse({}) : parseConfig(text, file);
 
   const configured = config.agents.defaults.workspace;
-  const workspace = options.workspace ?? (configured === '' ? undefined : configured);
+  const workspace =
+    options.workspace ?? (configured === '' ? undefined : configured);
 
   return {
     config,

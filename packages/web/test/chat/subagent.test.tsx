@@ -48,19 +48,35 @@ const DELEGATION: ToolPart = {
   subagent: RUN,
 };
 
-function toolWith(tool: Partial<ToolPart>, run: Partial<SubagentPart> | null): ToolPart {
-  return { ...DELEGATION, subagent: run === null ? undefined : { ...RUN, ...run }, ...tool };
+function toolWith(
+  tool: Partial<ToolPart>,
+  run: Partial<SubagentPart> | null,
+): ToolPart {
+  return {
+    ...DELEGATION,
+    subagent: run === null ? undefined : { ...RUN, ...run },
+    ...tool,
+  };
 }
 
 function card(
   tool: Partial<ToolPart> = {},
   run: Partial<SubagentPart> | null = {},
-): { readonly update: (t: Partial<ToolPart>, r?: Partial<SubagentPart> | null) => void } {
-  const result = renderWithProviders(<ToolCard tool={toolWith(tool, run)} onApprove={vi.fn()} />);
+): {
+  readonly update: (
+    t: Partial<ToolPart>,
+    r?: Partial<SubagentPart> | null,
+  ) => void;
+} {
+  const result = renderWithProviders(
+    <ToolCard tool={toolWith(tool, run)} onApprove={vi.fn()} />,
+  );
   return {
     /** Re-renders the same card with a later state of the same call. */
     update: (nextTool, nextRun = {}) => {
-      result.update(<ToolCard tool={toolWith(nextTool, nextRun)} onApprove={vi.fn()} />);
+      result.update(
+        <ToolCard tool={toolWith(nextTool, nextRun)} onApprove={vi.fn()} />,
+      );
     },
   };
 }
@@ -76,7 +92,9 @@ describe('a card that delegated', () => {
 
     // The run is visible without anyone pressing anything: a collapsed card
     // over a running delegation says nothing for as long as it takes.
-    expect(screen.getByRole('region', { name: 'Subagent run: Researcher' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('region', { name: 'Subagent run: Researcher' }),
+    ).toBeInTheDocument();
     expect(screen.getByText('working')).toBeInTheDocument();
     expect(screen.getByText('qwen3:8b')).toBeInTheDocument();
   });
@@ -90,7 +108,10 @@ describe('a card that delegated', () => {
 
     update(
       { status: 'ok', content: 'Retries default to 3.', durationMs: 4200 },
-      { done: true, parts: [{ kind: 'text', id: 'sub-1#0', text: 'Found it.' }] },
+      {
+        done: true,
+        parts: [{ kind: 'text', id: 'sub-1#0', text: 'Found it.' }],
+      },
     );
 
     expect(screen.queryByText('working')).not.toBeInTheDocument();
@@ -104,7 +125,10 @@ describe('a card that delegated', () => {
     // tool card follows.
     card(
       { status: 'ok', content: 'Retries default to 3.' },
-      { done: true, parts: [{ kind: 'text', id: 'sub-1#0', text: 'Found it.' }] },
+      {
+        done: true,
+        parts: [{ kind: 'text', id: 'sub-1#0', text: 'Found it.' }],
+      },
     );
 
     expect(screen.queryByText('Found it.')).not.toBeInTheDocument();
@@ -142,7 +166,9 @@ describe('a card that delegated', () => {
 
     // The same landmark and the same status label a top-level call gets — which
     // is the point of one renderer rather than a nested variant.
-    expect(screen.getByRole('region', { name: 'Tool call: list_dir' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('region', { name: 'Tool call: list_dir' }),
+    ).toBeInTheDocument();
     expect(screen.getAllByLabelText('Succeeded')).toHaveLength(2);
   });
 
@@ -150,7 +176,9 @@ describe('a card that delegated', () => {
     card({ status: 'ok' }, { done: true });
     await open();
 
-    expect(screen.getByText('The subagent produced no steps.')).toBeInTheDocument();
+    expect(
+      screen.getByText('The subagent produced no steps.'),
+    ).toBeInTheDocument();
   });
 
   it("fetches the run from the subagent's own session after a reload", async () => {
@@ -169,7 +197,10 @@ describe('a card that delegated', () => {
               seq: 1,
               createdAtMs: 0,
               turnId: 't2',
-              message: { role: 'user', content: [{ type: 'text', text: 'the task' }] },
+              message: {
+                role: 'user',
+                content: [{ type: 'text', text: 'the task' }],
+              },
             },
             {
               id: 'm2',
@@ -177,7 +208,10 @@ describe('a card that delegated', () => {
               seq: 2,
               createdAtMs: 0,
               turnId: 't2',
-              message: { role: 'assistant', content: [{ type: 'text', text: 'Found it.' }] },
+              message: {
+                role: 'assistant',
+                content: [{ type: 'text', text: 'Found it.' }],
+              },
             },
           ],
         },
@@ -195,7 +229,10 @@ describe('a card that delegated', () => {
 
   it("says so when the subagent's session is gone", async () => {
     stubApi({
-      '/api/sessions/sub-1/messages': [404, { error: { code: 'not_found', message: 'x' } }],
+      '/api/sessions/sub-1/messages': [
+        404,
+        { error: { code: 'not_found', message: 'x' } },
+      ],
     });
 
     card({ status: 'ok' }, { done: true, loaded: false });
@@ -204,13 +241,17 @@ describe('a card that delegated', () => {
     expect(await screen.findByText(/no longer stored/)).toBeInTheDocument();
     // Never "produced no steps": that is a claim about the subagent, and this
     // is a fact about the database.
-    expect(screen.queryByText('The subagent produced no steps.')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('The subagent produced no steps.'),
+    ).not.toBeInTheDocument();
   });
 
   it('adds nothing to an ordinary tool call', () => {
     card({ name: 'read_file', status: 'ok', content: 'hello' }, null);
 
-    expect(screen.queryByRole('region', { name: /Subagent run/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('region', { name: /Subagent run/ }),
+    ).not.toBeInTheDocument();
     // And it is closed by default, exactly as it was before delegation existed.
     expect(screen.queryByText('hello')).not.toBeInTheDocument();
   });

@@ -24,18 +24,31 @@ import { useTranslation } from 'react-i18next';
 
 import type { Config } from '@ghostai/protocol';
 
-import { FieldGrid, SaveBar, Section, SwitchRow, TextField } from '@/components/form/controls.js';
+import {
+  FieldGrid,
+  SaveBar,
+  Section,
+  SwitchRow,
+  TextField,
+} from '@/components/form/controls.js';
 import { toToolsForm, toToolsPatch, type ToolsForm } from './tools-form.js';
 import { useSaveSettings } from './use-settings.js';
 
-export function ToolsPanel({ config }: { readonly config: Config }): JSX.Element {
+export function ToolsPanel({
+  config,
+}: {
+  readonly config: Config;
+}): JSX.Element {
   const { t } = useTranslation();
   const [form, setForm] = useState<ToolsForm>(() => toToolsForm(config.tools));
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   const [dirty, setDirty] = useState(false);
   const { save, saving } = useSaveSettings();
 
-  const update = <K extends keyof ToolsForm>(key: K, value: ToolsForm[K]): void => {
+  const update = <K extends keyof ToolsForm>(
+    key: K,
+    value: ToolsForm[K],
+  ): void => {
     setForm((current) => ({ ...current, [key]: value }));
     setDirty(true);
   };

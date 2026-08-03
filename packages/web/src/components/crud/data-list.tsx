@@ -59,8 +59,12 @@ export function DataListRow({
   return (
     <li className="data-list__row">
       <div className="data-list__primary">{primary}</div>
-      {meta !== undefined && <div className="cluster data-list__meta">{meta}</div>}
-      {actions !== undefined && <div className="data-list__actions">{actions}</div>}
+      {meta !== undefined && (
+        <div className="cluster data-list__meta">{meta}</div>
+      )}
+      {actions !== undefined && (
+        <div className="data-list__actions">{actions}</div>
+      )}
     </li>
   );
 }

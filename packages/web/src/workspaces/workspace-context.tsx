@@ -20,7 +20,14 @@
  *    conversation on screen ran in another.
  */
 
-import { createContext, useCallback, useContext, useState, type JSX, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useState,
+  type JSX,
+  type ReactNode,
+} from 'react';
 
 import { DEFAULT_WORKSPACE_ID } from '@ghostai/protocol';
 
@@ -77,7 +84,11 @@ function store(workspaceId: string): void {
 
 const WorkspaceContext = createContext<WorkspaceState | undefined>(undefined);
 
-export function WorkspaceProvider({ children }: { readonly children: ReactNode }): JSX.Element {
+export function WorkspaceProvider({
+  children,
+}: {
+  readonly children: ReactNode;
+}): JSX.Element {
   const [workspaceId, setWorkspaceId] = useState<string>(readStored);
 
   const move = useCallback((next: string): void => {

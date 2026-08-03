@@ -31,7 +31,10 @@ export const LIGHT_QUERY = '(prefers-color-scheme: light)';
 const PREFERENCES: readonly ThemePreference[] = ['dark', 'light', 'system'];
 
 export function isThemePreference(value: unknown): value is ThemePreference {
-  return typeof value === 'string' && (PREFERENCES as readonly string[]).includes(value);
+  return (
+    typeof value === 'string' &&
+    (PREFERENCES as readonly string[]).includes(value)
+  );
 }
 
 /** The rule, in one place: an explicit choice wins, and `system` asks the OS. */
@@ -73,7 +76,9 @@ export function storePreference(
 }
 
 /** True when the OS asks for light. False whenever the question cannot be asked. */
-export function systemPrefersLight(view: Window | undefined = defaultView()): boolean {
+export function systemPrefersLight(
+  view: Window | undefined = defaultView(),
+): boolean {
   return view?.matchMedia(LIGHT_QUERY).matches ?? false;
 }
 

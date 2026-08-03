@@ -27,12 +27,23 @@ function job(over: Partial<AutomationJob> = {}): AutomationJob {
     id: 'job-1',
     name: 'Nightly build',
     schedule: { kind: 'cron', expr: '0 9 * * *' },
-    payload: { kind: 'scheduled', message: 'check', deliver: false, targets: {} },
+    payload: {
+      kind: 'scheduled',
+      message: 'check',
+      deliver: false,
+      targets: {},
+    },
     enabled: true,
     deleteAfterRun: false,
     createdAtMs: 0,
     updatedAtMs: 0,
-    state: { nextRunAtMs: 0, lastRunAtMs: 0, lastStatus: 'pending', lastError: '', runCount: 0 },
+    state: {
+      nextRunAtMs: 0,
+      lastRunAtMs: 0,
+      lastStatus: 'pending',
+      lastError: '',
+      runCount: 0,
+    },
     ...over,
   };
 }
@@ -66,10 +77,16 @@ function stub(over: Partial<AutomationPort> = {}): Stub {
 
 function contextWith(port?: AutomationPort): ToolContext {
   workspace = createTestWorkspace();
-  return { ...workspace.context, ...(port === undefined ? {} : { automation: port }) };
+  return {
+    ...workspace.context,
+    ...(port === undefined ? {} : { automation: port }),
+  };
 }
 
-async function run(args: unknown, port?: AutomationPort): Promise<ReturnType<typeof toToolResult>> {
+async function run(
+  args: unknown,
+  port?: AutomationPort,
+): Promise<ReturnType<typeof toToolResult>> {
   return toToolResult(await automationTool.run(args, contextWith(port)));
 }
 
@@ -79,7 +96,9 @@ describe('the automation tool', () => {
     // it *is* the zone a cron is read in — so the hour the model writes is the
     // hour it sees. Saying so is what stops a model trained on the old advice
     // from converting an offset it no longer needs to convert.
-    expect(automationTool.description).toMatch(/current time is in your system prompt/iu);
+    expect(automationTool.description).toMatch(
+      /current time is in your system prompt/iu,
+    );
     expect(automationTool.description).toMatch(/install timezone/u);
     expect(automationTool.description).toMatch(/do not convert it/u);
   });
@@ -89,7 +108,9 @@ describe('the automation tool', () => {
     // the surface said the job gets its own session, so "do the thing we
     // discussed" scheduled a turn with no idea what the thing was — and the
     // create succeeded, so there was no signal until the run a week later.
-    expect(automationTool.description).toMatch(/fresh conversation that cannot see this one/u);
+    expect(automationTool.description).toMatch(
+      /fresh conversation that cannot see this one/u,
+    );
     const message = automationTool.definition('builtin').parameters.properties;
     expect(JSON.stringify(message)).toMatch(/no history/u);
   });
@@ -108,14 +129,24 @@ describe('the automation tool', () => {
 describe('create', () => {
   it('maps every_minutes onto the interval schedule', async () => {
     const s = stub();
-    await run({ action: 'create', name: 'x', message: 'go', every_minutes: 15 }, s.port);
-    expect(s.created[0]).toMatchObject({ schedule: { kind: 'every', everyMs: 900_000 } });
+    await run(
+      { action: 'create', name: 'x', message: 'go', every_minutes: 15 },
+      s.port,
+    );
+    expect(s.created[0]).toMatchObject({
+      schedule: { kind: 'every', everyMs: 900_000 },
+    });
   });
 
   it('maps cron onto a schedule with no zone of its own', async () => {
     const s = stub();
-    await run({ action: 'create', name: 'x', message: 'go', cron: '0 9 * * *' }, s.port);
-    expect(s.created[0]).toMatchObject({ schedule: { kind: 'cron', expr: '0 9 * * *' } });
+    await run(
+      { action: 'create', name: 'x', message: 'go', cron: '0 9 * * *' },
+      s.port,
+    );
+    expect(s.created[0]).toMatchObject({
+      schedule: { kind: 'cron', expr: '0 9 * * *' },
+    });
     expect(s.created[0]).not.toHaveProperty('schedule.tz');
   });
 
@@ -126,7 +157,13 @@ describe('create', () => {
     const s = stub();
     await expect(
       automationTool.run(
-        { action: 'create', name: 'x', message: 'go', cron: '0 9 * * *', tz: 'UTC' },
+        {
+          action: 'create',
+          name: 'x',
+          message: 'go',
+          cron: '0 9 * * *',
+          tz: 'UTC',
+        },
         contextWith(s.port),
       ),
     ).rejects.toThrow();
@@ -134,7 +171,15 @@ describe('create', () => {
 
   it('maps an ISO instant onto a one-shot, which self-destructs by default', async () => {
     const s = stub();
-    await run({ action: 'create', name: 'x', message: 'go', at: '2026-08-01T09:00:00Z' }, s.port);
+    await run(
+      {
+        action: 'create',
+        name: 'x',
+        message: 'go',
+        at: '2026-08-01T09:00:00Z',
+      },
+      s.port,
+    );
     expect(s.created[0]).toMatchObject({
       schedule: { kind: 'at', atMs: Date.parse('2026-08-01T09:00:00Z') },
       deleteAfterRun: true,
@@ -145,7 +190,13 @@ describe('create', () => {
     // Choosing silently is how a job ends up on a schedule nobody wrote.
     const s = stub();
     const result = await run(
-      { action: 'create', name: 'x', message: 'go', every_minutes: 5, cron: '0 9 * * *' },
+      {
+        action: 'create',
+        name: 'x',
+        message: 'go',
+        every_minutes: 5,
+        cron: '0 9 * * *',
+      },
       s.port,
     );
     expect(result.isError).toBe(true);
@@ -155,7 +206,10 @@ describe('create', () => {
 
   it('refuses none at all', async () => {
     const s = stub();
-    const result = await run({ action: 'create', name: 'x', message: 'go' }, s.port);
+    const result = await run(
+      { action: 'create', name: 'x', message: 'go' },
+      s.port,
+    );
     expect(result.isError).toBe(true);
     expect(s.created).toHaveLength(0);
   });
@@ -172,19 +226,26 @@ describe('create', () => {
 
   it('requires a name and a message', async () => {
     const s = stub();
-    expect((await run({ action: 'create', message: 'go', every_minutes: 5 }, s.port)).isError).toBe(
-      true,
-    );
-    expect((await run({ action: 'create', name: 'x', every_minutes: 5 }, s.port)).isError).toBe(
-      true,
-    );
+    expect(
+      (await run({ action: 'create', message: 'go', every_minutes: 5 }, s.port))
+        .isError,
+    ).toBe(true);
+    expect(
+      (await run({ action: 'create', name: 'x', every_minutes: 5 }, s.port))
+        .isError,
+    ).toBe(true);
     expect(s.created).toHaveLength(0);
   });
 
   it('coerces a stringified number, because models emit them', async () => {
     const s = stub();
-    await run({ action: 'create', name: 'x', message: 'go', every_minutes: '15' }, s.port);
-    expect(s.created[0]).toMatchObject({ schedule: { kind: 'every', everyMs: 900_000 } });
+    await run(
+      { action: 'create', name: 'x', message: 'go', every_minutes: '15' },
+      s.port,
+    );
+    expect(s.created[0]).toMatchObject({
+      schedule: { kind: 'every', everyMs: 900_000 },
+    });
   });
 });
 
@@ -215,13 +276,22 @@ describe('refusals a model has to be able to act on', () => {
   it('passes the validator′s own sentence through', async () => {
     const result = await run(
       { action: 'create', name: 'x', message: 'go', cron: '99 * * * *' },
-      refusing({ ok: false, refusal: 'unschedulable', detail: 'minute must be between 0 and 59.' }),
+      refusing({
+        ok: false,
+        refusal: 'unschedulable',
+        detail: 'minute must be between 0 and 59.',
+      }),
     );
     expect(result.content).toMatch(/minute must be between 0 and 59/u);
   });
 
   it('says so when the install has no scheduler at all, rather than pretending', async () => {
-    const result = await run({ action: 'create', name: 'x', message: 'go', every_minutes: 5 });
+    const result = await run({
+      action: 'create',
+      name: 'x',
+      message: 'go',
+      every_minutes: 5,
+    });
     expect(result.isError).toBe(true);
     expect(result.content).toMatch(/no scheduler/u);
   });
@@ -246,7 +316,8 @@ describe('list and delete', () => {
   it('marks a disabled job, so the model does not report it as live', async () => {
     const result = await run(
       { action: 'list' },
-      stub({ list: () => ({ ok: true, value: [job({ enabled: false })] }) }).port,
+      stub({ list: () => ({ ok: true, value: [job({ enabled: false })] }) })
+        .port,
     );
     expect(result.content).toContain('disabled');
   });
@@ -261,7 +332,12 @@ describe('list and delete', () => {
         list: () => ({
           ok: true,
           value: [
-            job({ state: { ...job().state, nextRunAtMs: Date.parse('2026-08-02T09:00:00Z') } }),
+            job({
+              state: {
+                ...job().state,
+                nextRunAtMs: Date.parse('2026-08-02T09:00:00Z'),
+              },
+            }),
           ],
         }),
       }).port,

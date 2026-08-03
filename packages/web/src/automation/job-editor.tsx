@@ -65,7 +65,9 @@ import {
   useSaveJob,
 } from './use-automation.js';
 
-const STATUS_TONE: Readonly<Record<RunStatus, 'neutral' | 'success' | 'warning' | 'danger'>> = {
+const STATUS_TONE: Readonly<
+  Record<RunStatus, 'neutral' | 'success' | 'warning' | 'danger'>
+> = {
   pending: 'neutral',
   ok: 'success',
   skipped: 'neutral',
@@ -91,7 +93,9 @@ export function JobEditorRoute(): JSX.Element {
   const { jobId } = useParams({ from: '/automation/$jobId' });
   const jobs = useAutomationJobs();
 
-  if (jobs.isPending) return <p className="page__note">{t('automation.loadingOne')}</p>;
+  if (jobs.isPending) {
+    return <p className="page__note">{t('automation.loadingOne')}</p>;
+  }
   if (jobs.isError) {
     return (
       <p role="alert" className="page__error">
@@ -157,15 +161,23 @@ function Editor({ job }: { readonly job?: AutomationJob }): JSX.Element {
   });
   const agentOptions = useMemo(() => {
     const known = agents.data?.agents ?? [];
-    const options = [{ value: DEFAULT_AGENT_ID, label: t('automation.agentDefault') }];
+    const options = [
+      { value: DEFAULT_AGENT_ID, label: t('automation.agentDefault') },
+    ];
     for (const agent of known) {
       if (agent.id === DEFAULT_AGENT_ID) continue;
-      options.push({ value: agent.id, label: agent.label === '' ? agent.id : agent.label });
+      options.push({
+        value: agent.id,
+        label: agent.label === '' ? agent.id : agent.label,
+      });
     }
     // A job bound to an agent that has since been deleted keeps its row rather
     // than silently reading as the default — the binding is still stored, and
     // hiding it would make the editor lie about what will run.
-    if (form.agentId !== '' && !options.some((option) => option.value === form.agentId)) {
+    if (
+      form.agentId !== '' &&
+      !options.some((option) => option.value === form.agentId)
+    ) {
       options.push({
         value: form.agentId,
         label: t('automation.agentMissing', { id: form.agentId }),
@@ -210,7 +222,10 @@ function Editor({ job }: { readonly job?: AutomationJob }): JSX.Element {
       create.mutate(result.create, {
         onSuccess: (created) => {
           setDirty(false);
-          void navigate({ to: '/automation/$jobId', params: { jobId: created.id } });
+          void navigate({
+            to: '/automation/$jobId',
+            params: { jobId: created.id },
+          });
         },
       });
       return;
@@ -269,7 +284,10 @@ function Editor({ job }: { readonly job?: AutomationJob }): JSX.Element {
         />
       </Section>
 
-      <Section title={t('automation.scheduleTitle')} description={t('automation.scheduleDesc')}>
+      <Section
+        title={t('automation.scheduleTitle')}
+        description={t('automation.scheduleDesc')}
+      >
         <FieldGrid>
           <SelectField
             label={t('automation.scheduleKind')}
@@ -341,13 +359,18 @@ function Editor({ job }: { readonly job?: AutomationJob }): JSX.Element {
         {job !== undefined && (
           <p className="settings-field__hint">
             {job.state.nextRunAtMs > 0
-              ? t('automation.nextRun', { when: format.dateTime(job.state.nextRunAtMs) })
+              ? t('automation.nextRun', {
+                  when: format.dateTime(job.state.nextRunAtMs),
+                })
               : t('automation.notScheduled')}
           </p>
         )}
       </Section>
 
-      <Section title={t('automation.payloadTitle')} description={t('automation.payloadDesc')}>
+      <Section
+        title={t('automation.payloadTitle')}
+        description={t('automation.payloadDesc')}
+      >
         <FieldGrid>
           <SelectField
             label={t('automation.payloadKind')}
@@ -418,7 +441,10 @@ function Editor({ job }: { readonly job?: AutomationJob }): JSX.Element {
         />
       </Section>
 
-      <Section title={t('automation.deliveryTitle')} description={t('automation.deliveryDesc')}>
+      <Section
+        title={t('automation.deliveryTitle')}
+        description={t('automation.deliveryDesc')}
+      >
         <SwitchRow
           label={t('automation.deliverLabel')}
           hint={t('automation.deliverHint')}
@@ -455,7 +481,11 @@ function Editor({ job }: { readonly job?: AutomationJob }): JSX.Element {
         saving={creating ? create.pending : save.pending}
         onSave={onSave}
         onRevert={() => {
-          setForm(job === undefined ? emptyJobForm(timeZone) : toJobForm(job, timeZone));
+          setForm(
+            job === undefined
+              ? emptyJobForm(timeZone)
+              : toJobForm(job, timeZone),
+          );
           setErrors({});
           setDirty(false);
         }}
@@ -465,8 +495,13 @@ function Editor({ job }: { readonly job?: AutomationJob }): JSX.Element {
           on a create form reads as a feature that is broken rather than one
           that has not happened. */}
       {job !== undefined && (
-        <Section title={t('automation.historyTitle')} description={t('automation.historyDesc')}>
-          {runs.isPending && <p className="page__note">{t('automation.loadingRuns')}</p>}
+        <Section
+          title={t('automation.historyTitle')}
+          description={t('automation.historyDesc')}
+        >
+          {runs.isPending && (
+            <p className="page__note">{t('automation.loadingRuns')}</p>
+          )}
           {runs.isError && (
             <p role="alert" className="page__error">
               {t('automation.loadError', { message: runs.error.message })}
@@ -480,7 +515,10 @@ function Editor({ job }: { readonly job?: AutomationJob }): JSX.Element {
               // page, so an unnamed one is announced as "list" with nothing
               // saying what is in it — and there is now a pager beneath it
               // whose label has to match something.
-              <ul className="settings-divided-list" aria-label={t('automation.historyTitle')}>
+              <ul
+                className="settings-divided-list"
+                aria-label={t('automation.historyTitle')}
+              >
                 {runs.data.runs.map((entry) => (
                   <RunItem key={entry.id} run={entry} />
                 ))}
@@ -506,13 +544,19 @@ function RunItem({ run }: { readonly run: AutomationRun }): JSX.Element {
   return (
     <li className="settings-divided-list__text">
       <div className="cluster">
-        <Badge tone={STATUS_TONE[run.status]}>{t(`automation.status.${run.status}`)}</Badge>
-        <span className="settings-divided-list__name">{format.dateTime(run.startedAtMs)}</span>
+        <Badge tone={STATUS_TONE[run.status]}>
+          {t(`automation.status.${run.status}`)}
+        </Badge>
+        <span className="settings-divided-list__name">
+          {format.dateTime(run.startedAtMs)}
+        </span>
       </div>
       {run.skipReason !== undefined && (
         <p className="settings-divided-list__detail">{run.skipReason}</p>
       )}
-      {run.error !== undefined && <p className="settings-field__error">{run.error}</p>}
+      {run.error !== undefined && (
+        <p className="settings-field__error">{run.error}</p>
+      )}
       {run.output !== undefined && run.output !== '' && (
         <p className="settings-divided-list__detail">{run.output}</p>
       )}

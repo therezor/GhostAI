@@ -22,7 +22,9 @@ import { AgentPicker } from '@/agents/agent-picker.js';
 import { stubApi, testQueryClient, type StubRoute } from '@testkit/render.js';
 
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children }: { readonly children: ReactNode }) => <a href="/agents">{children}</a>,
+  Link: ({ children }: { readonly children: ReactNode }) => (
+    <a href="/agents">{children}</a>
+  ),
 }));
 
 const STORAGE_KEY = 'ghostai:agent';
@@ -72,19 +74,29 @@ function mount(
 
 describe('the agent picker', () => {
   it('names the agent the session is bound to', async () => {
-    mount({ '/api/sessions/web-1': [200, session('writer')] }, { sessionKey: 'web-1' });
+    mount(
+      { '/api/sessions/web-1': [200, session('writer')] },
+      { sessionKey: 'web-1' },
+    );
 
-    expect(await screen.findByRole('button', { name: 'Agent: Writer' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('button', { name: 'Agent: Writer' }),
+    ).toBeInTheDocument();
   });
 
   it('marks a binding whose agent is no longer configured', async () => {
     // The trigger used to render the dead id as though it were an ordinary
     // label, and the menu's radio group matched nothing — so the only signal
     // that a session pointed at a deleted agent was an unchecked list.
-    mount({ '/api/sessions/web-1': [200, session('reviewer')] }, { sessionKey: 'web-1' });
+    mount(
+      { '/api/sessions/web-1': [200, session('reviewer')] },
+      { sessionKey: 'web-1' },
+    );
 
     expect(
-      await screen.findByRole('button', { name: /reviewer — no longer configured/ }),
+      await screen.findByRole('button', {
+        name: /reviewer — no longer configured/,
+      }),
     ).toBeInTheDocument();
   });
 
@@ -130,7 +142,9 @@ describe('the agent picker', () => {
     localStorage.setItem(STORAGE_KEY, 'writer');
     mount();
 
-    expect(await screen.findByRole('button', { name: 'Agent: Writer' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('button', { name: 'Agent: Writer' }),
+    ).toBeInTheDocument();
     expect(localStorage.getItem(STORAGE_KEY)).toBe('writer');
   });
 });

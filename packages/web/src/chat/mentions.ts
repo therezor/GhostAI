@@ -17,7 +17,11 @@
  * autocomplete completes the namespace and gets out of the way.
  */
 
-import { MENTION_KINDS, parseMentions, type MentionKind } from '@ghostai/protocol';
+import {
+  MENTION_KINDS,
+  parseMentions,
+  type MentionKind,
+} from '@ghostai/protocol';
 
 export { parseMentions as mentionsIn };
 
@@ -51,7 +55,10 @@ export interface MentionSuggestion {
  * what closes it: moving the caret past a space means the mention is finished
  * and there is nothing to complete.
  */
-export function mentionAtCaret(text: string, caret: number): MentionQuery | undefined {
+export function mentionAtCaret(
+  text: string,
+  caret: number,
+): MentionQuery | undefined {
   const before = text.slice(0, caret);
 
   // Search backwards for the `@` that opens the run the caret is in. A space
@@ -92,14 +99,18 @@ export function mentionAtCaret(text: string, caret: number): MentionQuery | unde
  * Empty once a namespace has been chosen — see the file docblock. An empty list
  * is what the caller renders as "no popover", not as "nothing found".
  */
-export function mentionSuggestions(query: MentionQuery): readonly MentionSuggestion[] {
+export function mentionSuggestions(
+  query: MentionQuery,
+): readonly MentionSuggestion[] {
   if (query.kind !== undefined) return [];
 
-  return MENTION_KINDS.filter((kind) => kind.startsWith(query.query)).map((kind) => ({
-    insert: `@${kind}:`,
-    label: `@${kind}:`,
-    hint: HINTS[kind],
-  }));
+  return MENTION_KINDS.filter((kind) => kind.startsWith(query.query)).map(
+    (kind) => ({
+      insert: `@${kind}:`,
+      label: `@${kind}:`,
+      hint: HINTS[kind],
+    }),
+  );
 }
 
 const HINTS: Record<MentionKind, string> = {
@@ -114,7 +125,8 @@ export function applyMention(
   query: MentionQuery,
   suggestion: MentionSuggestion,
 ): { readonly text: string; readonly caret: number } {
-  const next = text.slice(0, query.start) + suggestion.insert + text.slice(query.end);
+  const next =
+    text.slice(0, query.start) + suggestion.insert + text.slice(query.end);
   return { text: next, caret: query.start + suggestion.insert.length };
 }
 

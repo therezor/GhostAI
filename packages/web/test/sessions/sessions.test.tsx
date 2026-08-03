@@ -20,10 +20,17 @@ import { describe, expect, it } from 'vitest';
 
 import { Providers } from '@/app/providers.js';
 import { createAppRouter } from '@/app/router.js';
-import { stubApi, testQueryClient, type RecordedRequest, type StubRoute } from '@testkit/render.js';
+import {
+  stubApi,
+  testQueryClient,
+  type RecordedRequest,
+  type StubRoute,
+} from '@testkit/render.js';
 import { STATUS } from '@testkit/fixtures.js';
 
-function session(over: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+function session(
+  over: Partial<Record<string, unknown>> = {},
+): Record<string, unknown> {
   return {
     key: 'web:1',
     title: 'Fix the login throttle',
@@ -39,7 +46,12 @@ function session(over: Partial<Record<string, unknown>> = {}): Record<string, un
 const LIST = {
   sessions: [
     session(),
-    session({ key: 'auto:1', title: 'Nightly digest', origin: 'automation', messageCount: 1 }),
+    session({
+      key: 'auto:1',
+      title: 'Nightly digest',
+      origin: 'automation',
+      messageCount: 1,
+    }),
   ],
   total: 2,
 };
@@ -71,10 +83,16 @@ function mount(overrides: Record<string, StubRoute> = {}): {
   readonly user: ReturnType<typeof userEvent.setup>;
   readonly calls: RecordedRequest[];
 } {
-  const calls = stubApi({ ...SHELL_ROUTES, '/api/sessions': [200, LIST], ...overrides });
+  const calls = stubApi({
+    ...SHELL_ROUTES,
+    '/api/sessions': [200, LIST],
+    ...overrides,
+  });
 
   const router = createAppRouter();
-  router.update({ history: createMemoryHistory({ initialEntries: ['/sessions'] }) });
+  router.update({
+    history: createMemoryHistory({ initialEntries: ['/sessions'] }),
+  });
 
   render(
     <Providers client={testQueryClient()}>
@@ -99,15 +117,21 @@ function list(): HTMLElement {
 
 /** The requests this page made for a page of sessions. */
 function listCalls(calls: readonly RecordedRequest[]): RecordedRequest[] {
-  return calls.filter((call) => call.method === 'GET' && call.path === '/api/sessions');
+  return calls.filter(
+    (call) => call.method === 'GET' && call.path === '/api/sessions',
+  );
 }
 
 describe('the sessions page', () => {
   it('lists what the server sent', async () => {
     mount();
 
-    expect(await screen.findByRole('link', { name: 'Open Fix the login throttle' })).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Open Nightly digest' })).toBeVisible();
+    expect(
+      await screen.findByRole('link', { name: 'Open Fix the login throttle' }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole('link', { name: 'Open Nightly digest' }),
+    ).toBeVisible();
   });
 
   it('names the count rather than leaving a bare number beside a time', async () => {
@@ -133,9 +157,13 @@ describe('the sessions page', () => {
   });
 
   it('falls back to a name for a session nobody has spoken in', async () => {
-    mount({ '/api/sessions': [200, { sessions: [session({ title: '' })], total: 1 }] });
+    mount({
+      '/api/sessions': [200, { sessions: [session({ title: '' })], total: 1 }],
+    });
 
-    expect(await screen.findByRole('link', { name: 'Open New session' })).toBeVisible();
+    expect(
+      await screen.findByRole('link', { name: 'Open New session' }),
+    ).toBeVisible();
   });
 
   it('scopes the request to the workspace on screen', async () => {
@@ -156,10 +184,15 @@ describe('searching sessions', () => {
     const { user, calls } = mount();
 
     await screen.findByRole('link', { name: 'Open Fix the login throttle' });
-    await user.type(screen.getByRole('searchbox', { name: 'Filter sessions' }), 'login');
+    await user.type(
+      screen.getByRole('searchbox', { name: 'Filter sessions' }),
+      'login',
+    );
 
     await waitFor(() => {
-      expect(listCalls(calls).some((call) => call.query.get('q') === 'login')).toBe(true);
+      expect(
+        listCalls(calls).some((call) => call.query.get('q') === 'login'),
+      ).toBe(true);
     });
   });
 
@@ -170,13 +203,20 @@ describe('searching sessions', () => {
    * loss.
    */
   it('tells an empty workspace apart from a search that matched nothing', async () => {
-    const { user } = mount({ '/api/sessions': [200, { sessions: [], total: 0 }] });
+    const { user } = mount({
+      '/api/sessions': [200, { sessions: [], total: 0 }],
+    });
 
     expect(await screen.findByText('No sessions yet.')).toBeInTheDocument();
 
-    await user.type(screen.getByRole('searchbox', { name: 'Filter sessions' }), 'login');
+    await user.type(
+      screen.getByRole('searchbox', { name: 'Filter sessions' }),
+      'login',
+    );
 
-    expect(await screen.findByText('No session matches “login”.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('No session matches “login”.'),
+    ).toBeInTheDocument();
   });
 
   it('sends the chosen column and direction', async () => {
@@ -184,7 +224,9 @@ describe('searching sessions', () => {
 
     await screen.findByRole('link', { name: 'Open Fix the login throttle' });
     await user.click(screen.getByRole('button', { name: /Sort by/ }));
-    await user.click(await screen.findByRole('menuitemradio', { name: 'Title' }));
+    await user.click(
+      await screen.findByRole('menuitemradio', { name: 'Title' }),
+    );
 
     await waitFor(() => {
       const last = listCalls(calls).at(-1);
@@ -197,8 +239,11 @@ describe('searching sessions', () => {
 
 describe('paging sessions', () => {
   const full = {
-    sessions: Array.from({ length: 25 }, (_unused, index) =>
-      session({ key: `web:${String(index)}`, title: `Session ${String(index)}` }),
+    sessions: Array.from({ length: 25 }, (unused, index) =>
+      session({
+        key: `web:${String(index)}`,
+        title: `Session ${String(index)}`,
+      }),
     ),
     total: 60,
   };
@@ -216,7 +261,9 @@ describe('paging sessions', () => {
     await user.click(within(pager).getByRole('button', { name: 'Page 3' }));
 
     await waitFor(() => {
-      expect(listCalls(calls).some((call) => call.query.get('offset') === '50')).toBe(true);
+      expect(
+        listCalls(calls).some((call) => call.query.get('offset') === '50'),
+      ).toBe(true);
     });
   });
 
@@ -231,15 +278,24 @@ describe('paging sessions', () => {
     const pager = await screen.findByRole('navigation', { name: 'Sessions' });
     await user.click(within(pager).getByRole('button', { name: 'Page 3' }));
     await waitFor(() => {
-      expect(listCalls(calls).some((call) => call.query.get('offset') === '50')).toBe(true);
+      expect(
+        listCalls(calls).some((call) => call.query.get('offset') === '50'),
+      ).toBe(true);
     });
 
-    await user.type(screen.getByRole('searchbox', { name: 'Filter sessions' }), 'login');
+    await user.type(
+      screen.getByRole('searchbox', { name: 'Filter sessions' }),
+      'login',
+    );
 
     await waitFor(() => {
-      const searched = listCalls(calls).filter((call) => call.query.get('q') === 'login');
+      const searched = listCalls(calls).filter(
+        (call) => call.query.get('q') === 'login',
+      );
       expect(searched.length).toBeGreaterThan(0);
-      expect(searched.every((call) => (call.query.get('offset') ?? '0') === '0')).toBe(true);
+      expect(
+        searched.every((call) => (call.query.get('offset') ?? '0') === '0'),
+      ).toBe(true);
     });
   });
 });
@@ -252,7 +308,9 @@ describe('acting on a session', () => {
 
     await screen.findByRole('link', { name: 'Open Fix the login throttle' });
     await user.click(
-      within(list()).getByRole('button', { name: 'Actions for Fix the login throttle' }),
+      within(list()).getByRole('button', {
+        name: 'Actions for Fix the login throttle',
+      }),
     );
     await user.click(await screen.findByRole('menuitem', { name: 'Rename' }));
 
@@ -264,16 +322,22 @@ describe('acting on a session', () => {
     await waitFor(() => {
       expect(calls.some((call) => call.method === 'PATCH')).toBe(true);
     });
-    expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({ title: 'Renamed' });
+    expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({
+      title: 'Renamed',
+    });
   });
 
   /** The sidebar deleted on one click. This is the thing that fixed. */
   it('asks before it deletes, and sends nothing until the answer is yes', async () => {
-    const { user, calls } = mount({ 'DELETE /api/sessions/web%3A1': [204, null] });
+    const { user, calls } = mount({
+      'DELETE /api/sessions/web%3A1': [204, null],
+    });
 
     await screen.findByRole('link', { name: 'Open Fix the login throttle' });
     await user.click(
-      within(list()).getByRole('button', { name: 'Actions for Fix the login throttle' }),
+      within(list()).getByRole('button', {
+        name: 'Actions for Fix the login throttle',
+      }),
     );
     await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
 
@@ -285,7 +349,10 @@ describe('acting on a session', () => {
 
     await waitFor(() => {
       expect(
-        calls.some((call) => call.method === 'DELETE' && call.path === '/api/sessions/web%3A1'),
+        calls.some(
+          (call) =>
+            call.method === 'DELETE' && call.path === '/api/sessions/web%3A1',
+        ),
       ).toBe(true);
     });
   });

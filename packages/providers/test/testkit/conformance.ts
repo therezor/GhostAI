@@ -57,12 +57,17 @@ export interface ProviderConformanceOptions {
   readonly create: (transport: MockTransport) => ChatProvider;
 }
 
-const HELLO: readonly ChatMessage[] = [systemMessage('You are GhostAI.'), userMessage('hello')];
+const HELLO: readonly ChatMessage[] = [
+  systemMessage('You are GhostAI.'),
+  userMessage('hello'),
+];
 
 /** Collects a stream, keeping the deltas and the single terminal result. */
-async function collect(
-  events: AsyncIterable<ChatStreamEvent>,
-): Promise<{ text: string[]; reasoning: string[]; done: ChatStreamEvent | undefined }> {
+async function collect(events: AsyncIterable<ChatStreamEvent>): Promise<{
+  text: string[];
+  reasoning: string[];
+  done: ChatStreamEvent | undefined;
+}> {
   const text: string[] = [];
   const reasoning: string[] = [];
   let done: ChatStreamEvent | undefined;
@@ -76,7 +81,12 @@ async function collect(
 
 export function providerConformance(options: ProviderConformanceOptions): void {
   const model = options.model ?? 'test-model';
-  const base: ChatRequest = { model, messages: HELLO, maxTokens: 256, temperature: 0.1 };
+  const base: ChatRequest = {
+    model,
+    messages: HELLO,
+    maxTokens: 256,
+    temperature: 0.1,
+  };
 
   /** The provider plus a deterministic clock, for the scenarios that retry. */
   const resilient = (
@@ -86,7 +96,10 @@ export function providerConformance(options: ProviderConformanceOptions): void {
     return {
       // `jitter: () => 1` pins full-jitter backoff to its ceiling, so a schedule
       // is a value a test can state rather than a range it has to tolerate.
-      provider: withResilience(options.create(transport), { clock, jitter: () => 1 }),
+      provider: withResilience(options.create(transport), {
+        clock,
+        jitter: () => 1,
+      }),
       clock,
     };
   };
@@ -130,7 +143,11 @@ export function providerConformance(options: ProviderConformanceOptions): void {
       const transport = mockTransport().push(
         completion({
           toolCalls: [
-            { id: 'call_1', name: 'read_file', argumentsJson: '{"path":"a.txt"}' },
+            {
+              id: 'call_1',
+              name: 'read_file',
+              argumentsJson: '{"path":"a.txt"}',
+            },
             { id: 'call_2', name: 'list_dir', argumentsJson: '{"path": ' },
           ],
         }),
@@ -162,10 +179,16 @@ export function providerConformance(options: ProviderConformanceOptions): void {
           textChunk('Hel'),
           textChunk('lo'),
           finishChunk('stop'),
-          usageChunk({ prompt_tokens: 9, completion_tokens: 2, total_tokens: 11 }),
+          usageChunk({
+            prompt_tokens: 9,
+            completion_tokens: 2,
+            total_tokens: 11,
+          }),
         ]),
       );
-      const { text, reasoning, done } = await collect(options.create(transport).stream(base));
+      const { text, reasoning, done } = await collect(
+        options.create(transport).stream(base),
+      );
 
       expect(text).toEqual(['Hel', 'lo']);
       expect(reasoning).toEqual(['thinking']);
@@ -182,7 +205,11 @@ export function providerConformance(options: ProviderConformanceOptions): void {
         sseResponse([
           toolCallChunk(0, { id: 'call_a', name: 'read_file' }),
           toolCallChunk(0, { argumentsJson: '{"path":' }),
-          toolCallChunk(1, { id: 'call_b', name: 'list_dir', argumentsJson: '{}' }),
+          toolCallChunk(1, {
+            id: 'call_b',
+            name: 'list_dir',
+            argumentsJson: '{}',
+          }),
           toolCallChunk(0, { argumentsJson: '"a.txt"}' }),
           finishChunk('tool_calls'),
         ]),
@@ -204,7 +231,10 @@ export function providerConformance(options: ProviderConformanceOptions): void {
       const seen: string[] = [];
 
       const drain = async (): Promise<void> => {
-        for await (const event of provider.stream({ ...base, signal: controller.signal })) {
+        for await (const event of provider.stream({
+          ...base,
+          signal: controller.signal,
+        })) {
           if (event.type === 'text') {
             seen.push(event.text);
             controller.abort();
@@ -213,7 +243,8 @@ export function providerConformance(options: ProviderConformanceOptions): void {
       };
 
       await expect(drain()).rejects.toSatisfy(
-        (error: unknown) => isProviderError(error) && error.reason === 'aborted',
+        (error: unknown) =>
+          isProviderError(error) && error.reason === 'aborted',
       );
       expect(seen).toEqual(['Hel']);
     });
@@ -243,7 +274,9 @@ export function providerConformance(options: ProviderConformanceOptions): void {
 
       await expect(provider.chat(base)).rejects.toSatisfy(
         (error: unknown) =>
-          isProviderError(error) && error.reason === 'auth' && error.status === 401,
+          isProviderError(error) &&
+          error.reason === 'auth' &&
+          error.status === 401,
       );
       expect(transport.calls).toHaveLength(1);
     });
@@ -260,7 +293,9 @@ export function providerConformance(options: ProviderConformanceOptions): void {
       const { provider, clock } = resilient(transport);
       const result = await provider.chat({ ...base, reasoningEffort: 'high' });
 
-      expect(result.message.content).toEqual([textPart('degraded but answered')]);
+      expect(result.message.content).toEqual([
+        textPart('degraded but answered'),
+      ]);
       expect(transport.calls[0]?.body.reasoning_effort).toBe('high');
       expect(transport.calls[1]?.body.reasoning_effort).toBeUndefined();
       // A degradation is a repair, not a transient failure: it must not spend
@@ -271,12 +306,15 @@ export function providerConformance(options: ProviderConformanceOptions): void {
     it('drops the oldest turns when the request exceeds the context window', async () => {
       const long: readonly ChatMessage[] = [
         systemMessage('You are GhostAI.'),
-        ...Array.from({ length: 12 }, (_, index) =>
+        ...Array.from({ length: 12 }, (value, index) =>
           userMessage(`question ${String(index)} `.repeat(40)),
         ),
       ];
       const transport = mockTransport().push(
-        errorResponse(400, { message: 'too long', code: 'context_length_exceeded' }),
+        errorResponse(400, {
+          message: 'too long',
+          code: 'context_length_exceeded',
+        }),
         completion({ text: 'fits now' }),
       );
       const { provider } = resilient(transport);
@@ -300,7 +338,9 @@ export function providerConformance(options: ProviderConformanceOptions): void {
 
       expect(text).toEqual(['answered without streaming']);
       if (done?.type !== 'done') throw new Error('no done event');
-      expect(done.result.message.content).toEqual([textPart('answered without streaming')]);
+      expect(done.result.message.content).toEqual([
+        textPart('answered without streaming'),
+      ]);
       expect(transport.calls[1]?.body.stream).toBeUndefined();
     });
 
@@ -309,11 +349,16 @@ export function providerConformance(options: ProviderConformanceOptions): void {
       await options.create(transport).chat({
         ...base,
         messages: [
-          userMessage([textPart('what is this?'), imagePart('image/png', { data: 'aGk=' })]),
+          userMessage([
+            textPart('what is this?'),
+            imagePart('image/png', { data: 'aGk=' }),
+          ]),
         ],
       });
 
-      const messages = transport.calls[0]?.body.messages as { content: unknown }[];
+      const messages = transport.calls[0]?.body.messages as Array<{
+        content: unknown;
+      }>;
       expect(messages[0]?.content).toEqual([
         { type: 'text', text: 'what is this?' },
         { type: 'image_url', image_url: { url: 'data:image/png;base64,aGk=' } },
@@ -321,24 +366,34 @@ export function providerConformance(options: ProviderConformanceOptions): void {
     });
 
     it('round-trips a tool result back into the next request', async () => {
-      const transport = mockTransport().push(completion({ text: 'the file says hi' }));
+      const transport = mockTransport().push(
+        completion({ text: 'the file says hi' }),
+      );
       await options.create(transport).chat({
         ...base,
         messages: [
           userMessage('read a.txt'),
           assistantMessage('', {
-            toolCalls: [{ id: 'call_1', name: 'read_file', argumentsJson: '{}' }],
+            toolCalls: [
+              { id: 'call_1', name: 'read_file', argumentsJson: '{}' },
+            ],
           }),
           toolMessage('call_1', 'read_file', 'hi'),
         ],
       });
 
-      const messages = transport.calls[0]?.body.messages as Record<string, unknown>[];
+      const messages = transport.calls[0]?.body.messages as Array<
+        Record<string, unknown>
+      >;
       // An assistant turn with only tool calls carries `null` content, and the
       // tool result carries the id that pairs it — the two facts every provider
       // returns a 400 for when they are wrong.
       expect(messages[1]).toMatchObject({ role: 'assistant', content: null });
-      expect(messages[2]).toMatchObject({ role: 'tool', tool_call_id: 'call_1', content: 'hi' });
+      expect(messages[2]).toMatchObject({
+        role: 'tool',
+        tool_call_id: 'call_1',
+        content: 'hi',
+      });
     });
 
     it('lists models, and reports the failure when it cannot', async () => {

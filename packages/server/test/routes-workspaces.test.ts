@@ -20,7 +20,9 @@ afterEach(async () => {
   while (running.length > 0) await running.pop()?.close();
 });
 
-async function start(...args: Parameters<typeof startTestServer>): Promise<TestServer> {
+async function start(
+  ...args: Parameters<typeof startTestServer>
+): Promise<TestServer> {
   const started = await startTestServer(...args);
   running.push(started);
   return started;
@@ -38,13 +40,16 @@ async function create(
   });
 }
 
-async function list(test: TestServer): Promise<{ id: string; name: string }[]> {
+async function list(
+  test: TestServer,
+): Promise<Array<{ id: string; name: string }>> {
   const response = await test.server.app.inject({
     method: 'GET',
     url: '/api/workspaces',
     headers: test.headers,
   });
-  return response.json<{ workspaces: { id: string; name: string }[] }>().workspaces;
+  return response.json<{ workspaces: Array<{ id: string; name: string }> }>()
+    .workspaces;
 }
 
 describe('GET /api/workspaces', () => {
@@ -54,7 +59,10 @@ describe('GET /api/workspaces', () => {
 
     const workspaces = await list(test);
     expect(workspaces[0]).toMatchObject({ id: 'default', name: 'Default' });
-    expect(workspaces.map((workspace) => workspace.id)).toEqual(['default', 'alpha']);
+    expect(workspaces.map((workspace) => workspace.id)).toEqual([
+      'default',
+      'alpha',
+    ]);
   });
 
   it('reports the session count a delete would have to move', async () => {
@@ -68,7 +76,9 @@ describe('GET /api/workspaces', () => {
     });
 
     const workspaces = await list(test);
-    expect(workspaces.find((workspace) => workspace.id === 'acme')).toMatchObject({
+    expect(
+      workspaces.find((workspace) => workspace.id === 'acme'),
+    ).toMatchObject({
       sessionCount: 1,
     });
   });
@@ -96,7 +106,10 @@ describe('POST /api/workspaces', () => {
     const response = await create(test, { name: 'Client Acme' });
 
     expect(response.statusCode).toBe(201);
-    expect(response.json()).toMatchObject({ id: 'client-acme', isDefault: false });
+    expect(response.json()).toMatchObject({
+      id: 'client-acme',
+      isDefault: false,
+    });
     expect(existsSync(join(test.workspace, 'client-acme'))).toBe(true);
   });
 
@@ -112,14 +125,20 @@ describe('POST /api/workspaces', () => {
 
   it('refuses a reserved id', async () => {
     const test = await start();
-    expect((await create(test, { name: 'Nope', id: 'default' })).statusCode).toBe(422);
-    expect((await create(test, { name: 'Nope', id: 'con' })).statusCode).toBe(422);
+    expect(
+      (await create(test, { name: 'Nope', id: 'default' })).statusCode,
+    ).toBe(422);
+    expect((await create(test, { name: 'Nope', id: 'con' })).statusCode).toBe(
+      422,
+    );
   });
 
   it('refuses a duplicate', async () => {
     const test = await start();
     await create(test, { name: 'Notes', id: 'notes' });
-    expect((await create(test, { name: 'Notes', id: 'notes' })).statusCode).toBe(409);
+    expect(
+      (await create(test, { name: 'Notes', id: 'notes' })).statusCode,
+    ).toBe(409);
   });
 
   it('adopts an existing folder, which is what makes delete-then-recreate work', async () => {
@@ -127,14 +146,18 @@ describe('POST /api/workspaces', () => {
     mkdirSync(join(test.workspace, 'research'), { recursive: true });
     writeFileSync(join(test.workspace, 'research', 'notes.md'), 'kept');
 
-    expect((await create(test, { name: 'Research', id: 'research' })).statusCode).toBe(201);
+    expect(
+      (await create(test, { name: 'Research', id: 'research' })).statusCode,
+    ).toBe(201);
     expect(existsSync(join(test.workspace, 'research', 'notes.md'))).toBe(true);
   });
 
   it('refuses a slug that collides with a file', async () => {
     const test = await start();
     writeFileSync(join(test.workspace, 'notes'), 'not a folder');
-    expect((await create(test, { name: 'Notes', id: 'notes' })).statusCode).toBe(409);
+    expect(
+      (await create(test, { name: 'Notes', id: 'notes' })).statusCode,
+    ).toBe(409);
   });
 });
 
@@ -174,12 +197,17 @@ describe('PATCH /api/workspaces/:id', () => {
       payload: { id: 'acme24' },
     });
 
-    expect(response.json()).toMatchObject({ id: 'acme24', name: 'Client Acme' });
+    expect(response.json()).toMatchObject({
+      id: 'acme24',
+      name: 'Client Acme',
+    });
     expect(existsSync(join(test.workspace, 'acme'))).toBe(false);
     expect(existsSync(join(test.workspace, 'acme24', 'notes.md'))).toBe(true);
     // The half that is not the store's: a folder that moved without its
     // conversations is worse than either half on its own.
-    expect((await list(test)).find((workspace) => workspace.id === 'acme24')).toMatchObject({
+    expect(
+      (await list(test)).find((workspace) => workspace.id === 'acme24'),
+    ).toMatchObject({
       sessionCount: 1,
     });
   });
@@ -195,7 +223,10 @@ describe('PATCH /api/workspaces/:id', () => {
       payload: { name: 'Client Acme', id: 'acme24' },
     });
 
-    expect(response.json()).toMatchObject({ id: 'acme24', name: 'Client Acme' });
+    expect(response.json()).toMatchObject({
+      id: 'acme24',
+      name: 'Client Acme',
+    });
   });
 
   it('refuses to move the default, whose folder holds all the others', async () => {
@@ -244,7 +275,10 @@ describe('PATCH /api/workspaces/:id', () => {
 });
 
 describe('DELETE /api/workspaces/:id', () => {
-  async function remove(test: TestServer, id: string): Promise<LightMyRequestResponse> {
+  async function remove(
+    test: TestServer,
+    id: string,
+  ): Promise<LightMyRequestResponse> {
     return await test.server.app.inject({
       method: 'DELETE',
       url: `/api/workspaces/${id}`,
@@ -258,7 +292,9 @@ describe('DELETE /api/workspaces/:id', () => {
     writeFileSync(join(test.workspace, 'research', 'notes.md'), 'kept');
 
     expect((await remove(test, 'research')).statusCode).toBe(204);
-    expect((await list(test)).map((workspace) => workspace.id)).toEqual(['default']);
+    expect((await list(test)).map((workspace) => workspace.id)).toEqual([
+      'default',
+    ]);
     // The whole reason delete detaches: there is no undo for removing a tree
     // someone has been working in, and one click is all it takes to ask.
     expect(existsSync(join(test.workspace, 'research', 'notes.md'))).toBe(true);
@@ -373,6 +409,9 @@ describe('sessions and workspaces', () => {
       payload: { key: 'web-1', workspaceId: 'acme' },
     });
 
-    expect(response.json()).toMatchObject({ key: 'web-1', workspaceId: 'acme' });
+    expect(response.json()).toMatchObject({
+      key: 'web-1',
+      workspaceId: 'acme',
+    });
   });
 });

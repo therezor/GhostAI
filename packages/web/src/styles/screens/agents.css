@@ -143,7 +143,9 @@
   /* Five templates under the disclosure, none of them a page of text — the
      system prompt above is the only one that is. A uniform 20rem would make the
      panel a scroll of mostly-empty boxes. */
-  .agent-editor__advanced-body .agent-editor__template + .agent-editor__template {
+  .agent-editor__advanced-body
+    .agent-editor__template
+    + .agent-editor__template {
     padding-top: var(--space-4);
     border-top: var(--hairline) solid var(--line);
   }

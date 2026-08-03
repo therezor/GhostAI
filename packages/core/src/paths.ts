@@ -34,7 +34,10 @@ const DEFAULT_ROOT_DIRNAME = '.ghostai';
  * treating `~alice` as a *relative directory named `~alice`* is both what the
  * shell would not do and the more predictable of the two wrong answers.
  */
-export function expandHome(inputPath: string, home: string = homedir()): string {
+export function expandHome(
+  inputPath: string,
+  home: string = homedir(),
+): string {
   if (inputPath === '~') return home;
   if (inputPath.startsWith('~/') || inputPath.startsWith(`~${sep}`)) {
     return join(home, inputPath.slice(2));
@@ -50,7 +53,10 @@ export function expandHome(inputPath: string, home: string = homedir()): string 
  * the config file's directory, so a relative `workspace` means "beside the
  * config" rather than "wherever the service happened to be started from".
  */
-export function resolvePath(inputPath: string, base: string = process.cwd()): string {
+export function resolvePath(
+  inputPath: string,
+  base: string = process.cwd(),
+): string {
   const expanded = expandHome(inputPath);
   return isAbsolute(expanded) ? resolve(expanded) : resolve(base, expanded);
 }
@@ -134,10 +140,13 @@ export interface ResolveGhostPathsOptions {
   readonly home?: string;
 }
 
-export function resolveGhostPaths(options: ResolveGhostPathsOptions = {}): GhostPaths {
+export function resolveGhostPaths(
+  options: ResolveGhostPathsOptions = {},
+): GhostPaths {
   const home = options.home ?? homedir();
   const env = options.env ?? process.env;
-  const rootInput = options.root ?? env[HOME_ENV_VAR] ?? join(home, DEFAULT_ROOT_DIRNAME);
+  const rootInput =
+    options.root ?? env[HOME_ENV_VAR] ?? join(home, DEFAULT_ROOT_DIRNAME);
   const root = resolve(expandHome(rootInput, home));
 
   return {
@@ -183,7 +192,9 @@ export function resolveGhostPaths(options: ResolveGhostPathsOptions = {}): Ghost
 export function workspaceDirFor(paths: GhostPaths, id: string): string {
   if (id === DEFAULT_WORKSPACE_ID) return paths.workspace;
   if (!isWorkspaceId(id)) {
-    throw new GhostError('invalid_input', `Not a workspace id: ${id}`, { details: { id } });
+    throw new GhostError('invalid_input', `Not a workspace id: ${id}`, {
+      details: { id },
+    });
   }
   return join(paths.workspace, id);
 }
@@ -208,7 +219,9 @@ export function workspaceDirFor(paths: GhostPaths, id: string): string {
  */
 export function agentDirFor(paths: GhostPaths, id: string): string {
   if (!isAgentId(id)) {
-    throw new GhostError('invalid_input', `Not an agent id: ${id}`, { details: { id } });
+    throw new GhostError('invalid_input', `Not an agent id: ${id}`, {
+      details: { id },
+    });
   }
   return join(paths.agentsDir, id);
 }
@@ -222,9 +235,13 @@ export function agentDirFor(paths: GhostPaths, id: string): string {
  */
 export function sharedDirFor(paths: GhostPaths, workspaceId: string): string {
   if (!isWorkspaceId(workspaceId)) {
-    throw new GhostError('invalid_input', `Not a workspace id: ${workspaceId}`, {
-      details: { id: workspaceId },
-    });
+    throw new GhostError(
+      'invalid_input',
+      `Not a workspace id: ${workspaceId}`,
+      {
+        details: { id: workspaceId },
+      },
+    );
   }
   return join(paths.sharedDir, workspaceId);
 }

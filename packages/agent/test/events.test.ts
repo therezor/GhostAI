@@ -18,8 +18,16 @@ const SAMPLES: Record<AgentEventType, AgentEvent> = {
     model: 'qwen3:8b',
     provider: 'ollama',
   },
-  'assistant.delta': { type: 'assistant.delta', turnId: 'turn-1', text: 'Hello' },
-  'reasoning.delta': { type: 'reasoning.delta', turnId: 'turn-1', text: 'Thinking' },
+  'assistant.delta': {
+    type: 'assistant.delta',
+    turnId: 'turn-1',
+    text: 'Hello',
+  },
+  'reasoning.delta': {
+    type: 'reasoning.delta',
+    turnId: 'turn-1',
+    text: 'Thinking',
+  },
   'tool.call': {
     type: 'tool.call',
     turnId: 'turn-1',
@@ -95,7 +103,10 @@ describe('AgentEvent', () => {
       expect(event.type).toBe(type);
 
       const parsed = ServerMessageSchema.safeParse({ ...event, seq: 7 });
-      expect(parsed.success, `${type}: ${JSON.stringify(parsed.error?.issues)}`).toBe(true);
+      expect(
+        parsed.success,
+        `${type}: ${JSON.stringify(parsed.error?.issues)}`,
+      ).toBe(true);
 
       // `safeParse` strips unknown keys rather than rejecting them, so success
       // alone would not catch a field this package renamed. Every field the

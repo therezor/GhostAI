@@ -23,7 +23,15 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { BrainCircuit, Copy, Pencil, Plus, Power, PowerOff, Trash2 } from 'lucide-react';
+import {
+  BrainCircuit,
+  Copy,
+  Pencil,
+  Plus,
+  Power,
+  PowerOff,
+  Trash2,
+} from 'lucide-react';
 import { useMemo, useState, type JSX } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
@@ -49,7 +57,11 @@ import type { Comparators } from '@/components/crud/sort.js';
 import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
 import { useSaveSettings, useSettings } from '@/settings/use-settings.js';
-import { toAgentDeletePatch, toAgentEnabledPatch, toNewAgentPatch } from './agents-form.js';
+import {
+  toAgentDeletePatch,
+  toAgentEnabledPatch,
+  toNewAgentPatch,
+} from './agents-form.js';
 import { useAgent } from './agent-context.js';
 
 /** One row of the list, with everything it renders already resolved. */
@@ -96,12 +108,18 @@ const COMPARE: Comparators<AgentRow, SortKey> = {
  */
 function summarise(entry: AgentEntry, t: TFunction): string {
   const permissions = Object.values(entry.tools);
-  const enabled = permissions.filter((permission) => permission !== 'deny').length;
-  const asking = permissions.filter((permission) => permission === 'ask').length;
+  const enabled = permissions.filter(
+    (permission) => permission !== 'deny',
+  ).length;
+  const asking = permissions.filter(
+    (permission) => permission === 'ask',
+  ).length;
 
   const parts = [t('agents.summaryTools', { count: enabled })];
   if (asking > 0) parts.push(t('agents.summaryAsking', { count: asking }));
-  if (entry.systemPrompt.trim() !== '') parts.push(t('agents.summaryOwnPrompt'));
+  if (entry.systemPrompt.trim() !== '') {
+    parts.push(t('agents.summaryOwnPrompt'));
+  }
   return parts.join(' · ');
 }
 
@@ -112,7 +130,9 @@ export function AgentsRoute(): JSX.Element {
   const navigate = useNavigate();
   const { agentId: active, select } = useAgent();
 
-  const [pendingDelete, setPendingDelete] = useState<AgentRow | undefined>(undefined);
+  const [pendingDelete, setPendingDelete] = useState<AgentRow | undefined>(
+    undefined,
+  );
 
   const agents = useQuery({
     queryKey: queryKeys.agents,
@@ -131,7 +151,10 @@ export function AgentsRoute(): JSX.Element {
    * written down would hide the one actually in use.
    */
   const ids = useMemo(
-    () => [DEFAULT_AGENT_ID, ...Object.keys(list).filter((id) => id !== DEFAULT_AGENT_ID)],
+    () => [
+      DEFAULT_AGENT_ID,
+      ...Object.keys(list).filter((id) => id !== DEFAULT_AGENT_ID),
+    ],
     [list],
   );
 
@@ -140,7 +163,10 @@ export function AgentsRoute(): JSX.Element {
     const target = pendingDelete?.id;
     if (target === undefined) return [];
     return Object.entries(list)
-      .filter(([id, entry]) => id !== target && entry.subagents.some((ref) => ref.id === target))
+      .filter(
+        ([id, entry]) =>
+          id !== target && entry.subagents.some((ref) => ref.id === target),
+      )
       .map(([id, entry]) => (entry.label === '' ? id : entry.label));
   }, [list, pendingDelete]);
 
@@ -151,7 +177,8 @@ export function AgentsRoute(): JSX.Element {
       // `/api/agents` reports the model a turn would actually use, but it omits
       // the disabled ones entirely — so the stored value is the fallback, or a
       // switched-off agent would show a dash where its model is.
-      const model = resolved.find((agent) => agent.id === id)?.model ?? entry.model ?? '';
+      const model =
+        resolved.find((agent) => agent.id === id)?.model ?? entry.model ?? '';
       const isDefault = id === DEFAULT_AGENT_ID;
       return {
         id,
@@ -169,17 +196,18 @@ export function AgentsRoute(): JSX.Element {
 
   // The agent list is a slice of the settings tree, so it arrives whole — the
   // page is a slice of what is already here rather than a second request.
-  const { filter, setFilter, sort, setSort, matched, pagination, rows } = useListPage({
-    rows: all,
-    initialSort: { key: 'name', descending: false },
-    haystack: (row) => `${row.id} ${row.label}`,
-    comparators: COMPARE,
-    // The default is the agent every other one was created as a copy of, so it
-    // heads the list in both directions rather than sorting among the agents it
-    // seeded.
-    group: (row) => (row.isDefault ? 0 : 1),
-    tiebreak: (a, b) => a.label.localeCompare(b.label),
-  });
+  const { filter, setFilter, sort, setSort, matched, pagination, rows } =
+    useListPage({
+      rows: all,
+      initialSort: { key: 'name', descending: false },
+      haystack: (row) => `${row.id} ${row.label}`,
+      comparators: COMPARE,
+      // The default is the agent every other one was created as a copy of, so it
+      // heads the list in both directions rather than sorting among the agents it
+      // seeded.
+      group: (row) => (row.isDefault ? 0 : 1),
+      tiebreak: (a, b) => a.label.localeCompare(b.label),
+    });
 
   const taken = useMemo(() => new Set(ids), [ids]);
 
@@ -195,7 +223,10 @@ export function AgentsRoute(): JSX.Element {
    * had never seen — which is the "There is no agent called …" path, and is why
    * duplicating one appeared to do nothing at all.
    */
-  const createThenOpen = (id: string, patch: ReturnType<typeof toNewAgentPatch>): void => {
+  const createThenOpen = (
+    id: string,
+    patch: ReturnType<typeof toNewAgentPatch>,
+  ): void => {
     save(patch, {
       onSuccess: () => {
         open(id);
@@ -263,7 +294,11 @@ export function AgentsRoute(): JSX.Element {
       <p className="page__note">{t('agents.note')}</p>
 
       <div className="row list-toolbar">
-        <SearchFilter value={filter} label={t('agents.filter')} onValueChange={setFilter} />
+        <SearchFilter
+          value={filter}
+          label={t('agents.filter')}
+          onValueChange={setFilter}
+        />
         <ListSort
           options={[
             { key: 'name', label: t('common.name') },
@@ -276,7 +311,9 @@ export function AgentsRoute(): JSX.Element {
         />
       </div>
 
-      {settings.isPending && <p className="page__note">{t('common.loading')}</p>}
+      {settings.isPending && (
+        <p className="page__note">{t('common.loading')}</p>
+      )}
       {settings.isError && (
         <p role="alert" className="page__error">
           {t('agents.loadError', { message: settings.error.message })}
@@ -304,14 +341,18 @@ export function AgentsRoute(): JSX.Element {
                         <span className="truncate">{row.label}</span>
                         {row.isDefault && <Badge>default</Badge>}
                       </span>
-                      <span className="agents__summary truncate">{summarise(row.entry, t)}</span>
+                      <span className="agents__summary truncate">
+                        {summarise(row.entry, t)}
+                      </span>
                     </span>
                   </Link>
                 }
                 meta={
                   <>
                     <span className="data-list__code">{row.model}</span>
-                    <Badge tone={row.enabled ? 'success' : 'neutral'}>{statusLabel(row)}</Badge>
+                    <Badge tone={row.enabled ? 'success' : 'neutral'}>
+                      {statusLabel(row)}
+                    </Badge>
                   </>
                 }
                 actions={
@@ -376,7 +417,11 @@ export function AgentsRoute(): JSX.Element {
         ))}
 
       {settings.isSuccess && (
-        <Pagination pagination={pagination} total={matched.length} label={t('agents.title')} />
+        <Pagination
+          pagination={pagination}
+          total={matched.length}
+          label={t('agents.title')}
+        />
       )}
 
       <ConfirmDialog

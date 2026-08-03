@@ -28,8 +28,13 @@ const schema = z.strictObject({
   path: z
     .string()
     .default('.')
-    .describe('Directory to list. Rooted at the workspace. Defaults to the root itself.'),
-  recursive: z.boolean().default(false).describe('Walk subdirectories as well.'),
+    .describe(
+      'Directory to list. Rooted at the workspace. Defaults to the root itself.',
+    ),
+  recursive: z
+    .boolean()
+    .default(false)
+    .describe('Walk subdirectories as well.'),
   maxEntries: z.coerce
     .number()
     .int()
@@ -44,7 +49,11 @@ export const listDirTool: AnyTool = defineTool({
     'List the contents of a workspace directory. The workspace is the root: "/x" and "../x" both resolve inside it, never outside. Directories are marked with a trailing slash and files show their size. Nothing is hidden; use maxEntries to bound a large tree.',
   schema,
   risk: 'safe',
-  annotations: { title: 'List directory', readOnlyHint: true, idempotentHint: true },
+  annotations: {
+    title: 'List directory',
+    readOnlyHint: true,
+    idempotentHint: true,
+  },
   async execute(args, context) {
     assertNotAborted(context.signal, 'list_dir');
     const accepted = context.jail.accept(args.path);
@@ -54,7 +63,10 @@ export const listDirTool: AnyTool = defineTool({
 
     let entries: Dirent[];
     try {
-      entries = await readdir(resolved, { withFileTypes: true, recursive: args.recursive });
+      entries = await readdir(resolved, {
+        withFileTypes: true,
+        recursive: args.recursive,
+      });
     } catch (error) {
       throw fsFailure(error, where, note);
     }
@@ -71,7 +83,9 @@ export const listDirTool: AnyTool = defineTool({
         absolute: join(entry.parentPath, entry.name),
       }))
       .sort((left, right) => {
-        if (left.isDirectory !== right.isDirectory) return left.isDirectory ? -1 : 1;
+        if (left.isDirectory !== right.isDirectory) {
+          return left.isDirectory ? -1 : 1;
+        }
         return left.name < right.name ? -1 : left.name > right.name ? 1 : 0;
       });
 
@@ -107,6 +121,8 @@ export const listDirTool: AnyTool = defineTool({
 
 function relativeName(root: string, parentPath: string, name: string): string {
   if (parentPath === root) return name;
-  const prefix = parentPath.startsWith(root) ? parentPath.slice(root.length + 1) : parentPath;
+  const prefix = parentPath.startsWith(root)
+    ? parentPath.slice(root.length + 1)
+    : parentPath;
   return join(prefix, name);
 }

@@ -24,7 +24,10 @@ describe('the wordmark', () => {
     // Exact string, not a substring: the mark is a sibling element rather than
     // a character in the text, which is what keeps this matching.
     expect(getByText('GhostAI')).toBeInTheDocument();
-    expect(container.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    expect(container.querySelector('svg')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
     expect(container.textContent).toBe('GhostAI');
   });
 

@@ -23,9 +23,14 @@
  * with a fake socket and no DOM.
  */
 
-import { ServerMessageSchema, type ClientMessage, type ServerMessage } from '@ghostai/protocol';
+import {
+  ServerMessageSchema,
+  type ClientMessage,
+  type ServerMessage,
+} from '@ghostai/protocol';
 
-export type ConnectionStatus = 'connecting' | 'open' | 'reconnecting' | 'closed';
+export type ConnectionStatus =
+  'connecting' | 'open' | 'reconnecting' | 'closed';
 
 /**
  * The delays between reconnect attempts, in milliseconds; the last one repeats.
@@ -35,7 +40,9 @@ export type ConnectionStatus = 'connecting' | 'open' | 'reconnecting' | 'closed'
  * for five seconds after a one-second outage assumes the app broke. The tail is
  * long because the other common cause is a laptop that closed its lid.
  */
-export const RECONNECT_DELAYS_MS: readonly number[] = [400, 1_000, 2_500, 5_000, 10_000, 20_000];
+export const RECONNECT_DELAYS_MS: readonly number[] = [
+  400, 1_000, 2_500, 5_000, 10_000, 20_000,
+];
 
 /**
  * Outbound frames held while the socket is down.
@@ -83,37 +90,37 @@ export interface ReconnectingSocketOptions {
 }
 
 export class ReconnectingSocket {
-  readonly #options: ReconnectingSocketOptions;
-  readonly #delays: readonly number[];
-  readonly #buffer: ClientMessage[] = [];
+  private readonly options: ReconnectingSocketOptions;
+  private readonly delays: readonly number[];
+  private readonly buffer: ClientMessage[] = [];
 
-  #socket: SocketLike | undefined;
-  #timer: ReturnType<typeof setTimeout> | undefined;
-  #attempt = 0;
-  #status: ConnectionStatus = 'closed';
+  private socket: SocketLike | undefined;
+  private timer: ReturnType<typeof setTimeout> | undefined;
+  private attempt = 0;
+  private currentStatus: ConnectionStatus = 'closed';
   /** True from `close()` until the next `open()`, and no reconnect happens in it. */
-  #stopped = true;
+  private stopped = true;
 
   constructor(options: ReconnectingSocketOptions) {
-    this.#options = options;
-    this.#delays = options.delays ?? RECONNECT_DELAYS_MS;
+    this.options = options;
+    this.delays = options.delays ?? RECONNECT_DELAYS_MS;
   }
 
   get status(): ConnectionStatus {
-    return this.#status;
+    return this.currentStatus;
   }
 
   /** Frames waiting for a socket. Read by the tests and by nothing else. */
   get buffered(): number {
-    return this.#buffer.length;
+    return this.buffer.length;
   }
 
   /** Opens, or does nothing if a socket is already open or dialling. */
   open(): void {
-    if (!this.#stopped) return;
-    this.#stopped = false;
-    this.#attempt = 0;
-    this.#dial('connecting');
+    if (!this.stopped) return;
+    this.stopped = false;
+    this.attempt = 0;
+    this.dial('connecting');
   }
 
   /**
@@ -121,11 +128,11 @@ export class ReconnectingSocket {
    * against a connection the caller has just said it does not want.
    */
   close(): void {
-    this.#stopped = true;
-    this.#clearTimer();
-    this.#buffer.length = 0;
-    this.#teardown();
-    this.#setStatus('closed');
+    this.stopped = true;
+    this.clearTimer();
+    this.buffer.length = 0;
+    this.teardown();
+    this.setStatus('closed');
   }
 
   /**
@@ -137,11 +144,11 @@ export class ReconnectingSocket {
    * than dialling again.
    */
   reconnectNow(): void {
-    if (this.#stopped) return;
-    this.#clearTimer();
-    this.#teardown();
-    this.#attempt = 0;
-    this.#dial('reconnecting');
+    if (this.stopped) return;
+    this.clearTimer();
+    this.teardown();
+    this.attempt = 0;
+    this.dial('reconnecting');
   }
 
   /**
@@ -151,50 +158,50 @@ export class ReconnectingSocket {
    * test uses for everything.
    */
   send(message: ClientMessage): boolean {
-    if (this.#socket !== undefined && this.#status === 'open') {
-      this.#write(this.#socket, message);
+    if (this.socket !== undefined && this.currentStatus === 'open') {
+      this.write(this.socket, message);
       return true;
     }
 
-    this.#buffer.push(message);
-    if (this.#buffer.length > MAX_BUFFERED_FRAMES) this.#buffer.shift();
+    this.buffer.push(message);
+    if (this.buffer.length > MAX_BUFFERED_FRAMES) this.buffer.shift();
     return false;
   }
 
   // -------------------------------------------------------------------------
 
-  #dial(status: ConnectionStatus): void {
-    this.#setStatus(status);
+  private dial(status: ConnectionStatus): void {
+    this.setStatus(status);
 
-    const create = this.#options.create ?? defaultCreate;
+    const create = this.options.create ?? defaultCreate;
     let socket: SocketLike;
     try {
-      socket = create(this.#options.url());
+      socket = create(this.options.url());
     } catch {
       // A URL the browser refuses to dial — a bad protocol, a blocked origin.
       // It is a failed attempt like any other, so it goes on the schedule
       // rather than leaving the socket wedged in `connecting` forever.
-      this.#scheduleReconnect();
+      this.scheduleReconnect();
       return;
     }
 
-    this.#socket = socket;
+    this.socket = socket;
 
     socket.onopen = (): void => {
-      if (this.#socket !== socket) return;
-      this.#setStatus('open');
-      this.#options.onOpen?.((message) => {
-        this.#write(socket, message);
+      if (this.socket !== socket) return;
+      this.setStatus('open');
+      this.options.onOpen?.((message) => {
+        this.write(socket, message);
       });
-      this.#flush(socket);
+      this.flush(socket);
     };
 
     socket.onmessage = (event): void => {
-      if (this.#socket !== socket) return;
+      if (this.socket !== socket) return;
       // The connection has proved itself: the next drop starts at the top of
       // the schedule rather than wherever this attempt left the counter.
-      this.#attempt = 0;
-      this.#receive(event.data);
+      this.attempt = 0;
+      this.receive(event.data);
     };
 
     // `error` is always followed by `close` in every browser, so reconnecting
@@ -202,20 +209,20 @@ export class ReconnectingSocket {
     socket.onerror = null;
 
     socket.onclose = (): void => {
-      if (this.#socket !== socket) return;
-      this.#socket = undefined;
-      if (this.#stopped) return;
-      this.#scheduleReconnect();
+      if (this.socket !== socket) return;
+      this.socket = undefined;
+      if (this.stopped) return;
+      this.scheduleReconnect();
     };
   }
 
-  #receive(data: unknown): void {
+  private receive(data: unknown): void {
     let value: unknown = data;
     if (typeof data === 'string') {
       try {
         value = JSON.parse(data);
       } catch {
-        this.#options.onInvalidFrame?.('Frame is not valid JSON', data);
+        this.options.onInvalidFrame?.('Frame is not valid JSON', data);
         return;
       }
     }
@@ -225,59 +232,59 @@ export class ReconnectingSocket {
       // A server this client cannot read is a bug worth surfacing, not a frame
       // worth guessing at. The connection survives: the next frame may be fine,
       // and dropping the socket would lose the ones that are.
-      this.#options.onInvalidFrame?.(describe(parsed.error.issues), value);
+      this.options.onInvalidFrame?.(describe(parsed.error.issues), value);
       return;
     }
 
-    this.#options.onMessage(parsed.data);
+    this.options.onMessage(parsed.data);
   }
 
-  #flush(socket: SocketLike): void {
-    for (const message of this.#buffer.splice(0)) this.#write(socket, message);
+  private flush(socket: SocketLike): void {
+    for (const message of this.buffer.splice(0)) this.write(socket, message);
   }
 
-  #write(socket: SocketLike, message: ClientMessage): void {
+  private write(socket: SocketLike, message: ClientMessage): void {
     try {
       socket.send(JSON.stringify(message));
     } catch {
       // The socket died between the readyState check and the write. Buffer it
       // for the next connection rather than losing what the user typed.
-      this.#buffer.push(message);
-      if (this.#buffer.length > MAX_BUFFERED_FRAMES) this.#buffer.shift();
+      this.buffer.push(message);
+      if (this.buffer.length > MAX_BUFFERED_FRAMES) this.buffer.shift();
     }
   }
 
-  #scheduleReconnect(): void {
-    this.#setStatus('reconnecting');
+  private scheduleReconnect(): void {
+    this.setStatus('reconnecting');
 
-    const index = Math.min(this.#attempt, this.#delays.length - 1);
-    const base = this.#delays[index] ?? 0;
-    this.#attempt += 1;
+    const index = Math.min(this.attempt, this.delays.length - 1);
+    const base = this.delays[index] ?? 0;
+    this.attempt += 1;
 
     // ±25%. Without it, every tab open on a server that restarted redials in
     // the same millisecond, which is a thundering herd the moment there is more
     // than one of them.
-    const random = this.#options.random ?? webCryptoUnitInterval;
+    const random = this.options.random ?? webCryptoUnitInterval;
     const delay = Math.round(base * (0.75 + random() * 0.5));
 
-    this.#timer = setTimeout(() => {
-      this.#timer = undefined;
-      if (this.#stopped) return;
-      this.#dial('reconnecting');
+    this.timer = setTimeout(() => {
+      this.timer = undefined;
+      if (this.stopped) return;
+      this.dial('reconnecting');
     }, delay);
   }
 
-  #clearTimer(): void {
-    if (this.#timer === undefined) return;
-    clearTimeout(this.#timer);
-    this.#timer = undefined;
+  private clearTimer(): void {
+    if (this.timer === undefined) return;
+    clearTimeout(this.timer);
+    this.timer = undefined;
   }
 
   /** Drops the handlers before closing, so our own `close` is not a reconnect. */
-  #teardown(): void {
-    const socket = this.#socket;
+  private teardown(): void {
+    const socket = this.socket;
     if (socket === undefined) return;
-    this.#socket = undefined;
+    this.socket = undefined;
     socket.onopen = null;
     socket.onclose = null;
     socket.onerror = null;
@@ -289,10 +296,10 @@ export class ReconnectingSocket {
     }
   }
 
-  #setStatus(status: ConnectionStatus): void {
-    if (this.#status === status) return;
-    this.#status = status;
-    this.#options.onStatus(status);
+  private setStatus(status: ConnectionStatus): void {
+    if (this.currentStatus === status) return;
+    this.currentStatus = status;
+    this.options.onStatus(status);
   }
 }
 
@@ -303,10 +310,15 @@ export class ReconnectingSocket {
  * Fastify instance that owns `/ws`, and a configurable socket origin would be a
  * setting whose only correct value is the one this computes.
  */
-export function socketUrl(sessionKey: string | undefined, location: Location): string {
+export function socketUrl(
+  sessionKey: string | undefined,
+  location: Location,
+): string {
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const base = `${protocol}//${location.host}/ws`;
-  return sessionKey === undefined ? base : `${base}?session=${encodeURIComponent(sessionKey)}`;
+  return sessionKey === undefined
+    ? base
+    : `${base}?session=${encodeURIComponent(sessionKey)}`;
 }
 
 function defaultCreate(url: string): SocketLike {
@@ -327,7 +339,9 @@ function webCryptoUnitInterval(): number {
   return (buffer[0] ?? 0) / 2 ** 32;
 }
 
-function describe(issues: readonly { path: PropertyKey[]; message: string }[]): string {
+function describe(
+  issues: ReadonlyArray<{ path: PropertyKey[]; message: string }>,
+): string {
   const first = issues[0];
   if (first === undefined) return 'Frame did not match any server message';
   const path = first.path.map(String).join('.');

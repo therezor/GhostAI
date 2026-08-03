@@ -12,14 +12,18 @@
 
 import type { ServerMessage } from '@ghostai/protocol';
 
-import type { ChannelHub, ChannelHubConnectOptions, ChannelHubConnection } from '#src/manager.js';
+import type {
+  ChannelHub,
+  ChannelHubConnectOptions,
+  ChannelHubConnection,
+} from '#src/manager.js';
 
 /** A `user.message` frame, as the manager writes one. */
 export interface ReceivedFrame {
   readonly type: string;
   readonly sessionKey?: string;
   readonly content?: string;
-  readonly attachments?: readonly { type: string; url: string }[];
+  readonly attachments?: ReadonlyArray<{ type: string; url: string }>;
   readonly clientMessageId?: string;
 }
 
@@ -34,22 +38,26 @@ export class ScriptedConnection implements ChannelHubConnection {
   readonly sessionKey: string;
   readonly frames: ReceivedFrame[] = [];
   closed = false;
-  #turns = 0;
-  readonly #send: (message: ServerMessage) => void;
-  readonly #options: ScriptedHubOptions;
+  private turns = 0;
+  private readonly send: (message: ServerMessage) => void;
+  private readonly options: ScriptedHubOptions;
 
   constructor(options: ChannelHubConnectOptions, scripted: ScriptedHubOptions) {
     this.sessionKey = options.sessionKey ?? 'scripted';
-    this.#send = options.send;
-    this.#options = scripted;
+    this.send = options.send;
+    this.options = scripted;
   }
 
   receive(frame: unknown): void {
     const received = frame as ReceivedFrame;
     this.frames.push(received);
-    if (received.type !== 'user.message' || this.#options.silent === true) return;
-    this.#turns += 1;
-    this.turn(this.#options.reply?.(received) ?? `echo: ${received.content ?? ''}`);
+    if (received.type !== 'user.message' || this.options.silent === true) {
+      return;
+    }
+    this.turns += 1;
+    this.turn(
+      this.options.reply?.(received) ?? `echo: ${received.content ?? ''}`,
+    );
   }
 
   close(): void {
@@ -58,7 +66,7 @@ export class ScriptedConnection implements ChannelHubConnection {
 
   /** One turn, in the order and shape `AgentLoop` yields one. */
   turn(text: string): void {
-    const turnId = `turn-${String(this.#turns)}`;
+    const turnId = `turn-${String(this.turns)}`;
     this.emit({
       type: 'turn.start',
       agentId: 'default',
@@ -68,28 +76,36 @@ export class ScriptedConnection implements ChannelHubConnection {
       model: 'scripted',
       provider: 'scripted',
     });
-    if (text !== '') this.emit({ type: 'assistant.delta', seq: 0, turnId, text });
-    this.emit({ type: 'turn.end', seq: 0, turnId, stopReason: 'complete', iterations: 1 });
+    if (text !== '') {
+      this.emit({ type: 'assistant.delta', seq: 0, turnId, text });
+    }
+    this.emit({
+      type: 'turn.end',
+      seq: 0,
+      turnId,
+      stopReason: 'complete',
+      iterations: 1,
+    });
   }
 
   /** Anything else the hub could send this connection. */
   emit(message: ServerMessage): void {
-    if (!this.closed) this.#send(message);
+    if (!this.closed) this.send(message);
   }
 }
 
 export class ScriptedHub implements ChannelHub {
   readonly connections: ScriptedConnection[] = [];
   /** The `channel` each connection was opened with, in order. */
-  readonly origins: (string | undefined)[] = [];
-  readonly #options: ScriptedHubOptions;
+  readonly origins: Array<string | undefined> = [];
+  private readonly options: ScriptedHubOptions;
 
   constructor(options: ScriptedHubOptions = {}) {
-    this.#options = options;
+    this.options = options;
   }
 
   connect(options: ChannelHubConnectOptions): ChannelHubConnection {
-    const connection = new ScriptedConnection(options, this.#options);
+    const connection = new ScriptedConnection(options, this.options);
     this.connections.push(connection);
     this.origins.push(options.channel);
     return connection;
@@ -98,7 +114,9 @@ export class ScriptedHub implements ChannelHub {
   /** The single connection, when a test expects exactly one. */
   only(): ScriptedConnection {
     if (this.connections.length !== 1) {
-      throw new Error(`Expected one hub connection, found ${String(this.connections.length)}`);
+      throw new Error(
+        `Expected one hub connection, found ${String(this.connections.length)}`,
+      );
     }
     return this.connections[0]!;
   }

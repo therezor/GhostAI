@@ -39,8 +39,18 @@ const STATUS = {
 
 const AGENTS = {
   agents: [
-    { id: 'default', label: 'Default', model: 'install-default-model', provider: 'ollama' },
-    { id: 'researcher', label: 'Researcher', model: 'pinned-research-model', provider: 'lmstudio' },
+    {
+      id: 'default',
+      label: 'Default',
+      model: 'install-default-model',
+      provider: 'ollama',
+    },
+    {
+      id: 'researcher',
+      label: 'Researcher',
+      model: 'pinned-research-model',
+      provider: 'lmstudio',
+    },
   ],
 };
 
@@ -95,7 +105,9 @@ describe('the welcome card', () => {
     localStorage.setItem('ghostai:agent', 'researcher');
     mount();
 
-    expect(await screen.findByText('pinned-research-model')).toBeInTheDocument();
+    expect(
+      await screen.findByText('pinned-research-model'),
+    ).toBeInTheDocument();
     expect(screen.getByText('lmstudio')).toBeInTheDocument();
     expect(screen.queryByText('install-default-model')).not.toBeInTheDocument();
   });
@@ -103,7 +115,9 @@ describe('the welcome card', () => {
   it('names the default agent’s model when that is the selection', async () => {
     mount();
 
-    expect(await screen.findByText('install-default-model')).toBeInTheDocument();
+    expect(
+      await screen.findByText('install-default-model'),
+    ).toBeInTheDocument();
     expect(screen.getByText('ollama')).toBeInTheDocument();
   });
 
@@ -114,21 +128,30 @@ describe('the welcome card', () => {
     localStorage.setItem('ghostai:agent', 'deleted-agent');
     mount();
 
-    expect(await screen.findByText('install-default-model')).toBeInTheDocument();
+    expect(
+      await screen.findByText('install-default-model'),
+    ).toBeInTheDocument();
   });
 
   it('names no model at all before the install has one', async () => {
     stubFetch({
-      '/api/status': [200, { ...STATUS, configured: false, model: '', provider: '' }],
+      '/api/status': [
+        200,
+        { ...STATUS, configured: false, model: '', provider: '' },
+      ],
       '/api/agents': [200, { agents: [] }],
       '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
       '/api/setup': [200, { required: false }],
     });
     mount();
 
-    expect(await screen.findByRole('heading', { name: 'Ready when you are.' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Ready when you are.' }),
+    ).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.queryByText('install-default-model')).not.toBeInTheDocument();
+      expect(
+        screen.queryByText('install-default-model'),
+      ).not.toBeInTheDocument();
     });
   });
 });

@@ -26,18 +26,21 @@ export interface RecordedCall {
 }
 
 /** Produces a response for one request. Receives `init` so it can honour `signal`. */
-export type ResponseHandler = (url: string, init: RequestInit) => Response | Promise<Response>;
+export type ResponseHandler = (
+  url: string,
+  init: RequestInit,
+) => Response | Promise<Response>;
 
 export interface MockTransport {
   readonly fetchImpl: FetchImplementation;
   readonly calls: readonly RecordedCall[];
   /** Queues one response. Calls are served in the order they were queued. */
-  push(...responses: readonly (Response | ResponseHandler)[]): MockTransport;
+  push(...responses: ReadonlyArray<Response | ResponseHandler>): MockTransport;
 }
 
 export function mockTransport(): MockTransport {
   const calls: RecordedCall[] = [];
-  const queue: (Response | ResponseHandler)[] = [];
+  const queue: Array<Response | ResponseHandler> = [];
 
   const transport: MockTransport = {
     calls,
@@ -105,7 +108,9 @@ export function completion(options: CompletionOptions = {}): Response {
         message: {
           role: 'assistant',
           content: options.text ?? null,
-          ...(options.reasoning === undefined ? {} : { reasoning_content: options.reasoning }),
+          ...(options.reasoning === undefined
+            ? {}
+            : { reasoning_content: options.reasoning }),
           ...(toolCalls.length === 0
             ? {}
             : {
@@ -117,16 +122,25 @@ export function completion(options: CompletionOptions = {}): Response {
                 })),
               }),
         },
-        finish_reason: options.finishReason ?? (toolCalls.length > 0 ? 'tool_calls' : 'stop'),
+        finish_reason:
+          options.finishReason ??
+          (toolCalls.length > 0 ? 'tool_calls' : 'stop'),
       },
     ],
-    usage: options.usage ?? { prompt_tokens: 11, completion_tokens: 7, total_tokens: 18 },
+    usage: options.usage ?? {
+      prompt_tokens: 11,
+      completion_tokens: 7,
+      total_tokens: 18,
+    },
   });
 }
 
 /** `GET /models` — the one endpoint whose shape is the same everywhere. */
 export function modelsResponse(...ids: readonly string[]): Response {
-  return jsonResponse(200, { object: 'list', data: ids.map((id) => ({ id, object: 'model' })) });
+  return jsonResponse(200, {
+    object: 'list',
+    data: ids.map((id) => ({ id, object: 'model' })),
+  });
 }
 
 /** An error body in the shape every OpenAI-compatible endpoint returns. */
@@ -144,7 +158,10 @@ export function sseBody(
   options: { readonly done?: boolean } = {},
 ): string {
   const body = frames
-    .map((frame) => `data: ${typeof frame === 'string' ? frame : JSON.stringify(frame)}\n\n`)
+    .map(
+      (frame) =>
+        `data: ${typeof frame === 'string' ? frame : JSON.stringify(frame)}\n\n`,
+    )
     .join('');
   return options.done === false ? body : `${body}data: [DONE]\n\n`;
 }
@@ -160,7 +177,10 @@ export function sseResponse(
 }
 
 /** A `chat.completion.chunk` carrying a text delta. */
-export function textChunk(text: string, model = 'test-model'): Record<string, unknown> {
+export function textChunk(
+  text: string,
+  model = 'test-model',
+): Record<string, unknown> {
   return { model, choices: [{ index: 0, delta: { content: text } }] };
 }
 
@@ -171,7 +191,11 @@ export function reasoningChunk(text: string): Record<string, unknown> {
 /** A tool-call fragment. Splitting `arguments` across chunks is the normal case. */
 export function toolCallChunk(
   index: number,
-  fragment: { readonly id?: string; readonly name?: string; readonly argumentsJson?: string },
+  fragment: {
+    readonly id?: string;
+    readonly name?: string;
+    readonly argumentsJson?: string;
+  },
 ): Record<string, unknown> {
   return {
     choices: [
@@ -201,7 +225,9 @@ export function finishChunk(reason = 'stop'): Record<string, unknown> {
 }
 
 /** The usage-only trailer `stream_options: {include_usage: true}` asks for. */
-export function usageChunk(usage: Readonly<Record<string, unknown>>): Record<string, unknown> {
+export function usageChunk(
+  usage: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
   return { choices: [], usage };
 }
 
@@ -213,7 +239,7 @@ export function usageChunk(usage: Readonly<Record<string, unknown>>): Record<str
  * and what the signal interrupts is the body still being read.
  */
 export function hangingStream(frames: readonly unknown[]): ResponseHandler {
-  return (_url, init) => {
+  return (url, init) => {
     const encoder = new TextEncoder();
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -229,6 +255,9 @@ export function hangingStream(frames: readonly unknown[]): ResponseHandler {
         else signal.addEventListener('abort', abort, { once: true });
       },
     });
-    return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+    return new Response(body, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    });
   };
 }

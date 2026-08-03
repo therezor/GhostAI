@@ -47,7 +47,8 @@ import type { AddressInfo } from 'node:net';
  * why the gate skips rather than fails when this path is empty.
  */
 export const DEFAULT_ORIGINAL_ROOT: string = resolve(
-  process.env.GHOSTAI_FIDELITY_ORIGINAL ?? join(process.cwd(), '..', '..', '.fidelity-reference'),
+  process.env.GHOSTAI_FIDELITY_ORIGINAL ??
+    join(process.cwd(), '..', '..', '.fidelity-reference'),
 );
 
 const HTML = 'text/html; charset=utf-8';
@@ -93,11 +94,15 @@ function stripRemoteLinks(html: string): string {
 }
 
 /** True when the reference is where it is expected to be. */
-export function referenceAvailable(root: string = DEFAULT_ORIGINAL_ROOT): boolean {
+export function referenceAvailable(
+  root: string = DEFAULT_ORIGINAL_ROOT,
+): boolean {
   return existsSync(join(root, 'index.html'));
 }
 
-export async function serveReference(options: ReferenceOptions = {}): Promise<Reference> {
+export async function serveReference(
+  options: ReferenceOptions = {},
+): Promise<Reference> {
   const root = options.root ?? DEFAULT_ORIGINAL_ROOT;
   const webfonts = options.webfonts ?? false;
 
@@ -153,7 +158,9 @@ export async function serveReference(options: ReferenceOptions = {}): Promise<Re
       return;
     }
 
-    response.writeHead(200, { 'content-type': TYPES[extension] ?? 'application/octet-stream' });
+    response.writeHead(200, {
+      'content-type': TYPES[extension] ?? 'application/octet-stream',
+    });
     createReadStream(target).pipe(response);
   });
 

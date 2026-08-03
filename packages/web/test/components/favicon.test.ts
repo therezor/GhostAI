@@ -23,10 +23,13 @@ import { describe, expect, it } from 'vitest';
 
 import { PACKAGE_ROOT } from '@testkit/paths.js';
 
-const favicon = readFileSync(join(PACKAGE_ROOT, 'public', 'favicon.svg'), 'utf8');
+const favicon = readFileSync(
+  join(PACKAGE_ROOT, 'public', 'favicon.svg'),
+  'utf8',
+);
 
 /** Every shape lucide draws for `skull`, as `[tagName, attributes]`. */
-function shapesOf(): readonly (readonly [string, Record<string, string>])[] {
+function shapesOf(): ReadonlyArray<readonly [string, Record<string, string>]> {
   const { container } = render(createElement(Skull));
   const svg = container.querySelector('svg');
   if (svg === null) throw new Error('Skull rendered nothing');
@@ -45,12 +48,15 @@ describe('the favicon', () => {
     expect(shapes.length).toBeGreaterThan(0);
 
     for (const [tag, attributes] of shapes) {
-      if (tag === 'path') expect(favicon).toContain(`d="${attributes.d ?? ''}"`);
-      else {
+      if (tag === 'path') {
+        expect(favicon).toContain(`d="${attributes.d ?? ''}"`);
+      } else {
         // A circle is three numbers rather than one string, and the file writes
         // them on separate lines, so each is checked on its own.
         for (const name of ['cx', 'cy', 'r']) {
-          expect(favicon, `${tag} ${name}`).toContain(`${name}="${attributes[name] ?? ''}"`);
+          expect(favicon, `${tag} ${name}`).toContain(
+            `${name}="${attributes[name] ?? ''}"`,
+          );
         }
       }
     }

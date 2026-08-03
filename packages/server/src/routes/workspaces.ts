@@ -50,7 +50,8 @@ type WorkspaceRouteId =
   | 'workspaces.moveSessions';
 
 export function workspaceRoutes(deps: RouteDeps): RouteGroup<WorkspaceRouteId> {
-  const workspaces = (): typeof deps.runtime.workspaces => deps.runtime.workspaces;
+  const workspaces = (): typeof deps.runtime.workspaces =>
+    deps.runtime.workspaces;
 
   const summarise = (record: WorkspaceRecord): WorkspaceSummary => ({
     id: record.id,
@@ -78,7 +79,10 @@ export function workspaceRoutes(deps: RouteDeps): RouteGroup<WorkspaceRouteId> {
 
     'workspaces.create': {
       summary: 'Create a workspace and its folder',
-      schema: { body: CreateWorkspaceRequestSchema, response: { 201: WorkspaceSummarySchema } },
+      schema: {
+        body: CreateWorkspaceRequestSchema,
+        response: { 201: WorkspaceSummarySchema },
+      },
       handler: (request, reply): WorkspaceSummary => {
         const body = request.body as CreateWorkspaceRequest;
         // The store owns slug derivation, uniqueness, the reserved names and
@@ -165,7 +169,9 @@ export function workspaceRoutes(deps: RouteDeps): RouteGroup<WorkspaceRouteId> {
         const from = require(id);
         require(to);
         if (from.id === to) {
-          throw conflict('A workspace cannot be moved into itself', { workspaceId: from.id });
+          throw conflict('A workspace cannot be moved into itself', {
+            workspaceId: from.id,
+          });
         }
         return { moved: deps.runtime.store.reassignWorkspace(from.id, to) };
       },

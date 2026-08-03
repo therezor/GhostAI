@@ -36,7 +36,9 @@ afterEach(async () => {
   while (hubs.length > 0) hubs.pop()?.close();
   while (started.length > 0) await started.pop()?.close();
   while (opened.length > 0) opened.pop()?.close();
-  while (workspaces.length > 0) rmSync(workspaces.pop() ?? '', { recursive: true, force: true });
+  while (workspaces.length > 0) {
+    rmSync(workspaces.pop() ?? '', { recursive: true, force: true });
+  }
 });
 
 function config(server: Record<string, unknown> = {}): Config {
@@ -60,7 +62,11 @@ function collaborators(
   database: DatabaseSync,
   settings: Config = config(),
 ): { runtime: ReturnType<typeof createFakeRuntime>; hub: SessionHub } {
-  const runtime = createFakeRuntime({ database, workspace: workspace(), config: settings });
+  const runtime = createFakeRuntime({
+    database,
+    workspace: workspace(),
+    config: settings,
+  });
   const { hub } = createTestHub(runtime.store, settings);
   hubs.push(hub);
   return { runtime, hub };
@@ -75,7 +81,11 @@ async function start(options: StartOptions = {}): Promise<GhostServer> {
   const database = new DatabaseSync(':memory:');
   opened.push(database);
   const settings = options.config ?? config();
-  const runtime = createFakeRuntime({ database, workspace: workspace(), config: settings });
+  const runtime = createFakeRuntime({
+    database,
+    workspace: workspace(),
+    config: settings,
+  });
   const { hub } = createTestHub(runtime.store, settings);
   hubs.push(hub);
   const server = await createServer({
@@ -84,7 +94,9 @@ async function start(options: StartOptions = {}): Promise<GhostServer> {
     hub,
     database,
     hasher: fakeHasher,
-    ...(options.password === null ? {} : { password: options.password ?? PASSWORD }),
+    ...(options.password === null
+      ? {}
+      : { password: options.password ?? PASSWORD }),
   });
   started.push(server);
   return server;
@@ -94,7 +106,8 @@ async function start(options: StartOptions = {}): Promise<GhostServer> {
 // The auth matrix
 // ---------------------------------------------------------------------------
 
-type StateName = 'no credential' | 'bad cookie' | 'good cookie' | 'bad bearer' | 'good bearer';
+type StateName =
+  'no credential' | 'bad cookie' | 'good cookie' | 'bad bearer' | 'good bearer';
 
 const STATES: readonly StateName[] = [
   'no credential',
@@ -104,7 +117,10 @@ const STATES: readonly StateName[] = [
   'good bearer',
 ];
 
-const ACCEPTED: ReadonlySet<StateName> = new Set<StateName>(['good cookie', 'good bearer']);
+const ACCEPTED: ReadonlySet<StateName> = new Set<StateName>([
+  'good cookie',
+  'good bearer',
+]);
 
 function headersFor(state: StateName, token: string): Record<string, string> {
   switch (state) {
@@ -131,9 +147,16 @@ function headersFor(state: StateName, token: string): Record<string, string> {
 const PAYLOADS: Readonly<Record<string, Record<string, unknown>>> = {
   'auth.login': { username: USERNAME, password: PASSWORD },
   'setup.claim': { code: 'AAAA-BBBB-CCCC' },
-  'setup.password': { password: 'set-from-the-matrix', currentPassword: PASSWORD },
+  'setup.password': {
+    password: 'set-from-the-matrix',
+    currentPassword: PASSWORD,
+  },
   'settings.patch': { agents: { defaults: { temperature: 0.5 } } },
-  'settings.credential': { namespace: 'providers', key: 'openai', value: 'sk-test' },
+  'settings.credential': {
+    namespace: 'providers',
+    key: 'openai',
+    value: 'sk-test',
+  },
   'sessions.create': { title: 'from the matrix' },
   'sessions.update': { title: 'renamed' },
   'files.sign': { path: 'note.txt' },
@@ -155,8 +178,10 @@ function documentPath(url: string): string {
 
 function urlFor(spec: RouteSpec): string {
   return (
-    spec.url.replace(':key', 'a-session').replace(':id', 'an-id').replace(':token', 'not.a.token') +
-    (QUERIES[spec.id] ?? '')
+    spec.url
+      .replace(':key', 'a-session')
+      .replace(':id', 'an-id')
+      .replace(':token', 'not.a.token') + (QUERIES[spec.id] ?? '')
   );
 }
 
@@ -219,7 +244,10 @@ describe('auth matrix', () => {
       });
       // The signature is not a login and is not switched off with one.
       const expected = spec.auth === 'signed' ? 401 : 'not 401';
-      expect({ id: spec.id, status: response.statusCode === 401 ? 401 : 'not 401' }).toEqual({
+      expect({
+        id: spec.id,
+        status: response.statusCode === 401 ? 401 : 'not 401',
+      }).toEqual({
         id: spec.id,
         status: expected,
       });
@@ -227,7 +255,9 @@ describe('auth matrix', () => {
   });
 
   it('rejects a token that expired since it was issued', async () => {
-    const server = await start({ config: config({ auth: { sessionTtlMs: 1 } }) });
+    const server = await start({
+      config: config({ auth: { sessionTtlMs: 1 } }),
+    });
     const token = server.auth.issue().token;
     await new Promise((resolve) => setTimeout(resolve, 5));
 
@@ -274,7 +304,10 @@ describe('auth matrix', () => {
 describe('setup', () => {
   it('reports an install with no password as needing to be claimed', async () => {
     const server = await start({ password: null });
-    const response = await server.app.inject({ method: 'GET', url: '/api/setup' });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/setup',
+    });
 
     expect(response.statusCode).toBe(200);
     // One bit and nothing else. An unauthenticated caller learns this anyway by
@@ -285,7 +318,10 @@ describe('setup', () => {
 
   it('reports a claimed install as not needing setup', async () => {
     const server = await start();
-    const response = await server.app.inject({ method: 'GET', url: '/api/setup' });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/setup',
+    });
     expect(response.json()).toEqual({ required: false });
   });
 
@@ -293,8 +329,14 @@ describe('setup', () => {
     // There is nothing to claim: the server is reachable without a credential
     // by design, and asking for a password that would never be checked is
     // security theatre with a login form.
-    const server = await start({ config: config({ auth: { enabled: false } }), password: null });
-    const response = await server.app.inject({ method: 'GET', url: '/api/setup' });
+    const server = await start({
+      config: config({ auth: { enabled: false } }),
+      password: null,
+    });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/setup',
+    });
     expect(response.json()).toEqual({ required: false });
   });
 
@@ -309,7 +351,8 @@ describe('setup', () => {
     });
 
     expect(claim.statusCode).toBe(200);
-    const token = claim.cookies.find((entry) => entry.name === SESSION_COOKIE)?.value ?? '';
+    const token =
+      claim.cookies.find((entry) => entry.name === SESSION_COOKIE)?.value ?? '';
     expect(token).not.toBe('');
     // The code is a login, so it gets the same cookie treatment: a token in the
     // body is a token an injected script can read.
@@ -360,7 +403,8 @@ describe('setup', () => {
       url: '/api/setup/claim',
       payload: { code },
     });
-    const claimed = claim.cookies.find((entry) => entry.name === SESSION_COOKIE)?.value ?? '';
+    const claimed =
+      claim.cookies.find((entry) => entry.name === SESSION_COOKIE)?.value ?? '';
 
     const set = await server.app.inject({
       method: 'POST',
@@ -373,7 +417,8 @@ describe('setup', () => {
     // `setPassword` revokes every session including the caller's own, so
     // without a re-issue the browser is signed out mid-wizard with the code it
     // would need to get back in already spent.
-    const reissued = set.cookies.find((entry) => entry.name === SESSION_COOKIE)?.value ?? '';
+    const reissued =
+      set.cookies.find((entry) => entry.name === SESSION_COOKIE)?.value ?? '';
     expect(reissued).not.toBe('');
     expect(reissued).not.toBe(claimed);
 
@@ -417,7 +462,10 @@ describe('setup', () => {
       method: 'POST',
       url: '/api/setup/password',
       headers: { authorization: `Bearer ${token}` },
-      payload: { password: 'chosen-in-the-panel', currentPassword: 'not-the-old-one' },
+      payload: {
+        password: 'chosen-in-the-panel',
+        currentPassword: 'not-the-old-one',
+      },
     });
     expect(wrong.statusCode).toBe(401);
 
@@ -442,8 +490,12 @@ describe('setup', () => {
 
     expect(response.statusCode).toBe(200);
     expect(server.auth.username()).toBe('operator');
-    expect(await server.auth.verifyLogin('operator', 'chosen-in-the-panel')).toBe(true);
-    expect(await server.auth.verifyLogin('ghost', 'chosen-in-the-panel')).toBe(false);
+    expect(
+      await server.auth.verifyLogin('operator', 'chosen-in-the-panel'),
+    ).toBe(true);
+    expect(await server.auth.verifyLogin('ghost', 'chosen-in-the-panel')).toBe(
+      false,
+    );
   });
 
   it('refuses a password below the minimum before it reaches the store', async () => {
@@ -469,7 +521,8 @@ describe('setup', () => {
       url: '/api/setup/claim',
       payload: { code },
     });
-    const claimed = claim.cookies.find((entry) => entry.name === SESSION_COOKIE)?.value ?? '';
+    const claimed =
+      claim.cookies.find((entry) => entry.name === SESSION_COOKIE)?.value ?? '';
 
     await server.app.inject({
       method: 'POST',
@@ -478,7 +531,10 @@ describe('setup', () => {
       payload: { password: 'chosen-in-the-wizard' },
     });
 
-    const status = await server.app.inject({ method: 'GET', url: '/api/setup' });
+    const status = await server.app.inject({
+      method: 'GET',
+      url: '/api/setup',
+    });
     expect(status.json()).toEqual({ required: false });
   });
 });
@@ -497,9 +553,14 @@ describe('login', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ ok: true, expiresAtMs: expect.any(Number) });
+    expect(response.json()).toEqual({
+      ok: true,
+      expiresAtMs: expect.any(Number),
+    });
 
-    const cookie = response.cookies.find((entry) => entry.name === SESSION_COOKIE);
+    const cookie = response.cookies.find(
+      (entry) => entry.name === SESSION_COOKIE,
+    );
     expect(cookie?.httpOnly).toBe(true);
     expect(cookie?.sameSite).toBe('Strict');
     expect(cookie?.path).toBe('/');
@@ -514,7 +575,9 @@ describe('login', () => {
       url: '/api/auth/login',
       payload: { username: USERNAME, password: PASSWORD },
     });
-    const token = response.cookies.find((entry) => entry.name === SESSION_COOKIE)?.value;
+    const token = response.cookies.find(
+      (entry) => entry.name === SESSION_COOKIE,
+    )?.value;
 
     expect(token).toBeTruthy();
     expect(response.payload).not.toContain(token);
@@ -528,7 +591,8 @@ describe('login', () => {
       url: '/api/auth/login',
       payload: { username: USERNAME, password: PASSWORD },
     });
-    const token = login.cookies.find((entry) => entry.name === SESSION_COOKIE)?.value ?? '';
+    const token =
+      login.cookies.find((entry) => entry.name === SESSION_COOKIE)?.value ?? '';
 
     const me = await server.app.inject({
       method: 'GET',
@@ -571,7 +635,10 @@ describe('login', () => {
   });
 
   it('refuses a login when authentication is disabled', async () => {
-    const server = await start({ config: config({ auth: { enabled: false } }), password: null });
+    const server = await start({
+      config: config({ auth: { enabled: false } }),
+      password: null,
+    });
     const response = await server.app.inject({
       method: 'POST',
       url: '/api/auth/login',
@@ -588,18 +655,34 @@ describe('login', () => {
     const headers = { authorization: `Bearer ${token}` };
 
     expect(
-      (await server.app.inject({ method: 'POST', url: '/api/auth/logout', headers })).statusCode,
+      (
+        await server.app.inject({
+          method: 'POST',
+          url: '/api/auth/logout',
+          headers,
+        })
+      ).statusCode,
     ).toBe(204);
     expect(
-      (await server.app.inject({ method: 'GET', url: '/api/auth/me', headers })).statusCode,
+      (await server.app.inject({ method: 'GET', url: '/api/auth/me', headers }))
+        .statusCode,
     ).toBe(401);
   });
 
   it('answers /api/auth/me without a session when authentication is off', async () => {
-    const server = await start({ config: config({ auth: { enabled: false } }), password: null });
-    const response = await server.app.inject({ method: 'GET', url: '/api/auth/me' });
+    const server = await start({
+      config: config({ auth: { enabled: false } }),
+      password: null,
+    });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/auth/me',
+    });
 
-    expect(response.json()).toEqual({ authenticated: true, authEnabled: false });
+    expect(response.json()).toEqual({
+      authenticated: true,
+      authEnabled: false,
+    });
   });
 });
 
@@ -632,7 +715,9 @@ describe('rate limiting', () => {
    * throttle turns the fifth wrong answer into a wait.
    */
   it('stops guessing at the fifth attempt, well inside the per-minute limit', async () => {
-    const server = await start({ config: config({ auth: { rateLimitPerMinute: 0 } }) });
+    const server = await start({
+      config: config({ auth: { rateLimitPerMinute: 0 } }),
+    });
     const codes = await hammer(server, '/api/auth/login', 6);
 
     expect(codes.slice(0, 4)).toEqual([401, 401, 401, 401]);
@@ -688,7 +773,9 @@ describe('rate limiting', () => {
   // setting. A correct password does not trip the throttle, so this is what
   // reaches the plugin's own counter.
   it('limits login attempts even with the global limit disabled', async () => {
-    const server = await start({ config: config({ auth: { rateLimitPerMinute: 0 } }) });
+    const server = await start({
+      config: config({ auth: { rateLimitPerMinute: 0 } }),
+    });
     const codes = await hammer(server, '/api/auth/login', 11, PASSWORD);
 
     expect(codes.slice(0, 10).every((code) => code === 200)).toBe(true);
@@ -706,19 +793,26 @@ describe('rate limiting', () => {
 
     expect(response.statusCode).toBe(429);
     expect(response.json()).toEqual({
-      error: { code: 'rate_limited', message: expect.stringContaining('Retry in') },
+      error: {
+        code: 'rate_limited',
+        message: expect.stringContaining('Retry in'),
+      },
     });
   });
 
   it('applies the configured global limit to every other route', async () => {
-    const server = await start({ config: config({ auth: { rateLimitPerMinute: 2 } }) });
+    const server = await start({
+      config: config({ auth: { rateLimitPerMinute: 2 } }),
+    });
     const codes = await hammer(server, '/api/health', 3);
 
     expect(codes).toEqual([200, 200, 429]);
   });
 
   it('leaves other routes unlimited when the setting is zero', async () => {
-    const server = await start({ config: config({ auth: { rateLimitPerMinute: 0 } }) });
+    const server = await start({
+      config: config({ auth: { rateLimitPerMinute: 0 } }),
+    });
     const codes = await hammer(server, '/api/health', 20);
 
     expect(codes.every((code) => code === 200)).toBe(true);
@@ -732,11 +826,17 @@ describe('rate limiting', () => {
 describe('errors', () => {
   it('answers an unknown route in the error envelope', async () => {
     const server = await start();
-    const response = await server.app.inject({ method: 'GET', url: '/api/nope' });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/nope',
+    });
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toEqual({
-      error: { code: 'not_found', message: expect.stringContaining('/api/nope') },
+      error: {
+        code: 'not_found',
+        message: expect.stringContaining('/api/nope'),
+      },
     });
   });
 
@@ -757,7 +857,10 @@ describe('errors', () => {
 describe('health', () => {
   it('reports ok while the database answers', async () => {
     const server = await start();
-    const response = await server.app.inject({ method: 'GET', url: '/api/health' });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/health',
+    });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
@@ -778,7 +881,10 @@ describe('health', () => {
     started.push(server);
     database.close();
 
-    const response = await server.app.inject({ method: 'GET', url: '/api/health' });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/health',
+    });
     expect(response.json().status).toBe('fail');
   });
 });
@@ -817,7 +923,10 @@ describe('boot', () => {
     const setup = await server.app.inject({ method: 'GET', url: '/api/setup' });
     expect(setup.json()).toEqual({ required: true });
 
-    const status = await server.app.inject({ method: 'GET', url: '/api/status' });
+    const status = await server.app.inject({
+      method: 'GET',
+      url: '/api/status',
+    });
     expect(status.statusCode).toBe(401);
   });
 
@@ -879,19 +988,27 @@ describe('the generated document', () => {
   it('is OpenAPI 3.1 with the protocol schemas as its component pool', async () => {
     const doc = await document();
 
-    expect(doc).toMatchObject({ openapi: '3.1.0', info: { version: SERVER_VERSION } });
-    const schemas = (doc as unknown as { components: { schemas: Record<string, unknown> } })
-      .components.schemas;
+    expect(doc).toMatchObject({
+      openapi: '3.1.0',
+      info: { version: SERVER_VERSION },
+    });
+    const schemas = (
+      doc as unknown as { components: { schemas: Record<string, unknown> } }
+    ).components.schemas;
     expect(Object.keys(schemas).length).toBeGreaterThan(50);
     expect(schemas).toHaveProperty('LoginRequest');
     expect(schemas).toHaveProperty('AuthSessionResponse');
   });
 
   it('describes every manifest route once', async () => {
-    const doc = (await document()) as unknown as { paths: Record<string, Record<string, unknown>> };
+    const doc = (await document()) as unknown as {
+      paths: Record<string, Record<string, unknown>>;
+    };
 
     for (const spec of ROUTE_MANIFEST) {
-      expect(doc.paths[documentPath(spec.url)]?.[spec.method.toLowerCase()]).toBeDefined();
+      expect(
+        doc.paths[documentPath(spec.url)]?.[spec.method.toLowerCase()],
+      ).toBeDefined();
     }
   });
 
@@ -901,13 +1018,24 @@ describe('the generated document', () => {
     const doc = (await document()) as unknown as {
       paths: Record<
         string,
-        { get?: { responses: Record<string, { content: Record<string, { schema: unknown }> }> } }
+        {
+          get?: {
+            responses: Record<
+              string,
+              { content: Record<string, { schema: unknown }> }
+            >;
+          };
+        }
       >;
     };
     const schema =
-      doc.paths['/api/auth/me']?.get?.responses['200']?.content['application/json']?.schema;
+      doc.paths['/api/auth/me']?.get?.responses['200']?.content[
+        'application/json'
+      ]?.schema;
 
-    expect(schema).toEqual({ $ref: '#/components/schemas/AuthSessionResponse' });
+    expect(schema).toEqual({
+      $ref: '#/components/schemas/AuthSessionResponse',
+    });
   });
 
   // Input mode, so a field carrying `.default()` is not advertised as required.
@@ -915,13 +1043,24 @@ describe('the generated document', () => {
     const doc = (await document()) as unknown as {
       paths: Record<
         string,
-        { post?: { requestBody: { content: Record<string, { schema: Record<string, unknown> }> } } }
+        {
+          post?: {
+            requestBody: {
+              content: Record<string, { schema: Record<string, unknown> }>;
+            };
+          };
+        }
       >;
     };
     const schema =
-      doc.paths['/api/auth/login']?.post?.requestBody.content['application/json']?.schema;
+      doc.paths['/api/auth/login']?.post?.requestBody.content[
+        'application/json'
+      ]?.schema;
 
-    expect(schema).toMatchObject({ type: 'object', required: ['username', 'password'] });
+    expect(schema).toMatchObject({
+      type: 'object',
+      required: ['username', 'password'],
+    });
   });
 
   it('marks the authenticated routes as authenticated', async () => {
@@ -930,7 +1069,8 @@ describe('the generated document', () => {
     };
 
     for (const spec of ROUTE_MANIFEST) {
-      const operation = doc.paths[documentPath(spec.url)]?.[spec.method.toLowerCase()];
+      const operation =
+        doc.paths[documentPath(spec.url)]?.[spec.method.toLowerCase()];
       const security = operation?.security ?? [];
       expect({ id: spec.id, secured: security.length > 0 }).toEqual({
         id: spec.id,

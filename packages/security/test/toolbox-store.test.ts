@@ -1,4 +1,10 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -19,7 +25,12 @@ function install(name: string, overrides: Record<string, unknown> = {}): void {
   mkdirSync(join(base, name), { recursive: true });
   writeFileSync(
     join(base, name, 'toolbox.json'),
-    JSON.stringify({ schema: 'ghostai.toolbox/1', name, image: DIGEST, ...overrides }),
+    JSON.stringify({
+      schema: 'ghostai.toolbox/1',
+      name,
+      image: DIGEST,
+      ...overrides,
+    }),
   );
 }
 
@@ -47,13 +58,17 @@ describe('ToolboxStore.require', () => {
     expect(store.require('research').toolbox.name).toBe('research');
 
     install('research', { version: '2.0.0' });
-    expect(() => store.require('research')).toThrow(/has changed since it was approved/);
+    expect(() => store.require('research')).toThrow(
+      /has changed since it was approved/,
+    );
   });
 
   it('reports the manifest path, for the read-only mount', () => {
     install('research');
     store.approve('research');
-    expect(store.require('research').manifestPath).toBe(join(base, 'research', 'toolbox.json'));
+    expect(store.require('research').manifestPath).toBe(
+      join(base, 'research', 'toolbox.json'),
+    );
   });
 
   it('refuses an image pinned by tag even after approval', () => {
@@ -135,7 +150,9 @@ describe('ToolboxStore.list', () => {
 
   it('reports a directory with no manifest at all', () => {
     mkdirSync(join(base, 'empty'), { recursive: true });
-    expect(store.list().find((entry) => entry.name === 'empty')?.problem).toBe('no manifest');
+    expect(store.list().find((entry) => entry.name === 'empty')?.problem).toBe(
+      'no manifest',
+    );
   });
 });
 

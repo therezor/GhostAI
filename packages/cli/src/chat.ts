@@ -35,7 +35,11 @@ import type { ContentPart, StopReason } from '@ghostai/protocol';
 import { runSlashCommand } from './commands.js';
 import { translationsFor, type CliT, type Env } from './i18n.js';
 import { TurnRenderer } from './render.js';
-import { createChatRuntime, type ChatRuntime, type RuntimeOptions } from './runtime.js';
+import {
+  createChatRuntime,
+  type ChatRuntime,
+  type RuntimeOptions,
+} from './runtime.js';
 
 /** Conventional exit code for "terminated by SIGINT". */
 export const SIGINT_EXIT_CODE = 130;
@@ -131,7 +135,9 @@ export async function runTurn(
     content,
     signal: deps.signal,
     channel: 'cli',
-    ...(deps.workspaceId === undefined ? {} : { workspaceId: deps.workspaceId }),
+    ...(deps.workspaceId === undefined
+      ? {}
+      : { workspaceId: deps.workspaceId }),
   });
 
   try {
@@ -184,7 +190,9 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
     out,
     t: envLang.t,
     ...(options.colors === undefined ? {} : { colors: options.colors }),
-    ...(options.showReasoning === undefined ? {} : { showReasoning: options.showReasoning }),
+    ...(options.showReasoning === undefined
+      ? {}
+      : { showReasoning: options.showReasoning }),
   });
 
   // Logs go to stderr at `warn` by default. On stdout they would interleave
@@ -204,7 +212,10 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
   // After the runtime, because this is the first point the install's own answer
   // exists — `config.ui.locale` sits under `GHOSTAI_LANG` and above the shell's
   // `LANG` in the order `resolveCliLocale` applies.
-  const lang = translationsFor(options.env ?? process.env, runtime.config.ui.locale);
+  const lang = translationsFor(
+    options.env ?? process.env,
+    runtime.config.ui.locale,
+  );
 
   // One controller per turn, replaced each time: an `AbortController` cannot be
   // reset, so reusing an aborted one would make every later turn stop before its
@@ -215,7 +226,9 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
   };
   if (options.handleSignals !== false) process.on('SIGINT', onInterrupt);
 
-  const turn = async (content: string | readonly ContentPart[]): Promise<TurnOutcome> => {
+  const turn = async (
+    content: string | readonly ContentPart[],
+  ): Promise<TurnOutcome> => {
     const controller = new AbortController();
     active = controller;
     try {
@@ -242,7 +255,9 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
   try {
     // A message argument, then anything piped in. A REPL on a stdin that is not
     // a terminal would read its first line as a question and then see EOF.
-    const oneShot = options.message ?? (input.isTTY === true ? undefined : await readAll(input));
+    const oneShot =
+      options.message ??
+      (input.isTTY === true ? undefined : await readAll(input));
     if (oneShot !== undefined) {
       const content = oneShot.trim();
       if (content === '') return 0;
@@ -260,7 +275,8 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
         }),
       );
       const opened = runtime.store.getSession(sessionKey);
-      const title = opened === undefined || opened.title === '' ? sessionKey : opened.title;
+      const title =
+        opened === undefined || opened.title === '' ? sessionKey : opened.title;
       renderer.note(lang.t('chat.helpHint', { title }));
     }
 
@@ -303,7 +319,9 @@ interface ReplDeps {
   readonly attach: (sessionKey: string) => void;
   readonly workspace: () => string | undefined;
   readonly setWorkspace: (id: string | undefined) => void;
-  readonly turn: (content: string | readonly ContentPart[]) => Promise<TurnOutcome>;
+  readonly turn: (
+    content: string | readonly ContentPart[],
+  ) => Promise<TurnOutcome>;
   readonly hasActiveTurn: () => boolean;
   readonly abortActive: () => void;
 }

@@ -51,8 +51,13 @@ interface Property {
   readonly minimum: number | undefined;
 }
 
-function readProperties(parameters: Readonly<Record<string, unknown>>): readonly Property[] {
-  const properties = (parameters.properties ?? {}) as Record<string, Record<string, unknown>>;
+function readProperties(
+  parameters: Readonly<Record<string, unknown>>,
+): readonly Property[] {
+  const properties = (parameters.properties ?? {}) as Record<
+    string,
+    Record<string, unknown>
+  >;
   const required = new Set((parameters.required ?? []) as readonly string[]);
   return Object.entries(properties).map(([name, schema]) => ({
     name,
@@ -86,7 +91,9 @@ export function toolConformance(options: ToolConformanceOptions): void {
         // The definitions go over the wire to a provider and over the
         // WebSocket to the UI. Anything not JSON-representable — a Date, a
         // RegExp, undefined — silently changes shape in transit.
-        expect(JSON.parse(JSON.stringify(tool.parameters))).toEqual(tool.parameters);
+        expect(JSON.parse(JSON.stringify(tool.parameters))).toEqual(
+          tool.parameters,
+        );
       });
 
       it('describes every property it advertises', () => {
@@ -95,7 +102,10 @@ export function toolConformance(options: ToolConformanceOptions): void {
           Record<string, unknown>
         >;
         for (const [name, schema] of Object.entries(described)) {
-          expect(schema.description, `${tool.name}.${name} has no description`).toBeTruthy();
+          expect(
+            schema.description,
+            `${tool.name}.${name} has no description`,
+          ).toBeTruthy();
         }
       });
 
@@ -120,22 +130,27 @@ export function toolConformance(options: ToolConformanceOptions): void {
         ['a number', 42],
         ['an array', []],
         ['a boolean', true],
-      ])('rejects %s in place of an argument object', (_label, raw) => {
+      ])('rejects %s in place of an argument object', (label, raw) => {
         expect(tool.parseArgs(raw).ok).toBe(false);
       });
 
       it('rejects an unknown property rather than stripping it', () => {
-        const parsed = tool.parseArgs({ ...options.validArgs, [UNKNOWN_KEY]: true });
+        const parsed = tool.parseArgs({
+          ...options.validArgs,
+          [UNKNOWN_KEY]: true,
+        });
         expect(parsed.ok).toBe(false);
         if (!parsed.ok) expect(parsed.message).toContain(tool.name);
       });
 
-      const requiredProperties = properties.filter((property) => property.required);
+      const requiredProperties = properties.filter(
+        (property) => property.required,
+      );
       if (requiredProperties.length > 0) {
         it.each(requiredProperties.map((property) => [property.name] as const))(
           'rejects a call missing the required %s',
           (name) => {
-            const { [name]: _omitted, ...rest } = options.validArgs;
+            const { [name]: omitted, ...rest } = options.validArgs;
             expect(tool.parseArgs(rest).ok).toBe(false);
           },
         );
@@ -145,24 +160,37 @@ export function toolConformance(options: ToolConformanceOptions): void {
         (property) => property.type === 'integer' || property.type === 'number',
       );
       if (numeric.length > 0) {
-        it.each(numeric.map((property) => [property.name, property.minimum ?? 1] as const))(
+        it.each(
+          numeric.map(
+            (property) => [property.name, property.minimum ?? 1] as const,
+          ),
+        )(
           'coerces the string form of %s, as models emit it',
           (name, minimum) => {
-            const parsed = tool.parseArgs({ ...options.validArgs, [name]: String(minimum) });
+            const parsed = tool.parseArgs({
+              ...options.validArgs,
+              [name]: String(minimum),
+            });
             expect(parsed.ok, parsed.ok ? '' : parsed.message).toBe(true);
             if (parsed.ok) {
-              expect((parsed.args as Record<string, unknown>)[name]).toBe(minimum);
+              expect((parsed.args as Record<string, unknown>)[name]).toBe(
+                minimum,
+              );
             }
           },
         );
       }
 
-      const strings = properties.filter((property) => property.type === 'string');
+      const strings = properties.filter(
+        (property) => property.type === 'string',
+      );
       if (strings.length > 0) {
         it.each(strings.map((property) => [property.name] as const))(
           'rejects a number where %s expects a string',
           (name) => {
-            expect(tool.parseArgs({ ...options.validArgs, [name]: 1 }).ok).toBe(false);
+            expect(tool.parseArgs({ ...options.validArgs, [name]: 1 }).ok).toBe(
+              false,
+            );
           },
         );
       }
@@ -187,10 +215,12 @@ export function toolConformance(options: ToolConformanceOptions): void {
         const base = options.context();
         // Every tool takes at least one argument that can be made invalid;
         // an unknown key is the one case guaranteed to exist for all of them.
-        const failure = await tool.run({ ...options.validArgs, [UNKNOWN_KEY]: true }, base).then(
-          () => null,
-          (error: unknown) => error,
-        );
+        const failure = await tool
+          .run({ ...options.validArgs, [UNKNOWN_KEY]: true }, base)
+          .then(
+            () => null,
+            (error: unknown) => error,
+          );
         expect(isGhostError(failure)).toBe(true);
       });
 
@@ -209,7 +239,9 @@ export function toolConformance(options: ToolConformanceOptions): void {
           expect(execution.truncated).toBe(true);
           // The truncation marker names how much was dropped, so the result is
           // the budget plus that one line rather than exactly the budget.
-          expect(execution.content.length).toBeLessThan(config.maxOutputChars + 200);
+          expect(execution.content.length).toBeLessThan(
+            config.maxOutputChars + 200,
+          );
         });
       }
     });

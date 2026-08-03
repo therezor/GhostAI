@@ -27,7 +27,11 @@
  */
 
 import { z } from 'zod';
-import type { AssistantMessage, ChatMessage, ToolDefinition } from '@ghostai/protocol';
+import type {
+  AssistantMessage,
+  ChatMessage,
+  ToolDefinition,
+} from '@ghostai/protocol';
 import type { ChatResult } from '@ghostai/providers';
 
 /** How much of a task file is worth paying to classify, every interval, forever. */
@@ -55,11 +59,13 @@ export const HEARTBEAT_TOOL: ToolDefinition = {
       action: {
         type: 'string',
         enum: ['skip', 'run'],
-        description: 'run only when the file asks for something that is due now.',
+        description:
+          'run only when the file asks for something that is due now.',
       },
       reason: {
         type: 'string',
-        description: 'One sentence: why there is nothing to do, or what is due.',
+        description:
+          'One sentence: why there is nothing to do, or what is due.',
       },
       instruction: {
         type: 'string',
@@ -72,7 +78,8 @@ export const HEARTBEAT_TOOL: ToolDefinition = {
 /** The second decision: whether the run's result is worth interrupting anyone. */
 export const HEARTBEAT_RESULT_TOOL: ToolDefinition = {
   name: 'heartbeat_result',
-  description: 'Decide whether what the agent did is worth telling the user about.',
+  description:
+    'Decide whether what the agent did is worth telling the user about.',
   risk: 'safe',
   source: 'builtin',
   parameters: {
@@ -84,7 +91,10 @@ export const HEARTBEAT_RESULT_TOOL: ToolDefinition = {
         type: 'boolean',
         description: 'Whether this is worth interrupting the user for.',
       },
-      title: { type: 'string', description: 'A short headline, under ten words.' },
+      title: {
+        type: 'string',
+        description: 'A short headline, under ten words.',
+      },
       summary: { type: 'string', description: 'One or two sentences.' },
     },
   },
@@ -126,7 +136,10 @@ function truncate(text: string, limit: number): string {
 }
 
 /** The first tool call by name, or undefined. */
-function toolCallNamed(message: AssistantMessage, name: string): string | undefined {
+function toolCallNamed(
+  message: AssistantMessage,
+  name: string,
+): string | undefined {
   for (const call of message.toolCalls) {
     if (call.name === name) return call.argumentsJson;
   }
@@ -177,7 +190,10 @@ export function buildDecideMessages(input: DecideMessagesInput): ChatMessage[] {
     {
       role: 'user',
       content: [
-        { type: 'text', text: `Task file \`${input.file}\`:\n\n\`\`\`\n${input.contents}\n\`\`\`` },
+        {
+          type: 'text',
+          text: `Task file \`${input.file}\`:\n\n\`\`\`\n${input.contents}\n\`\`\``,
+        },
       ],
     },
   ];
@@ -194,7 +210,10 @@ export function buildDecideMessages(input: DecideMessagesInput): ChatMessage[] {
  * and retries whenever a provider objects to it, so a model that answers in
  * prose is a normal outcome of a normal degradation, not a broken install.
  */
-export function readDecision(result: ChatResult, file: string): HeartbeatDecision {
+export function readDecision(
+  result: ChatResult,
+  file: string,
+): HeartbeatDecision {
   const argumentsJson = toolCallNamed(result.message, HEARTBEAT_TOOL.name);
 
   if (argumentsJson === undefined) {
@@ -211,12 +230,17 @@ export function readDecision(result: ChatResult, file: string): HeartbeatDecisio
   const parsed = DecisionArgumentsSchema.safeParse(parseJson(argumentsJson));
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
-    const detail = issue === undefined ? 'unreadable' : `${issue.path.join('.')} ${issue.message}`;
+    const detail =
+      issue === undefined
+        ? 'unreadable'
+        : `${issue.path.join('.')} ${issue.message}`;
     return {
       action: 'skip',
       reason: `The model's decision could not be read (${detail}).`,
       instruction: '',
-      warnings: [`The heartbeat model sent arguments that did not parse: ${detail}.`],
+      warnings: [
+        `The heartbeat model sent arguments that did not parse: ${detail}.`,
+      ],
     };
   }
 
@@ -224,7 +248,10 @@ export function readDecision(result: ChatResult, file: string): HeartbeatDecisio
   if (action === 'skip') {
     return {
       action: 'skip',
-      reason: truncate(reason === '' ? 'Nothing due.' : reason, MAX_REASON_LENGTH),
+      reason: truncate(
+        reason === '' ? 'Nothing due.' : reason,
+        MAX_REASON_LENGTH,
+      ),
       instruction: '',
       warnings: [],
     };
@@ -236,8 +263,13 @@ export function readDecision(result: ChatResult, file: string): HeartbeatDecisio
   const missing = instruction === undefined || instruction.trim() === '';
   return {
     action: 'run',
-    reason: truncate(reason === '' ? 'The task file asks for work.' : reason, MAX_REASON_LENGTH),
-    instruction: missing ? `Read \`${file}\` and do what it asks.` : instruction,
+    reason: truncate(
+      reason === '' ? 'The task file asks for work.' : reason,
+      MAX_REASON_LENGTH,
+    ),
+    instruction: missing
+      ? `Read \`${file}\` and do what it asks.`
+      : instruction,
     warnings: missing
       ? [
           'The heartbeat model chose to run without saying what to do; the task file was used as-is.',
@@ -255,7 +287,9 @@ export interface EvaluateMessagesInput {
   readonly output: string;
 }
 
-export function buildEvaluateMessages(input: EvaluateMessagesInput): ChatMessage[] {
+export function buildEvaluateMessages(
+  input: EvaluateMessagesInput,
+): ChatMessage[] {
   return [
     {
       role: 'system',
@@ -285,8 +319,14 @@ export function buildEvaluateMessages(input: EvaluateMessagesInput): ChatMessage
  * notification nobody needed is a minor annoyance, and a finished run nobody
  * was told about is invisible — so the cheap mistake is the one to make.
  */
-export function readEvaluation(result: ChatResult, fallbackTitle: string): HeartbeatEvaluation {
-  const argumentsJson = toolCallNamed(result.message, HEARTBEAT_RESULT_TOOL.name);
+export function readEvaluation(
+  result: ChatResult,
+  fallbackTitle: string,
+): HeartbeatEvaluation {
+  const argumentsJson = toolCallNamed(
+    result.message,
+    HEARTBEAT_RESULT_TOOL.name,
+  );
   const parsed =
     argumentsJson === undefined
       ? undefined
@@ -297,7 +337,9 @@ export function readEvaluation(result: ChatResult, fallbackTitle: string): Heart
       notify: true,
       title: fallbackTitle,
       summary: textOf(result.message),
-      warnings: ['The heartbeat model did not say whether this was worth a notification.'],
+      warnings: [
+        'The heartbeat model did not say whether this was worth a notification.',
+      ],
     };
   }
 

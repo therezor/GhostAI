@@ -80,7 +80,12 @@ export const SECTION_SEPARATOR = '\n\n---\n\n';
  * `RAW_PROMPT_PLACEHOLDERS` keeps it, because raw mode places every section
  * itself and has to be able to name this one.
  */
-export const PROMPT_PLACEHOLDERS = ['name', 'workspaceId', 'workspaceRoot', 'runtime'] as const;
+export const PROMPT_PLACEHOLDERS = [
+  'name',
+  'workspaceId',
+  'workspaceRoot',
+  'runtime',
+] as const;
 
 export type PromptPlaceholder = (typeof PROMPT_PLACEHOLDERS)[number];
 
@@ -138,7 +143,8 @@ export function unknownPlaceholders(
   // now and each has its own vocabulary — `{{time}}` is a typo in the identity
   // half and correct in the live one. An editor that warned from one list would
   // be wrong about whichever template it was not looking at.
-  const vocabulary = known === PROMPT_PLACEHOLDERS ? KNOWN : new Set<string>(known);
+  const vocabulary =
+    known === PROMPT_PLACEHOLDERS ? KNOWN : new Set<string>(known);
   const seen = new Set<string>();
   for (const match of template.matchAll(PLACEHOLDER)) {
     const name = match[1] ?? '';
@@ -280,7 +286,9 @@ export function namesDelimiter(template: string): boolean {
 
 /** The tool-output policy an agent runs, with the built-in standing in for an unset one. */
 export function effectiveToolPolicy(template?: string): string {
-  return template === undefined || template === '' ? DEFAULT_TOOL_POLICY_TEMPLATE : template;
+  return template === undefined || template === ''
+    ? DEFAULT_TOOL_POLICY_TEMPLATE
+    : template;
 }
 
 /**
@@ -396,7 +404,8 @@ export const PLATFORM_PROMPT_PLACEHOLDERS = [
   'shellPolicy',
 ] as const;
 
-export type PlatformPromptPlaceholder = (typeof PLATFORM_PROMPT_PLACEHOLDERS)[number];
+export type PlatformPromptPlaceholder =
+  (typeof PLATFORM_PROMPT_PLACEHOLDERS)[number];
 
 /**
  * What a *toolbox* template may ask for.
@@ -421,7 +430,8 @@ export const TOOLBOX_PROMPT_PLACEHOLDERS = [
   'docs',
 ] as const;
 
-export type ToolboxPromptPlaceholder = (typeof TOOLBOX_PROMPT_PLACEHOLDERS)[number];
+export type ToolboxPromptPlaceholder =
+  (typeof TOOLBOX_PROMPT_PLACEHOLDERS)[number];
 
 /**
  * What a *tool-output policy* template may ask for.

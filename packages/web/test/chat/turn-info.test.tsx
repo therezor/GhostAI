@@ -96,7 +96,12 @@ describe('where a session came from', () => {
   it('says nothing for a session with no row yet', async () => {
     // A fresh tab has not been spoken in, so the server has no row for it and
     // inventing `web` would be a claim rather than a fact.
-    stubFetch({ [`/api/sessions/${encodeURIComponent(SESSION)}`]: [404, { error: 'not found' }] });
+    stubFetch({
+      [`/api/sessions/${encodeURIComponent(SESSION)}`]: [
+        404,
+        { error: 'not found' },
+      ],
+    });
     await openDetails();
 
     expect(await screen.findByText('Model')).toBeInTheDocument();

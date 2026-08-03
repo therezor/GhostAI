@@ -22,11 +22,17 @@ import {
   type ProviderTestResponse,
   type ProvidersResponse,
 } from '@ghostai/protocol';
-import { PROVIDERS, describeInstance, describeProvider, listInstances } from '@ghostai/providers';
+import {
+  PROVIDERS,
+  describeInstance,
+  describeProvider,
+  listInstances,
+} from '@ghostai/providers';
 
 import type { RouteDeps, RouteGroup } from './types.js';
 
-type ProviderRouteId = 'providers.list' | 'providers.test' | 'models.list' | 'models.refresh';
+type ProviderRouteId =
+  'providers.list' | 'providers.test' | 'models.list' | 'models.refresh';
 
 /**
  * The models the settings tree names, with no endpoint asked.
@@ -45,17 +51,26 @@ function configuredModels(deps: RouteDeps): ModelsResponse {
     const key = `${providerId} ${id}`;
     if (id === '' || seen.has(key)) return;
     seen.add(key);
-    models.push({ id, providerId, ...(providerType === undefined ? {} : { providerType }) });
+    models.push({
+      id,
+      providerId,
+      ...(providerType === undefined ? {} : { providerType }),
+    });
   };
 
   for (const instance of listInstances(deps.runtime.config().providers)) {
-    for (const model of instance.config.models) add(instance.id, model, instance.spec.id);
+    for (const model of instance.config.models) {
+      add(instance.id, model, instance.spec.id);
+    }
   }
 
   const agent = deps.runtime.agent();
   if (agent.configured) add(agent.provider, agent.model);
 
-  models.sort((a, b) => a.providerId.localeCompare(b.providerId) || a.id.localeCompare(b.id));
+  models.sort(
+    (a, b) =>
+      a.providerId.localeCompare(b.providerId) || a.id.localeCompare(b.id),
+  );
   // Empty rather than one entry per provider saying "not fetched": `errors` is
   // for a list that was attempted and failed, and a client that renders it would
   // otherwise show a wall of failures for something nobody asked for.
@@ -71,17 +86,27 @@ function configuredModels(deps: RouteDeps): ModelsResponse {
  * closes. `errors` names the instances that could not be reached, which is what
  * lets the panel say *why* a list looks short.
  */
-async function listModels(deps: RouteDeps, refresh: boolean): Promise<ModelsResponse> {
+async function listModels(
+  deps: RouteDeps,
+  refresh: boolean,
+): Promise<ModelsResponse> {
   const fetched = await deps.runtime.models?.({ refresh });
   if (fetched === undefined) return configuredModels(deps);
 
   const configured = configuredModels(deps);
-  const seen = new Set(fetched.models.map((model) => `${model.providerId} ${model.id}`));
+  const seen = new Set(
+    fetched.models.map((model) => `${model.providerId} ${model.id}`),
+  );
   const models = [
     ...fetched.models,
-    ...configured.models.filter((model) => !seen.has(`${model.providerId} ${model.id}`)),
+    ...configured.models.filter(
+      (model) => !seen.has(`${model.providerId} ${model.id}`),
+    ),
   ];
-  models.sort((a, b) => a.providerId.localeCompare(b.providerId) || a.id.localeCompare(b.id));
+  models.sort(
+    (a, b) =>
+      a.providerId.localeCompare(b.providerId) || a.id.localeCompare(b.id),
+  );
   return { models, errors: fetched.errors };
 }
 
@@ -94,8 +119,9 @@ export function providerRoutes(deps: RouteDeps): RouteGroup<ProviderRouteId> {
         const present = deps.runtime.credentialsPresent();
         return {
           types: PROVIDERS.map((spec) => describeProvider(spec)),
-          instances: listInstances(deps.runtime.config().providers).map((instance) =>
-            describeInstance(instance, present[instance.id] ?? false),
+          instances: listInstances(deps.runtime.config().providers).map(
+            (instance) =>
+              describeInstance(instance, present[instance.id] ?? false),
           ),
         };
       },
@@ -123,14 +149,17 @@ export function providerRoutes(deps: RouteDeps): RouteGroup<ProviderRouteId> {
             message: 'This server cannot test provider connections.',
           };
         }
-        return await deps.runtime.testProvider(request.body as ProviderTestRequest);
+        return await deps.runtime.testProvider(
+          request.body as ProviderTestRequest,
+        );
       },
     },
 
     'models.list': {
       summary: 'Models available to the configured provider instances',
       schema: { response: { 200: ModelsResponseSchema } },
-      handler: async (): Promise<ModelsResponse> => await listModels(deps, false),
+      handler: async (): Promise<ModelsResponse> =>
+        await listModels(deps, false),
     },
 
     // A POST because it has an effect: it discards the cached catalogue and
@@ -138,9 +167,11 @@ export function providerRoutes(deps: RouteDeps): RouteGroup<ProviderRouteId> {
     // uses, and it must not turn a render loop into a flood of requests at
     // somebody's local model server.
     'models.refresh': {
-      summary: 'Re-fetch every provider instance model list, ignoring the cache',
+      summary:
+        'Re-fetch every provider instance model list, ignoring the cache',
       schema: { response: { 200: ModelsResponseSchema } },
-      handler: async (): Promise<ModelsResponse> => await listModels(deps, true),
+      handler: async (): Promise<ModelsResponse> =>
+        await listModels(deps, true),
     },
   };
 }

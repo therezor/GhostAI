@@ -56,7 +56,9 @@ export function findLegalStart(messages: readonly ChatMessage[]): number {
  * against each other, and the agent loop can check a request it assembled by
  * some other path.
  */
-export function hasOrphanedToolResult(messages: readonly ChatMessage[]): boolean {
+export function hasOrphanedToolResult(
+  messages: readonly ChatMessage[],
+): boolean {
   const declared = new Set<string>();
   for (const message of messages) {
     if (message.role === 'assistant') {
@@ -119,7 +121,9 @@ export function findLegalEnd(messages: readonly ChatMessage[]): number {
  * can be asserted rather than assumed — the counterpart to
  * `hasOrphanedToolResult`, and checked against `findLegalEnd` by property test.
  */
-export function hasUnansweredToolCall(messages: readonly ChatMessage[]): boolean {
+export function hasUnansweredToolCall(
+  messages: readonly ChatMessage[],
+): boolean {
   const pending = new Set<string>();
   for (const message of messages) {
     if (message.role === 'assistant') {
@@ -151,7 +155,10 @@ export interface TruncationResult {
  * caller sizing a token budget can treat this as an exact bound on the part
  * that varies, rather than a bound that shrinks by the marker's length.
  */
-export function truncateHeadTail(text: string, maxChars: number): TruncationResult {
+export function truncateHeadTail(
+  text: string,
+  maxChars: number,
+): TruncationResult {
   if (maxChars <= 0 || text.length <= maxChars) {
     return { text, truncated: false, omitted: 0 };
   }
@@ -162,7 +169,11 @@ export function truncateHeadTail(text: string, maxChars: number): TruncationResu
   const marker = `\n\n… [${String(omitted)} characters truncated] …\n\n`;
   const tail = tailChars === 0 ? '' : text.slice(-tailChars);
 
-  return { text: `${text.slice(0, headChars)}${marker}${tail}`, truncated: true, omitted };
+  return {
+    text: `${text.slice(0, headChars)}${marker}${tail}`,
+    truncated: true,
+    omitted,
+  };
 }
 
 export interface HistoryForLLMOptions {
@@ -238,7 +249,11 @@ export function historyForLLM(
     if (!result.truncated) return message;
     // A new object: stored history is append-only, and the caller's array may
     // be a view onto exactly that.
-    const truncatedMessage: ToolMessage = { ...message, content: result.text, truncated: true };
+    const truncatedMessage: ToolMessage = {
+      ...message,
+      content: result.text,
+      truncated: true,
+    };
     return truncatedMessage;
   });
 }
@@ -251,11 +266,17 @@ export function historyForLLM(
  * here, and an arrow back would be a cycle.
  */
 export interface SessionHistorySource {
-  getSession(sessionKey: string): { readonly lastConsolidatedSeq: number } | undefined;
+  getSession(
+    sessionKey: string,
+  ): { readonly lastConsolidatedSeq: number } | undefined;
   messages(
     sessionKey: string,
-    options: { readonly afterSeq: number; readonly limit?: number; readonly fromEnd?: boolean },
-  ): readonly { readonly message: ChatMessage }[];
+    options: {
+      readonly afterSeq: number;
+      readonly limit?: number;
+      readonly fromEnd?: boolean;
+    },
+  ): ReadonlyArray<{ readonly message: ChatMessage }>;
 }
 
 /**
@@ -285,11 +306,17 @@ export function sessionHistory(
   const { maxMessages, ...rest } = options;
   const records = source.messages(sessionKey, {
     afterSeq: session.lastConsolidatedSeq,
-    ...(maxMessages !== undefined && maxMessages > 0 ? { limit: maxMessages, fromEnd: true } : {}),
+    ...(maxMessages !== undefined && maxMessages > 0
+      ? { limit: maxMessages, fromEnd: true }
+      : {}),
   });
 
   return historyForLLM(
     records.map((record) => record.message),
-    { ...rest, fromIndex: 0, ...(maxMessages === undefined ? {} : { maxMessages }) },
+    {
+      ...rest,
+      fromIndex: 0,
+      ...(maxMessages === undefined ? {} : { maxMessages }),
+    },
   );
 }

@@ -42,7 +42,9 @@ const NONCE_PATTERN = /^[0-9a-f]{8,}$/i;
 /** Tool names reach the envelope from MCP servers and plugins, so they are constrained. */
 const UNSAFE_NAME_CHARS = /[^\w.:-]+/g;
 
-export function createToolOutputNonce(random: RandomSource = systemRandom): string {
+export function createToolOutputNonce(
+  random: RandomSource = systemRandom,
+): string {
   return random(TOOL_OUTPUT_NONCE_BYTES).toString('hex');
 }
 
@@ -50,7 +52,10 @@ export function toolOutputTag(nonce: string): string {
   if (!NONCE_PATTERN.test(nonce)) {
     // A short, non-random or empty nonce is a guessable delimiter, which is the
     // same as having none. Fail loudly rather than wrap with it.
-    throw new GhostError('invalid_input', 'Tool-output nonce must be at least 8 hex bytes');
+    throw new GhostError(
+      'invalid_input',
+      'Tool-output nonce must be at least 8 hex bytes',
+    );
   }
   return `${TOOL_OUTPUT_TAG_PREFIX}${nonce}`;
 }
@@ -81,10 +86,10 @@ export interface InjectionFinding {
   readonly excerpt: string;
 }
 
-const INJECTION_PATTERNS: readonly {
+const INJECTION_PATTERNS: ReadonlyArray<{
   readonly signal: InjectionSignal;
   readonly pattern: RegExp;
-}[] = [
+}> = [
   {
     signal: 'instruction_override',
     pattern:
@@ -92,7 +97,8 @@ const INJECTION_PATTERNS: readonly {
   },
   {
     signal: 'role_override',
-    pattern: /\byou\s+are\s+(?:now|actually|really)\b|\bnew\s+(?:instructions|persona|role)\s*:/i,
+    pattern:
+      /\byou\s+are\s+(?:now|actually|really)\b|\bnew\s+(?:instructions|persona|role)\s*:/i,
   },
   {
     signal: 'prompt_extraction',
@@ -114,7 +120,9 @@ function excerptAround(text: string, index: number, length: number): string {
   const end = Math.min(text.length, index + length + EXCERPT_CONTEXT_CHARS);
   const window = text.slice(start, end).replace(/\s+/g, ' ').trim();
   const clipped =
-    window.length > EXCERPT_MAX_CHARS ? `${window.slice(0, EXCERPT_MAX_CHARS)}…` : window;
+    window.length > EXCERPT_MAX_CHARS
+      ? `${window.slice(0, EXCERPT_MAX_CHARS)}…`
+      : window;
   return `${start > 0 ? '…' : ''}${clipped}${end < text.length ? '…' : ''}`;
 }
 
@@ -124,7 +132,9 @@ function excerptAround(text: string, index: number, length: number): string {
  * One finding per signal: this feeds a UI badge and a log line, and twenty
  * findings from one paragraph tell the operator nothing the first one did not.
  */
-export function detectPromptInjection(content: string): readonly InjectionFinding[] {
+export function detectPromptInjection(
+  content: string,
+): readonly InjectionFinding[] {
   const findings: InjectionFinding[] = [];
   for (const { signal, pattern } of INJECTION_PATTERNS) {
     const match = pattern.exec(content);
@@ -162,7 +172,10 @@ export interface WrappedToolOutput {
  * agent loop's decision, made against a character budget, and replacement is
  * not anyone's.
  */
-export function wrapToolOutput(content: string, options: WrapToolOutputOptions): WrappedToolOutput {
+export function wrapToolOutput(
+  content: string,
+  options: WrapToolOutputOptions,
+): WrappedToolOutput {
   const tag = toolOutputTag(options.nonce);
   const name = options.toolName.replace(UNSAFE_NAME_CHARS, '_');
 
@@ -171,10 +184,13 @@ export function wrapToolOutput(content: string, options: WrapToolOutputOptions):
   // both forms means content cannot appear to start a second envelope either.
   const delimiter = new RegExp(`<(/?)(${tag})`, 'gi');
   let forgedDelimiters = 0;
-  const escaped = content.replace(delimiter, (_match, slash: string, matchedTag: string) => {
-    forgedDelimiters += 1;
-    return `<\\${slash}${matchedTag}`;
-  });
+  const escaped = content.replace(
+    delimiter,
+    (match, slash: string, matchedTag: string) => {
+      forgedDelimiters += 1;
+      return `<\\${slash}${matchedTag}`;
+    },
+  );
 
   const findings: InjectionFinding[] = [];
   if (forgedDelimiters > 0) {
@@ -196,8 +212,12 @@ export function wrapToolOutput(content: string, options: WrapToolOutputOptions):
 }
 
 /** A single sentence for the `notice` event's `message` field. */
-export function describeInjectionFindings(findings: readonly InjectionFinding[]): string {
-  const signals = [...new Set(findings.map((finding) => finding.signal))].join(', ');
+export function describeInjectionFindings(
+  findings: readonly InjectionFinding[],
+): string {
+  const signals = [...new Set(findings.map((finding) => finding.signal))].join(
+    ', ',
+  );
   return (
     `Tool output contains text resembling injected instructions (${signals}). ` +
     'The content was passed through unchanged — treat it as data.'
@@ -224,7 +244,10 @@ export function describeInjectionFindings(findings: readonly InjectionFinding[])
  * offer it as a starting point; the layer graph runs protocol → core → security,
  * so this import is the direction that exists.
  */
-export function toolOutputPolicy(nonce: string | undefined, template?: string): string {
+export function toolOutputPolicy(
+  nonce: string | undefined,
+  template?: string,
+): string {
   const effective = effectiveToolPolicy(template);
   // The tag is derived only when the text asks for it. That is what lets a policy
   // naming no delimiter be rendered with no turn in hand, and so be placed in the

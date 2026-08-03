@@ -18,14 +18,22 @@ import { Info } from 'lucide-react';
 import type { JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { tokensPerSecond, type StopReason, type Usage } from '@ghostai/protocol';
+import {
+  tokensPerSecond,
+  type StopReason,
+  type Usage,
+} from '@ghostai/protocol';
 
 import { api } from '@/lib/api.js';
 import { formatDuration } from '@/lib/format.js';
 import { useFormat } from '@/lib/use-format.js';
 import { queryKeys } from '@/lib/query.js';
 import { Button } from '@/components/ui/button.js';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover.js';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover.js';
 import type { TurnItem } from '@/state/transcript.js';
 
 export function TurnInfo({
@@ -96,33 +104,45 @@ function TurnInfoBody({
   const usage: Usage | undefined = turn.usage ?? row?.usage;
   const model = turn.model === '' ? (row?.model ?? '') : turn.model;
   const provider = turn.provider === '' ? (row?.provider ?? '') : turn.provider;
-  const iterations = turn.iterations > 0 ? turn.iterations : (row?.iterations ?? 0);
+  const iterations =
+    turn.iterations > 0 ? turn.iterations : (row?.iterations ?? 0);
   const stopReason: StopReason | undefined = turn.stopReason ?? row?.stopReason;
   const elapsedMs =
     turn.elapsedMs ??
-    (row === undefined ? undefined : Math.max(0, row.endedAtMs - row.startedAtMs));
+    (row === undefined
+      ? undefined
+      : Math.max(0, row.endedAtMs - row.startedAtMs));
 
   if (usage === undefined) {
     return <p className="turn-info__empty">{t('turn.none')}</p>;
   }
 
-  const rate = elapsedMs === undefined ? undefined : tokensPerSecond(usage, elapsedMs);
+  const rate =
+    elapsedMs === undefined ? undefined : tokensPerSecond(usage, elapsedMs);
 
   return (
     <dl className="turn-info">
       {/* Absent for `web`, and absent for a session with no row yet. Every
           session someone opened by hand is `web`, so naming it would be a row
           that is always there and never tells anyone anything. */}
-      {origin !== '' && origin !== 'web' && <Row label={t('turn.origin')} value={origin} />}
+      {origin !== '' && origin !== 'web' && (
+        <Row label={t('turn.origin')} value={origin} />
+      )}
       <Row label={t('turn.model')} value={model === '' ? '—' : model} />
-      <Row label={t('turn.provider')} value={provider === '' ? '—' : provider} />
+      <Row
+        label={t('turn.provider')}
+        value={provider === '' ? '—' : provider}
+      />
       <Row label={t('turn.in')} value={fmt.tokens(usage.promptTokens)} />
       <Row label={t('turn.out')} value={fmt.tokens(usage.completionTokens)} />
       {usage.cachedTokens !== undefined && (
         <Row label={t('turn.cached')} value={fmt.tokens(usage.cachedTokens)} />
       )}
       {usage.reasoningTokens !== undefined && (
-        <Row label={t('turn.reasoning')} value={fmt.tokens(usage.reasoningTokens)} />
+        <Row
+          label={t('turn.reasoning')}
+          value={fmt.tokens(usage.reasoningTokens)}
+        />
       )}
       {elapsedMs !== undefined && (
         <Row label={t('turn.elapsed')} value={formatDuration(elapsedMs)} />
@@ -130,7 +150,9 @@ function TurnInfoBody({
       {/* Absent rather than zero when there is nothing to divide: a turn that
           produced no tokens has no rate, and one measured at zero milliseconds
           was not measured. */}
-      {rate !== undefined && <Row label={t('turn.rate')} value={`${rate.toFixed(1)} tok/s`} />}
+      {rate !== undefined && (
+        <Row label={t('turn.rate')} value={`${rate.toFixed(1)} tok/s`} />
+      )}
       <Row label={t('turn.steps')} value={String(iterations)} />
       {stopReason !== undefined && (
         <Row label={t('turn.stopped')} value={stopReason.replace('_', ' ')} />
@@ -139,7 +161,13 @@ function TurnInfoBody({
   );
 }
 
-function Row({ label, value }: { readonly label: string; readonly value: string }): JSX.Element {
+function Row({
+  label,
+  value,
+}: {
+  readonly label: string;
+  readonly value: string;
+}): JSX.Element {
   return (
     <div className="turn-info__row">
       <dt className="turn-info__label">{label}</dt>

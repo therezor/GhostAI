@@ -51,7 +51,9 @@ export const test = base.extend<Fixtures & Options>({
     await page.goto(harness.url);
     // The shell, not the route: every screen has it, and waiting for it is what
     // separates "the bundle loaded" from "React mounted".
-    await expect(page.getByRole('complementary', { name: 'Sidebar' })).toBeVisible();
+    await expect(
+      page.getByRole('complementary', { name: 'Sidebar' }),
+    ).toBeVisible();
     await use(page);
   },
 });

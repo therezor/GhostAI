@@ -31,9 +31,16 @@ import type { RouteId } from './manifest.js';
 export { LOGIN_ATTEMPTS_PER_MINUTE } from './routes/auth.js';
 export { MAX_TEXT_BODY_BYTES, MAX_UPLOAD_BYTES } from './routes/files.js';
 export { MAX_BUFFERED_BYTES } from './routes/ws.js';
-export type { RouteDefinition, RouteDeps, RouteGroup, RouteRateLimit } from './routes/types.js';
+export type {
+  RouteDefinition,
+  RouteDeps,
+  RouteGroup,
+  RouteRateLimit,
+} from './routes/types.js';
 
-export function createRoutes(deps: RouteDeps): Record<RouteId, RouteDefinition> {
+export function createRoutes(
+  deps: RouteDeps,
+): Record<RouteId, RouteDefinition> {
   return {
     ...systemRoutes(deps),
     ...wsRoutes(deps),

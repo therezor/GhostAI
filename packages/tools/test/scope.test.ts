@@ -34,7 +34,11 @@ afterEach(() => {
 
 describe('permissionFor', () => {
   it('reads back what the map says', () => {
-    const perms = { read_file: 'allow', exec: 'ask', write_file: 'deny' } as const;
+    const perms = {
+      read_file: 'allow',
+      exec: 'ask',
+      write_file: 'deny',
+    } as const;
 
     expect(permissionFor(perms, 'read_file')).toBe('allow');
     expect(permissionFor(perms, 'exec')).toBe('ask');
@@ -60,7 +64,7 @@ describe('isEnabled', () => {
     ['allow', 'allow', true],
     ['ask', 'ask', true],
     ['deny', 'deny', false],
-  ])('reports %s as %s', (_name, permission, expected) => {
+  ])('reports %s as %s', (name, permission, expected) => {
     expect(isEnabled({ exec: permission as 'allow' }, 'exec')).toBe(expected);
   });
 
@@ -95,14 +99,19 @@ describe('ToolRegistry.select', () => {
   it('offers a tool set to ask — asking is not hiding', () => {
     const scope = registry.select({ read_file: 'allow', exec: 'ask' });
 
-    expect(scope.definitions().map((definition) => definition.name)).toEqual(['exec', 'read_file']);
+    expect(scope.definitions().map((definition) => definition.name)).toEqual([
+      'exec',
+      'read_file',
+    ]);
     expect(scope.permissionFor('exec')).toBe('ask');
   });
 
   it('offers only what the map names', () => {
     const scope = registry.select({ read_file: 'allow' });
 
-    expect(scope.definitions().map((definition) => definition.name)).toEqual(['read_file']);
+    expect(scope.definitions().map((definition) => definition.name)).toEqual([
+      'read_file',
+    ]);
   });
 
   it('keeps definitions sorted, so the cached prompt prefix is stable', () => {
@@ -153,7 +162,9 @@ describe('ToolRegistry.select', () => {
       'read_file',
       'write_file',
     ]);
-    expect((await scope.execute({ name: 'list_dir' }, context)).isError).toBe(false);
+    expect((await scope.execute({ name: 'list_dir' }, context)).isError).toBe(
+      false,
+    );
   });
 
   it('does not admit a late-registered tool the agent never enabled', () => {
@@ -174,7 +185,9 @@ describe('ToolRegistry.select', () => {
 
     registry.unregister('write_file');
 
-    expect(scope.definitions().map((definition) => definition.name)).toEqual(['read_file']);
+    expect(scope.definitions().map((definition) => definition.name)).toEqual([
+      'read_file',
+    ]);
   });
 
   it('reuses the memo while nothing has changed, and rebuilds when it does', () => {

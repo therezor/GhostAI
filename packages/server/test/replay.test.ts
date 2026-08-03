@@ -13,16 +13,24 @@ describe('ReplayBuffer', () => {
 
     expect(buffer.size).toBe(3);
     expect(buffer.capacity).toBe(3);
-    expect(buffer.after(0).messages.map((message) => message.seq)).toEqual([3, 4, 5]);
+    expect(buffer.after(0).messages.map((message) => message.seq)).toEqual([
+      3, 4, 5,
+    ]);
   });
 
   it('replays exactly the tail after a mid-stream seq', () => {
     const buffer = new ReplayBuffer(16);
-    for (let seq = 1; seq <= 6; seq += 1) buffer.push(delta(seq, `chunk-${String(seq)}`));
+    for (let seq = 1; seq <= 6; seq += 1) {
+      buffer.push(delta(seq, `chunk-${String(seq)}`));
+    }
 
     const slice = buffer.after(3);
     expect(slice.complete).toBe(true);
-    expect(slice.messages).toEqual([delta(4, 'chunk-4'), delta(5, 'chunk-5'), delta(6, 'chunk-6')]);
+    expect(slice.messages).toEqual([
+      delta(4, 'chunk-4'),
+      delta(5, 'chunk-5'),
+      delta(6, 'chunk-6'),
+    ]);
   });
 
   it('reports a gap rather than a tail that starts late', () => {

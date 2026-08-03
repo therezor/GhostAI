@@ -5,7 +5,11 @@ import { isGhostError, userMessage } from '@ghostai/core';
 import { createProvider, resolveConnection } from '#src/factory.js';
 import { findProvider, type ProviderSpec } from '#src/registry.js';
 import { recordingClock } from '#testkit/clock.js';
-import { completion, errorResponse, mockTransport } from '#testkit/transport.js';
+import {
+  completion,
+  errorResponse,
+  mockTransport,
+} from '#testkit/transport.js';
 
 const caught = (fn: () => unknown): unknown => {
   try {
@@ -20,7 +24,10 @@ describe('createProvider', () => {
   const base = { model: 'test-model', messages: [userMessage('hi')] };
 
   it('builds a provider from a table id', () => {
-    const provider = createProvider({ provider: 'ollama', fetchImpl: mockTransport().fetchImpl });
+    const provider = createProvider({
+      provider: 'ollama',
+      fetchImpl: mockTransport().fetchImpl,
+    });
     expect(provider.id).toBe('ollama');
     expect(provider.spec.wire).toBe('openai-chat');
   });
@@ -33,9 +40,10 @@ describe('createProvider', () => {
       keywords: [],
       defaultApiBase: 'https://example.invalid/v1',
     };
-    expect(createProvider({ provider: spec, fetchImpl: mockTransport().fetchImpl }).id).toBe(
-      'plugin-provider',
-    );
+    expect(
+      createProvider({ provider: spec, fetchImpl: mockTransport().fetchImpl })
+        .id,
+    ).toBe('plugin-provider');
   });
 
   it('names the unknown provider rather than failing later', () => {
@@ -47,7 +55,9 @@ describe('createProvider', () => {
   it('refuses a wire that has no adapter, loudly', () => {
     // Silently falling back to the OpenAI shape would surface as a 404 in the
     // middle of a turn, which reads as "the model is gone".
-    const error = caught(() => createProvider({ provider: 'anthropic', apiKey: 'k' }));
+    const error = caught(() =>
+      createProvider({ provider: 'anthropic', apiKey: 'k' }),
+    );
     expect(isGhostError(error) && error.kind).toBe('config');
     expect((error as Error).message).toMatch(/anthropic-messages/);
   });
@@ -71,7 +81,9 @@ describe('createProvider', () => {
   });
 
   it('returns the bare adapter when resilience is switched off', async () => {
-    const transport = mockTransport().push(errorResponse(503, { message: 'overloaded' }));
+    const transport = mockTransport().push(
+      errorResponse(503, { message: 'overloaded' }),
+    );
     const provider = createProvider({
       provider: 'ollama',
       fetchImpl: transport.fetchImpl,
@@ -88,7 +100,9 @@ describe('resolveConnection', () => {
   const openrouter = findProvider('openrouter')!;
 
   it('falls back to the table default', () => {
-    expect(resolveConnection(ollama, undefined).apiBase).toBe('http://127.0.0.1:11434/v1');
+    expect(resolveConnection(ollama, undefined).apiBase).toBe(
+      'http://127.0.0.1:11434/v1',
+    );
   });
 
   it('treats a cleared field as unset rather than as an empty URL', () => {

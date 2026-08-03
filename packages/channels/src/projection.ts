@@ -49,7 +49,10 @@ export interface TurnProjectionOptions {
 }
 
 /** What to say about a turn that did not simply finish. */
-function stopNotice(stopReason: StopReason, hasAnswer: boolean): string | undefined {
+function stopNotice(
+  stopReason: StopReason,
+  hasAnswer: boolean,
+): string | undefined {
   switch (stopReason) {
     case 'complete':
       // Rare, and worth a word: a turn whose whole output was tool calls looks
@@ -76,22 +79,22 @@ function stopNotice(stopReason: StopReason, hasAnswer: boolean): string | undefi
  * session's accumulator show up in another's reply.
  */
 export class TurnProjection {
-  readonly #sendProgress: boolean;
-  readonly #sendToolHints: boolean;
+  private readonly sendProgress: boolean;
+  private readonly sendToolHints: boolean;
   /** The answer as it stands. Reset at each `turn.start`. */
-  #answer = '';
-  #turnId: string | undefined;
+  private answerText = '';
+  private turnId: string | undefined;
   /** `callId` → tool name, so a failed result can be named. */
-  readonly #tools = new Map<string, string>();
+  private readonly tools = new Map<string, string>();
 
   constructor(options: TurnProjectionOptions = {}) {
-    this.#sendProgress = options.sendProgress ?? true;
-    this.#sendToolHints = options.sendToolHints ?? false;
+    this.sendProgress = options.sendProgress ?? true;
+    this.sendToolHints = options.sendToolHints ?? false;
   }
 
   /** The text accumulated for the running turn. Exposed for assertions. */
   get answer(): string {
-    return this.#answer;
+    return this.answerText;
   }
 
   /**
@@ -104,32 +107,34 @@ export class TurnProjection {
   project(message: ServerMessage): readonly OutboundDraft[] {
     switch (message.type) {
       case 'turn.start':
-        this.#answer = '';
-        this.#turnId = message.turnId;
-        this.#tools.clear();
+        this.answerText = '';
+        this.turnId = message.turnId;
+        this.tools.clear();
         return [];
 
       case 'assistant.delta':
-        this.#answer += message.text;
+        this.answerText += message.text;
         return [];
 
       case 'tool.call': {
-        this.#tools.set(message.callId, message.name);
+        this.tools.set(message.callId, message.name);
         const drafts: OutboundDraft[] = [];
-        if (this.#sendToolHints) drafts.push(this.#draft('notice', `Running ${message.name}…`));
+        if (this.sendToolHints) {
+          drafts.push(this.draft('notice', `Running ${message.name}…`));
+        }
         // At a tool boundary rather than per delta: the bus queue is bounded,
         // and a message per token would fill it with a copy of the answer for
         // every token in it.
-        if (this.#sendProgress && this.#answer !== '') {
-          drafts.push(this.#draft('progress', this.#answer));
+        if (this.sendProgress && this.answerText !== '') {
+          drafts.push(this.draft('progress', this.answerText));
         }
         return drafts;
       }
 
       case 'tool.result': {
-        if (!this.#sendToolHints || message.ok) return [];
-        const name = this.#tools.get(message.callId) ?? 'a tool';
-        return [this.#draft('notice', `${name} failed.`)];
+        if (!this.sendToolHints || message.ok) return [];
+        const name = this.tools.get(message.callId) ?? 'a tool';
+        return [this.draft('notice', `${name} failed.`)];
       }
 
       case 'tool.approvalRequest':
@@ -137,7 +142,7 @@ export class TurnProjection {
         // call is going to sit until it expires and the turn will look hung —
         // saying so is the difference between a wait and a mystery.
         return [
-          this.#draft(
+          this.draft(
             'notice',
             `${message.name} needs approval before it can run. Approve it in the web UI; ` +
               'it is denied automatically if nobody answers.',
@@ -145,7 +150,7 @@ export class TurnProjection {
         ];
 
       case 'notice':
-        return [this.#draft('notice', message.message)];
+        return [this.draft('notice', message.message)];
 
       /**
        * A subagent's turn, reduced to its two ends.
@@ -153,7 +158,7 @@ export class TurnProjection {
        * The nested stream is deliberately *not* projected. A chat transport has
        * one channel for everything, so forwarding a subagent's deltas would
        * interleave its working-out with the answer the caller is composing —
-       * and `#answer` is a single accumulator, so they would literally be
+       * and `#answerText` is a single accumulator, so they would literally be
        * concatenated. Saying nothing is no better: a delegation can run for a
        * minute, and a silent minute reads as a hung bot.
        *
@@ -162,38 +167,47 @@ export class TurnProjection {
        * "tell me what the agent is doing, not only what it concluded".
        */
       case 'subagent.event': {
-        if (!this.#sendToolHints) return [];
+        if (!this.sendToolHints) return [];
         const who = message.label === '' ? message.agentId : message.label;
         if (message.event.type === 'turn.start') {
-          return [this.#draft('notice', `Asking ${who}…`)];
+          return [this.draft('notice', `Asking ${who}…`)];
         }
         if (message.event.type === 'turn.end') {
-          return [this.#draft('notice', `${who} finished.`)];
+          return [this.draft('notice', `${who} finished.`)];
         }
         return [];
       }
 
       case 'message.queued':
         return [
-          this.#draft(
+          this.draft(
             'notice',
             `Queued behind ${String(message.queueDepth)} message${message.queueDepth === 1 ? '' : 's'}.`,
           ),
         ];
 
       case 'error':
-        return [{ kind: 'error', text: message.message, ...this.#turn(message.turnId) }];
+        return [
+          {
+            kind: 'error',
+            text: message.message,
+            ...this.turn(message.turnId),
+          },
+        ];
 
       case 'turn.end': {
-        const answer = this.#answer;
+        const answer = this.answerText;
         const drafts: OutboundDraft[] = [];
-        if (answer !== '') drafts.push({ kind: 'reply', text: answer, turnId: message.turnId });
+        if (answer !== '') {
+          drafts.push({ kind: 'reply', text: answer, turnId: message.turnId });
+        }
         const notice = stopNotice(message.stopReason, answer !== '');
-        if (notice !== undefined)
+        if (notice !== undefined) {
           drafts.push({ kind: 'notice', text: notice, turnId: message.turnId });
-        this.#answer = '';
-        this.#turnId = undefined;
-        this.#tools.clear();
+        }
+        this.answerText = '';
+        this.turnId = undefined;
+        this.tools.clear();
         return drafts;
       }
 
@@ -223,13 +237,13 @@ export class TurnProjection {
     }
   }
 
-  #draft(kind: OutboundKind, text: string): OutboundDraft {
-    return { kind, text, ...this.#turn(undefined) };
+  private draft(kind: OutboundKind, text: string): OutboundDraft {
+    return { kind, text, ...this.turn(undefined) };
   }
 
   /** The turn id from the event when it carries one, else the running turn's. */
-  #turn(turnId: string | undefined): { turnId?: string } {
-    const id = turnId ?? this.#turnId;
+  private turn(turnId: string | undefined): { turnId?: string } {
+    const id = turnId ?? this.turnId;
     return id === undefined ? {} : { turnId: id };
   }
 }

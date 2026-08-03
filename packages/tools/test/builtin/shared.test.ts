@@ -6,11 +6,16 @@ import { fsFailure } from '#src/builtin/shared.js';
 
 describe('fsFailure', () => {
   it('maps an errno to a kind and a workspace-relative message', () => {
-    const error = fsFailure(Object.assign(new Error('raw'), { code: 'EACCES' }), 'notes.md');
+    const error = fsFailure(
+      Object.assign(new Error('raw'), { code: 'EACCES' }),
+      'notes.md',
+    );
     expect(isGhostError(error)).toBe(true);
     if (isGhostError(error)) {
       expect(error.kind).toBe('permission_denied');
-      expect(error.message).toBe('notes.md is not readable or writable by this process.');
+      expect(error.message).toBe(
+        'notes.md is not readable or writable by this process.',
+      );
       expect(error.details).toEqual({ path: 'notes.md', code: 'EACCES' });
     }
   });
@@ -36,7 +41,10 @@ describe('fsFailure', () => {
   });
 
   it('falls back to the tool kind for an unrecognised errno', () => {
-    const error = fsFailure(Object.assign(new Error('raw'), { code: 'EXDEV' }), 'x');
+    const error = fsFailure(
+      Object.assign(new Error('raw'), { code: 'EXDEV' }),
+      'x',
+    );
     expect(isGhostError(error)).toBe(true);
     if (isGhostError(error)) {
       expect(error.kind).toBe('tool');

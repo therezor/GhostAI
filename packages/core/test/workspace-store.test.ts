@@ -1,4 +1,11 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -7,7 +14,12 @@ import fc from 'fast-check';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { isGhostError } from '#src/errors.js';
-import { resolveGhostPaths, sharedDirFor, workspaceDirFor, type GhostPaths } from '#src/paths.js';
+import {
+  resolveGhostPaths,
+  sharedDirFor,
+  workspaceDirFor,
+  type GhostPaths,
+} from '#src/paths.js';
 import { SessionStore } from '#src/session-store.js';
 import {
   DEFAULT_WORKSPACE_ID,
@@ -51,7 +63,7 @@ describe('workspace ids', () => {
     ['hyphens inside', 'client-acme'],
     ['the default', 'default'],
     ['forty characters', 'a'.repeat(40)],
-  ])('accepts %s', (_name, id) => {
+  ])('accepts %s', (name, id) => {
     expect(isWorkspaceId(id)).toBe(true);
   });
 
@@ -68,7 +80,7 @@ describe('workspace ids', () => {
     ['uppercase', 'Work'],
     ['a space', 'my ws'],
     ['forty-one characters', 'a'.repeat(41)],
-  ])('refuses %s', (_name, id) => {
+  ])('refuses %s', (name, id) => {
     expect(isWorkspaceId(id)).toBe(false);
   });
 
@@ -120,7 +132,9 @@ describe('workspaceDirFor', () => {
   });
 
   it('resolves an id with no registry row, so a detached workspace keeps its files', () => {
-    expect(workspaceDirFor(paths, 'detached')).toBe(join(paths.workspace, 'detached'));
+    expect(workspaceDirFor(paths, 'detached')).toBe(
+      join(paths.workspace, 'detached'),
+    );
   });
 });
 
@@ -128,7 +142,11 @@ describe('WorkspaceStore', () => {
   it('bootstraps a default that is marked as such', () => {
     const rows = store.list();
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ id: DEFAULT_WORKSPACE_ID, isDefault: true, name: 'Default' });
+    expect(rows[0]).toMatchObject({
+      id: DEFAULT_WORKSPACE_ID,
+      isDefault: true,
+      name: 'Default',
+    });
   });
 
   it('bootstraps idempotently across two stores on one connection', () => {
@@ -140,13 +158,19 @@ describe('WorkspaceStore', () => {
     const created = store.create({ name: 'Client Acme' });
     expect(created.id).toBe('client-acme');
     expect(created.isDefault).toBe(false);
-    expect(statSync(join(paths.workspace, 'client-acme')).isDirectory()).toBe(true);
+    expect(statSync(join(paths.workspace, 'client-acme')).isDirectory()).toBe(
+      true,
+    );
   });
 
   it('lists the default first, then by name', () => {
     store.create({ name: 'Zulu' });
     store.create({ name: 'alpha' });
-    expect(store.list().map((row) => row.id)).toEqual([DEFAULT_WORKSPACE_ID, 'alpha', 'zulu']);
+    expect(store.list().map((row) => row.id)).toEqual([
+      DEFAULT_WORKSPACE_ID,
+      'alpha',
+      'zulu',
+    ]);
   });
 
   it('disambiguates a slug that is already taken', () => {
@@ -163,20 +187,28 @@ describe('WorkspaceStore', () => {
   });
 
   it('refuses an explicit id that is not a legal slug', () => {
-    expect(kindOf(() => store.create({ name: 'Escape', id: '../etc' }))).toBe('invalid_input');
-    expect(kindOf(() => store.create({ name: 'Shouty', id: 'Work' }))).toBe('invalid_input');
+    expect(kindOf(() => store.create({ name: 'Escape', id: '../etc' }))).toBe(
+      'invalid_input',
+    );
+    expect(kindOf(() => store.create({ name: 'Shouty', id: 'Work' }))).toBe(
+      'invalid_input',
+    );
   });
 
   it('refuses a reserved id', () => {
     for (const id of ['default', 'con', 'nul', 'com1', 'lpt9']) {
       expect(RESERVED_WORKSPACE_IDS.has(id)).toBe(true);
-      expect(kindOf(() => store.create({ name: 'Nope', id }))).toBe('invalid_input');
+      expect(kindOf(() => store.create({ name: 'Nope', id }))).toBe(
+        'invalid_input',
+      );
     }
   });
 
   it('refuses a duplicate id', () => {
     store.create({ name: 'Notes', id: 'notes' });
-    expect(kindOf(() => store.create({ name: 'Notes again', id: 'notes' }))).toBe('conflict');
+    expect(
+      kindOf(() => store.create({ name: 'Notes again', id: 'notes' })),
+    ).toBe('conflict');
   });
 
   it('refuses a name that is only whitespace', () => {
@@ -189,7 +221,9 @@ describe('WorkspaceStore', () => {
 
     const created = store.create({ name: 'Research', id: 'research' });
     expect(created.id).toBe('research');
-    expect(statSync(join(paths.workspace, 'research', 'notes.md')).isFile()).toBe(true);
+    expect(
+      statSync(join(paths.workspace, 'research', 'notes.md')).isFile(),
+    ).toBe(true);
   });
 
   it('refuses a slug that collides with a file in the default workspace', () => {
@@ -197,7 +231,9 @@ describe('WorkspaceStore', () => {
     // user can already have put something there. A file would make every
     // operation in that workspace fail with ENOTDIR.
     writeFileSync(join(paths.workspace, 'notes'), 'not a folder');
-    expect(kindOf(() => store.create({ name: 'Notes', id: 'notes' }))).toBe('conflict');
+    expect(kindOf(() => store.create({ name: 'Notes', id: 'notes' }))).toBe(
+      'conflict',
+    );
   });
 
   it('renames without moving anything on disk', () => {
@@ -205,7 +241,9 @@ describe('WorkspaceStore', () => {
     const renamed = store.rename(created.id, 'New');
     expect(renamed.name).toBe('New');
     expect(store.get(created.id)?.name).toBe('New');
-    expect(statSync(workspaceDirFor(paths, created.id)).isDirectory()).toBe(true);
+    expect(statSync(workspaceDirFor(paths, created.id)).isDirectory()).toBe(
+      true,
+    );
   });
 
   it('refuses to rename something that is not there', () => {
@@ -223,8 +261,12 @@ describe('WorkspaceStore', () => {
     // moving one must not silently reword the other.
     expect(moved.name).toBe('Client Acme');
     expect(store.get(created.id)).toBeUndefined();
-    expect(statSync(join(paths.workspace, 'acme24', 'notes.md')).isFile()).toBe(true);
-    expect(statSync(join(paths.workspace, created.id), { throwIfNoEntry: false })).toBeUndefined();
+    expect(statSync(join(paths.workspace, 'acme24', 'notes.md')).isFile()).toBe(
+      true,
+    );
+    expect(
+      statSync(join(paths.workspace, created.id), { throwIfNoEntry: false }),
+    ).toBeUndefined();
   });
 
   it('takes the shared layer with it, since that is keyed by workspace too', () => {
@@ -234,7 +276,9 @@ describe('WorkspaceStore', () => {
 
     store.relocate(created.id, 'lab');
 
-    expect(statSync(join(sharedDirFor(paths, 'lab'), 'facts.md')).isFile()).toBe(true);
+    expect(
+      statSync(join(sharedDirFor(paths, 'lab'), 'facts.md')).isFile(),
+    ).toBe(true);
   });
 
   it('is a no-op when the folder is the one it already has', () => {
@@ -244,14 +288,22 @@ describe('WorkspaceStore', () => {
   });
 
   it('refuses to move the default, whose folder is the root the others live in', () => {
-    expect(kindOf(() => store.relocate(DEFAULT_WORKSPACE_ID, 'somewhere'))).toBe('conflict');
+    expect(
+      kindOf(() => store.relocate(DEFAULT_WORKSPACE_ID, 'somewhere')),
+    ).toBe('conflict');
   });
 
   it('refuses a folder that is not a legal slug, or is reserved', () => {
     const created = store.create({ name: 'Notes' });
-    expect(kindOf(() => store.relocate(created.id, '../etc'))).toBe('invalid_input');
-    expect(kindOf(() => store.relocate(created.id, 'Work'))).toBe('invalid_input');
-    expect(kindOf(() => store.relocate(created.id, 'con'))).toBe('invalid_input');
+    expect(kindOf(() => store.relocate(created.id, '../etc'))).toBe(
+      'invalid_input',
+    );
+    expect(kindOf(() => store.relocate(created.id, 'Work'))).toBe(
+      'invalid_input',
+    );
+    expect(kindOf(() => store.relocate(created.id, 'con'))).toBe(
+      'invalid_input',
+    );
   });
 
   it('refuses a folder another workspace already registers', () => {
@@ -266,12 +318,16 @@ describe('WorkspaceStore', () => {
     const created = store.create({ name: 'Notes' });
     mkdirSync(join(paths.workspace, 'occupied'), { recursive: true });
 
-    expect(kindOf(() => store.relocate(created.id, 'occupied'))).toBe('conflict');
+    expect(kindOf(() => store.relocate(created.id, 'occupied'))).toBe(
+      'conflict',
+    );
     expect(store.get(created.id)?.id).toBe(created.id);
   });
 
   it('refuses to move something that is not there', () => {
-    expect(kindOf(() => store.relocate('ghost', 'elsewhere'))).toBe('not_found');
+    expect(kindOf(() => store.relocate('ghost', 'elsewhere'))).toBe(
+      'not_found',
+    );
   });
 
   it('leaves the row alone when the directory could not be moved', () => {
@@ -291,7 +347,9 @@ describe('WorkspaceStore', () => {
     store.delete(created.id);
 
     expect(store.get(created.id)).toBeUndefined();
-    expect(statSync(join(workspaceDirFor(paths, created.id), 'notes.md')).isFile()).toBe(true);
+    expect(
+      statSync(join(workspaceDirFor(paths, created.id), 'notes.md')).isFile(),
+    ).toBe(true);
   });
 
   it('refuses to delete the default', () => {
@@ -311,7 +369,10 @@ describe('WorkspaceStore', () => {
   });
 
   it('round-trips metadata', () => {
-    const created = store.create({ name: 'Tagged', metadata: { colour: 'green' } });
+    const created = store.create({
+      name: 'Tagged',
+      metadata: { colour: 'green' },
+    });
     expect(store.get(created.id)?.metadata).toEqual({ colour: 'green' });
   });
 });
@@ -324,12 +385,16 @@ describe('sessions and workspaces', () => {
   });
 
   it('defaults a session to the default workspace', () => {
-    expect(sessions.ensureSession('web-1').workspaceId).toBe(DEFAULT_WORKSPACE_ID);
+    expect(sessions.ensureSession('web-1').workspaceId).toBe(
+      DEFAULT_WORKSPACE_ID,
+    );
   });
 
   it('records the workspace a session was created in', () => {
     store.create({ name: 'Acme', id: 'acme' });
-    expect(sessions.ensureSession('web-1', { workspaceId: 'acme' }).workspaceId).toBe('acme');
+    expect(
+      sessions.ensureSession('web-1', { workspaceId: 'acme' }).workspaceId,
+    ).toBe('acme');
   });
 
   it('never moves a session once created, however it is re-opened', () => {
@@ -337,7 +402,9 @@ describe('sessions and workspaces', () => {
     // its jail from the stored row, and the stored row cannot be talked into
     // changing by a later request that claims otherwise.
     sessions.ensureSession('web-1', { workspaceId: 'acme' });
-    expect(sessions.ensureSession('web-1', { workspaceId: 'other' }).workspaceId).toBe('acme');
+    expect(
+      sessions.ensureSession('web-1', { workspaceId: 'other' }).workspaceId,
+    ).toBe('acme');
   });
 
   it('filters a listing by workspace', () => {

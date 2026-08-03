@@ -30,7 +30,11 @@
  * be displaying the lock rather than the door.
  */
 
-import type { AgentEvent, NestedAgentEvent, SubagentEvent } from '@ghostai/agent';
+import type {
+  AgentEvent,
+  NestedAgentEvent,
+  SubagentEvent,
+} from '@ghostai/agent';
 import type { TurnStatsRecord } from '@ghostai/core';
 import { tokensPerSecond, type ToolRisk, type Usage } from '@ghostai/protocol';
 import pc from 'picocolors';
@@ -86,7 +90,11 @@ function jsonText(value: unknown): string {
 }
 
 function formatValue(value: unknown): string {
-  if (value === null || typeof value === 'number' || typeof value === 'boolean') {
+  if (
+    value === null ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
     return String(value);
   }
   return clip(jsonText(value), 44);
@@ -112,7 +120,10 @@ export function summariseArgs(args: unknown, max: number = 96): string {
 
   const entries = Object.entries(args);
   if (entries.length === 0) return '';
-  return clip(entries.map(([key, value]) => `${key}=${formatValue(value)}`).join(' '), max);
+  return clip(
+    entries.map(([key, value]) => `${key}=${formatValue(value)}`).join(' '),
+    max,
+  );
 }
 
 /**
@@ -152,7 +163,10 @@ export function formatCount(value: number): string {
  * was measured at zero milliseconds, and both stay unreported here: a rate
  * derived from a zero is a number that looks measured and is not.
  */
-export function formatRate(usage: Usage, elapsedMs: number | undefined): string | undefined {
+export function formatRate(
+  usage: Usage,
+  elapsedMs: number | undefined,
+): string | undefined {
   if (elapsedMs === undefined) return undefined;
   const rate = tokensPerSecond(usage, elapsedMs);
   return rate === undefined ? undefined : `${rate.toFixed(1)} tok/s`;
@@ -201,12 +215,12 @@ function riskColor(colors: Palette, risk: ToolRisk): (text: string) => string {
 }
 
 export class TurnRenderer {
-  readonly #out: RenderTarget;
-  readonly #c: Palette;
-  readonly #showReasoning: boolean;
-  readonly #showUsage: boolean;
-  readonly #toolResultLines: number;
-  readonly #t: CliT;
+  private readonly out: RenderTarget;
+  private readonly c: Palette;
+  private readonly showReasoning: boolean;
+  private readonly showUsage: boolean;
+  private readonly toolResultLines: number;
+  private readonly t: CliT;
   /**
    * Tool name by call, so a result can label itself without re-reading.
    *
@@ -215,12 +229,12 @@ export class TurnRenderer {
    * mint the same one its caller just used — and a shared map would then have
    * the child's result deleting the parent's label.
    */
-  readonly #calls = new Map<string, string>();
+  private readonly calls = new Map<string, string>();
 
-  #atLineStart = true;
-  #mode: 'idle' | 'assistant' | 'reasoning' = 'idle';
+  private atLineStart = true;
+  private mode: 'idle' | 'assistant' | 'reasoning' = 'idle';
   /** The session the current top-level turn is on. Set by `turn.start`. */
-  #sessionKey = '';
+  private sessionKey = '';
   /**
    * How far in to write. `0` for the operator's own turn.
    *
@@ -230,23 +244,23 @@ export class TurnRenderer {
    * the stream, so streamed prose is indented on every line it wraps onto and
    * not only where a `#line` call happens to be.
    */
-  #depth = 0;
+  private depth = 0;
 
   constructor(options: TurnRendererOptions) {
-    this.#out = options.out;
-    this.#c = pc.createColors(options.colors);
-    this.#showReasoning = options.showReasoning ?? true;
-    this.#showUsage = options.showUsage ?? true;
-    this.#t = options.t ?? translations(DEFAULT_LOCALE).t;
-    this.#toolResultLines = options.toolResultLines ?? DEFAULT_TOOL_RESULT_LINES;
+    this.out = options.out;
+    this.c = pc.createColors(options.colors);
+    this.showReasoning = options.showReasoning ?? true;
+    this.showUsage = options.showUsage ?? true;
+    this.t = options.t ?? translations(DEFAULT_LOCALE).t;
+    this.toolResultLines = options.toolResultLines ?? DEFAULT_TOOL_RESULT_LINES;
   }
 
   handle(event: AgentEvent): void {
     if (event.type === 'subagent.event') {
-      this.#subagent(event);
+      this.subagent(event);
       return;
     }
-    this.#render(event, this.#sessionKey);
+    this.render(event, this.sessionKey);
   }
 
   /**
@@ -256,36 +270,42 @@ export class TurnRenderer {
    * rendering as its caller's — a nested `exec` looks like an `exec`, which is
    * the whole point of indentation being the only difference.
    */
-  #render(event: NestedAgentEvent, sessionKey: string): void {
+  private render(event: NestedAgentEvent, sessionKey: string): void {
     switch (event.type) {
       case 'turn.start':
-        this.#mode = 'idle';
+        this.mode = 'idle';
         // Only the operator's own turn resets the map. A subagent's `turn.start`
         // arriving here would otherwise drop the labels of the calls its caller
         // has in flight — including the delegating call itself.
-        if (this.#depth === 0) {
-          this.#sessionKey = event.sessionKey;
-          this.#calls.clear();
+        if (this.depth === 0) {
+          this.sessionKey = event.sessionKey;
+          this.calls.clear();
         }
         return;
       case 'assistant.delta':
-        this.#stream('assistant', event.text);
+        this.stream('assistant', event.text);
         return;
       case 'reasoning.delta':
-        if (this.#showReasoning) this.#stream('reasoning', event.text);
+        if (this.showReasoning) this.stream('reasoning', event.text);
         return;
       case 'tool.call':
-        this.#toolCall(sessionKey, event.callId, event.name, event.args, event.risk);
+        this.toolCall(
+          sessionKey,
+          event.callId,
+          event.name,
+          event.args,
+          event.risk,
+        );
         return;
       case 'tool.progress':
-        this.#line(
-          this.#c.dim(
-            `  … ${this.#calls.get(callKey(sessionKey, event.callId)) ?? 'tool'} ${formatDuration(event.elapsedMs)}`,
+        this.line(
+          this.c.dim(
+            `  … ${this.calls.get(callKey(sessionKey, event.callId)) ?? 'tool'} ${formatDuration(event.elapsedMs)}`,
           ),
         );
         return;
       case 'tool.result':
-        this.#toolResult(
+        this.toolResult(
           sessionKey,
           event.callId,
           event.ok,
@@ -298,16 +318,25 @@ export class TurnRenderer {
         // The terminal has no way to answer one — `ghost chat` installs no gate,
         // so an `ask` tool simply runs. Reaching here means the CLI is watching
         // a turn some other surface is driving, and saying so beats a gap.
-        this.#line(this.#c.yellow(`⧗ ${this.#t('render.awaitingApproval', { tool: event.name })}`));
+        this.line(
+          this.c.yellow(
+            `⧗ ${this.t('render.awaitingApproval', { tool: event.name })}`,
+          ),
+        );
         return;
       case 'notice':
-        this.#line(`${this.#c.yellow('⚠')} ${this.#c.yellow(event.message)}`);
+        this.line(`${this.c.yellow('⚠')} ${this.c.yellow(event.message)}`);
         return;
       case 'error':
-        this.#error(event.code, event.message, event.retryable);
+        this.error(event.code, event.message, event.retryable);
         return;
       case 'turn.end':
-        this.#turnEnd(event.stopReason, event.iterations, event.usage, event.elapsedMs);
+        this.turnEnd(
+          event.stopReason,
+          event.iterations,
+          event.usage,
+          event.elapsedMs,
+        );
         return;
     }
   }
@@ -324,73 +353,85 @@ export class TurnRenderer {
    * an event that threw halfway through — the next answer would otherwise be
    * written two spaces in with nothing to explain it.
    */
-  #subagent(event: SubagentEvent): void {
+  private subagent(event: SubagentEvent): void {
     const who = event.label === '' ? event.agentId : event.label;
-    const previous = this.#depth;
+    const previous = this.depth;
 
     if (event.event.type === 'turn.start') {
-      this.#break();
-      this.#mode = 'idle';
-      this.#depth = event.depth - 1;
+      this.break();
+      this.mode = 'idle';
+      this.depth = event.depth - 1;
       try {
-        this.#line(this.#c.dim(`┄ ${this.#t('render.subagent.start', { agent: who })}`));
+        this.line(
+          this.c.dim(`┄ ${this.t('render.subagent.start', { agent: who })}`),
+        );
       } finally {
-        this.#depth = previous;
+        this.depth = previous;
       }
       return;
     }
 
-    this.#depth = event.depth;
+    this.depth = event.depth;
     try {
-      this.#render(event.event, event.sessionKey);
+      this.render(event.event, event.sessionKey);
     } finally {
-      this.#depth = previous;
+      this.depth = previous;
     }
 
     if (event.event.type !== 'turn.end') return;
 
-    this.#depth = event.depth - 1;
+    this.depth = event.depth - 1;
     try {
-      this.#line(this.#c.dim(`┄ ${this.#t('render.subagent.done', { agent: who })}`));
+      this.line(
+        this.c.dim(`┄ ${this.t('render.subagent.done', { agent: who })}`),
+      );
     } finally {
-      this.#depth = previous;
+      this.depth = previous;
     }
   }
 
   /** Ends the turn's last line, so a prompt is never printed onto it. */
   finish(): void {
-    this.#break();
-    this.#mode = 'idle';
+    this.break();
+    this.mode = 'idle';
   }
 
   /** A line of the CLI's own, in the same line discipline as the events. */
   note(text: string): void {
-    this.#line(this.#c.dim(text));
+    this.line(this.c.dim(text));
   }
 
   warn(text: string): void {
-    this.#line(`${this.#c.yellow('⚠')} ${text}`);
+    this.line(`${this.c.yellow('⚠')} ${text}`);
   }
 
-  #stream(mode: 'assistant' | 'reasoning', text: string): void {
-    if (this.#mode !== mode) {
-      this.#break();
+  private stream(mode: 'assistant' | 'reasoning', text: string): void {
+    if (this.mode !== mode) {
+      this.break();
       // A header, because dimmed prose is otherwise indistinguishable from the
       // answer to anyone whose terminal renders dim as plain.
-      if (mode === 'reasoning') this.#line(this.#c.dim('┄ thinking'));
-      this.#mode = mode;
+      if (mode === 'reasoning') this.line(this.c.dim('┄ thinking'));
+      this.mode = mode;
     }
-    this.#write(mode === 'reasoning' ? this.#c.dim(text) : text);
+    this.write(mode === 'reasoning' ? this.c.dim(text) : text);
   }
 
-  #toolCall(sessionKey: string, callId: string, name: string, args: unknown, risk: ToolRisk): void {
-    this.#calls.set(callKey(sessionKey, callId), name);
-    const color = riskColor(this.#c, risk);
+  private toolCall(
+    sessionKey: string,
+    callId: string,
+    name: string,
+    args: unknown,
+    risk: ToolRisk,
+  ): void {
+    this.calls.set(callKey(sessionKey, callId), name);
+    const color = riskColor(this.c, risk);
     const summary = summariseArgs(args);
-    this.#line(`${color('⚙')} ${color(name)}${summary === '' ? '' : ` ${this.#c.dim(summary)}`}`);
+    this.line(
+      `${color('⚙')} ${color(name)}${summary === '' ? '' : ` ${this.c.dim(summary)}`}`,
+    );
   }
 
-  #toolResult(
+  private toolResult(
     sessionKey: string,
     callId: string,
     ok: boolean,
@@ -398,46 +439,54 @@ export class TurnRenderer {
     truncated: boolean,
     durationMs: number,
   ): void {
-    const mark = ok ? this.#c.green('✓') : this.#c.red('✗');
+    const mark = ok ? this.c.green('✓') : this.c.red('✗');
     const suffix = truncated ? ', truncated' : '';
-    this.#line(`  ${mark} ${this.#c.dim(`${formatDuration(durationMs)}${suffix}`)}`);
-    this.#calls.delete(callKey(sessionKey, callId));
+    this.line(
+      `  ${mark} ${this.c.dim(`${formatDuration(durationMs)}${suffix}`)}`,
+    );
+    this.calls.delete(callKey(sessionKey, callId));
 
-    if (this.#toolResultLines <= 0 || content === '') return;
+    if (this.toolResultLines <= 0 || content === '') return;
     const lines = content.split('\n');
-    for (const line of lines.slice(0, this.#toolResultLines)) {
-      this.#line(this.#c.dim(`    ${clip(line, 100)}`));
+    for (const line of lines.slice(0, this.toolResultLines)) {
+      this.line(this.c.dim(`    ${clip(line, 100)}`));
     }
-    const hidden = lines.length - this.#toolResultLines;
-    if (hidden > 0) this.#line(this.#c.dim(`    … ${String(hidden)} more lines`));
+    const hidden = lines.length - this.toolResultLines;
+    if (hidden > 0) {
+      this.line(this.c.dim(`    … ${String(hidden)} more lines`));
+    }
   }
 
-  #error(code: string, message: string, retryable: boolean): void {
-    this.#line(`${this.#c.red('✖')} ${message}`);
-    this.#line(this.#c.dim(`  ${code}${retryable ? ' · retryable' : ''}`));
+  private error(code: string, message: string, retryable: boolean): void {
+    this.line(`${this.c.red('✖')} ${message}`);
+    this.line(this.c.dim(`  ${code}${retryable ? ' · retryable' : ''}`));
   }
 
-  #turnEnd(
+  private turnEnd(
     stopReason: string,
     iterations: number,
     usage: Usage | undefined,
     elapsedMs: number | undefined,
   ): void {
-    this.#break();
-    this.#mode = 'idle';
+    this.break();
+    this.mode = 'idle';
 
     // `complete` is deliberately absent from the map, so an unlisted reason
     // stays `undefined` and prints nothing rather than resolving a missing key.
     const reasonKey = STOP_REASONS[stopReason];
-    if (reasonKey !== undefined) this.#line(this.#c.yellow(`  ${this.#t(reasonKey)}`));
-    if (!this.#showUsage) return;
+    if (reasonKey !== undefined) {
+      this.line(this.c.yellow(`  ${this.t(reasonKey)}`));
+    }
+    if (!this.showUsage) return;
 
-    const parts = [this.#t('render.steps', { count: iterations })];
-    if (usage !== undefined && usage.totalTokens > 0) parts.push(formatUsage(usage));
+    const parts = [this.t('render.steps', { count: iterations })];
+    if (usage !== undefined && usage.totalTokens > 0) {
+      parts.push(formatUsage(usage));
+    }
     if (elapsedMs !== undefined) parts.push(formatDuration(elapsedMs));
     const rate = usage === undefined ? undefined : formatRate(usage, elapsedMs);
     if (rate !== undefined) parts.push(rate);
-    this.#line(this.#c.dim(`  · ${parts.join(' · ')}`));
+    this.line(this.c.dim(`  · ${parts.join(' · ')}`));
   }
 
   /**
@@ -452,24 +501,24 @@ export class TurnRenderer {
       const elapsedMs = Math.max(0, row.endedAtMs - row.startedAtMs);
       const parts = [
         row.model === '' ? 'unknown model' : row.model,
-        this.#t('render.steps', { count: row.iterations }),
+        this.t('render.steps', { count: row.iterations }),
         formatUsage(row.usage),
         formatDuration(elapsedMs),
       ];
       const rate = formatRate(row.usage, elapsedMs);
       if (rate !== undefined) parts.push(rate);
-      this.#line(this.#c.dim(`  · ${parts.join(' · ')}`));
+      this.line(this.c.dim(`  · ${parts.join(' · ')}`));
     }
   }
 
-  #line(text: string): void {
-    this.#break();
-    this.#write(`${text}\n`);
+  private line(text: string): void {
+    this.break();
+    this.write(`${text}\n`);
   }
 
   /** A newline only when the cursor is not already at the start of one. */
-  #break(): void {
-    if (!this.#atLineStart) this.#write('\n');
+  private break(): void {
+    if (!this.atLineStart) this.write('\n');
   }
 
   /**
@@ -481,11 +530,13 @@ export class TurnRenderer {
    * on whichever line a chunk happened to start and flush left on every line it
    * wrapped onto. Rewriting newlines here catches both.
    */
-  #write(text: string): void {
+  private write(text: string): void {
     if (text === '') return;
-    const indent = '  '.repeat(this.#depth);
-    this.#out.write(indent === '' ? text : indented(text, indent, this.#atLineStart));
-    this.#atLineStart = text.endsWith('\n');
+    const indent = '  '.repeat(this.depth);
+    this.out.write(
+      indent === '' ? text : indented(text, indent, this.atLineStart),
+    );
+    this.atLineStart = text.endsWith('\n');
   }
 }
 
@@ -504,6 +555,8 @@ function callKey(sessionKey: string, callId: string): string {
  */
 function indented(text: string, indent: string, atLineStart: boolean): string {
   const body = text.replaceAll('\n', `\n${indent}`);
-  const trimmed = body.endsWith(`\n${indent}`) ? body.slice(0, -indent.length) : body;
+  const trimmed = body.endsWith(`\n${indent}`)
+    ? body.slice(0, -indent.length)
+    : body;
   return atLineStart ? `${indent}${trimmed}` : trimmed;
 }

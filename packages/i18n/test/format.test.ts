@@ -84,8 +84,12 @@ describe('formatRelativeSpan', () => {
 
     expect(formatRelativeSpan(span, 'en')).toBe('5m ago');
     expect(formatRelativeSpan(span, 'en', 'long')).toBe('5 minutes ago');
-    expect(formatRelativeSpan({ kind: 'ago', value: 3, unit: 'hour' }, 'en')).toBe('3h ago');
-    expect(formatRelativeSpan({ kind: 'ago', value: 2, unit: 'day' }, 'en')).toBe('2d ago');
+    expect(
+      formatRelativeSpan({ kind: 'ago', value: 3, unit: 'hour' }, 'en'),
+    ).toBe('3h ago');
+    expect(
+      formatRelativeSpan({ kind: 'ago', value: 2, unit: 'day' }, 'en'),
+    ).toBe('2d ago');
   });
 
   it('leaves the wording to the caller for everything that is not an interval', () => {

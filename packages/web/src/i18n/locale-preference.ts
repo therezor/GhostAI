@@ -24,7 +24,12 @@
  * not worth a blank page.
  */
 
-import { DEFAULT_LOCALE, isRtl, resolveFirstLocale, type Locale } from '@ghostai/i18n';
+import {
+  DEFAULT_LOCALE,
+  isRtl,
+  resolveFirstLocale,
+  type Locale,
+} from '@ghostai/i18n';
 
 /**
  * What the user chose: a BCP-47 tag, or `SYSTEM` meaning "ask the browser".
@@ -50,7 +55,9 @@ export function isLocalePreference(value: unknown): value is LocalePreference {
 }
 
 /** What the browser asks for, most-preferred first. */
-export function browserLocales(view: Window | undefined = defaultView()): readonly string[] {
+export function browserLocales(
+  view: Window | undefined = defaultView(),
+): readonly string[] {
   return view?.navigator.languages ?? [];
 }
 
@@ -64,7 +71,8 @@ export function resolvePreference(
   preference: LocalePreference,
   fromBrowser: readonly string[],
 ): Locale {
-  const requested = preference === SYSTEM ? fromBrowser : [preference, ...fromBrowser];
+  const requested =
+    preference === SYSTEM ? fromBrowser : [preference, ...fromBrowser];
   return resolveFirstLocale(requested);
 }
 

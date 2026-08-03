@@ -15,7 +15,12 @@ import { describe, expect, it } from 'vitest';
 
 import { Providers } from '@/app/providers.js';
 import { createAppRouter } from '@/app/router.js';
-import { stubApi, testQueryClient, type RecordedRequest, type StubRoute } from '@testkit/render.js';
+import {
+  stubApi,
+  testQueryClient,
+  type RecordedRequest,
+  type StubRoute,
+} from '@testkit/render.js';
 import { STATUS } from '@testkit/fixtures.js';
 
 const UNREAD = {
@@ -54,7 +59,10 @@ function mount(overrides: Record<string, StubRoute> = {}): {
   const calls = stubApi({
     ...SHELL_ROUTES,
     '/api/notifications': [200, LIST],
-    'POST /api/notifications/n1/read': [200, { ...UNREAD, readAtMs: Date.now() }],
+    'POST /api/notifications/n1/read': [
+      200,
+      { ...UNREAD, readAtMs: Date.now() },
+    ],
     'POST /api/notifications/read': [204, null],
     'DELETE /api/notifications/n1': [204, null],
     ...overrides,
@@ -62,7 +70,9 @@ function mount(overrides: Record<string, StubRoute> = {}): {
 
   const user = userEvent.setup();
   const router = createAppRouter();
-  router.update({ history: createMemoryHistory({ initialEntries: ['/notifications'] }) });
+  router.update({
+    history: createMemoryHistory({ initialEntries: ['/notifications'] }),
+  });
   render(
     <Providers client={testQueryClient()}>
       <RouterProvider router={router} />
@@ -76,9 +86,13 @@ describe('the notification centre', () => {
   it('lists what the server reported, newest first, with the unread count', async () => {
     mount();
 
-    const list = await screen.findByRole('article', { name: 'Nightly digest finished' });
+    const list = await screen.findByRole('article', {
+      name: 'Nightly digest finished',
+    });
     expect(list).toHaveTextContent('Wrote notes/digest.md');
-    expect(screen.getByRole('article', { name: 'Approval expired' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('article', { name: 'Approval expired' }),
+    ).toBeInTheDocument();
     // The header count and the sidebar badge read the same query.
     expect(screen.getAllByText('1 unread.').length).toBeGreaterThan(0);
   });
@@ -86,68 +100,104 @@ describe('the notification centre', () => {
   it('offers to open the session a notification came from', async () => {
     mount();
 
-    const row = await screen.findByRole('article', { name: 'Nightly digest finished' });
+    const row = await screen.findByRole('article', {
+      name: 'Nightly digest finished',
+    });
     const link = within(row).getByRole('link', { name: 'Open session' });
-    expect(link).toHaveAttribute('href', expect.stringContaining('session=web%3A9'));
+    expect(link).toHaveAttribute(
+      'href',
+      expect.stringContaining('session=web%3A9'),
+    );
   });
 
   it('marks one read and recounts the badge rather than decrementing it', async () => {
     const { user, calls } = mount();
 
-    const row = await screen.findByRole('article', { name: 'Nightly digest finished' });
+    const row = await screen.findByRole('article', {
+      name: 'Nightly digest finished',
+    });
     await user.click(within(row).getByRole('button', { name: 'Mark read' }));
 
     await waitFor(() => {
       expect(screen.getByText('All caught up.')).toBeInTheDocument();
     });
 
-    expect(calls.some((call) => call.path === '/api/notifications/n1/read')).toBe(true);
+    expect(
+      calls.some((call) => call.path === '/api/notifications/n1/read'),
+    ).toBe(true);
     // The row that was already read has no button to press, so a second press
     // cannot drive the count below zero.
-    expect(screen.queryByRole('button', { name: 'Mark read' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Mark read' }),
+    ).not.toBeInTheDocument();
   });
 
   it('marks everything read in one press, and offers it only when there is something to mark', async () => {
     const { user, calls } = mount();
 
-    const markAll = await screen.findByRole('button', { name: 'Mark all read' });
+    const markAll = await screen.findByRole('button', {
+      name: 'Mark all read',
+    });
     await user.click(markAll);
 
     await waitFor(() => {
-      expect(calls.some((call) => call.path === '/api/notifications/read')).toBe(true);
+      expect(
+        calls.some((call) => call.path === '/api/notifications/read'),
+      ).toBe(true);
     });
   });
 
   it('disables mark-all when nothing is unread', async () => {
-    mount({ '/api/notifications': [200, { notifications: [READ], unreadCount: 0, total: 1 }] });
+    mount({
+      '/api/notifications': [
+        200,
+        { notifications: [READ], unreadCount: 0, total: 1 },
+      ],
+    });
 
-    expect(await screen.findByRole('button', { name: 'Mark all read' })).toBeDisabled();
+    expect(
+      await screen.findByRole('button', { name: 'Mark all read' }),
+    ).toBeDisabled();
   });
 
   it('deletes one', async () => {
     const { user, calls } = mount();
 
     await screen.findByRole('article', { name: 'Nightly digest finished' });
-    await user.click(screen.getByRole('button', { name: 'Delete “Nightly digest finished”' }));
+    await user.click(
+      screen.getByRole('button', { name: 'Delete “Nightly digest finished”' }),
+    );
 
     await waitFor(() => {
       expect(calls.some((call) => call.method === 'DELETE')).toBe(true);
     });
-    expect(calls.find((call) => call.method === 'DELETE')?.path).toBe('/api/notifications/n1');
+    expect(calls.find((call) => call.method === 'DELETE')?.path).toBe(
+      '/api/notifications/n1',
+    );
   });
 
   it('explains an empty list rather than showing an empty box', async () => {
-    mount({ '/api/notifications': [200, { notifications: [], unreadCount: 0, total: 0 }] });
+    mount({
+      '/api/notifications': [
+        200,
+        { notifications: [], unreadCount: 0, total: 0 },
+      ],
+    });
 
     expect(await screen.findByText('Nothing here yet.')).toBeInTheDocument();
   });
 
   it('says so when the list cannot be loaded', async () => {
     mount({
-      '/api/notifications': [500, { error: { code: 'internal', message: 'database is locked' } }],
+      '/api/notifications': [
+        500,
+        { error: { code: 'internal', message: 'database is locked' } },
+      ],
     });
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('database is locked');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'database is locked',
+    );
   });
 });
 
@@ -156,7 +206,9 @@ describe('clearing the notification centre', () => {
    * A labelled button beside Mark all read, the pairing Files uses for New and
    * Upload. The dialog is what makes it safe, not its obscurity.
    */
-  async function openClear(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  async function openClear(
+    user: ReturnType<typeof userEvent.setup>,
+  ): Promise<void> {
     await user.click(screen.getByRole('button', { name: 'Clear all' }));
   }
 
@@ -180,7 +232,9 @@ describe('clearing the notification centre', () => {
     await openClear(user);
 
     // `total`, not `unreadCount`: the count of what is being deleted.
-    expect(await screen.findByText(/2 notifications are deleted/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/2 notifications are deleted/),
+    ).toBeInTheDocument();
   });
 
   it('sends one request for the whole list once the answer is yes', async () => {
@@ -189,18 +243,28 @@ describe('clearing the notification centre', () => {
     await screen.findByRole('article', { name: 'Nightly digest finished' });
     await openClear(user);
     await user.click(
-      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Clear all' }),
+      within(await screen.findByRole('dialog')).getByRole('button', {
+        name: 'Clear all',
+      }),
     );
 
     await waitFor(() => {
       expect(
-        calls.some((call) => call.method === 'DELETE' && call.path === '/api/notifications'),
+        calls.some(
+          (call) =>
+            call.method === 'DELETE' && call.path === '/api/notifications',
+        ),
       ).toBe(true);
     });
   });
 
   it('offers nothing to clear when there is nothing', async () => {
-    mount({ '/api/notifications': [200, { notifications: [], unreadCount: 0, total: 0 }] });
+    mount({
+      '/api/notifications': [
+        200,
+        { notifications: [], unreadCount: 0, total: 0 },
+      ],
+    });
 
     await screen.findByText('Nothing here yet.');
     expect(screen.getByRole('button', { name: 'Clear all' })).toBeDisabled();
@@ -210,7 +274,7 @@ describe('clearing the notification centre', () => {
 describe('paging the notification centre', () => {
   /** 30 rows over a page size of 25: two pages, and a reason for the control. */
   const page1 = {
-    notifications: Array.from({ length: 25 }, (_unused, index) => ({
+    notifications: Array.from({ length: 25 }, (unused, index) => ({
       id: `p${String(index)}`,
       title: `Report ${String(index)}`,
       body: '',
@@ -229,10 +293,18 @@ describe('paging the notification centre', () => {
   it('offers the two steps and no numbered destinations', async () => {
     mount({ '/api/notifications': [200, page1] });
 
-    const pager = await screen.findByRole('navigation', { name: 'Notifications' });
-    expect(within(pager).getByRole('button', { name: 'Next page' })).toBeEnabled();
-    expect(within(pager).getByRole('button', { name: 'Previous page' })).toBeDisabled();
-    expect(within(pager).queryByRole('button', { name: 'Page 2' })).not.toBeInTheDocument();
+    const pager = await screen.findByRole('navigation', {
+      name: 'Notifications',
+    });
+    expect(
+      within(pager).getByRole('button', { name: 'Next page' }),
+    ).toBeEnabled();
+    expect(
+      within(pager).getByRole('button', { name: 'Previous page' }),
+    ).toBeDisabled();
+    expect(
+      within(pager).queryByRole('button', { name: 'Page 2' }),
+    ).not.toBeInTheDocument();
   });
 
   it('says where in the list the reader is', async () => {
@@ -245,13 +317,17 @@ describe('paging the notification centre', () => {
     const { user, calls } = mount({ '/api/notifications': [200, page1] });
 
     await user.click(
-      within(await screen.findByRole('navigation', { name: 'Notifications' })).getByRole('button', {
+      within(
+        await screen.findByRole('navigation', { name: 'Notifications' }),
+      ).getByRole('button', {
         name: 'Next page',
       }),
     );
 
     await waitFor(() => {
-      expect(calls.some((call) => call.query.get('offset') === '25')).toBe(true);
+      expect(calls.some((call) => call.query.get('offset') === '25')).toBe(
+        true,
+      );
     });
   });
 
@@ -259,6 +335,8 @@ describe('paging the notification centre', () => {
     mount();
 
     await screen.findByRole('article', { name: 'Nightly digest finished' });
-    expect(screen.queryByRole('navigation', { name: 'Notifications' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('navigation', { name: 'Notifications' }),
+    ).not.toBeInTheDocument();
   });
 });

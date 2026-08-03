@@ -34,8 +34,9 @@ export function recordingClock(startMs = 1_700_000_000_000): RecordingClock {
     sleep: (delayMs, signal) => {
       // The signal is still honoured: a turn cancelled during backoff must not
       // proceed to the retry, and that ordering is worth testing without a wait.
-      if (signal?.aborted === true)
+      if (signal?.aborted === true) {
         return Promise.reject(new GhostError('aborted', 'Sleep aborted'));
+      }
       sleeps.push(delayMs);
       now += delayMs;
       return Promise.resolve();

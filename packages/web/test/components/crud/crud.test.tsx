@@ -36,7 +36,11 @@ describe('ConfirmDialog', () => {
     const onConfirm = vi.fn();
     const onOpenChange = vi.fn();
     renderWithProviders(
-      <ConfirmDialog {...props} onConfirm={onConfirm} onOpenChange={onOpenChange} />,
+      <ConfirmDialog
+        {...props}
+        onConfirm={onConfirm}
+        onOpenChange={onOpenChange}
+      />,
     );
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -50,7 +54,11 @@ describe('ConfirmDialog', () => {
     // to see a close that never went through a button.
     const onOpenChange = vi.fn();
     renderWithProviders(
-      <ConfirmDialog {...props} onConfirm={vi.fn()} onOpenChange={onOpenChange} />,
+      <ConfirmDialog
+        {...props}
+        onConfirm={vi.fn()}
+        onOpenChange={onOpenChange}
+      />,
     );
 
     await userEvent.keyboard('{Escape}');
@@ -62,7 +70,11 @@ describe('ConfirmDialog', () => {
     const onConfirm = vi.fn();
     const onOpenChange = vi.fn();
     renderWithProviders(
-      <ConfirmDialog {...props} onConfirm={onConfirm} onOpenChange={onOpenChange} />,
+      <ConfirmDialog
+        {...props}
+        onConfirm={onConfirm}
+        onOpenChange={onOpenChange}
+      />,
     );
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
@@ -75,7 +87,9 @@ describe('ConfirmDialog', () => {
   it('shows what turns the question into a decision', () => {
     renderWithProviders(
       <ConfirmDialog {...props} onConfirm={vi.fn()} onOpenChange={vi.fn()}>
-        <p className="notice notice--danger">Everything inside goes with it — 47 items.</p>
+        <p className="notice notice--danger">
+          Everything inside goes with it — 47 items.
+        </p>
       </ConfirmDialog>,
     );
 
@@ -84,7 +98,12 @@ describe('ConfirmDialog', () => {
 
   it('does not offer the confirm while the action is in flight', () => {
     renderWithProviders(
-      <ConfirmDialog {...props} pending onConfirm={vi.fn()} onOpenChange={vi.fn()} />,
+      <ConfirmDialog
+        {...props}
+        pending
+        onConfirm={vi.fn()}
+        onOpenChange={vi.fn()}
+      />,
     );
 
     expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled();
@@ -100,7 +119,9 @@ describe('NameDialog', () => {
 
   it('submits on Enter, because that is the only thing a one-box dialog is for', async () => {
     const onSubmit = vi.fn();
-    renderWithProviders(<NameDialog {...props} onSubmit={onSubmit} onOpenChange={vi.fn()} />);
+    renderWithProviders(
+      <NameDialog {...props} onSubmit={onSubmit} onOpenChange={vi.fn()} />,
+    );
 
     await userEvent.type(screen.getByLabelText('Folder name'), 'drafts{Enter}');
 
@@ -109,16 +130,23 @@ describe('NameDialog', () => {
 
   it('trims what it hands back', async () => {
     const onSubmit = vi.fn();
-    renderWithProviders(<NameDialog {...props} onSubmit={onSubmit} onOpenChange={vi.fn()} />);
+    renderWithProviders(
+      <NameDialog {...props} onSubmit={onSubmit} onOpenChange={vi.fn()} />,
+    );
 
-    await userEvent.type(screen.getByLabelText('Folder name'), '  drafts  {Enter}');
+    await userEvent.type(
+      screen.getByLabelText('Folder name'),
+      '  drafts  {Enter}',
+    );
 
     expect(onSubmit).toHaveBeenCalledWith('drafts');
   });
 
   it('refuses a blank name without asking the server', async () => {
     const onSubmit = vi.fn();
-    renderWithProviders(<NameDialog {...props} onSubmit={onSubmit} onOpenChange={vi.fn()} />);
+    renderWithProviders(
+      <NameDialog {...props} onSubmit={onSubmit} onOpenChange={vi.fn()} />,
+    );
 
     expect(screen.getByRole('button', { name: 'Create' })).toBeDisabled();
 
@@ -134,8 +162,17 @@ describe('NameDialog', () => {
 
     await userEvent.type(screen.getByLabelText('Folder name'), 'drafts');
 
-    rerender(<NameDialog {...props} open={false} onSubmit={onSubmit} onOpenChange={vi.fn()} />);
-    rerender(<NameDialog {...props} open onSubmit={onSubmit} onOpenChange={vi.fn()} />);
+    rerender(
+      <NameDialog
+        {...props}
+        open={false}
+        onSubmit={onSubmit}
+        onOpenChange={vi.fn()}
+      />,
+    );
+    rerender(
+      <NameDialog {...props} open onSubmit={onSubmit} onOpenChange={vi.fn()} />,
+    );
 
     await waitFor(() => {
       expect(screen.getByLabelText('Folder name')).toHaveValue('');
@@ -176,7 +213,9 @@ describe('NameDialog', () => {
     await userEvent.type(input, 'taken');
 
     expect(input).toHaveAttribute('aria-invalid', 'true');
-    expect(screen.getByText('There is already one called “taken”.')).toBeInTheDocument();
+    expect(
+      screen.getByText('There is already one called “taken”.'),
+    ).toBeInTheDocument();
 
     await userEvent.type(input, '{Enter}');
     expect(onSubmit).not.toHaveBeenCalled();
@@ -192,10 +231,14 @@ describe('RowActions', () => {
       </RowActions>,
     );
 
-    const trigger = screen.getByRole('button', { name: 'Actions for notes.md' });
+    const trigger = screen.getByRole('button', {
+      name: 'Actions for notes.md',
+    });
     await userEvent.click(trigger);
 
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+    await userEvent.click(
+      await screen.findByRole('menuitem', { name: 'Delete' }),
+    );
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
 });
@@ -204,7 +247,10 @@ describe('DataList', () => {
   it('is a list of rows, so nothing depends on a display property', () => {
     renderWithProviders(
       <DataList label="Providers">
-        <DataListRow primary={<button type="button">Ollama</button>} meta={<span>no key</span>} />
+        <DataListRow
+          primary={<button type="button">Ollama</button>}
+          meta={<span>no key</span>}
+        />
         <DataListRow primary={<button type="button">OpenAI</button>} />
       </DataList>,
     );
@@ -212,7 +258,9 @@ describe('DataList', () => {
     // The point of the `<ul>`: a `<tr>` set to `display: grid` stops being a
     // row to a screen reader, and the card layout this replaced a table with
     // needs a grid on every row.
-    const rows = within(screen.getByRole('list', { name: 'Providers' })).getAllByRole('listitem');
+    const rows = within(
+      screen.getByRole('list', { name: 'Providers' }),
+    ).getAllByRole('listitem');
     expect(rows).toHaveLength(2);
     expect(rows[0]).toHaveTextContent('no key');
   });
@@ -252,7 +300,9 @@ describe('ListSort', () => {
 
     // The column *and* the direction. A trigger labelled only "Sort by" is a
     // control you have to open to find out what it is doing.
-    expect(screen.getByRole('button', { name: 'Sort by Name, Ascending' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Sort by Name, Ascending' }),
+    ).toBeInTheDocument();
   });
 
   it('opens a new column in the direction that column is read', async () => {
@@ -260,7 +310,9 @@ describe('ListSort', () => {
     render(false, onChange);
 
     await userEvent.click(screen.getByRole('button', { name: /Sort by/ }));
-    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Size' }));
+    await userEvent.click(
+      await screen.findByRole('menuitemradio', { name: 'Size' }),
+    );
 
     // `size` is not in `ascendingFirst`: "which is biggest" is the question
     // that column answers, so it opens largest first.
@@ -272,7 +324,9 @@ describe('ListSort', () => {
     render(false, onChange);
 
     await userEvent.click(screen.getByRole('button', { name: /Sort by/ }));
-    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Descending' }));
+    await userEvent.click(
+      await screen.findByRole('menuitemradio', { name: 'Descending' }),
+    );
 
     expect(onChange).toHaveBeenCalledWith({ key: 'name', descending: true });
   });
@@ -284,9 +338,15 @@ describe('ListSort', () => {
 
     // Two groups, so two marks — which is what makes the second question
     // answerable without first working out the answer to the first.
-    expect(await screen.findByRole('menuitemradio', { name: 'Name' })).toBeChecked();
-    expect(screen.getByRole('menuitemradio', { name: 'Descending' })).toBeChecked();
-    expect(screen.getByRole('menuitemradio', { name: 'Ascending' })).not.toBeChecked();
+    expect(
+      await screen.findByRole('menuitemradio', { name: 'Name' }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole('menuitemradio', { name: 'Descending' }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole('menuitemradio', { name: 'Ascending' }),
+    ).not.toBeChecked();
   });
 });
 
@@ -314,13 +374,19 @@ describe('pageItems', () => {
 
 describe('usePagination', () => {
   /** A probe that renders the hook's state and lets a test drive it. */
-  function Probe({ total, resetOn }: { total: number; resetOn: string }): JSX.Element {
+  function Probe({
+    total,
+    resetOn,
+  }: {
+    total: number;
+    resetOn: string;
+  }): JSX.Element {
     const pagination = usePagination({ resetOn }).withTotal(total);
     return (
       <>
         <output data-testid="state">
-          {pagination.page}/{pagination.pageCount} rows {pagination.start}-{pagination.end} offset{' '}
-          {pagination.offset}
+          {pagination.page}/{pagination.pageCount} rows {pagination.start}-
+          {pagination.end} offset {pagination.offset}
         </output>
         <Pagination pagination={pagination} total={total} label="Rows" />
       </>
@@ -393,7 +459,9 @@ describe('Pagination', () => {
   function render(total: number): void {
     function Harness(): JSX.Element {
       const pagination = usePagination({ resetOn: '' }).withTotal(total);
-      return <Pagination pagination={pagination} total={total} label="Sessions" />;
+      return (
+        <Pagination pagination={pagination} total={total} label="Sessions" />
+      );
     }
     renderWithProviders(<Harness />);
   }
@@ -401,7 +469,9 @@ describe('Pagination', () => {
   /** A disabled Previous and Next under every short list is chrome that can never act. */
   it('is absent when there is only one page', () => {
     render(25);
-    expect(screen.queryByRole('navigation', { name: 'Sessions' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('navigation', { name: 'Sessions' }),
+    ).not.toBeInTheDocument();
   });
 
   it('says how much there is, which is what a filter is judged by', () => {
@@ -417,14 +487,21 @@ describe('Pagination', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
 
-    expect(screen.getByRole('button', { name: 'Page 2' })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('button', { name: 'Page 1' })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('button', { name: 'Page 2' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(screen.getByRole('button', { name: 'Page 1' })).not.toHaveAttribute(
+      'aria-current',
+    );
   });
 
   it('disables the end it is already at', async () => {
     render(60);
 
-    expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: 'Previous page' }),
+    ).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Next page' })).toBeEnabled();
 
     await userEvent.click(screen.getByRole('button', { name: 'Page 3' }));
@@ -436,7 +513,9 @@ describe('Pagination', () => {
   /** Reading "ellipsis" between two numbers says nothing anyone can act on. */
   it('hides the elision from the accessibility tree', () => {
     render(500);
-    expect(screen.getByRole('navigation', { name: 'Sessions' })).toHaveTextContent('…');
+    expect(
+      screen.getByRole('navigation', { name: 'Sessions' }),
+    ).toHaveTextContent('…');
     expect(screen.queryByRole('button', { name: '…' })).not.toBeInTheDocument();
   });
 });

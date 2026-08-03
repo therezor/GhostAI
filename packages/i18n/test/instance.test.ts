@@ -30,7 +30,12 @@ const RESOURCES = {
 type LooseT = (key: string, options?: Record<string, unknown>) => string;
 
 function build(locale = 'en', strict = false): LooseT {
-  const instance = createI18n({ locale, resources: RESOURCES, defaultNS: 'web', strict });
+  const instance = createI18n({
+    locale,
+    resources: RESOURCES,
+    defaultNS: 'web',
+    strict,
+  });
   return instance.t as unknown as LooseT;
 }
 
@@ -88,7 +93,9 @@ describe('strict mode', () => {
   it('throws on a missing key, so a typo fails the suite', () => {
     const t = build('en', true);
 
-    expect(() => t('nope.not.a.key')).toThrow(/Missing translation: web:nope\.not\.a\.key/u);
+    expect(() => t('nope.not.a.key')).toThrow(
+      /Missing translation: web:nope\.not\.a\.key/u,
+    );
   });
 
   it('returns the key instead of throwing when it is off', () => {

@@ -59,7 +59,9 @@ describe('contrastRatio', () => {
   });
 
   it('is 1:1 against itself', () => {
-    expect(contrastRatio(rgb255ToRgba(18, 18, 18), rgb255ToRgba(18, 18, 18))).toBeCloseTo(1, 6);
+    expect(
+      contrastRatio(rgb255ToRgba(18, 18, 18), rgb255ToRgba(18, 18, 18)),
+    ).toBeCloseTo(1, 6);
   });
 });
 
@@ -79,6 +81,8 @@ describe('composite', () => {
     const surface = oklchToRgba(0.159, 0.005, 77.3);
     const hovered = composite(rgb255ToRgba(255, 255, 255, 0.05), surface);
 
-    expect(relativeLuminance(hovered)).toBeGreaterThan(relativeLuminance(surface));
+    expect(relativeLuminance(hovered)).toBeGreaterThan(
+      relativeLuminance(surface),
+    );
   });
 });

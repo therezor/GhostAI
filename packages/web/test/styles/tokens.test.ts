@@ -11,13 +11,19 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { parseDeclarations, readTokensCss, resolveTokens } from '@/tokens/sheet.js';
+import {
+  parseDeclarations,
+  readTokensCss,
+  resolveTokens,
+} from '@/tokens/sheet.js';
 
 const css = readTokensCss();
 const declarations = parseDeclarations(css);
 
 describe('the two light seed blocks', () => {
-  const inMediaQuery = declarations.filter((declaration) => declaration.media !== undefined);
+  const inMediaQuery = declarations.filter(
+    (declaration) => declaration.media !== undefined,
+  );
   const inAttribute = declarations.filter((declaration) =>
     declaration.selector.includes("[data-theme='light']"),
   );
@@ -44,7 +50,9 @@ describe('the two light seed blocks', () => {
         .filter((declaration) => declaration.property.startsWith('--seed-'))
         .map((declaration) => declaration.property),
     );
-    const light = new Set(inAttribute.map((declaration) => declaration.property));
+    const light = new Set(
+      inAttribute.map((declaration) => declaration.property),
+    );
 
     // Shared on purpose. The gold is the gold — only its lightness and chroma
     // move between themes — and `--seed-on-fill-l` is text on a fill, which is
@@ -56,14 +64,18 @@ describe('the two light seed blocks', () => {
       '--seed-neutral-h',
       '--seed-on-fill-l',
     ];
-    const missing = [...dark].filter((seed) => !light.has(seed) && !shared.includes(seed));
+    const missing = [...dark].filter(
+      (seed) => !light.has(seed) && !shared.includes(seed),
+    );
 
     expect(missing).toEqual([]);
   });
 });
 
 describe('the derived layer', () => {
-  const declared = new Set(declarations.map((declaration) => declaration.property));
+  const declared = new Set(
+    declarations.map((declaration) => declaration.property),
+  );
 
   it('exposes every colour the stylesheets use', () => {
     for (const token of [
@@ -99,7 +111,9 @@ describe('the derived layer', () => {
    * added and then wired up nowhere.
    */
   it('consumes every seed it declares', () => {
-    const seeds = [...declared].filter((property) => property.startsWith('--seed-'));
+    const seeds = [...declared].filter((property) =>
+      property.startsWith('--seed-'),
+    );
     const derived = declarations
       .filter((declaration) => !declaration.property.startsWith('--seed-'))
       .map((declaration) => declaration.value)
@@ -117,7 +131,14 @@ describe('sizing', () => {
    * slipped into any of these is a piece of the UI that stopped honouring the
    * browser's font size.
    */
-  const PREFIXES = ['--text-', '--leading-', '--radius-', '--space-', '--size-', '--layout-'];
+  const PREFIXES = [
+    '--text-',
+    '--leading-',
+    '--radius-',
+    '--space-',
+    '--size-',
+    '--layout-',
+  ];
 
   const sizes = declarations.filter((declaration) =>
     PREFIXES.some((prefix) => declaration.property.startsWith(prefix)),
@@ -134,7 +155,8 @@ describe('sizing', () => {
     // these ramps. A count of 40 would now fail on a sheet that is *better*
     // than the one it was written against.
     const missing = PREFIXES.filter(
-      (prefix) => !sizes.some((declaration) => declaration.property.startsWith(prefix)),
+      (prefix) =>
+        !sizes.some((declaration) => declaration.property.startsWith(prefix)),
     );
 
     expect(missing).toEqual([]);

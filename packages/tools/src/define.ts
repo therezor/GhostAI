@@ -145,7 +145,11 @@ export interface ArgIssue {
 
 export type ParseArgsResult<Args> =
   | { readonly ok: true; readonly args: Args }
-  | { readonly ok: false; readonly message: string; readonly issues: readonly ArgIssue[] };
+  | {
+      readonly ok: false;
+      readonly message: string;
+      readonly issues: readonly ArgIssue[];
+    };
 
 export interface ToolSpec<S extends z.ZodType> {
   readonly name: string;
@@ -155,7 +159,10 @@ export interface ToolSpec<S extends z.ZodType> {
   /** Defaults to `safe`; the approval policy per band lives in config. */
   readonly risk?: ToolRisk;
   readonly annotations?: ToolAnnotations;
-  execute(args: z.output<S>, context: ToolContext): Promise<ToolOutput> | ToolOutput;
+  execute(
+    args: z.output<S>,
+    context: ToolContext,
+  ): Promise<ToolOutput> | ToolOutput;
 }
 
 /**
@@ -199,21 +206,28 @@ function describeIssues(error: z.ZodError): readonly ArgIssue[] {
   }));
 }
 
-function computeParameters(name: string, schema: z.ZodType): Readonly<Record<string, unknown>> {
+function computeParameters(
+  name: string,
+  schema: z.ZodType,
+): Readonly<Record<string, unknown>> {
   let emitted: Record<string, unknown>;
   try {
     emitted = z.toJSONSchema(schema, { io: 'input' });
   } catch (error) {
-    throw new GhostError('config', `Tool ${name} has a schema with no JSON Schema form`, {
-      cause: error,
-      details: { tool: name },
-    });
+    throw new GhostError(
+      'config',
+      `Tool ${name} has a schema with no JSON Schema form`,
+      {
+        cause: error,
+        details: { tool: name },
+      },
+    );
   }
 
   // `$schema` is a document-level annotation. Providers accept the object as a
   // parameter schema, not as a standalone document, and some gateways reject
   // unknown top-level keys outright.
-  const { $schema: _document, ...parameters } = emitted;
+  const { $schema: document, ...parameters } = emitted;
 
   if (parameters.type !== 'object') {
     throw new GhostError(
@@ -240,7 +254,9 @@ function computeParameters(name: string, schema: z.ZodType): Readonly<Record<str
  * Everything derivable is derived here and once: a tool defined at module load
  * computes its JSON Schema at module load, not per turn and not per iteration.
  */
-export function defineTool<S extends z.ZodType>(spec: ToolSpec<S>): Tool<z.output<S>> {
+export function defineTool<S extends z.ZodType>(
+  spec: ToolSpec<S>,
+): Tool<z.output<S>> {
   if (!TOOL_NAME_PATTERN.test(spec.name)) {
     throw new GhostError(
       'config',
@@ -269,13 +285,21 @@ export function defineTool<S extends z.ZodType>(spec: ToolSpec<S>): Tool<z.outpu
     if (result.success) return { ok: true, args: result.data };
     const issues = describeIssues(result.error);
     const detail = issues
-      .map((issue) => (issue.path === '' ? issue.message : `${issue.path}: ${issue.message}`))
+      .map((issue) =>
+        issue.path === '' ? issue.message : `${issue.path}: ${issue.message}`,
+      )
       .join('; ');
-    return { ok: false, message: `Invalid arguments for ${spec.name}: ${detail}`, issues };
+    return {
+      ok: false,
+      message: `Invalid arguments for ${spec.name}: ${detail}`,
+      issues,
+    };
   };
 
-  const execute = async (args: z.output<S>, context: ToolContext): Promise<ToolOutput> =>
-    await spec.execute(args, context);
+  const execute = async (
+    args: z.output<S>,
+    context: ToolContext,
+  ): Promise<ToolOutput> => await spec.execute(args, context);
 
   return {
     name: spec.name,

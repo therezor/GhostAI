@@ -14,7 +14,11 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import type { Clock } from '@ghostai/core';
-import { ConfigSchema, type Config, type ToolDefinition } from '@ghostai/protocol';
+import {
+  ConfigSchema,
+  type Config,
+  type ToolDefinition,
+} from '@ghostai/protocol';
 
 import { createServer, type GhostServer, type UiOptions } from '#src/app.js';
 import type { PasswordHasher } from '#src/auth-store.js';
@@ -78,7 +82,9 @@ export interface TestServer {
   close(): Promise<void>;
 }
 
-export async function startTestServer(options: TestServerOptions = {}): Promise<TestServer> {
+export async function startTestServer(
+  options: TestServerOptions = {},
+): Promise<TestServer> {
   const database = new DatabaseSync(':memory:');
   const workspace = mkdtempSync(join(tmpdir(), 'ghostai-routes-'));
   const config = options.config ?? ConfigSchema.parse({});
@@ -88,11 +94,17 @@ export async function startTestServer(options: TestServerOptions = {}): Promise<
     workspace,
     config,
     ...(options.tools === undefined ? {} : { tools: options.tools }),
-    ...(options.registeredTools === undefined ? {} : { registeredTools: options.registeredTools }),
+    ...(options.registeredTools === undefined
+      ? {}
+      : { registeredTools: options.registeredTools }),
     ...(options.provider === undefined ? {} : { provider: options.provider }),
     ...(options.model === undefined ? {} : { model: options.model }),
-    ...(options.configured === undefined ? {} : { configured: options.configured }),
-    ...(options.systemPrompt === undefined ? {} : { systemPrompt: options.systemPrompt }),
+    ...(options.configured === undefined
+      ? {}
+      : { configured: options.configured }),
+    ...(options.systemPrompt === undefined
+      ? {}
+      : { systemPrompt: options.systemPrompt }),
     ...(options.onReload === undefined ? {} : { onReload: options.onReload }),
     ...(options.clock === undefined ? {} : { clock: options.clock }),
     ...(options.credentialsPresent === undefined
@@ -100,7 +112,12 @@ export async function startTestServer(options: TestServerOptions = {}): Promise<
       : { credentialsPresent: options.credentialsPresent }),
   });
 
-  const { hub, runner } = createTestHub(runtime.store, config, options.answer, options.runner);
+  const { hub, runner } = createTestHub(
+    runtime.store,
+    config,
+    options.answer,
+    options.runner,
+  );
 
   const server = await createServer({
     config,
@@ -111,7 +128,9 @@ export async function startTestServer(options: TestServerOptions = {}): Promise<
     password: TEST_PASSWORD,
     ...(options.clock === undefined ? {} : { clock: options.clock }),
     ...(options.ui === undefined ? {} : { ui: options.ui }),
-    ...(options.scheduler === undefined ? {} : { scheduler: () => options.scheduler }),
+    ...(options.scheduler === undefined
+      ? {}
+      : { scheduler: () => options.scheduler }),
   });
 
   return {

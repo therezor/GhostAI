@@ -14,7 +14,12 @@
 
 import type { StoredMessage, SubagentRunRef } from '@ghostai/protocol';
 
-import { type ToolPart, type Transcript, type TranscriptItem, type TurnPart } from './shapes.js';
+import {
+  type ToolPart,
+  type Transcript,
+  type TranscriptItem,
+  type TurnPart,
+} from './shapes.js';
 import {
   attachmentsOf,
   findTool,
@@ -45,7 +50,10 @@ export function mergeStoredHistory(
   subagentRuns: Readonly<Record<string, SubagentRunRef>> = {},
   failures: Readonly<Record<string, string>> = {},
 ): Transcript {
-  const base = withLiveRiskBands(fromStoredMessages(messages, subagentRuns, failures), existing);
+  const base = withLiveRiskBands(
+    fromStoredMessages(messages, subagentRuns, failures),
+    existing,
+  );
 
   const ids = new Set(base.map((item) => item.id));
   // The second key, and the one that does the real work: a message sent a
@@ -61,11 +69,19 @@ export function mergeStoredHistory(
   const merged: TranscriptItem[] = [...base];
   for (const item of existing) {
     if (ids.has(item.id)) continue;
-    if (item.kind === 'user' && item.turnId !== undefined && turns.has(item.turnId)) continue;
+    if (
+      item.kind === 'user' &&
+      item.turnId !== undefined &&
+      turns.has(item.turnId)
+    ) {
+      continue;
+    }
     // Deduping against what has already been kept, not only against the base,
     // makes this idempotent — and the history query can resolve more than once.
     ids.add(item.id);
-    if (item.kind === 'user' && item.turnId !== undefined) turns.add(item.turnId);
+    if (item.kind === 'user' && item.turnId !== undefined) {
+      turns.add(item.turnId);
+    }
     merged.push(item);
   }
 
@@ -145,7 +161,10 @@ export function fromStoredMessages(
       key,
       span === undefined
         ? { first: stored.seq, last: stored.seq }
-        : { first: Math.min(span.first, stored.seq), last: Math.max(span.last, stored.seq) },
+        : {
+            first: Math.min(span.first, stored.seq),
+            last: Math.max(span.last, stored.seq),
+          },
     );
     if (stored.message.role === 'assistant') answered.add(key);
   }
@@ -197,7 +216,11 @@ export function fromStoredMessages(
 
         const text = textOf(message.content);
         if (text !== '') {
-          parts.push({ kind: 'text', id: `${turn.id}#${String(parts.length)}`, text });
+          parts.push({
+            kind: 'text',
+            id: `${turn.id}#${String(parts.length)}`,
+            text,
+          });
         }
 
         for (const call of message.toolCalls) {
@@ -232,7 +255,9 @@ export function fromStoredMessages(
         // `findLegalStart` guarantees the assistant turn that made it is in the
         // same history, but not that it is in the last item.
         const index = items.findLastIndex(
-          (item) => item.kind === 'turn' && findTool(item.parts, message.toolCallId) !== undefined,
+          (item) =>
+            item.kind === 'turn' &&
+            findTool(item.parts, message.toolCallId) !== undefined,
         );
         const turn = items[index];
         if (turn?.kind !== 'turn') continue;
@@ -264,7 +289,9 @@ export function fromStoredMessages(
       lastSeq: spans.get(item.id)?.last,
       // Same shape as a failure that arrived over the socket, so a turn read
       // back from storage and one watched live are indistinguishable.
-      ...(failure === undefined ? {} : { failure: { message: failure, retryable: true } }),
+      ...(failure === undefined
+        ? {}
+        : { failure: { message: failure, retryable: true } }),
     };
   });
 }

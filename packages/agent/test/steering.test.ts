@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { MAX_PENDING_STEER, STEERING_PREFIX, SteeringQueue, steeringText } from '#src/steering.js';
+import {
+  MAX_PENDING_STEER,
+  STEERING_PREFIX,
+  SteeringQueue,
+  steeringText,
+} from '#src/steering.js';
 
 describe('SteeringQueue', () => {
   it('holds messages until the loop drains them', () => {
@@ -10,7 +15,9 @@ describe('SteeringQueue', () => {
     queue.push('a', 'use the other directory', 1000);
     expect(queue.hasPending('a')).toBe(true);
 
-    expect(queue.drain('a')).toEqual([{ content: 'use the other directory', receivedAtMs: 1000 }]);
+    expect(queue.drain('a')).toEqual([
+      { content: 'use the other directory', receivedAtMs: 1000 },
+    ]);
     expect(queue.hasPending('a')).toBe(false);
     expect(queue.drain('a')).toEqual([]);
   });
@@ -22,7 +29,9 @@ describe('SteeringQueue', () => {
     queue.push('b', 'for b', 2);
 
     expect(queue.size).toBe(2);
-    expect(queue.drain('a').map((message) => message.content)).toEqual(['for a']);
+    expect(queue.drain('a').map((message) => message.content)).toEqual([
+      'for a',
+    ]);
     expect(queue.hasPending('b')).toBe(true);
   });
 
@@ -34,7 +43,10 @@ describe('SteeringQueue', () => {
     queue.push('a', 'third', 3);
 
     // The newest correction is the one the user is waiting on.
-    expect(queue.drain('a').map((message) => message.content)).toEqual(['second', 'third']);
+    expect(queue.drain('a').map((message) => message.content)).toEqual([
+      'second',
+      'third',
+    ]);
   });
 
   it('defaults to a bounded queue', () => {
@@ -60,7 +72,10 @@ describe('SteeringQueue', () => {
 
 describe('steeringText', () => {
   it('marks the message as an interruption rather than a new request', () => {
-    const text = steeringText({ content: 'no, the other one', receivedAtMs: 1 });
+    const text = steeringText({
+      content: 'no, the other one',
+      receivedAtMs: 1,
+    });
 
     expect(text.startsWith(STEERING_PREFIX)).toBe(true);
     expect(text).toContain('no, the other one');

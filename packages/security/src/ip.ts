@@ -44,7 +44,12 @@ export interface ParsedIp {
  * `link-local` — that is the metadata endpoint.
  */
 export type AddressCategory =
-  'loopback' | 'private' | 'link-local' | 'multicast' | 'unspecified' | 'reserved';
+  | 'loopback'
+  | 'private'
+  | 'link-local'
+  | 'multicast'
+  | 'unspecified'
+  | 'reserved';
 
 export interface AddressRange {
   readonly cidr: string;
@@ -57,9 +62,17 @@ export const BLOCKED_RANGES: readonly AddressRange[] = [
   { cidr: '10.0.0.0/8', label: 'private', category: 'private' },
   { cidr: '100.64.0.0/10', label: 'carrier-grade NAT', category: 'private' },
   { cidr: '127.0.0.0/8', label: 'loopback', category: 'loopback' },
-  { cidr: '169.254.0.0/16', label: 'link-local and cloud metadata', category: 'link-local' },
+  {
+    cidr: '169.254.0.0/16',
+    label: 'link-local and cloud metadata',
+    category: 'link-local',
+  },
   { cidr: '172.16.0.0/12', label: 'private', category: 'private' },
-  { cidr: '192.0.0.0/24', label: 'IETF protocol assignments', category: 'reserved' },
+  {
+    cidr: '192.0.0.0/24',
+    label: 'IETF protocol assignments',
+    category: 'reserved',
+  },
   { cidr: '192.0.2.0/24', label: 'documentation', category: 'reserved' },
   { cidr: '192.88.99.0/24', label: '6to4 relay anycast', category: 'reserved' },
   { cidr: '192.168.0.0/16', label: 'private', category: 'private' },
@@ -67,11 +80,19 @@ export const BLOCKED_RANGES: readonly AddressRange[] = [
   { cidr: '198.51.100.0/24', label: 'documentation', category: 'reserved' },
   { cidr: '203.0.113.0/24', label: 'documentation', category: 'reserved' },
   { cidr: '224.0.0.0/4', label: 'multicast', category: 'multicast' },
-  { cidr: '240.0.0.0/4', label: 'reserved, including broadcast', category: 'reserved' },
+  {
+    cidr: '240.0.0.0/4',
+    label: 'reserved, including broadcast',
+    category: 'reserved',
+  },
   // `::/96` covers both the unspecified address and the deprecated
   // IPv4-compatible form `::127.0.0.1`. IPv4-*mapped* addresses are not here:
   // `parseIpLiteral` returns them as family 4, so they meet the table above.
-  { cidr: '::/96', label: 'unspecified and IPv4-compatible', category: 'unspecified' },
+  {
+    cidr: '::/96',
+    label: 'unspecified and IPv4-compatible',
+    category: 'unspecified',
+  },
   { cidr: '::1/128', label: 'loopback', category: 'loopback' },
   { cidr: '64:ff9b::/96', label: 'NAT64, embeds IPv4', category: 'reserved' },
   { cidr: '100::/64', label: 'discard-only', category: 'reserved' },
@@ -156,7 +177,10 @@ function parseDottedQuad(text: string): Uint8Array | null {
  * is only legal in the final position of the whole literal, so `1.2.3.4::5` has
  * to be refused even though the quad ends the half it appears in.
  */
-function ipv6GroupsToBytes(groups: readonly string[], terminal: boolean): Uint8Array | null {
+function ipv6GroupsToBytes(
+  groups: readonly string[],
+  terminal: boolean,
+): Uint8Array | null {
   const out: number[] = [];
   for (const [index, group] of groups.entries()) {
     if (group === '') return null;
@@ -187,7 +211,9 @@ function formatIpv6(bytes: Uint8Array): string {
   // and there is no impossible `undefined` case to branch on.
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const groups: number[] = [];
-  for (let index = 0; index < 16; index += 2) groups.push(view.getUint16(index));
+  for (let index = 0; index < 16; index += 2) {
+    groups.push(view.getUint16(index));
+  }
 
   let bestStart = -1;
   let bestLength = 0;
@@ -221,7 +247,10 @@ function parseIpv6(text: string): ParsedIp | null {
 
   const headText = halves[0] ?? '';
   const tailText = halves.length === 2 ? (halves[1] ?? '') : null;
-  const head = ipv6GroupsToBytes(headText === '' ? [] : headText.split(':'), tailText === null);
+  const head = ipv6GroupsToBytes(
+    headText === '' ? [] : headText.split(':'),
+    tailText === null,
+  );
   const tail = ipv6GroupsToBytes(
     tailText === null || tailText === '' ? [] : tailText.split(':'),
     true,
@@ -318,7 +347,12 @@ function compileRange(range: AddressRange): CompiledRange {
   if (parsed === null) {
     throw new GhostError('internal', `Malformed blocked range: ${range.cidr}`);
   }
-  return { range, family: parsed.family, bytes: parsed.bytes, prefix: parsed.prefix };
+  return {
+    range,
+    family: parsed.family,
+    bytes: parsed.bytes,
+    prefix: parsed.prefix,
+  };
 }
 
 /**
@@ -327,11 +361,15 @@ function compileRange(range: AddressRange): CompiledRange {
  * deployment that allows loopback so it can reach its own model server must get
  * the same answer for `[::1]` as for `127.0.0.1`.
  */
-const COMPILED_RANGES: readonly CompiledRange[] = BLOCKED_RANGES.map(compileRange).sort(
-  (left, right) => right.prefix - left.prefix,
-);
+const COMPILED_RANGES: readonly CompiledRange[] = BLOCKED_RANGES.map(
+  compileRange,
+).sort((left, right) => right.prefix - left.prefix);
 
-function matchesPrefix(address: Uint8Array, network: Uint8Array, prefix: number): boolean {
+function matchesPrefix(
+  address: Uint8Array,
+  network: Uint8Array,
+  prefix: number,
+): boolean {
   const wholeBytes = prefix >> 3;
   for (let index = 0; index < wholeBytes; index += 1) {
     if (address[index] !== network[index]) return false;
@@ -339,14 +377,18 @@ function matchesPrefix(address: Uint8Array, network: Uint8Array, prefix: number)
   const remainingBits = prefix & 7;
   if (remainingBits === 0) return true;
   const mask = (0xff << (8 - remainingBits)) & 0xff;
-  return ((address[wholeBytes] ?? 0) & mask) === ((network[wholeBytes] ?? 0) & mask);
+  return (
+    ((address[wholeBytes] ?? 0) & mask) === ((network[wholeBytes] ?? 0) & mask)
+  );
 }
 
 /** The range an address falls in, or `null` if it is publicly routable. */
 export function classifyAddress(ip: ParsedIp): AddressRange | null {
   for (const compiled of COMPILED_RANGES) {
     if (compiled.family !== ip.family) continue;
-    if (matchesPrefix(ip.bytes, compiled.bytes, compiled.prefix)) return compiled.range;
+    if (matchesPrefix(ip.bytes, compiled.bytes, compiled.prefix)) {
+      return compiled.range;
+    }
   }
   return null;
 }

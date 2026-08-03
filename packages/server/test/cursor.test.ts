@@ -11,7 +11,9 @@ import {
 
 describe('cursors', () => {
   it('round-trips a message position', () => {
-    expect(decodeMessageCursor(encodeMessageCursor({ seq: 42 }))).toEqual({ seq: 42 });
+    expect(decodeMessageCursor(encodeMessageCursor({ seq: 42 }))).toEqual({
+      seq: 42,
+    });
   });
 
   it('round-trips a session position', () => {
@@ -21,7 +23,9 @@ describe('cursors', () => {
 
   it('round-trips a notification position', () => {
     const cursor = { createdAtMs: 1_700_000_000_000, id: 'n1' };
-    expect(decodeNotificationCursor(encodeNotificationCursor(cursor))).toEqual(cursor);
+    expect(decodeNotificationCursor(encodeNotificationCursor(cursor))).toEqual(
+      cursor,
+    );
   });
 
   // Opaque on purpose: a cursor that reads as `42` is a cursor a client does
@@ -32,11 +36,23 @@ describe('cursors', () => {
 
   it.each([
     ['not base64 at all', '@@@@'],
-    ['base64 that is not JSON', Buffer.from('hello', 'utf8').toString('base64url')],
-    ['JSON that is not an object', Buffer.from('[1,2]', 'utf8').toString('base64url')],
-    ['an object with the wrong field', Buffer.from('{"x":1}', 'utf8').toString('base64url')],
-    ['a seq that is not an integer', Buffer.from('{"s":1.5}', 'utf8').toString('base64url')],
-  ])('refuses %s with a 400', (_name, cursor) => {
+    [
+      'base64 that is not JSON',
+      Buffer.from('hello', 'utf8').toString('base64url'),
+    ],
+    [
+      'JSON that is not an object',
+      Buffer.from('[1,2]', 'utf8').toString('base64url'),
+    ],
+    [
+      'an object with the wrong field',
+      Buffer.from('{"x":1}', 'utf8').toString('base64url'),
+    ],
+    [
+      'a seq that is not an integer',
+      Buffer.from('{"s":1.5}', 'utf8').toString('base64url'),
+    ],
+  ])('refuses %s with a 400', (name, cursor) => {
     // Never a silent restart from the top: that pages a client through the same
     // first page forever, which reads as a hung UI rather than a bad request.
     expect(() => decodeMessageCursor(cursor)).toThrow(/cursor/i);
@@ -56,6 +72,8 @@ describe('cursors', () => {
     // A message cursor handed to the session listing decodes as base64 and as
     // JSON and still does not address a position. It has to be rejected on its
     // fields, not on its encoding.
-    expect(() => decodeSessionCursor(encodeMessageCursor({ seq: 1 }))).toThrow(/cursor/i);
+    expect(() => decodeSessionCursor(encodeMessageCursor({ seq: 1 }))).toThrow(
+      /cursor/i,
+    );
   });
 });

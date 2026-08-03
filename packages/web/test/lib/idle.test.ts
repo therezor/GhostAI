@@ -25,7 +25,10 @@ describe('onIdle', () => {
     const cancel = vi.fn();
     const task = vi.fn();
 
-    const handle = onIdle(task, { requestIdleCallback: request, cancelIdleCallback: cancel });
+    const handle = onIdle(task, {
+      requestIdleCallback: request,
+      cancelIdleCallback: cancel,
+    });
 
     // The timeout is what makes this fire at all in a tab that is never idle —
     // one streaming a long answer, for instance.

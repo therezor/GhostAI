@@ -21,10 +21,18 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { Providers } from '@/app/providers.js';
-import { stubApi, testQueryClient, type RecordedRequest, type StubRoute } from '@testkit/render.js';
+import {
+  stubApi,
+  testQueryClient,
+  type RecordedRequest,
+  type StubRoute,
+} from '@testkit/render.js';
 import { UNCONFIGURED_STATUS } from '@testkit/fixtures.js';
 
-const UNAUTHENTICATED: StubRoute = [401, { error: { code: 'unauthorized', message: 'nope' } }];
+const UNAUTHENTICATED: StubRoute = [
+  401,
+  { error: { code: 'unauthorized', message: 'nope' } },
+];
 
 const PROVIDERS = {
   types: [
@@ -42,7 +50,9 @@ const PROVIDERS = {
   instances: [],
 };
 
-function mount(overrides: Record<string, StubRoute> = {}): { readonly calls: RecordedRequest[] } {
+function mount(overrides: Record<string, StubRoute> = {}): {
+  readonly calls: RecordedRequest[];
+} {
   const calls = stubApi({
     '/api/setup': [200, { required: true }],
     'POST /api/setup/claim': [200, { ok: true, expiresAtMs: 1 }],
@@ -73,7 +83,9 @@ function mount(overrides: Record<string, StubRoute> = {}): { readonly calls: Rec
  * `Skip` is the answer "yes, that one" — and it is what the majority of first
  * runs will click. The step has its own test below.
  */
-async function pastLanguage(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+async function pastLanguage(
+  user: ReturnType<typeof userEvent.setup>,
+): Promise<void> {
   await user.click(await screen.findByRole('button', { name: 'Skip' }));
 }
 
@@ -89,7 +101,9 @@ describe('an unclaimed install', () => {
     expect(screen.getByLabelText('Setup code')).toHaveFocus();
     // The login overlay is mounted too — both render on a 401 — and this one
     // has to be the one the user is looking at.
-    expect(screen.queryByRole('heading', { name: 'Sign in' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Sign in' }),
+    ).not.toBeInTheDocument();
   });
 
   it('offers no way to skip the two credential steps', async () => {
@@ -100,7 +114,9 @@ describe('an unclaimed install', () => {
 
     // Skipping would leave a shell-capable agent with no password, which is the
     // state the wizard exists to end.
-    expect(screen.queryByRole('button', { name: 'Skip' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Skip' }),
+    ).not.toBeInTheDocument();
     // `Back` *is* offered here, and only here among the credential steps: it
     // leads to the language question, where nothing has been spent yet. The
     // password step still has none — the code is single-use by then.
@@ -112,14 +128,20 @@ describe('an unclaimed install', () => {
     const { calls } = mount();
     await pastLanguage(user);
 
-    await user.type(await screen.findByLabelText('Setup code'), 'aaaa-bbbb-cccc');
+    await user.type(
+      await screen.findByLabelText('Setup code'),
+      'aaaa-bbbb-cccc',
+    );
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
     // The username is prefilled with the default, so a first run is a password
     // and nothing else unless the operator wants otherwise.
     expect(await screen.findByLabelText('Username')).toHaveValue('ghost');
     await user.type(screen.getByLabelText('Password'), 'a-good-password');
-    await user.type(screen.getByLabelText('Confirm password'), 'a-good-password');
+    await user.type(
+      screen.getByLabelText('Confirm password'),
+      'a-good-password',
+    );
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
     expect(
@@ -128,7 +150,9 @@ describe('an unclaimed install', () => {
 
     const claim = calls.find((call) => call.path === '/api/setup/claim');
     expect(claim?.body).toEqual({ code: 'aaaa-bbbb-cccc' });
-    expect(calls.find((call) => call.path === '/api/setup/password')?.body).toEqual({
+    expect(
+      calls.find((call) => call.path === '/api/setup/password')?.body,
+    ).toEqual({
       username: 'ghost',
       password: 'a-good-password',
     });
@@ -139,18 +163,26 @@ describe('an unclaimed install', () => {
     const { calls } = mount();
     await pastLanguage(user);
 
-    await user.type(await screen.findByLabelText('Setup code'), 'aaaa-bbbb-cccc');
+    await user.type(
+      await screen.findByLabelText('Setup code'),
+      'aaaa-bbbb-cccc',
+    );
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
     const username = await screen.findByLabelText('Username');
     await user.clear(username);
     await user.type(username, 'operator');
     await user.type(screen.getByLabelText('Password'), 'a-good-password');
-    await user.type(screen.getByLabelText('Confirm password'), 'a-good-password');
+    await user.type(
+      screen.getByLabelText('Confirm password'),
+      'a-good-password',
+    );
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
     await waitFor(() => {
-      expect(calls.find((call) => call.path === '/api/setup/password')?.body).toEqual({
+      expect(
+        calls.find((call) => call.path === '/api/setup/password')?.body,
+      ).toEqual({
         username: 'operator',
         password: 'a-good-password',
       });
@@ -164,14 +196,19 @@ describe('an unclaimed install', () => {
     const { calls } = mount();
     await pastLanguage(user);
 
-    await user.type(await screen.findByLabelText('Setup code'), 'aaaa-bbbb-cccc');
+    await user.type(
+      await screen.findByLabelText('Setup code'),
+      'aaaa-bbbb-cccc',
+    );
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
     await user.type(await screen.findByLabelText('Password'), 'short');
     await user.type(screen.getByLabelText('Confirm password'), 'short');
 
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
-    expect(calls.some((call) => call.path === '/api/setup/password')).toBe(false);
+    expect(calls.some((call) => call.path === '/api/setup/password')).toBe(
+      false,
+    );
   });
 
   it('refuses to submit two passwords that differ, without asking the server', async () => {
@@ -179,15 +216,26 @@ describe('an unclaimed install', () => {
     const { calls } = mount();
     await pastLanguage(user);
 
-    await user.type(await screen.findByLabelText('Setup code'), 'aaaa-bbbb-cccc');
+    await user.type(
+      await screen.findByLabelText('Setup code'),
+      'aaaa-bbbb-cccc',
+    );
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
-    await user.type(await screen.findByLabelText('Password'), 'one that is long enough');
-    await user.type(screen.getByLabelText('Confirm password'), 'another that is long enough');
+    await user.type(
+      await screen.findByLabelText('Password'),
+      'one that is long enough',
+    );
+    await user.type(
+      screen.getByLabelText('Confirm password'),
+      'another that is long enough',
+    );
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('do not match');
-    expect(calls.some((call) => call.path === '/api/setup/password')).toBe(false);
+    expect(calls.some((call) => call.path === '/api/setup/password')).toBe(
+      false,
+    );
   });
 
   it('says the code was wrong rather than leaving the field looking accepted', async () => {
@@ -195,11 +243,18 @@ describe('an unclaimed install', () => {
     mount({ 'POST /api/setup/claim': UNAUTHENTICATED });
     await pastLanguage(user);
 
-    await user.type(await screen.findByLabelText('Setup code'), 'zzzz-zzzz-zzzz');
+    await user.type(
+      await screen.findByLabelText('Setup code'),
+      'zzzz-zzzz-zzzz',
+    );
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Incorrect or already-used');
-    expect(screen.getByRole('heading', { name: 'Enter the setup code' })).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Incorrect or already-used',
+    );
+    expect(
+      screen.getByRole('heading', { name: 'Enter the setup code' }),
+    ).toBeInTheDocument();
   });
 });
 
@@ -210,7 +265,10 @@ describe('a claimed install with no model', () => {
     // claimed.
     mount({
       '/api/setup': [200, { required: false }],
-      '/api/status': [200, { ...UNCONFIGURED_STATUS, authEnabled: true, toolCount: 0 }],
+      '/api/status': [
+        200,
+        { ...UNCONFIGURED_STATUS, authEnabled: true, toolCount: 0 },
+      ],
     });
 
     expect(

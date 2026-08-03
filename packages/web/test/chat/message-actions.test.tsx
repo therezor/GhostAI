@@ -26,9 +26,15 @@ describe('the message action bar', () => {
   it('offers copy alone when nothing else is possible', () => {
     renderWithProviders(<MessageActions text="hello" busy={false} />);
 
-    expect(screen.getByRole('button', { name: 'Copy message' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Edit this message' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Regenerate the answer' })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Copy message' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Edit this message' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Regenerate the answer' }),
+    ).not.toBeInTheDocument();
   });
 
   it('names every icon button, because none of them has visible text', () => {
@@ -61,7 +67,9 @@ describe('the message action bar', () => {
     expect(await navigator.clipboard.readText()).toBe('the answer');
     // The check mark is where the eye already is; a toast would be a
     // notification about something the user just did and is looking at.
-    expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('button', { name: 'Copied' }),
+    ).toBeInTheDocument();
   });
 
   it('disables everything that would start a turn while one is running', () => {
@@ -75,9 +83,15 @@ describe('the message action bar', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: 'Edit this message' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Regenerate the answer' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Branch from here' })).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: 'Edit this message' }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: 'Regenerate the answer' }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: 'Branch from here' }),
+    ).toBeDisabled();
     // Copy asks the server nothing, so a running turn is no reason to refuse it.
     expect(screen.getByRole('button', { name: 'Copy message' })).toBeEnabled();
   });
@@ -99,7 +113,9 @@ describe('the message action bar', () => {
     );
 
     await user.click(screen.getByRole('button', { name: 'Edit this message' }));
-    await user.click(screen.getByRole('button', { name: 'Regenerate the answer' }));
+    await user.click(
+      screen.getByRole('button', { name: 'Regenerate the answer' }),
+    );
     await user.click(screen.getByRole('button', { name: 'Branch from here' }));
 
     expect(onEdit).toHaveBeenCalledOnce();

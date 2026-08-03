@@ -45,7 +45,15 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type JSX } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type JSX,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { FileEntry } from '@ghostai/protocol';
@@ -100,7 +108,11 @@ type NewKind = 'file' | 'directory';
 export function FilesRoute(): JSX.Element {
   const { t } = useTranslation();
   const fmt = useFormat();
-  const { path, workspace: fromUrl, file: openPath } = useSearch({ from: '/files' });
+  const {
+    path,
+    workspace: fromUrl,
+    file: openPath,
+  } = useSearch({ from: '/files' });
   const { workspaceId } = useWorkspace();
   // The URL wins when it has one, so a link to a file is complete and
   // shareable — this page's own doctrine is that its location lives in the
@@ -112,7 +124,9 @@ export function FilesRoute(): JSX.Element {
   const directory = normalisePath(path ?? ROOT_PATH);
   const [previewDirty, setPreviewDirty] = useState(false);
   const [discarding, setDiscarding] = useState(false);
-  const [pendingDelete, setPendingDelete] = useState<FileEntry | undefined>(undefined);
+  const [pendingDelete, setPendingDelete] = useState<FileEntry | undefined>(
+    undefined,
+  );
   const [renaming, setRenaming] = useState<FileEntry | undefined>(undefined);
   const [creating, setCreating] = useState<NewKind | undefined>(undefined);
   const [filter, setFilter] = useState('');
@@ -129,7 +143,9 @@ export function FilesRoute(): JSX.Element {
   });
 
   const refresh = (): void => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.files(workspace, directory) });
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.files(workspace, directory),
+    });
   };
 
   /**
@@ -140,7 +156,9 @@ export function FilesRoute(): JSX.Element {
    * string rather than merging into it — a hand-written `{ file }` somewhere
    * would silently drop the workspace and the directory with it.
    */
-  const searchFor = (file?: string): { path?: string; workspace: string; file?: string } => ({
+  const searchFor = (
+    file?: string,
+  ): { path?: string; workspace: string; file?: string } => ({
     // `path` is omitted at the root rather than sent as `.`: the parameter's
     // default only applies when it is absent, and a URL that says `?path=` for
     // "the top of the workspace" is a longer way of saying nothing.
@@ -158,7 +176,10 @@ export function FilesRoute(): JSX.Element {
    * dialog simply does not open, which is the same answer the row would give.
    */
   const preview = useMemo(
-    () => listing.data?.entries.find((entry) => entry.path === openPath && !entry.isDirectory),
+    () =>
+      listing.data?.entries.find(
+        (entry) => entry.path === openPath && !entry.isDirectory,
+      ),
     [listing.data, openPath],
   );
 
@@ -185,15 +206,18 @@ export function FilesRoute(): JSX.Element {
     // A directory always goes recursively, because the dialog behind this has
     // already said so and counted what it holds. The flag exists to stop a
     // *stray request* from recursing, not to make the UI ask twice.
-    mutationFn: (entry: FileEntry) => api.deleteFile(workspace, entry.path, entry.isDirectory),
-    onSuccess: (_result, entry) => {
+    mutationFn: (entry: FileEntry) =>
+      api.deleteFile(workspace, entry.path, entry.isDirectory),
+    onSuccess: (result, entry) => {
       toast.success(`Deleted ${entry.name}`);
       setPendingDelete(undefined);
       refresh();
       // The dialog would close on its own once the row is gone from the
       // listing, but the address would keep naming a file that no longer
       // exists — and that address is what a reload and a shared link read.
-      if (openPath === entry.path) void navigate({ to: '/files', search: searchFor() });
+      if (openPath === entry.path) {
+        void navigate({ to: '/files', search: searchFor() });
+      }
     },
     onError: (error: Error) => {
       toast.error('Could not delete it', error.message);
@@ -209,12 +233,19 @@ export function FilesRoute(): JSX.Element {
    */
   const pendingContents = useQuery({
     queryKey: queryKeys.files(workspace, pendingDelete?.path ?? ''),
-    queryFn: ({ signal }) => api.files(workspace, pendingDelete?.path ?? '.', signal),
+    queryFn: ({ signal }) =>
+      api.files(workspace, pendingDelete?.path ?? '.', signal),
     enabled: pendingDelete?.isDirectory === true,
   });
 
   const create = useMutation({
-    mutationFn: ({ kind, name }: { readonly kind: NewKind; readonly name: string }) => {
+    mutationFn: ({
+      kind,
+      name,
+    }: {
+      readonly kind: NewKind;
+      readonly name: string;
+    }) => {
       const target = joinPath(directory, name.trim());
       // An empty file rather than a placeholder line: what the reader asked for
       // is a name to start typing under, and anything written into it is
@@ -228,7 +259,9 @@ export function FilesRoute(): JSX.Element {
       refresh();
       toast.success(`Created ${entry.name}`);
       // Straight into it, which is the only reason to have made it.
-      if (kind === 'file') void navigate({ to: '/files', search: searchFor(entry.path) });
+      if (kind === 'file') {
+        void navigate({ to: '/files', search: searchFor(entry.path) });
+      }
     },
     onError: (error: Error) => {
       toast.error('Could not create it', error.message);
@@ -245,8 +278,18 @@ export function FilesRoute(): JSX.Element {
    * one function call.
    */
   const rename = useMutation({
-    mutationFn: ({ entry, name }: { readonly entry: FileEntry; readonly name: string }) =>
-      api.moveFile(workspace, entry.path, joinPath(parentOf(entry.path), name.trim())),
+    mutationFn: ({
+      entry,
+      name,
+    }: {
+      readonly entry: FileEntry;
+      readonly name: string;
+    }) =>
+      api.moveFile(
+        workspace,
+        entry.path,
+        joinPath(parentOf(entry.path), name.trim()),
+      ),
     onSuccess: (entry, { entry: previous }) => {
       setRenaming(undefined);
       refresh();
@@ -372,7 +415,11 @@ export function FilesRoute(): JSX.Element {
       />
 
       <div className="row list-toolbar">
-        <SearchFilter value={filter} label={t('files.filter')} onValueChange={setFilter} />
+        <SearchFilter
+          value={filter}
+          label={t('files.filter')}
+          onValueChange={setFilter}
+        />
         <ListSort
           options={[
             { key: 'name', label: t('common.name') },
@@ -407,7 +454,9 @@ export function FilesRoute(): JSX.Element {
             // Only when the pointer actually left the region: `dragleave` also
             // fires crossing into a child, which would flicker the highlight
             // once per row the cursor passes over.
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            if (
+              !event.currentTarget.contains(event.relatedTarget as Node | null)
+            ) {
               setDropping(false);
             }
           }}
@@ -420,7 +469,9 @@ export function FilesRoute(): JSX.Element {
               <p className="file-drop__empty-hint">{t('files.emptyHint')}</p>
             </div>
           ) : entries.length === 0 ? (
-            <p className="page__note">{t('files.noMatch', { filter, count: total })}</p>
+            <p className="page__note">
+              {t('files.noMatch', { filter, count: total })}
+            </p>
           ) : (
             <DataList label={t('files.title')}>
               {entries.map((entry) => (
@@ -435,7 +486,9 @@ export function FilesRoute(): JSX.Element {
                     <Link
                       to="/files"
                       search={
-                        entry.isDirectory ? { path: entry.path, workspace } : searchFor(entry.path)
+                        entry.isDirectory
+                          ? { path: entry.path, workspace }
+                          : searchFor(entry.path)
                       }
                       className={cn(
                         'data-list__open',
@@ -458,7 +511,9 @@ export function FilesRoute(): JSX.Element {
                       {/* A directory has no size of its own to report, and the
                           em dash is what the Size column used to say so. It
                           still reads as "nothing to say here" beside a time. */}
-                      <span>{entry.isDirectory ? '—' : formatBytes(entry.sizeBytes)}</span>
+                      <span>
+                        {entry.isDirectory ? '—' : formatBytes(entry.sizeBytes)}
+                      </span>
                       <span>{fmt.relativeTime(entry.modifiedAtMs, now)}</span>
                     </>
                   }
@@ -473,7 +528,10 @@ export function FilesRoute(): JSX.Element {
                               search: { path: entry.path, workspace },
                             });
                           } else {
-                            void navigate({ to: '/files', search: searchFor(entry.path) });
+                            void navigate({
+                              to: '/files',
+                              search: searchFor(entry.path),
+                            });
                           }
                         }}
                       >
@@ -523,7 +581,11 @@ export function FilesRoute(): JSX.Element {
             <DialogSubheading>{preview?.path ?? ''}</DialogSubheading>
           </DialogHeader>
           {preview !== undefined && (
-            <FilePreview entry={preview} workspace={workspace} onDirtyChange={handleDirtyChange} />
+            <FilePreview
+              entry={preview}
+              workspace={workspace}
+              onDirtyChange={handleDirtyChange}
+            />
           )}
         </DialogContent>
       </Dialog>
@@ -583,7 +645,11 @@ export function FilesRoute(): JSX.Element {
         onOpenChange={(open) => {
           if (!open) setPendingDelete(undefined);
         }}
-        title={pendingDelete?.isDirectory === true ? 'Delete this folder?' : 'Delete this file?'}
+        title={
+          pendingDelete?.isDirectory === true
+            ? 'Delete this folder?'
+            : 'Delete this file?'
+        }
         description={`${pendingDelete?.path ?? ''} is removed from the workspace. There is no undo.`}
         confirmLabel="Delete"
         pending={remove.isPending}
@@ -595,12 +661,19 @@ export function FilesRoute(): JSX.Element {
             "Delete drafts?" and "Delete drafts and the 47 things in it?" are
             different questions, and only one of them is the one being asked. */}
         {pendingDelete?.isDirectory === true && pendingContents.isSuccess && (
-          <p className={cn('notice', pendingContents.data.entries.length > 0 && 'notice--danger')}>
+          <p
+            className={cn(
+              'notice',
+              pendingContents.data.entries.length > 0 && 'notice--danger',
+            )}
+          >
             <Trash2 />
             <span>
               {pendingContents.data.entries.length === 0
                 ? t('files.folderEmpty')
-                : t('files.folderContents', { count: pendingContents.data.entries.length })}
+                : t('files.folderContents', {
+                    count: pendingContents.data.entries.length,
+                  })}
             </span>
           </p>
         )}

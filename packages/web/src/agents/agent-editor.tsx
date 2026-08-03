@@ -254,7 +254,9 @@ export function AgentCreateRoute(): JSX.Element {
   const { t } = useTranslation();
   const settings = useSettings();
 
-  if (settings.isPending) return <p className="page__note">{t('agents.loading')}</p>;
+  if (settings.isPending) {
+    return <p className="page__note">{t('agents.loading')}</p>;
+  }
   if (settings.isError) {
     return (
       <p role="alert" className="page__error">
@@ -266,7 +268,8 @@ export function AgentCreateRoute(): JSX.Element {
   const { config } = settings.data;
   // The template a new agent is stamped from, and the same one `toNewAgentPatch`
   // used: the default agent as it actually stands, not the schema's defaults.
-  const template = config.agents.list[DEFAULT_AGENT_ID] ?? AgentEntrySchema.parse({});
+  const template =
+    config.agents.list[DEFAULT_AGENT_ID] ?? AgentEntrySchema.parse({});
 
   return (
     <Editor
@@ -284,7 +287,9 @@ export function AgentEditorRoute(): JSX.Element {
   const { agentId } = useParams({ from: '/agents/$agentId' });
   const settings = useSettings();
 
-  if (settings.isPending) return <p className="page__note">{t('agents.loading')}</p>;
+  if (settings.isPending) {
+    return <p className="page__note">{t('agents.loading')}</p>;
+  }
   if (settings.isError) {
     return (
       <p role="alert" className="page__error">
@@ -358,7 +363,9 @@ function Editor({
   const { agentId: active, select } = useAgent();
   const { save, saving } = useSaveSettings();
 
-  const [form, setForm] = useState<AgentEntryForm>(() => toAgentEntryForm(entry, defaults));
+  const [form, setForm] = useState<AgentEntryForm>(() =>
+    toAgentEntryForm(entry, defaults),
+  );
   const [base, setBase] = useState<AgentForm>(() => toAgentForm(defaults));
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   const [dirty, setDirty] = useState(false);
@@ -420,10 +427,12 @@ function Editor({
     // one-way door: the option that would take it back did not exist, and an
     // agent could not be moved off a container without hand-editing the config.
     { value: NO_TOOLBOX, label: t('agents.toolboxHost') },
-    ...(toolboxes.data?.toolboxes ?? []).map((box: { name: string; label: string }) => ({
-      value: box.name,
-      label: box.label === '' ? box.name : `${box.label} (${box.name})`,
-    })),
+    ...(toolboxes.data?.toolboxes ?? []).map(
+      (box: { name: string; label: string }) => ({
+        value: box.name,
+        label: box.label === '' ? box.name : `${box.label} (${box.name})`,
+      }),
+    ),
   ];
   const chosen = toolboxes.data?.toolboxes.find(
     (box: { name: string }) => box.name === form.toolboxName,
@@ -449,11 +458,17 @@ function Editor({
     return order.indexOf(option.value) <= order.indexOf(ceiling);
   });
 
-  const update = <K extends keyof AgentEntryForm>(key: K, value: AgentEntryForm[K]): void => {
+  const update = <K extends keyof AgentEntryForm>(
+    key: K,
+    value: AgentEntryForm[K],
+  ): void => {
     setForm((current) => ({ ...current, [key]: value }));
     setDirty(true);
   };
-  const updateBase = <K extends keyof AgentForm>(key: K, value: AgentForm[K]): void => {
+  const updateBase = <K extends keyof AgentForm>(
+    key: K,
+    value: AgentForm[K],
+  ): void => {
     setBase((current) => ({ ...current, [key]: value }));
     setDirty(true);
   };
@@ -545,7 +560,9 @@ function Editor({
   const policyUnfenced =
     form.toolPolicyPrompt.trim() !== '' &&
     !namesDelimiter(form.toolPolicyPrompt) &&
-    !namesDelimiter(form.livePrompt === '' ? DEFAULT_LIVE_STATE_TEMPLATE : form.livePrompt);
+    !namesDelimiter(
+      form.livePrompt === '' ? DEFAULT_LIVE_STATE_TEMPLATE : form.livePrompt,
+    );
 
   // ── Tools ────────────────────────────────────────────────────────────────
   //
@@ -573,7 +590,9 @@ function Editor({
    * wearing two rows that disagreed about whether it existed.
    */
   const toolNames = useMemo(() => {
-    const names = new Set<string>((tools.data?.tools ?? []).map((tool) => tool.name));
+    const names = new Set<string>(
+      (tools.data?.tools ?? []).map((tool) => tool.name),
+    );
     for (const name of Object.keys(form.tools)) {
       if (!toolboxToolNames.has(name)) names.add(name);
     }
@@ -601,7 +620,10 @@ function Editor({
    */
   const toolsOff = !switches.toolsEnabled.checked;
 
-  const setToolPermission = (name: string, permission: ToolPermission): void => {
+  const setToolPermission = (
+    name: string,
+    permission: ToolPermission,
+  ): void => {
     update('tools', { ...form.tools, [name]: permission });
   };
 
@@ -638,7 +660,9 @@ function Editor({
   );
 
   const providerOptions = useMemo(() => {
-    const instances = (providers.data?.instances ?? []).filter((instance) => instance.enabled);
+    const instances = (providers.data?.instances ?? []).filter(
+      (instance) => instance.enabled,
+    );
     return [
       { value: 'auto', label: 'auto — resolve from whichever has credentials' },
       ...instances.map((instance) => ({
@@ -657,7 +681,12 @@ function Editor({
    * provider stopped listing, survives being looked at.
    */
   const modelChoices = useMemo(
-    () => modelOptions(models.data?.models ?? [], fields.provider.value, fields.model.value),
+    () =>
+      modelOptions(
+        models.data?.models ?? [],
+        fields.provider.value,
+        fields.model.value,
+      ),
     [models.data, fields.provider.value, fields.model.value],
   );
 
@@ -713,12 +742,15 @@ function Editor({
   const proposedId = idSource.trim() === '' ? '' : deriveAgentId(idSource);
   // Creating is never renaming: there is no old id for the new one to move
   // away from, so the same box means "what this will be called" instead.
-  const renaming = !creating && !isDefault && proposedId !== '' && proposedId !== agentId;
+  const renaming =
+    !creating && !isDefault && proposedId !== '' && proposedId !== agentId;
 
   const idError = ((): string | undefined => {
     if (creating) {
       if (proposedId === '') return t('agents.idEmpty');
-      return list[proposedId] === undefined ? undefined : t('agents.idTaken', { id: proposedId });
+      return list[proposedId] === undefined
+        ? undefined
+        : t('agents.idTaken', { id: proposedId });
     }
     if (isDefault || idDraft.trim() === agentId) return undefined;
     if (proposedId === '') return t('agents.idEmpty');
@@ -767,7 +799,10 @@ function Editor({
       // the write lands is the "There is no agent called…" path.
       save(result.patch, {
         onSuccess: () => {
-          void navigate({ to: '/agents/$agentId', params: { agentId: target } });
+          void navigate({
+            to: '/agents/$agentId',
+            params: { agentId: target },
+          });
         },
       });
       setDirty(false);
@@ -797,7 +832,10 @@ function Editor({
               // an id that names *nothing*, and this one now names the renamed
               // agent.
               if (active === agentId) select(proposedId);
-              void navigate({ to: '/agents/$agentId', params: { agentId: proposedId } });
+              void navigate({
+                to: '/agents/$agentId',
+                params: { agentId: proposedId },
+              });
             },
           }
         : {},
@@ -819,7 +857,12 @@ function Editor({
     setDirty(false);
   };
 
-  const name = form.label === '' ? (creating ? t('agents.newTitle') : agentId) : form.label;
+  const name =
+    form.label === ''
+      ? creating
+        ? t('agents.newTitle')
+        : agentId
+      : form.label;
 
   return (
     <div className="stack page page--wide agent-editor">
@@ -867,7 +910,10 @@ function Editor({
         </p>
       </div>
 
-      <Section title={t('agents.identity')} description={t('agents.identityDesc')}>
+      <Section
+        title={t('agents.identity')}
+        description={t('agents.identityDesc')}
+      >
         <FieldGrid>
           <TextField
             label={t('common.name')}
@@ -887,7 +933,9 @@ function Editor({
                 setIdDraft(value);
                 setDirty(true);
               }}
-              {...(errors.agentId === undefined || creating ? {} : { error: errors.agentId })}
+              {...(errors.agentId === undefined || creating
+                ? {}
+                : { error: errors.agentId })}
               hint={
                 // Creating shows what the id *will be* as it is typed, and says
                 // so inline rather than as an error — a name that collides is a
@@ -937,8 +985,15 @@ function Editor({
           <SelectField
             label={t('agents.model')}
             value={fields.model.value}
-            placeholder={modelChoices.length === 0 ? 'No models to choose from' : 'Choose a model'}
-            options={modelChoices.map((model) => ({ value: model, label: model }))}
+            placeholder={
+              modelChoices.length === 0
+                ? 'No models to choose from'
+                : 'Choose a model'
+            }
+            options={modelChoices.map((model) => ({
+              value: model,
+              label: model,
+            }))}
             onValueChange={fields.model.set}
             error={errors.model}
             hint={
@@ -982,8 +1037,13 @@ function Editor({
         </FieldGrid>
       </Section>
 
-      <Section title={t('agents.toolsSection')} description={t('agents.toolsDesc')}>
-        {tools.isPending && <p className="page__note">{t('agents.loadingTools')}</p>}
+      <Section
+        title={t('agents.toolsSection')}
+        description={t('agents.toolsDesc')}
+      >
+        {tools.isPending && (
+          <p className="page__note">{t('agents.loadingTools')}</p>
+        )}
         {/* Above the list rather than in place of it. The rows say what this
             agent is configured to do, and that is still true and still saved —
             what has changed is only that this model is not being told about any
@@ -998,7 +1058,12 @@ function Editor({
           />
         )}
         {toolNames.length > 0 && (
-          <ul className={cn('stack agent-editor__tools', toolsOff && 'agent-editor__tools--off')}>
+          <ul
+            className={cn(
+              'stack agent-editor__tools',
+              toolsOff && 'agent-editor__tools--off',
+            )}
+          >
             {toolNames.map((name) => {
               const tool = registered.get(name);
               return (
@@ -1008,7 +1073,9 @@ function Editor({
                   detail={tool?.description ?? ''}
                   risk={tool?.risk}
                   permission={form.tools[name] ?? 'deny'}
-                  fields={tool === undefined ? [] : parameterFields(tool.parameters)}
+                  fields={
+                    tool === undefined ? [] : parameterFields(tool.parameters)
+                  }
                   override={form.toolPrompts[name]}
                   disabled={toolsOff}
                   onChange={(next) => {
@@ -1029,9 +1096,16 @@ function Editor({
         {chosen?.exposesTools === true && chosen.tools.length > 0 && (
           <>
             <h3 className="agent-editor__tool-group">
-              {t('agents.toolboxToolsGroup', { name: chosen.label || chosen.name })}
+              {t('agents.toolboxToolsGroup', {
+                name: chosen.label || chosen.name,
+              })}
             </h3>
-            <ul className={cn('stack agent-editor__tools', toolsOff && 'agent-editor__tools--off')}>
+            <ul
+              className={cn(
+                'stack agent-editor__tools',
+                toolsOff && 'agent-editor__tools--off',
+              )}
+            >
               {chosen.tools.map((tool) => (
                 <ToolRow
                   key={tool.name}
@@ -1065,7 +1139,10 @@ function Editor({
       {/* After the tools, because delegating *is* a tool from the model's side —
           one per subagent, named after it — and an operator reading down the
           page has just decided what this agent may do on its own. */}
-      <Section title={t('agents.subagentsSection')} description={t('agents.subagentsDesc')}>
+      <Section
+        title={t('agents.subagentsSection')}
+        description={t('agents.subagentsDesc')}
+      >
         {delegable.length === 0 ? (
           <p className="page__note">{t('agents.subagentsNoneAvailable')}</p>
         ) : (
@@ -1081,19 +1158,22 @@ function Editor({
                   // yet has no id, and two of them would collide on `''` — which
                   // React resolves by reusing one input for both.
                   key={index}
-                  ref_={ref}
+                  subagentRef={ref}
                   index={index}
                   // The agent itself is never offered, and neither is one already
                   // chosen — both are refused at save, and a picker that offers
                   // what the save refuses teaches the wrong thing.
                   options={delegable.filter(
-                    (agent) => agent.id === ref.id || !chosenSubagents.has(agent.id),
+                    (agent) =>
+                      agent.id === ref.id || !chosenSubagents.has(agent.id),
                   )}
                   onChange={(next) => {
                     setSubagent(index, next);
                   }}
                   onRemove={() => {
-                    setSubagents(form.subagents.filter((_unused, at) => at !== index));
+                    setSubagents(
+                      form.subagents.filter((unused, at) => at !== index),
+                    );
                   }}
                 />
               ))}
@@ -1103,7 +1183,10 @@ function Editor({
               variant="secondary"
               disabled={form.subagents.length >= delegable.length}
               onClick={() => {
-                setSubagents([...form.subagents, { id: '', prompt: '', permission: 'allow' }]);
+                setSubagents([
+                  ...form.subagents,
+                  { id: '', prompt: '', permission: 'allow' },
+                ]);
               }}
             >
               <Plus aria-hidden="true" />
@@ -1116,8 +1199,13 @@ function Editor({
       {/* After the tools, because a profile decides *where* the tools it just
           listed actually run — and before the budget, which is a smaller
           decision. */}
-      <Section title={t('agents.toolboxSection')} description={t('agents.toolboxDesc')}>
-        {toolboxes.isPending && <p className="page__note">{t('agents.toolboxLoading')}</p>}
+      <Section
+        title={t('agents.toolboxSection')}
+        description={t('agents.toolboxDesc')}
+      >
+        {toolboxes.isPending && (
+          <p className="page__note">{t('agents.toolboxLoading')}</p>
+        )}
         {toolboxes.data?.toolboxes.length === 0 && (
           <p className="page__note">{t('agents.toolboxNoProfiles')}</p>
         )}
@@ -1220,7 +1308,10 @@ function Editor({
         </FieldGrid>
       </Section>
 
-      <Section title={t('agents.systemPrompt')} description={t('agents.promptDesc')}>
+      <Section
+        title={t('agents.systemPrompt')}
+        description={t('agents.promptDesc')}
+      >
         <div className="stack agent-editor__prompt">
           <TemplateEditor
             key={`${String(formEpoch)}-system`}
@@ -1230,7 +1321,9 @@ function Editor({
             value={form.systemPrompt}
             placeholders={raw ? RAW_PROMPT_PLACEHOLDERS : PROMPT_PLACEHOLDERS}
             removable={false}
-            hint={raw ? 'agents.promptSystemRawHint' : 'agents.promptSystemHint'}
+            hint={
+              raw ? 'agents.promptSystemRawHint' : 'agents.promptSystemHint'
+            }
             {...(promptUncacheable
               ? {
                   // Not an error: a clock in the prompt is a legitimate thing to
@@ -1396,10 +1489,15 @@ function Editor({
                               // every turn, at which point the whole of it is
                               // re-sent per step.
                               warning: {
-                                title: t('agents.promptToolPolicyUncacheableTitle'),
-                                message: t('agents.promptToolPolicyUncacheable', {
-                                  tag: '{{tag}}',
-                                }),
+                                title: t(
+                                  'agents.promptToolPolicyUncacheableTitle',
+                                ),
+                                message: t(
+                                  'agents.promptToolPolicyUncacheable',
+                                  {
+                                    tag: '{{tag}}',
+                                  },
+                                ),
                               },
                             }
                           : {})}
@@ -1414,7 +1512,12 @@ function Editor({
         </div>
       </Section>
 
-      <SaveBar dirty={dirty} saving={saving} onSave={onSave} onRevert={onRevert} />
+      <SaveBar
+        dirty={dirty}
+        saving={saving}
+        onSave={onSave}
+        onRevert={onRevert}
+      />
 
       <ConfirmDialog
         open={confirmingDelete}

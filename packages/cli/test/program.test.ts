@@ -121,7 +121,9 @@ describe('runCli', () => {
     expect(options?.sessionKey).toBe('cli:default');
     // Absent, not `undefined`: the runtime distinguishes "no override" from a
     // value, and `exactOptionalPropertyTypes` is what keeps that honest.
-    expect(options === undefined ? [] : Object.keys(options)).not.toContain('model');
+    expect(options === undefined ? [] : Object.keys(options)).not.toContain(
+      'model',
+    );
   });
 
   it('turns colour off in --json mode so the output stays parseable', async () => {
@@ -247,7 +249,13 @@ describe('ghost serve', () => {
   });
 
   it('passes the username through, from the flag or the environment', async () => {
-    const flag = await serve(['serve', '--password', 'hunter2hunter2', '--username', 'operator']);
+    const flag = await serve([
+      'serve',
+      '--password',
+      'hunter2hunter2',
+      '--username',
+      'operator',
+    ]);
     expect(flag.calls[0]?.username).toBe('operator');
 
     const env = await serve(['serve'], {

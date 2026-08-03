@@ -32,18 +32,35 @@ describe('the grammar table', () => {
     // rejected `import()` the first time someone writes that fence. This is the
     // only place it can be caught early.
     const loaded = await Promise.all(
-      Object.entries(LANGUAGES).map(async ([name, load]) => [name, await load()] as const),
+      Object.entries(LANGUAGES).map(
+        async ([name, load]) => [name, await load()] as const,
+      ),
     );
 
     for (const [name, grammar] of loaded) {
       const registration = (grammar as { default?: unknown }).default;
-      expect(Array.isArray(registration), `${name} did not export a grammar`).toBe(true);
+      expect(
+        Array.isArray(registration),
+        `${name} did not export a grammar`,
+      ).toBe(true);
       expect((registration as unknown[]).length).toBeGreaterThan(0);
     }
   });
 
   it('points every alias at a grammar that is actually carried', () => {
-    const aliases = ['ts', 'js', 'jsx', 'sh', 'zsh', 'py', 'rb', 'rs', 'yml', 'md', 'tf'];
+    const aliases = [
+      'ts',
+      'js',
+      'jsx',
+      'sh',
+      'zsh',
+      'py',
+      'rb',
+      'rs',
+      'yml',
+      'md',
+      'tf',
+    ];
 
     for (const alias of aliases) {
       const resolved = resolveLanguage(alias);
@@ -78,7 +95,9 @@ describe('highlight', () => {
 
     // A highlighter that drops or duplicates a character is a highlighter that
     // silently corrupts the code the user is about to copy.
-    const rebuilt = lines?.map((line) => line.map((token) => token.content).join('')).join('\n');
+    const rebuilt = lines
+      ?.map((line) => line.map((token) => token.content).join(''))
+      .join('\n');
     expect(rebuilt).toBe(code);
   });
 
@@ -86,7 +105,8 @@ describe('highlight', () => {
     const dark = await highlight('const a = 1;', 'ts', 'dark');
     const light = await highlight('const a = 1;', 'ts', 'light');
 
-    const first = (lines: typeof dark): string | undefined => lines?.[0]?.[0]?.color;
+    const first = (lines: typeof dark): string | undefined =>
+      lines?.[0]?.[0]?.color;
     expect(first(dark)).toBeDefined();
     expect(first(light)).toBeDefined();
     expect(first(dark)).not.toBe(first(light));
@@ -95,7 +115,9 @@ describe('highlight', () => {
   it('returns undefined for a language it does not carry', async () => {
     // An unhighlighted code block is a perfectly good code block, and a fence
     // saying `brainfuck` is not an error condition.
-    await expect(highlight('+++', 'brainfuck', 'dark')).resolves.toBeUndefined();
+    await expect(
+      highlight('+++', 'brainfuck', 'dark'),
+    ).resolves.toBeUndefined();
     await expect(highlight('x', '', 'dark')).resolves.toBeUndefined();
   });
 

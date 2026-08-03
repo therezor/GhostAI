@@ -27,9 +27,11 @@ describe('the focus ring', () => {
     const offenders = sources
       .filter(({ file }) => file !== 'src/styles/base.css')
       .flatMap(({ file, source }) =>
-        [...source.matchAll(/(?:focus(?:-visible)?:)?outline-none|outline:\s*none/g)].map(
-          (match) => `${file}: ${match[0]}`,
-        ),
+        [
+          ...source.matchAll(
+            /(?:focus(?:-visible)?:)?outline-none|outline:\s*none/g,
+          ),
+        ].map((match) => `${file}: ${match[0]}`),
       );
 
     expect(offenders).toEqual([]);
@@ -52,7 +54,9 @@ describe('interactive elements', () => {
       .filter(({ file }) => file.endsWith('.tsx'))
       .flatMap(({ file, source }) =>
         [...source.matchAll(/size="icon"[\s\S]{0,240}?<\/Button>/g)]
-          .filter((match) => !/aria-label|aria-labelledby|sr-only/.test(match[0]))
+          .filter(
+            (match) => !/aria-label|aria-labelledby|sr-only/.test(match[0]),
+          )
           .map(() => file),
       );
 
@@ -86,7 +90,10 @@ describe('interactive elements', () => {
       .filter((element) => !reached.has(element))
       // A tab list is one tab stop by design: arrow keys move within it, which
       // `primitives.test.tsx` asserts separately.
-      .filter((element) => element.getAttribute('role') !== 'tab' || element.tabIndex === 0);
+      .filter(
+        (element) =>
+          element.getAttribute('role') !== 'tab' || element.tabIndex === 0,
+      );
 
     expect(unreachable.map((element) => element.textContent)).toEqual([]);
   });

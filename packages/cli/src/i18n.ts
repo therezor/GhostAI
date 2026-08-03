@@ -37,7 +37,12 @@ import { createCliI18n } from '@ghostai/i18n/cli';
 import type { i18n, TFunction } from 'i18next';
 
 /** The environment variables that name a language, most specific first. */
-const POSIX_LOCALE_VARS = ['LC_ALL', 'LC_MESSAGES', 'LANG', 'LANGUAGE'] as const;
+const POSIX_LOCALE_VARS = [
+  'LC_ALL',
+  'LC_MESSAGES',
+  'LANG',
+  'LANGUAGE',
+] as const;
 
 export type Env = Readonly<Record<string, string | undefined>>;
 
@@ -98,7 +103,9 @@ export function translationsFor(env: Env, configured?: string): Translations {
  * that writes one to a log does not.
  */
 export function describeError(error: unknown, { i18n }: Translations): string {
-  if (!isKeyed(error)) return error instanceof Error ? error.message : String(error);
+  if (!isKeyed(error)) {
+    return error instanceof Error ? error.message : String(error);
+  }
   // The unscoped `t`, not the shared-scoped one: the key arrives fully
   // qualified (`shared:runtime.noProvider`) because that is what a package with
   // no namespace of its own can name unambiguously.
@@ -118,6 +125,7 @@ interface KeyedError {
  */
 function isKeyed(value: unknown): value is KeyedError {
   return (
-    value instanceof Error && typeof (value as { messageKey?: unknown }).messageKey === 'string'
+    value instanceof Error &&
+    typeof (value as { messageKey?: unknown }).messageKey === 'string'
   );
 }

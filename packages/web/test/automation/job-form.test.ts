@@ -17,7 +17,12 @@ import { describe, expect, it } from 'vitest';
 import { createWebI18n } from '@ghostai/i18n/web';
 import type { AutomationJob } from '@ghostai/protocol';
 
-import { describeSchedule, emptyJobForm, toJobForm, toJobRequest } from '@/automation/job-form.js';
+import {
+  describeSchedule,
+  emptyJobForm,
+  toJobForm,
+  toJobRequest,
+} from '@/automation/job-form.js';
 
 const t = createWebI18n('en').getFixedT(null, 'web');
 
@@ -29,12 +34,23 @@ function job(over: Partial<AutomationJob> = {}): AutomationJob {
     id: 'j1',
     name: 'Morning',
     schedule: { kind: 'cron', expr: '0 9 * * *' },
-    payload: { kind: 'scheduled', message: 'check the build', deliver: false, targets: {} },
+    payload: {
+      kind: 'scheduled',
+      message: 'check the build',
+      deliver: false,
+      targets: {},
+    },
     enabled: true,
     deleteAfterRun: false,
     createdAtMs: 0,
     updatedAtMs: 0,
-    state: { nextRunAtMs: 0, lastRunAtMs: 0, lastStatus: 'pending', lastError: '', runCount: 0 },
+    state: {
+      nextRunAtMs: 0,
+      lastRunAtMs: 0,
+      lastStatus: 'pending',
+      lastError: '',
+      runCount: 0,
+    },
     ...over,
   };
 }
@@ -48,11 +64,17 @@ function form(
 
 describe('toJobForm', () => {
   it('reads a cron schedule into its own fields', () => {
-    expect(toJobForm(job(), TZ)).toMatchObject({ scheduleKind: 'cron', cronExpr: '0 9 * * *' });
+    expect(toJobForm(job(), TZ)).toMatchObject({
+      scheduleKind: 'cron',
+      cronExpr: '0 9 * * *',
+    });
   });
 
   it('shows an interval in minutes, which is what people type', () => {
-    const result = toJobForm(job({ schedule: { kind: 'every', everyMs: 900_000 } }), TZ);
+    const result = toJobForm(
+      job({ schedule: { kind: 'every', everyMs: 900_000 } }),
+      TZ,
+    );
     expect(result).toMatchObject({ scheduleKind: 'every', everyMinutes: '15' });
   });
 
@@ -60,10 +82,12 @@ describe('toJobForm', () => {
     // 06:30Z is 09:30 in Kyiv in January. A `Date`-based conversion would render
     // whatever the machine running this is set to, which is the whole bug.
     const atMs = Date.parse('2026-01-15T06:30:00Z');
-    expect(toJobForm(job({ schedule: { kind: 'at', atMs } }), TZ).at).toBe('2026-01-15T08:30');
-    expect(toJobForm(job({ schedule: { kind: 'at', atMs } }), 'Asia/Tokyo').at).toBe(
-      '2026-01-15T15:30',
+    expect(toJobForm(job({ schedule: { kind: 'at', atMs } }), TZ).at).toBe(
+      '2026-01-15T08:30',
     );
+    expect(
+      toJobForm(job({ schedule: { kind: 'at', atMs } }), 'Asia/Tokyo').at,
+    ).toBe('2026-01-15T15:30');
   });
 
   it('reads a heartbeat payload into the file and model boxes', () => {
@@ -79,13 +103,20 @@ describe('toJobForm', () => {
       }),
       TZ,
     );
-    expect(result).toMatchObject({ payloadKind: 'heartbeat', file: 'NOTES.md', model: 'tiny' });
+    expect(result).toMatchObject({
+      payloadKind: 'heartbeat',
+      file: 'NOTES.md',
+      model: 'tiny',
+    });
   });
 
   it('leaves the boxes for the other kind at their defaults rather than blank', () => {
     // Switching kind in the editor must not land on an empty required field
     // that the operator never saw.
-    const result = toJobForm(job({ schedule: { kind: 'every', everyMs: 60_000 } }), TZ);
+    const result = toJobForm(
+      job({ schedule: { kind: 'every', everyMs: 60_000 } }),
+      TZ,
+    );
     expect(result.cronExpr).toBe(emptyJobForm(TZ).cronExpr);
   });
 });
@@ -93,7 +124,12 @@ describe('toJobForm', () => {
 describe('toJobRequest', () => {
   it('converts minutes to milliseconds once, on save', () => {
     const result = toJobRequest(
-      form({ name: 'x', scheduleKind: 'every', everyMinutes: '15', message: 'go' }),
+      form({
+        name: 'x',
+        scheduleKind: 'every',
+        everyMinutes: '15',
+        message: 'go',
+      }),
       t,
       TZ,
     );
@@ -106,10 +142,17 @@ describe('toJobRequest', () => {
     // The schema refuses `{kind: 'cron', atMs: 5}`, and so must the form —
     // otherwise a save fails with a validation error the operator cannot see
     // the cause of.
-    const result = toJobRequest(form({ name: 'x', scheduleKind: 'cron', message: 'go' }), t, TZ);
+    const result = toJobRequest(
+      form({ name: 'x', scheduleKind: 'cron', message: 'go' }),
+      t,
+      TZ,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(Object.keys(result.create.schedule).sort()).toEqual(['expr', 'kind']);
+    expect(Object.keys(result.create.schedule).sort()).toEqual([
+      'expr',
+      'kind',
+    ]);
   });
 
   it('never emits a per-job timezone, which the schema no longer accepts', () => {
@@ -123,7 +166,12 @@ describe('toJobRequest', () => {
 
   it('reads the one-shot field as a wall clock in the install zone', () => {
     const result = toJobRequest(
-      form({ name: 'x', scheduleKind: 'at', at: '2026-01-15T08:30', message: 'go' }),
+      form({
+        name: 'x',
+        scheduleKind: 'at',
+        at: '2026-01-15T08:30',
+        message: 'go',
+      }),
       t,
       TZ,
     );
@@ -148,7 +196,12 @@ describe('toJobRequest', () => {
     // Kyiv goes 03:00 → 04:00 on 2026-03-29, so 03:30 never happens. Booking an
     // hour away from where the operator pointed is worse than saying so.
     const result = toJobRequest(
-      form({ name: 'x', scheduleKind: 'at', at: '2026-03-29T03:30', message: 'go' }),
+      form({
+        name: 'x',
+        scheduleKind: 'at',
+        at: '2026-03-29T03:30',
+        message: 'go',
+      }),
       t,
       TZ,
     );
@@ -158,7 +211,11 @@ describe('toJobRequest', () => {
   });
 
   it('refuses a cron expression that is not five fields, before the round trip', () => {
-    const result = toJobRequest(form({ name: 'x', cronExpr: '0 9 *', message: 'go' }), t, TZ);
+    const result = toJobRequest(
+      form({ name: 'x', cronExpr: '0 9 *', message: 'go' }),
+      t,
+      TZ,
+    );
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.errors.cronExpr).toMatch(/five fields/u);
@@ -168,9 +225,13 @@ describe('toJobRequest', () => {
     // The shape check is deliberately shallow: importing the real parser would
     // drag `node:sqlite` into the browser bundle. `99 * * * *` is five fields
     // and nonsense, and the server's 422 is what says so.
-    expect(toJobRequest(form({ name: 'x', cronExpr: '99 * * * *', message: 'go' }), t, TZ).ok).toBe(
-      true,
-    );
+    expect(
+      toJobRequest(
+        form({ name: 'x', cronExpr: '99 * * * *', message: 'go' }),
+        t,
+        TZ,
+      ).ok,
+    ).toBe(true);
   });
 
   it('requires a name, a message and a task file where each applies', () => {
@@ -181,12 +242,20 @@ describe('toJobRequest', () => {
     if (noMessage.ok) return;
     expect(noMessage.errors.message).toBeDefined();
 
-    const noFile = toJobRequest(form({ name: 'x', payloadKind: 'heartbeat', file: ' ' }), t, TZ);
+    const noFile = toJobRequest(
+      form({ name: 'x', payloadKind: 'heartbeat', file: ' ' }),
+      t,
+      TZ,
+    );
     expect(noFile.ok).toBe(false);
   });
 
   it('refuses delivery with no channel, rather than saving a job that cannot deliver', () => {
-    const result = toJobRequest(form({ name: 'x', message: 'go', deliver: true }), t, TZ);
+    const result = toJobRequest(
+      form({ name: 'x', message: 'go', deliver: true }),
+      t,
+      TZ,
+    );
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.errors.channel).toBeDefined();
@@ -214,11 +283,15 @@ describe('toJobRequest', () => {
 
 describe('describeSchedule', () => {
   it('says each kind in a way a list row can carry', () => {
-    expect(describeSchedule({ kind: 'every', everyMs: 60_000 }, t, 'en', TZ)).toBe('Every minute');
-    expect(describeSchedule({ kind: 'every', everyMs: 300_000 }, t, 'en', TZ)).toBe(
-      'Every 5 minutes',
-    );
-    expect(describeSchedule({ kind: 'cron', expr: '0 9 * * *' }, t, 'en', TZ)).toBe('0 9 * * *');
+    expect(
+      describeSchedule({ kind: 'every', everyMs: 60_000 }, t, 'en', TZ),
+    ).toBe('Every minute');
+    expect(
+      describeSchedule({ kind: 'every', everyMs: 300_000 }, t, 'en', TZ),
+    ).toBe('Every 5 minutes');
+    expect(
+      describeSchedule({ kind: 'cron', expr: '0 9 * * *' }, t, 'en', TZ),
+    ).toBe('0 9 * * *');
   });
 
   it('renders a one-shot in the install zone, with the zone named', () => {

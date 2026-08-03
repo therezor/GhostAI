@@ -48,15 +48,22 @@ function sink(): NodeJS.WritableStream & { text: string } {
  * does not depend on. Node's global `Response` *is* undici's at runtime — the
  * runtime embeds it — so this is a declaration-level detail, not a fiction.
  */
-function transport(...responses: readonly (Response | (() => Promise<never>))[]): {
+function transport(
+  ...responses: ReadonlyArray<Response | (() => Promise<never>)>
+): {
   fetchImpl: FetchImplementation;
-  bodies: Record<string, unknown>[];
+  bodies: Array<Record<string, unknown>>;
 } {
   const queue = [...responses];
-  const bodies: Record<string, unknown>[] = [];
-  const fetchImpl = async (_url: string, init: { body?: unknown }): Promise<Response> => {
+  const bodies: Array<Record<string, unknown>> = [];
+  const fetchImpl = async (
+    url: string,
+    init: { body?: unknown },
+  ): Promise<Response> => {
     bodies.push(
-      typeof init.body === 'string' ? (JSON.parse(init.body) as Record<string, unknown>) : {},
+      typeof init.body === 'string'
+        ? (JSON.parse(init.body) as Record<string, unknown>)
+        : {},
     );
     const next = queue.shift();
     if (next === undefined) throw new Error('unscripted request');
@@ -67,15 +74,26 @@ function transport(...responses: readonly (Response | (() => Promise<never>))[])
 
 function sse(...frames: readonly unknown[]): Response {
   const body = `${frames.map((frame) => `data: ${JSON.stringify(frame)}\n\n`).join('')}data: [DONE]\n\n`;
-  return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+  return new Response(body, {
+    status: 200,
+    headers: { 'content-type': 'text/event-stream' },
+  });
 }
 
-function toolCallFrame(id: string, name: string, argumentsJson: string): unknown {
+function toolCallFrame(
+  id: string,
+  name: string,
+  argumentsJson: string,
+): unknown {
   return {
     choices: [
       {
         index: 0,
-        delta: { tool_calls: [{ index: 0, id, function: { name, arguments: argumentsJson } }] },
+        delta: {
+          tool_calls: [
+            { index: 0, id, function: { name, arguments: argumentsJson } },
+          ],
+        },
       },
     ],
   };
@@ -89,10 +107,15 @@ function finishFrame(reason: string): unknown {
   return { choices: [{ index: 0, delta: {}, finish_reason: reason }] };
 }
 
-const USAGE = { choices: [], usage: { prompt_tokens: 20, completion_tokens: 4, total_tokens: 24 } };
+const USAGE = {
+  choices: [],
+  usage: { prompt_tokens: 20, completion_tokens: 4, total_tokens: 24 },
+};
 
 /** A loop whose whole behaviour is the generator handed to it. */
-function fakeLoop(run: (input: TurnInput) => AsyncGenerator<AgentEvent, unknown>): AgentLoop {
+function fakeLoop(
+  run: (input: TurnInput) => AsyncGenerator<AgentEvent, unknown>,
+): AgentLoop {
   return { run } as unknown as AgentLoop;
 }
 
@@ -160,7 +183,9 @@ async function quiet(out: { text: () => string }, stillMs = 40): Promise<void> {
 async function waitFor(check: () => boolean, timeoutMs = 5000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (!check()) {
-    if (Date.now() > deadline) throw new Error('timed out waiting for the prompt');
+    if (Date.now() > deadline) {
+      throw new Error('timed out waiting for the prompt');
+    }
     await new Promise((done) => setTimeout(done, 5));
   }
 }
@@ -186,7 +211,11 @@ describe('runTurn', () => {
         model: 'm',
         provider: 'p',
       } satisfies AgentEvent;
-      yield { type: 'assistant.delta', turnId: 't1', text: 'Hi.' } satisfies AgentEvent;
+      yield {
+        type: 'assistant.delta',
+        turnId: 't1',
+        text: 'Hi.',
+      } satisfies AgentEvent;
       yield {
         type: 'turn.end',
         turnId: 't1',
@@ -197,11 +226,20 @@ describe('runTurn', () => {
     });
 
     const outcome = await runTurn(
-      { loop, renderer: renderer(out), sessionKey: 's', signal: new AbortController().signal },
+      {
+        loop,
+        renderer: renderer(out),
+        sessionKey: 's',
+        signal: new AbortController().signal,
+      },
       'hello',
     );
 
-    expect(outcome).toEqual({ stopReason: 'complete', aborted: false, failed: false });
+    expect(outcome).toEqual({
+      stopReason: 'complete',
+      aborted: false,
+      failed: false,
+    });
     expect(out.text).toContain('Hi.');
   });
 
@@ -225,7 +263,11 @@ describe('runTurn', () => {
       },
       'go',
     );
-    expect(outcome).toEqual({ stopReason: 'max_iterations', aborted: false, failed: false });
+    expect(outcome).toEqual({
+      stopReason: 'max_iterations',
+      aborted: false,
+      failed: false,
+    });
   });
 
   it('threads the signal into the loop and reports the abort', async () => {
@@ -261,12 +303,21 @@ describe('runTurn', () => {
     });
 
     const pending = runTurn(
-      { loop, renderer: renderer(buffer()), sessionKey: 's', signal: controller.signal },
+      {
+        loop,
+        renderer: renderer(buffer()),
+        sessionKey: 's',
+        signal: controller.signal,
+      },
       'long job',
     );
     controller.abort();
 
-    expect(await pending).toEqual({ stopReason: 'aborted', aborted: true, failed: false });
+    expect(await pending).toEqual({
+      stopReason: 'aborted',
+      aborted: true,
+      failed: false,
+    });
   });
 
   it('treats an abandoned generator as an abort rather than a crash', async () => {
@@ -323,7 +374,11 @@ describe('runTurn', () => {
   it('emits one JSON object per event when asked to', async () => {
     const out = sink();
     const loop = fakeLoop(async function* () {
-      yield { type: 'assistant.delta', turnId: 't1', text: 'Hi.' } satisfies AgentEvent;
+      yield {
+        type: 'assistant.delta',
+        turnId: 't1',
+        text: 'Hi.',
+      } satisfies AgentEvent;
       yield {
         type: 'turn.end',
         turnId: 't1',
@@ -348,7 +403,10 @@ describe('runTurn', () => {
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line) as AgentEvent);
-    expect(lines.map((event) => event.type)).toEqual(['assistant.delta', 'turn.end']);
+    expect(lines.map((event) => event.type)).toEqual([
+      'assistant.delta',
+      'turn.end',
+    ]);
   });
 });
 
@@ -366,7 +424,10 @@ describe('chatCommand', () => {
     writeFileSync(join(home, 'workspace', 'notes.md'), '# notes\n');
 
     const { fetchImpl, bodies } = transport(
-      sse(toolCallFrame('call_1', 'list_dir', '{"path":"."}'), finishFrame('tool_calls')),
+      sse(
+        toolCallFrame('call_1', 'list_dir', '{"path":"."}'),
+        finishFrame('tool_calls'),
+      ),
       sse(textFrame('Just notes.md'), finishFrame('stop'), USAGE),
     );
     const out = sink();
@@ -386,13 +447,14 @@ describe('chatCommand', () => {
 
     // The tool's *own* output, not the scripted answer: this is what proves the
     // jail was rooted at this run's workspace rather than at `~/.ghostai`.
-    const listing = bodies[1]?.messages as { role: string; content?: unknown }[] | undefined;
+    const listing = bodies[1]?.messages as
+      Array<{ role: string; content?: unknown }> | undefined;
     const toolMessage = listing?.find((message) => message.role === 'tool');
     expect(JSON.stringify(toolMessage?.content)).toContain('notes.md');
 
     // The second request carries the tool result, which is what makes this a
     // multi-iteration turn rather than two unrelated ones.
-    const second = bodies[1]?.messages as { role: string }[] | undefined;
+    const second = bodies[1]?.messages as Array<{ role: string }> | undefined;
     expect(second?.map((message) => message.role)).toContain('tool');
 
     // Reopened from disk, because the point of the store is surviving the
@@ -414,7 +476,9 @@ describe('chatCommand', () => {
 
   it('advertises tools to the provider, and none when told not to', async () => {
     const home = tempHome();
-    const withTools = transport(sse(textFrame('ok'), finishFrame('stop'), USAGE));
+    const withTools = transport(
+      sse(textFrame('ok'), finishFrame('stop'), USAGE),
+    );
     await chatCommand({
       ...base,
       home,
@@ -439,11 +503,24 @@ describe('chatCommand', () => {
   it('continues a session across invocations, and forgets it on --new', async () => {
     const home = tempHome();
     const first = transport(sse(textFrame('one'), finishFrame('stop'), USAGE));
-    await chatCommand({ ...base, home, fetchImpl: first.fetchImpl, out: sink(), message: 'a' });
+    await chatCommand({
+      ...base,
+      home,
+      fetchImpl: first.fetchImpl,
+      out: sink(),
+      message: 'a',
+    });
 
     const second = transport(sse(textFrame('two'), finishFrame('stop'), USAGE));
-    await chatCommand({ ...base, home, fetchImpl: second.fetchImpl, out: sink(), message: 'b' });
-    const carried = second.bodies[0]?.messages as { role: string }[] | undefined;
+    await chatCommand({
+      ...base,
+      home,
+      fetchImpl: second.fetchImpl,
+      out: sink(),
+      message: 'b',
+    });
+    const carried = second.bodies[0]?.messages as
+      Array<{ role: string }> | undefined;
     // system + the first turn's user/assistant + this turn's user + the trailing
     // turn carrying live state, which is sent on every request and stored on none.
     expect(carried).toHaveLength(5);
@@ -455,7 +532,9 @@ describe('chatCommand', () => {
       'user',
     ]);
 
-    const third = transport(sse(textFrame('three'), finishFrame('stop'), USAGE));
+    const third = transport(
+      sse(textFrame('three'), finishFrame('stop'), USAGE),
+    );
     await chatCommand({
       ...base,
       home,
@@ -470,14 +549,24 @@ describe('chatCommand', () => {
   it('exits 1 on a provider failure, and writes nothing to history', async () => {
     const home = tempHome();
     const { fetchImpl } = transport(
-      new Response(JSON.stringify({ error: { message: 'no key', type: 'auth' } }), {
-        status: 401,
-        headers: { 'content-type': 'application/json' },
-      }),
+      new Response(
+        JSON.stringify({ error: { message: 'no key', type: 'auth' } }),
+        {
+          status: 401,
+          headers: { 'content-type': 'application/json' },
+        },
+      ),
     );
     const out = sink();
 
-    const code = await chatCommand({ ...base, home, fetchImpl, out, colors: false, message: 'hi' });
+    const code = await chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out,
+      colors: false,
+      message: 'hi',
+    });
 
     expect(code).toBe(1);
     expect(out.text).toContain('✖');
@@ -486,7 +575,9 @@ describe('chatCommand', () => {
     // request, so a poisoned turn must not poison the session.
     const store = new SessionStore({ file: join(home, 'ghost.db') });
     try {
-      expect(store.history('cli:default').map((message) => message.role)).toEqual(['user']);
+      expect(
+        store.history('cli:default').map((message) => message.role),
+      ).toEqual(['user']);
     } finally {
       store.close();
     }
@@ -498,14 +589,26 @@ describe('chatCommand', () => {
       throw new DOMException('aborted', 'AbortError');
     });
 
-    const code = await chatCommand({ ...base, home, fetchImpl, out: sink(), message: 'hi' });
+    const code = await chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: sink(),
+      message: 'hi',
+    });
     expect(code).toBe(SIGINT_EXIT_CODE);
   });
 
   it('does nothing for an empty message', async () => {
     const home = tempHome();
     const { fetchImpl, bodies } = transport();
-    const code = await chatCommand({ ...base, home, fetchImpl, out: sink(), message: '   ' });
+    const code = await chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: sink(),
+      message: '   ',
+    });
 
     expect(code).toBe(0);
     expect(bodies).toHaveLength(0);
@@ -513,19 +616,30 @@ describe('chatCommand', () => {
 
   it('reads a piped stdin as the message', async () => {
     const home = tempHome();
-    const { fetchImpl, bodies } = transport(sse(textFrame('ok'), finishFrame('stop'), USAGE));
+    const { fetchImpl, bodies } = transport(
+      sse(textFrame('ok'), finishFrame('stop'), USAGE),
+    );
     const input = Readable.from(['what is ', 'here?'], { objectMode: false });
 
-    const code = await chatCommand({ ...base, home, fetchImpl, out: sink(), input });
+    const code = await chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: sink(),
+      input,
+    });
 
     expect(code).toBe(0);
-    const messages = bodies[0]?.messages as { role: string; content: unknown }[] | undefined;
+    const messages = bodies[0]?.messages as
+      Array<{ role: string; content: unknown }> | undefined;
     expect(JSON.stringify(messages?.[1]?.content)).toContain('what is here?');
   });
 
   it('runs a session at the prompt, with slash commands beside it', async () => {
     const home = tempHome();
-    const { fetchImpl } = transport(sse(textFrame('Two.'), finishFrame('stop'), USAGE));
+    const { fetchImpl } = transport(
+      sse(textFrame('Two.'), finishFrame('stop'), USAGE),
+    );
     const out = streamSink();
     // A prompt is only opened on a terminal; a REPL on a piped stdin would read
     // its first line as a question and then hit EOF.
@@ -561,7 +675,9 @@ describe('chatCommand', () => {
 
   it('manages sessions, messages and workspaces from the prompt', async () => {
     const home = tempHome();
-    const { fetchImpl } = transport(sse(textFrame('An answer.'), finishFrame('stop'), USAGE));
+    const { fetchImpl } = transport(
+      sse(textFrame('An answer.'), finishFrame('stop'), USAGE),
+    );
     const out = streamSink();
     const input = Object.assign(new PassThrough(), { isTTY: true });
 
@@ -672,7 +788,9 @@ describe('chatCommand', () => {
 
   it('refuses to rework a message that is not one of yours', async () => {
     const home = tempHome();
-    const { fetchImpl } = transport(sse(textFrame('An answer.'), finishFrame('stop'), USAGE));
+    const { fetchImpl } = transport(
+      sse(textFrame('An answer.'), finishFrame('stop'), USAGE),
+    );
     const out = streamSink();
     const input = Object.assign(new PassThrough(), { isTTY: true });
 
@@ -707,10 +825,19 @@ describe('chatCommand', () => {
 
   it('emits raw events in --json mode instead of prose', async () => {
     const home = tempHome();
-    const { fetchImpl } = transport(sse(textFrame('ok'), finishFrame('stop'), USAGE));
+    const { fetchImpl } = transport(
+      sse(textFrame('ok'), finishFrame('stop'), USAGE),
+    );
     const out = sink();
 
-    await chatCommand({ ...base, home, fetchImpl, out, json: true, message: 'hi' });
+    await chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out,
+      json: true,
+      message: 'hi',
+    });
 
     const types = out.text
       .trim()

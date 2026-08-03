@@ -18,7 +18,10 @@
  * inspector reads per session and this route has no business restating.
  */
 
-import { ToolListResponseSchema, type ToolListResponse } from '@ghostai/protocol';
+import {
+  ToolListResponseSchema,
+  type ToolListResponse,
+} from '@ghostai/protocol';
 
 import type { RouteDeps, RouteGroup } from './types.js';
 
@@ -29,7 +32,9 @@ export function toolRoutes(deps: RouteDeps): RouteGroup<'tools.list'> {
       schema: { response: { 200: ToolListResponseSchema } },
       // Already sorted by name: the registry keeps that order so a reconnecting
       // MCP server cannot rewrite the cached prompt prefix.
-      handler: (): ToolListResponse => ({ tools: [...deps.runtime.registeredTools()] }),
+      handler: (): ToolListResponse => ({
+        tools: [...deps.runtime.registeredTools()],
+      }),
     },
   };
 }

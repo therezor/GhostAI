@@ -16,7 +16,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { composite, contrastRatio, toHex, type Rgba } from '@/tokens/color.js';
-import { readTokensCss, resolveTokens, toRgba, type ThemeName } from '@/tokens/sheet.js';
+import {
+  readTokensCss,
+  resolveTokens,
+  toRgba,
+  type ThemeName,
+} from '@/tokens/sheet.js';
 
 /** WCAG 2.1 AA for body text. Everything in the sheet is held to it. */
 const AA_NORMAL = 4.5;
@@ -49,26 +54,31 @@ describe.each(THEMES)('%s theme', (theme) => {
     return toRgba(value);
   };
 
-  it.each(FOREGROUNDS.flatMap((fg) => SURFACES.map((surface) => [fg, surface] as const)))(
-    '%s on %s meets AA',
-    (fg, surface) => {
-      const background = color(surface);
-      const ratio = contrastRatio(composite(color(fg), background), background);
+  it.each(
+    FOREGROUNDS.flatMap((fg) =>
+      SURFACES.map((surface) => [fg, surface] as const),
+    ),
+  )('%s on %s meets AA', (fg, surface) => {
+    const background = color(surface);
+    const ratio = contrastRatio(composite(color(fg), background), background);
 
-      expect(
-        ratio,
-        `${fg} (${toHex(color(fg))}) on ${surface} (${toHex(background)}) is ${ratio.toFixed(2)}:1`,
-      ).toBeGreaterThanOrEqual(AA_NORMAL);
-    },
-  );
+    expect(
+      ratio,
+      `${fg} (${toHex(color(fg))}) on ${surface} (${toHex(background)}) is ${ratio.toFixed(2)}:1`,
+    ).toBeGreaterThanOrEqual(AA_NORMAL);
+  });
 
   it.each(FILLS)('--on-fill meets AA on %s', (fill) => {
     const background = color(fill);
-    const ratio = contrastRatio(composite(color('--on-fill'), background), background);
-
-    expect(ratio, `--on-fill on ${fill} is ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(
-      AA_NORMAL,
+    const ratio = contrastRatio(
+      composite(color('--on-fill'), background),
+      background,
     );
+
+    expect(
+      ratio,
+      `--on-fill on ${fill} is ${ratio.toFixed(2)}:1`,
+    ).toBeGreaterThanOrEqual(AA_NORMAL);
   });
 
   /**
@@ -82,7 +92,10 @@ describe.each(THEMES)('%s theme', (theme) => {
     (role) => {
       for (const surface of SURFACES) {
         const background = composite(color(`--${role}-soft`), color(surface));
-        const ratio = contrastRatio(composite(color(`--${role}-fg`), background), background);
+        const ratio = contrastRatio(
+          composite(color(`--${role}-fg`), background),
+          background,
+        );
 
         expect(
           ratio,
@@ -100,9 +113,15 @@ describe.each(THEMES)('%s theme', (theme) => {
   it('lines are visible against the surfaces they sit on', () => {
     for (const surface of SURFACES) {
       const background = color(surface);
-      const ratio = contrastRatio(composite(color('--line-strong'), background), background);
+      const ratio = contrastRatio(
+        composite(color('--line-strong'), background),
+        background,
+      );
 
-      expect(ratio, `--line-strong on ${surface} is ${ratio.toFixed(2)}:1`).toBeGreaterThan(1.5);
+      expect(
+        ratio,
+        `--line-strong on ${surface} is ${ratio.toFixed(2)}:1`,
+      ).toBeGreaterThan(1.5);
     }
   });
 

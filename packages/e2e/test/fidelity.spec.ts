@@ -103,7 +103,10 @@ test.describe('fidelity', () => {
   // checkout beside this one, so its absence is the normal state of a CI
   // machine and of anyone who cloned only this repo. A suite that failed there
   // would be a suite people learn to ignore.
-  test.skip(!referenceAvailable(), `no reference build at ${DEFAULT_ORIGINAL_ROOT}`);
+  test.skip(
+    !referenceAvailable(),
+    `no reference build at ${DEFAULT_ORIGINAL_ROOT}`,
+  );
 
   test('matches the product being replaced on every measurement that can be compared', async ({
     app,
@@ -116,7 +119,10 @@ test.describe('fidelity', () => {
     const browser = await chromium.launch();
     let expected: Metrics;
     try {
-      const page = await browser.newPage({ colorScheme: 'dark', viewport: VIEWPORT });
+      const page = await browser.newPage({
+        colorScheme: 'dark',
+        viewport: VIEWPORT,
+      });
       await page.goto(reference.url);
       expected = await measure(page, REFERENCE_LAYOUT);
     } finally {
@@ -142,8 +148,12 @@ test.describe('fidelity', () => {
       ['base font size', actual.baseFontSize, expected.baseFontSize],
     ] as const) {
       const ratio = mine / theirs;
-      expect.soft(ratio, `${name} is larger than the reference's`).toBeGreaterThan(1);
-      expect.soft(ratio, `${name} is within the intended scale`).toBeLessThanOrEqual(SCALE_CEILING);
+      expect
+        .soft(ratio, `${name} is larger than the reference's`)
+        .toBeGreaterThan(1);
+      expect
+        .soft(ratio, `${name} is within the intended scale`)
+        .toBeLessThanOrEqual(SCALE_CEILING);
     }
 
     for (const [name, mine, theirs] of [
@@ -151,12 +161,19 @@ test.describe('fidelity', () => {
       ['the raised surface', actual.surface1, expected.surface1],
       ['body text', actual.foreground, expected.foreground],
     ] as const) {
-      const worst = Math.max(...mine.map((value, index) => Math.abs(value - (theirs[index] ?? 0))));
-      expect.soft(worst, `${name}: worst channel`).toBeLessThanOrEqual(TOLERANCE.channel);
+      const worst = Math.max(
+        ...mine.map((value, index) => Math.abs(value - (theirs[index] ?? 0))),
+      );
+      expect
+        .soft(worst, `${name}: worst channel`)
+        .toBeLessThanOrEqual(TOLERANCE.channel);
     }
 
     expect
-      .soft(Math.abs(actual.foregroundMuted - expected.foregroundMuted), 'muted text')
+      .soft(
+        Math.abs(actual.foregroundMuted - expected.foregroundMuted),
+        'muted text',
+      )
       .toBeLessThanOrEqual(TOLERANCE.luminance);
   });
 });

@@ -31,7 +31,11 @@ import { api } from '@/lib/api.js';
 import { useFormat } from '@/lib/use-format.js';
 import { queryKeys } from '@/lib/query.js';
 import { Button } from '@/components/ui/button.js';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover.js';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover.js';
 import { toast } from '@/components/ui/toast.js';
 import { LEVEL_CLASSES, LEVEL_ICONS } from '@/notifications/levels.js';
 
@@ -96,17 +100,23 @@ export function NotificationBell(): JSX.Element {
           size="icon"
           className="notification-bell"
           aria-label={
-            unreadCount === 0 ? 'Notifications' : `Notifications, ${String(unreadCount)} unread`
+            unreadCount === 0
+              ? 'Notifications'
+              : `Notifications, ${String(unreadCount)} unread`
           }
         >
           <Bell />
-          {unreadCount > 0 && <span className="notification-bell__dot" aria-hidden="true" />}
+          {unreadCount > 0 && (
+            <span className="notification-bell__dot" aria-hidden="true" />
+          )}
         </Button>
       </PopoverTrigger>
 
       <PopoverContent align="end" className="stack popover--notifications">
         <div className="row notification-bell__header">
-          <h2 className="notification-bell__title">{t('notifications.title')}</h2>
+          <h2 className="notification-bell__title">
+            {t('notifications.title')}
+          </h2>
           <span className="spacer" />
           {unreadCount > 0 && (
             <Button
@@ -130,17 +140,23 @@ export function NotificationBell(): JSX.Element {
                 now={now}
                 onOpen={() => {
                   setOpen(false);
-                  if (notification.readAtMs === undefined) markRead.mutate(notification.id);
+                  if (notification.readAtMs === undefined) {
+                    markRead.mutate(notification.id);
+                  }
                 }}
               />
             </li>
           ))}
 
           {notifications.isSuccess && rows.length === 0 && (
-            <li className="notification-bell__empty">{t('common.nothingHere')}</li>
+            <li className="notification-bell__empty">
+              {t('common.nothingHere')}
+            </li>
           )}
           {notifications.isError && (
-            <li className="notification-bell__empty">{t('notifications.loadFailed')}</li>
+            <li className="notification-bell__empty">
+              {t('notifications.loadFailed')}
+            </li>
           )}
         </ul>
 
@@ -174,13 +190,17 @@ function NotificationRow({
 
   const body = (
     <>
-      <Icon className={cn('notification__icon', LEVEL_CLASSES[notification.level])} />
+      <Icon
+        className={cn('notification__icon', LEVEL_CLASSES[notification.level])}
+      />
       <span className="notification-mini__text">
         <span className="notification-mini__title truncate">
           {/* The word, for a reader who gets neither the surface nor the
               weight. Unread is the state worth announcing; "read" is the
               absence of it and would be noise on every other row. */}
-          {unread && <span className="sr-only">{t('notifications.unread')} </span>}
+          {unread && (
+            <span className="sr-only">{t('notifications.unread')} </span>
+          )}
           {notification.title}
         </span>
         <span className="notification-mini__time">
@@ -190,7 +210,10 @@ function NotificationRow({
     </>
   );
 
-  const className = cn('notification-mini', unread && 'notification-mini--unread');
+  const className = cn(
+    'notification-mini',
+    unread && 'notification-mini--unread',
+  );
 
   // A notification that names a conversation is a link into it — that is the
   // whole point of the field. One that names none is not a link pretending to

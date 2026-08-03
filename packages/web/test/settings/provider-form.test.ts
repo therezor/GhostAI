@@ -86,18 +86,27 @@ describe('toProviderPatch', () => {
   it('sends an empty base URL rather than omitting it, so the field can be cleared', () => {
     // Omitting it would mean "leave whatever is there", and the operator who
     // just emptied the field would find the old endpoint back on reload.
-    const patch = toProviderPatch('openai', { ...FORM, apiBase: '   ', models: '' });
+    const patch = toProviderPatch('openai', {
+      ...FORM,
+      apiBase: '   ',
+      models: '',
+    });
     expect(patch.providers?.openai).toMatchObject({ apiBase: '', models: [] });
   });
 
   it('never carries a credential', () => {
-    expect(JSON.stringify(toProviderPatch('openai', FORM))).not.toMatch(/key|secret|token/i);
+    expect(JSON.stringify(toProviderPatch('openai', FORM))).not.toMatch(
+      /key|secret|token/i,
+    );
   });
 });
 
 describe('toCreateProviderPatch', () => {
   it('names the type, which is the one patch that may', () => {
-    const patch = toCreateProviderPatch('ollama-2', { ...FORM, label: '  GPU box  ' });
+    const patch = toCreateProviderPatch('ollama-2', {
+      ...FORM,
+      label: '  GPU box  ',
+    });
 
     expect(patch).toEqual({
       providers: {
@@ -116,7 +125,9 @@ describe('toCreateProviderPatch', () => {
   it('carries every field the edit patch does, plus the type', () => {
     // One form produces both, so a field added to the dialog cannot reach one
     // patch and miss the other — which is what a separate add form did.
-    const created = toCreateProviderPatch('ollama-2', FORM).providers?.['ollama-2'];
+    const created = toCreateProviderPatch('ollama-2', FORM).providers?.[
+      'ollama-2'
+    ];
     const edited = toProviderPatch('ollama-2', FORM).providers?.['ollama-2'];
     expect(created).toEqual({ type: 'ollama', ...edited });
   });
@@ -130,10 +141,14 @@ describe('proposeInstanceId', () => {
 
   it('suffixes past every id already taken', () => {
     expect(proposeInstanceId('ollama', ['ollama'])).toBe('ollama-2');
-    expect(proposeInstanceId('ollama', ['ollama', 'ollama-2'])).toBe('ollama-3');
+    expect(proposeInstanceId('ollama', ['ollama', 'ollama-2'])).toBe(
+      'ollama-3',
+    );
     // A gap is reused rather than skipped past — the rule is "first free", not
     // "one more than the highest".
-    expect(proposeInstanceId('ollama', ['ollama', 'ollama-3'])).toBe('ollama-2');
+    expect(proposeInstanceId('ollama', ['ollama', 'ollama-3'])).toBe(
+      'ollama-2',
+    );
   });
 });
 

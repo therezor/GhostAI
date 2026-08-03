@@ -46,8 +46,8 @@ export interface ReplaySlice {
 }
 
 export class ReplayBuffer {
-  readonly #capacity: number;
-  readonly #entries: SequencedServerMessage[] = [];
+  private readonly maxEntries: number;
+  private readonly entries: SequencedServerMessage[] = [];
   /**
    * The highest `seq` ever pushed, tracked separately from the entries.
    *
@@ -55,31 +55,31 @@ export class ReplayBuffer {
    * a resuming client missed anything, and after enough pushes the entries no
    * longer remember where the sequence started.
    */
-  #lastSeq = 0;
+  private lastAppendedSeq = 0;
 
   constructor(capacity: number) {
-    this.#capacity = Math.max(0, Math.trunc(capacity));
+    this.maxEntries = Math.max(0, Math.trunc(capacity));
   }
 
   get capacity(): number {
-    return this.#capacity;
+    return this.maxEntries;
   }
 
   get size(): number {
-    return this.#entries.length;
+    return this.entries.length;
   }
 
   /** The highest `seq` emitted for this session, retained or not. */
   get lastSeq(): number {
-    return this.#lastSeq;
+    return this.lastAppendedSeq;
   }
 
   push(message: SequencedServerMessage): void {
-    this.#lastSeq = message.seq;
-    if (this.#capacity === 0) return;
-    this.#entries.push(message);
-    const excess = this.#entries.length - this.#capacity;
-    if (excess > 0) this.#entries.splice(0, excess);
+    this.lastAppendedSeq = message.seq;
+    if (this.maxEntries === 0) return;
+    this.entries.push(message);
+    const excess = this.entries.length - this.maxEntries;
+    if (excess > 0) this.entries.splice(0, excess);
   }
 
   /**
@@ -91,17 +91,17 @@ export class ReplayBuffer {
    * empty, complete slice.
    */
   after(lastSeq: number): ReplaySlice {
-    if (lastSeq >= this.#lastSeq) {
+    if (lastSeq >= this.lastAppendedSeq) {
       // Equal means nothing was missed. Greater means this client saw a
       // sequence this buffer never emitted — a restart, or a different server.
-      return { messages: [], complete: lastSeq === this.#lastSeq };
+      return { messages: [], complete: lastSeq === this.lastAppendedSeq };
     }
 
-    const messages = this.#entries.filter((entry) => entry.seq > lastSeq);
+    const messages = this.entries.filter((entry) => entry.seq > lastSeq);
     return { messages, complete: messages[0]?.seq === lastSeq + 1 };
   }
 
   clear(): void {
-    this.#entries.length = 0;
+    this.entries.length = 0;
   }
 }

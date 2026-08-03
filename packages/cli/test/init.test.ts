@@ -41,7 +41,7 @@ interface Run {
   readonly code: number;
   readonly output: string;
   readonly errors: string;
-  readonly credentials: { instanceId: string; value: string }[];
+  readonly credentials: Array<{ instanceId: string; value: string }>;
   readonly home: string;
 }
 
@@ -90,7 +90,7 @@ async function run(
     setImmediate(() => input.write(`${answer ?? ''}\n`));
   });
 
-  const credentials: { instanceId: string; value: string }[] = [];
+  const credentials: Array<{ instanceId: string; value: string }> = [];
 
   const code = await initCommand({
     home,
@@ -134,8 +134,17 @@ describe('initCommand', () => {
   });
 
   it('stores a token for a local endpoint, which the vault used to skip', async () => {
-    const { credentials } = await run(['', 'ollama', '', '', 'proxy-token', '1']);
-    expect(credentials).toEqual([{ instanceId: 'ollama', value: 'proxy-token' }]);
+    const { credentials } = await run([
+      '',
+      'ollama',
+      '',
+      '',
+      'proxy-token',
+      '1',
+    ]);
+    expect(credentials).toEqual([
+      { instanceId: 'ollama', value: 'proxy-token' },
+    ]);
   });
 
   it('writes no credential when the token is left blank', async () => {
@@ -146,9 +155,13 @@ describe('initCommand', () => {
   it('names a second endpoint of the same type rather than overwriting the first', async () => {
     const home = tempHome();
     await run(['', 'ollama', 'Laptop', '', '', '1'], { home });
-    await run(['', 'ollama', 'GPU box', 'http://gpu.lan:11434/v1', '', '2'], { home });
+    await run(['', 'ollama', 'GPU box', 'http://gpu.lan:11434/v1', '', '2'], {
+      home,
+    });
 
-    const written = configIn(home) as { providers: Record<string, { label?: string }> };
+    const written = configIn(home) as {
+      providers: Record<string, { label?: string }>;
+    };
     expect(Object.keys(written.providers)).toEqual(['ollama', 'ollama-2']);
     expect(written.providers['ollama-2']?.label).toBe('GPU box');
   });
@@ -156,13 +169,18 @@ describe('initCommand', () => {
   it('falls back to typing a model when the endpoint cannot be listed', async () => {
     // An unreachable Ollama usually means it is not running, which is worth
     // reading rather than working around — but it must not end the wizard.
-    const { code, home, output } = await run(['', 'ollama', '', '', '', 'typed-by-hand'], {
-      listModels: async () => [],
-    });
+    const { code, home, output } = await run(
+      ['', 'ollama', '', '', '', 'typed-by-hand'],
+      {
+        listModels: async () => [],
+      },
+    );
 
     expect(code).toBe(0);
     expect(output).toContain('Could not list models');
-    expect(configIn(home)).toMatchObject({ agents: { defaults: { model: 'typed-by-hand' } } });
+    expect(configIn(home)).toMatchObject({
+      agents: { defaults: { model: 'typed-by-hand' } },
+    });
   });
 
   it('refuses a pipe rather than reading EOF as an answer', async () => {
@@ -200,6 +218,8 @@ describe('initCommand', () => {
 
     expect(code).toBe(0);
     expect(output).toContain('Enter a number between');
-    expect(configIn(home)).toMatchObject({ providers: { ollama: { type: 'ollama' } } });
+    expect(configIn(home)).toMatchObject({
+      providers: { ollama: { type: 'ollama' } },
+    });
   });
 });

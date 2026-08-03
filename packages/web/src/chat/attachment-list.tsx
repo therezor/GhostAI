@@ -84,7 +84,9 @@ function AttachmentItem({
       <File aria-hidden="true" className="message-attachment__icon" />
       <span className="message-attachment__name truncate">{label}</span>
       {attachment.sizeBytes !== undefined && (
-        <span className="message-attachment__size">{formatBytes(attachment.sizeBytes)}</span>
+        <span className="message-attachment__size">
+          {formatBytes(attachment.sizeBytes)}
+        </span>
       )}
       {signed.data !== undefined && (
         <a

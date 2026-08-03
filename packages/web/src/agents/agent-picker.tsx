@@ -25,7 +25,12 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { BrainCircuit, ChevronDown, Settings2, TriangleAlert } from 'lucide-react';
+import {
+  BrainCircuit,
+  ChevronDown,
+  Settings2,
+  TriangleAlert,
+} from 'lucide-react';
 import { useEffect, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -47,7 +52,11 @@ import { queryKeys } from '@/lib/query.js';
 import { toast } from '@/components/ui/toast.js';
 import { useAgent } from './agent-context.js';
 
-export function AgentPicker({ sessionKey }: { readonly sessionKey?: string }): JSX.Element {
+export function AgentPicker({
+  sessionKey,
+}: {
+  readonly sessionKey?: string;
+}): JSX.Element {
   const { t } = useTranslation();
   const { agentId: preferred, select, adopt } = useAgent();
   const queryClient = useQueryClient();
@@ -91,7 +100,8 @@ export function AgentPicker({ sessionKey }: { readonly sessionKey?: string }): J
   }, [missing, bound, select]);
 
   const move = useMutation({
-    mutationFn: (agentId: string) => api.moveSessionToAgent(sessionKey ?? '', agentId),
+    mutationFn: (agentId: string) =>
+      api.moveSessionToAgent(sessionKey ?? '', agentId),
     onSuccess: (updated) => {
       queryClient.setQueryData(queryKeys.session(updated.key), updated);
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
@@ -120,12 +130,22 @@ export function AgentPicker({ sessionKey }: { readonly sessionKey?: string }): J
         <Button
           variant="ghost"
           size="sm"
-          className={missing ? 'agent-picker__trigger is-missing' : 'agent-picker__trigger'}
+          className={
+            missing
+              ? 'agent-picker__trigger is-missing'
+              : 'agent-picker__trigger'
+          }
           aria-label={
-            missing ? t('agents.missingLabel', { id: current }) : t('agents.pickerLabel', { label })
+            missing
+              ? t('agents.missingLabel', { id: current })
+              : t('agents.pickerLabel', { label })
           }
         >
-          {missing ? <TriangleAlert aria-hidden="true" /> : <BrainCircuit aria-hidden="true" />}
+          {missing ? (
+            <TriangleAlert aria-hidden="true" />
+          ) : (
+            <BrainCircuit aria-hidden="true" />
+          )}
           <span className="truncate">{label}</span>
           <ChevronDown className="agent-picker__caret" aria-hidden="true" />
         </Button>
@@ -143,14 +163,18 @@ export function AgentPicker({ sessionKey }: { readonly sessionKey?: string }): J
         )}
 
         <DropdownMenuLabel>
-          {bound === undefined ? t('agents.forThisSession') : t('agents.moveThisSession')}
+          {bound === undefined
+            ? t('agents.forThisSession')
+            : t('agents.moveThisSession')}
         </DropdownMenuLabel>
 
         <DropdownMenuRadioGroup value={current} onValueChange={choose}>
           {rows.map((agent) => (
             <DropdownMenuRadioItem key={agent.id} value={agent.id}>
               <span className="truncate">{agent.label}</span>
-              {agent.model !== '' && <span className="agent-picker__hint">{agent.model}</span>}
+              {agent.model !== '' && (
+                <span className="agent-picker__hint">{agent.model}</span>
+              )}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>

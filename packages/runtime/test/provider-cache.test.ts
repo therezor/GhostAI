@@ -1,7 +1,15 @@
-import { findProvider, type ChatProvider, type ProviderSpec } from '@ghostai/providers';
+import {
+  findProvider,
+  type ChatProvider,
+  type ProviderSpec,
+} from '@ghostai/providers';
 import { describe, expect, it } from 'vitest';
 
-import { ProviderCache, providerCacheKey, type ProviderRequest } from '#src/provider-cache.js';
+import {
+  ProviderCache,
+  providerCacheKey,
+  type ProviderRequest,
+} from '#src/provider-cache.js';
 
 function spec(id: string): ProviderSpec {
   const found = findProvider(id);
@@ -10,7 +18,11 @@ function spec(id: string): ProviderSpec {
 }
 
 /** Counts constructions and closes instead of opening a socket. */
-function counting(): { created: number; closed: string[]; create: () => ChatProvider } {
+function counting(): {
+  created: number;
+  closed: string[];
+  create: () => ChatProvider;
+} {
   const state = {
     created: 0,
     closed: [] as string[],
@@ -54,7 +66,9 @@ describe('providerCacheKey', () => {
   });
 
   it('distinguishes an absent credential from an empty one', () => {
-    expect(providerCacheKey(request())).not.toBe(providerCacheKey(request({ apiKey: '' })));
+    expect(providerCacheKey(request())).not.toBe(
+      providerCacheKey(request({ apiKey: '' })),
+    );
   });
 
   it('cannot be collided by moving a character between headers', () => {
@@ -78,7 +92,7 @@ describe('ProviderCache', () => {
     ['the base URL', { apiBase: 'http://127.0.0.1:1234/v1' }],
     ['the provider', { spec: spec('groq') }],
     ['a header', { extraHeaders: { 'X-Title': 'ghost' } }],
-  ])('builds a new adapter when %s changes', (_label, overrides) => {
+  ])('builds a new adapter when %s changes', (label, overrides) => {
     const factory = counting();
     const cache = new ProviderCache({ create: factory.create });
 
@@ -138,7 +152,8 @@ describe('ProviderCache', () => {
   it('survives an adapter whose pool refuses to drain', () => {
     const cache = new ProviderCache({
       max: 1,
-      create: () => ({ close: () => Promise.reject(new Error('stuck')) }) as ChatProvider,
+      create: () =>
+        ({ close: () => Promise.reject(new Error('stuck')) }) as ChatProvider,
     });
 
     cache.get(request({ model: 'a' }));

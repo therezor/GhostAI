@@ -94,7 +94,9 @@ export function NameDialog({
         >
           <DialogHeader>
             <DialogHeading>{title}</DialogHeading>
-            {description !== undefined && <DialogSubheading>{description}</DialogSubheading>}
+            {description !== undefined && (
+              <DialogSubheading>{description}</DialogSubheading>
+            )}
           </DialogHeader>
 
           <div className="stack settings-field">
@@ -104,7 +106,9 @@ export function NameDialog({
               autoFocus
               value={value}
               aria-invalid={validation?.ok === false}
-              {...(validation?.hint === undefined ? {} : { 'aria-describedby': hintId })}
+              {...(validation?.hint === undefined
+                ? {}
+                : { 'aria-describedby': hintId })}
               {...(placeholder === undefined ? {} : { placeholder })}
               onChange={(event) => {
                 setValue(event.target.value);

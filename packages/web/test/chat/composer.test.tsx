@@ -21,7 +21,9 @@ interface Sent {
   readonly attachments: readonly Attachment[];
 }
 
-function mount(overrides: Partial<React.ComponentProps<typeof Composer>> = {}): {
+function mount(
+  overrides: Partial<React.ComponentProps<typeof Composer>> = {},
+): {
   readonly sent: Sent[];
   readonly stops: number[];
 } {
@@ -48,7 +50,9 @@ const box = (): HTMLElement => screen.getByRole('textbox', { name: 'Message' });
 /** The hidden `<input type="file">` the Attach button clicks for the user. */
 const filePicker = (): HTMLInputElement => {
   const input = document.body.querySelector('input[type="file"]');
-  if (!(input instanceof HTMLInputElement)) throw new Error('no file input rendered');
+  if (!(input instanceof HTMLInputElement)) {
+    throw new Error('no file input rendered');
+  }
   return input;
 };
 
@@ -62,7 +66,9 @@ describe('sending', () => {
 
     await user.keyboard('{Enter}');
 
-    expect(sent).toEqual([{ text: 'first line\nsecond line', attachments: [] }]);
+    expect(sent).toEqual([
+      { text: 'first line\nsecond line', attachments: [] },
+    ]);
     // The composer clears, because the message is gone.
     expect(box()).toHaveValue('');
   });
@@ -96,7 +102,9 @@ describe('sending', () => {
     const { sent, stops } = mount({ busy: true, queueDepth: 2 });
 
     expect(screen.getByText(/2 messages waiting/)).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Stop the current turn' }));
+    await user.click(
+      screen.getByRole('button', { name: 'Stop the current turn' }),
+    );
     expect(stops).toHaveLength(1);
 
     // Enter still sends: the hub queues it, and disabling the box would lose
@@ -151,10 +159,16 @@ describe('the @ autocomplete', () => {
     ]);
     // Focus stays in the textarea; `aria-activedescendant` is what tells a
     // screen reader which option the arrow keys are on.
-    expect(box()).toHaveAttribute('aria-activedescendant', 'composer-mentions-0');
+    expect(box()).toHaveAttribute(
+      'aria-activedescendant',
+      'composer-mentions-0',
+    );
 
     await user.keyboard('{ArrowDown}{ArrowDown}');
-    expect(box()).toHaveAttribute('aria-activedescendant', 'composer-mentions-2');
+    expect(box()).toHaveAttribute(
+      'aria-activedescendant',
+      'composer-mentions-2',
+    );
 
     await user.keyboard('{Enter}');
 
@@ -205,7 +219,10 @@ describe('attachments', () => {
     });
     const { sent } = mount();
 
-    await user.upload(filePicker(), new File(['hello'], 'note.txt', { type: 'text/plain' }));
+    await user.upload(
+      filePicker(),
+      new File(['hello'], 'note.txt', { type: 'text/plain' }),
+    );
 
     // A four-second upload starting when Send is pressed is four seconds of a
     // button that appears to have done nothing.
@@ -282,7 +299,10 @@ describe('attachments', () => {
   it('reports a failed upload on the chip rather than losing it silently', async () => {
     const user = userEvent.setup();
     stubFetch({
-      '/api/files/upload': [413, { error: { code: 'bad_request', message: 'Too large' } }],
+      '/api/files/upload': [
+        413,
+        { error: { code: 'bad_request', message: 'Too large' } },
+      ],
     });
     mount();
 
@@ -294,13 +314,18 @@ describe('attachments', () => {
   it('drops a staged file on request', async () => {
     const user = userEvent.setup();
     stubFetch({
-      '/api/files/upload': [201, { path: 'uploads/a-x.txt', sizeBytes: 1, mimeType: 'text/plain' }],
+      '/api/files/upload': [
+        201,
+        { path: 'uploads/a-x.txt', sizeBytes: 1, mimeType: 'text/plain' },
+      ],
     });
     mount();
 
     await user.upload(filePicker(), new File(['x'], 'x.txt'));
 
-    await user.click(await screen.findByRole('button', { name: 'Remove x.txt' }));
+    await user.click(
+      await screen.findByRole('button', { name: 'Remove x.txt' }),
+    );
 
     await waitFor(() => {
       expect(screen.queryByText('x.txt')).not.toBeInTheDocument();
@@ -313,7 +338,9 @@ describe('the file picker', () => {
     const user = userEvent.setup();
     mount();
 
-    const click = vi.spyOn(filePicker(), 'click').mockImplementation(() => undefined);
+    const click = vi
+      .spyOn(filePicker(), 'click')
+      .mockImplementation(() => undefined);
 
     await user.click(screen.getByRole('button', { name: 'Attach a file' }));
 

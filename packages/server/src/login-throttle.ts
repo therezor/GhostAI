@@ -117,7 +117,10 @@ export interface ThrottleBlock {
 function readNumber(value: unknown): number {
   if (typeof value === 'number') return value;
   if (typeof value === 'bigint') return Number(value);
-  throw new GhostError('storage', 'Expected an integer column in auth_throttle');
+  throw new GhostError(
+    'storage',
+    'Expected an integer column in auth_throttle',
+  );
 }
 
 /**
@@ -136,13 +139,13 @@ export function delayFor(failures: number, maxDelayMs: number): number {
 }
 
 export class LoginThrottle {
-  readonly #db: DatabaseSync;
-  readonly #clock: Clock;
+  private readonly db: DatabaseSync;
+  private readonly clock: Clock;
 
   constructor(options: LoginThrottleOptions) {
-    this.#db = options.database;
-    this.#clock = options.clock ?? systemClock;
-    this.#db.exec(SCHEMA);
+    this.db = options.database;
+    this.clock = options.clock ?? systemClock;
+    this.db.exec(SCHEMA);
   }
 
   /**
@@ -154,7 +157,7 @@ export class LoginThrottle {
    * can invoke it at will.
    */
   check(address: string): ThrottleBlock | undefined {
-    const now = this.#clock.now();
+    const now = this.clock.now();
     // Both scopes, and the longer of them — not the first one that happens to
     // be locked. `Retry-After` is a promise: a caller told to come back in
     // thirty seconds because the account bucket said so, while their own
@@ -162,8 +165,8 @@ export class LoginThrottle {
     // and is refused again. Answering with the real wait is the difference
     // between a throttle and a lie.
     return longest([
-      this.#blockFor(ACCOUNT_SCOPE, now),
-      this.#blockFor(addressScope(address), now),
+      this.blockFor(ACCOUNT_SCOPE, now),
+      this.blockFor(addressScope(address), now),
     ]);
   }
 
@@ -176,10 +179,14 @@ export class LoginThrottle {
    * send another, and the delay only becomes real when the response says so.
    */
   fail(address: string): ThrottleBlock | undefined {
-    const now = this.#clock.now();
-    const account = this.#record(ACCOUNT_SCOPE, now, MAX_ACCOUNT_DELAY_MS);
-    const perAddress = this.#record(addressScope(address), now, MAX_ADDRESS_DELAY_MS);
-    this.#prune(now);
+    const now = this.clock.now();
+    const account = this.record(ACCOUNT_SCOPE, now, MAX_ACCOUNT_DELAY_MS);
+    const perAddress = this.record(
+      addressScope(address),
+      now,
+      MAX_ADDRESS_DELAY_MS,
+    );
+    this.prune(now);
 
     return longest([account, perAddress]);
   }
@@ -192,19 +199,21 @@ export class LoginThrottle {
    * their next four attempts too.
    */
   succeed(address: string): void {
-    this.#db
+    this.db
       .prepare('DELETE FROM auth_throttle WHERE scope IN (?, ?)')
       .run(ACCOUNT_SCOPE, addressScope(address));
   }
 
   /** For the operator who locked themselves out and has a shell on the host. */
   reset(): number {
-    return Number(this.#db.prepare('DELETE FROM auth_throttle').run().changes);
+    return Number(this.db.prepare('DELETE FROM auth_throttle').run().changes);
   }
 
-  #blockFor(scope: string, now: number): ThrottleBlock | undefined {
-    const row = this.#db
-      .prepare('SELECT last_failed_ms, locked_until_ms FROM auth_throttle WHERE scope = ?')
+  private blockFor(scope: string, now: number): ThrottleBlock | undefined {
+    const row = this.db
+      .prepare(
+        'SELECT last_failed_ms, locked_until_ms FROM auth_throttle WHERE scope = ?',
+      )
       .get(scope);
     if (row === undefined) return undefined;
     // A decayed bucket is not consulted even though the row is still there —
@@ -212,12 +221,20 @@ export class LoginThrottle {
     // enforced just because nothing has swept it yet.
     if (now - readNumber(row.last_failed_ms) > DECAY_MS) return undefined;
     const lockedUntil = readNumber(row.locked_until_ms);
-    return lockedUntil > now ? { scope, retryAfterMs: lockedUntil - now } : undefined;
+    return lockedUntil > now
+      ? { scope, retryAfterMs: lockedUntil - now }
+      : undefined;
   }
 
-  #record(scope: string, now: number, maxDelayMs: number): ThrottleBlock | undefined {
-    const row = this.#db
-      .prepare('SELECT failures, last_failed_ms FROM auth_throttle WHERE scope = ?')
+  private record(
+    scope: string,
+    now: number,
+    maxDelayMs: number,
+  ): ThrottleBlock | undefined {
+    const row = this.db
+      .prepare(
+        'SELECT failures, last_failed_ms FROM auth_throttle WHERE scope = ?',
+      )
       .get(scope);
     const previous =
       row === undefined || now - readNumber(row.last_failed_ms) > DECAY_MS
@@ -228,7 +245,7 @@ export class LoginThrottle {
     const delay = delayFor(failures, maxDelayMs);
     const lockedUntil = now + delay;
 
-    this.#db
+    this.db
       .prepare(
         `INSERT INTO auth_throttle (scope, failures, last_failed_ms, locked_until_ms)
          VALUES (?, ?, ?, ?)
@@ -248,12 +265,14 @@ export class LoginThrottle {
    * Only on failure, which is the only path that grows the table, and which is
    * itself throttled by everything above.
    */
-  #prune(now: number): void {
-    this.#db
-      .prepare('DELETE FROM auth_throttle WHERE scope <> ? AND last_failed_ms < ?')
+  private prune(now: number): void {
+    this.db
+      .prepare(
+        'DELETE FROM auth_throttle WHERE scope <> ? AND last_failed_ms < ?',
+      )
       .run(ACCOUNT_SCOPE, now - DECAY_MS);
 
-    this.#db
+    this.db
       .prepare(
         `DELETE FROM auth_throttle WHERE scope IN (
            SELECT scope FROM auth_throttle WHERE scope <> ?
@@ -281,10 +300,15 @@ function addressScope(address: string): string {
  * Both scopes refuse independently, so the wait is the longer of them — being
  * released by one while the other still holds is not being released.
  */
-function longest(blocks: readonly (ThrottleBlock | undefined)[]): ThrottleBlock | undefined {
+function longest(
+  blocks: ReadonlyArray<ThrottleBlock | undefined>,
+): ThrottleBlock | undefined {
   let worst: ThrottleBlock | undefined;
   for (const block of blocks) {
-    if (block !== undefined && (worst === undefined || block.retryAfterMs > worst.retryAfterMs)) {
+    if (
+      block !== undefined &&
+      (worst === undefined || block.retryAfterMs > worst.retryAfterMs)
+    ) {
       worst = block;
     }
   }

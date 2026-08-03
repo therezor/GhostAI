@@ -160,7 +160,11 @@ be committed.
   "agents": { "defaults": { "provider": "ollama-gpu", "model": "qwen3:8b" } },
   "providers": {
     "ollama": { "type": "ollama" },
-    "ollama-gpu": { "type": "ollama", "label": "GPU box", "apiBase": "http://gpu.lan:11434/v1" }
+    "ollama-gpu": {
+      "type": "ollama",
+      "label": "GPU box",
+      "apiBase": "http://gpu.lan:11434/v1"
+    }
   }
 }
 ```

@@ -32,7 +32,10 @@ import { SYSTEM } from '@/i18n/locale-preference.js';
 import { SYSTEM_TZ, timezoneOptions } from '@/lib/timezones.js';
 import { isThemePreference } from '@/theme/theme.js';
 import { useAppTheme } from '@/theme/theme-context.js';
-import { browserTimezone, useAppTimezone } from '@/timezone/timezone-context.js';
+import {
+  browserTimezone,
+  useAppTimezone,
+} from '@/timezone/timezone-context.js';
 
 import {
   FieldGrid,
@@ -54,13 +57,18 @@ import { useSaveSettings } from './use-settings.js';
 function localeOptions(systemLabel: string): readonly SelectFieldOption[] {
   return [
     { value: SYSTEM, label: systemLabel },
-    ...SUPPORTED_LOCALES.map((locale) => ({ value: locale, label: nameOf(locale) })),
+    ...SUPPORTED_LOCALES.map((locale) => ({
+      value: locale,
+      label: nameOf(locale),
+    })),
   ];
 }
 
 function nameOf(locale: string): string {
   try {
-    return new Intl.DisplayNames([locale], { type: 'language' }).of(locale) ?? locale;
+    return (
+      new Intl.DisplayNames([locale], { type: 'language' }).of(locale) ?? locale
+    );
   } catch {
     // A runtime without the data for this tag. The tag itself is a worse label
     // than its own name and a better one than nothing.
@@ -93,7 +101,10 @@ export function AppearancePanel(): JSX.Element {
       // option reading only "System" would hide the fact that the click writes
       // a concrete zone — and that the answer therefore stops following this
       // browser the moment it is saved.
-      { value: SYSTEM_TZ, label: `${t('settings.appearance.system')} (${browserTimezone()})` },
+      {
+        value: SYSTEM_TZ,
+        label: `${t('settings.appearance.system')} (${browserTimezone()})`,
+      },
       ...timezoneOptions().map((zone) => ({ value: zone, label: zone })),
     ],
     [t],

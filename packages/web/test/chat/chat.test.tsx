@@ -11,7 +11,14 @@
  */
 
 import { RouterProvider, createMemoryHistory } from '@tanstack/react-router';
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -55,7 +62,9 @@ class ControlledSocket {
 
 const socket = (): ControlledSocket => {
   const instance = ControlledSocket.opened.at(-1);
-  if (instance === undefined) throw new Error('The shell never opened a socket');
+  if (instance === undefined) {
+    throw new Error('The shell never opened a socket');
+  }
   return instance;
 };
 
@@ -76,11 +85,13 @@ async function opened(): Promise<ControlledSocket> {
 let seq = 0;
 
 /** Frames from the server, with the sequence numbers the hub would stamp. */
-function deliver(...frames: readonly Unsequenced<ServerMessage>[]): void {
+function deliver(...frames: ReadonlyArray<Unsequenced<ServerMessage>>): void {
   act(() => {
     for (const frame of frames) {
       const stamped =
-        frame.type === 'connected' || frame.type === 'pong' || frame.type === 'error'
+        frame.type === 'connected' ||
+        frame.type === 'pong' ||
+        frame.type === 'error'
           ? frame
           : { ...frame, seq: (seq += 1) };
       socket().onmessage?.({ data: JSON.stringify(stamped) });
@@ -108,7 +119,9 @@ function mount(
   client = testQueryClient(),
 ): void {
   const router = createAppRouter();
-  router.update({ history: createMemoryHistory({ initialEntries: [initial] }) });
+  router.update({
+    history: createMemoryHistory({ initialEntries: [initial] }),
+  });
 
   render(
     <Providers client={client}>
@@ -142,8 +155,14 @@ beforeEach(() => {
     '/api/status': [200, STATUS],
     '/api/agents': [200, AGENTS],
     '/api/sessions': [200, { sessions: [], total: 0 }],
-    '/api/notifications': [200, { notifications: [], unreadCount: 0, total: 0 }],
-    '/api/sessions/web%3A1/messages': [200, { sessionKey: SESSION, messages: [] }],
+    '/api/notifications': [
+      200,
+      { notifications: [], unreadCount: 0, total: 0 },
+    ],
+    '/api/sessions/web%3A1/messages': [
+      200,
+      { sessionKey: SESSION, messages: [] },
+    ],
   });
 });
 
@@ -162,7 +181,11 @@ describe('a turn with tool calls', () => {
         queueDepth: 0,
         turnId: 't1',
       },
-      { type: 'assistant.delta', turnId: 't1', text: 'Let me check **two** things.' },
+      {
+        type: 'assistant.delta',
+        turnId: 't1',
+        text: 'Let me check **two** things.',
+      },
       {
         type: 'tool.call',
         turnId: 't1',
@@ -197,7 +220,11 @@ describe('a turn with tool calls', () => {
         truncated: false,
         durationMs: 30,
       },
-      { type: 'assistant.delta', turnId: 't1', text: '\n\nOne worked, one did not.' },
+      {
+        type: 'assistant.delta',
+        turnId: 't1',
+        text: '\n\nOne worked, one did not.',
+      },
       {
         type: 'turn.end',
         turnId: 't1',
@@ -278,7 +305,14 @@ describe('a turn with tool calls', () => {
 
     deliver(
       START,
-      { type: 'tool.call', turnId: 't1', callId: 'c1', name: 'fetch', args: {}, risk: 'network' },
+      {
+        type: 'tool.call',
+        turnId: 't1',
+        callId: 'c1',
+        name: 'fetch',
+        args: {},
+        risk: 'network',
+      },
       {
         type: 'tool.result',
         turnId: 't1',
@@ -299,7 +333,9 @@ describe('a turn with tool calls', () => {
 
     // Detection is non-destructive by design: the badge appears and the output
     // is still there to read.
-    expect(await screen.findByText('Possible prompt injection.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Possible prompt injection.'),
+    ).toBeInTheDocument();
   });
 
   it('says why a call did nothing when the model has no tools', async () => {
@@ -311,7 +347,14 @@ describe('a turn with tool calls', () => {
 
     deliver(
       START,
-      { type: 'tool.call', turnId: 't1', callId: 'c1', name: 'exec', args: {}, risk: 'exec' },
+      {
+        type: 'tool.call',
+        turnId: 't1',
+        callId: 'c1',
+        name: 'exec',
+        args: {},
+        risk: 'exec',
+      },
       {
         type: 'tool.result',
         turnId: 't1',
@@ -324,7 +367,8 @@ describe('a turn with tool calls', () => {
       {
         type: 'notice',
         kind: 'tools_disabled',
-        message: 'Refused "exec": tool calling is off for this model, so nothing ran.',
+        message:
+          'Refused "exec": tool calling is off for this model, so nothing ran.',
         turnId: 't1',
         callId: 'c1',
       },
@@ -355,7 +399,9 @@ describe('a turn with tool calls', () => {
       { type: 'assistant.delta', turnId: 't1', text: 'Done.' },
     );
 
-    expect(await screen.findByText('Ran on the default agent.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Ran on the default agent.'),
+    ).toBeInTheDocument();
     expect(screen.getByText(/which no longer exists/)).toBeInTheDocument();
     // The turn still ran: this is a notice, not a refusal.
     expect(screen.getByText('Done.')).toBeInTheDocument();
@@ -383,8 +429,14 @@ describe('an install with no model yet', () => {
       '/api/status': [200, UNCONFIGURED_STATUS],
       '/api/agents': [200, { agents: [] }],
       '/api/sessions': [200, { sessions: [], total: 0 }],
-      '/api/notifications': [200, { notifications: [], unreadCount: 0, total: 0 }],
-      '/api/sessions/web%3A1/messages': [200, { sessionKey: SESSION, messages: [] }],
+      '/api/notifications': [
+        200,
+        { notifications: [], unreadCount: 0, total: 0 },
+      ],
+      '/api/sessions/web%3A1/messages': [
+        200,
+        { sessionKey: SESSION, messages: [] },
+      ],
     });
     mount();
     await connect();
@@ -393,7 +445,9 @@ describe('an install with no model yet', () => {
     // too, and this assertion is about which sentence is on screen.
     const notice = await screen.findByText(/No model is configured yet\./);
     expect(notice).toHaveRole('status');
-    expect(within(notice).getByRole('link', { name: 'Add a provider' })).toBeInTheDocument();
+    expect(
+      within(notice).getByRole('link', { name: 'Add a provider' }),
+    ).toBeInTheDocument();
   });
 
   it('names no model on the welcome card rather than an empty badge', async () => {
@@ -403,13 +457,21 @@ describe('an install with no model yet', () => {
       '/api/status': [200, UNCONFIGURED_STATUS],
       '/api/agents': [200, { agents: [] }],
       '/api/sessions': [200, { sessions: [], total: 0 }],
-      '/api/notifications': [200, { notifications: [], unreadCount: 0, total: 0 }],
-      '/api/sessions/web%3A1/messages': [200, { sessionKey: SESSION, messages: [] }],
+      '/api/notifications': [
+        200,
+        { notifications: [], unreadCount: 0, total: 0 },
+      ],
+      '/api/sessions/web%3A1/messages': [
+        200,
+        { sessionKey: SESSION, messages: [] },
+      ],
     });
     mount();
     await connect();
 
-    expect(await screen.findByRole('heading', { name: 'Ready when you are.' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Ready when you are.' }),
+    ).toBeInTheDocument();
     expect(screen.queryByText('test-model')).not.toBeInTheDocument();
   });
 });
@@ -426,7 +488,9 @@ describe('a turn that produced no answer', () => {
     );
 
     expect(
-      await screen.findByText(/finished its reasoning without writing an answer/),
+      await screen.findByText(
+        /finished its reasoning without writing an answer/,
+      ),
     ).toBeVisible();
     // Not merely present: the disclosure body carries `hidden` when collapsed,
     // and a sentence pointing at reasoning nobody can see is worse than neither.
@@ -447,7 +511,9 @@ describe('a turn that produced no answer', () => {
     );
 
     expect(await screen.findByText('Stopped.')).toBeInTheDocument();
-    expect(screen.queryByText(/without writing an answer/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/without writing an answer/),
+    ).not.toBeInTheDocument();
   });
 
   it('says nothing about a turn whose work was a tool call', async () => {
@@ -479,7 +545,9 @@ describe('a turn that produced no answer', () => {
     );
 
     await screen.findByRole('region', { name: 'Tool call: read' });
-    expect(screen.queryByText(/without writing an answer/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/without writing an answer/),
+    ).not.toBeInTheDocument();
   });
 
   it('leaves an error to speak for itself', async () => {
@@ -496,8 +564,12 @@ describe('a turn that produced no answer', () => {
       turnId: 't1',
     });
 
-    expect(await screen.findByText(/The provider hung up\./)).toBeInTheDocument();
-    expect(screen.queryByText(/no answer, and no tool call/)).not.toBeInTheDocument();
+    expect(
+      await screen.findByText(/The provider hung up\./),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/no answer, and no tool call/),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -507,14 +579,20 @@ describe('sending', () => {
     mount();
     await connect();
 
-    await user.type(await screen.findByRole('textbox', { name: 'Message' }), 'what is this?');
+    await user.type(
+      await screen.findByRole('textbox', { name: 'Message' }),
+      'what is this?',
+    );
     await user.click(screen.getByRole('button', { name: 'Send' }));
 
     expect(screen.getByText('what is this?')).toBeInTheDocument();
     expect(screen.getByText('Sending…')).toBeInTheDocument();
 
     const sent = framesOf('user.message')[0];
-    expect(sent).toMatchObject({ sessionKey: SESSION, content: 'what is this?' });
+    expect(sent).toMatchObject({
+      sessionKey: SESSION,
+      content: 'what is this?',
+    });
     // The idempotency key, which is what makes a retry after a dropped socket
     // safe to replay.
     expect(sent).toHaveProperty('clientMessageId', expect.any(String));
@@ -543,7 +621,10 @@ describe('a message that storage catches up with', () => {
       '/api/status': [200, STATUS],
       '/api/agents': [200, AGENTS],
       '/api/sessions': [200, { sessions: [], total: 0 }],
-      '/api/notifications': [200, { notifications: [], unreadCount: 0, total: 0 }],
+      '/api/notifications': [
+        200,
+        { notifications: [], unreadCount: 0, total: 0 },
+      ],
       '/api/sessions/web%3A1/messages': [
         200,
         {
@@ -554,7 +635,10 @@ describe('a message that storage catches up with', () => {
               sessionKey: SESSION,
               createdAtMs: 1,
               turnId: 't1',
-              message: { role: 'user', content: [{ type: 'text', text: 'hello there' }] },
+              message: {
+                role: 'user',
+                content: [{ type: 'text', text: 'hello there' }],
+              },
             },
           ],
         },
@@ -566,7 +650,10 @@ describe('a message that storage catches up with', () => {
     mount('/');
     await connect();
 
-    await user.type(await screen.findByRole('textbox', { name: 'Message' }), 'hello there{Enter}');
+    await user.type(
+      await screen.findByRole('textbox', { name: 'Message' }),
+      'hello there{Enter}',
+    );
 
     const sent = framesOf('user.message')[0] as { clientMessageId: string };
     deliver(
@@ -588,7 +675,9 @@ describe('a message that storage catches up with', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('fetch failed', { exact: false })).toBeInTheDocument();
+      expect(
+        screen.getByText('fetch failed', { exact: false }),
+      ).toBeInTheDocument();
     });
     // The bubble the client drew and the row the server stored are the same
     // sentence; the turn id is what joins them.
@@ -623,13 +712,19 @@ describe('switching to a session whose history is already cached', () => {
     // any session nobody is adding to. React Query's structural sharing
     // hands back the *same* `history.data` reference when the refetch is
     // deep-equal, so a switch produces no new reference to react to.
-    client.setQueryData(['sessions', OTHER, 'messages'], storedIn(OTHER, 'the weather report'));
+    client.setQueryData(
+      ['sessions', OTHER, 'messages'],
+      storedIn(OTHER, 'the weather report'),
+    );
 
     stubFetch({
       '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
       '/api/status': [200, STATUS],
       '/api/agents': [200, AGENTS],
-      '/api/notifications': [200, { notifications: [], unreadCount: 0, total: 0 }],
+      '/api/notifications': [
+        200,
+        { notifications: [], unreadCount: 0, total: 0 },
+      ],
       '/api/sessions': [
         200,
         {
@@ -654,7 +749,10 @@ describe('switching to a session whose history is already cached', () => {
           total: 2,
         },
       ],
-      '/api/sessions/web%3A1/messages': [200, storedIn(SESSION, 'the first session')],
+      '/api/sessions/web%3A1/messages': [
+        200,
+        storedIn(SESSION, 'the first session'),
+      ],
       [`/api/sessions/${encodeURIComponent(OTHER)}/messages`]: [
         200,
         storedIn(OTHER, 'the weather report'),
@@ -684,13 +782,19 @@ describe('switching to a session whose history is already cached', () => {
     // What this tab fetched before it navigated away. A turn has run in that
     // conversation since, and this tab was attached elsewhere and saw none of
     // it: no event reached it, so nothing invalidated this entry.
-    client.setQueryData(['sessions', OTHER, 'messages'], storedIn(OTHER, 'the stale answer'));
+    client.setQueryData(
+      ['sessions', OTHER, 'messages'],
+      storedIn(OTHER, 'the stale answer'),
+    );
 
     stubFetch({
       '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
       '/api/status': [200, STATUS],
       '/api/agents': [200, AGENTS],
-      '/api/notifications': [200, { notifications: [], unreadCount: 0, total: 0 }],
+      '/api/notifications': [
+        200,
+        { notifications: [], unreadCount: 0, total: 0 },
+      ],
       '/api/sessions': [
         200,
         {
@@ -715,7 +819,10 @@ describe('switching to a session whose history is already cached', () => {
           total: 2,
         },
       ],
-      '/api/sessions/web%3A1/messages': [200, storedIn(SESSION, 'the first session')],
+      '/api/sessions/web%3A1/messages': [
+        200,
+        storedIn(SESSION, 'the first session'),
+      ],
       // Storage has moved on. The cached copy above is what the tab would show
       // if it trusted its own 30-second-old answer.
       [`/api/sessions/${encodeURIComponent(OTHER)}/messages`]: [
@@ -763,10 +870,16 @@ describe('stopping', () => {
     );
 
     // Send became Stop, which is the whole point of `session.status.busy`.
-    expect(screen.queryByRole('button', { name: 'Send' })).not.toBeInTheDocument();
-    await user.click(await screen.findByRole('button', { name: 'Stop the current turn' }));
+    expect(
+      screen.queryByRole('button', { name: 'Send' }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      await screen.findByRole('button', { name: 'Stop the current turn' }),
+    );
 
-    expect(framesOf('turn.stop')).toEqual([{ type: 'turn.stop', sessionKey: SESSION }]);
+    expect(framesOf('turn.stop')).toEqual([
+      { type: 'turn.stop', sessionKey: SESSION },
+    ]);
 
     deliver(
       {
@@ -822,7 +935,7 @@ describe('the approval gate', () => {
       risk: 'exec',
       expiresAtMs: Date.now() + 60_000,
     },
-  ] as const satisfies readonly Unsequenced<ServerMessage>[];
+  ] as const satisfies ReadonlyArray<Unsequenced<ServerMessage>>;
 
   it('asks before the call runs, and answers with the scope that was pressed', async () => {
     const user = userEvent.setup();
@@ -832,7 +945,9 @@ describe('the approval gate', () => {
 
     // Open by default: an approval prompt inside a collapsed card is a turn
     // that has silently stopped.
-    expect(await screen.findByText(/needs approval to run/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/needs approval to run/),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText('Needs approval')).toBeInTheDocument();
     // Nothing ran: there is no output to show yet.
     expect(screen.queryByText('Output')).not.toBeInTheDocument();
@@ -856,7 +971,9 @@ describe('the approval gate', () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByText(/needs approval to run/)).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/needs approval to run/),
+      ).not.toBeInTheDocument();
     });
     expect(screen.getByText('removed build')).toBeInTheDocument();
   });
@@ -955,7 +1072,12 @@ describe('a mid-stream reload', () => {
         lastSeq: applied,
       },
       // The ring covered the gap, so the frames themselves follow.
-      { type: 'session.replay', sessionKey: SESSION, messages: [], complete: true },
+      {
+        type: 'session.replay',
+        sessionKey: SESSION,
+        messages: [],
+        complete: true,
+      },
       { type: 'assistant.delta', turnId: 't1', text: ' and the rest of it.' },
       { type: 'turn.end', turnId: 't1', stopReason: 'complete', iterations: 1 },
     );
@@ -968,7 +1090,11 @@ describe('a mid-stream reload', () => {
   it('rebuilds from storage when the resume fell outside the ring', async () => {
     mount();
     await connect();
-    deliver(START, { type: 'assistant.delta', turnId: 't1', text: 'lost text' });
+    deliver(START, {
+      type: 'assistant.delta',
+      turnId: 't1',
+      text: 'lost text',
+    });
 
     const before = useTurnStore.getState().lastSeq;
     cleanup();
@@ -1004,7 +1130,10 @@ describe('a mid-stream reload', () => {
             seq: 1,
             createdAtMs: 1,
             turnId: 't1',
-            message: { role: 'user', content: [{ type: 'text', text: 'the original question' }] },
+            message: {
+              role: 'user',
+              content: [{ type: 'text', text: 'the original question' }],
+            },
           },
         ],
       },
@@ -1012,7 +1141,9 @@ describe('a mid-stream reload', () => {
 
     // `complete: false` is the server saying "I cannot cover the gap" — the
     // stored tail replaces the transcript rather than being appended to it.
-    expect(await screen.findByText('the original question')).toBeInTheDocument();
+    expect(
+      await screen.findByText('the original question'),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/lost text/)).not.toBeInTheDocument();
   });
 });
@@ -1050,7 +1181,9 @@ describe('reworking a session', () => {
     const user = userEvent.setup();
     await seeded();
 
-    await user.click(screen.getByRole('button', { name: 'Regenerate the answer' }));
+    await user.click(
+      screen.getByRole('button', { name: 'Regenerate the answer' }),
+    );
 
     // `firstSeq` is what makes this addressable without a refetch.
     expect(framesOf('turn.regenerate')).toEqual([
@@ -1133,12 +1266,17 @@ describe('reworking a session', () => {
           seq: 1,
           createdAtMs: 1,
           turnId: 't1',
-          message: { role: 'user', content: [{ type: 'text', text: 'the first question' }] },
+          message: {
+            role: 'user',
+            content: [{ type: 'text', text: 'the first question' }],
+          },
         },
       ],
     });
 
-    await user.click(await screen.findByRole('button', { name: 'Edit this message' }));
+    await user.click(
+      await screen.findByRole('button', { name: 'Edit this message' }),
+    );
 
     const editor = screen.getByRole('textbox', { name: 'Edit message' });
     await user.clear(editor);
@@ -1190,7 +1328,9 @@ describe('reworking a session', () => {
       ],
     });
 
-    await user.click(await screen.findByRole('button', { name: 'Edit this message' }));
+    await user.click(
+      await screen.findByRole('button', { name: 'Edit this message' }),
+    );
     const editor = screen.getByRole('textbox', { name: 'Edit message' });
     await user.clear(editor);
     await user.type(editor, 'what is this, exactly');

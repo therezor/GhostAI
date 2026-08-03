@@ -75,7 +75,7 @@ export function createI18n(options: CreateI18nOptions): i18n {
     // why the two move together rather than the handler standing alone.
     saveMissing: strict,
     missingKeyHandler: strict
-      ? (_lngs: readonly string[], ns: string, key: string): void => {
+      ? (lngs: readonly string[], ns: string, key: string): void => {
           throw new Error(`Missing translation: ${ns}:${key}`);
         }
       : false,

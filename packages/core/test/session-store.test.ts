@@ -8,7 +8,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { Clock } from '#src/clock.js';
 import { GhostError, isGhostError } from '#src/errors.js';
 import { hasOrphanedToolResult } from '#src/history.js';
-import { assistantMessage, textOf, toolMessage, userMessage } from '#src/messages.js';
+import {
+  assistantMessage,
+  textOf,
+  toolMessage,
+  userMessage,
+} from '#src/messages.js';
 import { SessionStore, toStoredMessage } from '#src/session-store.js';
 
 const NOW = 1_700_000_000_000;
@@ -45,7 +50,9 @@ function makeStore(): SessionStore {
   return new SessionStore({ clock: fixedClock, newId: counterIds() });
 }
 
-const call = (id: string): { id: string; name: string; argumentsJson: string } => ({
+const call = (
+  id: string,
+): { id: string; name: string; argumentsJson: string } => ({
   id,
   name: 'read_file',
   argumentsJson: '{"path":"a.txt"}',
@@ -116,7 +123,9 @@ describe('sessions', () => {
     store.ensureSession('a', { origin: 'web' });
     store.ensureSession('t', { origin: 'telegram' });
 
-    expect(store.listSessions({ origin: 'telegram' }).map((s) => s.key)).toEqual(['t']);
+    expect(
+      store.listSessions({ origin: 'telegram' }).map((s) => s.key),
+    ).toEqual(['t']);
     expect(
       store
         .listSessions()
@@ -143,7 +152,9 @@ describe('sessions', () => {
         .map((s) => s.key)
         .sort(),
     ).toEqual(['a', 'auto', 'sub']);
-    expect(store.listSessions().find((s) => s.key === 'auto')?.origin).toBe('automation');
+    expect(store.listSessions().find((s) => s.key === 'auto')?.origin).toBe(
+      'automation',
+    );
     store.close();
   });
 
@@ -153,7 +164,9 @@ describe('sessions', () => {
     store.ensureSession('a', { origin: 'web' });
     store.ensureSession('auto', { origin: 'automation' });
 
-    expect(store.listSessions({ origin: 'automation' }).map((s) => s.key)).toEqual(['auto']);
+    expect(
+      store.listSessions({ origin: 'automation' }).map((s) => s.key),
+    ).toEqual(['auto']);
     expect(store.getSession('auto')?.origin).toBe('automation');
     store.close();
   });
@@ -208,7 +221,10 @@ describe('sessions', () => {
     }
 
     const page = store.listSessions({ limit: 1 });
-    const cursor = { updatedAtMs: page[0]?.updatedAtMs ?? 0, key: page[0]?.key ?? '' };
+    const cursor = {
+      updatedAtMs: page[0]?.updatedAtMs ?? 0,
+      key: page[0]?.key ?? '',
+    };
 
     now += 1000;
     store.append('a', userMessage('a turn landed'));
@@ -273,8 +289,12 @@ describe('sessions', () => {
     store.ensureSession('c', { title: 'a_b' });
     store.ensureSession('d', { title: 'axb' });
 
-    expect(store.listSessions({ query: '100%' }).map((session) => session.key)).toEqual(['a']);
-    expect(store.listSessions({ query: 'a_b' }).map((session) => session.key)).toEqual(['c']);
+    expect(
+      store.listSessions({ query: '100%' }).map((session) => session.key),
+    ).toEqual(['a']);
+    expect(
+      store.listSessions({ query: 'a_b' }).map((session) => session.key),
+    ).toEqual(['c']);
     store.close();
   });
 
@@ -291,14 +311,27 @@ describe('sessions', () => {
     now = NOW + 2;
     store.ensureSession('c', { title: 'Gamma' });
 
-    const keys = (options: Parameters<typeof store.listSessions>[0]): string[] =>
-      store.listSessions(options).map((session) => session.key);
+    const keys = (
+      options: Parameters<typeof store.listSessions>[0],
+    ): string[] => store.listSessions(options).map((session) => session.key);
 
     expect(keys({})).toEqual(['c', 'b', 'a']);
-    expect(keys({ orderBy: 'created', descending: false })).toEqual(['a', 'b', 'c']);
+    expect(keys({ orderBy: 'created', descending: false })).toEqual([
+      'a',
+      'b',
+      'c',
+    ]);
     // NOCASE, so `alpha` sorts with the capitals rather than after them.
-    expect(keys({ orderBy: 'title', descending: false })).toEqual(['b', 'a', 'c']);
-    expect(keys({ orderBy: 'title', descending: true })).toEqual(['c', 'a', 'b']);
+    expect(keys({ orderBy: 'title', descending: false })).toEqual([
+      'b',
+      'a',
+      'c',
+    ]);
+    expect(keys({ orderBy: 'title', descending: true })).toEqual([
+      'c',
+      'a',
+      'b',
+    ]);
     store.close();
   });
 
@@ -307,19 +340,34 @@ describe('sessions', () => {
     store.ensureSession('a');
 
     expect(() =>
-      store.listSessions({ orderBy: 'title', after: { updatedAtMs: NOW, key: 'a' } }),
+      store.listSessions({
+        orderBy: 'title',
+        after: { updatedAtMs: NOW, key: 'a' },
+      }),
     ).toThrow(/only valid in the default ordering/);
     expect(() =>
-      store.listSessions({ descending: false, after: { updatedAtMs: NOW, key: 'a' } }),
+      store.listSessions({
+        descending: false,
+        after: { updatedAtMs: NOW, key: 'a' },
+      }),
     ).toThrow(/only valid in the default ordering/);
     store.close();
   });
 
   it('counts what the same filter lists, so a pager cannot disagree with its rows', () => {
     const store = makeStore();
-    store.ensureSession('a', { title: 'login throttle', workspaceId: 'default' });
-    store.ensureSession('b', { title: 'login rate limit', workspaceId: 'default' });
-    store.ensureSession('c', { title: 'nightly digest', workspaceId: 'default' });
+    store.ensureSession('a', {
+      title: 'login throttle',
+      workspaceId: 'default',
+    });
+    store.ensureSession('b', {
+      title: 'login rate limit',
+      workspaceId: 'default',
+    });
+    store.ensureSession('c', {
+      title: 'nightly digest',
+      workspaceId: 'default',
+    });
     store.ensureSession('d', {
       title: 'login elsewhere',
       workspaceId: 'other',
@@ -380,7 +428,10 @@ describe('sessions', () => {
     expect(store.getSession('a')?.metadata).toEqual({ topicId: 42 });
 
     store.updateSession('a', { metadata: { topicId: 43, tags: ['x'] } });
-    expect(store.getSession('a')?.metadata).toEqual({ topicId: 43, tags: ['x'] });
+    expect(store.getSession('a')?.metadata).toEqual({
+      topicId: 43,
+      tags: ['x'],
+    });
     store.close();
   });
 
@@ -472,7 +523,10 @@ describe('appending', () => {
     const store = makeStore();
     const records = store.appendMany(
       's',
-      [assistantMessage('', { toolCalls: [call('a')] }), toolMessage('a', 'read_file', 'x')],
+      [
+        assistantMessage('', { toolCalls: [call('a')] }),
+        toolMessage('a', 'read_file', 'x'),
+      ],
       { turnId: 'turn-1' },
     );
     expect(records.every((r) => r.turnId === 'turn-1')).toBe(true);
@@ -505,13 +559,17 @@ describe('reading messages', () => {
 
   it('pages forward from a cursor', () => {
     const store = seeded();
-    expect(store.messages('s', { afterSeq: 1 }).map((r) => r.seq)).toEqual([2, 3]);
+    expect(store.messages('s', { afterSeq: 1 }).map((r) => r.seq)).toEqual([
+      2, 3,
+    ]);
     store.close();
   });
 
   it('respects an upper bound', () => {
     const store = seeded();
-    expect(store.messages('s', { beforeSeq: 3 }).map((r) => r.seq)).toEqual([1, 2]);
+    expect(store.messages('s', { beforeSeq: 3 }).map((r) => r.seq)).toEqual([
+      1, 2,
+    ]);
     store.close();
   });
 
@@ -523,7 +581,9 @@ describe('reading messages', () => {
 
   it('takes the newest when reading from the end, still in order', () => {
     const store = seeded();
-    expect(store.messages('s', { limit: 2, fromEnd: true }).map((r) => r.seq)).toEqual([2, 3]);
+    expect(
+      store.messages('s', { limit: 2, fromEnd: true }).map((r) => r.seq),
+    ).toEqual([2, 3]);
     store.close();
   });
 
@@ -581,18 +641,26 @@ describe('history', () => {
     store.append('s', userMessage('b'));
     store.append('s', userMessage('c'));
 
-    expect(store.history('s', { maxMessages: 2 })).toEqual([userMessage('b'), userMessage('c')]);
+    expect(store.history('s', { maxMessages: 2 })).toEqual([
+      userMessage('b'),
+      userMessage('c'),
+    ]);
     store.close();
   });
 
   it('does not double-apply the consolidation offset', () => {
     const store = makeStore();
-    for (const text of ['a', 'b', 'c', 'd']) store.append('s', userMessage(text));
+    for (const text of ['a', 'b', 'c', 'd']) {
+      store.append('s', userMessage(text));
+    }
     store.updateSession('s', { lastConsolidatedSeq: 2 });
 
     // Two consolidated, two remaining — asking for two must return both of the
     // remaining pair rather than skipping a second block of two.
-    expect(store.history('s', { maxMessages: 2 })).toEqual([userMessage('c'), userMessage('d')]);
+    expect(store.history('s', { maxMessages: 2 })).toEqual([
+      userMessage('c'),
+      userMessage('d'),
+    ]);
     store.close();
   });
 
@@ -625,7 +693,11 @@ describe('durability', () => {
   it('survives a reopen with tool-call pairing intact', () => {
     const file = tempFile();
 
-    const first = new SessionStore({ file, clock: fixedClock, newId: counterIds() });
+    const first = new SessionStore({
+      file,
+      clock: fixedClock,
+      newId: counterIds(),
+    });
     first.appendMany(
       'web:1',
       [
@@ -640,7 +712,11 @@ describe('durability', () => {
     first.updateSession('web:1', { title: 'Reading files' });
     first.close();
 
-    const second = new SessionStore({ file, clock: fixedClock, newId: counterIds() });
+    const second = new SessionStore({
+      file,
+      clock: fixedClock,
+      newId: counterIds(),
+    });
     const history = second.history('web:1');
 
     expect(second.getSession('web:1')?.title).toBe('Reading files');
@@ -653,11 +729,19 @@ describe('durability', () => {
   it('continues the sequence after a reopen rather than restarting it', () => {
     const file = tempFile();
 
-    const first = new SessionStore({ file, clock: fixedClock, newId: counterIds() });
+    const first = new SessionStore({
+      file,
+      clock: fixedClock,
+      newId: counterIds(),
+    });
     first.append('s', userMessage('one'));
     first.close();
 
-    const second = new SessionStore({ file, clock: fixedClock, newId: counterIds('second-') });
+    const second = new SessionStore({
+      file,
+      clock: fixedClock,
+      newId: counterIds('second-'),
+    });
     expect(second.append('s', userMessage('two')).seq).toBe(2);
     second.close();
   });
@@ -693,7 +777,9 @@ describe('clearing', () => {
 describe('truncating', () => {
   it('drops everything after the cut and reports how much', () => {
     const store = makeStore();
-    for (const text of ['one', 'two', 'three', 'four']) store.append('s', userMessage(text));
+    for (const text of ['one', 'two', 'three', 'four']) {
+      store.append('s', userMessage(text));
+    }
 
     expect(store.truncateAfter('s', 2)).toEqual({ seq: 2, deleted: 2 });
     expect(store.messages('s').map((record) => record.seq)).toEqual([1, 2]);
@@ -702,7 +788,9 @@ describe('truncating', () => {
 
   it('leaves next_seq alone, so sequences never rewind', () => {
     const store = makeStore();
-    for (const text of ['one', 'two', 'three']) store.append('s', userMessage(text));
+    for (const text of ['one', 'two', 'three']) {
+      store.append('s', userMessage(text));
+    }
 
     store.truncateAfter('s', 1);
 
@@ -714,7 +802,9 @@ describe('truncating', () => {
 
   it('clamps both markers to the cut', () => {
     const store = makeStore();
-    for (const text of ['one', 'two', 'three', 'four']) store.append('s', userMessage(text));
+    for (const text of ['one', 'two', 'three', 'four']) {
+      store.append('s', userMessage(text));
+    }
     store.updateSession('s', { lastConsolidatedSeq: 3, lastLearnedSeq: 4 });
 
     store.truncateAfter('s', 2);
@@ -727,7 +817,9 @@ describe('truncating', () => {
 
   it('leaves a marker below the cut where it is', () => {
     const store = makeStore();
-    for (const text of ['one', 'two', 'three']) store.append('s', userMessage(text));
+    for (const text of ['one', 'two', 'three']) {
+      store.append('s', userMessage(text));
+    }
     store.updateSession('s', { lastConsolidatedSeq: 1 });
 
     store.truncateAfter('s', 2);
@@ -806,20 +898,26 @@ describe('truncating', () => {
 describe('forking', () => {
   it('copies the prefix into a new session and leaves the source alone', () => {
     const store = makeStore();
-    for (const text of ['one', 'two', 'three']) store.append('s', userMessage(text));
+    for (const text of ['one', 'two', 'three']) {
+      store.append('s', userMessage(text));
+    }
 
     const fork = store.forkSession('s', 2);
 
     expect(fork.copied).toBe(2);
     expect(fork.seq).toBe(2);
-    expect(store.messages(fork.session.key).map((r) => textOf(r.message))).toEqual(['one', 'two']);
+    expect(
+      store.messages(fork.session.key).map((r) => textOf(r.message)),
+    ).toEqual(['one', 'two']);
     expect(store.messageCount('s')).toBe(3);
     store.close();
   });
 
   it('reseats sequences densely from one', () => {
     const store = makeStore();
-    for (const text of ['one', 'two', 'three']) store.append('s', userMessage(text));
+    for (const text of ['one', 'two', 'three']) {
+      store.append('s', userMessage(text));
+    }
     store.truncateAfter('s', 1);
     store.append('s', userMessage('sparse'));
 
@@ -846,7 +944,11 @@ describe('forking', () => {
 
   it('inherits workspace, origin and agent', () => {
     const store = makeStore();
-    store.ensureSession('s', { origin: 'cli', workspaceId: 'w2', agentId: 'p1' });
+    store.ensureSession('s', {
+      origin: 'cli',
+      workspaceId: 'w2',
+      agentId: 'p1',
+    });
     store.append('s', userMessage('one'));
 
     const fork = store.forkSession('s', 1);
@@ -866,7 +968,11 @@ describe('forking', () => {
 
     const fork = store.forkSession('s', 1);
 
-    expect(fork.session.metadata.forkedFrom).toEqual({ key: 's', seq: 1, atMs: NOW });
+    expect(fork.session.metadata.forkedFrom).toEqual({
+      key: 's',
+      seq: 1,
+      atMs: NOW,
+    });
     store.close();
   });
 
@@ -876,14 +982,18 @@ describe('forking', () => {
     store.ensureSession('titled', { title: 'Named already' });
     store.append('titled', userMessage('anything'));
 
-    expect(store.forkSession('s', 1).session.title).toBe('why does the login throw');
+    expect(store.forkSession('s', 1).session.title).toBe(
+      'why does the login throw',
+    );
     expect(store.forkSession('titled', 1).session.title).toBe('Named already');
     store.close();
   });
 
   it('remaps the consolidation markers by count', () => {
     const store = makeStore();
-    for (const text of ['one', 'two', 'three', 'four']) store.append('s', userMessage(text));
+    for (const text of ['one', 'two', 'three', 'four']) {
+      store.append('s', userMessage(text));
+    }
     store.updateSession('s', { lastConsolidatedSeq: 2, lastLearnedSeq: 3 });
 
     const fork = store.forkSession('s', 4);
@@ -921,8 +1031,12 @@ describe('forking', () => {
     const store = makeStore();
     store.append('s', userMessage('one'));
 
-    expect(store.forkSession('s', 1, { key: 'chosen' }).session.key).toBe('chosen');
-    expect(() => store.forkSession('s', 1, { key: 'chosen' })).toThrow(GhostError);
+    expect(store.forkSession('s', 1, { key: 'chosen' }).session.key).toBe(
+      'chosen',
+    );
+    expect(() => store.forkSession('s', 1, { key: 'chosen' })).toThrow(
+      GhostError,
+    );
     store.close();
   });
 
@@ -984,7 +1098,10 @@ describe('turn stats', () => {
     const store = makeStore();
     store.ensureSession('s');
     store.recordTurnStats(
-      stats('t1', { stopReason: 'error', error: 'No container runtime is reachable.' }),
+      stats('t1', {
+        stopReason: 'error',
+        error: 'No container runtime is reachable.',
+      }),
     );
     store.recordTurnStats(stats('t2'));
 
@@ -1005,8 +1122,14 @@ describe('turn stats', () => {
     store.recordTurnStats(stats('t2', { endedAtMs: NOW + 2 }));
     store.recordTurnStats(stats('t3', { endedAtMs: NOW + 3 }));
 
-    expect(store.turnStats('s').map((row) => row.turnId)).toEqual(['t3', 't2', 't1']);
-    expect(store.turnStats('s', { limit: 2 }).map((row) => row.turnId)).toEqual(['t3', 't2']);
+    expect(store.turnStats('s').map((row) => row.turnId)).toEqual([
+      't3',
+      't2',
+      't1',
+    ]);
+    expect(store.turnStats('s', { limit: 2 }).map((row) => row.turnId)).toEqual(
+      ['t3', 't2'],
+    );
     store.close();
   });
 
@@ -1014,16 +1137,25 @@ describe('turn stats', () => {
     const store = makeStore();
     store.ensureSession('s');
     store.recordTurnStats(
-      stats('t1', { usage: { promptTokens: 1, completionTokens: 2, totalTokens: 3 } }),
+      stats('t1', {
+        usage: { promptTokens: 1, completionTokens: 2, totalTokens: 3 },
+      }),
     );
     store.recordTurnStats(
       stats('t2', {
-        usage: { promptTokens: 1, completionTokens: 2, totalTokens: 3, cachedTokens: 9 },
+        usage: {
+          promptTokens: 1,
+          completionTokens: 2,
+          totalTokens: 3,
+          cachedTokens: 9,
+        },
       }),
     );
 
     const rows = store.turnStats('s');
-    expect(rows.find((row) => row.turnId === 't1')?.usage.cachedTokens).toBeUndefined();
+    expect(
+      rows.find((row) => row.turnId === 't1')?.usage.cachedTokens,
+    ).toBeUndefined();
     expect(rows.find((row) => row.turnId === 't2')?.usage.cachedTokens).toBe(9);
     store.close();
   });
@@ -1034,13 +1166,19 @@ describe('turn stats', () => {
     store.ensureSession('other');
     store.recordTurnStats(stats('t1'));
     store.recordTurnStats(
-      stats('t2', { usage: { promptTokens: 5, completionTokens: 5, totalTokens: 10 } }),
+      stats('t2', {
+        usage: { promptTokens: 5, completionTokens: 5, totalTokens: 10 },
+      }),
     );
     store.recordTurnStats(stats('t3', { sessionKey: 'other' }));
 
     const totals = store.sessionUsage(['s', 'other', 'missing']);
 
-    expect(totals.get('s')).toEqual({ promptTokens: 105, completionTokens: 25, totalTokens: 130 });
+    expect(totals.get('s')).toEqual({
+      promptTokens: 105,
+      completionTokens: 25,
+      totalTokens: 130,
+    });
     expect(totals.get('other')?.totalTokens).toBe(120);
     // A session with no recorded turns is absent rather than zeroed — the
     // honest answer for a conversation whose turns predate this table.
@@ -1098,7 +1236,9 @@ describe('lifecycle', () => {
     store.close();
 
     // Still usable: whoever opened the connection owns its lifetime.
-    expect(database.prepare('SELECT COUNT(*) AS n FROM messages').get()).toMatchObject({ n: 1 });
+    expect(
+      database.prepare('SELECT COUNT(*) AS n FROM messages').get(),
+    ).toMatchObject({ n: 1 });
     database.close();
   });
 });
@@ -1106,10 +1246,16 @@ describe('lifecycle', () => {
 describe('corrupt data', () => {
   it('rejects a stored payload that no longer matches the schema', () => {
     const database = new DatabaseSync(':memory:');
-    const store = new SessionStore({ database, clock: fixedClock, newId: counterIds() });
+    const store = new SessionStore({
+      database,
+      clock: fixedClock,
+      newId: counterIds(),
+    });
     store.append('s', userMessage('hi'));
 
-    database.prepare('UPDATE messages SET payload_json = ? WHERE seq = 1').run('{"role":"alien"}');
+    database
+      .prepare('UPDATE messages SET payload_json = ? WHERE seq = 1')
+      .run('{"role":"alien"}');
 
     try {
       store.messages('s');
@@ -1127,7 +1273,9 @@ describe('corrupt data', () => {
     store.ensureSession('s');
 
     for (const bad of ['not json at all', '[1,2,3]', 'null']) {
-      database.prepare('UPDATE sessions SET metadata_json = ? WHERE key = ?').run(bad, 's');
+      database
+        .prepare('UPDATE sessions SET metadata_json = ? WHERE key = ?')
+        .run(bad, 's');
       expect(store.getSession('s')?.metadata).toEqual({});
     }
 
@@ -1209,7 +1357,9 @@ describe('reassigning an agent', () => {
     const store = makeStore();
     store.ensureSession('a', { agentId: 'reviewer' });
 
-    expect(store.reassignAgents([{ from: 'reviewer', to: 'reviewer' }])).toBe(0);
+    expect(store.reassignAgents([{ from: 'reviewer', to: 'reviewer' }])).toBe(
+      0,
+    );
     expect(store.getSession('a')?.agentId).toBe('reviewer');
   });
 

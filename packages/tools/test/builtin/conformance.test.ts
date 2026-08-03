@@ -41,7 +41,10 @@ afterAll(() => {
 
 const withNotes = seeded((root) => {
   writeFileSync(join(root, 'notes.md'), '# Notes\nthe quick brown fox\n');
-  writeFileSync(join(root, 'big.txt'), 'lorem ipsum dolor sit amet\n'.repeat(400));
+  writeFileSync(
+    join(root, 'big.txt'),
+    'lorem ipsum dolor sit amet\n'.repeat(400),
+  );
 });
 
 describe('built-in conformance', () => {
@@ -69,7 +72,10 @@ describe('built-in conformance', () => {
     context: seeded((root) => {
       mkdirSync(join(root, 'src'));
       for (let index = 0; index < 60; index += 1) {
-        writeFileSync(join(root, `fixture-${String(index).padStart(3, '0')}.txt`), 'x');
+        writeFileSync(
+          join(root, `fixture-${String(index).padStart(3, '0')}.txt`),
+          'x',
+        );
       }
     }),
     validArgs: { path: '.' },
@@ -121,7 +127,9 @@ describe('the built-in set, as packages below it assume it', () => {
       const seeded = DEFAULT_AGENT_TOOLS[tool.name];
       if (seeded === undefined) continue; // covered above
       const risk = tool.definition('builtin').risk;
-      expect(seeded).toBe(risk === 'safe' || risk === 'write' ? 'allow' : 'ask');
+      expect(seeded).toBe(
+        risk === 'safe' || risk === 'write' ? 'allow' : 'ask',
+      );
     }
   });
 });

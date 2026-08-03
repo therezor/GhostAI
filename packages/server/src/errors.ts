@@ -12,12 +12,19 @@
  * a response body outside `errorBody`.
  */
 
-import { GhostError, isGhostError, toGhostError, type ErrorKind } from '@ghostai/core';
+import {
+  GhostError,
+  isGhostError,
+  toGhostError,
+  type ErrorKind,
+} from '@ghostai/core';
 import type { ErrorCode, ErrorResponse } from '@ghostai/protocol';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 /** Status and wire code for each kind in the core taxonomy. */
-const BY_KIND: Readonly<Record<ErrorKind, { status: number; code: ErrorCode }>> = {
+const BY_KIND: Readonly<
+  Record<ErrorKind, { status: number; code: ErrorCode }>
+> = {
   config: { status: 500, code: 'config_invalid' },
   invalid_input: { status: 422, code: 'bad_request' },
   not_found: { status: 404, code: 'not_found' },
@@ -118,7 +125,10 @@ export function tooManyRequests(message: string): HttpError {
  * 400 means "fix the request", a 409 means "look again and decide". Saving a
  * file the agent rewrote since it was loaded is the second, not the first.
  */
-export function conflict(message: string, details?: Readonly<Record<string, unknown>>): HttpError {
+export function conflict(
+  message: string,
+  details?: Readonly<Record<string, unknown>>,
+): HttpError {
   return new HttpError(409, 'bad_request', 'conflict', message, details);
 }
 
@@ -161,7 +171,9 @@ const OPAQUE_500 = 'Internal server error';
 function clientErrorStatus(value: unknown): number | undefined {
   if (!(value instanceof Error)) return undefined;
   const status: unknown = (value as { statusCode?: unknown }).statusCode;
-  if (typeof status !== 'number' || status < 400 || status >= 500) return undefined;
+  if (typeof status !== 'number' || status < 400 || status >= 500) {
+    return undefined;
+  }
   return status;
 }
 
@@ -198,7 +210,8 @@ export function resolveError(value: unknown): ResolvedError {
   const mapped = BY_KIND[ghost.kind];
   // A `GhostError` is written for an operator; anything else at 5xx is not.
   const expected = isGhostError(value);
-  const message = mapped.status >= 500 && !expected ? OPAQUE_500 : ghost.message;
+  const message =
+    mapped.status >= 500 && !expected ? OPAQUE_500 : ghost.message;
   return {
     status: mapped.status,
     code: mapped.code,
@@ -216,7 +229,9 @@ export function errorBody(
     error: {
       code,
       message,
-      ...(details === undefined || Object.keys(details).length === 0 ? {} : { details }),
+      ...(details === undefined || Object.keys(details).length === 0
+        ? {}
+        : { details }),
     },
   };
 }
@@ -232,7 +247,10 @@ export interface ErrorHandlerOptions {
    * (which paths are the API's, which document is the shell) is the caller's
    * knowledge, not this module's.
    */
-  readonly onNotFound?: (request: FastifyRequest, reply: FastifyReply) => boolean;
+  readonly onNotFound?: (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) => boolean;
 }
 
 /**
@@ -245,20 +263,28 @@ export function registerErrorHandler(
   app: FastifyInstance,
   options: ErrorHandlerOptions = {},
 ): void {
-  app.setErrorHandler((error: unknown, request: FastifyRequest, reply: FastifyReply) => {
-    const resolved = resolveError(error);
-    // Structured, not interpolated: pino redacts by path, and a message built
-    // with template literals is past the point where redaction can reach it.
-    const log = { err: resolved.cause, url: request.url, method: request.method };
-    if (resolved.status >= 500) request.log.error(log, 'request failed');
-    else request.log.warn(log, 'request rejected');
-    void reply.status(resolved.status).send(resolved.body);
-  });
+  app.setErrorHandler(
+    (error: unknown, request: FastifyRequest, reply: FastifyReply) => {
+      const resolved = resolveError(error);
+      // Structured, not interpolated: pino redacts by path, and a message built
+      // with template literals is past the point where redaction can reach it.
+      const log = {
+        err: resolved.cause,
+        url: request.url,
+        method: request.method,
+      };
+      if (resolved.status >= 500) request.log.error(log, 'request failed');
+      else request.log.warn(log, 'request rejected');
+      void reply.status(resolved.status).send(resolved.body);
+    },
+  );
 
   app.setNotFoundHandler((request: FastifyRequest, reply: FastifyReply) => {
     if (options.onNotFound?.(request, reply) === true) return;
     void reply
       .status(404)
-      .send(errorBody('not_found', `No route for ${request.method} ${request.url}`));
+      .send(
+        errorBody('not_found', `No route for ${request.method} ${request.url}`),
+      );
   });
 }

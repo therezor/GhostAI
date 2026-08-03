@@ -13,7 +13,6 @@ import {
   emptyUsage,
   findProvider,
   type ChatProvider,
-  type ChatRequest,
   type ChatResult,
   type ChatStreamEvent,
   type ProviderSpec,
@@ -34,7 +33,9 @@ channelConformance<LoopbackChannel>({
     channel.say(text);
   },
   sent: (channel) =>
-    channel.transcript.filter((entry) => entry.direction === 'out').map((entry) => entry.text),
+    channel.transcript
+      .filter((entry) => entry.direction === 'out')
+      .map((entry) => entry.text),
 });
 
 // ---------------------------------------------------------------------------
@@ -56,7 +57,7 @@ function fixedProvider(answer: string): ChatProvider {
     id: 'scripted',
     spec: SPEC,
     chat: async () => result(),
-    stream: async function* (_request: ChatRequest): AsyncIterable<ChatStreamEvent> {
+    stream: async function* (): AsyncIterable<ChatStreamEvent> {
       yield { type: 'text', text: answer };
       yield { type: 'done', result: result() };
     },
@@ -65,7 +66,7 @@ function fixedProvider(answer: string): ChatProvider {
   };
 }
 
-const cleanups: (() => Promise<void> | void)[] = [];
+const cleanups: Array<() => Promise<void> | void> = [];
 
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
@@ -116,7 +117,12 @@ async function stack(answer = 'Hello from the agent.'): Promise<Stack> {
   });
   await manager.start();
 
-  return { hub, store, manager, channel: manager.channel('loopback') as LoopbackChannel };
+  return {
+    hub,
+    store,
+    manager,
+    channel: manager.channel('loopback') as LoopbackChannel,
+  };
 }
 
 describe('the loopback channel over the real hub', () => {
@@ -128,8 +134,13 @@ describe('the loopback channel over the real hub', () => {
       expect(channel.replies()).toEqual(['Hello from the agent.']);
     });
 
-    const messages = store.messages('loopback:default').map((record) => record.message);
-    expect(messages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    const messages = store
+      .messages('loopback:default')
+      .map((record) => record.message);
+    expect(messages.map((message) => message.role)).toEqual([
+      'user',
+      'assistant',
+    ]);
     expect(messages.map((message) => textOf(message))).toEqual([
       'what can you do?',
       'Hello from the agent.',
@@ -143,7 +154,11 @@ describe('the loopback channel over the real hub', () => {
     const { hub, store, channel } = await stack('Same agent.');
 
     const web = hub.connect({ sessionKey: 'web:1', send: () => undefined });
-    web.receive({ type: 'user.message', sessionKey: 'web:1', content: 'from a tab' });
+    web.receive({
+      type: 'user.message',
+      sessionKey: 'web:1',
+      content: 'from a tab',
+    });
     channel.say('from a chat app');
 
     await vi.waitFor(() => {
@@ -176,7 +191,9 @@ describe('the loopback channel over the real hub', () => {
     });
     expect(channel.replies()).toEqual(['One at a time.', 'One at a time.']);
     expect(
-      channel.transcript.some((entry) => entry.kind === 'notice' && entry.text.includes('Queued')),
+      channel.transcript.some(
+        (entry) => entry.kind === 'notice' && entry.text.includes('Queued'),
+      ),
     ).toBe(true);
   });
 

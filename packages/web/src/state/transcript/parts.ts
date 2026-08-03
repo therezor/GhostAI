@@ -10,7 +10,12 @@
  * merge in `stored.ts` then has to paper over.
  */
 
-import type { Attachment, ContentPart, SubagentRunRef, ToolRisk } from '@ghostai/protocol';
+import type {
+  Attachment,
+  ContentPart,
+  SubagentRunRef,
+  ToolRisk,
+} from '@ghostai/protocol';
 
 import {
   type SubagentPart,
@@ -106,10 +111,15 @@ export function upsertTool(
     return [...parts, update(seedTool(callId, 'tool', undefined, 'safe'))];
   }
   const next = update(tool);
-  return next === tool ? parts : parts.map((part) => (part === tool ? next : part));
+  return next === tool
+    ? parts
+    : parts.map((part) => (part === tool ? next : part));
 }
 
-export function findTool(parts: readonly TurnPart[], callId: string): ToolPart | undefined {
+export function findTool(
+  parts: readonly TurnPart[],
+  callId: string,
+): ToolPart | undefined {
   for (const part of parts) {
     if (part.kind === 'tool' && part.id === callId) return part;
   }
@@ -144,7 +154,10 @@ export function openTurn(items: TranscriptItem[], turnId: string): TurnItem {
   return turn;
 }
 
-export function replaceLast(items: TranscriptItem[], item: TranscriptItem): void {
+export function replaceLast(
+  items: TranscriptItem[],
+  item: TranscriptItem,
+): void {
   items[items.length - 1] = item;
 }
 
@@ -158,7 +171,9 @@ export function replaceLast(items: TranscriptItem[], item: TranscriptItem): void
  * nowhere else to go.
  */
 export function textOf(content: readonly ContentPart[]): string {
-  return content.map((part) => (part.type === 'text' ? part.text : '')).join('');
+  return content
+    .map((part) => (part.type === 'text' ? part.text : ''))
+    .join('');
 }
 
 /**
@@ -174,7 +189,9 @@ export function textOf(content: readonly ContentPart[]): string {
  * URL whose token expired long ago, which would render as a broken image.
  * Neither is worth showing.
  */
-export function attachmentsOf(content: readonly ContentPart[]): readonly Attachment[] {
+export function attachmentsOf(
+  content: readonly ContentPart[],
+): readonly Attachment[] {
   return content.flatMap((part) =>
     part.type === 'file'
       ? [
@@ -182,7 +199,9 @@ export function attachmentsOf(content: readonly ContentPart[]): readonly Attachm
             mimeType: part.mimeType,
             path: part.path,
             ...(part.name === undefined ? {} : { name: part.name }),
-            ...(part.sizeBytes === undefined ? {} : { sizeBytes: part.sizeBytes }),
+            ...(part.sizeBytes === undefined
+              ? {}
+              : { sizeBytes: part.sizeBytes }),
           },
         ]
       : [],

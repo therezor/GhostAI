@@ -30,7 +30,12 @@ request.
       "permission": "allow",
       "requiresArgs": true
     },
-    { "name": "curl", "use": "Call an API.", "permission": "ask", "requiresArgs": true }
+    {
+      "name": "curl",
+      "use": "Call an API.",
+      "permission": "ask",
+      "requiresArgs": true
+    }
   ],
   "notes": "Write findings to /workspace and search them with rg.",
   "expose": "tools",

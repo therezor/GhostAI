@@ -1,13 +1,20 @@
 import { GhostError } from '@ghostai/core';
 import { describe, expect, it } from 'vitest';
 
-import { describeError, resolveCliLocale, translations, translationsFor } from '#src/i18n.js';
+import {
+  describeError,
+  resolveCliLocale,
+  translations,
+  translationsFor,
+} from '#src/i18n.js';
 
 describe('resolveCliLocale', () => {
   it('lets GHOSTAI_LANG override the shell', () => {
     // The override exists for a script that wants one language regardless of
     // the machine it lands on.
-    expect(resolveCliLocale({ GHOSTAI_LANG: 'en', LANG: 'de_DE.UTF-8' })).toBe('en');
+    expect(resolveCliLocale({ GHOSTAI_LANG: 'en', LANG: 'de_DE.UTF-8' })).toBe(
+      'en',
+    );
   });
 
   it('prefers the configured locale over the shell', () => {
@@ -17,7 +24,9 @@ describe('resolveCliLocale', () => {
   it('reads the POSIX chain in the order POSIX defines', () => {
     // `LC_ALL` outranks `LC_MESSAGES`, which outranks `LANG`.
     expect(resolveCliLocale({ LC_ALL: 'en_GB.UTF-8', LANG: 'zz' })).toBe('en');
-    expect(resolveCliLocale({ LC_MESSAGES: 'en_US.UTF-8', LANG: 'zz' })).toBe('en');
+    expect(resolveCliLocale({ LC_MESSAGES: 'en_US.UTF-8', LANG: 'zz' })).toBe(
+      'en',
+    );
   });
 
   it('reads `LANG=C` as no localisation rather than as a language', () => {
@@ -35,7 +44,9 @@ describe('translations', () => {
   it('scopes `t` to the terminal bundle', () => {
     const { t } = translations('en');
 
-    expect(t('program.description')).toBe('A self-hosted agent that runs where your files are.');
+    expect(t('program.description')).toBe(
+      'A self-hosted agent that runs where your files are.',
+    );
   });
 
   it('scopes `ts` to the shared bundle the errors name', () => {
@@ -47,7 +58,9 @@ describe('translations', () => {
   it('interpolates without escaping, because a terminal has no entities', () => {
     const { t } = translations('en');
 
-    expect(t('program.notAPort', { value: 'a & b' })).toBe('"a & b" is not a port number');
+    expect(t('program.notAPort', { value: 'a & b' })).toBe(
+      '"a & b" is not a port number',
+    );
   });
 
   it('resolves from the environment', () => {
@@ -61,10 +74,15 @@ describe('describeError', () => {
   it('translates an error that carries a key', () => {
     const error = new GhostError('config', 'the English original', {
       messageKey: 'shared:runtime.noModel',
-      messageParams: { provider: 'Ollama', configFile: '/etc/ghost/config.json' },
+      messageParams: {
+        provider: 'Ollama',
+        configFile: '/etc/ghost/config.json',
+      },
     });
 
-    expect(describeError(error, lang)).toContain('No model configured for Ollama.');
+    expect(describeError(error, lang)).toContain(
+      'No model configured for Ollama.',
+    );
     expect(describeError(error, lang)).toContain('/etc/ghost/config.json');
   });
 

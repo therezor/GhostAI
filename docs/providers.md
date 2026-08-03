@@ -40,7 +40,11 @@ two Ollama servers:
 {
   "providers": {
     "ollama": { "type": "ollama" },
-    "ollama-gpu": { "type": "ollama", "label": "GPU box", "apiBase": "http://gpu.lan:11434/v1" }
+    "ollama-gpu": {
+      "type": "ollama",
+      "label": "GPU box",
+      "apiBase": "http://gpu.lan:11434/v1"
+    }
   }
 }
 ```

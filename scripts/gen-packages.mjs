@@ -16,7 +16,10 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 /** Write a file through Prettier so regenerating never fails `format:check`. */
 async function writeFormatted(path, contents) {
   const config = await prettier.resolveConfig(path);
-  writeFileSync(path, await prettier.format(contents, { ...config, filepath: path }));
+  writeFileSync(
+    path,
+    await prettier.format(contents, { ...config, filepath: path }),
+  );
 }
 
 /**
@@ -34,7 +37,10 @@ function withNotes(json, notes) {
       .split('\n')
       .map((line) => (line === '' ? '//' : `// ${line}`))
       .join('\n');
-    out = out.replace(new RegExp(`^(\\s*)"${key}":`, 'm'), `\n${comment}\n$1"${key}":`);
+    out = out.replace(
+      new RegExp(`^(\\s*)"${key}":`, 'm'),
+      `\n${comment}\n$1"${key}":`,
+    );
   }
   return out;
 }
@@ -42,7 +48,8 @@ function withNotes(json, notes) {
 /** @type {Record<string, { description: string; deps?: Record<string,string>; devDeps?: Record<string,string>; internal?: string[]; bin?: Record<string,string>; compilerOptions?: Record<string, unknown>; tsconfigNotes?: Record<string,string> }>} */
 const PACKAGES = {
   protocol: {
-    description: 'Zod schemas and derived types shared by every GhostAI package.',
+    description:
+      'Zod schemas and derived types shared by every GhostAI package.',
     deps: { zod: '^4.0.0' },
     compilerOptions: { isolatedDeclarations: false },
     tsconfigNotes: {
@@ -61,17 +68,20 @@ const PACKAGES = {
     },
   },
   core: {
-    description: 'Canonical message types, session store, message bus, logger, clock.',
+    description:
+      'Canonical message types, session store, message bus, logger, clock.',
     internal: ['protocol'],
     deps: { pino: '^9.5.0', zod: '^4.0.0' },
   },
   security: {
-    description: 'Credential vault, workspace jail, SSRF-guarded fetch, exec argv guard.',
+    description:
+      'Credential vault, workspace jail, SSRF-guarded fetch, exec argv guard.',
     internal: ['protocol', 'core'],
     deps: { undici: '^7.2.0' },
   },
   providers: {
-    description: 'LLM provider registry, wire adapters, and resilience decorator.',
+    description:
+      'LLM provider registry, wire adapters, and resilience decorator.',
     internal: ['protocol', 'core', 'security'],
     // undici for the streaming request path: `fetch` alone cannot carry a
     // per-provider dispatcher, and the pool's idle timeouts are what tell a
@@ -104,7 +114,8 @@ const PACKAGES = {
     devDeps: { zod: '^4.0.0' },
   },
   server: {
-    description: 'Fastify app, boot policy, authentication, and the session hub.',
+    description:
+      'Fastify app, boot policy, authentication, and the session hub.',
     // `agent` is a dependency of the *transport*, never the other way round: the
     // hub drives `AgentLoop.run()` and forwards its events, and the loop has no
     // idea a socket exists. The layering lint rule and pnpm's isolated
@@ -129,10 +140,15 @@ const PACKAGES = {
     // `@readme/openapi-parser` validates the generated document as OpenAPI 3.1;
     // `ws` is the socket test client, because the WebSocket route is the one
     // surface `fastify.inject()` cannot reach.
-    devDeps: { '@readme/openapi-parser': '^6.3.0', '@types/ws': '^8.5.0', ws: '^8.18.0' },
+    devDeps: {
+      '@readme/openapi-parser': '^6.3.0',
+      '@types/ws': '^8.5.0',
+      ws: '^8.18.0',
+    },
   },
   channels: {
-    description: 'The channel contract and the manager bridging MessageBus to the session hub.',
+    description:
+      'The channel contract and the manager bridging MessageBus to the session hub.',
     // The one package that exports its testkit. `channelConformance` has to be
     // runnable by a channel that lives *outside* this repo — a plugin channel
     // in Phase 4 — and the provider and tool suites' rule (importable only from
@@ -183,7 +199,9 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
   mkdirSync(join(dir, 'src'), { recursive: true });
 
   const dependencies = { ...(cfg.deps ?? {}) };
-  for (const dep of cfg.internal ?? []) dependencies[`@ghostai/${dep}`] = 'workspace:*';
+  for (const dep of cfg.internal ?? []) {
+    dependencies[`@ghostai/${dep}`] = 'workspace:*';
+  }
 
   const pkg = {
     name: `@ghostai/${name}`,
@@ -245,10 +263,15 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
     // reads these same files to find path aliases and only accepts the explicit
     // form, so a reference written the short way makes the end-to-end suite
     // fail to start with an error about a package it never imported.
-    references: (cfg.internal ?? []).map((dep) => ({ path: `../${dep}/tsconfig.json` })),
+    references: (cfg.internal ?? []).map((dep) => ({
+      path: `../${dep}/tsconfig.json`,
+    })),
   };
 
-  const entries = ["'src/index.ts'", ...Object.values(cfg.subpaths ?? {}).map((e) => `'${e}'`)];
+  const entries = [
+    "'src/index.ts'",
+    ...Object.values(cfg.subpaths ?? {}).map((e) => `'${e}'`),
+  ];
 
   // Without a config of its own, a package running `vitest run` from its own
   // directory finds the *root* config and inherits its `projects` globs — which

@@ -12,11 +12,14 @@ import {
 
 const parse = (host: string): ParsedIp => {
   const parsed = parseIpLiteral(host);
-  if (parsed === null) throw new Error(`expected ${host} to parse as an address`);
+  if (parsed === null) {
+    throw new Error(`expected ${host} to parse as an address`);
+  }
   return parsed;
 };
 
-const category = (host: string): string | null => classifyAddress(parse(host))?.category ?? null;
+const category = (host: string): string | null =>
+  classifyAddress(parse(host))?.category ?? null;
 
 describe('parseIpLiteral: IPv4 encodings', () => {
   it.each([
@@ -160,12 +163,16 @@ describe('classifyAddress', () => {
     expect(category(host)).toBe(expected);
   });
 
-  it.each(['8.8.8.8', '1.1.1.1', '93.184.216.34', '172.32.0.1', '172.15.0.1', '2606:4700::1111'])(
-    'leaves the routable address %s unclassified',
-    (host) => {
-      expect(classifyAddress(parse(host))).toBeNull();
-    },
-  );
+  it.each([
+    '8.8.8.8',
+    '1.1.1.1',
+    '93.184.216.34',
+    '172.32.0.1',
+    '172.15.0.1',
+    '2606:4700::1111',
+  ])('leaves the routable address %s unclassified', (host) => {
+    expect(classifyAddress(parse(host))).toBeNull();
+  });
 
   it('prefers the most specific range, so ::1 is loopback and not merely ::/96', () => {
     // Category drives policy: a deployment that allows loopback to reach its own
@@ -208,7 +215,9 @@ describe('BLOCKED_RANGES', () => {
     expect(BLOCKED_RANGES.length).toBeGreaterThan(20);
     for (const range of BLOCKED_RANGES) {
       const [address, prefix] = range.cidr.split('/');
-      expect(address === undefined ? null : parseIpLiteral(address)).not.toBeNull();
+      expect(
+        address === undefined ? null : parseIpLiteral(address),
+      ).not.toBeNull();
       expect(Number.parseInt(prefix ?? '', 10)).toBeGreaterThanOrEqual(0);
     }
   });
@@ -248,19 +257,33 @@ describe('property: encoding cannot smuggle a blocked address past the guard', (
     fc.tuple(fc.constant(10), fc.nat(255), fc.nat(255), fc.nat(255)),
     fc.tuple(fc.constant(192), fc.constant(168), fc.nat(255), fc.nat(255)),
     fc.tuple(fc.constant(169), fc.constant(254), fc.nat(255), fc.nat(255)),
-    fc.tuple(fc.constant(172), fc.integer({ min: 16, max: 31 }), fc.nat(255), fc.nat(255)),
-    fc.tuple(fc.constant(100), fc.integer({ min: 64, max: 127 }), fc.nat(255), fc.nat(255)),
+    fc.tuple(
+      fc.constant(172),
+      fc.integer({ min: 16, max: 31 }),
+      fc.nat(255),
+      fc.nat(255),
+    ),
+    fc.tuple(
+      fc.constant(100),
+      fc.integer({ min: 64, max: 127 }),
+      fc.nat(255),
+      fc.nat(255),
+    ),
   );
 
   it('holds across decimal, octal, hex, short and IPv4-mapped forms', () => {
     fc.assert(
-      fc.property(blockedIpv4, fc.integer({ min: 0, max: 6 }), (bytes, style) => {
-        const host = formatIpv4(bytes, style);
-        const parsed = parseIpLiteral(host);
-        expect(parsed).not.toBeNull();
-        if (parsed === null) return;
-        expect(classifyAddress(parsed)).not.toBeNull();
-      }),
+      fc.property(
+        blockedIpv4,
+        fc.integer({ min: 0, max: 6 }),
+        (bytes, style) => {
+          const host = formatIpv4(bytes, style);
+          const parsed = parseIpLiteral(host);
+          expect(parsed).not.toBeNull();
+          if (parsed === null) return;
+          expect(classifyAddress(parsed)).not.toBeNull();
+        },
+      ),
       { numRuns: 3000 },
     );
   });
@@ -362,7 +385,9 @@ describe('cidrContains', () => {
       fc.property(fc.string(), (text) => {
         const parsed = parseCidr(text);
         if (parsed !== null) {
-          expect(parsed.prefix).toBeLessThanOrEqual(parsed.bytes.byteLength * 8);
+          expect(parsed.prefix).toBeLessThanOrEqual(
+            parsed.bytes.byteLength * 8,
+          );
           cidrContains(parsed, parse('10.0.0.1'));
         }
       }),

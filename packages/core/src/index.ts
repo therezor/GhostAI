@@ -67,7 +67,12 @@ export {
   slugify,
 } from './slug-id.js';
 
-export { parseMetadata, rowReader, type Row, type RowReader } from './sqlite-row.js';
+export {
+  parseMetadata,
+  rowReader,
+  type Row,
+  type RowReader,
+} from './sqlite-row.js';
 
 export {
   WorkspaceStore,

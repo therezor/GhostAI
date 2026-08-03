@@ -46,7 +46,11 @@ const kindOf = (run: () => unknown): string => {
 
 const ok = (stdout = ''): CommandResult => ({ status: 0, stdout, stderr: '' });
 const fail = (): CommandResult => ({ status: 1, stdout: '', stderr: 'nope' });
-const unavailable = (): CommandResult => ({ status: null, stdout: '', stderr: '' });
+const unavailable = (): CommandResult => ({
+  status: null,
+  stdout: '',
+  stderr: '',
+});
 
 beforeEach(() => {
   base = realpathSync(mkdtempSync(join(tmpdir(), 'ghostai-vault-')));
@@ -104,7 +108,9 @@ describe('keyFileStore', () => {
 
 describe('keychainStore', () => {
   it('reads a key from the macOS keychain', () => {
-    const run = vi.fn<CommandRunner>().mockReturnValue(ok(`${KEY.toString('base64')}\n`));
+    const run = vi
+      .fn<CommandRunner>()
+      .mockReturnValue(ok(`${KEY.toString('base64')}\n`));
     const store = keychainStore({ platform: 'darwin', run });
     expect(store.name).toBe('keychain:darwin');
     expect(store.load()?.equals(KEY)).toBe(true);
@@ -121,7 +127,10 @@ describe('keychainStore', () => {
   it('writes to the macOS keychain with the secret on stdin, never in argv', () => {
     const encoded = KEY.toString('base64');
     // The write, then the read-back that proves it took.
-    const run = vi.fn<CommandRunner>().mockReturnValueOnce(ok()).mockReturnValueOnce(ok(encoded));
+    const run = vi
+      .fn<CommandRunner>()
+      .mockReturnValueOnce(ok())
+      .mockReturnValueOnce(ok(encoded));
 
     expect(keychainStore({ platform: 'darwin', run }).save(KEY)).toBe(true);
 
@@ -141,12 +150,17 @@ describe('keychainStore', () => {
     // The exit code is not evidence: it was 0 for the empty-password failure
     // above. A store that reports success it cannot demonstrate keeps
     // `resolveVaultKey` from falling through to the keyfile that would work.
-    const run = vi.fn<CommandRunner>().mockReturnValueOnce(ok()).mockReturnValueOnce(ok(''));
+    const run = vi
+      .fn<CommandRunner>()
+      .mockReturnValueOnce(ok())
+      .mockReturnValueOnce(ok(''));
     expect(keychainStore({ platform: 'darwin', run }).save(KEY)).toBe(false);
   });
 
   it('reads and writes the Linux secret service', () => {
-    const run = vi.fn<CommandRunner>().mockReturnValue(ok(KEY.toString('base64')));
+    const run = vi
+      .fn<CommandRunner>()
+      .mockReturnValue(ok(KEY.toString('base64')));
     const store = keychainStore({ platform: 'linux', run });
     expect(store.name).toBe('keychain:linux');
     expect(store.load()?.equals(KEY)).toBe(true);
@@ -158,22 +172,30 @@ describe('keychainStore', () => {
     expect(input).toBe(KEY.toString('base64'));
   });
 
-  it.each(['darwin', 'linux'] as const)('reports no key when %s lookup fails', (platform) => {
-    const store = keychainStore({ platform, run: () => fail() });
-    expect(store.load()).toBeNull();
-    expect(store.save(KEY)).toBe(false);
-  });
+  it.each(['darwin', 'linux'] as const)(
+    'reports no key when %s lookup fails',
+    (platform) => {
+      const store = keychainStore({ platform, run: () => fail() });
+      expect(store.load()).toBeNull();
+      expect(store.save(KEY)).toBe(false);
+    },
+  );
 
   it.each(['darwin', 'linux'] as const)(
     'reports no key when the %s tool is missing',
     (platform) => {
-      expect(keychainStore({ platform, run: () => unavailable() }).load()).toBeNull();
+      expect(
+        keychainStore({ platform, run: () => unavailable() }).load(),
+      ).toBeNull();
     },
   );
 
   it('treats a truncated keychain entry as absent rather than fatal', () => {
     // Regenerating a key is recoverable; refusing to start is not.
-    const store = keychainStore({ platform: 'darwin', run: () => ok('dHJ1bmNhdGVk') });
+    const store = keychainStore({
+      platform: 'darwin',
+      run: () => ok('dHJ1bmNhdGVk'),
+    });
     expect(store.load()).toBeNull();
   });
 
@@ -192,14 +214,28 @@ describe('keychainStore', () => {
 
   it('honours a custom service and account', () => {
     const run = vi.fn<CommandRunner>().mockReturnValue(ok());
-    keychainStore({ platform: 'linux', run, service: 'svc', account: 'acct' }).load();
-    expect(run.mock.calls[0]?.[1]).toEqual(['lookup', 'service', 'svc', 'account', 'acct']);
+    keychainStore({
+      platform: 'linux',
+      run,
+      service: 'svc',
+      account: 'acct',
+    }).load();
+    expect(run.mock.calls[0]?.[1]).toEqual([
+      'lookup',
+      'service',
+      'svc',
+      'account',
+      'acct',
+    ]);
   });
 });
 
 describe('systemCommandRunner', () => {
   it('captures stdout and the exit status', () => {
-    const result = systemCommandRunner(process.execPath, ['-e', 'process.stdout.write("hi")']);
+    const result = systemCommandRunner(process.execPath, [
+      '-e',
+      'process.stdout.write("hi")',
+    ]);
     expect(result).toMatchObject({ status: 0, stdout: 'hi' });
   });
 
@@ -221,12 +257,18 @@ describe('systemCommandRunner', () => {
   });
 
   it('reports a non-zero exit', () => {
-    expect(systemCommandRunner(process.execPath, ['-e', 'process.exit(3)']).status).toBe(3);
+    expect(
+      systemCommandRunner(process.execPath, ['-e', 'process.exit(3)']).status,
+    ).toBe(3);
   });
 });
 
 describe('resolveVaultKey', () => {
-  const store = (name: string, key: Buffer | null, accepts = true): KeyStore => ({
+  const store = (
+    name: string,
+    key: Buffer | null,
+    accepts = true,
+  ): KeyStore => ({
     name,
     load: () => key,
     save: () => accepts,
@@ -234,12 +276,16 @@ describe('resolveVaultKey', () => {
 
   it('takes the first store that has a key', () => {
     expect(
-      resolveVaultKey({ stores: [store('first', KEY), store('second', OTHER_KEY)] }),
+      resolveVaultKey({
+        stores: [store('first', KEY), store('second', OTHER_KEY)],
+      }),
     ).toMatchObject({ source: 'first', created: false });
   });
 
   it('falls through to a store that does have one', () => {
-    const resolved = resolveVaultKey({ stores: [store('empty', null), store('keyfile', KEY)] });
+    const resolved = resolveVaultKey({
+      stores: [store('empty', null), store('keyfile', KEY)],
+    });
     expect(resolved.source).toBe('keyfile');
     expect(resolved.key.equals(KEY)).toBe(true);
   });
@@ -267,7 +313,9 @@ describe('resolveVaultKey', () => {
 
   it('fails rather than running with a key nothing stored', () => {
     // A vault under a key that was never written is a vault lost at restart.
-    expect(kindOf(() => resolveVaultKey({ stores: [store('nope', null, false)] }))).toBe('config');
+    expect(
+      kindOf(() => resolveVaultKey({ stores: [store('nope', null, false)] })),
+    ).toBe('config');
   });
 
   it('uses real randomness by default', () => {
@@ -287,21 +335,26 @@ describe('resolveVaultKey', () => {
 
   it('works end to end against a real key file', () => {
     const keyPath = join(base, 'vault.key');
-    const first = resolveVaultKey({ stores: [keyFileStore({ file: keyPath })] });
+    const first = resolveVaultKey({
+      stores: [keyFileStore({ file: keyPath })],
+    });
     expect(first.created).toBe(true);
-    const second = resolveVaultKey({ stores: [keyFileStore({ file: keyPath })] });
+    const second = resolveVaultKey({
+      stores: [keyFileStore({ file: keyPath })],
+    });
     expect(second.created).toBe(false);
     expect(second.key.equals(first.key)).toBe(true);
   });
 });
 
 describe('CredentialVault', () => {
-  const open = (key: Buffer = KEY): CredentialVault => new CredentialVault({ file, key });
+  const open = (key: Buffer = KEY): CredentialVault =>
+    new CredentialVault({ file, key });
 
   it('refuses a key of the wrong size', () => {
-    expect(kindOf(() => new CredentialVault({ file, key: Buffer.alloc(16) }))).toBe(
-      'invalid_input',
-    );
+    expect(
+      kindOf(() => new CredentialVault({ file, key: Buffer.alloc(16) })),
+    ).toBe('invalid_input');
   });
 
   it('starts empty when there is no file yet', () => {
@@ -452,19 +505,31 @@ describe('CredentialVault', () => {
 
     it('refuses a modified ciphertext', () => {
       open().set('providers', 'openai', 'sk-secret');
-      const envelope = JSON.parse(readFileSync(file, 'utf8')) as Record<string, string>;
+      const envelope = JSON.parse(readFileSync(file, 'utf8')) as Record<
+        string,
+        string
+      >;
       const data = Buffer.from(envelope.data ?? '', 'base64');
       data[0] = (data[0] ?? 0) ^ 0xff;
-      writeFileSync(file, JSON.stringify({ ...envelope, data: data.toString('base64') }));
+      writeFileSync(
+        file,
+        JSON.stringify({ ...envelope, data: data.toString('base64') }),
+      );
       expect(() => open()).toThrow(/authentication failed/);
     });
 
     it('refuses a modified authentication tag', () => {
       open().set('providers', 'openai', 'sk-secret');
-      const envelope = JSON.parse(readFileSync(file, 'utf8')) as Record<string, string>;
+      const envelope = JSON.parse(readFileSync(file, 'utf8')) as Record<
+        string,
+        string
+      >;
       writeFileSync(
         file,
-        JSON.stringify({ ...envelope, tag: Buffer.alloc(16).toString('base64') }),
+        JSON.stringify({
+          ...envelope,
+          tag: Buffer.alloc(16).toString('base64'),
+        }),
       );
       expect(() => open()).toThrow(/authentication failed/);
     });
@@ -474,21 +539,27 @@ describe('CredentialVault', () => {
       ['an envelope missing fields', '{"v":1}'],
       ['an envelope that is not an object', '"a string"'],
       ['a null envelope', 'null'],
-    ])('refuses %s', (_name, contents) => {
+    ])('refuses %s', (name, contents) => {
       writeFileSync(file, contents);
       expect(kindOf(() => open())).toBe('config');
     });
 
     it('refuses a future format version', () => {
       open().set('providers', 'openai', 'sk-secret');
-      const envelope = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+      const envelope = JSON.parse(readFileSync(file, 'utf8')) as Record<
+        string,
+        unknown
+      >;
       writeFileSync(file, JSON.stringify({ ...envelope, v: 99 }));
       expect(() => open()).toThrow(/unsupported format v99/);
     });
 
     it('refuses a different algorithm', () => {
       open().set('providers', 'openai', 'sk-secret');
-      const envelope = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+      const envelope = JSON.parse(readFileSync(file, 'utf8')) as Record<
+        string,
+        unknown
+      >;
       writeFileSync(file, JSON.stringify({ ...envelope, alg: 'aes-128-cbc' }));
       expect(() => open()).toThrow(/unsupported format/);
     });
@@ -497,7 +568,9 @@ describe('CredentialVault', () => {
       // EISDIR, not ENOENT: this is not a first run, so it must not start empty.
       const asDirectory = join(base, 'vault-as-directory');
       mkdirSync(asDirectory);
-      expect(kindOf(() => new CredentialVault({ file: asDirectory, key: KEY }))).toBe('config');
+      expect(
+        kindOf(() => new CredentialVault({ file: asDirectory, key: KEY })),
+      ).toBe('config');
     });
 
     describe('a payload that decrypts but is not a credential store', () => {
@@ -505,11 +578,17 @@ describe('CredentialVault', () => {
       const writePayload = (plaintext: string): void => {
         const vault = open();
         vault.set('placeholder', 'x', 'y');
-        const envelope = JSON.parse(readFileSync(file, 'utf8')) as Record<string, string>;
+        const envelope = JSON.parse(readFileSync(file, 'utf8')) as Record<
+          string,
+          string
+        >;
         const iv = Buffer.from(envelope.iv ?? '', 'base64');
         const cipher = createCipheriv('aes-256-gcm', KEY, iv);
         cipher.setAAD(Buffer.from('ghostai-vault-v1', 'utf8'));
-        const data = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+        const data = Buffer.concat([
+          cipher.update(plaintext, 'utf8'),
+          cipher.final(),
+        ]);
         writeFileSync(
           file,
           JSON.stringify({
@@ -527,7 +606,7 @@ describe('CredentialVault', () => {
         ['a namespace that is not an object', '{"providers":"oops"}'],
         ['a namespace that is an array', '{"providers":[]}'],
         ['a value that is not a string', '{"providers":{"openai":42}}'],
-      ])('refuses %s', (_name, plaintext) => {
+      ])('refuses %s', (name, plaintext) => {
         writePayload(plaintext);
         expect(kindOf(() => open())).toBe('config');
       });

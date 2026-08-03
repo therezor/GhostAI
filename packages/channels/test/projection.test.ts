@@ -38,14 +38,27 @@ const delta = (text: string): ServerMessage =>
 
 const end = (
   stopReason: 'complete' | 'aborted' | 'max_iterations' | 'error' = 'complete',
-): ServerMessage => event({ type: 'turn.end', turnId: TURN, stopReason, iterations: 1 });
+): ServerMessage =>
+  event({ type: 'turn.end', turnId: TURN, stopReason, iterations: 1 });
 
 const call = (name: string, callId = 'c1'): ServerMessage =>
-  event({ type: 'tool.call', turnId: TURN, callId, name, args: {}, risk: 'safe' });
+  event({
+    type: 'tool.call',
+    turnId: TURN,
+    callId,
+    name,
+    args: {},
+    risk: 'safe',
+  });
 
 describe('TurnProjection', () => {
   it('emits one reply carrying the whole answer', () => {
-    const drafts = run(new TurnProjection(), [start(), delta('Hel'), delta('lo'), end()]);
+    const drafts = run(new TurnProjection(), [
+      start(),
+      delta('Hel'),
+      delta('lo'),
+      end(),
+    ]);
 
     expect(drafts).toEqual([{ kind: 'reply', text: 'Hello', turnId: TURN }]);
   });
@@ -53,7 +66,11 @@ describe('TurnProjection', () => {
   it('never emits the reasoning stream', () => {
     const drafts = run(new TurnProjection(), [
       start(),
-      event({ type: 'reasoning.delta', turnId: TURN, text: 'the user probably wants…' }),
+      event({
+        type: 'reasoning.delta',
+        turnId: TURN,
+        text: 'the user probably wants…',
+      }),
       delta('Yes.'),
       end(),
     ]);
@@ -77,26 +94,32 @@ describe('TurnProjection', () => {
   });
 
   it('sends no progress before the model has written anything', () => {
-    const drafts = run(new TurnProjection({ sendProgress: true }), [start(), call('read_file')]);
+    const drafts = run(new TurnProjection({ sendProgress: true }), [
+      start(),
+      call('read_file'),
+    ]);
 
     expect(drafts).toEqual([]);
   });
 
   it('names the tool only when hints are on', () => {
     const off = run(new TurnProjection(), [start(), call('exec')]);
-    const on = run(new TurnProjection({ sendProgress: false, sendToolHints: true }), [
-      start(),
-      call('exec'),
-      event({
-        type: 'tool.result',
-        turnId: TURN,
-        callId: 'c1',
-        ok: false,
-        content: 'exit 1',
-        truncated: false,
-        durationMs: 2,
-      }),
-    ]);
+    const on = run(
+      new TurnProjection({ sendProgress: false, sendToolHints: true }),
+      [
+        start(),
+        call('exec'),
+        event({
+          type: 'tool.result',
+          turnId: TURN,
+          callId: 'c1',
+          ok: false,
+          content: 'exit 1',
+          truncated: false,
+          durationMs: 2,
+        }),
+      ],
+    );
 
     expect(off).toEqual([]);
     expect(on).toEqual([
@@ -125,7 +148,11 @@ describe('TurnProjection', () => {
   });
 
   it('says why a turn stopped, after handing over what it had written', () => {
-    const drafts = run(new TurnProjection(), [start(), delta('Half an ans'), end('aborted')]);
+    const drafts = run(new TurnProjection(), [
+      start(),
+      delta('Half an ans'),
+      end('aborted'),
+    ]);
 
     expect(drafts).toEqual([
       { kind: 'reply', text: 'Half an ans', turnId: TURN },
@@ -137,7 +164,11 @@ describe('TurnProjection', () => {
     const drafts = run(new TurnProjection(), [start(), end()]);
 
     expect(drafts).toEqual([
-      { kind: 'notice', text: 'The turn finished without an answer.', turnId: TURN },
+      {
+        kind: 'notice',
+        text: 'The turn finished without an answer.',
+        turnId: TURN,
+      },
     ]);
   });
 
@@ -153,11 +184,17 @@ describe('TurnProjection', () => {
       end('error'),
     ]);
 
-    expect(drafts).toEqual([{ kind: 'error', text: 'upstream said no', turnId: TURN }]);
+    expect(drafts).toEqual([
+      { kind: 'error', text: 'upstream said no', turnId: TURN },
+    ]);
   });
 
   it('reports the iteration cap, which a partial answer otherwise hides', () => {
-    const drafts = run(new TurnProjection(), [start(), delta('so far…'), end('max_iterations')]);
+    const drafts = run(new TurnProjection(), [
+      start(),
+      delta('so far…'),
+      end('max_iterations'),
+    ]);
 
     expect(drafts.map((draft) => draft.kind)).toEqual(['reply', 'notice']);
     expect(drafts[1]?.text).toContain('tool-iteration limit');
@@ -165,8 +202,16 @@ describe('TurnProjection', () => {
 
   it('reports a queued message with its depth', () => {
     const drafts = run(new TurnProjection(), [
-      event({ type: 'message.queued', sessionKey: 'telegram:1', queueDepth: 1 }),
-      event({ type: 'message.queued', sessionKey: 'telegram:1', queueDepth: 2 }),
+      event({
+        type: 'message.queued',
+        sessionKey: 'telegram:1',
+        queueDepth: 1,
+      }),
+      event({
+        type: 'message.queued',
+        sessionKey: 'telegram:1',
+        queueDepth: 2,
+      }),
     ]);
 
     expect(drafts.map((draft) => draft.text)).toEqual([
@@ -187,7 +232,11 @@ describe('TurnProjection', () => {
     ]);
 
     expect(drafts).toEqual([
-      { kind: 'notice', text: 'A tool result contained instructions.', turnId: TURN },
+      {
+        kind: 'notice',
+        text: 'A tool result contained instructions.',
+        turnId: TURN,
+      },
     ]);
   });
 
@@ -219,12 +268,22 @@ describe('TurnProjection', () => {
         busy: true,
         queueDepth: 0,
       }),
-      event({ type: 'session.replay', sessionKey: 's', messages: [], complete: true }),
+      event({
+        type: 'session.replay',
+        sessionKey: 's',
+        messages: [],
+        complete: true,
+      }),
       event({ type: 'session.reset', sessionKey: 's' }),
       event({ type: 'steer', sessionKey: 's', content: 'actually…' }),
       event({ type: 'tools.changed', tools: [] }),
       event({ type: 'transcribe.result', text: 'hi' }),
-      event({ type: 'tool.progress', turnId: TURN, callId: 'c1', elapsedMs: 15_000 }),
+      event({
+        type: 'tool.progress',
+        turnId: TURN,
+        callId: 'c1',
+        elapsedMs: 15_000,
+      }),
       event({
         type: 'notification',
         id: 'n1',

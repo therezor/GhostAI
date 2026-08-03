@@ -32,7 +32,9 @@ function store(): SessionStore {
   return created;
 }
 
-const call = (id: string): { id: string; name: string; argumentsJson: string } => ({
+const call = (
+  id: string,
+): { id: string; name: string; argumentsJson: string } => ({
   id,
   name: 'read_file',
   argumentsJson: '{}',
@@ -82,7 +84,9 @@ describe('resolveSeq', () => {
   it('says so plainly when you have said nothing yet', () => {
     const db = new SessionStore();
     db.ensureSession(SESSION);
-    expect(() => resolveSeq(db, SESSION, undefined)).toThrow(/not said anything/u);
+    expect(() => resolveSeq(db, SESSION, undefined)).toThrow(
+      /not said anything/u,
+    );
     db.close();
   });
 });
@@ -90,13 +94,18 @@ describe('resolveSeq', () => {
 describe('recentMessages', () => {
   it('returns the tail, oldest first, with the seqs the listing prints', () => {
     const db = store();
-    expect(recentMessages(db, SESSION, 3).map((row) => row.seq)).toEqual([4, 5, 6]);
+    expect(recentMessages(db, SESSION, 3).map((row) => row.seq)).toEqual([
+      4, 5, 6,
+    ]);
     db.close();
   });
 
   it('names each row by role, so a seq can be judged before it is used', () => {
     const db = store();
-    expect(recentMessages(db, SESSION, 2).map((row) => row.role)).toEqual(['user', 'assistant']);
+    expect(recentMessages(db, SESSION, 2).map((row) => row.role)).toEqual([
+      'user',
+      'assistant',
+    ]);
     db.close();
   });
 });

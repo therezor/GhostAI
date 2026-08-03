@@ -14,7 +14,11 @@ import { describe, expect, it } from 'vitest';
 
 import { ContextBody } from '@/context/context-inspector.js';
 import { ContextStrip } from '@/context/context-strip.js';
-import { renderWithProviders, stubApi, type StubRoute } from '@testkit/render.js';
+import {
+  renderWithProviders,
+  stubApi,
+  type StubRoute,
+} from '@testkit/render.js';
 
 const CONTEXT = {
   sessionKey: 'web:1',
@@ -44,10 +48,16 @@ const CONTEXT = {
       message: { role: 'user', content: [{ type: 'text', text: 'hello' }] },
     },
   ],
-  runtimeBlock: '## Live state\n\nCurrent time: Tuesday, 14 November 2023 at 22:13 (UTC)',
+  runtimeBlock:
+    '## Live state\n\nCurrent time: Tuesday, 14 November 2023 at 22:13 (UTC)',
   estimatedTokens: 5120,
   contextWindowTokens: 10_000,
-  breakdown: { systemPrompt: 1000, tools: 1000, messages: 3000, runtimeBlock: 120 },
+  breakdown: {
+    systemPrompt: 1000,
+    tools: 1000,
+    messages: 3000,
+    runtimeBlock: 120,
+  },
 };
 
 /**
@@ -55,7 +65,9 @@ const CONTEXT = {
  * assertions are unchanged — they run after opening it, which is the only thing
  * that moved.
  */
-function mount(routes: Record<string, StubRoute> = {}): ReturnType<typeof userEvent.setup> {
+function mount(
+  routes: Record<string, StubRoute> = {},
+): ReturnType<typeof userEvent.setup> {
   stubApi({ '/api/sessions/web%3A1/context': [200, CONTEXT], ...routes });
   renderWithProviders(<ContextStrip sessionKey="web:1" />);
   return userEvent.setup();
@@ -79,7 +91,9 @@ describe('the context strip', () => {
 
   it('renders nothing before a session exists', () => {
     stubApi({});
-    const { container } = renderWithProviders(<ContextStrip sessionKey={undefined} />);
+    const { container } = renderWithProviders(
+      <ContextStrip sessionKey={undefined} />,
+    );
 
     // A fresh tab holds a key the socket minted with no stored row behind it,
     // so the request would 404 — and an error under the composer of a
@@ -88,8 +102,12 @@ describe('the context strip', () => {
   });
 
   it('renders nothing when the session has not started', async () => {
-    stubApi({ '/api/sessions/web%3A1/context': [404, { error: { code: 'not_found' } }] });
-    const { container } = renderWithProviders(<ContextStrip sessionKey="web:1" />);
+    stubApi({
+      '/api/sessions/web%3A1/context': [404, { error: { code: 'not_found' } }],
+    });
+    const { container } = renderWithProviders(
+      <ContextStrip sessionKey="web:1" />,
+    );
 
     await waitFor(() => {
       expect(container.querySelector('.context-strip')).toBeNull();
@@ -114,8 +132,12 @@ describe('the context inspector', () => {
     const user = mount();
     await open(user);
 
-    const table = await screen.findByRole('table', { name: 'Token usage by section' });
-    const rows = [...table.querySelectorAll('tbody tr')].map((row) => row.textContent);
+    const table = await screen.findByRole('table', {
+      name: 'Token usage by section',
+    });
+    const rows = [...table.querySelectorAll('tbody tr')].map(
+      (row) => row.textContent,
+    );
 
     // Request order, which is also cached-then-not: the trailing turn is last
     // because it is the only row a provider's cache cannot serve.
@@ -131,7 +153,9 @@ describe('the context inspector', () => {
     const user = mount();
     await open(user);
 
-    expect(await screen.findByText(/You are GhostAI, a helpful agent\./)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/You are GhostAI, a helpful agent\./),
+    ).toBeInTheDocument();
     // Was `1 messages in the window`. The count is one, and the sentence now
     // agrees with it — this line asserted the bug rather than the behaviour,
     // which is what an inflection hand-rolled at the call site buys you.
@@ -140,9 +164,14 @@ describe('the context inspector', () => {
 
   it('says a budget is over the window rather than rendering it as full', async () => {
     const user = mount({
-      '/api/sessions/web%3A1/context': [200, { ...CONTEXT, estimatedTokens: 12_000 }],
+      '/api/sessions/web%3A1/context': [
+        200,
+        { ...CONTEXT, estimatedTokens: 12_000 },
+      ],
     });
-    await user.click(await screen.findByRole('button', { name: /over the window/ }));
+    await user.click(
+      await screen.findByRole('button', { name: /over the window/ }),
+    );
 
     // The distinction the panel exists for: "exactly full" and "twice over" are
     // the same picture, and only one of them explains a dropped turn. The strip
@@ -170,7 +199,9 @@ describe('the context inspector', () => {
     });
     renderWithProviders(<ContextBody sessionKey="web:1" />);
 
-    expect(await screen.findByText(/this session has not started/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/this session has not started/i),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
@@ -178,13 +209,17 @@ describe('the context inspector', () => {
     stubApi({
       '/api/sessions/web%3A1/context': [
         500,
-        { error: { code: 'internal', message: 'the prompt could not be built' } },
+        {
+          error: { code: 'internal', message: 'the prompt could not be built' },
+        },
       ],
     });
     renderWithProviders(<ContextBody sessionKey="web:1" />);
 
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('the prompt could not be built');
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'the prompt could not be built',
+      );
     });
   });
 });
@@ -203,7 +238,9 @@ describe('the context inspector: what is in each section', () => {
 
     // By `summary`, because "System prompt" is also the label of its row in the
     // table above — the two are deliberately the same word.
-    await user.click(await screen.findByText('System prompt', { selector: 'summary' }));
+    await user.click(
+      await screen.findByText('System prompt', { selector: 'summary' }),
+    );
     expect(screen.getByText('You are GhostAI, a helpful agent.')).toBeVisible();
   });
 
@@ -213,9 +250,13 @@ describe('the context inspector: what is in each section', () => {
     const user = mount();
     await open(user);
 
-    await user.click(await screen.findByText('Live state', { selector: 'summary' }));
+    await user.click(
+      await screen.findByText('Live state', { selector: 'summary' }),
+    );
     expect(
-      screen.getByText(/Current time: Tuesday, 14 November 2023 at 22:13 \(UTC\)/),
+      screen.getByText(
+        /Current time: Tuesday, 14 November 2023 at 22:13 \(UTC\)/,
+      ),
     ).toBeVisible();
   });
 

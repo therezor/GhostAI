@@ -5,7 +5,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { isGhostError, type GhostError } from '@ghostai/core';
 
-import { toToolResult, type ToolContext, type ToolResult } from '#src/define.js';
+import {
+  toToolResult,
+  type ToolContext,
+  type ToolResult,
+} from '#src/define.js';
 import { ToolRegistry } from '#src/registry.js';
 import type { CommandRunner, RunRequest } from '#src/runner.js';
 import { createTestWorkspace, type TestWorkspace } from '#testkit/workspace.js';
@@ -35,13 +39,17 @@ async function failure(args: unknown, ctx = context): Promise<GhostError> {
     () => null,
     (value: unknown) => value,
   );
-  if (!isGhostError(error)) throw new Error(`expected a GhostError, got ${String(error)}`);
+  if (!isGhostError(error)) {
+    throw new Error(`expected a GhostError, got ${String(error)}`);
+  }
   return error;
 }
 
 describe('exec', () => {
   it('runs a program and returns its output', async () => {
-    const result = await run({ argv: [NODE, '-e', 'process.stdout.write("hello")'] });
+    const result = await run({
+      argv: [NODE, '-e', 'process.stdout.write("hello")'],
+    });
     expect(result.isError).toBe(false);
     expect(result.content).toBe('hello\n\nExit code: 0');
   });
@@ -76,7 +84,11 @@ describe('exec', () => {
 
   it('reports both streams', async () => {
     const result = await run({
-      argv: [NODE, '-e', 'process.stdout.write("out"); process.stderr.write("err")'],
+      argv: [
+        NODE,
+        '-e',
+        'process.stdout.write("out"); process.stderr.write("err")',
+      ],
     });
     expect(result.content).toContain('out');
     expect(result.content).toContain('[stderr]\nerr');
@@ -106,13 +118,17 @@ describe('exec', () => {
   it('refuses a denied binary', async () => {
     const error = await failure(
       { argv: ['curl', 'https://example.com'] },
-      workspace.with({ exec: { ...context.config.exec, deniedBinaries: ['curl'] } }),
+      workspace.with({
+        exec: { ...context.config.exec, deniedBinaries: ['curl'] },
+      }),
     );
     expect(error.kind).toBe('permission_denied');
   });
 
   it('refuses an argument reaching outside the workspace', async () => {
-    const error = await failure({ argv: [NODE, '-e', '0', '../../etc/passwd'] });
+    const error = await failure({
+      argv: [NODE, '-e', '0', '../../etc/passwd'],
+    });
     expect(error.kind).toBe('jail_escape');
   });
 
@@ -127,9 +143,16 @@ describe('exec', () => {
   it('passes only the allow-listed environment through', async () => {
     const result = await run(
       {
-        argv: [NODE, '-e', 'process.stdout.write(JSON.stringify(Object.keys(process.env).sort()))'],
+        argv: [
+          NODE,
+          '-e',
+          'process.stdout.write(JSON.stringify(Object.keys(process.env).sort()))',
+        ],
       },
-      { ...context, env: { PATH: '/usr/bin', HOME: '/home/x', GHOSTAI_API_KEY: 'secret' } },
+      {
+        ...context,
+        env: { PATH: '/usr/bin', HOME: '/home/x', GHOSTAI_API_KEY: 'secret' },
+      },
     );
     expect(result.content).toContain('PATH');
     expect(result.content).not.toContain('GHOSTAI_API_KEY');
@@ -172,7 +195,10 @@ describe('exec', () => {
   });
 
   it('kills the child when the turn is aborted', async () => {
-    const running = execTool.run({ argv: [NODE, '-e', 'setTimeout(() => {}, 60000)'] }, context);
+    const running = execTool.run(
+      { argv: [NODE, '-e', 'setTimeout(() => {}, 60000)'] },
+      context,
+    );
     setTimeout(() => {
       workspace.controller.abort();
     }, 50);
@@ -189,14 +215,19 @@ describe('exec', () => {
     const running = registry.execute(
       {
         name: 'exec',
-        argumentsJson: JSON.stringify({ argv: [NODE, '-e', 'setTimeout(() => {}, 60000)'] }),
+        argumentsJson: JSON.stringify({
+          argv: [NODE, '-e', 'setTimeout(() => {}, 60000)'],
+        }),
       },
       context,
     );
     setTimeout(() => {
       workspace.controller.abort();
     }, 50);
-    await expect(running).resolves.toMatchObject({ isError: true, errorKind: 'aborted' });
+    await expect(running).resolves.toMatchObject({
+      isError: true,
+      errorKind: 'aborted',
+    });
   });
 });
 
@@ -220,7 +251,8 @@ describe('the built-in set', () => {
     const registry = new ToolRegistry();
     registerBuiltins(
       registry,
-      workspace.with({ exec: { ...context.config.exec, enable: false } }).config,
+      workspace.with({ exec: { ...context.config.exec, enable: false } })
+        .config,
     );
     expect(registry.has('exec')).toBe(false);
     expect(registry.size).toBe(5);
@@ -267,7 +299,10 @@ describe('the runner seam', () => {
     // The default has to stay the behaviour exec has always had, or every
     // existing caller changes meaning without changing code.
     const result = toToolResult(
-      await execTool.run({ argv: [NODE, '-e', 'process.stdout.write("local")'] }, context),
+      await execTool.run(
+        { argv: [NODE, '-e', 'process.stdout.write("local")'] },
+        context,
+      ),
     );
 
     expect(result.isError).toBe(false);
@@ -277,7 +312,10 @@ describe('the runner seam', () => {
   it('uses the context’s runner instead of spawning', async () => {
     const { runner, seen } = recording();
     const result = toToolResult(
-      await execTool.run({ argv: [NODE, '-e', 'process.exit(1)'] }, { ...context, runner }),
+      await execTool.run(
+        { argv: [NODE, '-e', 'process.exit(1)'] },
+        { ...context, runner },
+      ),
     );
 
     expect(seen).toHaveLength(1);
@@ -311,9 +349,14 @@ describe('the runner seam', () => {
 
   it('passes the reconciled timeout, not the model’s request', async () => {
     const { runner, seen } = recording();
-    const capped = workspace.with({ exec: { ...context.config.exec, timeoutMs: 5_000 } });
+    const capped = workspace.with({
+      exec: { ...context.config.exec, timeoutMs: 5_000 },
+    });
 
-    await execTool.run({ argv: [NODE, '--version'], timeoutMs: 60_000 }, { ...capped, runner });
+    await execTool.run(
+      { argv: [NODE, '--version'], timeoutMs: 60_000 },
+      { ...capped, runner },
+    );
 
     expect(seen[0]?.timeoutMs).toBe(5_000);
   });

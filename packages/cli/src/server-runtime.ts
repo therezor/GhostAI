@@ -59,7 +59,12 @@ import {
 } from '@ghostai/providers';
 import { ToolboxStore } from '@ghostai/security';
 import { openVault, resolveAgent, type GhostRuntime } from '@ghostai/runtime';
-import type { AgentSummary, AgentView, ServerRuntime, ExtensionCounts } from '@ghostai/server';
+import type {
+  AgentSummary,
+  AgentView,
+  ServerRuntime,
+  ExtensionCounts,
+} from '@ghostai/server';
 import type { CredentialVault, FetchImplementation } from '@ghostai/security';
 
 /**
@@ -123,9 +128,14 @@ export function createServerRuntime(
    * to put a key on plain HTTP to a public host. That is the submitted
    * connection being invalid, not the endpoint being unwell.
    */
-  const describeFailure = (error: unknown): { reason: string; message: string } => {
+  const describeFailure = (
+    error: unknown,
+  ): { reason: string; message: string } => {
     const message = error instanceof Error ? error.message : String(error);
-    return { reason: isProviderError(error) ? error.reason : 'invalid_request', message };
+    return {
+      reason: isProviderError(error) ? error.reason : 'invalid_request',
+      message,
+    };
   };
 
   /**
@@ -141,7 +151,9 @@ export function createServerRuntime(
     readonly apiBase: string;
     readonly extraHeaders: Readonly<Record<string, string>>;
     readonly apiKey: string | undefined;
-  }): Promise<{ models: ModelInfo[] } | { reason: string; message: string }> => {
+  }): Promise<
+    { models: ModelInfo[] } | { reason: string; message: string }
+  > => {
     if (probe.spec.supportsModelListing !== true) {
       return {
         reason: 'unsupported',
@@ -160,7 +172,9 @@ export function createServerRuntime(
         apiKey: probe.apiKey,
         apiBase: probe.apiBase,
         extraHeaders: probe.extraHeaders,
-        ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+        ...(options.fetchImpl === undefined
+          ? {}
+          : { fetchImpl: options.fetchImpl }),
         // Retries and degradation are for a turn. A catalogue that does not
         // answer promptly should say so, not spend fifteen seconds insisting.
         resilience: false,
@@ -169,7 +183,9 @@ export function createServerRuntime(
       return describeFailure(error);
     }
 
-    const signal = AbortSignal.timeout(options.modelTimeoutMs ?? MODEL_FETCH_TIMEOUT_MS);
+    const signal = AbortSignal.timeout(
+      options.modelTimeoutMs ?? MODEL_FETCH_TIMEOUT_MS,
+    );
     try {
       return { models: await provider.listModels(signal) };
     } catch (error) {
@@ -191,7 +207,9 @@ export function createServerRuntime(
     instanceId: string,
   ): Promise<{ models: ModelInfo[] } | { error: string }> => {
     const config = runtime.config.providers[instanceId];
-    const instance = listInstances(runtime.config.providers).find((i) => i.id === instanceId);
+    const instance = listInstances(runtime.config.providers).find(
+      (i) => i.id === instanceId,
+    );
     if (config === undefined || instance === undefined) return { models: [] };
 
     const result = await probeConnection({
@@ -213,7 +231,10 @@ export function createServerRuntime(
     };
   };
 
-  const readCredential = (instanceId: string, envKey: string | undefined): string | undefined => {
+  const readCredential = (
+    instanceId: string,
+    envKey: string | undefined,
+  ): string | undefined => {
     const stored = openIfUseful(false)?.get('providers', instanceId);
     if (stored !== undefined && stored !== '') return stored;
     const fromEnv = envKey === undefined ? undefined : env[envKey];
@@ -261,7 +282,10 @@ export function createServerRuntime(
     // optional signatures let pass: `GET /api/settings` never reported a load
     // error and `GET /api/status` always answered with the route's own fallback.
     loadError: (): string | undefined => undefined,
-    extensions: (): ExtensionCounts => ({ mcpServersConnected: 0, pluginsLoaded: 0 }),
+    extensions: (): ExtensionCounts => ({
+      mcpServersConnected: 0,
+      pluginsLoaded: 0,
+    }),
 
     configWarnings: () => runtime.configWarnings,
 
@@ -295,7 +319,9 @@ export function createServerRuntime(
 
     setCredential: (request: SetCredentialRequest): void => {
       const store = openIfUseful(true);
-      if (store === undefined) throw new Error('The credential vault could not be opened');
+      if (store === undefined) {
+        throw new Error('The credential vault could not be opened');
+      }
       if (request.value === null) store.delete(request.namespace, request.key);
       else store.set(request.namespace, request.key, request.value);
       // An empty patch is not a no-op: the rebuild re-reads the credential, and
@@ -345,7 +371,9 @@ export function createServerRuntime(
         // toolset no turn on this agent would ever send.
         tools:
           loop?.toolDefinitions ??
-          (agent.defaults.toolsEnabled ? runtime.tools.select(agent.tools).definitions() : []),
+          (agent.defaults.toolsEnabled
+            ? runtime.tools.select(agent.tools).definitions()
+            : []),
         contextWindowTokens: agent.defaults.contextWindowTokens,
         // The loop's own composition, not a second assembly of it: memory and
         // skills arrive as contributors attached to that object, and a
@@ -356,7 +384,8 @@ export function createServerRuntime(
             // With no model there is no turn and no prompt, and throwing would
             // make one unconfigured panel break a screen that otherwise works.
             return {
-              staticPrompt: 'No model is configured, so no system prompt has been assembled yet.',
+              staticPrompt:
+                'No model is configured, so no system prompt has been assembled yet.',
               runtimeBlock: '',
             };
           }
@@ -369,7 +398,8 @@ export function createServerRuntime(
     // plugin tools — everything an agent could be granted. Toolbox programs are
     // absent because they belong to a toolbox rather than the registry, and the
     // editor reads those from `GET /api/toolboxes` under their own heading.
-    registeredTools: (): readonly ToolDefinition[] => runtime.tools.definitions(),
+    registeredTools: (): readonly ToolDefinition[] =>
+      runtime.tools.definitions(),
 
     agents: (): readonly AgentSummary[] =>
       runtime.agents.map((agent) => ({
@@ -392,7 +422,9 @@ export function createServerRuntime(
       }
 
       const listable = listInstances(runtime.config.providers).filter(
-        (instance) => instance.config.enabled && instance.spec.supportsModelListing === true,
+        (instance) =>
+          instance.config.enabled &&
+          instance.spec.supportsModelListing === true,
       );
 
       // All at once: the list is as slow as its slowest endpoint either way,
@@ -416,7 +448,9 @@ export function createServerRuntime(
       return response;
     },
 
-    testProvider: async (request: ProviderTestRequest): Promise<ProviderTestResponse> => {
+    testProvider: async (
+      request: ProviderTestRequest,
+    ): Promise<ProviderTestResponse> => {
       const spec = findProvider(request.type);
       if (spec === null) {
         return {
@@ -451,7 +485,12 @@ export function createServerRuntime(
       });
 
       if ('reason' in result) {
-        return { ok: false, models: [], reason: result.reason, message: result.message };
+        return {
+          ok: false,
+          models: [],
+          reason: result.reason,
+          message: result.message,
+        };
       }
 
       // A successful probe has just learned this endpoint's catalogue first
@@ -480,14 +519,19 @@ export function createServerRuntime(
     chat: async (input): Promise<ChatResult> => {
       const resolved = runtime.providerFor(input.agentId, input.model);
       if (resolved === null) {
-        throw new GhostError('not_found', 'No provider is configured to answer with.');
+        throw new GhostError(
+          'not_found',
+          'No provider is configured to answer with.',
+        );
       }
       return await resolved.provider.chat({
         model: resolved.model,
         messages: input.messages,
         tools: input.tools,
         toolChoice: input.toolChoice,
-        ...(input.maxTokens === undefined ? {} : { maxTokens: input.maxTokens }),
+        ...(input.maxTokens === undefined
+          ? {}
+          : { maxTokens: input.maxTokens }),
         ...(input.signal === undefined ? {} : { signal: input.signal }),
       });
     },

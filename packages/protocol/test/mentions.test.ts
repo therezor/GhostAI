@@ -42,7 +42,9 @@ describe('parseMentions', () => {
 
   describe('quoted form', () => {
     it('captures values containing spaces', () => {
-      expect(parseMentions('@kb:"My Project Docs"').kb).toEqual(['My Project Docs']);
+      expect(parseMentions('@kb:"My Project Docs"').kb).toEqual([
+        'My Project Docs',
+      ]);
     });
 
     it('preserves punctuation inside quotes', () => {
@@ -146,7 +148,9 @@ describe('parseMentions', () => {
     });
 
     it('does not treat a multi-line message as a barrier', () => {
-      expect(parseMentions('line one\n@kb:docs\nline three').kb).toEqual(['docs']);
+      expect(parseMentions('line one\n@kb:docs\nline three').kb).toEqual([
+        'docs',
+      ]);
     });
   });
 

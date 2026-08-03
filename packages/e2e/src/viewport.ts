@@ -25,7 +25,10 @@ export const VIEWPORT: { readonly width: number; readonly height: number } = {
  * drawer, the settings grid is one column, and a row that fits here fits every
  * handset above it.
  */
-export const NARROW_VIEWPORT: { readonly width: number; readonly height: number } = {
+export const NARROW_VIEWPORT: {
+  readonly width: number;
+  readonly height: number;
+} = {
   width: 375,
   height: 812,
 };

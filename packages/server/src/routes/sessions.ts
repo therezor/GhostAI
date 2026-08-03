@@ -86,7 +86,10 @@ type SessionRouteId =
  * A conversation whose turns predate the `turn_stats` table has no total, and
  * reporting `0` would claim it cost nothing rather than that nobody counted.
  */
-function toSummary(record: SessionSummaryRecord, totalUsage?: Usage): SessionSummary {
+function toSummary(
+  record: SessionSummaryRecord,
+  totalUsage?: Usage,
+): SessionSummary {
   return {
     key: record.key,
     title: record.title,
@@ -153,7 +156,9 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
         // is a "Page 4 of 3" that only appears once someone searches.
         const filter = {
           ...(query.origin === undefined ? {} : { origin: query.origin }),
-          ...(query.workspace === undefined ? {} : { workspaceId: query.workspace }),
+          ...(query.workspace === undefined
+            ? {}
+            : { workspaceId: query.workspace }),
           ...(query.q === undefined ? {} : { query: query.q }),
         };
 
@@ -165,7 +170,9 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
           ...(query.offset === undefined ? {} : { offset: query.offset }),
           ...(query.sort === undefined ? {} : { orderBy: query.sort }),
           ...(query.desc === undefined ? {} : { descending: query.desc }),
-          ...(query.cursor === undefined ? {} : { after: decodeSessionCursor(query.cursor) }),
+          ...(query.cursor === undefined
+            ? {}
+            : { after: decodeSessionCursor(query.cursor) }),
         });
 
         // A cursor encodes `(updatedAtMs, key)`, which is a position in the
@@ -173,12 +180,17 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
         // sorted by title would hand back a cursor that cannot be followed —
         // the store refuses the combination — so under any other ordering there
         // simply is no next cursor, and the pager uses `total` instead.
-        const defaultOrder = (query.sort ?? 'updated') === 'updated' && (query.desc ?? true);
+        const defaultOrder =
+          (query.sort ?? 'updated') === 'updated' && (query.desc ?? true);
 
         const { page, next } = paginate(
           rows,
           query.limit,
-          (last) => encodeSessionCursor({ updatedAtMs: last.updatedAtMs, key: last.key }),
+          (last) =>
+            encodeSessionCursor({
+              updatedAtMs: last.updatedAtMs,
+              key: last.key,
+            }),
           defaultOrder,
         );
 
@@ -187,7 +199,9 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
         const usage = store.sessionUsage(page.map((record) => record.key));
 
         return {
-          sessions: page.map((record) => toSummary(record, usage.get(record.key))),
+          sessions: page.map((record) =>
+            toSummary(record, usage.get(record.key)),
+          ),
           total: store.countSessions(filter),
           ...next,
         };
@@ -196,7 +210,10 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
 
     'sessions.create': {
       summary: 'Create a session, or return the existing one for a key',
-      schema: { body: CreateSessionRequestSchema, response: { 201: SessionSummarySchema } },
+      schema: {
+        body: CreateSessionRequestSchema,
+        response: { 201: SessionSummarySchema },
+      },
       handler: (request, reply): SessionSummary => {
         const body = request.body as CreateSessionRequest;
         // `ensureSession` is idempotent, so a client that retries a create it
@@ -217,20 +234,31 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
         const record = store.ensureSession(body.key ?? newUuid(), {
           origin: 'web',
           ...(body.title === undefined ? {} : { title: body.title }),
-          ...(body.workspaceId === undefined ? {} : { workspaceId: body.workspaceId }),
+          ...(body.workspaceId === undefined
+            ? {}
+            : { workspaceId: body.workspaceId }),
           ...(body.agentId === undefined ? {} : { agentId: body.agentId }),
         });
         void reply.status(201);
-        return toSummary({ ...record, messageCount: store.messageCount(record.key) });
+        return toSummary({
+          ...record,
+          messageCount: store.messageCount(record.key),
+        });
       },
     },
 
     'sessions.get': {
       summary: 'One session',
-      schema: { params: SessionParamsSchema, response: { 200: SessionSummarySchema } },
+      schema: {
+        params: SessionParamsSchema,
+        response: { 200: SessionSummarySchema },
+      },
       handler: (request): SessionSummary => {
         const record = requireSession(params(request).key);
-        return toSummary(record, store.sessionUsage([record.key]).get(record.key));
+        return toSummary(
+          record,
+          store.sessionUsage([record.key]).get(record.key),
+        );
       },
     },
 
@@ -275,7 +303,10 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
         const { key } = params(request);
         requireSession(key);
         const query = request.query as PageQuery;
-        const cursor = query.cursor === undefined ? undefined : decodeMessageCursor(query.cursor);
+        const cursor =
+          query.cursor === undefined
+            ? undefined
+            : decodeMessageCursor(query.cursor);
 
         const rows = store.messages(key, {
           ...(cursor === undefined ? {} : { afterSeq: cursor.seq }),
@@ -300,7 +331,9 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
           failures: Object.fromEntries(
             store
               .turnStats(key)
-              .flatMap((turn) => (turn.error === undefined ? [] : [[turn.turnId, turn.error]])),
+              .flatMap((turn) =>
+                turn.error === undefined ? [] : [[turn.turnId, turn.error]],
+              ),
           ),
           ...next,
         };
@@ -320,7 +353,10 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
 
     'sessions.context': {
       summary: 'What the agent would send to the model for this session',
-      schema: { params: SessionParamsSchema, response: { 200: ContextResponseSchema } },
+      schema: {
+        params: SessionParamsSchema,
+        response: { 200: ContextResponseSchema },
+      },
       handler: async (request): Promise<ContextResponse> => {
         const { key } = params(request);
         const session = requireSession(key);
@@ -392,7 +428,9 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
         // traffic in one transaction at the end, so a branch taken now starts
         // with an unanswered question and no way to tell that it did.
         if (deps.hub.busy(key)) {
-          throw conflict('A turn is running on this session. Stop it, then branch.');
+          throw conflict(
+            'A turn is running on this session. Stop it, then branch.',
+          );
         }
 
         const fork = store.forkSession(key, body.seq, {
@@ -419,7 +457,10 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
         const { key } = params(request);
         requireSession(key);
         const query = request.query as TurnsQuery;
-        return { sessionKey: key, turns: store.turnStats(key, { limit: query.limit }) };
+        return {
+          sessionKey: key,
+          turns: store.turnStats(key, { limit: query.limit }),
+        };
       },
     },
   };

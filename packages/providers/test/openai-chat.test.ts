@@ -11,10 +11,18 @@ import {
 } from '@ghostai/core';
 
 import { isProviderError } from '#src/errors.js';
-import { assertUsableApiBase, createOpenAIChatProvider } from '#src/openai-chat.js';
+import {
+  assertUsableApiBase,
+  createOpenAIChatProvider,
+} from '#src/openai-chat.js';
 import { findProvider, type ProviderSpec } from '#src/registry.js';
 import { providerConformance } from '#testkit/conformance.js';
-import { completion, mockTransport, sseResponse, textChunk } from '#testkit/transport.js';
+import {
+  completion,
+  mockTransport,
+  sseResponse,
+  textChunk,
+} from '#testkit/transport.js';
 
 const specOf = (id: string): ProviderSpec => {
   const spec = findProvider(id);
@@ -31,7 +39,10 @@ const specOf = (id: string): ProviderSpec => {
 providerConformance({
   name: 'ollama',
   create: (transport) =>
-    createOpenAIChatProvider({ spec: specOf('ollama'), fetchImpl: transport.fetchImpl }),
+    createOpenAIChatProvider({
+      spec: specOf('ollama'),
+      fetchImpl: transport.fetchImpl,
+    }),
 });
 
 providerConformance({
@@ -58,8 +69,12 @@ providerConformance({
 
 describe('assertUsableApiBase', () => {
   it('accepts https anywhere, with or without a key', () => {
-    expect(assertUsableApiBase('https://api.openai.com/v1', true).protocol).toBe('https:');
-    expect(assertUsableApiBase('https://api.openai.com/v1', false).protocol).toBe('https:');
+    expect(
+      assertUsableApiBase('https://api.openai.com/v1', true).protocol,
+    ).toBe('https:');
+    expect(
+      assertUsableApiBase('https://api.openai.com/v1', false).protocol,
+    ).toBe('https:');
   });
 
   it('accepts plain http to a local server carrying a key', () => {
@@ -73,25 +88,38 @@ describe('assertUsableApiBase', () => {
   });
 
   it('accepts plain http to a public host when no key is attached', () => {
-    expect(assertUsableApiBase('http://example.com/v1', false).hostname).toBe('example.com');
+    expect(assertUsableApiBase('http://example.com/v1', false).hostname).toBe(
+      'example.com',
+    );
   });
 
   it('refuses to send a key over plain http to a public host', () => {
-    expect(() => assertUsableApiBase('http://example.com/v1', true)).toThrow(/plain HTTP/);
+    expect(() => assertUsableApiBase('http://example.com/v1', true)).toThrow(
+      /plain HTTP/,
+    );
     // Decimal-encoded 8.8.8.8 — the point of routing this through the address
     // classifier rather than a string test for "127." or "192.168.".
-    expect(() => assertUsableApiBase('http://134744072/v1', true)).toThrow(/plain HTTP/);
+    expect(() => assertUsableApiBase('http://134744072/v1', true)).toThrow(
+      /plain HTTP/,
+    );
   });
 
   it('rejects a non-URL and a non-http scheme', () => {
     expect(() => assertUsableApiBase('not a url', false)).toThrow(/not a URL/);
-    expect(() => assertUsableApiBase('file:///etc/passwd', false)).toThrow(/http or https/);
-    expect(() => assertUsableApiBase('ftp://example.com', false)).toThrow(/http or https/);
+    expect(() => assertUsableApiBase('file:///etc/passwd', false)).toThrow(
+      /http or https/,
+    );
+    expect(() => assertUsableApiBase('ftp://example.com', false)).toThrow(
+      /http or https/,
+    );
   });
 });
 
 describe('openai-chat adapter', () => {
-  const base = { model: 'test-model', messages: [systemMessage('sys'), userMessage('hi')] };
+  const base = {
+    model: 'test-model',
+    messages: [systemMessage('sys'), userMessage('hi')],
+  };
 
   it('requires a base URL when the table has no default', () => {
     const spec: ProviderSpec = {
@@ -100,9 +128,9 @@ describe('openai-chat adapter', () => {
       wire: 'openai-chat',
       keywords: [],
     };
-    expect(() => createOpenAIChatProvider({ spec, fetchImpl: mockTransport().fetchImpl })).toThrow(
-      /no apiBase/,
-    );
+    expect(() =>
+      createOpenAIChatProvider({ spec, fetchImpl: mockTransport().fetchImpl }),
+    ).toThrow(/no apiBase/);
   });
 
   it('sends the bearer token and the table headers', async () => {
@@ -129,12 +157,17 @@ describe('openai-chat adapter', () => {
       fetchImpl: transport.fetchImpl,
     }).chat({
       model: 'test-model',
-      messages: [userMessage([textPart('what is this?'), imagePart('image/png', { data: 'AAA' })])],
+      messages: [
+        userMessage([
+          textPart('what is this?'),
+          imagePart('image/png', { data: 'AAA' }),
+        ]),
+      ],
     });
 
-    const messages = transport.calls[0]?.body.messages as {
-      content: { type: string; image_url?: { url: string } }[];
-    }[];
+    const messages = transport.calls[0]?.body.messages as Array<{
+      content: Array<{ type: string; image_url?: { url: string } }>;
+    }>;
     expect(messages[0]?.content[1]).toEqual({
       type: 'image_url',
       image_url: { url: 'data:image/png;base64,AAA' },
@@ -153,20 +186,26 @@ describe('openai-chat adapter', () => {
     }).chat({
       model: 'test-model',
       messages: [
-        userMessage([textPart('open this'), filePart('uploads/ab12-notes.csv', 'text/csv')]),
+        userMessage([
+          textPart('open this'),
+          filePart('uploads/ab12-notes.csv', 'text/csv'),
+        ]),
       ],
     });
 
-    const messages = transport.calls[0]?.body.messages as { content: string }[];
+    const messages = transport.calls[0]?.body.messages as Array<{
+      content: string;
+    }>;
     // Every part is text now, so the adapter collapses them to a plain string.
     expect(messages[0]?.content).toContain('uploads/ab12-notes.csv');
   });
 
   it('omits authorization entirely for a keyless local server', async () => {
     const transport = mockTransport().push(completion({ text: 'ok' }));
-    await createOpenAIChatProvider({ spec: specOf('ollama'), fetchImpl: transport.fetchImpl }).chat(
-      base,
-    );
+    await createOpenAIChatProvider({
+      spec: specOf('ollama'),
+      fetchImpl: transport.fetchImpl,
+    }).chat(base);
     expect(transport.calls[0]?.headers.authorization).toBeUndefined();
   });
 
@@ -211,7 +250,10 @@ describe('openai-chat adapter', () => {
   });
 
   it('sends tools and tool_choice only when tools are present', async () => {
-    const transport = mockTransport().push(completion({ text: 'ok' }), completion({ text: 'ok' }));
+    const transport = mockTransport().push(
+      completion({ text: 'ok' }),
+      completion({ text: 'ok' }),
+    );
     const provider = createOpenAIChatProvider({
       spec: specOf('ollama'),
       fetchImpl: transport.fetchImpl,
@@ -237,14 +279,21 @@ describe('openai-chat adapter', () => {
     expect(transport.calls[1]?.body.tools).toEqual([
       {
         type: 'function',
-        function: { name: 't', description: 'd', parameters: { type: 'object' } },
+        function: {
+          name: 't',
+          description: 'd',
+          parameters: { type: 'object' },
+        },
       },
     ]);
     expect(transport.calls[1]?.body.tool_choice).toBe('required');
   });
 
   it('sends an effort straight through, and translates the one that is ours', async () => {
-    const transport = mockTransport().push(completion({ text: 'ok' }), completion({ text: 'ok' }));
+    const transport = mockTransport().push(
+      completion({ text: 'ok' }),
+      completion({ text: 'ok' }),
+    );
     const provider = createOpenAIChatProvider({
       spec: specOf('ollama'),
       fetchImpl: transport.fetchImpl,
@@ -289,7 +338,8 @@ describe('openai-chat adapter', () => {
     });
 
     await expect(provider.chat(base)).rejects.toSatisfy(
-      (error: unknown) => isProviderError(error) && error.reason === 'server' && error.retryable,
+      (error: unknown) =>
+        isProviderError(error) && error.reason === 'server' && error.retryable,
     );
   });
 
@@ -304,14 +354,19 @@ describe('openai-chat adapter', () => {
 
     await expect(provider.chat(base)).rejects.toSatisfy(
       (error: unknown) =>
-        isProviderError(error) && error.reason === 'transport' && error.kind === 'network',
+        isProviderError(error) &&
+        error.reason === 'transport' &&
+        error.kind === 'network',
     );
   });
 
   it('surfaces an error delivered inside a 200 stream', async () => {
     const transport = mockTransport().push(
       sseResponse(
-        [textChunk('par'), { error: { message: 'upstream died', code: 'server_error' } }],
+        [
+          textChunk('par'),
+          { error: { message: 'upstream died', code: 'server_error' } },
+        ],
         { done: false },
       ),
     );
@@ -322,8 +377,9 @@ describe('openai-chat adapter', () => {
 
     const seen: string[] = [];
     const drain = async (): Promise<void> => {
-      for await (const event of provider.stream(base))
+      for await (const event of provider.stream(base)) {
         if (event.type === 'text') seen.push(event.text);
+      }
     };
 
     await expect(drain()).rejects.toThrow(/upstream died/);
@@ -345,10 +401,11 @@ describe('openai-chat adapter', () => {
     });
 
     const drain = async (): Promise<void> => {
-      for await (const _event of provider.stream(base)) void _event;
+      for await (const event of provider.stream(base)) void event;
     };
     await expect(drain()).rejects.toSatisfy(
-      (error: unknown) => isProviderError(error) && error.reason === 'stream_parse',
+      (error: unknown) =>
+        isProviderError(error) && error.reason === 'stream_parse',
     );
   });
 
@@ -359,10 +416,11 @@ describe('openai-chat adapter', () => {
       fetchImpl: transport.fetchImpl,
     });
     const drain = async (): Promise<void> => {
-      for await (const _event of provider.stream(base)) void _event;
+      for await (const event of provider.stream(base)) void event;
     };
     await expect(drain()).rejects.toSatisfy(
-      (error: unknown) => isProviderError(error) && error.reason === 'stream_parse',
+      (error: unknown) =>
+        isProviderError(error) && error.reason === 'stream_parse',
     );
   });
 
@@ -380,7 +438,9 @@ describe('openai-chat adapter', () => {
 
     await expect(provider.chat(base)).rejects.toSatisfy(
       (error: unknown) =>
-        isProviderError(error) && error.reason === 'server' && error.status === 502,
+        isProviderError(error) &&
+        error.reason === 'server' &&
+        error.status === 502,
     );
   });
 
@@ -393,7 +453,12 @@ describe('openai-chat adapter', () => {
               message: {
                 role: 'assistant',
                 content: null,
-                tool_calls: [{ type: 'function', function: { name: 'list_dir', arguments: '{}' } }],
+                tool_calls: [
+                  {
+                    type: 'function',
+                    function: { name: 'list_dir', arguments: '{}' },
+                  },
+                ],
               },
               finish_reason: 'tool_calls',
             },
@@ -423,7 +488,13 @@ describe('openai-chat adapter', () => {
               message: {
                 role: 'assistant',
                 tool_calls: [
-                  { id: 'c1', function: { name: 'read_file', arguments: { path: 'a.txt' } } },
+                  {
+                    id: 'c1',
+                    function: {
+                      name: 'read_file',
+                      arguments: { path: 'a.txt' },
+                    },
+                  },
                 ],
               },
             },
@@ -489,17 +560,28 @@ describe('the undici transport', () => {
         {
           model: 'qwen3',
           choices: [
-            { message: { role: 'assistant', content: 'from undici' }, finish_reason: 'stop' },
+            {
+              message: { role: 'assistant', content: 'from undici' },
+              finish_reason: 'stop',
+            },
           ],
           usage: { prompt_tokens: 4, completion_tokens: 2, total_tokens: 6 },
         },
         { headers: { 'content-type': 'application/json' } },
       );
 
-    const provider = createOpenAIChatProvider({ spec: specOf('ollama'), dispatcher: agent });
-    const result = await provider.chat({ model: 'qwen3', messages: [userMessage('hi')] });
+    const provider = createOpenAIChatProvider({
+      spec: specOf('ollama'),
+      dispatcher: agent,
+    });
+    const result = await provider.chat({
+      model: 'qwen3',
+      messages: [userMessage('hi')],
+    });
 
-    expect(result.message.content).toEqual([{ type: 'text', text: 'from undici' }]);
+    expect(result.message.content).toEqual([
+      { type: 'text', text: 'from undici' },
+    ]);
     expect(result.usage.totalTokens).toBe(6);
     // No pooled agent was built, so `close` has nothing of its own to release.
     await provider.close();
@@ -515,15 +597,24 @@ describe('the undici transport', () => {
         { headers: { 'content-type': 'application/json' } },
       );
 
-    const provider = createOpenAIChatProvider({ spec: specOf('ollama'), dispatcher: agent });
+    const provider = createOpenAIChatProvider({
+      spec: specOf('ollama'),
+      dispatcher: agent,
+    });
     const drain = async (): Promise<void> => {
-      for await (const _event of provider.stream({ model: 'qwen3', messages: [userMessage('hi')] }))
-        void _event;
+      for await (const event of provider.stream({
+        model: 'qwen3',
+        messages: [userMessage('hi')],
+      })) {
+        void event;
+      }
     };
 
     await expect(drain()).rejects.toSatisfy(
       (error: unknown) =>
-        isProviderError(error) && error.reason === 'rate_limit' && error.status === 429,
+        isProviderError(error) &&
+        error.reason === 'rate_limit' &&
+        error.status === 429,
     );
   });
 });

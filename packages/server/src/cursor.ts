@@ -172,6 +172,9 @@ export function paginate<T>(
   const last = page.at(-1);
   return {
     page,
-    next: issue && rows.length > limit && last !== undefined ? { nextCursor: encode(last) } : {},
+    next:
+      issue && rows.length > limit && last !== undefined
+        ? { nextCursor: encode(last) }
+        : {},
   };
 }

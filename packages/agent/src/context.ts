@@ -13,7 +13,11 @@
  * them with `toStoredMessage`; the terminal never needs to.
  */
 
-import { historyForLLM, type SessionStore, type StoredMessageRecord } from '@ghostai/core';
+import {
+  historyForLLM,
+  type SessionStore,
+  type StoredMessageRecord,
+} from '@ghostai/core';
 import type { ChatMessage, ToolDefinition } from '@ghostai/protocol';
 import { estimateTokens } from '@ghostai/providers';
 

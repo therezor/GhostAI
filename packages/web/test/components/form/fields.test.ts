@@ -36,18 +36,33 @@ describe('parseNumber', () => {
   });
 
   it('refuses text and infinities', () => {
-    expect(parseNumber('abc', t)).toEqual({ ok: false, error: 'Must be a number' });
-    expect(parseNumber('Infinity', t)).toEqual({ ok: false, error: 'Must be a number' });
+    expect(parseNumber('abc', t)).toEqual({
+      ok: false,
+      error: 'Must be a number',
+    });
+    expect(parseNumber('Infinity', t)).toEqual({
+      ok: false,
+      error: 'Must be a number',
+    });
   });
 
   it('enforces the bounds it is given', () => {
-    expect(parseNumber('0', t, { min: 1 })).toEqual({ ok: false, error: 'Must be at least 1' });
-    expect(parseNumber('3', t, { max: 2 })).toEqual({ ok: false, error: 'Must be at most 2' });
+    expect(parseNumber('0', t, { min: 1 })).toEqual({
+      ok: false,
+      error: 'Must be at least 1',
+    });
+    expect(parseNumber('3', t, { max: 2 })).toEqual({
+      ok: false,
+      error: 'Must be at most 2',
+    });
     expect(parseNumber('1.5', t, { integer: true })).toEqual({
       ok: false,
       error: 'Must be a whole number',
     });
-    expect(parseNumber('1.5', t, { min: 0, max: 2 })).toEqual({ ok: true, value: 1.5 });
+    expect(parseNumber('1.5', t, { min: 0, max: 2 })).toEqual({
+      ok: true,
+      value: 1.5,
+    });
   });
 });
 
@@ -106,13 +121,21 @@ describe('modelOptions', () => {
   });
 
   it('offers everything under `auto`, which is not a provider', () => {
-    expect(modelOptions(models, 'auto', '')).toEqual(['gpt-5', 'llama3', 'qwen']);
+    expect(modelOptions(models, 'auto', '')).toEqual([
+      'gpt-5',
+      'llama3',
+      'qwen',
+    ]);
   });
 
   it('always includes the current model, even when nothing advertises it', () => {
     // A picker that dropped the selected value would change the setting by
     // rendering: the control would show — and then save — a different model.
-    expect(modelOptions(models, 'ollama', 'hand-typed')).toEqual(['hand-typed', 'llama3', 'qwen']);
+    expect(modelOptions(models, 'ollama', 'hand-typed')).toEqual([
+      'hand-typed',
+      'llama3',
+      'qwen',
+    ]);
   });
 
   it('does not list the current model twice', () => {

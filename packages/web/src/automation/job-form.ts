@@ -16,7 +16,11 @@
  */
 
 import type { TFunction } from 'i18next';
-import { formatDateTime, instantFromZonedInput, zonedInputValue } from '@ghostai/i18n';
+import {
+  formatDateTime,
+  instantFromZonedInput,
+  zonedInputValue,
+} from '@ghostai/i18n';
 import type {
   AutomationJob,
   AutomationSchedule,
@@ -99,12 +103,18 @@ export function toJobForm(job: AutomationJob, timeZone: string): JobForm {
     enabled: job.enabled,
     deleteAfterRun: job.deleteAfterRun,
     scheduleKind: schedule.kind,
-    ...(schedule.kind === 'at' ? { at: zonedInputValue(schedule.atMs, timeZone) } : {}),
-    ...(schedule.kind === 'every' ? { everyMinutes: String(schedule.everyMs / MINUTE_MS) } : {}),
+    ...(schedule.kind === 'at'
+      ? { at: zonedInputValue(schedule.atMs, timeZone) }
+      : {}),
+    ...(schedule.kind === 'every'
+      ? { everyMinutes: String(schedule.everyMs / MINUTE_MS) }
+      : {}),
     ...(schedule.kind === 'cron' ? { cronExpr: schedule.expr } : {}),
     payloadKind: payload.kind,
     ...(payload.kind === 'scheduled' ? { message: payload.message } : {}),
-    ...(payload.kind === 'heartbeat' ? { file: payload.file, model: payload.model ?? '' } : {}),
+    ...(payload.kind === 'heartbeat'
+      ? { file: payload.file, model: payload.model ?? '' }
+      : {}),
     agentId: payload.agentId ?? '',
     sessionKey: payload.sessionKey ?? '',
     deliver: payload.deliver,
@@ -136,9 +146,17 @@ function buildSchedule(
   }
 
   if (form.scheduleKind === 'every') {
-    const minutes = parseNumber(form.everyMinutes, t, { min: 1, integer: true });
-    if (!minutes.ok) return { ok: false, errors: { everyMinutes: minutes.error } };
-    return { ok: true, schedule: { kind: 'every', everyMs: minutes.value * MINUTE_MS } };
+    const minutes = parseNumber(form.everyMinutes, t, {
+      min: 1,
+      integer: true,
+    });
+    if (!minutes.ok) {
+      return { ok: false, errors: { everyMinutes: minutes.error } };
+    }
+    return {
+      ok: true,
+      schedule: { kind: 'every', everyMs: minutes.value * MINUTE_MS },
+    };
   }
 
   const expr = form.cronExpr.trim();
@@ -157,7 +175,11 @@ function buildSchedule(
  * — building them separately is how a field gets added to create and forgotten
  * on update.
  */
-export function toJobRequest(form: JobForm, t: TFunction, timeZone: string): JobFormResult {
+export function toJobRequest(
+  form: JobForm,
+  t: TFunction,
+  timeZone: string,
+): JobFormResult {
   const errors: Record<string, string> = {};
 
   const name = form.name.trim();
@@ -177,11 +199,15 @@ export function toJobRequest(form: JobForm, t: TFunction, timeZone: string): Job
     errors.channel = t('settings.fields.required');
   }
 
-  if (Object.keys(errors).length > 0 || !schedule.ok) return { ok: false, errors };
+  if (Object.keys(errors).length > 0 || !schedule.ok) {
+    return { ok: false, errors };
+  }
 
   const optional = {
     ...(form.agentId.trim() === '' ? {} : { agentId: form.agentId.trim() }),
-    ...(form.sessionKey.trim() === '' ? {} : { sessionKey: form.sessionKey.trim() }),
+    ...(form.sessionKey.trim() === ''
+      ? {}
+      : { sessionKey: form.sessionKey.trim() }),
     ...(form.channel.trim() === '' ? {} : { channel: form.channel.trim() }),
     ...(form.to.trim() === '' ? {} : { to: form.to.trim() }),
   };
@@ -241,7 +267,9 @@ export function describeSchedule(
         when: formatDateTime(schedule.atMs, locale, timeZone),
       });
     case 'every':
-      return t('automation.scheduleEvery', { count: schedule.everyMs / MINUTE_MS });
+      return t('automation.scheduleEvery', {
+        count: schedule.everyMs / MINUTE_MS,
+      });
     case 'cron':
       return schedule.expr;
   }

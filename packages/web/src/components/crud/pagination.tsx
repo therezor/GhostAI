@@ -44,13 +44,16 @@ const SPAN = 1;
  * absurd: the ellipsis is the same width as the number it replaced, and it
  * turns a destination into a mystery to save nothing.
  */
-export function pageItems(page: number, pageCount: number): readonly (number | 'gap')[] {
+export function pageItems(
+  page: number,
+  pageCount: number,
+): ReadonlyArray<number | 'gap'> {
   const wanted = new Set<number>([1, pageCount]);
   for (let candidate = page - SPAN; candidate <= page + SPAN; candidate += 1) {
     if (candidate >= 1 && candidate <= pageCount) wanted.add(candidate);
   }
 
-  const items: (number | 'gap')[] = [];
+  const items: Array<number | 'gap'> = [];
   let previous = 0;
   for (const current of [...wanted].sort((a, b) => a - b)) {
     if (previous !== 0) {
@@ -123,7 +126,11 @@ export function Pagination({
               // Not a button, and not announced: it is the *absence* of pages, and
               // reading "ellipsis" between two numbers says nothing a reader can
               // act on.
-              <li key={`gap-${String(index)}`} className="pagination__gap" aria-hidden="true">
+              <li
+                key={`gap-${String(index)}`}
+                className="pagination__gap"
+                aria-hidden="true"
+              >
                 …
               </li>
             ) : (
@@ -131,11 +138,16 @@ export function Pagination({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={cn('pagination__page', item === page && 'pagination__page--current')}
+                  className={cn(
+                    'pagination__page',
+                    item === page && 'pagination__page--current',
+                  )}
                   // The visible label is a bare number, which says nothing on its
                   // own; this is what makes it a destination.
                   aria-label={t('common.goToPage', { page: item })}
-                  {...(item === page ? { 'aria-current': 'page' as const } : {})}
+                  {...(item === page
+                    ? { 'aria-current': 'page' as const }
+                    : {})}
                   onClick={() => {
                     setPage(item);
                   }}

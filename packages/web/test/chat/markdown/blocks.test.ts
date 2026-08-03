@@ -11,7 +11,11 @@
 import { describe, expect, it } from 'vitest';
 import type { Tokens } from 'marked';
 
-import { fenceLanguage, inlineTokens, splitBlocks } from '@/chat/markdown/blocks.js';
+import {
+  fenceLanguage,
+  inlineTokens,
+  splitBlocks,
+} from '@/chat/markdown/blocks.js';
 
 describe('splitBlocks', () => {
   it('is empty for an empty answer', () => {
@@ -21,7 +25,11 @@ describe('splitBlocks', () => {
   it('splits top-level blocks and drops the blank lines between them', () => {
     const blocks = splitBlocks('# Title\n\nA paragraph.\n\n- one\n- two\n');
 
-    expect(blocks.map((block) => block.token.type)).toEqual(['heading', 'paragraph', 'list']);
+    expect(blocks.map((block) => block.token.type)).toEqual([
+      'heading',
+      'paragraph',
+      'list',
+    ]);
     expect(blocks.map((block) => block.key)).toEqual(['0', '1', '2']);
   });
 
@@ -72,7 +80,8 @@ describe('inlineTokens', () => {
 });
 
 describe('fenceLanguage', () => {
-  const fence = (source: string): Tokens.Code => splitBlocks(source)[0]?.token as Tokens.Code;
+  const fence = (source: string): Tokens.Code =>
+    splitBlocks(source)[0]?.token as Tokens.Code;
 
   it('takes the first word and lower-cases it', () => {
     expect(fenceLanguage(fence('```TypeScript\nx\n```'))).toBe('typescript');

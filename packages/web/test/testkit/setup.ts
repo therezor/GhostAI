@@ -100,25 +100,25 @@ class InertWebSocket {
  * across a page reload should not mean durable across a test file.
  */
 class MemoryStorage implements Storage {
-  readonly #entries = new Map<string, string>();
+  private readonly entries = new Map<string, string>();
 
   get length(): number {
-    return this.#entries.size;
+    return this.entries.size;
   }
   clear(): void {
-    this.#entries.clear();
+    this.entries.clear();
   }
   getItem(key: string): string | null {
-    return this.#entries.get(key) ?? null;
+    return this.entries.get(key) ?? null;
   }
   key(index: number): string | null {
-    return [...this.#entries.keys()][index] ?? null;
+    return [...this.entries.keys()][index] ?? null;
   }
   removeItem(key: string): void {
-    this.#entries.delete(key);
+    this.entries.delete(key);
   }
   setItem(key: string, value: string): void {
-    this.#entries.set(key, value);
+    this.entries.set(key, value);
   }
 }
 
@@ -154,7 +154,10 @@ beforeEach(() => {
     ['languages', ['en']],
     ['language', 'en'],
   ] as const) {
-    Object.defineProperty(globalThis.navigator, property, { value, configurable: true });
+    Object.defineProperty(globalThis.navigator, property, {
+      value,
+      configurable: true,
+    });
   }
   // The router scrolls to the top on every navigation; jsdom logs a
   // "Not implemented" line for each one.

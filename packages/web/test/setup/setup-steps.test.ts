@@ -18,7 +18,14 @@ import {
 
 describe('the order', () => {
   it('runs access first, then configuration', () => {
-    expect(SETUP_STEPS).toEqual(['language', 'code', 'password', 'provider', 'model', 'done']);
+    expect(SETUP_STEPS).toEqual([
+      'language',
+      'code',
+      'password',
+      'provider',
+      'model',
+      'done',
+    ]);
   });
 
   it('walks to done and stays there', () => {
@@ -81,7 +88,9 @@ describe('progressOf', () => {
 
 describe('initialStep', () => {
   it('starts at the language on an unclaimed install', () => {
-    expect(initialStep({ setupRequired: true, configured: false })).toBe('language');
+    expect(initialStep({ setupRequired: true, configured: false })).toBe(
+      'language',
+    );
   });
 
   it('does not open at all on a claimed, configured install', () => {
@@ -92,13 +101,17 @@ describe('initialStep', () => {
     // `/api/status` needs a session, so a signed-out browser never learns this.
     // Treating unknown as "not configured" would pop the wizard open in front
     // of the login form for anyone whose session had merely expired.
-    expect(initialStep({ setupRequired: false, configured: undefined })).toBeNull();
+    expect(
+      initialStep({ setupRequired: false, configured: undefined }),
+    ).toBeNull();
   });
 
   it('skips the credential steps for a claimed install with no model', () => {
     // The tab was closed after the password step. Asking for a code that no
     // longer exists would be a dead end on an install that is already claimed.
-    expect(initialStep({ setupRequired: false, configured: false })).toBe('provider');
+    expect(initialStep({ setupRequired: false, configured: false })).toBe(
+      'provider',
+    );
   });
 });
 

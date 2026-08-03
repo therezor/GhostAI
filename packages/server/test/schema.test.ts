@@ -26,7 +26,11 @@ function transform(schema: FastifySchema): Record<string, unknown> {
   return jsonSchemaTransform({ schema, url: '/api/test' }).schema;
 }
 
-function validate(schema: z.ZodType, data: unknown, httpPart = 'body'): unknown {
+function validate(
+  schema: z.ZodType,
+  data: unknown,
+  httpPart = 'body',
+): unknown {
   return zodValidatorCompiler({
     schema,
     method: 'POST',
@@ -38,7 +42,9 @@ function validate(schema: z.ZodType, data: unknown, httpPart = 'body'): unknown 
 
 describe('the component pool', () => {
   it('carries every registered protocol schema', () => {
-    expect(Object.keys(PROTOCOL_COMPONENTS).sort()).toEqual(Object.keys(PROTOCOL_SCHEMAS).sort());
+    expect(Object.keys(PROTOCOL_COMPONENTS).sort()).toEqual(
+      Object.keys(PROTOCOL_SCHEMAS).sort(),
+    );
   });
 
   // `$schema` belongs at the root of a document, not on each member of a pool.
@@ -57,7 +63,10 @@ describe('the component pool', () => {
 
 describe('jsonSchemaTransform', () => {
   it('is a no-op for a route with no schema', () => {
-    expect(jsonSchemaTransform({ url: '/api/test' })).toEqual({ schema: {}, url: '/api/test' });
+    expect(jsonSchemaTransform({ url: '/api/test' })).toEqual({
+      schema: {},
+      url: '/api/test',
+    });
   });
 
   it('references the pool for a registered response schema', () => {
@@ -70,14 +79,22 @@ describe('jsonSchemaTransform', () => {
   // by then the parse has supplied it — advertising that to a client tells it to
   // send values the schema exists to fill in, and it obliges.
   it('inlines a request body in input mode', () => {
-    const body = transform({ body: LoginRequestSchema }).body as Record<string, unknown>;
-    expect(body).toMatchObject({ type: 'object', required: ['username', 'password'] });
+    const body = transform({ body: LoginRequestSchema }).body as Record<
+      string,
+      unknown
+    >;
+    expect(body).toMatchObject({
+      type: 'object',
+      required: ['username', 'password'],
+    });
     expect(body).not.toHaveProperty('$ref');
   });
 
   it('inlines a schema that is not in the pool', () => {
     const local = z.object({ page: z.number() });
-    expect(transform({ querystring: local }).querystring).toMatchObject({ type: 'object' });
+    expect(transform({ querystring: local }).querystring).toMatchObject({
+      type: 'object',
+    });
   });
 
   it('converts params and leaves unrelated keys alone', () => {
@@ -94,7 +111,9 @@ describe('jsonSchemaTransform', () => {
 
   it('passes a response entry that is already JSON Schema straight through', () => {
     const raw = { type: 'string' };
-    expect(transform({ response: { 200: raw } }).response).toEqual({ '200': raw });
+    expect(transform({ response: { 200: raw } }).response).toEqual({
+      '200': raw,
+    });
   });
 });
 
@@ -106,11 +125,16 @@ describe('zodValidatorCompiler', () => {
       agents: { defaults: { temperature: 0.5 } },
     }) as { value: ConfigPatch };
 
-    expect(result.value).toEqual({ agents: { defaults: { temperature: 0.5 } } });
+    expect(result.value).toEqual({
+      agents: { defaults: { temperature: 0.5 } },
+    });
   });
 
   it('reports a failure as a 422 keyed by JSON pointer', () => {
-    const result = validate(LoginRequestSchema, { username: 'ghost', password: 42 }) as {
+    const result = validate(LoginRequestSchema, {
+      username: 'ghost',
+      password: 42,
+    }) as {
       error: { status: number; code: string; details: Record<string, string> };
     };
 
@@ -129,7 +153,9 @@ describe('zodValidatorCompiler', () => {
   });
 
   it('uses `/` for a failure at the root', () => {
-    const result = validate(z.string(), 42) as { error: { details: Record<string, string> } };
+    const result = validate(z.string(), 42) as {
+      error: { details: Record<string, string> };
+    };
     expect(Object.keys(result.error.details)).toEqual(['/']);
   });
 
@@ -147,7 +173,9 @@ describe('zodValidatorCompiler', () => {
       url: '/api/test',
       httpStatus: '200',
     });
-    expect((compile({}) as { error: { message: string } }).error.message).toBe('Invalid request');
+    expect((compile({}) as { error: { message: string } }).error.message).toBe(
+      'Invalid request',
+    );
   });
 
   it('keeps only the first issue per field', () => {
@@ -164,6 +192,8 @@ describe('jsonSerializerCompiler', () => {
   it('serialises without filtering by schema', () => {
     // Stated as a test because it is a property worth being deliberate about:
     // nothing relies on serialisation to keep a field out of a response.
-    expect(jsonSerializerCompiler()({ a: 1, extra: true })).toBe('{"a":1,"extra":true}');
+    expect(jsonSerializerCompiler()({ a: 1, extra: true })).toBe(
+      '{"a":1,"extra":true}',
+    );
   });
 });

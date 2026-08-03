@@ -56,7 +56,8 @@ export function KeyField({
       hint={
         <>
           {stored}
-          {envKey !== undefined && ` ${envKey} in the environment is used when none is saved.`}
+          {envKey !== undefined &&
+            ` ${envKey} in the environment is used when none is saved.`}
         </>
       }
     />

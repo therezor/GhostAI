@@ -27,7 +27,8 @@ export interface ThemeState {
 }
 
 export function useTheme(): ThemeState {
-  const [preference, setPreferenceState] = useState<ThemePreference>(readStoredPreference);
+  const [preference, setPreferenceState] =
+    useState<ThemePreference>(readStoredPreference);
   const [resolved, setResolved] = useState<ResolvedTheme>(() =>
     resolveTheme(readStoredPreference(), systemPrefersLight()),
   );

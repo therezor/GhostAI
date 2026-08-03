@@ -9,7 +9,11 @@
  * else says it should be allowed.
  */
 
-import { ConfigPatchSchema, ToolsConfigSchema, type ToolsConfig } from '@ghostai/protocol';
+import {
+  ConfigPatchSchema,
+  ToolsConfigSchema,
+  type ToolsConfig,
+} from '@ghostai/protocol';
 import { describe, expect, it } from 'vitest';
 import { createWebI18n } from '@ghostai/i18n/web';
 
@@ -44,7 +48,10 @@ describe('toToolsPatch', () => {
   });
 
   it('refuses an approval timeout of zero, unlike every other duration here', () => {
-    const result = toToolsPatch({ ...toToolsForm(config()), approvalTimeoutSeconds: '0' }, t);
+    const result = toToolsPatch(
+      { ...toToolsForm(config()), approvalTimeoutSeconds: '0' },
+      t,
+    );
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -52,7 +59,10 @@ describe('toToolsPatch', () => {
   });
 
   it('allows an exec timeout of zero, where zero does mean no limit', () => {
-    const result = toToolsPatch({ ...toToolsForm(config()), execTimeoutSeconds: '0' }, t);
+    const result = toToolsPatch(
+      { ...toToolsForm(config()), execTimeoutSeconds: '0' },
+      t,
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;

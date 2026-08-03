@@ -47,16 +47,22 @@ const stylesheets = walk(STYLES).filter((file) => file.endsWith('.css'));
 const components = walk(SRC).filter((file) => file.endsWith('.tsx'));
 
 const read = (file: string): string => readFileSync(file, 'utf8');
-const stripComments = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, '');
+const stripComments = (css: string): string =>
+  css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 /** Every `selector { … }` in the styles directory, flattened. */
 const rules: readonly Rule[] = stylesheets.flatMap((file) =>
-  [...stripComments(read(file)).matchAll(/([^{}]+)\{([^{}]*)\}/g)].flatMap((match) =>
-    (match[1] ?? '')
-      .split(',')
-      .map((selector) => selector.trim().split('\n').at(-1)?.trim() ?? '')
-      .filter((selector) => selector !== '')
-      .map((selector) => ({ file: relative(SRC, file), selector, body: match[2] ?? '' })),
+  [...stripComments(read(file)).matchAll(/([^{}]+)\{([^{}]*)\}/g)].flatMap(
+    (match) =>
+      (match[1] ?? '')
+        .split(',')
+        .map((selector) => selector.trim().split('\n').at(-1)?.trim() ?? '')
+        .filter((selector) => selector !== '')
+        .map((selector) => ({
+          file: relative(SRC, file),
+          selector,
+          body: match[2] ?? '',
+        })),
   ),
 );
 
@@ -94,10 +100,12 @@ function classLists(source: string): readonly string[] {
   return out;
 }
 
-const classLiterals: readonly { readonly file: string; readonly value: string }[] =
-  components.flatMap((file) =>
-    classLists(read(file)).map((value) => ({ file: relative(SRC, file), value })),
-  );
+const classLiterals: ReadonlyArray<{
+  readonly file: string;
+  readonly value: string;
+}> = components.flatMap((file) =>
+  classLists(read(file)).map((value) => ({ file: relative(SRC, file), value })),
+);
 
 describe('--gap', () => {
   const setters = new Set(
@@ -110,7 +118,10 @@ describe('--gap', () => {
 
   /** True when the rule consumes `--gap` itself, so it needs no primitive. */
   const consumesGap = (name: string): boolean =>
-    rules.some((rule) => rule.selector === `.${name}` && /(?<![\w-])gap:/.test(rule.body));
+    rules.some(
+      (rule) =>
+        rule.selector === `.${name}` && /(?<![\w-])gap:/.test(rule.body),
+    );
 
   it('is set by a meaningful number of rules', () => {
     // Guards the two assertions below: a rename that emptied this set would
@@ -124,7 +135,9 @@ describe('--gap', () => {
     for (const name of setters) {
       if (consumesGap(name)) continue;
 
-      const uses = classLiterals.filter(({ value }) => value.split(/\s+/).includes(name));
+      const uses = classLiterals.filter(({ value }) =>
+        value.split(/\s+/).includes(name),
+      );
       if (uses.length === 0) {
         unwired.push(`.${name} — sets --gap and is never used in markup`);
         continue;
@@ -133,7 +146,9 @@ describe('--gap', () => {
       for (const { file, value } of uses) {
         const tokens = value.split(/\s+/);
         if (!PRIMITIVES.some((primitive) => tokens.includes(primitive))) {
-          unwired.push(`.${name} — ${file}: "${value}" has no stack/row/cluster`);
+          unwired.push(
+            `.${name} — ${file}: "${value}" has no stack/row/cluster`,
+          );
         }
       }
     }
@@ -144,10 +159,12 @@ describe('--gap', () => {
 
 describe('the type scale', () => {
   const fontSizes = rules.flatMap((rule) =>
-    [...rule.body.matchAll(/font-size:\s*var\((--text-[\w-]+)\)/g)].map((match) => ({
-      ...rule,
-      token: match[1] ?? '',
-    })),
+    [...rule.body.matchAll(/font-size:\s*var\((--text-[\w-]+)\)/g)].map(
+      (match) => ({
+        ...rule,
+        token: match[1] ?? '',
+      }),
+    ),
   );
 
   it('declares --text-base exactly once, on body, so everything inherits it', () => {
@@ -156,11 +173,13 @@ describe('the type scale', () => {
     // `.markdown h5` and `h6` are the exception that proves it: they sit inside
     // an answer, which is `--text-md`, so returning to the base is a step
     // *down* rather than a restatement of the default.
-    const outsideMarkdown = declared.filter((rule) => !rule.selector.startsWith('.markdown'));
+    const outsideMarkdown = declared.filter(
+      (rule) => !rule.selector.startsWith('.markdown'),
+    );
 
-    expect(outsideMarkdown.map((rule) => `${rule.file}  ${rule.selector}`)).toEqual([
-      'styles/base.css  body',
-    ]);
+    expect(
+      outsideMarkdown.map((rule) => `${rule.file}  ${rule.selector}`),
+    ).toEqual(['styles/base.css  body']);
   });
 
   it('reserves the two smallest steps for things that are not sentences', () => {
@@ -192,7 +211,9 @@ describe('the type scale', () => {
 
   it('uses every step it declares', () => {
     const scale = [
-      ...readFileSync(join(STYLES, 'tokens.css'), 'utf8').matchAll(/(--text-[\w-]+):/g),
+      ...readFileSync(join(STYLES, 'tokens.css'), 'utf8').matchAll(
+        /(--text-[\w-]+):/g,
+      ),
     ]
       .map((match) => match[1] ?? '')
       .filter((token) => token !== '--text-base'); // set once, on body, and inherited

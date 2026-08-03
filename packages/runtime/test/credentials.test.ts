@@ -7,7 +7,10 @@ import { findProvider, type ProviderInstance } from '@ghostai/providers';
 import { CredentialVault } from '@ghostai/security';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { PROVIDER_CREDENTIAL_NAMESPACE, findCredential } from '#src/credentials.js';
+import {
+  PROVIDER_CREDENTIAL_NAMESPACE,
+  findCredential,
+} from '#src/credentials.js';
 
 const dirs: string[] = [];
 
@@ -18,7 +21,10 @@ function tempDir(): string {
 }
 
 function vaultIn(dir: string): CredentialVault {
-  return new CredentialVault({ file: join(dir, 'vault.json'), key: Buffer.alloc(32, 7) });
+  return new CredentialVault({
+    file: join(dir, 'vault.json'),
+    key: Buffer.alloc(32, 7),
+  });
 }
 
 /** An instance of `type`, named `id` — which defaults to the type, as a migrated config would. */
@@ -47,7 +53,9 @@ describe('findCredential', () => {
     // and `ghost chat` against Ollama must not create one. Passing `undefined`
     // rather than `false` is the point: the real code path is exercised, and it
     // must not reach the keychain at all. `/nowhere` has no vault file.
-    expect(findCredential(instance('ollama'), paths, {}, undefined)).toBeUndefined();
+    expect(
+      findCredential(instance('ollama'), paths, {}, undefined),
+    ).toBeUndefined();
   });
 
   it('reads a token stored for a local instance', () => {
@@ -57,7 +65,9 @@ describe('findCredential', () => {
     const vault = vaultIn(tempDir());
     vault.set(PROVIDER_CREDENTIAL_NAMESPACE, 'ollama-gpu', 'proxy-token');
 
-    expect(findCredential(instance('ollama', 'ollama-gpu'), paths, {}, vault)).toBe('proxy-token');
+    expect(
+      findCredential(instance('ollama', 'ollama-gpu'), paths, {}, vault),
+    ).toBe('proxy-token');
   });
 
   it('keys the vault by instance, so two instances of one type differ', () => {
@@ -65,8 +75,12 @@ describe('findCredential', () => {
     vault.set(PROVIDER_CREDENTIAL_NAMESPACE, 'ollama', 'laptop-token');
     vault.set(PROVIDER_CREDENTIAL_NAMESPACE, 'ollama-gpu', 'gpu-token');
 
-    expect(findCredential(instance('ollama'), paths, {}, vault)).toBe('laptop-token');
-    expect(findCredential(instance('ollama', 'ollama-gpu'), paths, {}, vault)).toBe('gpu-token');
+    expect(findCredential(instance('ollama'), paths, {}, vault)).toBe(
+      'laptop-token',
+    );
+    expect(
+      findCredential(instance('ollama', 'ollama-gpu'), paths, {}, vault),
+    ).toBe('gpu-token');
   });
 
   it('finds a key stored before instances existed, under the provider id', () => {
@@ -76,23 +90,35 @@ describe('findCredential', () => {
     const vault = vaultIn(tempDir());
     vault.set(PROVIDER_CREDENTIAL_NAMESPACE, 'openai', 'stored-before');
 
-    expect(findCredential(instance('openai'), paths, {}, vault)).toBe('stored-before');
+    expect(findCredential(instance('openai'), paths, {}, vault)).toBe(
+      'stored-before',
+    );
   });
 
   it('prefers the vault over an exported environment variable', () => {
     const vault = vaultIn(tempDir());
     vault.set(PROVIDER_CREDENTIAL_NAMESPACE, 'openai', 'from-vault');
 
-    expect(findCredential(instance('openai'), paths, { OPENAI_API_KEY: 'from-env' }, vault)).toBe(
-      'from-vault',
-    );
+    expect(
+      findCredential(
+        instance('openai'),
+        paths,
+        { OPENAI_API_KEY: 'from-env' },
+        vault,
+      ),
+    ).toBe('from-vault');
   });
 
   it('falls back to the environment when the vault holds nothing', () => {
     const vault = vaultIn(tempDir());
-    expect(findCredential(instance('openai'), paths, { OPENAI_API_KEY: 'from-env' }, vault)).toBe(
-      'from-env',
-    );
+    expect(
+      findCredential(
+        instance('openai'),
+        paths,
+        { OPENAI_API_KEY: 'from-env' },
+        vault,
+      ),
+    ).toBe('from-env');
   });
 
   it('treats an empty variable as absent rather than as an empty key', () => {

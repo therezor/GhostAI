@@ -88,7 +88,10 @@ export function parseDeclarations(css: string): readonly Declaration[] {
  * blocks are included — `--color-accent` is declared there, and it is the name
  * every component reads.
  */
-export function resolveTokens(css: string, theme: ThemeName): ReadonlyMap<string, string> {
+export function resolveTokens(
+  css: string,
+  theme: ThemeName,
+): ReadonlyMap<string, string> {
   const raw = new Map<string, string>();
   for (const decl of parseDeclarations(css)) {
     if (appliesTo(decl, theme)) raw.set(decl.property, decl.value);
@@ -101,16 +104,31 @@ export function resolveTokens(css: string, theme: ThemeName): ReadonlyMap<string
 
 /** Resolves one token all the way to sRGB. Throws on a notation the sheet should not contain. */
 export function toRgba(value: string): Rgba {
-  const oklch = /^oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*(?:\/\s*([\d.]+)\s*)?\)$/.exec(value);
+  const oklch =
+    /^oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*(?:\/\s*([\d.]+)\s*)?\)$/.exec(
+      value,
+    );
   if (oklch) {
     const [, l, c, h, a] = oklch;
-    return oklchToRgba(Number(l), Number(c), Number(h), a === undefined ? 1 : Number(a));
+    return oklchToRgba(
+      Number(l),
+      Number(c),
+      Number(h),
+      a === undefined ? 1 : Number(a),
+    );
   }
 
-  const rgb = /^rgb\(\s*(\d+)\s+(\d+)\s+(\d+)\s*(?:\/\s*([\d.]+)\s*)?\)$/.exec(value);
+  const rgb = /^rgb\(\s*(\d+)\s+(\d+)\s+(\d+)\s*(?:\/\s*([\d.]+)\s*)?\)$/.exec(
+    value,
+  );
   if (rgb) {
     const [, r, g, b, a] = rgb;
-    return rgb255ToRgba(Number(r), Number(g), Number(b), a === undefined ? 1 : Number(a));
+    return rgb255ToRgba(
+      Number(r),
+      Number(g),
+      Number(b),
+      a === undefined ? 1 : Number(a),
+    );
   }
 
   throw new Error(`Not a colour this parser supports: ${value}`);
@@ -133,18 +151,27 @@ function appliesTo(decl: Declaration, theme: ThemeName): boolean {
 }
 
 /** Substitutes `var(--x)` references until the value is a literal. */
-function expand(key: string, raw: ReadonlyMap<string, string>, seen: ReadonlySet<string>): string {
+function expand(
+  key: string,
+  raw: ReadonlyMap<string, string>,
+  seen: ReadonlySet<string>,
+): string {
   if (seen.has(key)) throw new Error(`Cyclic custom property: ${key}`);
 
   const value = raw.get(key);
   if (value === undefined) throw new Error(`Undefined custom property: ${key}`);
 
   const next = new Set([...seen, key]);
-  return value.replace(/var\(\s*(--[\w-]+)\s*\)/g, (_match, ref: string) => expand(ref, raw, next));
+  return value.replace(/var\(\s*(--[\w-]+)\s*\)/g, (match, ref: string) =>
+    expand(ref, raw, next),
+  );
 }
 
-function parseBody(body: string, prelude: string): readonly (readonly [string, string])[] {
-  const out: (readonly [string, string])[] = [];
+function parseBody(
+  body: string,
+  prelude: string,
+): ReadonlyArray<readonly [string, string]> {
+  const out: Array<readonly [string, string]> = [];
 
   for (const statement of splitTopLevel(body)) {
     const trimmed = statement.trim();
@@ -152,14 +179,20 @@ function parseBody(body: string, prelude: string): readonly (readonly [string, s
 
     // A nested at-rule or plain rule inside a `:root` block. `tokens.css` has
     // none; the base layer's nested `@media` lives in `base.css`, not here.
-    if (trimmed.includes('{')) throw new Error(`Unexpected nested rule in ${prelude}`);
+    if (trimmed.includes('{')) {
+      throw new Error(`Unexpected nested rule in ${prelude}`);
+    }
 
     const colon = trimmed.indexOf(':');
-    if (colon === -1) throw new Error(`Unparsable declaration in ${prelude}: ${trimmed}`);
+    if (colon === -1) {
+      throw new Error(`Unparsable declaration in ${prelude}: ${trimmed}`);
+    }
 
     const property = trimmed.slice(0, colon).trim();
     const value = trimmed.slice(colon + 1).trim();
-    if (property.startsWith('--')) out.push([property, collapseWhitespace(value)]);
+    if (property.startsWith('--')) {
+      out.push([property, collapseWhitespace(value)]);
+    }
   }
 
   return out;

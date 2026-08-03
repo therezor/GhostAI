@@ -10,7 +10,11 @@ import { RotateCcw, SquarePen } from 'lucide-react';
 import { useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type { ToolPermission, ToolPromptOverride, ToolRisk } from '@ghostai/protocol';
+import type {
+  ToolPermission,
+  ToolPromptOverride,
+  ToolRisk,
+} from '@ghostai/protocol';
 
 import { Badge } from '@/components/ui/badge.js';
 import { Button } from '@/components/ui/button.js';
@@ -51,17 +55,30 @@ export interface ToolField {
  * override reaching `argv.items` would need a path syntax to specify and to
  * validate, for a field whose parent can say the same thing in a sentence.
  */
-export function parameterFields(parameters: Readonly<Record<string, unknown>>): ToolField[] {
+export function parameterFields(
+  parameters: Readonly<Record<string, unknown>>,
+): ToolField[] {
   const properties = parameters.properties;
-  if (typeof properties !== 'object' || properties === null || Array.isArray(properties)) return [];
+  if (
+    typeof properties !== 'object' ||
+    properties === null ||
+    Array.isArray(properties)
+  ) {
+    return [];
+  }
 
-  return Object.entries(properties as Record<string, unknown>).map(([name, schema]) => {
-    const described =
-      typeof schema === 'object' && schema !== null && !Array.isArray(schema)
-        ? (schema as Record<string, unknown>).description
-        : undefined;
-    return { name, description: typeof described === 'string' ? described : '' };
-  });
+  return Object.entries(properties as Record<string, unknown>).map(
+    ([name, schema]) => {
+      const described =
+        typeof schema === 'object' && schema !== null && !Array.isArray(schema)
+          ? (schema as Record<string, unknown>).description
+          : undefined;
+      return {
+        name,
+        description: typeof described === 'string' ? described : '',
+      };
+    },
+  );
 }
 
 /**
@@ -113,7 +130,10 @@ export function ToolRow({
   const rewritten = stored.description !== '';
 
   const setField = (field: string, text: string): void => {
-    onOverrideChange({ ...stored, fields: { ...stored.fields, [field]: text } });
+    onOverrideChange({
+      ...stored,
+      fields: { ...stored.fields, [field]: text },
+    });
   };
 
   return (
@@ -153,7 +173,11 @@ export function ToolRow({
       </Button>
       <div className="agent-editor__tool-permission">
         <SelectField
-          label={<span className="sr-only">{t('agents.toolPermissionFor', { name })}</span>}
+          label={
+            <span className="sr-only">
+              {t('agents.toolPermissionFor', { name })}
+            </span>
+          }
           value={permission}
           disabled={disabled}
           options={TOOL_PERMISSIONS.map((option) => ({
@@ -173,7 +197,9 @@ export function ToolRow({
       <Dialog open={editing} onOpenChange={setEditing}>
         <DialogContent className="agent-editor__wording-dialog">
           <DialogHeader>
-            <DialogHeading>{t('agents.toolWordingTitle', { name })}</DialogHeading>
+            <DialogHeading>
+              {t('agents.toolWordingTitle', { name })}
+            </DialogHeading>
             <DialogSubheading>{t('agents.toolWordingHint')}</DialogSubheading>
           </DialogHeader>
 
@@ -192,7 +218,9 @@ export function ToolRow({
             />
             {fields.length > 0 && (
               <>
-                <h4 className="agent-editor__wording-heading">{t('agents.toolWordingArgs')}</h4>
+                <h4 className="agent-editor__wording-heading">
+                  {t('agents.toolWordingArgs')}
+                </h4>
                 {fields.map((field) => (
                   <TextareaField
                     key={field.name}

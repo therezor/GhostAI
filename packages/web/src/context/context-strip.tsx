@@ -60,7 +60,8 @@ export function ContextStrip({
   const budget = summariseContext(context.data, t);
   // Past the window the segments are scaled to the bar so none is clipped, and
   // the overflow is said in words — the same rule the dialog follows.
-  const scale = budget.over && budget.usedPercent > 0 ? 100 / budget.usedPercent : 1;
+  const scale =
+    budget.over && budget.usedPercent > 0 ? 100 / budget.usedPercent : 1;
 
   return (
     <>
@@ -75,7 +76,10 @@ export function ContextStrip({
           {budget.segments.map((segment) => (
             <span
               key={segment.key}
-              className={cn('context-strip__fill', SEGMENT_FILLS[segment.key] ?? FALLBACK_FILL)}
+              className={cn(
+                'context-strip__fill',
+                SEGMENT_FILLS[segment.key] ?? FALLBACK_FILL,
+              )}
               style={{ width: `${String(segment.percent * scale)}%` }}
             />
           ))}
@@ -91,7 +95,11 @@ export function ContextStrip({
         </span>
       </button>
 
-      <ContextDialog sessionKey={sessionKey} open={open} onOpenChange={setOpen} />
+      <ContextDialog
+        sessionKey={sessionKey}
+        open={open}
+        onOpenChange={setOpen}
+      />
     </>
   );
 }

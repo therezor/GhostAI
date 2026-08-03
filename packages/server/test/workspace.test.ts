@@ -1,4 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -10,7 +16,9 @@ import { inlineSafe, listDirectory } from '#src/workspace.js';
 const roots: string[] = [];
 
 afterEach(() => {
-  while (roots.length > 0) rmSync(roots.pop() ?? '', { recursive: true, force: true });
+  while (roots.length > 0) {
+    rmSync(roots.pop() ?? '', { recursive: true, force: true });
+  }
 });
 
 /**
@@ -78,7 +86,9 @@ describe('listDirectory', () => {
     writeFileSync(join(root, 'inside.txt'), 'here');
     symlinkSync('/etc', join(root, 'escape'));
 
-    expect(listDirectory(jail, root).map((entry) => entry.name)).toEqual(['inside.txt']);
+    expect(listDirectory(jail, root).map((entry) => entry.name)).toEqual([
+      'inside.txt',
+    ]);
   });
 
   it('skips an entry that vanished between readdir and stat', () => {
@@ -88,7 +98,9 @@ describe('listDirectory', () => {
     symlinkSync(join(root, 'never-existed'), join(root, 'dangling'));
     writeFileSync(join(root, 'real.txt'), 'here');
 
-    expect(listDirectory(jail, root).map((entry) => entry.name)).toEqual(['real.txt']);
+    expect(listDirectory(jail, root).map((entry) => entry.name)).toEqual([
+      'real.txt',
+    ]);
   });
 
   it('reports a directory with no size', () => {

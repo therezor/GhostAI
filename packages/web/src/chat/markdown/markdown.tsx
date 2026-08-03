@@ -37,7 +37,11 @@ export interface MarkdownProps {
   readonly className?: string;
 }
 
-export function Markdown({ text, streaming = false, className }: MarkdownProps): JSX.Element {
+export function Markdown({
+  text,
+  streaming = false,
+  className,
+}: MarkdownProps): JSX.Element {
   const blocks = splitBlocks(text);
 
   return (
@@ -69,10 +73,11 @@ interface BlockProps {
  * neither has anything the block renders.
  */
 const MemoBlock = memo(
-  function Block({ token, complete }: BlockProps): ReactNode {
+  ({ token, complete }: BlockProps): ReactNode => {
     return renderBlock(token, complete);
   },
-  (previous, next) => previous.raw === next.raw && previous.complete === next.complete,
+  (previous, next) =>
+    previous.raw === next.raw && previous.complete === next.complete,
 );
 
 function renderBlock(token: Token, complete: boolean): ReactNode {
@@ -101,7 +106,12 @@ function renderBlock(token: Token, complete: boolean): ReactNode {
       return (
         <blockquote>
           {(token as Tokens.Blockquote).tokens.map((child, index) => (
-            <MemoBlock key={index} token={child} raw={child.raw} complete={complete} />
+            <MemoBlock
+              key={index}
+              token={child}
+              raw={child.raw}
+              complete={complete}
+            />
           ))}
         </blockquote>
       );
@@ -151,7 +161,10 @@ function renderList(token: Tokens.List, complete: boolean): ReactNode {
       {...(start !== undefined && start !== 1 ? { start } : {})}
     >
       {token.items.map((item, index) => (
-        <li key={index} {...(item.task ? { 'data-task': 'true' as const } : {})}>
+        <li
+          key={index}
+          {...(item.task ? { 'data-task': 'true' as const } : {})}
+        >
           {item.task && (
             <input
               type="checkbox"
@@ -166,7 +179,12 @@ function renderList(token: Tokens.List, complete: boolean): ReactNode {
           )}
           <div>
             {item.tokens.map((child, childIndex) => (
-              <MemoBlock key={childIndex} token={child} raw={child.raw} complete={complete} />
+              <MemoBlock
+                key={childIndex}
+                token={child}
+                raw={child.raw}
+                complete={complete}
+              />
             ))}
           </div>
         </li>
@@ -176,7 +194,9 @@ function renderList(token: Tokens.List, complete: boolean): ReactNode {
 }
 
 function renderTable(token: Tokens.Table): ReactNode {
-  const align = (index: number): { readonly 'data-align'?: 'left' | 'center' | 'right' } => {
+  const align = (
+    index: number,
+  ): { readonly 'data-align'?: 'left' | 'center' | 'right' } => {
     const value = token.align[index];
     return value === null || value === undefined ? {} : { 'data-align': value };
   };
@@ -276,7 +296,9 @@ function InlineLink({ token }: { readonly token: Tokens.Link }): ReactNode {
       // reaching back through `window.opener`. `noreferrer` is the privacy half.
       target="_blank"
       rel="noopener noreferrer nofollow"
-      {...(token.title === null || token.title === undefined ? {} : { title: token.title })}
+      {...(token.title === null || token.title === undefined
+        ? {}
+        : { title: token.title })}
     >
       {children}
     </a>

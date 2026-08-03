@@ -117,6 +117,10 @@ export function usePagination({
 }
 
 /** The slice of an in-memory list one page shows. */
-export function pageRows<T>(rows: readonly T[], { offset }: Pagination, pageSize = PAGE_SIZE): T[] {
+export function pageRows<T>(
+  rows: readonly T[],
+  { offset }: Pagination,
+  pageSize = PAGE_SIZE,
+): T[] {
   return rows.slice(offset, offset + pageSize);
 }

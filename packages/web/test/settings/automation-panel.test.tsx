@@ -20,7 +20,12 @@ import { ConfigSchema } from '@ghostai/protocol';
 
 import { Providers } from '@/app/providers.js';
 import { createAppRouter } from '@/app/router.js';
-import { stubApi, testQueryClient, type RecordedRequest, type StubRoute } from '@testkit/render.js';
+import {
+  stubApi,
+  testQueryClient,
+  type RecordedRequest,
+  type StubRoute,
+} from '@testkit/render.js';
 import { STATUS } from '@testkit/fixtures.js';
 
 const SETTINGS = { config: ConfigSchema.parse({}), credentialsPresent: {} };
@@ -46,7 +51,9 @@ function mount(): {
   const user = userEvent.setup();
   const router = createAppRouter();
   router.update({
-    history: createMemoryHistory({ initialEntries: ['/settings?panel=automation'] }),
+    history: createMemoryHistory({
+      initialEntries: ['/settings?panel=automation'],
+    }),
   });
   render(
     <Providers client={testQueryClient()}>
@@ -66,8 +73,12 @@ describe('the Automation panel', () => {
 
     expect(await screen.findByLabelText('Concurrent runs')).toBeInTheDocument();
     // The jobs are a page, not a panel — there is no list and no create here.
-    expect(screen.queryByRole('list', { name: 'Automation' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'New job' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('list', { name: 'Automation' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'New job' }),
+    ).not.toBeInTheDocument();
   });
 
   it('sends the operator to Appearance for the timezone instead of dropping it', async () => {
@@ -76,7 +87,9 @@ describe('the Automation panel', () => {
     mount();
     await screen.findByLabelText('Concurrent runs');
     expect(screen.queryByLabelText('Default timezone')).not.toBeInTheDocument();
-    expect(screen.getByText(/timezone moved to Settings . Appearance/u)).toBeInTheDocument();
+    expect(
+      screen.getByText(/timezone moved to Settings . Appearance/u),
+    ).toBeInTheDocument();
   });
 
   it('saves one scheduler patch and nothing else', async () => {
@@ -90,7 +103,9 @@ describe('the Automation panel', () => {
     await waitFor(() => {
       expect(patchesOf(calls)).toHaveLength(1);
     });
-    const patch = patchesOf(calls)[0]?.body as { scheduler?: Record<string, unknown> };
+    const patch = patchesOf(calls)[0]?.body as {
+      scheduler?: Record<string, unknown>;
+    };
     expect(patch.scheduler).toMatchObject({ concurrency: 4 });
     // Gone from this branch entirely — it is `ui.timezone` now, and a scheduler
     // patch that still carried it would fail to parse.
@@ -109,14 +124,15 @@ describe('the Automation panel', () => {
     await waitFor(() => {
       expect(patchesOf(calls)).toHaveLength(1);
     });
-    expect((patchesOf(calls)[0]?.body as { scheduler: Record<string, unknown> }).scheduler).toEqual(
-      {
-        enabled: true,
-        catchUpOnBoot: false,
-        concurrency: 2,
-        runRetention: 200,
-      },
-    );
+    expect(
+      (patchesOf(calls)[0]?.body as { scheduler: Record<string, unknown> })
+        .scheduler,
+    ).toEqual({
+      enabled: true,
+      catchUpOnBoot: false,
+      concurrency: 2,
+      runRetention: 200,
+    });
   });
 
   it('refuses a concurrency below one before it reaches the wire', async () => {
@@ -127,7 +143,9 @@ describe('the Automation panel', () => {
     await user.type(concurrency, '0');
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Must be at least 1');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Must be at least 1',
+    );
     expect(patchesOf(calls)).toHaveLength(0);
   });
 
@@ -139,7 +157,9 @@ describe('the Automation panel', () => {
     await user.type(retention, '5');
     await user.click(screen.getByRole('button', { name: 'Revert' }));
 
-    expect(await screen.findByLabelText('Runs kept per job')).toHaveValue('200');
+    expect(await screen.findByLabelText('Runs kept per job')).toHaveValue(
+      '200',
+    );
     expect(patchesOf(calls)).toHaveLength(0);
   });
 });

@@ -37,7 +37,8 @@ async function scrollsHorizontally(page: Page): Promise<boolean> {
     // A pixel of slack: a fractional layout width rounds up, and a one-pixel
     // overflow nobody can scroll to is not the bug this is looking for.
     return (
-      root.scrollWidth > root.clientWidth + 1 || document.body.scrollWidth > root.clientWidth + 1
+      root.scrollWidth > root.clientWidth + 1 ||
+      document.body.scrollWidth > root.clientWidth + 1
     );
   });
 }
@@ -91,7 +92,11 @@ async function escapees(page: Page): Promise<readonly string[]> {
       const edge = column.getBoundingClientRect().right;
 
       const inItsOwnScroller = (element: Element): boolean => {
-        for (let at = element.parentElement; at !== null && at !== column; at = at.parentElement) {
+        for (
+          let at = element.parentElement;
+          at !== null && at !== column;
+          at = at.parentElement
+        ) {
           const overflow = getComputedStyle(at).overflowX;
           if (overflow === 'auto' || overflow === 'scroll') return true;
         }
@@ -124,23 +129,29 @@ async function escapees(page: Page): Promise<readonly string[]> {
  * `/agents/default` is here for the same reason: the index was covered and the
  * editor, which is where the tool and subagent rows live, was not.
  */
-const SCREENS: readonly { readonly path: string; readonly name: string }[] = [
-  { path: '/', name: 'chat' },
-  { path: '/agents', name: 'agents' },
-  { path: '/agents/default', name: 'agent editor' },
-  { path: '/workspaces', name: 'workspaces' },
-  { path: '/files', name: 'files' },
-  { path: '/notifications', name: 'notifications' },
-  { path: '/settings', name: 'settings' },
-  { path: '/settings?panel=providers', name: 'providers' },
-  { path: '/tokens', name: 'style guide' },
-];
+const SCREENS: ReadonlyArray<{ readonly path: string; readonly name: string }> =
+  [
+    { path: '/', name: 'chat' },
+    { path: '/agents', name: 'agents' },
+    { path: '/agents/default', name: 'agent editor' },
+    { path: '/workspaces', name: 'workspaces' },
+    { path: '/files', name: 'files' },
+    { path: '/notifications', name: 'notifications' },
+    { path: '/settings', name: 'settings' },
+    { path: '/settings?panel=providers', name: 'providers' },
+    { path: '/tokens', name: 'style guide' },
+  ];
 
 test.describe('at 200% font size', () => {
   for (const screen of SCREENS) {
-    test(`${screen.name} reflows without a horizontal scrollbar`, async ({ app, harness }) => {
+    test(`${screen.name} reflows without a horizontal scrollbar`, async ({
+      app,
+      harness,
+    }) => {
       await app.goto(`${harness.url}${screen.path}`);
-      await expect(app.getByRole('complementary', { name: 'Sidebar' })).toBeVisible();
+      await expect(
+        app.getByRole('complementary', { name: 'Sidebar' }),
+      ).toBeVisible();
       await doubleFontSize(app);
 
       expect(await scrollsHorizontally(app)).toBe(false);
@@ -158,7 +169,9 @@ test.describe('at 200% font size', () => {
     await message.fill('stream a long answer');
     await app.getByRole('button', { name: 'Send' }).click();
 
-    await expect(app.getByTestId('transcript').getByText('Here is what I found.')).toBeVisible();
+    await expect(
+      app.getByTestId('transcript').getByText('Here is what I found.'),
+    ).toBeVisible();
     expect(await scrollsHorizontally(app)).toBe(false);
   });
 });
@@ -182,9 +195,14 @@ test.describe('at 200% font size', () => {
  */
 test.describe('the shell owns the only vertical scrollbar', () => {
   for (const screen of SCREENS) {
-    test(`${screen.name} does not scroll the page itself`, async ({ app, harness }) => {
+    test(`${screen.name} does not scroll the page itself`, async ({
+      app,
+      harness,
+    }) => {
       await app.goto(`${harness.url}${screen.path}`);
-      await expect(app.getByRole('complementary', { name: 'Sidebar' })).toBeVisible();
+      await expect(
+        app.getByRole('complementary', { name: 'Sidebar' }),
+      ).toBeVisible();
 
       expect(await scrollsVertically(app)).toBe(false);
     });
@@ -213,21 +231,26 @@ test.describe('on a phone', () => {
       // narrow spec: the `app` fixture waits for the inline sidebar, which
       // below the shell's `md` breakpoint is a drawer and never appears. Boot
       // wide, then narrow.
-      await expect(app.getByRole('complementary', { name: 'Sidebar' })).toBeVisible();
+      await expect(
+        app.getByRole('complementary', { name: 'Sidebar' }),
+      ).toBeVisible();
       await app.setViewportSize(NARROW_VIEWPORT);
 
       // The durable signal that the shell has actually taken the new width:
       // the sidebar has become a drawer and the button that opens it exists.
       // Waiting on that rather than on a timeout is what keeps this from
       // measuring a layout mid-reflow.
-      await expect(app.getByRole('button', { name: 'Open menu' })).toBeVisible();
+      await expect(
+        app.getByRole('button', { name: 'Open menu' }),
+      ).toBeVisible();
 
       // Both sensors, because each misses what the other catches: the page can
       // scroll sideways, or a column can clip the overflow and hide it instead.
       expect(await scrollsHorizontally(app)).toBe(false);
-      expect(await escapees(app), 'nothing should extend past the column that clips it').toEqual(
-        [],
-      );
+      expect(
+        await escapees(app),
+        'nothing should extend past the column that clips it',
+      ).toEqual([]);
     });
   }
 
@@ -255,20 +278,26 @@ test.describe('on a phone', () => {
    * to its client width asks the only question that distinguishes the two:
    * whether the text fits the box it was given.
    */
-  test('a long endpoint wraps instead of widening the page', async ({ app, harness }) => {
+  test('a long endpoint wraps instead of widening the page', async ({
+    app,
+    harness,
+  }) => {
     await app.request.patch(`${harness.url}/api/settings`, {
       data: {
         providers: {
           ollama: {
             type: 'ollama',
-            apiBase: 'http://selfhostedinferenceboxonthelanwithalonghostname:11434/v1',
+            apiBase:
+              'http://selfhostedinferenceboxonthelanwithalonghostname:11434/v1',
           },
         },
       },
     });
 
     await app.goto(`${harness.url}/settings?panel=providers`);
-    await expect(app.getByRole('complementary', { name: 'Sidebar' })).toBeVisible();
+    await expect(
+      app.getByRole('complementary', { name: 'Sidebar' }),
+    ).toBeVisible();
     await app.setViewportSize(NARROW_VIEWPORT);
     await expect(app.getByRole('button', { name: 'Open menu' })).toBeVisible();
 
@@ -279,7 +308,9 @@ test.describe('on a phone', () => {
     await expect(endpoint).toBeVisible();
 
     // A pixel of slack, for the same reason the two sweeps above allow one.
-    const spill = await endpoint.evaluate((element) => element.scrollWidth - element.clientWidth);
+    const spill = await endpoint.evaluate(
+      (element) => element.scrollWidth - element.clientWidth,
+    );
     expect(
       spill,
       'the endpoint should wrap inside its card rather than spill out of it',
@@ -307,9 +338,14 @@ test.describe('at 1×', () => {
   });
 
   for (const screen of SCREENS) {
-    test(`${screen.name} keeps its content inside the columns`, async ({ app, harness }) => {
+    test(`${screen.name} keeps its content inside the columns`, async ({
+      app,
+      harness,
+    }) => {
       await app.goto(`${harness.url}${screen.path}`);
-      await expect(app.getByRole('complementary', { name: 'Sidebar' })).toBeVisible();
+      await expect(
+        app.getByRole('complementary', { name: 'Sidebar' }),
+      ).toBeVisible();
 
       // The bug this exists for: Radix's `ScrollArea` renders the viewport's
       // content inside a `display: table` wrapper so that content wider than
@@ -320,15 +356,19 @@ test.describe('at 1×', () => {
       // sidebar and being cut off mid-character by the aside's own `overflow`,
       // with no ellipsis and nothing in the console. `escapees` is where the
       // measurement lives, and the phone block above uses the same one.
-      expect(await escapees(app), 'nothing should extend past the column that clips it').toEqual(
-        [],
-      );
+      expect(
+        await escapees(app),
+        'nothing should extend past the column that clips it',
+      ).toEqual([]);
     });
   }
 });
 
 test.describe('keyboard', () => {
-  test('every stop on the style guide takes a visible ring', async ({ app, harness }) => {
+  test('every stop on the style guide takes a visible ring', async ({
+    app,
+    harness,
+  }) => {
     await app.goto(`${harness.url}/tokens`);
     await expect(app.getByRole('heading', { level: 1 })).toBeVisible();
 
@@ -351,7 +391,8 @@ test.describe('keyboard', () => {
         // ring would draw a `box-shadow` instead, and both count — what does
         // not count is neither.
         const ringed =
-          (style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0) ||
+          (style.outlineStyle !== 'none' &&
+            parseFloat(style.outlineWidth) > 0) ||
           style.boxShadow !== 'none';
         return { described, ringed };
       });
@@ -360,10 +401,15 @@ test.describe('keyboard', () => {
       if (!stop.ringed) unringed.push(stop.described);
     }
 
-    expect(unringed, 'every focus stop should carry a visible ring').toEqual([]);
+    expect(unringed, 'every focus stop should carry a visible ring').toEqual(
+      [],
+    );
   });
 
-  test('a dialog traps focus, closes on Escape and gives focus back', async ({ app, harness }) => {
+  test('a dialog traps focus, closes on Escape and gives focus back', async ({
+    app,
+    harness,
+  }) => {
     await app.goto(`${harness.url}/tokens`);
 
     const trigger = app.getByRole('button', { name: 'Open dialog' });
@@ -377,9 +423,13 @@ test.describe('keyboard', () => {
     for (let i = 0; i < 8; i += 1) {
       await app.keyboard.press('Tab');
       const inside = await dialog.evaluate(
-        (element) => document.activeElement !== null && element.contains(document.activeElement),
+        (element) =>
+          document.activeElement !== null &&
+          element.contains(document.activeElement),
       );
-      expect(inside, `focus left the dialog after ${String(i + 1)} tabs`).toBe(true);
+      expect(inside, `focus left the dialog after ${String(i + 1)} tabs`).toBe(
+        true,
+      );
     }
 
     await app.keyboard.press('Escape');
@@ -388,7 +438,9 @@ test.describe('keyboard', () => {
     await expect(trigger).toBeFocused();
   });
 
-  test('the notification bell states its count and returns focus', async ({ app }) => {
+  test('the notification bell states its count and returns focus', async ({
+    app,
+  }) => {
     // The count is drawn as a dot, so the button's name is the only place a
     // screen reader can learn there is anything to look at.
     const bell = app.getByRole('button', { name: /^Notifications/u });
@@ -402,16 +454,24 @@ test.describe('keyboard', () => {
   });
 
   test('every message action is reachable and named', async ({ app }) => {
-    await app.getByRole('textbox', { name: 'Message' }).fill('stream a long answer');
+    await app
+      .getByRole('textbox', { name: 'Message' })
+      .fill('stream a long answer');
     await app.getByRole('button', { name: 'Send' }).click();
-    await expect(app.getByTestId('transcript').getByText('Here is what I found.')).toBeVisible({
+    await expect(
+      app.getByTestId('transcript').getByText('Here is what I found.'),
+    ).toBeVisible({
       timeout: 15_000,
     });
 
     // Revealed with `opacity` and `:focus-within` rather than `display: none`,
     // so they keep their place in the tab order — which is the whole reason a
     // keyboard user can reach them at all.
-    for (const name of ['Copy message', 'Regenerate the answer', 'Turn details']) {
+    for (const name of [
+      'Copy message',
+      'Regenerate the answer',
+      'Turn details',
+    ]) {
       const action = app.getByRole('button', { name }).first();
       await expect(action).toBeVisible();
       await action.focus();
@@ -422,9 +482,14 @@ test.describe('keyboard', () => {
 
 test.describe('no theme is second-class', () => {
   for (const screen of SCREENS) {
-    test(`${screen.name} renders no invisible text`, async ({ app, harness }) => {
+    test(`${screen.name} renders no invisible text`, async ({
+      app,
+      harness,
+    }) => {
       await app.goto(`${harness.url}${screen.path}`);
-      await expect(app.getByRole('complementary', { name: 'Sidebar' })).toBeVisible();
+      await expect(
+        app.getByRole('complementary', { name: 'Sidebar' }),
+      ).toBeVisible();
 
       // The unit suite proves every *token pairing* meets AA in both themes,
       // by reading `tokens.css`. What it cannot see is a component that paired
@@ -452,21 +517,30 @@ test.describe('no theme is second-class', () => {
           ctx.clearRect(0, 0, 1, 1);
           ctx.fillStyle = color;
           ctx.fillRect(0, 0, 1, 1);
-          const [r = 0, g = 0, b = 0, a = 0] = ctx.getImageData(0, 0, 1, 1).data;
+          const [r = 0, g = 0, b = 0, a = 0] = ctx.getImageData(
+            0,
+            0,
+            1,
+            1,
+          ).data;
           return [r, g, b, a / 255];
         };
 
         const channel = (value: number): number => {
           const srgb = value / 255;
-          return srgb <= 0.03928 ? srgb / 12.92 : Math.pow((srgb + 0.055) / 1.055, 2.4);
+          return srgb <= 0.03928
+            ? srgb / 12.92
+            : Math.pow((srgb + 0.055) / 1.055, 2.4);
         };
         const luminance = ([r, g, b]: [number, number, number]): number =>
           0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
-        const ratio = (a: [number, number, number], b: [number, number, number]): number => {
-          const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [
-            number,
-            number,
-          ];
+        const ratio = (
+          a: [number, number, number],
+          b: [number, number, number],
+        ): number => {
+          const [light, dark] = [luminance(a), luminance(b)].sort(
+            (x, y) => y - x,
+          ) as [number, number];
           return (light + 0.05) / (dark + 0.05);
         };
         /** Composites a partly transparent colour over what is behind it. */
@@ -480,10 +554,14 @@ test.describe('no theme is second-class', () => {
         ];
 
         const found: string[] = [];
-        const page = toRgb(getComputedStyle(document.documentElement).backgroundColor);
+        const page = toRgb(
+          getComputedStyle(document.documentElement).backgroundColor,
+        );
         const pageRgb: [number, number, number] = [page[0], page[1], page[2]];
 
-        for (const element of document.querySelectorAll<HTMLElement>('body *')) {
+        for (const element of document.querySelectorAll<HTMLElement>(
+          'body *',
+        )) {
           // Only elements holding text of their own, or every ancestor reports
           // its descendants' words as its own.
           const own = [...element.childNodes]
@@ -492,41 +570,58 @@ test.describe('no theme is second-class', () => {
             .join('')
             .trim();
           if (own === '') continue;
-          if (element.closest('[hidden], [aria-hidden="true"]') !== null) continue;
+          if (element.closest('[hidden], [aria-hidden="true"]') !== null) {
+            continue;
+          }
 
           const style = getComputedStyle(element);
-          if (style.visibility === 'hidden' || style.display === 'none') continue;
+          if (style.visibility === 'hidden' || style.display === 'none') {
+            continue;
+          }
           if (element.getClientRects().length === 0) continue;
 
           // Every ancestor's opacity multiplies, and a faded-out overlay is not
           // a contrast bug.
           let opacity = 1;
-          for (let node: HTMLElement | null = element; node !== null; node = node.parentElement) {
+          for (
+            let node: HTMLElement | null = element;
+            node !== null;
+            node = node.parentElement
+          ) {
             opacity *= parseFloat(getComputedStyle(node).opacity);
           }
           if (opacity < 0.95) continue;
 
           // Composite every backdrop from the page up, so a translucent hover
           // overlay counts as part of what is behind the text.
-          const layers: [number, number, number, number][] = [];
-          for (let node: HTMLElement | null = element; node !== null; node = node.parentElement) {
+          const layers: Array<[number, number, number, number]> = [];
+          for (
+            let node: HTMLElement | null = element;
+            node !== null;
+            node = node.parentElement
+          ) {
             const fill = toRgb(getComputedStyle(node).backgroundColor);
             if (fill[3] > 0) layers.push(fill);
           }
           let background = pageRgb;
-          for (const layer of layers.reverse()) background = over(layer, background);
+          for (const layer of layers.reverse()) {
+            background = over(layer, background);
+          }
 
           const text = over(toRgb(style.color), background);
           if (ratio(text, background) < 3) {
-            found.push(`${element.tagName.toLowerCase()}: "${own.slice(0, 40)}"`);
+            found.push(
+              `${element.tagName.toLowerCase()}: "${own.slice(0, 40)}"`,
+            );
           }
         }
         return found;
       });
 
-      expect(collisions, 'every painted string should clear 3:1 against what is behind it').toEqual(
-        [],
-      );
+      expect(
+        collisions,
+        'every painted string should clear 3:1 against what is behind it',
+      ).toEqual([]);
     });
   }
 });

@@ -54,7 +54,14 @@
  */
 
 import { lstatSync, realpathSync } from 'node:fs';
-import { basename, dirname, join, relative as pathRelative, resolve, sep } from 'node:path';
+import {
+  basename,
+  dirname,
+  join,
+  relative as pathRelative,
+  resolve,
+  sep,
+} from 'node:path';
 
 import { GhostError, ensureDir } from '@ghostai/core';
 
@@ -109,7 +116,12 @@ export interface JailAccept {
 }
 
 export type JailCheck =
-  JailAccept | { readonly ok: false; readonly rejection: JailRejection; readonly message: string };
+  | JailAccept
+  | {
+      readonly ok: false;
+      readonly rejection: JailRejection;
+      readonly message: string;
+    };
 
 export interface WorkspaceJailOptions {
   readonly root: string;
@@ -167,7 +179,9 @@ function normalise(inputPath: string): Normalised {
   };
 
   if (inputPath.startsWith('\\\\') || inputPath.startsWith('//')) note('unc');
-  else if (inputPath.startsWith('/') || inputPath.startsWith('\\')) note('absolute');
+  else if (inputPath.startsWith('/') || inputPath.startsWith('\\')) {
+    note('absolute');
+  }
 
   /** Drops `.` and empty segments; `..` pops, and popping empty is the clamp. */
   const fold = (parts: readonly string[]): string[] => {
@@ -231,8 +245,11 @@ export function pathShapes(inputPath: string): readonly PathShape[] {
   const raw = inputPath.split(SEPARATORS);
 
   if (raw[0]?.startsWith('~') === true) shapes.push('home_prefix');
-  if (inputPath.startsWith('\\\\') || inputPath.startsWith('//')) shapes.push('unc');
-  else if (inputPath.startsWith('/') || inputPath.startsWith('\\')) shapes.push('absolute');
+  if (inputPath.startsWith('\\\\') || inputPath.startsWith('//')) {
+    shapes.push('unc');
+  } else if (inputPath.startsWith('/') || inputPath.startsWith('\\')) {
+    shapes.push('absolute');
+  }
   if (DRIVE_LETTER.test(inputPath)) shapes.push('drive');
   if (raw.includes('..')) shapes.push('traversal');
 
@@ -283,7 +300,13 @@ function realpathBoundary(target: string, floor: string): string {
       return tail.length === 0 ? real : resolve(real, ...tail);
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
-      if (code === undefined || !NON_EXISTENT_CODES.has(code) || current === floor) throw error;
+      if (
+        code === undefined ||
+        !NON_EXISTENT_CODES.has(code) ||
+        current === floor
+      ) {
+        throw error;
+      }
       if (entryExists(current)) throw error;
       tail.unshift(basename(current));
       current = dirname(current);
@@ -304,13 +327,18 @@ export class WorkspaceJail {
       if (options.create ?? true) ensureDir(requested);
       real = realpathSync(requested);
     } catch (error) {
-      throw new GhostError('config', `Workspace root is unusable: ${requested}`, {
-        cause: error,
-        details: { root: requested },
-      });
+      throw new GhostError(
+        'config',
+        `Workspace root is unusable: ${requested}`,
+        {
+          cause: error,
+          details: { root: requested },
+        },
+      );
     }
     this.root = real;
-    this.caseInsensitive = options.caseInsensitive ?? process.platform === 'win32';
+    this.caseInsensitive =
+      options.caseInsensitive ?? process.platform === 'win32';
   }
 
   /**
@@ -344,7 +372,10 @@ export class WorkspaceJail {
       // The only way to arrive here after a lexical normalisation that cannot
       // produce an escaping string is a symlink inside the workspace pointing
       // out of it.
-      return reject('outside_root', `Path resolves outside the workspace: ${inputPath}`);
+      return reject(
+        'outside_root',
+        `Path resolves outside the workspace: ${inputPath}`,
+      );
     }
     return { ok: true, path: real, relative: relativePath, rewrites };
   }
@@ -389,9 +420,16 @@ export class WorkspaceJail {
   relative(absolutePath: string): string {
     const resolved = resolve(absolutePath);
     if (!this.contains(resolved)) {
-      throw new GhostError('jail_escape', `Path is outside the workspace: ${absolutePath}`, {
-        details: { path: absolutePath, rejection: 'outside_root' satisfies JailRejection },
-      });
+      throw new GhostError(
+        'jail_escape',
+        `Path is outside the workspace: ${absolutePath}`,
+        {
+          details: {
+            path: absolutePath,
+            rejection: 'outside_root' satisfies JailRejection,
+          },
+        },
+      );
     }
     return pathRelative(this.root, resolved);
   }
@@ -426,7 +464,9 @@ export class WorkspaceJail {
     const root = this.fold(this.root.replaceAll('\\', '/'));
 
     if (candidate === root) return '/';
-    if (candidate.startsWith(`${root}/`)) return inputPath.slice(this.root.length);
+    if (candidate.startsWith(`${root}/`)) {
+      return inputPath.slice(this.root.length);
+    }
     return inputPath;
   }
 

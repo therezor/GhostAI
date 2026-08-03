@@ -1,4 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -28,29 +34,43 @@ afterEach(() => {
 });
 
 /** Runs a tool and returns the error it threw, typed. */
-async function failure(tool: AnyTool, args: unknown, ctx = context): Promise<GhostError> {
+async function failure(
+  tool: AnyTool,
+  args: unknown,
+  ctx = context,
+): Promise<GhostError> {
   const error = await tool.run(args, ctx).then(
     () => null,
     (value: unknown) => value,
   );
-  if (!isGhostError(error)) throw new Error(`expected a GhostError, got ${String(error)}`);
+  if (!isGhostError(error)) {
+    throw new Error(`expected a GhostError, got ${String(error)}`);
+  }
   return error;
 }
 
-async function text(tool: AnyTool, args: unknown, ctx = context): Promise<string> {
+async function text(
+  tool: AnyTool,
+  args: unknown,
+  ctx = context,
+): Promise<string> {
   return toToolResult(await tool.run(args, ctx)).content;
 }
 
 describe('read_file', () => {
   it('reads a workspace file', async () => {
     writeFileSync(join(root, 'notes.md'), 'hello\nworld\n');
-    await expect(text(readFileTool, { path: 'notes.md' })).resolves.toBe('hello\nworld\n');
+    await expect(text(readFileTool, { path: 'notes.md' })).resolves.toBe(
+      'hello\nworld\n',
+    );
   });
 
   it('reads a file in a subdirectory', async () => {
     mkdirSync(join(root, 'src'));
     writeFileSync(join(root, 'src', 'index.ts'), 'export {};');
-    await expect(text(readFileTool, { path: 'src/index.ts' })).resolves.toBe('export {};');
+    await expect(text(readFileTool, { path: 'src/index.ts' })).resolves.toBe(
+      'export {};',
+    );
   });
 
   it('reports a missing file as not_found against the relative path', async () => {
@@ -70,7 +90,10 @@ describe('read_file', () => {
   });
 
   it('refuses to dump a binary file into the context', async () => {
-    writeFileSync(join(root, 'logo.png'), Buffer.from([0x89, 0x50, 0x00, 0x01, 0x02]));
+    writeFileSync(
+      join(root, 'logo.png'),
+      Buffer.from([0x89, 0x50, 0x00, 0x01, 0x02]),
+    );
     const error = await failure(readFileTool, { path: 'logo.png' });
     expect(error.kind).toBe('invalid_input');
     expect(error.message).toContain('binary');
@@ -78,7 +101,9 @@ describe('read_file', () => {
 
   it('says so rather than returning nothing for an empty file', async () => {
     writeFileSync(join(root, 'empty.txt'), '');
-    await expect(text(readFileTool, { path: 'empty.txt' })).resolves.toContain('is empty');
+    await expect(text(readFileTool, { path: 'empty.txt' })).resolves.toContain(
+      'is empty',
+    );
   });
 
   it('bounds the read by the output budget rather than the file size', async () => {
@@ -93,38 +118,46 @@ describe('read_file', () => {
   });
 
   it('returns a line window', async () => {
-    writeFileSync(join(root, 'lines.txt'), ['one', 'two', 'three', 'four'].join('\n'));
-    await expect(text(readFileTool, { path: 'lines.txt', offset: 2, limit: 2 })).resolves.toBe(
-      'two\nthree',
+    writeFileSync(
+      join(root, 'lines.txt'),
+      ['one', 'two', 'three', 'four'].join('\n'),
     );
+    await expect(
+      text(readFileTool, { path: 'lines.txt', offset: 2, limit: 2 }),
+    ).resolves.toBe('two\nthree');
   });
 
   it('reads to the end when only an offset is given', async () => {
     writeFileSync(join(root, 'lines.txt'), ['one', 'two', 'three'].join('\n'));
-    await expect(text(readFileTool, { path: 'lines.txt', offset: 3 })).resolves.toBe('three');
+    await expect(
+      text(readFileTool, { path: 'lines.txt', offset: 3 }),
+    ).resolves.toBe('three');
   });
 
   it('reports an offset past the end instead of returning nothing', async () => {
     writeFileSync(join(root, 'lines.txt'), 'one\ntwo');
-    await expect(text(readFileTool, { path: 'lines.txt', offset: 99 })).resolves.toContain(
-      'past the end',
-    );
+    await expect(
+      text(readFileTool, { path: 'lines.txt', offset: 99 }),
+    ).resolves.toContain('past the end');
   });
 
   it.each([
     ['a traversal', '../secret', 'secret'],
     ['an absolute path', '/etc/passwd', 'etc/passwd'],
     ['a home prefix', '~/.ssh/id_rsa', '.ssh/id_rsa'],
-  ])('clamps %s into the workspace and says where it looked', async (_name, path, landed) => {
-    // The workspace is a chroot, so none of these is a refusal — each names a
-    // file inside the workspace that happens not to exist. What matters is that
-    // the model is told so: an unexplained ENOENT on `/etc/passwd` reads as
-    // "the host has no passwd file", which is a lie in the other direction.
-    const error = await failure(readFileTool, { path });
-    expect(error.kind).toBe('not_found');
-    expect(error.message).toContain(landed);
-    expect(error.message).toContain('The workspace is the root');
-  });
+  ])(
+    'clamps %s into the workspace and says where it looked',
+    async (name, path, landed) => {
+      // The workspace is a chroot, so none of these is a refusal — each names a
+      // file inside the workspace that happens not to exist. What matters is that
+      // the model is told so: an unexplained ENOENT on `/etc/passwd` reads as
+      // "the host has no passwd file", which is a lie in the other direction.
+      const error = await failure(readFileTool, { path });
+      expect(error.kind).toBe('not_found');
+      expect(error.message).toContain(landed);
+      expect(error.message).toContain('The workspace is the root');
+    },
+  );
 
   it('says where it read from when a clamped path does exist', async () => {
     writeFileSync(join(root, 'passwd'), 'not the real one');
@@ -139,13 +172,18 @@ describe('read_file', () => {
     const outside = join(root, '..', 'outside.txt');
     writeFileSync(outside, 'stolen');
     symlinkSync(outside, join(root, 'link.txt'));
-    expect((await failure(readFileTool, { path: 'link.txt' })).kind).toBe('jail_escape');
+    expect((await failure(readFileTool, { path: 'link.txt' })).kind).toBe(
+      'jail_escape',
+    );
   });
 });
 
 describe('write_file', () => {
   it('writes a file and reports its size', async () => {
-    const result = await text(writeFileTool, { path: 'out.txt', content: 'hello' });
+    const result = await text(writeFileTool, {
+      path: 'out.txt',
+      content: 'hello',
+    });
     expect(readFileSync(join(root, 'out.txt'), 'utf8')).toBe('hello');
     expect(result).toBe('Wrote 5 B to out.txt.');
   });
@@ -163,9 +201,9 @@ describe('write_file', () => {
 
   it('reports writing over a directory as invalid input', async () => {
     mkdirSync(join(root, 'src'));
-    expect((await failure(writeFileTool, { path: 'src', content: 'x' })).kind).toBe(
-      'invalid_input',
-    );
+    expect(
+      (await failure(writeFileTool, { path: 'src', content: 'x' })).kind,
+    ).toBe('invalid_input');
   });
 
   it('clamps a write that tried to escape, and lands it inside the workspace', async () => {
@@ -175,7 +213,9 @@ describe('write_file', () => {
 
     expect(readFileSync(join(root, 'escape.txt'), 'utf8')).toBe('x');
     expect(existsSync(join(root, '..', 'escape.txt'))).toBe(false);
-    expect(result.content).toContain('"../escape.txt" was resolved to "escape.txt"');
+    expect(result.content).toContain(
+      '"../escape.txt" was resolved to "escape.txt"',
+    );
   });
 
   it('still refuses a symlink that leads out of the workspace', async () => {
@@ -184,9 +224,9 @@ describe('write_file', () => {
     const outside = join(root, '..', 'target.txt');
     writeFileSync(outside, 'stolen');
     symlinkSync(outside, join(root, 'link.txt'));
-    expect((await failure(writeFileTool, { path: 'link.txt', content: 'x' })).kind).toBe(
-      'jail_escape',
-    );
+    expect(
+      (await failure(writeFileTool, { path: 'link.txt', content: 'x' })).kind,
+    ).toBe('jail_escape');
     expect(readFileSync(outside, 'utf8')).toBe('stolen');
   });
 
@@ -197,9 +237,9 @@ describe('write_file', () => {
     const outside = join(root, '..', 'planted.txt');
     symlinkSync(outside, join(root, 'decoy.txt'));
 
-    expect((await failure(writeFileTool, { path: 'decoy.txt', content: 'x' })).kind).toBe(
-      'jail_escape',
-    );
+    expect(
+      (await failure(writeFileTool, { path: 'decoy.txt', content: 'x' })).kind,
+    ).toBe('jail_escape');
     expect(existsSync(outside)).toBe(false);
   });
 
@@ -222,7 +262,9 @@ describe('edit_file', () => {
       oldText: 'const b = 2;',
       newText: 'const b = 3;',
     });
-    expect(readFileSync(join(root, 'code.ts'), 'utf8')).toBe('const a = 1;\nconst b = 3;\n');
+    expect(readFileSync(join(root, 'code.ts'), 'utf8')).toBe(
+      'const a = 1;\nconst b = 3;\n',
+    );
     expect(result).toContain('Replaced 1 occurrence in code.ts');
   });
 
@@ -274,26 +316,47 @@ describe('edit_file', () => {
   });
 
   it('refuses a no-op edit', async () => {
-    const error = await failure(editFileTool, { path: 'code.ts', oldText: 'a', newText: 'a' });
+    const error = await failure(editFileTool, {
+      path: 'code.ts',
+      oldText: 'a',
+      newText: 'a',
+    });
     expect(error.kind).toBe('invalid_input');
   });
 
   it('reports a missing file', async () => {
     expect(
-      (await failure(editFileTool, { path: 'gone.ts', oldText: 'a', newText: 'b' })).kind,
+      (
+        await failure(editFileTool, {
+          path: 'gone.ts',
+          oldText: 'a',
+          newText: 'b',
+        })
+      ).kind,
     ).toBe('not_found');
   });
 
   it('writes $ patterns literally', async () => {
     // `String.replace` with a replacement *string* reads `$&` as "the match".
     writeFileSync(join(root, 'code.ts'), 'PRICE');
-    await text(editFileTool, { path: 'code.ts', oldText: 'PRICE', newText: '$& $1 $` costs $5' });
-    expect(readFileSync(join(root, 'code.ts'), 'utf8')).toBe('$& $1 $` costs $5');
+    await text(editFileTool, {
+      path: 'code.ts',
+      oldText: 'PRICE',
+      newText: '$& $1 $` costs $5',
+    });
+    expect(readFileSync(join(root, 'code.ts'), 'utf8')).toBe(
+      '$& $1 $` costs $5',
+    );
   });
 
   it('writes $ patterns literally with replaceAll too', async () => {
     writeFileSync(join(root, 'code.ts'), 'A A');
-    await text(editFileTool, { path: 'code.ts', oldText: 'A', newText: '$&', replaceAll: true });
+    await text(editFileTool, {
+      path: 'code.ts',
+      oldText: 'A',
+      newText: '$&',
+      replaceAll: true,
+    });
     expect(readFileSync(join(root, 'code.ts'), 'utf8')).toBe('$& $&');
   });
 
@@ -348,11 +411,15 @@ describe('list_dir', () => {
 
   it('says a directory is empty', async () => {
     mkdirSync(join(root, 'empty'));
-    await expect(text(listDirTool, { path: 'empty' })).resolves.toContain('is empty');
+    await expect(text(listDirTool, { path: 'empty' })).resolves.toContain(
+      'is empty',
+    );
   });
 
   it('reports a missing directory', async () => {
-    expect((await failure(listDirTool, { path: 'nope' })).kind).toBe('not_found');
+    expect((await failure(listDirTool, { path: 'nope' })).kind).toBe(
+      'not_found',
+    );
   });
 
   it('clamps a listing that tried to escape back to the workspace root', async () => {

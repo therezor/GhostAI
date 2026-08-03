@@ -157,7 +157,10 @@ export type SchedulerChat = (input: {
 }) => Promise<ChatResult>;
 
 /** Reads one workspace-relative file, or throws. Absent means no heartbeat. */
-export type SchedulerReadFile = (path: string, maxBytes: number) => Promise<string>;
+export type SchedulerReadFile = (
+  path: string,
+  maxBytes: number,
+) => Promise<string>;
 
 export interface SchedulerOptions {
   readonly jobs: AutomationStore;
@@ -195,7 +198,11 @@ export interface SchedulerPort {
  * cron expression like `0 0 30 2 *` that is legal to write and impossible to
  * reach. All three are the same to the timer.
  */
-export function nextRunAfter(schedule: AutomationSchedule, fromMs: number, tz = 'UTC'): number {
+export function nextRunAfter(
+  schedule: AutomationSchedule,
+  fromMs: number,
+  tz = 'UTC',
+): number {
   switch (schedule.kind) {
     case 'at':
       return schedule.atMs > fromMs ? schedule.atMs : 0;
@@ -252,50 +259,54 @@ interface TurnOutcome {
  * change for twenty lines.
  */
 class TurnCollector {
-  #turnId: string | undefined;
-  #text = '';
-  #error: string | undefined;
-  readonly #warnings: string[] = [];
-  #settle: ((outcome: TurnOutcome) => void) | undefined;
-  #done = false;
+  private turnId: string | undefined;
+  private text = '';
+  private error: string | undefined;
+  private readonly warnings: string[] = [];
+  private settle: ((outcome: TurnOutcome) => void) | undefined;
+  private done = false;
 
   readonly promise: Promise<TurnOutcome>;
 
   constructor() {
     this.promise = new Promise<TurnOutcome>((resolve) => {
-      this.#settle = resolve;
+      this.settle = resolve;
     });
   }
 
   receive(message: ServerMessage): void {
-    if (this.#done) return;
+    if (this.done) return;
     switch (message.type) {
       case 'turn.start':
-        this.#turnId ??= message.turnId;
+        this.turnId ??= message.turnId;
         return;
       case 'assistant.delta':
-        this.#text += message.text;
+        this.text += message.text;
         return;
       case 'notice':
-        this.#warnings.push(message.message);
+        this.warnings.push(message.message);
         return;
       case 'error':
         // A hub-level refusal — no model configured, the session is busy. It
         // arrives unsequenced and no `turn.end` follows it, so this is the only
         // place the run learns it will never start.
-        this.#error = message.message;
+        this.error = message.message;
         this.finish();
         return;
       case 'turn.end':
-        if (this.#turnId !== undefined && message.turnId !== this.#turnId) return;
+        if (this.turnId !== undefined && message.turnId !== this.turnId) {
+          return;
+        }
         // `max_iterations` is a warning rather than a failure: the turn did work
         // and produced an answer, it just ran out of tool budget saying so.
         // Recording it as an error would notify the operator that a job broke
         // when what actually happened is that it was busy.
         if (message.stopReason === 'max_iterations') {
-          this.#warnings.push('The turn hit its tool-iteration cap; the answer may be incomplete.');
+          this.warnings.push(
+            'The turn hit its tool-iteration cap; the answer may be incomplete.',
+          );
         } else if (message.stopReason !== 'complete') {
-          this.#error = `The turn ended early (${message.stopReason}).`;
+          this.error = `The turn ended early (${message.stopReason}).`;
         }
         this.finish();
         return;
@@ -338,10 +349,14 @@ class TurnCollector {
 
   /** Settles with whatever has arrived. Idempotent. */
   finish(error?: string): void {
-    if (this.#done) return;
-    this.#done = true;
-    if (error !== undefined) this.#error = error;
-    this.#settle?.({ text: this.#text.trim(), error: this.#error, warnings: [...this.#warnings] });
+    if (this.done) return;
+    this.done = true;
+    if (error !== undefined) this.error = error;
+    this.settle?.({
+      text: this.text.trim(),
+      error: this.error,
+      warnings: [...this.warnings],
+    });
   }
 }
 
@@ -350,22 +365,24 @@ class TurnCollector {
 // ---------------------------------------------------------------------------
 
 export class Scheduler implements SchedulerPort {
-  readonly #jobs: AutomationStore;
-  readonly #config: () => Config;
-  readonly #connect: (options: SchedulerConnectOptions) => SchedulerConnection;
-  readonly #broadcast: (event: NotificationBroadcast) => void;
-  readonly #raise: (input: CreateNotificationInput) => Notification;
-  readonly #deleteSession: ((sessionKey: string) => void) | undefined;
-  readonly #chat: SchedulerChat | undefined;
-  readonly #readFile: SchedulerReadFile | undefined;
-  readonly #clock: Clock;
-  readonly #logger: Logger;
-  readonly #newId: () => string;
-  readonly #runTimeoutMs: number;
+  private readonly jobs: AutomationStore;
+  private readonly config: () => Config;
+  private readonly connect: (
+    options: SchedulerConnectOptions,
+  ) => SchedulerConnection;
+  private readonly broadcast: (event: NotificationBroadcast) => void;
+  private readonly raise: (input: CreateNotificationInput) => Notification;
+  private readonly deleteSession: ((sessionKey: string) => void) | undefined;
+  private readonly chat: SchedulerChat | undefined;
+  private readonly readFile: SchedulerReadFile | undefined;
+  private readonly clock: Clock;
+  private readonly logger: Logger;
+  private readonly newId: () => string;
+  private readonly runTimeoutMs: number;
 
-  #timer: TimerHandle | undefined;
-  #started = false;
-  #stopping = false;
+  private timer: TimerHandle | undefined;
+  private started = false;
+  private stopping = false;
   /**
    * The zone the stored `next_run_at_ms` values were computed against.
    *
@@ -373,29 +390,29 @@ export class Scheduler implements SchedulerPort {
    * a boot a no-op rather than a full rescan of jobs whose next run the boot
    * sweep just settled.
    */
-  #zonedAt: string | undefined;
+  private zonedAt: string | undefined;
   /** Job ids with a run in flight. What stops a job overlapping itself. */
-  readonly #inFlight = new Map<string, AbortController>();
+  private readonly inFlight = new Map<string, AbortController>();
   /** Every in-flight run's promise, so `stop()` can await the tail. */
-  readonly #settling = new Set<Promise<void>>();
+  private readonly settling = new Set<Promise<void>>();
 
   constructor(options: SchedulerOptions) {
-    this.#jobs = options.jobs;
-    this.#config = options.config;
-    this.#connect = options.connect;
-    this.#broadcast = options.broadcast;
-    this.#raise = options.raise;
-    this.#deleteSession = options.deleteSession;
-    this.#chat = options.chat;
-    this.#readFile = options.readFile;
-    this.#clock = options.clock ?? systemClock;
-    this.#logger = options.logger ?? silentLogger;
-    this.#newId = options.newId ?? newUuid;
-    this.#runTimeoutMs = options.runTimeoutMs ?? DEFAULT_RUN_TIMEOUT_MS;
+    this.jobs = options.jobs;
+    this.config = options.config;
+    this.connect = options.connect;
+    this.broadcast = options.broadcast;
+    this.raise = options.raise;
+    this.deleteSession = options.deleteSession;
+    this.chat = options.chat;
+    this.readFile = options.readFile;
+    this.clock = options.clock ?? systemClock;
+    this.logger = options.logger ?? silentLogger;
+    this.newId = options.newId ?? newUuid;
+    this.runTimeoutMs = options.runTimeoutMs ?? DEFAULT_RUN_TIMEOUT_MS;
   }
 
   get enabled(): boolean {
-    return this.#config().scheduler.enabled;
+    return this.config().scheduler.enabled;
   }
 
   /**
@@ -407,8 +424,8 @@ export class Scheduler implements SchedulerPort {
    * `scheduler.refresh()`, so an existing cron job is rescheduled on the save
    * rather than on the next fire.
    */
-  #timezone(): string {
-    return this.#config().ui.timezone;
+  private timezone(): string {
+    return this.config().ui.timezone;
   }
 
   /**
@@ -419,25 +436,28 @@ export class Scheduler implements SchedulerPort {
    * switching it on.
    */
   start(): void {
-    if (this.#started) return;
-    this.#started = true;
+    if (this.started) return;
+    this.started = true;
     // The zone the stored next-runs are already valid against, so the first
     // `refresh()` after boot has nothing to recompute. `#catchUp` below settles
     // them against this same value.
-    this.#zonedAt = this.#timezone();
+    this.zonedAt = this.timezone();
 
-    const closed = this.#jobs.reconcilePending(INTERRUPTED_BY_RESTART);
+    const closed = this.jobs.reconcilePending(INTERRUPTED_BY_RESTART);
     if (closed > 0) {
-      this.#logger.warn({ runs: closed }, 'closed out automation runs left by a previous process');
+      this.logger.warn(
+        { runs: closed },
+        'closed out automation runs left by a previous process',
+      );
     }
 
     if (!this.enabled) {
-      this.#logger.info('scheduler is disabled in settings; no jobs will run');
+      this.logger.info('scheduler is disabled in settings; no jobs will run');
       return;
     }
 
-    this.#catchUp();
-    this.#arm();
+    this.catchUp();
+    this.arm();
   }
 
   /**
@@ -448,23 +468,23 @@ export class Scheduler implements SchedulerPort {
    * a store whose connection is about to go.
    */
   async stop(): Promise<void> {
-    this.#stopping = true;
-    this.#clearTimer();
-    for (const controller of this.#inFlight.values()) controller.abort();
-    await Promise.allSettled([...this.#settling]);
-    this.#started = false;
-    this.#stopping = false;
+    this.stopping = true;
+    this.clearTimer();
+    for (const controller of this.inFlight.values()) controller.abort();
+    await Promise.allSettled([...this.settling]);
+    this.started = false;
+    this.stopping = false;
   }
 
   /** Re-reads what is due. Called after any create, update, delete or save. */
   refresh(): void {
-    if (!this.#started) return;
-    this.#rezone();
+    if (!this.started) return;
+    this.rezone();
     if (!this.enabled) {
-      this.#clearTimer();
+      this.clearTimer();
       return;
     }
-    this.#arm();
+    this.arm();
   }
 
   /**
@@ -485,22 +505,22 @@ export class Scheduler implements SchedulerPort {
    * called after every create, update and delete, and a rescan of every job on
    * each of those is work with no answer to give.
    */
-  #rezone(): void {
-    const tz = this.#timezone();
-    if (this.#zonedAt === tz) return;
-    this.#zonedAt = tz;
+  private rezone(): void {
+    const tz = this.timezone();
+    if (this.zonedAt === tz) return;
+    this.zonedAt = tz;
 
-    const now = this.#clock.now();
+    const now = this.clock.now();
     let moved = 0;
-    for (const job of this.#jobs.listJobs()) {
+    for (const job of this.jobs.listJobs()) {
       if (job.schedule.kind !== 'cron' || !job.enabled) continue;
       const next = nextRunAfter(job.schedule, now, tz);
       if (next === job.state.nextRunAtMs) continue;
-      this.#jobs.setNextRun(job.id, next);
+      this.jobs.setNextRun(job.id, next);
       moved += 1;
     }
     if (moved > 0) {
-      this.#logger.info(
+      this.logger.info(
         `Timezone is now ${tz}; rescheduled ${String(moved)} cron job(s) against it.`,
       );
     }
@@ -514,24 +534,27 @@ export class Scheduler implements SchedulerPort {
    * holding a request open for the length of an agent run.
    */
   runNow(jobId: string): AutomationRun {
-    const job = this.#jobs.getJob(jobId);
+    const job = this.jobs.getJob(jobId);
     if (job === undefined) {
-      throw new GhostError('not_found', `No automation job with id "${jobId}".`);
+      throw new GhostError(
+        'not_found',
+        `No automation job with id "${jobId}".`,
+      );
     }
-    if (this.#inFlight.has(jobId)) {
+    if (this.inFlight.has(jobId)) {
       throw new GhostError('conflict', `"${job.name}" is already running.`);
     }
-    return this.#dispatch(job, { rearmAfter: true });
+    return this.dispatch(job, { rearmAfter: true });
   }
 
   // -------------------------------------------------------------------------
   // The timer
   // -------------------------------------------------------------------------
 
-  #clearTimer(): void {
-    if (this.#timer === undefined) return;
-    this.#clock.clearTimeout(this.#timer);
-    this.#timer = undefined;
+  private clearTimer(): void {
+    if (this.timer === undefined) return;
+    this.clock.clearTimeout(this.timer);
+    this.timer = undefined;
   }
 
   /**
@@ -541,19 +564,22 @@ export class Scheduler implements SchedulerPort {
    * could not start — see `BUSY_RETRY_MS`. Without it the delay to work that is
    * already due is zero, and a saturated scheduler re-arms at zero forever.
    */
-  #arm(floorMs = 0): void {
-    this.#clearTimer();
-    if (this.#stopping || !this.enabled) return;
+  private arm(floorMs = 0): void {
+    this.clearTimer();
+    if (this.stopping || !this.enabled) return;
 
-    const at = this.#jobs.earliestDueMs();
+    const at = this.jobs.earliestDueMs();
     // No timer at all when nothing is scheduled. An idle install should not be
     // waking up to discover that repeatedly.
     if (at === undefined) return;
 
-    const delay = Math.min(Math.max(at - this.#clock.now(), floorMs), MAX_ARM_MS);
-    this.#timer = this.#clock.setTimeout(() => {
-      this.#timer = undefined;
-      this.#drain();
+    const delay = Math.min(
+      Math.max(at - this.clock.now(), floorMs),
+      MAX_ARM_MS,
+    );
+    this.timer = this.clock.setTimeout(() => {
+      this.timer = undefined;
+      this.drain();
     }, delay);
   }
 
@@ -563,30 +589,30 @@ export class Scheduler implements SchedulerPort {
    * `concurrency` is read live on every drain, so raising it in Settings takes
    * effect on the next wake rather than the next restart.
    */
-  #drain(): void {
-    if (this.#stopping || !this.enabled) return;
+  private drain(): void {
+    if (this.stopping || !this.enabled) return;
 
     // True when something was due and could not be started — every slot taken,
     // or the only due job is one already running. Both leave the row due, so
     // the next arm would compute a zero delay and spin.
     let blocked = false;
 
-    const limit = this.#config().scheduler.concurrency - this.#inFlight.size;
+    const limit = this.config().scheduler.concurrency - this.inFlight.size;
     if (limit <= 0) {
-      blocked = this.#jobs.earliestDueMs() !== undefined;
+      blocked = this.jobs.earliestDueMs() !== undefined;
     } else {
-      for (const job of this.#jobs.dueJobs(this.#clock.now(), limit)) {
+      for (const job of this.jobs.dueJobs(this.clock.now(), limit)) {
         // A job already running is left due rather than started twice. Its own
         // completion recomputes the next time and rearms.
-        if (this.#inFlight.has(job.id)) {
+        if (this.inFlight.has(job.id)) {
           blocked = true;
           continue;
         }
-        this.#dispatch(job, { rearmAfter: false });
+        this.dispatch(job, { rearmAfter: false });
       }
     }
 
-    this.#arm(blocked ? BUSY_RETRY_MS : 0);
+    this.arm(blocked ? BUSY_RETRY_MS : 0);
   }
 
   /**
@@ -599,16 +625,16 @@ export class Scheduler implements SchedulerPort {
    * it off records the miss rather than hiding it — a reminder that silently
    * vanished is worse than one that says it was missed.
    */
-  #catchUp(): void {
-    const now = this.#clock.now();
-    const missed = this.#jobs.missedJobs(now);
+  private catchUp(): void {
+    const now = this.clock.now();
+    const missed = this.jobs.missedJobs(now);
     if (missed.length === 0) return;
 
-    const catchUp = this.#config().scheduler.catchUpOnBoot;
+    const catchUp = this.config().scheduler.catchUpOnBoot;
 
     for (const job of missed) {
       if (catchUp) {
-        this.#dispatch(job, {
+        this.dispatch(job, {
           rearmAfter: false,
           warnings: [
             `This run was started at boot: its scheduled time (${new Date(job.state.nextRunAtMs).toISOString()}) passed while the server was down.`,
@@ -621,17 +647,20 @@ export class Scheduler implements SchedulerPort {
         // Recorded, not deleted: a one-shot that vanished without trace is a
         // reminder the operator never learns was missed. `deleteAfterRun` is
         // deliberately not honoured here, because it did not run.
-        const run = this.#jobs.startRun({ jobId: job.id });
-        this.#jobs.finishRun(run.id, {
+        const run = this.jobs.startRun({ jobId: job.id });
+        this.jobs.finishRun(run.id, {
           status: 'skipped',
           skipReason: 'Missed while the server was down.',
         });
-        this.#jobs.recordOutcome(job.id, { ranAtMs: now, status: 'skipped' });
-        this.#jobs.setNextRun(job.id, 0);
+        this.jobs.recordOutcome(job.id, { ranAtMs: now, status: 'skipped' });
+        this.jobs.setNextRun(job.id, 0);
         continue;
       }
 
-      this.#jobs.setNextRun(job.id, nextRunAfter(job.schedule, now, this.#timezone()));
+      this.jobs.setNextRun(
+        job.id,
+        nextRunAfter(job.schedule, now, this.timezone()),
+      );
     }
   }
 
@@ -646,17 +675,20 @@ export class Scheduler implements SchedulerPort {
    * a hard kill leaves the job scheduled at roughly the right moment rather
    * than unscheduled forever. Completion corrects it.
    */
-  #dispatch(
+  private dispatch(
     job: AutomationJob,
-    options: { readonly rearmAfter: boolean; readonly warnings?: readonly string[] },
+    options: {
+      readonly rearmAfter: boolean;
+      readonly warnings?: readonly string[];
+    },
   ): AutomationRun {
-    const now = this.#clock.now();
-    const run = this.#jobs.startRun({
+    const now = this.clock.now();
+    const run = this.jobs.startRun({
       jobId: job.id,
       // A plain id. The job it belongs to is `job_id` on this very row and the
       // origin is `sessions.origin`, so a key that spelled either out was long
       // without being more useful — nothing ever parsed it back.
-      sessionKey: job.payload.sessionKey ?? this.#newId(),
+      sessionKey: job.payload.sessionKey ?? this.newId(),
     });
 
     // A one-shot is unscheduled the instant it is dispatched. Anything else
@@ -667,26 +699,29 @@ export class Scheduler implements SchedulerPort {
     // next-run time here left a row badged Disabled with a "Next run" beside
     // it — a contradiction an operator has to work out for themselves, and a
     // stale time the job would inherit whenever it was next switched on.
-    this.#jobs.setNextRun(job.id, this.#nextRunFor(job, now));
+    this.jobs.setNextRun(job.id, this.nextRunFor(job, now));
 
     const controller = new AbortController();
-    this.#inFlight.set(job.id, controller);
+    this.inFlight.set(job.id, controller);
 
-    const settled = this.#execute(job, run, controller, options.warnings ?? [])
+    const settled = this.execute(job, run, controller, options.warnings ?? [])
       .catch((error: unknown) => {
-        this.#logger.error({ err: error, jobId: job.id }, 'automation run failed unexpectedly');
+        this.logger.error(
+          { err: error, jobId: job.id },
+          'automation run failed unexpectedly',
+        );
       })
       .finally(() => {
-        this.#inFlight.delete(job.id);
-        this.#settling.delete(settled);
-        if (options.rearmAfter || !this.#stopping) this.#arm();
+        this.inFlight.delete(job.id);
+        this.settling.delete(settled);
+        if (options.rearmAfter || !this.stopping) this.arm();
       });
 
-    this.#settling.add(settled);
+    this.settling.add(settled);
     return run;
   }
 
-  async #execute(
+  private async execute(
     job: AutomationJob,
     run: AutomationRun,
     controller: AbortController,
@@ -703,64 +738,81 @@ export class Scheduler implements SchedulerPort {
 
     try {
       if (job.payload.kind === 'heartbeat') {
-        const decided = await this.#decide(job, job.payload, controller.signal);
+        const decided = await this.decide(job, job.payload, controller.signal);
         warnings.push(...decided.warnings);
         if (decided.action !== 'run') {
           status = 'skipped';
           skipReason = decided.reason;
         } else {
-          const turn = await this.#runTurn(job, run, decided.instruction, controller);
+          const turn = await this.runTurn(
+            job,
+            run,
+            decided.instruction,
+            controller,
+          );
           warnings.push(...turn.warnings);
           output = turn.text;
           if (turn.error !== undefined) {
             status = 'error';
             error = turn.error;
           } else {
-            const verdict = await this.#evaluate(
+            const verdict = await this.evaluate(
               job,
               decided.instruction,
               turn.text,
               controller.signal,
             );
             warnings.push(...verdict.warnings);
-            if (verdict.notify) notify = { title: verdict.title, body: verdict.summary };
+            if (verdict.notify) {
+              notify = { title: verdict.title, body: verdict.summary };
+            }
           }
         }
       } else {
-        const turn = await this.#runTurn(job, run, job.payload.message, controller);
+        const turn = await this.runTurn(
+          job,
+          run,
+          job.payload.message,
+          controller,
+        );
         warnings.push(...turn.warnings);
         output = turn.text;
         if (turn.error !== undefined) {
           status = 'error';
           error = turn.error;
         } else {
-          notify = { title: `${job.name} finished`, body: output.slice(0, 500) };
+          notify = {
+            title: `${job.name} finished`,
+            body: output.slice(0, 500),
+          };
         }
       }
     } catch (caught) {
       const failure = toGhostError(caught);
       status = 'error';
-      error = controller.signal.aborted ? INTERRUPTED_BY_SHUTDOWN : failure.message;
+      error = controller.signal.aborted
+        ? INTERRUPTED_BY_SHUTDOWN
+        : failure.message;
     }
 
-    this.#jobs.finishRun(run.id, {
+    this.jobs.finishRun(run.id, {
       status,
       warnings,
       ...(output === '' ? {} : { output }),
       ...(error === undefined ? {} : { error }),
       ...(skipReason === undefined ? {} : { skipReason }),
     });
-    this.#jobs.recordOutcome(job.id, {
+    this.jobs.recordOutcome(job.id, {
       ranAtMs: run.startedAtMs,
       status,
       ...(error === undefined ? {} : { error }),
     });
 
-    this.#settle(job, run, status, error, notify);
+    this.settle(job, run, status, error, notify);
   }
 
   /** Everything that happens once a run's outcome is written. */
-  #settle(
+  private settle(
     job: AutomationJob,
     run: AutomationRun,
     status: RunStatus,
@@ -771,29 +823,36 @@ export class Scheduler implements SchedulerPort {
       // An error always notifies. The evaluate step never gets to veto it: a
       // failure nobody was told about is a job that has quietly not worked for
       // a week.
-      this.#notify(job, run, {
+      this.notify(job, run, {
         title: `${job.name} failed`,
         body: error ?? '',
         level: 'error',
       });
     } else if (notify !== undefined) {
-      this.#notify(job, run, { title: notify.title, body: notify.body, level: 'info' });
+      this.notify(job, run, {
+        title: notify.title,
+        body: notify.body,
+        level: 'info',
+      });
     }
 
     // Trimming here rather than on a sweep: the row that pushes the history
     // over the cap is the one that just landed.
-    const trimmed = this.#jobs.trimRuns(job.id, this.#config().scheduler.runRetention);
+    const trimmed = this.jobs.trimRuns(
+      job.id,
+      this.config().scheduler.runRetention,
+    );
     for (const gone of trimmed) {
       // Only the sessions this engine minted. A `payload.sessionKey` the
       // operator chose is deliberately shared and long-lived, and deleting it
       // would take a conversation with it.
       if (gone.sessionKey === undefined) continue;
       if (job.payload.sessionKey === gone.sessionKey) continue;
-      this.#deleteSession?.(gone.sessionKey);
+      this.deleteSession?.(gone.sessionKey);
     }
 
     if (job.deleteAfterRun && job.schedule.kind === 'at') {
-      this.#jobs.deleteJob(job.id);
+      this.jobs.deleteJob(job.id);
       return;
     }
 
@@ -802,7 +861,7 @@ export class Scheduler implements SchedulerPort {
     // rather than immediately due, which is what stops a slow job from
     // becoming a permanent backlog.
     if (job.schedule.kind !== 'at') {
-      this.#jobs.setNextRun(job.id, this.#nextRunFor(job, this.#clock.now()));
+      this.jobs.setNextRun(job.id, this.nextRunFor(job, this.clock.now()));
     }
   }
 
@@ -813,17 +872,21 @@ export class Scheduler implements SchedulerPort {
    * for a disabled job, which has no next occurrence at all — an on-demand run
    * must not quietly put one back on the timer's books.
    */
-  #nextRunFor(job: AutomationJob, nowMs: number): number {
+  private nextRunFor(job: AutomationJob, nowMs: number): number {
     if (job.schedule.kind === 'at' || !job.enabled) return 0;
-    return nextRunAfter(job.schedule, nowMs, this.#timezone());
+    return nextRunAfter(job.schedule, nowMs, this.timezone());
   }
 
-  #notify(
+  private notify(
     job: AutomationJob,
     run: AutomationRun,
-    input: { readonly title: string; readonly body: string; readonly level: Notification['level'] },
+    input: {
+      readonly title: string;
+      readonly body: string;
+      readonly level: Notification['level'];
+    },
   ): void {
-    const notification = this.#raise({
+    const notification = this.raise({
       title: input.title,
       body: input.body,
       level: input.level,
@@ -831,7 +894,7 @@ export class Scheduler implements SchedulerPort {
       ...(run.sessionKey === undefined ? {} : { sessionKey: run.sessionKey }),
     });
 
-    this.#broadcast({
+    this.broadcast({
       type: 'notification',
       id: notification.id,
       title: notification.title,
@@ -839,7 +902,9 @@ export class Scheduler implements SchedulerPort {
       level: notification.level,
       createdAtMs: notification.createdAtMs,
       jobId: job.id,
-      ...(notification.sessionKey === undefined ? {} : { sessionKey: notification.sessionKey }),
+      ...(notification.sessionKey === undefined
+        ? {}
+        : { sessionKey: notification.sessionKey }),
     });
   }
 
@@ -851,7 +916,7 @@ export class Scheduler implements SchedulerPort {
    * `turn.end`, would otherwise leave the run `pending` forever with no process
    * behind it.
    */
-  async #runTurn(
+  private async runTurn(
     job: AutomationJob,
     run: AutomationRun,
     message: string,
@@ -863,7 +928,7 @@ export class Scheduler implements SchedulerPort {
     // fresh one each time.
     const sessionKey = run.sessionKey ?? job.id;
 
-    const connection = this.#connect({
+    const connection = this.connect({
       sessionKey,
       channel: AUTOMATION_ORIGIN,
       // This connection drives the turn and collects its output; it cannot
@@ -873,7 +938,9 @@ export class Scheduler implements SchedulerPort {
       send: (event) => {
         collector.receive(event);
       },
-      ...(job.payload.agentId === undefined ? {} : { agentId: job.payload.agentId }),
+      ...(job.payload.agentId === undefined
+        ? {}
+        : { agentId: job.payload.agentId }),
     });
 
     const onAbort = (): void => {
@@ -882,10 +949,10 @@ export class Scheduler implements SchedulerPort {
     };
     controller.signal.addEventListener('abort', onAbort, { once: true });
 
-    const timeout = this.#clock.setTimeout(() => {
+    const timeout = this.clock.setTimeout(() => {
       connection.receive({ type: 'turn.stop', sessionKey });
       collector.finish('The run exceeded its time limit and was stopped.');
-    }, this.#runTimeoutMs);
+    }, this.runTimeoutMs);
 
     try {
       connection.receive({
@@ -894,11 +961,13 @@ export class Scheduler implements SchedulerPort {
         content: message,
         // The run id, so a redelivery is acknowledged rather than run twice.
         clientMessageId: run.id,
-        ...(job.payload.agentId === undefined ? {} : { agentId: job.payload.agentId }),
+        ...(job.payload.agentId === undefined
+          ? {}
+          : { agentId: job.payload.agentId }),
       });
       return await collector.promise;
     } finally {
-      this.#clock.clearTimeout(timeout);
+      this.clock.clearTimeout(timeout);
       controller.signal.removeEventListener('abort', onAbort);
       connection.close();
     }
@@ -908,7 +977,7 @@ export class Scheduler implements SchedulerPort {
   // Heartbeat
   // -------------------------------------------------------------------------
 
-  async #decide(
+  private async decide(
     job: AutomationJob,
     payload: Extract<AutomationPayload, { kind: 'heartbeat' }>,
     signal: AbortSignal,
@@ -918,8 +987,8 @@ export class Scheduler implements SchedulerPort {
     readonly instruction: string;
     readonly warnings: readonly string[];
   }> {
-    const chat = this.#chat;
-    const readFile = this.#readFile;
+    const chat = this.chat;
+    const readFile = this.readFile;
     if (chat === undefined || readFile === undefined) {
       // Not a silent "always run": that would start an unbounded turn on
       // whatever the file happens to say, every interval, forever.
@@ -948,7 +1017,12 @@ export class Scheduler implements SchedulerPort {
     }
 
     if (contents.trim() === '') {
-      return { action: 'skip', reason: `${payload.file} is empty.`, instruction: '', warnings: [] };
+      return {
+        action: 'skip',
+        reason: `${payload.file} is empty.`,
+        instruction: '',
+        warnings: [],
+      };
     }
 
     const truncated = contents.length > MAX_TASK_FILE_BYTES;
@@ -956,7 +1030,7 @@ export class Scheduler implements SchedulerPort {
       messages: buildDecideMessages({
         file: payload.file,
         contents: truncated ? contents.slice(0, MAX_TASK_FILE_BYTES) : contents,
-        nowIso: new Date(this.#clock.now()).toISOString(),
+        nowIso: new Date(this.clock.now()).toISOString(),
       }),
       tools: [HEARTBEAT_TOOL],
       toolChoice: 'required',
@@ -967,19 +1041,22 @@ export class Scheduler implements SchedulerPort {
     });
 
     const decision = readDecision(result, payload.file);
-    this.#logger.debug(
+    this.logger.debug(
       { jobId: job.id, action: decision.action, reason: decision.reason },
       'heartbeat decision',
     );
     return {
       ...decision,
       warnings: truncated
-        ? [...decision.warnings, `${payload.file} was truncated before the model read it.`]
+        ? [
+            ...decision.warnings,
+            `${payload.file} was truncated before the model read it.`,
+          ]
         : decision.warnings,
     };
   }
 
-  async #evaluate(
+  private async evaluate(
     job: AutomationJob,
     instruction: string,
     output: string,
@@ -990,7 +1067,7 @@ export class Scheduler implements SchedulerPort {
     readonly summary: string;
     readonly warnings: readonly string[];
   }> {
-    const chat = this.#chat;
+    const chat = this.chat;
     if (chat === undefined) {
       return {
         notify: true,

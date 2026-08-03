@@ -58,7 +58,14 @@ import type { ServeCommandOptions } from './serve.js';
  */
 export const VERSION = '0.0.0';
 
-const LOG_LEVELS: readonly string[] = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
+const LOG_LEVELS: readonly string[] = [
+  'trace',
+  'debug',
+  'info',
+  'warn',
+  'error',
+  'fatal',
+];
 
 export interface CliDeps {
   readonly out?: NodeJS.WritableStream;
@@ -128,10 +135,17 @@ function resolvePort(value: string | undefined, t: CliT): number | undefined {
   return port;
 }
 
-function resolveLogLevel(value: string | undefined, t: CliT): LogLevel | undefined {
+function resolveLogLevel(
+  value: string | undefined,
+  t: CliT,
+): LogLevel | undefined {
   if (value === undefined) return undefined;
   if (!LOG_LEVELS.includes(value)) {
-    throw new CommanderError(1, 'ghost.logLevel', t('program.unknownLogLevel', { value }));
+    throw new CommanderError(
+      1,
+      'ghost.logLevel',
+      t('program.unknownLogLevel', { value }),
+    );
   }
   return value as LogLevel;
 }
@@ -170,7 +184,10 @@ export function buildProgram(deps: CliDeps = {}): Command {
     // it from two different commander defaults, so both have to be named.
     .helpCommand('help [command]', t('help.displayHelp'))
     .option('--home <dir>', t('program.options.home'))
-    .option('--log-level <level>', t('program.options.logLevel', { levels: LOG_LEVELS.join(', ') }))
+    .option(
+      '--log-level <level>',
+      t('program.options.logLevel', { levels: LOG_LEVELS.join(', ') }),
+    )
     .option('--no-color', t('program.options.noColor'))
     // Commander builds its own five section headings into `formatHelp`, so
     // `styleTitle` — its hook for colouring them — is the only seam that reaches
@@ -207,37 +224,47 @@ export function buildProgram(deps: CliDeps = {}): Command {
     .option('--json', t('chat.options.json'), false)
     .option('--no-reasoning', t('chat.options.noReasoning'))
     .option('--no-tools', t('chat.options.noTools'))
-    .action(async (words: string[], options: ChatCliOptions, command: Command) => {
-      const globals = command.parent?.opts<GlobalOptions>() ?? { color: true };
-      const level = resolveLogLevel(globals.logLevel, t);
-      const message = words.join(' ').trim();
+    .action(
+      async (words: string[], options: ChatCliOptions, command: Command) => {
+        const globals = command.parent?.opts<GlobalOptions>() ?? {
+          color: true,
+        };
+        const level = resolveLogLevel(globals.logLevel, t);
+        const message = words.join(' ').trim();
 
-      const code = await runChat({
-        ...(message === '' ? {} : { message }),
-        sessionKey: options.session,
-        ...(options.model === undefined ? {} : { model: options.model }),
-        ...(options.provider === undefined ? {} : { provider: options.provider }),
-        ...(options.workspace === undefined ? {} : { workspace: options.workspace }),
-        ...(options.workspaceId === undefined ? {} : { workspaceId: options.workspaceId }),
-        ...(globals.home === undefined ? {} : { home: globals.home }),
-        fresh: options.new,
-        json: options.json,
-        showReasoning: options.reasoning,
-        tools: options.tools,
-        // `--json` writes machine-readable output to the same stream; colouring
-        // it would corrupt the JSON for the script reading it.
-        colors: options.json ? false : globals.color,
-        out,
-        errOut,
-        ...(level === undefined ? {} : { logLevel: level }),
-      });
-      command.setOptionValue('exitCode', code);
-    });
+        const code = await runChat({
+          ...(message === '' ? {} : { message }),
+          sessionKey: options.session,
+          ...(options.model === undefined ? {} : { model: options.model }),
+          ...(options.provider === undefined
+            ? {}
+            : { provider: options.provider }),
+          ...(options.workspace === undefined
+            ? {}
+            : { workspace: options.workspace }),
+          ...(options.workspaceId === undefined
+            ? {}
+            : { workspaceId: options.workspaceId }),
+          ...(globals.home === undefined ? {} : { home: globals.home }),
+          fresh: options.new,
+          json: options.json,
+          showReasoning: options.reasoning,
+          tools: options.tools,
+          // `--json` writes machine-readable output to the same stream; colouring
+          // it would corrupt the JSON for the script reading it.
+          colors: options.json ? false : globals.color,
+          out,
+          errOut,
+          ...(level === undefined ? {} : { logLevel: level }),
+        });
+        command.setOptionValue('exitCode', code);
+      },
+    );
 
   program
     .command('init')
     .description(t('init.description'))
-    .action(async (_options: unknown, command: Command) => {
+    .action(async (options: unknown, command: Command) => {
       const globals = command.parent?.opts<GlobalOptions>() ?? { color: true };
       const code = await runInit({
         ...(globals.home === undefined ? {} : { home: globals.home }),
@@ -250,11 +277,15 @@ export function buildProgram(deps: CliDeps = {}): Command {
       command.setOptionValue('exitCode', code);
     });
 
-  const toolbox = program.command('toolbox').description(t('toolbox.description'));
+  const toolbox = program
+    .command('toolbox')
+    .description(t('toolbox.description'));
   const toolboxAction =
     (action: 'list' | 'approve' | 'revoke') =>
-    (id: string | undefined, _options: unknown, command: Command) => {
-      const globals = command.parent?.parent?.opts<GlobalOptions>() ?? { color: true };
+    (id: string | undefined, options: unknown, command: Command) => {
+      const globals = command.parent?.parent?.opts<GlobalOptions>() ?? {
+        color: true,
+      };
       const code = runToolbox({
         action,
         ...(id === undefined ? {} : { id }),
@@ -310,7 +341,9 @@ export function buildProgram(deps: CliDeps = {}): Command {
         ...(resolvePort(options.port, t) === undefined
           ? {}
           : { port: resolvePort(options.port, t) }),
-        ...(options.workspace === undefined ? {} : { workspace: options.workspace }),
+        ...(options.workspace === undefined
+          ? {}
+          : { workspace: options.workspace }),
         ...(password === undefined || password === '' ? {} : { password }),
         ...(username === undefined || username === '' ? {} : { username }),
         ...(options.ui === undefined ? {} : { ui: options.ui }),
@@ -359,7 +392,10 @@ async function describeFailure(error: unknown, env: Env): Promise<string> {
  * drain stdout on its own, which is the difference between a piped answer
  * arriving in full and being truncated at whatever the pipe had flushed.
  */
-export async function runCli(argv: readonly string[], deps: CliDeps = {}): Promise<number> {
+export async function runCli(
+  argv: readonly string[],
+  deps: CliDeps = {},
+): Promise<number> {
   const errOut = deps.errOut ?? process.stderr;
   const env = deps.env ?? process.env;
   const program = buildProgram(deps);

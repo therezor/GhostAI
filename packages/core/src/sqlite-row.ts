@@ -64,9 +64,13 @@ export function rowReader(store: string): RowReader {
     int(row, column) {
       const value = toInt(row[column]);
       if (value !== undefined) return value;
-      throw new GhostError('storage', `Expected an integer in column "${column}"`, {
-        details: { store, column },
-      });
+      throw new GhostError(
+        'storage',
+        `Expected an integer in column "${column}"`,
+        {
+          details: { store, column },
+        },
+      );
     },
     string(row, column) {
       const value = row[column];
@@ -98,7 +102,9 @@ export function rowReader(store: string): RowReader {
 export function parseMetadata(raw: string): Readonly<Record<string, unknown>> {
   try {
     const parsed: unknown = JSON.parse(raw);
-    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+    return typeof parsed === 'object' &&
+      parsed !== null &&
+      !Array.isArray(parsed)
       ? (parsed as Record<string, unknown>)
       : {};
   } catch {

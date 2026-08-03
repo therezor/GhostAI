@@ -167,7 +167,9 @@ export interface RuntimePromptContext extends StaticPromptContext {
  */
 export interface ContextContributor {
   readonly name: string;
-  staticSection?(context: StaticPromptContext): Promise<string | undefined> | string | undefined;
+  staticSection?(
+    context: StaticPromptContext,
+  ): Promise<string | undefined> | string | undefined;
   runtimeSection?(context: RuntimePromptContext): string | undefined;
 }
 
@@ -226,7 +228,10 @@ export interface PromptToolbox {
   readonly name: string;
   /** Where the workspace is mounted inside the container. */
   readonly workdir: string;
-  readonly tools: readonly { readonly name: string; readonly use: string }[];
+  readonly tools: ReadonlyArray<{
+    readonly name: string;
+    readonly use: string;
+  }>;
   /** Caveats about the box as a whole. */
   readonly notes: string;
   /**
@@ -359,14 +364,21 @@ export interface BuildRuntimeBlockOptions {
  * it for both placements — so repeating it here would be the same claim twice,
  * and this section is left to say only what is true of *this* box.
  */
-function renderToolbox(toolbox: PromptToolbox | undefined, template: string | undefined): string {
+function renderToolbox(
+  toolbox: PromptToolbox | undefined,
+  template: string | undefined,
+): string {
   if (toolbox === undefined || toolbox.name === '') return '';
 
   const stored = templateOr(template, DEFAULT_TOOLBOX_TEMPLATE);
   if (stored.trim() === '') return '';
 
   const toolList = toolbox.tools
-    .map((tool) => (tool.use === '' ? `- \`${tool.name}\`` : `- \`${tool.name}\` — ${tool.use}`))
+    .map((tool) =>
+      tool.use === ''
+        ? `- \`${tool.name}\``
+        : `- \`${tool.name}\` — ${tool.use}`,
+    )
     .join('\n');
   const notes = toolbox.notes.trim();
   // Last, and under its own heading, so the reference reads as a document rather
@@ -384,7 +396,8 @@ function renderToolbox(toolbox: PromptToolbox | undefined, template: string | un
     tools: toolList === '' ? '' : `\n\nInstalled:\n${toolList}`,
     toolList,
     notes: notes === '' ? '' : `\n\n${notes}`,
-    reference: docs === '' ? '' : `\n\n### ${toolbox.name} reference\n\n${docs}`,
+    reference:
+      docs === '' ? '' : `\n\n### ${toolbox.name} reference\n\n${docs}`,
     docs,
   }).trim();
 }
@@ -487,7 +500,9 @@ export async function contributorSections(
   const sections: string[] = [];
   for (const contributor of contributors ?? []) {
     const section = await contributor.staticSection?.(context);
-    if (section !== undefined && section.trim() !== '') sections.push(section.trim());
+    if (section !== undefined && section.trim() !== '') {
+      sections.push(section.trim());
+    }
   }
   return sections;
 }
@@ -527,7 +542,8 @@ function identity(
 
   // Whitespace-only is empty. A template of three newlines is not a decision an
   // operator made, and rendering it would give the agent no identity at all.
-  const template = stored.trim() === '' ? DEFAULT_SYSTEM_PROMPT_TEMPLATE : stored;
+  const template =
+    stored.trim() === '' ? DEFAULT_SYSTEM_PROMPT_TEMPLATE : stored;
 
   return renderPromptTemplate(template, {
     name: label === '' ? 'GhostAI' : label,
@@ -547,7 +563,9 @@ function identity(
  * ones, so the prefix a provider caches grows at the end rather than shifting
  * when a contributor is added or removed mid-session.
  */
-export async function buildStaticPrompt(options: BuildStaticPromptOptions): Promise<string> {
+export async function buildStaticPrompt(
+  options: BuildStaticPromptOptions,
+): Promise<string> {
   const { platform, runtimeLabel } = resolveHost(options);
 
   // One section, not two. The operator's text used to arrive here as a separate
@@ -579,7 +597,10 @@ export async function buildStaticPrompt(options: BuildStaticPromptOptions): Prom
   // Before contributors, after the identity: it describes the environment every
   // later section is talking about, and a model told what it can run before it
   // is told what to do needs fewer turns to discover the difference.
-  const toolbox = renderToolbox(options.tools?.toolbox, options.tools?.toolboxPrompt);
+  const toolbox = renderToolbox(
+    options.tools?.toolbox,
+    options.tools?.toolboxPrompt,
+  );
   if (toolbox !== '') sections.push(toolbox);
 
   // The tool-output policy, when it names no delimiter — which the default does
@@ -591,7 +612,9 @@ export async function buildStaticPrompt(options: BuildStaticPromptOptions): Prom
   const policy = staticToolPolicy(options.tools);
   if (policy !== '') sections.push(policy);
 
-  sections.push(...(await contributorSections(options.contributors, options.context)));
+  sections.push(
+    ...(await contributorSections(options.contributors, options.context)),
+  );
 
   return sections.join(SECTION_SEPARATOR);
 }
@@ -637,7 +660,10 @@ function templateOr(stored: string | undefined, fallback: string): string {
  * result and still escapes a forged delimiter, so the envelopes remain and the
  * model is simply never told what they mean.
  */
-function renderToolPolicy(template: string | undefined, nonce?: string): string {
+function renderToolPolicy(
+  template: string | undefined,
+  nonce?: string,
+): string {
   const stored = template ?? '';
   if (stored !== '' && stored.trim() === '') return '';
   return toolOutputPolicy(nonce, stored);
@@ -688,7 +714,10 @@ function staticToolPolicy(tools: PromptTools | undefined): string {
 }
 
 /** The policy as the per-iteration half should carry it. See `staticToolPolicy`. */
-function runtimeToolPolicy(tools: PromptTools | undefined, nonce: string): string {
+function runtimeToolPolicy(
+  tools: PromptTools | undefined,
+  nonce: string,
+): string {
   if (tools === undefined || toolPolicyIsStatic(tools.policyPrompt)) return '';
   return renderToolPolicy(tools.policyPrompt, nonce);
 }
@@ -733,7 +762,9 @@ function resolveHost(options: {
   const platform = options.platform ?? hostPlatform;
   return {
     platform,
-    runtimeLabel: options.runtimeLabel ?? `${osLabel(platform)} ${arch}, Node ${versions.node}`,
+    runtimeLabel:
+      options.runtimeLabel ??
+      `${osLabel(platform)} ${arch}, Node ${versions.node}`,
   };
 }
 
@@ -754,7 +785,8 @@ function liveValues(
     readonly nonce: string;
   },
 ): LivePromptValues {
-  const timeZone = options.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const timeZone =
+    options.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   // Counted inclusively — on the last legal iteration one is left, not none —
   // because "1 left" is what a person and a model both read as "this is it".
   const left = context.maxIterations - context.iteration + 1;
@@ -763,7 +795,10 @@ function liveValues(
     // Only when it is about to matter. See `ITERATION_WARNING_AT`.
     wrapUp:
       context.maxIterations > 0 && left <= ITERATION_WARNING_AT
-        ? renderWrapUp(templateOr(options.wrapUpPrompt, DEFAULT_WRAP_UP_TEMPLATE), left)
+        ? renderWrapUp(
+            templateOr(options.wrapUpPrompt, DEFAULT_WRAP_UP_TEMPLATE),
+            left,
+          )
         : '',
     iteration: String(context.iteration),
     maxIterations: String(context.maxIterations),
@@ -785,7 +820,9 @@ function runtimeSectionsOf(
   const sections: string[] = [];
   for (const contributor of contributors ?? []) {
     const section = contributor.runtimeSection?.(context);
-    if (section !== undefined && section.trim() !== '') sections.push(section.trim());
+    if (section !== undefined && section.trim() !== '') {
+      sections.push(section.trim());
+    }
   }
   return sections;
 }
@@ -820,7 +857,9 @@ export function buildRuntimeBlock(options: BuildRuntimeBlockOptions): string {
   const { context } = options;
   const values = liveValues(context, {
     ...(options.timeZone === undefined ? {} : { timeZone: options.timeZone }),
-    ...(options.wrapUpPrompt === undefined ? {} : { wrapUpPrompt: options.wrapUpPrompt }),
+    ...(options.wrapUpPrompt === undefined
+      ? {}
+      : { wrapUpPrompt: options.wrapUpPrompt }),
     nonce: options.nonce,
   });
 
@@ -871,9 +910,12 @@ const REMINDER_DELIMITER = new RegExp(`<(/?)(${REMINDER_TAG})`, 'gi');
  * or a contributor section is text this module did not write.
  */
 export function runtimeReminder(block: string): string {
-  const escaped = block.replace(REMINDER_DELIMITER, (_match, slash: string, tag: string) => {
-    return `<\\${slash}${tag}`;
-  });
+  const escaped = block.replace(
+    REMINDER_DELIMITER,
+    (match, slash: string, tag: string) => {
+      return `<\\${slash}${tag}`;
+    },
+  );
   return `<${REMINDER_TAG}>\n${escaped}\n</${REMINDER_TAG}>`;
 }
 
@@ -946,9 +988,13 @@ export function buildRawPrompt(options: BuildRawPromptOptions): string {
   // Whitespace-only is empty here too, and it matters more than it does in
   // template mode: a raw agent whose template renders to nothing would be sent
   // no system message at all.
-  const template = stored.trim() === '' ? DEFAULT_SYSTEM_PROMPT_TEMPLATE : stored;
+  const template =
+    stored.trim() === '' ? DEFAULT_SYSTEM_PROMPT_TEMPLATE : stored;
 
-  const toolbox = renderToolbox(options.tools?.toolbox, options.tools?.toolboxPrompt);
+  const toolbox = renderToolbox(
+    options.tools?.toolbox,
+    options.tools?.toolboxPrompt,
+  );
   const runtimeSections = runtimeSectionsOf(options.contributors, context);
   const statics = (options.staticSections ?? []).join(SECTION_SEPARATOR);
   const correction = (options.correction ?? '').trim();
@@ -958,7 +1004,12 @@ export function buildRawPrompt(options: BuildRawPromptOptions): string {
     workspaceId: context.workspaceId,
     workspaceRoot: context.workspaceRoot,
     runtime: runtimeLabel,
-    platformPolicy: commandPolicy(platform, runtimeLabel, context.workspaceId, options.tools),
+    platformPolicy: commandPolicy(
+      platform,
+      runtimeLabel,
+      context.workspaceId,
+      options.tools,
+    ),
     // The same values the live-state section carries in template mode, so a raw
     // agent and a template agent on one machine read the same clock and the
     // same iteration counter.
@@ -976,10 +1027,13 @@ export function buildRawPrompt(options: BuildRawPromptOptions): string {
     // saying what it used to — the placeholder means "the tool-output policy",
     // not "most of it".
     toolPolicy:
-      options.tools === undefined ? '' : rawToolPolicy(options.tools.policyPrompt, options.nonce),
+      options.tools === undefined
+        ? ''
+        : rawToolPolicy(options.tools.policyPrompt, options.nonce),
     nonce: options.nonce,
     contributors: statics === '' ? '' : `${SECTION_SEPARATOR}${statics}`,
-    runtimeSections: runtimeSections.length === 0 ? '' : `\n\n${runtimeSections.join('\n\n')}`,
+    runtimeSections:
+      runtimeSections.length === 0 ? '' : `\n\n${runtimeSections.join('\n\n')}`,
     correction: correction === '' ? '' : `\n\n${correction}`,
   });
 }

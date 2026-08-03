@@ -169,7 +169,14 @@ const DAY_MS = 86_400_000;
 /** Milliseconds to add to UTC to reach local wall-clock time at this instant. */
 function offsetAt(instantMs: number, tz: string | undefined): number {
   const p = partsOf(instantMs, tz);
-  const asIfUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+  const asIfUtc = Date.UTC(
+    p.year,
+    p.month - 1,
+    p.day,
+    p.hour,
+    p.minute,
+    p.second,
+  );
   return asIfUtc - Math.floor(instantMs / 1000) * 1000;
 }
 
@@ -225,9 +232,13 @@ function instantOfLocal(
 }
 
 function fail(expr: string, detail: string): never {
-  throw new GhostError('config', `Invalid cron expression "${expr}": ${detail}`, {
-    details: { expr },
-  });
+  throw new GhostError(
+    'config',
+    `Invalid cron expression "${expr}": ${detail}`,
+    {
+      details: { expr },
+    },
+  );
 }
 
 function parseValue(
@@ -241,10 +252,15 @@ function parseValue(
   const named = names?.[raw.toLowerCase()];
   const value = named ?? Number.parseInt(raw, 10);
   if (!Number.isInteger(value) || String(value) !== raw.trim()) {
-    if (named === undefined) fail(expr, `"${raw}" is not a value ${field} accepts.`);
+    if (named === undefined) {
+      fail(expr, `"${raw}" is not a value ${field} accepts.`);
+    }
   }
   if (value < min || value > max) {
-    fail(expr, `${field} must be between ${String(min)} and ${String(max)}, got ${raw}.`);
+    fail(
+      expr,
+      `${field} must be between ${String(min)} and ${String(max)}, got ${raw}.`,
+    );
   }
   return value;
 }
@@ -273,13 +289,22 @@ function parseField(
     if (term === '') fail(expr, `${field} has an empty term.`);
 
     const [rangePart = '', stepPart, ...extra] = term.split('/');
-    if (extra.length > 0) fail(expr, `${field} has more than one step in "${term}".`);
+    if (extra.length > 0) {
+      fail(expr, `${field} has more than one step in "${term}".`);
+    }
 
     let step = 1;
     if (stepPart !== undefined) {
       step = Number.parseInt(stepPart, 10);
-      if (!Number.isInteger(step) || step < 1 || String(step) !== stepPart.trim()) {
-        fail(expr, `${field} has a step that is not a positive whole number: "${stepPart}".`);
+      if (
+        !Number.isInteger(step) ||
+        step < 1 ||
+        String(step) !== stepPart.trim()
+      ) {
+        fail(
+          expr,
+          `${field} has a step that is not a positive whole number: "${stepPart}".`,
+        );
       }
     }
 
@@ -290,10 +315,14 @@ function parseField(
       to = max;
     } else if (rangePart.includes('-')) {
       const [lo = '', hi = '', ...rest] = rangePart.split('-');
-      if (rest.length > 0) fail(expr, `${field} has a malformed range "${rangePart}".`);
+      if (rest.length > 0) {
+        fail(expr, `${field} has a malformed range "${rangePart}".`);
+      }
       from = parseValue(lo, min, max, names, expr, field);
       to = parseValue(hi, min, max, names, expr, field);
-      if (from > to) fail(expr, `${field} range "${rangePart}" runs backwards.`);
+      if (from > to) {
+        fail(expr, `${field} range "${rangePart}" runs backwards.`);
+      }
     } else {
       from = parseValue(rangePart, min, max, names, expr, field);
       // A bare value with a step runs to the end of the range; without one it is
@@ -323,7 +352,9 @@ export function parseCron(expr: string, tz?: string): CronSpec {
     try {
       new Intl.DateTimeFormat('en-US', { timeZone: tz });
     } catch {
-      throw new GhostError('config', `Unknown timezone "${tz}".`, { details: { tz } });
+      throw new GhostError('config', `Unknown timezone "${tz}".`, {
+        details: { tz },
+      });
     }
   }
 
@@ -345,7 +376,15 @@ export function parseCron(expr: string, tz?: string): CronSpec {
     daysOfMonth: parseField(dom, 1, 31, undefined, expr, 'day-of-month'),
     months: parseField(month, 1, 12, MONTH_NAMES, expr, 'month'),
     // 7 is Sunday in every dialect that accepts it, and 0 already is here.
-    daysOfWeek: parseField(dow, 0, 7, DAY_NAMES, expr, 'day-of-week', (v) => v % 7),
+    daysOfWeek: parseField(
+      dow,
+      0,
+      7,
+      DAY_NAMES,
+      expr,
+      'day-of-week',
+      (v) => v % 7,
+    ),
     domRestricted: dom.trim() !== '*',
     dowRestricted: dow.trim() !== '*',
     // Present-and-undefined rather than absent, matching `Clock`'s neighbours
@@ -356,7 +395,12 @@ export function parseCron(expr: string, tz?: string): CronSpec {
 }
 
 /** Whether a calendar day satisfies the month and the day-of-* rule. */
-function dayMatches(spec: CronSpec, year: number, month: number, day: number): boolean {
+function dayMatches(
+  spec: CronSpec,
+  year: number,
+  month: number,
+  day: number,
+): boolean {
   if (!spec.months.includes(month)) return false;
 
   const domHit = spec.daysOfMonth.includes(day);
@@ -366,7 +410,9 @@ function dayMatches(spec: CronSpec, year: number, month: number, day: number): b
   // The rule: restricted on both sides means either may satisfy it. Restricted
   // on one means the other is `*`, whose set is full, so the AND below is the
   // same answer written once.
-  return spec.domRestricted && spec.dowRestricted ? domHit || dowHit : domHit && dowHit;
+  return spec.domRestricted && spec.dowRestricted
+    ? domHit || dowHit
+    : domHit && dowHit;
 }
 
 function daysInMonth(year: number, month: number): number {
@@ -397,7 +443,14 @@ export function nextCronRun(spec: CronSpec, afterMs: number): number | null {
         for (const minute of spec.minutes) {
           probes += 1;
           if (probes > MAX_SLOT_PROBES) return null;
-          const instant = instantOfLocal(year, month, day, hour, minute, spec.tz);
+          const instant = instantOfLocal(
+            year,
+            month,
+            day,
+            hour,
+            minute,
+            spec.tz,
+          );
           // `null` is a wall-clock time the zone skipped. Not an error, and not
           // a reason to stop: the job simply has no occurrence in the hour that
           // did not happen, and the next slot is the right answer.

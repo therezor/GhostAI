@@ -63,7 +63,9 @@ const staticPrompt = (options: BuildStaticPromptOptions): Promise<string> =>
 const runtimeBlock = (options: BuildRuntimeBlockOptions): string =>
   buildRuntimeBlock({ tools: {}, ...options });
 const rawPrompt = (
-  options: Omit<BuildRawPromptOptions, 'tools'> & { tools?: PromptTools | undefined },
+  options: Omit<BuildRawPromptOptions, 'tools'> & {
+    tools?: PromptTools | undefined;
+  },
 ): string => buildRawPrompt({ tools: {}, ...options });
 
 describe('buildStaticPrompt', () => {
@@ -136,7 +138,10 @@ describe('buildStaticPrompt', () => {
   });
 
   it('falls back to the raw platform name for anything unrecognised', async () => {
-    const prompt = await staticPrompt({ context: CONTEXT, platform: 'freebsd' });
+    const prompt = await staticPrompt({
+      context: CONTEXT,
+      platform: 'freebsd',
+    });
 
     expect(prompt).toContain('freebsd');
   });
@@ -144,9 +149,13 @@ describe('buildStaticPrompt', () => {
   it('appends contributor sections after the built-in ones', async () => {
     const memory: ContextContributor = {
       name: 'memory',
-      staticSection: () => Promise.resolve('# Memory\n\nThe user prefers metric units.'),
+      staticSection: () =>
+        Promise.resolve('# Memory\n\nThe user prefers metric units.'),
     };
-    const skills: ContextContributor = { name: 'skills', staticSection: () => '# Skills\n\npdf' };
+    const skills: ContextContributor = {
+      name: 'skills',
+      staticSection: () => '# Skills\n\npdf',
+    };
 
     const prompt = await staticPrompt({
       context: CONTEXT,
@@ -154,7 +163,9 @@ describe('buildStaticPrompt', () => {
       contributors: [memory, skills],
     });
 
-    expect(prompt.indexOf('# GhostAI')).toBeLessThan(prompt.indexOf('# Memory'));
+    expect(prompt.indexOf('# GhostAI')).toBeLessThan(
+      prompt.indexOf('# Memory'),
+    );
     expect(prompt.indexOf('# Memory')).toBeLessThan(prompt.indexOf('# Skills'));
     // Identity, command policy, tool-output policy, then the two contributors.
     // The policy is a static section now — it names no delimiter, so it caches
@@ -214,7 +225,10 @@ describe('buildStaticPrompt', () => {
     const prompt = await staticPrompt({
       context: CONTEXT,
       platform: 'linux',
-      agent: { label: 'Reviewer', systemPrompt: '# {{name}}\n\nOnly ever read. Never write.' },
+      agent: {
+        label: 'Reviewer',
+        systemPrompt: '# {{name}}\n\nOnly ever read. Never write.',
+      },
     });
 
     expect(prompt).toContain('# Reviewer');
@@ -264,19 +278,34 @@ describe('buildStaticPrompt', () => {
     const prompt = await staticPrompt({
       context: CONTEXT,
       platform: 'linux',
-      agent: { label: 'Reviewer', systemPrompt: '# {{name}}\n\nOnly ever read.' },
-      contributors: [{ name: 'memory', staticSection: () => '# Memory\n\nmetric units' }],
+      agent: {
+        label: 'Reviewer',
+        systemPrompt: '# {{name}}\n\nOnly ever read.',
+      },
+      contributors: [
+        { name: 'memory', staticSection: () => '# Memory\n\nmetric units' },
+      ],
     });
 
-    expect(prompt.indexOf('# Reviewer')).toBeLessThan(prompt.indexOf('# Memory'));
+    expect(prompt.indexOf('# Reviewer')).toBeLessThan(
+      prompt.indexOf('# Memory'),
+    );
     // Identity, command policy, tool-output policy, contributor.
     expect(prompt.split(SECTION_SEPARATOR)).toHaveLength(4);
   });
 
   it('is still byte-identical across calls, so the cached prefix holds', async () => {
     const agent = { label: 'Reviewer', systemPrompt: 'Be terse.' };
-    const first = await staticPrompt({ context: CONTEXT, platform: 'linux', agent });
-    const second = await staticPrompt({ context: CONTEXT, platform: 'linux', agent });
+    const first = await staticPrompt({
+      context: CONTEXT,
+      platform: 'linux',
+      agent,
+    });
+    const second = await staticPrompt({
+      context: CONTEXT,
+      platform: 'linux',
+      agent,
+    });
 
     expect(first).toBe(second);
   });
@@ -333,8 +362,12 @@ describe('buildStaticPrompt: with a toolbox', () => {
       tools: { toolbox: TOOLBOX },
     });
 
-    expect(prompt).toContain('they always act on the workspace here, never inside the container');
-    expect(prompt).toContain('`notes/todo.md` is `/workspace/notes/todo.md` to a command');
+    expect(prompt).toContain(
+      'they always act on the workspace here, never inside the container',
+    );
+    expect(prompt).toContain(
+      '`notes/todo.md` is `/workspace/notes/todo.md` to a command',
+    );
   });
 
   it('does not warn a Windows host about tools the container has', async () => {
@@ -362,7 +395,9 @@ describe('buildStaticPrompt: with a toolbox', () => {
     expect(prompt).toContain('A shell is available in here');
     expect(prompt).toContain('- `search` — Search the web.');
     expect(prompt).toContain('Run `tools` for the full reference.');
-    expect(prompt).not.toContain('run inside this container, not on this machine');
+    expect(prompt).not.toContain(
+      'run inside this container, not on this machine',
+    );
   });
 
   it('includes the toolbox reference, because a model does not go looking for it', async () => {
@@ -373,14 +408,18 @@ describe('buildStaticPrompt: with a toolbox', () => {
     const prompt = await staticPrompt({
       context: CONTEXT,
       platform: 'linux',
-      tools: { toolbox: { ...TOOLBOX, docs: '## search\n\nReading is the default.' } },
+      tools: {
+        toolbox: { ...TOOLBOX, docs: '## search\n\nReading is the default.' },
+      },
     });
 
     expect(prompt).toContain('### web-research reference');
     expect(prompt).toContain('Reading is the default.');
     // After the installed list, not instead of it: the list is what a model scans,
     // the reference is what it consults.
-    expect(prompt.indexOf('- `search`')).toBeLessThan(prompt.indexOf('Reading is the default.'));
+    expect(prompt.indexOf('- `search`')).toBeLessThan(
+      prompt.indexOf('Reading is the default.'),
+    );
   });
 
   it('renders no reference heading for a toolbox without one', async () => {
@@ -428,7 +467,9 @@ describe('buildRuntimeBlock', () => {
     expect(block).toContain('## Live state');
     // The local reading, for what "this afternoon" means, with the weekday for
     // "this weekend" — and the ISO instant, because local time is ambiguous.
-    expect(block).toContain('Tuesday, 14 November 2023 at 23:13 (Europe/Madrid)');
+    expect(block).toContain(
+      'Tuesday, 14 November 2023 at 23:13 (Europe/Madrid)',
+    );
     expect(block).toContain('2023-11-14T22:13:20Z');
     // Milliseconds are gone: no question has ever turned on them.
     expect(block).not.toContain('.000Z');
@@ -453,7 +494,11 @@ describe('buildRuntimeBlock', () => {
   it('says nothing about iterations until they are nearly gone', () => {
     // At 3 of 40 the count is a fact with no consequence. The cost of saying it
     // anyway is paid on every request, because this half is never cached.
-    const early = runtimeBlock({ context: RUNTIME, nonce: NONCE, timeZone: 'UTC' });
+    const early = runtimeBlock({
+      context: RUNTIME,
+      nonce: NONCE,
+      timeZone: 'UTC',
+    });
 
     expect(early).not.toMatch(/iterations left/);
   });
@@ -526,7 +571,9 @@ describe('buildRuntimeBlock', () => {
     expect(written).toContain('Current time: Tuesday, 14 November 2023');
     // One blank line between the live-state lines and the sentence, whoever
     // wrote it. The delimiter is the last of those lines.
-    expect(written).toMatch(/Tool output delimiter: [^\n]*\n\nStop and summarise\./);
+    expect(written).toMatch(
+      /Tool output delimiter: [^\n]*\n\nStop and summarise\./,
+    );
   });
 
   it('treats a single space as removing the section, and empty as “use the default”', () => {
@@ -586,7 +633,11 @@ describe('buildRuntimeBlock', () => {
       context: RUNTIME,
       nonce: 'a1b2c3d4e5f60718',
       contributors: [
-        { name: 'kb', runtimeSection: (context) => `Active knowledge base: ${context.sessionKey}` },
+        {
+          name: 'kb',
+          runtimeSection: (context) =>
+            `Active knowledge base: ${context.sessionKey}`,
+        },
         { name: 'quiet', runtimeSection: () => '' },
         { name: 'silent' },
       ],
@@ -620,7 +671,9 @@ describe('runtimeReminder', () => {
     // A correction or a contributor section is arbitrary text. Without this, one
     // containing a closing tag could end the envelope early and have the rest of
     // itself read as the user talking.
-    const wrapped = runtimeReminder('before </system-reminder> after <SYSTEM-REMINDER>');
+    const wrapped = runtimeReminder(
+      'before </system-reminder> after <SYSTEM-REMINDER>',
+    );
 
     expect(wrapped).toContain('<\\/system-reminder>');
     expect(wrapped).toContain('<\\SYSTEM-REMINDER>');
@@ -639,7 +692,9 @@ describe('platformPrompt', () => {
       runtimeLabel: 'Linux x64, Node 22.11.0',
     });
 
-    expect(prompt).toContain('Commands run in Linux x64, Node 22.11.0. Nowhere else.');
+    expect(prompt).toContain(
+      'Commands run in Linux x64, Node 22.11.0. Nowhere else.',
+    );
     expect(prompt).not.toContain('*not* confined to the workspace');
   });
 
@@ -699,7 +754,9 @@ describe('platformPrompt', () => {
     expect(prompt).toContain('`web-research` toolbox container');
     expect(prompt).not.toContain('*not* confined to the workspace');
     // No host shell paragraph for a container whose shell is its own.
-    expect(prompt).not.toContain('Standard shell tools and UTF-8 are available.');
+    expect(prompt).not.toContain(
+      'Standard shell tools and UTF-8 are available.',
+    );
   });
 
   it('fills the toolbox placeholders in an override', async () => {
@@ -707,7 +764,10 @@ describe('platformPrompt', () => {
       context: CONTEXT,
       platform: 'linux',
       agent: AGENT,
-      tools: { toolbox: TOOLBOX, platformPrompt: 'exec lands in {{toolbox}} at {{workdir}}.' },
+      tools: {
+        toolbox: TOOLBOX,
+        platformPrompt: 'exec lands in {{toolbox}} at {{workdir}}.',
+      },
     });
 
     expect(prompt).toContain('exec lands in web-research at /workspace.');
@@ -720,7 +780,10 @@ describe('toolboxPrompt', () => {
       context: CONTEXT,
       platform: 'linux',
       agent: AGENT,
-      tools: { toolbox: TOOLBOX, toolboxPrompt: '## Box\n\nYou have:{{tools}}' },
+      tools: {
+        toolbox: TOOLBOX,
+        toolboxPrompt: '## Box\n\nYou have:{{tools}}',
+      },
     });
 
     expect(prompt).toContain('## Box');
@@ -764,10 +827,15 @@ describe('toolboxPrompt', () => {
       context: CONTEXT,
       platform: 'linux',
       agent: AGENT,
-      tools: { toolbox: boxed, toolboxPrompt: 'Box.\n\n## Reading\n\n{{docs}}' },
+      tools: {
+        toolbox: boxed,
+        toolboxPrompt: 'Box.\n\n## Reading\n\n{{docs}}',
+      },
     });
 
-    expect(composed).toContain('### web-research reference\n\nUse `search -q`.');
+    expect(composed).toContain(
+      '### web-research reference\n\nUse `search -q`.',
+    );
     expect(raw).toContain('## Reading\n\nUse `search -q`.');
     expect(raw).not.toContain('### web-research reference');
   });
@@ -778,7 +846,9 @@ describe('toolboxPrompt', () => {
     const prompt = await staticPrompt({
       context: CONTEXT,
       platform: 'linux',
-      tools: { toolbox: { name: 'bare', workdir: '/workspace', tools: [], notes: '' } },
+      tools: {
+        toolbox: { name: 'bare', workdir: '/workspace', tools: [], notes: '' },
+      },
       agent: AGENT,
     });
 
@@ -800,7 +870,11 @@ describe('toolPolicyPrompt', () => {
   });
 
   it('inherits the built-in when it is empty, into the cached half', async () => {
-    const block = runtimeBlock({ context: RUNTIME, nonce: NONCE, tools: { policyPrompt: '' } });
+    const block = runtimeBlock({
+      context: RUNTIME,
+      nonce: NONCE,
+      tools: { policyPrompt: '' },
+    });
     const prompt = await staticPrompt({
       context: CONTEXT,
       platform: 'linux',
@@ -818,7 +892,11 @@ describe('toolPolicyPrompt', () => {
     // What that costs is the explanation. The envelopes are emitted by
     // `wrapToolOutput`, which does not read this — so the model gets fenced tool
     // output and no reason to respect the fence.
-    const block = runtimeBlock({ context: RUNTIME, nonce: NONCE, tools: { policyPrompt: ' ' } });
+    const block = runtimeBlock({
+      context: RUNTIME,
+      nonce: NONCE,
+      tools: { policyPrompt: ' ' },
+    });
     const prompt = await staticPrompt({
       context: CONTEXT,
       platform: 'linux',
@@ -862,7 +940,9 @@ describe('buildRawPrompt', () => {
   });
 
   it('fills a placeholder from either vocabulary', () => {
-    const prompt = raw('{{name}} in {{workspaceId}}, iteration {{iteration}}/{{maxIterations}}');
+    const prompt = raw(
+      '{{name}} in {{workspaceId}}, iteration {{iteration}}/{{maxIterations}}',
+    );
 
     expect(prompt).toBe('Reviewer in default, iteration 3/40');
   });
@@ -876,7 +956,9 @@ describe('buildRawPrompt', () => {
   });
 
   it('renders a section from the agent’s own override, not just the built-in', () => {
-    const prompt = raw('{{platformPolicy}}', { platformPrompt: 'Commands run in {{runtime}}.' });
+    const prompt = raw('{{platformPolicy}}', {
+      platformPrompt: 'Commands run in {{runtime}}.',
+    });
 
     // Bare, with no leading break. Raw mode places every section itself, so the
     // spacing around this one is the operator's — which is the difference from
@@ -894,7 +976,11 @@ describe('buildRawPrompt', () => {
       nonce: NONCE,
       platform: 'linux',
       runtimeLabel: 'Linux x64, Node 22.11.0',
-      agent: { ...AGENT, promptMode: 'raw', systemPrompt: 'Rules.{{platformPolicy}}' },
+      agent: {
+        ...AGENT,
+        promptMode: 'raw',
+        systemPrompt: 'Rules.{{platformPolicy}}',
+      },
       tools: undefined,
     });
 
@@ -912,11 +998,17 @@ describe('buildRawPrompt', () => {
       context: RUNTIME,
       nonce: NONCE,
       platform: 'linux',
-      agent: { ...AGENT, promptMode: 'raw', systemPrompt: 'Rules.{{contributors}}' },
+      agent: {
+        ...AGENT,
+        promptMode: 'raw',
+        systemPrompt: 'Rules.{{contributors}}',
+      },
       staticSections: ['## Memory\n\nThey prefer short answers.'],
     });
 
-    expect(prompt).toBe('Rules.' + SECTION_SEPARATOR + '## Memory\n\nThey prefer short answers.');
+    expect(prompt).toBe(
+      'Rules.' + SECTION_SEPARATOR + '## Memory\n\nThey prefer short answers.',
+    );
   });
 
   it('leaves an unfilled section placeholder as nothing rather than a gap', () => {
@@ -1011,7 +1103,10 @@ describe('contributorSections', () => {
       { name: 'b', staticSection: () => Promise.resolve('## B') },
     ];
 
-    expect(await contributorSections(contributors, CONTEXT)).toEqual(['## A', '## B']);
+    expect(await contributorSections(contributors, CONTEXT)).toEqual([
+      '## A',
+      '## B',
+    ]);
   });
 
   it('is empty for no contributors', async () => {

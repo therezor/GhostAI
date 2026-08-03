@@ -12,13 +12,19 @@
 import { expect, test } from '../src/fixtures.js';
 
 test.describe('a turn', () => {
-  test('streams an answer, its reasoning and its code block', async ({ app }) => {
-    await app.getByRole('textbox', { name: 'Message' }).fill('stream a long answer');
+  test('streams an answer, its reasoning and its code block', async ({
+    app,
+  }) => {
+    await app
+      .getByRole('textbox', { name: 'Message' })
+      .fill('stream a long answer');
     await app.getByRole('button', { name: 'Send' }).click();
 
     const transcript = app.getByTestId('transcript');
     await expect(transcript.getByText('Here is what I found.')).toBeVisible();
-    await expect(transcript.getByText('That is the whole of it.')).toBeVisible();
+    await expect(
+      transcript.getByText('That is the whole of it.'),
+    ).toBeVisible();
 
     // The fence became a code block rather than a paragraph containing
     // backticks — which is the difference the block splitter exists to make.
@@ -35,8 +41,12 @@ test.describe('a turn', () => {
     await expect(app.getByRole('button', { name: 'Send' })).toBeVisible();
   });
 
-  test('renders a tool card for a call that needs no approval', async ({ app }) => {
-    await app.getByRole('textbox', { name: 'Message' }).fill('list the workspace');
+  test('renders a tool card for a call that needs no approval', async ({
+    app,
+  }) => {
+    await app
+      .getByRole('textbox', { name: 'Message' })
+      .fill('list the workspace');
     await app.getByRole('button', { name: 'Send' }).click();
 
     const card = app.getByRole('region', { name: 'Tool call: list_dir' });
@@ -49,7 +59,9 @@ test.describe('a turn', () => {
     await card.getByRole('button', { expanded: false }).click();
     await expect(card.getByText('notes.md')).toBeVisible();
 
-    await expect(app.getByTestId('transcript').getByText('The workspace holds')).toBeVisible();
+    await expect(
+      app.getByTestId('transcript').getByText('The workspace holds'),
+    ).toBeVisible();
   });
 
   test('Stop aborts a turn while a tool is still running', async ({ app }) => {
@@ -73,10 +85,14 @@ test.describe('a turn', () => {
     await expect(card.getByLabel('Running')).toHaveCount(0);
   });
 
-  test('a queued message says so rather than disabling the composer', async ({ app }) => {
+  test('a queued message says so rather than disabling the composer', async ({
+    app,
+  }) => {
     await app.getByRole('textbox', { name: 'Message' }).fill('stall here');
     await app.getByRole('button', { name: 'Send' }).click();
-    await expect(app.getByRole('button', { name: 'Stop the current turn' })).toBeVisible();
+    await expect(
+      app.getByRole('button', { name: 'Stop the current turn' }),
+    ).toBeVisible();
 
     // Enter still sends while a turn runs: the hub queues it. A composer that
     // disabled itself would lose whatever the user was mid-way through typing.
@@ -85,7 +101,9 @@ test.describe('a turn', () => {
     await message.fill('stall again');
     await message.press('Enter');
 
-    await expect(app.getByText(/message waiting|messages waiting/)).toBeVisible();
+    await expect(
+      app.getByText(/message waiting|messages waiting/),
+    ).toBeVisible();
     await app.getByRole('button', { name: 'Stop the current turn' }).click();
   });
 });
@@ -113,34 +131,48 @@ test.describe('a turn', () => {
  * agent picker and the budget.
  */
 test.describe('the composer on a narrow screen', () => {
-  test('puts the agent picker and the context budget on separate rows', async ({ app }) => {
+  test('puts the agent picker and the context budget on separate rows', async ({
+    app,
+  }) => {
     // Resized here rather than through `test.use`: the `app` fixture waits for
     // the inline sidebar, which below the shell's `md` breakpoint is a drawer
     // and never appears. Boot wide, then narrow.
     await app.setViewportSize({ width: 480, height: 900 });
 
-    await app.getByRole('textbox', { name: 'Message' }).fill('stream a long answer');
+    await app
+      .getByRole('textbox', { name: 'Message' })
+      .fill('stream a long answer');
     await app.getByRole('button', { name: 'Send' }).click();
-    await expect(app.getByTestId('transcript').getByText('Here is what I found.')).toBeVisible({
+    await expect(
+      app.getByTestId('transcript').getByText('Here is what I found.'),
+    ).toBeVisible({
       timeout: 15_000,
     });
 
     const picker = app.getByRole('button', { name: /^Agent: / });
-    const budget = app.getByRole('button', { name: /of .* tokens|of [\d,]+ ·/u });
+    const budget = app.getByRole('button', {
+      name: /of .* tokens|of [\d,]+ ·/u,
+    });
     await expect(budget).toBeVisible({ timeout: 15_000 });
 
     const pickerBox = await picker.boundingBox();
     const budgetBox = await budget.boundingBox();
-    if (pickerBox === null || budgetBox === null) throw new Error('no layout to measure');
+    if (pickerBox === null || budgetBox === null) {
+      throw new Error('no layout to measure');
+    }
 
     // Stacked: the budget starts below the picker ends, rather than beside it.
     expect(budgetBox.y).toBeGreaterThanOrEqual(pickerBox.y + pickerBox.height);
   });
 
-  test('shows the keyboard hint where a first-time reader is already looking', async ({ app }) => {
+  test('shows the keyboard hint where a first-time reader is already looking', async ({
+    app,
+  }) => {
     // On the welcome screen, once, rather than under the box on every render
     // for the life of the install.
-    await expect(app.getByText('Enter to send', { exact: false })).toBeVisible();
+    await expect(
+      app.getByText('Enter to send', { exact: false }),
+    ).toBeVisible();
 
     await app.getByRole('textbox', { name: 'Message' }).fill('hello');
     await app.getByRole('button', { name: 'Send' }).click();
@@ -150,19 +182,29 @@ test.describe('the composer on a narrow screen', () => {
 
     // And gone once there is a session, because the row under the box is
     // the budget's now.
-    await expect(app.getByText('Enter to send', { exact: false })).toHaveCount(0);
+    await expect(app.getByText('Enter to send', { exact: false })).toHaveCount(
+      0,
+    );
   });
 });
 
 test.describe('reworking a turn', () => {
-  test('regenerate replaces the answer rather than appending one', async ({ app }) => {
-    await app.getByRole('textbox', { name: 'Message' }).fill('stream a long answer');
+  test('regenerate replaces the answer rather than appending one', async ({
+    app,
+  }) => {
+    await app
+      .getByRole('textbox', { name: 'Message' })
+      .fill('stream a long answer');
     await app.getByRole('button', { name: 'Send' }).click();
 
-    const answer = app.getByTestId('transcript').getByText('Here is what I found.');
+    const answer = app
+      .getByTestId('transcript')
+      .getByText('Here is what I found.');
     await expect(answer).toBeVisible({ timeout: 15_000 });
 
-    const question = app.getByTestId('transcript').getByText('stream a long answer');
+    const question = app
+      .getByTestId('transcript')
+      .getByText('stream a long answer');
     await expect(question).toHaveCount(1);
 
     await app.getByRole('button', { name: 'Regenerate the answer' }).click();
@@ -170,7 +212,9 @@ test.describe('reworking a turn', () => {
     // Still exactly one. The scripted provider says the same thing again, so a
     // second copy would be the transcript growing rather than being rebuilt.
     await expect(answer).toHaveCount(1, { timeout: 15_000 });
-    await expect(app.getByRole('button', { name: 'Send' })).toBeVisible({ timeout: 15_000 });
+    await expect(app.getByRole('button', { name: 'Send' })).toBeVisible({
+      timeout: 15_000,
+    });
 
     // And the question is still there, exactly once. Re-running deletes that row
     // and writes it back, and the client used to rebuild over the gap — so the
@@ -181,9 +225,13 @@ test.describe('reworking a turn', () => {
   });
 
   test('the info button opens what the turn cost', async ({ app }) => {
-    await app.getByRole('textbox', { name: 'Message' }).fill('stream a long answer');
+    await app
+      .getByRole('textbox', { name: 'Message' })
+      .fill('stream a long answer');
     await app.getByRole('button', { name: 'Send' }).click();
-    await expect(app.getByTestId('transcript').getByText('Here is what I found.')).toBeVisible({
+    await expect(
+      app.getByTestId('transcript').getByText('Here is what I found.'),
+    ).toBeVisible({
       timeout: 15_000,
     });
 
@@ -196,10 +244,16 @@ test.describe('reworking a turn', () => {
     await expect(details.getByText('Model')).toBeVisible();
   });
 
-  test('editing a message re-runs the turn from the new wording', async ({ app }) => {
-    await app.getByRole('textbox', { name: 'Message' }).fill('stream a long answer');
+  test('editing a message re-runs the turn from the new wording', async ({
+    app,
+  }) => {
+    await app
+      .getByRole('textbox', { name: 'Message' })
+      .fill('stream a long answer');
     await app.getByRole('button', { name: 'Send' }).click();
-    await expect(app.getByTestId('transcript').getByText('Here is what I found.')).toBeVisible({
+    await expect(
+      app.getByTestId('transcript').getByText('Here is what I found.'),
+    ).toBeVisible({
       timeout: 15_000,
     });
 
@@ -212,13 +266,19 @@ test.describe('reworking a turn', () => {
     // The new wording ran: `list the workspace` is a different scripted route,
     // so its tool card is proof the edit reached the model rather than only the
     // transcript.
-    await expect(app.getByRole('region', { name: 'Tool call: list_dir' })).toBeVisible({
+    await expect(
+      app.getByRole('region', { name: 'Tool call: list_dir' }),
+    ).toBeVisible({
       timeout: 15_000,
     });
-    await expect(app.getByTestId('transcript').getByText('Here is what I found.')).toHaveCount(0);
+    await expect(
+      app.getByTestId('transcript').getByText('Here is what I found.'),
+    ).toHaveCount(0);
   });
 
-  test('an attached image is still on screen after a reload', async ({ app }) => {
+  test('an attached image is still on screen after a reload', async ({
+    app,
+  }) => {
     // Two durable states, and the reload is the point of the test. An
     // attachment used to be stored as a signed URL with a ten-minute life, so
     // the transcript held a dead link the moment the tab sat idle -- and the
@@ -228,26 +288,38 @@ test.describe('reworking a turn', () => {
     const picker = app.locator('input[type="file"]');
     await picker.setInputFiles([
       { name: 'shot.png', mimeType: 'image/png', buffer: onePixelPng() },
-      { name: 'rows.csv', mimeType: 'text/csv', buffer: Buffer.from('date,amount\n') },
+      {
+        name: 'rows.csv',
+        mimeType: 'text/csv',
+        buffer: Buffer.from('date,amount\n'),
+      },
     ]);
 
-    await app.getByRole('textbox', { name: 'Message' }).fill('stream a long answer');
+    await app
+      .getByRole('textbox', { name: 'Message' })
+      .fill('stream a long answer');
     await app.getByRole('button', { name: 'Send' }).click();
-    await expect(app.getByTestId('transcript').getByText('Here is what I found.')).toBeVisible({
+    await expect(
+      app.getByTestId('transcript').getByText('Here is what I found.'),
+    ).toBeVisible({
       timeout: 15_000,
     });
 
     const transcript = app.getByTestId('transcript');
-    await expect(transcript.getByRole('img', { name: 'shot.png' })).toBeVisible();
+    await expect(
+      transcript.getByRole('img', { name: 'shot.png' }),
+    ).toBeVisible();
     await expect(transcript.getByText('rows.csv')).toBeVisible();
 
     await app.reload();
 
     // Rebuilt from storage rather than from the socket's live frames: this is
     // the assertion the old shape could not pass.
-    await expect(transcript.getByRole('img', { name: 'shot.png' })).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(transcript.getByRole('img', { name: 'shot.png' })).toBeVisible(
+      {
+        timeout: 15_000,
+      },
+    );
     await expect(transcript.getByText('rows.csv')).toBeVisible();
   });
 });

@@ -7,14 +7,22 @@
  * operator's own action is what caused it and nothing they typed is wrong.
  */
 
-import { AgentDefaultsSchema, ConfigPatchSchema, type AgentDefaults } from '@ghostai/protocol';
+import {
+  AgentDefaultsSchema,
+  ConfigPatchSchema,
+  type AgentDefaults,
+} from '@ghostai/protocol';
 import { describe, expect, it } from 'vitest';
 import { createWebI18n } from '@ghostai/i18n/web';
 
 /** English, resolved: these assertions compare the message a user would read. */
 const t = createWebI18n('en').getFixedT(null, 'web');
 
-import { MODEL_REQUIRED, toAgentForm, toAgentPatch } from '@/agents/agents-form.js';
+import {
+  MODEL_REQUIRED,
+  toAgentForm,
+  toAgentPatch,
+} from '@/agents/agents-form.js';
 
 /**
  * A model is set unless a case is about not having one.
@@ -29,7 +37,9 @@ const defaults = (overrides: Partial<AgentDefaults> = {}): AgentDefaults =>
 
 describe('toAgentForm', () => {
   it('renders every value as the string an input holds', () => {
-    const form = toAgentForm(defaults({ model: 'gpt-5', toolTimeoutMs: 30_000 }));
+    const form = toAgentForm(
+      defaults({ model: 'gpt-5', toolTimeoutMs: 30_000 }),
+    );
 
     expect(form.model).toBe('gpt-5');
     expect(form.maxTokens).toBe('8192');
@@ -45,7 +55,9 @@ describe('toAgentForm', () => {
     // Blank sends no reasoning parameter; `off` sends one asking for none. If
     // this collapsed to `''` the switch would look like it worked and change
     // nothing about the request.
-    expect(toAgentForm(defaults({ reasoningEffort: 'off' })).reasoningEffort).toBe('off');
+    expect(
+      toAgentForm(defaults({ reasoningEffort: 'off' })).reasoningEffort,
+    ).toBe('off');
   });
 
   it('carries the two capability switches through as booleans', () => {
@@ -86,7 +98,10 @@ describe('toAgentPatch', () => {
     // so an omitted key preserves what the config file or `--workspace` set —
     // but a form that still emitted `workspace: ''` would look correct in a
     // diff and would reset a configured root on every unrelated save.
-    const result = toAgentPatch(toAgentForm(defaults({ workspace: '/tmp/w' })), t);
+    const result = toAgentPatch(
+      toAgentForm(defaults({ workspace: '/tmp/w' })),
+      t,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
@@ -123,7 +138,10 @@ describe('toAgentPatch', () => {
   });
 
   it('refuses an empty provider, which would resolve to nothing', () => {
-    const result = toAgentPatch({ ...toAgentForm(defaults()), provider: '  ' }, t);
+    const result = toAgentPatch(
+      { ...toAgentForm(defaults()), provider: '  ' },
+      t,
+    );
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.errors.provider).toBe('Required');
@@ -143,7 +161,10 @@ describe('toAgentPatch', () => {
     // Omitting it was the bug: `agents.defaults` merges per field, so a patch
     // that never mentions the key preserves whatever is stored. `null` is the
     // token `DELETE_BY_NULL` reads as a removal.
-    const result = toAgentPatch({ ...toAgentForm(defaults()), reasoningEffort: '' }, t);
+    const result = toAgentPatch(
+      { ...toAgentForm(defaults()), reasoningEffort: '' },
+      t,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
@@ -168,7 +189,10 @@ describe('toAgentPatch', () => {
   });
 
   it('still sends a temperature that is set, including zero', () => {
-    const result = toAgentPatch({ ...toAgentForm(defaults()), temperature: '0' }, t);
+    const result = toAgentPatch(
+      { ...toAgentForm(defaults()), temperature: '0' },
+      t,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
@@ -176,7 +200,10 @@ describe('toAgentPatch', () => {
   });
 
   it('sends the reasoning effort when it is one the protocol knows', () => {
-    const result = toAgentPatch({ ...toAgentForm(defaults()), reasoningEffort: 'high' }, t);
+    const result = toAgentPatch(
+      { ...toAgentForm(defaults()), reasoningEffort: 'high' },
+      t,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
@@ -187,7 +214,10 @@ describe('toAgentPatch', () => {
     // The one that would go wrong quietly: `off` is falsy-adjacent enough that a
     // truthiness check anywhere on the way through turns it into the `null` that
     // means "no reasoning parameter at all" — the opposite request.
-    const result = toAgentPatch({ ...toAgentForm(defaults()), reasoningEffort: 'off' }, t);
+    const result = toAgentPatch(
+      { ...toAgentForm(defaults()), reasoningEffort: 'off' },
+      t,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 

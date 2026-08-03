@@ -47,7 +47,9 @@ function describe(profile: Toolbox): readonly string[] {
   if (profile.caps.add.length > 0) {
     lines.push(`    caps       +${profile.caps.add.join(' +')}`);
   }
-  for (const warning of weakenedIn(profile)) lines.push(`    ${warning}  <-- review this`);
+  for (const warning of weakenedIn(profile)) {
+    lines.push(`    ${warning}  <-- review this`);
+  }
   return lines;
 }
 
@@ -61,7 +63,10 @@ export function runToolbox(options: ToolboxOptions): number {
 
   const database = new DatabaseSync(loaded.paths.dbFile);
   try {
-    const store = new ToolboxStore({ database, dir: loaded.paths.toolboxesDir });
+    const store = new ToolboxStore({
+      database,
+      dir: loaded.paths.toolboxesDir,
+    });
 
     if (options.action === 'list') {
       const listing = store.list();
@@ -72,7 +77,9 @@ export function runToolbox(options: ToolboxOptions): number {
       for (const entry of listing) {
         const state = entry.approved ? 'approved' : 'NOT APPROVED';
         out(`${entry.name}  [${state}]`);
-        if (entry.toolbox !== undefined) for (const line of describe(entry.toolbox)) out(line);
+        if (entry.toolbox !== undefined) {
+          for (const line of describe(entry.toolbox)) out(line);
+        }
         if (entry.problem !== undefined) out(`    problem    ${entry.problem}`);
         out('');
       }
@@ -87,7 +94,9 @@ export function runToolbox(options: ToolboxOptions): number {
 
     if (options.action === 'revoke') {
       store.revoke(id);
-      out(`Revoked ${id}. The manifest is still installed; it will no longer run.`);
+      out(
+        `Revoked ${id}. The manifest is still installed; it will no longer run.`,
+      );
       return 0;
     }
 

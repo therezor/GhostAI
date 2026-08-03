@@ -46,13 +46,15 @@ const resultOf = (text: string): ChatResult => ({
 
 /** A provider whose every call is scripted, so an attempt sequence is a value. */
 function scripted(
-  ...steps: readonly (ChatResult | Error | readonly ChatStreamEvent[])[]
+  ...steps: ReadonlyArray<ChatResult | Error | readonly ChatStreamEvent[]>
 ): ChatProvider & {
   readonly seen: ChatRequest[];
 } {
   const seen: ChatRequest[] = [];
   let index = 0;
-  const next = (req: ChatRequest): ChatResult | Error | readonly ChatStreamEvent[] => {
+  const next = (
+    req: ChatRequest,
+  ): ChatResult | Error | readonly ChatStreamEvent[] => {
     seen.push(req);
     const step = steps[index];
     index += 1;
@@ -68,8 +70,12 @@ function scripted(
       const step = next(req);
       if (step instanceof Error) return Promise.reject(step);
       if (Array.isArray(step)) {
-        const done = (step as readonly ChatStreamEvent[]).find((event) => event.type === 'done');
-        return Promise.resolve(done?.type === 'done' ? done.result : resultOf(''));
+        const done = (step as readonly ChatStreamEvent[]).find(
+          (event) => event.type === 'done',
+        );
+        return Promise.resolve(
+          done?.type === 'done' ? done.result : resultOf(''),
+        );
       }
       return Promise.resolve(step as ChatResult);
     },
@@ -140,28 +146,47 @@ describe('retry', () => {
   });
 
   it('normalises an untyped throw before deciding', async () => {
-    const inner = scripted(new TypeError('fetch failed'), resultOf('recovered'));
+    const inner = scripted(
+      new TypeError('fetch failed'),
+      resultOf('recovered'),
+    );
     const { provider } = wrap(inner);
     // A raw `TypeError` from undici is a transport failure, which is retryable —
     // but only once it has been through `toProviderError`.
-    expect((await provider.chat(request())).message.content).toEqual([textPart('recovered')]);
+    expect((await provider.chat(request())).message.content).toEqual([
+      textPart('recovered'),
+    ]);
   });
 
   it('honours Retry-After over its own schedule, up to the ceiling', () => {
     const options = { baseDelayMs: 500, maxDelayMs: 8000, jitter: () => 1 };
     expect(
-      backoffDelayMs(1, new ProviderError('rate_limit', 'x', { retryAfterMs: 2000 }), options),
+      backoffDelayMs(
+        1,
+        new ProviderError('rate_limit', 'x', { retryAfterMs: 2000 }),
+        options,
+      ),
     ).toBe(2000);
     expect(
-      backoffDelayMs(1, new ProviderError('rate_limit', 'x', { retryAfterMs: 90_000 }), options),
+      backoffDelayMs(
+        1,
+        new ProviderError('rate_limit', 'x', { retryAfterMs: 90_000 }),
+        options,
+      ),
     ).toBe(8000);
-    expect(backoffDelayMs(4, new ProviderError('server', 'x'), options)).toBe(4000);
-    expect(backoffDelayMs(9, new ProviderError('server', 'x'), options)).toBe(8000);
+    expect(backoffDelayMs(4, new ProviderError('server', 'x'), options)).toBe(
+      4000,
+    );
+    expect(backoffDelayMs(9, new ProviderError('server', 'x'), options)).toBe(
+      8000,
+    );
   });
 
   it('scales the delay by the jitter fraction', () => {
     const options = { baseDelayMs: 1000, maxDelayMs: 8000, jitter: () => 0.25 };
-    expect(backoffDelayMs(1, new ProviderError('server', 'x'), options)).toBe(250);
+    expect(backoffDelayMs(1, new ProviderError('server', 'x'), options)).toBe(
+      250,
+    );
   });
 
   it('aborting during backoff ends the turn rather than retrying', async () => {
@@ -171,12 +196,15 @@ describe('retry', () => {
     const provider = withResilience(inner, {
       clock: {
         ...clock,
-        sleep: () => Promise.reject(new ProviderError('aborted', 'Sleep aborted')),
+        sleep: () =>
+          Promise.reject(new ProviderError('aborted', 'Sleep aborted')),
       },
       jitter: () => 1,
     });
 
-    await expect(provider.chat(request({ signal: controller.signal }))).rejects.toThrow(/aborted/);
+    await expect(
+      provider.chat(request({ signal: controller.signal })),
+    ).rejects.toThrow(/aborted/);
     expect(inner.seen).toHaveLength(1);
   });
 });
@@ -185,7 +213,9 @@ describe('the degradation ladder', () => {
   it('drops reasoning_effort first, without spending a retry or a wait', async () => {
     const notices: ResilienceNotice[] = [];
     const inner = scripted(
-      new ProviderError('unsupported_param', 'no', { param: 'reasoning_effort' }),
+      new ProviderError('unsupported_param', 'no', {
+        param: 'reasoning_effort',
+      }),
       resultOf('ok'),
     );
     const clock = recordingClock();
@@ -195,7 +225,9 @@ describe('the degradation ladder', () => {
       onNotice: (n) => notices.push(n),
     });
 
-    await provider.chat(request({ reasoningEffort: 'high', toolChoice: 'auto' }));
+    await provider.chat(
+      request({ reasoningEffort: 'high', toolChoice: 'auto' }),
+    );
     expect(inner.seen[1]?.reasoningEffort).toBeUndefined();
     // Only the one thing the provider objected to; `tool_choice` is untouched.
     expect(inner.seen[1]?.toolChoice).toBe('auto');
@@ -227,7 +259,9 @@ describe('the degradation ladder', () => {
     );
     const { provider } = wrap(inner);
 
-    await provider.chat(request({ reasoningEffort: 'high', toolChoice: 'required' }));
+    await provider.chat(
+      request({ reasoningEffort: 'high', toolChoice: 'required' }),
+    );
     expect(inner.seen[1]?.reasoningEffort).toBe('high');
     expect(inner.seen[1]?.toolChoice).toBeUndefined();
   });
@@ -248,7 +282,12 @@ describe('the degradation ladder', () => {
         request({
           reasoningEffort: 'low',
           toolChoice: 'auto',
-          messages: [userMessage([textPart('look'), imagePart('image/png', { data: 'aGk=' })])],
+          messages: [
+            userMessage([
+              textPart('look'),
+              imagePart('image/png', { data: 'aGk=' }),
+            ]),
+          ],
         }),
       ),
     ).rejects.toThrow(/400/);
@@ -256,7 +295,8 @@ describe('the degradation ladder', () => {
     expect(inner.seen[1]?.reasoningEffort).toBeUndefined();
     expect(inner.seen[2]?.toolChoice).toBeUndefined();
     expect(
-      inner.seen[3]?.messages[0]?.role === 'user' && inner.seen[3].messages[0].content,
+      inner.seen[3]?.messages[0]?.role === 'user' &&
+        inner.seen[3].messages[0].content,
     ).toEqual([textPart('look')]);
   });
 
@@ -267,7 +307,9 @@ describe('the degradation ladder', () => {
     );
     const { provider } = wrap(inner);
 
-    await provider.chat(request({ cacheKey: 'web:1', reasoningEffort: 'high' }));
+    await provider.chat(
+      request({ cacheKey: 'web:1', reasoningEffort: 'high' }),
+    );
 
     expect(inner.seen[1]?.cacheKey).toBeUndefined();
     // And nothing else was given up to get there — the whole reason this step
@@ -286,7 +328,13 @@ describe('the degradation ladder', () => {
     const { provider } = wrap(inner);
 
     await provider.chat(
-      request({ messages: [systemMessage('rules'), userMessage('hello'), userMessage('live')] }),
+      request({
+        messages: [
+          systemMessage('rules'),
+          userMessage('hello'),
+          userMessage('live'),
+        ],
+      }),
     );
 
     const merged = inner.seen[1]?.messages;
@@ -298,18 +346,26 @@ describe('the degradation ladder', () => {
   });
 
   it('leaves a request whose last two turns are not both user alone', () => {
-    const step = DEFAULT_DEGRADATION_STEPS.find((entry) => entry.id === 'merge_trailing_user')!;
+    const step = DEFAULT_DEGRADATION_STEPS.find(
+      (entry) => entry.id === 'merge_trailing_user',
+    )!;
 
-    expect(step.apply(request({ messages: [userMessage('hello')] }))).toBeNull();
     expect(
-      step.apply(request({ messages: [userMessage('hello'), assistantMessage('hi')] })),
+      step.apply(request({ messages: [userMessage('hello')] })),
+    ).toBeNull();
+    expect(
+      step.apply(
+        request({ messages: [userMessage('hello'), assistantMessage('hi')] }),
+      ),
     ).toBeNull();
   });
 
   it('does not degrade an error no repair addresses', async () => {
     const inner = scripted(new ProviderError('content_filter', 'refused'));
     const { provider } = wrap(inner);
-    await expect(provider.chat(request({ reasoningEffort: 'high' }))).rejects.toThrow(/refused/);
+    await expect(
+      provider.chat(request({ reasoningEffort: 'high' })),
+    ).rejects.toThrow(/refused/);
     expect(inner.seen).toHaveLength(1);
   });
 
@@ -334,10 +390,17 @@ describe('the degradation ladder', () => {
 });
 
 describe('truncateOldestTurns', () => {
-  const long = (marker: string): ChatMessage => userMessage(`${marker} `.repeat(60));
+  const long = (marker: string): ChatMessage =>
+    userMessage(`${marker} `.repeat(60));
 
   it('keeps the system prompt and the newest turn', () => {
-    const messages = [systemMessage('rules'), long('a'), long('b'), long('c'), long('d')];
+    const messages = [
+      systemMessage('rules'),
+      long('a'),
+      long('b'),
+      long('c'),
+      long('d'),
+    ];
     const kept = truncateOldestTurns(messages);
 
     expect(kept).not.toBeNull();
@@ -350,8 +413,16 @@ describe('truncateOldestTurns', () => {
     // It cuts from the front, so this holds by construction — but the tool-pair
     // realignment runs over the whole array, and dropping this message would
     // send a request with no clock, no delimiter and no wrap-up warning.
-    const runtime = userMessage('<system-reminder>\n## Live state\n</system-reminder>');
-    const messages = [systemMessage('rules'), long('a'), long('b'), long('c'), runtime];
+    const runtime = userMessage(
+      '<system-reminder>\n## Live state\n</system-reminder>',
+    );
+    const messages = [
+      systemMessage('rules'),
+      long('a'),
+      long('b'),
+      long('c'),
+      runtime,
+    ];
     const kept = truncateOldestTurns(messages);
 
     expect(kept?.at(-1)).toEqual(runtime);
@@ -363,7 +434,9 @@ describe('truncateOldestTurns', () => {
     // messages, and cutting to the last one alone would send a clock with no
     // question in front of it.
     const question = userMessage('what did the migration change?');
-    const runtime = userMessage('<system-reminder>\n## Live state\n</system-reminder>');
+    const runtime = userMessage(
+      '<system-reminder>\n## Live state\n</system-reminder>',
+    );
     const kept = truncateOldestTurns([
       systemMessage('rules'),
       long('a'),
@@ -382,7 +455,9 @@ describe('truncateOldestTurns', () => {
     // a different 400, about an orphaned tool result.
     const messages: ChatMessage[] = [
       long('old'),
-      assistantMessage('', { toolCalls: [{ id: 'c1', name: 'read_file', argumentsJson: '{}' }] }),
+      assistantMessage('', {
+        toolCalls: [{ id: 'c1', name: 'read_file', argumentsJson: '{}' }],
+      }),
       toolMessage('c1', 'read_file', 'x'.repeat(400)),
       long('newer'),
       long('newest'),
@@ -390,15 +465,21 @@ describe('truncateOldestTurns', () => {
     const kept = truncateOldestTurns(messages);
     const declared = new Set<string>();
     for (const message of kept ?? []) {
-      if (message.role === 'assistant') for (const call of message.toolCalls) declared.add(call.id);
-      if (message.role === 'tool') expect(declared.has(message.toolCallId)).toBe(true);
+      if (message.role === 'assistant') {
+        for (const call of message.toolCalls) declared.add(call.id);
+      }
+      if (message.role === 'tool') {
+        expect(declared.has(message.toolCallId)).toBe(true);
+      }
     }
   });
 
   it('declines when there is nothing left to drop', () => {
     expect(truncateOldestTurns([])).toBeNull();
     expect(truncateOldestTurns([userMessage('only')])).toBeNull();
-    expect(truncateOldestTurns([systemMessage('rules'), userMessage('only')])).toBeNull();
+    expect(
+      truncateOldestTurns([systemMessage('rules'), userMessage('only')]),
+    ).toBeNull();
   });
 
   it('declines when the survivors would all be orphaned tool results', () => {
@@ -467,8 +548,9 @@ describe('streaming resilience', () => {
 
     const seen: string[] = [];
     const drain = async (): Promise<void> => {
-      for await (const event of provider.stream(request()))
+      for await (const event of provider.stream(request())) {
         if (event.type === 'text') seen.push(event.text);
+      }
     };
 
     await expect(drain()).rejects.toThrow(/died mid-answer/);
@@ -479,18 +561,27 @@ describe('streaming resilience', () => {
 
   it('degrades a stream the same way as a single request', async () => {
     const inner = scripted(
-      new ProviderError('unsupported_param', 'no', { param: 'reasoning_effort' }),
+      new ProviderError('unsupported_param', 'no', {
+        param: 'reasoning_effort',
+      }),
       [{ type: 'done', result: resultOf('ok') }],
     );
     const { provider } = wrap(inner);
 
-    for await (const _event of provider.stream(request({ reasoningEffort: 'high' }))) void _event;
+    for await (const event of provider.stream(
+      request({ reasoningEffort: 'high' }),
+    )) {
+      void event;
+    }
     expect(inner.seen[1]?.reasoningEffort).toBeUndefined();
   });
 
   it('falls back to a single response when the stream cannot be parsed', async () => {
     const notices: ResilienceNotice[] = [];
-    const inner = scripted(new ProviderError('stream_parse', 'garbage'), resultOf('whole answer'));
+    const inner = scripted(
+      new ProviderError('stream_parse', 'garbage'),
+      resultOf('whole answer'),
+    );
     const clock = recordingClock();
     const provider = withResilience(inner, {
       clock,

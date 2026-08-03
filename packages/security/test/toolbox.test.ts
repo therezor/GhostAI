@@ -2,7 +2,10 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
 import { GhostError } from '@ghostai/core';
-import type { AgentToolboxNetwork, ToolboxNetworkMode } from '@ghostai/protocol';
+import type {
+  AgentToolboxNetwork,
+  ToolboxNetworkMode,
+} from '@ghostai/protocol';
 
 import {
   assertNetworkWithinCeiling,
@@ -25,7 +28,10 @@ function manifest(overrides: Record<string, unknown> = {}): Uint8Array {
   );
 }
 
-function network(mode: ToolboxNetworkMode, allow: string[] = []): AgentToolboxNetwork {
+function network(
+  mode: ToolboxNetworkMode,
+  allow: string[] = [],
+): AgentToolboxNetwork {
   return { mode, allow };
 }
 
@@ -60,17 +66,21 @@ describe('parseToolbox', () => {
 
   it('refuses bytes that are not JSON', () => {
     expect(() => parseToolbox(Buffer.from('not json'))).toThrow(GhostError);
-    expect(() => parseToolbox(Buffer.from('not json'))).toThrow(/not valid JSON/);
-  });
-
-  it('refuses an unrecognised schema version', () => {
-    expect(() => parseToolbox(manifest({ schema: 'ghostai.sandbox-toolbox/2' }))).toThrow(
-      /not valid/,
+    expect(() => parseToolbox(Buffer.from('not json'))).toThrow(
+      /not valid JSON/,
     );
   });
 
+  it('refuses an unrecognised schema version', () => {
+    expect(() =>
+      parseToolbox(manifest({ schema: 'ghostai.sandbox-toolbox/2' })),
+    ).toThrow(/not valid/);
+  });
+
   it('names the offending field when the shape is wrong', () => {
-    expect(() => parseToolbox(manifest({ runtime: 'containerd' }))).toThrow(/runtime/);
+    expect(() => parseToolbox(manifest({ runtime: 'containerd' }))).toThrow(
+      /runtime/,
+    );
   });
 });
 
@@ -84,7 +94,9 @@ describe('assertToolboxPolicy', () => {
   it('refuses an image pinned by tag', () => {
     // The whole approval gate rests on this: a tag can be repointed after the
     // operator approved it, and every recorded hash would still match.
-    const toolbox = parseToolbox(manifest({ image: 'kalilinux/kali-rolling:latest' }));
+    const toolbox = parseToolbox(
+      manifest({ image: 'kalilinux/kali-rolling:latest' }),
+    );
     expect(() => {
       assertToolboxPolicy(toolbox);
     }).toThrow(/digest/);
@@ -97,17 +109,20 @@ describe('assertToolboxPolicy', () => {
     }).toThrow(/digest/);
   });
 
-  it.each(['NET_ADMIN', 'CAP_NET_ADMIN', 'net_admin', 'SYS_ADMIN', 'SYS_MODULE'])(
-    'refuses the %s capability however it is spelled',
-    (capability) => {
-      // A sandbox shares the gateway's network namespace, so NET_ADMIN would let
-      // it flush the very rules that scope its egress.
-      const toolbox = parseToolbox(manifest({ caps: { add: [capability] } }));
-      expect(() => {
-        assertToolboxPolicy(toolbox);
-      }).toThrow(GhostError);
-    },
-  );
+  it.each([
+    'NET_ADMIN',
+    'CAP_NET_ADMIN',
+    'net_admin',
+    'SYS_ADMIN',
+    'SYS_MODULE',
+  ])('refuses the %s capability however it is spelled', (capability) => {
+    // A sandbox shares the gateway's network namespace, so NET_ADMIN would let
+    // it flush the very rules that scope its egress.
+    const toolbox = parseToolbox(manifest({ caps: { add: [capability] } }));
+    expect(() => {
+      assertToolboxPolicy(toolbox);
+    }).toThrow(GhostError);
+  });
 
   it('permits NET_RAW, which is what a SYN scan needs', () => {
     const toolbox = parseToolbox(manifest({ caps: { add: ['NET_RAW'] } }));
@@ -119,14 +134,18 @@ describe('assertToolboxPolicy', () => {
   it('permits unconfined seccomp, which rootless builds require', () => {
     // Surfaced in the install review rather than refused: it is dangerous, but
     // it does not break machinery the operator cannot reason about.
-    const toolbox = parseToolbox(manifest({ security: { seccomp: 'unconfined' } }));
+    const toolbox = parseToolbox(
+      manifest({ security: { seccomp: 'unconfined' } }),
+    );
     expect(() => {
       assertToolboxPolicy(toolbox);
     }).not.toThrow();
   });
 
   it('refuses an empty proxy host entry', () => {
-    const toolbox = parseToolbox(manifest({ network: { proxyAllowHosts: ['  '] } }));
+    const toolbox = parseToolbox(
+      manifest({ network: { proxyAllowHosts: ['  '] } }),
+    );
     expect(() => {
       assertToolboxPolicy(toolbox);
     }).toThrow(/empty proxy host/);
@@ -134,23 +153,36 @@ describe('assertToolboxPolicy', () => {
 });
 
 describe('assertNetworkWithinCeiling', () => {
-  const ceiling = (maxMode: ToolboxNetworkMode) => parseToolbox(manifest({ network: { maxMode } }));
+  const ceiling = (maxMode: ToolboxNetworkMode) =>
+    parseToolbox(manifest({ network: { maxMode } }));
 
   it('refuses an agent asking for more than the toolbox permits', () => {
     expect(() => {
-      assertNetworkWithinCeiling(ceiling('allowlist'), network('open'), 'pentest');
+      assertNetworkWithinCeiling(
+        ceiling('allowlist'),
+        network('open'),
+        'pentest',
+      );
     }).toThrow(/permits at most/);
   });
 
   it('refuses any network against a toolbox whose ceiling is none', () => {
     expect(() => {
-      assertNetworkWithinCeiling(ceiling('none'), network('allowlist', ['10.0.0.0/8']), 'malware');
+      assertNetworkWithinCeiling(
+        ceiling('none'),
+        network('allowlist', ['10.0.0.0/8']),
+        'malware',
+      );
     }).toThrow(/permits at most/);
   });
 
   it('accepts a request at or below the ceiling', () => {
     expect(() => {
-      assertNetworkWithinCeiling(ceiling('open'), network('allowlist', ['10.0.0.0/8']), 'a');
+      assertNetworkWithinCeiling(
+        ceiling('open'),
+        network('allowlist', ['10.0.0.0/8']),
+        'a',
+      );
     }).not.toThrow();
     expect(() => {
       assertNetworkWithinCeiling(ceiling('open'), network('none'), 'a');
@@ -163,22 +195,33 @@ describe('assertNetworkWithinCeiling', () => {
     }).toThrow(/reaches nothing/);
   });
 
-  it.each(['example.com', '10.0.0.1', 'not a cidr', '10.0.0.0/64', '10.0.0.0/+8'])(
-    'refuses %s, which is not a CIDR block',
-    (entry) => {
-      // Hostnames especially: an allow-list resolved by name is defeated by DNS
-      // rebinding, which is the attack guardedFetch already exists to stop.
-      expect(() => {
-        assertNetworkWithinCeiling(ceiling('open'), network('allowlist', [entry]), 'a');
-      }).toThrow(/CIDR/);
-    },
-  );
+  it.each([
+    'example.com',
+    '10.0.0.1',
+    'not a cidr',
+    '10.0.0.0/64',
+    '10.0.0.0/+8',
+  ])('refuses %s, which is not a CIDR block', (entry) => {
+    // Hostnames especially: an allow-list resolved by name is defeated by DNS
+    // rebinding, which is the attack guardedFetch already exists to stop.
+    expect(() => {
+      assertNetworkWithinCeiling(
+        ceiling('open'),
+        network('allowlist', [entry]),
+        'a',
+      );
+    }).toThrow(/CIDR/);
+  });
 
   it('accepts private ranges, which is the whole point of an engagement scope', () => {
     // Deliberately opposite to guardedFetch's policy, where 192.168/16 is
     // blocked. Same parsing, different question.
     expect(() => {
-      assertNetworkWithinCeiling(ceiling('open'), network('allowlist', ['192.168.1.0/24']), 'a');
+      assertNetworkWithinCeiling(
+        ceiling('open'),
+        network('allowlist', ['192.168.1.0/24']),
+        'a',
+      );
     }).not.toThrow();
   });
 });
@@ -197,7 +240,11 @@ describe('effectiveNetwork', () => {
     const resolved = effectiveNetwork(
       parseToolbox(
         manifest({
-          network: { maxMode: 'open', dns: ['1.1.1.1'], proxyAllowHosts: ['deb.debian.org'] },
+          network: {
+            maxMode: 'open',
+            dns: ['1.1.1.1'],
+            proxyAllowHosts: ['deb.debian.org'],
+          },
         }),
       ),
       network('open'),
@@ -214,14 +261,18 @@ describe('effectiveNetwork', () => {
     const order = (mode: ToolboxNetworkMode) => modes.indexOf(mode);
 
     fc.assert(
-      fc.property(fc.constantFrom(...modes), fc.constantFrom(...modes), (maxMode, requested) => {
-        const resolved = effectiveNetwork(
-          parseToolbox(manifest({ network: { maxMode } })),
-          network(requested, ['10.0.0.0/8']),
-        );
-        expect(order(resolved.mode)).toBeLessThanOrEqual(order(maxMode));
-        expect(order(resolved.mode)).toBeLessThanOrEqual(order(requested));
-      }),
+      fc.property(
+        fc.constantFrom(...modes),
+        fc.constantFrom(...modes),
+        (maxMode, requested) => {
+          const resolved = effectiveNetwork(
+            parseToolbox(manifest({ network: { maxMode } })),
+            network(requested, ['10.0.0.0/8']),
+          );
+          expect(order(resolved.mode)).toBeLessThanOrEqual(order(maxMode));
+          expect(order(resolved.mode)).toBeLessThanOrEqual(order(requested));
+        },
+      ),
     );
   });
 });
@@ -270,7 +321,9 @@ describe('assertToolboxPolicy: an entry may not shadow a built-in', () => {
   );
 
   it('permits a program whose name merely resembles one', () => {
-    const toolbox = parseToolbox(manifest({ tools: [{ name: 'readfile' }, { name: 'execute' }] }));
+    const toolbox = parseToolbox(
+      manifest({ tools: [{ name: 'readfile' }, { name: 'execute' }] }),
+    );
     expect(() => {
       assertToolboxPolicy(toolbox);
     }).not.toThrow();

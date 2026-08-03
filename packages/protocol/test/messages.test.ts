@@ -9,7 +9,9 @@ import {
 
 describe('ChatMessageSchema', () => {
   it('parses a system message', () => {
-    expect(ChatMessageSchema.parse({ role: 'system', content: 'be brief' })).toMatchObject({
+    expect(
+      ChatMessageSchema.parse({ role: 'system', content: 'be brief' }),
+    ).toMatchObject({
       role: 'system',
     });
   });
@@ -57,7 +59,9 @@ describe('ChatMessageSchema', () => {
     // conversation that no longer opens.
     const parsed = ChatMessageSchema.parse({
       role: 'user',
-      content: [{ type: 'image', mimeType: 'image/png', url: '/api/media/legacy' }],
+      content: [
+        { type: 'image', mimeType: 'image/png', url: '/api/media/legacy' },
+      ],
     });
     if (parsed.role !== 'user') throw new Error('unreachable');
     expect(parsed.content[0]).toMatchObject({ type: 'image' });
@@ -74,8 +78,10 @@ describe('ChatMessageSchema', () => {
 
   it('rejects an unknown content part type', () => {
     expect(
-      ChatMessageSchema.safeParse({ role: 'user', content: [{ type: 'audio', data: 'x' }] })
-        .success,
+      ChatMessageSchema.safeParse({
+        role: 'user',
+        content: [{ type: 'audio', data: 'x' }],
+      }).success,
     ).toBe(false);
   });
 
@@ -102,7 +108,11 @@ describe('ChatMessageSchema', () => {
     // The pairing key `findLegalStart` walks: a tool result with no originating
     // call is a provider 400.
     expect(
-      ChatMessageSchema.safeParse({ role: 'tool', name: 'read_file', content: 'x' }).success,
+      ChatMessageSchema.safeParse({
+        role: 'tool',
+        name: 'read_file',
+        content: 'x',
+      }).success,
     ).toBe(false);
     expect(
       ChatMessageSchema.safeParse({
@@ -126,14 +136,19 @@ describe('ChatMessageSchema', () => {
   });
 
   it('rejects an unknown role', () => {
-    expect(ChatMessageSchema.safeParse({ role: 'developer', content: 'x' }).success).toBe(false);
+    expect(
+      ChatMessageSchema.safeParse({ role: 'developer', content: 'x' }).success,
+    ).toBe(false);
   });
 
   it('rejects a role mismatch in the payload', () => {
-    expect(ChatMessageSchema.safeParse({ role: 'user', content: 'a plain string' }).success).toBe(
-      false,
-    );
-    expect(ChatMessageSchema.safeParse({ role: 'system', content: [] }).success).toBe(false);
+    expect(
+      ChatMessageSchema.safeParse({ role: 'user', content: 'a plain string' })
+        .success,
+    ).toBe(false);
+    expect(
+      ChatMessageSchema.safeParse({ role: 'system', content: [] }).success,
+    ).toBe(false);
   });
 });
 
@@ -209,7 +224,10 @@ describe('tokensPerSecond', () => {
 
   it('reports nothing rather than zero for a turn that produced nothing', () => {
     expect(
-      tokensPerSecond({ promptTokens: 10, completionTokens: 0, totalTokens: 10 }, 1000),
+      tokensPerSecond(
+        { promptTokens: 10, completionTokens: 0, totalTokens: 10 },
+        1000,
+      ),
     ).toBeUndefined();
   });
 });

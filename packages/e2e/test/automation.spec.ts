@@ -39,8 +39,14 @@ const jobsOf = async (app: Page, url: string): Promise<JobView[]> => {
   return ((await response.json()) as { jobs: JobView[] }).jobs;
 };
 
-const runsOf = async (app: Page, url: string, jobId: string): Promise<RunView[]> => {
-  const response = await app.request.get(`${url}/api/automation/jobs/${jobId}/runs`);
+const runsOf = async (
+  app: Page,
+  url: string,
+  jobId: string,
+): Promise<RunView[]> => {
+  const response = await app.request.get(
+    `${url}/api/automation/jobs/${jobId}/runs`,
+  );
   return ((await response.json()) as { runs: RunView[] }).runs;
 };
 
@@ -66,9 +72,15 @@ async function seedJob(
 }
 
 const jobRow = (app: Page, name: string) =>
-  app.getByRole('list', { name: 'Automation' }).getByRole('listitem').filter({ hasText: name });
+  app
+    .getByRole('list', { name: 'Automation' })
+    .getByRole('listitem')
+    .filter({ hasText: name });
 
-test('Automation is a page, reached from the sidebar before Settings', async ({ app, harness }) => {
+test('Automation is a page, reached from the sidebar before Settings', async ({
+  app,
+  harness,
+}) => {
   await app.goto(harness.url);
 
   const nav = app.getByRole('navigation');
@@ -78,7 +90,10 @@ test('Automation is a page, reached from the sidebar before Settings', async ({ 
   await expect(app.getByRole('link', { name: 'New job' })).toBeVisible();
 });
 
-test('the engine settings are in Settings, and the jobs are not', async ({ app, harness }) => {
+test('the engine settings are in Settings, and the jobs are not', async ({
+  app,
+  harness,
+}) => {
   // The split: install-wide knobs are a settings panel, the jobs an operator
   // keeps are a page. Settings → Automation must hold the first and none of
   // the second.
@@ -89,7 +104,10 @@ test('the engine settings are in Settings, and the jobs are not', async ({ app, 
   await expect(app.getByRole('link', { name: 'New job' })).toHaveCount(0);
 });
 
-test('creating a job writes it to the store, from the create page', async ({ app, harness }) => {
+test('creating a job writes it to the store, from the create page', async ({
+  app,
+  harness,
+}) => {
   await app.goto(`${harness.url}/automation`);
 
   await app.getByRole('link', { name: 'New job' }).click();
@@ -109,7 +127,10 @@ test('creating a job writes it to the store, from the create page', async ({ app
     .toBe('check the build');
 });
 
-test('the install timezone reschedules an existing cron job', async ({ app, harness }) => {
+test('the install timezone reschedules an existing cron job', async ({
+  app,
+  harness,
+}) => {
   // The behaviour the one-zone design turns on, end to end: a cron expression
   // is a wall-clock time, so its stored instant is only valid against the zone
   // it was computed in. Changing the zone in Appearance is therefore a
@@ -192,7 +213,10 @@ test('a cron expression the server cannot honour is refused, and the job is unch
     .toBe('0 9 1 1 *');
 });
 
-test('running a job on demand produces a real turn that settles', async ({ app, harness }) => {
+test('running a job on demand produces a real turn that settles', async ({
+  app,
+  harness,
+}) => {
   const seeded = await seedJob(app, harness.url);
   await app.goto(`${harness.url}/automation`);
 
@@ -205,16 +229,23 @@ test('running a job on demand produces a real turn that settles', async ({ app, 
   // reaching a terminal status is what says the hub, the loop and the store
   // were all actually wired to each other.
   await expect
-    .poll(async () => (await runsOf(app, harness.url, seeded.id))[0]?.status, { timeout: 15_000 })
+    .poll(async () => (await runsOf(app, harness.url, seeded.id))[0]?.status, {
+      timeout: 15_000,
+    })
     .toBe('ok');
   await expect
     .poll(async () => (await runsOf(app, harness.url, seeded.id))[0]?.output)
     .not.toBe('');
   // And the job's own state carries the outcome, which is what the list shows.
-  await expect.poll(async () => (await jobsOf(app, harness.url))[0]?.state.lastStatus).toBe('ok');
+  await expect
+    .poll(async () => (await jobsOf(app, harness.url))[0]?.state.lastStatus)
+    .toBe('ok');
 });
 
-test('a run leaves a session that is listed like any other', async ({ app, harness }) => {
+test('a run leaves a session that is listed like any other', async ({
+  app,
+  harness,
+}) => {
   // Listed rather than hidden. A scheduled run that goes wrong is diagnosed by
   // reading its turn, and while these were excluded from the unscoped listing
   // the run history beside the job showed the output without linking to the
@@ -223,17 +254,24 @@ test('a run leaves a session that is listed like any other', async ({ app, harne
   await app.request.post(`${harness.url}/api/automation/jobs/${seeded.id}/run`);
 
   await expect
-    .poll(async () => (await runsOf(app, harness.url, seeded.id))[0]?.status, { timeout: 15_000 })
+    .poll(async () => (await runsOf(app, harness.url, seeded.id))[0]?.status, {
+      timeout: 15_000,
+    })
     .toBe('ok');
 
   const unscoped = await app.request.get(`${harness.url}/api/sessions`);
-  const listed = ((await unscoped.json()) as { sessions: { origin: string }[] }).sessions;
+  const listed = (
+    (await unscoped.json()) as { sessions: Array<{ origin: string }> }
+  ).sessions;
   expect(listed.some((session) => session.origin === 'automation')).toBe(true);
 
   // Provenance survives as a column, so a caller that wants only these still
   // has one question to ask.
-  const scoped = await app.request.get(`${harness.url}/api/sessions?origin=automation`);
-  const automation = ((await scoped.json()) as { sessions: unknown[] }).sessions;
+  const scoped = await app.request.get(
+    `${harness.url}/api/sessions?origin=automation`,
+  );
+  const automation = ((await scoped.json()) as { sessions: unknown[] })
+    .sessions;
   expect(automation.length).toBeGreaterThan(0);
 
   // And the run history is a way in to it. The link is the whole path from
@@ -257,7 +295,10 @@ test('pages a run history longer than one page', async ({ app, harness }) => {
   const seeded = await seedJob(app, harness.url);
   for (let index = 0; index < 30; index += 1) {
     const run = harness.server.automation.startRun({ jobId: seeded.id });
-    harness.server.automation.finishRun(run.id, { status: 'ok', output: `run ${String(index)}` });
+    harness.server.automation.finishRun(run.id, {
+      status: 'ok',
+      output: `run ${String(index)}`,
+    });
   }
 
   await app.goto(`${harness.url}/automation/${seeded.id}`);
@@ -290,12 +331,19 @@ test('deleting a job takes its history with it', async ({ app, harness }) => {
   await app.getByRole('menuitem', { name: 'Delete' }).click();
   await app.getByRole('button', { name: 'Delete' }).last().click();
 
-  await expect.poll(async () => (await jobsOf(app, harness.url)).length).toBe(0);
-  const runs = await app.request.get(`${harness.url}/api/automation/jobs/${seeded.id}/runs`);
+  await expect
+    .poll(async () => (await jobsOf(app, harness.url)).length)
+    .toBe(0);
+  const runs = await app.request.get(
+    `${harness.url}/api/automation/jobs/${seeded.id}/runs`,
+  );
   expect(runs.status()).toBe(404);
 });
 
-test('the scheduler settings save and take effect without a restart', async ({ app, harness }) => {
+test('the scheduler settings save and take effect without a restart', async ({
+  app,
+  harness,
+}) => {
   await app.goto(`${harness.url}/settings?panel=automation`);
 
   await app.getByLabel('Concurrent runs').fill('4');

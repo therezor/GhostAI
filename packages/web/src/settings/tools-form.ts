@@ -16,7 +16,11 @@
 import type { ToolsConfig } from '@ghostai/protocol';
 import type { TFunction } from 'i18next';
 
-import { msToSeconds, parseNumber, secondsToMs } from '@/components/form/fields.js';
+import {
+  msToSeconds,
+  parseNumber,
+  secondsToMs,
+} from '@/components/form/fields.js';
 import type { PatchResult } from '@/components/form/fields.js';
 
 export interface ToolsForm {
@@ -43,17 +47,34 @@ export function toToolsPatch(form: ToolsForm, t: TFunction): PatchResult {
   const errors: Record<string, string> = {};
 
   // `min: 1` second, not zero — see the note at the top of the file.
-  const approvalTimeout = parseNumber(form.approvalTimeoutSeconds, t, { min: 1 });
+  const approvalTimeout = parseNumber(form.approvalTimeoutSeconds, t, {
+    min: 1,
+  });
   const execTimeout = parseNumber(form.execTimeoutSeconds, t, { min: 0 });
-  const execMaxOutputBytes = parseNumber(form.execMaxOutputBytes, t, { integer: true, min: 1 });
-  const maxOutputChars = parseNumber(form.maxOutputChars, t, { integer: true, min: 1 });
+  const execMaxOutputBytes = parseNumber(form.execMaxOutputBytes, t, {
+    integer: true,
+    min: 1,
+  });
+  const maxOutputChars = parseNumber(form.maxOutputChars, t, {
+    integer: true,
+    min: 1,
+  });
 
-  if (!approvalTimeout.ok) errors.approvalTimeoutSeconds = approvalTimeout.error;
+  if (!approvalTimeout.ok) {
+    errors.approvalTimeoutSeconds = approvalTimeout.error;
+  }
   if (!execTimeout.ok) errors.execTimeoutSeconds = execTimeout.error;
-  if (!execMaxOutputBytes.ok) errors.execMaxOutputBytes = execMaxOutputBytes.error;
+  if (!execMaxOutputBytes.ok) {
+    errors.execMaxOutputBytes = execMaxOutputBytes.error;
+  }
   if (!maxOutputChars.ok) errors.maxOutputChars = maxOutputChars.error;
 
-  if (!approvalTimeout.ok || !execTimeout.ok || !execMaxOutputBytes.ok || !maxOutputChars.ok) {
+  if (
+    !approvalTimeout.ok ||
+    !execTimeout.ok ||
+    !execMaxOutputBytes.ok ||
+    !maxOutputChars.ok
+  ) {
     return { ok: false, errors };
   }
 

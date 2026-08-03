@@ -4,12 +4,19 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { DEFAULT_MIME_TYPE, MAX_TEXT_BYTES, mimeTypeFor, readText } from '#src/workspace-files.js';
+import {
+  DEFAULT_MIME_TYPE,
+  MAX_TEXT_BYTES,
+  mimeTypeFor,
+  readText,
+} from '#src/workspace-files.js';
 
 const roots: string[] = [];
 
 afterEach(() => {
-  while (roots.length > 0) rmSync(roots.pop() ?? '', { recursive: true, force: true });
+  while (roots.length > 0) {
+    rmSync(roots.pop() ?? '', { recursive: true, force: true });
+  }
 });
 
 /** One temp directory, cleaned up after the test that made it. */
@@ -22,7 +29,8 @@ function workspace(): string {
 /** Writes `contents` and returns its absolute path and byte length. */
 function file(contents: string | Buffer): { path: string; sizeBytes: number } {
   const path = join(workspace(), 'sample');
-  const bytes = typeof contents === 'string' ? Buffer.from(contents, 'utf8') : contents;
+  const bytes =
+    typeof contents === 'string' ? Buffer.from(contents, 'utf8') : contents;
   writeFileSync(path, bytes);
   return { path, sizeBytes: bytes.byteLength };
 }
@@ -38,15 +46,21 @@ describe('mimeTypeFor', () => {
 
   // A type this table does not know downloads rather than executes, which is
   // the safe direction for a tree a language model writes to.
-  it.each(['archive.7z', 'no-extension', 'script.sh'])('falls back for %s', (path) => {
-    expect(mimeTypeFor(path)).toBe(DEFAULT_MIME_TYPE);
-  });
+  it.each(['archive.7z', 'no-extension', 'script.sh'])(
+    'falls back for %s',
+    (path) => {
+      expect(mimeTypeFor(path)).toBe(DEFAULT_MIME_TYPE);
+    },
+  );
 
   // The property everything downstream depends on: this table cannot be asked
   // whether a file is text. `readText` answers that, from the bytes.
-  it.each(['module.ts', 'script.py', 'config.yaml'])('does not claim %s is text', (path) => {
-    expect(mimeTypeFor(path)).toBe(DEFAULT_MIME_TYPE);
-  });
+  it.each(['module.ts', 'script.py', 'config.yaml'])(
+    'does not claim %s is text',
+    (path) => {
+      expect(mimeTypeFor(path)).toBe(DEFAULT_MIME_TYPE);
+    },
+  );
 });
 
 describe('readText', () => {
@@ -66,7 +80,9 @@ describe('readText', () => {
   });
 
   it('returns nothing for bytes holding a NUL', () => {
-    const { path, sizeBytes } = file(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x1a]));
+    const { path, sizeBytes } = file(
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x1a]),
+    );
     expect(readText(path, sizeBytes)).toBeUndefined();
   });
 

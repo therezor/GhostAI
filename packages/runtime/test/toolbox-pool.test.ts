@@ -1,4 +1,10 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { hostname, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -9,7 +15,12 @@ import { GhostError } from '@ghostai/core';
 import { ToolboxStore } from '@ghostai/security';
 import type { AgentToolboxNetwork } from '@ghostai/protocol';
 
-import type { CommandRunner, RunOutcome, RunRequest, ToolboxRequest } from '@ghostai/tools';
+import type {
+  CommandRunner,
+  RunOutcome,
+  RunRequest,
+  ToolboxRequest,
+} from '@ghostai/tools';
 
 import {
   OWNER_LABEL,
@@ -42,7 +53,9 @@ function fakeEngine(): FakeEngine {
     reaped: 0,
     failReap: false,
     probe() {
-      if (this.failProbe) throw new Error('Cannot connect to the Docker daemon');
+      if (this.failProbe) {
+        throw new Error('Cannot connect to the Docker daemon');
+      }
     },
     reapOrphans() {
       if (this.failReap) throw new Error('cannot list');
@@ -103,7 +116,9 @@ function pool(overrides: Partial<ToolboxPoolOptions> = {}): ToolboxPool {
     // A stub by default, because the container is now started by the first
     // command rather than by `forTurn` — so a test about containers has to run
     // one, and the real runner would reach for a daemon.
-    newRunner: () => ({ run: async (): Promise<RunOutcome> => await Promise.resolve(outcome()) }),
+    newRunner: () => ({
+      run: async (): Promise<RunOutcome> => await Promise.resolve(outcome()),
+    }),
     ...overrides,
   });
 }
@@ -259,7 +274,9 @@ describe('ToolboxPool', () => {
     expect(engine.started).toHaveLength(0);
 
     // The command is not, and it says which of the two it is.
-    await expect(runner?.run(runRequest())).rejects.toThrow(/No container runtime is reachable/);
+    await expect(runner?.run(runRequest())).rejects.toThrow(
+      /No container runtime is reachable/,
+    );
   });
 
   it('keeps a turn sandboxed when the daemon is unreachable', async () => {
@@ -283,7 +300,9 @@ describe('ToolboxPool', () => {
     engine.failProbe = true;
     const live = pool();
     const runner = live.forTurn(request());
-    await expect(runner?.run(runRequest())).rejects.toThrow(/No container runtime is reachable/);
+    await expect(runner?.run(runRequest())).rejects.toThrow(
+      /No container runtime is reachable/,
+    );
 
     engine.failProbe = false;
 
@@ -344,16 +363,18 @@ describe('ToolboxPool', () => {
     expect(runner).toBeDefined();
 
     await expect(runner?.run(runRequest())).rejects.toThrow(GhostError);
-    await expect(runner?.run(runRequest())).rejects.toThrow(/could not be started/);
+    await expect(runner?.run(runRequest())).rejects.toThrow(
+      /could not be started/,
+    );
   });
 
   it('refuses a network request above the toolbox ceiling', () => {
     install('research', { network: { maxMode: 'none' } });
     store.approve('research');
 
-    expect(() => pool().forTurn(request({ network: { mode: 'open', allow: [] } }))).toThrow(
-      /permits at most/,
-    );
+    expect(() =>
+      pool().forTurn(request({ network: { mode: 'open', allow: [] } })),
+    ).toThrow(/permits at most/);
   });
 
   it('stops a container that has gone idle', async () => {
@@ -451,7 +472,9 @@ describe('ownerProcessLooksAlive', () => {
   it('reports a pid on this host that no longer exists', () => {
     // The only case that may answer `false`, and the only case where reaping is
     // safe: this host, a pid that is gone.
-    expect(ownerProcessLooksAlive(`${hostname()}:${String(0x7fffffff)}`)).toBe(false);
+    expect(ownerProcessLooksAlive(`${hostname()}:${String(0x7fffffff)}`)).toBe(
+      false,
+    );
   });
 
   it('spares an owner on another host, which it cannot ask about', () => {
@@ -503,8 +526,12 @@ describe('ToolboxPool: a container with a command in it', () => {
       idleMs: 500,
       clock: { now: () => now } as never,
       newRunner: () => {
-        if (!first)
-          return { run: async (): Promise<RunOutcome> => await Promise.resolve(outcome()) };
+        if (!first) {
+          return {
+            run: async (): Promise<RunOutcome> =>
+              await Promise.resolve(outcome()),
+          };
+        }
         first = false;
         return held.runner;
       },
@@ -538,14 +565,20 @@ describe('ToolboxPool: a container with a command in it', () => {
     const live = pool({
       maxLive: 1,
       newRunner: () => {
-        if (!first)
-          return { run: async (): Promise<RunOutcome> => await Promise.resolve(outcome()) };
+        if (!first) {
+          return {
+            run: async (): Promise<RunOutcome> =>
+              await Promise.resolve(outcome()),
+          };
+        }
         first = false;
         return held.runner;
       },
     });
 
-    const running = live.forTurn(request({ sessionKey: 'a' }))?.run(runRequest());
+    const running = live
+      .forTurn(request({ sessionKey: 'a' }))
+      ?.run(runRequest());
     await use(live, request({ sessionKey: 'b' }));
 
     // Over the cap on purpose: the cap stops containers accumulating *unused*,
@@ -570,7 +603,8 @@ describe('ToolboxPool: a container that disappeared', () => {
     const outcomes = [GONE, outcome({ stdout: 'ran on the new one' })];
     const live = pool({
       newRunner: () => ({
-        run: async (): Promise<RunOutcome> => await Promise.resolve(outcomes.shift() ?? outcome()),
+        run: async (): Promise<RunOutcome> =>
+          await Promise.resolve(outcomes.shift() ?? outcome()),
       }),
     });
 
@@ -587,10 +621,15 @@ describe('ToolboxPool: a container that disappeared', () => {
     // runner bound to a container name could not survive the rebuild.
     install('research');
     store.approve('research');
-    const outcomes = [GONE, outcome({ stdout: 'first' }), outcome({ stdout: 'second' })];
+    const outcomes = [
+      GONE,
+      outcome({ stdout: 'first' }),
+      outcome({ stdout: 'second' }),
+    ];
     const live = pool({
       newRunner: () => ({
-        run: async (): Promise<RunOutcome> => await Promise.resolve(outcomes.shift() ?? outcome()),
+        run: async (): Promise<RunOutcome> =>
+          await Promise.resolve(outcomes.shift() ?? outcome()),
       }),
     });
 
@@ -604,7 +643,9 @@ describe('ToolboxPool: a container that disappeared', () => {
     // that kept rebuilding would hide it behind a slow turn.
     install('research');
     store.approve('research');
-    const live = pool({ newRunner: () => ({ run: async () => await Promise.resolve(GONE) }) });
+    const live = pool({
+      newRunner: () => ({ run: async () => await Promise.resolve(GONE) }),
+    });
 
     const result = await live.forTurn(request())?.run(runRequest());
 
@@ -617,12 +658,16 @@ describe('ToolboxPool: a container that disappeared', () => {
     // one was.
     install('research');
     store.approve('research');
-    const live = pool({ newRunner: () => ({ run: async () => await Promise.resolve(GONE) }) });
+    const live = pool({
+      newRunner: () => ({ run: async () => await Promise.resolve(GONE) }),
+    });
     const runner = live.forTurn(request());
 
     store.revoke('research');
 
-    await expect(runner?.run(runRequest())).rejects.toThrow(/never been approved/);
+    await expect(runner?.run(runRequest())).rejects.toThrow(
+      /never been approved/,
+    );
   });
 });
 
@@ -670,7 +715,9 @@ describe('ToolboxPool: edges', () => {
 
     const argv = engine.started[0]?.join(' ') ?? '';
     expect(argv).toContain('type=bind,src=/host/workspace,dst=/workspace');
-    expect(argv).toContain('type=bind,src=/host/toolboxes/research,dst=/run/ghost,ro');
+    expect(argv).toContain(
+      'type=bind,src=/host/toolboxes/research,dst=/run/ghost,ro',
+    );
     expect(argv).not.toContain(base);
   });
 });

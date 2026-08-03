@@ -27,7 +27,9 @@ afterEach(async () => {
   while (running.length > 0) await running.pop()?.close();
 });
 
-async function start(...args: Parameters<typeof startTestServer>): Promise<TestServer> {
+async function start(
+  ...args: Parameters<typeof startTestServer>
+): Promise<TestServer> {
   const started = await startTestServer(...args);
   running.push(started);
   return started;
@@ -63,7 +65,11 @@ describe('GET /api/status', () => {
       tools: [READ_FILE],
     });
 
-    const response = await server.app.inject({ method: 'GET', url: '/api/status', headers });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/status',
+      headers,
+    });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
@@ -85,11 +91,23 @@ describe('GET /api/status', () => {
   it('reports a fresh install as unconfigured, without failing', async () => {
     // The whole point of the state: everything but a turn works, so the client
     // can render the app and point at setup rather than at an error page.
-    const { server, headers } = await start({ configured: false, provider: '', model: '' });
-    const response = await server.app.inject({ method: 'GET', url: '/api/status', headers });
+    const { server, headers } = await start({
+      configured: false,
+      provider: '',
+      model: '',
+    });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/status',
+      headers,
+    });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ configured: false, provider: '', model: '' });
+    expect(response.json()).toMatchObject({
+      configured: false,
+      provider: '',
+      model: '',
+    });
   });
 
   // The model is read through the runtime rather than snapshotted at boot, so a
@@ -100,7 +118,11 @@ describe('GET /api/status', () => {
 
     const original = runtime.agent();
     Object.assign(runtime, { agent: () => ({ ...original, model: 'second' }) });
-    const response = await server.app.inject({ method: 'GET', url: '/api/status', headers });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/status',
+      headers,
+    });
 
     expect(response.json().model).toBe('second');
   });
@@ -112,8 +134,14 @@ describe('GET /api/status', () => {
 
 describe('GET /api/settings', () => {
   it('returns the settings tree and presence flags', async () => {
-    const { server, headers } = await start({ credentialsPresent: { openai: true } });
-    const response = await server.app.inject({ method: 'GET', url: '/api/settings', headers });
+    const { server, headers } = await start({
+      credentialsPresent: { openai: true },
+    });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/settings',
+      headers,
+    });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
@@ -130,10 +158,18 @@ describe('GET /api/settings', () => {
       method: 'PUT',
       url: '/api/settings/credentials',
       headers,
-      payload: { namespace: 'providers', key: 'openai', value: 'sk-the-actual-secret' },
+      payload: {
+        namespace: 'providers',
+        key: 'openai',
+        value: 'sk-the-actual-secret',
+      },
     });
 
-    const response = await server.app.inject({ method: 'GET', url: '/api/settings', headers });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/settings',
+      headers,
+    });
 
     expect(response.payload).not.toContain('sk-the-actual-secret');
     expect(response.json().credentialsPresent.openai).toBe(true);
@@ -144,9 +180,15 @@ describe('GET /api/settings', () => {
 
   it('reports a config file that failed to parse', async () => {
     const { server, headers, runtime } = await start();
-    Object.assign(runtime, { loadError: () => 'config.json is not valid JSON' });
+    Object.assign(runtime, {
+      loadError: () => 'config.json is not valid JSON',
+    });
 
-    const response = await server.app.inject({ method: 'GET', url: '/api/settings', headers });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/settings',
+      headers,
+    });
     expect(response.json().loadError).toMatch(/not valid JSON/);
   });
 
@@ -154,7 +196,11 @@ describe('GET /api/settings', () => {
     // Empty rather than absent, so a client renders "nothing wrong" without a
     // presence check that would read a missing field as healthy too.
     const { server, headers } = await start();
-    const response = await server.app.inject({ method: 'GET', url: '/api/settings', headers });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/settings',
+      headers,
+    });
 
     expect(response.json().warnings).toEqual([]);
   });
@@ -163,14 +209,26 @@ describe('GET /api/settings', () => {
     const { server, headers, runtime } = await start();
     Object.assign(runtime, {
       configWarnings: () => [
-        { code: 'missing_subagent', message: 'planner delegates to reviewer', agentId: 'planner' },
+        {
+          code: 'missing_subagent',
+          message: 'planner delegates to reviewer',
+          agentId: 'planner',
+        },
       ],
     });
 
-    const response = await server.app.inject({ method: 'GET', url: '/api/settings', headers });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/settings',
+      headers,
+    });
 
     expect(response.json().warnings).toEqual([
-      { code: 'missing_subagent', message: 'planner delegates to reviewer', agentId: 'planner' },
+      {
+        code: 'missing_subagent',
+        message: 'planner delegates to reviewer',
+        agentId: 'planner',
+      },
     ]);
   });
 });
@@ -191,7 +249,9 @@ describe('PATCH /api/settings', () => {
     // Untouched siblings keep their values rather than being reset to defaults,
     // which is the whole reason `ConfigPatch` is not `ConfigSchema.partial()`.
     expect(response.json().config.agents.defaults.maxToolIterations).toBe(40);
-    expect(runtime.patches).toEqual([{ agents: { defaults: { temperature: 0.9 } } }]);
+    expect(runtime.patches).toEqual([
+      { agents: { defaults: { temperature: 0.9 } } },
+    ]);
   });
 
   it('serves the patched settings on the next read', async () => {
@@ -203,7 +263,11 @@ describe('PATCH /api/settings', () => {
       payload: { agents: { defaults: { model: 'a-new-model' } } },
     });
 
-    const response = await server.app.inject({ method: 'GET', url: '/api/settings', headers });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/settings',
+      headers,
+    });
     expect(response.json().config.agents.defaults.model).toBe('a-new-model');
   });
 
@@ -236,7 +300,9 @@ describe('PATCH /api/settings', () => {
     });
 
     expect(response.statusCode).toBe(422);
-    expect(Object.keys(response.json().error.details)).toEqual(['/agents/defaults/temperature']);
+    expect(Object.keys(response.json().error.details)).toEqual([
+      '/agents/defaults/temperature',
+    ]);
   });
 
   it('deletes an agent another one delegates to', async () => {
@@ -248,7 +314,9 @@ describe('PATCH /api/settings', () => {
         agents: {
           list: {
             reviewer: { label: 'Reviewer' },
-            planner: { subagents: [{ id: 'reviewer', prompt: '', permission: 'allow' }] },
+            planner: {
+              subagents: [{ id: 'reviewer', prompt: '', permission: 'allow' }],
+            },
           },
         },
       }),
@@ -269,9 +337,11 @@ describe('PATCH /api/settings', () => {
     // An id is user-authored and re-creatable, so a new agent under a name the
     // operator just freed must not inherit what the old one was granted.
     const { server, headers, hub } = await start({
-      config: ConfigSchema.parse({ agents: { list: { reviewer: { label: 'Reviewer' } } } }),
+      config: ConfigSchema.parse({
+        agents: { list: { reviewer: { label: 'Reviewer' } } },
+      }),
     });
-    const retained: ReadonlySet<string>[] = [];
+    const retained: Array<ReadonlySet<string>> = [];
     const original = hub.retainAgents.bind(hub);
     Object.assign(hub, {
       retainAgents: (ids: ReadonlySet<string>) => {
@@ -294,8 +364,12 @@ describe('PATCH /api/settings', () => {
 
 describe('POST /api/settings/reload', () => {
   it('re-reads the file and answers with what it is now serving', async () => {
-    const edited = ConfigSchema.parse({ agents: { defaults: { model: 'edited-by-hand' } } });
-    const { server, headers, runtime } = await start({ onReload: () => edited });
+    const edited = ConfigSchema.parse({
+      agents: { defaults: { model: 'edited-by-hand' } },
+    });
+    const { server, headers, runtime } = await start({
+      onReload: () => edited,
+    });
 
     const response = await server.app.inject({
       method: 'POST',
@@ -312,11 +386,21 @@ describe('POST /api/settings/reload', () => {
   });
 
   it('serves the reloaded settings on the next read', async () => {
-    const edited = ConfigSchema.parse({ agents: { defaults: { temperature: 0.9 } } });
+    const edited = ConfigSchema.parse({
+      agents: { defaults: { temperature: 0.9 } },
+    });
     const { server, headers } = await start({ onReload: () => edited });
-    await server.app.inject({ method: 'POST', url: '/api/settings/reload', headers });
+    await server.app.inject({
+      method: 'POST',
+      url: '/api/settings/reload',
+      headers,
+    });
 
-    const response = await server.app.inject({ method: 'GET', url: '/api/settings', headers });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/settings',
+      headers,
+    });
     expect(response.json().config.agents.defaults.temperature).toBe(0.9);
   });
 
@@ -340,7 +424,11 @@ describe('POST /api/settings/reload', () => {
 
     // The rebuild failed, so the server is still on what it was serving — which
     // is the difference between a reload and a restart.
-    const settings = await server.app.inject({ method: 'GET', url: '/api/settings', headers });
+    const settings = await server.app.inject({
+      method: 'GET',
+      url: '/api/settings',
+      headers,
+    });
     expect(settings.statusCode).toBe(200);
   });
 });
@@ -361,7 +449,9 @@ describe('PUT /api/settings/credentials', () => {
   });
 
   it('deletes with a null value', async () => {
-    const { server, headers, runtime } = await start({ credentialsPresent: { groq: true } });
+    const { server, headers, runtime } = await start({
+      credentialsPresent: { groq: true },
+    });
     await server.app.inject({
       method: 'PUT',
       url: '/api/settings/credentials',
@@ -392,7 +482,11 @@ describe('PUT /api/settings/credentials', () => {
 describe('GET /api/providers', () => {
   it('describes every provider type in the registry', async () => {
     const { server, headers } = await start();
-    const response = await server.app.inject({ method: 'GET', url: '/api/providers', headers });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/providers',
+      headers,
+    });
 
     const { types } = response.json<ProvidersResponse>();
     expect(types).toHaveLength(PROVIDERS.length);
@@ -403,7 +497,9 @@ describe('GET /api/providers', () => {
     });
     // The catalogue carries no credential flag: a credential belongs to a
     // configured endpoint, and two instances of one type can differ.
-    expect(types.find((type) => type.id === 'openai')).not.toHaveProperty('credentialsPresent');
+    expect(types.find((type) => type.id === 'openai')).not.toHaveProperty(
+      'credentialsPresent',
+    );
   });
 
   it('lists the configured instances, with a credential flag each', async () => {
@@ -412,14 +508,25 @@ describe('GET /api/providers', () => {
       config: ConfigSchema.parse({
         providers: {
           ollama: { type: 'ollama' },
-          'ollama-gpu': { type: 'ollama', label: 'GPU box', apiBase: 'http://gpu.lan:11434/v1' },
+          'ollama-gpu': {
+            type: 'ollama',
+            label: 'GPU box',
+            apiBase: 'http://gpu.lan:11434/v1',
+          },
         },
       }),
     });
-    const response = await server.app.inject({ method: 'GET', url: '/api/providers', headers });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/providers',
+      headers,
+    });
 
     const { instances } = response.json<ProvidersResponse>();
-    expect(instances.map((instance) => instance.id)).toEqual(['ollama', 'ollama-gpu']);
+    expect(instances.map((instance) => instance.id)).toEqual([
+      'ollama',
+      'ollama-gpu',
+    ]);
     expect(instances[0]).toMatchObject({
       type: 'ollama',
       displayName: 'Ollama',
@@ -511,11 +618,17 @@ describe('GET /api/models', () => {
       provider: 'ollama',
       model: 'qwen3',
       config: ConfigSchema.parse({
-        providers: { openai: { type: 'openai', models: ['gpt-5', 'gpt-5-mini'] } },
+        providers: {
+          openai: { type: 'openai', models: ['gpt-5', 'gpt-5-mini'] },
+        },
       }),
     });
 
-    const response = await server.app.inject({ method: 'GET', url: '/api/models', headers });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/models',
+      headers,
+    });
 
     expect(response.json()).toEqual({
       // Sorted by provider then model, so a settings panel renders a stable
@@ -548,7 +661,11 @@ describe('GET /api/models', () => {
       }),
     });
 
-    const response = await server.app.inject({ method: 'GET', url: '/api/models', headers });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/models',
+      headers,
+    });
 
     expect(response.json()).toEqual({
       models: [
@@ -561,14 +678,22 @@ describe('GET /api/models', () => {
   });
 
   it('offers nothing for the agent when no model is configured', async () => {
-    const { server, headers } = await start({ configured: false, provider: '', model: '' });
-    const response = await server.app.inject({ method: 'GET', url: '/api/models', headers });
+    const { server, headers } = await start({
+      configured: false,
+      provider: '',
+      model: '',
+    });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/models',
+      headers,
+    });
     expect(response.json()).toEqual({ models: [], errors: {} });
   });
 
   it('asks the runtime to bypass its cache on refresh', async () => {
     const { server, headers, runtime } = await start();
-    const asked: (boolean | undefined)[] = [];
+    const asked: Array<boolean | undefined> = [];
     Object.assign(runtime, {
       models: async (options?: { refresh?: boolean }) => {
         asked.push(options?.refresh);
@@ -577,7 +702,11 @@ describe('GET /api/models', () => {
     });
 
     await server.app.inject({ method: 'GET', url: '/api/models', headers });
-    await server.app.inject({ method: 'POST', url: '/api/models/refresh', headers });
+    await server.app.inject({
+      method: 'POST',
+      url: '/api/models/refresh',
+      headers,
+    });
 
     expect(asked).toEqual([false, true]);
   });
@@ -590,7 +719,11 @@ describe('GET /api/models', () => {
 describe('GET /api/tools', () => {
   it('returns the live registry rather than the settings tree', async () => {
     const { server, headers } = await start({ tools: [READ_FILE] });
-    const response = await server.app.inject({ method: 'GET', url: '/api/tools', headers });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/tools',
+      headers,
+    });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ tools: [READ_FILE] });
@@ -604,15 +737,26 @@ describe('GET /api/tools', () => {
    * with, had no row anywhere and could not be turned on from the UI at all.
    */
   it('offers a registered tool the default agent does not hold', async () => {
-    const { server, headers } = await start({ tools: [], registeredTools: [AUTOMATION] });
-    const response = await server.app.inject({ method: 'GET', url: '/api/tools', headers });
+    const { server, headers } = await start({
+      tools: [],
+      registeredTools: [AUTOMATION],
+    });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/tools',
+      headers,
+    });
 
     expect(response.json()).toEqual({ tools: [AUTOMATION] });
   });
 
   it('answers with an empty list when nothing is registered', async () => {
     const { server, headers } = await start();
-    const response = await server.app.inject({ method: 'GET', url: '/api/tools', headers });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/tools',
+      headers,
+    });
 
     expect(response.json()).toEqual({ tools: [] });
   });
@@ -624,12 +768,26 @@ describe('GET /api/tools', () => {
 
 describe('GET /api/agents', () => {
   it('lists the default agent on an install that named none', async () => {
-    const { server, headers } = await start({ provider: 'ollama', model: 'qwen3:8b' });
-    const response = await server.app.inject({ method: 'GET', url: '/api/agents', headers });
+    const { server, headers } = await start({
+      provider: 'ollama',
+      model: 'qwen3:8b',
+    });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/agents',
+      headers,
+    });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      agents: [{ id: 'default', label: 'default', model: 'qwen3:8b', provider: 'ollama' }],
+      agents: [
+        {
+          id: 'default',
+          label: 'default',
+          model: 'qwen3:8b',
+          provider: 'ollama',
+        },
+      ],
     });
   });
 
@@ -638,16 +796,32 @@ describe('GET /api/agents', () => {
       provider: 'ollama',
       model: 'qwen3:8b',
       config: ConfigSchema.parse({
-        agents: { list: { reviewer: { label: 'Reviewer', model: 'qwen3:32b' } } },
+        agents: {
+          list: { reviewer: { label: 'Reviewer', model: 'qwen3:32b' } },
+        },
       }),
     });
 
-    const response = await server.app.inject({ method: 'GET', url: '/api/agents', headers });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/agents',
+      headers,
+    });
 
     expect(response.json()).toEqual({
       agents: [
-        { id: 'default', label: 'default', model: 'qwen3:8b', provider: 'ollama' },
-        { id: 'reviewer', label: 'Reviewer', model: 'qwen3:32b', provider: 'ollama' },
+        {
+          id: 'default',
+          label: 'default',
+          model: 'qwen3:8b',
+          provider: 'ollama',
+        },
+        {
+          id: 'reviewer',
+          label: 'Reviewer',
+          model: 'qwen3:32b',
+          provider: 'ollama',
+        },
       ],
     });
   });
@@ -659,10 +833,16 @@ describe('GET /api/agents', () => {
       }),
     });
 
-    const response = await server.app.inject({ method: 'GET', url: '/api/agents', headers });
-    expect(response.json<{ agents: { id: string }[] }>().agents.map((a) => a.id)).toEqual([
-      'default',
-    ]);
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/agents',
+      headers,
+    });
+    expect(
+      response
+        .json<{ agents: Array<{ id: string }> }>()
+        .agents.map((a) => a.id),
+    ).toEqual(['default']);
   });
 });
 
@@ -675,7 +855,9 @@ describe('renaming an agent through PATCH /api/settings', () => {
           reviewer: { label: 'Reviewer' },
           planner: {
             label: 'Planner',
-            subagents: [{ id: 'reviewer', prompt: 'Check it.', permission: 'allow' }],
+            subagents: [
+              { id: 'reviewer', prompt: 'Check it.', permission: 'allow' },
+            ],
           },
         },
       },
@@ -705,7 +887,9 @@ describe('renaming an agent through PATCH /api/settings', () => {
   }
 
   it('moves the agent, its delegations and its conversations together', async () => {
-    const { server, runtime, headers } = await start({ config: withReviewer() });
+    const { server, runtime, headers } = await start({
+      config: withReviewer(),
+    });
     runtime.store.ensureSession('mine', { agentId: 'reviewer' });
     runtime.store.ensureSession('other', { agentId: 'planner' });
 
@@ -717,7 +901,9 @@ describe('renaming an agent through PATCH /api/settings', () => {
     expect(config.agents.list.reviewer).toBeUndefined();
     expect(config.agents.list['code-review']?.label).toBe('Reviewer');
     // The delegation follows, so the model keeps the subagent it had.
-    expect(config.agents.list.planner?.subagents.map((ref) => ref.id)).toEqual(['code-review']);
+    expect(config.agents.list.planner?.subagents.map((ref) => ref.id)).toEqual([
+      'code-review',
+    ]);
     // Conversations follow; ones bound elsewhere do not.
     expect(runtime.store.getSession('mine')?.agentId).toBe('code-review');
     expect(runtime.store.getSession('other')?.agentId).toBe('planner');
@@ -725,7 +911,9 @@ describe('renaming an agent through PATCH /api/settings', () => {
 
   it('does not rewrite which agent ran a past turn', async () => {
     // History is a record of what happened, not a pointer to what exists now.
-    const { server, runtime, headers } = await start({ config: withReviewer() });
+    const { server, runtime, headers } = await start({
+      config: withReviewer(),
+    });
     runtime.store.ensureSession('mine', { agentId: 'reviewer' });
     runtime.store.recordTurnStats({
       turnId: 't1',
@@ -746,7 +934,9 @@ describe('renaming an agent through PATCH /api/settings', () => {
   });
 
   it('answers a rename to the same id without complaining about it', async () => {
-    const { server, runtime, headers } = await start({ config: withReviewer() });
+    const { server, runtime, headers } = await start({
+      config: withReviewer(),
+    });
 
     const response = await rename(server, 'reviewer', 'reviewer', headers);
 
@@ -757,7 +947,9 @@ describe('renaming an agent through PATCH /api/settings', () => {
   it('404s for an agent that does not exist', async () => {
     const { server, headers } = await start({ config: withReviewer() });
 
-    expect((await rename(server, 'ghost', 'phantom', headers)).statusCode).toBe(404);
+    expect((await rename(server, 'ghost', 'phantom', headers)).statusCode).toBe(
+      404,
+    );
   });
 
   it('refuses to rename the default agent', async () => {
@@ -765,7 +957,9 @@ describe('renaming an agent through PATCH /api/settings', () => {
     // default agent is not a state anything downstream can use.
     const { server, headers } = await start({ config: withReviewer() });
 
-    expect((await rename(server, 'default', 'house', headers)).statusCode).toBe(422);
+    expect((await rename(server, 'default', 'house', headers)).statusCode).toBe(
+      422,
+    );
   });
 
   it.each([
@@ -778,7 +972,9 @@ describe('renaming an agent through PATCH /api/settings', () => {
   ])('422s renaming to %s (%s)', async (to) => {
     const { server, headers } = await start({ config: withReviewer() });
 
-    expect((await rename(server, 'reviewer', to, headers)).statusCode).toBe(422);
+    expect((await rename(server, 'reviewer', to, headers)).statusCode).toBe(
+      422,
+    );
   });
 
   it('409s when the new id is already taken', async () => {
@@ -794,11 +990,17 @@ describe('renaming an agent through PATCH /api/settings', () => {
     // The reason the two travel together. As separate requests this was two
     // writes with a window between them, and the failure mode was an agent
     // under its new name holding its old settings.
-    const { server, runtime, headers } = await start({ config: withReviewer() });
+    const { server, runtime, headers } = await start({
+      config: withReviewer(),
+    });
     runtime.store.ensureSession('mine', { agentId: 'reviewer' });
 
     const response = await rename(server, 'reviewer', 'code-review', headers, {
-      agents: { list: { 'code-review': { label: 'Second Opinion', model: 'qwen3:32b' } } },
+      agents: {
+        list: {
+          'code-review': { label: 'Second Opinion', model: 'qwen3:32b' },
+        },
+      },
     });
 
     expect(response.statusCode).toBe(200);
@@ -815,7 +1017,9 @@ describe('renaming an agent through PATCH /api/settings', () => {
     // Validated before `applySettings`, so a body carrying both a bad rename and
     // a good edit lands neither — which is what "atomic" has to mean from the
     // caller's side.
-    const { server, runtime, headers } = await start({ config: withReviewer() });
+    const { server, runtime, headers } = await start({
+      config: withReviewer(),
+    });
     runtime.store.ensureSession('mine', { agentId: 'reviewer' });
 
     const response = await rename(server, 'reviewer', 'planner', headers, {
@@ -830,7 +1034,9 @@ describe('renaming an agent through PATCH /api/settings', () => {
   });
 
   it('moves two agents in one save', async () => {
-    const { server, runtime, headers } = await start({ config: withReviewer() });
+    const { server, runtime, headers } = await start({
+      config: withReviewer(),
+    });
     runtime.store.ensureSession('one', { agentId: 'reviewer' });
     runtime.store.ensureSession('two', { agentId: 'planner' });
 
@@ -851,7 +1057,9 @@ describe('renaming an agent through PATCH /api/settings', () => {
     expect(list['code-review']).toBeDefined();
     expect(list.strategist).toBeDefined();
     // The delegation followed the agent it names, through both moves.
-    expect(list.strategist?.subagents.map((ref) => ref.id)).toEqual(['code-review']);
+    expect(list.strategist?.subagents.map((ref) => ref.id)).toEqual([
+      'code-review',
+    ]);
     expect(runtime.store.getSession('one')?.agentId).toBe('code-review');
     expect(runtime.store.getSession('two')?.agentId).toBe('strategist');
   });
@@ -876,8 +1084,14 @@ describe('renaming an agent through PATCH /api/settings', () => {
       config: ConfigSchema.parse({ agents: { list: { reviewer: {} } } }),
     });
 
-    const response = await server.app.inject({ method: 'GET', url: '/api/agents', headers });
-    const agents = response.json<{ agents: { id: string; label: string }[] }>().agents;
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/agents',
+      headers,
+    });
+    const agents = response.json<{
+      agents: Array<{ id: string; label: string }>;
+    }>().agents;
     expect(agents.find((a) => a.id === 'reviewer')?.label).toBe('reviewer');
   });
 });
@@ -890,7 +1104,11 @@ describe('GET /api/status: the workspace', () => {
     // targeted one, so nothing absolute crosses this boundary any more.
     const { server, headers } = await start({});
 
-    const response = await server.app.inject({ method: 'GET', url: '/api/status', headers });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/status',
+      headers,
+    });
     const body = response.json();
 
     expect(body.workspaceId).toBe('default');

@@ -46,9 +46,17 @@ function planOf(overrides: Partial<ExecPlan> = {}): ExecPlan {
   };
 }
 
-const NONE: EffectiveNetwork = { mode: 'none', allow: [], dns: [], proxyAllowHosts: [] };
+const NONE: EffectiveNetwork = {
+  mode: 'none',
+  allow: [],
+  dns: [],
+  proxyAllowHosts: [],
+};
 
-const create = (overrides: Record<string, unknown> = {}, network: EffectiveNetwork = NONE) =>
+const create = (
+  overrides: Record<string, unknown> = {},
+  network: EffectiveNetwork = NONE,
+) =>
   containerCreateArgv({
     toolbox: toolboxOf(overrides),
     network,
@@ -69,7 +77,9 @@ describe('containerCreateArgv: hardening', () => {
     // list would otherwise inherit Docker's defaults and look correct doing it.
     expect(create({ caps: { drop: [], add: [] } })).toContain('--cap-drop=ALL');
     expect(
-      create({ caps: { drop: ['ALL'], add: [] } }).filter((f) => f === '--cap-drop=ALL'),
+      create({ caps: { drop: ['ALL'], add: [] } }).filter(
+        (f) => f === '--cap-drop=ALL',
+      ),
     ).toHaveLength(1);
   });
 
@@ -83,11 +93,15 @@ describe('containerCreateArgv: hardening', () => {
   it('adds back only the capabilities the toolbox names', () => {
     const argv = create({ caps: { drop: ['ALL'], add: ['NET_RAW'] } });
     expect(argv).toContain('--cap-add=NET_RAW');
-    expect(argv.filter((flag) => flag.startsWith('--cap-add='))).toHaveLength(1);
+    expect(argv.filter((flag) => flag.startsWith('--cap-add='))).toHaveLength(
+      1,
+    );
   });
 
   it('applies every resource limit', () => {
-    const argv = create({ limits: { memoryMb: 4096, cpus: 2, pidsMax: 512, shmSizeMb: 1024 } });
+    const argv = create({
+      limits: { memoryMb: 4096, cpus: 2, pidsMax: 512, shmSizeMb: 1024 },
+    });
     expect(argv).toContain('--memory=4096m');
     expect(argv).toContain('--cpus=2');
     expect(argv).toContain('--pids-limit=512');
@@ -95,7 +109,9 @@ describe('containerCreateArgv: hardening', () => {
   });
 
   it('omits a limit set to zero rather than passing an unlimited flag', () => {
-    const argv = create({ limits: { memoryMb: 0, cpus: 0, pidsMax: 0, shmSizeMb: 0 } });
+    const argv = create({
+      limits: { memoryMb: 0, cpus: 0, pidsMax: 0, shmSizeMb: 0 },
+    });
     expect(argv.some((flag) => flag.startsWith('--memory'))).toBe(false);
     expect(argv.some((flag) => flag.startsWith('--pids-limit'))).toBe(false);
   });
@@ -126,10 +142,15 @@ describe('containerCreateArgv: hardening', () => {
     const argv = containerCreateArgv({
       toolbox: toolboxOf(),
       network: NONE,
-      mount: { hostPath: '/Users/me/Notes:2024/ws', containerPath: '/workspace' },
+      mount: {
+        hostPath: '/Users/me/Notes:2024/ws',
+        containerPath: '/workspace',
+      },
       containerName: 'c',
     });
-    expect(argv).toContain('type=bind,src=/Users/me/Notes:2024/ws,dst=/workspace');
+    expect(argv).toContain(
+      'type=bind,src=/Users/me/Notes:2024/ws,dst=/workspace',
+    );
   });
 
   it('mounts the approved manifest read-only, outside the workspace', () => {
@@ -143,7 +164,9 @@ describe('containerCreateArgv: hardening', () => {
       containerName: 'c',
       manifestPath: '/home/ghost/profiles/kali/profile.json',
     });
-    expect(argv).toContain('type=bind,src=/home/ghost/profiles/kali,dst=/run/ghost,ro');
+    expect(argv).toContain(
+      'type=bind,src=/home/ghost/profiles/kali,dst=/run/ghost,ro',
+    );
     expect(argv.join(' ')).not.toContain('/workspace/.ghost/profile.json');
   });
 
@@ -193,7 +216,12 @@ describe('containerCreateArgv: network', () => {
     // NET_ADMIN, so it is constrained by rules it cannot reach.
     const argv = containerCreateArgv({
       toolbox: toolboxOf(),
-      network: { mode: 'allowlist', allow: ['10.0.0.0/8'], dns: [], proxyAllowHosts: [] },
+      network: {
+        mode: 'allowlist',
+        allow: ['10.0.0.0/8'],
+        dns: [],
+        proxyAllowHosts: [],
+      },
       mount: { hostPath: '/h', containerPath: '/workspace' },
       containerName: 'c',
       gatewayContainer: 'ghost-netgate-1',
@@ -205,17 +233,33 @@ describe('containerCreateArgv: network', () => {
     // Fail closed. An allow-list nothing enforces is indistinguishable from no
     // allow-list, and this is the failure that would otherwise look like success.
     expect(() =>
-      create({}, { mode: 'allowlist', allow: ['10.0.0.0/8'], dns: [], proxyAllowHosts: [] }),
+      create(
+        {},
+        {
+          mode: 'allowlist',
+          allow: ['10.0.0.0/8'],
+          dns: [],
+          proxyAllowHosts: [],
+        },
+      ),
     ).toThrow(GhostError);
     expect(() =>
-      create({}, { mode: 'allowlist', allow: ['10.0.0.0/8'], dns: [], proxyAllowHosts: [] }),
+      create(
+        {},
+        {
+          mode: 'allowlist',
+          allow: ['10.0.0.0/8'],
+          dns: [],
+          proxyAllowHosts: [],
+        },
+      ),
     ).toThrow(/open egress/);
   });
 
   it('uses the bridge for an open profile with no gateway', () => {
-    expect(create({}, { mode: 'open', allow: [], dns: [], proxyAllowHosts: [] })).toContain(
-      '--network=bridge',
-    );
+    expect(
+      create({}, { mode: 'open', allow: [], dns: [], proxyAllowHosts: [] }),
+    ).toContain('--network=bridge');
   });
 });
 
@@ -235,7 +279,9 @@ describe('containerExecArgv', () => {
   });
 
   it('is unaffected by shell metacharacters in the arguments', () => {
-    const result = argv(planOf({ args: ['$(whoami)', '`id`', '; rm -rf /', '&& curl evil'] }));
+    const result = argv(
+      planOf({ args: ['$(whoami)', '`id`', '; rm -rf /', '&& curl evil'] }),
+    );
     const script = result[result.indexOf('-c') + 1] ?? '';
     expect(script).toBe('echo $$ > "$1"; shift; exec "$@"');
     expect(result).toContain('$(whoami)');
@@ -270,7 +316,9 @@ describe('containerExecArgv', () => {
   });
 
   it('reports the transcript at its read-only mount, outside the workspace', () => {
-    expect(containerRunDir('ghost-sbx-1', 'x')).toBe('/run/ghost-runs/ghost-sbx-1/x');
+    expect(containerRunDir('ghost-sbx-1', 'x')).toBe(
+      '/run/ghost-runs/ghost-sbx-1/x',
+    );
   });
 
   it('keeps the transcript mount a sibling of the toolbox mount, never nested', () => {
@@ -287,7 +335,9 @@ describe('containerExecArgv', () => {
       containerName: 'c',
       runsPath: '/home/ghost/runs',
     });
-    expect(argv).toContain('type=bind,src=/home/ghost/runs,dst=/run/ghost-runs,ro');
+    expect(argv).toContain(
+      'type=bind,src=/home/ghost/runs,dst=/run/ghost-runs,ro',
+    );
   });
 });
 
@@ -339,7 +389,9 @@ describe('containerRunner', () => {
     rmSync(base, { recursive: true, force: true });
   });
 
-  function fakeInner(outcome: Partial<RunOutcome> = {}): CommandRunner & { calls: RunRequest[] } {
+  function fakeInner(
+    outcome: Partial<RunOutcome> = {},
+  ): CommandRunner & { calls: RunRequest[] } {
     const calls: RunRequest[] = [];
     return {
       calls,
@@ -379,8 +431,12 @@ describe('containerRunner', () => {
     });
 
     expect(outcome.transcriptDir).toBe('/run/ghost-runs/c/run-1');
-    expect(readFileSync(join(workspace, 'c/run-1/stdout.log'), 'utf8')).toBe('scan line one\n');
-    expect(readFileSync(join(workspace, 'c/run-1/stderr.log'), 'utf8')).toBe('a warning\n');
+    expect(readFileSync(join(workspace, 'c/run-1/stdout.log'), 'utf8')).toBe(
+      'scan line one\n',
+    );
+    expect(readFileSync(join(workspace, 'c/run-1/stderr.log'), 'utf8')).toBe(
+      'a warning\n',
+    );
   });
 
   it('runs the docker client rather than the guarded program', async () => {
@@ -394,7 +450,11 @@ describe('containerRunner', () => {
       bin: 'podman',
     });
 
-    await runner.run({ plan: planOf(), timeoutMs: 0, signal: new AbortController().signal });
+    await runner.run({
+      plan: planOf(),
+      timeoutMs: 0,
+      signal: new AbortController().signal,
+    });
 
     expect(inner.calls[0]?.plan.file).toBe('podman');
     expect(inner.calls[0]?.plan.args[0]).toBe('exec');
@@ -410,7 +470,11 @@ describe('containerRunner', () => {
       inner,
     });
 
-    await runner.run({ plan: planOf(), timeoutMs: 0, signal: new AbortController().signal });
+    await runner.run({
+      plan: planOf(),
+      timeoutMs: 0,
+      signal: new AbortController().signal,
+    });
 
     expect(Object.keys(inner.calls[0]?.plan.env ?? {})).toEqual(['PATH']);
   });
@@ -427,7 +491,11 @@ describe('containerRunner', () => {
       inner,
     });
 
-    await runner.run({ plan: planOf(), timeoutMs: 5, signal: new AbortController().signal });
+    await runner.run({
+      plan: planOf(),
+      timeoutMs: 5,
+      signal: new AbortController().signal,
+    });
     await new Promise((resolve) => setImmediate(resolve));
 
     const kill = inner.calls.find((call) => call.plan.args.includes('KILL'));
@@ -459,7 +527,11 @@ describe('containerRunner', () => {
     });
 
     await expect(
-      runner.run({ plan: planOf(), timeoutMs: 0, signal: new AbortController().signal }),
+      runner.run({
+        plan: planOf(),
+        timeoutMs: 0,
+        signal: new AbortController().signal,
+      }),
     ).rejects.toThrow(GhostError);
     await new Promise((resolve) => setImmediate(resolve));
 
@@ -498,7 +570,9 @@ describe('openTranscript', () => {
       await transcript.close();
       expect(transcript.hostDir).toBe(join(base, 'ghost-sbx-1', 'r9'));
       expect(transcript.containerDir).toBe('/run/ghost-runs/ghost-sbx-1/r9');
-      expect(readFileSync(join(transcript.hostDir, 'stdout.log'), 'utf8')).toBe('hello\n');
+      expect(readFileSync(join(transcript.hostDir, 'stdout.log'), 'utf8')).toBe(
+        'hello\n',
+      );
     } finally {
       rmSync(base, { recursive: true, force: true });
     }
@@ -526,26 +600,49 @@ describe('openTranscript', () => {
  */
 describe('containerIsGone', () => {
   const gone = (stderr: string, code = 1): boolean =>
-    containerIsGone({ stdout: '', stderr, truncated: false, code, signal: null, timedOut: false });
+    containerIsGone({
+      stdout: '',
+      stderr,
+      truncated: false,
+      code,
+      signal: null,
+      timedOut: false,
+    });
 
   it('recognises what each engine says when the container is not there', () => {
-    expect(gone('Error response from daemon: No such container: ghost-sbx-1\n')).toBe(true);
-    expect(gone('Error response from daemon: Container ghost-sbx-1 is not running\n')).toBe(true);
+    expect(
+      gone('Error response from daemon: No such container: ghost-sbx-1\n'),
+    ).toBe(true);
+    expect(
+      gone(
+        'Error response from daemon: Container ghost-sbx-1 is not running\n',
+      ),
+    ).toBe(true);
     expect(gone('Error: No such container: ghost-sbx-1\n')).toBe(true);
-    expect(gone('Error: no container with name or ID "ghost-sbx-1" found\n')).toBe(true);
-    expect(gone('Error: can only create exec sessions on running containers\n')).toBe(true);
+    expect(
+      gone('Error: no container with name or ID "ghost-sbx-1" found\n'),
+    ).toBe(true);
+    expect(
+      gone('Error: can only create exec sessions on running containers\n'),
+    ).toBe(true);
   });
 
   it('leaves a command that merely printed one of those strings alone', () => {
     // Anchored at the start of stderr rather than searched for anywhere in it,
     // because the daemon writes its refusal *instead of* the command's output —
     // so the message is the whole of stderr when it is the daemon talking.
-    expect(gone('grep: No such container: not found in any file\n')).toBe(false);
-    expect(gone('a warning\nError response from daemon: No such container: x\n')).toBe(false);
+    expect(gone('grep: No such container: not found in any file\n')).toBe(
+      false,
+    );
+    expect(
+      gone('a warning\nError response from daemon: No such container: x\n'),
+    ).toBe(false);
   });
 
   it('says nothing about a command that succeeded', () => {
-    expect(gone('Error response from daemon: No such container: x\n', 0)).toBe(false);
+    expect(gone('Error response from daemon: No such container: x\n', 0)).toBe(
+      false,
+    );
   });
 
   it('says nothing about a command that was killed', () => {

@@ -47,8 +47,16 @@ describe('the settings panels', () => {
     // page in the nav, because a list an operator keeps is not a setting. That
     // is the split Agents already makes: the agents are a page, and only
     // install-wide tool settings are in Settings.
-    const built = SETTINGS_PANELS.filter((panel) => !isPlanned(panel)).map((panel) => panel.id);
-    expect(built).toEqual(['providers', 'tools', 'account', 'appearance', 'automation']);
+    const built = SETTINGS_PANELS.filter((panel) => !isPlanned(panel)).map(
+      (panel) => panel.id,
+    );
+    expect(built).toEqual([
+      'providers',
+      'tools',
+      'account',
+      'appearance',
+      'automation',
+    ]);
   });
 
   it('no longer advertise profiles as unbuilt, now that agents ship', () => {
@@ -63,14 +71,19 @@ describe('the settings panels', () => {
   it('give every unbuilt panel a list of what lands in it', () => {
     for (const panel of SETTINGS_PANELS.filter(isPlanned)) {
       const systems = PLANNED_SYSTEMS[panel.id];
-      expect(systems, `${panel.id} names a phase but lists nothing`).toBeDefined();
+      expect(
+        systems,
+        `${panel.id} names a phase but lists nothing`,
+      ).toBeDefined();
       expect(systems?.length).toBeGreaterThan(0);
     }
   });
 
   it('never lists a system in a panel that is already built', () => {
     for (const id of Object.keys(PLANNED_SYSTEMS)) {
-      expect(SETTINGS_PANELS.find((panel) => panel.id === id)?.phase).toBeDefined();
+      expect(
+        SETTINGS_PANELS.find((panel) => panel.id === id)?.phase,
+      ).toBeDefined();
     }
   });
 

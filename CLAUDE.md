@@ -76,6 +76,76 @@ test, where the state can be held still (`packages/web/test/chat/approval.test.t
 The rule of thumb: if the only reason you can see it is that the machine was slow,
 it does not belong in an `expect`.
 
+## The style guide is Google's, and the linter owns it
+
+This repo follows the [Google TypeScript Style Guide][gts]. You do not need to
+have read it: the parts a machine can check are in `eslint.config.js` and
+`.prettierrc.json`, so `pnpm lint` and `pnpm format:check` are the guide as far
+as a change is concerned. Read it when you want to know _why_ a rule is there.
+
+[gts]: https://google.github.io/styleguide/tsguide.html
+
+Two things about it that surprise people:
+
+- **80 columns, not 100.** This is the guide's, and it is the reason almost
+  every file was touched at once. That reformat is listed in
+  `.git-blame-ignore-revs`, so `git blame` can skip it — GitHub reads the file
+  by name, and locally it takes one command per clone:
+
+  ```bash
+  git config blame.ignoreRevsFile .git-blame-ignore-revs
+  ```
+
+- **No leading or trailing underscores, including on unused parameters.**
+  There is no `argsIgnorePattern`. A parameter that is not used is deleted; one
+  that cannot be deleted because it sits before a parameter that _is_ used just
+  gets an ordinary name. `_x` is not available as an escape hatch.
+
+### The deliberate deviations, and why
+
+Everything below is a place where the guide says one thing and this repo does
+another on purpose. If you are about to "fix" one of these, this is the
+argument you are arguing with.
+
+- **PascalCase is allowed for values, not only for types.** Two kinds of value
+  are PascalCase by an external convention and cannot be renamed without
+  breaking what reads them: a React component or context (JSX treats a
+  lowercase identifier as an intrinsic element), and a zod schema
+  (`ChatMessageSchema`), whose name mirrors the type it produces and which is
+  re-exported across every package.
+- **`export default` is allowed in `*.config.ts`.** vite, vitest, tsup and
+  playwright each load their config by taking the module's default export. The
+  guide's rule is about our modules; a file whose shape is dictated by the tool
+  reading it is not one. Everywhere else the rule is on.
+- **Object and type _properties_ are exempt from naming rules.** They are wire
+  formats, HTTP header names, route keys, CSS custom properties and i18n keys —
+  data whose spelling is fixed outside this repository, not identifiers.
+- **`ignoreRestSiblings` is on.** `const {password, ...rest} = user` has to name
+  the key it drops. Without this there is no way to omit a field at all, and the
+  guide's own advice is to use rest destructuring for exactly this.
+- **Tests may assert object literals.** `{matches: true} as MediaQueryListEvent`
+  is the point of a fixture: it supplies the one field under test and no other,
+  and the annotation the guide asks for instead would be a compile error. Only
+  the object-literal case is relaxed, and only under `test/` — `as` is still the
+  required syntax, and product code still annotates.
+
+### `#private` is gone; `private` is the spelling
+
+The guide bans `#ident` in favour of TypeScript's `private`, and converting the
+repo rewrote a little over 2,000 declarations and references across 30 files.
+Two consequences worth knowing before you reintroduce one by habit:
+
+- A `private` field is a real, enumerable own property. `#x` was invisible to
+  `Object.keys`, spread, `JSON.stringify` and a deep-equality assertion;
+  `private x` is not. If you write a test that deep-compares an instance, it now
+  sees the internals.
+- A private field can no longer share a name with a public getter. The pattern
+  `#items` + `get items()` does not compile, so the _private_ side gets the new
+  name — `private itemsByKey` + `get items()`. Fifteen of those were renamed
+  during the conversion; the public surface was left alone deliberately, because
+  a getter becoming a property is an API change and a rename of a private field
+  is not.
+
 ## Where a test goes
 
 Every test lives in its package's `test/` directory, mirroring `src/`. The test for

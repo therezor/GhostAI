@@ -25,7 +25,12 @@ import { ConfigSchema, type ConfigPatch } from '@ghostai/protocol';
 
 import { Providers } from '@/app/providers.js';
 import { createAppRouter } from '@/app/router.js';
-import { stubApi, testQueryClient, type RecordedRequest, type StubRoute } from '@testkit/render.js';
+import {
+  stubApi,
+  testQueryClient,
+  type RecordedRequest,
+  type StubRoute,
+} from '@testkit/render.js';
 import { STATUS } from '@testkit/fixtures.js';
 import { KEY_PLACEHOLDER } from '@/settings/provider-form.js';
 
@@ -42,7 +47,10 @@ const CONFIG = ConfigSchema.parse({
   },
 });
 
-const SETTINGS = { config: CONFIG, credentialsPresent: { ollama: false, openai: true } };
+const SETTINGS = {
+  config: CONFIG,
+  credentialsPresent: { ollama: false, openai: true },
+};
 
 const PROVIDERS = {
   types: [],
@@ -105,7 +113,9 @@ function mount(
   const user = userEvent.setup();
   const router = createAppRouter();
   router.update({
-    history: createMemoryHistory({ initialEntries: [`/settings/providers/${instanceId}`] }),
+    history: createMemoryHistory({
+      initialEntries: [`/settings/providers/${instanceId}`],
+    }),
   });
   render(
     <Providers client={testQueryClient()}>
@@ -117,7 +127,9 @@ function mount(
 }
 
 const patchesOf = (calls: readonly RecordedRequest[]): ConfigPatch[] =>
-  calls.filter((call) => call.method === 'PATCH').map((call) => call.body as ConfigPatch);
+  calls
+    .filter((call) => call.method === 'PATCH')
+    .map((call) => call.body as ConfigPatch);
 
 const probesOf = (calls: readonly RecordedRequest[]): RecordedRequest[] =>
   calls.filter((call) => call.path === '/api/providers/test');
@@ -126,13 +138,19 @@ describe('the provider editor', () => {
   it('opens on what the endpoint currently is', async () => {
     mount();
 
-    expect(await screen.findByLabelText('API base')).toHaveValue('http://127.0.0.1:11434/v1');
+    expect(await screen.findByLabelText('API base')).toHaveValue(
+      'http://127.0.0.1:11434/v1',
+    );
     expect(screen.getByLabelText('Extra models')).toHaveValue('llama3');
     // The type is a fact, not a control: the vault entry is keyed to this id,
     // so an endpoint that could change protocol would be a key handed to a
     // stranger.
-    expect(screen.queryByRole('combobox', { name: 'Type' })).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Ollama');
+    expect(
+      screen.queryByRole('combobox', { name: 'Type' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+      'Ollama',
+    );
   });
 
   it('says so for a link to an endpoint that is not there', async () => {
@@ -156,7 +174,12 @@ describe('the provider editor', () => {
     });
     expect(patchesOf(calls)[0]?.providers).toEqual({
       // No `type`: an endpoint cannot change protocol by being edited.
-      ollama: { label: '', apiBase: 'http://elsewhere/v1', models: ['llama3'], enabled: true },
+      ollama: {
+        label: '',
+        apiBase: 'http://elsewhere/v1',
+        models: ['llama3'],
+        enabled: true,
+      },
     });
     // After the patch, because the vault is keyed by instance id.
     expect(calls.find((call) => call.method === 'PUT')?.body).toEqual({
@@ -244,12 +267,19 @@ describe('the provider editor', () => {
     // request: `GET /models` answers "does this respond" and "what is on it" at
     // the same time, so asking them separately was asking twice.
     const { user, calls } = mount('openai', {
-      'POST /api/providers/test': [200, { ok: true, models: ['gpt-5', 'gpt-5-mini'] }],
+      'POST /api/providers/test': [
+        200,
+        { ok: true, models: ['gpt-5', 'gpt-5-mini'] },
+      ],
     });
 
-    await user.click(await screen.findByRole('button', { name: 'Fetch models' }));
+    await user.click(
+      await screen.findByRole('button', { name: 'Fetch models' }),
+    );
 
-    expect(await screen.findByText('Reachable — 2 models listed.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Reachable — 2 models listed.'),
+    ).toBeInTheDocument();
     expect(screen.getByText('gpt-5-mini')).toBeInTheDocument();
     // Fetching is not saving.
     expect(patchesOf(calls)).toHaveLength(0);
@@ -264,8 +294,12 @@ describe('the provider editor', () => {
       ],
     });
 
-    await user.click(await screen.findByRole('button', { name: 'Fetch models' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('the key was rejected');
+    await user.click(
+      await screen.findByRole('button', { name: 'Fetch models' }),
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'the key was rejected',
+    );
   });
 
   it('fetches against the connection being edited, not the one on disk', async () => {
@@ -313,7 +347,12 @@ describe('the provider editor', () => {
     const { user, calls } = mount('ollama', {
       'POST /api/providers/test': [
         200,
-        { ok: false, models: [], reason: 'transport', message: 'nothing is listening there' },
+        {
+          ok: false,
+          models: [],
+          reason: 'transport',
+          message: 'nothing is listening there',
+        },
       ],
     });
 
@@ -341,9 +380,15 @@ describe('the provider editor', () => {
   it('deletes after asking, and returns to the list', async () => {
     const { user, calls, router } = mount();
 
-    await user.click(await screen.findByRole('button', { name: 'Actions for Ollama' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Delete this provider' }));
-    expect(await screen.findByRole('dialog')).toHaveTextContent('its saved key is deleted with it');
+    await user.click(
+      await screen.findByRole('button', { name: 'Actions for Ollama' }),
+    );
+    await user.click(
+      await screen.findByRole('menuitem', { name: 'Delete this provider' }),
+    );
+    expect(await screen.findByRole('dialog')).toHaveTextContent(
+      'its saved key is deleted with it',
+    );
 
     await user.click(screen.getByRole('button', { name: 'Delete' }));
 

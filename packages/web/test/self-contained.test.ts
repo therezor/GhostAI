@@ -18,7 +18,8 @@ import { collectSources } from '@/tokens/run-gates.js';
 const sources = collectSources();
 
 /** Anything that would resolve to a host other than the one serving the page. */
-const EXTERNAL_URL = /(?:https?:)?\/\/(?!localhost|127\.0\.0\.1)[a-z0-9-]+\.[a-z]/gi;
+const EXTERNAL_URL =
+  /(?:https?:)?\/\/(?!localhost|127\.0\.0\.1)[a-z0-9-]+\.[a-z]/gi;
 
 describe('the shipped UI', () => {
   it('references no external origin', () => {
@@ -40,6 +41,8 @@ describe('the shipped UI', () => {
     const main = sources.find((source) => source.file === 'src/main.tsx');
 
     expect(main?.source).toContain("import '@fontsource-variable/inter'");
-    expect(main?.source).toContain("import '@fontsource-variable/jetbrains-mono'");
+    expect(main?.source).toContain(
+      "import '@fontsource-variable/jetbrains-mono'",
+    );
   });
 });

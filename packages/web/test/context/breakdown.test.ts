@@ -30,15 +30,16 @@ const input = {
 describe('summariseContext', () => {
   it('orders the known sections regardless of the key order it received', () => {
     // JSON preserves insertion order, and the server's is not the reading order.
-    expect(summariseContext(input, t).segments.map((segment) => segment.key)).toEqual([
-      'systemPrompt',
-      'tools',
-      'messages',
-    ]);
+    expect(
+      summariseContext(input, t).segments.map((segment) => segment.key),
+    ).toEqual(['systemPrompt', 'tools', 'messages']);
   });
 
   it('measures each section against the window', () => {
-    const { segments, usedPercent, freeTokens, over } = summariseContext(input, t);
+    const { segments, usedPercent, freeTokens, over } = summariseContext(
+      input,
+      t,
+    );
 
     expect(segments.map((segment) => segment.percent)).toEqual([10, 10, 30]);
     expect(usedPercent).toBe(50);
@@ -47,11 +48,9 @@ describe('summariseContext', () => {
   });
 
   it('labels the sections in words', () => {
-    expect(summariseContext(input, t).segments.map((segment) => segment.label)).toEqual([
-      'System prompt',
-      'Tool definitions',
-      'Session',
-    ]);
+    expect(
+      summariseContext(input, t).segments.map((segment) => segment.label),
+    ).toEqual(['System prompt', 'Tool definitions', 'Session']);
   });
 
   it('accounts for whatever the sections do not add up to', () => {
@@ -62,11 +61,15 @@ describe('summariseContext', () => {
 
     expect(other?.key).toBe('other');
     expect(other?.tokens).toBe(1000);
-    expect(budget.segments.reduce((total, segment) => total + segment.tokens, 0)).toBe(6000);
+    expect(
+      budget.segments.reduce((total, segment) => total + segment.tokens, 0),
+    ).toBe(6000);
   });
 
   it('adds no remainder when the sections already add up', () => {
-    expect(summariseContext(input, t).segments.map((s) => s.key)).not.toContain('other');
+    expect(summariseContext(input, t).segments.map((s) => s.key)).not.toContain(
+      'other',
+    );
   });
 
   it('reports a budget past the window rather than clamping it', () => {
@@ -101,7 +104,9 @@ describe('summariseContext', () => {
   it('survives a window of zero rather than dividing by it', () => {
     const budget = summariseContext({ ...input, contextWindowTokens: 0 }, t);
 
-    expect(budget.segments.every((segment) => segment.percent === 0)).toBe(true);
+    expect(budget.segments.every((segment) => segment.percent === 0)).toBe(
+      true,
+    );
     expect(budget.usedPercent).toBe(0);
   });
 
@@ -118,7 +123,13 @@ describe('summariseContext', () => {
     // Unattributed by construction, so it counts as uncached — the honest side
     // to err on for a figure nobody can point at.
     expect(budget.segments).toEqual([
-      { key: 'other', label: 'Unattributed', tokens: 400, percent: 50, cacheable: false },
+      {
+        key: 'other',
+        label: 'Unattributed',
+        tokens: 400,
+        percent: 50,
+        cacheable: false,
+      },
     ]);
     expect(budget.uncachedTokens).toBe(400);
   });
@@ -126,7 +137,12 @@ describe('summariseContext', () => {
   it('separates what a prompt cache can serve from what every step pays again', () => {
     const budget = summariseContext(
       {
-        breakdown: { systemPrompt: 1000, tools: 500, messages: 2000, runtimeBlock: 120 },
+        breakdown: {
+          systemPrompt: 1000,
+          tools: 500,
+          messages: 2000,
+          runtimeBlock: 120,
+        },
         estimatedTokens: 3620,
         contextWindowTokens: 10_000,
       },
@@ -140,7 +156,12 @@ describe('summariseContext', () => {
       'messages',
       'runtimeBlock',
     ]);
-    expect(budget.segments.map((segment) => segment.cacheable)).toEqual([true, true, true, false]);
+    expect(budget.segments.map((segment) => segment.cacheable)).toEqual([
+      true,
+      true,
+      true,
+      false,
+    ]);
     // The figure the split exists to move: the trailing turn, and nothing else.
     expect(budget.uncachedTokens).toBe(120);
   });

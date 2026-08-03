@@ -8,7 +8,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { ProviderCache } from '#src/provider-cache.js';
-import { createRuntime, type GhostRuntime, type RuntimeOptions } from '#src/runtime.js';
+import {
+  createRuntime,
+  type GhostRuntime,
+  type RuntimeOptions,
+} from '#src/runtime.js';
 
 const homes: string[] = [];
 const opened: GhostRuntime[] = [];
@@ -17,7 +21,9 @@ const databases: DatabaseSync[] = [];
 function tempHome(config?: unknown): string {
   const dir = mkdtempSync(join(tmpdir(), 'ghostai-runtime-'));
   homes.push(dir);
-  if (config !== undefined) writeFileSync(join(dir, 'config.json'), JSON.stringify(config));
+  if (config !== undefined) {
+    writeFileSync(join(dir, 'config.json'), JSON.stringify(config));
+  }
   return dir;
 }
 
@@ -34,7 +40,9 @@ function ollama(
   options: RuntimeOptions = {},
 ): GhostRuntime {
   const home = tempHome({
-    agents: { defaults: { provider: 'ollama', model: 'qwen3:8b', ...defaults } },
+    agents: {
+      defaults: { provider: 'ollama', model: 'qwen3:8b', ...defaults },
+    },
   });
   return build({ home, ...options });
 }
@@ -84,7 +92,9 @@ describe('createRuntime', () => {
     // `resolveInstance` returns null rather than picking one, and a request
     // landing at an endpoint nobody chose fails as a 401 from somewhere
     // unexpected — so the turn stops and says what to set.
-    expect(() => runtime.requireLoop()).toThrow(/No provider could be resolved/);
+    expect(() => runtime.requireLoop()).toThrow(
+      /No provider could be resolved/,
+    );
   });
 
   it('reports a provider with no model as unconfigured, naming the provider', () => {
@@ -93,7 +103,9 @@ describe('createRuntime', () => {
 
     expect(runtime.configured).toBe(false);
     expect(runtime.instance?.id).toBe('ollama');
-    expect(() => runtime.requireLoop()).toThrow(/No model configured for Ollama/);
+    expect(() => runtime.requireLoop()).toThrow(
+      /No model configured for Ollama/,
+    );
   });
 
   it('becomes configured when a reconfigure supplies what was missing', () => {
@@ -101,7 +113,9 @@ describe('createRuntime', () => {
     expect(runtime.configured).toBe(false);
 
     runtime.reconfigure({
-      providers: { 'ollama-gpu': { type: 'ollama', apiBase: 'http://gpu.lan:11434/v1' } },
+      providers: {
+        'ollama-gpu': { type: 'ollama', apiBase: 'http://gpu.lan:11434/v1' },
+      },
       agents: { defaults: { provider: 'ollama-gpu', model: 'qwen3:8b' } },
     });
 
@@ -114,7 +128,11 @@ describe('createRuntime', () => {
     const home = tempHome({
       providers: {
         laptop: { type: 'ollama', apiBase: 'http://127.0.0.1:11434/v1' },
-        gpu: { type: 'ollama', label: 'GPU box', apiBase: 'http://gpu.lan:11434/v1' },
+        gpu: {
+          type: 'ollama',
+          label: 'GPU box',
+          apiBase: 'http://gpu.lan:11434/v1',
+        },
       },
       agents: { defaults: { provider: 'gpu', model: 'qwen3:8b' } },
     });
@@ -138,14 +156,22 @@ describe('createRuntime', () => {
 
   it('resolves the workspace from the config, relative to the home', () => {
     const home = tempHome({
-      agents: { defaults: { provider: 'ollama', model: 'm', workspace: 'projects/alpha' } },
+      agents: {
+        defaults: {
+          provider: 'ollama',
+          model: 'm',
+          workspace: 'projects/alpha',
+        },
+      },
     });
     const runtime = build({ home });
 
     expect(runtime.paths.workspace).toBe(resolve(home, 'projects/alpha'));
     // The jail canonicalises through `realpath`, which on macOS turns the
     // temp directory into its `/private` form.
-    expect(runtime.jail.root).toBe(realpathSync(resolve(home, 'projects/alpha')));
+    expect(runtime.jail.root).toBe(
+      realpathSync(resolve(home, 'projects/alpha')),
+    );
   });
 
   it('lets an explicit workspace win over the config', () => {
@@ -176,11 +202,15 @@ describe('createRuntime over a borrowed connection', () => {
 
     second.store.ensureSession('b');
     expect(second.store.messageCount('a')).toBe(0);
-    expect(database.prepare('select count(*) as n from sessions').get()).toEqual({ n: 2 });
+    expect(
+      database.prepare('select count(*) as n from sessions').get(),
+    ).toEqual({ n: 2 });
   });
 
   it('opens its own file when no connection is borrowed', () => {
-    const home = tempHome({ agents: { defaults: { provider: 'ollama', model: 'm' } } });
+    const home = tempHome({
+      agents: { defaults: { provider: 'ollama', model: 'm' } },
+    });
     const runtime = build({ home });
 
     runtime.store.ensureSession('cli:default');
@@ -195,7 +225,9 @@ describe('reconfigure', () => {
     const store = runtime.store;
     const before = runtime.loop;
 
-    const config = runtime.reconfigure({ agents: { defaults: { model: 'llama3' } } });
+    const config = runtime.reconfigure({
+      agents: { defaults: { model: 'llama3' } },
+    });
 
     expect(config.agents.defaults.model).toBe('llama3');
     expect(runtime.model).toBe('llama3');
@@ -298,7 +330,9 @@ describe('reconfigure', () => {
     expect(providers.size).toBe(1);
 
     runtime.reconfigure({
-      providers: { ollama: { type: 'ollama', apiBase: 'http://127.0.0.1:9999/v1' } },
+      providers: {
+        ollama: { type: 'ollama', apiBase: 'http://127.0.0.1:9999/v1' },
+      },
     });
     expect(providers.size).toBe(2);
   });
@@ -316,9 +350,9 @@ describe('reconfigure', () => {
     const runtime = ollama();
     const before = runtime.loop;
 
-    expect(() => runtime.reconfigure({ agents: { defaults: { provider: 'anthropic' } } })).toThrow(
-      /anthropic-messages/,
-    );
+    expect(() =>
+      runtime.reconfigure({ agents: { defaults: { provider: 'anthropic' } } }),
+    ).toThrow(/anthropic-messages/);
 
     expect(runtime.loop).toBe(before);
     expect(runtime.spec?.id).toBe('ollama');
@@ -328,9 +362,9 @@ describe('reconfigure', () => {
 
   it('rejects a patch the schema refuses without touching the runtime', () => {
     const runtime = ollama();
-    expect(() => runtime.reconfigure({ agents: { defaults: { temperature: 40 } } })).toThrow(
-      /agents\.defaults\.temperature/,
-    );
+    expect(() =>
+      runtime.reconfigure({ agents: { defaults: { temperature: 40 } } }),
+    ).toThrow(/agents\.defaults\.temperature/);
     expect(runtime.config.agents.defaults.temperature).toBeUndefined();
   });
 
@@ -383,11 +417,15 @@ describe('reload', () => {
   }
 
   it('picks up an edit made to the file since the runtime was built', () => {
-    const home = tempHome({ agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } } });
+    const home = tempHome({
+      agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } },
+    });
     const runtime = build({ home });
     const before = runtime.loop;
 
-    rewrite(home, { agents: { defaults: { provider: 'ollama', model: 'llama3' } } });
+    rewrite(home, {
+      agents: { defaults: { provider: 'ollama', model: 'llama3' } },
+    });
     const config = runtime.reload();
 
     expect(config.agents.defaults.model).toBe('llama3');
@@ -400,19 +438,25 @@ describe('reload', () => {
     // `{}` over what is in memory: a merge keeps the value the file no longer
     // carries, which makes an undo in an editor look like it did nothing.
     const home = tempHome({
-      agents: { defaults: { provider: 'ollama', model: 'qwen3:8b', temperature: 0.9 } },
+      agents: {
+        defaults: { provider: 'ollama', model: 'qwen3:8b', temperature: 0.9 },
+      },
     });
     const runtime = build({ home });
     expect(runtime.config.agents.defaults.temperature).toBe(0.9);
 
-    rewrite(home, { agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } } });
+    rewrite(home, {
+      agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } },
+    });
     runtime.reload();
 
     expect(runtime.config.agents.defaults.temperature).toBeUndefined();
   });
 
   it('re-registers the built-ins, so a tool switched off in the file disappears', () => {
-    const home = tempHome({ agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } } });
+    const home = tempHome({
+      agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } },
+    });
     const runtime = build({ home });
     expect(runtime.tools.has('exec')).toBe(true);
 
@@ -427,12 +471,16 @@ describe('reload', () => {
   });
 
   it('keeps the store and the steering queue, so a turn in flight is not disturbed', () => {
-    const home = tempHome({ agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } } });
+    const home = tempHome({
+      agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } },
+    });
     const runtime = build({ home });
     const store = runtime.store;
     runtime.requireLoop().steer('s1', 'actually, use TypeScript');
 
-    rewrite(home, { agents: { defaults: { provider: 'ollama', model: 'llama3' } } });
+    rewrite(home, {
+      agents: { defaults: { provider: 'ollama', model: 'llama3' } },
+    });
     runtime.reload();
 
     expect(runtime.store).toBe(store);
@@ -440,13 +488,17 @@ describe('reload', () => {
   });
 
   it('changes nothing when the file cannot be built', () => {
-    const home = tempHome({ agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } } });
+    const home = tempHome({
+      agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } },
+    });
     const runtime = build({ home });
     const before = runtime.loop;
 
     // A provider that resolves to an adapter this build cannot construct — the
     // same failure `reconfigure` refuses, arriving through the file instead.
-    rewrite(home, { agents: { defaults: { provider: 'anthropic', model: 'claude-opus-5' } } });
+    rewrite(home, {
+      agents: { defaults: { provider: 'anthropic', model: 'claude-opus-5' } },
+    });
 
     expect(() => runtime.reload()).toThrow(/anthropic-messages/u);
     expect(runtime.loop).toBe(before);
@@ -456,10 +508,14 @@ describe('reload', () => {
   it('leaves a construction-time override in place', () => {
     // Same rule as `reconfigure`: `ghost chat --model x` is a statement about
     // this process, and an edit to the file must not move it.
-    const home = tempHome({ agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } } });
+    const home = tempHome({
+      agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } },
+    });
     const runtime = build({ home, model: 'pinned' });
 
-    rewrite(home, { agents: { defaults: { provider: 'ollama', model: 'llama3' } } });
+    rewrite(home, {
+      agents: { defaults: { provider: 'ollama', model: 'llama3' } },
+    });
     runtime.reload();
 
     expect(runtime.model).toBe('pinned');
@@ -469,7 +525,10 @@ describe('reload', () => {
 
 describe('multiple agents', () => {
   /** A runtime with one named agent beside the defaults. */
-  function withAgent(entry: Record<string, unknown>, id = 'reviewer'): GhostRuntime {
+  function withAgent(
+    entry: Record<string, unknown>,
+    id = 'reviewer',
+  ): GhostRuntime {
     const home = tempHome({
       agents: {
         defaults: { provider: 'ollama', model: 'qwen3:8b', temperature: 0.1 },
@@ -528,14 +587,18 @@ describe('multiple agents', () => {
     const runtime = withAgent({ model: 'qwen3:32b' });
 
     expect(runtime.jails.forWorkspace('default').root).toBe(runtime.jail.root);
-    expect(runtime.agents.every((agent) => agent.defaults.workspace === '')).toBe(true);
+    expect(
+      runtime.agents.every((agent) => agent.defaults.workspace === ''),
+    ).toBe(true);
   });
 
   it('narrows one agent’s tools without touching the shared registry', () => {
     const runtime = withAgent({ tools: { read_file: 'allow', exec: 'deny' } });
 
     const scope = runtime.tools.select(runtime.agents[1]?.tools ?? {});
-    expect(scope.definitions().map((definition) => definition.name)).toEqual(['read_file']);
+    expect(scope.definitions().map((definition) => definition.name)).toEqual([
+      'read_file',
+    ]);
     // The registry itself still has it, for every other agent.
     expect(runtime.tools.has('exec')).toBe(true);
   });
@@ -570,7 +633,9 @@ describe('multiple agents', () => {
     const runtime = withAgent({ model: 'qwen3:32b' });
     const before = runtime.requireLoopFor('reviewer');
 
-    runtime.reconfigure({ agents: { list: { reviewer: { model: 'llama3' } } } });
+    runtime.reconfigure({
+      agents: { list: { reviewer: { model: 'llama3' } } },
+    });
     const after = runtime.requireLoopFor('reviewer');
 
     expect(after).not.toBe(before);
@@ -584,7 +649,10 @@ describe('multiple agents', () => {
 
     runtime.reconfigure({ agents: { list: { writer: { label: 'Writer' } } } });
 
-    expect(runtime.agents.map((agent) => agent.id)).toEqual(['default', 'writer']);
+    expect(runtime.agents.map((agent) => agent.id)).toEqual([
+      'default',
+      'writer',
+    ]);
     expect(runtime.requireLoopFor('writer').model).toBe('qwen3:8b');
   });
 
@@ -614,7 +682,13 @@ describe('agent references surviving a delete', () => {
           researcher: { label: 'Researcher' },
           main: {
             label: 'Main',
-            subagents: [{ id: 'researcher', prompt: 'Ask for facts.', permission: 'allow' }],
+            subagents: [
+              {
+                id: 'researcher',
+                prompt: 'Ask for facts.',
+                permission: 'allow',
+              },
+            ],
           },
         },
       },
@@ -628,7 +702,9 @@ describe('agent references surviving a delete', () => {
     // a server fault and then did nothing.
     const runtime = build({ home: delegatingHome() });
 
-    const next = runtime.reconfigure({ agents: { list: { researcher: null } } });
+    const next = runtime.reconfigure({
+      agents: { list: { researcher: null } },
+    });
 
     expect(next.agents.list.researcher).toBeUndefined();
     // The *returned* config is what the caller saves, so the healing has to be
@@ -639,14 +715,22 @@ describe('agent references surviving a delete', () => {
   it('leaves the delegation alone when the target is only switched off', () => {
     const runtime = build({ home: delegatingHome() });
 
-    const next = runtime.reconfigure({ agents: { list: { researcher: { enabled: false } } } });
+    const next = runtime.reconfigure({
+      agents: { list: { researcher: { enabled: false } } },
+    });
 
-    expect(next.agents.list.main?.subagents.map((ref) => ref.id)).toEqual(['researcher']);
+    expect(next.agents.list.main?.subagents.map((ref) => ref.id)).toEqual([
+      'researcher',
+    ]);
     // The binding is dropped even though the ref survives, and the reason is
     // reported rather than swallowed.
-    expect(runtime.agents.find((agent) => agent.id === 'main')?.subagents).toEqual([]);
+    expect(
+      runtime.agents.find((agent) => agent.id === 'main')?.subagents,
+    ).toEqual([]);
     expect(runtime.configWarnings).toHaveLength(1);
-    expect(runtime.configWarnings[0]).toMatchObject({ code: 'disabled_subagent' });
+    expect(runtime.configWarnings[0]).toMatchObject({
+      code: 'disabled_subagent',
+    });
   });
 
   it('starts on a config whose delegation names an agent that is not there', () => {
@@ -656,14 +740,19 @@ describe('agent references surviving a delete', () => {
       agents: {
         defaults: { provider: 'ollama', model: 'qwen3:8b' },
         list: {
-          main: { subagents: [{ id: 'ghost', prompt: '', permission: 'allow' }] },
+          main: {
+            subagents: [{ id: 'ghost', prompt: '', permission: 'allow' }],
+          },
         },
       },
     });
 
     const runtime = build({ home });
 
-    expect(runtime.agents.map((agent) => agent.id)).toEqual(['default', 'main']);
+    expect(runtime.agents.map((agent) => agent.id)).toEqual([
+      'default',
+      'main',
+    ]);
     expect(runtime.configWarnings[0]).toMatchObject({
       agentId: 'main',
       code: 'missing_subagent',
@@ -704,23 +793,29 @@ describe('agent references surviving a delete', () => {
     const home = tempHome({
       agents: {
         defaults: { provider: 'ollama', model: 'qwen3:8b' },
-        list: { main: { subagents: [{ id: 'ghost', prompt: '', permission: 'allow' }] } },
+        list: {
+          main: {
+            subagents: [{ id: 'ghost', prompt: '', permission: 'allow' }],
+          },
+        },
       },
     });
     const runtime = build({ home });
 
     const reloaded = runtime.reload();
 
-    expect(reloaded.agents.list.main?.subagents.map((ref) => ref.id)).toEqual(['ghost']);
+    expect(reloaded.agents.list.main?.subagents.map((ref) => ref.id)).toEqual([
+      'ghost',
+    ]);
     expect(runtime.configWarnings).toHaveLength(1);
   });
 
   it('refuses a patch that introduces an id nothing could use', () => {
     const runtime = ollama();
 
-    expect(() => runtime.reconfigure({ agents: { list: { '../evil': { label: 'No' } } } })).toThrow(
-      /cannot be used as an agent id/,
-    );
+    expect(() =>
+      runtime.reconfigure({ agents: { list: { '../evil': { label: 'No' } } } }),
+    ).toThrow(/cannot be used as an agent id/);
   });
 
   it('still lets an odd id already on disk be deleted', () => {

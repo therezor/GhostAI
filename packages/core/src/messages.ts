@@ -39,7 +39,10 @@ export function textPart(text: string): TextPart {
  * request time. Putting a relative signed URL here is what used to send every
  * attachment nowhere.
  */
-export function imagePart(mimeType: string, source: { data: string } | { url: string }): ImagePart {
+export function imagePart(
+  mimeType: string,
+  source: { data: string } | { url: string },
+): ImagePart {
   return { type: 'image', mimeType, ...source };
 }
 
@@ -54,7 +57,9 @@ export function filePart(
     path,
     mimeType,
     ...(details.name === undefined ? {} : { name: details.name }),
-    ...(details.sizeBytes === undefined ? {} : { sizeBytes: details.sizeBytes }),
+    ...(details.sizeBytes === undefined
+      ? {}
+      : { sizeBytes: details.sizeBytes }),
   };
 }
 
@@ -63,7 +68,9 @@ export function systemMessage(content: string): SystemMessage {
 }
 
 /** Accepts a string for the common case, or parts for multimodal input. */
-export function userMessage(content: string | readonly ContentPart[]): UserMessage {
+export function userMessage(
+  content: string | readonly ContentPart[],
+): UserMessage {
   return {
     role: 'user',
     content: typeof content === 'string' ? [textPart(content)] : [...content],
@@ -83,7 +90,9 @@ export function assistantMessage(
     role: 'assistant',
     content: typeof content === 'string' ? [textPart(content)] : [...content],
     toolCalls: [...(options.toolCalls ?? [])],
-    ...(options.reasoning === undefined ? {} : { reasoning: options.reasoning }),
+    ...(options.reasoning === undefined
+      ? {}
+      : { reasoning: options.reasoning }),
   };
 }
 
@@ -122,7 +131,9 @@ export function toolMessage(
  * is what an attachment-only first message now gets.
  */
 export function textOf(message: ChatMessage): string {
-  if (message.role === 'system' || message.role === 'tool') return message.content;
+  if (message.role === 'system' || message.role === 'tool') {
+    return message.content;
+  }
   return message.content
     .filter((part): part is TextPart => part.type === 'text')
     .map((part) => part.text)
@@ -156,5 +167,8 @@ export function hasImages(message: ChatMessage): boolean {
 export function withoutImages(message: ChatMessage): ChatMessage {
   if (message.role === 'system' || message.role === 'tool') return message;
   if (!hasImages(message)) return message;
-  return { ...message, content: message.content.filter((part) => part.type !== 'image') };
+  return {
+    ...message,
+    content: message.content.filter((part) => part.type !== 'image'),
+  };
 }

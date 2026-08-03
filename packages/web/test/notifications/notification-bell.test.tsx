@@ -16,7 +16,11 @@ import { screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { NotificationBell } from '@/notifications/notification-bell.js';
-import { renderWithProviders, stubApi, type StubRoute } from '@testkit/render.js';
+import {
+  renderWithProviders,
+  stubApi,
+  type StubRoute,
+} from '@testkit/render.js';
 
 const NOTIFICATION = {
   id: 'n1',
@@ -29,7 +33,10 @@ const NOTIFICATION = {
 
 function mount(routes: Record<string, StubRoute> = {}): void {
   stubApi({
-    '/api/notifications': [200, { notifications: [NOTIFICATION], unreadCount: 1, total: 1 }],
+    '/api/notifications': [
+      200,
+      { notifications: [NOTIFICATION], unreadCount: 1, total: 1 },
+    ],
     ...routes,
   });
   renderWithProviders(<NotificationBell />);
@@ -45,8 +52,15 @@ describe('the notification bell', () => {
   });
 
   it('says nothing about a count when there is none', async () => {
-    mount({ '/api/notifications': [200, { notifications: [], unreadCount: 0, total: 0 }] });
+    mount({
+      '/api/notifications': [
+        200,
+        { notifications: [], unreadCount: 0, total: 0 },
+      ],
+    });
 
-    expect(await screen.findByRole('button', { name: 'Notifications' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('button', { name: 'Notifications' }),
+    ).toBeInTheDocument();
   });
 });

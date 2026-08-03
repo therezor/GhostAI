@@ -1,4 +1,11 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -8,7 +15,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { isGhostError } from '@ghostai/core';
 import { type ExecToolConfig, ExecToolConfigSchema } from '@ghostai/protocol';
 
-import { SHELL_BINARIES, binaryName, createOutputCap, guardExec } from '#src/exec-guard.js';
+import {
+  SHELL_BINARIES,
+  binaryName,
+  createOutputCap,
+  guardExec,
+} from '#src/exec-guard.js';
 import { WorkspaceJail } from '#src/jail.js';
 
 let base: string;
@@ -97,9 +109,18 @@ describe('guardExec: the environment', () => {
   it('passes only allow-listed variables', () => {
     const plan = guardExec(['git'], {
       jail,
-      env: { PATH: '/usr/bin', HOME: '/home/x', AWS_SECRET_ACCESS_KEY: 'leak', LANG: 'en_US' },
+      env: {
+        PATH: '/usr/bin',
+        HOME: '/home/x',
+        AWS_SECRET_ACCESS_KEY: 'leak',
+        LANG: 'en_US',
+      },
     });
-    expect(plan.env).toEqual({ PATH: '/usr/bin', HOME: '/home/x', LANG: 'en_US' });
+    expect(plan.env).toEqual({
+      PATH: '/usr/bin',
+      HOME: '/home/x',
+      LANG: 'en_US',
+    });
   });
 
   it('omits an allow-listed variable that is not set', () => {
@@ -142,9 +163,11 @@ describe('guardExec: the environment', () => {
 
 describe('guardExec: refusals', () => {
   it('refuses when exec is disabled', () => {
-    expect(kindOf(() => guardExec(['git'], { jail, config: config({ enable: false }) }))).toBe(
-      'permission_denied',
-    );
+    expect(
+      kindOf(() =>
+        guardExec(['git'], { jail, config: config({ enable: false }) }),
+      ),
+    ).toBe('permission_denied');
   });
 
   it.each([[[]], [['']]])('refuses the empty argv %j', (argv) => {
@@ -152,38 +175,48 @@ describe('guardExec: refusals', () => {
   });
 
   it('refuses a NUL byte anywhere in argv', () => {
-    expect(kindOf(() => guardExec(['git', 'log\0--all'], { jail }))).toBe('permission_denied');
-    expect(kindOf(() => guardExec(['git\0', 'log'], { jail }))).toBe('permission_denied');
+    expect(kindOf(() => guardExec(['git', 'log\0--all'], { jail }))).toBe(
+      'permission_denied',
+    );
+    expect(kindOf(() => guardExec(['git\0', 'log'], { jail }))).toBe(
+      'permission_denied',
+    );
   });
 
   it('refuses a denied binary, by basename', () => {
     const denied = config({ deniedBinaries: ['curl'] });
-    expect(kindOf(() => guardExec(['curl', 'https://x'], { jail, config: denied }))).toBe(
-      'permission_denied',
-    );
-    expect(kindOf(() => guardExec(['/usr/bin/curl'], { jail, config: denied }))).toBe(
-      'permission_denied',
-    );
-    expect(kindOf(() => guardExec(['curl.exe'], { jail, config: denied }))).toBe(
-      'permission_denied',
-    );
+    expect(
+      kindOf(() => guardExec(['curl', 'https://x'], { jail, config: denied })),
+    ).toBe('permission_denied');
+    expect(
+      kindOf(() => guardExec(['/usr/bin/curl'], { jail, config: denied })),
+    ).toBe('permission_denied');
+    expect(
+      kindOf(() => guardExec(['curl.exe'], { jail, config: denied })),
+    ).toBe('permission_denied');
   });
 
   it('refuses anything outside a non-empty allow-list', () => {
     const only = config({ allowedBinaries: ['git', 'node'] });
-    expect(guardExec(['git', 'status'], { jail, config: only }).file).toBe('git');
-    expect(kindOf(() => guardExec(['rm', '-rf', 'src'], { jail, config: only }))).toBe(
-      'permission_denied',
+    expect(guardExec(['git', 'status'], { jail, config: only }).file).toBe(
+      'git',
     );
+    expect(
+      kindOf(() => guardExec(['rm', '-rf', 'src'], { jail, config: only })),
+    ).toBe('permission_denied');
   });
 
   it('lets the deny-list win over the allow-list', () => {
     const both = config({ allowedBinaries: ['git'], deniedBinaries: ['git'] });
-    expect(kindOf(() => guardExec(['git'], { jail, config: both }))).toBe('permission_denied');
+    expect(kindOf(() => guardExec(['git'], { jail, config: both }))).toBe(
+      'permission_denied',
+    );
   });
 
   it.each(SHELL_BINARIES)('refuses the shell %s by default', (shell) => {
-    expect(kindOf(() => guardExec([shell, 'script.js'], { jail }))).toBe('permission_denied');
+    expect(kindOf(() => guardExec([shell, 'script.js'], { jail }))).toBe(
+      'permission_denied',
+    );
   });
 
   it('allows a shell that was explicitly allow-listed', () => {
@@ -201,7 +234,9 @@ describe('guardExec: refusals', () => {
       // program string handed to a shell re-creates the parsing argv removes.
       const allowed = config({ allowedBinaries: ['bash', 'powershell'] });
       expect(
-        kindOf(() => guardExec(['bash', flag, 'rm -rf / | sh'], { jail, config: allowed })),
+        kindOf(() =>
+          guardExec(['bash', flag, 'rm -rf / | sh'], { jail, config: allowed }),
+        ),
       ).toBe('permission_denied');
     },
   );
@@ -209,7 +244,10 @@ describe('guardExec: refusals', () => {
   it('does not scan arguments for shell metacharacters', () => {
     // These are inert under execFile with shell: false, and rejecting them would
     // break legitimate commands while blocking nothing.
-    const plan = guardExec(['git', 'commit', '-m', 'fix $(HOME) && `date` | sh'], { jail });
+    const plan = guardExec(
+      ['git', 'commit', '-m', 'fix $(HOME) && `date` | sh'],
+      { jail },
+    );
     expect(plan.args).toContain('fix $(HOME) && `date` | sh');
   });
 });
@@ -224,20 +262,24 @@ describe('guardExec: path arguments', () => {
     ['a drive letter', 'C:\\Windows\\System32'],
     ['a flag value that escapes', '--output=../outside.txt'],
     ['a flag value that is absolute', '--output=/etc/passwd'],
-  ])('refuses %s', (_name, argument) => {
-    expect(kindOf(() => guardExec(['cat', argument], { jail }))).toBe('jail_escape');
+  ])('refuses %s', (name, argument) => {
+    expect(kindOf(() => guardExec(['cat', argument], { jail }))).toBe(
+      'jail_escape',
+    );
   });
 
   it('refuses a symlink argument that points out of the workspace', () => {
     // The string looks contained; the link resolves to the workspace's parent.
     symlinkSync(base, join(root, 'escape'));
-    expect(kindOf(() => guardExec(['cat', 'escape/outside.txt'], { jail }))).toBe('jail_escape');
+    expect(
+      kindOf(() => guardExec(['cat', 'escape/outside.txt'], { jail })),
+    ).toBe('jail_escape');
   });
 
   it.each([
     ['a traversal', '../evil.sh'],
     ['a home path', '~/bin/evil'],
-  ])('refuses a program path that is %s', (_name, argv0) => {
+  ])('refuses a program path that is %s', (name, argv0) => {
     expect(kindOf(() => guardExec([argv0], { jail }))).toBe('jail_escape');
   });
 
@@ -274,7 +316,7 @@ describe('guardExec: path arguments', () => {
     ['a contained relative path', 'src/index.ts'],
     ['a dot-slash path', './script.js'],
     ['a numeric argument', '42'],
-  ])('accepts %s', (_name, argument) => {
+  ])('accepts %s', (name, argument) => {
     expect(guardExec(['git', argument], { jail }).args).toEqual([argument]);
   });
 
@@ -282,13 +324,21 @@ describe('guardExec: path arguments', () => {
     // No separator, so a shape-based heuristic would wave it through — and the
     // child would read whatever the link points at.
     symlinkSync(join(base, 'outside.txt'), join(root, 'notes.txt'));
-    expect(kindOf(() => guardExec(['cat', 'notes.txt'], { jail }))).toBe('jail_escape');
+    expect(kindOf(() => guardExec(['cat', 'notes.txt'], { jail }))).toBe(
+      'jail_escape',
+    );
   });
 
   it('collects the path-shaped arguments for the audit log', () => {
     writeFileSync(join(root, 'src', 'a.ts'), '');
-    const plan = guardExec(['node', 'script.js', 'src/a.ts', '--out=src/b.ts'], { jail });
-    expect(plan.paths).toEqual([join(root, 'src', 'a.ts'), join(root, 'src', 'b.ts')]);
+    const plan = guardExec(
+      ['node', 'script.js', 'src/a.ts', '--out=src/b.ts'],
+      { jail },
+    );
+    expect(plan.paths).toEqual([
+      join(root, 'src', 'a.ts'),
+      join(root, 'src', 'b.ts'),
+    ]);
   });
 
   it('does not report a URL argument as a file it touches', () => {
@@ -301,13 +351,15 @@ describe('guardExec: path arguments', () => {
     // Unverifiable but not path-shaped: refusing a long commit message would be
     // the guard inventing a rule of its own.
     const message = 'x'.repeat(5000);
-    expect(guardExec(['git', 'commit', '-m', message], { jail }).args).toContain(message);
+    expect(
+      guardExec(['git', 'commit', '-m', message], { jail }).args,
+    ).toContain(message);
   });
 
   it('still refuses a path-shaped argument too long to verify', () => {
-    expect(kindOf(() => guardExec(['cat', `src/${'x'.repeat(5000)}`], { jail }))).toBe(
-      'jail_escape',
-    );
+    expect(
+      kindOf(() => guardExec(['cat', `src/${'x'.repeat(5000)}`], { jail })),
+    ).toBe('jail_escape');
   });
 
   it('refuses what the jail clamps, which is the one place the two layers differ', () => {
@@ -315,7 +367,9 @@ describe('guardExec: path arguments', () => {
     // The guard cannot follow it there, because the child it is about to spawn
     // resolves that string against the real filesystem.
     expect(jail.check('/etc/passwd').ok).toBe(true);
-    expect(kindOf(() => guardExec(['cat', '/etc/passwd'], { jail }))).toBe('jail_escape');
+    expect(kindOf(() => guardExec(['cat', '/etc/passwd'], { jail }))).toBe(
+      'jail_escape',
+    );
   });
 });
 
@@ -339,8 +393,13 @@ describe('property: the chroot change did not widen the exec surface', () => {
     const segments = input.split(OLD_SEPARATORS);
     if (segments[0]?.startsWith('~') === true) return true;
     if (input.startsWith('\\\\') || input.startsWith('//')) return true;
-    if (input.startsWith('/') || input.startsWith('\\') || OLD_DRIVE_LETTER.test(input))
+    if (
+      input.startsWith('/') ||
+      input.startsWith('\\') ||
+      OLD_DRIVE_LETTER.test(input)
+    ) {
       return true;
+    }
     return segments.includes('..');
   }
 
@@ -376,40 +435,54 @@ describe('property: the chroot change did not widen the exec surface', () => {
 
   it('accepts an argument exactly when the pre-chroot rule would have', () => {
     fc.assert(
-      fc.property(fc.array(fragments, { minLength: 1, maxLength: 6 }), (parts) => {
-        const argument = parts.join('');
-        const candidate = candidateOf(argument);
-        const expected = candidate !== '' && refusedBefore(candidate);
+      fc.property(
+        fc.array(fragments, { minLength: 1, maxLength: 6 }),
+        (parts) => {
+          const argument = parts.join('');
+          const candidate = candidateOf(argument);
+          const expected = candidate !== '' && refusedBefore(candidate);
 
-        let refused = false;
-        try {
-          guardExec(['git', argument], { jail });
-        } catch {
-          refused = true;
-        }
-        expect(refused).toBe(expected);
-      }),
+          let refused = false;
+          try {
+            guardExec(['git', argument], { jail });
+          } catch {
+            refused = true;
+          }
+          expect(refused).toBe(expected);
+        },
+      ),
       { numRuns: 3000 },
     );
   });
 
   it('holds for a program path as well as for an argument', () => {
     fc.assert(
-      fc.property(fc.array(fragments, { minLength: 1, maxLength: 4 }), (parts) => {
-        const argv0 = parts.join('');
-        // A bare name goes to PATH and an absolute one is a system binary; only
-        // the workspace-relative shape is the jail's business.
-        fc.pre(argv0 !== '' && !argv0.startsWith('/') && !OLD_DRIVE_LETTER.test(argv0));
-        fc.pre(argv0.includes('/') || argv0.includes('\\') || argv0.startsWith('~'));
+      fc.property(
+        fc.array(fragments, { minLength: 1, maxLength: 4 }),
+        (parts) => {
+          const argv0 = parts.join('');
+          // A bare name goes to PATH and an absolute one is a system binary; only
+          // the workspace-relative shape is the jail's business.
+          fc.pre(
+            argv0 !== '' &&
+              !argv0.startsWith('/') &&
+              !OLD_DRIVE_LETTER.test(argv0),
+          );
+          fc.pre(
+            argv0.includes('/') ||
+              argv0.includes('\\') ||
+              argv0.startsWith('~'),
+          );
 
-        let refused = false;
-        try {
-          guardExec([argv0], { jail });
-        } catch (error) {
-          refused = isGhostError(error) && error.kind === 'jail_escape';
-        }
-        expect(refused).toBe(refusedBefore(argv0));
-      }),
+          let refused = false;
+          try {
+            guardExec([argv0], { jail });
+          } catch (error) {
+            refused = isGhostError(error) && error.kind === 'jail_escape';
+          }
+          expect(refused).toBe(refusedBefore(argv0));
+        },
+      ),
       { numRuns: 2000 },
     );
   });
@@ -422,13 +495,21 @@ describe('createOutputCap', () => {
     const cap = createOutputCap(16);
     expect(cap.push(bytes('hello '))).toBe(true);
     expect(cap.push(bytes('world'))).toBe(true);
-    expect(cap.done()).toEqual({ text: 'hello world', truncated: false, bytes: 11 });
+    expect(cap.done()).toEqual({
+      text: 'hello world',
+      truncated: false,
+      bytes: 11,
+    });
   });
 
   it('fills exactly to the budget without reporting truncation', () => {
     const cap = createOutputCap(5);
     expect(cap.push(bytes('12345'))).toBe(true);
-    expect(cap.done()).toMatchObject({ text: '12345', truncated: false, bytes: 5 });
+    expect(cap.done()).toMatchObject({
+      text: '12345',
+      truncated: false,
+      bytes: 5,
+    });
   });
 
   it('truncates mid-chunk and tells the caller to stop', () => {
@@ -448,8 +529,9 @@ describe('createOutputCap', () => {
 
   it('treats 0 as unlimited, matching the config convention', () => {
     const cap = createOutputCap(0);
-    for (let index = 0; index < 100; index += 1)
+    for (let index = 0; index < 100; index += 1) {
       expect(cap.push(bytes('x'.repeat(100)))).toBe(true);
+    }
     expect(cap.done()).toMatchObject({ truncated: false, bytes: 10_000 });
   });
 
@@ -488,19 +570,22 @@ describe('property: every path-shaped argument is contained or refused', () => {
 
   it('holds for generated argv vectors', () => {
     fc.assert(
-      fc.property(fc.array(fragments, { minLength: 1, maxLength: 6 }), (parts) => {
-        const argument = parts.join('');
-        let plan;
-        try {
-          plan = guardExec(['git', argument], { jail });
-        } catch {
-          return; // refused, which is always an acceptable answer
-        }
-        // Accepted: then every path it validated is inside the workspace, and the
-        // argument reached the child exactly as written.
-        for (const path of plan.paths) expect(jail.contains(path)).toBe(true);
-        expect(plan.args).toEqual([argument]);
-      }),
+      fc.property(
+        fc.array(fragments, { minLength: 1, maxLength: 6 }),
+        (parts) => {
+          const argument = parts.join('');
+          let plan;
+          try {
+            plan = guardExec(['git', argument], { jail });
+          } catch {
+            return; // refused, which is always an acceptable answer
+          }
+          // Accepted: then every path it validated is inside the workspace, and the
+          // argument reached the child exactly as written.
+          for (const path of plan.paths) expect(jail.contains(path)).toBe(true);
+          expect(plan.args).toEqual([argument]);
+        },
+      ),
       { numRuns: 3000 },
     );
   });
@@ -508,11 +593,16 @@ describe('property: every path-shaped argument is contained or refused', () => {
   it('never accepts an argument containing a traversal segment', () => {
     fc.assert(
       fc.property(
-        fc.array(fc.constantFrom('a', 'b', '..'), { minLength: 1, maxLength: 5 }),
+        fc.array(fc.constantFrom('a', 'b', '..'), {
+          minLength: 1,
+          maxLength: 5,
+        }),
         fc.constantFrom('', '--out='),
         (segments, prefix) => {
           fc.pre(segments.includes('..'));
-          expect(() => guardExec(['git', `${prefix}${segments.join('/')}`], { jail })).toThrow();
+          expect(() =>
+            guardExec(['git', `${prefix}${segments.join('/')}`], { jail }),
+          ).toThrow();
         },
       ),
     );
@@ -520,7 +610,8 @@ describe('property: every path-shaped argument is contained or refused', () => {
 });
 
 describe('guardExec: sandboxed', () => {
-  const sandboxed = (argv: readonly string[]) => guardExec(argv, { jail, sandboxed: true });
+  const sandboxed = (argv: readonly string[]) =>
+    guardExec(argv, { jail, sandboxed: true });
 
   it('permits a shell, which the container rather than the guard now bounds', () => {
     // On the host a shell puts a parser back between the argv contract and the
@@ -533,14 +624,18 @@ describe('guardExec: sandboxed', () => {
 
   it('permits an absolute path, which addresses the container and not the host', () => {
     expect(() => sandboxed(['cat', '/etc/os-release'])).not.toThrow();
-    expect(() => sandboxed(['nmap', '-oN', '/tmp/scan.txt', '10.0.0.5'])).not.toThrow();
+    expect(() =>
+      sandboxed(['nmap', '-oN', '/tmp/scan.txt', '10.0.0.5']),
+    ).not.toThrow();
   });
 
   it('permits a redirect inside a script string', () => {
     // The failure that made lifting the two rules together necessary: the path
     // lives inside the script, so a path check would refuse the very pipelines
     // enabling the shell was meant to allow.
-    expect(() => sandboxed(['sh', '-c', 'nuclei -u http://t > /workspace/out.txt'])).not.toThrow();
+    expect(() =>
+      sandboxed(['sh', '-c', 'nuclei -u http://t > /workspace/out.txt']),
+    ).not.toThrow();
   });
 
   it('still enforces the binary deny-list', () => {
@@ -582,6 +677,8 @@ describe('guardExec: sandboxed', () => {
   it('keeps refusing shells and outside paths when not sandboxed', () => {
     // The relaxation is opt-in per call and must not leak into the host path.
     expect(() => guardExec(['bash', '-lc', 'x'], { jail })).toThrow(/shell/);
-    expect(() => guardExec(['cat', '/etc/passwd'], { jail })).toThrow(/outside/);
+    expect(() => guardExec(['cat', '/etc/passwd'], { jail })).toThrow(
+      /outside/,
+    );
   });
 });

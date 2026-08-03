@@ -32,7 +32,11 @@ import {
 import { useTurnStore } from '@/state/turn.js';
 import { toast } from '@/components/ui/toast.js';
 import { readCursor, writeCursor } from './cursor.js';
-import { ReconnectingSocket, socketUrl, type ConnectionStatus } from './socket.js';
+import {
+  ReconnectingSocket,
+  socketUrl,
+  type ConnectionStatus,
+} from './socket.js';
 
 type Listener = (message: ServerMessage) => void;
 
@@ -79,7 +83,11 @@ export function openConnection(sessionKey: string | undefined): void {
   if (sessionKey !== undefined) attachWithCursor(sessionKey);
 
   socket ??= new ReconnectingSocket({
-    url: () => socketUrl(requested ?? useTurnStore.getState().sessionKey, globalThis.location),
+    url: () =>
+      socketUrl(
+        requested ?? useTurnStore.getState().sessionKey,
+        globalThis.location,
+      ),
     onStatus: handleStatus,
     onMessage: handleMessage,
     onOpen: (send) => {
@@ -100,9 +108,15 @@ export function openConnection(sessionKey: string | undefined): void {
       // story: replaying a ring full of completed turns on top of it would
       // render each of them twice.
       if (reconnecting) {
-        if (lastSeq > 0) send({ type: 'session.resume', sessionKey: attached, lastSeq });
+        if (lastSeq > 0) {
+          send({ type: 'session.resume', sessionKey: attached, lastSeq });
+        }
       } else if (resumeFloor !== undefined) {
-        send({ type: 'session.resume', sessionKey: attached, lastSeq: resumeFloor });
+        send({
+          type: 'session.resume',
+          sessionKey: attached,
+          lastSeq: resumeFloor,
+        });
       }
       reconnecting = true;
     },
@@ -142,7 +156,10 @@ export function switchSession(sessionKey: string): void {
   // the URL only catches up a moment later — asking to switch to the session
   // already being watched would resume it, and the ring would re-deliver
   // frames this client had already applied.
-  if (requested === sessionKey || useTurnStore.getState().sessionKey === sessionKey) {
+  if (
+    requested === sessionKey ||
+    useTurnStore.getState().sessionKey === sessionKey
+  ) {
     requested = sessionKey;
     return;
   }
@@ -280,7 +297,9 @@ export function regenerateTurn(seq?: number): void {
   const question =
     seq === undefined
       ? undefined
-      : store.transcript.find((item) => item.kind === 'user' && item.seq === seq);
+      : store.transcript.find(
+          (item) => item.kind === 'user' && item.seq === seq,
+        );
 
   const clientMessageId = newUuid();
   if (seq !== undefined && question?.kind === 'user') {
@@ -325,10 +344,16 @@ export function editMessage(
   });
 }
 
-export function approveTool(callId: string, approved: boolean, scope: ApprovalScope): void {
+export function approveTool(
+  callId: string,
+  approved: boolean,
+  scope: ApprovalScope,
+): void {
   // Recorded locally first, so the buttons go on the click rather than on the
   // round trip. The gate is the server's; the acknowledgement is ours.
-  useTurnStore.getState().answerApproval(callId, approved ? 'approved' : 'denied');
+  useTurnStore
+    .getState()
+    .answerApproval(callId, approved ? 'approved' : 'denied');
   socket?.send({ type: 'tool.approve', callId, approved, scope });
 }
 

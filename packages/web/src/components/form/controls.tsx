@@ -49,18 +49,27 @@ export function Section({
   return (
     <section aria-label={title} className={cn('settings-section', className)}>
       <h3 className="settings-section__title">{title}</h3>
-      {description !== undefined && <p className="settings-section__description">{description}</p>}
+      {description !== undefined && (
+        <p className="settings-section__description">{description}</p>
+      )}
       <div className="stack settings-section__body">{children}</div>
     </section>
   );
 }
 
 /** Two columns above `sm`, one below — a settings form is the last place to force a scroll. */
-export function FieldGrid({ children }: { readonly children: ReactNode }): JSX.Element {
+export function FieldGrid({
+  children,
+}: {
+  readonly children: ReactNode;
+}): JSX.Element {
   return <div className="settings-grid">{children}</div>;
 }
 
-export interface TextareaFieldProps extends Omit<ComponentProps<'textarea'>, 'id' | 'onChange'> {
+export interface TextareaFieldProps extends Omit<
+  ComponentProps<'textarea'>,
+  'id' | 'onChange'
+> {
   readonly label: ReactNode;
   readonly hint?: ReactNode;
   readonly error?: string | undefined;
@@ -125,7 +134,10 @@ export function TextareaField({
   );
 }
 
-export interface TextFieldProps extends Omit<ComponentProps<'input'>, 'id' | 'onChange'> {
+export interface TextFieldProps extends Omit<
+  ComponentProps<'input'>,
+  'id' | 'onChange'
+> {
   readonly label: ReactNode;
   readonly hint?: ReactNode;
   readonly error?: string | undefined;
@@ -244,7 +256,9 @@ export function SelectField({
           aria-invalid={error !== undefined}
           {...(describedBy === '' ? {} : { 'aria-describedby': describedBy })}
         >
-          <SelectValue {...(placeholder === undefined ? {} : { placeholder })} />
+          <SelectValue
+            {...(placeholder === undefined ? {} : { placeholder })}
+          />
         </SelectTrigger>
         <SelectContent>
           {options.map((option) => (
@@ -331,7 +345,11 @@ export function SaveBar({
       {children}
       {/* Announced rather than only coloured: "unsaved changes" is the state a
           user is most likely to leave the page in the middle of. */}
-      <span role="status" aria-live="polite" className="settings-save-bar__state">
+      <span
+        role="status"
+        aria-live="polite"
+        className="settings-save-bar__state"
+      >
         {dirty ? 'Unsaved changes' : ''}
       </span>
     </div>

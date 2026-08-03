@@ -20,7 +20,12 @@
  * reader jumps to a page and acts on a row rather than walking the list.
  */
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 
@@ -51,7 +56,9 @@ export interface SessionQuery {
  * page collapses to the height of a loading sentence, which on a full page is
  * most of a screen jumping under the cursor.
  */
-export function useSessionPage(query: SessionQuery): UseQueryResult<SessionListResponse> {
+export function useSessionPage(
+  query: SessionQuery,
+): UseQueryResult<SessionListResponse> {
   return useQuery({
     queryKey: queryKeys.sessionPage(query),
     queryFn: ({ signal }) =>
@@ -91,7 +98,8 @@ export function useRenameSession(): MutationHandle<
   const refresh = useRefreshSessions();
 
   const mutation = useMutation({
-    mutationFn: ({ key, title }: { key: string; title: string }) => api.renameSession(key, title),
+    mutationFn: ({ key, title }: { key: string; title: string }) =>
+      api.renameSession(key, title),
     onSuccess: (session: SessionSummary) => {
       refresh();
       return session;
@@ -104,7 +112,9 @@ export function useRenameSession(): MutationHandle<
   return {
     mutate: (input, options) => {
       mutation.mutate(input, {
-        ...(options?.onSuccess === undefined ? {} : { onSuccess: options.onSuccess }),
+        ...(options?.onSuccess === undefined
+          ? {}
+          : { onSuccess: options.onSuccess }),
       });
     },
     pending: mutation.isPending,
@@ -128,7 +138,9 @@ export function useDeleteSession(): MutationHandle<string> {
   return {
     mutate: (key, options) => {
       mutation.mutate(key, {
-        ...(options?.onSuccess === undefined ? {} : { onSuccess: options.onSuccess }),
+        ...(options?.onSuccess === undefined
+          ? {}
+          : { onSuccess: options.onSuccess }),
       });
     },
     pending: mutation.isPending,

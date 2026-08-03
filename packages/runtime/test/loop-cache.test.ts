@@ -13,13 +13,17 @@ interface Counting {
   readonly built: string[];
 }
 
-function counting(options: { max?: number; fails?: ReadonlySet<string> } = {}): Counting {
+function counting(
+  options: { max?: number; fails?: ReadonlySet<string> } = {},
+): Counting {
   const built: string[] = [];
   const cache = new LoopCache({
     ...(options.max === undefined ? {} : { max: options.max }),
     create: (agentId) => {
       built.push(agentId);
-      if (options.fails?.has(agentId) === true) throw new Error(`cannot build ${agentId}`);
+      if (options.fails?.has(agentId) === true) {
+        throw new Error(`cannot build ${agentId}`);
+      }
       return fakeLoop(agentId);
     },
   });
@@ -47,7 +51,9 @@ describe('LoopCache', () => {
 
   it('does not remember a null, so a save that configures the install takes effect', () => {
     let configured = false;
-    const cache = new LoopCache({ create: () => (configured ? fakeLoop('default') : null) });
+    const cache = new LoopCache({
+      create: () => (configured ? fakeLoop('default') : null),
+    });
 
     expect(cache.get('default')).toBeNull();
     configured = true;

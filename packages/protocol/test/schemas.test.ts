@@ -14,7 +14,7 @@ describe('JSON Schema conversion', () => {
   // `z.toJSONSchema`, because the OpenAPI document and every tool definition are
   // generated through it. A schema using an unrepresentable construct — a
   // transform, a `Date`, a `bigint` — throws here rather than at server boot.
-  describe.each(entries)('%s', (_name, schema) => {
+  describe.each(entries)('%s', (name, schema) => {
     it('converts in output mode', () => {
       const json = z.toJSONSchema(schema);
       expect(json).toBeTypeOf('object');
@@ -55,8 +55,12 @@ describe('registry completeness', () => {
 
 describe('generated shapes', () => {
   it('emits a discriminated union as a oneOf over every variant', () => {
-    const json = z.toJSONSchema(PROTOCOL_SCHEMAS.ClientMessage) as { oneOf?: unknown[] };
-    expect(json.oneOf).toHaveLength(PROTOCOL_SCHEMAS.ClientMessage.options.length);
+    const json = z.toJSONSchema(PROTOCOL_SCHEMAS.ClientMessage) as {
+      oneOf?: unknown[];
+    };
+    expect(json.oneOf).toHaveLength(
+      PROTOCOL_SCHEMAS.ClientMessage.options.length,
+    );
   });
 
   it('carries defaults into the document so a client can see them', () => {
@@ -71,10 +75,14 @@ describe('generated shapes', () => {
   });
 
   it('marks defaulted fields optional in input mode and present in output mode', () => {
-    const input = z.toJSONSchema(PROTOCOL_SCHEMAS.AgentDefaults, { io: 'input' }) as {
+    const input = z.toJSONSchema(PROTOCOL_SCHEMAS.AgentDefaults, {
+      io: 'input',
+    }) as {
       required?: string[];
     };
-    const output = z.toJSONSchema(PROTOCOL_SCHEMAS.AgentDefaults) as { required?: string[] };
+    const output = z.toJSONSchema(PROTOCOL_SCHEMAS.AgentDefaults) as {
+      required?: string[];
+    };
     expect(input.required ?? []).not.toContain('maxToolIterations');
     expect(output.required ?? []).toContain('maxToolIterations');
   });

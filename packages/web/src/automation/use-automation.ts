@@ -65,13 +65,20 @@ export function useAutomationRuns(
   return useQuery({
     queryKey: queryKeys.automationRuns(jobId, page),
     queryFn: ({ signal }) =>
-      api.automationRuns(jobId, { limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE, signal }),
+      api.automationRuns(jobId, {
+        limit: PAGE_SIZE,
+        offset: (page - 1) * PAGE_SIZE,
+        signal,
+      }),
     enabled: jobId !== '',
     placeholderData: keepPreviousData,
   });
 }
 
-export function useCreateJob(): MutationHandle<CreateAutomationJob, AutomationJob> {
+export function useCreateJob(): MutationHandle<
+  CreateAutomationJob,
+  AutomationJob
+> {
   const queryClient = useQueryClient();
   const mutation = useMutation({
     mutationFn: (body: CreateAutomationJob) => api.createAutomationJob(body),
@@ -89,10 +96,13 @@ export function useCreateJob(): MutationHandle<CreateAutomationJob, AutomationJo
   return { mutate: mutation.mutate, pending: mutation.isPending };
 }
 
-export function useSaveJob(jobId: string): MutationHandle<UpdateAutomationJob, AutomationJob> {
+export function useSaveJob(
+  jobId: string,
+): MutationHandle<UpdateAutomationJob, AutomationJob> {
   const queryClient = useQueryClient();
   const mutation = useMutation({
-    mutationFn: (body: UpdateAutomationJob) => api.updateAutomationJob(jobId, body),
+    mutationFn: (body: UpdateAutomationJob) =>
+      api.updateAutomationJob(jobId, body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.automation });
       toast.success('Job saved');
@@ -126,12 +136,17 @@ export function useRunJob(): MutationHandle<string, AutomationRun> {
   const queryClient = useQueryClient();
   const mutation = useMutation({
     mutationFn: (id: string) => api.runAutomationJob(id),
-    onSuccess: (_run, id: string) => {
+    onSuccess: (run, id: string) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.automation });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.automationRuns(id) });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.automationRuns(id),
+      });
       // Said out loud because the run is invisible: the route answered the
       // moment it queued, and the result lands minutes later as a notification.
-      toast.success('Run started', 'The result will arrive in your notifications.');
+      toast.success(
+        'Run started',
+        'The result will arrive in your notifications.',
+      );
     },
     onError: (error: Error) => {
       toast.error('Could not start the run', error.message);

@@ -3,7 +3,11 @@ import { describe, expect, it } from 'vitest';
 import type { ContentPart } from '@ghostai/protocol';
 
 import type { Clock } from '#src/clock.js';
-import { MessageBus, RateLimiter, type InboundMessage } from '#src/message-bus.js';
+import {
+  MessageBus,
+  RateLimiter,
+  type InboundMessage,
+} from '#src/message-bus.js';
 import { textPart } from '#src/messages.js';
 
 const NOW = 1_700_000_000_000;
@@ -26,7 +30,10 @@ class TestClock implements Clock {
     this.mono += ms;
   }
 
-  setTimeout(callback: () => void, delayMs: number): ReturnType<typeof globalThis.setTimeout> {
+  setTimeout(
+    callback: () => void,
+    delayMs: number,
+  ): ReturnType<typeof globalThis.setTimeout> {
     return globalThis.setTimeout(callback, delayMs);
   }
 
@@ -46,8 +53,14 @@ function counterIds(): () => string {
 
 const hello: readonly ContentPart[] = [textPart('hello')];
 
-function makeBus(options: Partial<ConstructorParameters<typeof MessageBus>[0]> = {}): MessageBus {
-  return new MessageBus({ clock: new TestClock(), newId: counterIds(), ...options });
+function makeBus(
+  options: Partial<ConstructorParameters<typeof MessageBus>[0]> = {},
+): MessageBus {
+  return new MessageBus({
+    clock: new TestClock(),
+    newId: counterIds(),
+    ...options,
+  });
 }
 
 const inboundInput = {
@@ -60,7 +73,10 @@ const inboundInput = {
 describe('publishing inbound', () => {
   it('accepts a message and stamps it', async () => {
     const bus = makeBus();
-    expect(bus.publishInbound(inboundInput)).toEqual({ kind: 'accepted', id: 'id1' });
+    expect(bus.publishInbound(inboundInput)).toEqual({
+      kind: 'accepted',
+      id: 'id1',
+    });
 
     const received = await bus.inbound().next();
     expect(received.value).toEqual({
@@ -93,7 +109,10 @@ describe('publishing inbound', () => {
     const bus = makeBus({ capacity: 2 });
     expect(bus.publishInbound(inboundInput).kind).toBe('accepted');
     expect(bus.publishInbound(inboundInput).kind).toBe('accepted');
-    expect(bus.publishInbound(inboundInput)).toEqual({ kind: 'queue_full', queued: 2 });
+    expect(bus.publishInbound(inboundInput)).toEqual({
+      kind: 'queue_full',
+      queued: 2,
+    });
     expect(bus.inboundSize).toBe(2);
   });
 
@@ -116,7 +135,11 @@ describe('publishing outbound', () => {
     });
 
     const received = await bus.outbound().next();
-    expect(received.value).toMatchObject({ kind: 'reply', target: '42', createdAtMs: NOW });
+    expect(received.value).toMatchObject({
+      kind: 'reply',
+      target: '42',
+      createdAtMs: NOW,
+    });
   });
 
   it('carries an explicit kind', async () => {
@@ -128,7 +151,9 @@ describe('publishing outbound', () => {
       content: hello,
       kind: 'progress',
     });
-    expect((await bus.outbound().next()).value).toMatchObject({ kind: 'progress' });
+    expect((await bus.outbound().next()).value).toMatchObject({
+      kind: 'progress',
+    });
   });
 
   it('is not rate limited — pacing belongs to the channel', () => {
@@ -175,7 +200,9 @@ describe('consuming', () => {
     bus.publishInbound({ ...inboundInput, id: 'a' });
     bus.publishInbound({ ...inboundInput, id: 'b' });
 
-    const ids = [await first, await second].map((r) => (r.value as InboundMessage).id);
+    const ids = [await first, await second].map(
+      (r) => (r.value as InboundMessage).id,
+    );
     expect(ids.sort()).toEqual(['a', 'b']);
     expect(bus.inboundSize).toBe(0);
   });
@@ -235,11 +262,16 @@ describe('rate limiting', () => {
   it('is disabled by default', () => {
     const limiter = new RateLimiter({}, new TestClock());
     expect(limiter.enabled).toBe(false);
-    for (let i = 0; i < 100; i++) expect(limiter.consume('user-1')).toBeUndefined();
+    for (let i = 0; i < 100; i++) {
+      expect(limiter.consume('user-1')).toBeUndefined();
+    }
   });
 
   it('allows a burst and then refuses', () => {
-    const limiter = new RateLimiter({ perMinute: 60, burst: 3 }, new TestClock());
+    const limiter = new RateLimiter(
+      { perMinute: 60, burst: 3 },
+      new TestClock(),
+    );
     expect(limiter.consume('u')).toBeUndefined();
     expect(limiter.consume('u')).toBeUndefined();
     expect(limiter.consume('u')).toBeUndefined();
@@ -275,7 +307,10 @@ describe('rate limiting', () => {
   });
 
   it('meters each sender separately', () => {
-    const limiter = new RateLimiter({ perMinute: 60, burst: 1 }, new TestClock());
+    const limiter = new RateLimiter(
+      { perMinute: 60, burst: 1 },
+      new TestClock(),
+    );
     expect(limiter.consume('a')).toBeUndefined();
     expect(limiter.consume('b')).toBeUndefined();
     expect(limiter.consume('a')).toBeGreaterThan(0);
@@ -316,7 +351,10 @@ describe('rate limiting', () => {
   it('stays bounded even when nothing is reclaimable', () => {
     // Time frozen, so no bucket ever refills — the LRU pass is the only thing
     // standing between a flood of distinct senders and unbounded memory.
-    const limiter = new RateLimiter({ perMinute: 60, burst: 2 }, new TestClock());
+    const limiter = new RateLimiter(
+      { perMinute: 60, burst: 2 },
+      new TestClock(),
+    );
     for (let i = 0; i < RateLimiter.MAX_TRACKED_SENDERS + 500; i++) {
       limiter.consume(`sender-${String(i)}`);
     }
@@ -324,7 +362,10 @@ describe('rate limiting', () => {
   });
 
   it('evicts the least recently used sender, not the most recent', () => {
-    const limiter = new RateLimiter({ perMinute: 60, burst: 2 }, new TestClock());
+    const limiter = new RateLimiter(
+      { perMinute: 60, burst: 2 },
+      new TestClock(),
+    );
     limiter.consume('early');
     for (let i = 0; i < RateLimiter.MAX_TRACKED_SENDERS; i++) {
       limiter.consume(`sender-${String(i)}`);

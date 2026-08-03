@@ -162,7 +162,10 @@ export interface ToolboxPoolOptions {
    * otherwise needs a daemon to observe. The default is the real container
    * runner; `container-runner.test.ts` covers that half.
    */
-  readonly newRunner?: (containerName: string, toolbox: Toolbox) => CommandRunner;
+  readonly newRunner?: (
+    containerName: string,
+    toolbox: Toolbox,
+  ) => CommandRunner;
   /**
    * What to label containers with, so a sweep can tell this process's from a
    * peer's. Defaults to `ownerTag()`, which is also what `dockerEngine` defaults
@@ -223,8 +226,8 @@ interface Facade {
 }
 
 export class ToolboxPool implements RunnerResolver {
-  readonly #options: ToolboxPoolOptions;
-  readonly #live = new Map<string, Entry>();
+  private readonly options: ToolboxPoolOptions;
+  private readonly liveEntries = new Map<string, Entry>();
   /**
    * The runner handed to a turn, per key.
    *
@@ -235,14 +238,14 @@ export class ToolboxPool implements RunnerResolver {
    * invisible to the caller. Cached so `forTurn` twice in a session is the same
    * object, which is what tells a reader nothing restarted.
    */
-  readonly #facades = new Map<string, Facade>();
-  readonly #owner: string;
-  #counter = 0;
-  #swept = false;
+  private readonly facades = new Map<string, Facade>();
+  private readonly owner: string;
+  private counter = 0;
+  private swept = false;
 
   constructor(options: ToolboxPoolOptions) {
-    this.#options = options;
-    this.#owner = options.owner ?? ownerTag();
+    this.options = options;
+    this.owner = options.owner ?? ownerTag();
   }
 
   /**
@@ -258,23 +261,28 @@ export class ToolboxPool implements RunnerResolver {
    * Failure is logged rather than thrown: an orphan nobody could remove is
    * untidy, and refusing the turn over it would turn untidy into unusable.
    */
-  #sweepOnce(): void {
-    if (this.#swept) return;
-    this.#swept = true;
+  private sweepOnce(): void {
+    if (this.swept) return;
+    this.swept = true;
     try {
-      this.#options.engine.reapOrphans();
+      this.options.engine.reapOrphans();
     } catch (error) {
-      this.#options.logger?.warn({ error }, 'could not sweep orphaned sandboxes');
+      this.options.logger?.warn(
+        { error },
+        'could not sweep orphaned sandboxes',
+      );
     }
   }
 
-  #now(): number {
-    return this.#options.clock?.now() ?? Date.now();
+  private now(): number {
+    return this.options.clock?.now() ?? Date.now();
   }
 
-  #nextId(): string {
-    this.#counter += 1;
-    return this.#options.newId?.() ?? `${String(this.#now())}-${String(this.#counter)}`;
+  private nextId(): string {
+    this.counter += 1;
+    return (
+      this.options.newId?.() ?? `${String(this.now())}-${String(this.counter)}`
+    );
   }
 
   static keyOf(request: ToolboxRequest): string {
@@ -311,7 +319,7 @@ export class ToolboxPool implements RunnerResolver {
     if (request.toolbox === '') return undefined;
 
     const key = ToolboxPool.keyOf(request);
-    this.#reapIdle();
+    this.reapIdle();
 
     // **Before the cache, not after.** `require` is the only thing that re-reads
     // the manifest and re-checks its hash against the approvals table, and a warm
@@ -320,24 +328,28 @@ export class ToolboxPool implements RunnerResolver {
     // stayed active. `ghost profiles revoke` is a different process writing the
     // shared database, so nothing notifies this pool; asking every turn is what
     // makes revocation mean something. It costs one read, one hash and one row.
-    const approved = this.#options.toolboxes.require(request.toolbox);
-    assertNetworkWithinCeiling(approved.toolbox, request.network, request.agentId);
+    const approved = this.options.toolboxes.require(request.toolbox);
+    assertNetworkWithinCeiling(
+      approved.toolbox,
+      request.network,
+      request.agentId,
+    );
 
-    const existing = this.#live.get(key);
+    const existing = this.liveEntries.get(key);
     if (existing !== undefined) {
       if (existing.manifestSha256 === approved.manifestSha256) {
-        existing.lastUsedMs = this.#now();
+        existing.lastUsedMs = this.now();
         // Re-inserted so Map iteration order stays least-recently-used first.
-        this.#live.delete(key);
-        this.#live.set(key, existing);
+        this.liveEntries.delete(key);
+        this.liveEntries.set(key, existing);
       } else {
         // A live container started from a manifest that has since changed is
         // stopped rather than reused: it was built with the old policy's flags.
         // The next command starts a replacement from the manifest as it is now.
-        this.#drop(key, existing);
+        this.drop(key, existing);
       }
     }
-    return this.#facadeFor(key, request);
+    return this.facadeFor(key, request);
   }
 
   /**
@@ -352,12 +364,12 @@ export class ToolboxPool implements RunnerResolver {
    * and its first tool call for a long time, and a toolbox revoked in that
    * window must not get a container.
    */
-  #ensure(key: string, spec: ToolboxRequest): void {
-    if (this.#live.has(key)) return;
-    const approved = this.#options.toolboxes.require(spec.toolbox);
+  private ensure(key: string, spec: ToolboxRequest): void {
+    if (this.liveEntries.has(key)) return;
+    const approved = this.options.toolboxes.require(spec.toolbox);
     assertNetworkWithinCeiling(approved.toolbox, spec.network, spec.agentId);
-    this.#live.set(key, this.#start(spec, approved));
-    this.#evictBeyondCap(key);
+    this.liveEntries.set(key, this.start(spec, approved));
+    this.evictBeyondCap(key);
   }
 
   /**
@@ -371,8 +383,8 @@ export class ToolboxPool implements RunnerResolver {
    * for the one reason that matters: a `docker exec` that could not find its
    * container never started the command, so nothing has run twice.
    */
-  #facadeFor(key: string, spec: ToolboxRequest): CommandRunner {
-    const cached = this.#facades.get(key);
+  private facadeFor(key: string, spec: ToolboxRequest): CommandRunner {
+    const cached = this.facades.get(key);
     if (cached !== undefined) {
       // A second turn on the same session may carry a different workspace root
       // or network, and it is the newest one that any command should start from.
@@ -388,40 +400,44 @@ export class ToolboxPool implements RunnerResolver {
           // a dead daemon, a revoked toolbox — rejects the command, which the
           // tool registry renders as a failed tool card rather than letting it
           // unwind the turn.
-          this.#ensure(key, facade.spec);
+          this.ensure(key, facade.spec);
 
-          const outcome = await this.#runOn(key, request);
+          const outcome = await this.runOn(key, request);
           if (!containerIsGone(outcome)) return outcome;
 
-          const stale = this.#live.get(key);
+          const stale = this.liveEntries.get(key);
           if (stale === undefined) return outcome;
-          this.#options.logger?.warn(
+          this.options.logger?.warn(
             { container: stale.name, toolbox: stale.request.toolbox },
             'sandbox disappeared; rebuilding it and retrying the command',
           );
 
-          this.#drop(key, stale);
-          this.#ensure(key, facade.spec);
+          this.drop(key, stale);
+          this.ensure(key, facade.spec);
           // Once. A second disappearance is something other than a stale handle,
           // and a loop that keeps rebuilding would hide it.
-          return await this.#runOn(key, request);
+          return await this.runOn(key, request);
         },
       },
     };
 
-    this.#facades.set(key, facade);
+    this.facades.set(key, facade);
     return facade.runner;
   }
 
-  async #runOn(key: string, request: RunRequest): Promise<RunOutcome> {
-    const entry = this.#live.get(key);
+  private async runOn(key: string, request: RunRequest): Promise<RunOutcome> {
+    const entry = this.liveEntries.get(key);
     if (entry === undefined) {
       // Every caller runs `#ensure` immediately before this, and `#ensure`
       // either puts an entry in place or throws — so this is a bug rather than
       // a state to recover from, and it says which one.
-      throw new GhostError('internal', 'The sandbox for this turn is no longer in the pool.', {
-        details: { key },
-      });
+      throw new GhostError(
+        'internal',
+        'The sandbox for this turn is no longer in the pool.',
+        {
+          details: { key },
+        },
+      );
     }
 
     entry.busy += 1;
@@ -432,13 +448,13 @@ export class ToolboxPool implements RunnerResolver {
       // Stamped on the way out as well as per turn: a command that ran for
       // twenty minutes leaves a container that was used twenty minutes ago, not
       // one that has been idle since the turn began.
-      entry.lastUsedMs = this.#now();
+      entry.lastUsedMs = this.now();
     }
   }
 
-  #start(request: ToolboxRequest, approved: ApprovedToolbox): Entry {
+  private start(request: ToolboxRequest, approved: ApprovedToolbox): Entry {
     const { toolbox } = approved;
-    const name = `ghost-sbx-${this.#nextId()}`;
+    const name = `ghost-sbx-${this.nextId()}`;
     // **Every** path handed to the daemon goes through the translation, not just
     // the workspace. The manifest lives under `GHOSTAI_HOME`, so a containerised
     // GhostAI that translated only the workspace would ask the daemon to mount
@@ -446,19 +462,22 @@ export class ToolboxPool implements RunnerResolver {
     // host, and usually nothing. The failure is a container that starts and
     // carries the wrong policy file, which is worse than one that refuses.
     const daemonPath = (path: string): string =>
-      this.#options.hostPath === undefined ? path : this.#options.hostPath(path);
+      this.options.hostPath === undefined ? path : this.options.hostPath(path);
 
     const argv = containerCreateArgv({
       toolbox,
       network: effectiveNetwork(toolbox, request.network),
-      mount: { hostPath: daemonPath(request.workspaceRoot), containerPath: toolbox.workdir },
+      mount: {
+        hostPath: daemonPath(request.workspaceRoot),
+        containerPath: toolbox.workdir,
+      },
       containerName: name,
       manifestPath: daemonPath(approved.manifestPath),
-      runsPath: daemonPath(this.#options.runsDir),
+      runsPath: daemonPath(this.options.runsDir),
       labels: {
         'ghostai.session': request.sessionKey,
         'ghostai.toolbox': toolbox.name,
-        [OWNER_LABEL]: this.#owner,
+        [OWNER_LABEL]: this.owner,
       },
     });
 
@@ -471,23 +490,26 @@ export class ToolboxPool implements RunnerResolver {
     // a directory created microseconds earlier — so the mounted path has to be one
     // that already existed. The per-container subdirectory is created by
     // `openTranscript` on the host side, inside a mount the container already has.
-    mkdirSync(this.#options.runsDir, { recursive: true });
+    mkdirSync(this.options.runsDir, { recursive: true });
 
     try {
-      this.#options.engine.probe();
-      this.#sweepOnce();
+      this.options.engine.probe();
+      this.sweepOnce();
     } catch (error) {
       throw new GhostError(
         'tool',
         `No container runtime is reachable, so agent "${request.agentId}" could not run its command.\n` +
           '  Start Docker (or Podman) and try again. Everything that does not need a\n' +
           '  sandbox keeps working meanwhile.',
-        { cause: error, details: { agentId: request.agentId, toolbox: toolbox.name } },
+        {
+          cause: error,
+          details: { agentId: request.agentId, toolbox: toolbox.name },
+        },
       );
     }
 
     try {
-      this.#options.engine.start(argv);
+      this.options.engine.start(argv);
     } catch (error) {
       // Refused, never downgraded to the host. See the module header.
       //
@@ -499,39 +521,45 @@ export class ToolboxPool implements RunnerResolver {
       throw new GhostError(
         'tool',
         `The sandbox for agent "${request.agentId}" could not be started, so the command was not run.\n  ${reason}`,
-        { cause: error, details: { agentId: request.agentId, toolbox: toolbox.name } },
+        {
+          cause: error,
+          details: { agentId: request.agentId, toolbox: toolbox.name },
+        },
       );
     }
 
-    this.#options.logger?.info({ container: name, toolbox: toolbox.name }, 'sandbox started');
+    this.options.logger?.info(
+      { container: name, toolbox: toolbox.name },
+      'sandbox started',
+    );
 
     return {
       name,
       sessionKey: request.sessionKey,
       manifestSha256: approved.manifestSha256,
       request,
-      lastUsedMs: this.#now(),
+      lastUsedMs: this.now(),
       busy: 0,
       runner:
-        this.#options.newRunner?.(name, toolbox) ??
+        this.options.newRunner?.(name, toolbox) ??
         containerRunner({
           toolbox,
           containerName: name,
           // Keyed on the container name this pool generated, never on the
           // client-chosen session key — that string is only `min(1)` and has no
           // business becoming a path component.
-          runsRoot: this.#options.runsDir,
-          nextRunId: () => this.#nextId(),
+          runsRoot: this.options.runsDir,
+          nextRunId: () => this.nextId(),
         }),
     };
   }
 
-  #reapIdle(): void {
-    const idleMs = this.#options.idleMs ?? TOOLBOX_IDLE_MS;
+  private reapIdle(): void {
+    const idleMs = this.options.idleMs ?? TOOLBOX_IDLE_MS;
     if (idleMs <= 0) return;
-    const cutoff = this.#now() - idleMs;
-    for (const [key, entry] of this.#live) {
-      if (entry.busy === 0 && entry.lastUsedMs < cutoff) this.#drop(key, entry);
+    const cutoff = this.now() - idleMs;
+    for (const [key, entry] of this.liveEntries) {
+      if (entry.busy === 0 && entry.lastUsedMs < cutoff) this.drop(key, entry);
     }
   }
 
@@ -551,51 +579,57 @@ export class ToolboxPool implements RunnerResolver {
    * stop containers accumulating unused, and a container with a command in it is
    * not that.
    */
-  #evictBeyondCap(keep: string): void {
-    const cap = this.#options.maxLive ?? MAX_LIVE_TOOLBOXES;
-    for (const [key, entry] of this.#live) {
-      if (this.#live.size <= cap) return;
-      if (key !== keep && entry.busy === 0) this.#drop(key, entry);
+  private evictBeyondCap(keep: string): void {
+    const cap = this.options.maxLive ?? MAX_LIVE_TOOLBOXES;
+    for (const [key, entry] of this.liveEntries) {
+      if (this.liveEntries.size <= cap) return;
+      if (key !== keep && entry.busy === 0) this.drop(key, entry);
     }
   }
 
-  #drop(key: string, entry: Entry): void {
-    this.#live.delete(key);
+  private drop(key: string, entry: Entry): void {
+    this.liveEntries.delete(key);
     // The facade outlives one container but not the entry: a turn still holding
     // it rebuilds through it, while a later `forTurn` builds a fresh one rather
     // than this map growing by one closure per session forever.
-    this.#facades.delete(key);
+    this.facades.delete(key);
     // The transcripts go with the container. Nothing prunes them otherwise, and a
     // scanning agent writes a lot of them.
     try {
-      rmSync(join(this.#options.runsDir, entry.name), { recursive: true, force: true });
+      rmSync(join(this.options.runsDir, entry.name), {
+        recursive: true,
+        force: true,
+      });
     } catch {
       // A transcript directory that will not delete is untidy, never fatal.
     }
     try {
-      this.#options.engine.stop(entry.name);
+      this.options.engine.stop(entry.name);
     } catch (error) {
       // A container that is already gone is the common case, and a failure to
       // stop one must not take down the turn that triggered the sweep.
-      this.#options.logger?.warn({ container: entry.name, error }, 'sandbox stop failed');
+      this.options.logger?.warn(
+        { container: entry.name, error },
+        'sandbox stop failed',
+      );
     }
   }
 
   /** Stops every container this session owns. Called when a session ends. */
   releaseSession(sessionKey: string): void {
-    for (const [key, entry] of this.#live) {
-      if (key.endsWith(` ${sessionKey}`)) this.#drop(key, entry);
+    for (const [key, entry] of this.liveEntries) {
+      if (key.endsWith(` ${sessionKey}`)) this.drop(key, entry);
     }
   }
 
   /** Stops everything. Called on `reconfigure` and on shutdown. */
   close(): void {
-    for (const [key, entry] of this.#live) this.#drop(key, entry);
+    for (const [key, entry] of this.liveEntries) this.drop(key, entry);
   }
 
   /** Live container names, for tests and diagnostics. */
   get live(): readonly string[] {
-    return [...this.#live.values()].map((entry) => entry.name);
+    return [...this.liveEntries.values()].map((entry) => entry.name);
   }
 }
 
@@ -644,12 +678,18 @@ export interface DockerEngineOptions {
   readonly isOwnerAlive?: (owner: string) => boolean;
 }
 
-export function dockerEngine(options: DockerEngineOptions = {}): ContainerEngine {
+export function dockerEngine(
+  options: DockerEngineOptions = {},
+): ContainerEngine {
   const bin = options.bin ?? 'docker';
   const owner = options.owner ?? ownerTag();
   const isOwnerAlive = options.isOwnerAlive ?? ownerProcessLooksAlive;
 
-  const run = (argv: readonly string[], what: string, timeout = CONTROL_TIMEOUT_MS): void => {
+  const run = (
+    argv: readonly string[],
+    what: string,
+    timeout = CONTROL_TIMEOUT_MS,
+  ): void => {
     const result = spawnSync(bin, [...argv], {
       encoding: 'utf8',
       windowsHide: true,
@@ -665,15 +705,23 @@ export function dockerEngine(options: DockerEngineOptions = {}): ContainerEngine
       );
     }
     if (result.error !== undefined) {
-      throw new GhostError('tool', `Could not run ${bin}: ${result.error.message}`, {
-        cause: result.error,
-        details: { bin, what },
-      });
+      throw new GhostError(
+        'tool',
+        `Could not run ${bin}: ${result.error.message}`,
+        {
+          cause: result.error,
+          details: { bin, what },
+        },
+      );
     }
     if (result.status !== 0) {
-      throw new GhostError('tool', `${bin} ${what} failed: ${(result.stderr || '').trim()}`, {
-        details: { bin, what, status: result.status },
-      });
+      throw new GhostError(
+        'tool',
+        `${bin} ${what} failed: ${(result.stderr || '').trim()}`,
+        {
+          details: { bin, what, status: result.status },
+        },
+      );
     }
   };
 

@@ -9,7 +9,13 @@
  * credential, and drives it with HTTP and a WebSocket.
  */
 
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -40,7 +46,9 @@ const running: RunningServer[] = [];
 
 afterEach(async () => {
   while (running.length > 0) await running.pop()?.close();
-  while (homes.length > 0) rmSync(homes.pop() ?? '', { recursive: true, force: true });
+  while (homes.length > 0) {
+    rmSync(homes.pop() ?? '', { recursive: true, force: true });
+  }
 });
 
 /**
@@ -67,8 +75,16 @@ function configOf(root: string): Config {
   return JSON.parse(readFileSync(join(root, 'config.json'), 'utf8')) as Config;
 }
 
-async function start(root: string, options: Record<string, unknown> = {}): Promise<RunningServer> {
-  const server = await startServer({ home: root, password: PASSWORD, port: 0, ...options });
+async function start(
+  root: string,
+  options: Record<string, unknown> = {},
+): Promise<RunningServer> {
+  const server = await startServer({
+    home: root,
+    password: PASSWORD,
+    port: 0,
+    ...options,
+  });
   running.push(server);
   return server;
 }
@@ -84,11 +100,17 @@ describe('startServer', () => {
     const server = await start(root);
 
     const health = await fetch(`${server.url}/api/health`);
-    const status = await fetch(`${server.url}/api/status`, { headers: bearer(server) });
+    const status = await fetch(`${server.url}/api/status`, {
+      headers: bearer(server),
+    });
     const body = (await status.json()) as StatusResponse;
 
     expect(health.status).toBe(200);
-    expect(body).toMatchObject({ provider: 'ollama', model: 'test-model', authEnabled: true });
+    expect(body).toMatchObject({
+      provider: 'ollama',
+      model: 'test-model',
+      authEnabled: true,
+    });
     // The id, never the path: `/api/status` stopped reporting an absolute host
     // path when workspaces landed. The banner still prints one — a terminal on
     // the host is not a network boundary.
@@ -102,7 +124,9 @@ describe('startServer', () => {
     const status = await fetch(`${server.url}/api/status`);
 
     expect(status.status).toBe(401);
-    await expect(status.json()).resolves.toMatchObject({ error: { code: 'unauthorized' } });
+    await expect(status.json()).resolves.toMatchObject({
+      error: { code: 'unauthorized' },
+    });
   });
 
   it('accepts a WebSocket on the same port', async () => {
@@ -111,12 +135,14 @@ describe('startServer', () => {
     const socket = new WebSocket(`${server.url.replace('http', 'ws')}/ws`, {
       headers: bearer(server),
     });
-    const greeting = await new Promise<Record<string, unknown>>((resolve, reject) => {
-      socket.once('message', (data: Buffer) => {
-        resolve(JSON.parse(data.toString('utf8')) as Record<string, unknown>);
-      });
-      socket.once('error', reject);
-    });
+    const greeting = await new Promise<Record<string, unknown>>(
+      (resolve, reject) => {
+        socket.once('message', (data: Buffer) => {
+          resolve(JSON.parse(data.toString('utf8')) as Record<string, unknown>);
+        });
+        socket.once('error', reject);
+      },
+    );
     socket.close();
 
     expect(greeting).toMatchObject({ type: 'connected', protocolVersion: 2 });
@@ -129,7 +155,9 @@ describe('startServer', () => {
     const response = await fetch(`${server.url}/api/settings`, {
       method: 'PATCH',
       headers: { ...bearer(server), 'content-type': 'application/json' },
-      body: JSON.stringify({ agents: { defaults: { model: 'another-model' } } }),
+      body: JSON.stringify({
+        agents: { defaults: { model: 'another-model' } },
+      }),
     });
 
     expect(response.status).toBe(200);
@@ -146,7 +174,9 @@ describe('startServer', () => {
     const response = await fetch(`${server.url}/api/settings`, {
       method: 'PATCH',
       headers: { ...bearer(server), 'content-type': 'application/json' },
-      body: JSON.stringify({ server: { host: '0.0.0.0', auth: { enabled: false } } }),
+      body: JSON.stringify({
+        server: { host: '0.0.0.0', auth: { enabled: false } },
+      }),
     });
 
     expect(response.status).toBeGreaterThanOrEqual(400);
@@ -162,9 +192,9 @@ describe('startServer', () => {
     // config would walk straight past the check.
     const root = home({ auth: { enabled: false } });
 
-    await expect(startServer({ home: root, host: '0.0.0.0', port: 0 })).rejects.toThrow(
-      /Refusing to start/,
-    );
+    await expect(
+      startServer({ home: root, host: '0.0.0.0', port: 0 }),
+    ).rejects.toThrow(/Refusing to start/);
   });
 
   it('starts the channels it was given, over the same hub', async () => {
@@ -177,7 +207,9 @@ describe('startServer', () => {
     };
     const server = await start(home(), { channels: [factory] });
 
-    expect(server.channels.channels.map((channel) => channel.id)).toEqual(['loopback']);
+    expect(server.channels.channels.map((channel) => channel.id)).toEqual([
+      'loopback',
+    ]);
     // The same hub the socket serves — not a second one built for channels.
     expect(server.hub.sessionCount).toBe(0);
   });
@@ -223,7 +255,10 @@ describe('resolveUiRoot', () => {
     // checkout that has only ever run `pnpm test` has no `dist` at all. The
     // implicit lookup has to answer for whichever one it is standing in.
     const require = createRequire(import.meta.url);
-    const root = join(dirname(require.resolve('@ghostai/web/package.json')), 'dist');
+    const root = join(
+      dirname(require.resolve('@ghostai/web/package.json')),
+      'dist',
+    );
     const built = existsSync(join(root, 'index.html'));
 
     expect(resolveUiRoot(undefined)).toBe(built ? root : undefined);
@@ -246,7 +281,9 @@ describe('the banner', () => {
   });
 
   it('warns when anything that can reach the port can drive the agent', async () => {
-    const server = await start(home({ auth: { enabled: false } }), { password: undefined });
+    const server = await start(home({ auth: { enabled: false } }), {
+      password: undefined,
+    });
 
     expect(banner(server, false, t)).toContain('can drive this agent');
   });

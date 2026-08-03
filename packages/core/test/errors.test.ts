@@ -30,7 +30,9 @@ describe('GhostError', () => {
   });
 
   it('lets the caller override retryable', () => {
-    expect(new GhostError('provider', 'overloaded', { retryable: true }).retryable).toBe(true);
+    expect(
+      new GhostError('provider', 'overloaded', { retryable: true }).retryable,
+    ).toBe(true);
   });
 
   it('defaults details to an empty object', () => {
@@ -38,7 +40,9 @@ describe('GhostError', () => {
   });
 
   it('keeps structured details', () => {
-    const error = new GhostError('storage', 'x', { details: { sessionKey: 's', seq: 3 } });
+    const error = new GhostError('storage', 'x', {
+      details: { sessionKey: 's', seq: 3 },
+    });
     expect(error.details).toEqual({ sessionKey: 's', seq: 3 });
   });
 
@@ -67,7 +71,9 @@ describe('isGhostError', () => {
   });
 
   it('rejects an error whose kind is not in the taxonomy', () => {
-    expect(isGhostError(Object.assign(new Error('x'), { kind: 'invented' }))).toBe(false);
+    expect(
+      isGhostError(Object.assign(new Error('x'), { kind: 'invented' })),
+    ).toBe(false);
   });
 
   it('rejects plain errors and non-errors', () => {
@@ -109,7 +115,9 @@ describe('toGhostError', () => {
 
   it('does not degrade a precise kind when re-normalised', () => {
     const original = new GhostError('rate_limited', 'slow down');
-    expect(toGhostError(toGhostError(original), 'internal').kind).toBe('rate_limited');
+    expect(toGhostError(toGhostError(original), 'internal').kind).toBe(
+      'rate_limited',
+    );
   });
 
   it('maps an abort to the aborted kind', () => {

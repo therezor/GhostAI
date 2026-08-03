@@ -107,7 +107,9 @@ describe('HubApprovalGate', () => {
   it('remembers a session-scoped answer for that session alone', async () => {
     const gate = new HubApprovalGate({ clock: manualClock() });
 
-    const first = gate.request(approvalRequest({ callId: 'a', sessionKey: 'web:1' }));
+    const first = gate.request(
+      approvalRequest({ callId: 'a', sessionKey: 'web:1' }),
+    );
     gate.resolve('a', true, 'session');
     await first;
 
@@ -125,7 +127,9 @@ describe('HubApprovalGate', () => {
   it('remembers an always-scoped answer across sessions', async () => {
     const gate = new HubApprovalGate({ clock: manualClock() });
 
-    const first = gate.request(approvalRequest({ callId: 'a', sessionKey: 'web:1' }));
+    const first = gate.request(
+      approvalRequest({ callId: 'a', sessionKey: 'web:1' }),
+    );
     gate.resolve('a', true, 'always');
     await first;
 
@@ -141,7 +145,9 @@ describe('HubApprovalGate', () => {
     gate.resolve('a', false, 'session');
     await expect(first).resolves.toEqual({ approved: false, scope: 'session' });
 
-    await expect(gate.request(approvalRequest({ callId: 'b' }))).resolves.toEqual({
+    await expect(
+      gate.request(approvalRequest({ callId: 'b' })),
+    ).resolves.toEqual({
       approved: false,
       scope: 'session',
     });
@@ -173,7 +179,9 @@ describe('HubApprovalGate', () => {
   it('denies immediately when the deadline has already passed', async () => {
     const clock = manualClock();
     const gate = new HubApprovalGate({ clock });
-    const pending = gate.request(approvalRequest({ expiresAtMs: START_MS - 1 }));
+    const pending = gate.request(
+      approvalRequest({ expiresAtMs: START_MS - 1 }),
+    );
 
     clock.advance(0);
 
@@ -184,7 +192,9 @@ describe('HubApprovalGate', () => {
     const clock = manualClock();
     const gate = new HubApprovalGate({ clock });
     const controller = new AbortController();
-    const pending = gate.request(approvalRequest({ signal: controller.signal }));
+    const pending = gate.request(
+      approvalRequest({ signal: controller.signal }),
+    );
 
     controller.abort();
 
@@ -221,11 +231,15 @@ describe('HubApprovalGate', () => {
   it('settles pending prompts and forgets memory when a session closes', async () => {
     const gate = new HubApprovalGate({ clock: manualClock() });
 
-    const remembered = gate.request(approvalRequest({ callId: 'a', sessionKey: 'web:1' }));
+    const remembered = gate.request(
+      approvalRequest({ callId: 'a', sessionKey: 'web:1' }),
+    );
     gate.resolve('a', true, 'session');
     await remembered;
 
-    const pending = gate.request(approvalRequest({ callId: 'b', sessionKey: 'web:2' }));
+    const pending = gate.request(
+      approvalRequest({ callId: 'b', sessionKey: 'web:2' }),
+    );
     gate.clearSession('web:2');
     await expect(pending).resolves.toMatchObject({ approved: false });
 
@@ -255,7 +269,9 @@ describe('HubApprovalGate when nobody is watching', () => {
     // prompt goes nowhere and the turn waits out the whole timeout for a denial
     // that was certain when it was raised. This is what sends someone to look.
     const { gate, raised } = watched({});
-    void gate.request(approvalRequest({ sessionKey: 'automation:job-1:run-1', name: 'exec' }));
+    void gate.request(
+      approvalRequest({ sessionKey: 'automation:job-1:run-1', name: 'exec' }),
+    );
 
     expect(raised).toEqual([
       {
@@ -315,7 +331,10 @@ describe('HubApprovalGate when nobody is watching', () => {
     // Neither hook wired is every path except the live server. Defaulting the
     // other way would raise a notification for every prompt the CLI shows.
     const raised: UnattendedApproval[] = [];
-    const gate = new HubApprovalGate({ clock: manualClock(), onUnattended: (a) => raised.push(a) });
+    const gate = new HubApprovalGate({
+      clock: manualClock(),
+      onUnattended: (a) => raised.push(a),
+    });
 
     void gate.request(approvalRequest());
     expect(raised).toHaveLength(0);
@@ -329,12 +348,16 @@ describe('HubApprovalGate across agents', () => {
     // undo the restriction on the locked-down one.
     const gate = new HubApprovalGate({ clock: manualClock() });
 
-    const granted = gate.request(approvalRequest({ agentId: 'writer', callId: 'c1' }));
+    const granted = gate.request(
+      approvalRequest({ agentId: 'writer', callId: 'c1' }),
+    );
     gate.resolve('c1', true, 'always');
     await expect(granted).resolves.toMatchObject({ approved: true });
 
     // Same tool, same session, different agent: still has to ask.
-    const pending = gate.request(approvalRequest({ agentId: 'reviewer', callId: 'c2' }));
+    const pending = gate.request(
+      approvalRequest({ agentId: 'reviewer', callId: 'c2' }),
+    );
     expect(gate.pendingCount).toBe(1);
 
     gate.resolve('c2', false, 'once');
@@ -344,13 +367,21 @@ describe('HubApprovalGate across agents', () => {
   it('remembers a standing answer for the agent it was given to', async () => {
     const gate = new HubApprovalGate({ clock: manualClock() });
 
-    const first = gate.request(approvalRequest({ agentId: 'writer', callId: 'c1' }));
+    const first = gate.request(
+      approvalRequest({ agentId: 'writer', callId: 'c1' }),
+    );
     gate.resolve('c1', true, 'always');
     await first;
 
     // A different session, the same agent: answered from memory, nothing parks.
     await expect(
-      gate.request(approvalRequest({ agentId: 'writer', sessionKey: 'web:2', callId: 'c2' })),
+      gate.request(
+        approvalRequest({
+          agentId: 'writer',
+          sessionKey: 'web:2',
+          callId: 'c2',
+        }),
+      ),
     ).resolves.toMatchObject({ approved: true, scope: 'always' });
     expect(gate.pendingCount).toBe(0);
   });
@@ -358,13 +389,17 @@ describe('HubApprovalGate across agents', () => {
   it('keeps a session-scoped answer to that session, whoever runs it', async () => {
     const gate = new HubApprovalGate({ clock: manualClock() });
 
-    const first = gate.request(approvalRequest({ agentId: 'writer', callId: 'c1' }));
+    const first = gate.request(
+      approvalRequest({ agentId: 'writer', callId: 'c1' }),
+    );
     gate.resolve('c1', true, 'session');
     await first;
 
     // A session is bound to one agent, so the session scope needs no agent
     // dimension — but it must not reach a different session.
-    void gate.request(approvalRequest({ sessionKey: 'web:2', agentId: 'writer', callId: 'c2' }));
+    void gate.request(
+      approvalRequest({ sessionKey: 'web:2', agentId: 'writer', callId: 'c2' }),
+    );
     expect(gate.pendingCount).toBe(1);
   });
 });
@@ -376,28 +411,44 @@ describe('HubApprovalGate when an agent goes away', () => {
     // that share a key — and the second would inherit the first's permissions.
     const gate = new HubApprovalGate({ clock: manualClock() });
 
-    const granted = gate.request(approvalRequest({ agentId: 'reviewer', callId: 'c1' }));
+    const granted = gate.request(
+      approvalRequest({ agentId: 'reviewer', callId: 'c1' }),
+    );
     gate.resolve('c1', true, 'always');
     await granted;
 
     gate.retainAgents(new Set(['default']));
 
     // The re-created agent has to ask for itself.
-    void gate.request(approvalRequest({ agentId: 'reviewer', sessionKey: 'web:2', callId: 'c2' }));
+    void gate.request(
+      approvalRequest({
+        agentId: 'reviewer',
+        sessionKey: 'web:2',
+        callId: 'c2',
+      }),
+    );
     expect(gate.pendingCount).toBe(1);
   });
 
   it('keeps the standing answers of agents that are still configured', async () => {
     const gate = new HubApprovalGate({ clock: manualClock() });
 
-    const granted = gate.request(approvalRequest({ agentId: 'writer', callId: 'c1' }));
+    const granted = gate.request(
+      approvalRequest({ agentId: 'writer', callId: 'c1' }),
+    );
     gate.resolve('c1', true, 'always');
     await granted;
 
     gate.retainAgents(new Set(['default', 'writer']));
 
     await expect(
-      gate.request(approvalRequest({ agentId: 'writer', sessionKey: 'web:2', callId: 'c2' })),
+      gate.request(
+        approvalRequest({
+          agentId: 'writer',
+          sessionKey: 'web:2',
+          callId: 'c2',
+        }),
+      ),
     ).resolves.toMatchObject({ approved: true, scope: 'always' });
     expect(gate.pendingCount).toBe(0);
   });
@@ -405,7 +456,9 @@ describe('HubApprovalGate when an agent goes away', () => {
   it('leaves session-scoped answers alone, which belong to the conversation', async () => {
     const gate = new HubApprovalGate({ clock: manualClock() });
 
-    const granted = gate.request(approvalRequest({ agentId: 'reviewer', callId: 'c1' }));
+    const granted = gate.request(
+      approvalRequest({ agentId: 'reviewer', callId: 'c1' }),
+    );
     gate.resolve('c1', true, 'session');
     await granted;
 
@@ -421,17 +474,31 @@ describe('HubApprovalGate when an agent goes away', () => {
   it('carries a standing answer across a rename, which is the same agent', async () => {
     const gate = new HubApprovalGate({ clock: manualClock() });
 
-    const granted = gate.request(approvalRequest({ agentId: 'reviewer', callId: 'c1' }));
+    const granted = gate.request(
+      approvalRequest({ agentId: 'reviewer', callId: 'c1' }),
+    );
     gate.resolve('c1', true, 'always');
     await granted;
 
     gate.renameAgent('reviewer', 'code-review');
 
     await expect(
-      gate.request(approvalRequest({ agentId: 'code-review', sessionKey: 'web:2', callId: 'c2' })),
+      gate.request(
+        approvalRequest({
+          agentId: 'code-review',
+          sessionKey: 'web:2',
+          callId: 'c2',
+        }),
+      ),
     ).resolves.toMatchObject({ approved: true, scope: 'always' });
     // And nothing is left behind under the old name.
-    void gate.request(approvalRequest({ agentId: 'reviewer', sessionKey: 'web:3', callId: 'c3' }));
+    void gate.request(
+      approvalRequest({
+        agentId: 'reviewer',
+        sessionKey: 'web:3',
+        callId: 'c3',
+      }),
+    );
     expect(gate.pendingCount).toBe(1);
   });
 

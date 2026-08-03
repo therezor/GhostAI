@@ -347,7 +347,9 @@ Discoverable is not the same as read.
 ```ts
 interface ContextContributor {
   readonly name: string;
-  staticSection?(ctx: StaticPromptContext): Promise<string | undefined> | string | undefined;
+  staticSection?(
+    ctx: StaticPromptContext,
+  ): Promise<string | undefined> | string | undefined;
   runtimeSection?(ctx: RuntimePromptContext): string | undefined;
 }
 ```

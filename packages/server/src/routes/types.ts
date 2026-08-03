@@ -31,7 +31,9 @@ import type { SchedulerPort } from '../scheduler.js';
  * satisfy the composer no matter which routes it forgot, because a string index
  * signature covers every key.
  */
-export type RouteGroup<K extends RouteId> = Readonly<Record<K, RouteDefinition>>;
+export type RouteGroup<K extends RouteId> = Readonly<
+  Record<K, RouteDefinition>
+>;
 
 export interface RouteRateLimit {
   readonly max: number;

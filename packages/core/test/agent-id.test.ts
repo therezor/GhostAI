@@ -1,7 +1,12 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_AGENT_ID, RESERVED_AGENT_IDS, deriveAgentId, isAgentId } from '#src/agent-id.js';
+import {
+  DEFAULT_AGENT_ID,
+  RESERVED_AGENT_IDS,
+  deriveAgentId,
+  isAgentId,
+} from '#src/agent-id.js';
 import { isWorkspaceId } from '#src/workspace-id.js';
 
 describe('agent ids', () => {
@@ -11,7 +16,7 @@ describe('agent ids', () => {
     ['hyphens inside', 'code-reviewer'],
     ['the default', 'default'],
     ['forty characters', 'a'.repeat(40)],
-  ])('accepts %s', (_name, id) => {
+  ])('accepts %s', (name, id) => {
     expect(isAgentId(id)).toBe(true);
   });
 
@@ -28,7 +33,7 @@ describe('agent ids', () => {
     ['uppercase', 'Reviewer'],
     ['a space', 'my agent'],
     ['forty-one characters', 'a'.repeat(41)],
-  ])('refuses %s', (_name, id) => {
+  ])('refuses %s', (name, id) => {
     expect(isAgentId(id)).toBe(false);
   });
 

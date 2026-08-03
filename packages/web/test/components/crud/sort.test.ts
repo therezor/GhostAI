@@ -10,7 +10,12 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { filterRows, sortBy, sortRows, type Comparators } from '@/components/crud/sort.js';
+import {
+  filterRows,
+  sortBy,
+  sortRows,
+  type Comparators,
+} from '@/components/crud/sort.js';
 
 interface Row {
   readonly name: string;
@@ -32,25 +37,20 @@ const rows: readonly Row[] = [
   { name: 'mango', size: 10, folder: false },
 ];
 
-const names = (result: readonly Row[]): readonly string[] => result.map((row) => row.name);
+const names = (result: readonly Row[]): readonly string[] =>
+  result.map((row) => row.name);
 
 describe('sortRows', () => {
   it('orders by the chosen column, ascending', () => {
-    expect(names(sortRows(rows, { key: 'name', descending: false }, COMPARE))).toEqual([
-      'apple',
-      'docs',
-      'mango',
-      'zebra',
-    ]);
+    expect(
+      names(sortRows(rows, { key: 'name', descending: false }, COMPARE)),
+    ).toEqual(['apple', 'docs', 'mango', 'zebra']);
   });
 
   it('reverses when descending', () => {
-    expect(names(sortRows(rows, { key: 'name', descending: true }, COMPARE))).toEqual([
-      'zebra',
-      'mango',
-      'docs',
-      'apple',
-    ]);
+    expect(
+      names(sortRows(rows, { key: 'name', descending: true }, COMPARE)),
+    ).toEqual(['zebra', 'mango', 'docs', 'apple']);
   });
 
   it('does not mutate the array it was given', () => {
@@ -65,7 +65,9 @@ describe('sortRows', () => {
     // The rule this exists for: a folder is not a small file or an old file, so
     // "largest first" must not scatter it through the list.
     for (const descending of [false, true]) {
-      const sorted = sortRows(rows, { key: 'size', descending }, COMPARE, { group });
+      const sorted = sortRows(rows, { key: 'size', descending }, COMPARE, {
+        group,
+      });
       expect(sorted[0]?.name, `descending=${String(descending)}`).toBe('docs');
     }
   });
@@ -107,10 +109,16 @@ describe('sortBy', () => {
   const ASCENDING_FIRST: readonly Key[] = ['name'];
 
   it('starts a text column ascending', () => {
-    expect(sortBy('name', ASCENDING_FIRST)).toEqual({ key: 'name', descending: false });
+    expect(sortBy('name', ASCENDING_FIRST)).toEqual({
+      key: 'name',
+      descending: false,
+    });
   });
 
   it('starts a numeric column descending, because the question is “what is big”', () => {
-    expect(sortBy('size', ASCENDING_FIRST)).toEqual({ key: 'size', descending: true });
+    expect(sortBy('size', ASCENDING_FIRST)).toEqual({
+      key: 'size',
+      descending: true,
+    });
   });
 });

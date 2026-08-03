@@ -19,7 +19,9 @@ import type { Page } from '@playwright/test';
 import { expect, test } from '../src/fixtures.js';
 
 test.describe('sessions', () => {
-  test('starts one, names it after the first message, and lists it', async ({ app }) => {
+  test('starts one, names it after the first message, and lists it', async ({
+    app,
+  }) => {
     const sidebar = app.getByRole('complementary', { name: 'Sidebar' });
 
     await sidebar.getByRole('button', { name: 'New session' }).click();
@@ -27,31 +29,43 @@ test.describe('sessions', () => {
     // REST rather than the socket's `session.new`: the navigation needs it.
     await expect(app).toHaveURL(/\?session=/u);
 
-    await app.getByRole('textbox', { name: 'Message' }).fill('stream a long answer');
+    await app
+      .getByRole('textbox', { name: 'Message' })
+      .fill('stream a long answer');
     await app.getByRole('textbox', { name: 'Message' }).press('Enter');
-    await expect(app.getByText('The workspace holds', { exact: false }).first()).toBeVisible({
+    await expect(
+      app.getByText('The workspace holds', { exact: false }).first(),
+    ).toBeVisible({
       timeout: 15_000,
     });
 
     // Derived by the loop, so the sidebar shows a name rather than a uuid.
-    await expect(sidebar.getByText('stream a long answer')).toBeVisible({ timeout: 15_000 });
+    await expect(sidebar.getByText('stream a long answer')).toBeVisible({
+      timeout: 15_000,
+    });
   });
 
   test('saves nothing until something is said', async ({ app }) => {
     const sidebar = app.getByRole('complementary', { name: 'Sidebar' });
 
     await sidebar.getByRole('button', { name: 'New session' }).click();
-    await expect(app.getByRole('heading', { name: 'Ready when you are.' })).toBeVisible();
+    await expect(
+      app.getByRole('heading', { name: 'Ready when you are.' }),
+    ).toBeVisible();
 
     // Pressed, then thought better of. A row written on the press would still
     // be here — and the list would fill with sessions nobody had.
     await expect(sidebar.getByText('No sessions yet.')).toBeVisible();
 
-    await app.getByRole('textbox', { name: 'Message' }).fill('stream a long answer');
+    await app
+      .getByRole('textbox', { name: 'Message' })
+      .fill('stream a long answer');
     await app.getByRole('textbox', { name: 'Message' }).press('Enter');
 
     // Saved by the turn, not by the button.
-    await expect(sidebar.getByText('stream a long answer')).toBeVisible({ timeout: 15_000 });
+    await expect(sidebar.getByText('stream a long answer')).toBeVisible({
+      timeout: 15_000,
+    });
   });
 
   test('switches between sessions without losing either', async ({ app }) => {
@@ -61,43 +75,63 @@ test.describe('sessions', () => {
     await sidebar.getByRole('button', { name: 'New session' }).click();
     await message.fill('list the workspace');
     await message.press('Enter');
-    await expect(app.getByRole('region', { name: 'Tool call: list_dir' })).toBeVisible({
+    await expect(
+      app.getByRole('region', { name: 'Tool call: list_dir' }),
+    ).toBeVisible({
       timeout: 15_000,
     });
 
     await sidebar.getByRole('button', { name: 'New session' }).click();
     // A fresh session is empty, which the dead nav link never managed.
-    await expect(app.getByRole('heading', { name: 'Ready when you are.' })).toBeVisible();
+    await expect(
+      app.getByRole('heading', { name: 'Ready when you are.' }),
+    ).toBeVisible();
 
     await sidebar.getByRole('link', { name: /list the workspace/u }).click();
-    await expect(app.getByRole('region', { name: 'Tool call: list_dir' })).toBeVisible({
+    await expect(
+      app.getByRole('region', { name: 'Tool call: list_dir' }),
+    ).toBeVisible({
       timeout: 15_000,
     });
   });
 
-  test('marks the new session until there is a saved one to mark', async ({ app }) => {
+  test('marks the new session until there is a saved one to mark', async ({
+    app,
+  }) => {
     const sidebar = app.getByRole('complementary', { name: 'Sidebar' });
 
     await sidebar.getByRole('button', { name: 'New session' }).click();
 
     // A session exists on the socket before it exists in the list, and without
     // this the column would claim you are nowhere for the whole of that window.
-    await expect(sidebar.locator('[aria-current="page"]')).toHaveText(/New session/u);
+    await expect(sidebar.locator('[aria-current="page"]')).toHaveText(
+      /New session/u,
+    );
 
-    await app.getByRole('textbox', { name: 'Message' }).fill('stream a long answer');
+    await app
+      .getByRole('textbox', { name: 'Message' })
+      .fill('stream a long answer');
     await app.getByRole('textbox', { name: 'Message' }).press('Enter');
-    await expect(sidebar.getByText('stream a long answer')).toBeVisible({ timeout: 15_000 });
+    await expect(sidebar.getByText('stream a long answer')).toBeVisible({
+      timeout: 15_000,
+    });
 
     // Saved, so the mark moves to the row — and there is only ever one.
     await expect(sidebar.locator('[aria-current="page"]')).toHaveCount(1);
-    await expect(sidebar.locator('[aria-current="page"]')).toHaveText(/stream a long answer/u);
+    await expect(sidebar.locator('[aria-current="page"]')).toHaveText(
+      /stream a long answer/u,
+    );
   });
 
-  test('lists a session on one line, without a message count', async ({ app }) => {
+  test('lists a session on one line, without a message count', async ({
+    app,
+  }) => {
     const sidebar = app.getByRole('complementary', { name: 'Sidebar' });
 
     await sidebar.getByRole('button', { name: 'New session' }).click();
-    await app.getByRole('textbox', { name: 'Message' }).fill('stream a long answer');
+    await app
+      .getByRole('textbox', { name: 'Message' })
+      .fill('stream a long answer');
     await app.getByRole('textbox', { name: 'Message' }).press('Enter');
 
     const row = sidebar.getByRole('link', { name: /stream a long answer/u });
@@ -113,29 +147,41 @@ test.describe('sessions', () => {
     const sidebar = app.getByRole('complementary', { name: 'Sidebar' });
 
     await sidebar.getByRole('button', { name: 'New session' }).click();
-    await app.getByRole('textbox', { name: 'Message' }).fill('stream a long answer');
+    await app
+      .getByRole('textbox', { name: 'Message' })
+      .fill('stream a long answer');
     await app.getByRole('textbox', { name: 'Message' }).press('Enter');
-    await expect(sidebar.getByText('stream a long answer')).toBeVisible({ timeout: 15_000 });
+    await expect(sidebar.getByText('stream a long answer')).toBeVisible({
+      timeout: 15_000,
+    });
 
     // `aria-current` is the accessible half of the surface change, and the half
     // a screenshot cannot check. Located by the attribute rather than through
     // `getByRole`, which has no `current` option and silently ignores one.
-    await expect(sidebar.locator('a[aria-current="page"]')).toHaveText(/stream a long answer/u);
+    await expect(sidebar.locator('a[aria-current="page"]')).toHaveText(
+      /stream a long answer/u,
+    );
   });
 
-  test('branches into a second session, leaving the first alone', async ({ app }) => {
+  test('branches into a second session, leaving the first alone', async ({
+    app,
+  }) => {
     const sidebar = app.getByRole('complementary', { name: 'Sidebar' });
     const message = app.getByRole('textbox', { name: 'Message' });
 
     await sidebar.getByRole('button', { name: 'New session' }).click();
     await message.fill('stream a long answer');
     await message.press('Enter');
-    await expect(sidebar.getByText('stream a long answer')).toBeVisible({ timeout: 15_000 });
+    await expect(sidebar.getByText('stream a long answer')).toBeVisible({
+      timeout: 15_000,
+    });
 
     await app.getByRole('button', { name: 'Branch from here' }).first().click();
 
     // Two rows now name the same thing: the fork inherits the source's title.
-    await expect(sidebar.getByText('stream a long answer')).toHaveCount(2, { timeout: 15_000 });
+    await expect(sidebar.getByText('stream a long answer')).toHaveCount(2, {
+      timeout: 15_000,
+    });
   });
 });
 
@@ -181,15 +227,21 @@ test.describe('the sessions page', () => {
     // `exact`, because the sidebar's own "Latest sessions" heading is a
     // substring match for this one and Playwright's default name matching is
     // not anchored.
-    await expect(app.getByRole('heading', { name: 'Sessions', exact: true })).toBeVisible();
+    await expect(
+      app.getByRole('heading', { name: 'Sessions', exact: true }),
+    ).toBeVisible();
   }
 
-  test('is reachable from the sidebar and lists what is there', async ({ app }) => {
+  test('is reachable from the sidebar and lists what is there', async ({
+    app,
+  }) => {
     await seed(app, ['stream a long answer']);
     await openPage(app);
 
     await expect(
-      app.getByRole('list', { name: 'Sessions' }).getByText('stream a long answer'),
+      app
+        .getByRole('list', { name: 'Sessions' })
+        .getByText('stream a long answer'),
     ).toBeVisible();
   });
 
@@ -200,7 +252,9 @@ test.describe('the sessions page', () => {
     const list = app.getByRole('list', { name: 'Sessions' });
     await expect(list.getByText('list the workspace')).toBeVisible();
 
-    await app.getByRole('searchbox', { name: 'Filter sessions' }).fill('workspace');
+    await app
+      .getByRole('searchbox', { name: 'Filter sessions' })
+      .fill('workspace');
 
     // The durable state: one row matches and the other is gone. A SQL `LIKE`
     // decided that, not a filter over the rows the browser already had.
@@ -224,11 +278,15 @@ test.describe('the sessions page', () => {
     // One rename, two lists: both read the same query key, so one invalidation
     // refreshes the column as well as the page.
     await expect(
-      app.getByRole('complementary', { name: 'Sidebar' }).getByText('Renamed from the page'),
+      app
+        .getByRole('complementary', { name: 'Sidebar' })
+        .getByText('Renamed from the page'),
     ).toBeVisible();
   });
 
-  test('asks before deleting, and the row is gone once it is answered', async ({ app }) => {
+  test('asks before deleting, and the row is gone once it is answered', async ({
+    app,
+  }) => {
     await seed(app, ['stream a long answer']);
     await openPage(app);
 

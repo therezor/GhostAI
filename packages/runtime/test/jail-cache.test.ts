@@ -12,7 +12,11 @@ import { join } from 'node:path';
 
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 
-import { isGhostError, resolveGhostPaths, type GhostPaths } from '@ghostai/core';
+import {
+  isGhostError,
+  resolveGhostPaths,
+  type GhostPaths,
+} from '@ghostai/core';
 import { WorkspaceJail } from '@ghostai/security';
 
 import { JailCache, MAX_CACHED_JAILS } from '#src/jail-cache.js';
@@ -58,7 +62,10 @@ describe('JailCache', () => {
   });
 
   it('throws from the constructor when the workspace root cannot be used', () => {
-    const broken = resolveGhostPaths({ root: base, workspace: join(base, 'a-file', 'under') });
+    const broken = resolveGhostPaths({
+      root: base,
+      workspace: join(base, 'a-file', 'under'),
+    });
     // A file where a directory has to be.
     mkdirSync(join(base, 'x'), { recursive: true });
     writeFileSync(join(base, 'a-file'), 'not a directory');
@@ -102,7 +109,9 @@ describe('JailCache', () => {
       expect(isGhostError(catchOf(() => cache.forWorkspace(bad)))).toBe(true);
     }
     // Nothing was created outside the workspace by the attempt.
-    expect(statSync(join(base, 'escape'), { throwIfNoEntry: false })).toBeUndefined();
+    expect(
+      statSync(join(base, 'escape'), { throwIfNoEntry: false }),
+    ).toBeUndefined();
   });
 
   it('evicts the least recently used once past the bound', () => {

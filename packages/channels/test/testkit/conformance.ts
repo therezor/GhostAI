@@ -56,7 +56,9 @@ export interface ChannelConformanceOptions<C extends Channel = Channel> {
 /**
  * Runs the contract against one factory. Call it inside a test file.
  */
-export function channelConformance<C extends Channel>(options: ChannelConformanceOptions<C>): void {
+export function channelConformance<C extends Channel>(
+  options: ChannelConformanceOptions<C>,
+): void {
   const { factory } = options;
 
   /** A manager with this factory registered, started, and its channel to hand. */
@@ -66,7 +68,9 @@ export function channelConformance<C extends Channel>(options: ChannelConformanc
     const manager = new ChannelManager({
       hub,
       factories: [factory],
-      ...(options.settings === undefined ? {} : { channels: { [factory.id]: options.settings } }),
+      ...(options.settings === undefined
+        ? {}
+        : { channels: { [factory.id]: options.settings } }),
     });
     await manager.start();
     const channel = manager.channel(factory.id) as C | undefined;
@@ -85,7 +89,9 @@ export function channelConformance<C extends Channel>(options: ChannelConformanc
     });
 
     it('publishes what it receives, under its own id', async () => {
-      const { manager, channel, hub } = await start(new ScriptedHub({ silent: true }));
+      const { manager, channel, hub } = await start(
+        new ScriptedHub({ silent: true }),
+      );
       try {
         await options.receive(channel, 'hello there');
         await flush();
@@ -105,7 +111,9 @@ export function channelConformance<C extends Channel>(options: ChannelConformanc
     });
 
     it('renders the answer back onto its transport', async () => {
-      const { manager, channel } = await start(new ScriptedHub({ reply: () => 'the answer' }));
+      const { manager, channel } = await start(
+        new ScriptedHub({ reply: () => 'the answer' }),
+      );
       try {
         await options.receive(channel, 'a question');
         await flush();
@@ -126,14 +134,19 @@ export function channelConformance<C extends Channel>(options: ChannelConformanc
         await flush();
 
         expect(hub.connections).toHaveLength(1);
-        expect(hub.messages().map((frame) => frame.content)).toEqual(['first', 'second']);
+        expect(hub.messages().map((frame) => frame.content)).toEqual([
+          'first',
+          'second',
+        ]);
       } finally {
         await manager.stop();
       }
     });
 
     it('renders an error rather than swallowing it', async () => {
-      const { manager, channel, hub } = await start(new ScriptedHub({ silent: true }));
+      const { manager, channel, hub } = await start(
+        new ScriptedHub({ silent: true }),
+      );
       try {
         await options.receive(channel, 'a question');
         await flush();
@@ -146,14 +159,18 @@ export function channelConformance<C extends Channel>(options: ChannelConformanc
         await flush();
         await flush();
 
-        expect(options.sent(channel).join('\n')).toContain('the model is unreachable');
+        expect(options.sent(channel).join('\n')).toContain(
+          'the model is unreachable',
+        );
       } finally {
         await manager.stop();
       }
     });
 
     it('says nothing more once it has been stopped', async () => {
-      const { manager, channel, hub } = await start(new ScriptedHub({ silent: true }));
+      const { manager, channel, hub } = await start(
+        new ScriptedHub({ silent: true }),
+      );
       await options.receive(channel, 'a question');
       await flush();
       const connection = hub.only();

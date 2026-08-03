@@ -27,7 +27,9 @@ function configWith(patch: ConfigPatch): Config {
 }
 
 /** A config with `main` delegating to whatever the refs name. */
-const delegating = (refs: readonly { id: string; prompt?: string }[]): ConfigPatch => ({
+const delegating = (
+  refs: ReadonlyArray<{ id: string; prompt?: string }>,
+): ConfigPatch => ({
   agents: {
     list: {
       researcher: { label: 'Researcher' },
@@ -36,7 +38,11 @@ const delegating = (refs: readonly { id: string; prompt?: string }[]): ConfigPat
       // defaulted field is still required of a TypeScript literal.
       main: {
         label: 'Main',
-        subagents: refs.map((ref) => ({ prompt: '', permission: 'allow' as const, ...ref })),
+        subagents: refs.map((ref) => ({
+          prompt: '',
+          permission: 'allow' as const,
+          ...ref,
+        })),
       },
     },
   },
@@ -91,14 +97,20 @@ describe('resolveAgent', () => {
     // so they are absent from a parsed `agents.defaults`. A merge driven by the
     // keys that happen to be present would drop exactly these two.
     const config = configWith({
-      agents: { list: { reviewer: { reasoningEffort: 'high', consolidationModel: 'haiku' } } },
+      agents: {
+        list: {
+          reviewer: { reasoningEffort: 'high', consolidationModel: 'haiku' },
+        },
+      },
     });
     const agent = resolveAgent(config, 'reviewer');
 
     expect(agent.defaults.reasoningEffort).toBe('high');
     expect(agent.defaults.consolidationModel).toBe('haiku');
     // And the default agent still has neither.
-    expect(resolveAgent(config, undefined).defaults.reasoningEffort).toBeUndefined();
+    expect(
+      resolveAgent(config, undefined).defaults.reasoningEffort,
+    ).toBeUndefined();
   });
 
   it('lets one agent turn off a capability the rest of the install keeps', () => {
@@ -107,7 +119,13 @@ describe('resolveAgent', () => {
     const config = configWith({
       agents: {
         defaults: { model: 'claude-opus-5' },
-        list: { local: { model: 'qwen3:8b', visionEnabled: false, toolsEnabled: false } },
+        list: {
+          local: {
+            model: 'qwen3:8b',
+            visionEnabled: false,
+            toolsEnabled: false,
+          },
+        },
       },
     });
 
@@ -122,10 +140,15 @@ describe('resolveAgent', () => {
 
   it('never lets an agent move its own workspace', () => {
     const config = configWith({
-      agents: { defaults: { workspace: '/tmp/shared' }, list: { reviewer: {} } },
+      agents: {
+        defaults: { workspace: '/tmp/shared' },
+        list: { reviewer: {} },
+      },
     });
 
-    expect(resolveAgent(config, 'reviewer').defaults.workspace).toBe('/tmp/shared');
+    expect(resolveAgent(config, 'reviewer').defaults.workspace).toBe(
+      '/tmp/shared',
+    );
   });
 
   it('replaces the tool map rather than merging into the seed', () => {
@@ -133,7 +156,9 @@ describe('resolveAgent', () => {
     // change a permission but never remove one, and switching a tool off has to
     // be expressible.
     const config = configWith({
-      agents: { list: { reviewer: { tools: { read_file: 'allow', exec: 'deny' } } } },
+      agents: {
+        list: { reviewer: { tools: { read_file: 'allow', exec: 'deny' } } },
+      },
     });
 
     expect(resolveAgent(config, 'reviewer').tools).toEqual({
@@ -151,11 +176,15 @@ describe('resolveAgent', () => {
   it('seeds the default agent, which usually has no entry at all', () => {
     // An agent with no tools cannot do anything, and `default` is the agent an
     // install that configured nothing runs as.
-    expect(resolveAgent(configWith({}), undefined).tools).toEqual(DEFAULT_AGENT_TOOLS);
+    expect(resolveAgent(configWith({}), undefined).tools).toEqual(
+      DEFAULT_AGENT_TOOLS,
+    );
   });
 
   it('lets an agent hold no tools at all when it says so', () => {
-    const config = configWith({ agents: { list: { reviewer: { tools: {} } } } });
+    const config = configWith({
+      agents: { list: { reviewer: { tools: {} } } },
+    });
 
     expect(resolveAgent(config, 'reviewer').tools).toEqual({});
   });
@@ -167,7 +196,9 @@ describe('resolveAgent', () => {
     const agent = resolveAgent(config, 'reviewer');
 
     expect(agent.toolsConfig.exec.allowedBinaries).toEqual(['git']);
-    expect(agent.toolsConfig.exec.envAllowlist).toEqual(base.tools.exec.envAllowlist);
+    expect(agent.toolsConfig.exec.envAllowlist).toEqual(
+      base.tools.exec.envAllowlist,
+    );
     // And the global config is untouched — this is a view, not a mutation.
     expect(base.tools.exec.allowedBinaries).toEqual([]);
   });
@@ -179,7 +210,9 @@ describe('resolveAgent', () => {
 
   it('lets agents.list.default customise the agent an install already runs as', () => {
     const config = configWith({
-      agents: { list: { default: { label: 'Ghost', systemPrompt: 'Be terse.' } } },
+      agents: {
+        list: { default: { label: 'Ghost', systemPrompt: 'Be terse.' } },
+      },
     });
     const agent = resolveAgent(config, undefined);
 
@@ -195,7 +228,9 @@ describe('resolveAgent', () => {
   });
 
   it('refuses a disabled agent, and says that is why', () => {
-    const config = configWith({ agents: { list: { reviewer: { enabled: false } } } });
+    const config = configWith({
+      agents: { list: { reviewer: { enabled: false } } },
+    });
 
     expect(() => resolveAgent(config, 'reviewer')).toThrow(/disabled/);
   });
@@ -229,7 +264,10 @@ describe('resolveAgent', () => {
       agents: {
         list: {
           boxed: {
-            toolbox: { name: 'kali', network: { mode: 'allowlist', allow: ['example.com'] } },
+            toolbox: {
+              name: 'kali',
+              network: { mode: 'allowlist', allow: ['example.com'] },
+            },
           },
         },
       },
@@ -275,22 +313,37 @@ describe('listAgents', () => {
       agents: { list: { writer: {}, reviewer: {} } },
     });
 
-    expect(listAgents(config).map((agent) => agent.id)).toEqual(['default', 'writer', 'reviewer']);
+    expect(listAgents(config).map((agent) => agent.id)).toEqual([
+      'default',
+      'writer',
+      'reviewer',
+    ]);
   });
 
   it('omits a disabled agent without duplicating the default', () => {
     const config = configWith({
-      agents: { list: { default: { label: 'Ghost' }, writer: { enabled: false }, reviewer: {} } },
+      agents: {
+        list: {
+          default: { label: 'Ghost' },
+          writer: { enabled: false },
+          reviewer: {},
+        },
+      },
     });
 
-    expect(listAgents(config).map((agent) => agent.id)).toEqual(['default', 'reviewer']);
+    expect(listAgents(config).map((agent) => agent.id)).toEqual([
+      'default',
+      'reviewer',
+    ]);
     expect(listAgents(config)[0]?.label).toBe('Ghost');
   });
 
   it('keeps the default runnable even if it is marked disabled', () => {
     // Switching off the only agent an install has is not a state anything
     // above here can do something useful with.
-    const config = configWith({ agents: { list: { default: { enabled: false } } } });
+    const config = configWith({
+      agents: { list: { default: { enabled: false } } },
+    });
 
     expect(listAgents(config).map((agent) => agent.id)).toEqual(['default']);
     expect(resolveAgent(config, 'default').id).toBe('default');
@@ -306,7 +359,7 @@ describe('hasAgent', () => {
     ['an unknown id', 'nope', false],
     ['an enabled agent', 'reviewer', true],
     ['a disabled agent', 'writer', false],
-  ])('reports %s as %s', (_name, id, expected) => {
+  ])('reports %s as %s', (name, id, expected) => {
     const config = configWith({
       agents: { list: { reviewer: {}, writer: { enabled: false } } },
     });
@@ -341,12 +394,16 @@ describe('subagents', () => {
       agents: {
         list: {
           'code-review': { label: 'Code review' },
-          main: { subagents: [{ id: 'code-review', prompt: '', permission: 'allow' }] },
+          main: {
+            subagents: [{ id: 'code-review', prompt: '', permission: 'allow' }],
+          },
         },
       },
     });
 
-    expect(resolveAgent(config, 'main').subagents[0]?.toolName).toBe('ask_code_review');
+    expect(resolveAgent(config, 'main').subagents[0]?.toolName).toBe(
+      'ask_code_review',
+    );
   });
 
   it('is empty for an agent that delegates to nobody', () => {
@@ -356,7 +413,11 @@ describe('subagents', () => {
   it('lets an agent delegate to `default`, which usually has no entry', () => {
     const config = configWith({
       agents: {
-        list: { main: { subagents: [{ id: 'default', prompt: '', permission: 'allow' }] } },
+        list: {
+          main: {
+            subagents: [{ id: 'default', prompt: '', permission: 'allow' }],
+          },
+        },
       },
     });
 
@@ -368,10 +429,18 @@ describe('subagents', () => {
 
   it('refuses an agent that lists itself', () => {
     const config = configWith({
-      agents: { list: { main: { subagents: [{ id: 'main', prompt: '', permission: 'allow' }] } } },
+      agents: {
+        list: {
+          main: {
+            subagents: [{ id: 'main', prompt: '', permission: 'allow' }],
+          },
+        },
+      },
     });
 
-    expect(() => resolveAgent(config, 'main')).toThrow(/lists itself as a subagent/);
+    expect(() => resolveAgent(config, 'main')).toThrow(
+      /lists itself as a subagent/,
+    );
     try {
       resolveAgent(config, 'main');
     } catch (error) {
@@ -382,9 +451,13 @@ describe('subagents', () => {
   });
 
   it('refuses the same subagent twice', () => {
-    const config = configWith(delegating([{ id: 'researcher' }, { id: 'researcher' }]));
+    const config = configWith(
+      delegating([{ id: 'researcher' }, { id: 'researcher' }]),
+    );
 
-    expect(() => resolveAgent(config, 'main')).toThrow(/lists "researcher" as a subagent twice/);
+    expect(() => resolveAgent(config, 'main')).toThrow(
+      /lists "researcher" as a subagent twice/,
+    );
   });
 
   it('drops a subagent that does not exist rather than refusing the agent', () => {
@@ -402,7 +475,10 @@ describe('subagents', () => {
     const { warnings } = resolveAgents(config);
 
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toMatchObject({ agentId: 'main', code: 'missing_subagent' });
+    expect(warnings[0]).toMatchObject({
+      agentId: 'main',
+      code: 'missing_subagent',
+    });
     expect(warnings[0]?.message).toMatch(/does not exist/);
     expect(warnings[0]?.message).toMatch(/Known agents: researcher, main/);
   });
@@ -412,7 +488,9 @@ describe('subagents', () => {
       agents: {
         list: {
           researcher: { label: 'Researcher', enabled: false },
-          main: { subagents: [{ id: 'researcher', prompt: '', permission: 'allow' }] },
+          main: {
+            subagents: [{ id: 'researcher', prompt: '', permission: 'allow' }],
+          },
         },
       },
     });
@@ -421,7 +499,10 @@ describe('subagents', () => {
 
     expect(resolveAgent(config, 'main').subagents).toEqual([]);
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toMatchObject({ agentId: 'main', code: 'disabled_subagent' });
+    expect(warnings[0]).toMatchObject({
+      agentId: 'main',
+      code: 'disabled_subagent',
+    });
     expect(warnings[0]?.message).toMatch(/switched off/);
   });
 
@@ -442,10 +523,9 @@ describe('subagents', () => {
       },
     });
 
-    expect(resolveAgent(config, 'main').subagents.map((binding) => binding.agentId)).toEqual([
-      'researcher',
-      'writer',
-    ]);
+    expect(
+      resolveAgent(config, 'main').subagents.map((binding) => binding.agentId),
+    ).toEqual(['researcher', 'writer']);
   });
 
   it('does not refuse at listing either, which is what used to break boot', () => {
@@ -459,7 +539,9 @@ describe('subagents', () => {
 
 describe('resolveAgentOrDefault', () => {
   it('answers with the agent that was asked for when it resolves', () => {
-    const config = configWith({ agents: { list: { writer: { label: 'Writer' } } } });
+    const config = configWith({
+      agents: { list: { writer: { label: 'Writer' } } },
+    });
 
     const resolution = resolveAgentOrDefault(config, 'writer');
 
@@ -487,7 +569,9 @@ describe('resolveAgentOrDefault', () => {
   });
 
   it('treats a key that is not a usable id as missing', () => {
-    const config = configWith({ agents: { list: { '../evil': { label: 'Sneaky' } } } });
+    const config = configWith({
+      agents: { list: { '../evil': { label: 'Sneaky' } } },
+    });
 
     expect(resolveAgentOrDefault(config, '../evil').miss).toBe('unknown');
   });
@@ -503,7 +587,9 @@ describe('resolveAgentOrDefault', () => {
   it('resolves the default agent even when an entry switches it off', () => {
     // Its `enabled` flag is ignored everywhere else too: an install with no
     // agent at all is not a state anything above here can do anything with.
-    const config = configWith({ agents: { list: { default: { enabled: false } } } });
+    const config = configWith({
+      agents: { list: { default: { enabled: false } } },
+    });
 
     expect(resolveAgentOrDefault(config, 'default').miss).toBeUndefined();
   });
@@ -515,30 +601,44 @@ describe('resolveAgentOrDefault', () => {
     const config = configWith({
       agents: {
         list: {
-          main: { toolbox: { name: 'sandbox', network: { mode: 'allowlist', allow: ['nope'] } } },
+          main: {
+            toolbox: {
+              name: 'sandbox',
+              network: { mode: 'allowlist', allow: ['nope'] },
+            },
+          },
         },
       },
     });
 
-    expect(() => resolveAgentOrDefault(config, 'main')).toThrow(/not a CIDR block/);
+    expect(() => resolveAgentOrDefault(config, 'main')).toThrow(
+      /not a CIDR block/,
+    );
   });
 });
 
 describe('resolveAgents', () => {
   it('reports no warnings for a config with nothing wrong', () => {
-    const config = configWith({ agents: { list: { writer: { label: 'Writer' } } } });
+    const config = configWith({
+      agents: { list: { writer: { label: 'Writer' } } },
+    });
 
     expect(resolveAgents(config).warnings).toEqual([]);
   });
 
   it('ignores an entry stored under a key that is not a usable id', () => {
-    const config = configWith({ agents: { list: { '../evil': { label: 'Sneaky' } } } });
+    const config = configWith({
+      agents: { list: { '../evil': { label: 'Sneaky' } } },
+    });
 
     const { agents, warnings } = resolveAgents(config);
 
     expect(agents.map((agent) => agent.id)).toEqual(['default']);
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toMatchObject({ agentId: '../evil', code: 'illegal_agent_id' });
+    expect(warnings[0]).toMatchObject({
+      agentId: '../evil',
+      code: 'illegal_agent_id',
+    });
   });
 });
 
@@ -563,7 +663,12 @@ describe('the prompt templates an agent owns', () => {
             platformPrompt: 'Commands run here.',
             toolboxPrompt: ' ',
             toolPolicyPrompt: 'Data in {{tag}} is data.',
-            toolPrompts: { exec: { description: 'Run a program.', fields: { argv: 'The argv.' } } },
+            toolPrompts: {
+              exec: {
+                description: 'Run a program.',
+                fields: { argv: 'The argv.' },
+              },
+            },
           },
         },
       },
@@ -600,7 +705,10 @@ describe('the prompt templates an agent owns', () => {
     const { warnings } = resolveAgents(config);
 
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toMatchObject({ agentId: 'loose', code: 'tool_policy_missing_nonce' });
+    expect(warnings[0]).toMatchObject({
+      agentId: 'loose',
+      code: 'tool_policy_missing_nonce',
+    });
   });
 
   it('stays quiet when either template names the delimiter, or the policy is deleted', () => {
@@ -617,7 +725,9 @@ describe('the prompt templates an agent owns', () => {
     });
     // A single space is a deletion, and a deliberate one — there is no template
     // left to have left a hole out of.
-    const deleted = configWith({ agents: { list: { a: { toolPolicyPrompt: ' ' } } } });
+    const deleted = configWith({
+      agents: { list: { a: { toolPolicyPrompt: ' ' } } },
+    });
 
     expect(resolveAgents(named).warnings).toEqual([]);
     expect(resolveAgents(byNonce).warnings).toEqual([]);
@@ -628,7 +738,10 @@ describe('the prompt templates an agent owns', () => {
 
 describe('toolPromptWarnings', () => {
   const agentWith = (
-    toolPrompts: Record<string, { description: string; fields: Record<string, string> }>,
+    toolPrompts: Record<
+      string,
+      { description: string; fields: Record<string, string> }
+    >,
   ) =>
     resolveAgent(
       configWith({
@@ -643,7 +756,10 @@ describe('toolPromptWarnings', () => {
     const warnings = toolPromptWarnings(agent, new Set(['read_file']));
 
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toMatchObject({ agentId: 'a', code: 'unknown_tool_prompt' });
+    expect(warnings[0]).toMatchObject({
+      agentId: 'a',
+      code: 'unknown_tool_prompt',
+    });
     expect(warnings[0]?.details.tool).toBe('nosuch');
   });
 
@@ -656,22 +772,30 @@ describe('toolPromptWarnings', () => {
       ask_researcher: { description: 'y', fields: {} },
     });
 
-    expect(toolPromptWarnings(agent, new Set(['search', 'ask_researcher']))).toEqual([]);
+    expect(
+      toolPromptWarnings(agent, new Set(['search', 'ask_researcher'])),
+    ).toEqual([]);
   });
 });
 
 describe('pruneDanglingSubagents', () => {
   it('removes a delegation whose target is gone, and says which', () => {
-    const config = configWith(delegating([{ id: 'researcher' }, { id: 'nobody' }]));
+    const config = configWith(
+      delegating([{ id: 'researcher' }, { id: 'nobody' }]),
+    );
 
     const { config: pruned, removed } = pruneDanglingSubagents(config);
 
-    expect(pruned.agents.list.main?.subagents.map((ref) => ref.id)).toEqual(['researcher']);
+    expect(pruned.agents.list.main?.subagents.map((ref) => ref.id)).toEqual([
+      'researcher',
+    ]);
     expect(removed).toEqual([{ agentId: 'main', subagentId: 'nobody' }]);
   });
 
   it('reports every dangling target, not just the first', () => {
-    const config = configWith(delegating([{ id: 'nobody' }, { id: 'also-nobody' }]));
+    const config = configWith(
+      delegating([{ id: 'nobody' }, { id: 'also-nobody' }]),
+    );
 
     expect(pruneDanglingSubagents(config).removed).toHaveLength(2);
   });
@@ -683,21 +807,29 @@ describe('pruneDanglingSubagents', () => {
       agents: {
         list: {
           researcher: { label: 'Researcher', enabled: false },
-          main: { subagents: [{ id: 'researcher', prompt: '', permission: 'allow' }] },
+          main: {
+            subagents: [{ id: 'researcher', prompt: '', permission: 'allow' }],
+          },
         },
       },
     });
 
     const { config: pruned, removed } = pruneDanglingSubagents(config);
 
-    expect(pruned.agents.list.main?.subagents.map((ref) => ref.id)).toEqual(['researcher']);
+    expect(pruned.agents.list.main?.subagents.map((ref) => ref.id)).toEqual([
+      'researcher',
+    ]);
     expect(removed).toEqual([]);
   });
 
   it('keeps a delegation to the default agent, which usually has no entry', () => {
     const config = configWith({
       agents: {
-        list: { main: { subagents: [{ id: 'default', prompt: '', permission: 'allow' }] } },
+        list: {
+          main: {
+            subagents: [{ id: 'default', prompt: '', permission: 'allow' }],
+          },
+        },
       },
     });
 
@@ -726,7 +858,9 @@ describe('pruneDanglingSubagents', () => {
 
 describe('assertWritableAgentIds', () => {
   it('allows an ordinary new id', () => {
-    const after = configWith({ agents: { list: { 'code-review': { label: 'Reviewer' } } } });
+    const after = configWith({
+      agents: { list: { 'code-review': { label: 'Reviewer' } } },
+    });
 
     expect(() => {
       assertWritableAgentIds(base, after);
@@ -756,9 +890,13 @@ describe('assertWritableAgentIds', () => {
   });
 
   it('grandfathers an odd key that is already stored', () => {
-    const before = configWith({ agents: { list: { '../evil': { label: 'Sneaky' } } } });
+    const before = configWith({
+      agents: { list: { '../evil': { label: 'Sneaky' } } },
+    });
     const after = configWith({
-      agents: { list: { '../evil': { label: 'Renamed' }, writer: { label: 'Writer' } } },
+      agents: {
+        list: { '../evil': { label: 'Renamed' }, writer: { label: 'Writer' } },
+      },
     });
 
     expect(() => {
@@ -770,7 +908,9 @@ describe('assertWritableAgentIds', () => {
     // The case this rule exists to not break: an id that cannot be written is
     // otherwise an id that can never be removed, and the agents page is the
     // only interface that edits agents.
-    const before = configWith({ agents: { list: { '../evil': { label: 'Sneaky' } } } });
+    const before = configWith({
+      agents: { list: { '../evil': { label: 'Sneaky' } } },
+    });
 
     expect(() => {
       assertWritableAgentIds(before, base);
@@ -778,7 +918,9 @@ describe('assertWritableAgentIds', () => {
   });
 
   it('allows the default agent to be given an entry', () => {
-    const after = configWith({ agents: { list: { default: { label: 'House style' } } } });
+    const after = configWith({
+      agents: { list: { default: { label: 'House style' } } },
+    });
 
     expect(() => {
       assertWritableAgentIds(base, after);

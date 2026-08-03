@@ -18,7 +18,12 @@ import { ConfigSchema } from '@ghostai/protocol';
 import { Providers } from '@/app/providers.js';
 import { createAppRouter } from '@/app/router.js';
 import { useTurnStore } from '@/state/turn.js';
-import { stubApi, testQueryClient, type RecordedRequest, type StubRoute } from '@testkit/render.js';
+import {
+  stubApi,
+  testQueryClient,
+  type RecordedRequest,
+  type StubRoute,
+} from '@testkit/render.js';
 import { STATUS } from '@testkit/fixtures.js';
 
 /** What `POST /api/settings/reload` answers with: the settings it now serves. */
@@ -47,7 +52,10 @@ const MESSAGES = {
       seq: 1,
       createdAtMs: 1,
       turnId: 't1',
-      message: { role: 'user', content: [{ type: 'text', text: 'a stored question' }] },
+      message: {
+        role: 'user',
+        content: [{ type: 'text', text: 'a stored question' }],
+      },
     },
   ],
 };
@@ -90,7 +98,9 @@ function renderApp(
   });
 
   const router = createAppRouter();
-  router.update({ history: createMemoryHistory({ initialEntries: [initial] }) });
+  router.update({
+    history: createMemoryHistory({ initialEntries: [initial] }),
+  });
 
   render(
     <Providers client={testQueryClient()}>
@@ -110,7 +120,9 @@ describe('the shell', () => {
     renderApp();
 
     // The chat route on an empty session is the welcome screen.
-    expect(await screen.findByRole('heading', { name: 'Ready when you are.' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Ready when you are.' }),
+    ).toBeInTheDocument();
 
     // The provider and the model are named on the welcome card and on each
     // turn. The header used to print them a third time, which is a third place
@@ -122,8 +134,12 @@ describe('the shell', () => {
     // dropped `?session=` from a route that reads the store rather than the
     // URL, and the next message put the key straight back.
     const sidebar = screen.getByRole('complementary', { name: 'Sidebar' });
-    expect(within(sidebar).getByRole('button', { name: 'New session' })).toBeInTheDocument();
-    expect(within(sidebar).queryByRole('link', { name: /^Chat$/ })).not.toBeInTheDocument();
+    expect(
+      within(sidebar).getByRole('button', { name: 'New session' }),
+    ).toBeInTheDocument();
+    expect(
+      within(sidebar).queryByRole('link', { name: /^Chat$/ }),
+    ).not.toBeInTheDocument();
   });
 
   it('lists sessions in the sidebar and unread notifications in the header', async () => {
@@ -147,21 +163,31 @@ describe('the shell', () => {
 
     await screen.findByText('First session');
 
-    const listed = calls.find((call) => call.method === 'GET' && call.path === '/api/sessions');
+    const listed = calls.find(
+      (call) => call.method === 'GET' && call.path === '/api/sessions',
+    );
     expect(listed?.query.get('limit')).toBe('30');
     // The way to the rest is a nav row rather than a footer under the list: the
     // list scrolls, so anything below it is below the fold on a short window.
-    expect(screen.getByRole('link', { name: 'Sessions' })).toHaveAttribute('href', '/sessions');
+    expect(screen.getByRole('link', { name: 'Sessions' })).toHaveAttribute(
+      'href',
+      '/sessions',
+    );
   });
 
   it('opens recent notifications from the header, with a way to the full list', async () => {
     const { user } = renderApp();
 
-    await user.click(await screen.findByRole('button', { name: /^Notifications/ }));
+    await user.click(
+      await screen.findByRole('button', { name: /^Notifications/ }),
+    );
 
     expect(await screen.findByText('A turn failed')).toBeInTheDocument();
     // The glance is not a replacement for the archive.
-    expect(screen.getByRole('link', { name: 'See all' })).toHaveAttribute('href', '/notifications');
+    expect(screen.getByRole('link', { name: 'See all' })).toHaveAttribute(
+      'href',
+      '/notifications',
+    );
   });
 
   it('tells the unread notifications from the read ones', async () => {
@@ -197,16 +223,24 @@ describe('the shell', () => {
       ],
     });
 
-    await user.click(await screen.findByRole('button', { name: /^Notifications/ }));
+    await user.click(
+      await screen.findByRole('button', { name: /^Notifications/ }),
+    );
 
-    const unread = (await screen.findByText('Still unread')).closest('.notification-mini');
+    const unread = (await screen.findByText('Still unread')).closest(
+      '.notification-mini',
+    );
     const read = screen.getByText('Already read').closest('.notification-mini');
     expect(unread).toHaveClass('notification-mini--unread');
     expect(read).not.toHaveClass('notification-mini--unread');
 
     // The part that does not depend on seeing either signal.
-    expect(within(unread as HTMLElement).getByText('Unread')).toBeInTheDocument();
-    expect(within(read as HTMLElement).queryByText('Unread')).not.toBeInTheDocument();
+    expect(
+      within(unread as HTMLElement).getByText('Unread'),
+    ).toBeInTheDocument();
+    expect(
+      within(read as HTMLElement).queryByText('Unread'),
+    ).not.toBeInTheDocument();
   });
 
   it('marks a notification read when it is opened', async () => {
@@ -236,24 +270,41 @@ describe('the shell', () => {
       ],
       'POST /api/notifications/n1/read': [
         200,
-        { id: 'n1', title: 'A turn failed', body: '', level: 'error', createdAtMs: 1, readAtMs: 2 },
+        {
+          id: 'n1',
+          title: 'A turn failed',
+          body: '',
+          level: 'error',
+          createdAtMs: 1,
+          readAtMs: 2,
+        },
       ],
     });
 
-    await user.click(await screen.findByRole('button', { name: /^Notifications/ }));
-    await user.click(await screen.findByRole('link', { name: /A turn failed/u }));
+    await user.click(
+      await screen.findByRole('button', { name: /^Notifications/ }),
+    );
+    await user.click(
+      await screen.findByRole('link', { name: /A turn failed/u }),
+    );
 
     await waitFor(() => {
-      expect(calls.some((call) => call.path === '/api/notifications/n1/read')).toBe(true);
+      expect(
+        calls.some((call) => call.path === '/api/notifications/n1/read'),
+      ).toBe(true);
     });
   });
 
   it('starts a session without saving an empty one', async () => {
     const { user, calls } = renderApp();
 
-    const sidebar = await screen.findByRole('complementary', { name: 'Sidebar' });
+    const sidebar = await screen.findByRole('complementary', {
+      name: 'Sidebar',
+    });
     const before = calls.length;
-    await user.click(within(sidebar).getByRole('button', { name: 'New session' }));
+    await user.click(
+      within(sidebar).getByRole('button', { name: 'New session' }),
+    );
 
     // The URL moves to a key minted on the client, so the click can navigate to
     // it — but nothing is written. A row created on the press is a row that
@@ -262,7 +313,9 @@ describe('the shell', () => {
     await waitFor(() => {
       expect(useTurnStore.getState().sessionKey).toMatch(/^[0-9a-f-]{8,}/u);
     });
-    expect(calls.slice(before).filter((call) => call.method === 'POST')).toEqual([]);
+    expect(
+      calls.slice(before).filter((call) => call.method === 'POST'),
+    ).toEqual([]);
   });
 
   it('names a session rather than showing its key', async () => {
@@ -277,16 +330,22 @@ describe('the shell', () => {
   it('navigates without unmounting the shell around it', async () => {
     const { user } = renderApp();
 
-    const sidebar = await screen.findByRole('complementary', { name: 'Sidebar' });
+    const sidebar = await screen.findByRole('complementary', {
+      name: 'Sidebar',
+    });
     const header = screen.getByRole('banner');
 
     await user.click(within(sidebar).getByRole('link', { name: /Settings/ }));
 
-    expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Settings' }),
+    ).toBeInTheDocument();
     // The same nodes, not replacements: a remount here would drop the socket
     // that Step 17 hangs off the shell.
     expect(screen.getByRole('banner')).toBe(header);
-    expect(screen.getByRole('complementary', { name: 'Sidebar' })).toBe(sidebar);
+    expect(screen.getByRole('complementary', { name: 'Sidebar' })).toBe(
+      sidebar,
+    );
   });
 
   it('reports the socket state in a live region', async () => {
@@ -316,14 +375,18 @@ describe('the shell', () => {
     // The badge is the trigger: the reasons to reload are all read off the
     // indicator, so that is where the control belongs.
     await user.click(await screen.findByRole('button', { name: 'Connecting' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Reload app' }));
+    await user.click(
+      await screen.findByRole('menuitem', { name: 'Reload app' }),
+    );
 
     await waitFor(() => {
       expect(reload).toHaveBeenCalledTimes(1);
     });
     // The server first. A page that came back on the same stale config would
     // look like the button did nothing.
-    expect(calls.some((call) => call.path === '/api/settings/reload')).toBe(true);
+    expect(calls.some((call) => call.path === '/api/settings/reload')).toBe(
+      true,
+    );
   });
 
   it('keeps the page when the server could not reload, and says why', async () => {
@@ -333,16 +396,25 @@ describe('the shell', () => {
     const { user } = renderApp('/', {
       'POST /api/settings/reload': [
         500,
-        { error: { code: 'config_invalid', message: 'config.json is not valid JSON' } },
+        {
+          error: {
+            code: 'config_invalid',
+            message: 'config.json is not valid JSON',
+          },
+        },
       ],
     });
 
     await user.click(await screen.findByRole('button', { name: 'Connecting' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Reload app' }));
+    await user.click(
+      await screen.findByRole('menuitem', { name: 'Reload app' }),
+    );
 
     // The message is the point. A navigation here would wipe it after one
     // frame and leave the operator pressing a button that does nothing.
-    expect(await screen.findByText('config.json is not valid JSON')).toBeInTheDocument();
+    expect(
+      await screen.findByText('config.json is not valid JSON'),
+    ).toBeInTheDocument();
     expect(reload).not.toHaveBeenCalled();
   });
 
@@ -357,16 +429,22 @@ describe('the shell', () => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
-    expect(await screen.findByRole('heading', { name: 'Files' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Files' }),
+    ).toBeInTheDocument();
   });
 
   it('answers an unknown address with a way back', async () => {
     const { user } = renderApp('/does-not-exist');
 
-    expect(await screen.findByRole('heading', { name: 'Not found' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Not found' }),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole('link', { name: 'Back to the session' }));
-    expect(await screen.findByRole('heading', { name: 'Ready when you are.' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Ready when you are.' }),
+    ).toBeInTheDocument();
   });
 
   it('validates ?session= rather than handing a component whatever was in the URL', async () => {

@@ -41,7 +41,13 @@ const OptionalDurationMs = z.number().int().nonnegative();
  * want it to, so send whatever this wire spells that as. What that is per
  * endpoint lives in `ProviderSpec.reasoningOffBody`.
  */
-export const ReasoningEffortSchema = z.enum(['off', 'minimal', 'low', 'medium', 'high']);
+export const ReasoningEffortSchema = z.enum([
+  'off',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+]);
 export type ReasoningEffort = z.infer<typeof ReasoningEffortSchema>;
 
 /**
@@ -70,10 +76,16 @@ export type PromptMode = z.infer<typeof PromptModeSchema>;
  * application fail its own constraint check.
  */
 type Unwrapped<T> =
-  T extends z.ZodDefault<infer Inner> ? Inner : T extends z.ZodPrefault<infer Inner> ? Inner : T;
+  T extends z.ZodDefault<infer Inner>
+    ? Inner
+    : T extends z.ZodPrefault<infer Inner>
+      ? Inner
+      : T;
 
 type PatchShape<S extends z.ZodRawShape> = {
-  [K in keyof S]: Unwrapped<S[K]> extends z.ZodType ? z.ZodOptional<Unwrapped<S[K]>> : never;
+  [K in keyof S]: Unwrapped<S[K]> extends z.ZodType
+    ? z.ZodOptional<Unwrapped<S[K]>>
+    : never;
 };
 
 /**
@@ -90,7 +102,9 @@ type PatchShape<S extends z.ZodRawShape> = {
  * because an agent's own settings are a patch over `agents.defaults` — the
  * inherit-unless-set shape is not only a wire concern.
  */
-function patchOf<S extends z.ZodRawShape>(schema: z.ZodObject<S>): z.ZodObject<PatchShape<S>> {
+function patchOf<S extends z.ZodRawShape>(
+  schema: z.ZodObject<S>,
+): z.ZodObject<PatchShape<S>> {
   const shape: Record<string, z.ZodType> = {};
   const fields = schema.shape as unknown as Record<string, z.ZodType>;
   for (const [key, field] of Object.entries(fields)) {
@@ -253,7 +267,9 @@ export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;
  * `type` = the key, and every credential already in the vault keeps resolving
  * under the same string.
  */
-export const ProvidersConfigSchema = z.record(z.string(), ProviderConfigSchema).default({});
+export const ProvidersConfigSchema = z
+  .record(z.string(), ProviderConfigSchema)
+  .default({});
 export type ProvidersConfig = z.infer<typeof ProvidersConfigSchema>;
 
 // ---------------------------------------------------------------------------
@@ -361,7 +377,9 @@ export const ExecToolConfigSchema = z.object({
     .default(1024 * 1024),
   installAudit: z.boolean().default(true),
   installAuditTimeoutMs: OptionalDurationMs.default(0),
-  installAuditBlockSeverity: z.enum(['low', 'moderate', 'high', 'critical']).default('high'),
+  installAuditBlockSeverity: z
+    .enum(['low', 'moderate', 'high', 'critical'])
+    .default('high'),
 });
 export type ExecToolConfig = z.infer<typeof ExecToolConfigSchema>;
 
@@ -472,13 +490,14 @@ export type AgentTools = ToolPermissions;
  * broken to whoever just made it — and because the alternative reading of
  * "explicit" would be a setup chore five clicks long before the first turn.
  */
-export const DEFAULT_AGENT_TOOLS: Readonly<Record<string, ToolPermission>> = Object.freeze({
-  read_file: 'allow',
-  list_dir: 'allow',
-  write_file: 'allow',
-  edit_file: 'allow',
-  exec: 'ask',
-});
+export const DEFAULT_AGENT_TOOLS: Readonly<Record<string, ToolPermission>> =
+  Object.freeze({
+    read_file: 'allow',
+    list_dir: 'allow',
+    write_file: 'allow',
+    edit_file: 'allow',
+    exec: 'ask',
+  });
 
 /**
  * How much network an agent asks its toolbox for.
@@ -937,7 +956,9 @@ export const ConfigPatchSchema = z.object({
               // resend `allow` — which is how a settings panel silently clears
               // the allow-list it never rendered.
               toolbox: patchOf(AgentToolboxSchema)
-                .extend({ network: patchOf(AgentToolboxNetworkSchema).optional() })
+                .extend({
+                  network: patchOf(AgentToolboxNetworkSchema).optional(),
+                })
                 .optional(),
               memory: patchOf(AgentMemoryScopeSchema).optional(),
               // `subagents` is deliberately *not* restated beside these. It is
@@ -963,7 +984,9 @@ export const ConfigPatchSchema = z.object({
    * that already has one. Creating an instance without naming a type fails the
    * merged tree's re-parse, which is a 400 saying exactly that.
    */
-  providers: z.record(z.string(), patchOf(ProviderConfigSchema).nullable()).optional(),
+  providers: z
+    .record(z.string(), patchOf(ProviderConfigSchema).nullable())
+    .optional(),
   server: patchOf(ServerConfigSchema)
     .extend({ auth: patchOf(AuthConfigSchema).optional() })
     .optional(),

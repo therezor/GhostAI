@@ -9,7 +9,11 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { instantFromZonedInput, isValidTimeZone, zonedInputValue } from '#src/zoned-time.js';
+import {
+  instantFromZonedInput,
+  isValidTimeZone,
+  zonedInputValue,
+} from '#src/zoned-time.js';
 
 const KYIV = 'Europe/Kyiv';
 
@@ -25,7 +29,9 @@ describe('zonedInputValue', () => {
   });
 
   it('pads every field, because the input parses by position', () => {
-    expect(zonedInputValue(Date.parse('2026-03-05T04:07:00Z'), 'UTC')).toBe('2026-03-05T04:07');
+    expect(zonedInputValue(Date.parse('2026-03-05T04:07:00Z'), 'UTC')).toBe(
+      '2026-03-05T04:07',
+    );
   });
 
   it('is blank for a non-instant rather than rendering NaN into the box', () => {
@@ -36,9 +42,9 @@ describe('zonedInputValue', () => {
   it('crosses a date boundary rather than clamping to the day', () => {
     // 22:30 UTC is already tomorrow in Tokyo. Keeping the date fixed would put
     // a job a day out from where the operator pointed.
-    expect(zonedInputValue(Date.parse('2026-01-15T22:30:00Z'), 'Asia/Tokyo')).toBe(
-      '2026-01-16T07:30',
-    );
+    expect(
+      zonedInputValue(Date.parse('2026-01-15T22:30:00Z'), 'Asia/Tokyo'),
+    ).toBe('2026-01-16T07:30');
   });
 });
 
@@ -53,9 +59,15 @@ describe('instantFromZonedInput', () => {
   });
 
   it('round-trips with zonedInputValue in both directions', () => {
-    for (const iso of ['2026-01-15T06:30:00Z', '2026-07-15T06:30:00Z', '2026-12-31T23:00:00Z']) {
+    for (const iso of [
+      '2026-01-15T06:30:00Z',
+      '2026-07-15T06:30:00Z',
+      '2026-12-31T23:00:00Z',
+    ]) {
       const atMs = Date.parse(iso);
-      expect(instantFromZonedInput(zonedInputValue(atMs, KYIV), KYIV)).toBe(atMs);
+      expect(instantFromZonedInput(zonedInputValue(atMs, KYIV), KYIV)).toBe(
+        atMs,
+      );
     }
   });
 
@@ -69,7 +81,13 @@ describe('instantFromZonedInput', () => {
   });
 
   it('is null for anything that is not a wall clock', () => {
-    for (const bad of ['', '   ', 'tomorrow', '2026-01-15', '15/01/2026 08:30']) {
+    for (const bad of [
+      '',
+      '   ',
+      'tomorrow',
+      '2026-01-15',
+      '15/01/2026 08:30',
+    ]) {
       expect(instantFromZonedInput(bad, KYIV)).toBeNull();
     }
   });
@@ -105,8 +123,12 @@ describe('instantFromZonedInput', () => {
     it('agrees with itself across the transition in a southern-hemisphere zone', () => {
       // Sydney transitions the other way round in the calendar, which is what
       // catches an implementation that hard-codes the northern direction.
-      expect(instantFromZonedInput('2026-10-04T02:30', 'Australia/Sydney')).toBeNull();
-      expect(instantFromZonedInput('2026-04-05T02:30', 'Australia/Sydney')).not.toBeNull();
+      expect(
+        instantFromZonedInput('2026-10-04T02:30', 'Australia/Sydney'),
+      ).toBeNull();
+      expect(
+        instantFromZonedInput('2026-04-05T02:30', 'Australia/Sydney'),
+      ).not.toBeNull();
     });
   });
 });

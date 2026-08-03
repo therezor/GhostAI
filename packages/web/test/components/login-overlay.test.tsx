@@ -15,7 +15,12 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { renderWithProviders, stubApi, stubFetch, urlOf } from '@testkit/render.js';
+import {
+  renderWithProviders,
+  stubApi,
+  stubFetch,
+  urlOf,
+} from '@testkit/render.js';
 
 describe('the login overlay', () => {
   it('stays out of the way when the caller is authenticated', async () => {
@@ -101,11 +106,17 @@ describe('the login overlay', () => {
   it('distinguishes a wrong password from a rate limit', async () => {
     const user = userEvent.setup();
     stubFetch({
-      '/api/auth/me': [401, { error: { code: 'unauthorized', message: 'No session' } }],
+      '/api/auth/me': [
+        401,
+        { error: { code: 'unauthorized', message: 'No session' } },
+      ],
       // Claimed: the setup overlay mounts above the login one and would
       // otherwise be deciding whether to open on an unstubbed request.
       '/api/setup': [200, { required: false }],
-      '/api/auth/login': [429, { error: { code: 'rate_limited', message: 'Slow down' } }],
+      '/api/auth/login': [
+        429,
+        { error: { code: 'rate_limited', message: 'Slow down' } },
+      ],
     });
 
     renderWithProviders(<main>The app behind it</main>);
@@ -122,7 +133,10 @@ describe('the login overlay', () => {
   it('sends the username beside the password', async () => {
     const user = userEvent.setup();
     const calls = stubApi({
-      '/api/auth/me': [401, { error: { code: 'unauthorized', message: 'No session' } }],
+      '/api/auth/me': [
+        401,
+        { error: { code: 'unauthorized', message: 'No session' } },
+      ],
       '/api/setup': [200, { required: false }],
       'POST /api/auth/login': [200, { ok: true, expiresAtMs: 99 }],
     });
@@ -139,7 +153,9 @@ describe('the login overlay', () => {
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
 
     await waitFor(() => {
-      expect(calls.find((call) => call.path === '/api/auth/login')?.body).toEqual({
+      expect(
+        calls.find((call) => call.path === '/api/auth/login')?.body,
+      ).toEqual({
         username: 'operator',
         password: 'a good password',
       });
@@ -153,13 +169,17 @@ describe('the login overlay', () => {
     });
     renderWithProviders(<main>The app behind it</main>);
 
-    expect(await screen.findByRole('button', { name: 'Sign in' })).toBeDisabled();
+    expect(
+      await screen.findByRole('button', { name: 'Sign in' }),
+    ).toBeDisabled();
   });
 
   it('says so when the server cannot be reached at all', async () => {
     const user = userEvent.setup();
     vi.stubGlobal('fetch', (input: RequestInfo | URL) => {
-      if (urlOf(input) === '/api/auth/login') return Promise.reject(new TypeError('offline'));
+      if (urlOf(input) === '/api/auth/login') {
+        return Promise.reject(new TypeError('offline'));
+      }
       if (urlOf(input) === '/api/setup') {
         return Promise.resolve(
           new Response(JSON.stringify({ required: false }), {
@@ -169,10 +189,13 @@ describe('the login overlay', () => {
         );
       }
       return Promise.resolve(
-        new Response(JSON.stringify({ error: { code: 'unauthorized', message: 'no' } }), {
-          status: 401,
-          headers: { 'content-type': 'application/json' },
-        }),
+        new Response(
+          JSON.stringify({ error: { code: 'unauthorized', message: 'no' } }),
+          {
+            status: 401,
+            headers: { 'content-type': 'application/json' },
+          },
+        ),
       );
     });
 
@@ -181,6 +204,8 @@ describe('the login overlay', () => {
     await user.type(await screen.findByLabelText('Password'), 'hunter2');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not reach the server.');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not reach the server.',
+    );
   });
 });

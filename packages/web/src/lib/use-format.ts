@@ -22,7 +22,12 @@ import { useTranslation } from 'react-i18next';
 import { useAppLocale } from '@/i18n/i18n-context.js';
 import { useAppTimezone } from '@/timezone/timezone-context.js';
 
-import { formatDate, formatDateTime, formatRelativeTime, formatTokens } from './format.js';
+import {
+  formatDate,
+  formatDateTime,
+  formatRelativeTime,
+  formatTokens,
+} from './format.js';
 
 export interface Formatters {
   /** A token count with the locale's grouping separator. */
@@ -46,7 +51,8 @@ export function useFormat(): Formatters {
   return useMemo(
     () => ({
       tokens: (value: number) => formatTokens(value, resolved),
-      relativeTime: (atMs: number, now: number) => formatRelativeTime(atMs, now, resolved, t),
+      relativeTime: (atMs: number, now: number) =>
+        formatRelativeTime(atMs, now, resolved, t),
       date: (atMs: number) => formatDate(atMs, resolved, timeZone),
       dateTime: (atMs: number) => formatDateTime(atMs, resolved, timeZone),
     }),

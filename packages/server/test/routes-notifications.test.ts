@@ -23,7 +23,9 @@ afterEach(async () => {
   while (opened.length > 0) opened.pop()?.close();
 });
 
-async function start(...args: Parameters<typeof startTestServer>): Promise<TestServer> {
+async function start(
+  ...args: Parameters<typeof startTestServer>
+): Promise<TestServer> {
   const started = await startTestServer(...args);
   running.push(started);
   return started;
@@ -54,7 +56,11 @@ describe('NotificationStore', () => {
     const notifications = store(clock);
     notifications.create({ title: 'Job finished' });
     clock.advance(1000);
-    notifications.create({ title: 'Job failed', level: 'error', jobId: 'job-1' });
+    notifications.create({
+      title: 'Job failed',
+      level: 'error',
+      jobId: 'job-1',
+    });
 
     expect(notifications.unreadCount()).toBe(2);
     expect(notifications.list()[0]).toMatchObject({
@@ -113,15 +119,23 @@ describe('NotificationStore', () => {
 
   it('pages over an offset for a numbered reader', async () => {
     const test = await start();
-    for (let i = 0; i < 5; i += 1) test.server.notifications.create({ title: `n${String(i)}` });
+    for (let i = 0; i < 5; i += 1) {
+      test.server.notifications.create({ title: `n${String(i)}` });
+    }
 
-    expect(test.server.notifications.list({ limit: 2, offset: 2 })).toHaveLength(2);
-    expect(test.server.notifications.list({ limit: 2, offset: 99 })).toEqual([]);
+    expect(
+      test.server.notifications.list({ limit: 2, offset: 2 }),
+    ).toHaveLength(2);
+    expect(test.server.notifications.list({ limit: 2, offset: 99 })).toEqual(
+      [],
+    );
   });
 
   it('empties the table and says how many went', async () => {
     const test = await start();
-    for (let i = 0; i < 3; i += 1) test.server.notifications.create({ title: `n${String(i)}` });
+    for (let i = 0; i < 3; i += 1) {
+      test.server.notifications.create({ title: `n${String(i)}` });
+    }
 
     expect(test.server.notifications.deleteAll()).toBe(3);
     expect(test.server.notifications.count()).toBe(0);
@@ -135,9 +149,9 @@ describe('NotificationStore', () => {
     notifications.create({ title: 'unread' });
     notifications.markRead(read.id);
 
-    expect(notifications.list({ unreadOnly: true }).map((entry) => entry.title)).toEqual([
-      'unread',
-    ]);
+    expect(
+      notifications.list({ unreadOnly: true }).map((entry) => entry.title),
+    ).toEqual(['unread']);
   });
 
   it('reports nothing for an id it does not hold', async () => {
@@ -154,7 +168,9 @@ describe('NotificationStore', () => {
 describe('notification routes', () => {
   it('lists with the total unread count, not the page count', async () => {
     const test = await start();
-    for (let i = 0; i < 3; i += 1) test.server.notifications.create({ title: `n${String(i)}` });
+    for (let i = 0; i < 3; i += 1) {
+      test.server.notifications.create({ title: `n${String(i)}` });
+    }
 
     const response = await test.server.app.inject({
       method: 'GET',
@@ -218,7 +234,10 @@ describe('notification routes', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ id: created.id, readAtMs: expect.any(Number) });
+    expect(response.json()).toMatchObject({
+      id: created.id,
+      readAtMs: expect.any(Number),
+    });
     expect(test.server.notifications.unreadCount()).toBe(0);
   });
 
@@ -253,7 +272,9 @@ describe('notification routes', () => {
 
   it('pages over an offset and reports how many there are', async () => {
     const test = await start();
-    for (let i = 0; i < 5; i += 1) test.server.notifications.create({ title: `n${String(i)}` });
+    for (let i = 0; i < 5; i += 1) {
+      test.server.notifications.create({ title: `n${String(i)}` });
+    }
 
     const response = await test.server.app.inject({
       method: 'GET',

@@ -24,7 +24,12 @@
 
 import { spawn } from 'node:child_process';
 
-import { GhostError, abortedError, systemClock, type Clock } from '@ghostai/core';
+import {
+  GhostError,
+  abortedError,
+  systemClock,
+  type Clock,
+} from '@ghostai/core';
 import type { AgentToolboxNetwork } from '@ghostai/protocol';
 import { createOutputCap, type ExecPlan } from '@ghostai/security';
 
@@ -32,7 +37,10 @@ import { createOutputCap, type ExecPlan } from '@ghostai/security';
 export const KILL_GRACE_MS = 2_000;
 
 /** Receives every byte a command writes, before the output budget is applied. */
-export type OutputTee = (stream: 'stdout' | 'stderr', chunk: Uint8Array) => void;
+export type OutputTee = (
+  stream: 'stdout' | 'stderr',
+  chunk: Uint8Array,
+) => void;
 
 export interface RunRequest {
   /** What to run. Already guarded — a runner does not re-decide policy. */
@@ -185,10 +193,14 @@ export const localRunner: CommandRunner = {
         settled = true;
         cleanup();
         reject(
-          new GhostError('tool', `Could not run ${plan.file}: ${error.message}`, {
-            cause: error,
-            details: { file: plan.file },
-          }),
+          new GhostError(
+            'tool',
+            `Could not run ${plan.file}: ${error.message}`,
+            {
+              cause: error,
+              details: { file: plan.file },
+            },
+          ),
         );
       });
 

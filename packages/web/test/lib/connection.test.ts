@@ -64,7 +64,9 @@ let seq = 0;
 
 function deliver(frame: Unsequenced<ServerMessage>): void {
   const stamped =
-    frame.type === 'connected' || frame.type === 'pong' || frame.type === 'error'
+    frame.type === 'connected' ||
+    frame.type === 'pong' ||
+    frame.type === 'error'
       ? frame
       : { ...frame, seq: (seq += 1) };
   socket().onmessage?.({ data: JSON.stringify(stamped) });
@@ -85,7 +87,9 @@ describe('opening', () => {
   it('dials the session the URL named, on the page’s own origin', () => {
     open('web:7');
 
-    expect(socket().url).toBe(`ws://${globalThis.location.host}/ws?session=web%3A7`);
+    expect(socket().url).toBe(
+      `ws://${globalThis.location.host}/ws?session=web%3A7`,
+    );
     expect(useTurnStore.getState().sessionKey).toBe('web:7');
   });
 
@@ -102,7 +106,9 @@ describe('opening', () => {
 
     open('web:1');
 
-    expect(socket().sent).toEqual([{ type: 'session.resume', sessionKey: 'web:1', lastSeq: 12 }]);
+    expect(socket().sent).toEqual([
+      { type: 'session.resume', sessionKey: 'web:1', lastSeq: 12 },
+    ]);
   });
 
   it('takes the session the server minted when the URL named none', () => {
@@ -183,7 +189,11 @@ describe('speaking', () => {
     open('web:1');
 
     sendUserMessage('hello', [
-      { mimeType: 'image/png', path: 'uploads/ab12cd34-shot.png', name: 'shot.png' },
+      {
+        mimeType: 'image/png',
+        path: 'uploads/ab12cd34-shot.png',
+        name: 'shot.png',
+      },
     ]);
 
     const sent = socket().sent[0];
@@ -193,10 +203,19 @@ describe('speaking', () => {
       content: 'hello',
       // The workspace path, not a signed URL: the server reads the bytes off
       // disk when it builds the request, long after a token would have expired.
-      attachments: [{ mimeType: 'image/png', path: 'uploads/ab12cd34-shot.png', name: 'shot.png' }],
+      attachments: [
+        {
+          mimeType: 'image/png',
+          path: 'uploads/ab12cd34-shot.png',
+          name: 'shot.png',
+        },
+      ],
       clientMessageId: expect.any(String),
     });
-    expect(useTurnStore.getState().transcript[0]).toMatchObject({ kind: 'user', pending: true });
+    expect(useTurnStore.getState().transcript[0]).toMatchObject({
+      kind: 'user',
+      pending: true,
+    });
   });
 
   it('refuses to send before there is a session to send on', () => {
@@ -250,7 +269,10 @@ describe('speaking', () => {
           seq: 3,
           createdAtMs: 0,
           turnId: 't1',
-          message: { role: 'user', content: [{ type: 'text', text: 'why is the sky blue?' }] },
+          message: {
+            role: 'user',
+            content: [{ type: 'text', text: 'why is the sky blue?' }],
+          },
         },
       ],
     });
@@ -258,7 +280,11 @@ describe('speaking', () => {
     regenerateTurn(3);
 
     const frame = socket().sent.at(-1);
-    expect(frame).toMatchObject({ type: 'turn.regenerate', sessionKey: 'web:1', seq: 3 });
+    expect(frame).toMatchObject({
+      type: 'turn.regenerate',
+      sessionKey: 'web:1',
+      seq: 3,
+    });
     expect(frame).toHaveProperty('clientMessageId');
 
     // Still there, and pending — the row it came from is about to be deleted.
@@ -280,7 +306,10 @@ describe('speaking', () => {
           seq: 3,
           createdAtMs: 0,
           turnId: 't1',
-          message: { role: 'user', content: [{ type: 'text', text: 'why is the sky blue?' }] },
+          message: {
+            role: 'user',
+            content: [{ type: 'text', text: 'why is the sky blue?' }],
+          },
         },
       ],
     });
@@ -289,7 +318,12 @@ describe('speaking', () => {
     // What `#rewind` broadcasts: the question is deleted, and mid-regenerate the
     // surviving tail is empty. Rebuilding from it is what used to lose the
     // message — storage never lost it, the client did.
-    deliver({ type: 'session.truncated', sessionKey: 'web:1', upToSeq: 2, messages: [] });
+    deliver({
+      type: 'session.truncated',
+      sessionKey: 'web:1',
+      upToSeq: 2,
+      messages: [],
+    });
 
     expect(useTurnStore.getState().transcript).toMatchObject([
       { kind: 'user', text: 'why is the sky blue?', pending: true },
@@ -352,10 +386,16 @@ describe('speaking', () => {
     });
     // The gate is the server's; the acknowledgement is ours, and it happens on
     // the click rather than on the echo.
-    const turn = useTurnStore.getState().transcript.find((item) => item.kind === 'turn');
+    const turn = useTurnStore
+      .getState()
+      .transcript.find((item) => item.kind === 'turn');
     const tool =
-      turn?.kind === 'turn' ? turn.parts.find((part) => part.kind === 'tool') : undefined;
-    expect(tool?.kind === 'tool' ? tool.approval?.answered : undefined).toBe('approved');
+      turn?.kind === 'turn'
+        ? turn.parts.find((part) => part.kind === 'tool')
+        : undefined;
+    expect(tool?.kind === 'tool' ? tool.approval?.answered : undefined).toBe(
+      'approved',
+    );
   });
 });
 
@@ -396,7 +436,12 @@ describe('listening', () => {
   it('raises a toast for an error with no turn to render it on', () => {
     open('web:1');
 
-    deliver({ type: 'error', code: 'internal', message: 'it broke', retryable: false });
+    deliver({
+      type: 'error',
+      code: 'internal',
+      message: 'it broke',
+      retryable: false,
+    });
 
     expect(useToastStore.getState().toasts).toHaveLength(1);
   });
@@ -442,7 +487,9 @@ describe('losing the connection', () => {
 
     socket().onclose?.();
 
-    expect(useToastStore.getState().toasts[0]).toMatchObject({ title: 'Connection lost' });
+    expect(useToastStore.getState().toasts[0]).toMatchObject({
+      title: 'Connection lost',
+    });
     expect(useTurnStore.getState().connection).toBe('reconnecting');
   });
 

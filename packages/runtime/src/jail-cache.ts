@@ -28,7 +28,11 @@
  *    reference is the whole of closing it.
  */
 
-import { workspaceDirFor, DEFAULT_WORKSPACE_ID, type GhostPaths } from '@ghostai/core';
+import {
+  workspaceDirFor,
+  DEFAULT_WORKSPACE_ID,
+  type GhostPaths,
+} from '@ghostai/core';
 import { WorkspaceJail, type JailResolver } from '@ghostai/security';
 
 /**
@@ -47,47 +51,50 @@ export interface JailCacheOptions {
 }
 
 export class JailCache implements JailResolver {
-  readonly #paths: GhostPaths;
-  readonly #max: number;
-  readonly #create: (root: string) => WorkspaceJail;
+  private readonly paths: GhostPaths;
+  private readonly max: number;
+  private readonly create: (root: string) => WorkspaceJail;
   /** Insertion-ordered, which is what makes the first key the LRU victim. */
-  readonly #jails = new Map<string, WorkspaceJail>();
-  readonly #default: WorkspaceJail;
+  private readonly jails = new Map<string, WorkspaceJail>();
+  private readonly defaultJail: WorkspaceJail;
 
   constructor(options: JailCacheOptions) {
-    this.#paths = options.paths;
-    this.#max = options.max ?? MAX_CACHED_JAILS;
-    this.#create = options.create ?? ((root) => new WorkspaceJail({ root }));
-    this.#default = this.forWorkspace(DEFAULT_WORKSPACE_ID);
+    this.paths = options.paths;
+    this.max = options.max ?? MAX_CACHED_JAILS;
+    this.create = options.create ?? ((root) => new WorkspaceJail({ root }));
+    this.defaultJail = this.forWorkspace(DEFAULT_WORKSPACE_ID);
   }
 
   get default(): WorkspaceJail {
-    return this.#default;
+    return this.defaultJail;
   }
 
   forWorkspace(workspaceId: string): WorkspaceJail {
-    const cached = this.#jails.get(workspaceId);
+    const cached = this.jails.get(workspaceId);
     if (cached !== undefined) {
       // Re-insert so the working set stays at the young end of the map.
-      this.#jails.delete(workspaceId);
-      this.#jails.set(workspaceId, cached);
+      this.jails.delete(workspaceId);
+      this.jails.set(workspaceId, cached);
       return cached;
     }
 
     // Throws `invalid_input` for anything that is not a legal slug, which is
     // the second of the two places that check — the first being the route.
-    const jail = this.#create(workspaceDirFor(this.#paths, workspaceId));
-    this.#jails.set(workspaceId, jail);
+    const jail = this.create(workspaceDirFor(this.paths, workspaceId));
+    this.jails.set(workspaceId, jail);
 
-    if (this.#jails.size > this.#max) {
-      const oldest = this.#jails.keys().next();
-      // Never evict the default: it is held by `#default` regardless, and
+    if (this.jails.size > this.max) {
+      const oldest = this.jails.keys().next();
+      // Never evict the default: it is held by `#defaultJail` regardless, and
       // dropping its entry would make the next lookup rebuild a jail this
       // object already has.
-      if (!oldest.done && oldest.value !== DEFAULT_WORKSPACE_ID) this.#jails.delete(oldest.value);
-      else if (!oldest.done) {
-        const next = [...this.#jails.keys()].find((key) => key !== DEFAULT_WORKSPACE_ID);
-        if (next !== undefined) this.#jails.delete(next);
+      if (!oldest.done && oldest.value !== DEFAULT_WORKSPACE_ID) {
+        this.jails.delete(oldest.value);
+      } else if (!oldest.done) {
+        const next = [...this.jails.keys()].find(
+          (key) => key !== DEFAULT_WORKSPACE_ID,
+        );
+        if (next !== undefined) this.jails.delete(next);
       }
     }
 
@@ -104,15 +111,15 @@ export class JailCache implements JailResolver {
    * created on the freed folder name: the lookup would hand it a jail resolved
    * against the directory that used to be there.
    *
-   * Never the default, whose entry is also held by `#default`; there is nothing
+   * Never the default, whose entry is also held by `#defaultJail`; there is nothing
    * that can move it, so nothing asks.
    */
   evict(workspaceId: string): void {
     if (workspaceId === DEFAULT_WORKSPACE_ID) return;
-    this.#jails.delete(workspaceId);
+    this.jails.delete(workspaceId);
   }
 
   clear(): void {
-    this.#jails.clear();
+    this.jails.clear();
   }
 }

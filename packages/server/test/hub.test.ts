@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { AgentEvent, TurnInput, TurnResult } from '@ghostai/agent';
-import { GhostError, SessionStore, assistantMessage, userMessage } from '@ghostai/core';
+import {
+  GhostError,
+  SessionStore,
+  assistantMessage,
+  userMessage,
+} from '@ghostai/core';
 import {
   ConfigSchema,
   PROTOCOL_VERSION,
@@ -12,7 +17,12 @@ import {
 } from '@ghostai/protocol';
 
 import { HubApprovalGate } from '#src/approvals.js';
-import { SessionHub, type ConnectOptions, type HubClient, type TurnRunner } from '#src/hub.js';
+import {
+  SessionHub,
+  type ConnectOptions,
+  type HubClient,
+  type TurnRunner,
+} from '#src/hub.js';
 
 const SESSION = 'web:1';
 
@@ -39,8 +49,8 @@ type Emission = AgentEvent | typeof END | { readonly throws: unknown };
  */
 class ScriptedTurn {
   readonly input: TurnInput;
-  readonly #queue: Emission[] = [];
-  #resolve: ((emission: Emission) => void) | undefined;
+  private readonly queue: Emission[] = [];
+  private resolve: ((emission: Emission) => void) | undefined;
 
   constructor(input: TurnInput) {
     this.input = input;
@@ -51,44 +61,49 @@ class ScriptedTurn {
   }
 
   take(): Promise<Emission> {
-    const next = this.#queue.shift();
+    const next = this.queue.shift();
     if (next !== undefined) return Promise.resolve(next);
     return new Promise<Emission>((resolve) => {
-      this.#resolve = resolve;
+      this.resolve = resolve;
     });
   }
 
   async emit(event: AgentEvent): Promise<void> {
-    this.#push(event);
+    this.push(event);
     await flush();
   }
 
   async fail(error: unknown): Promise<void> {
-    this.#push({ throws: error });
+    this.push({ throws: error });
     await flush();
   }
 
   /** Ends the turn the way the loop does: a `turn.end`, then the return. */
   async end(stopReason: 'complete' | 'aborted' = 'complete'): Promise<void> {
-    this.#push({ type: 'turn.end', turnId: this.turnId, stopReason, iterations: 1 });
-    this.#push(END);
+    this.push({
+      type: 'turn.end',
+      turnId: this.turnId,
+      stopReason,
+      iterations: 1,
+    });
+    this.push(END);
     await flush();
   }
 
-  #push(emission: Emission): void {
-    const resolve = this.#resolve;
+  private push(emission: Emission): void {
+    const resolve = this.resolve;
     if (resolve === undefined) {
-      this.#queue.push(emission);
+      this.queue.push(emission);
       return;
     }
-    this.#resolve = undefined;
+    this.resolve = undefined;
     resolve(emission);
   }
 }
 
 class ScriptedRunner implements TurnRunner {
   readonly turns: ScriptedTurn[] = [];
-  readonly steers: { sessionKey: string; content: string }[] = [];
+  readonly steers: Array<{ sessionKey: string; content: string }> = [];
 
   async *run(input: TurnInput): AsyncGenerator<AgentEvent, TurnResult> {
     const turn = new ScriptedTurn(input);
@@ -116,7 +131,9 @@ class ScriptedRunner implements TurnRunner {
 
   turn(index: number): ScriptedTurn {
     const turn = this.turns[index];
-    if (turn === undefined) throw new Error(`No turn ${String(index)} has started`);
+    if (turn === undefined) {
+      throw new Error(`No turn ${String(index)} has started`);
+    }
     return turn;
   }
 }
@@ -130,7 +147,9 @@ interface TestClient extends HubClient {
   readonly frames: ServerMessage[];
   types(): ServerMessageType[];
   /** Frames of one type, which is what most assertions actually want. */
-  of<T extends ServerMessageType>(type: T): Extract<ServerMessage, { type: T }>[];
+  of<T extends ServerMessageType>(
+    type: T,
+  ): Array<Extract<ServerMessage, { type: T }>>;
   /** Drops what has been asserted, so the next assertion reads a clean slate. */
   reset(): void;
 }
@@ -157,7 +176,7 @@ interface HarnessOptions {
   readonly maxSessions?: number;
 }
 
-const cleanups: (() => void)[] = [];
+const cleanups: Array<() => void> = [];
 
 afterEach(() => {
   for (const cleanup of cleanups.splice(0)) cleanup();
@@ -189,11 +208,18 @@ function harness(options: HarnessOptions = {}): Harness {
       if (id === 'default') return { agentId: id, miss: undefined };
       const entry = config.agents.list[id];
       if (entry?.enabled === true) return { agentId: id, miss: undefined };
-      return { agentId: 'default', miss: entry === undefined ? 'unknown' : 'disabled' };
+      return {
+        agentId: 'default',
+        miss: entry === undefined ? 'unknown' : 'disabled',
+      };
     },
     newId: () => `id-${String(++counter)}`,
-    ...(options.maxQueueDepth === undefined ? {} : { maxQueueDepth: options.maxQueueDepth }),
-    ...(options.maxSessions === undefined ? {} : { maxSessions: options.maxSessions }),
+    ...(options.maxQueueDepth === undefined
+      ? {}
+      : { maxQueueDepth: options.maxQueueDepth }),
+    ...(options.maxSessions === undefined
+      ? {}
+      : { maxSessions: options.maxSessions }),
   });
   cleanups.push(() => {
     hub.close();
@@ -206,7 +232,10 @@ function harness(options: HarnessOptions = {}): Harness {
     approvals,
     connect: (connectOptions: TestConnectOptions = {}): TestClient => {
       const frames: ServerMessage[] = [];
-      const { sessionKey, ...rest } = { sessionKey: SESSION, ...connectOptions };
+      const { sessionKey, ...rest } = {
+        sessionKey: SESSION,
+        ...connectOptions,
+      };
       const client = hub.connect({
         ...rest,
         ...(sessionKey === undefined ? {} : { sessionKey }),
@@ -225,9 +254,12 @@ function harness(options: HarnessOptions = {}): Harness {
       return Object.assign(client, {
         frames,
         types: (): ServerMessageType[] => frames.map((frame) => frame.type),
-        of: <T extends ServerMessageType>(type: T): Extract<ServerMessage, { type: T }>[] =>
+        of: <T extends ServerMessageType>(
+          type: T,
+        ): Array<Extract<ServerMessage, { type: T }>> =>
           frames.filter(
-            (frame): frame is Extract<ServerMessage, { type: T }> => frame.type === type,
+            (frame): frame is Extract<ServerMessage, { type: T }> =>
+              frame.type === type,
           ),
         reset: (): void => {
           frames.length = 0;
@@ -306,7 +338,10 @@ describe('SessionHub', () => {
       const client = h.connect();
       client.reset();
 
-      await send(client, new TextEncoder().encode(JSON.stringify({ type: 'ping' })));
+      await send(
+        client,
+        new TextEncoder().encode(JSON.stringify({ type: 'ping' })),
+      );
 
       expect(client.types()).toEqual(['pong']);
     });
@@ -324,7 +359,11 @@ describe('SessionHub', () => {
       broken.reset();
       healthy.reset();
 
-      await send(healthy, { type: 'user.message', sessionKey: SESSION, content: 'hello' });
+      await send(healthy, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'hello',
+      });
 
       expect(broken.types()).toEqual([]);
       expect(healthy.types()).toContain('message.ack');
@@ -362,11 +401,19 @@ describe('SessionHub', () => {
       const h = harness({ loop: () => runner });
       const client = h.connect();
 
-      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'too early' });
+      await send(client, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'too early',
+      });
 
       runner = h.runner;
       client.reset();
-      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'now' });
+      await send(client, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'now',
+      });
 
       expect(h.runner.turn(0).input).toMatchObject({ content: 'now' });
     });
@@ -396,7 +443,11 @@ describe('SessionHub', () => {
       });
 
       const turn = h.runner.turn(0);
-      expect(turn.input).toMatchObject({ sessionKey: SESSION, content: 'hello', channel: 'web' });
+      expect(turn.input).toMatchObject({
+        sessionKey: SESSION,
+        content: 'hello',
+        channel: 'web',
+      });
 
       await turn.emit({
         type: 'turn.start',
@@ -406,7 +457,11 @@ describe('SessionHub', () => {
         model: 'm',
         provider: 'p',
       });
-      await turn.emit({ type: 'assistant.delta', turnId: turn.turnId, text: 'hi' });
+      await turn.emit({
+        type: 'assistant.delta',
+        turnId: turn.turnId,
+        text: 'hi',
+      });
       await turn.end();
 
       expect(client.types()).toEqual([
@@ -418,14 +473,17 @@ describe('SessionHub', () => {
         'session.status',
       ]);
       // One counter, no gaps and no reuse.
-      expect(client.frames.map((frame) => ('seq' in frame ? frame.seq : null))).toEqual([
-        1, 2, 3, 4, 5, 6,
-      ]);
+      expect(
+        client.frames.map((frame) => ('seq' in frame ? frame.seq : null)),
+      ).toEqual([1, 2, 3, 4, 5, 6]);
       expect(client.of('message.ack')[0]).toMatchObject({
         messageId: turn.turnId,
         clientMessageId: 'c-1',
       });
-      expect(client.of('session.status').map((frame) => frame.busy)).toEqual([true, false]);
+      expect(client.of('session.status').map((frame) => frame.busy)).toEqual([
+        true,
+        false,
+      ]);
     });
 
     it('turns every attachment into a file part, whatever its type', async () => {
@@ -452,7 +510,11 @@ describe('SessionHub', () => {
 
       expect(h.runner.turn(0).input.content).toEqual([
         { type: 'text', text: 'look at this' },
-        { type: 'file', mimeType: 'image/png', path: 'uploads/ab12cd34-shot.png' },
+        {
+          type: 'file',
+          mimeType: 'image/png',
+          path: 'uploads/ab12cd34-shot.png',
+        },
         {
           type: 'file',
           mimeType: 'text/csv',
@@ -471,11 +533,17 @@ describe('SessionHub', () => {
         type: 'user.message',
         sessionKey: SESSION,
         content: '',
-        attachments: [{ mimeType: 'image/png', path: 'uploads/ab12cd34-shot.png' }],
+        attachments: [
+          { mimeType: 'image/png', path: 'uploads/ab12cd34-shot.png' },
+        ],
       });
 
       expect(h.runner.turn(0).input.content).toEqual([
-        { type: 'file', mimeType: 'image/png', path: 'uploads/ab12cd34-shot.png' },
+        {
+          type: 'file',
+          mimeType: 'image/png',
+          path: 'uploads/ab12cd34-shot.png',
+        },
       ]);
     });
 
@@ -490,10 +558,16 @@ describe('SessionHub', () => {
       });
 
       const input = h.runner.turn(0).input;
-      expect(input.mentions).toMatchObject({ kb: ['release notes'], mcp: [], skill: ['triage'] });
+      expect(input.mentions).toMatchObject({
+        kb: ['release notes'],
+        mcp: [],
+        skill: ['triage'],
+      });
       // The text is untouched: the model sees exactly what was typed, and the
       // spans are what a renderer uses to highlight them.
-      expect(input.content).toBe('check @kb:"release notes" and @skill:triage before answering');
+      expect(input.content).toBe(
+        'check @kb:"release notes" and @skill:triage before answering',
+      );
       expect(input.channel).toBe('telegram');
     });
 
@@ -502,7 +576,11 @@ describe('SessionHub', () => {
       const client = h.connect();
       client.reset();
 
-      await send(client, { type: 'user.message', sessionKey: SESSION, content: '' });
+      await send(client, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: '',
+      });
 
       expect(client.of('error')[0]).toMatchObject({ code: 'bad_request' });
       expect(h.runner.turns).toHaveLength(0);
@@ -513,19 +591,33 @@ describe('SessionHub', () => {
       const client = h.connect();
       client.reset();
 
-      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'first' });
-      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'second' });
+      await send(client, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'first',
+      });
+      await send(client, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'second',
+      });
 
       expect(h.runner.turns).toHaveLength(1);
       expect(client.of('message.queued')[0]?.queueDepth).toBe(1);
-      expect(client.of('session.status').at(-1)).toMatchObject({ busy: true, queueDepth: 1 });
+      expect(client.of('session.status').at(-1)).toMatchObject({
+        busy: true,
+        queueDepth: 1,
+      });
 
       await h.runner.turn(0).end();
 
       expect(h.runner.turns).toHaveLength(2);
       expect(h.runner.turn(1).input.content).toBe('second');
       // The queue drained straight into the next turn: no idle status between.
-      expect(client.of('session.status').at(-1)).toMatchObject({ busy: true, queueDepth: 0 });
+      expect(client.of('session.status').at(-1)).toMatchObject({
+        busy: true,
+        queueDepth: 0,
+      });
 
       await h.runner.turn(1).end();
       expect(h.hub.busy(SESSION)).toBe(false);
@@ -535,12 +627,27 @@ describe('SessionHub', () => {
       const h = harness({ maxQueueDepth: 1 });
       const client = h.connect();
 
-      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'running' });
-      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'queued' });
+      await send(client, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'running',
+      });
+      await send(client, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'queued',
+      });
       client.reset();
-      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'too much' });
+      await send(client, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'too much',
+      });
 
-      expect(client.of('error')[0]).toMatchObject({ code: 'session_busy', retryable: true });
+      expect(client.of('error')[0]).toMatchObject({
+        code: 'session_busy',
+        retryable: true,
+      });
       expect(h.runner.turns).toHaveLength(1);
     });
 
@@ -608,7 +715,11 @@ describe('SessionHub', () => {
     it('forwards a mid-turn error without sequencing it, and still closes the turn', async () => {
       const h = harness();
       const client = h.connect();
-      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'go' });
+      await send(client, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'go',
+      });
       const turn = h.runner.turn(0);
       client.reset();
 
@@ -631,7 +742,11 @@ describe('SessionHub', () => {
       const h = harness();
       const client = h.connect();
 
-      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'run a build' });
+      await send(client, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'run a build',
+      });
       const turn = h.runner.turn(0);
       await turn.emit({
         type: 'tool.call',
@@ -665,7 +780,11 @@ describe('SessionHub', () => {
       const h = harness();
       const client = h.connect();
 
-      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'go' });
+      await send(client, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'go',
+      });
       client.reset();
       await h.runner.turn(0).fail(new Error('the provider adapter exploded'));
 
@@ -685,7 +804,11 @@ describe('SessionHub', () => {
       const h = harness();
       const client = h.connect();
 
-      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'go' });
+      await send(client, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'go',
+      });
       await h.runner.turn(0).emit({
         type: 'turn.start',
         sessionKey: SESSION,
@@ -698,14 +821,21 @@ describe('SessionHub', () => {
       client.reset();
       await h.runner.turn(0).fail(new Error('the sandbox is unreachable'));
 
-      expect(client.of('turn.end')[0]).toMatchObject({ stopReason: 'error', firstSeq: 1 });
+      expect(client.of('turn.end')[0]).toMatchObject({
+        stopReason: 'error',
+        firstSeq: 1,
+      });
     });
 
     it('closes a turn abandoned by an abort without reporting an error', async () => {
       const h = harness();
       const client = h.connect();
 
-      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'go' });
+      await send(client, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'go',
+      });
       client.reset();
       await h.runner.turn(0).fail(new DOMException('aborted', 'AbortError'));
 
@@ -724,12 +854,20 @@ describe('SessionHub', () => {
       });
       const client = h.connect();
 
-      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'go' });
+      await send(client, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'go',
+      });
       expect(client.of('error')[0]).toMatchObject({ code: 'internal' });
       expect(client.of('turn.end')).toHaveLength(1);
 
       broken = false;
-      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'again' });
+      await send(client, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'again',
+      });
       expect(runner.turns).toHaveLength(1);
     });
 
@@ -737,7 +875,11 @@ describe('SessionHub', () => {
       const h = harness();
       const client = h.connect();
 
-      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'go' });
+      await send(client, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'go',
+      });
       h.hub.close();
 
       expect(h.runner.turn(0).input.signal?.aborted).toBe(true);
@@ -751,9 +893,17 @@ describe('SessionHub', () => {
       const [a, b, c] = [h.connect(), h.connect(), h.connect()];
       for (const client of [a, b, c]) client.reset();
 
-      await send(a, { type: 'user.message', sessionKey: SESSION, content: 'hello' });
+      await send(a, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'hello',
+      });
       const turn = h.runner.turn(0);
-      await turn.emit({ type: 'assistant.delta', turnId: turn.turnId, text: 'hi' });
+      await turn.emit({
+        type: 'assistant.delta',
+        turnId: turn.turnId,
+        text: 'hi',
+      });
       await turn.end();
 
       expect(b.frames).toEqual(a.frames);
@@ -789,7 +939,11 @@ describe('SessionHub', () => {
       // every unattended run look watched, which is the one case `watchers`
       // exists to detect.
       const h = harness();
-      h.hub.connect({ send: () => undefined, sessionKey: SESSION, unattended: true });
+      h.hub.connect({
+        send: () => undefined,
+        sessionKey: SESSION,
+        unattended: true,
+      });
       expect(h.hub.watchers(SESSION)).toBe(0);
 
       // A real tab on the same session still counts.
@@ -806,7 +960,11 @@ describe('SessionHub', () => {
       staying.reset();
       leaving.reset();
 
-      await send(staying, { type: 'user.message', sessionKey: SESSION, content: 'hello' });
+      await send(staying, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'hello',
+      });
 
       expect(leaving.types()).toEqual([]);
       expect(staying.types()).toContain('message.ack');
@@ -825,7 +983,11 @@ describe('SessionHub', () => {
       stayed.reset();
       switched.reset();
 
-      await send(stayed, { type: 'user.message', sessionKey: SESSION, content: 'hello' });
+      await send(stayed, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'hello',
+      });
 
       expect(stayed.types()).toContain('message.ack');
       expect(switched.types()).toEqual([]);
@@ -859,7 +1021,11 @@ describe('SessionHub', () => {
     it('stamps each session′s own seq rather than inventing a second sequence', async () => {
       const h = harness();
       const client = h.connect();
-      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'hello' });
+      await send(client, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'hello',
+      });
       const turn = h.runner.turn(0);
       await turn.end();
       client.reset();
@@ -883,7 +1049,11 @@ describe('SessionHub', () => {
       // never sent — exactly the gap `replay` reports as incomplete.
       const h = harness();
       const client = h.connect();
-      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'hello' });
+      await send(client, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'hello',
+      });
       const turn = h.runner.turn(0);
       await turn.end();
       // The session's own counter, as the hub reports it to a joining client —
@@ -925,7 +1095,11 @@ describe('SessionHub', () => {
       const h = harness();
       const first = h.connect();
 
-      await send(first, { type: 'user.message', sessionKey: SESSION, content: 'hello' });
+      await send(first, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'hello',
+      });
       const turn = h.runner.turn(0);
       await turn.emit({
         type: 'turn.start',
@@ -935,20 +1109,43 @@ describe('SessionHub', () => {
         model: 'm',
         provider: 'p',
       });
-      await turn.emit({ type: 'assistant.delta', turnId: turn.turnId, text: 'one ' });
-      const seenSoFar = first.frames.filter((frame) => 'seq' in frame).at(-1)?.seq ?? 0;
+      await turn.emit({
+        type: 'assistant.delta',
+        turnId: turn.turnId,
+        text: 'one ',
+      });
+      const seenSoFar =
+        first.frames.filter((frame) => 'seq' in frame).at(-1)?.seq ?? 0;
 
       // The tab reloads mid-turn and comes back.
       first.close();
-      await turn.emit({ type: 'assistant.delta', turnId: turn.turnId, text: 'two ' });
-      await turn.emit({ type: 'assistant.delta', turnId: turn.turnId, text: 'three' });
+      await turn.emit({
+        type: 'assistant.delta',
+        turnId: turn.turnId,
+        text: 'two ',
+      });
+      await turn.emit({
+        type: 'assistant.delta',
+        turnId: turn.turnId,
+        text: 'three',
+      });
 
       const second = h.connect();
       second.reset();
-      await send(second, { type: 'session.resume', sessionKey: SESSION, lastSeq: seenSoFar });
+      await send(second, {
+        type: 'session.resume',
+        sessionKey: SESSION,
+        lastSeq: seenSoFar,
+      });
 
-      expect(second.of('session.replay')[0]).toMatchObject({ complete: true, messages: [] });
-      expect(second.of('assistant.delta').map((frame) => frame.text)).toEqual(['two ', 'three']);
+      expect(second.of('session.replay')[0]).toMatchObject({
+        complete: true,
+        messages: [],
+      });
+      expect(second.of('assistant.delta').map((frame) => frame.text)).toEqual([
+        'two ',
+        'three',
+      ]);
       // The replayed frames keep the `seq` they were emitted with; only the
       // envelope and the status are new events.
       expect(second.of('assistant.delta').map((frame) => frame.seq)).toEqual([
@@ -964,17 +1161,36 @@ describe('SessionHub', () => {
       h.store.append(SESSION, assistantMessage('to ship it'));
 
       const client = h.connect();
-      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'hello' });
+      await send(client, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'hello',
+      });
       const turn = h.runner.turn(0);
-      await turn.emit({ type: 'assistant.delta', turnId: turn.turnId, text: 'a' });
-      await turn.emit({ type: 'assistant.delta', turnId: turn.turnId, text: 'b' });
+      await turn.emit({
+        type: 'assistant.delta',
+        turnId: turn.turnId,
+        text: 'a',
+      });
+      await turn.emit({
+        type: 'assistant.delta',
+        turnId: turn.turnId,
+        text: 'b',
+      });
       client.reset();
 
-      await send(client, { type: 'session.resume', sessionKey: SESSION, lastSeq: 1 });
+      await send(client, {
+        type: 'session.resume',
+        sessionKey: SESSION,
+        lastSeq: 1,
+      });
 
       const replay = client.of('session.replay')[0];
       expect(replay?.complete).toBe(false);
-      expect(replay?.messages.map((stored) => stored.message.role)).toEqual(['user', 'assistant']);
+      expect(replay?.messages.map((stored) => stored.message.role)).toEqual([
+        'user',
+        'assistant',
+      ]);
       // No tail: storage and the ring would render the same text twice.
       expect(client.of('assistant.delta')).toEqual([]);
     });
@@ -982,19 +1198,35 @@ describe('SessionHub', () => {
     it('tells a client that has seen everything that it missed nothing', async () => {
       const h = harness();
       const client = h.connect();
-      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'hello' });
-      const lastSeq = client.frames.filter((frame) => 'seq' in frame).at(-1)?.seq ?? 0;
+      await send(client, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'hello',
+      });
+      const lastSeq =
+        client.frames.filter((frame) => 'seq' in frame).at(-1)?.seq ?? 0;
       client.reset();
 
-      await send(client, { type: 'session.resume', sessionKey: SESSION, lastSeq });
+      await send(client, {
+        type: 'session.resume',
+        sessionKey: SESSION,
+        lastSeq,
+      });
 
-      expect(client.of('session.replay')[0]).toMatchObject({ complete: true, messages: [] });
+      expect(client.of('session.replay')[0]).toMatchObject({
+        complete: true,
+        messages: [],
+      });
     });
 
     it('rebuilds a client whose session state was evicted', async () => {
       const h = harness({ maxSessions: 1 });
       const first = h.connect();
-      await send(first, { type: 'user.message', sessionKey: SESSION, content: 'hello' });
+      await send(first, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'hello',
+      });
       await h.runner.turn(0).end();
       first.close();
 
@@ -1005,7 +1237,11 @@ describe('SessionHub', () => {
       second.close();
       const returning = h.connect();
       returning.reset();
-      await send(returning, { type: 'session.resume', sessionKey: SESSION, lastSeq: 3 });
+      await send(returning, {
+        type: 'session.resume',
+        sessionKey: SESSION,
+        lastSeq: 3,
+      });
 
       expect(returning.of('session.replay')[0]?.complete).toBe(false);
     });
@@ -1013,7 +1249,11 @@ describe('SessionHub', () => {
     it('keeps a live session rather than evicting to satisfy the cap', async () => {
       const h = harness({ maxSessions: 1 });
       const busy = h.connect();
-      await send(busy, { type: 'user.message', sessionKey: SESSION, content: 'hello' });
+      await send(busy, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'hello',
+      });
 
       h.connect({ sessionKey: 'web:2' });
 
@@ -1026,13 +1266,23 @@ describe('SessionHub', () => {
       const h = harness();
       const a = h.connect();
       const b = h.connect();
-      await send(a, { type: 'user.message', sessionKey: SESSION, content: 'read the config' });
+      await send(a, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'read the config',
+      });
       a.reset();
       b.reset();
 
-      await send(a, { type: 'turn.steer', sessionKey: SESSION, content: 'the other directory' });
+      await send(a, {
+        type: 'turn.steer',
+        sessionKey: SESSION,
+        content: 'the other directory',
+      });
 
-      expect(h.runner.steers).toEqual([{ sessionKey: SESSION, content: 'the other directory' }]);
+      expect(h.runner.steers).toEqual([
+        { sessionKey: SESSION, content: 'the other directory' },
+      ]);
       expect(a.of('steer')[0]?.content).toBe('the other directory');
       expect(b.of('steer')).toHaveLength(1);
     });
@@ -1042,7 +1292,11 @@ describe('SessionHub', () => {
       const client = h.connect();
       client.reset();
 
-      await send(client, { type: 'turn.steer', sessionKey: SESSION, content: 'wait' });
+      await send(client, {
+        type: 'turn.steer',
+        sessionKey: SESSION,
+        content: 'wait',
+      });
 
       expect(client.of('error')[0]).toMatchObject({ code: 'bad_request' });
       expect(h.runner.steers).toEqual([]);
@@ -1071,7 +1325,10 @@ describe('SessionHub', () => {
         scope: 'session',
       });
 
-      await expect(decision).resolves.toEqual({ approved: true, scope: 'session' });
+      await expect(decision).resolves.toEqual({
+        approved: true,
+        scope: 'session',
+      });
     });
 
     it('says nothing when an approval arrives too late to matter', async () => {
@@ -1079,7 +1336,11 @@ describe('SessionHub', () => {
       const client = h.connect();
       client.reset();
 
-      await send(client, { type: 'tool.approve', callId: 'call-gone', approved: true });
+      await send(client, {
+        type: 'tool.approve',
+        callId: 'call-gone',
+        approved: true,
+      });
 
       expect(client.types()).toEqual([]);
     });
@@ -1089,7 +1350,11 @@ describe('SessionHub', () => {
       const client = h.connect();
       client.reset();
 
-      await send(client, { type: 'audio.transcribe', audio: 'AAAA', mimeType: 'audio/webm' });
+      await send(client, {
+        type: 'audio.transcribe',
+        audio: 'AAAA',
+        mimeType: 'audio/webm',
+      });
 
       expect(client.of('error')[0]).toMatchObject({ code: 'config_invalid' });
     });
@@ -1099,8 +1364,12 @@ describe('SessionHub', () => {
 describe('regenerating a turn', () => {
   /** A completed exchange: the question at seq 1, the answer at seq 2. */
   function seeded(h: Harness): void {
-    h.store.append(SESSION, userMessage('the original question'), { turnId: 't1' });
-    h.store.append(SESSION, assistantMessage('the first answer'), { turnId: 't1' });
+    h.store.append(SESSION, userMessage('the original question'), {
+      turnId: 't1',
+    });
+    h.store.append(SESSION, assistantMessage('the first answer'), {
+      turnId: 't1',
+    });
   }
 
   it('drops the old answer and re-runs the question', async () => {
@@ -1130,10 +1399,16 @@ describe('regenerating a turn', () => {
     const client = h.connect({ sessionKey: SESSION });
     client.reset();
 
-    client.receive({ type: 'turn.regenerate', sessionKey: SESSION, clientMessageId: 'c-9' });
+    client.receive({
+      type: 'turn.regenerate',
+      sessionKey: SESSION,
+      clientMessageId: 'c-9',
+    });
     await flush();
 
-    expect(client.of('message.ack')[0]).toMatchObject({ clientMessageId: 'c-9' });
+    expect(client.of('message.ack')[0]).toMatchObject({
+      clientMessageId: 'c-9',
+    });
   });
 
   it('tells every attached tab what survived', async () => {
@@ -1156,7 +1431,9 @@ describe('regenerating a turn', () => {
     const h = harness();
     seeded(h);
     h.store.append(SESSION, userMessage('a second question'), { turnId: 't2' });
-    h.store.append(SESSION, assistantMessage('a second answer'), { turnId: 't2' });
+    h.store.append(SESSION, assistantMessage('a second answer'), {
+      turnId: 't2',
+    });
     const client = h.connect({ sessionKey: SESSION });
 
     client.receive({ type: 'turn.regenerate', sessionKey: SESSION, seq: 1 });
@@ -1172,14 +1449,18 @@ describe('regenerating a turn', () => {
     const h = harness();
     h.store.append(SESSION, userMessage('the real question'), { turnId: 't1' });
     // Steering appends a user row mid-turn under the same turn id.
-    h.store.append(SESSION, userMessage('actually, focus on the parser'), { turnId: 't1' });
+    h.store.append(SESSION, userMessage('actually, focus on the parser'), {
+      turnId: 't1',
+    });
     h.store.append(SESSION, assistantMessage('an answer'), { turnId: 't1' });
     const client = h.connect({ sessionKey: SESSION });
 
     client.receive({ type: 'turn.regenerate', sessionKey: SESSION });
     await flush();
 
-    expect(h.runner.turn(0).input.content).toEqual([{ type: 'text', text: 'the real question' }]);
+    expect(h.runner.turn(0).input.content).toEqual([
+      { type: 'text', text: 'the real question' },
+    ]);
   });
 
   it('refuses when there is nothing to re-run', async () => {
@@ -1197,7 +1478,11 @@ describe('regenerating a turn', () => {
     const h = harness();
     seeded(h);
     const client = h.connect({ sessionKey: SESSION });
-    client.receive({ type: 'user.message', sessionKey: SESSION, content: 'hello' });
+    client.receive({
+      type: 'user.message',
+      sessionKey: SESSION,
+      content: 'hello',
+    });
     await flush();
     client.reset();
 
@@ -1226,8 +1511,12 @@ describe('regenerating a turn', () => {
 
 describe('editing a message', () => {
   function seeded(h: Harness): void {
-    h.store.append(SESSION, userMessage('the original question'), { turnId: 't1' });
-    h.store.append(SESSION, assistantMessage('the first answer'), { turnId: 't1' });
+    h.store.append(SESSION, userMessage('the original question'), {
+      turnId: 't1',
+    });
+    h.store.append(SESSION, assistantMessage('the first answer'), {
+      turnId: 't1',
+    });
   }
 
   it('replaces the message and re-runs from it', async () => {
@@ -1255,11 +1544,18 @@ describe('editing a message', () => {
     h.store.append(SESSION, userMessage('a second question'), { turnId: 't2' });
     const client = h.connect({ sessionKey: SESSION });
 
-    client.receive({ type: 'user.edit', sessionKey: SESSION, seq: 3, content: 'rewritten' });
+    client.receive({
+      type: 'user.edit',
+      sessionKey: SESSION,
+      seq: 3,
+      content: 'rewritten',
+    });
     await flush();
 
     // Everything before the edited message survives.
-    expect(h.store.messages(SESSION).map((record) => record.seq)).toEqual([1, 2]);
+    expect(h.store.messages(SESSION).map((record) => record.seq)).toEqual([
+      1, 2,
+    ]);
   });
 
   it('refuses a seq that is not a message the user wrote', async () => {
@@ -1268,7 +1564,12 @@ describe('editing a message', () => {
     const client = h.connect({ sessionKey: SESSION });
 
     // seq 2 is the assistant's answer.
-    client.receive({ type: 'user.edit', sessionKey: SESSION, seq: 2, content: 'nope' });
+    client.receive({
+      type: 'user.edit',
+      sessionKey: SESSION,
+      seq: 2,
+      content: 'nope',
+    });
     await flush();
 
     expect(client.of('error')[0]?.code).toBe('bad_request');
@@ -1280,7 +1581,12 @@ describe('editing a message', () => {
     seeded(h);
     const client = h.connect({ sessionKey: SESSION });
 
-    client.receive({ type: 'user.edit', sessionKey: SESSION, seq: 1, content: '' });
+    client.receive({
+      type: 'user.edit',
+      sessionKey: SESSION,
+      seq: 1,
+      content: '',
+    });
     await flush();
 
     expect(client.of('error')[0]?.code).toBe('bad_request');
@@ -1292,7 +1598,12 @@ describe('editing a message', () => {
     seeded(h);
     const client = h.connect({ sessionKey: SESSION });
 
-    client.receive({ type: 'user.edit', sessionKey: SESSION, seq: 1, content: 'rewritten' });
+    client.receive({
+      type: 'user.edit',
+      sessionKey: SESSION,
+      seq: 1,
+      content: 'rewritten',
+    });
     await flush();
 
     expect(client.of('error')[0]?.code).toBe('not_configured');
@@ -1303,11 +1614,20 @@ describe('editing a message', () => {
     const h = harness();
     seeded(h);
     const client = h.connect({ sessionKey: SESSION });
-    client.receive({ type: 'user.message', sessionKey: SESSION, content: 'hello' });
+    client.receive({
+      type: 'user.message',
+      sessionKey: SESSION,
+      content: 'hello',
+    });
     await flush();
     client.reset();
 
-    client.receive({ type: 'user.edit', sessionKey: SESSION, seq: 1, content: 'rewritten' });
+    client.receive({
+      type: 'user.edit',
+      sessionKey: SESSION,
+      seq: 1,
+      content: 'rewritten',
+    });
     await flush();
 
     expect(client.of('error')[0]?.code).toBe('session_busy');
@@ -1334,11 +1654,11 @@ describe('editing a message', () => {
 describe('SessionHub agent routing', () => {
   /** Records which agent each turn was resolved for. */
   function tracking(): {
-    readonly asked: (string | undefined)[];
+    readonly asked: Array<string | undefined>;
     readonly loop: (agentId: string | undefined) => TurnRunner;
     readonly runner: ScriptedRunner;
   } {
-    const asked: (string | undefined)[] = [];
+    const asked: Array<string | undefined> = [];
     const runner = new ScriptedRunner();
     return {
       asked,
@@ -1375,7 +1695,11 @@ describe('SessionHub agent routing', () => {
     const h = harness({ loop: tracked.loop });
     const client = h.connect();
 
-    await send(client, { type: 'user.message', sessionKey: SESSION, content: 'hello' });
+    await send(client, {
+      type: 'user.message',
+      sessionKey: SESSION,
+      content: 'hello',
+    });
 
     // Named rather than left `undefined`: the hub has decided which agent runs
     // and says which, so the id it asks for and the id it reports on
@@ -1387,7 +1711,10 @@ describe('SessionHub agent routing', () => {
     // A history built under one agent's prompt, tools and permissions must not
     // silently continue under another's.
     const tracked = tracking();
-    const h = harness({ loop: tracked.loop, agents: configured('reviewer', 'writer') });
+    const h = harness({
+      loop: tracked.loop,
+      agents: configured('reviewer', 'writer'),
+    });
     h.store.ensureSession(SESSION, { agentId: 'reviewer' });
     const client = h.connect();
 
@@ -1409,11 +1736,17 @@ describe('SessionHub agent routing', () => {
     h.store.ensureSession(SESSION, { agentId: 'reviewer' });
     const client = h.connect();
 
-    await send(client, { type: 'user.message', sessionKey: SESSION, content: 'hello' });
+    await send(client, {
+      type: 'user.message',
+      sessionKey: SESSION,
+      content: 'hello',
+    });
 
     expect(tracked.asked).toEqual(['default']);
     expect(client.of('notice')[0]).toMatchObject({ kind: 'agent_fallback' });
-    expect(client.of('notice')[0]).toMatchObject({ message: /no longer exists/ });
+    expect(client.of('notice')[0]).toMatchObject({
+      message: /no longer exists/,
+    });
 
     // The turn happened: this is a notice, not a refusal. Driven to completion
     // rather than asserted mid-flight, so what is checked is where the turn
@@ -1423,11 +1756,17 @@ describe('SessionHub agent routing', () => {
   });
 
   it('says so differently when the agent is merely switched off', async () => {
-    const h = harness({ agents: { reviewer: { label: 'Reviewer', enabled: false } } });
+    const h = harness({
+      agents: { reviewer: { label: 'Reviewer', enabled: false } },
+    });
     h.store.ensureSession(SESSION, { agentId: 'reviewer' });
     const client = h.connect();
 
-    await send(client, { type: 'user.message', sessionKey: SESSION, content: 'hello' });
+    await send(client, {
+      type: 'user.message',
+      sessionKey: SESSION,
+      content: 'hello',
+    });
 
     expect(client.of('notice')[0]).toMatchObject({ message: /switched off/ });
   });
@@ -1437,7 +1776,11 @@ describe('SessionHub agent routing', () => {
     h.store.ensureSession(SESSION, { agentId: 'reviewer' });
     const client = h.connect();
 
-    await send(client, { type: 'user.message', sessionKey: SESSION, content: 'hello' });
+    await send(client, {
+      type: 'user.message',
+      sessionKey: SESSION,
+      content: 'hello',
+    });
 
     expect(client.of('notice')).toHaveLength(0);
   });
@@ -1453,9 +1796,17 @@ describe('SessionHub agent routing', () => {
 
     // Each turn is finished before the next is sent: a second message arriving
     // mid-turn is queued, and one turn cannot raise two notices.
-    await send(client, { type: 'user.message', sessionKey: SESSION, content: 'one' });
+    await send(client, {
+      type: 'user.message',
+      sessionKey: SESSION,
+      content: 'one',
+    });
     await h.runner.turn(0).end();
-    await send(client, { type: 'user.message', sessionKey: SESSION, content: 'two' });
+    await send(client, {
+      type: 'user.message',
+      sessionKey: SESSION,
+      content: 'two',
+    });
     await h.runner.turn(1).end();
 
     expect(client.of('notice')).toHaveLength(2);
@@ -1491,7 +1842,9 @@ describe('SessionHub agent routing', () => {
     const h = harness({
       agents: configured('boxed'),
       loop: (agentId) => {
-        if (agentId === 'boxed') throw new GhostError('config', 'names no toolbox');
+        if (agentId === 'boxed') {
+          throw new GhostError('config', 'names no toolbox');
+        }
         return runner;
       },
     });
@@ -1508,7 +1861,11 @@ describe('SessionHub agent routing', () => {
     expect(runner.turns).toHaveLength(0);
 
     // The socket is fine: the next turn reaches a runner as usual.
-    await send(client, { type: 'user.message', sessionKey: SESSION, content: 'hi' });
+    await send(client, {
+      type: 'user.message',
+      sessionKey: SESSION,
+      content: 'hi',
+    });
     expect(runner.turns).toHaveLength(1);
   });
 
@@ -1520,8 +1877,16 @@ describe('SessionHub agent routing', () => {
     const h = harness({ loop: tracked.loop, agents: configured('writer') });
     const client = h.connect();
 
-    await send(client, { type: 'session.new', sessionKey: 'fresh', agentId: 'writer' });
-    await send(client, { type: 'user.message', sessionKey: 'fresh', content: 'hello' });
+    await send(client, {
+      type: 'session.new',
+      sessionKey: 'fresh',
+      agentId: 'writer',
+    });
+    await send(client, {
+      type: 'user.message',
+      sessionKey: 'fresh',
+      content: 'hello',
+    });
 
     expect(tracked.asked).toEqual(['writer']);
   });

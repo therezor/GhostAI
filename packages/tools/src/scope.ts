@@ -36,12 +36,18 @@ import type { ToolPermission, ToolPermissions } from '@ghostai/protocol';
  * that resolves an *agent* builds one — see `GhostRuntime#createLoop` — so this
  * fallback is not reachable from a turn.
  */
-export function permissionFor(perms: ToolPermissions | undefined, name: string): ToolPermission {
+export function permissionFor(
+  perms: ToolPermissions | undefined,
+  name: string,
+): ToolPermission {
   if (perms === undefined) return 'allow';
   return perms[name] ?? 'deny';
 }
 
 /** Whether the model is offered `name` at all. See the module header. */
-export function isEnabled(perms: ToolPermissions | undefined, name: string): boolean {
+export function isEnabled(
+  perms: ToolPermissions | undefined,
+  name: string,
+): boolean {
   return permissionFor(perms, name) !== 'deny';
 }

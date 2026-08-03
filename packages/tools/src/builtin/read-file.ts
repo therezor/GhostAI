@@ -38,7 +38,9 @@ const schema = z.strictObject({
     .int()
     .min(1)
     .optional()
-    .describe('1-based line number to start from. Omit to start at the beginning.'),
+    .describe(
+      '1-based line number to start from. Omit to start at the beginning.',
+    ),
   limit: z.coerce
     .number()
     .int()
@@ -71,9 +73,13 @@ export const readFileTool: AnyTool = defineTool({
     try {
       const stats = await handle.stat();
       if (stats.isDirectory()) {
-        throw new GhostError('invalid_input', `${where} is a directory. Use list_dir instead.`, {
-          details: { path: where },
-        });
+        throw new GhostError(
+          'invalid_input',
+          `${where} is a directory. Use list_dir instead.`,
+          {
+            details: { path: where },
+          },
+        );
       }
       if (stats.size === 0) return `${where} is empty.`;
 
@@ -93,7 +99,9 @@ export const readFileTool: AnyTool = defineTool({
       }
 
       const clipped = bytesRead > budget;
-      let text = bytes.subarray(0, clipped ? budget : bytesRead).toString('utf8');
+      let text = bytes
+        .subarray(0, clipped ? budget : bytesRead)
+        .toString('utf8');
 
       if (args.offset !== undefined || args.limit !== undefined) {
         const lines = text.split('\n');

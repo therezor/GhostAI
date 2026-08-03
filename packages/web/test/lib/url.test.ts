@@ -16,7 +16,9 @@ const BASE = 'https://ghost.example/app/';
 
 describe('safeHref', () => {
   it('allows the three schemes a document legitimately links with', () => {
-    expect(safeHref('https://example.com/a', BASE)).toBe('https://example.com/a');
+    expect(safeHref('https://example.com/a', BASE)).toBe(
+      'https://example.com/a',
+    );
     expect(safeHref('http://example.com', BASE)).toBe('http://example.com/');
     expect(safeHref('mailto:a@b.c', BASE)).toBe('mailto:a@b.c');
   });
@@ -29,7 +31,9 @@ describe('safeHref', () => {
     // The obvious one, and the one people forget: `data:text/html` in an `<a>`
     // is a same-origin document in every browser that still honours it.
     expect(safeHref('javascript:alert(1)', BASE)).toBeUndefined();
-    expect(safeHref('data:text/html,<script>alert(1)</script>', BASE)).toBeUndefined();
+    expect(
+      safeHref('data:text/html,<script>alert(1)</script>', BASE),
+    ).toBeUndefined();
     expect(safeHref('vbscript:msgbox(1)', BASE)).toBeUndefined();
     expect(safeHref('file:///etc/passwd', BASE)).toBeUndefined();
   });

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { textToolCallCorrection, textToolCallName } from '#src/text-tool-call.js';
+import {
+  textToolCallCorrection,
+  textToolCallName,
+} from '#src/text-tool-call.js';
 
 const KNOWN = ['search', 'fetch', 'exec', 'read_file'];
 
@@ -22,19 +25,30 @@ describe('textToolCallName', () => {
   });
 
   it('reads the other wrappers models reach for', () => {
-    expect(textToolCallName('<function_call>{"name":"search"}</function_call>', KNOWN)).toBe(
-      'search',
-    );
-    expect(textToolCallName('<tool_use>{"name": "exec"}</tool_use>', KNOWN)).toBe('exec');
     expect(
-      textToolCallName('```json\n{"name": "search", "arguments": {"args": ["x"]}}\n```', KNOWN),
+      textToolCallName(
+        '<function_call>{"name":"search"}</function_call>',
+        KNOWN,
+      ),
+    ).toBe('search');
+    expect(
+      textToolCallName('<tool_use>{"name": "exec"}</tool_use>', KNOWN),
+    ).toBe('exec');
+    expect(
+      textToolCallName(
+        '```json\n{"name": "search", "arguments": {"args": ["x"]}}\n```',
+        KNOWN,
+      ),
     ).toBe('search');
   });
 
   it('reads a bare object from a model that wraps nothing', () => {
-    expect(textToolCallName('I will call {"name": "read_file", "arguments": {}}', KNOWN)).toBe(
-      'read_file',
-    );
+    expect(
+      textToolCallName(
+        'I will call {"name": "read_file", "arguments": {}}',
+        KNOWN,
+      ),
+    ).toBe('read_file');
   });
 
   it('says nothing about an ordinary answer', () => {
@@ -42,7 +56,9 @@ describe('textToolCallName', () => {
     // before any regex work.
     expect(textToolCallName('The answer is 42.', KNOWN)).toBeUndefined();
     expect(textToolCallName('', KNOWN)).toBeUndefined();
-    expect(textToolCallName('I searched and found three results.', KNOWN)).toBeUndefined();
+    expect(
+      textToolCallName('I searched and found three results.', KNOWN),
+    ).toBeUndefined();
   });
 
   it('ignores a name that is not a registered tool', () => {
@@ -51,11 +67,15 @@ describe('textToolCallName', () => {
     expect(
       textToolCallName('<tool_call>{"name": "browse_web"}</tool_call>', KNOWN),
     ).toBeUndefined();
-    expect(textToolCallName('{"name": "Alice", "age": 30}', KNOWN)).toBeUndefined();
+    expect(
+      textToolCallName('{"name": "Alice", "age": 30}', KNOWN),
+    ).toBeUndefined();
   });
 
   it('ignores everything when no tools are registered', () => {
-    expect(textToolCallName('<tool_call>{"name":"search"}</tool_call>', [])).toBeUndefined();
+    expect(
+      textToolCallName('<tool_call>{"name":"search"}</tool_call>', []),
+    ).toBeUndefined();
   });
 
   it('does not carry regex state between calls', () => {

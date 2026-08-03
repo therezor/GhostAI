@@ -64,7 +64,10 @@ function recorder(...responses: readonly Response[]): Recorder {
 const redirect = (location: string, status = 302): Response =>
   new Response(null, { status, headers: { location } });
 
-const expectBlocked = async (promise: Promise<unknown>, match: RegExp): Promise<void> => {
+const expectBlocked = async (
+  promise: Promise<unknown>,
+  match: RegExp,
+): Promise<void> => {
   await expect(promise).rejects.toThrow(match);
   await promise.catch((error: unknown) => {
     expect(isGhostError(error)).toBe(true);
@@ -122,11 +125,15 @@ describe('validateTarget: schemes and hosts', () => {
 
   it('matches a leading-dot denied entry against subdomains', async () => {
     await expectBlocked(
-      validateTarget('https://api.internal.example/', { deniedHosts: ['.internal.example'] }),
+      validateTarget('https://api.internal.example/', {
+        deniedHosts: ['.internal.example'],
+      }),
       /denied by configuration/,
     );
     await expectBlocked(
-      validateTarget('https://internal.example/', { deniedHosts: ['.internal.example'] }),
+      validateTarget('https://internal.example/', {
+        deniedHosts: ['.internal.example'],
+      }),
       /denied by configuration/,
     );
   });
@@ -161,7 +168,10 @@ describe('validateTarget: address literals', () => {
   });
 
   it('permits loopback only when the policy says so', async () => {
-    await expectBlocked(validateTarget('http://127.0.0.1:11434/api/chat'), /blocked range/);
+    await expectBlocked(
+      validateTarget('http://127.0.0.1:11434/api/chat'),
+      /blocked range/,
+    );
     const target = await validateTarget('http://127.0.0.1:11434/api/chat', {
       allowLoopback: true,
     });
@@ -169,19 +179,26 @@ describe('validateTarget: address literals', () => {
   });
 
   it('permits IPv6 loopback under the same flag', async () => {
-    const target = await validateTarget('http://[::1]:11434/', { allowLoopback: true });
+    const target = await validateTarget('http://[::1]:11434/', {
+      allowLoopback: true,
+    });
     expect(target.addresses).toEqual([{ address: '::1', family: 6 }]);
   });
 
   it('permits private ranges only when the policy says so', async () => {
     await expectBlocked(validateTarget('http://10.1.2.3/'), /blocked range/);
-    await expect(validateTarget('http://10.1.2.3/', { allowPrivate: true })).resolves.toBeDefined();
+    await expect(
+      validateTarget('http://10.1.2.3/', { allowPrivate: true }),
+    ).resolves.toBeDefined();
   });
 
   it('never unlocks link-local, whatever is allowed', async () => {
     // 169.254.169.254 is the cloud metadata endpoint. No flag reaches it.
     await expectBlocked(
-      validateTarget('http://169.254.169.254/', { allowLoopback: true, allowPrivate: true }),
+      validateTarget('http://169.254.169.254/', {
+        allowLoopback: true,
+        allowPrivate: true,
+      }),
       /blocked range/,
     );
   });
@@ -203,7 +220,9 @@ describe('validateTarget: address literals', () => {
 describe('validateTarget: resolution', () => {
   it('refuses a name that resolves into a blocked range', async () => {
     await expectBlocked(
-      validateTarget('http://rebind.example/', { resolver: resolvesTo('169.254.169.254') }),
+      validateTarget('http://rebind.example/', {
+        resolver: resolvesTo('169.254.169.254'),
+      }),
       /resolves to 169\.254\.169\.254/,
     );
   });
@@ -220,32 +239,40 @@ describe('validateTarget: resolution', () => {
 
   it('refuses an IPv6 answer in a blocked range', async () => {
     await expectBlocked(
-      validateTarget('http://rebind.example/', { resolver: resolvesTo('fd00::1') }),
+      validateTarget('http://rebind.example/', {
+        resolver: resolvesTo('fd00::1'),
+      }),
       /blocked range/,
     );
   });
 
   it('refuses an answer it cannot parse', async () => {
     await expectBlocked(
-      validateTarget('http://weird.example/', { resolver: resolvesTo('not-an-address') }),
+      validateTarget('http://weird.example/', {
+        resolver: resolvesTo('not-an-address'),
+      }),
       /unparseable address/,
     );
   });
 
   it('reports an empty answer as a network failure', async () => {
     await expect(
-      validateTarget('http://void.example/', { resolver: () => Promise.resolve([]) }),
+      validateTarget('http://void.example/', {
+        resolver: () => Promise.resolve([]),
+      }),
     ).rejects.toThrow(/Cannot resolve host/);
   });
 
   it('wraps a resolver failure', async () => {
     const failing: DnsResolver = () => Promise.reject(new Error('ENOTFOUND'));
-    await validateTarget('http://void.example/', { resolver: failing }).catch((error: unknown) => {
-      expect(isGhostError(error) && error.kind).toBe('network');
-    });
-    await expect(validateTarget('http://void.example/', { resolver: failing })).rejects.toThrow(
-      /Cannot resolve host/,
+    await validateTarget('http://void.example/', { resolver: failing }).catch(
+      (error: unknown) => {
+        expect(isGhostError(error) && error.kind).toBe('network');
+      },
     );
+    await expect(
+      validateTarget('http://void.example/', { resolver: failing }),
+    ).rejects.toThrow(/Cannot resolve host/);
   });
 
   it('skips classification for an allow-listed name but still pins it', async () => {
@@ -267,7 +294,10 @@ describe('validateTarget: resolution', () => {
   it('uses node:dns when no resolver is injected', async () => {
     // Which is how `localhost` gets blocked: the name is innocuous, the answer
     // is not.
-    await expectBlocked(validateTarget('http://localhost:11434/'), /blocked range/);
+    await expectBlocked(
+      validateTarget('http://localhost:11434/'),
+      /blocked range/,
+    );
     await expect(
       validateTarget('http://localhost:11434/', { allowLoopback: true }),
     ).resolves.toMatchObject({ host: 'localhost' });
@@ -311,7 +341,11 @@ describe('pinnedLookup', () => {
 
   it('fails rather than substituting another family', () => {
     const callback = vi.fn();
-    pinnedLookup([{ address: '93.184.216.34', family: 4 }])('example.com', { family: 6 }, callback);
+    pinnedLookup([{ address: '93.184.216.34', family: 4 }])(
+      'example.com',
+      { family: 6 },
+      callback,
+    );
     const error = callback.mock.calls[0]?.[0] as NodeJS.ErrnoException;
     expect(error.code).toBe('ENOTFOUND');
   });
@@ -320,9 +354,16 @@ describe('pinnedLookup', () => {
     // The whole point: the second resolution cannot differ from the first
     // because there is no second resolution.
     const callback = vi.fn();
-    pinnedLookup(addresses)('attacker-controlled.example', { all: true }, callback);
+    pinnedLookup(addresses)(
+      'attacker-controlled.example',
+      { all: true },
+      callback,
+    );
     const answered = callback.mock.calls[0]?.[1] as LookupAddress[];
-    expect(answered.map((entry) => entry.address)).toEqual(['93.184.216.34', '2606:2800::1']);
+    expect(answered.map((entry) => entry.address)).toEqual([
+      '93.184.216.34',
+      '2606:2800::1',
+    ]);
   });
 });
 
@@ -347,7 +388,10 @@ describe('guardedFetch', () => {
     const fetcher = recorder(new Response('ok'));
     await guardedFetch('https://example.com/', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer secret' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer secret',
+      },
       body: '{"a":1}',
       resolver: publicResolver,
       fetchImpl: fetcher.fetchImpl,
@@ -355,21 +399,29 @@ describe('guardedFetch', () => {
     expect(fetcher.calls[0]).toMatchObject({
       method: 'POST',
       body: '{"a":1}',
-      headers: { 'content-type': 'application/json', authorization: 'Bearer secret' },
+      headers: {
+        'content-type': 'application/json',
+        authorization: 'Bearer secret',
+      },
     });
   });
 
   it('refuses the request before connecting when the target is blocked', async () => {
     const fetcher = recorder();
     await expectBlocked(
-      guardedFetch('http://169.254.169.254/latest/meta-data/', { fetchImpl: fetcher.fetchImpl }),
+      guardedFetch('http://169.254.169.254/latest/meta-data/', {
+        fetchImpl: fetcher.fetchImpl,
+      }),
       /blocked range/,
     );
     expect(fetcher.calls).toEqual([]);
   });
 
   it('follows a redirect and re-validates the next hop', async () => {
-    const fetcher = recorder(redirect('https://example.org/final'), new Response('landed'));
+    const fetcher = recorder(
+      redirect('https://example.org/final'),
+      new Response('landed'),
+    );
     const result = await guardedFetch('https://example.com/start', {
       resolver: publicResolver,
       fetchImpl: fetcher.fetchImpl,
@@ -381,7 +433,9 @@ describe('guardedFetch', () => {
 
   it('refuses a redirect into a blocked range', async () => {
     // The classic two-step SSRF: a public URL that 302s to the metadata service.
-    const fetcher = recorder(redirect('http://169.254.169.254/latest/meta-data/'));
+    const fetcher = recorder(
+      redirect('http://169.254.169.254/latest/meta-data/'),
+    );
     await expectBlocked(
       guardedFetch('https://example.com/start', {
         resolver: publicResolver,
@@ -397,7 +451,10 @@ describe('guardedFetch', () => {
       .fn<DnsResolver>()
       .mockResolvedValueOnce([{ address: '93.184.216.34', family: 4 }])
       .mockResolvedValueOnce([{ address: '1.1.1.1', family: 4 }]);
-    const fetcher = recorder(redirect('https://elsewhere.example/x'), new Response('ok'));
+    const fetcher = recorder(
+      redirect('https://elsewhere.example/x'),
+      new Response('ok'),
+    );
     const result = await guardedFetch('https://example.com/', {
       resolver,
       fetchImpl: fetcher.fetchImpl,
@@ -407,9 +464,16 @@ describe('guardedFetch', () => {
   });
 
   it('drops credentials when the origin changes', async () => {
-    const fetcher = recorder(redirect('https://attacker.example/collect'), new Response('ok'));
+    const fetcher = recorder(
+      redirect('https://attacker.example/collect'),
+      new Response('ok'),
+    );
     await guardedFetch('https://example.com/', {
-      headers: { Authorization: 'Bearer secret', Cookie: 'session=1', Accept: 'text/html' },
+      headers: {
+        Authorization: 'Bearer secret',
+        Cookie: 'session=1',
+        Accept: 'text/html',
+      },
       resolver: publicResolver,
       fetchImpl: fetcher.fetchImpl,
     });
@@ -417,17 +481,25 @@ describe('guardedFetch', () => {
   });
 
   it('keeps credentials on a same-origin redirect', async () => {
-    const fetcher = recorder(redirect('https://example.com/next'), new Response('ok'));
+    const fetcher = recorder(
+      redirect('https://example.com/next'),
+      new Response('ok'),
+    );
     await guardedFetch('https://example.com/', {
       headers: { Authorization: 'Bearer secret' },
       resolver: publicResolver,
       fetchImpl: fetcher.fetchImpl,
     });
-    expect(fetcher.calls[1]?.headers).toMatchObject({ authorization: 'Bearer secret' });
+    expect(fetcher.calls[1]?.headers).toMatchObject({
+      authorization: 'Bearer secret',
+    });
   });
 
   it('turns a 303 into a GET and drops the body', async () => {
-    const fetcher = recorder(redirect('https://example.com/result', 303), new Response('ok'));
+    const fetcher = recorder(
+      redirect('https://example.com/result', 303),
+      new Response('ok'),
+    );
     await guardedFetch('https://example.com/submit', {
       method: 'POST',
       body: 'a=1',
@@ -438,7 +510,10 @@ describe('guardedFetch', () => {
   });
 
   it('keeps the method on a 307', async () => {
-    const fetcher = recorder(redirect('https://example.com/result', 307), new Response('ok'));
+    const fetcher = recorder(
+      redirect('https://example.com/result', 307),
+      new Response('ok'),
+    );
     await guardedFetch('https://example.com/submit', {
       method: 'POST',
       body: 'a=1',
@@ -494,16 +569,22 @@ describe('guardedFetch', () => {
   });
 
   it('wraps a transport failure', async () => {
-    const failing: FetchImplementation = () => Promise.reject(new Error('ECONNREFUSED'));
+    const failing: FetchImplementation = () =>
+      Promise.reject(new Error('ECONNREFUSED'));
     await guardedFetch('https://example.com/', {
       resolver: publicResolver,
       fetchImpl: failing,
     }).catch((error: unknown) => {
       expect(isGhostError(error) && error.kind).toBe('network');
-      expect(isGhostError(error) && error.message).toMatch(/Request to example\.com failed/);
+      expect(isGhostError(error) && error.message).toMatch(
+        /Request to example\.com failed/,
+      );
     });
     await expect(
-      guardedFetch('https://example.com/', { resolver: publicResolver, fetchImpl: failing }),
+      guardedFetch('https://example.com/', {
+        resolver: publicResolver,
+        fetchImpl: failing,
+      }),
     ).rejects.toThrow(/failed/);
   });
 
@@ -526,7 +607,7 @@ describe('guardedFetch', () => {
     await guardedFetch('https://example.com/', {
       timeoutMs: 0,
       resolver: publicResolver,
-      fetchImpl: (_url, init) => {
+      fetchImpl: (url, init) => {
         expect(init.signal).toBeUndefined();
         return Promise.resolve(new Response('ok'));
       },
@@ -538,7 +619,9 @@ describe('guardedFetch', () => {
       new Response(
         new ReadableStream<Uint8Array>({
           start(controller) {
-            for (const chunk of chunks) controller.enqueue(new TextEncoder().encode(chunk));
+            for (const chunk of chunks) {
+              controller.enqueue(new TextEncoder().encode(chunk));
+            }
             controller.close();
           },
         }),
@@ -584,7 +667,12 @@ describe('guardedFetch', () => {
         maxBytes: 64,
         resolver: publicResolver,
         fetchImpl: () =>
-          Promise.resolve(new Response('body', { status: 201, headers: { 'x-trace': 'abc' } })),
+          Promise.resolve(
+            new Response('body', {
+              status: 201,
+              headers: { 'x-trace': 'abc' },
+            }),
+          ),
       });
       expect(result.response.status).toBe(201);
       expect(result.response.headers.get('x-trace')).toBe('abc');
@@ -605,7 +693,9 @@ describe('against a real server, through the real dispatcher', () => {
   beforeAll(async () => {
     server = createServer((request, response) => {
       if (request.url === '/redirect-to-metadata') {
-        response.writeHead(302, { location: 'http://169.254.169.254/latest/meta-data/' });
+        response.writeHead(302, {
+          location: 'http://169.254.169.254/latest/meta-data/',
+        });
         response.end();
         return;
       }
@@ -633,7 +723,9 @@ describe('against a real server, through the real dispatcher', () => {
   });
 
   it('fetches over the pinned dispatcher', async () => {
-    const result = await guardedFetch(`${origin}/hello`, { allowLoopback: true });
+    const result = await guardedFetch(`${origin}/hello`, {
+      allowLoopback: true,
+    });
     expect(result.response.status).toBe(200);
     expect(await result.response.text()).toContain('served 127.0.0.1');
     expect(result.address).toBe('127.0.0.1');
@@ -641,9 +733,12 @@ describe('against a real server, through the real dispatcher', () => {
 
   it('sends the Host header for the name, not the pinned address', async () => {
     // The pin changes where the socket goes, never what the request says.
-    const result = await guardedFetch(`${origin.replace('127.0.0.1', 'localhost')}/hello`, {
-      allowLoopback: true,
-    });
+    const result = await guardedFetch(
+      `${origin.replace('127.0.0.1', 'localhost')}/hello`,
+      {
+        allowLoopback: true,
+      },
+    );
     expect(await result.response.text()).toContain('served localhost');
   });
 
@@ -654,21 +749,24 @@ describe('against a real server, through the real dispatcher', () => {
   });
 
   it('caps a real response body', async () => {
-    const result = await guardedFetch(`${origin}/big`, { allowLoopback: true, maxBytes: 1024 });
+    const result = await guardedFetch(`${origin}/big`, {
+      allowLoopback: true,
+      maxBytes: 1024,
+    });
     await expect(result.response.text()).rejects.toThrow(/exceeded 1024 bytes/);
   });
 
   it('reports a refused connection as a network error', async () => {
     // Port 1 on loopback: nothing listens, and the failure is immediate.
-    await expect(guardedFetch('http://127.0.0.1:1/', { allowLoopback: true })).rejects.toThrow(
-      /Request to 127\.0\.0\.1 failed/,
-    );
+    await expect(
+      guardedFetch('http://127.0.0.1:1/', { allowLoopback: true }),
+    ).rejects.toThrow(/Request to 127\.0\.0\.1 failed/);
   });
 
   it('still refuses a blocked target with the real transport in place', async () => {
-    await expect(guardedFetch('http://169.254.169.254/latest/meta-data/')).rejects.toThrow(
-      /blocked range/,
-    );
+    await expect(
+      guardedFetch('http://169.254.169.254/latest/meta-data/'),
+    ).rejects.toThrow(/blocked range/);
   });
 });
 
@@ -701,13 +799,19 @@ describe('property: no blocked address is reachable', () => {
 
   it('holds for literals in the URL', async () => {
     await fc.assert(
-      fc.asyncProperty(blockedHost, fc.constantFrom('http', 'https'), async (host, scheme) => {
-        const fetcher = recorder();
-        await expect(
-          guardedFetch(`${scheme}://${host}/x`, { fetchImpl: fetcher.fetchImpl }),
-        ).rejects.toThrow();
-        expect(fetcher.calls).toEqual([]);
-      }),
+      fc.asyncProperty(
+        blockedHost,
+        fc.constantFrom('http', 'https'),
+        async (host, scheme) => {
+          const fetcher = recorder();
+          await expect(
+            guardedFetch(`${scheme}://${host}/x`, {
+              fetchImpl: fetcher.fetchImpl,
+            }),
+          ).rejects.toThrow();
+          expect(fetcher.calls).toEqual([]);
+        },
+      ),
       { numRuns: 200 },
     );
   });
@@ -715,7 +819,13 @@ describe('property: no blocked address is reachable', () => {
   it('holds for names that resolve to a blocked address', async () => {
     await fc.assert(
       fc.asyncProperty(
-        fc.constantFrom('127.0.0.1', '169.254.169.254', '10.0.0.1', 'fd00::1', '::1'),
+        fc.constantFrom(
+          '127.0.0.1',
+          '169.254.169.254',
+          '10.0.0.1',
+          'fd00::1',
+          '::1',
+        ),
         async (address) => {
           const fetcher = recorder();
           await expect(

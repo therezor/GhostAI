@@ -66,7 +66,8 @@ export interface RecordedRequest {
   readonly body: unknown;
 }
 
-export type StubRoute = [number, unknown] | ((request: RecordedRequest) => [number, unknown]);
+export type StubRoute =
+  [number, unknown] | ((request: RecordedRequest) => [number, unknown]);
 
 /**
  * `stubFetch` with a method, a body and a memory.
@@ -100,7 +101,8 @@ export function stubApi(routes: Record<string, StubRoute>): RecordedRequest[] {
       return Promise.reject(new Error(`Unstubbed request: ${method} ${url}`));
     }
 
-    const [status, payload] = typeof match === 'function' ? match(record) : match;
+    const [status, payload] =
+      typeof match === 'function' ? match(record) : match;
     return Promise.resolve(
       new Response(status === 204 ? null : JSON.stringify(payload), {
         status,

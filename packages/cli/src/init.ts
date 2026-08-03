@@ -32,9 +32,24 @@
 
 import { createInterface, type Interface } from 'node:readline/promises';
 
-import { ConfigSchema, type Config, type ProviderConfig } from '@ghostai/protocol';
-import { GhostError, ensureDir, loadConfig, saveConfig, type LoadedConfig } from '@ghostai/core';
-import { PROVIDERS, createProvider, nextInstanceId, type ProviderSpec } from '@ghostai/providers';
+import {
+  ConfigSchema,
+  type Config,
+  type ProviderConfig,
+} from '@ghostai/protocol';
+import {
+  GhostError,
+  ensureDir,
+  loadConfig,
+  saveConfig,
+  type LoadedConfig,
+} from '@ghostai/core';
+import {
+  PROVIDERS,
+  createProvider,
+  nextInstanceId,
+  type ProviderSpec,
+} from '@ghostai/providers';
 import { PROVIDER_CREDENTIAL_NAMESPACE, openVault } from '@ghostai/runtime';
 import pc from 'picocolors';
 
@@ -45,7 +60,9 @@ import { translationsFor, type CliT } from './i18n.js';
 /** A language named in its own language, so the person who needs it can read it. */
 function nameOfLocale(locale: string): string {
   try {
-    return new Intl.DisplayNames([locale], { type: 'language' }).of(locale) ?? locale;
+    return (
+      new Intl.DisplayNames([locale], { type: 'language' }).of(locale) ?? locale
+    );
   } catch {
     return locale;
   }
@@ -63,7 +80,11 @@ export interface InitOptions {
   readonly colors?: boolean | undefined;
   readonly env?: Readonly<Record<string, string | undefined>>;
   /** Injected by tests so nothing here opens a socket. */
-  readonly listModels?: (spec: ProviderSpec, apiBase: string, apiKey?: string) => Promise<string[]>;
+  readonly listModels?: (
+    spec: ProviderSpec,
+    apiBase: string,
+    apiKey?: string,
+  ) => Promise<string[]>;
   /** Injected by tests, which have no keychain. */
   readonly saveCredential?: (instanceId: string, value: string) => void;
 }
@@ -75,7 +96,11 @@ interface Ask {
   /** Reads without echoing, so a key does not land in the scrollback. */
   secret(question: string): Promise<string>;
   /** A numbered list. Returns the chosen index. */
-  choose(question: string, options: readonly string[], fallbackIndex?: number): Promise<number>;
+  choose(
+    question: string,
+    options: readonly string[],
+    fallbackIndex?: number,
+  ): Promise<number>;
   confirm(question: string, fallback: boolean): Promise<boolean>;
 }
 
@@ -88,7 +113,8 @@ function createAsk(
   const c = pc.createColors(colors);
 
   const text = async (question: string, fallback?: string): Promise<string> => {
-    const suffix = fallback === undefined || fallback === '' ? '' : c.dim(` [${fallback}]`);
+    const suffix =
+      fallback === undefined || fallback === '' ? '' : c.dim(` [${fallback}]`);
     const answer = (await rl.question(`${question}${suffix}: `)).trim();
     return answer === '' ? (fallback ?? '') : answer;
   };
@@ -103,7 +129,12 @@ function createAsk(
       // writer rather than the stream's matters: readline holds its own
       // reference to the output stream, and replacing `write` underneath it
       // deadlocks the very question being asked.
-      const internal = rl as Interface & { _writeToOutput?: (text: string) => void };
+      const internal = rl as Interface & {
+        // The leading underscore is node's, not ours: this is the name on
+        // `readline.Interface`, so the guide's rule has nothing to bite on.
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        _writeToOutput?: (text: string) => void;
+      };
       const original = internal._writeToOutput?.bind(internal);
       let masked = false;
 
@@ -140,14 +171,18 @@ function createAsk(
       for (;;) {
         const answer = await text(question, String(fallbackIndex + 1));
         const index = Number(answer) - 1;
-        if (Number.isInteger(index) && index >= 0 && index < options.length) return index;
+        if (Number.isInteger(index) && index >= 0 && index < options.length) {
+          return index;
+        }
         // By name as well as by number: an operator who types `ollama` has
         // answered the question, and refusing it would be pedantry.
         const named = options.findIndex((option) =>
           option.toLowerCase().startsWith(answer.toLowerCase()),
         );
         if (answer !== '' && named >= 0) return named;
-        out.write(c.yellow(`  ${t('init.enterNumber', { max: options.length })}\n`));
+        out.write(
+          c.yellow(`  ${t('init.enterNumber', { max: options.length })}\n`),
+        );
       }
     },
 
@@ -166,7 +201,9 @@ function createAsk(
      * letter is tested first regardless.
      */
     confirm: async (question: string, fallback: boolean): Promise<boolean> => {
-      const hint = fallback ? t('prompt.yesNoDefaultYes') : t('prompt.yesNoDefaultNo');
+      const hint = fallback
+        ? t('prompt.yesNoDefaultYes')
+        : t('prompt.yesNoDefaultNo');
       const answer = (await text(question, hint)).toLowerCase();
       const yes = t('prompt.yes').toLowerCase();
       const no = t('prompt.no').toLowerCase();
@@ -200,7 +237,9 @@ async function fetchModels(
     resilience: false,
   });
   try {
-    const models = await provider.listModels(AbortSignal.timeout(MODEL_FETCH_TIMEOUT_MS));
+    const models = await provider.listModels(
+      AbortSignal.timeout(MODEL_FETCH_TIMEOUT_MS),
+    );
     return models.map((model) => model.id);
   } catch {
     return [];
@@ -305,14 +344,18 @@ async function collect(
         ] ?? DEFAULT_LOCALE)
       : loaded.config.ui.locale;
 
-  const workspace = await ask.text(t('init.workspaceDir'), loaded.paths.workspace);
+  const workspace = await ask.text(
+    t('init.workspaceDir'),
+    loaded.paths.workspace,
+  );
 
   out.write(`\n${t('init.whichProvider')}\n`);
   const specs = PROVIDERS;
   const chosenIndex = await ask.choose(
     t('init.provider'),
     specs.map(
-      (spec) => `${spec.displayName}${spec.isLocal === true ? c.dim(t('init.local')) : ''}`,
+      (spec) =>
+        `${spec.displayName}${spec.isLocal === true ? c.dim(t('init.local')) : ''}`,
     ),
     specs.findIndex((spec) => spec.id === 'ollama'),
   );
@@ -325,12 +368,21 @@ async function collect(
   // Offered for local providers too: a LAN model server behind an
   // authenticating proxy is a real configuration, and the credential lookup
   // reads the vault for one now.
-  const apiKey = await ask.secret(spec.isLocal === true ? t('init.apiToken') : t('init.apiKey'));
+  const apiKey = await ask.secret(
+    spec.isLocal === true ? t('init.apiToken') : t('init.apiKey'),
+  );
 
-  const instanceId = nextInstanceId(spec.id, Object.keys(loaded.config.providers));
+  const instanceId = nextInstanceId(
+    spec.id,
+    Object.keys(loaded.config.providers),
+  );
 
   out.write('\n');
-  const offered = await listModels(spec, apiBase, apiKey === '' ? undefined : apiKey);
+  const offered = await listModels(
+    spec,
+    apiBase,
+    apiKey === '' ? undefined : apiKey,
+  );
   let model: string;
   if (offered.length > 0) {
     out.write(`${String(offered.length)} models available.\n`);
@@ -359,7 +411,11 @@ async function collect(
 }
 
 /** The only two writes the wizard makes, both at the end. */
-function write(answers: Answers, loaded: LoadedConfig, options: InitOptions): void {
+function write(
+  answers: Answers,
+  loaded: LoadedConfig,
+  options: InitOptions,
+): void {
   const merged: Config = ConfigSchema.parse({
     ...loaded.config,
     agents: {
@@ -371,7 +427,10 @@ function write(answers: Answers, loaded: LoadedConfig, options: InitOptions): vo
         model: answers.model,
       },
     },
-    providers: { ...loaded.config.providers, [answers.instanceId]: answers.instance },
+    providers: {
+      ...loaded.config.providers,
+      [answers.instanceId]: answers.instance,
+    },
     ui: { ...loaded.config.ui, locale: answers.locale },
   });
 
@@ -382,7 +441,11 @@ function write(answers: Answers, loaded: LoadedConfig, options: InitOptions): vo
   const save =
     options.saveCredential ??
     ((instanceId: string, value: string): void => {
-      openVault(loaded.paths).set(PROVIDER_CREDENTIAL_NAMESPACE, instanceId, value);
+      openVault(loaded.paths).set(
+        PROVIDER_CREDENTIAL_NAMESPACE,
+        instanceId,
+        value,
+      );
     });
   save(answers.instanceId, answers.apiKey);
 }
@@ -390,6 +453,7 @@ function write(answers: Answers, loaded: LoadedConfig, options: InitOptions): vo
 /** Ctrl-C at a prompt, and Ctrl-D closing stdin. Both mean "leave". */
 function isAbortError(error: unknown): boolean {
   return (
-    error instanceof Error && (error.name === 'AbortError' || error.message.includes('closed'))
+    error instanceof Error &&
+    (error.name === 'AbortError' || error.message.includes('closed'))
   );
 }
