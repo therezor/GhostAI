@@ -648,25 +648,25 @@ describe('the default agent', () => {
     expect(await screen.findByText(/names \{\{tag\}\} or \{\{nonce\}\}/)).toBeInTheDocument();
   });
 
-  it('says the tool sections are not placed while the model has tool calling off', async () => {
+  it('says a tool section is not sent while the model has tool calling off', async () => {
     // The editors stay editable — the wording is worth writing before the model
-    // that can use it is chosen — so saying the sections are not placed is the
+    // that can use it is chosen — so a line saying it is not being sent is the
     // only thing standing between an operator and tuning prose nothing reads.
     const { user } = mount('/agents/default');
 
-    const toolCalling = await screen.findByRole('switch', { name: 'Tool calling' });
-    expect(screen.queryByText('Tool calling disabled.')).not.toBeInTheDocument();
-
-    await user.click(toolCalling);
-
-    // Once, above the prompt, rather than once per tool-shaped template box.
-    // The count is the assertion: this used to be stated on every such box, in
-    // a drawer, so the same consequence of the switch at the top of the screen
-    // arrived two or three times depending on which sections the agent had.
-    expect(await screen.findAllByText('Tool calling disabled.')).toHaveLength(1);
-
-    // Still editable, and the stored wording still on screen.
     await openAdvanced(user);
+    expect(screen.queryByText(/This section isn’t sent to the model/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('switch', { name: 'Tool calling' }));
+
+    // Every tool-shaped section on screen, which is two here: the third —
+    // Toolbox — renders only for an agent that has one, and this agent runs on
+    // the host. `Running commands` is the one worth pinning, because it is not
+    // obviously about tools until you notice every line of it describes `exec`
+    // landing somewhere. The count is the assertion: a bare plural query would
+    // pass while silently leaving a section unmarked.
+    expect(await screen.findAllByText(/This section isn’t sent to the model/)).toHaveLength(2);
+    // Still editable, and the stored wording still on screen.
     expect(screen.getByLabelText(/^Tool output policy for/)).toBeEnabled();
     expect(screen.getByLabelText(/^Running commands for/)).toBeEnabled();
   });
@@ -687,7 +687,7 @@ describe('the default agent', () => {
     await user.click(screen.getByRole('switch', { name: 'Tool calling' }));
 
     expect(screen.queryByText(/names \{\{tag\}\} or \{\{nonce\}\}/)).not.toBeInTheDocument();
-    expect(screen.getByText('Tool calling disabled.')).toBeInTheDocument();
+    expect(screen.getAllByText(/This section isn’t sent to the model/).length).toBeGreaterThan(0);
   });
 
   it('says what naming the delimiter in the policy costs', async () => {
@@ -1049,7 +1049,7 @@ describe('a named agent', () => {
 
     await user.click(screen.getByRole('switch', { name: 'Tool calling' }));
 
-    expect(screen.getByText('Tool calling disabled.')).toBeInTheDocument();
+    expect(screen.getByText(/aren’t being sent to the model/)).toBeInTheDocument();
     // Every row is still there, still showing what it was set to.
     expect(screen.getByRole('combobox', { name: 'Permission for exec' })).toBeInTheDocument();
     expect(permission).toBeDisabled();

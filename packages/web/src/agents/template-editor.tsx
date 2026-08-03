@@ -40,6 +40,7 @@ export function TemplateEditor({
   placeholders,
   hint,
   removable = true,
+  warning,
   onChange,
 }: {
   readonly name: string;
@@ -52,6 +53,13 @@ export function TemplateEditor({
   readonly hint?: WebKey;
   /** `systemPrompt` is not: an agent with no identity is never what was meant. */
   readonly removable?: boolean;
+  /**
+   * A second warning the caller decides, shown beside the stray-placeholder one.
+   *
+   * A title and a message rather than one string: it renders as a `NoticeBlock`
+   * like every other warning in the app, and that shape wants both.
+   */
+  readonly warning?: { readonly title: string; readonly message: string } | undefined;
   readonly onChange: (next: string) => void;
 }): JSX.Element {
   const { t } = useTranslation();
@@ -113,6 +121,29 @@ export function TemplateEditor({
         <p className="agent-editor__hint">{t('agents.promptRemovedHint')}</p>
       ) : (
         <>
+          {/* Above the editor, not under it. A box holding a page of Markdown
+              pushes anything below it off the screen, so a warning there is one
+              the operator scrolls past to reach the text it is about. */}
+          {stray.length > 0 && (
+            <NoticeBlock
+              role="alert"
+              tone="warning"
+              icon={AlertTriangle}
+              title={t('agents.promptStrayTitle')}
+              message={t('agents.promptStray', {
+                names: stray.map((placeholder) => `{{${placeholder}}}`).join(', '),
+              })}
+            />
+          )}
+          {warning !== undefined && (
+            <NoticeBlock
+              role="alert"
+              tone="warning"
+              icon={AlertTriangle}
+              title={warning.title}
+              message={warning.message}
+            />
+          )}
           <CodeEditor
             value={text}
             readOnly={false}
@@ -130,21 +161,6 @@ export function TemplateEditor({
             {t(owned ? 'agents.promptPlaceholders' : 'agents.promptAdoptHint')}{' '}
             {placeholders.map((placeholder) => `{{${placeholder}}}`).join(', ')}.
           </p>
-          {/* The one warning that stays in the box, because it is about the
-              text in *this* box rather than about the prompt as a whole — the
-              editor hoists those above the prompt, where a consequence of one
-              switch is stated once instead of once per template. */}
-          {stray.length > 0 && (
-            <NoticeBlock
-              role="alert"
-              tone="warning"
-              icon={AlertTriangle}
-              title={t('agents.promptStrayTitle')}
-              message={t('agents.promptStray', {
-                names: stray.map((placeholder) => `{{${placeholder}}}`).join(', '),
-              })}
-            />
-          )}
         </>
       )}
     </div>
