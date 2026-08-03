@@ -6,13 +6,14 @@
  * state machine of its own, which is the reason it was worth its own file.
  */
 
-import { RotateCcw, Trash2 } from 'lucide-react';
+import { AlertTriangle, RotateCcw, Trash2 } from 'lucide-react';
 import { useMemo, useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { unknownPlaceholders } from '@ghostai/protocol';
 
 import { Button } from '@/components/ui/button.js';
+import { NoticeBlock } from '@/components/ui/notice.js';
 import { CodeEditor } from '@/files/code-editor.js';
 import type { WebKey } from '@/i18n/keys.js';
 
@@ -39,7 +40,6 @@ export function TemplateEditor({
   placeholders,
   hint,
   removable = true,
-  warning,
   onChange,
 }: {
   readonly name: string;
@@ -52,8 +52,6 @@ export function TemplateEditor({
   readonly hint?: WebKey;
   /** `systemPrompt` is not: an agent with no identity is never what was meant. */
   readonly removable?: boolean;
-  /** A second warning the caller decides, shown beside the stray-placeholder one. */
-  readonly warning?: string | undefined;
   readonly onChange: (next: string) => void;
 }): JSX.Element {
   const { t } = useTranslation();
@@ -132,19 +130,20 @@ export function TemplateEditor({
             {t(owned ? 'agents.promptPlaceholders' : 'agents.promptAdoptHint')}{' '}
             {placeholders.map((placeholder) => `{{${placeholder}}}`).join(', ')}.
           </p>
+          {/* The one warning that stays in the box, because it is about the
+              text in *this* box rather than about the prompt as a whole — the
+              editor hoists those above the prompt, where a consequence of one
+              switch is stated once instead of once per template. */}
           {stray.length > 0 && (
-            <p role="alert" className="notice notice--warning">
-              <span>
-                {t('agents.promptStray', {
-                  names: stray.map((placeholder) => `{{${placeholder}}}`).join(', '),
-                })}
-              </span>
-            </p>
-          )}
-          {warning !== undefined && (
-            <p role="alert" className="notice notice--warning">
-              <span>{warning}</span>
-            </p>
+            <NoticeBlock
+              role="alert"
+              tone="warning"
+              icon={AlertTriangle}
+              title={t('agents.promptStrayTitle')}
+              message={t('agents.promptStray', {
+                names: stray.map((placeholder) => `{{${placeholder}}}`).join(', '),
+              })}
+            />
           )}
         </>
       )}

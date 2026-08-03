@@ -42,6 +42,12 @@ export interface NoticeBlockProps {
    * not assignable to one returning `Element`.
    */
   readonly icon: ComponentType<{ readonly 'aria-hidden'?: boolean }>;
+  /**
+   * Announced, when the notice appears in response to something the operator
+   * just did. Left off for one that is simply part of the page — a live region
+   * that was there on load announces nothing and only costs a reader.
+   */
+  readonly role?: 'alert' | 'status';
   readonly className?: string;
 }
 
@@ -50,10 +56,14 @@ export function NoticeBlock({
   message,
   tone = 'neutral',
   icon: Icon,
+  role,
   className,
 }: NoticeBlockProps): JSX.Element {
   return (
-    <div className={cn('notice', TONE_CLASSES[tone], className)}>
+    <div
+      className={cn('notice', TONE_CLASSES[tone], className)}
+      {...(role === undefined ? {} : { role })}
+    >
       <Icon aria-hidden={true} />
       <span>
         <span className="notice__label">{title}.</span>{' '}

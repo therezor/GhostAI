@@ -36,7 +36,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowLeft, Plus, Trash2, Wrench } from 'lucide-react';
+import { ArrowLeft, Plus, ShieldAlert, Timer, Trash2, Wrench } from 'lucide-react';
 import { useMemo, useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -526,6 +526,12 @@ function Editor({
 
   /** Bumped by a revert, to remount the template editors. See `onRevert`. */
   const [formEpoch, setFormEpoch] = useState(0);
+
+  // A clock or a counter in a raw template: not an error — it is a legitimate
+  // thing to want — but a price an operator cannot see on the bill, so it is
+  // said here.
+  const promptUncacheable =
+    raw && VOLATILE.some((hole) => form.systemPrompt.includes(`{{${hole}}}`));
 
   // Whether the policy would leave the model unable to identify a tool-output
   // fence. `namesDelimiter` is the protocol's, which is what `assertBuildable`
@@ -1209,12 +1215,46 @@ function Editor({
               not being told about any of it. Which makes it a fact about the
               prompt: the tools section is not in the prompt this agent sends,
               and the place to say so is where an operator is writing it. */}
+          {/* Every warning about the prompt as a whole, above the prompt.
+              They used to sit one per template box, three of them behind the
+              advanced disclosure — so a consequence of a switch at the top of
+              the screen was stated three times, in a drawer, in boxes the
+              operator had not opened. What is left inside a box is the one
+              thing that is about that box's own text: a placeholder nothing
+              fills. */}
           {toolsOff && (
             <NoticeBlock
               tone="warning"
               icon={Wrench}
               title={t('agents.toolsOffTitle')}
               message={t('agents.toolsOffNote')}
+            />
+          )}
+          {promptUncacheable && (
+            <NoticeBlock
+              tone="warning"
+              icon={Timer}
+              title={t('agents.promptUncacheableTitle')}
+              message={t('agents.promptUncacheable')}
+            />
+          )}
+          {!toolsOff && policyUnfenced && (
+            <NoticeBlock
+              tone="warning"
+              icon={ShieldAlert}
+              title={t('agents.promptToolPolicyUnfencedTitle')}
+              // Passed rather than written into the bundle: i18next does not
+              // rescan an interpolated value, which is the only way a literal
+              // `{{…}}` survives to the screen.
+              message={t('agents.promptToolPolicyUnfenced', { tag: '{{tag}}', nonce: '{{nonce}}' })}
+            />
+          )}
+          {!toolsOff && !policyUnfenced && namesDelimiter(form.toolPolicyPrompt) && (
+            <NoticeBlock
+              tone="warning"
+              icon={Timer}
+              title={t('agents.promptToolPolicyUncacheableTitle')}
+              message={t('agents.promptToolPolicyUncacheable', { tag: '{{tag}}' })}
             />
           )}
           <TemplateEditor
@@ -1226,14 +1266,6 @@ function Editor({
             placeholders={raw ? RAW_PROMPT_PLACEHOLDERS : PROMPT_PLACEHOLDERS}
             removable={false}
             hint={raw ? 'agents.promptSystemRawHint' : 'agents.promptSystemHint'}
-            {...(raw && VOLATILE.some((hole) => form.systemPrompt.includes(`{{${hole}}}`))
-              ? {
-                  // Not an error: a clock in the prompt is a legitimate thing to
-                  // want. It is a price, and one an operator cannot see on the
-                  // bill, so it is said here instead.
-                  warning: t('agents.promptUncacheable'),
-                }
-              : {})}
             onChange={(next) => {
               update('systemPrompt', next);
             }}
@@ -1304,11 +1336,6 @@ function Editor({
                     value={form.platformPrompt}
                     placeholders={PLATFORM_PROMPT_PLACEHOLDERS}
                     hint="agents.promptPlatformHint"
-                    // Tool-shaped like the two below it: every line it renders
-                    // describes running a command, and the file tools it names
-                    // are tools too. With none of them there is nothing left for
-                    // the section to be about.
-                    {...(toolsOff ? { warning: t('agents.promptNotPlacedNoTools') } : {})}
                     onChange={(next) => {
                       update('platformPrompt', next);
                     }}
@@ -1322,11 +1349,6 @@ function Editor({
                       value={form.toolboxPrompt}
                       placeholders={TOOLBOX_PROMPT_PLACEHOLDERS}
                       hint="agents.promptToolboxHint"
-                      // Left editable rather than disabled: the wording is worth
-                      // writing before the model that can use it is chosen, and
-                      // a box that refuses keystrokes cannot say why as clearly
-                      // as a line that says it is not being placed.
-                      {...(toolsOff ? { warning: t('agents.promptNotPlacedNoTools') } : {})}
                       onChange={(next) => {
                         update('toolboxPrompt', next);
                       }}
@@ -1340,32 +1362,6 @@ function Editor({
                     value={form.toolPolicyPrompt}
                     placeholders={TOOL_POLICY_PLACEHOLDERS}
                     hint="agents.promptToolPolicyHint"
-                    // Ahead of the two delimiter warnings, and it replaces them:
-                    // neither says anything while the section is not placed, and
-                    // a box carrying three lines about a prompt nothing sends is
-                    // three chances to act on the wrong one.
-                    {...(toolsOff
-                      ? { warning: t('agents.promptNotPlacedNoTools') }
-                      : policyUnfenced
-                        ? {
-                            warning: t('agents.promptToolPolicyUnfenced', {
-                              // Passed rather than written into the bundle: i18next
-                              // does not rescan an interpolated value, which is the
-                              // only way a literal `{{…}}` survives to the screen.
-                              tag: '{{tag}}',
-                              nonce: '{{nonce}}',
-                            }),
-                          }
-                        : namesDelimiter(form.toolPolicyPrompt)
-                          ? {
-                              // Naming the tag here is legal and costs the cache:
-                              // this section is otherwise identical for the life of
-                              // a session, so it rides the cached prefix — unless it
-                              // spells out a delimiter that changes every turn, at
-                              // which point the whole of it is re-sent per step.
-                              warning: t('agents.promptToolPolicyUncacheable', { tag: '{{tag}}' }),
-                            }
-                          : {})}
                     onChange={(next) => {
                       update('toolPolicyPrompt', next);
                     }}
