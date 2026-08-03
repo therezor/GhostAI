@@ -109,6 +109,8 @@ export {
   type UnattendedApproval,
 } from './approvals.js';
 
+export { agentForTurn } from './agent-binding.js';
+
 export {
   DEFAULT_MAX_QUEUE_DEPTH,
   DEFAULT_MAX_SESSIONS,

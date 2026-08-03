@@ -66,6 +66,7 @@ import {
   type ServerMessage,
 } from '@ghostai/protocol';
 
+import { agentForTurn } from './agent-binding.js';
 import type { HubApprovalGate } from './approvals.js';
 import { resolveError } from './errors.js';
 import type { AgentMissReason } from './runtime.js';
@@ -924,7 +925,13 @@ export class SessionHub {
       // becomes the default agent rather than a refusal. A conversation must
       // not stop working because an agent it was bound to was deleted, and the
       // binding is left alone, so re-creating that agent silently restores it.
-      const requested = this.#agentFor(state.key, turn);
+      // The rule lives in `agent-binding.ts`: sixty lines of domain policy do
+      // not belong in the file that frames sockets.
+      const requested = agentForTurn({
+        stored: this.#store.getSession(state.key)?.agentId,
+        requested: turn.agentId,
+        resolves: (agentId) => this.#resolveAgentId(agentId).miss === undefined,
+      });
       const { agentId, miss } = this.#resolveAgentId(requested);
       if (miss !== undefined) {
         // Said out loud every turn, not once. The fallback is re-decided each
@@ -990,7 +997,7 @@ export class SessionHub {
         // The *resolved* id, so the loop that runs and the binding it writes
         // agree. Passing the frame's raw id would let a turn run on `default`
         // while `ensureSession` recorded a session bound to an agent that does
-        // not exist — the exact disagreement `#agentFor` exists to prevent.
+        // not exist — the exact disagreement `agentForTurn` exists to prevent.
         //
         // Still conditional on the frame having named one at all: an absent
         // `agentId` means "do not bind", and substituting `default` here would
@@ -1014,39 +1021,6 @@ export class SessionHub {
       // again; announcing idle first would make a queue look like a gap.
       if (!this.#drain(state)) this.#status(state);
     }
-  }
-
-  /**
-   * Which agent runs this turn.
-   *
-   * The **stored session wins**, exactly as its workspace does. A history built
-   * under one agent's prompt, tools and permissions must not silently continue
-   * under another's, so a frame naming an agent can only ever decide the
-   * binding of a session that does not exist yet. Moving an existing one is an
-   * explicit `PATCH /api/sessions/:key`.
-   *
-   * The loop applies the same rule to the prompt when it calls `ensureSession`;
-   * this is the same decision made one layer earlier, because *which loop* runs
-   * the turn has to agree with what that loop then puts in the prompt.
-   *
-   * One exception, and only one: a stored id that **no longer resolves** loses
-   * to a frame that names an agent which does. The rule above protects a
-   * conversation from being continued under settings it was not built with, and
-   * an agent that has been deleted offers no such settings to protect — so the
-   * only thing outranking the operator's explicit pick would achieve is
-   * dropping them onto `default` while they watched themselves choose something
-   * else.
-   */
-  #agentFor(sessionKey: string, turn: QueuedTurn): string | undefined {
-    const stored = this.#store.getSession(sessionKey)?.agentId;
-    if (stored === undefined || stored === '') return turn.agentId;
-    if (this.#resolveAgentId(stored).miss === undefined) return stored;
-    if (turn.agentId !== undefined && this.#resolveAgentId(turn.agentId).miss === undefined) {
-      return turn.agentId;
-    }
-    // Neither resolves. The stored one is returned so the notice names what the
-    // conversation actually claims rather than whatever the last frame carried.
-    return stored;
   }
 
   /**
