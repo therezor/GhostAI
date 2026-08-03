@@ -105,7 +105,7 @@ export default tseslint.config(
   },
   {
     // Tests may be looser: fixtures use non-null assertions and unsafe casts freely.
-    files: ['**/*.test.ts', '**/test/**/*.ts', '**/testkit/**/*.ts'],
+    files: ['**/*.test.{ts,tsx}', '**/test/**/*.{ts,tsx}', '**/testkit/**/*.ts'],
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',
       // A scripted async generator — a stream fixture — legitimately has

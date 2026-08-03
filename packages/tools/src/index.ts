@@ -18,9 +18,11 @@
  *    `exec` — every one of which routes its filesystem access through the
  *    workspace jail and, for `exec`, an argv guard rather than a shell.
  *
- * `toolConformance` is deliberately absent from this entry point. It lives in
- * `src/testkit/` and is imported relatively by tests, so `vitest` never becomes
- * a runtime dependency of anything that ships.
+ * `toolConformance` is deliberately absent from this entry point. It imports
+ * `vitest`, and nothing that ships may pull a test framework into its runtime
+ * graph. It lives in `test/testkit/` — outside `src` entirely, so there is no
+ * export that could reach it by accident — and this package's own tests reach
+ * it as `#testkit/conformance.js`.
  */
 
 export {

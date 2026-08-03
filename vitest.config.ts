@@ -52,11 +52,14 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary', 'html'],
+      // `src` only, which since the tests and testkits moved to `test/` is the
+      // whole of the filter. Fixtures and jsdom stubs are not code under test:
+      // measuring a no-op `observe()` that exists because jsdom lacks one says
+      // nothing, and — because a testkit runs on every test and so scores near
+      // 100% — it inflates the ratio of whichever package holds it. Keeping the
+      // directory out of `src` is what keeps it out of the denominator.
       include: ['packages/*/src/**/*.ts'],
-      // `src/test/**` is test infrastructure — jsdom stubs and render helpers.
-      // Measuring a no-op `observe()` that exists because jsdom lacks one says
-      // nothing about the code under test, and it drags a real threshold down.
-      exclude: ['**/*.test.ts', '**/index.ts', '**/*.d.ts', '**/src/test/**'],
+      exclude: ['**/*.test.ts', '**/index.ts', '**/*.d.ts'],
       thresholds: Object.fromEntries(
         Object.entries(THRESHOLDS).map(([pkg, t]) => [
           `packages/${pkg}/src/**`,

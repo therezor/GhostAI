@@ -11,11 +11,13 @@
       "default": "./dist/index.js"
     }
   },
+  "imports": {
+    "#src/*": "./src/*"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist",
-    "!dist/**/*.test.*"
+    "dist"
   ],
   "bin": {
     "ghost": "./dist/index.js"
@@ -24,7 +26,7 @@
     "build": "tsup && tsc -b",
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "lint": "eslint src"
+    "lint": "eslint src test"
   },
   "dependencies": {
     "@ghostai/agent": "workspace:*",

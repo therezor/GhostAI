@@ -7,7 +7,7 @@
   "license": "MIT",
   "scripts": {
     "typecheck": "tsc -b",
-    "lint": "eslint src",
+    "lint": "eslint src test",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "baseline": "tsx src/fidelity/capture.ts"

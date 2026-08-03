@@ -72,9 +72,78 @@ every time.
 
 Assert the **durable** state a step settles into — the card's `Succeeded`/`Failed`
 status, the text in the transcript — and cover the in-between wording in a component
-test, where the state can be held still (`packages/web/src/chat/approval.test.tsx`).
+test, where the state can be held still (`packages/web/test/chat/approval.test.tsx`).
 The rule of thumb: if the only reason you can see it is that the machine was slow,
 it does not belong in an `expect`.
+
+## Where a test goes
+
+Every test lives in its package's `test/` directory, mirroring `src/`. The test for
+`packages/server/src/hub.ts` is `packages/server/test/hub.test.ts`; the test for
+`packages/web/src/chat/markdown/blocks.ts` is
+`packages/web/test/chat/markdown/blocks.test.ts`. Nothing under `src/` is a test.
+
+Tests reach source through an alias, never a relative path:
+
+- **`#src/…`** everywhere except web — a package.json `imports` entry, so
+  `#src/hub.js` resolves the same way for node, tsc and vitest with no extra config.
+- **`@/…`** in web, which already had the alias and uses it throughout.
+
+Two consequences worth knowing before you fight them:
+
+- **`test/` is its own TypeScript project** (`packages/<pkg>/test/tsconfig.json`,
+  referenced from the root `tsconfig.json`). That is what keeps tests out of
+  `rootDir` and so out of the emitted `dist`, and it is what ESLint's
+  `projectService` finds when it walks up from a test file. A new package needs
+  both of its references added at the root, not one.
+- **A test no longer shares a program with the rest of `src/`**, so a module
+  augmentation it used to inherit for free must now be imported by name. This is
+  why `test/schema.test.ts` carries `import type {} from '@fastify/swagger'`:
+  `summary` is not fastify's field, and `src/app.ts` is no longer in scope to
+  merge it on.
+
+**Web is the exception, deliberately.** Its tests are checked by
+`packages/web/tsconfig.json` itself rather than a separate project, because that
+config sets `noEmit` — and `tsc -b` refuses a reference to a project that disables
+emit (TS6310), a reference being a promise of declarations. There is no `dist` to
+keep tests out of there either, so the split would buy nothing.
+
+### A `testkit/` is never in `src/`
+
+`src/` is runtime code. A testkit is not runtime code, so every one of them lives in
+`test/testkit/` — including the two that other packages import.
+
+That last part is the bit worth stating, because "another package imports it" reads
+like it must be built and therefore must be in `src/`. It does not. The `exports`
+map can name TypeScript source directly:
+
+```json
+"./testkit": { "types": "./test/testkit/index.ts", "default": "./test/testkit/index.ts" }
+```
+
+Every consumer of a testkit is a test runner, and all of them read TypeScript —
+vitest for `examples/loopback-channel`, Playwright for
+`packages/e2e/src/harness/provider.ts`. Neither needs a build, so neither gets one:
+`agent` and `channels` have no `src/testkit/` tsup entry and emit no `dist/testkit/`
+at all. Their `files` array carries `test/testkit` beside `dist`, since the subpath
+export resolves outside `dist`.
+
+Reach a testkit by alias, never a relative path — `#testkit/server.js` (a
+package.json `imports` entry), and `@testkit/render.js` in web beside the existing
+`@/`. Both resolve from the package that _defines_ them, so they work unchanged
+when a test in another package imports across the boundary.
+
+Two things this arrangement bought, both of which had been quietly wrong:
+
+- **`packages/channels/tsup.config.ts` no longer needs `external: ['vitest']`.** That
+  line existed because a testkit under `src/` was a bundler entry point, and its
+  comment said "without this, half a megabyte of vitest ends up inside dist/". With
+  the testkit outside `src/`, tsup never sees it and the hazard is gone rather than
+  suppressed.
+- **Coverage stopped being padded.** A testkit runs on every test, so it scored
+  94–100% and inflated the ratio for whichever package held it. Nothing under
+  `test/` is inside `include: ['packages/*/src/**/*.ts']` any more, so the gates now
+  measure product code alone — they got stricter, and no threshold had to move.
 
 ## Auth changes touch more places than they look like they do
 

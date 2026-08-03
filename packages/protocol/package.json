@@ -11,17 +11,19 @@
       "default": "./dist/index.js"
     }
   },
+  "imports": {
+    "#src/*": "./src/*"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist",
-    "!dist/**/*.test.*"
+    "dist"
   ],
   "scripts": {
     "build": "tsup && tsc -b",
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "lint": "eslint src"
+    "lint": "eslint src test"
   },
   "dependencies": {
     "zod": "^4.0.0"

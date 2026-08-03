@@ -19,7 +19,7 @@ import { VIEWPORT } from './src/viewport.js';
  * particular is a setting two specs want opposite answers from.
  */
 export default defineConfig({
-  testDir: './src/tests',
+  testDir: './test',
   fullyParallel: true,
   // A `.only` left in a spec silently reduces CI to that one test.
   forbidOnly: process.env['CI'] === 'true',
