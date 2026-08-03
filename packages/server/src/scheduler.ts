@@ -299,9 +299,41 @@ class TurnCollector {
         }
         this.finish();
         return;
-      default:
+
+      // Everything a job's transcript has no use for: the streams a person
+      // watches, the connection bookkeeping a browser reconciles against, and
+      // the tool traffic — a run records what the turn *said*, and the calls it
+      // made along the way are in the session either way.
+      //
+      // Listed rather than swept up by a `default`, which is the whole point of
+      // this change. `TurnProjection` next door is exhaustive and a protocol
+      // event added without a decision there is a type error; here a `default`
+      // meant a new event silently did nothing in every scheduled run, and
+      // nothing anywhere said so.
+      case 'connected':
+      case 'pong':
+      case 'message.ack':
+      case 'message.queued':
+      case 'reasoning.delta':
+      case 'tool.call':
+      case 'tool.progress':
+      case 'tool.result':
+      case 'tool.approvalRequest':
+      case 'subagent.event':
+      case 'session.status':
+      case 'session.reset':
+      case 'session.replay':
+      case 'session.truncated':
+      case 'notification':
+      case 'transcribe.result':
+      case 'tools.changed':
+      case 'steer':
         return;
     }
+    // Unreachable while the switch above is exhaustive, and a compile error the
+    // moment it is not: `message` is `never` here only if every member of the
+    // union has a case. This is the line that makes adding an event a decision.
+    message satisfies never;
   }
 
   /** Settles with whatever has arrived. Idempotent. */
