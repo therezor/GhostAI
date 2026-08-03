@@ -434,7 +434,21 @@ type AgentOwnFields = Omit<
   | 'temperature'
   | 'reasoningEffort'
   | 'toolTimeoutMs'
->;
+> &
+  StatedFields;
+
+/**
+ * The fields an entry must state outright rather than inherit.
+ *
+ * `Required`, rather than a comment saying so. `AgentEntry` is
+ * `patchOf(AgentDefaultsSchema)`, so every field on it is optional and an entry
+ * that leaves these out follows `agents.defaults` instead. Both default to
+ * `true` there, so an omission does not read as "unset" — it reads as "on".
+ * That is how Duplicate turned vision back on for the copy: `ownFields` had a
+ * comment insisting they are always written, and nothing said it to the other
+ * builder. A type says it to both.
+ */
+type StatedFields = Required<Pick<AgentEntry, 'visionEnabled' | 'toolsEnabled'>>;
 
 function ownFields(form: AgentEntryForm, entry: AgentEntry): AgentOwnFields {
   // Dropped rather than spread: each is either replaced below or, in the case
@@ -721,7 +735,11 @@ export function toNewAgentPatch(
           ...(temperature === undefined ? {} : { temperature }),
           ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
           ...(template.exec === undefined ? {} : { exec: { ...template.exec } }),
-        },
+          // `satisfies`, so leaving out a stated field is a compile error here
+          // as well as in `ownFields`. The two builders write the same entry
+          // from different sources — a form and a stored template — which is
+          // exactly how they came to disagree.
+        } satisfies AgentEntry & StatedFields,
       },
     },
   };
