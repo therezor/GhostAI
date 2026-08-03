@@ -36,7 +36,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowLeft, Plus, RotateCcw, SquarePen, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { useMemo, useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -50,40 +50,25 @@ import {
   DEFAULT_TOOLBOX_TEMPLATE,
   DEFAULT_TOOL_POLICY_TEMPLATE,
   DEFAULT_WRAP_UP_TEMPLATE,
-  defaultSubagentPrompt,
   deriveAgentId,
   LIVE_PROMPT_PLACEHOLDERS,
   PLATFORM_PROMPT_PLACEHOLDERS,
   PROMPT_PLACEHOLDERS,
   RAW_PROMPT_PLACEHOLDERS,
-  subagentToolName,
   TOOL_POLICY_PLACEHOLDERS,
   TOOLBOX_PROMPT_PLACEHOLDERS,
-  unknownPlaceholders,
   type AgentDefaults,
   type AgentEntry,
   type SubagentRef,
   type ToolPermission,
   type ToolPromptOverride,
-  type ToolRisk,
 } from '@ghostai/protocol';
 
-import type { WebKey } from '@/i18n/keys.js';
 import { Badge } from '@/components/ui/badge.js';
 import { Button } from '@/components/ui/button.js';
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogHeading,
-  DialogSubheading,
-} from '@/components/ui/dialog.js';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu.js';
 import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';
 import { RowActions } from '@/components/crud/row-actions.js';
-import { CodeEditor } from '@/files/code-editor.js';
 import { api } from '@/lib/api.js';
 import { cn } from '@/lib/cn.js';
 import { queryKeys } from '@/lib/query.js';
@@ -94,15 +79,12 @@ import {
   SelectField,
   SwitchRow,
   TextField,
-  TextareaField,
 } from '@/settings/controls.js';
 import { modelOptions } from '@/settings/fields.js';
 import { useSaveSettings, useSettings } from '@/settings/use-settings.js';
 import {
   REASONING_EFFORTS,
-  TOOL_PERMISSIONS,
   UNSET_VALUE,
-  isToolPermission,
   toAgentDeletePatch,
   toAgentEntryForm,
   toAgentEntryPatch,
@@ -112,6 +94,9 @@ import {
   type AgentForm,
 } from './agents-form.js';
 import { useAgent } from './agent-context.js';
+import { SubagentRow } from './subagent-row.js';
+import { TemplateEditor } from './template-editor.js';
+import { ToolRow, parameterFields } from './tool-row.js';
 
 /**
  * The fields both halves of the form hold as strings under the same name.
@@ -217,9 +202,6 @@ function BoundField({
   );
 }
 
-/** Shared so an unopened row does not allocate one per render. */
-const EMPTY_OVERRIDE: ToolPromptOverride = { description: '', fields: {} };
-
 /**
  * The placeholders whose value differs between two requests in the same turn.
  *
@@ -239,459 +221,6 @@ const VOLATILE: readonly string[] = [
   'correction',
 ];
 
-/** One advertised argument, and what the tool itself says about it. */
-interface ToolField {
-  readonly name: string;
-  /** The built-in description, or empty when the schema gives none. */
-  readonly description: string;
-}
-
-/**
- * The top-level arguments in a tool's advertised JSON Schema, with their own
- * descriptions — which are what the boxes below show as placeholders.
- *
- * A generic "the built-in description" told an operator nothing: the whole
- * question they are answering is whether the built-in wording is good enough,
- * and they cannot answer it without reading it. Showing the real one means an
- * empty box is a legible statement about what the model is being told.
- *
- * Top level only, which is the same bound `applyToolPrompts` enforces: an
- * override reaching `argv.items` would need a path syntax to specify and to
- * validate, for a field whose parent can say the same thing in a sentence.
- */
-function parameterFields(parameters: Readonly<Record<string, unknown>>): ToolField[] {
-  const properties = parameters.properties;
-  if (typeof properties !== 'object' || properties === null || Array.isArray(properties)) return [];
-
-  return Object.entries(properties as Record<string, unknown>).map(([name, schema]) => {
-    const described =
-      typeof schema === 'object' && schema !== null && !Array.isArray(schema)
-        ? (schema as Record<string, unknown>).description
-        : undefined;
-    return { name, description: typeof described === 'string' ? described : '' };
-  });
-}
-
-/**
- * One template an agent owns, with the three states it can be in.
- *
- * Six boxes on this screen behave identically, and the behaviour is not obvious
- * enough to reimplement six times: **empty inherits the built-in, and a single
- * space deletes the section.** Both are real answers, and neither is expressible
- * by typing — an operator cannot type "inherit", and a space is invisible — so
- * each gets a button and a state the box says out loud.
- *
- * **Ownership is state, not `value !== ''`.** Deriving it made the box fight the
- * person typing in it: selecting all and deleting — the obvious way to start a
- * short prompt from scratch — emptied the field, which flipped it back to "not
- * owned", which refilled the box with the built-in. The next keystroke landed at
- * the end of a page of text nobody asked for.
- */
-function TemplateEditor({
-  name,
-  label,
-  builtIn,
-  value,
-  placeholders,
-  hint,
-  removable = true,
-  warning,
-  onChange,
-}: {
-  readonly name: string;
-  /** Typed `WebKey` rather than `string`, or a deleted key renders as itself. */
-  readonly label: WebKey;
-  /** What an empty value renders as. Shown in the box until the first keystroke. */
-  readonly builtIn: string;
-  readonly value: string;
-  readonly placeholders: readonly string[];
-  readonly hint?: WebKey;
-  /** `systemPrompt` is not: an agent with no identity is never what was meant. */
-  readonly removable?: boolean;
-  /** A second warning the caller decides, shown beside the stray-placeholder one. */
-  readonly warning?: string | undefined;
-  readonly onChange: (next: string) => void;
-}): JSX.Element {
-  const { t } = useTranslation();
-  const [owned, setOwned] = useState(() => value.trim() !== '');
-  // A stored value that is whitespace but not empty is the deletion. It is the
-  // one state with nothing to edit, so it renders as a sentence and a button
-  // rather than as a box holding a space nobody can see.
-  const removed = value !== '' && value.trim() === '';
-  const text = owned && !removed ? value : builtIn;
-  const stray = useMemo(() => unknownPlaceholders(text, placeholders), [text, placeholders]);
-
-  return (
-    <div className="stack agent-editor__template">
-      <div className="cluster agent-editor__prompt-bar">
-        <span className="micro-label">{t(label)}</span>
-        <span className="agent-editor__template-state">
-          {t(
-            removed ? 'agents.promptRemoved' : owned ? 'agents.promptOwn' : 'agents.promptBuiltIn',
-          )}
-        </span>
-        <span className="spacer" />
-        {/* Both buttons are named for their section. Six of each on this screen
-            read identically otherwise, which leaves a screen reader — and a
-            test — with no way to say which one it means. */}
-        {removable && !removed && (
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label={t('agents.promptRemoveFor', { label: t(label) })}
-            onClick={() => {
-              // A single space, because empty already means "inherit". See the
-              // asymmetry documented on `AgentEntry.livePrompt`.
-              onChange(' ');
-            }}
-          >
-            <Trash2 aria-hidden="true" />
-            {t('agents.promptRemove')}
-          </Button>
-        )}
-        {(owned || removed) && (
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label={t(removed ? 'agents.promptRestoreFor' : 'agents.promptResetFor', {
-              label: t(label),
-            })}
-            onClick={() => {
-              setOwned(false);
-              onChange('');
-            }}
-          >
-            <RotateCcw aria-hidden="true" />
-            {t(removed ? 'agents.promptRestore' : 'agents.resetBuiltin')}
-          </Button>
-        )}
-      </div>
-
-      {removed ? (
-        <p className="agent-editor__hint">{t('agents.promptRemovedHint')}</p>
-      ) : (
-        <>
-          <CodeEditor
-            value={text}
-            readOnly={false}
-            language="markdown"
-            label={t('agents.promptEditorFor', { label: t(label), name })}
-            onChange={(next) => {
-              // The first keystroke is the decision: from here the text is this
-              // agent's, including when it is emptied.
-              setOwned(true);
-              onChange(next);
-            }}
-          />
-          <p className="agent-editor__hint">
-            {hint === undefined ? '' : `${t(hint)} `}
-            {t(owned ? 'agents.promptPlaceholders' : 'agents.promptAdoptHint')}{' '}
-            {placeholders.map((placeholder) => `{{${placeholder}}}`).join(', ')}.
-          </p>
-          {stray.length > 0 && (
-            <p role="alert" className="notice notice--warning">
-              <span>
-                {t('agents.promptStray', {
-                  names: stray.map((placeholder) => `{{${placeholder}}}`).join(', '),
-                })}
-              </span>
-            </p>
-          )}
-          {warning !== undefined && (
-            <p role="alert" className="notice notice--warning">
-              <span>{warning}</span>
-            </p>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-/**
- * One tool, and the single control that decides everything about it.
- *
- * There is no on/off switch beside the select, because there is nothing for one
- * to say: `Disabled` *is* the off position, and a switch would let an operator
- * express "off, but ask" — a state the config cannot hold and the runtime would
- * silently read as off.
- *
- * The label is the tool's name in mono, which is what it is: an identifier the
- * model types, not prose. The risk badge is advisory — it is what seeded this
- * permission when the agent was created, and it decides nothing now.
- */
-function ToolRow({
-  name,
-  detail,
-  risk,
-  permission,
-  fields,
-  override,
-  disabled,
-  onChange,
-  onOverrideChange,
-}: {
-  readonly name: string;
-  /** The tool's own description. The row shows the override instead when there is one. */
-  readonly detail: string;
-  readonly risk: ToolRisk | undefined;
-  readonly permission: ToolPermission;
-  /** Top-level arguments from the live schema. Empty when it is not registered. */
-  readonly fields: readonly ToolField[];
-  readonly override: ToolPromptOverride | undefined;
-  /**
-   * The row is shown but not editable, because this model is sent no tools.
-   *
-   * Not required, and that is the point: the stored permission and wording are
-   * still rendered and still saved untouched, so switching the model back
-   * restores the toolset exactly as it was. A list that emptied itself would
-   * make the switch destructive.
-   */
-  readonly disabled: boolean;
-  readonly onChange: (next: ToolPermission) => void;
-  readonly onOverrideChange: (next: ToolPromptOverride) => void;
-}): JSX.Element {
-  const { t } = useTranslation();
-  const stored = override ?? EMPTY_OVERRIDE;
-  const [editing, setEditing] = useState(false);
-  const rewritten = stored.description !== '';
-
-  const setField = (field: string, text: string): void => {
-    onOverrideChange({ ...stored, fields: { ...stored.fields, [field]: text } });
-  };
-
-  return (
-    <li className="row agent-editor__tool">
-      <div className="agent-editor__tool-text">
-        <span className="agent-editor__tool-name truncate">{name}</span>
-        {/* The row says what the model is told, not what the tool shipped with.
-            Showing the built-in under a tool whose description an operator has
-            replaced would make the list disagree with the payload. */}
-        {(rewritten ? stored.description : detail) !== '' && (
-          <span className="agent-editor__tool-detail truncate">
-            {rewritten ? stored.description : detail}
-          </span>
-        )}
-      </div>
-      {risk === undefined ? (
-        // Named in the config but not registered right now — an MCP server that
-        // is down, or a tool that was removed. It stays on the list so a save
-        // cannot drop it.
-        <Badge tone="warning">{t('agents.toolNotInstalled')}</Badge>
-      ) : (
-        <Badge tone="neutral">{risk}</Badge>
-      )}
-      <Button
-        variant="ghost"
-        size="sm"
-        className="agent-editor__tool-edit"
-        disabled={disabled}
-        // Named for the tool: a list of ten rows has ten of these, and an icon
-        // called "Wording" tells a screen reader nothing about which.
-        aria-label={t('agents.toolWordingFor', { name })}
-        onClick={() => {
-          setEditing(true);
-        }}
-      >
-        <SquarePen aria-hidden="true" />
-      </Button>
-      <div className="agent-editor__tool-permission">
-        <SelectField
-          label={<span className="sr-only">{t('agents.toolPermissionFor', { name })}</span>}
-          value={permission}
-          disabled={disabled}
-          options={TOOL_PERMISSIONS.map((option) => ({
-            value: option,
-            label: t(PERMISSION_LABELS[option]),
-          }))}
-          onValueChange={(next) => {
-            if (isToolPermission(next)) onChange(next);
-          }}
-        />
-      </div>
-
-      {/* A dialog rather than an expander on the row. The list is a scrolling
-          box of one-line rows, and pushing a form into the middle of it moved
-          every row below the one being edited — while giving the form the width
-          of a column sized for a permission select. */}
-      <Dialog open={editing} onOpenChange={setEditing}>
-        <DialogContent className="agent-editor__wording-dialog">
-          <DialogHeader>
-            <DialogHeading>{t('agents.toolWordingTitle', { name })}</DialogHeading>
-            <DialogSubheading>{t('agents.toolWordingHint')}</DialogSubheading>
-          </DialogHeader>
-
-          <div className="stack agent-editor__wording-body">
-            <TextareaField
-              label={t('agents.toolWordingDesc')}
-              value={stored.description}
-              // The tool's real description, so an empty box is a legible
-              // statement about what the model is being told rather than a
-              // promise that something exists somewhere.
-              placeholder={detail}
-              rows={3}
-              onValueChange={(next) => {
-                onOverrideChange({ ...stored, description: next });
-              }}
-            />
-            {fields.length > 0 && (
-              <>
-                <h4 className="agent-editor__wording-heading">{t('agents.toolWordingArgs')}</h4>
-                {fields.map((field) => (
-                  <TextareaField
-                    key={field.name}
-                    label={field.name}
-                    value={stored.fields[field.name] ?? ''}
-                    placeholder={field.description}
-                    rows={2}
-                    onValueChange={(next) => {
-                      setField(field.name, next);
-                    }}
-                  />
-                ))}
-              </>
-            )}
-            {/* The boundary that stops an override from breaking the tool: the
-                model is told what these arguments mean, and the schema that
-                accepts them is still generated from the tool's own definition. */}
-            <p className="agent-editor__hint">{t('agents.toolWordingNote')}</p>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                onOverrideChange({ description: '', fields: {} });
-              }}
-            >
-              <RotateCcw aria-hidden="true" />
-              {t('agents.resetBuiltin')}
-            </Button>
-            <DialogClose asChild>
-              <Button>{t('common.done')}</Button>
-            </DialogClose>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </li>
-  );
-}
-
-/**
- * One agent this one may hand a task to.
- *
- * Three controls, in the order the decision is made: *who*, *when to use them*,
- * and *whether to ask first*. The middle one is the largest because it is the
- * one that matters — it becomes the tool description the model reads, and it is
- * the only part of this feature that decides when a delegation actually fires.
- *
- * The tool name is shown rather than asked for. It is derived from the agent id
- * so two subagents can never collide and none can shadow a built-in; showing it
- * is what makes an operator's prompt ("use `ask_researcher` when…") match what
- * the model is really offered.
- */
-function SubagentRow({
-  ref_,
-  index,
-  options,
-  onChange,
-  onRemove,
-}: {
-  readonly ref_: SubagentRef;
-  readonly index: number;
-  readonly options: readonly { readonly id: string; readonly label: string }[];
-  readonly onChange: (next: SubagentRef) => void;
-  readonly onRemove: () => void;
-}): JSX.Element {
-  const { t } = useTranslation();
-  const position = index + 1;
-  // The target's label, which is what the generated description names. Read off
-  // the option list rather than stored on the reference, for the same reason
-  // `labelOf` reads it off the target's entry: one place to rename an agent.
-  const targetLabel = options.find((agent) => agent.id === ref_.id)?.label ?? '';
-
-  return (
-    <li className="stack agent-editor__subagent">
-      <div className="row agent-editor__subagent-head">
-        {/* Wrapped, like the permission select beside it, so the stylesheet has
-            something to place. The two are the same kind of thing and the phone
-            layout has to address them both. */}
-        <div className="agent-editor__subagent-agent">
-          <SelectField
-            label={<span className="sr-only">{t('agents.subagentAgentFor', { position })}</span>}
-            value={ref_.id}
-            placeholder={t('agents.subagentChoose')}
-            options={options.map((agent) => ({
-              value: agent.id,
-              label: agent.label === '' ? agent.id : agent.label,
-            }))}
-            onValueChange={(next) => {
-              onChange({ ...ref_, id: next });
-            }}
-          />
-        </div>
-
-        {ref_.id !== '' && (
-          <code className="agent-editor__subagent-tool">{subagentToolName(ref_.id)}</code>
-        )}
-
-        <div className="agent-editor__subagent-permission">
-          <SelectField
-            label={
-              <span className="sr-only">{t('agents.subagentPermissionFor', { position })}</span>
-            }
-            value={ref_.permission}
-            options={TOOL_PERMISSIONS.map((option) => ({
-              value: option,
-              label: t(PERMISSION_LABELS[option]),
-            }))}
-            onValueChange={(next) => {
-              if (isToolPermission(next)) onChange({ ...ref_, permission: next });
-            }}
-          />
-        </div>
-
-        <Button
-          variant="ghost"
-          aria-label={t('agents.subagentRemove', { position })}
-          onClick={onRemove}
-        >
-          <Trash2 aria-hidden="true" />
-        </Button>
-      </div>
-
-      {/* The one box on this page that is not a single line, and it earns it by
-          what it has to *show* rather than by what gets typed into it. The
-          placeholder is the description the model reads when this is left
-          empty — a couple of sentences — and in an `<input>` an operator saw
-          about forty characters of it, which left the default as invisible as
-          having no placeholder at all. It grows with its content, so a one-word
-          answer still costs one line. */}
-      <TextareaField
-        label={<span className="sr-only">{t('agents.subagentPromptFor', { position })}</span>}
-        value={ref_.prompt}
-        // The sentence the model would actually read, not an invented example
-        // of one an operator might write — which is what this used to hold, and
-        // left "leave it empty for a generic one" as the only clue about a
-        // default nobody could see.
-        //
-        // A placeholder rather than a prefilled value on purpose: it is built
-        // from the *target's* current label, so it follows a rename. Written
-        // into the reference it would freeze the name the agent had on the day
-        // the delegation was added, and nothing would ever correct it.
-        placeholder={
-          ref_.id === '' ? '' : defaultSubagentPrompt(targetLabel === '' ? ref_.id : targetLabel)
-        }
-        hint={t('agents.subagentPromptHint')}
-        rows={2}
-        onValueChange={(next) => {
-          onChange({ ...ref_, prompt: next });
-        }}
-      />
-    </li>
-  );
-}
-
 /**
  * The tool pinned to the top of the list.
  *
@@ -701,13 +230,6 @@ function SubagentRow({
  * manifest order is the useful order.
  */
 const EXEC_TOOL = 'exec';
-
-const PERMISSION_LABELS: Readonly<Record<ToolPermission, WebKey>> = {
-  allow: 'agents.toolAllow',
-  ask: 'agents.toolAsk',
-  deny: 'agents.toolDisabled',
-};
-
 /**
  * The dropdown's stand-in for "no toolbox".
  *
