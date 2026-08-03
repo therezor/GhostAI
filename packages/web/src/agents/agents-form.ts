@@ -688,6 +688,12 @@ export function toNewAgentPatch(
           promptMode: template.promptMode,
           toolPrompts: structuredClone(template.toolPrompts),
           tools: { ...template.tools },
+          // Written, not left to inheritance — the same rule `ownFields` states
+          // for the editor's save, and for the same reason. Omitting them makes
+          // the copy follow `agents.defaults`, so duplicating an agent with
+          // vision switched off produced one with vision switched on.
+          visionEnabled: template.visionEnabled ?? defaults.visionEnabled,
+          toolsEnabled: template.toolsEnabled ?? defaults.toolsEnabled,
           // The one thing deliberately *not* copied. Everything else here is a
           // setting — how the agent thinks, what it may touch, what it costs —
           // and inheriting those is what "a copy of the default agent" means.

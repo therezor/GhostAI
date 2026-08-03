@@ -399,6 +399,32 @@ describe('toNewAgentPatch', () => {
     expect(ConfigPatchSchema.safeParse(patch).success).toBe(true);
   });
 
+  it('carries a switched-off capability into the copy', () => {
+    // Inheritance is the wrong default here: `AgentEntrySchema` makes these
+    // optional and `agents.defaults` says `true`, so an omitted `false` reads
+    // as "ask the default" and comes back on. Duplicating an agent with vision
+    // switched off produced one with vision switched on.
+    const restricted = AgentEntrySchema.parse({ visionEnabled: false, toolsEnabled: false });
+    const patch = toNewAgentPatch('copy', 'Copy', restricted, DEFAULTS);
+
+    expect(patch.agents?.list?.copy).toMatchObject({
+      visionEnabled: false,
+      toolsEnabled: false,
+    });
+  });
+
+  it('writes the capabilities the template inherited rather than omitting them', () => {
+    // The default agent's entry stores neither, and the copy must still say so
+    // outright — otherwise it follows a later change to `agents.defaults` that
+    // the operator never made on its behalf.
+    const patch = toNewAgentPatch('copy', 'Copy', template, DEFAULTS);
+
+    expect(patch.agents?.list?.copy).toMatchObject({
+      visionEnabled: DEFAULTS.visionEnabled,
+      toolsEnabled: DEFAULTS.toolsEnabled,
+    });
+  });
+
   it('takes the template’s own value over the default where it has one', () => {
     const pinned = AgentEntrySchema.parse({ model: 'qwen3:32b', maxTokens: 512 });
     const patch = toNewAgentPatch('copy', 'Copy', pinned, DEFAULTS);
