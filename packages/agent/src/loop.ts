@@ -937,36 +937,6 @@ export class AgentLoop {
       if (title !== '') this.#store.updateSession(sessionKey, { title });
     }
 
-    const preamble = await this.#preamble(promptContext);
-
-    // Resolved once per turn, beside the jail and for the same reason: a
-    // sandbox is a property of (agent, workspace, session), and re-deriving it
-    // per tool call would let a mid-turn config change move it.
-    const sandbox: ToolboxRequest = {
-      agentId: session.agentId ?? DEFAULT_AGENT_ID,
-      workspaceId: session.workspaceId,
-      sessionKey,
-      toolbox: this.#toolbox.name,
-      network: this.#toolbox.network,
-      workspaceRoot: jail.root,
-    };
-    const runner = this.#runners?.forTurn(sandbox);
-    // Beside the runner and off the same request, for the same reason: which
-    // agent and which session is a property of the turn, and re-deriving it per
-    // tool call would let a mid-turn change move it.
-    const automation = this.#automation?.forTurn(sandbox);
-
-    const toolContext: ToolContext = {
-      jail,
-      signal,
-      config: this.#toolsConfig,
-      clock: this.#clock,
-      logger: this.#logger,
-      env: this.#env,
-      ...(runner === undefined ? {} : { runner, sandboxed: true }),
-      ...(automation === undefined ? {} : { automation }),
-    };
-
     const startedAt = this.#clock.monotonic();
     // Both clocks, deliberately. The monotonic one caps the wall timeout and
     // must stay monotonic — an NTP step backwards through a `now()`-based cap
@@ -976,6 +946,16 @@ export class AgentLoop {
     let iteration = 0;
     let elapsedMs = 0;
     let stopReason: StopReason | undefined;
+    /**
+     * Why the turn failed, set alongside every `stopReason = 'error'`.
+     *
+     * Recorded on the stats row rather than appended to history: everything in
+     * `messages` is replayed into every later provider request, so an error
+     * written there would fail its way into the prompt forever. This is the only
+     * durable copy — the `error` event carrying the same words is unsequenced
+     * and gone the moment it is delivered.
+     */
+    let errorMessage: string | undefined;
     let finalText = '';
     let usage: Usage = emptyUsage();
     /** Set for exactly one iteration, then cleared. See `text-tool-call.ts`. */
@@ -985,6 +965,14 @@ export class AgentLoop {
     try {
       // Inside the `try`, so a caller that abandons the iterator before the
       // first iteration still runs the cleanup below.
+      //
+      // And *first* inside it, above every fallible step below. Building the
+      // preamble awaits, and resolving the sandbox reaches a container daemon
+      // that may be down — either can throw. Opening the turn after them meant
+      // a failure there unwound before the turn existed, so the error named a
+      // `turnId` no client had seen start, the transcript invented an orphan
+      // turn with no `firstSeq`, and the one thing the reader wanted — a
+      // Regenerate button — was the one thing there was no address for.
       yield {
         type: 'turn.start',
         sessionKey,
@@ -996,6 +984,36 @@ export class AgentLoop {
         // end, and a failed turn with no seq is a failed turn nothing can
         // re-run.
         firstSeq,
+      };
+
+      const preamble = await this.#preamble(promptContext);
+
+      // Resolved once per turn, beside the jail and for the same reason: a
+      // sandbox is a property of (agent, workspace, session), and re-deriving it
+      // per tool call would let a mid-turn config change move it.
+      const sandbox: ToolboxRequest = {
+        agentId: session.agentId ?? DEFAULT_AGENT_ID,
+        workspaceId: session.workspaceId,
+        sessionKey,
+        toolbox: this.#toolbox.name,
+        network: this.#toolbox.network,
+        workspaceRoot: jail.root,
+      };
+      const runner = this.#runners?.forTurn(sandbox);
+      // Beside the runner and off the same request, for the same reason: which
+      // agent and which session is a property of the turn, and re-deriving it per
+      // tool call would let a mid-turn change move it.
+      const automation = this.#automation?.forTurn(sandbox);
+
+      const toolContext: ToolContext = {
+        jail,
+        signal,
+        config: this.#toolsConfig,
+        clock: this.#clock,
+        logger: this.#logger,
+        env: this.#env,
+        ...(runner === undefined ? {} : { runner, sandboxed: true }),
+        ...(automation === undefined ? {} : { automation }),
       };
 
       while (iteration < maxIterations) {
@@ -1103,6 +1121,7 @@ export class AgentLoop {
             turnId,
           };
           stopReason = 'error';
+          errorMessage = ghost.message;
           break;
         }
 
@@ -1110,14 +1129,16 @@ export class AgentLoop {
           // A stream that ends without its `done` event has not reported tool
           // calls, usage or a finish reason. Treating that as an empty answer
           // would silently end the turn on a transport bug.
+          const message = 'The provider ended the stream without a result.';
           yield {
             type: 'error',
             code: 'provider_error',
-            message: 'The provider ended the stream without a result.',
+            message,
             retryable: true,
             turnId,
           };
           stopReason = 'error';
+          errorMessage = message;
           break;
         }
 
@@ -1228,6 +1249,7 @@ export class AgentLoop {
       iterations: iteration,
       stopReason,
       usage,
+      ...(errorMessage === undefined ? {} : { error: errorMessage }),
     });
 
     yield {

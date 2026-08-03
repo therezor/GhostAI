@@ -142,7 +142,7 @@ describe('accumulating a turn', () => {
     });
     expect(turnOf(scoped)).toMatchObject({
       done: true,
-      failure: { code: 'provider_error', retryable: true },
+      failure: { message: 'upstream said no', retryable: true },
     });
 
     // A connection-scoped error has no turn to render on; the toast is its home.
@@ -553,6 +553,47 @@ describe('a stored history', () => {
       status: 'ok',
       content: 'a.txt',
     });
+  });
+
+  it('shows why a turn failed, for a turn that answered nothing', () => {
+    // The shape a failed turn actually leaves behind: the question, and nothing
+    // else. An error is never appended to history — it would be replayed into
+    // every later provider request — so the reason travels beside the rows.
+    const items = fromStoredMessages(
+      [stored('m1', 't1', { role: 'user', content: [{ type: 'text', text: 'hi' }] }, 7)],
+      {},
+      { t1: 'No container runtime is reachable.' },
+    );
+
+    // One turn, not two, and it sits after the question it belongs to.
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatchObject({ kind: 'user', text: 'hi', seq: 7 });
+    expect(turnOf(items)).toMatchObject({
+      id: 't1',
+      done: true,
+      failure: { message: 'No container runtime is reachable.' },
+      // The address Regenerate re-runs from. Without it the rebuilt turn is
+      // exactly the un-runnable one this whole change is about.
+      firstSeq: 7,
+    });
+  });
+
+  it('does not open a second turn when a failed turn also answered', () => {
+    const items = fromStoredMessages(
+      [
+        stored('m1', 't1', { role: 'user', content: [{ type: 'text', text: 'hi' }] }),
+        stored('m2', 't1', {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'partly' }],
+          toolCalls: [],
+        }),
+      ],
+      {},
+      { t1: 'the stream ended early' },
+    );
+
+    expect(items.filter((item) => item.kind === 'turn')).toHaveLength(1);
+    expect(turnOf(items)).toMatchObject({ failure: { message: 'the stream ended early' } });
   });
 
   it('keeps malformed tool arguments as the string the model emitted', () => {

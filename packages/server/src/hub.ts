@@ -777,7 +777,16 @@ export class SessionHub {
     // Read before the delete, because the delete is what removes it.
     const content = target.message.role === 'user' ? target.message.content : [];
     this.#rewind(state, target.seq);
-    this.#enqueue(connection, state, { content, mentions: parseMentions(textOf(target.message)) });
+    this.#enqueue(connection, state, {
+      content,
+      mentions: parseMentions(textOf(target.message)),
+      // Forwarded exactly as `#edit` does. The rewind above deletes the question
+      // and the loop appends it again, so the asking client is showing an
+      // optimistic bubble in the gap; this is what the ack uses to claim it.
+      ...(message.clientMessageId === undefined
+        ? {}
+        : { clientMessageId: message.clientMessageId }),
+    });
   }
 
   /** Replaces a message and re-runs from it. Same guards as `#regenerate`. */
@@ -896,6 +905,14 @@ export class SessionHub {
    */
   async #runTurn(state: SessionState, turn: QueuedTurn): Promise<void> {
     const controller = new AbortController();
+    /**
+     * Set once the loop's `turn.start` has reached the clients.
+     *
+     * The distinction it records is "did anyone see this turn open", which is
+     * what decides whether a failure can be closed at an address the client
+     * already holds. Undefined means the loop was never asked to run at all.
+     */
+    let opened: { readonly firstSeq: number | undefined } | undefined;
     try {
       // An id naming no runnable agent — deleted, switched off, or never real —
       // becomes the default agent rather than a refusal. A conversation must
@@ -975,9 +992,15 @@ export class SessionHub {
         ...(turn.agentId === undefined ? {} : { agentId }),
       });
 
-      for await (const event of events) this.#forward(state, event);
+      for await (const event of events) {
+        // Remembered so a failure below can close the turn at the same address
+        // the client already has. The loop opens the turn before anything that
+        // can throw, so in practice this is set whenever the loop ran at all.
+        if (event.type === 'turn.start') opened = { firstSeq: event.firstSeq };
+        this.#forward(state, event);
+      }
     } catch (error) {
-      this.#failTurn(state, turn.id, error);
+      this.#failTurn(state, turn.id, error, opened);
     } finally {
       state.running = undefined;
       state.touchedAtMs = this.#clock.now();
@@ -1020,11 +1043,33 @@ export class SessionHub {
     return stored;
   }
 
-  #failTurn(state: SessionState, turnId: string, error: unknown): void {
+  /**
+   * Closes a turn that threw.
+   *
+   * `opened` carries the `firstSeq` the loop reported on `turn.start`, when it
+   * got that far. Restating it here is what keeps a failed turn re-runnable
+   * through a reconnect: the client reads `message.firstSeq ?? turn.firstSeq`,
+   * so a replay that has lost the original `turn.start` out of the ring buffer
+   * would otherwise rebuild a turn with no address and offer no Regenerate.
+   */
+  #failTurn(
+    state: SessionState,
+    turnId: string,
+    error: unknown,
+    opened?: { readonly firstSeq: number | undefined },
+  ): void {
+    const address = opened?.firstSeq === undefined ? {} : ({ firstSeq: opened.firstSeq } as const);
+
     if (isAbortError(error)) {
       // The loop normally yields `turn.end` with `aborted` itself; a throw here
       // means it unwound before it could, and the turn still has to close.
-      this.#emit(state, { type: 'turn.end', turnId, stopReason: 'aborted', iterations: 0 });
+      this.#emit(state, {
+        type: 'turn.end',
+        turnId,
+        stopReason: 'aborted',
+        iterations: 0,
+        ...address,
+      });
       return;
     }
 
@@ -1041,7 +1086,13 @@ export class SessionHub {
       retryable: resolved.cause.retryable,
       turnId,
     });
-    this.#emit(state, { type: 'turn.end', turnId, stopReason: 'error', iterations: 0 });
+    this.#emit(state, {
+      type: 'turn.end',
+      turnId,
+      stopReason: 'error',
+      iterations: 0,
+      ...address,
+    });
   }
 
   /**

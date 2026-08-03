@@ -289,6 +289,14 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
           // and a page that carried only its own share would leave a card on
           // the next page unable to say it had a run.
           subagentRuns: subagentRunsOf(store.getSession(key)?.metadata ?? {}),
+          // Beside `subagentRuns`, sent whole for the same reason. A failed turn
+          // appends nothing, so without this a rebuilt transcript shows the
+          // question, no answer, and no sign that anything went wrong.
+          failures: Object.fromEntries(
+            store
+              .turnStats(key)
+              .flatMap((turn) => (turn.error === undefined ? [] : [[turn.turnId, turn.error]])),
+          ),
           ...(rows.length > query.limit && last !== undefined
             ? { nextCursor: encodeMessageCursor({ seq: last.seq }) }
             : {}),

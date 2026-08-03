@@ -26,6 +26,7 @@ interface FakeEngine extends ContainerEngine {
   readonly started: string[][];
   readonly stopped: string[];
   failStart: boolean;
+  failProbe: boolean;
   reaped: number;
   failReap: boolean;
 }
@@ -37,10 +38,11 @@ function fakeEngine(): FakeEngine {
     started,
     stopped,
     failStart: false,
+    failProbe: false,
     reaped: 0,
     failReap: false,
     probe() {
-      /* reachable */
+      if (this.failProbe) throw new Error('Cannot connect to the Docker daemon');
     },
     reapOrphans() {
       if (this.failReap) throw new Error('cannot list');
@@ -98,8 +100,28 @@ function pool(overrides: Partial<ToolboxPoolOptions> = {}): ToolboxPool {
       counter += 1;
       return String(counter);
     },
+    // A stub by default, because the container is now started by the first
+    // command rather than by `forTurn` — so a test about containers has to run
+    // one, and the real runner would reach for a daemon.
+    newRunner: () => ({ run: async (): Promise<RunOutcome> => await Promise.resolve(outcome()) }),
     ...overrides,
   });
+}
+
+/**
+ * Resolves a runner and puts one command through it.
+ *
+ * `forTurn` is policy only: it proves a sandbox is *allowed*, not that one
+ * exists. Anything asserting on `engine.started`, `live`, or a stop has to ask
+ * for a container, and asking means running something.
+ */
+async function use(
+  live: ToolboxPool,
+  spec: ToolboxRequest = request(),
+): Promise<CommandRunner | undefined> {
+  const runner = live.forTurn(spec);
+  await runner?.run(runRequest());
+  return runner;
 }
 
 /** Enough of a `RunRequest` to reach a runner; nothing here inspects the plan. */
@@ -164,7 +186,7 @@ describe('ToolboxPool', () => {
     expect(engine.started).toHaveLength(0);
   });
 
-  it('sweeps containers a previous process left behind, on first use', () => {
+  it('sweeps containers a previous process left behind, on first use', async () => {
     // `close()` reaps what this process started and reaps nothing when the
     // process was killed outright. Without this, a crash leaks a container
     // holding a workspace mount, forever, silently.
@@ -172,8 +194,8 @@ describe('ToolboxPool', () => {
     store.approve('research');
     const live = pool();
 
-    live.forTurn(request());
-    live.forTurn(request({ sessionKey: 'web:2' }));
+    await use(live);
+    await use(live, request({ sessionKey: 'web:2' }));
 
     // Once, not per turn.
     expect(engine.reaped).toBe(1);
@@ -202,65 +224,127 @@ describe('ToolboxPool', () => {
     expect(engine.started).toHaveLength(0);
   });
 
-  it('starts a container once the toolbox is approved', () => {
+  it('allows a sandbox without starting one, then starts it on the first command', async () => {
     install('research');
     store.approve('research');
+    const live = pool();
 
-    const runner = pool().forTurn(request());
+    const runner = live.forTurn(request());
 
+    // Allowed, and nothing started: a turn that never calls a tool never pays
+    // for a container, and never touches the daemon to find that out.
     expect(runner).toBeDefined();
+    expect(engine.started).toHaveLength(0);
+
+    await runner?.run(runRequest());
+
     expect(engine.started).toHaveLength(1);
     expect(engine.started[0]?.[0]).toBe('run');
   });
 
-  it('reuses the container for a second turn in the same session', () => {
+  it('opens a turn without a daemon, and fails only the command', async () => {
+    // The whole point of resolving policy without starting anything. Docker
+    // being closed used to throw out of `forTurn`, which runs before the turn
+    // has opened — so it killed the turn, and `probe()` is a `spawnSync` that
+    // blocked the event loop for five seconds first.
+    install('research');
+    store.approve('research');
+    engine.failProbe = true;
+    const live = pool();
+
+    const runner = live.forTurn(request());
+
+    // The turn is fine. Everything that does not need a sandbox keeps working.
+    expect(runner).toBeDefined();
+    expect(engine.started).toHaveLength(0);
+
+    // The command is not, and it says which of the two it is.
+    await expect(runner?.run(runRequest())).rejects.toThrow(/No container runtime is reachable/);
+  });
+
+  it('keeps a turn sandboxed when the daemon is unreachable', async () => {
+    // The sharpest way to get this wrong. `sandboxed` is derived from `forTurn`
+    // returning something, and it is what tells the exec guard the host's rules
+    // do not apply — so answering `undefined` here would not read as "no
+    // sandbox available", it would run the command on the host with the host's
+    // permissions. Refusal, never a downgrade.
+    install('research');
+    store.approve('research');
+    engine.failProbe = true;
+
+    expect(pool().forTurn(request())).toBeDefined();
+  });
+
+  it('starts the container once the daemon comes back', async () => {
+    // A dead daemon is a condition that changes while the server is up, and
+    // nothing about the first failure may make the session permanently broken.
+    install('research');
+    store.approve('research');
+    engine.failProbe = true;
+    const live = pool();
+    const runner = live.forTurn(request());
+    await expect(runner?.run(runRequest())).rejects.toThrow(/No container runtime is reachable/);
+
+    engine.failProbe = false;
+
+    expect((await runner?.run(runRequest()))?.code).toBe(0);
+    expect(engine.started).toHaveLength(1);
+  });
+
+  it('reuses the container for a second turn in the same session', async () => {
     // The whole reason the pool exists: a Kali or research image costs seconds
     // to start, and a conversation should pay that once.
     install('research');
     store.approve('research');
     const live = pool();
 
-    const first = live.forTurn(request());
-    const second = live.forTurn(request());
+    const first = await use(live);
+    const second = await use(live);
 
     expect(second).toBe(first);
     expect(engine.started).toHaveLength(1);
   });
 
-  it('gives two sessions two containers', () => {
+  it('gives two sessions two containers', async () => {
     // Keyed on the session, not the agent: one engagement's artefacts must not
     // sit in another's /tmp.
     install('research');
     store.approve('research');
     const live = pool();
 
-    live.forTurn(request({ sessionKey: 'web:1' }));
-    live.forTurn(request({ sessionKey: 'web:2' }));
+    await use(live, request({ sessionKey: 'web:1' }));
+    await use(live, request({ sessionKey: 'web:2' }));
 
     expect(engine.started).toHaveLength(2);
     expect(live.live).toHaveLength(2);
   });
 
-  it('gives two workspaces two containers, because the mount differs', () => {
+  it('gives two workspaces two containers, because the mount differs', async () => {
     install('research');
     store.approve('research');
     const live = pool();
 
-    live.forTurn(request({ workspaceId: 'default' }));
-    live.forTurn(request({ workspaceId: 'clients' }));
+    await use(live, request({ workspaceId: 'default' }));
+    await use(live, request({ workspaceId: 'clients' }));
 
     expect(engine.started).toHaveLength(2);
   });
 
-  it('refuses rather than falling back to the host when the engine fails', () => {
+  it('refuses rather than falling back to the host when the engine fails', async () => {
     // The one failure mode where an operator believes there is a boundary and
     // there is not.
     install('research');
     store.approve('research');
     engine.failStart = true;
 
-    expect(() => pool().forTurn(request())).toThrow(GhostError);
-    expect(() => pool().forTurn(request())).toThrow(/could not be started/);
+    // Still a runner. `sandboxed` is derived from this being defined, so an
+    // engine failure that returned `undefined` would not mean "no sandbox" — it
+    // would hand the command to the host. The refusal belongs on the command.
+    const runner = pool().forTurn(request());
+    expect(runner).toBeDefined();
+
+    await expect(runner?.run(runRequest())).rejects.toThrow(GhostError);
+    await expect(runner?.run(runRequest())).rejects.toThrow(/could not be started/);
   });
 
   it('refuses a network request above the toolbox ceiling', () => {
@@ -272,41 +356,41 @@ describe('ToolboxPool', () => {
     );
   });
 
-  it('stops a container that has gone idle', () => {
+  it('stops a container that has gone idle', async () => {
     install('research');
     store.approve('research');
     let now = 1_000;
     const live = pool({ idleMs: 500, clock: { now: () => now } as never });
 
-    live.forTurn(request());
+    await use(live);
     now = 2_000;
-    live.forTurn(request({ sessionKey: 'web:2' }));
+    await use(live, request({ sessionKey: 'web:2' }));
 
     expect(engine.stopped).toHaveLength(1);
     expect(live.live).toHaveLength(1);
   });
 
-  it('evicts the least recently used beyond the cap', () => {
+  it('evicts the least recently used beyond the cap', async () => {
     install('research');
     store.approve('research');
     const live = pool({ maxLive: 2 });
 
-    live.forTurn(request({ sessionKey: 'a' }));
-    live.forTurn(request({ sessionKey: 'b' }));
-    live.forTurn(request({ sessionKey: 'c' }));
+    await use(live, request({ sessionKey: 'a' }));
+    await use(live, request({ sessionKey: 'b' }));
+    await use(live, request({ sessionKey: 'c' }));
 
     expect(live.live).toHaveLength(2);
     expect(engine.stopped).toHaveLength(1);
   });
 
-  it('stops every container a session owns when it ends', () => {
+  it('stops every container a session owns when it ends', async () => {
     install('research');
     store.approve('research');
     const live = pool();
 
-    live.forTurn(request({ sessionKey: 'web:1', agentId: 'a' }));
-    live.forTurn(request({ sessionKey: 'web:1', agentId: 'b' }));
-    live.forTurn(request({ sessionKey: 'web:2', agentId: 'a' }));
+    await use(live, request({ sessionKey: 'web:1', agentId: 'a' }));
+    await use(live, request({ sessionKey: 'web:1', agentId: 'b' }));
+    await use(live, request({ sessionKey: 'web:2', agentId: 'a' }));
 
     live.releaseSession('web:1');
 
@@ -314,13 +398,13 @@ describe('ToolboxPool', () => {
     expect(live.live).toHaveLength(1);
   });
 
-  it('survives an engine that cannot stop a container', () => {
+  it('survives an engine that cannot stop a container', async () => {
     // A container already gone is the common case, and a failed reap must not
     // take down the turn that triggered the sweep.
     install('research');
     store.approve('research');
     const live = pool();
-    live.forTurn(request());
+    await use(live);
     engine.stop = () => {
       throw new Error('no such container');
     };
@@ -331,24 +415,24 @@ describe('ToolboxPool', () => {
     expect(live.live).toHaveLength(0);
   });
 
-  it('translates the mount path for a containerised GhostAI', () => {
+  it('translates the mount path for a containerised GhostAI', async () => {
     // A bind path is resolved by the daemon, so asking for GhostAI's own view
     // would mount the host's path of that name — usually an empty directory.
     install('research');
     store.approve('research');
     const live = pool({ hostPath: () => '/host/data/workspace' });
 
-    live.forTurn(request());
+    await use(live);
 
     expect(engine.started[0]?.join(' ')).toContain(
       'type=bind,src=/host/data/workspace,dst=/workspace',
     );
   });
 
-  it('labels the container with its session, toolbox and owning process', () => {
+  it('labels the container with its session, toolbox and owning process', async () => {
     install('research');
     store.approve('research');
-    pool().forTurn(request());
+    await use(pool());
 
     const argv = engine.started[0]?.join(' ') ?? '';
     expect(argv).toContain('ghostai.session=web:1');
@@ -412,10 +496,18 @@ describe('ToolboxPool: a container with a command in it', () => {
     store.approve('research');
     const held = heldRunner();
     let now = 1_000;
+    // Only the first container gets the held runner: the second session has to
+    // run something to start a container at all, and must not block on it.
+    let first = true;
     const live = pool({
       idleMs: 500,
       clock: { now: () => now } as never,
-      newRunner: () => held.runner,
+      newRunner: () => {
+        if (!first)
+          return { run: async (): Promise<RunOutcome> => await Promise.resolve(outcome()) };
+        first = false;
+        return held.runner;
+      },
     });
 
     const runner = live.forTurn(request());
@@ -423,7 +515,7 @@ describe('ToolboxPool: a container with a command in it', () => {
     // Long enough that the idle cutoff has passed.
     now = 10_000;
 
-    live.forTurn(request({ sessionKey: 'web:2' }));
+    await use(live, request({ sessionKey: 'web:2' }));
 
     expect(engine.stopped).toHaveLength(0);
     expect(live.live).toHaveLength(2);
@@ -442,10 +534,19 @@ describe('ToolboxPool: a container with a command in it', () => {
     install('research');
     store.approve('research');
     const held = heldRunner();
-    const live = pool({ maxLive: 1, newRunner: () => held.runner });
+    let first = true;
+    const live = pool({
+      maxLive: 1,
+      newRunner: () => {
+        if (!first)
+          return { run: async (): Promise<RunOutcome> => await Promise.resolve(outcome()) };
+        first = false;
+        return held.runner;
+      },
+    });
 
     const running = live.forTurn(request({ sessionKey: 'a' }))?.run(runRequest());
-    live.forTurn(request({ sessionKey: 'b' }));
+    await use(live, request({ sessionKey: 'b' }));
 
     // Over the cap on purpose: the cap stops containers accumulating *unused*,
     // and one with a command in it is not that.
@@ -526,7 +627,7 @@ describe('ToolboxPool: a container that disappeared', () => {
 });
 
 describe('ToolboxPool: edges', () => {
-  it('never evicts the container it is about to hand back', () => {
+  it('never evicts the container it is about to hand back', async () => {
     // With a cap this small the newest entry is the only entry, so an unguarded
     // sweep would stop the container whose runner is being returned — and every
     // exec would fail against something the pool reported starting.
@@ -534,22 +635,22 @@ describe('ToolboxPool: edges', () => {
     store.approve('research');
     const live = pool({ maxLive: 0 });
 
-    const runner = live.forTurn(request());
+    const runner = await use(live);
 
     expect(runner).toBeDefined();
     expect(live.live).toHaveLength(1);
     expect(engine.stopped).toHaveLength(0);
   });
 
-  it('releases only the session it was asked about', () => {
+  it('releases only the session it was asked about', async () => {
     // Matching used to be `key.endsWith(' ' + sessionKey)`, which reaps a
     // different session whose key happens to end with this one's text.
     install('research');
     store.approve('research');
     const live = pool();
 
-    live.forTurn(request({ sessionKey: 'web:1' }));
-    live.forTurn(request({ sessionKey: 'x web:1' }));
+    await use(live, request({ sessionKey: 'web:1' }));
+    await use(live, request({ sessionKey: 'x web:1' }));
 
     live.releaseSession('web:1');
 
@@ -557,7 +658,7 @@ describe('ToolboxPool: edges', () => {
     expect(engine.stopped).toHaveLength(1);
   });
 
-  it('translates the manifest mount as well as the workspace', () => {
+  it('translates the manifest mount as well as the workspace', async () => {
     // A containerised GhostAI that translated only the workspace would ask the
     // daemon for its own /data/profiles path — which means something else on the
     // host. The container would start carrying the wrong policy file.
@@ -565,7 +666,7 @@ describe('ToolboxPool: edges', () => {
     store.approve('research');
     const live = pool({ hostPath: (path) => path.replace(base, '/host') });
 
-    live.forTurn(request());
+    await use(live);
 
     const argv = engine.started[0]?.join(' ') ?? '';
     expect(argv).toContain('type=bind,src=/host/workspace,dst=/workspace');
@@ -589,17 +690,17 @@ describe('ToolboxPool: approval is re-checked every turn', () => {
     expect(() => live.forTurn(request())).toThrow(/never been approved/);
   });
 
-  it('replaces a container whose manifest changed under it', () => {
+  it('replaces a container whose manifest changed under it', async () => {
     // The running container was created with the old policy's flags, so reusing
     // it would run under a manifest nobody approved.
     install('research');
     store.approve('research');
     const live = pool();
-    const first = live.forTurn(request());
+    const first = await use(live);
 
     install('research', { network: { maxMode: 'open' }, version: '2.0.0' });
     store.approve('research');
-    const second = live.forTurn(request());
+    const second = await use(live);
 
     expect(second).not.toBe(first);
     expect(engine.stopped).toHaveLength(1);

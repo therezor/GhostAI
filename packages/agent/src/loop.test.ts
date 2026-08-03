@@ -588,6 +588,35 @@ describe('AgentLoop', () => {
     ]);
   });
 
+  it('turns an unreachable sandbox into a failed tool, not a failed turn', async () => {
+    // The other half of deferring the container start. The pool now refuses from
+    // inside `run` rather than from `forTurn`, and this is what that buys: the
+    // turn stays open, the model is told which command failed and why, and it
+    // can say so instead of the conversation ending on a stack trace.
+    const unreachable = defineTool({
+      name: 'sandboxed',
+      description: 'Runs in a sandbox that is not there.',
+      schema: z.strictObject({}),
+      execute: () => {
+        throw new GhostError('tool', 'No container runtime is reachable.');
+      },
+    });
+    const { loop } = harness({
+      tools: [unreachable],
+      turns: [{ toolCalls: [toolCall('c1', 'sandboxed', {})] }, { deltas: ['Docker is off.'] }],
+    });
+
+    const { events, result } = await runTurn(loop, { sessionKey: SESSION, content: 'scan it' });
+
+    expect(events[2]).toMatchObject({ type: 'tool.result', callId: 'c1', ok: false });
+    expect(events[2]?.type === 'tool.result' ? events[2].content : '').toContain(
+      'No container runtime is reachable.',
+    );
+    // The turn finished normally, which is the whole point.
+    expect(result).toMatchObject({ stopReason: 'complete' });
+    expect(typesOf(events)).toContain('turn.end');
+  });
+
   it('wraps the stored tool result but not the one it reports', async () => {
     const { loop, store } = harness({
       tools: [echoTool],
@@ -1936,6 +1965,53 @@ describe('turn stats', () => {
     // seq 1 is the user message, seq 2 the answer.
     expect(end).toMatchObject({ firstSeq: 1, lastSeq: 2 });
     expect(end?.type === 'turn.end' && end.elapsedMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('records why a failed turn failed', async () => {
+    // The `error` event says the same thing, but it is unsequenced and gone the
+    // moment it is delivered. This row is the only durable copy — and the only
+    // one an automation run can be asked about afterwards.
+    const { loop, store } = harness({
+      turns: [{ error: new ProviderError('server', 'upstream said no', { status: 500 }) }],
+    });
+
+    await runTurn(loop, { sessionKey: SESSION, content: 'hello' });
+
+    expect(store.turnStats(SESSION)[0]).toMatchObject({
+      stopReason: 'error',
+      error: 'upstream said no',
+    });
+  });
+
+  it('records no reason for a turn that did not fail', async () => {
+    const { loop, store } = harness({ turns: [{ deltas: ['ok'] }] });
+
+    await runTurn(loop, { sessionKey: SESSION, content: 'hello' });
+
+    expect(store.turnStats(SESSION)[0]?.error).toBeUndefined();
+  });
+
+  it('opens the turn before resolving the sandbox, so a dead daemon is still re-runnable', async () => {
+    // A container daemon that is down throws from `forTurn`. That used to
+    // happen *before* `turn.start` was yielded, so the turn never opened, the
+    // failure named a turn id no client had seen, and the transcript had no
+    // `firstSeq` to offer a Regenerate from. The turn still fails — it must —
+    // but it fails at an address.
+    const { loop } = harness({
+      loop: {
+        runners: {
+          forTurn: () => {
+            throw new GhostError('tool', 'No container runtime is reachable.');
+          },
+        },
+      },
+    });
+
+    const iterator = loop.run({ sessionKey: SESSION, content: 'hello' });
+    const first = await iterator.next();
+
+    expect(first.value).toMatchObject({ type: 'turn.start', turnId: 'turn-1', firstSeq: 1 });
+    await expect(iterator.next()).rejects.toThrow(/No container runtime is reachable/);
   });
 
   it('spans the tool traffic a turn wrote', async () => {

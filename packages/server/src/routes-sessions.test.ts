@@ -509,6 +509,48 @@ describe('GET /api/sessions/:key/messages', () => {
     expect(secondBody.nextCursor).toBeUndefined();
   });
 
+  it('reports why a turn failed, which the message rows cannot say', async () => {
+    const test = await start();
+    test.runtime.store.ensureSession('web-1');
+    test.runtime.store.append('web-1', userMessage('hi'), { turnId: 't1' });
+    test.runtime.store.recordTurnStats({
+      turnId: 't1',
+      sessionKey: 'web-1',
+      agentId: 'default',
+      provider: 'ollama',
+      model: 'test-model',
+      startedAtMs: 1,
+      endedAtMs: 2,
+      iterations: 0,
+      stopReason: 'error',
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      error: 'No container runtime is reachable.',
+    });
+    // A turn that succeeded contributes nothing, so the map holds failures only.
+    test.runtime.store.recordTurnStats({
+      turnId: 't2',
+      sessionKey: 'web-1',
+      agentId: 'default',
+      provider: 'ollama',
+      model: 'test-model',
+      startedAtMs: 3,
+      endedAtMs: 4,
+      iterations: 1,
+      stopReason: 'complete',
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    });
+
+    const response = await test.server.app.inject({
+      method: 'GET',
+      url: '/api/sessions/web-1/messages',
+      headers: test.headers,
+    });
+
+    expect(response.json<SessionMessagesResponse>().failures).toEqual({
+      t1: 'No container runtime is reachable.',
+    });
+  });
+
   it('returns an empty page for a session with no messages', async () => {
     const test = await start();
     test.runtime.store.ensureSession('web-1');
@@ -519,7 +561,12 @@ describe('GET /api/sessions/:key/messages', () => {
       headers: test.headers,
     });
 
-    expect(response.json()).toEqual({ sessionKey: 'web-1', messages: [], subagentRuns: {} });
+    expect(response.json()).toEqual({
+      sessionKey: 'web-1',
+      messages: [],
+      subagentRuns: {},
+      failures: {},
+    });
   });
 });
 

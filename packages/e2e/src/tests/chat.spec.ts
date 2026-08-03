@@ -162,12 +162,22 @@ test.describe('reworking a turn', () => {
     const answer = app.getByTestId('transcript').getByText('Here is what I found.');
     await expect(answer).toBeVisible({ timeout: 15_000 });
 
+    const question = app.getByTestId('transcript').getByText('stream a long answer');
+    await expect(question).toHaveCount(1);
+
     await app.getByRole('button', { name: 'Regenerate the answer' }).click();
 
     // Still exactly one. The scripted provider says the same thing again, so a
     // second copy would be the transcript growing rather than being rebuilt.
     await expect(answer).toHaveCount(1, { timeout: 15_000 });
     await expect(app.getByRole('button', { name: 'Send' })).toBeVisible({ timeout: 15_000 });
+
+    // And the question is still there, exactly once. Re-running deletes that row
+    // and writes it back, and the client used to rebuild over the gap — so the
+    // message vanished for good. Asserted after the turn has settled, which is
+    // the durable state: whether it is momentarily `pending` mid-flight is the
+    // kind of timing the runner decides, and not something to hold a test to.
+    await expect(question).toHaveCount(1);
   });
 
   test('the info button opens what the turn cost', async ({ app }) => {

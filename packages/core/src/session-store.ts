@@ -262,6 +262,13 @@ export interface TurnStatsRecord {
   readonly iterations: number;
   readonly stopReason: StopReason;
   readonly usage: Usage;
+  /**
+   * Why it stopped, when `stopReason` is `error`.
+   *
+   * Absent on a turn that succeeded, and on any failure recorded before this
+   * was captured — nothing wrote it, and nothing can reconstruct it.
+   */
+  readonly error?: string;
 }
 
 const SCHEMA = `
@@ -310,6 +317,11 @@ CREATE TABLE IF NOT EXISTS messages (
 -- The agent is recorded per turn rather than read from the session because a
 -- session can be moved to another agent, and a transcript that then reported
 -- every past turn as the new agent's work would be a lie about what ran.
+--
+-- The error column is why the turn stopped, when stop_reason is 'error'. Here
+-- rather than as a message row, because everything in messages is replayed into
+-- every later provider request: an error appended to history would fail its way
+-- into the prompt forever. NULL for every turn that did not fail.
 CREATE TABLE IF NOT EXISTS turn_stats (
   turn_id           TEXT    PRIMARY KEY,
   session_key       TEXT    NOT NULL REFERENCES sessions(key) ON DELETE CASCADE,
@@ -324,7 +336,8 @@ CREATE TABLE IF NOT EXISTS turn_stats (
   completion_tokens INTEGER NOT NULL DEFAULT 0,
   total_tokens      INTEGER NOT NULL DEFAULT 0,
   cached_tokens     INTEGER,
-  reasoning_tokens  INTEGER
+  reasoning_tokens  INTEGER,
+  error             TEXT
 ) STRICT;
 
 CREATE UNIQUE INDEX IF NOT EXISTS messages_session_seq ON messages(session_key, seq);
@@ -382,6 +395,10 @@ function readUsage(row: Row): Usage {
 }
 
 function rowToTurnStats(row: Row): TurnStatsRecord {
+  // Tolerant on purpose: a database written before this column existed has no
+  // `error` in the row at all, and that is a turn with no recorded reason
+  // rather than a corrupt one.
+  const error = readOptionalString(row, 'error');
   return {
     turnId: readString(row, 'turn_id'),
     sessionKey: readString(row, 'session_key'),
@@ -393,6 +410,7 @@ function rowToTurnStats(row: Row): TurnStatsRecord {
     iterations: readInt(row, 'iterations'),
     stopReason: readString(row, 'stop_reason') as StopReason,
     usage: readUsage(row),
+    ...(error === undefined ? {} : { error }),
   };
 }
 
@@ -1235,8 +1253,8 @@ export class SessionStore {
       `INSERT INTO turn_stats
          (turn_id, session_key, agent_id, provider, model, started_at_ms, ended_at_ms,
           iterations, stop_reason, prompt_tokens, completion_tokens, total_tokens,
-          cached_tokens, reasoning_tokens)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          cached_tokens, reasoning_tokens, error)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(turn_id) DO UPDATE SET
          agent_id = excluded.agent_id,
          provider = excluded.provider, model = excluded.model,
@@ -1245,7 +1263,8 @@ export class SessionStore {
          prompt_tokens = excluded.prompt_tokens,
          completion_tokens = excluded.completion_tokens,
          total_tokens = excluded.total_tokens, cached_tokens = excluded.cached_tokens,
-         reasoning_tokens = excluded.reasoning_tokens`,
+         reasoning_tokens = excluded.reasoning_tokens,
+         error = excluded.error`,
     ).run(
       stats.turnId,
       stats.sessionKey,
@@ -1261,6 +1280,7 @@ export class SessionStore {
       stats.usage.totalTokens,
       stats.usage.cachedTokens ?? null,
       stats.usage.reasoningTokens ?? null,
+      stats.error ?? null,
     );
   }
 

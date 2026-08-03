@@ -647,6 +647,30 @@ describe('SessionHub', () => {
       expect(h.hub.busy(SESSION)).toBe(false);
     });
 
+    it('closes a failed turn at the address the client already has', async () => {
+      // `firstSeq` is what Regenerate re-runs from. The loop reports it on
+      // `turn.start`, but a client whose reconnect fell outside the replay ring
+      // only ever sees this synthesised `turn.end` — and without the seq on it
+      // the rebuilt turn has nothing to offer a re-run from.
+      const h = harness();
+      const client = h.connect();
+
+      await send(client, { type: 'user.message', sessionKey: SESSION, content: 'go' });
+      await h.runner.turn(0).emit({
+        type: 'turn.start',
+        sessionKey: SESSION,
+        turnId: h.runner.turn(0).turnId,
+        agentId: 'default',
+        model: 'test-model',
+        provider: 'test',
+        firstSeq: 1,
+      });
+      client.reset();
+      await h.runner.turn(0).fail(new Error('the sandbox is unreachable'));
+
+      expect(client.of('turn.end')[0]).toMatchObject({ stopReason: 'error', firstSeq: 1 });
+    });
+
     it('closes a turn abandoned by an abort without reporting an error', async () => {
       const h = harness();
       const client = h.connect();
@@ -1064,6 +1088,22 @@ describe('regenerating a turn', () => {
     expect(h.runner.turn(0).input.content).toEqual([
       { type: 'text', text: 'the original question' },
     ]);
+  });
+
+  it('echoes the client message id so the optimistic bubble can be claimed', async () => {
+    // The rewind deletes the question and the loop writes it back, so the asking
+    // tab is showing a bubble of its own in the gap. `message.ack` is what tells
+    // it that bubble is now a real message; without the id it never matches and
+    // the bubble sits on "Sending…" for the life of the session.
+    const h = harness();
+    seeded(h);
+    const client = h.connect({ sessionKey: SESSION });
+    client.reset();
+
+    client.receive({ type: 'turn.regenerate', sessionKey: SESSION, clientMessageId: 'c-9' });
+    await flush();
+
+    expect(client.of('message.ack')[0]).toMatchObject({ clientMessageId: 'c-9' });
   });
 
   it('tells every attached tab what survived', async () => {

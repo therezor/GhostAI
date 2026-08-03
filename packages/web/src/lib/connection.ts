@@ -259,20 +259,45 @@ export function steerTurn(content: string): void {
 /**
  * Re-runs a turn, discarding the answer it produced.
  *
- * The local truncation is a flicker guard and nothing more. `session.truncated`
- * arrives a moment later carrying the stored tail and rebuilds the transcript
- * from it — this only stops the answer being thrown away from sitting on screen
- * while the replacement is being asked for.
- *
- * It cuts *at* `seq` rather than below it, keeping the question visible: the
- * server deletes and re-appends that row, and a bubble that vanished and came
- * back would read as the message having been lost.
+ * Cuts *below* the question and re-adds it as a pending bubble, which is the
+ * same shape as `editMessage` and for the same reason. The server deletes that
+ * row — `#rewind` truncates to `seq - 1`, because the loop appends the question
+ * again at the top of every turn — and announces the deletion with a
+ * `session.truncated` carrying the surviving tail. Keeping the stored bubble on
+ * screen across that frame is not possible: the row it came from is gone, and
+ * the rebuild from the tail drops it. An optimistic bubble is the only kind that
+ * survives the gap, and `message.ack` reconciles it against the rewritten row a
+ * moment later.
  */
 export function regenerateTurn(seq?: number): void {
-  const sessionKey = useTurnStore.getState().sessionKey;
-  if (sessionKey === undefined) return;
-  if (seq !== undefined) useTurnStore.getState().truncateAfter(seq);
-  socket?.send({ type: 'turn.regenerate', sessionKey, ...(seq === undefined ? {} : { seq }) });
+  const store = useTurnStore.getState();
+  const sessionKey = store.sessionKey;
+  if (sessionKey === undefined || socket === undefined) return;
+
+  // Absent `seq` means "the most recent turn", which the server resolves — there
+  // is nothing named here to stand in for. A `seq` that matches nothing is the
+  // same case: send the frame and let the server refuse it if it is wrong.
+  const question =
+    seq === undefined
+      ? undefined
+      : store.transcript.find((item) => item.kind === 'user' && item.seq === seq);
+
+  const clientMessageId = newUuid();
+  if (seq !== undefined && question?.kind === 'user') {
+    store.truncateAfter(seq - 1);
+    store.appendPending({
+      clientMessageId,
+      text: question.text,
+      attachments: question.attachments,
+    });
+  }
+
+  socket.send({
+    type: 'turn.regenerate',
+    sessionKey,
+    ...(seq === undefined ? {} : { seq }),
+    ...(question === undefined ? {} : { clientMessageId }),
+  });
 }
 
 /** Replaces a message and re-runs from it. */

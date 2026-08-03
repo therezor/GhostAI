@@ -40,7 +40,6 @@
 import type {
   Attachment,
   ContentPart,
-  ErrorCode,
   NestedAgentEvent,
   NoticeKind,
   ServerMessage,
@@ -194,8 +193,15 @@ export interface SubagentPart {
 
 export type TurnPart = TextPart | ReasoningPart | NoticePart | ToolPart;
 
+/**
+ * Why a turn failed.
+ *
+ * Deliberately carries no error code. Nothing renders one — the failure line is
+ * the message and whether retrying is worth it — and leaving it out is what
+ * makes a failure that arrived over the socket and one rebuilt from storage the
+ * same value. Storage records the sentence, not the code.
+ */
 export interface TurnFailure {
-  readonly code: ErrorCode;
   readonly message: string;
   readonly retryable: boolean;
 }
@@ -415,11 +421,7 @@ export function applyServerMessage(items: Transcript, message: ServerMessage): T
         : updateTurn(items, message.turnId, (turn) => ({
             ...turn,
             done: true,
-            failure: {
-              code: message.code,
-              message: message.message,
-              retryable: message.retryable,
-            },
+            failure: { message: message.message, retryable: message.retryable },
           }));
 
     case 'steer':
@@ -437,11 +439,20 @@ export function applyServerMessage(items: Transcript, message: ServerMessage): T
       // the stored tail is the transcript, and the live frames resume on top.
       return message.complete ? items : fromStoredMessages(message.messages);
 
-    case 'session.truncated':
+    case 'session.truncated': {
       // The frame carries the surviving tail, so this is a rebuild rather than
       // a splice — and it is the same rebuild `session.replay` does past the
       // ring. A tab that did not initiate the regenerate corrects itself here.
-      return fromStoredMessages(message.messages);
+      //
+      // Pending bubbles survive it. An edit or a regenerate deletes the question
+      // and re-runs from it, so the tail this frame carries does *not* contain
+      // it — the loop has not written it back yet. The tab that asked put an
+      // optimistic bubble up for exactly that gap, and rebuilding over it is
+      // what made the message look lost. A tab that did not ask has no pending
+      // items, so this is a no-op there.
+      const pending = items.filter((item) => item.kind === 'user' && item.pending);
+      return [...fromStoredMessages(message.messages), ...pending];
+    }
 
     case 'connected':
     case 'pong':
@@ -572,8 +583,9 @@ export function mergeStoredHistory(
   existing: Transcript,
   messages: readonly StoredMessage[],
   subagentRuns: Readonly<Record<string, SubagentRunRef>> = {},
+  failures: Readonly<Record<string, string>> = {},
 ): Transcript {
-  const base = withLiveRiskBands(fromStoredMessages(messages, subagentRuns), existing);
+  const base = withLiveRiskBands(fromStoredMessages(messages, subagentRuns, failures), existing);
 
   const ids = new Set(base.map((item) => item.id));
   // The second key, and the one that does the real work: a message sent a
@@ -655,6 +667,7 @@ function withLiveRiskBands(base: Transcript, existing: Transcript): Transcript {
 export function fromStoredMessages(
   messages: readonly StoredMessage[],
   subagentRuns: Readonly<Record<string, SubagentRunRef>> = {},
+  failures: Readonly<Record<string, string>> = {},
 ): Transcript {
   const items: TranscriptItem[] = [];
 
@@ -663,6 +676,8 @@ export function fromStoredMessages(
   // message that started it, which the loop below has already passed by the
   // time it opens the turn.
   const spans = new Map<string, { first: number; last: number }>();
+  /** Turns that produced an answer, so the loop below knows which did not. */
+  const answered = new Set<string>();
   for (const stored of messages) {
     const key = stored.turnId ?? stored.id;
     const span = spans.get(key);
@@ -672,6 +687,7 @@ export function fromStoredMessages(
         ? { first: stored.seq, last: stored.seq }
         : { first: Math.min(span.first, stored.seq), last: Math.max(span.last, stored.seq) },
     );
+    if (stored.message.role === 'assistant') answered.add(key);
   }
 
   for (const stored of messages) {
@@ -693,6 +709,18 @@ export function fromStoredMessages(
           attachments: attachmentsOf(message.content),
           pending: false,
         });
+        // A turn that failed appended no answer, so nothing below would ever
+        // open one — and the failure would have nowhere to render. Opened here,
+        // directly after the question, which is where it belongs. Guarded on
+        // there being no assistant row, so a turn that *did* answer is still
+        // opened by the branch below and there is one turn rather than two.
+        if (
+          stored.turnId !== undefined &&
+          failures[stored.turnId] !== undefined &&
+          !answered.has(stored.turnId)
+        ) {
+          openTurn(items, stored.turnId);
+        }
         continue;
 
       case 'assistant': {
@@ -767,11 +795,18 @@ export function fromStoredMessages(
     }
   }
 
-  return items.map((item) =>
-    item.kind === 'turn'
-      ? { ...item, firstSeq: spans.get(item.id)?.first, lastSeq: spans.get(item.id)?.last }
-      : item,
-  );
+  return items.map((item) => {
+    if (item.kind !== 'turn') return item;
+    const failure = failures[item.id];
+    return {
+      ...item,
+      firstSeq: spans.get(item.id)?.first,
+      lastSeq: spans.get(item.id)?.last,
+      // Same shape as a failure that arrived over the socket, so a turn read
+      // back from storage and one watched live are indistinguishable.
+      ...(failure === undefined ? {} : { failure: { message: failure, retryable: true } }),
+    };
+  });
 }
 
 /**

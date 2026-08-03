@@ -155,6 +155,13 @@ export const RegenerateMessageSchema = z.object({
   sessionKey: z.string().min(1),
   /** The user message to re-run from. Absent means the most recent turn. */
   seq: z.number().int().positive().optional(),
+  /**
+   * Here for the same reason it is on `user.edit`: re-running deletes the
+   * question and the loop writes it back, so the client has to put the bubble
+   * up itself meanwhile. This is the id the `message.ack` echoes, and without it
+   * that bubble has nothing to reconcile against and sits on "Sending…".
+   */
+  clientMessageId: z.string().optional(),
 });
 
 /**

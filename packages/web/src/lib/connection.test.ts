@@ -230,6 +230,68 @@ describe('speaking', () => {
     ]);
   });
 
+  it('keeps the question on screen while the turn it started is re-run', () => {
+    open('web:1');
+    // The stored question and the answer it produced, as a fetch would supply
+    // them. Regenerating deletes both server-side, so anything still on screen
+    // afterwards is there because this client put it there.
+    deliver({
+      type: 'session.replay',
+      sessionKey: 'web:1',
+      complete: false,
+      messages: [
+        {
+          id: 'm1',
+          sessionKey: 'web:1',
+          seq: 3,
+          createdAtMs: 0,
+          turnId: 't1',
+          message: { role: 'user', content: [{ type: 'text', text: 'why is the sky blue?' }] },
+        },
+      ],
+    });
+
+    regenerateTurn(3);
+
+    const frame = socket().sent.at(-1);
+    expect(frame).toMatchObject({ type: 'turn.regenerate', sessionKey: 'web:1', seq: 3 });
+    expect(frame).toHaveProperty('clientMessageId');
+
+    // Still there, and pending — the row it came from is about to be deleted.
+    expect(useTurnStore.getState().transcript).toMatchObject([
+      { kind: 'user', text: 'why is the sky blue?', pending: true },
+    ]);
+  });
+
+  it('does not lose the question to the truncation the server announces', () => {
+    open('web:1');
+    deliver({
+      type: 'session.replay',
+      sessionKey: 'web:1',
+      complete: false,
+      messages: [
+        {
+          id: 'm1',
+          sessionKey: 'web:1',
+          seq: 3,
+          createdAtMs: 0,
+          turnId: 't1',
+          message: { role: 'user', content: [{ type: 'text', text: 'why is the sky blue?' }] },
+        },
+      ],
+    });
+
+    regenerateTurn(3);
+    // What `#rewind` broadcasts: the question is deleted, and mid-regenerate the
+    // surviving tail is empty. Rebuilding from it is what used to lose the
+    // message — storage never lost it, the client did.
+    deliver({ type: 'session.truncated', sessionKey: 'web:1', upToSeq: 2, messages: [] });
+
+    expect(useTurnStore.getState().transcript).toMatchObject([
+      { kind: 'user', text: 'why is the sky blue?', pending: true },
+    ]);
+  });
+
   it('edits a message and shows the replacement before the server answers', () => {
     open('web:1');
 

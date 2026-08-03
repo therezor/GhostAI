@@ -80,6 +80,7 @@ export interface TurnState {
   readonly mergeHistory: (
     messages: readonly StoredMessage[],
     subagentRuns?: Readonly<Record<string, SubagentRunRef>>,
+    failures?: Readonly<Record<string, string>>,
   ) => void;
   readonly setTranscript: (transcript: Transcript) => void;
   readonly reset: () => void;
@@ -176,9 +177,9 @@ export const useTurnStore = create<TurnState>((set) => ({
     set((state) => ({ transcript: markApprovalAnswered(state.transcript, callId, answered) }));
   },
 
-  mergeHistory: (messages, subagentRuns) => {
+  mergeHistory: (messages, subagentRuns, failures) => {
     set((state) => ({
-      transcript: mergeStoredHistory(state.transcript, messages, subagentRuns),
+      transcript: mergeStoredHistory(state.transcript, messages, subagentRuns, failures),
     }));
   },
 

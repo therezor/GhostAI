@@ -980,6 +980,24 @@ describe('turn stats', () => {
     store.close();
   });
 
+  it('records why a turn failed, and nothing when it did not', () => {
+    const store = makeStore();
+    store.ensureSession('s');
+    store.recordTurnStats(
+      stats('t1', { stopReason: 'error', error: 'No container runtime is reachable.' }),
+    );
+    store.recordTurnStats(stats('t2'));
+
+    const rows = store.turnStats('s');
+    expect(rows.find((row) => row.turnId === 't1')?.error).toBe(
+      'No container runtime is reachable.',
+    );
+    // Not `''` — a turn that succeeded has no reason, and the absence is the
+    // distinction the transcript reads.
+    expect(rows.find((row) => row.turnId === 't2')?.error).toBeUndefined();
+    store.close();
+  });
+
   it('returns the most recent turn first, and honours a limit', () => {
     const store = makeStore();
     store.ensureSession('s');

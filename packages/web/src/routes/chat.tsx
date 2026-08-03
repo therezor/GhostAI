@@ -110,6 +110,15 @@ export function ChatRoute(): JSX.Element {
     // a 404 until the first turn lands — an expected answer rather than a
     // failure worth three exponential backoffs.
     retry: false,
+    // Against the app-wide 30 s, because this response *is* the transcript on a
+    // switch and the usual invalidation cannot reach it. A tab only receives
+    // events for the session it is attached to, so a turn that ends in a
+    // conversation this tab has left invalidates nothing here — switching back
+    // inside the window rendered a cached copy of a history that had moved on.
+    // `session.resume` cannot cover the difference either: its cursor means
+    // "everything before this is in storage", so a stale copy of storage is
+    // indistinguishable from the truth.
+    staleTime: 0,
   });
 
   useEffect(() => {
@@ -121,7 +130,7 @@ export function ChatRoute(): JSX.Element {
     // has already switched to another conversation would otherwise merge one
     // session's history into another's transcript.
     if (state.sessionKey !== session) return;
-    state.mergeHistory(data.messages, data.subagentRuns);
+    state.mergeHistory(data.messages, data.subagentRuns, data.failures);
     // `sessionKey` is a dependency because the guard above reads it, and it
     // moves *after* this effect on a switch: the socket is attached by the
     // shell, which is this route's parent, and React runs a child's effects

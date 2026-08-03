@@ -21,6 +21,7 @@ import { Providers } from '@/app/providers.js';
 import { createAppRouter } from '@/app/router.js';
 import { resetConnection } from '@/lib/connection.js';
 import { useTurnStore } from '@/state/turn.js';
+import { createQueryClient } from '@/lib/query.js';
 import { stubFetch, testQueryClient } from '@/test/render.js';
 import { AGENTS, STATUS, UNCONFIGURED_STATUS } from '@/test/fixtures.js';
 
@@ -640,6 +641,65 @@ describe('switching to a session whose history is already cached', () => {
 
     expect(await screen.findByText('the weather report')).toBeInTheDocument();
     expect(screen.queryByText('the first session')).not.toBeInTheDocument();
+  });
+
+  it('does not show a copy of the history that has since moved on', async () => {
+    const user = userEvent.setup();
+    // The real client, deliberately. `testQueryClient` sets `staleTime: 0`
+    // globally, so this case passes under it whether or not the route asks for
+    // it — the bug only exists at the app's own 30 s default.
+    const client = createQueryClient();
+    // What this tab fetched before it navigated away. A turn has run in that
+    // conversation since, and this tab was attached elsewhere and saw none of
+    // it: no event reached it, so nothing invalidated this entry.
+    client.setQueryData(['sessions', OTHER, 'messages'], storedIn(OTHER, 'the stale answer'));
+
+    stubFetch({
+      '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
+      '/api/status': [200, STATUS],
+      '/api/agents': [200, AGENTS],
+      '/api/notifications': [200, { notifications: [], unreadCount: 0, total: 0 }],
+      '/api/sessions': [
+        200,
+        {
+          sessions: [
+            {
+              key: SESSION,
+              title: 'First chat',
+              origin: 'web',
+              createdAtMs: 1,
+              updatedAtMs: 2,
+              messageCount: 1,
+            },
+            {
+              key: OTHER,
+              title: 'Weather run',
+              origin: 'automation',
+              createdAtMs: 1,
+              updatedAtMs: 1,
+              messageCount: 1,
+            },
+          ],
+          total: 2,
+        },
+      ],
+      '/api/sessions/web%3A1/messages': [200, storedIn(SESSION, 'the first session')],
+      // Storage has moved on. The cached copy above is what the tab would show
+      // if it trusted its own 30-second-old answer.
+      [`/api/sessions/${encodeURIComponent(OTHER)}/messages`]: [
+        200,
+        storedIn(OTHER, 'the current answer'),
+      ],
+    });
+
+    mount(`/?session=${encodeURIComponent(SESSION)}`, client);
+    await connect();
+    expect(await screen.findByText('the first session')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: /Weather run/u }));
+
+    expect(await screen.findByText('the current answer')).toBeInTheDocument();
+    expect(screen.queryByText('the stale answer')).not.toBeInTheDocument();
   });
 });
 

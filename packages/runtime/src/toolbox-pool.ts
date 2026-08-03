@@ -208,6 +208,20 @@ interface Entry {
   busy: number;
 }
 
+/**
+ * A turn's runner, and the request it should start a container from.
+ *
+ * The request is held here rather than read from the live `Entry`, because with
+ * a lazily-started container there is no entry to read it from the first time —
+ * and after a container is dropped there is none to read it from again. It is
+ * mutable so a later turn on the same session updates it in place, which keeps
+ * the runner a turn is holding pointed at current policy.
+ */
+interface Facade {
+  readonly runner: CommandRunner;
+  spec: ToolboxRequest;
+}
+
 export class ToolboxPool implements RunnerResolver {
   readonly #options: ToolboxPoolOptions;
   readonly #live = new Map<string, Entry>();
@@ -221,7 +235,7 @@ export class ToolboxPool implements RunnerResolver {
    * invisible to the caller. Cached so `forTurn` twice in a session is the same
    * object, which is what tells a reader nothing restarted.
    */
-  readonly #facades = new Map<string, CommandRunner>();
+  readonly #facades = new Map<string, Facade>();
   readonly #owner: string;
   #counter = 0;
   #swept = false;
@@ -267,6 +281,32 @@ export class ToolboxPool implements RunnerResolver {
     return `${request.agentId} ${request.workspaceId} ${request.sessionKey}`;
   }
 
+  /**
+   * The runner for a turn — policy only, and deliberately no container.
+   *
+   * Resolving a sandbox is on the turn-open path, and starting one there meant
+   * probing the daemon there too. `probe()` is a `spawnSync`, so a daemon that
+   * has gone away did not fail this turn, it blocked the event loop for five
+   * seconds and *then* failed it — every session and every HTTP route with it.
+   * Worse, it threw before the turn had opened, so the failure had no turn to
+   * belong to and the operator was offered no way to re-run it.
+   *
+   * So this decides *whether* a sandbox is allowed and the first command starts
+   * it. A turn that calls no tool now touches the daemon not at all, and a
+   * daemon that is down surfaces as a failed tool card inside a live turn —
+   * which is a thing the model can read and the operator can act on.
+   *
+   * What stays here is what must: `require` re-reads the manifest and re-checks
+   * the approval, and the ceiling check bounds the network. Both still throw
+   * synchronously, because a revoked or over-privileged toolbox is a refusal to
+   * run rather than a command that fails.
+   *
+   * **It returns a runner even when the daemon is unreachable, and that is load
+   * bearing.** `sandboxed` is derived from this being defined, and it is what
+   * tells the exec guard the host's rules do not apply. Returning `undefined`
+   * here would not degrade to "no sandbox available" — it would run the command
+   * on the host. Refusal, never a downgrade; see the module header.
+   */
   forTurn(request: ToolboxRequest): CommandRunner | undefined {
     if (request.toolbox === '') return undefined;
 
@@ -290,15 +330,34 @@ export class ToolboxPool implements RunnerResolver {
         // Re-inserted so Map iteration order stays least-recently-used first.
         this.#live.delete(key);
         this.#live.set(key, existing);
-        return this.#facadeFor(key);
+      } else {
+        // A live container started from a manifest that has since changed is
+        // stopped rather than reused: it was built with the old policy's flags.
+        // The next command starts a replacement from the manifest as it is now.
+        this.#drop(key, existing);
       }
-      // A live container started from a manifest that has since changed is
-      // stopped rather than reused: it was built with the old policy's flags.
-      this.#drop(key, existing);
     }
-    this.#live.set(key, this.#start(request, approved));
+    return this.#facadeFor(key, request);
+  }
+
+  /**
+   * Starts this key's container if it has none.
+   *
+   * The other half of a policy-only `forTurn`: every path that runs a command
+   * goes through here first, so "there is an entry" is still true by the time
+   * anything needs one — established at first use rather than at turn open.
+   *
+   * `require` runs again rather than reusing what `forTurn` resolved, and the
+   * rebuild path has always done the same. A turn can sit between its opening
+   * and its first tool call for a long time, and a toolbox revoked in that
+   * window must not get a container.
+   */
+  #ensure(key: string, spec: ToolboxRequest): void {
+    if (this.#live.has(key)) return;
+    const approved = this.#options.toolboxes.require(spec.toolbox);
+    assertNetworkWithinCeiling(approved.toolbox, spec.network, spec.agentId);
+    this.#live.set(key, this.#start(spec, approved));
     this.#evictBeyondCap(key);
-    return this.#facadeFor(key);
   }
 
   /**
@@ -312,44 +371,54 @@ export class ToolboxPool implements RunnerResolver {
    * for the one reason that matters: a `docker exec` that could not find its
    * container never started the command, so nothing has run twice.
    */
-  #facadeFor(key: string): CommandRunner {
+  #facadeFor(key: string, spec: ToolboxRequest): CommandRunner {
     const cached = this.#facades.get(key);
-    if (cached !== undefined) return cached;
+    if (cached !== undefined) {
+      // A second turn on the same session may carry a different workspace root
+      // or network, and it is the newest one that any command should start from.
+      cached.spec = spec;
+      return cached.runner;
+    }
 
-    const facade: CommandRunner = {
-      run: async (request: RunRequest): Promise<RunOutcome> => {
-        const outcome = await this.#runOn(key, request);
-        if (!containerIsGone(outcome)) return outcome;
+    const facade: Facade = {
+      spec,
+      runner: {
+        run: async (request: RunRequest): Promise<RunOutcome> => {
+          // Where the container actually comes from now. Anything this throws —
+          // a dead daemon, a revoked toolbox — rejects the command, which the
+          // tool registry renders as a failed tool card rather than letting it
+          // unwind the turn.
+          this.#ensure(key, facade.spec);
 
-        const stale = this.#live.get(key);
-        if (stale === undefined) return outcome;
-        this.#options.logger?.warn(
-          { container: stale.name, toolbox: stale.request.toolbox },
-          'sandbox disappeared; rebuilding it and retrying the command',
-        );
+          const outcome = await this.#runOn(key, request);
+          if (!containerIsGone(outcome)) return outcome;
 
-        const spec = stale.request;
-        this.#drop(key, stale);
-        // Re-checked rather than reused from the turn's own resolution: a
-        // rebuild is a new container, and a toolbox revoked in the meantime must
-        // not get one.
-        this.#live.set(key, this.#start(spec, this.#options.toolboxes.require(spec.toolbox)));
-        // Once. A second disappearance is something other than a stale handle,
-        // and a loop that keeps rebuilding would hide it.
-        return await this.#runOn(key, request);
+          const stale = this.#live.get(key);
+          if (stale === undefined) return outcome;
+          this.#options.logger?.warn(
+            { container: stale.name, toolbox: stale.request.toolbox },
+            'sandbox disappeared; rebuilding it and retrying the command',
+          );
+
+          this.#drop(key, stale);
+          this.#ensure(key, facade.spec);
+          // Once. A second disappearance is something other than a stale handle,
+          // and a loop that keeps rebuilding would hide it.
+          return await this.#runOn(key, request);
+        },
       },
     };
 
     this.#facades.set(key, facade);
-    return facade;
+    return facade.runner;
   }
 
   async #runOn(key: string, request: RunRequest): Promise<RunOutcome> {
     const entry = this.#live.get(key);
     if (entry === undefined) {
-      // The facade is only reachable through `forTurn`, which puts an entry in
-      // place before returning it — so this is a bug rather than a state to
-      // recover from, and it says which one.
+      // Every caller runs `#ensure` immediately before this, and `#ensure`
+      // either puts an entry in place or throws — so this is a bug rather than
+      // a state to recover from, and it says which one.
       throw new GhostError('internal', 'The sandbox for this turn is no longer in the pool.', {
         details: { key },
       });

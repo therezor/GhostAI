@@ -392,6 +392,16 @@ export const SessionMessagesResponseSchema = z.object({
    * second request to find out whether there is one.
    */
   subagentRuns: z.record(z.string(), SubagentRunRefSchema).default({}),
+  /**
+   * Why each failed turn failed, by turn id.
+   *
+   * Beside `subagentRuns` and for the same reason: a fact about the transcript
+   * that the message rows cannot hold. A failed turn appends nothing — an error
+   * in `messages` would be replayed into every later provider request — so a
+   * rebuilt transcript would otherwise show the question, no answer, and no
+   * indication that anything went wrong.
+   */
+  failures: z.record(z.string(), z.string()).default({}),
 });
 export type SessionMessagesResponse = z.infer<typeof SessionMessagesResponseSchema>;
 
@@ -479,6 +489,8 @@ export const TurnStatsSchema = z.object({
   iterations: z.number().int().nonnegative().default(0),
   stopReason: StopReasonSchema,
   usage: UsageSchema,
+  /** Why it stopped, when `stopReason` is `error`. */
+  error: z.string().optional(),
 });
 export type TurnStats = z.infer<typeof TurnStatsSchema>;
 
