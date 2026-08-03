@@ -73,7 +73,7 @@ function assertServable(current: Config, patch: ConfigPatch): void {
 }
 
 function settingsResponse(deps: RouteDeps): SettingsResponse {
-  const loadError = deps.runtime.loadError?.();
+  const loadError = deps.runtime.loadError();
   return {
     config: deps.runtime.config(),
     credentialsPresent: deps.runtime.credentialsPresent(),
@@ -81,7 +81,7 @@ function settingsResponse(deps: RouteDeps): SettingsResponse {
     // Read fresh on every response rather than only after a write: a warning
     // most often comes from the file as it was found at boot, and the first
     // request for the settings tree is where anyone would look for it.
-    warnings: [...(deps.runtime.configWarnings?.() ?? [])],
+    warnings: [...deps.runtime.configWarnings()],
   };
 }
 

@@ -63,10 +63,7 @@ export function systemRoutes(deps: RouteDeps): RouteGroup<SystemRouteId> {
       schema: { response: { 200: StatusResponseSchema } },
       handler: (): StatusResponse => {
         const agent = deps.runtime.agent();
-        const extensions = deps.runtime.extensions?.() ?? {
-          mcpServersConnected: 0,
-          pluginsLoaded: 0,
-        };
+        const extensions = deps.runtime.extensions();
         return {
           version: SERVER_VERSION,
           protocolVersion: PROTOCOL_VERSION,

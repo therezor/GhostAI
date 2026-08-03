@@ -119,7 +119,7 @@ export function workspaceRoutes(deps: RouteDeps): RouteGroup<WorkspaceRouteId> {
           // the store: `sessions` is another store's table, and the jail cache
           // is not a store at all.
           deps.runtime.store.reassignWorkspace(from, record.id);
-          deps.runtime.releaseWorkspace?.(from);
+          deps.runtime.releaseWorkspace(from);
         }
 
         return summarise(record);

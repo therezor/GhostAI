@@ -152,7 +152,7 @@ export interface ServerRuntime {
   setCredential(request: SetCredentialRequest): void;
 
   /** Set when `config.json` failed to parse and the defaults are in use. */
-  loadError?(): string | undefined;
+  loadError(): string | undefined;
 
   /**
    * Settings that parsed but could not be fully honoured. Empty is healthy.
@@ -165,7 +165,7 @@ export interface ServerRuntime {
    * Optional for the same reason `releaseWorkspace` is: a route test standing
    * in for a runtime has no settings file to have warnings about.
    */
-  configWarnings?(): readonly ConfigWarning[];
+  configWarnings(): readonly ConfigWarning[];
 
   readonly store: SessionStore;
 
@@ -201,7 +201,7 @@ export interface ServerRuntime {
    * that keeps no jails has nothing to forget, and a route test should not have
    * to say so.
    */
-  releaseWorkspace?(workspaceId: string): void;
+  releaseWorkspace(workspaceId: string): void;
 
   /**
    * One agent's view. `undefined` is the default agent.
@@ -258,7 +258,7 @@ export interface ServerRuntime {
   testProvider?(request: ProviderTestRequest): Promise<ProviderTestResponse>;
 
   /** Zero for both until `@ghostai/mcp` and `@ghostai/plugin-host` exist. */
-  extensions?(): ExtensionCounts;
+  extensions(): ExtensionCounts;
 
   /**
    * One provider request that is **not** a turn.

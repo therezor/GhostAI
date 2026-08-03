@@ -59,7 +59,7 @@ import {
 } from '@ghostai/providers';
 import { ToolboxStore } from '@ghostai/security';
 import { openVault, resolveAgent, type GhostRuntime } from '@ghostai/runtime';
-import type { AgentSummary, AgentView, ServerRuntime } from '@ghostai/server';
+import type { AgentSummary, AgentView, ServerRuntime, ExtensionCounts } from '@ghostai/server';
 import type { CredentialVault, FetchImplementation } from '@ghostai/security';
 
 /**
@@ -252,6 +252,16 @@ export function createServerRuntime(
 
       return saveConfig(runtime.file, merged);
     },
+
+    // Declared capabilities with no source yet, stated rather than left absent.
+    // `loadConfig` throws on an unreadable file, so a running server has no load
+    // error to report — there is no tolerant-boot path for it to describe. And
+    // there is no MCP or plugin registry to count, so zero is the honest answer
+    // rather than a placeholder. Both were simply missing before, which the
+    // optional signatures let pass: `GET /api/settings` never reported a load
+    // error and `GET /api/status` always answered with the route's own fallback.
+    loadError: (): string | undefined => undefined,
+    extensions: (): ExtensionCounts => ({ mcpServersConnected: 0, pluginsLoaded: 0 }),
 
     configWarnings: () => runtime.configWarnings,
 

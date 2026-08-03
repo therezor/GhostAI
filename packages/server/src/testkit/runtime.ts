@@ -167,6 +167,16 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
 
   return {
     toolboxes: () => options.toolboxes ?? [],
+    // A route test standing in for a runtime has no settings file to have
+    // failed to read and no extensions to count, so these are the "nothing to
+    // report" answers. Stated rather than left off: they were optional on the
+    // port precisely so three implementations did not all have to change, and
+    // that is how `loadError` and `extensions` came to be declared capabilities
+    // that no implementation anywhere provided.
+    loadError: () => undefined,
+    configWarnings: () => [],
+    releaseWorkspace: () => undefined,
+    extensions: () => ({ mcpServersConnected: 0, pluginsLoaded: 0 }),
     patches,
     reloads,
     credentialWrites,

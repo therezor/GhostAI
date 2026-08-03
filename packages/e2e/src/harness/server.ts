@@ -67,6 +67,7 @@ import {
   type AgentView,
   type GhostServer,
   type ServerRuntime,
+  type ExtensionCounts,
 } from '@ghostai/server';
 
 import { routedProvider } from './provider.js';
@@ -500,6 +501,11 @@ function harnessRuntime(runtime: GhostRuntime, configFile: string): ServerRuntim
     // Wired here as well as in the real adapter, because this harness has its
     // own `RuntimePort` — the field is optional, so forgetting it breaks no
     // build and simply leaves the settings page with nothing to report.
+    // See `createServerRuntime`: declared capabilities with no source. Stated
+    // here too, so the harness and the real thing answer alike.
+    loadError: (): string | undefined => undefined,
+    extensions: (): ExtensionCounts => ({ mcpServersConnected: 0, pluginsLoaded: 0 }),
+
     configWarnings: () => runtime.configWarnings,
 
     agents: (): readonly AgentSummary[] =>
