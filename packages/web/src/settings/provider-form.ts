@@ -27,7 +27,7 @@
 
 import type { ConfigPatch, ProviderConfig, ProviderTestRequest } from '@ghostai/protocol';
 
-import { formatList, parseList } from './fields.js';
+import { formatList, parseList } from '@/components/form/fields.js';
 
 export interface ProviderForm {
   /**

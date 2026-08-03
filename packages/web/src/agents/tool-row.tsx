@@ -23,7 +23,7 @@ import {
   DialogHeading,
   DialogSubheading,
 } from '@/components/ui/dialog.js';
-import { SelectField, TextareaField } from '@/settings/controls.js';
+import { SelectField, TextareaField } from '@/components/form/controls.js';
 
 import { TOOL_PERMISSIONS, isToolPermission } from './agents-form.js';
 import { PERMISSION_LABELS } from './tool-permissions.js';

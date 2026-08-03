@@ -79,8 +79,8 @@ import {
   SelectField,
   SwitchRow,
   TextField,
-} from '@/settings/controls.js';
-import { modelOptions } from '@/settings/fields.js';
+} from '@/components/form/controls.js';
+import { modelOptions } from '@/components/form/fields.js';
 import { useSaveSettings, useSettings } from '@/settings/use-settings.js';
 import {
   REASONING_EFFORTS,

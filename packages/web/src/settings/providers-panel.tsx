@@ -46,7 +46,7 @@ import { RowActions } from '@/components/crud/row-actions.js';
 import { filterRows, sortRows, type Comparators, type SortOrder } from '@/components/crud/sort.js';
 import { pageRows, usePagination } from '@/components/crud/use-pagination.js';
 import { SearchFilter } from '@/components/ui/search-filter.js';
-import { Section } from './controls.js';
+import { Section } from '@/components/form/controls.js';
 import { toProviderEnabledPatch } from './provider-form.js';
 import { useRemoveProvider } from './use-provider.js';
 import { useSaveSettings } from './use-settings.js';

@@ -12,7 +12,7 @@ import type { JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Badge } from '@/components/ui/badge.js';
-import { Section } from './controls.js';
+import { Section } from '@/components/form/controls.js';
 import { PLANNED_SYSTEMS, type SettingsPanel } from './panels.js';
 
 export function PlannedPanel({ panel }: { readonly panel: SettingsPanel }): JSX.Element {

@@ -42,7 +42,14 @@ import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';
 import { RowActions } from '@/components/crud/row-actions.js';
 import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
-import { FieldGrid, SaveBar, Section, SelectField, SwitchRow, TextField } from './controls.js';
+import {
+  FieldGrid,
+  SaveBar,
+  Section,
+  SelectField,
+  SwitchRow,
+  TextField,
+} from '@/components/form/controls.js';
 import { KeyField, ProbeLine } from './provider-fields.js';
 import {
   EMPTY_PROVIDER_FORM,

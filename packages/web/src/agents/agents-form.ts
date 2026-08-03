@@ -59,7 +59,12 @@ import {
   type ToolPromptOverride,
 } from '@ghostai/protocol';
 
-import { msToSeconds, parseNumber, secondsToMs, type PatchResult } from '@/settings/fields.js';
+import {
+  msToSeconds,
+  parseNumber,
+  secondsToMs,
+  type PatchResult,
+} from '@/components/form/fields.js';
 
 export type { PatchResult };
 

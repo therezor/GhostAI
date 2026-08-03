@@ -24,7 +24,7 @@ import type {
   UpdateAutomationJob,
 } from '@ghostai/protocol';
 
-import { parseNumber } from '@/settings/fields.js';
+import { parseNumber } from '@/components/form/fields.js';
 
 export type ScheduleKind = AutomationSchedule['kind'];
 export type PayloadKind = AutomationJob['payload']['kind'];

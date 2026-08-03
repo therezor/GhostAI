@@ -28,8 +28,8 @@ import { useTranslation } from 'react-i18next';
 
 import type { Config } from '@ghostai/protocol';
 
-import { FieldGrid, SaveBar, Section, SwitchRow, TextField } from './controls.js';
-import { parseNumber, type PatchResult } from './fields.js';
+import { FieldGrid, SaveBar, Section, SwitchRow, TextField } from '@/components/form/controls.js';
+import { parseNumber, type PatchResult } from '@/components/form/fields.js';
 import { useSaveSettings } from './use-settings.js';
 
 export function AutomationPanel({ config }: { readonly config: Config }): JSX.Element {

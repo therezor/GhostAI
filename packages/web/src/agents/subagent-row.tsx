@@ -11,7 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { defaultSubagentPrompt, subagentToolName, type SubagentRef } from '@ghostai/protocol';
 
 import { Button } from '@/components/ui/button.js';
-import { SelectField, TextareaField } from '@/settings/controls.js';
+import { SelectField, TextareaField } from '@/components/form/controls.js';
 
 import { TOOL_PERMISSIONS, isToolPermission } from './agents-form.js';
 import { PERMISSION_LABELS } from './tool-permissions.js';

@@ -32,7 +32,7 @@ import { ApiError, api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
 import { Button } from '@/components/ui/button.js';
 import { toast } from '@/components/ui/toast.js';
-import { Section, TextField } from './controls.js';
+import { Section, TextField } from '@/components/form/controls.js';
 
 export function AccountPanel(): JSX.Element {
   const { t } = useTranslation();

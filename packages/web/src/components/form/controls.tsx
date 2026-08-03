@@ -1,11 +1,18 @@
 /**
- * The furniture every settings panel is built out of.
+ * The furniture every form on this app is built out of.
  *
  * A settings screen is where a design system either holds or visibly stops
  * holding: it is dozens of label/control/hint triples, and written one at a time
  * they drift in spacing, in where the hint sits, and in whether the label is
- * attached to the control at all. These are the four shapes the panels below
- * need, so a new setting is a line rather than a layout decision.
+ * attached to the control at all. These are the shapes a form needs, so a new
+ * setting is a line rather than a layout decision.
+ *
+ * It lived in `settings/` and was imported across by the agent editor, the job
+ * editor, the workspace editor and the setup overlay — a design-system layer
+ * named after one of its callers, so that deleting the Settings screen would
+ * have been a compile error in four features that have nothing to do with it.
+ * `fields.ts` next door already carried that argument in its `PatchResult` note;
+ * this is the same argument applied to the module rather than to one symbol.
  *
  * `SaveBar` carries the one behavioural rule worth stating: **a settings panel
  * saves on a press, never on a keystroke.** A field that applies as it is typed

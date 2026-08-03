@@ -1,7 +1,7 @@
 /**
- * The settings form's edges.
+ * A form's edges.
  *
- * Every panel below is a form over `Config`, and a form over a typed tree has
+ * Every panel here is a form over `Config`, and a form over a typed tree has
  * exactly three places it goes wrong: a number that arrives as a string, a
  * duration stored in one unit and shown in another, and a list edited as text.
  * All three are here, as functions, because all three have a boundary that is

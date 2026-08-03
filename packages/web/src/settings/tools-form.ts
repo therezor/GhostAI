@@ -16,8 +16,8 @@
 import type { ToolsConfig } from '@ghostai/protocol';
 import type { TFunction } from 'i18next';
 
-import { msToSeconds, parseNumber, secondsToMs } from './fields.js';
-import type { PatchResult } from './fields.js';
+import { msToSeconds, parseNumber, secondsToMs } from '@/components/form/fields.js';
+import type { PatchResult } from '@/components/form/fields.js';
 
 export interface ToolsForm {
   readonly approvalTimeoutSeconds: string;

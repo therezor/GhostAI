@@ -14,7 +14,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { ProviderTestResponse } from '@ghostai/protocol';
 
-import { TextField } from './controls.js';
+import { TextField } from '@/components/form/controls.js';
 import { describeProbe } from './use-provider.js';
 
 /**

@@ -24,7 +24,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { Config } from '@ghostai/protocol';
 
-import { FieldGrid, SaveBar, Section, SwitchRow, TextField } from './controls.js';
+import { FieldGrid, SaveBar, Section, SwitchRow, TextField } from '@/components/form/controls.js';
 import { toToolsForm, toToolsPatch, type ToolsForm } from './tools-form.js';
 import { useSaveSettings } from './use-settings.js';
 

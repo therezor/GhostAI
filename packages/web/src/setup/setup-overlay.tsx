@@ -34,7 +34,7 @@ import { queryKeys } from '@/lib/query.js';
 import { Button } from '@/components/ui/button.js';
 import { Field } from '@/components/ui/field.js';
 import { Wordmark } from '@/components/wordmark.js';
-import { SelectField, TextField } from '@/settings/controls.js';
+import { SelectField, TextField } from '@/components/form/controls.js';
 import { EMPTY_PROVIDER_FORM, toCreateProviderPatch } from '@/settings/provider-form.js';
 import {
   initialStep,

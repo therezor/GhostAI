@@ -54,7 +54,7 @@ import { RowActions } from '@/components/crud/row-actions.js';
 import { api } from '@/lib/api.js';
 import { useFormat } from '@/lib/use-format.js';
 import { queryKeys } from '@/lib/query.js';
-import { FieldGrid, SaveBar, Section, TextField } from '@/settings/controls.js';
+import { FieldGrid, SaveBar, Section, TextField } from '@/components/form/controls.js';
 import { DeleteWorkspaceDialog } from './delete-workspace.js';
 import { WORKSPACE_ROOT_PATH, folderLabel } from './folder.js';
 import { useWorkspace } from './workspace-context.js';

@@ -34,7 +34,13 @@ import { isThemePreference } from '@/theme/theme.js';
 import { useAppTheme } from '@/theme/theme-context.js';
 import { browserTimezone, useAppTimezone } from '@/timezone/timezone-context.js';
 
-import { FieldGrid, SaveBar, Section, SelectField, type SelectFieldOption } from './controls.js';
+import {
+  FieldGrid,
+  SaveBar,
+  Section,
+  SelectField,
+  type SelectFieldOption,
+} from '@/components/form/controls.js';
 import { useSaveSettings } from './use-settings.js';
 
 /**

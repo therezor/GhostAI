@@ -47,7 +47,7 @@ import {
   SwitchRow,
   TextField,
   TextareaField,
-} from '@/settings/controls.js';
+} from '@/components/form/controls.js';
 
 import {
   emptyJobForm,
