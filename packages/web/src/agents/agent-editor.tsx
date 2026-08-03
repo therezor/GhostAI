@@ -256,7 +256,7 @@ export function AgentCreateRoute(): JSX.Element {
   if (settings.isError) {
     return (
       <p role="alert" className="page__error">
-        Could not load the defaults: {settings.error.message}
+        {t('agents.loadDefaultsError', { message: settings.error.message })}
       </p>
     );
   }
@@ -286,7 +286,7 @@ export function AgentEditorRoute(): JSX.Element {
   if (settings.isError) {
     return (
       <p role="alert" className="page__error">
-        Could not load the agent: {settings.error.message}
+        {t('agents.loadOneError', { message: settings.error.message })}
       </p>
     );
   }
@@ -302,7 +302,7 @@ export function AgentEditorRoute(): JSX.Element {
     return (
       <div className="stack page page--wide">
         <p role="alert" className="page__error">
-          There is no agent called “{agentId}”.
+          {t('agents.noSuchAgent', { id: agentId })}
         </p>
         <Link to="/agents" className="page__back">
           <ArrowLeft aria-hidden="true" />

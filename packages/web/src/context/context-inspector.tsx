@@ -109,7 +109,7 @@ export function ContextBody({ sessionKey }: { readonly sessionKey: string }): JS
 
     return (
       <p role="alert" className="page__error">
-        Could not read the context: {context.error.message}
+        {t('context.loadError', { message: context.error.message })}
       </p>
     );
   }

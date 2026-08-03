@@ -83,7 +83,7 @@ export function WorkspaceCreateRoute(): JSX.Element {
   if (workspaces.isError) {
     return (
       <p role="alert" className="page__error">
-        Could not load the workspaces: {workspaces.error.message}
+        {t('workspaces.loadListError', { message: workspaces.error.message })}
       </p>
     );
   }
@@ -104,7 +104,7 @@ export function WorkspaceEditorRoute(): JSX.Element {
   if (workspaces.isError) {
     return (
       <p role="alert" className="page__error">
-        Could not load the workspace: {workspaces.error.message}
+        {t('workspaces.loadOneError', { message: workspaces.error.message })}
       </p>
     );
   }
@@ -117,7 +117,7 @@ export function WorkspaceEditorRoute(): JSX.Element {
     return (
       <div className="stack page page--wide">
         <p role="alert" className="page__error">
-          There is no workspace called “{workspaceId}”.
+          {t('workspaces.noSuchWorkspace', { id: workspaceId })}
         </p>
         <Link to="/workspaces" className="page__back">
           <ArrowLeft aria-hidden="true" />

@@ -79,6 +79,8 @@ export function Message({
   onApprove,
   onAction,
 }: MessageProps): JSX.Element {
+  const { t } = useTranslation();
+
   switch (item.kind) {
     case 'user':
       return <UserMessage item={item} busy={busy} onAction={onAction} />;
@@ -94,7 +96,7 @@ export function Message({
         />
       );
     case 'steer':
-      return <p className="steer">Steered mid-turn: {item.text}</p>;
+      return <p className="steer">{t('chat.steeredMidTurn', { text: item.text })}</p>;
     case 'notice':
       return <Notice kind={item.notice} message={item.message} />;
   }

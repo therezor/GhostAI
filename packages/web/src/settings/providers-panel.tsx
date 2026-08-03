@@ -93,7 +93,7 @@ export function ProvidersPanel(): JSX.Element {
   if (providers.isError) {
     return (
       <p role="alert" className="page__error">
-        Could not load providers: {providers.error.message}
+        {t('providers.loadError', { message: providers.error.message })}
       </p>
     );
   }

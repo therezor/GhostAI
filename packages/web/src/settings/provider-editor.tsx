@@ -88,7 +88,7 @@ export function ProviderCreateRoute(): JSX.Element {
   if (providers.isError) {
     return (
       <p role="alert" className="page__error">
-        Could not load the provider types: {providers.error.message}
+        {t('providers.loadTypesError', { message: providers.error.message })}
       </p>
     );
   }
@@ -177,7 +177,9 @@ export function ProviderEditorRoute(): JSX.Element {
   if (settings.isError || providers.isError) {
     return (
       <p role="alert" className="page__error">
-        Could not load the provider: {(settings.error ?? providers.error)?.message}
+        {t('providers.loadOneError', {
+          message: (settings.error ?? providers.error)?.message ?? '',
+        })}
       </p>
     );
   }
@@ -190,7 +192,7 @@ export function ProviderEditorRoute(): JSX.Element {
     return (
       <div className="stack page page--wide">
         <p role="alert" className="page__error">
-          There is no provider called “{instanceId}”.
+          {t('providers.noSuchProvider', { id: instanceId })}
         </p>
         <Link to="/settings" search={{ panel: 'providers' }} className="page__back">
           <ArrowLeft aria-hidden="true" />
@@ -352,10 +354,7 @@ function Editor({
           )}
         </div>
 
-        <p className="page__note">
-          A {instance.type} endpoint. The type is fixed for the life of an instance: its saved key
-          is keyed to this id, so talking a different protocol is a different endpoint.
-        </p>
+        <p className="page__note">{t('providers.typeFixedNote', { type: instance.type })}</p>
       </div>
 
       <Section title={t('providers.identity')} description={t('providers.identityDesc')}>

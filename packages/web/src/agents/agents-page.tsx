@@ -279,13 +279,13 @@ export function AgentsRoute(): JSX.Element {
       {settings.isPending && <p className="page__note">{t('common.loading')}</p>}
       {settings.isError && (
         <p role="alert" className="page__error">
-          Could not load agents: {settings.error.message}
+          {t('agents.loadError', { message: settings.error.message })}
         </p>
       )}
 
       {settings.isSuccess &&
         (matched.length === 0 ? (
-          <p className="page__note">No agent matches “{filter}”.</p>
+          <p className="page__note">{t('agents.noMatch', { filter })}</p>
         ) : (
           <DataList label={t('agents.title')}>
             {rows.map((row) => (

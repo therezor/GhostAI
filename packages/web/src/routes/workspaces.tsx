@@ -131,7 +131,7 @@ export function WorkspacesRoute(): JSX.Element {
       {workspaces.isPending && <p className="page__note">{t('common.loading')}</p>}
       {workspaces.isError && (
         <p role="alert" className="page__error">
-          Could not load workspaces: {workspaces.error.message}
+          {t('workspaces.loadError', { message: workspaces.error.message })}
         </p>
       )}
 

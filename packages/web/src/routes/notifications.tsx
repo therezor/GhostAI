@@ -161,7 +161,7 @@ export function NotificationsRoute(): JSX.Element {
       {notifications.isPending && <p className="page__note">{t('common.loading')}</p>}
       {notifications.isError && (
         <p role="alert" className="page__error">
-          Could not load notifications: {notifications.error.message}
+          {t('notifications.loadError', { message: notifications.error.message })}
         </p>
       )}
 

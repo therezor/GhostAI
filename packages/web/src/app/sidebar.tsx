@@ -268,7 +268,7 @@ export function Sidebar({ onNavigate }: { readonly onNavigate?: () => void }): J
                       }}
                     >
                       <Label htmlFor={`rename-${session.key}`} className="sr-only">
-                        New name for {title}
+                        {t('sessions.renameLabel', { title })}
                       </Label>
                       <Input
                         id={`rename-${session.key}`}

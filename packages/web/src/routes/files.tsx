@@ -388,7 +388,7 @@ export function FilesRoute(): JSX.Element {
       {listing.isPending && <p className="page__note">{t('common.loading')}</p>}
       {listing.isError && (
         <p role="alert" className="page__error">
-          Could not list this directory: {listing.error.message}
+          {t('files.listError', { message: listing.error.message })}
         </p>
       )}
 
@@ -420,9 +420,7 @@ export function FilesRoute(): JSX.Element {
               <p className="file-drop__empty-hint">{t('files.emptyHint')}</p>
             </div>
           ) : entries.length === 0 ? (
-            <p className="page__note">
-              Nothing here matches “{filter}”. {String(total)} entries are hidden.
-            </p>
+            <p className="page__note">{t('files.noMatch', { filter, count: total })}</p>
           ) : (
             <DataList label={t('files.title')}>
               {entries.map((entry) => (

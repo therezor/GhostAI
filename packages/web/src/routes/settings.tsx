@@ -124,7 +124,7 @@ function PanelBody({ panelId }: { readonly panelId: string }): JSX.Element {
   if (settings.isError) {
     return (
       <p role="alert" className="page__error">
-        Could not load settings: {settings.error.message}
+        {t('settings.loadFailed', { message: settings.error.message })}
       </p>
     );
   }

@@ -50,6 +50,24 @@ const PROSE = /[A-Za-z]{2,}(?:['’-]?[A-Za-z]+)*(?:\s+[A-Za-z]{2,}[^<>{}"]*)/;
 const JSX_TEXT = />\s*([A-Z][^<>{}]*?)\s*</g;
 
 /**
+ * A JSX expression container, flattened to a placeholder before the sweep runs.
+ *
+ * `JSX_TEXT` forbids braces in the text it captures, which is what keeps it from
+ * running across a block of code — and it also meant a sentence with a value in
+ * it was invisible. Twenty-two of them were: every "Could not load the agent:
+ * {error.message}", every "There is no workspace called “{id}”." A whole class
+ * of copy, and the class that shows up on the worst day the user has.
+ *
+ * Flattening rather than allowing braces through. Widening the character class
+ * was the obvious fix and it is wrong: `[^<>]` will happily run from a `>` in
+ * `a.enabled) - Number(b)` to a `<` three statements later and report the code
+ * in between as untranslated prose. Replacing the innermost `{…}` with a marker
+ * leaves the *text* whole and still refuses to cross a real brace, so a sentence
+ * matches and a block of code does not.
+ */
+const EXPRESSION = /\{[^{}]*\}/g;
+
+/**
  * The attributes that carry copy rather than configuration.
  *
  * `hint` was missing from this list for as long as it has existed, and fifteen
@@ -63,8 +81,9 @@ const JSX_TEXT = />\s*([A-Z][^<>{}]*?)\s*</g;
  */
 const COPY_ATTRIBUTES = /\b(?:aria-label|placeholder|title|alt|description|label|hint)="([^"]+)"/g;
 
-function offendersIn(file: string, source: string): string[] {
+function offendersIn(file: string, rawSource: string): string[] {
   const found: string[] = [];
+  const source = rawSource.replace(EXPRESSION, '…');
 
   for (const [, text] of source.matchAll(JSX_TEXT)) {
     if (text !== undefined && PROSE.test(text)) found.push(`${file}: >${text}<`);
