@@ -937,6 +937,71 @@ describe('buildRawPrompt', () => {
   });
 });
 
+describe('raw and template mode agree about live state', () => {
+  // The two builders derive these from one function now. Before that they each
+  // computed them, and nothing said they had to match — a raw agent could have
+  // read a different "iterations left" than a template agent on the same turn,
+  // and no test would have noticed. Asserting the agreement is what makes the
+  // sharing load-bearing rather than incidental.
+  const LIVE_HOLES = [
+    'time',
+    'iteration',
+    'maxIterations',
+    'iterationsLeft',
+    'channel',
+    'sessionKey',
+    'tag',
+  ] as const;
+
+  it('fills every live placeholder with the same value in both modes', () => {
+    const template = LIVE_HOLES.map((hole) => `{{${hole}}}`).join('\n');
+
+    const fromRaw = rawPrompt({
+      context: RUNTIME,
+      nonce: NONCE,
+      platform: 'linux',
+      runtimeLabel: 'Linux x64, Node 22.11.0',
+      agent: { ...AGENT, promptMode: 'raw', systemPrompt: template },
+      tools: {},
+    });
+
+    const fromTemplate = buildRuntimeBlock({
+      context: RUNTIME,
+      nonce: NONCE,
+      livePrompt: template,
+    });
+
+    expect(fromRaw).toBe(fromTemplate);
+  });
+
+  it('gates the wrap-up at the same iteration in both modes', () => {
+    const nearTheCap = { ...RUNTIME, iteration: RUNTIME.maxIterations };
+
+    const fromRaw = rawPrompt({
+      context: nearTheCap,
+      nonce: NONCE,
+      platform: 'linux',
+      runtimeLabel: 'Linux x64, Node 22.11.0',
+      agent: { ...AGENT, promptMode: 'raw', systemPrompt: '{{wrapUp}}' },
+      tools: {},
+    });
+
+    const fromTemplate = buildRuntimeBlock({
+      context: nearTheCap,
+      nonce: NONCE,
+      livePrompt: '{{wrapUp}}',
+    });
+
+    // Trimmed on both sides: `renderWrapUp` returns its text behind a blank
+    // line so it separates itself from whatever precedes it, and template mode
+    // trims the whole live section afterwards while raw mode leaves the
+    // operator's blob exactly as written. That is a placement difference, not a
+    // disagreement about the value — which is what this asserts.
+    expect(fromRaw.trim()).not.toBe('');
+    expect(fromRaw.trim()).toBe(fromTemplate.trim());
+  });
+});
+
 describe('contributorSections', () => {
   it('collects the non-empty ones in order, trimmed', async () => {
     const contributors: ContextContributor[] = [
