@@ -29,8 +29,8 @@ import type { WebKey } from '@/i18n/keys.js';
 
 import type { NoticeKind } from '@ghostai/protocol';
 
-import { cn } from '@/lib/cn.js';
 import type { BadgeProps } from '@/components/ui/badge.js';
+import { NoticeBlock } from '@/components/ui/notice.js';
 
 const NOTICES: Record<
   NoticeKind,
@@ -55,16 +55,6 @@ const NOTICES: Record<
   tools_disabled: { label: 'chat.notices.tools_disabled', tone: 'warning', icon: Wrench },
 };
 
-/** Neutral is the base rule in `chat.css`, so it needs no modifier. */
-const TONE_CLASSES = {
-  danger: 'notice--danger',
-  warning: 'notice--warning',
-  info: 'notice--info',
-  success: 'notice--success',
-  accent: 'notice--accent',
-  neutral: '',
-} as const;
-
 export function Notice({
   kind,
   message,
@@ -78,18 +68,15 @@ export function Notice({
   const { label, tone, icon: Icon } = NOTICES[kind];
   const text = t(label);
 
+  // The shape is `NoticeBlock`'s; this file's job is the vocabulary — which
+  // wire event gets which words, which tone and which icon.
   return (
-    <div
-      // Not a `Badge`: a notice carries a sentence, and a pill that wraps to
-      // three lines is not a pill. The tone vocabulary is shared, the shape is
-      // not.
-      className={cn('notice', TONE_CLASSES[tone], className)}
-    >
-      <Icon />
-      <span>
-        <span className="notice__label">{text}.</span>{' '}
-        <span className="notice__message">{message}</span>
-      </span>
-    </div>
+    <NoticeBlock
+      title={text}
+      message={message}
+      tone={tone}
+      icon={Icon}
+      {...(className === undefined ? {} : { className })}
+    />
   );
 }

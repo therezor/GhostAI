@@ -36,7 +36,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Wrench } from 'lucide-react';
 import { useMemo, useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -66,6 +66,7 @@ import {
 } from '@ghostai/protocol';
 
 import { Badge } from '@/components/ui/badge.js';
+import { NoticeBlock } from '@/components/ui/notice.js';
 import { Button } from '@/components/ui/button.js';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu.js';
 import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';
@@ -977,12 +978,6 @@ function Editor({
 
       <Section title={t('agents.toolsSection')} description={t('agents.toolsDesc')}>
         {tools.isPending && <p className="page__note">{t('agents.loadingTools')}</p>}
-        {/* Shown above the list rather than in place of it. The rows say what
-            this agent is configured to do, and that is still true and still
-            saved — what has changed is only that this model is not being told
-            about any of it. Emptying the list would read as the config being
-            gone, which is the one thing the switch must not do. */}
-        {toolsOff && <p className="page__note page__warning">{t('agents.toolsOffNote')}</p>}
         {toolNames.length > 0 && (
           <ul className={cn('stack agent-editor__tools', toolsOff && 'agent-editor__tools--off')}>
             {toolNames.map((name) => {
@@ -1208,6 +1203,20 @@ function Editor({
 
       <Section title={t('agents.systemPrompt')} description={t('agents.promptDesc')}>
         <div className="stack agent-editor__prompt">
+          {/* Above the prompt, not beside the tool list it is about. The rows
+              down there are still what this agent is configured to do — that is
+              true and still saved — and what has changed is that this model is
+              not being told about any of it. Which makes it a fact about the
+              prompt: the tools section is not in the prompt this agent sends,
+              and the place to say so is where an operator is writing it. */}
+          {toolsOff && (
+            <NoticeBlock
+              tone="warning"
+              icon={Wrench}
+              title={t('agents.toolsOffTitle')}
+              message={t('agents.toolsOffNote')}
+            />
+          )}
           <TemplateEditor
             key={`${String(formEpoch)}-system`}
             name={name}
