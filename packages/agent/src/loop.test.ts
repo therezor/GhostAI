@@ -1195,6 +1195,18 @@ describe('AgentLoop', () => {
     const notice = events.find((event) => event.type === 'notice');
     expect(notice).toMatchObject({ kind: 'prompt_injection', callId: 'c1' });
 
+    // The injection notice follows its result; the *denied* notice precedes one.
+    // Two notices with opposite placement is the pair a reordering swaps
+    // without any `find`-based assertion noticing.
+    expect(typesOf(events)).toEqual([
+      'turn.start',
+      'tool.call',
+      'tool.result',
+      'notice',
+      'assistant.delta',
+      'turn.end',
+    ]);
+
     // Non-destructive: the detection raises a badge, the delimiters do the
     // defending, and the model sees exactly what the page said.
     const reported = events.find((event) => event.type === 'tool.result');
@@ -1214,6 +1226,50 @@ describe('AgentLoop', () => {
     // A failed call is a legal history entry, and the turn goes on.
     expect(result).toMatchObject({ stopReason: 'complete', iterations: 2 });
     expect(messagesOf(store).some((message) => message.role === 'tool')).toBe(true);
+  });
+
+  it('writes the assistant turn and every one of its answers in one transaction', async () => {
+    const { loop, store } = harness({
+      tools: [echoTool],
+      turns: [
+        {
+          toolCalls: [toolCall('c1', 'echo', { text: 'hi' }), toolCall('c2', 'nonexistent', {})],
+        },
+        { deltas: ['done'] },
+      ],
+      loop: { toolHeartbeatMs: 0 },
+    });
+
+    await runTurn(loop, { sessionKey: SESSION, content: 'go' });
+
+    const records = store.messages(SESSION);
+    expect(records.map((record) => record.message.role)).toEqual([
+      'user',
+      'assistant',
+      'tool',
+      'tool',
+      'assistant',
+    ]);
+
+    // In the model's order, one answer each, the failure recorded as one.
+    const answers = records.filter((record) => record.message.role === 'tool');
+    expect(
+      answers.map((record) => (record.message.role === 'tool' ? record.message.toolCallId : '')),
+    ).toEqual(['c1', 'c2']);
+    expect(
+      answers.map((record) =>
+        record.message.role === 'tool' ? record.message.isError : undefined,
+      ),
+    ).toEqual([false, true]);
+
+    // Contiguous seqs across the assistant turn and both of its answers, which
+    // is what proves one `appendMany` rather than an append per call. A partial
+    // write is precisely the orphaned tool result `findLegalStart` then has to
+    // repair on every later request — and appending per call leaves every
+    // other assertion in this file green.
+    const batch = records.slice(1, 4).map((record) => record.seq);
+    const first = batch[0] ?? 0;
+    expect(batch).toEqual([first, first + 1, first + 2]);
   });
 
   it('reports the arguments a model sent, malformed or absent', async () => {
@@ -1431,6 +1487,58 @@ describe('AgentLoop approvals', () => {
     expect(hasOrphanedToolResult(messages)).toBe(false);
     const stored = messages.find((message) => message.role === 'tool');
     expect(stored?.role === 'tool' ? stored.isError : false).toBe(true);
+  });
+
+  it('gates one call at a time, in the order the model asked', async () => {
+    const shell = shellTool();
+    const gate = manualGate();
+    const { loop, store } = harness({
+      tools: [shell.tool, echoTool],
+      turns: [
+        {
+          toolCalls: [
+            toolCall('c1', 'shell', { argv: ['ls'] }),
+            toolCall('c2', 'echo', { text: 'hi' }),
+          ],
+        },
+        { deltas: ['done'] },
+      ],
+      // Both, deliberately: an unlisted tool is invisible to `isEnabled`, so
+      // naming only `shell` would leave `echo` out of the scope entirely.
+      permissions: { shell: 'ask', echo: 'allow' },
+      loop: { approvals: gate.gate, toolHeartbeatMs: 0 },
+    });
+
+    const turn = startTurn(loop, { sessionKey: SESSION, content: 'go' });
+    await waitFor(() => gate.requests.length === 1);
+    gate.answer(false);
+    const result = await turn.done;
+
+    // Interleaved rather than batched, and that is the assertion: the second
+    // call's `tool.call` comes *after* the first call's result, because each
+    // call is authorised and answered in turn. Hoisting the gate out of the
+    // loop, or collecting the notices, reorders this without failing any
+    // single-call test.
+    expect(typesOf(turn.events)).toEqual([
+      'turn.start',
+      'tool.call',
+      'tool.approvalRequest',
+      'notice',
+      'tool.result',
+      'tool.call',
+      'tool.result',
+      'assistant.delta',
+      'turn.end',
+    ]);
+    expect(
+      turn.events.slice(1, 7).map((event) => ('callId' in event ? event.callId : undefined)),
+    ).toEqual(['c1', 'c1', 'c1', 'c1', 'c2', 'c2']);
+
+    // The refusal stopped the first call and nothing else: the second ran.
+    expect(shell.calls()).toBe(0);
+    expect(turn.events[6]).toMatchObject({ type: 'tool.result', ok: true, content: 'hi' });
+    expect(result).toMatchObject({ stopReason: 'complete', iterations: 2 });
+    expect(unansweredToolCalls(messagesOf(store))).toEqual([]);
   });
 
   it('denies a call nobody answered before the deadline', async () => {
