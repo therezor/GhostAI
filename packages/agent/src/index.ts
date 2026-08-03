@@ -88,10 +88,10 @@ export {
   type DescribeContextInput,
 } from './context.js';
 
+export { CANCELLED_TOOL_RESULT, TOOL_HEARTBEAT_MS } from './dispatch.js';
+
 export {
   AgentLoop,
-  CANCELLED_TOOL_RESULT,
-  TOOL_HEARTBEAT_MS,
   type AgentLoopOptions,
   type LoopAgent,
   type PromptPreview,

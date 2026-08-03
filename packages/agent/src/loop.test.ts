@@ -44,13 +44,8 @@ import {
   type ApprovalRequest,
 } from './approval.js';
 import type { AgentEvent, SubagentEvent } from './events.js';
-import {
-  AgentLoop,
-  CANCELLED_TOOL_RESULT,
-  type AgentLoopOptions,
-  type TurnInput,
-  type TurnResult,
-} from './loop.js';
+import { CANCELLED_TOOL_RESULT } from './dispatch.js';
+import { AgentLoop, type AgentLoopOptions, type TurnInput, type TurnResult } from './loop.js';
 import type { ContextContributor } from './prompt.js';
 import { MAX_SUBAGENT_DEPTH, subagentMap, type SubagentBinding } from './subagent.js';
 import { STEERING_PREFIX, SteeringQueue } from './steering.js';
