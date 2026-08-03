@@ -259,7 +259,7 @@ function CodeStep({ onDone }: { readonly onDone: () => void }): JSX.Element {
           setCode(event.target.value);
         }}
         error={messageOf(claim.error, 'Incorrect or already-used setup code.')}
-        hint="Dashes and capitals are optional."
+        hint={t('setup.codeHint')}
       />
       <Button type="submit" variant="primary" disabled={claim.isPending || code.trim() === ''}>
         {claim.isPending ? 'Checking…' : 'Continue'}
@@ -308,7 +308,7 @@ function PasswordStep({ onDone }: { readonly onDone: () => void }): JSX.Element 
         onChange={(event) => {
           setUsername(event.target.value);
         }}
-        hint="Signing in takes this and the password below."
+        hint={t('setup.usernameHint')}
       />
       <Field
         label={t('setup.password')}
@@ -413,7 +413,7 @@ function ProviderStep({ onDone }: { readonly onDone: (instanceId: string) => voi
             placeholder={chosen.defaultApiBase ?? 'Required for this provider'}
             spellCheck={false}
             onValueChange={setApiBase}
-            hint="Empty uses the default shown above."
+            hint={t('setup.apiBaseHint')}
           />
           <TextField
             label={chosen.isLocal ? 'API token (optional)' : 'API key'}

@@ -267,7 +267,7 @@ function Editor({
             value={name}
             placeholder={workspace?.id ?? t('workspaces.namePlaceholder')}
             onValueChange={setName}
-            hint="A label. Changing it moves nothing on disk and breaks no link."
+            hint={t('workspaces.nameHint')}
           />
 
           <TextField

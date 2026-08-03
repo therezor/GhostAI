@@ -94,7 +94,7 @@ export function ToolsPanel({ config }: { readonly config: Config }): JSX.Element
             onValueChange={(value) => {
               update('execTimeoutSeconds', value);
             }}
-            hint="0 for no timeout."
+            hint={t('settings.tools.execTimeoutHint')}
           />
           <TextField
             label={t('settings.tools.maxOutputBytes')}
@@ -115,7 +115,7 @@ export function ToolsPanel({ config }: { readonly config: Config }): JSX.Element
       >
         <SwitchRow
           label={t('settings.tools.restrictFiles')}
-          hint="The jail. Switching this off lets the agent read and write anywhere this process can."
+          hint={t('settings.tools.restrictFilesHint')}
           checked={form.restrictToWorkspace}
           onCheckedChange={(checked) => {
             update('restrictToWorkspace', checked);

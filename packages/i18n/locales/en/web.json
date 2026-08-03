@@ -2,6 +2,7 @@
   "account": {
     "confirmNewPassword": "Confirm new password",
     "currentPassword": "Current password",
+    "currentPasswordHint": "Required. Being signed in on its own is not enough to change the credential it was minted from.",
     "desc": "The username and password this server is reached with. Changing either signs out every other device, which is the point: the reason to rotate a credential is that the old one may be known.",
     "newPassword": "New password",
     "passwordLabel": "Password",
@@ -16,6 +17,7 @@
     "deleteAgent": "Delete this agent",
     "deleteTitle": "Delete this agent?",
     "enabled": "Enabled",
+    "enabledHint": "A disabled agent cannot run a turn and is hidden from the picker.",
     "filter": "Filter agents by name",
     "forThisSession": "For this session",
     "idCreatePreview": "Creates “{{id}}”.",
@@ -26,6 +28,7 @@
     "idLabel": "Identifier",
     "idPreview": "Will be renamed to “{{id}}”. Delegations and sessions follow; bookmarks and other devices do not.",
     "idTaken": "There is already an agent called “{{id}}”.",
+    "labelHint": "Fills {{token}} in the system prompt.",
     "limits": "Limits",
     "limitsDesc": "The budget a turn runs inside.",
     "loading": "Loading agent…",
@@ -104,6 +107,7 @@
     "summaryTools_other": "{{count}} tools",
     "systemPrompt": "System prompt",
     "temperature": "Temperature",
+    "temperatureHint": "Leave empty to send none at all — which is the only thing that works for models that reject it.",
     "title": "Agents",
     "toolAllow": "Allowed",
     "toolAsk": "Ask first",
@@ -140,7 +144,8 @@
     "toolWordingTitle": "What {{name}} tells the model",
     "turnTimeout": "Turn timeout (seconds)",
     "vision": "Reading images",
-    "visionHint": "Off sends an attached image as its file path instead of its contents, for a model that cannot see. The agent can still open it with its file tools."
+    "visionHint": "Off sends an attached image as its file path instead of its contents, for a model that cannot see. The agent can still open it with its file tools.",
+    "zeroDisablesHint": "0 disables the limit."
   },
   "automation": {
     "agentDefault": "Default agent",
@@ -403,6 +408,7 @@
   },
   "providers": {
     "apiBase": "API base",
+    "apiBaseHint": "Empty uses the default shown above.",
     "backToProviders": "Back to providers",
     "checking": "Checking the connection…",
     "chooseType": "Choose a type",
@@ -412,10 +418,12 @@
     "deleteProvider": "Delete this provider",
     "deleteTitle": "Delete this provider?",
     "enabled": "Enabled",
+    "enabledHint": "A disabled endpoint stays configured but is offered to no agent and asked for no models.",
     "endpoint": "Endpoint",
     "filter": "Filter providers",
     "identity": "Identity",
     "identityDesc": "What this endpoint is called in the list.",
+    "labelHint": "Blank uses the provider type’s own name.",
     "loading": "Loading providers…",
     "loadingOne": "Loading provider…",
     "models": "Models",
@@ -551,21 +559,25 @@
       "commandTimeout": "Command timeout (seconds)",
       "enableExec": "Let agents run commands",
       "enableExecHint": "The install-wide switch. Off removes exec from every agent, whatever its own permission says. On means each agent decides for itself, on its own screen.",
+      "execTimeoutHint": "0 for no timeout.",
       "executionDesc": "The exec tool, and what it may produce.",
       "executionTitle": "Execution",
       "maxChars": "Max characters per tool result",
       "maxCharsHint": "Longer results are truncated head and tail, keeping both ends. There is no unlimited: this number also bounds how much of a file a single read loads, so set it high rather than to 0.",
       "maxOutputBytes": "Max output (bytes)",
       "restrictFiles": "Restrict file tools to the workspace",
+      "restrictFilesHint": "The jail. Switching this off lets the agent read and write anywhere this process can.",
       "resultsDesc": "What comes back from a tool, and from where.",
       "resultsTitle": "Results"
     }
   },
   "setup": {
     "apiBase": "API base",
+    "apiBaseHint": "Empty uses the default shown above.",
     "asking": "Asking the provider what it has…",
     "back": "Back",
     "chooseOne": "Choose one",
+    "codeHint": "Dashes and capitals are optional.",
     "codeNote": "It was printed in the terminal that started this server. It works once.",
     "codePlaceholder": "XXXX-XXXX-XXXX",
     "codeTitle": "Enter the setup code",
@@ -589,7 +601,8 @@
     "providerTitle": "Add a model provider",
     "setupCode": "Setup code",
     "skip": "Skip",
-    "username": "Username"
+    "username": "Username",
+    "usernameHint": "Signing in takes this and the password below."
   },
   "shell": {
     "openMenu": "Open menu",
@@ -659,6 +672,7 @@
     "moveTitle": "Move the sessions first?",
     "namedNote_one": "Isolated from the other named workspaces — it cannot reach their files, and they cannot reach its. {{count}} session runs in it, last updated {{updated}}.",
     "namedNote_other": "Isolated from the other named workspaces — it cannot reach their files, and they cannot reach its. {{count}} sessions run in it, last updated {{updated}}.",
+    "nameHint": "A label. Changing it moves nothing on disk and breaks no link.",
     "namePlaceholder": "Client Acme",
     "new": "New workspace",
     "newHint": "A name, and the folder it gets inside the workspace root. Neither is a path, and the two are independent — the folder only starts out derived from the name.",

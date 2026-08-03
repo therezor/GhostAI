@@ -49,8 +49,19 @@ const PROSE = /[A-Za-z]{2,}(?:['’-]?[A-Za-z]+)*(?:\s+[A-Za-z]{2,}[^<>{}"]*)/;
 /** JSX text between tags: `>Some words<`, but not `>{expression}<`. */
 const JSX_TEXT = />\s*([A-Z][^<>{}]*?)\s*</g;
 
-/** The attributes that carry copy rather than configuration. */
-const COPY_ATTRIBUTES = /\b(?:aria-label|placeholder|title|alt|description|label)="([^"]+)"/g;
+/**
+ * The attributes that carry copy rather than configuration.
+ *
+ * `hint` was missing from this list for as long as it has existed, and fifteen
+ * sentences shipped untranslated behind the omission — the paragraph under a
+ * switch explaining what turning the workspace jail off actually does, what a
+ * blank provider name falls back to, why the current password is asked for
+ * again. It is a first-class prop on `TextField`, `SwitchRow` and `SelectField`
+ * and reads as prose to the person in front of it, so it belongs here with the
+ * rest. The gate only checks what it is told to check, which makes the contents
+ * of this list the whole of the rule.
+ */
+const COPY_ATTRIBUTES = /\b(?:aria-label|placeholder|title|alt|description|label|hint)="([^"]+)"/g;
 
 function offendersIn(file: string, source: string): string[] {
   const found: string[] = [];

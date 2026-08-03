@@ -107,7 +107,7 @@ export function AccountPanel(): JSX.Element {
           value={currentPassword}
           onValueChange={setCurrentPassword}
           error={change.error === null ? undefined : errorMessageOf(change.error)}
-          hint="Required. Being signed in on its own is not enough to change the credential it was minted from."
+          hint={t('account.currentPasswordHint')}
         />
 
         <TextField

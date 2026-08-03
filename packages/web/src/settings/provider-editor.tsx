@@ -364,11 +364,11 @@ function Editor({
             onValueChange={(value) => {
               update('label', value);
             }}
-            hint="Blank uses the provider type's own name."
+            hint={t('providers.labelHint')}
           />
           <SwitchRow
             label={t('providers.enabled')}
-            hint="A disabled endpoint stays configured but is offered to no agent and asked for no models."
+            hint={t('providers.enabledHint')}
             checked={form.enabled}
             onCheckedChange={(checked) => {
               update('enabled', checked);
@@ -386,7 +386,7 @@ function Editor({
           onValueChange={(value) => {
             update('apiBase', value);
           }}
-          hint="Empty uses the default shown above."
+          hint={t('providers.apiBaseHint')}
         />
 
         <KeyField

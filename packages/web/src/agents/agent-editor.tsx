@@ -871,7 +871,7 @@ function Editor({
             onValueChange={(value) => {
               update('label', value);
             }}
-            hint="Fills {{name}} in the system prompt."
+            hint={t('agents.labelHint', { token: '{{name}}' })}
           />
           {!isDefault && (
             <TextField
@@ -898,7 +898,7 @@ function Editor({
           {!isDefault && (
             <SwitchRow
               label={t('agents.enabled')}
-              hint="A disabled agent cannot run a turn and is hidden from the picker."
+              hint={t('agents.enabledHint')}
               checked={form.enabled}
               onCheckedChange={(checked) => {
                 update('enabled', checked);
@@ -950,7 +950,7 @@ function Editor({
             inputMode="decimal"
             error={errors.temperature}
             placeholder={t('agents.providerDefault')}
-            hint="Leave empty to send none at all — which is the only thing that works for models that reject it."
+            hint={t('agents.temperatureHint')}
           />
           <OptionalSelect
             label={t('agents.reasoningEffort')}
@@ -1180,7 +1180,7 @@ function Editor({
             bound={fields.toolTimeoutSeconds}
             inputMode="numeric"
             error={errors.toolTimeoutSeconds}
-            hint="0 disables the limit."
+            hint={t('agents.zeroDisablesHint')}
           />
           {isDefault && (
             <TextField
@@ -1202,7 +1202,7 @@ function Editor({
               onValueChange={(value) => {
                 updateBase('loopWallTimeoutSeconds', value);
               }}
-              hint="0 disables the limit."
+              hint={t('agents.zeroDisablesHint')}
             />
           )}
         </FieldGrid>
