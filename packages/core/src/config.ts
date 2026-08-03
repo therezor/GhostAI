@@ -33,7 +33,7 @@ import { dirname } from 'node:path';
 
 import { ConfigSchema, type Config } from '@ghostai/protocol';
 
-import { GhostError } from './errors.js';
+import { GhostError, errnoOf } from './errors.js';
 import {
   ensureDir,
   resolveGhostPaths,
@@ -58,12 +58,6 @@ export interface LoadedConfig {
 
 /** Only the two errno values that mean "there is no config file here". */
 const ABSENT_CODES: ReadonlySet<string> = new Set(['ENOENT', 'ENOTDIR']);
-
-function errnoOf(error: unknown): string | undefined {
-  if (typeof error !== 'object' || error === null) return undefined;
-  const code = (error as { code?: unknown }).code;
-  return typeof code === 'string' ? code : undefined;
-}
 
 /**
  * Parses and validates config text.

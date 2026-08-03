@@ -177,3 +177,17 @@ export function toGhostError(value: unknown, fallbackKind: ErrorKind = 'internal
 export function abortedError(what: string): GhostError {
   return new GhostError('aborted', `${what} aborted`);
 }
+
+/**
+ * The `errno` string on a Node system error, if that is what this is.
+ *
+ * Node types `code` as `string` on `ErrnoException`, but a `catch` binds
+ * `unknown` and the value may be anything a throw site chose — so the narrowing
+ * is the point, and it belongs in one place rather than beside each caller that
+ * wants to tell `ENOENT` from a real failure.
+ */
+export function errnoOf(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null) return undefined;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' ? code : undefined;
+}

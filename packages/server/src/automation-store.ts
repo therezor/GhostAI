@@ -30,9 +30,17 @@
  *    the sparse history is the one worth keeping.
  */
 
-import type { DatabaseSync, SQLOutputValue, StatementSync } from 'node:sqlite';
+import type { DatabaseSync, StatementSync } from 'node:sqlite';
 
-import { GhostError, silentLogger, systemClock, type Clock, type Logger } from '@ghostai/core';
+import {
+  GhostError,
+  rowReader,
+  silentLogger,
+  systemClock,
+  type Clock,
+  type Logger,
+  type Row,
+} from '@ghostai/core';
 import {
   AutomationPayloadSchema,
   AutomationScheduleSchema,
@@ -168,44 +176,19 @@ export interface TrimmedRun {
   readonly sessionKey: string | undefined;
 }
 
-type Row = Record<string, SQLOutputValue>;
-
-function readInt(row: Row, column: string): number {
-  const value = row[column];
-  if (typeof value === 'number') return value;
-  if (typeof value === 'bigint') return Number(value);
-  throw new GhostError('storage', `Expected an integer in automation.${column}`);
-}
-
-function readOptionalInt(row: Row, column: string): number | undefined {
-  const value = row[column];
-  if (typeof value === 'number') return value;
-  if (typeof value === 'bigint') return Number(value);
-  return undefined;
-}
-
-function readString(row: Row, column: string): string {
-  const value = row[column];
-  if (typeof value === 'string') return value;
-  throw new GhostError('storage', `Expected text in automation.${column}`);
-}
-
-function readOptionalString(row: Row, column: string): string | undefined {
-  const value = row[column];
-  return typeof value === 'string' ? value : undefined;
-}
+const read = rowReader('automation');
 
 /**
  * A status written by an older build becomes `pending` rather than failing the
  * read — the same trade `readLevel` makes next door, for the same reason.
  */
 function readStatus(row: Row, column: string): RunStatus {
-  const parsed = RunStatusSchema.safeParse(readString(row, column));
+  const parsed = RunStatusSchema.safeParse(read.string(row, column));
   return parsed.success ? parsed.data : 'pending';
 }
 
 function readWarnings(row: Row): string[] {
-  const raw = readOptionalString(row, 'warnings_json');
+  const raw = read.optionalString(row, 'warnings_json');
   if (raw === undefined) return [];
   try {
     const parsed: unknown = JSON.parse(raw);
@@ -216,15 +199,15 @@ function readWarnings(row: Row): string[] {
 }
 
 function rowToRun(row: Row): AutomationRun {
-  const finishedAtMs = readOptionalInt(row, 'finished_at_ms');
-  const skipReason = readOptionalString(row, 'skip_reason');
-  const error = readOptionalString(row, 'error');
-  const output = readOptionalString(row, 'output');
-  const sessionKey = readOptionalString(row, 'session_key');
+  const finishedAtMs = read.optionalInt(row, 'finished_at_ms');
+  const skipReason = read.optionalString(row, 'skip_reason');
+  const error = read.optionalString(row, 'error');
+  const output = read.optionalString(row, 'output');
+  const sessionKey = read.optionalString(row, 'session_key');
   return {
-    id: readString(row, 'id'),
-    jobId: readString(row, 'job_id'),
-    startedAtMs: readInt(row, 'started_at_ms'),
+    id: read.string(row, 'id'),
+    jobId: read.string(row, 'job_id'),
+    startedAtMs: read.int(row, 'started_at_ms'),
     status: readStatus(row, 'status'),
     warnings: readWarnings(row),
     ...(finishedAtMs === undefined ? {} : { finishedAtMs }),
@@ -237,9 +220,9 @@ function rowToRun(row: Row): AutomationRun {
 
 /** The parse failure a bad row produces, or `null` when it is fine. */
 function jobParseError(row: Row): string | null {
-  const schedule = AutomationScheduleSchema.safeParse(safeJson(readString(row, 'schedule_json')));
+  const schedule = AutomationScheduleSchema.safeParse(safeJson(read.string(row, 'schedule_json')));
   if (!schedule.success) return `schedule: ${schedule.error.issues[0]?.message ?? 'unparseable'}`;
-  const payload = AutomationPayloadSchema.safeParse(safeJson(readString(row, 'payload_json')));
+  const payload = AutomationPayloadSchema.safeParse(safeJson(read.string(row, 'payload_json')));
   if (!payload.success) return `payload: ${payload.error.issues[0]?.message ?? 'unparseable'}`;
   return null;
 }
@@ -254,28 +237,28 @@ function safeJson(raw: string): unknown {
 
 /** The attribution, or nothing at all when the operator made it. */
 function createdByOf(row: Row): Pick<AutomationJob, 'createdBy'> {
-  const agentId = readOptionalString(row, 'created_by_agent') ?? '';
-  const sessionKey = readOptionalString(row, 'created_by_session') ?? '';
+  const agentId = read.optionalString(row, 'created_by_agent') ?? '';
+  const sessionKey = read.optionalString(row, 'created_by_session') ?? '';
   return agentId === '' ? {} : { createdBy: { agentId, sessionKey } };
 }
 
 function rowToJob(row: Row): AutomationJob {
   return {
-    id: readString(row, 'id'),
-    name: readString(row, 'name'),
-    schedule: AutomationScheduleSchema.parse(safeJson(readString(row, 'schedule_json'))),
-    payload: AutomationPayloadSchema.parse(safeJson(readString(row, 'payload_json'))),
-    enabled: readInt(row, 'enabled') === 1,
-    deleteAfterRun: readInt(row, 'delete_after_run') === 1,
+    id: read.string(row, 'id'),
+    name: read.string(row, 'name'),
+    schedule: AutomationScheduleSchema.parse(safeJson(read.string(row, 'schedule_json'))),
+    payload: AutomationPayloadSchema.parse(safeJson(read.string(row, 'payload_json'))),
+    enabled: read.int(row, 'enabled') === 1,
+    deleteAfterRun: read.int(row, 'delete_after_run') === 1,
     ...createdByOf(row),
-    createdAtMs: readInt(row, 'created_at_ms'),
-    updatedAtMs: readInt(row, 'updated_at_ms'),
+    createdAtMs: read.int(row, 'created_at_ms'),
+    updatedAtMs: read.int(row, 'updated_at_ms'),
     state: {
-      nextRunAtMs: readInt(row, 'next_run_at_ms'),
-      lastRunAtMs: readInt(row, 'last_run_at_ms'),
+      nextRunAtMs: read.int(row, 'next_run_at_ms'),
+      lastRunAtMs: read.int(row, 'last_run_at_ms'),
       lastStatus: readStatus(row, 'last_status'),
-      lastError: readString(row, 'last_error'),
-      runCount: readInt(row, 'run_count'),
+      lastError: read.string(row, 'last_error'),
+      runCount: read.int(row, 'run_count'),
     },
   };
 }
@@ -331,8 +314,8 @@ export class AutomationStore {
     let changed = 0;
 
     for (const row of rows) {
-      const id = readString(row, 'id');
-      const raw = readString(row, 'schedule_json');
+      const id = read.string(row, 'id');
+      const raw = read.string(row, 'schedule_json');
       let parsed: unknown;
       try {
         parsed = JSON.parse(raw);
@@ -375,7 +358,7 @@ export class AutomationStore {
       this.#db
         .prepare('PRAGMA table_info(automation_jobs)')
         .all()
-        .map((row) => readOptionalString(row, 'name') ?? ''),
+        .map((row) => read.optionalString(row, 'name') ?? ''),
     );
 
     for (const [column, ddl] of [
@@ -405,7 +388,7 @@ export class AutomationStore {
     const problem = jobParseError(row);
     if (problem === null) return rowToJob(row);
     this.#logger.warn(
-      { jobId: readOptionalString(row, 'id'), problem },
+      { jobId: read.optionalString(row, 'id'), problem },
       'Skipping an automation job whose stored shape does not parse',
     );
     return undefined;
@@ -512,7 +495,7 @@ export class AutomationStore {
     const row = this.#stmt(
       'SELECT COUNT(*) AS n FROM automation_jobs WHERE created_by_agent = ?',
     ).get(agentId);
-    return row === undefined ? 0 : readInt(row, 'n');
+    return row === undefined ? 0 : read.int(row, 'n');
   }
 
   // -------------------------------------------------------------------------
@@ -526,7 +509,7 @@ export class AutomationStore {
         WHERE enabled = 1 AND next_run_at_ms > 0`,
     ).get();
     if (row === undefined) return undefined;
-    return readOptionalInt(row, 'at');
+    return read.optionalInt(row, 'at');
   }
 
   /**
@@ -553,7 +536,7 @@ export class AutomationStore {
         due.push(rowToJob(row));
         continue;
       }
-      const id = readString(row, 'id');
+      const id = read.string(row, 'id');
       this.#logger.error({ jobId: id, problem }, 'Disabling an automation job that does not parse');
       this.#stmt(
         `UPDATE automation_jobs
@@ -680,7 +663,7 @@ export class AutomationStore {
    */
   countRuns(jobId: string): number {
     const row = this.#stmt('SELECT COUNT(*) AS n FROM automation_runs WHERE job_id = ?').get(jobId);
-    return row === undefined ? 0 : readInt(row, 'n');
+    return row === undefined ? 0 : read.int(row, 'n');
   }
 
   /**
@@ -703,8 +686,8 @@ export class AutomationStore {
     if (doomed.length === 0) return [];
 
     const trimmed = doomed.map((row) => ({
-      id: readString(row, 'id'),
-      sessionKey: readOptionalString(row, 'session_key'),
+      id: read.string(row, 'id'),
+      sessionKey: read.optionalString(row, 'session_key'),
     }));
 
     const remove = this.#stmt('DELETE FROM automation_runs WHERE id = ?');

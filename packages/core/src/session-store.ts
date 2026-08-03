@@ -28,7 +28,7 @@
  * the install path.
  */
 
-import { DatabaseSync, type SQLOutputValue, type StatementSync } from 'node:sqlite';
+import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import { dirname } from 'node:path';
 
 import {
@@ -47,6 +47,7 @@ import { GhostError } from './errors.js';
 import { findLegalEnd, historyForLLM, type HistoryForLLMOptions } from './history.js';
 import { textOf } from './messages.js';
 import { ensureDir } from './paths.js';
+import { parseMetadata, rowReader, type Row } from './sqlite-row.js';
 import { deriveSessionTitle } from './session-title.js';
 import { DEFAULT_WORKSPACE_ID } from './workspace-id.js';
 
@@ -346,49 +347,15 @@ CREATE INDEX IF NOT EXISTS sessions_updated ON sessions(updated_at_ms DESC);
 CREATE INDEX IF NOT EXISTS turn_stats_session ON turn_stats(session_key, ended_at_ms DESC);
 `;
 
-type Row = Record<string, SQLOutputValue>;
-
-function readInt(row: Row, column: string): number {
-  const value = row[column];
-  if (typeof value === 'number') return value;
-  if (typeof value === 'bigint') return Number(value);
-  throw new GhostError('storage', `Expected an integer in column "${column}"`, {
-    details: { column },
-  });
-}
-
-function readString(row: Row, column: string): string {
-  const value = row[column];
-  if (typeof value === 'string') return value;
-  throw new GhostError('storage', `Expected text in column "${column}"`, { details: { column } });
-}
-
-function readOptionalString(row: Row, column: string): string | undefined {
-  const value = row[column];
-  return typeof value === 'string' ? value : undefined;
-}
-
-/**
- * An integer column that may be `NULL`.
- *
- * `SUM` over a column of all-`NULL` returns `NULL` rather than `0`, which is
- * exactly the distinction the two optional usage fields carry: a provider that
- * never reported cached tokens is not a provider that reported zero.
- */
-function readOptionalInt(row: Row, column: string): number | undefined {
-  const value = row[column];
-  if (typeof value === 'number') return value;
-  if (typeof value === 'bigint') return Number(value);
-  return undefined;
-}
+const read = rowReader('sessions');
 
 function readUsage(row: Row): Usage {
-  const cachedTokens = readOptionalInt(row, 'cached_tokens');
-  const reasoningTokens = readOptionalInt(row, 'reasoning_tokens');
+  const cachedTokens = read.optionalInt(row, 'cached_tokens');
+  const reasoningTokens = read.optionalInt(row, 'reasoning_tokens');
   return {
-    promptTokens: readOptionalInt(row, 'prompt_tokens') ?? 0,
-    completionTokens: readOptionalInt(row, 'completion_tokens') ?? 0,
-    totalTokens: readOptionalInt(row, 'total_tokens') ?? 0,
+    promptTokens: read.optionalInt(row, 'prompt_tokens') ?? 0,
+    completionTokens: read.optionalInt(row, 'completion_tokens') ?? 0,
+    totalTokens: read.optionalInt(row, 'total_tokens') ?? 0,
     ...(cachedTokens === undefined ? {} : { cachedTokens }),
     ...(reasoningTokens === undefined ? {} : { reasoningTokens }),
   };
@@ -398,53 +365,34 @@ function rowToTurnStats(row: Row): TurnStatsRecord {
   // Tolerant on purpose: a database written before this column existed has no
   // `error` in the row at all, and that is a turn with no recorded reason
   // rather than a corrupt one.
-  const error = readOptionalString(row, 'error');
+  const error = read.optionalString(row, 'error');
   return {
-    turnId: readString(row, 'turn_id'),
-    sessionKey: readString(row, 'session_key'),
-    agentId: readString(row, 'agent_id'),
-    provider: readString(row, 'provider'),
-    model: readString(row, 'model'),
-    startedAtMs: readInt(row, 'started_at_ms'),
-    endedAtMs: readInt(row, 'ended_at_ms'),
-    iterations: readInt(row, 'iterations'),
-    stopReason: readString(row, 'stop_reason') as StopReason,
+    turnId: read.string(row, 'turn_id'),
+    sessionKey: read.string(row, 'session_key'),
+    agentId: read.string(row, 'agent_id'),
+    provider: read.string(row, 'provider'),
+    model: read.string(row, 'model'),
+    startedAtMs: read.int(row, 'started_at_ms'),
+    endedAtMs: read.int(row, 'ended_at_ms'),
+    iterations: read.int(row, 'iterations'),
+    stopReason: read.string(row, 'stop_reason') as StopReason,
     usage: readUsage(row),
     ...(error === undefined ? {} : { error }),
   };
 }
 
-/**
- * Parses a `metadata_json` blob, tolerating anything that is not an object.
- *
- * Metadata is written by channels and plugins, so a malformed value is a bug in
- * something else. Failing the whole session read over it would make one bad
- * plugin write cost the user their conversation; an empty bag loses only the
- * metadata.
- */
-function parseMetadata(raw: string): Readonly<Record<string, unknown>> {
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
-}
-
 function rowToSession(row: Row): SessionRecord {
   return {
-    key: readString(row, 'key'),
-    title: readString(row, 'title'),
-    origin: readString(row, 'origin'),
-    workspaceId: readString(row, 'workspace_id'),
-    agentId: readOptionalString(row, 'agent_id'),
-    createdAtMs: readInt(row, 'created_at_ms'),
-    updatedAtMs: readInt(row, 'updated_at_ms'),
-    metadata: parseMetadata(readString(row, 'metadata_json')),
-    lastConsolidatedSeq: readInt(row, 'last_consolidated_seq'),
-    lastLearnedSeq: readInt(row, 'last_learned_seq'),
+    key: read.string(row, 'key'),
+    title: read.string(row, 'title'),
+    origin: read.string(row, 'origin'),
+    workspaceId: read.string(row, 'workspace_id'),
+    agentId: read.optionalString(row, 'agent_id'),
+    createdAtMs: read.int(row, 'created_at_ms'),
+    updatedAtMs: read.int(row, 'updated_at_ms'),
+    metadata: parseMetadata(read.string(row, 'metadata_json')),
+    lastConsolidatedSeq: read.int(row, 'last_consolidated_seq'),
+    lastLearnedSeq: read.int(row, 'last_learned_seq'),
   };
 }
 
@@ -711,7 +659,7 @@ export class SessionStore {
 
     return rows.map((row) => ({
       ...rowToSession(row),
-      messageCount: readInt(row, 'message_count'),
+      messageCount: read.int(row, 'message_count'),
     }));
   }
 
@@ -731,7 +679,7 @@ export class SessionStore {
     const row = this.#stmt(`SELECT COUNT(*) AS n FROM sessions s WHERE ${filter.sql}`).get(
       ...filter.bindings,
     );
-    return row === undefined ? 0 : readInt(row, 'n');
+    return row === undefined ? 0 : read.int(row, 'n');
   }
 
   /**
@@ -747,7 +695,7 @@ export class SessionStore {
     const row = this.#stmt('SELECT COUNT(*) AS n FROM sessions WHERE workspace_id = ?').get(
       workspaceId,
     );
-    return row === undefined ? 0 : readInt(row, 'n');
+    return row === undefined ? 0 : read.int(row, 'n');
   }
 
   /**
@@ -772,7 +720,7 @@ export class SessionStore {
     const row = this.#stmt('SELECT COUNT(*) AS n FROM messages WHERE session_key = ?').get(
       sessionKey,
     );
-    return row === undefined ? 0 : readInt(row, 'n');
+    return row === undefined ? 0 : read.int(row, 'n');
   }
 
   /**
@@ -833,7 +781,7 @@ export class SessionStore {
         });
       }
       // `next_seq` now points past the block just reserved.
-      const firstSeq = readInt(reserve, 'next_seq') - parsed.length;
+      const firstSeq = read.int(reserve, 'next_seq') - parsed.length;
 
       const insert = this.#stmt(
         `INSERT INTO messages (id, session_key, seq, created_at_ms, turn_id, role, payload_json)
@@ -889,19 +837,19 @@ export class SessionStore {
     if (fromEnd) rows.reverse();
 
     return rows.map((row): StoredMessageRecord => {
-      const seq = readInt(row, 'seq');
-      const parsed = ChatMessageSchema.safeParse(JSON.parse(readString(row, 'payload_json')));
+      const seq = read.int(row, 'seq');
+      const parsed = ChatMessageSchema.safeParse(JSON.parse(read.string(row, 'payload_json')));
       if (!parsed.success) {
         throw new GhostError('storage', 'Stored message failed schema validation', {
           details: { sessionKey, seq, issues: parsed.error.issues },
         });
       }
       return {
-        id: readString(row, 'id'),
+        id: read.string(row, 'id'),
         sessionKey,
         seq,
-        createdAtMs: readInt(row, 'created_at_ms'),
-        turnId: readOptionalString(row, 'turn_id'),
+        createdAtMs: read.int(row, 'created_at_ms'),
+        turnId: read.optionalString(row, 'turn_id'),
         message: parsed.data,
       };
     });
@@ -1325,7 +1273,7 @@ export class SessionStore {
     ).all(...sessionKeys);
 
     for (const row of rows) {
-      totals.set(readString(row, 'session_key'), readUsage(row));
+      totals.set(read.string(row, 'session_key'), readUsage(row));
     }
     return totals;
   }

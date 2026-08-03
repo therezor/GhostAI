@@ -29,11 +29,12 @@
  */
 
 import { renameSync, statSync } from 'node:fs';
-import type { DatabaseSync, SQLOutputValue, StatementSync } from 'node:sqlite';
+import type { DatabaseSync, StatementSync } from 'node:sqlite';
 
 import { systemClock, type Clock } from './clock.js';
 import { GhostError } from './errors.js';
 import { ensureDir, sharedDirFor, workspaceDirFor, type GhostPaths } from './paths.js';
+import { parseMetadata, rowReader, type Row } from './sqlite-row.js';
 import {
   DEFAULT_WORKSPACE_ID,
   RESERVED_WORKSPACE_IDS,
@@ -80,37 +81,16 @@ CREATE TABLE IF NOT EXISTS workspaces (
 CREATE UNIQUE INDEX IF NOT EXISTS workspaces_default ON workspaces(is_default) WHERE is_default = 1;
 `;
 
-type Row = Record<string, SQLOutputValue>;
-
-function readString(row: Row, column: string): string {
-  const value = row[column];
-  return typeof value === 'string' ? value : '';
-}
-
-function readInt(row: Row, column: string): number {
-  const value = row[column];
-  return typeof value === 'number' ? value : 0;
-}
-
-function parseMetadata(json: string): Readonly<Record<string, unknown>> {
-  try {
-    const parsed: unknown = JSON.parse(json);
-    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
-}
+const read = rowReader('workspaces');
 
 function rowToWorkspace(row: Row): WorkspaceRecord {
   return {
-    id: readString(row, 'id'),
-    name: readString(row, 'name'),
-    createdAtMs: readInt(row, 'created_at_ms'),
-    updatedAtMs: readInt(row, 'updated_at_ms'),
-    isDefault: readInt(row, 'is_default') === 1,
-    metadata: parseMetadata(readString(row, 'metadata_json')),
+    id: read.string(row, 'id'),
+    name: read.string(row, 'name'),
+    createdAtMs: read.int(row, 'created_at_ms'),
+    updatedAtMs: read.int(row, 'updated_at_ms'),
+    isDefault: read.int(row, 'is_default') === 1,
+    metadata: parseMetadata(read.string(row, 'metadata_json')),
   };
 }
 

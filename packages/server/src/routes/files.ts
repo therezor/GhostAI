@@ -48,7 +48,7 @@ import {
   type SignedUrlRequest,
   type UploadResponse,
 } from '@ghostai/protocol';
-import { DEFAULT_WORKSPACE_ID, ensureDir, systemClock } from '@ghostai/core';
+import { DEFAULT_WORKSPACE_ID, ensureDir, errnoOf, systemClock } from '@ghostai/core';
 import type { WorkspaceJail } from '@ghostai/security';
 import type { FastifyReply } from 'fastify';
 
@@ -120,13 +120,6 @@ function statOrUndefined(absolutePath: string): Stats | undefined {
   } catch {
     return undefined;
   }
-}
-
-/** The `errno` string on a Node system error, if that is what this is. */
-function errnoOf(error: unknown): string | undefined {
-  if (typeof error !== 'object' || error === null) return undefined;
-  const code = (error as { code?: unknown }).code;
-  return typeof code === 'string' ? code : undefined;
 }
 
 export function fileRoutes(deps: RouteDeps): RouteGroup<FileRouteId> {

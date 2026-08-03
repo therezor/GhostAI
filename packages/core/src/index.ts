@@ -16,6 +16,7 @@ export {
   ERROR_KINDS,
   GhostError,
   abortedError,
+  errnoOf,
   isAbortError,
   isGhostError,
   toGhostError,
@@ -63,6 +64,8 @@ export {
   isSlugId,
   slugify,
 } from './slug-id.js';
+
+export { parseMetadata, rowReader, type Row, type RowReader } from './sqlite-row.js';
 
 export {
   WorkspaceStore,

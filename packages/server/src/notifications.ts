@@ -21,9 +21,9 @@
  *    wrong, and it is also the case this table exists for.
  */
 
-import type { DatabaseSync, SQLOutputValue, StatementSync } from 'node:sqlite';
+import type { DatabaseSync, StatementSync } from 'node:sqlite';
 
-import { GhostError, systemClock, type Clock } from '@ghostai/core';
+import { rowReader, systemClock, type Clock, type Row } from '@ghostai/core';
 import { newUuid, type Notification } from '@ghostai/protocol';
 
 import type { NotificationCursor } from './cursor.js';
@@ -75,32 +75,7 @@ export interface ListNotificationsOptions {
   readonly unreadOnly?: boolean;
 }
 
-type Row = Record<string, SQLOutputValue>;
-
-function readInt(row: Row, column: string): number {
-  const value = row[column];
-  if (typeof value === 'number') return value;
-  if (typeof value === 'bigint') return Number(value);
-  throw new GhostError('storage', `Expected an integer in notifications.${column}`);
-}
-
-function readOptionalInt(row: Row, column: string): number | undefined {
-  const value = row[column];
-  if (typeof value === 'number') return value;
-  if (typeof value === 'bigint') return Number(value);
-  return undefined;
-}
-
-function readString(row: Row, column: string): string {
-  const value = row[column];
-  if (typeof value === 'string') return value;
-  throw new GhostError('storage', `Expected text in notifications.${column}`);
-}
-
-function readOptionalString(row: Row, column: string): string | undefined {
-  const value = row[column];
-  return typeof value === 'string' ? value : undefined;
-}
+const read = rowReader('notifications');
 
 /**
  * A level written by something that predates a level being added, or by a
@@ -108,20 +83,20 @@ function readOptionalString(row: Row, column: string): string | undefined {
  * bad row making the whole notification list unreadable.
  */
 function readLevel(row: Row): Notification['level'] {
-  const value = readString(row, 'level');
+  const value = read.string(row, 'level');
   return LEVELS.has(value) ? (value as Notification['level']) : 'info';
 }
 
 function rowToNotification(row: Row): Notification {
-  const readAtMs = readOptionalInt(row, 'read_at_ms');
-  const sessionKey = readOptionalString(row, 'session_key');
-  const jobId = readOptionalString(row, 'job_id');
+  const readAtMs = read.optionalInt(row, 'read_at_ms');
+  const sessionKey = read.optionalString(row, 'session_key');
+  const jobId = read.optionalString(row, 'job_id');
   return {
-    id: readString(row, 'id'),
-    title: readString(row, 'title'),
-    body: readString(row, 'body'),
+    id: read.string(row, 'id'),
+    title: read.string(row, 'title'),
+    body: read.string(row, 'body'),
     level: readLevel(row),
-    createdAtMs: readInt(row, 'created_at_ms'),
+    createdAtMs: read.int(row, 'created_at_ms'),
     ...(readAtMs === undefined ? {} : { readAtMs }),
     ...(sessionKey === undefined ? {} : { sessionKey }),
     ...(jobId === undefined ? {} : { jobId }),
@@ -223,14 +198,14 @@ export class NotificationStore {
     const row = this.#stmt(
       'SELECT COUNT(*) AS n FROM notifications WHERE (? = 0 OR read_at_ms IS NULL)',
     ).get(options.unreadOnly === true ? 1 : 0);
-    return row === undefined ? 0 : readInt(row, 'n');
+    return row === undefined ? 0 : read.int(row, 'n');
   }
 
   unreadCount(): number {
     const row = this.#stmt(
       'SELECT COUNT(*) AS n FROM notifications WHERE read_at_ms IS NULL',
     ).get();
-    return row === undefined ? 0 : readInt(row, 'n');
+    return row === undefined ? 0 : read.int(row, 'n');
   }
 
   /**
