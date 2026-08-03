@@ -96,8 +96,9 @@ import {
   type LivePromptValues,
   type ParsedMentions,
   type PromptMode,
+  toolPolicyUsesNonce,
 } from '@ghostai/protocol';
-import { toolOutputPolicy, toolOutputTag, toolPolicyUsesNonce } from '@ghostai/security';
+import { toolOutputPolicy, toolOutputTag } from '@ghostai/security';
 
 /**
  * The separator between top-level sections. Also joins the two halves.

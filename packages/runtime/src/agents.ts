@@ -44,6 +44,7 @@ import {
   type PromptMode,
   type ToolPromptOverrides,
   type ToolsConfig,
+  namesDelimiter,
 } from '@ghostai/protocol';
 import { parseCidr } from '@ghostai/security';
 
@@ -294,11 +295,6 @@ function resolveSubagents(
  * all-or-nothing, so a settings save naming an unapproved toolbox is still a 400
  * that changes nothing rather than a turn that dies later.
  */
-/** Whether a template spells out the turn's tool-output delimiter. */
-function namesDelimiter(template: string): boolean {
-  return template.includes('{{tag}}') || template.includes('{{nonce}}');
-}
-
 /**
  * The live-state template this agent actually renders.
  *

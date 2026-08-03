@@ -62,6 +62,7 @@ import {
   type SubagentRef,
   type ToolPermission,
   type ToolPromptOverride,
+  namesDelimiter,
 } from '@ghostai/protocol';
 
 import { Badge } from '@/components/ui/badge.js';
@@ -525,14 +526,11 @@ function Editor({
   /** Bumped by a revert, to remount the template editors. See `onRevert`. */
   const [formEpoch, setFormEpoch] = useState(0);
 
-  /**
-   * Whether the policy would leave the model unable to identify a tool-output
-   * fence. Mirrors `assertBuildable`, so the editor says it before the save
-   * rather than the settings response saying it after.
-   */
-  const namesDelimiter = (template: string): boolean =>
-    template.includes('{{nonce}}') || template.includes('{{tag}}');
-
+  // Whether the policy would leave the model unable to identify a tool-output
+  // fence. `namesDelimiter` is the protocol's, which is what `assertBuildable`
+  // asks on the server — so the editor says it before the save rather than the
+  // settings response saying it after, and the two cannot drift apart.
+  //
   // The delimiter has to be named somewhere, not specifically in the policy. The
   // built-in policy names none on purpose — it is prose that never changes, so it
   // caches, and the live-state section supplies the turn's tag. Both templates
