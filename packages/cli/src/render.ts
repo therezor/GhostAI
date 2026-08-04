@@ -37,6 +37,7 @@ import type {
 } from '@ghostai/agent';
 import type { TurnStatsRecord } from '@ghostai/core';
 import { tokensPerSecond, type ToolRisk, type Usage } from '@ghostai/protocol';
+import { stripAnsi, type Palette } from '@ghostai/tui';
 import pc from 'picocolors';
 
 import { DEFAULT_LOCALE } from '@ghostai/i18n';
@@ -54,8 +55,15 @@ export interface TurnRendererOptions {
   readonly colors?: boolean;
   /** Reasoning deltas are dimmed rather than hidden. Default `true`. */
   readonly showReasoning?: boolean;
-  /** The dim token/iteration line after a turn. Default `true`. */
-  readonly showUsage?: boolean;
+  /**
+   * The dim token/iteration line after a turn. Default `true`.
+   *
+   * Called stats rather than usage, which is what it was: `Usage` is the token
+   * record the protocol carries, and this is the *line* — which nobody at a
+   * prompt calls usage. `/output stats off` is how it is turned off, and one
+   * word for one thing is worth the rename.
+   */
+  readonly showStats?: boolean;
   /** Lines of a tool result to preview. `0` prints none. Default `6`. */
   readonly toolResultLines?: number;
   /**
@@ -199,8 +207,11 @@ const STOP_REASONS: Partial<Record<string, CliKey>> = {
   error: 'render.stopReasons.error',
 };
 
-type Palette = ReturnType<typeof pc.createColors>;
-
+/**
+ * `riskColor` stays here rather than moving to `@ghostai/tui` with the rest of
+ * the palette: it takes a `ToolRisk`, and a package whose whole claim is that it
+ * has never heard of an agent cannot be the one that knows `exec` is red.
+ */
 function riskColor(colors: Palette, risk: ToolRisk): (text: string) => string {
   switch (risk) {
     case 'exec':
@@ -217,8 +228,14 @@ function riskColor(colors: Palette, risk: ToolRisk): (text: string) => string {
 export class TurnRenderer {
   private readonly out: RenderTarget;
   private readonly c: Palette;
-  private readonly showReasoning: boolean;
-  private readonly showUsage: boolean;
+  /**
+   * Both are settable, because `/output` turns them off part way through a
+   * session. The flags that set them at launch — `--no-reasoning`, and
+   * `--json`, which suppresses the lot — are the same two fields; a REPL simply
+   * gets to change its mind.
+   */
+  private showReasoning: boolean;
+  private showStats: boolean;
   private readonly toolResultLines: number;
   private readonly t: CliT;
   /**
@@ -250,7 +267,7 @@ export class TurnRenderer {
     this.out = options.out;
     this.c = pc.createColors(options.colors);
     this.showReasoning = options.showReasoning ?? true;
-    this.showUsage = options.showUsage ?? true;
+    this.showStats = options.showStats ?? true;
     this.t = options.t ?? translations(DEFAULT_LOCALE).t;
     this.toolResultLines = options.toolResultLines ?? DEFAULT_TOOL_RESULT_LINES;
   }
@@ -346,7 +363,7 @@ export class TurnRenderer {
    *
    * The two ends of the delegated turn get a rule of their own, at the *parent's*
    * depth, because they are the boundary rather than something inside it — the
-   * same shape `#stream` uses for the `┄ thinking` header. Everything between
+   * same shape `#stream` uses for a mode change. Everything between
    * renders one level in, through the same `#render` the caller's events use.
    *
    * `#depth` is restored in a `finally` so a renderer is never left indented by
@@ -401,16 +418,82 @@ export class TurnRenderer {
     this.line(this.c.dim(text));
   }
 
+  /**
+   * The operator's own message, printed into the transcript.
+   *
+   * The editor holds the line while it is being typed and clears it on Return,
+   * so nothing would otherwise record what was asked — the frame is not the
+   * transcript. It is not an `AgentEvent` and deliberately does not go through
+   * the switch: nothing on the wire says "a human pressed Return in a
+   * terminal", and inventing an event so that one renderer could draw a caret
+   * would be putting a CLI concern into a union three transports share.
+   *
+   * The blank line above it is the one line of space between one exchange and
+   * the next. It used to come from the prompt's own leading newline; with the
+   * prompt gone it has to be written, and here is the only place that knows a
+   * new exchange is starting.
+   */
+  echo(text: string): void {
+    this.break();
+    this.write('\n');
+    // The same caret the editor draws, in the same colour: scrolling back
+    // through a long session, these are what the eye counts exchanges by.
+    this.line(`${this.c.green('›')} ${text}`);
+  }
+
+  /**
+   * A diagnostic from somewhere else, put into the transcript intact.
+   *
+   * Logs reach the terminal through the same sink the turn's text does — a pino
+   * line written straight to the fd would land wherever the cursor happens to
+   * be, which while an answer is streaming is the middle of a word. Routing it
+   * here is only half the fix; the other half is this line break. Measured
+   * without it: `- **Edit{"level":40,…,"msg":"mcp server unavailable"} files**`.
+   *
+   * The text keeps its own newline and its own shape. It is not this renderer's
+   * to reformat, and a JSON log line that has been prettied is a log line that
+   * no longer matches what is in the file.
+   */
+  aside(text: string): void {
+    this.break();
+    this.write(text);
+  }
+
   warn(text: string): void {
     this.line(`${this.c.yellow('⚠')} ${text}`);
   }
 
+  /** Whether the model's reasoning is streamed. */
+  get reasoningShown(): boolean {
+    return this.showReasoning;
+  }
+
+  setReasoningShown(shown: boolean): void {
+    this.showReasoning = shown;
+  }
+
+  /** Whether the token and timing line is printed after a turn. */
+  get statsShown(): boolean {
+    return this.showStats;
+  }
+
+  setStatsShown(shown: boolean): void {
+    this.showStats = shown;
+  }
+
+  /**
+   * Assistant text and reasoning, told apart by the break between them.
+   *
+   * Reasoning carried a `┄ thinking` header, on the argument that dimmed prose
+   * is indistinguishable from the answer on a terminal that renders dim as
+   * plain. In practice it read as a label on something that does not need one:
+   * the reasoning arrives before the answer, ends at a line break, and is the
+   * only dim run in a turn. A row of chrome on every one of them was the more
+   * expensive half of that trade.
+   */
   private stream(mode: 'assistant' | 'reasoning', text: string): void {
     if (this.mode !== mode) {
       this.break();
-      // A header, because dimmed prose is otherwise indistinguishable from the
-      // answer to anyone whose terminal renders dim as plain.
-      if (mode === 'reasoning') this.line(this.c.dim('┄ thinking'));
       this.mode = mode;
     }
     this.write(mode === 'reasoning' ? this.c.dim(text) : text);
@@ -477,7 +560,7 @@ export class TurnRenderer {
     if (reasonKey !== undefined) {
       this.line(this.c.yellow(`  ${this.t(reasonKey)}`));
     }
-    if (!this.showUsage) return;
+    if (!this.showStats) return;
 
     const parts = [this.t('render.steps', { count: iterations })];
     if (usage !== undefined && usage.totalTokens > 0) {
@@ -536,7 +619,11 @@ export class TurnRenderer {
     this.out.write(
       indent === '' ? text : indented(text, indent, this.atLineStart),
     );
-    this.atLineStart = text.endsWith('\n');
+    // Measured on what a reader sees, not on the bytes. Dimmed reasoning ends
+    // in `\x1b[22m` however its prose ended, so testing the raw string reports
+    // "mid-line" for a chunk that plainly finished one — and the next `break()`
+    // then writes a newline nobody asked for.
+    this.atLineStart = stripAnsi(text).endsWith('\n');
   }
 }
 

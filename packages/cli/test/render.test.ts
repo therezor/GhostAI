@@ -24,7 +24,7 @@ function render(
   events: readonly AgentEvent[],
   options: {
     showReasoning?: boolean;
-    showUsage?: boolean;
+    showStats?: boolean;
     toolResultLines?: number;
   } = {},
 ): string {
@@ -43,6 +43,58 @@ const START: AgentEvent = {
   model: 'qwen3',
   provider: 'ollama',
 };
+
+describe('echo', () => {
+  it('prints the operator’s own message into the transcript', () => {
+    // The editor clears the line on Return, so nothing else records what was
+    // asked — the frame is not the transcript.
+    const out = buffer();
+    new TurnRenderer({ out, colors: false }).echo('what is going on');
+    expect(out.text).toContain('› what is going on');
+  });
+
+  it('leaves one blank line above it, which is the gap between exchanges', () => {
+    // It used to come from the prompt's own leading newline. With the prompt
+    // gone it has to be written, and two messages in a row would otherwise sit
+    // flush against the answer between them.
+    const out = buffer();
+    const renderer = new TurnRenderer({ out, colors: false });
+    renderer.note('an answer');
+    renderer.echo('and then');
+
+    expect(out.text).toBe('an answer\n\n› and then\n');
+  });
+});
+
+describe('aside', () => {
+  it('starts a diagnostic on its own line, whatever was half-written', () => {
+    // Logs reach the terminal through the same sink the answer does. Without
+    // the break, a pino line lands wherever the cursor is — measured mid-answer
+    // as `- **Edit{"level":40,…} files**`.
+    const out = buffer();
+    const renderer = new TurnRenderer({ out, colors: false });
+    renderer.handle({
+      type: 'assistant.delta',
+      sessionKey: 's',
+      turnId: 't',
+      text: '- **Edit',
+    } as never);
+    renderer.aside('{"level":40,"msg":"mcp server unavailable"}\n');
+
+    expect(out.text).toBe(
+      '- **Edit\n{"level":40,"msg":"mcp server unavailable"}\n',
+    );
+  });
+
+  it('adds no break when a line has just ended', () => {
+    const out = buffer();
+    const renderer = new TurnRenderer({ out, colors: false });
+    renderer.note('a note');
+    renderer.aside('a log\n');
+
+    expect(out.text).toBe('a note\na log\n');
+  });
+});
 
 describe('clip', () => {
   it('leaves a short string alone', () => {
@@ -238,15 +290,17 @@ describe('TurnRenderer', () => {
     expect(text).toContain('… tool 1.0s');
   });
 
-  it('heads the reasoning stream so it is not read as the answer', () => {
+  it('breaks between the reasoning and the answer, and labels neither', () => {
+    // The reasoning used to carry a `┄ thinking` header. It read as a label on
+    // something that does not need one: reasoning arrives before the answer,
+    // ends at a line break, and is the only dim run in a turn.
     const text = render([
       START,
       { type: 'reasoning.delta', turnId: 't1', text: 'weighing options' },
       { type: 'assistant.delta', turnId: 't1', text: 'Yes.' },
     ]);
-    expect(text).toContain('┄ thinking');
-    expect(text).toContain('weighing options');
-    expect(text).toContain('Yes.');
+    expect(text).toContain('weighing options\nYes.');
+    expect(text).not.toContain('thinking');
   });
 
   it('hides reasoning entirely when asked to', () => {
@@ -334,7 +388,7 @@ describe('TurnRenderer', () => {
           iterations: 2,
         },
       ],
-      { showUsage: false },
+      { showStats: false },
     );
     expect(text).not.toContain('steps');
   });

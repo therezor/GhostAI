@@ -288,6 +288,45 @@ export default tseslint.config(
     },
   },
   {
+    /**
+     * One file in the CLI may open a readline interface, and no others.
+     *
+     * `init.ts` keeps it because the setup wizard genuinely is a sequence of
+     * questions with nothing else on screen — readline is the right tool for
+     * that and always was.
+     *
+     * The REPL no longer has one. readline draws its own line, at a row it
+     * measured for itself, by moving up over a row count it cached, and every
+     * one of those numbers is invalidated by a resize before the process is
+     * told the window moved — which is exactly the bug that took the frame
+     * away from it. `chat.ts` builds a renderer and an editor instead, and the
+     * ban is what stops a second owner of stdin from appearing beside them.
+     * The symptom of one would be dropped keystrokes rather than anything that
+     * looks like a layering mistake.
+     */
+    files: ['packages/cli/src/**/*.ts'],
+    ignores: ['packages/cli/src/init.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['../../*'],
+              message:
+                'Deep relative imports across package boundaries are banned. Import the package by name (@ghostai/<pkg>) and declare it in package.json dependencies.',
+            },
+            {
+              group: ['node:readline', 'node:readline/promises'],
+              message:
+                'The REPL owns stdin through `openKeyboard`, and readline would be a second owner of it. A caller that needs a menu takes a `Menu`.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // Tests may be looser: fixtures use non-null assertions and unsafe casts freely.
     files: [
       '**/*.test.{ts,tsx}',

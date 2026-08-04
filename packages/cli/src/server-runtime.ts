@@ -41,7 +41,6 @@ import type {
   Config,
   ConfigPatch,
   McpServerStatus,
-  ModelInfo,
   ModelsResponse,
   ProviderTestRequest,
   ProviderTestResponse,
@@ -49,14 +48,10 @@ import type {
   ToolDefinition,
 } from '@ghostai/protocol';
 import {
-  createProvider,
   findProvider,
-  isProviderError,
   listInstances,
   resolveConnection,
-  type ChatProvider,
   type ChatResult,
-  type ProviderSpec,
 } from '@ghostai/providers';
 import { ToolboxStore } from '@ghostai/security';
 import { openVault, resolveAgent, type GhostRuntime } from '@ghostai/runtime';
@@ -68,25 +63,7 @@ import type {
 } from '@ghostai/server';
 import type { CredentialVault, FetchImplementation } from '@ghostai/security';
 
-/**
- * How long a fetched catalogue is served before the endpoints are asked again.
- *
- * Long enough that opening the settings panel twice does not reach a local
- * model server twice; short enough that pulling a new model and coming back is
- * not a puzzle. `POST /api/models/refresh` bypasses it outright, which is what
- * the refresh button in the UI is for.
- */
-const MODEL_CACHE_TTL_MS = 60_000;
-
-/**
- * How long one endpoint gets to answer before it is reported as unreachable.
- *
- * Short on purpose: the whole list is only as fast as its slowest member, and a
- * laptop that has closed since the config was written must not make the
- * settings panel look hung. A timeout lands in `errors` beside a real refusal,
- * which is the honest place for it.
- */
-const MODEL_FETCH_TIMEOUT_MS = 5000;
+import { createModelCatalogue } from './models.js';
 
 export interface ServerRuntimeOptions {
   /** Defaults to `process.env`; the presence flags read provider key variables. */
@@ -105,7 +82,6 @@ export function createServerRuntime(
 ): ServerRuntime {
   const env = options.env ?? process.env;
   let vault: CredentialVault | undefined = options.vault;
-  let cached: { atMs: number; response: ModelsResponse } | undefined;
 
   /** `create` is what separates reading presence from storing a key. */
   const openIfUseful = (create: boolean): CredentialVault | undefined => {
@@ -113,123 +89,6 @@ export function createServerRuntime(
     if (!create && !existsSync(runtime.paths.vaultFile)) return undefined;
     vault = openVault(runtime.paths);
     return vault;
-  };
-
-  /**
-   * Why a probe did not produce a catalogue, keeping the classification.
-   *
-   * `reason` is the whole value of this: `auth` means the endpoint answered and
-   * refused the key, `transport` means nothing answered at all, and those send
-   * an operator to two entirely different places. `errors.ts` classifies from
-   * the status and the socket code, never from message text, so this passes the
-   * verdict along rather than re-deriving one.
-   *
-   * A throw that is not a `ProviderError` came from `createProvider` before any
-   * socket was opened — `assertUsableApiBase` refusing a base URL, or refusing
-   * to put a key on plain HTTP to a public host. That is the submitted
-   * connection being invalid, not the endpoint being unwell.
-   */
-  const describeFailure = (
-    error: unknown,
-  ): { reason: string; message: string } => {
-    const message = error instanceof Error ? error.message : String(error);
-    return {
-      reason: isProviderError(error) ? error.reason : 'invalid_request',
-      message,
-    };
-  };
-
-  /**
-   * One connection, asked for its catalogue. The only place here that dials out.
-   *
-   * Takes a resolved connection rather than an instance id, because the two
-   * callers want different things from it: `models` asks about something the
-   * config names, and `testProvider` asks about something an operator has typed
-   * and not saved yet.
-   */
-  const probeConnection = async (probe: {
-    readonly spec: ProviderSpec;
-    readonly apiBase: string;
-    readonly extraHeaders: Readonly<Record<string, string>>;
-    readonly apiKey: string | undefined;
-  }): Promise<
-    { models: ModelInfo[] } | { reason: string; message: string }
-  > => {
-    if (probe.spec.supportsModelListing !== true) {
-      return {
-        reason: 'unsupported',
-        message: `${probe.spec.displayName} does not publish a model list, so there is nothing to ask it.`,
-      };
-    }
-
-    let provider: ChatProvider;
-    try {
-      // Deliberately not through the runtime's `ProviderCache`: that cache is
-      // keyed by model as well as connection, and listing a catalogue has no
-      // model. Building a bare adapter for the call keeps a settings-panel
-      // refresh from evicting the adapter the next turn is going to want.
-      provider = createProvider({
-        provider: probe.spec,
-        apiKey: probe.apiKey,
-        apiBase: probe.apiBase,
-        extraHeaders: probe.extraHeaders,
-        ...(options.fetchImpl === undefined
-          ? {}
-          : { fetchImpl: options.fetchImpl }),
-        // Retries and degradation are for a turn. A catalogue that does not
-        // answer promptly should say so, not spend fifteen seconds insisting.
-        resilience: false,
-      });
-    } catch (error) {
-      return describeFailure(error);
-    }
-
-    const signal = AbortSignal.timeout(
-      options.modelTimeoutMs ?? MODEL_FETCH_TIMEOUT_MS,
-    );
-    try {
-      return { models: await provider.listModels(signal) };
-    } catch (error) {
-      return describeFailure(error);
-    } finally {
-      await provider.close();
-    }
-  };
-
-  /**
-   * One instance's catalogue, as a result rather than a rejection.
-   *
-   * A provider that cannot be reached is a normal state — a laptop is closed, a
-   * key expired — and one of them must not fail the whole list. The reason is
-   * carried through to `errors` so the panel can say which endpoint went quiet
-   * rather than silently showing a shorter list.
-   */
-  const fetchModels = async (
-    instanceId: string,
-  ): Promise<{ models: ModelInfo[] } | { error: string }> => {
-    const config = runtime.config.providers[instanceId];
-    const instance = listInstances(runtime.config.providers).find(
-      (i) => i.id === instanceId,
-    );
-    if (config === undefined || instance === undefined) return { models: [] };
-
-    const result = await probeConnection({
-      spec: instance.spec,
-      ...resolveConnection(instance.spec, config),
-      apiKey: readCredential(instanceId, instance.spec.envKey),
-    });
-    // `errors` is a map of prose, so the reason is dropped here rather than
-    // carried: `ModelsResponse` reports a list that came up short, and the
-    // question "why exactly" is what `providers.test` exists to answer.
-    if ('reason' in result) return { error: result.message };
-
-    return {
-      models: result.models.map((model) => ({
-        ...model,
-        providerId: instance.id,
-        providerType: instance.spec.id,
-      })),
-    };
   };
 
   const readCredential = (
@@ -241,6 +100,25 @@ export function createServerRuntime(
     const fromEnv = envKey === undefined ? undefined : env[envKey];
     return fromEnv === '' ? undefined : fromEnv;
   };
+
+  /**
+   * Model listing, which is no longer this file's job.
+   *
+   * It reads the same config and dials the same endpoints the REPL's `/model`
+   * does, so it lives in `models.ts` and both consume it. `readCredential` is
+   * passed in rather than a vault, because opening the vault is a decision this
+   * file makes and the catalogue must not.
+   */
+  const catalogue = createModelCatalogue(runtime, {
+    credentialFor: (instance) =>
+      readCredential(instance.id, instance.spec.envKey),
+    ...(options.fetchImpl === undefined
+      ? {}
+      : { fetchImpl: options.fetchImpl }),
+    ...(options.modelTimeoutMs === undefined
+      ? {}
+      : { timeoutMs: options.modelTimeoutMs }),
+  });
 
   return {
     config: () => runtime.config,
@@ -269,7 +147,7 @@ export function createServerRuntime(
         const store = openIfUseful(false);
         for (const id of removed) store?.delete('providers', id);
         // The catalogue named instances that no longer exist.
-        cached = undefined;
+        catalogue.invalidate();
       }
 
       return saveConfig(runtime.file, merged);
@@ -306,7 +184,7 @@ export function createServerRuntime(
       // The catalogue goes, though: a reload is how an operator picks up an
       // endpoint that moved or a model they have just pulled, and serving a
       // list fetched before the reload would answer with what they changed.
-      cached = undefined;
+      catalogue.invalidate();
       return next;
     },
 
@@ -337,7 +215,7 @@ export function createServerRuntime(
       // saved in the UI would not take effect until a restart.
       runtime.reconfigure({});
       // A key is often what stood between an endpoint and its catalogue.
-      cached = undefined;
+      catalogue.invalidate();
     },
 
     store: runtime.store,
@@ -419,42 +297,8 @@ export function createServerRuntime(
         provider: runtime.instance?.id ?? '',
       })),
 
-    models: async (modelOptions): Promise<ModelsResponse> => {
-      const now = Date.now();
-      if (
-        modelOptions?.refresh !== true &&
-        cached !== undefined &&
-        now - cached.atMs < MODEL_CACHE_TTL_MS
-      ) {
-        return cached.response;
-      }
-
-      const listable = listInstances(runtime.config.providers).filter(
-        (instance) =>
-          instance.config.enabled &&
-          instance.spec.supportsModelListing === true,
-      );
-
-      // All at once: the list is as slow as its slowest endpoint either way,
-      // and in sequence it would be as slow as their sum.
-      const results = await Promise.all(
-        listable.map(async (instance) => ({
-          id: instance.id,
-          result: await fetchModels(instance.id),
-        })),
-      );
-
-      const models: ModelInfo[] = [];
-      const errors: Record<string, string> = {};
-      for (const { id, result } of results) {
-        if ('error' in result) errors[id] = result.error;
-        else models.push(...result.models);
-      }
-
-      const response: ModelsResponse = { models, errors };
-      cached = { atMs: now, response };
-      return response;
-    },
+    models: async (modelOptions): Promise<ModelsResponse> =>
+      await catalogue.list(modelOptions),
 
     testProvider: async (
       request: ProviderTestRequest,
@@ -479,7 +323,7 @@ export function createServerRuntime(
           ? undefined
           : readCredential(request.instanceId, spec.envKey));
 
-      const result = await probeConnection({
+      const result = await catalogue.probe({
         spec,
         ...resolveConnection(spec, {
           type: request.type,
@@ -506,7 +350,7 @@ export function createServerRuntime(
       // is what turns "fetch this provider's models" into something the rest of
       // the app sees: without it the Agent panel would go on offering a 60 s
       // old list that predates the endpoint the operator just fixed.
-      cached = undefined;
+      catalogue.invalidate();
 
       // Ids only. The probe's job is "can this be reached, and what is on it" —
       // the shaped catalogue is what `models.list` serves.

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { PassThrough, Readable } from 'node:stream';
 
 import type { AgentEvent, AgentLoop, TurnInput } from '@ghostai/agent';
-import { SessionStore, hasOrphanedToolResult } from '@ghostai/core';
+import { SessionStore, hasOrphanedToolResult, textOf } from '@ghostai/core';
 import type { FetchImplementation } from '@ghostai/security';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -49,7 +49,7 @@ function sink(): NodeJS.WritableStream & { text: string } {
  * runtime embeds it — so this is a declaration-level detail, not a fiction.
  */
 function transport(
-  ...responses: ReadonlyArray<Response | (() => Promise<never>)>
+  ...responses: ReadonlyArray<Response | (() => Promise<Response>)>
 ): {
   fetchImpl: FetchImplementation;
   bodies: Array<Record<string, unknown>>;
@@ -124,13 +124,46 @@ function renderer(out: RenderTarget): TurnRenderer {
 }
 
 /** A real stream, for the REPL: readline attaches listeners to its output. */
-function streamSink(): { stream: PassThrough; text: () => string } {
+function streamSink(options: { isTTY?: boolean } = {}): {
+  stream: PassThrough;
+  text: () => string;
+  resizeTo: (columns: number) => void;
+} {
   const stream = new PassThrough();
   let text = '';
   stream.on('data', (chunk: Buffer) => {
     text += chunk.toString('utf8');
   });
-  return { stream, text: () => text };
+  // A menu needs a terminal on *both* ends: `menuAvailable` refuses to draw one
+  // into a pipe, which is what an ordinary `streamSink` is. Only the tests that
+  // exercise a picker ask for the terminal half.
+  if (options.isTTY === true) {
+    Object.assign(stream, { isTTY: true, columns: 60, rows: 24 });
+  }
+  return {
+    stream,
+    text: () => text,
+    /** Narrows the window, the way an emulator does before it signals. */
+    resizeTo(columns: number): void {
+      Object.assign(stream, { columns });
+      stream.emit('resize');
+    },
+  };
+}
+
+/** Writes a config with a couple of agents in it, which no install has by default. */
+function writeAgents(home: string): void {
+  writeFileSync(
+    join(home, 'config.json'),
+    JSON.stringify({
+      agents: {
+        list: {
+          reviewer: { label: 'Reviewer' },
+          scout: { label: 'Scout' },
+        },
+      },
+    }),
+  );
 }
 
 /** Polls rather than sleeping a fixed amount: the REPL answers when it answers. */
@@ -655,7 +688,11 @@ describe('chatCommand', () => {
     });
 
     await waitFor(() => out.text().includes('/help for commands'));
-    expect(out.text()).toContain('test-model @ Ollama');
+    // The header is a label/value block rather than the one-line banner it
+    // replaced, so the model and the provider are on rows of their own.
+    expect(out.text()).toContain('model      test-model');
+    expect(out.text()).toContain('provider   Ollama');
+    expect(out.text()).toContain('agent      default');
 
     input.write('/session\n');
     await waitFor(() => out.text().includes('0 messages'));
@@ -822,6 +859,622 @@ describe('chatCommand', () => {
     input.write('/exit\n');
     expect(await pending).toBe(0);
   }, 30_000);
+
+  // ── Agents ──────────────────────────────────────────────────
+
+  it('runs a turn on the agent the flag named, and binds the new session to it', async () => {
+    const home = tempHome();
+    writeAgents(home);
+    const { fetchImpl } = transport(
+      sse(textFrame('Reviewed.'), finishFrame('stop'), USAGE),
+    );
+
+    const code = await chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: sink(),
+      colors: false,
+      sessionKey: 'cli:agent',
+      agentId: 'reviewer',
+      message: 'look at this',
+    });
+
+    expect(code).toBe(0);
+    // The durable half: the row the loop wrote names the agent it ran on.
+    const store = new SessionStore({ file: join(home, 'ghost.db') });
+    expect(store.getSession('cli:agent')?.agentId).toBe('reviewer');
+    store.close();
+  });
+
+  it('lets the stored agent outrank the flag, so history keeps the settings it was built with', async () => {
+    // `agentForTurn`'s rule, and the reason it is imported rather than
+    // restated: a conversation must not silently continue under another
+    // agent's prompt, tools and permissions.
+    const home = tempHome();
+    writeAgents(home);
+    const first = transport(sse(textFrame('One.'), finishFrame('stop'), USAGE));
+    await chatCommand({
+      ...base,
+      home,
+      fetchImpl: first.fetchImpl,
+      out: sink(),
+      colors: false,
+      sessionKey: 'cli:bound',
+      agentId: 'reviewer',
+      message: 'first',
+    });
+
+    const second = transport(
+      sse(textFrame('Two.'), finishFrame('stop'), USAGE),
+    );
+    await chatCommand({
+      ...base,
+      home,
+      fetchImpl: second.fetchImpl,
+      out: sink(),
+      colors: false,
+      sessionKey: 'cli:bound',
+      agentId: 'scout',
+      message: 'second',
+    });
+
+    const store = new SessionStore({ file: join(home, 'ghost.db') });
+    expect(store.getSession('cli:bound')?.agentId).toBe('reviewer');
+    store.close();
+  });
+
+  it('falls back to the default agent, saying so, when the stored one has been deleted', async () => {
+    // Without this the next turn would throw: `agentForTurn` hands back the
+    // stored id when neither it nor the request resolves, and `requireLoopFor`
+    // refuses an id that names nothing runnable. Deleting an agent from
+    // config.json would turn a working conversation into a hard failure.
+    const home = tempHome();
+    writeAgents(home);
+    const first = transport(sse(textFrame('One.'), finishFrame('stop'), USAGE));
+    await chatCommand({
+      ...base,
+      home,
+      fetchImpl: first.fetchImpl,
+      out: sink(),
+      colors: false,
+      sessionKey: 'cli:orphan',
+      agentId: 'reviewer',
+      message: 'first',
+    });
+
+    writeFileSync(join(home, 'config.json'), JSON.stringify({ agents: {} }));
+
+    const out = sink();
+    const second = transport(
+      sse(textFrame('Two.'), finishFrame('stop'), USAGE),
+    );
+    const code = await chatCommand({
+      ...base,
+      home,
+      fetchImpl: second.fetchImpl,
+      out,
+      colors: false,
+      sessionKey: 'cli:orphan',
+      message: 'second',
+    });
+
+    expect(code).toBe(0);
+    expect(out.text).toContain('no longer exists');
+    expect(out.text).toContain('Two.');
+  });
+
+  it('moves the conversation onto another agent from the prompt', async () => {
+    const home = tempHome();
+    writeAgents(home);
+    const { fetchImpl } = transport(
+      sse(textFrame('Answered.'), finishFrame('stop'), USAGE),
+    );
+    const out = streamSink();
+    const input = Object.assign(new PassThrough(), { isTTY: true });
+
+    const pending = chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: out.stream,
+      colors: false,
+      input,
+      sessionKey: 'cli:switch',
+    });
+
+    await waitFor(() => out.text().includes('/help for commands'));
+    // A conversation with history, so `/agent` is an edit rather than a
+    // preference — the branch that writes to the row.
+    await send(input, out, 'say something', 'Answered.');
+    await send(input, out, '/agent scout', 'now runs on scout');
+
+    input.write('/exit\n');
+    expect(await pending).toBe(0);
+
+    const store = new SessionStore({ file: join(home, 'ghost.db') });
+    expect(store.getSession('cli:switch')?.agentId).toBe('scout');
+    store.close();
+  });
+
+  it('lists the agents instead of a menu when there is no terminal to draw one on', async () => {
+    const home = tempHome();
+    writeAgents(home);
+    const { fetchImpl } = transport();
+    const out = streamSink();
+    const input = Object.assign(new PassThrough(), { isTTY: true });
+
+    const pending = chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: out.stream,
+      colors: false,
+      input,
+      sessionKey: 'cli:listing',
+    });
+
+    await waitFor(() => out.text().includes('/help for commands'));
+    // stdout here is a pipe, so `menuAvailable` says no and `/agent` falls back
+    // on the listing — which is the answer a script deserves.
+    await send(input, out, '/agent', 'reviewer');
+    expect(out.text()).toContain('Reviewer');
+    expect(out.text()).toContain('Scout');
+
+    input.write('/exit\n');
+    expect(await pending).toBe(0);
+  });
+
+  it('opens a picker on a real terminal, and binds the conversation to what was chosen', async () => {
+    const home = tempHome();
+    writeAgents(home);
+    const { fetchImpl } = transport(
+      sse(textFrame('Answered.'), finishFrame('stop'), USAGE),
+    );
+    const out = streamSink({ isTTY: true });
+    const input = Object.assign(new PassThrough(), {
+      isTTY: true,
+      setRawMode(): void {
+        /* a PassThrough has no mode to set */
+      },
+    });
+
+    const pending = chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: out.stream,
+      colors: false,
+      input,
+      sessionKey: 'cli:picked',
+    });
+
+    await waitFor(() => out.text().includes('ctrl-g for the menu'));
+    await send(input, out, 'say something', 'Answered.');
+
+    input.write('/agent\n');
+    await waitFor(() => out.text().includes('Which agent?'));
+    // Down twice from `default`, which is `scout` — and then Enter. The
+    // assertion below is on the row it wrote, never on a frame of the menu.
+    input.write('\u001b[B\u001b[B\r');
+    await waitFor(() => out.text().includes('now runs on scout'));
+    await quiet(out);
+
+    input.write('/exit\n');
+    expect(await pending).toBe(0);
+
+    const store = new SessionStore({ file: join(home, 'ghost.db') });
+    expect(store.getSession('cli:picked')?.agentId).toBe('scout');
+    store.close();
+  });
+
+  it('prints the whole frame again when the window changes width', async () => {
+    // The resize fix, as the property that replaced the arithmetic. A terminal
+    // rewraps its own screen before the process is told anything, so the rows a
+    // program drew are no longer where it left them — some of them above the
+    // cursor, where no erase can reach. That is what left a stranded copy of
+    // the footer behind on every resize.
+    //
+    // So a width change is not patched. Each one clears the screen and prints
+    // the frame at the new width, banner included, which is only possible
+    // because the conversation is part of the frame.
+    const home = tempHome();
+    const { fetchImpl } = transport();
+    const out = streamSink({ isTTY: true });
+    const input = Object.assign(new PassThrough(), {
+      isTTY: true,
+      setRawMode(): void {
+        /* a PassThrough has no mode to set */
+      },
+    });
+
+    const pending = chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: out.stream,
+      colors: false,
+      input,
+      sessionKey: 'cli:resize',
+    });
+
+    await waitFor(() => out.text().includes('ctrl-g for the menu'));
+    await quiet(out);
+
+    // Built rather than written as a literal: `no-control-regex` exists to
+    // catch an escape byte that arrived by accident, and one here would be
+    // exactly what it is looking for. The bracket is escaped because CSI's is
+    // a literal one, not the start of a character class.
+    const ESC = String.fromCharCode(27);
+    const clear = new RegExp(`${ESC}\\[2J${ESC}\\[H`, 'u');
+
+    for (const columns of [20, 90, 20, 90]) {
+      const from = out.text().length;
+      out.resizeTo(columns);
+      await quiet(out);
+      const drawn = out.text().slice(from);
+
+      expect(drawn).toMatch(clear);
+      // The banner is drawn again, refolded — at 20 columns the hint line is
+      // three rows, which is the point: the conversation re-wraps rather than
+      // being clipped to whatever width it was first printed at.
+      expect(drawn).toContain('ghost');
+      expect(drawn).toContain('ctrl-g');
+      // The status rule is rebuilt for the new width, never refolded from the
+      // old one — a row wider than the window is what wraps, and a wrapped row
+      // is what put every later row's address out by one.
+      expect(drawn).toContain('\u2500'.repeat(columns));
+    }
+
+    input.write('/exit\n');
+    expect(await pending).toBe(0);
+  });
+
+  // ── The palette and the pickers ─────────────────────────────
+
+  it('prints the message itself, leaving no frame behind between messages', async () => {
+    // The rule above the editor is part of the prompt, which is the one part
+    // written into the scrollback — so the whole prompt block is taken down
+    // when the turn starts and the message reprinted. Without that the
+    // transcript grows a separator between every pair of messages.
+    const home = tempHome();
+    const { fetchImpl } = transport(
+      sse(textFrame('Answered.'), finishFrame('stop'), USAGE),
+    );
+    const out = streamSink({ isTTY: true });
+    const input = Object.assign(new PassThrough(), {
+      isTTY: true,
+      setRawMode(): void {
+        /* a PassThrough has no mode to set */
+      },
+    });
+
+    const pending = chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: out.stream,
+      colors: false,
+      input,
+      sessionKey: 'cli:echo',
+    });
+
+    await waitFor(() => out.text().includes('ctrl-g for the menu'));
+    await send(input, out, 'what is going on', 'Answered.');
+
+    expect(out.text()).toContain('› what is going on');
+
+    input.write('/exit\n');
+    expect(await pending).toBe(0);
+  });
+
+  it('says it is thinking until the answer starts arriving', async () => {
+    const home = tempHome();
+    // A provider that answers only when told to, so the gap the indicator
+    // exists to fill is a real one rather than one the test waited out.
+    let start: () => void = () => {
+      /* replaced below, before anything can call it */
+    };
+    const opened = new Promise<void>((resolve) => {
+      start = resolve;
+    });
+    const { fetchImpl } = transport(async () => {
+      await opened;
+      return sse(textFrame('Answered.'), finishFrame('stop'), USAGE);
+    });
+
+    const out = streamSink({ isTTY: true });
+    const input = Object.assign(new PassThrough(), {
+      isTTY: true,
+      setRawMode(): void {
+        /* a PassThrough has no mode to set */
+      },
+    });
+
+    const pending = chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: out.stream,
+      colors: false,
+      input,
+      sessionKey: 'cli:spinner',
+    });
+
+    await waitFor(() => out.text().includes('ctrl-g for the menu'));
+    input.write('what is going on\n');
+    await waitFor(() => out.text().includes('thinking…'));
+
+    start();
+    await waitFor(() => out.text().includes('Answered.'));
+    await quiet(out);
+
+    input.write('/exit\n');
+    expect(await pending).toBe(0);
+  });
+
+  it('runs a message typed while the answer was still streaming', async () => {
+    const home = tempHome();
+    let start: () => void = () => {
+      /* replaced below, before anything can call it */
+    };
+    const opened = new Promise<void>((resolve) => {
+      start = resolve;
+    });
+    const { fetchImpl } = transport(
+      async () => {
+        await opened;
+        return sse(textFrame('First.'), finishFrame('stop'), USAGE);
+      },
+      sse(textFrame('Second.'), finishFrame('stop'), USAGE),
+    );
+
+    const out = streamSink({ isTTY: true });
+    const input = Object.assign(new PassThrough(), {
+      isTTY: true,
+      setRawMode(): void {
+        /* a PassThrough has no mode to set */
+      },
+    });
+
+    const pending = chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: out.stream,
+      colors: false,
+      input,
+      sessionKey: 'cli:queued',
+    });
+
+    await waitFor(() => out.text().includes('ctrl-g for the menu'));
+    input.write('the first question\n');
+    await waitFor(() => out.text().includes('thinking…'));
+
+    // Typed and submitted while the first turn is still open.
+    input.write('the queued question\n');
+    start();
+
+    await waitFor(() => out.text().includes('Second.'), 20_000);
+    await quiet(out);
+
+    // The durable proof: both messages are in the history, in order.
+    input.write('/exit\n');
+    expect(await pending).toBe(0);
+
+    const store = new SessionStore({ file: join(home, 'ghost.db') });
+    const said = store
+      .messages('cli:queued', {})
+      .filter((row) => row.message.role === 'user')
+      .map((row) => textOf(row.message));
+    store.close();
+    expect(said).toEqual(['the first question', 'the queued question']);
+  });
+
+  // ── The status bar ──────────────────────────────────────────
+
+  it('draws a status bar under the editor, and fills in the context once a turn has run', async () => {
+    const home = tempHome();
+    const { fetchImpl } = transport(
+      sse(textFrame('Answered.'), finishFrame('stop'), USAGE),
+    );
+    const out = streamSink({ isTTY: true });
+    const input = Object.assign(new PassThrough(), {
+      isTTY: true,
+      setRawMode(): void {
+        /* a PassThrough has no mode to set */
+      },
+    });
+
+    const pending = chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: out.stream,
+      colors: false,
+      input,
+      sessionKey: 'cli:bar',
+    });
+
+    await waitFor(() => out.text().includes('ctrl-g for the menu'));
+    // The workspace and the agent are there from the first prompt; the context
+    // has nothing to measure until a turn has put something in the window.
+    await waitFor(() => out.text().includes('Ollama/test-model'));
+    expect(out.text()).not.toMatch(/%\/\d+k/u);
+
+    await send(input, out, 'say something', 'Answered.');
+    await waitFor(() => /%\/\d+k/u.test(out.text()));
+
+    input.write('/exit\n');
+    expect(await pending).toBe(0);
+  });
+
+  it('draws no frame at all when stdout is not a terminal', async () => {
+    // `ghost chat > log` still opens a prompt, because stdin is still a
+    // keyboard — but escape sequences written into a file are not a status bar,
+    // they are noise in somebody's log. So that path gets a prompt, a newline
+    // and `NO_MENU`, which is the whole of it.
+    const home = tempHome();
+    const { fetchImpl } = transport();
+    const out = streamSink();
+    const input = Object.assign(new PassThrough(), { isTTY: true });
+
+    const pending = chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: out.stream,
+      colors: false,
+      input,
+      sessionKey: 'cli:nobar',
+    });
+
+    await waitFor(() => out.text().includes('/help for commands'));
+    await quiet(out);
+    expect(out.text()).not.toContain('Ollama/test-model');
+
+    input.write('/exit\n');
+    expect(await pending).toBe(0);
+  });
+
+  it('picks another session from /sessions on a terminal', async () => {
+    const home = tempHome();
+    const { fetchImpl } = transport(
+      sse(textFrame('One.'), finishFrame('stop'), USAGE),
+    );
+    const out = streamSink({ isTTY: true });
+    const input = Object.assign(new PassThrough(), {
+      isTTY: true,
+      setRawMode(): void {
+        /* a PassThrough has no mode to set */
+      },
+    });
+
+    const pending = chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: out.stream,
+      colors: false,
+      input,
+      sessionKey: 'cli:first',
+    });
+
+    await waitFor(() => out.text().includes('ctrl-g for the menu'));
+    await send(input, out, 'say something', 'One.');
+    await send(input, out, '/new second', 'attached to cli-');
+
+    input.write('/sessions\n');
+    await waitFor(() => out.text().includes('Which session?'));
+    // Two sessions exist and the picker opens on the current one, so down-then-
+    // Enter lands on the other. The assertion is that the prompt moved, not
+    // which row it was on.
+    input.write('\u001b[B\r');
+    await waitFor(() => out.text().includes('attached to cli:first'));
+    await quiet(out);
+
+    input.write('/exit\n');
+    expect(await pending).toBe(0);
+  });
+
+  it('still lists sessions on a pipe, where there is no menu to open', async () => {
+    const home = tempHome();
+    const { fetchImpl } = transport();
+    const out = streamSink();
+    const input = Object.assign(new PassThrough(), { isTTY: true });
+
+    const pending = chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: out.stream,
+      colors: false,
+      input,
+      sessionKey: 'cli:listed',
+    });
+
+    await waitFor(() => out.text().includes('/help for commands'));
+    await send(input, out, '/new named one', 'attached to cli-');
+    await send(input, out, '/sessions', 'named one');
+
+    input.write('/exit\n');
+    expect(await pending).toBe(0);
+  });
+
+  it('opens the command palette on ctrl-g and runs what was chosen', async () => {
+    const home = tempHome();
+    writeAgents(home);
+    const { fetchImpl } = transport();
+    const out = streamSink({ isTTY: true });
+    const input = Object.assign(new PassThrough(), {
+      isTTY: true,
+      setRawMode(): void {
+        /* a PassThrough has no mode to set */
+      },
+    });
+
+    const pending = chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: out.stream,
+      colors: false,
+      input,
+      sessionKey: 'cli:palette',
+    });
+
+    await waitFor(() => out.text().includes('ctrl-g for the menu'));
+
+    input.write('\u0007');
+    await waitFor(() => out.text().includes('Which command?'));
+    // Filter down to `/help` and choose it. `/help` takes no argument, so the
+    // palette submits rather than leaving it in the editor — and the durable
+    // proof is that the help page itself was printed.
+    input.write('/help\r');
+    await waitFor(() => out.text().includes('the last n messages'));
+    await quiet(out);
+
+    input.write('/exit\n');
+    expect(await pending).toBe(0);
+  });
+
+  it('leaves a command that needs an argument in the editor instead of running it', async () => {
+    const home = tempHome();
+    const { fetchImpl } = transport();
+    const out = streamSink({ isTTY: true });
+    const input = Object.assign(new PassThrough(), {
+      isTTY: true,
+      setRawMode(): void {
+        /* a PassThrough has no mode to set */
+      },
+    });
+
+    const pending = chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: out.stream,
+      colors: false,
+      input,
+      sessionKey: 'cli:typed',
+    });
+
+    await waitFor(() => out.text().includes('ctrl-g for the menu'));
+
+    input.write('\u0007');
+    await waitFor(() => out.text().includes('Which command?'));
+    input.write('/rename\r');
+    await quiet(out);
+
+    // Nothing ran: a bare `/rename` would have been a usage error, and the
+    // absence of one is the evidence that it was typed rather than submitted.
+    expect(out.text()).not.toContain('usage: /rename');
+    // Finishing the line the palette started is what runs it.
+    await send(input, out, ' a better name', 'renamed to a better name');
+
+    input.write('/exit\n');
+    expect(await pending).toBe(0);
+  });
 
   it('emits raw events in --json mode instead of prose', async () => {
     const home = tempHome();

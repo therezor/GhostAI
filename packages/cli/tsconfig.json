@@ -36,6 +36,9 @@
     },
     {
       "path": "../channels/tsconfig.json"
+    },
+    {
+      "path": "../tui/tsconfig.json"
     }
   ]
 }
