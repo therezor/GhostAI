@@ -288,3 +288,17 @@ export function justify(left: string, right: string, width: number): string {
 export function rule(width: number, char: string = '\u2500'): string {
   return width <= 0 ? '' : char.repeat(width);
 }
+
+/**
+ * The text with its last grapheme cluster removed. What Backspace should do.
+ *
+ * `text.slice(0, -1)` takes a UTF-16 code unit, which cuts an emoji in half;
+ * spreading takes a code point, which strips one component of a family and
+ * leaves the rest. A person pressing Backspace means "the thing I can see", and
+ * that is a cluster — the same unit `visibleWidth` measures in.
+ */
+export function dropLastGrapheme(text: string): string {
+  let last = 0;
+  for (const { index } of GRAPHEMES.segment(text)) last = index;
+  return text.slice(0, last);
+}

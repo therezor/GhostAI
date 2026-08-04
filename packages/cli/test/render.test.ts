@@ -44,6 +44,17 @@ const START: AgentEvent = {
   provider: 'ollama',
 };
 
+describe('echo', () => {
+  it('prints the operator’s own message into the transcript', () => {
+    // readline echoes what was typed, but the whole prompt block is taken down
+    // when a turn starts — the rule above the editor would otherwise be left
+    // behind by every turn — so the message is reprinted here.
+    const out = buffer();
+    new TurnRenderer({ out, colors: false }).echo('what is going on');
+    expect(out.text).toContain('› what is going on');
+  });
+});
+
 describe('clip', () => {
   it('leaves a short string alone', () => {
     expect(clip('hello', 10)).toBe('hello');

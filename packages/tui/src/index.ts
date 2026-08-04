@@ -19,6 +19,7 @@ export { isCtrl, parseKey, parseKeys } from './keys.js';
 export type { Key, KeyName } from './keys.js';
 
 export {
+  dropLastGrapheme,
   fitToWidth,
   justify,
   padToWidth,
@@ -33,6 +34,12 @@ export type { Palette, Style, Theme } from './theme.js';
 
 export { SelectList } from './select-list.js';
 export type { SelectItem, SelectListOptions } from './select-list.js';
+
+export {
+  SPINNER_FRAMES,
+  SPINNER_INTERVAL_MS,
+  spinnerFrame,
+} from './spinner.js';
 
 export { openBottomBar } from './bottom-bar.js';
 export type { BottomBar, BottomBarOptions } from './bottom-bar.js';

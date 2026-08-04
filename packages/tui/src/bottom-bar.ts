@@ -33,7 +33,7 @@
  * the input.
  */
 
-import { truncateToWidth } from './text.js';
+import { truncateToWidth, visibleWidth } from './text.js';
 import { columnsOf, type TerminalOutput } from './screen.js';
 
 /**
@@ -75,10 +75,57 @@ export interface BottomBar {
    * round trip on every keystroke.
    */
   paint(lines: readonly string[], column: number): void;
+  /**
+   * Writes text into the transcript *above* the footer, and redraws it.
+   *
+   * This is what lets a turn stream while the editor and the status stay put.
+   * The order matters and is not the obvious one: the footer has to be erased
+   * *before* the text is written, not after. Writing first and erasing after
+   * leaves whatever of the footer sat to the right of the new text on its row —
+   * a rule with two words of an answer printed over its first columns.
+   *
+   * The column the transcript left off at is tracked here rather than asked
+   * for, because a streamed answer arrives in fragments that mostly do not end
+   * on a line break, and only this knows where the last one stopped.
+   */
+  writeAbove(text: string, lines: readonly string[]): void;
+  /**
+   * Redraws the footer without moving the transcript's cursor.
+   *
+   * The column comes from what `writeAbove` last wrote, which is the only thing
+   * that knows it — a streamed answer mostly does not end on a line break, and
+   * repainting to column zero would put the next fragment at the start of the
+   * row rather than after the words already on it.
+   */
+  repaint(lines: readonly string[]): void;
+  /**
+   * Steps back `rows` and erases everything from there down.
+   *
+   * For taking down a whole prompt block — the rule above the editor, the
+   * caret and the echoed line — so the caller can print the message into the
+   * transcript in its own words. Relative, like everything else here, so a
+   * scroll between the measurement and the erase cannot move it.
+   */
+  eraseBlock(rows: number): void;
   /** Erases from the cursor to the end of the display. */
   clear(): void;
   /** Erases and stops. Idempotent. */
   close(): void;
+}
+
+/**
+ * Where the cursor ends up after `text` is written starting at `column`.
+ *
+ * Counted in display columns and wrapped at the window width, because a line
+ * long enough to wrap leaves the cursor part way along a later row rather than
+ * far off the right of the first one — and the number is only ever used to put
+ * the cursor back.
+ */
+function advance(column: number, text: string, columns: number): number {
+  const at = text.lastIndexOf('\n');
+  const width =
+    at < 0 ? column + visibleWidth(text) : visibleWidth(text.slice(at + 1));
+  return columns > 0 ? width % columns : width;
 }
 
 export function openBottomBar(options: BottomBarOptions): BottomBar {
@@ -87,6 +134,8 @@ export function openBottomBar(options: BottomBarOptions): BottomBar {
 
   let painted = 0;
   let closed = false;
+  /** Where the transcript's own cursor sits, between writes above the footer. */
+  let column = 0;
 
   // Only the width matters. Drawing relative to the cursor needs no idea how
   // tall the window is, which is why a terminal that will not say — a pty
@@ -145,6 +194,35 @@ export function openBottomBar(options: BottomBarOptions): BottomBar {
      * on the bar's first row — stepping down again would leave that row behind,
      * and the turn's output would then be printed underneath a stale rule.
      */
+    writeAbove(text: string, lines: readonly string[]): void {
+      if (closed) return;
+
+      const columns = width();
+      // Step below the transcript's last row, erase the footer, and come back —
+      // all relative, so a scroll cannot leave the cursor a row out.
+      if (painted > 0) {
+        output.write(
+          `\n${ERASE_BELOW}${CURSOR_UP(1)}\r${CURSOR_RIGHT(column)}`,
+        );
+        painted = 0;
+      }
+
+      output.write(text);
+      column = advance(column, text, columns);
+      bar.paint(lines, column);
+    },
+
+    repaint(lines: readonly string[]): void {
+      bar.paint(lines, column);
+    },
+
+    eraseBlock(rows: number): void {
+      if (closed || rows <= 0) return;
+      output.write(frame(`${CURSOR_UP(rows)}\r${ERASE_BELOW}`));
+      painted = 0;
+      column = 0;
+    },
+
     clear(): void {
       if (closed || painted === 0) return;
       // Back to column zero first, so the erase takes the whole row rather than
@@ -153,6 +231,7 @@ export function openBottomBar(options: BottomBarOptions): BottomBar {
       // there is nothing to the left of it worth keeping.
       output.write(frame(`\r${ERASE_BELOW}`));
       painted = 0;
+      column = 0;
     },
 
     close(): void {

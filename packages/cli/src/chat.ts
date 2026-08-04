@@ -41,6 +41,8 @@ import {
   columnsOf,
   openBottomBar,
   themeFor,
+  SPINNER_INTERVAL_MS,
+  type BottomBar,
   type TerminalInput,
   type TerminalOutput,
   type Theme,
@@ -48,6 +50,7 @@ import {
 
 import { runSlashCommand } from './commands.js';
 import {
+  inputRule,
   startupHeader,
   statusBar,
   type ContextUsage,
@@ -55,7 +58,14 @@ import {
 } from './header.js';
 import { completeCommand, pickCommand } from './pickers/palette.js';
 import { translationsFor, type CliT, type Env } from './i18n.js';
-import { createMenu, menuAvailable, NO_MENU, type Menu } from './menu.js';
+import { createGeneration, NO_GENERATION } from './generation.js';
+import {
+  createMenu,
+  menuAvailable,
+  NO_MENU,
+  suspendReadline,
+  type Menu,
+} from './menu.js';
 import { createModelCatalogue, type ModelCatalogue } from './models.js';
 import { TurnRenderer } from './render.js';
 import {
@@ -228,8 +238,19 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
   // Before the runtime, so `--help`-speed paths never build one; the locale it
   // renders in is refined below once the config can be read.
   const envLang = translationsFor(options.env ?? process.env);
+  // A sink the turn can take over. `TurnRenderer` is untouched and knows
+  // nothing about a footer: while a turn runs, its writes go through the bar so
+  // that the editor and the status stay put underneath them.
+  let sink: ((text: string) => void) | undefined;
+  const target = {
+    write: (text: string): void => {
+      if (sink === undefined) out.write(text);
+      else sink(text);
+    },
+  };
+
   const renderer = new TurnRenderer({
-    out,
+    out: target,
     t: envLang.t,
     ...(options.colors === undefined ? {} : { colors: options.colors }),
     ...(options.showReasoning === undefined
@@ -240,12 +261,28 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
   // Logs go to stderr at `warn` by default. On stdout they would interleave
   // with the answer, and at `info` a local model's per-request lines would bury
   // it — so the CLI is quieter than the library default rather than the same.
+  // Diagnostics go through the footer too, when they are going to the same
+  // terminal. A pino line written straight to the fd lands wherever the cursor
+  // is, which while a turn is streaming is the middle of the status bar — and
+  // the bar has no idea it happened, so the damage stays on screen. Only when
+  // stderr *is* this terminal: a redirected stderr belongs in its file, not
+  // interleaved into stdout.
+  const errOut = options.errOut ?? process.stderr;
+  const shareTerminal = (errOut as { isTTY?: boolean }).isTTY === true;
+  const logTarget = {
+    write: (text: string): boolean => {
+      if (sink === undefined || !shareTerminal) return errOut.write(text);
+      sink(text);
+      return true;
+    },
+  } as unknown as NodeJS.WritableStream;
+
   const logger =
     options.logger ??
     createLogger({
       name: 'ghost',
       level: options.logLevel ?? 'warn',
-      destination: options.errOut ?? process.stderr,
+      destination: logTarget,
     });
 
   const runtime = createChatRuntime({ ...options, logger });
@@ -469,21 +506,29 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
       theme,
       menus,
       processHooks: options.handleSignals !== false,
-      // A blank line and the caret, and nothing else. The rule that used to sit
-      // above the editor is gone: a prompt string is the one part of the frame
-      // written *into* the scrollback, so it stayed behind after every turn and
-      // the transcript grew a separator between every pair of messages. Taking
-      // it back afterwards meant counting rows through readline's own wrapping,
-      // and counting wrong blanked a line of the conversation. The rule below
-      // the editor is drawn by the bar, is transient by construction, and says
-      // the same thing.
-      prompt: () => '\n› ',
+      prompt: () => `\n${inputRule(columnsOf(terminal) - 1, theme)}\n› `,
+      inputRule: () => inputRule(columnsOf(terminal) - 1, theme),
       // One column short of the window. Writing exactly `columns` characters
       // leaves a terminal in a pending-wrap state that different emulators
       // resolve differently, and every row here is followed by cursor motion
       // that assumes it knows which row it is on.
       status: () => statusBar(view(), columnsOf(terminal) - 1, theme),
       measure: measureContext,
+      setSink: (next) => {
+        sink = next;
+      },
+      echo: (content) => {
+        renderer.echo(content);
+      },
+      // `unref` so an animation frame never keeps the process alive: a turn
+      // that ends between two ticks must not leave `ghost` running.
+      ticker: (tick) => {
+        const timer = setInterval(tick, SPINNER_INTERVAL_MS);
+        timer.unref();
+        return () => {
+          clearInterval(timer);
+        };
+      },
       session: () => sessionKey,
       attach: (key) => {
         sessionKey = key;
@@ -524,10 +569,18 @@ interface ReplDeps {
   readonly processHooks: boolean;
   /** Built fresh each iteration, so the prompt follows the state. */
   readonly prompt: () => string;
+  /** The rule above the editor, for the turn that draws the frame itself. */
+  readonly inputRule: () => string;
   /** The rows drawn under the editor, rebuilt whenever the state moves. */
   readonly status: () => string[];
   /** Re-measures the context window. Awaited after a turn, never before a key. */
   readonly measure: () => Promise<void>;
+  /** Routes `TurnRenderer`'s writes through the footer for the turn's duration. */
+  readonly setSink: (sink: ((text: string) => void) | undefined) => void;
+  /** Prints the message into the transcript, since the prompt block is gone. */
+  readonly echo: (content: string) => void;
+  /** Drives the generating indicator. Injected so tests need no wall clock. */
+  readonly ticker: (tick: () => void) => () => void;
   /** The conversation the prompt is on, read fresh — it moves. */
   readonly session: () => string;
   readonly attach: (sessionKey: string) => void;
@@ -609,6 +662,21 @@ async function repl(deps: ReplDeps): Promise<number> {
     },
   });
 
+  const generation = deps.menus
+    ? createGeneration({
+        input: deps.input,
+        bar: status.bar,
+        suspend: () => suspendReadline(rl, deps.input),
+        inputRule: deps.inputRule,
+        status: deps.status,
+        setSink: deps.setSink,
+        interrupt: deps.abortActive,
+        theme: deps.theme,
+        t: deps.t,
+        ticker: deps.ticker,
+      })
+    : NO_GENERATION;
+
   const prompt = new AbortController();
   const onSigint = (): void => {
     // While a turn runs, Ctrl-C belongs to the turn. At an idle prompt it means
@@ -620,19 +688,32 @@ async function repl(deps: ReplDeps): Promise<number> {
 
   try {
     for (;;) {
-      let line: string;
-      try {
-        line = await status.ask((text) =>
-          rl.question(text, { signal: prompt.signal }),
-        );
-      } catch (error) {
-        // Ctrl-C at the prompt, or Ctrl-D closing stdin. Both mean "done".
-        if (isAbortError(error)) return 0;
-        throw error;
+      // A message typed while the last turn was running runs now, without a
+      // prompt: the operator has already pressed Return on it once.
+      let line = generation.takeQueued();
+      if (line === undefined) {
+        try {
+          line = await status.ask((text) => {
+            const asked = rl.question(text, { signal: prompt.signal });
+            // Half-typed when the last answer arrived, so it goes back into the
+            // editor rather than being thrown away.
+            const partial = generation.takePartial();
+            if (partial !== undefined) rl.write(partial);
+            return asked;
+          });
+        } catch (error) {
+          // Ctrl-C at the prompt, or Ctrl-D closing stdin. Both mean "done".
+          if (isAbortError(error)) return 0;
+          throw error;
+        }
       }
 
       const content = line.trim();
       if (content === '') continue;
+      // The prompt block came down with the rule, so the message is printed
+      // here instead — which is also what stops the frame from being left
+      // behind between one message and the next.
+      deps.echo(content);
       if (content.startsWith('/')) {
         const result = await runSlashCommand(content, {
           renderer: deps.renderer,
@@ -664,13 +745,17 @@ async function repl(deps: ReplDeps): Promise<number> {
         // `/edit` and `/regenerate` truncated, and handed the content back
         // rather than running it — so a re-run takes the same path a typed
         // message does, with the same renderer and the same Ctrl-C.
-        const rerun = await deps.turn(result.content);
+        const rerun = await generation.run(
+          async () => await deps.turn(result.content),
+        );
         if (rerun.aborted) deps.renderer.note(deps.t('chat.interrupted'));
         await deps.measure();
         continue;
       }
 
-      const outcome = await deps.turn(content);
+      const outcome = await generation.run(
+        async () => await deps.turn(content),
+      );
       if (outcome.aborted) deps.renderer.note(deps.t('chat.interrupted'));
       // After the turn, never before a keystroke: the context only changes when
       // the history does, so measuring here is both the cheap answer and the
@@ -686,10 +771,20 @@ async function repl(deps: ReplDeps): Promise<number> {
 }
 
 interface StatusBinding {
-  /** Runs one prompt with the bar under it, and erases it afterwards. */
+  /**
+   * Runs one prompt with the bar under it.
+   *
+   * On the way out the *whole* prompt block comes down — the rule, the caret
+   * and the echoed line — and the caller prints the message into the transcript
+   * itself. That is what keeps the rule above the editor from being left behind
+   * by every turn, and it is one erase of a block whose height readline
+   * reports, rather than an attempt to find one row inside it.
+   */
   ask(question: (prompt: string) => Promise<string>): Promise<string>;
   /** Redraws the bar, for a caller that has just drawn over it. */
   repaint(): void;
+  /** The footer itself, for the turn that takes it over while it runs. */
+  readonly bar: BottomBar;
   close(): void;
 }
 
@@ -732,11 +827,31 @@ function bindStatus(options: StatusOptions): StatusBinding {
   const bar = options.menus ? openBottomBar({ output }) : undefined;
 
   if (bar?.available !== true) {
+    // A footer that does nothing, rather than an `if` at every call site.
+    const nothing = (): void => {
+      /* there is no footer on a stream that cannot draw one */
+    };
+    const absent: BottomBar = {
+      columns: 0,
+      available: false,
+      reserve: nothing,
+      paint: nothing,
+      // The one method that still has to do its job: a turn's output has to
+      // reach the terminal whether or not there is a footer to put it above.
+      writeAbove: (text) => {
+        output.write(text);
+      },
+      repaint: nothing,
+      eraseBlock: nothing,
+      clear: nothing,
+      close: nothing,
+    };
     return {
       ask: async (question) => await question(options.prompt()),
       repaint: (): void => {
         /* there is no bar to redraw */
       },
+      bar: absent,
       close: (): void => {
         /* nothing was drawn */
       },
@@ -747,6 +862,8 @@ function bindStatus(options: StatusOptions): StatusBinding {
   let asking = false;
   /** How many rows the prompt occupies before the editor's own row. */
   let promptRows = 0;
+  /** The block's height, read at the last moment readline can still report it. */
+  let blockRows = 0;
 
   const repaint = (): void => {
     if (!asking) return;
@@ -781,6 +898,16 @@ function bindStatus(options: StatusOptions): StatusBinding {
     repaint();
   };
 
+  // Prepended, and for the opposite reason to the repaint: this has to read the
+  // cursor while readline still has a line to report a position within. One key
+  // later the line is gone and so is the number.
+  const measureBlock = (chunk: unknown, key?: { name?: string }): void => {
+    if (asking && key?.name === 'return') {
+      blockRows = options.rl.getCursorPos().rows;
+    }
+  };
+  options.input.prependListener('keypress', measureBlock);
+
   // Appended: readline's refresh clears from the prompt row down, synchronously
   // inside its own handler, so a listener running before it would paint a bar
   // readline then erased.
@@ -807,12 +934,20 @@ function bindStatus(options: StatusOptions): StatusBinding {
       } finally {
         asking = false;
         bar.clear();
+        // Readline has written `\r\n`, so the cursor is one row below the last
+        // row of the block; `blockRows` is the last row's own index. Up by one
+        // more than that is the block's first row, and erasing from there takes
+        // the rule, the caret and the echo with it.
+        bar.eraseBlock(blockRows + 1);
+        blockRows = 0;
       }
     },
     repaint,
+    bar,
     close(): void {
       asking = false;
       options.input.off('keypress', onKeypress);
+      options.input.off('keypress', measureBlock);
       bar.close();
     },
   };

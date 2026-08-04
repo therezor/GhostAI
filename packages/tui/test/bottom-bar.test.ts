@@ -116,6 +116,97 @@ describe('painting', () => {
   });
 });
 
+describe('writing above the footer', () => {
+  it('erases the footer before the text, never after', () => {
+    // Writing first and erasing after leaves whatever of the footer sat to the
+    // right of the new text on its row — a rule with two words of an answer
+    // printed over its first columns, which is what this looked like.
+    const output = fakeOutput();
+    const status = bar(output);
+    status.paint(['────────'], 0);
+    output.reset();
+
+    status.writeAbove('an answer\n', ['────────']);
+
+    const text = stripAnsi(output.text);
+    expect(text.indexOf(ERASE_BELOW)).toBeLessThan(text.indexOf('an answer'));
+    expect(text).toContain('an answer');
+    expect(text).toContain('────────');
+    status.close();
+  });
+
+  it('draws the footer again below wherever the text ended', () => {
+    const output = fakeOutput();
+    const status = bar(output);
+    status.paint(['footer'], 0);
+    output.reset();
+
+    status.writeAbove('line\n', ['footer']);
+
+    expect(stripAnsi(output.text)).toContain('line\n');
+    expect(stripAnsi(output.text)).toContain('footer');
+    status.close();
+  });
+
+  it('remembers the column a fragment stopped at, and comes back to it', () => {
+    // A streamed answer arrives in pieces that mostly do not end on a line
+    // break; repainting to column zero would put the next piece at the start of
+    // the row rather than after the words already on it.
+    const output = fakeOutput();
+    const status = bar(output);
+    status.paint(['footer'], 0);
+    output.reset();
+
+    status.writeAbove('four', ['footer']);
+
+    expect(output.text).toContain(`\r${CSI}4C`);
+    status.close();
+  });
+
+  it('counts from the last line break rather than the start of the write', () => {
+    const output = fakeOutput();
+    const status = bar(output);
+    status.paint(['footer'], 0);
+    output.reset();
+
+    status.writeAbove('a long first line\nthen', ['footer']);
+
+    expect(output.text).toContain(`\r${CSI}4C`);
+    status.close();
+  });
+
+  it('writes the text even when there is no footer up yet', () => {
+    const output = fakeOutput();
+    const status = bar(output);
+    status.writeAbove('first', ['footer']);
+    expect(stripAnsi(output.text)).toContain('first');
+    status.close();
+  });
+});
+
+describe('erasing a block', () => {
+  it('steps back and clears everything from there down', () => {
+    // For taking down a whole prompt block — the rule above the editor, the
+    // caret and the echoed line — so the caller can print the message itself.
+    const output = fakeOutput();
+    const status = bar(output);
+
+    status.eraseBlock(3);
+
+    expect(output.text).toContain(`${CSI}3A`);
+    expect(output.text).toContain(ERASE_BELOW);
+    status.close();
+  });
+
+  it('does nothing for a block of no rows', () => {
+    const output = fakeOutput();
+    const status = bar(output);
+    status.eraseBlock(0);
+    expect(output.text).toBe('');
+    status.close();
+  });
+});
+
 describe('reserving', () => {
   it('pushes the transcript up by the height it was given', () => {
     // At the bottom of the screen this scrolls, which is the point: everything

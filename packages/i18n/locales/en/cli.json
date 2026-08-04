@@ -5,6 +5,7 @@
     "attachedTo": "attached to {{key}}",
     "banner": "ghost · {{model}} @ {{provider}} · {{workspace}}",
     "description": "Talk to the agent. With no message, opens a prompt.",
+    "generating": "generating…",
     "header": {
       "agent": "agent",
       "hint": "/help for commands",
@@ -29,7 +30,8 @@
       "session": "session to continue",
       "workspace": "workspace root, overriding the configured default",
       "workspaceId": "workspace new sessions land in"
-    }
+    },
+    "queued": "queued — it runs when this turn finishes"
   },
   "help": {
     "arguments": "Arguments:",

@@ -405,6 +405,21 @@ export class TurnRenderer {
     this.line(this.c.dim(text));
   }
 
+  /**
+   * The operator's own message, printed into the transcript.
+   *
+   * readline echoes what was typed, but the whole prompt block is taken down
+   * when a turn starts — the rule above the editor would otherwise be left
+   * behind by every turn — so the message is reprinted here. It is not an
+   * `AgentEvent` and deliberately does not go through the switch: nothing on
+   * the wire says "a human pressed Return in a terminal", and inventing an
+   * event so that one renderer could draw a caret would be putting a CLI
+   * concern into a union three transports share.
+   */
+  echo(text: string): void {
+    this.line(`${this.c.dim('›')} ${text}`);
+  }
+
   warn(text: string): void {
     this.line(`${this.c.yellow('⚠')} ${text}`);
   }

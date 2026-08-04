@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { PassThrough, Readable } from 'node:stream';
 
 import type { AgentEvent, AgentLoop, TurnInput } from '@ghostai/agent';
-import { SessionStore, hasOrphanedToolResult } from '@ghostai/core';
+import { SessionStore, hasOrphanedToolResult, textOf } from '@ghostai/core';
 import type { FetchImplementation } from '@ghostai/security';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -49,7 +49,7 @@ function sink(): NodeJS.WritableStream & { text: string } {
  * runtime embeds it — so this is a declaration-level detail, not a fiction.
  */
 function transport(
-  ...responses: ReadonlyArray<Response | (() => Promise<never>)>
+  ...responses: ReadonlyArray<Response | (() => Promise<Response>)>
 ): {
   fetchImpl: FetchImplementation;
   bodies: Array<Record<string, unknown>>;
@@ -1060,6 +1060,145 @@ describe('chatCommand', () => {
   });
 
   // ── The palette and the pickers ─────────────────────────────
+
+  it('prints the message itself, leaving no frame behind between messages', async () => {
+    // The rule above the editor is part of the prompt, which is the one part
+    // written into the scrollback — so the whole prompt block is taken down
+    // when the turn starts and the message reprinted. Without that the
+    // transcript grows a separator between every pair of messages.
+    const home = tempHome();
+    const { fetchImpl } = transport(
+      sse(textFrame('Answered.'), finishFrame('stop'), USAGE),
+    );
+    const out = streamSink({ isTTY: true });
+    const input = Object.assign(new PassThrough(), {
+      isTTY: true,
+      setRawMode(): void {
+        /* a PassThrough has no mode to set */
+      },
+    });
+
+    const pending = chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: out.stream,
+      colors: false,
+      input,
+      sessionKey: 'cli:echo',
+    });
+
+    await waitFor(() => out.text().includes('ctrl-g for the menu'));
+    await send(input, out, 'what is going on', 'Answered.');
+
+    expect(out.text()).toContain('› what is going on');
+
+    input.write('/exit\n');
+    expect(await pending).toBe(0);
+  });
+
+  it('shows a generating indicator until the answer starts arriving', async () => {
+    const home = tempHome();
+    // A provider that answers only when told to, so the gap the indicator
+    // exists to fill is a real one rather than one the test waited out.
+    let start: () => void = () => {
+      /* replaced below, before anything can call it */
+    };
+    const opened = new Promise<void>((resolve) => {
+      start = resolve;
+    });
+    const { fetchImpl } = transport(async () => {
+      await opened;
+      return sse(textFrame('Answered.'), finishFrame('stop'), USAGE);
+    });
+
+    const out = streamSink({ isTTY: true });
+    const input = Object.assign(new PassThrough(), {
+      isTTY: true,
+      setRawMode(): void {
+        /* a PassThrough has no mode to set */
+      },
+    });
+
+    const pending = chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: out.stream,
+      colors: false,
+      input,
+      sessionKey: 'cli:spinner',
+    });
+
+    await waitFor(() => out.text().includes('ctrl-g for the menu'));
+    input.write('what is going on\n');
+    await waitFor(() => out.text().includes('generating'));
+
+    start();
+    await waitFor(() => out.text().includes('Answered.'));
+    await quiet(out);
+
+    input.write('/exit\n');
+    expect(await pending).toBe(0);
+  });
+
+  it('runs a message typed while the answer was still streaming', async () => {
+    const home = tempHome();
+    let start: () => void = () => {
+      /* replaced below, before anything can call it */
+    };
+    const opened = new Promise<void>((resolve) => {
+      start = resolve;
+    });
+    const { fetchImpl } = transport(
+      async () => {
+        await opened;
+        return sse(textFrame('First.'), finishFrame('stop'), USAGE);
+      },
+      sse(textFrame('Second.'), finishFrame('stop'), USAGE),
+    );
+
+    const out = streamSink({ isTTY: true });
+    const input = Object.assign(new PassThrough(), {
+      isTTY: true,
+      setRawMode(): void {
+        /* a PassThrough has no mode to set */
+      },
+    });
+
+    const pending = chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: out.stream,
+      colors: false,
+      input,
+      sessionKey: 'cli:queued',
+    });
+
+    await waitFor(() => out.text().includes('ctrl-g for the menu'));
+    input.write('the first question\n');
+    await waitFor(() => out.text().includes('generating'));
+
+    // Typed and submitted while the first turn is still open.
+    input.write('the queued question\n');
+    start();
+
+    await waitFor(() => out.text().includes('Second.'), 20_000);
+    await quiet(out);
+
+    // The durable proof: both messages are in the history, in order.
+    input.write('/exit\n');
+    expect(await pending).toBe(0);
+
+    const store = new SessionStore({ file: join(home, 'ghost.db') });
+    const said = store
+      .messages('cli:queued', {})
+      .filter((row) => row.message.role === 'user')
+      .map((row) => textOf(row.message));
+    store.close();
+    expect(said).toEqual(['the first question', 'the queued question']);
+  });
 
   // ── The status bar ──────────────────────────────────────────
 

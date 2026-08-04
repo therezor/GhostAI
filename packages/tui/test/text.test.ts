@@ -2,6 +2,7 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
 import {
+  dropLastGrapheme,
   fitToWidth,
   justify,
   padToWidth,
@@ -149,6 +150,21 @@ describe('fitToWidth', () => {
   it('produces exactly the requested width either way', () => {
     expect(visibleWidth(fitToWidth('ab', 6))).toBe(6);
     expect(visibleWidth(fitToWidth('abcdefghij', 6))).toBe(6);
+  });
+});
+
+describe('dropLastGrapheme', () => {
+  it('removes what a person can see, not a code unit', () => {
+    // `slice(0, -1)` takes a UTF-16 code unit and cuts an emoji in half;
+    // spreading takes a code point and strips one member of a family.
+    expect(dropLastGrapheme('ab')).toBe('a');
+    expect(dropLastGrapheme('a🚀')).toBe('a');
+    expect(dropLastGrapheme('a👨‍👩‍👧')).toBe('a');
+    expect(dropLastGrapheme('aé')).toBe('a');
+  });
+
+  it('has nothing to remove from nothing', () => {
+    expect(dropLastGrapheme('')).toBe('');
   });
 });
 
