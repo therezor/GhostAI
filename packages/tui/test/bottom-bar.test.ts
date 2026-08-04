@@ -277,6 +277,40 @@ describe('a terminal that will not say how tall it is', () => {
   });
 });
 
+describe('the window changing size', () => {
+  it('tells whoever asked, so they can rebuild their rows', () => {
+    // Every row bakes the width in, so a resize does not merely make the bar
+    // look wrong — a rule one column too long wraps onto a second row, and the
+    // cursor-up that comes back over it is then off by one for good.
+    const output = fakeOutput();
+    const status = bar(output);
+    let seen = 0;
+    status.onResize(() => {
+      seen += 1;
+    });
+
+    output.resizeTo(40, 20);
+
+    expect(seen).toBe(1);
+    status.close();
+  });
+
+  it('stops telling one that unsubscribed', () => {
+    const output = fakeOutput();
+    const status = bar(output);
+    let seen = 0;
+    const off = status.onResize(() => {
+      seen += 1;
+    });
+
+    off();
+    output.resizeTo(40, 20);
+
+    expect(seen).toBe(0);
+    status.close();
+  });
+});
+
 describe('the terminal cursor', () => {
   const HIDE = `${CSI}?25l`;
   const SHOW = `${CSI}?25h`;

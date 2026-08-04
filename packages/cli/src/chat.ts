@@ -845,6 +845,7 @@ function bindStatus(options: StatusOptions): StatusBinding {
         output.write(text);
       },
       repaint: nothing,
+      onResize: () => nothing,
       setCursorVisible: nothing,
       eraseBlock: nothing,
       clear: nothing,
@@ -877,6 +878,29 @@ function bindStatus(options: StatusOptions): StatusBinding {
   let promptRows = 0;
   /** The block's height, read at the last moment readline can still report it. */
   let blockRows = 0;
+
+  /**
+   * The window changed size, so every measured thing is wrong at once.
+   *
+   * The rules are a width in characters and the status columns are justified to
+   * one, so the lines have to be *rebuilt* rather than redrawn — and the rule
+   * above the editor lives in readline's prompt, which readline will happily go
+   * on refreshing at its old width until it is handed a new one.
+   *
+   * Readline's own resize handler runs first and clears from its prompt row
+   * down, which is where the bar is; without this the bar simply vanishes until
+   * the next keystroke, and a rule left one column too long wraps and puts the
+   * cursor arithmetic out for the rest of the session.
+   */
+  const onResize = (): void => {
+    if (!asking) return;
+    const text = options.prompt();
+    promptRows = text.split('\n').length - 1;
+    lines = options.status();
+    options.rl.setPrompt(text);
+    options.rl.prompt(true);
+    repaint();
+  };
 
   const repaint = (): void => {
     if (!asking) return;
@@ -920,6 +944,7 @@ function bindStatus(options: StatusOptions): StatusBinding {
     }
   };
   options.input.prependListener('keypress', measureBlock);
+  const offResize = bar.onResize(onResize);
 
   // Appended: readline's refresh clears from the prompt row down, synchronously
   // inside its own handler, so a listener running before it would paint a bar
@@ -963,6 +988,7 @@ function bindStatus(options: StatusOptions): StatusBinding {
       asking = false;
       options.input.off('keypress', onKeypress);
       options.input.off('keypress', measureBlock);
+      offResize();
       bar.close();
     },
   };

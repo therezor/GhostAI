@@ -111,6 +111,19 @@ export interface BottomBar {
    */
   eraseBlock(rows: number): void;
   /**
+   * Subscribes to the window changing size. Returns the unsubscribe.
+   *
+   * Every row here bakes the width in — the rules are that many characters and
+   * the status columns are justified to it — so a resize does not just make the
+   * bar look wrong, it makes it a *different height*: a rule one column too
+   * long wraps onto a second row, and the cursor-up that comes back over it is
+   * then off by one for the rest of the session.
+   *
+   * A caller has to rebuild its lines rather than repaint the old ones, which
+   * is why this hands back nothing but the fact that it happened.
+   */
+  onResize(handler: () => void): () => void;
+  /**
    * Hides or shows the terminal's own cursor.
    *
    * For the stretch where there is nothing to point at: while a turn is waiting
@@ -238,6 +251,13 @@ export function openBottomBar(options: BottomBarOptions): BottomBar {
       output.write(frame(`${CURSOR_UP(rows)}\r${ERASE_BELOW}`));
       painted = 0;
       column = 0;
+    },
+
+    onResize(handler: () => void): () => void {
+      output.on('resize', handler);
+      return () => {
+        output.off('resize', handler);
+      };
     },
 
     setCursorVisible(visible: boolean): void {

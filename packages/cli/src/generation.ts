@@ -74,6 +74,7 @@ export interface GenerationOptions {
   readonly bar: {
     writeAbove(text: string, lines: readonly string[]): void;
     repaint(lines: readonly string[]): void;
+    onResize(handler: () => void): () => void;
     setCursorVisible(visible: boolean): void;
     clear(): void;
   };
@@ -185,6 +186,11 @@ export function createGeneration(options: GenerationOptions): Generation {
         draw();
       };
 
+      // Readline is suspended, so nothing else is going to redraw: the footer
+      // has to rebuild itself. `footer()` reads the rule and the status rows
+      // fresh, which is the whole of what the width is baked into.
+      const offResize = bar.onResize(draw);
+
       const handover = options.suspend();
       options.input.on('data', onData);
       options.input.resume();
@@ -202,6 +208,7 @@ export function createGeneration(options: GenerationOptions): Generation {
       try {
         return await body();
       } finally {
+        offResize();
         stopTicking();
         bar.setCursorVisible(true);
         options.setSink(undefined);

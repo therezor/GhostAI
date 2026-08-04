@@ -29,6 +29,8 @@ interface Harness {
   readonly sink: () => ((text: string) => void) | undefined;
   /** Every `setCursorVisible` call, in order. */
   readonly cursor: boolean[];
+  /** Pretends the window changed size, the way the stream's event would. */
+  readonly resize: () => void;
 }
 
 function harness(): Harness {
@@ -40,6 +42,7 @@ function harness(): Harness {
   let ticker: (() => void) | undefined;
   let sink: ((text: string) => void) | undefined;
   const cursor: boolean[] = [];
+  let onResize: (() => void) | undefined;
 
   const generation = createGeneration({
     input,
@@ -50,6 +53,12 @@ function harness(): Harness {
       },
       repaint: (lines) => {
         footers.push([...lines]);
+      },
+      onResize: (handler) => {
+        onResize = handler;
+        return () => {
+          onResize = undefined;
+        };
       },
       setCursorVisible: (visible) => {
         cursor.push(visible);
@@ -93,6 +102,9 @@ function harness(): Harness {
     },
     sink: () => sink,
     cursor,
+    resize: () => {
+      onResize?.();
+    },
   };
 }
 
@@ -192,6 +204,34 @@ describe('the frame while a turn runs', () => {
 
     turn.finish();
     await run;
+  });
+
+  it('rebuilds the footer when the window changes size', async () => {
+    // Every row bakes the width in — the rules are that many characters and the
+    // status columns are justified to one — and readline is suspended, so the
+    // footer is the only thing that can put itself right.
+    const test = harness();
+    const turn = pending();
+    const run = test.generation.run(turn.body);
+    const before = test.footers.length;
+
+    test.resize();
+
+    expect(test.footers.length).toBe(before + 1);
+    turn.finish();
+    await run;
+  });
+
+  it('stops listening for resizes when the turn ends', async () => {
+    const test = harness();
+    const turn = pending();
+    const run = test.generation.run(turn.body);
+    turn.finish();
+    await run;
+
+    const after = test.footers.length;
+    test.resize();
+    expect(test.footers.length).toBe(after);
   });
 
   it('routes the turn output through the footer rather than straight out', async () => {
