@@ -46,6 +46,7 @@ import {
   DEFAULT_USERNAME,
   type Config,
   type ConfigPatch,
+  type McpServerStatus,
   type SetCredentialRequest,
 } from '@ghostai/protocol';
 import type { ChatProvider } from '@ghostai/providers';
@@ -532,10 +533,16 @@ function harnessRuntime(
     // See `createServerRuntime`: declared capabilities with no source. Stated
     // here too, so the harness and the real thing answer alike.
     loadError: (): string | undefined => undefined,
+    // The harness configures no MCP server and does not want one — a browser
+    // test must not depend on a subprocess starting — so these answer for a
+    // runtime that has a client and nothing for it to connect to.
     extensions: (): ExtensionCounts => ({
-      mcpServersConnected: 0,
+      mcpServersConnected: runtime
+        .mcpServers()
+        .filter((server) => server.state === 'ready').length,
       pluginsLoaded: 0,
     }),
+    mcpServers: (): readonly McpServerStatus[] => runtime.mcpServers(),
 
     configWarnings: () => runtime.configWarnings,
 

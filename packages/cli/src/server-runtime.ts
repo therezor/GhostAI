@@ -40,6 +40,7 @@ import { DEFAULT_AGENT_ID, GhostError, saveConfig } from '@ghostai/core';
 import type {
   Config,
   ConfigPatch,
+  McpServerStatus,
   ModelInfo,
   ModelsResponse,
   ProviderTestRequest,
@@ -274,18 +275,25 @@ export function createServerRuntime(
       return saveConfig(runtime.file, merged);
     },
 
-    // Declared capabilities with no source yet, stated rather than left absent.
+    // A declared capability with no source yet, stated rather than left absent.
     // `loadConfig` throws on an unreadable file, so a running server has no load
-    // error to report — there is no tolerant-boot path for it to describe. And
-    // there is no MCP or plugin registry to count, so zero is the honest answer
-    // rather than a placeholder. Both were simply missing before, which the
-    // optional signatures let pass: `GET /api/settings` never reported a load
-    // error and `GET /api/status` always answered with the route's own fallback.
+    // error to report — there is no tolerant-boot path for it to describe. It
+    // was simply missing before, which the optional signature let pass: `GET
+    // /api/settings` never reported a load error at all.
     loadError: (): string | undefined => undefined,
+
+    // `ready` and not merely "configured": the count answers "how many servers
+    // could a turn actually reach", which is the question the status line is
+    // asking. A server that is retrying is not one of them.
     extensions: (): ExtensionCounts => ({
-      mcpServersConnected: 0,
+      mcpServersConnected: runtime
+        .mcpServers()
+        .filter((server) => server.state === 'ready').length,
+      // Still zero until `@ghostai/plugin-host` exists.
       pluginsLoaded: 0,
     }),
+
+    mcpServers: (): readonly McpServerStatus[] => runtime.mcpServers(),
 
     configWarnings: () => runtime.configWarnings,
 

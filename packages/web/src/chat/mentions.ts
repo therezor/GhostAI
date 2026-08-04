@@ -10,11 +10,14 @@
  * re-export, so a fourth namespace added there appears here without an edit.
  *
  * What it deliberately does *not* do is offer values. `@kb:`, `@mcp:` and
- * `@skill:` scope to a knowledge base, an MCP server and a skill — none of which
- * exist before Phase 3. A completion list populated from nothing is a menu that
- * says "no results" for a feature that was never turned on, which reads as
- * broken rather than as absent. Until there is a catalogue to read, the
- * autocomplete completes the namespace and gets out of the way.
+ * `@skill:` scope to a knowledge base, an MCP server and a skill. MCP servers
+ * exist now, but **nothing reads the mention yet** — honouring it means
+ * narrowing a turn's tool scope, which is `AgentLoop`'s business rather than
+ * this file's, and offering a value the turn will then ignore is worse than
+ * offering none. The other two have no catalogue to read at all. A completion
+ * list that either says "no results" or completes to something inert reads as
+ * broken rather than as absent, so the autocomplete completes the namespace and
+ * gets out of the way.
  */
 
 import {

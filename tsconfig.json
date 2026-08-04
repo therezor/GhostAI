@@ -16,6 +16,8 @@
     { "path": "packages/providers/test" },
     { "path": "packages/tools" },
     { "path": "packages/tools/test" },
+    { "path": "packages/mcp" },
+    { "path": "packages/mcp/test" },
     { "path": "packages/agent" },
     { "path": "packages/agent/test" },
     { "path": "packages/runtime" },

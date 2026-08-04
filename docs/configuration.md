@@ -234,17 +234,42 @@ blocking nothing.
 
 ### `tools.mcpServers.<id>`
 
-_The schema ships; the client does not. See [ROADMAP.md](ROADMAP.md)._
+The id is part of every tool name this server contributes (`mcp_<id>_<tool>`),
+and those names are the keys of every agent's permission map — so renaming a
+server revokes its tools from every agent that had been granted one. The
+Extensions panel treats the id as fixed once created for that reason.
 
-| Key                      | Type                                                         | Default          | Notes                             |
-| ------------------------ | ------------------------------------------------------------ | ---------------- | --------------------------------- |
-| `type`                   | `stdio\|sse\|streamableHttp`                                 | _unset_          | Inferred from `command` vs `url`. |
-| `command`, `args`, `env` | string, string[], record                                     | `''`, `[]`, `{}` | For `stdio`.                      |
-| `url`, `headers`         | string, record                                               | `''`, `{}`       | For the HTTP transports.          |
-| `oauth`                  | `{ authUrl, tokenUrl, clientId, scopes, callbackTimeoutMs }` | _unset_          |                                   |
-| `toolTimeoutMs`          | int ≥ 0                                                      | `0`              |                                   |
-| `enabledTools`           | string[]                                                     | `['*']`          |                                   |
-| `enabled`                | boolean                                                      | `true`           |                                   |
+| Key                      | Type                                                         | Default          | Notes                                            |
+| ------------------------ | ------------------------------------------------------------ | ---------------- | ------------------------------------------------ |
+| `type`                   | `stdio\|sse\|streamableHttp`                                 | _unset_          | Inferred from `command` vs `url`.                |
+| `command`, `args`, `env` | string, string[], record                                     | `''`, `[]`, `{}` | For `stdio`.                                     |
+| `url`, `headers`         | string, record                                               | `''`, `{}`       | For the HTTP transports.                         |
+| `oauth`                  | `{ authUrl, tokenUrl, clientId, scopes, callbackTimeoutMs }` | _unset_          | HTTP only. Tokens go to the vault.               |
+| `toolTimeoutMs`          | int ≥ 0                                                      | `0`              | `0` waits as long as it takes.                   |
+| `enabledTools`           | string[]                                                     | `['*']`          | Upstream names; a trailing `*` matches a prefix. |
+| `enabled`                | boolean                                                      | `true`           |                                                  |
+
+**`type` is inferred but never guessed at `sse`.** An entry with a `command` is
+`stdio`, one with a `url` is `streamableHttp`, and one with both is refused —
+reaching the deprecated transport takes an explicit `"type": "sse"`. An entry
+that names neither is refused too, as a row on the Extensions panel rather than
+a settings save the operator loses.
+
+**`env` and `headers` replace rather than merge**, like `providers.<id>.extraHeaders`:
+they are edited as one block of text, and merging key by key would leave no way
+to remove an entry. `null` at `tools.mcpServers.<id>` deletes the server, and
+`null` at its `oauth` says it does not use OAuth.
+
+Two guards do **not** apply here, and the reasoning is in the module headers of
+`@ghostai/mcp`. A stdio `command` does not go through `guardExec`: that guard
+constrains argv a _model_ wrote inside the workspace jail, and it refuses the
+absolute paths and `npx`-shaped invocations every MCP server uses. A `url` does
+not go through `guardedFetch`'s SSRF blocklist, because the commonest MCP
+endpoint by far is `http://127.0.0.1:…`, which is exactly what that blocklist
+exists to refuse. Both are operator configuration, in the same trust class as
+`providers.<id>.apiBase`. What _is_ enforced: the child gets `env` plus a
+minimal inherited set rather than this process's whole environment, its stderr
+goes to the log rather than to yours, and the URL must parse as `http`/`https`.
 
 ---
 

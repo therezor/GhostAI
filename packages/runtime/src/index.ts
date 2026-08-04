@@ -47,6 +47,8 @@ export {
   type LoopCacheOptions,
 } from './loop-cache.js';
 
+export { registryToolSink } from './mcp-tools.js';
+
 export {
   MAX_CACHED_PROVIDERS,
   ProviderCache,

@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/tabs.js';
 import { AppearancePanel } from '@/settings/appearance-panel.js';
 import { AccountPanel } from '@/settings/account-panel.js';
+import { ExtensionsPanel } from '@/settings/extensions-panel.js';
 import { PlannedPanel } from '@/settings/planned-panel.js';
 import { ProvidersPanel } from '@/settings/providers-panel.js';
 import { ToolsPanel } from '@/settings/tools-panel.js';
@@ -145,5 +146,6 @@ function PanelBody({ panelId }: { readonly panelId: string }): JSX.Element {
   const { config } = settings.data;
   if (panel.id === 'tools') return <ToolsPanel config={config} />;
   if (panel.id === 'automation') return <AutomationPanel config={config} />;
+  if (panel.id === 'extensions') return <ExtensionsPanel config={config} />;
   return <ProvidersPanel />;
 }

@@ -26,6 +26,8 @@ export const queryKeys = {
   workspaces: ['workspaces'] as const,
   agents: ['agents'] as const,
   toolboxes: ['toolboxes'] as const,
+  /** Live connection state, which is not in the settings tree. See `use-mcp.ts`. */
+  mcp: ['mcp'] as const,
   /**
    * Scoped by workspace, because a session list is per workspace now.
    *

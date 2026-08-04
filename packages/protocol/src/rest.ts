@@ -14,7 +14,11 @@
 
 import { z } from 'zod';
 
-import { ConfigPatchSchema, ConfigSchema } from './config.js';
+import {
+  ConfigPatchSchema,
+  ConfigSchema,
+  McpTransportSchema,
+} from './config.js';
 import {
   StopReasonSchema,
   StoredMessageSchema,
@@ -622,6 +626,69 @@ export const ToolboxListResponseSchema = z.object({
   toolboxes: z.array(ToolboxSummarySchema),
 });
 export type ToolboxListResponse = z.infer<typeof ToolboxListResponseSchema>;
+
+// ---------------------------------------------------------------------------
+// MCP servers
+// ---------------------------------------------------------------------------
+
+/**
+ * Where one configured MCP server is right now.
+ *
+ * A *live* state, which is why it is here and not in the settings tree: an
+ * operator's `tools.mcpServers.<id>` entry says what should be connected, and
+ * this says what is. Folding the second into the first would mean writing
+ * "unreachable" into `config.json`.
+ *
+ * Declared in `@ghostai/protocol` rather than in `@ghostai/mcp` so that the
+ * server and the browser can name it without either of them depending on the
+ * client package — the same reason `ToolDefinition` lives here rather than in
+ * `@ghostai/tools`.
+ */
+export const McpServerStateSchema = z.enum([
+  'connecting',
+  'ready',
+  'needs_authorization',
+  'failed',
+  'disabled',
+]);
+export type McpServerState = z.infer<typeof McpServerStateSchema>;
+
+export const McpServerStatusSchema = z.object({
+  id: z.string().min(1),
+  /** Resolved, so a config that left it to inference still reports one. */
+  transport: McpTransportSchema.optional(),
+  state: McpServerStateSchema,
+  enabled: z.boolean(),
+  /** The flattened names the model sees. Sorted. */
+  tools: z.array(z.string()).default([]),
+  /** What the server advertises and `enabledTools` filtered out. */
+  filteredTools: z.array(z.string()).default([]),
+  serverName: z.string().default(''),
+  serverVersion: z.string().default(''),
+  /**
+   * Why it is not connected, phrased for the operator.
+   *
+   * A field on the row rather than a `ConfigWarning`, because those are
+   * properties of the settings tree — true at every moment until someone edits
+   * it — and a closed laptop is not. See `ConfigWarningSchema` above.
+   */
+  lastError: z.string().optional(),
+  lastConnectedAtMs: z.number().int().nonnegative().optional(),
+  /** Where the operator must go while `state` is `needs_authorization`. */
+  authorizationUrl: z.string().optional(),
+  /**
+   * Problems that did not stop the server working: a tool whose schema could
+   * not be advertised, an `enabledTools` entry matching nothing, a name
+   * collision that skipped one tool.
+   */
+  warnings: z.array(z.string()).default([]),
+});
+export type McpServerStatus = z.infer<typeof McpServerStatusSchema>;
+
+export const McpStatusResponseSchema = z.object({
+  servers: z.array(McpServerStatusSchema),
+});
+export type McpStatusResponse = z.infer<typeof McpStatusResponseSchema>;
 
 // ---------------------------------------------------------------------------
 // Files

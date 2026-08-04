@@ -21,6 +21,7 @@ import type {
   Config,
   ConfigPatch,
   ConfigWarning,
+  McpServerStatus,
   ModelsResponse,
   ProviderTestRequest,
   ProviderTestResponse,
@@ -257,8 +258,22 @@ export interface ServerRuntime {
    */
   testProvider?(request: ProviderTestRequest): Promise<ProviderTestResponse>;
 
-  /** Zero for both until `@ghostai/mcp` and `@ghostai/plugin-host` exist. */
+  /** `pluginsLoaded` stays zero until `@ghostai/plugin-host` exists. */
   extensions(): ExtensionCounts;
+
+  /**
+   * Every configured MCP server and the state it is actually in.
+   *
+   * Optional for the reason `models` is: a route test has no business owning a
+   * client, and a build with `mcp: false` has nothing to report. The route
+   * answers `{servers: []}` when it is absent, which is honest — an install
+   * with no MCP client has no MCP servers.
+   *
+   * A method rather than a field on `config()`, because this is *live* state.
+   * "Unreachable since 12:04" is not something to write into `config.json`,
+   * and the settings tree is what gets written back.
+   */
+  mcpServers?(): readonly McpServerStatus[];
 
   /**
    * One provider request that is **not** a turn.

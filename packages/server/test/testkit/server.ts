@@ -17,6 +17,7 @@ import type { Clock } from '@ghostai/core';
 import {
   ConfigSchema,
   type Config,
+  type McpServerStatus,
   type ToolDefinition,
 } from '@ghostai/protocol';
 
@@ -42,6 +43,8 @@ export interface TestServerOptions {
   /** What the registry holds. Defaults to `tools`; see `FakeRuntimeOptions`. */
   readonly registeredTools?: readonly ToolDefinition[];
   readonly credentialsPresent?: Readonly<Record<string, boolean>>;
+  /** Omitted leaves the port's optional method absent. See `FakeRuntimeOptions`. */
+  readonly mcpServers?: readonly McpServerStatus[];
   readonly provider?: string;
   readonly model?: string;
   /** `false` drives the routes as a fresh install with no provider or model. */
@@ -110,6 +113,9 @@ export async function startTestServer(
     ...(options.credentialsPresent === undefined
       ? {}
       : { credentialsPresent: options.credentialsPresent }),
+    ...(options.mcpServers === undefined
+      ? {}
+      : { mcpServers: options.mcpServers }),
   });
 
   const { hub, runner } = createTestHub(

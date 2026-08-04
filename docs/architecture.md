@@ -6,7 +6,7 @@ split-process topology and the reconnect-and-fall-back-to-HTTP client that would
 
 ## The packages
 
-Thirteen, plus one example. Each is a published-shaped workspace package with its own
+Fourteen, plus one example. Each is a published-shaped workspace package with its own
 tests and its own coverage bar.
 
 | Package              | Does                                                                                                                |
@@ -16,6 +16,7 @@ tests and its own coverage bar.
 | `@ghostai/security`  | `WorkspaceJail`, `guardExec`, `guardedFetch`, `CredentialVault`, nonce fencing, toolbox manifests and approvals     |
 | `@ghostai/providers` | The provider registry, the `openai-chat` wire adapter, SSE parsing, `withResilience`, token counting                |
 | `@ghostai/tools`     | `defineTool`, `ToolRegistry`, the built-in tools, the local and container runners                                   |
+| `@ghostai/mcp`       | The MCP client, connection lifecycle and the bridge from a remote tool onto `Tool`                                  |
 | `@ghostai/agent`     | `AgentLoop`, the approval contract, prompt assembly, steering, subagents                                            |
 | `@ghostai/runtime`   | The composition root: config → provider, jail, store, registry, one loop per agent                                  |
 | `@ghostai/channels`  | The `Channel` contract, `ChannelManager` and `TurnProjection`                                                       |
@@ -28,7 +29,7 @@ tests and its own coverage bar.
 ### Layering
 
 ```
-protocol → core → { security, providers } → tools → agent → runtime → server → cli
+protocol → core → { security, providers } → tools → { mcp, agent } → runtime → server → cli
 ```
 
 Dependencies only run downward, and the rule is enforced two ways, both mechanical:

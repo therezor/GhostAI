@@ -393,6 +393,34 @@ describe('ConfigPatchSchema', () => {
       }).success,
     ).toBe(false);
   });
+
+  it('carries a null through to delete an MCP server', () => {
+    // `mergeConfigPatch` has listed `tools.mcpServers.*` in `DELETE_BY_NULL`
+    // since before there was a client, and could never fire: the patch schema
+    // rejected the null one layer above it. This is the case that proves the
+    // two agree.
+    const patch = ConfigPatchSchema.parse({
+      tools: { mcpServers: { github: null } },
+    });
+    expect(patch.tools?.mcpServers?.github).toBeNull();
+  });
+
+  it('patches one field of an MCP server without restating the rest', () => {
+    const patch = ConfigPatchSchema.parse({
+      tools: { mcpServers: { github: { enabled: false } } },
+    });
+    expect(patch.tools?.mcpServers?.github?.enabled).toBe(false);
+    expect(patch.tools?.mcpServers?.github).not.toHaveProperty('command');
+    expect(patch.tools).not.toHaveProperty('exec');
+  });
+
+  it('still validates an MCP server it is given', () => {
+    expect(
+      ConfigPatchSchema.safeParse({
+        tools: { mcpServers: { github: { args: 'not-an-array' } } },
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe('isLoopbackHost', () => {

@@ -124,6 +124,40 @@ export function formatList(items: readonly string[]): string {
   return items.join('\n');
 }
 
+/**
+ * A record edited as one `NAME=value` per line.
+ *
+ * The shape an operator already has in their hand: an MCP server's environment
+ * comes out of a `.env` file or a shell line, and its headers come out of a
+ * `curl` command. Both are pasted, so both accept `=` and `:` as the separator
+ * and split on the *first* one — a bearer token contains neither, but a URL in
+ * a header value contains a colon and would otherwise be cut in half.
+ *
+ * A line with no separator is dropped rather than stored under an empty key.
+ * There is nothing useful to do with `FOO` on its own, and the alternative is a
+ * validation error for a stray line in a paste.
+ */
+export function parseRecord(text: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed === '') continue;
+    const at = trimmed.search(/[=:]/);
+    if (at <= 0) continue;
+    const key = trimmed.slice(0, at).trim();
+    if (key === '') continue;
+    out[key] = trimmed.slice(at + 1).trim();
+  }
+  return out;
+}
+
+/** The inverse. Always `=`, because that is what both halves accept back. */
+export function formatRecord(record: Readonly<Record<string, string>>): string {
+  return Object.entries(record)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n');
+}
+
 export interface ModelChoice {
   readonly id: string;
   readonly providerId: string;

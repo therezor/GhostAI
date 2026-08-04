@@ -14,10 +14,12 @@
  * tool that gains a numeric argument gains its coercion test without anyone
  * remembering to write one.
  *
- * Like the provider suite, this lives in `src/testkit/` and is *not* re-exported
- * from `index.ts` — it imports `vitest`, and shipping that in the package entry
- * would put a test framework in the runtime dependency graph of everything
- * downstream.
+ * It is reachable from other packages as `@ghostai/tools/testkit`, because two
+ * of the three kinds of tool above are defined elsewhere — `@ghostai/mcp` is the
+ * first — and a contract only verifiable from inside this package would go
+ * unverified exactly where it matters. It stays off the package *entry* all the
+ * same: this file imports `vitest`, and the entry is in the runtime dependency
+ * graph of everything downstream.
  */
 
 import { describe, expect, it } from 'vitest';

@@ -170,6 +170,66 @@ describe('registration', () => {
   });
 });
 
+describe('subscribe', () => {
+  it('fires on every mutation and not on a no-op', () => {
+    const registry = new ToolRegistry();
+    let fired = 0;
+    registry.subscribe(() => {
+      fired += 1;
+    });
+
+    registry.register(echo);
+    expect(fired).toBe(1);
+    registry.register(failing, 'mcp');
+    expect(fired).toBe(2);
+    registry.unregisterBySource('mcp');
+    expect(fired).toBe(3);
+    // Nothing was registered by a plugin, so nothing changed.
+    registry.unregisterBySource('plugin');
+    expect(fired).toBe(3);
+    registry.clear();
+    expect(fired).toBe(4);
+    // Already empty.
+    registry.clear();
+    expect(fired).toBe(4);
+  });
+
+  it('stops after the returned unsubscribe', () => {
+    const registry = new ToolRegistry();
+    let fired = 0;
+    const release = registry.subscribe(() => {
+      fired += 1;
+    });
+    registry.register(echo);
+    release();
+    registry.register(failing);
+    expect(fired).toBe(1);
+  });
+
+  it('detaches a listener that throws rather than failing the registration', () => {
+    const registry = new ToolRegistry();
+    let good = 0;
+    registry.subscribe(() => {
+      throw new Error('the socket has gone away');
+    });
+    registry.subscribe(() => {
+      good += 1;
+    });
+
+    // The registration itself must succeed: a dead transport is not a reason
+    // for a tool to fail to register.
+    expect(() => {
+      registry.register(echo);
+    }).not.toThrow();
+    expect(registry.has('echo')).toBe(true);
+    expect(good).toBe(1);
+
+    registry.register(failing);
+    // The thrower is gone; the healthy one is still there.
+    expect(good).toBe(2);
+  });
+});
+
 describe('definitions', () => {
   it('sorts by name so the cached prompt prefix is stable', () => {
     const registry = new ToolRegistry();

@@ -763,6 +763,76 @@ describe('GET /api/tools', () => {
 });
 
 // ---------------------------------------------------------------------------
+// MCP servers
+// ---------------------------------------------------------------------------
+
+const READY_SERVER = {
+  id: 'github',
+  transport: 'streamableHttp' as const,
+  state: 'ready' as const,
+  enabled: true,
+  tools: ['mcp_github_create-issue'],
+  filteredTools: [],
+  serverName: 'github-mcp',
+  serverVersion: '1.2.0',
+  warnings: [],
+};
+
+describe('GET /api/mcp', () => {
+  it('reports live state the settings tree has nowhere to put', async () => {
+    const failed = {
+      ...READY_SERVER,
+      id: 'linear',
+      state: 'failed' as const,
+      tools: [],
+      lastError: 'ECONNREFUSED',
+    };
+    const { server, headers } = await start({
+      mcpServers: [READY_SERVER, failed],
+    });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/mcp',
+      headers,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ servers: [READY_SERVER, failed] });
+  });
+
+  it('answers with an empty list on a build that has no MCP client', async () => {
+    // The port's method is optional, and an install without one has no MCP
+    // servers — which is the question being asked, so it is a 200 and not a 501.
+    const { server, headers } = await start();
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/mcp',
+      headers,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ servers: [] });
+  });
+
+  it('counts only the servers a turn could reach on the status line', async () => {
+    const { server, headers } = await start({
+      mcpServers: [
+        READY_SERVER,
+        { ...READY_SERVER, id: 'linear', state: 'failed' as const },
+        { ...READY_SERVER, id: 'notion', state: 'disabled' as const },
+      ],
+    });
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/status',
+      headers,
+    });
+
+    expect(response.json()).toMatchObject({ mcpServersConnected: 1 });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Agents
 // ---------------------------------------------------------------------------
 

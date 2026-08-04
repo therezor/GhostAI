@@ -160,6 +160,30 @@ export function resolveUiRoot(
 }
 
 /**
+ * Runs `act` once per turn of the microtask queue, however many times it is asked.
+ *
+ * The tool registry notifies per *mutation*, and a mutation is one tool: an MCP
+ * server registering forty is forty notifications, and a settings save
+ * unregisters every built-in and registers them again before it is done. A
+ * frame per mutation would be a `tools.changed` storm on every save, and the
+ * client cannot tell forty frames from one meaningful change.
+ *
+ * `queueMicrotask` rather than a timer, so the batch closes before anything can
+ * observe the intermediate state and nothing has to be cleaned up on shutdown.
+ */
+function coalesce(act: () => void): () => void {
+  let queued = false;
+  return () => {
+    if (queued) return;
+    queued = true;
+    queueMicrotask(() => {
+      queued = false;
+      act();
+    });
+  };
+}
+
+/**
  * Reads a heartbeat's task file, through the jail.
  *
  * `payload.file` is operator-authored and workspace-relative, so it goes
@@ -255,6 +279,8 @@ export async function startServer(
   let hub: SessionHub | undefined;
   let server: GhostServer | undefined;
   let channels: ChannelManager | undefined;
+  /** Detaches the `tools.changed` producer. Declared out here so `catch` can. */
+  let releaseTools: (() => void) | undefined;
   // Declared out here so the catch below can stop a timer a later step failed
   // after arming.
   let scheduler: Scheduler | undefined;
@@ -361,6 +387,24 @@ export async function startServer(
 
     const sessionHub = hub;
     const listener = server;
+
+    // The producer for `tools.changed`, and the reason it hangs off the
+    // *registry* rather than off the MCP manager: a plugin host will need the
+    // same seam in Phase 4, and the registry is the thing they have in common.
+    // `@ghostai/mcp` calls `sink.replace`, the registry's revision moves, and
+    // every open tab learns without either of them knowing a socket exists.
+    //
+    // It also closes a gap that predates MCP: switching `exec` off in the
+    // settings panel already mutated the registry, and nothing told the
+    // browser until the next reload.
+    releaseTools = built.tools.subscribe(
+      coalesce(() => {
+        sessionHub.broadcast({
+          type: 'tools.changed',
+          tools: [...serverRuntime.registeredTools()],
+        });
+      }),
+    );
     automationHolder.current = createAutomationResolver({
       jobs: listener.automation,
       sessions: built.store,
@@ -438,6 +482,10 @@ export async function startServer(
         // would leave the run row `pending` with nothing to close it.
         await engine.stop();
         await bridge.stop();
+        // Before the hub, so a registry mutation during `built.close()` — an
+        // MCP server's tools going as it disconnects — does not try to
+        // broadcast to sockets that are being torn down.
+        releaseTools?.();
         sessions.close();
         await listener.close();
         built.close();
@@ -450,6 +498,7 @@ export async function startServer(
     // a listener, a WAL, a timer or a channel connection behind.
     await scheduler?.stop();
     await channels?.stop();
+    releaseTools?.();
     hub?.close();
     await server?.close();
     runtime?.close();

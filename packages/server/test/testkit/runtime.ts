@@ -25,6 +25,7 @@ import {
   ConfigSchema,
   type Config,
   type ConfigPatch,
+  type McpServerStatus,
   type ToolDefinition,
 } from '@ghostai/protocol';
 import { WorkspaceJail, type ToolboxListing } from '@ghostai/security';
@@ -52,6 +53,12 @@ export interface FakeRuntimeOptions {
    */
   readonly registeredTools?: readonly ToolDefinition[];
   readonly toolboxes?: readonly ToolboxListing[];
+  /**
+   * Omitted entirely leaves the port's optional method absent, which is what a
+   * build with no MCP client looks like — the case `GET /api/mcp` has to
+   * answer for without a 501.
+   */
+  readonly mcpServers?: readonly McpServerStatus[];
   readonly credentialsPresent?: Readonly<Record<string, boolean>>;
   readonly systemPrompt?: string;
   /** The trailing turn the loop appends after the history. */
@@ -202,7 +209,18 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
     loadError: () => undefined,
     configWarnings: () => [],
     releaseWorkspace: () => undefined,
-    extensions: () => ({ mcpServersConnected: 0, pluginsLoaded: 0 }),
+    extensions: () => ({
+      mcpServersConnected: (options.mcpServers ?? []).filter(
+        (server) => server.state === 'ready',
+      ).length,
+      pluginsLoaded: 0,
+    }),
+    // Present only when a test supplies servers, so the absent case — a build
+    // with no MCP client at all — is the default rather than something a test
+    // has to remember to arrange.
+    ...(options.mcpServers === undefined
+      ? {}
+      : { mcpServers: () => options.mcpServers ?? [] }),
     patches,
     reloads,
     credentialWrites,

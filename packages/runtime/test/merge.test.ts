@@ -86,6 +86,96 @@ describe('mergeConfigPatch', () => {
     expect(Object.keys(one.providers)).toEqual(['laptop']);
   });
 
+  it('deletes an MCP server on an explicit null', () => {
+    // `tools.mcpServers.*` has been in `DELETE_BY_NULL` since before there was
+    // a client, and this is the first time anything could reach it: until the
+    // patch schema restated the record as nullable per entry, zod refused the
+    // null one layer above and this branch could never fire.
+    const two = mergeConfigPatch(base, {
+      tools: {
+        mcpServers: {
+          files: { command: 'npx' },
+          github: { url: 'https://mcp.github.test/mcp' },
+        },
+      },
+    });
+    const one = mergeConfigPatch(two, {
+      tools: { mcpServers: { github: null } },
+    });
+
+    expect(Object.keys(one.tools.mcpServers)).toEqual(['files']);
+  });
+
+  it('strips a null that says "unset" from a subtree being created', () => {
+    // The merge used to hand a patch straight through whenever there was
+    // nothing to merge it into, which skipped the delete-by-null pass — so a
+    // `null` meaning "this server does not use OAuth" survived into the tree
+    // and failed the re-parse. Deleting a key from nothing is a no-op; leaving
+    // the token that says so in the result is not.
+    const created = mergeConfigPatch(base, {
+      tools: { mcpServers: { files: { command: 'npx', oauth: null } } },
+    });
+
+    expect(created.tools.mcpServers.files?.command).toBe('npx');
+    expect(created.tools.mcpServers.files?.oauth).toBeUndefined();
+  });
+
+  it('removes an OAuth block an existing server had', () => {
+    const withOauth = mergeConfigPatch(base, {
+      tools: {
+        mcpServers: {
+          github: {
+            url: 'https://mcp.github.test/mcp',
+            oauth: {
+              authUrl: 'https://auth.test/a',
+              tokenUrl: 'https://auth.test/t',
+              clientId: 'x',
+              scopes: [],
+              callbackTimeoutMs: 0,
+            },
+          },
+        },
+      },
+    });
+    expect(withOauth.tools.mcpServers.github?.oauth).toBeDefined();
+
+    const without = mergeConfigPatch(withOauth, {
+      tools: { mcpServers: { github: { oauth: null } } },
+    });
+    expect(without.tools.mcpServers.github?.oauth).toBeUndefined();
+    // And the rest of the server is untouched.
+    expect(without.tools.mcpServers.github?.url).toBe(
+      'https://mcp.github.test/mcp',
+    );
+  });
+
+  it('replaces an MCP server env rather than merging it key by key', () => {
+    // The same argument as `providers.*.extraHeaders`: it is edited as one
+    // block of text, so merging would leave no way to remove an entry.
+    const two = mergeConfigPatch(base, {
+      tools: {
+        mcpServers: { files: { command: 'npx', env: { A: '1', B: '2' } } },
+      },
+    });
+    const one = mergeConfigPatch(two, {
+      tools: { mcpServers: { files: { env: { A: '1' } } } },
+    });
+
+    expect(one.tools.mcpServers.files?.env).toEqual({ A: '1' });
+  });
+
+  it('merges one MCP server without restating its siblings or its fields', () => {
+    const first = mergeConfigPatch(base, {
+      tools: { mcpServers: { files: { command: 'npx', args: ['-y', 'srv'] } } },
+    });
+    const second = mergeConfigPatch(first, {
+      tools: { mcpServers: { files: { enabled: false } } },
+    });
+
+    expect(second.tools.mcpServers.files?.enabled).toBe(false);
+    expect(second.tools.mcpServers.files?.args).toEqual(['-y', 'srv']);
+  });
+
   it('merges the agents record per id, leaving the other agents alone', () => {
     const first = mergeConfigPatch(base, {
       agents: { list: { reviewer: { label: 'Reviewer', temperature: 0 } } },

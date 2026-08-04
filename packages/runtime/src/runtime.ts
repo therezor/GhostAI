@@ -74,7 +74,12 @@ import {
   type GhostPaths,
   type Logger,
 } from '@ghostai/core';
-import type { Config, ConfigPatch, ToolPermissions } from '@ghostai/protocol';
+import type {
+  Config,
+  ConfigPatch,
+  McpServerStatus,
+  ToolPermissions,
+} from '@ghostai/protocol';
 import {
   PROVIDERS,
   resolveConnection,
@@ -101,6 +106,12 @@ import {
   type AutomationResolver,
   type RunnerResolver,
 } from '@ghostai/tools';
+import {
+  McpManager,
+  sdkConnector,
+  type BackoffOptions,
+  type McpConnector,
+} from '@ghostai/mcp';
 
 import {
   assertWritableAgentIds,
@@ -123,6 +134,7 @@ import {
   type ContainerEngine,
 } from './toolbox-pool.js';
 import { LoopCache } from './loop-cache.js';
+import { registryToolSink } from './mcp-tools.js';
 import { mergeConfigPatch } from './merge.js';
 import { ProviderCache } from './provider-cache.js';
 
@@ -177,6 +189,23 @@ export interface RuntimeOptions {
   readonly hostWorkspacePath?: ((workspaceRoot: string) => string) | undefined;
   /** `false` skips the credential vault; a value replaces it. */
   readonly vault?: CredentialVault | false | undefined;
+  /**
+   * The MCP client. `false` switches it off the way `tools: false` does the
+   * built-ins — an install that has configured no server pays nothing either
+   * way, but a test that wants to prove the registry is untouched can say so.
+   *
+   * `connect` is the seam a test replaces with a fake session so that nothing
+   * spawns a subprocess or opens a socket; the default is the real SDK.
+   */
+  readonly mcp?:
+    | false
+    | {
+        readonly connect?: McpConnector;
+        readonly backoff?: BackoffOptions;
+        /** Overrides the loopback OAuth callback port. */
+        readonly callbackPort?: number;
+      }
+    | undefined;
   /**
    * A connection to share.
    *
@@ -317,6 +346,15 @@ export interface GhostRuntime {
    */
   reload(): Config;
   close(): void;
+
+  /**
+   * Every configured MCP server and the state it is actually in.
+   *
+   * Live rather than configured, which is why it is a method here and not a
+   * corner of `config`: "unreachable since 12:04" is not something to write
+   * into `config.json`. Empty when the client is switched off.
+   */
+  mcpServers(): readonly McpServerStatus[];
 }
 
 /**
@@ -443,6 +481,8 @@ class Runtime implements GhostRuntime {
   private readonly providers: ProviderCache;
   /** An injected cache outlives this runtime; closing its adapters is not ours to do. */
   private readonly ownsProviders: boolean;
+  /** Survives a reconfigure, for the reason `tools` does. */
+  private readonly mcp: McpManager | undefined;
   private current: Resolved;
 
   constructor(options: RuntimeOptions) {
@@ -484,14 +524,61 @@ class Runtime implements GhostRuntime {
       logger: this.logger,
       ...(options.clock === undefined ? {} : { clock: options.clock }),
     });
+    // Beside the registry rather than inside `#build`, and for the same reason
+    // the registry is: a settings save must not tear down every connection and
+    // open it again. `#build` hands it the servers and it diffs them.
+    this.mcp = this.createMcpManager(loaded.paths);
     this.steering = new SteeringQueue({ logger: this.logger });
 
     try {
       this.current = this.build(loaded.config, undefined);
     } catch (error) {
       this.store.close();
+      void this.mcp?.close();
       throw error;
     }
+  }
+
+  /**
+   * The MCP client, or nothing.
+   *
+   * The vault is opened lazily and never fatally: a keychain that will not
+   * answer is a reason to keep OAuth tokens in memory for this process, not a
+   * reason for an install with no MCP server configured to fail to start.
+   */
+  private createMcpManager(paths: GhostPaths): McpManager | undefined {
+    const settings = this.options.mcp;
+    if (settings === false) return undefined;
+
+    let vault: CredentialVault | undefined;
+    if (this.options.vault !== false) {
+      try {
+        vault = this.options.vault ?? openVault(paths);
+      } catch (error) {
+        this.logger.debug(
+          { error },
+          'mcp oauth tokens will not be persisted: the vault could not be opened',
+        );
+      }
+    }
+
+    return new McpManager({
+      sink: registryToolSink(this.tools),
+      connect: settings?.connect ?? sdkConnector({ logger: this.logger }),
+      logger: this.logger,
+      ...(vault === undefined ? {} : { vault }),
+      ...(this.options.clock === undefined
+        ? {}
+        : { clock: this.options.clock }),
+      ...(settings?.backoff === undefined ? {} : { backoff: settings.backoff }),
+      ...(settings?.callbackPort === undefined
+        ? {}
+        : { callbackPort: settings.callbackPort }),
+    });
+  }
+
+  mcpServers(): readonly McpServerStatus[] {
+    return this.mcp?.statuses() ?? [];
   }
 
   get config(): Config {
@@ -663,6 +750,14 @@ class Runtime implements GhostRuntime {
 
   close(): void {
     this.current.toolboxPool?.close();
+    // Not awaited, because `close` is synchronous everywhere it is called from
+    // — `serve.ts` unwinds a listener, a WAL and a timer in order, and none of
+    // them is a promise. Closing a session is best-effort: a stdio child gets a
+    // signal, an HTTP connection gets a `DELETE`, and neither is something a
+    // shutdown should block on.
+    void this.mcp?.close().catch((error: unknown) => {
+      this.logger.debug({ error }, 'mcp shutdown failed');
+    });
     this.store.close();
     if (this.ownsProviders) this.providers.clear();
   }
@@ -767,6 +862,14 @@ class Runtime implements GhostRuntime {
         scheduler: config.scheduler.enabled,
       });
     }
+
+    // Here, in the region that cannot throw, because that is the whole
+    // contract: `reconcile` is synchronous and infallible, every dial happens
+    // on a background task, and an unreachable server becomes a status row
+    // rather than a save the operator loses. The same stance an unconfigured
+    // provider already has — see the header — and the same one the toolbox
+    // pool takes by not probing the daemon here.
+    this.mcp?.reconcile(config.tools.mcpServers);
 
     // A fresh cache per build: every loop in the old one was derived from the
     // settings that just changed. A turn already running keeps the loop it

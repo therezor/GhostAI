@@ -28,6 +28,7 @@
   "dependencies": {
     "@ghostai/agent": "workspace:*",
     "@ghostai/core": "workspace:*",
+    "@ghostai/mcp": "workspace:*",
     "@ghostai/protocol": "workspace:*",
     "@ghostai/providers": "workspace:*",
     "@ghostai/security": "workspace:*",

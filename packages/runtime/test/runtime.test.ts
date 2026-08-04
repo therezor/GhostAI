@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
+import { fakeServer, type FakeServer } from '@ghostai/mcp/testkit';
+import type { ConfigPatch } from '@ghostai/protocol';
 import { defineTool } from '@ghostai/tools';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -296,6 +298,133 @@ describe('reconfigure', () => {
     const runtime = ollama();
     runtime.reconfigure({ agents: { defaults: { toolTimeoutMs: 5_000 } } });
     expect(runtime.tools.timeoutMs).toBe(5_000);
+  });
+
+  describe('MCP servers', () => {
+    /** Lets the manager's background dial settle. */
+    async function settle(): Promise<void> {
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    }
+
+    type McpServersPatch = NonNullable<
+      NonNullable<ConfigPatch['tools']>['mcpServers']
+    >;
+
+    function withMcp(servers: McpServersPatch = {}): {
+      runtime: GhostRuntime;
+      server: FakeServer;
+    } {
+      const server = fakeServer();
+      const runtime = ollama({}, { mcp: { connect: server.connect } });
+      if (Object.keys(servers).length > 0) {
+        runtime.reconfigure({ tools: { mcpServers: servers } });
+      }
+      return { runtime, server };
+    }
+
+    it('registers a configured server tools into the shared registry', async () => {
+      const { runtime } = withMcp({ demo: { command: 'npx' } });
+      await settle();
+
+      expect(runtime.tools.has('mcp_demo_echo')).toBe(true);
+      expect(runtime.tools.sourceOf('mcp_demo_echo')).toBe('mcp');
+      expect(runtime.mcpServers()).toMatchObject([
+        { id: 'demo', state: 'ready' },
+      ]);
+    });
+
+    it('leaves an untouched server alone across an unrelated save', async () => {
+      const { runtime, server } = withMcp({ demo: { command: 'npx' } });
+      await settle();
+      const attempts = server.attempts;
+
+      runtime.reconfigure({ agents: { defaults: { temperature: 0.9 } } });
+      await settle();
+
+      // The manager survives a reconfigure for the reason the registry does.
+      expect(server.attempts).toBe(attempts);
+      expect(runtime.tools.has('mcp_demo_echo')).toBe(true);
+    });
+
+    it('unregisters a server that the operator deleted', async () => {
+      const { runtime } = withMcp({ demo: { command: 'npx' } });
+      await settle();
+
+      // The `null` is the delete syntax `ConfigPatchSchema` now carries and
+      // `DELETE_BY_NULL` has always honoured.
+      runtime.reconfigure({ tools: { mcpServers: { demo: null } } });
+      await settle();
+
+      expect(runtime.tools.has('mcp_demo_echo')).toBe(false);
+      expect(runtime.mcpServers()).toEqual([]);
+    });
+
+    it('does not fail a save because a server is unreachable', async () => {
+      const { runtime, server } = withMcp();
+      server.failConnects(new Error('ECONNREFUSED'));
+
+      // The stance an unconfigured provider already has: an operator editing
+      // one server's URL must not lose the save to another server being down.
+      expect(() => {
+        runtime.reconfigure({
+          tools: { mcpServers: { demo: { command: 'x' } } },
+        });
+      }).not.toThrow();
+      await settle();
+
+      expect(runtime.mcpServers()).toMatchObject([
+        { id: 'demo', state: 'failed' },
+      ]);
+      // Everything else still works.
+      expect(runtime.tools.has('read_file')).toBe(true);
+      expect(runtime.loop).not.toBeNull();
+    });
+
+    it('reports a misconfigured entry without refusing it', async () => {
+      const { runtime } = withMcp({ broken: {} });
+      await settle();
+
+      const [status] = runtime.mcpServers();
+      expect(status?.state).toBe('failed');
+      expect(status?.lastError).toContain('neither a command nor a url');
+    });
+
+    it('registers nothing at all when the client is switched off', async () => {
+      const runtime = ollama({}, { mcp: false });
+      runtime.reconfigure({
+        tools: { mcpServers: { demo: { command: 'x' } } },
+      });
+      await settle();
+
+      expect(runtime.mcpServers()).toEqual([]);
+      expect(runtime.tools.has('mcp_demo_echo')).toBe(false);
+    });
+
+    it('drops a server tools when it is switched off', async () => {
+      const { runtime } = withMcp({ demo: { command: 'npx' } });
+      await settle();
+      expect(runtime.tools.has('mcp_demo_echo')).toBe(true);
+
+      runtime.reconfigure({
+        tools: { mcpServers: { demo: { enabled: false } } },
+      });
+      await settle();
+
+      expect(runtime.tools.has('mcp_demo_echo')).toBe(false);
+      expect(runtime.mcpServers()).toMatchObject([{ state: 'disabled' }]);
+    });
+
+    it('keeps the built-ins when it re-registers them beside MCP tools', async () => {
+      const { runtime } = withMcp({ demo: { command: 'npx' } });
+      await settle();
+
+      runtime.reconfigure({ tools: { exec: { enable: false } } });
+      await settle();
+
+      // `unregisterBySource('builtin')` must not touch what MCP registered.
+      expect(runtime.tools.has('exec')).toBe(false);
+      expect(runtime.tools.has('mcp_demo_echo')).toBe(true);
+    });
   });
 
   it('keeps the steering queue, so a correction queued mid-turn survives', () => {

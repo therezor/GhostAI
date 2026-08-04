@@ -1,13 +1,21 @@
 /**
  * What Settings is made of, as data.
  *
- * Three panels are built and four name a phase instead. Keeping both in one
- * list is deliberate: the unbuilt ones are part of the shape of the product, and
- * a settings screen that simply omits them reads as a product that does not have
- * them rather than one whose scheduler arrives in Phase 5. The roadmap says
+ * Six panels are built and one names a phase instead. Keeping both in one list
+ * is deliberate: the unbuilt ones are part of the shape of the product, and a
+ * settings screen that simply omits them reads as a product that does not have
+ * them rather than one whose knowledge base arrives in Phase 5. The roadmap says
  * this explicitly — a panel whose backing system lands later renders a
  * placeholder naming the phase, not a stub implementation, because a stub is
  * indistinguishable from a broken feature and gets reported as one.
+ *
+ * **A built panel may still list planned systems**, and Extensions is the first
+ * to do it. MCP servers ship; skills, OAuth, channels and plugins do not, and
+ * they are four fifths of what that screen will eventually hold. Dropping them
+ * the moment one sibling landed would make the screen read as finished. What
+ * must not survive is a system listed here that *has* shipped — that is a panel
+ * telling an operator to wait for something already on the screen beside it, and
+ * `panels.test.ts` is what catches it.
  *
  * It is data rather than a `<Tabs>` written out by hand so the list can be
  * asserted about: `panels.test.ts` is what stops a panel from claiming a phase
@@ -64,7 +72,6 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = [
     id: 'extensions',
     label: 'settings.panels.extensions.label',
     summary: 'settings.panels.extensions.summary',
-    phase: 3,
   },
   {
     id: 'knowledge',
@@ -84,21 +91,19 @@ export interface PlannedSystem {
 }
 
 /**
- * Keyed by panel id, and only for panels that name a phase.
+ * Keyed by panel id — for a panel that names a phase, and for a built one that
+ * still has systems to come.
  *
  * The entries are more specific than the panel itself because the phases differ
- * within one screen: MCP arrives in Phase 3 and the plugin host in Phase 4, and
- * a single "coming in Phase 3" over both would be wrong about one of them.
+ * within one screen: skills arrive in Phase 3 and the plugin host in Phase 4,
+ * and a single "coming in Phase 3" over both would be wrong about one of them.
+ * That is also why MCP servers left this list rather than the panel doing so —
+ * the panel is built and the four systems under it are not.
  */
 export const PLANNED_SYSTEMS: Readonly<
   Record<string, readonly PlannedSystem[]>
 > = {
   extensions: [
-    {
-      name: 'settings.planned.mcpServers.name',
-      detail: 'settings.planned.mcpServers.detail',
-      phase: 3,
-    },
     {
       name: 'settings.planned.skills.name',
       detail: 'settings.planned.skills.detail',

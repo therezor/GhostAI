@@ -109,12 +109,14 @@ Everything under `~/.ghostai`, or `$GHOSTAI_HOME`:
 
 **An API** — REST and WebSocket on the same port, with an OpenAPI 3.1 document generated from the same Zod schemas the server validates against, served at `/api/openapi.json`. See [API](docs/api.md).
 
+**MCP servers** — add one in Settings → Extensions over stdio, Streamable HTTP or SSE, with OAuth where a server wants it. Its tools land in the same registry as the built-ins, as `mcp_<server>_<tool>`, and each agent decides for itself which of them it may call — nothing is granted implicitly. A server that goes away takes its tools with it and reconnects on its own. See [Tools](docs/tools.md#mcp-servers).
+
 ---
 
 ## How it works
 
 ```
-protocol → core → { security, providers } → tools → agent → runtime → server → cli
+protocol → core → { security, providers } → tools → { mcp, agent } → runtime → server → cli
 ```
 
 Packages may only depend downward, and that is enforced mechanically rather than by review: pnpm's isolated `node_modules` means a package can only resolve `@ghostai/x` if it declares it, so an undeclared import fails to _resolve_, not merely to lint.
@@ -188,7 +190,6 @@ The wire schemas, config blocks and seams for these already ship — which is wh
 
 | Feature                    | Ships today                                                         | Missing                                      |
 | -------------------------- | ------------------------------------------------------------------- | -------------------------------------------- |
-| **MCP client**             | Config for all three transports, OAuth, `ToolSource: 'mcp'`         | The client, lifecycle and tool bridge        |
 | **Memory**                 | The tuning keys, `lastConsolidatedSeq`, the prompt contributor seam | The store, retrieval and consolidation pass  |
 | **Skills**                 | `pinnedSkills`, `maxPinnedSkills`                                   | The on-disk format, loader and prompt budget |
 | **RAG**                    | Embedder and chunking config, hybrid search constants               | The index, embedder client and retrieval     |

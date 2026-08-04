@@ -996,6 +996,35 @@ export const ConfigPatchSchema = z.object({
         .extend({ search: patchOf(WebSearchConfigSchema).optional() })
         .optional(),
       exec: patchOf(ExecToolConfigSchema).optional(),
+      /**
+       * `null` deletes the server, exactly as it does for a provider instance.
+       *
+       * Restated here for the same two reasons `providers` is: `patchOf` is not
+       * recursive, so without this an entry would have to be resent whole to
+       * change one field — and a record whose entries an operator adds and
+       * removes needs a syntax for "remove this one". `mergeConfigPatch` has
+       * listed `tools.mcpServers.*` in `DELETE_BY_NULL` since before there was
+       * a client; until this line the null was rejected here, one layer above,
+       * so that entry could never fire.
+       */
+      mcpServers: z
+        .record(
+          z.string(),
+          patchOf(McpServerConfigSchema)
+            .extend({
+              /**
+               * `null` says this server does not use OAuth.
+               *
+               * Needed because `oauth` is genuinely optional rather than
+               * defaulted: "unset" is a real state, and an absent key already
+               * means "not mentioned". The same reason
+               * `agents.defaults.temperature` is in `DELETE_BY_NULL`.
+               */
+              oauth: McpOAuthConfigSchema.nullable().optional(),
+            })
+            .nullable(),
+        )
+        .optional(),
     })
     .optional(),
   /**

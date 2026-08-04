@@ -140,9 +140,11 @@ export interface RuntimePromptContext extends StaticPromptContext {
    *
    * Here rather than on `StaticPromptContext` because it changes per turn, and
    * a contributor that read a per-turn value from `staticSection` would be
-   * claiming a section is stable when it is not. Nothing reads it yet — memory,
-   * MCP scoping and skills arrive in Phase 3 — but a mention that never reaches
-   * the prompt is a feature the UI advertises and the agent cannot see.
+   * claiming a section is stable when it is not. Nothing reads it yet — memory
+   * and skills are still to come, and `@mcp:` scoping remains unbuilt even
+   * though MCP servers ship, because narrowing a turn's tool scope is a change
+   * to how the scope is built rather than to the client. A mention that never
+   * reaches the prompt is a feature the UI advertises and the agent cannot see.
    */
   readonly mentions?: ParsedMentions;
 }

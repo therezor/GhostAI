@@ -31,6 +31,7 @@ import {
   FileListResponseSchema,
   FileTextResponseSchema,
   LoginResponseSchema,
+  McpStatusResponseSchema,
   ModelsResponseSchema,
   NotificationListResponseSchema,
   NotificationSchema,
@@ -64,6 +65,7 @@ import {
   type FileListResponse,
   type FileTextResponse,
   type LoginResponse,
+  type McpStatusResponse,
   type ModelsResponse,
   type Notification,
   type NotificationListResponse,
@@ -473,6 +475,19 @@ export const api = {
    */
   toolboxes: (signal?: AbortSignal): Promise<ToolboxListResponse> =>
     request('/api/toolboxes', ToolboxListResponseSchema, {
+      ...(signal ? { signal } : {}),
+    }),
+
+  /**
+   * Where each configured MCP server actually is.
+   *
+   * Separate from `settings()` for the reason `agents()` is: the settings tree
+   * says what an operator asked for, and this says what came of it. A server
+   * that is unreachable is a live state that changes without the config
+   * changing, and `config.json` is not where that belongs.
+   */
+  mcpServers: (signal?: AbortSignal): Promise<McpStatusResponse> =>
+    request('/api/mcp', McpStatusResponseSchema, {
       ...(signal ? { signal } : {}),
     }),
 

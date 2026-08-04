@@ -9,6 +9,10 @@
       "development": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./testkit": {
+      "types": "./test/testkit/index.ts",
+      "default": "./test/testkit/index.ts"
     }
   },
   "imports": {
@@ -18,7 +22,8 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "test/testkit"
   ],
   "scripts": {
     "build": "tsup && tsc -b",

@@ -92,6 +92,27 @@ const PACKAGES = {
     description: 'Tool definition helper, registry, and built-in tools.',
     internal: ['protocol', 'core', 'security'],
     deps: { zod: '^4.0.0' },
+    // `toolConformance` is the contract every tool holds, and two of the three
+    // kinds of tool — MCP-proxied and plugin-supplied — are defined in other
+    // packages. Same argument `channelConformance` won; same arrangement.
+    subpaths: { './testkit': 'test/testkit/index.ts' },
+  },
+  mcp: {
+    description:
+      'MCP client, connection lifecycle, and the bridge onto the tool registry.',
+    // Above `tools` and below `runtime`: it turns a remote tool descriptor into
+    // a `Tool`, and knows nothing about config files, HTTP or the session hub.
+    internal: ['protocol', 'core', 'security', 'tools'],
+    deps: { '@modelcontextprotocol/sdk': '^1.30.0' },
+    // Tests only — `sdk-connector.test.ts` stands up a real `McpServer` on the
+    // other end of an in-memory transport, and the SDK's server half describes
+    // a tool's arguments with zod. Nothing in this package's runtime graph
+    // imports it.
+    devDeps: { zod: '^4.0.0' },
+    // `@ghostai/runtime`'s tests drive a connector to prove a settings save
+    // reconciles the right servers, and the composition root has no more
+    // business spawning a subprocess than this package does.
+    subpaths: { './testkit': 'test/testkit/index.ts' },
   },
   agent: {
     description: 'The agent loop, subagent manager, and context contributors.',
@@ -108,7 +129,15 @@ const PACKAGES = {
   },
   runtime: {
     description: 'The shared composition root: config in, a running agent out.',
-    internal: ['protocol', 'core', 'security', 'providers', 'tools', 'agent'],
+    internal: [
+      'protocol',
+      'core',
+      'security',
+      'providers',
+      'tools',
+      'mcp',
+      'agent',
+    ],
     // Tests only — one test registers a tool with `defineTool` to prove a
     // reconfigure does not drop it. Nothing in the runtime graph imports zod.
     devDeps: { zod: '^4.0.0' },

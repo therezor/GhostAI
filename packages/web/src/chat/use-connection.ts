@@ -96,6 +96,9 @@ export function useConnection(sessionKey: string | undefined): void {
 
           case 'tools.changed':
             void queryClient.invalidateQueries({ queryKey: queryKeys.tools });
+            // The same frame is what a server connecting or dropping produces,
+            // so the Extensions row settles by itself rather than by polling.
+            void queryClient.invalidateQueries({ queryKey: queryKeys.mcp });
             return;
 
           default:

@@ -20,7 +20,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { translations } from '#src/i18n.js';
 
@@ -146,6 +146,43 @@ describe('startServer', () => {
     socket.close();
 
     expect(greeting).toMatchObject({ type: 'connected', protocolVersion: 2 });
+  });
+
+  it('tells every open tab when the tool list moves, once per burst', async () => {
+    // The producer for `tools.changed`, which four places have consumed since
+    // before anything emitted it. It hangs off the registry rather than off
+    // the MCP manager so that a plugin host gets it for free — and it closes a
+    // gap that predates MCP: switching `exec` off already mutated the registry
+    // and nothing told the browser.
+    const server = await start(home());
+    const socket = new WebSocket(`${server.url.replace('http', 'ws')}/ws`, {
+      headers: bearer(server),
+    });
+    const frames: Array<Record<string, unknown>> = [];
+    await new Promise<void>((resolve, reject) => {
+      socket.once('open', resolve);
+      socket.once('error', reject);
+    });
+    socket.on('message', (data: Buffer) => {
+      frames.push(JSON.parse(data.toString('utf8')) as Record<string, unknown>);
+    });
+
+    // Three mutations in one turn, as a server registering its tools is.
+    server.runtime.tools.unregister('exec');
+    server.runtime.tools.unregister('read_file');
+    server.runtime.tools.unregister('list_dir');
+
+    await vi.waitFor(() => {
+      expect(frames.some((frame) => frame.type === 'tools.changed')).toBe(true);
+    });
+    socket.close();
+
+    const changed = frames.filter((frame) => frame.type === 'tools.changed');
+    // One frame, not three: the client cannot tell forty frames from one
+    // meaningful change, and a settings save is a burst by construction.
+    expect(changed).toHaveLength(1);
+    const tools = changed[0]?.tools as Array<{ name: string }>;
+    expect(tools.map((tool) => tool.name)).not.toContain('exec');
   });
 
   it('writes a settings save to config.json and moves the running agent', async () => {

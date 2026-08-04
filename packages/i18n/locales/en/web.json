@@ -314,9 +314,13 @@
     "ascending": "Ascending",
     "backToSession": "Back to the session",
     "close": "Close",
+    "delete": "Delete",
     "descending": "Descending",
+    "disable": "Disable",
     "dismiss": "Dismiss",
     "done": "Done",
+    "edit": "Edit",
+    "enable": "Enable",
     "goToPage": "Page {{page}}",
     "loading": "Loading…",
     "markAllRead": "Mark all read",
@@ -520,6 +524,79 @@
     "loadError": "The settings file could not be read and defaults are in use. Saving here overwrites it. ({{error}})",
     "loadFailed": "Could not load settings: {{message}}",
     "loading": "Loading settings…",
+    "mcp": {
+      "args": "Arguments",
+      "argsHint": "One per line.",
+      "authDesc": "For a server that wants an OAuth token rather than a header.",
+      "authorizeLink": "Authorize GhostAI with {{name}}",
+      "authTitle": "Authorization",
+      "authUrl": "Authorization URL",
+      "backToExtensions": "Back to Extensions",
+      "clientId": "Client ID",
+      "clientIdHint": "Leave as issued if the server registers clients dynamically.",
+      "command": "Command",
+      "commandHint": "The program to run, for example npx or uvx.",
+      "connectionDesc": "How to reach the server.",
+      "connectionTitle": "Connection",
+      "deleteHint": "“{{name}}” will be disconnected and its tools will stop being offered to any agent.",
+      "deleteTitle": "Remove this MCP server?",
+      "description": "Tool servers this install connects to. Their tools appear beside the built-ins, and each agent decides for itself which of them it may call.",
+      "editServer": "Edit {{name}}",
+      "enabled": "Connect to this server",
+      "enabledHint": "Off keeps the settings and stops connecting.",
+      "enabledTools": "Enabled tools",
+      "enabledToolsHint": "One name per line, as the server calls them. A trailing * matches a prefix. Empty means every tool it offers.",
+      "env": "Environment",
+      "envHint": "NAME=value, one per line. The child inherits nothing else.",
+      "exposureDesc": "Which of this server’s tools this install advertises at all.",
+      "exposureTitle": "Tools",
+      "filter": "Filter servers",
+      "filteredTools": "Filtered out right now: {{names}}",
+      "headers": "Headers",
+      "headersHint": "Name: value, one per line. These are stored in config.json in the clear — use OAuth below for anything that should not be.",
+      "loadError": "The settings could not be loaded — {{message}}",
+      "loadingOne": "Loading…",
+      "newServer": "New MCP server",
+      "newTitle": "New MCP server",
+      "noMatch": "No MCP server matches “{{filter}}”.",
+      "none": "No MCP servers yet. Add one to give your agents tools this install does not ship.",
+      "noSuchServer": "There is no MCP server called “{{id}}”.",
+      "plannedDescription": "The rest of what this panel will hold.",
+      "plannedTitle": "Still to come",
+      "scopes": "Scopes",
+      "scopesHint": "One per line.",
+      "serverId": "Name",
+      "serverIdHint": "Used in every tool name this server contributes, and fixed once saved: renaming it would revoke its tools from every agent holding one.",
+      "state": {
+        "connecting": "Connecting",
+        "disabled": "Off",
+        "disconnected": "Not connected",
+        "failed": "Unreachable",
+        "needsAuthorization": "Needs authorization",
+        "ready": "Connected",
+        "unknown": "Unknown"
+      },
+      "title": "MCP servers",
+      "tokenUrl": "Token URL",
+      "toolCount_one": "{{count}} tool",
+      "toolCount_other": "{{count}} tools",
+      "toolTimeout": "Tool timeout (seconds)",
+      "toolTimeoutHint": "0 waits as long as the server takes.",
+      "transport": "Transport",
+      "transportHint": "A local command, or a URL. Streamable HTTP is what most remote servers speak; SSE is the older one.",
+      "transports": {
+        "sse": "SSE (legacy)",
+        "stdio": "Local command (stdio)",
+        "streamableHttp": "Streamable HTTP"
+      },
+      "url": "URL",
+      "urlHint": "The endpoint, including its path.",
+      "urlScheme": "Must start with http:// or https://",
+      "usesOAuth": "This server uses OAuth",
+      "usesOAuthHint": "Tokens are written to the credential vault, never to config.json.",
+      "warningsDesc": "Things this server reported that did not stop it working.",
+      "warningsTitle": "Warnings"
+    },
     "panels": {
       "account": {
         "label": "Account",
@@ -535,7 +612,7 @@
       },
       "extensions": {
         "label": "Extensions",
-        "summary": "MCP servers, skills, channels and plugins."
+        "summary": "MCP servers, and the extension points still to come."
       },
       "knowledge": {
         "label": "Knowledge",
@@ -559,14 +636,11 @@
         "detail": "Ingest documents and search them from a turn.",
         "name": "Knowledge base"
       },
-      "mcpServers": {
-        "detail": "Connect tool servers over stdio, SSE or HTTP.",
-        "name": "MCP servers"
-      },
       "oauth": {
         "detail": "Authorise a provider without pasting a key.",
         "name": "OAuth connections"
       },
+      "phase": "Phase {{phase}}",
       "plugins": {
         "detail": "Install and remove capabilities from the UI.",
         "name": "Plugins"

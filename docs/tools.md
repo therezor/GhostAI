@@ -65,9 +65,45 @@ a turn a person started, and the scheduler starts turns the same way.
 Jobs an agent made carry `createdBy`, so the panel can say which agent asked and link back
 to the session that caused it.
 
-More tools arrive two ways: from a [toolbox](toolboxes.md) that declares its programs, and
+More tools arrive three ways: from a [toolbox](toolboxes.md) that declares its programs,
 from a subagent, which appears as `ask_<id>` (see
-[Architecture](architecture.md#subagents)).
+[Architecture](architecture.md#subagents)), and from an MCP server.
+
+## MCP servers
+
+An operator adds one in **Settings → Extensions**, over stdio, Streamable HTTP or the
+legacy SSE transport. Its tools land in the same registry as the built-ins and appear as
+ordinary permission rows in the agent editor, so **nothing is granted implicitly** — an
+absent entry in an agent's map already means "not enabled", and an existing agent gains
+no capability until someone says so. See [Configuration](configuration.md#toolsmcpserversid)
+for the settings and the two security decisions behind them.
+
+Four things about the bridge are worth knowing before reading `@ghostai/mcp`:
+
+- **The name is qualified and generated.** `mcp_<server>_<tool>`, sanitised into the
+  `[A-Za-z0-9_-]{1,64}` every provider accepts, with a digest suffix when it would not
+  fit. Two servers can both advertise `search`; one shared registry cannot hold two of
+  them, and `ToolRegistry.register` treats a duplicate as a `conflict` rather than
+  letting load order decide which one a call reaches.
+- **The schema is passed through, not converted.** Every other tool derives its JSON
+  Schema from a Zod object; an MCP server supplies the JSON Schema directly, so
+  `bridgeTool` implements `Tool` against it. Round-tripping through Zod would advertise a
+  shape the server did not describe — every converter is lossy on `$ref`, `oneOf` and
+  `format` — and the call would then fail _at the server_, which reads as the model being
+  broken. What the bridge validates is the contract `toolConformance` states and no more:
+  an object, no unknown keys, required keys present, declared types honoured, and `"10"`
+  accepted where a number is wanted. Anything deeper is the server's own business.
+- **A band is `safe` only if the server said so.** `readOnlyHint: true` earns `safe` and
+  `destructiveHint: true` earns `exec`; silence earns `network`, because an MCP call is
+  third-party code over a socket by construction. Bands remain advisory — see below.
+- **A server going away is a state, not an error.** Its tools are unregistered, the
+  browser is told through `tools.changed`, and it reconnects on a widening backoff with
+  no attempt cap. A call that lands in the window between gets an `isError` result the
+  model can read. An unreachable server never fails a settings save.
+
+An agent that had been granted a tool whose server is currently down keeps its row,
+badged **not installed** — `agents.list.*` is replaced wholesale on save, and a list
+built only from the live registry would silently drop the operator's opinion.
 
 ### Defining one
 

@@ -28,6 +28,7 @@ import {
   ProviderCreateRoute,
   ProviderEditorRoute,
 } from '@/settings/provider-editor.js';
+import { McpCreateRoute, McpEditorRoute } from '@/settings/mcp-editor.js';
 import { AutomationRoute } from '@/automation/automation-page.js';
 import { JobCreateRoute, JobEditorRoute } from '@/automation/job-editor.js';
 import { FilesRoute } from '@/routes/files.js';
@@ -188,6 +189,19 @@ const providerEditorRoute = createRoute({
   component: ProviderEditorRoute,
 });
 
+/** Adding an MCP server, on the same form that edits one. */
+const mcpCreateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings/mcp/new',
+  component: McpCreateRoute,
+});
+
+const mcpEditorRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings/mcp/$serverId',
+  component: McpEditorRoute,
+});
+
 const automationRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/automation',
@@ -235,6 +249,8 @@ const routeTree = rootRoute.addChildren([
   settingsRoute,
   providerCreateRoute,
   providerEditorRoute,
+  mcpCreateRoute,
+  mcpEditorRoute,
   automationRoute,
   jobCreateRoute,
   jobEditorRoute,

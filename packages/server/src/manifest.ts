@@ -203,6 +203,13 @@ const MANIFEST = [
     url: '/api/toolboxes',
     auth: 'required',
   },
+  // Live connection state, which `GET /api/settings` cannot carry: that
+  // response is the settings tree, and the tree is what gets written back to
+  // `config.json`. `GET /api/tools` cannot carry it either — it answers with
+  // flattened names and no server, and recovering "whose is
+  // `mcp_github_create-issue`?" by splitting a string in the browser is
+  // ambiguous the moment a server id contains an underscore.
+  { id: 'mcp.list', method: 'GET', url: '/api/mcp', auth: 'required' },
 
   // Files, upload and signed media
   { id: 'files.list', method: 'GET', url: '/api/files', auth: 'required' },

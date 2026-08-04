@@ -38,6 +38,11 @@ import { ConfigSchema, type Config, type ConfigPatch } from '@ghostai/protocol';
  */
 const REPLACE_WHOLESALE: readonly string[] = [
   'providers.*.extraHeaders',
+  // The same argument as `extraHeaders`, twice: both are edited as one block of
+  // text in the MCP editor, and merging key by key would make removing an
+  // entry impossible to express — an absent key means "not mentioned".
+  'tools.mcpServers.*.env',
+  'tools.mcpServers.*.headers',
   // An agent is edited as a whole, and almost every field on it is an
   // *override* that may be absent. Merging per field would make clearing one
   // impossible to express: an absent key means "not mentioned", so an operator
@@ -72,6 +77,13 @@ const REPLACE_WHOLESALE: readonly string[] = [
 const DELETE_BY_NULL: readonly string[] = [
   'providers.*',
   'tools.mcpServers.*',
+  // A leaf, like the two below, and for the same reason: `oauth` is genuinely
+  // `.optional()` in the schema, so "this server does not use OAuth" is a real
+  // state that needs a way to be said. Without it, switching authorization off
+  // in the editor would send a patch that does not mention `oauth` — and an
+  // absent key means "not mentioned", so the flow would survive a save that
+  // looked like it had removed one.
+  'tools.mcpServers.*.oauth',
   'agents.list.*',
   'agents.defaults.temperature',
   'agents.defaults.reasoningEffort',
@@ -99,14 +111,30 @@ function mergeValue(
   patch: unknown,
   path: readonly string[],
 ): unknown {
-  if (!isPlainObject(base) || !isPlainObject(patch)) return patch;
+  if (!isPlainObject(patch)) return patch;
   if (matchesPath(REPLACE_WHOLESALE, path)) return patch;
+
+  /**
+   * A patch that creates something still gets walked.
+   *
+   * This used to return `patch` verbatim whenever `base` was not an object,
+   * which is right for the *merge* — there is nothing to merge into — and wrong
+   * for the deletions, because it skipped the `DELETE_BY_NULL` pass below. A
+   * `null` meaning "unset" then survived into the merged tree and failed the
+   * re-parse as "expected object, received null". Deleting a key from nothing is
+   * a no-op; leaving the token that says so in the result is not.
+   *
+   * It went unnoticed because until `tools.mcpServers.<id>.oauth` no
+   * delete-by-null path lived under a record entry an operator can create:
+   * `providers.*` has no nullable field and `agents.defaults` always exists.
+   */
+  const source = isPlainObject(base) ? base : {};
 
   // Collected and applied at the end rather than deleted in place: a dynamic
   // `delete` on an object literal is what the lint rule is about, and rebuilding
   // once is both cheaper and easier to read than mutating mid-walk.
   const deleted = new Set<string>();
-  const merged: Record<string, unknown> = { ...base };
+  const merged: Record<string, unknown> = { ...source };
   for (const [key, value] of Object.entries(patch)) {
     // `undefined` is "not mentioned", not "set to nothing". JSON cannot carry
     // it at all, so the only way it arrives is a JS caller spreading an
@@ -122,7 +150,7 @@ function mergeValue(
       continue;
     }
 
-    merged[key] = mergeValue(base[key], value, childPath);
+    merged[key] = mergeValue(source[key], value, childPath);
   }
 
   if (deleted.size === 0) return merged;

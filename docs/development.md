@@ -117,7 +117,7 @@ not just a bug. A new branch in a guard needs a test, or `pnpm test:coverage` fa
 ### Layering
 
 ```
-protocol → core → { security, providers } → tools → agent → runtime → server → cli
+protocol → core → { security, providers } → tools → { mcp, agent } → runtime → server → cli
 ```
 
 Enforced two ways, both mechanical: pnpm's isolated `node_modules` means an undeclared

@@ -299,6 +299,7 @@ export class ToolRegistry {
   private readonly logger: Logger;
   private cachedDefinitions: readonly ToolDefinition[] | null = null;
   private revisionCount = 0;
+  private readonly listeners = new Set<() => void>();
 
   constructor(options: ToolRegistryOptions = {}) {
     this.currentTimeoutMs = options.timeoutMs ?? 0;
@@ -318,10 +319,45 @@ export class ToolRegistry {
     return this.revisionCount;
   }
 
+  /**
+   * Watches for a change to what is registered.
+   *
+   * The seam a transport reaches an MCP reconnection or a plugin load through,
+   * without either of them knowing a transport exists. A server connecting
+   * calls `register`; `invalidate` is the one funnel every mutation already
+   * passes through; the WebSocket's `tools.changed` frame falls out.
+   *
+   * **A listener is told that something changed, not what.** The definitions
+   * are one memoised call away and a diff nobody asked for would be a second
+   * thing to keep correct. Callers should coalesce: registering a server's
+   * forty tools is forty mutations and should be one frame.
+   *
+   * A listener that throws is logged and detached rather than allowed to fail
+   * the registration that notified it — a socket that has gone away must not
+   * stop a tool being registered.
+   */
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
   /** Every mutation goes through here, so no path can bump one and not the other. */
   private invalidate(): void {
     this.cachedDefinitions = null;
     this.revisionCount += 1;
+    for (const listener of [...this.listeners]) {
+      try {
+        listener();
+      } catch (error) {
+        this.listeners.delete(listener);
+        this.logger.warn(
+          { error },
+          'tool registry listener threw and was detached',
+        );
+      }
+    }
   }
 
   get timeoutMs(): number {

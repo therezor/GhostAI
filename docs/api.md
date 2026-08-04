@@ -90,6 +90,14 @@ the schema, and changing either revokes every other session.
 | GET    | `/api/agents`    | `required` | **Read-only.** Agents are created and edited through `PATCH /api/settings`. |
 | GET    | `/api/tools`     | `required` | What is registered, with source and risk band.                              |
 | GET    | `/api/toolboxes` | `required` | Installed manifests and their approval state.                               |
+| GET    | `/api/mcp`       | `required` | Each configured MCP server's live state. See below.                         |
+
+`GET /api/mcp` is read-only, like `/api/toolboxes`: a server is created, edited and
+deleted through `PATCH /api/settings`, because it is configuration. What this route
+carries is what the settings tree cannot — the state a server is actually in, the reason
+it is not connected, and the URL an operator must visit when it wants authorizing. A
+build with no MCP client answers `{"servers": []}` rather than a 501: it has no MCP
+servers, which is the question being asked.
 
 ### Files
 

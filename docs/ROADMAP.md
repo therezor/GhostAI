@@ -10,8 +10,6 @@ building a second one beside it.
 
 ## Planned
 
-- [ ] **Connect MCP servers** — third-party MCP tools appear beside the
-      built-ins.
 - [ ] **Telegram** — hold a session with an agent from Telegram. Unblocks
       heartbeat `targets` delivery.
 - [ ] **Skills** — reusable instruction bundles, some pinned, the rest loaded
@@ -27,6 +25,9 @@ building a second one beside it.
 
 ## Done
 
+- [x] **Connect MCP servers** — third-party MCP tools appear beside the
+      built-ins, as `mcp_<server>_<tool>` rows in each agent's permission map.
+      All three transports and OAuth; the client is `@ghostai/mcp`.
 - [x] **The agent from a terminal** — agent loop, tool registry, built-in file
       and exec tools, workspace jail, credential vault, provider registry,
       session store, `ghost chat`.

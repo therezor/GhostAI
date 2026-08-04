@@ -23,6 +23,9 @@
       "path": "../tools/tsconfig.json"
     },
     {
+      "path": "../mcp/tsconfig.json"
+    },
+    {
       "path": "../agent/tsconfig.json"
     }
   ]
