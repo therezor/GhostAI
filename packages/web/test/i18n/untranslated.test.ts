@@ -20,6 +20,16 @@
  * identifier like `qwen3:8b` do not trip it. What it is aimed at is the thing
  * that actually regresses: someone adds a panel with `<h2>Scheduled jobs</h2>`
  * six months from now and nothing anywhere notices.
+ *
+ * **The two-word bar is a known gap, not a clean line.** A single-word button —
+ * `Edit`, `Delete`, `Save`, `Cancel` — is copy by any reading, and this does not
+ * see it: `Thinking…`, the label under a turn that has not answered yet, shipped
+ * untranslated for exactly that reason. Lowering the bar to one word finds
+ * nineteen of them across twelve files, and twelve false positives with them —
+ * `label="agents.promptSystem"` is a *key* passed to a component that calls `t`
+ * itself, which is indistinguishable from prose at this level. Closing it means
+ * telling those two apart, and that is a change with a list of strings attached
+ * rather than a regex.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -47,8 +57,17 @@ const ALLOWED_FILES = new Set(ALLOWED.map((entry) => entry.file));
 /** Two words of prose or more — see the note above on why the bar is here. */
 const PROSE = /[A-Za-z]{2,}(?:['’-]?[A-Za-z]+)*(?:\s+[A-Za-z]{2,}[^<>{}"]*)/;
 
-/** JSX text between tags: `>Some words<`, but not `>{expression}<`. */
-const JSX_TEXT = />\s*([A-Z][^<>{}]*?)\s*</g;
+/**
+ * JSX text between tags: `>Some words<`, but not `>{expression}<`.
+ *
+ * The flattening marker is skipped as though it were whitespace, and that is
+ * not a detail. `{' '}` is how JSX is told to keep a space across a line break,
+ * so it sits immediately before a good deal of prose — and with the capital
+ * anchored directly to the `>`, every one of those sentences was invisible to
+ * this. The case below pins it, because the anchor reads as though it were
+ * tightening the rule rather than putting a hole in it.
+ */
+const JSX_TEXT = />(?:\s|…)*([A-Z][^<>{}]*?)\s*</g;
 
 /**
  * A JSX expression container, flattened to a placeholder before the sweep runs.
@@ -110,6 +129,17 @@ describe('user-facing copy', () => {
       .flatMap(({ file, source }) => offendersIn(file, source));
 
     expect(offenders).toEqual([]);
+  });
+
+  it('sees prose that a JSX space is sitting in front of', () => {
+    // `{' '}` is how JSX keeps a space across a line break, and it flattens to
+    // the same marker every other expression does. With the capital anchored
+    // straight to the `>`, everything after one was invisible — which reads
+    // like a tighter rule and is a hole.
+    const before = `<p><span />{' '} Nothing here was ever translated</p>`;
+    expect(offendersIn('sample.tsx', before)).toEqual([
+      'sample.tsx: >Nothing here was ever translated<',
+    ]);
   });
 
   it('keeps the allowlist honest', () => {

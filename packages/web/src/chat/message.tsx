@@ -273,7 +273,7 @@ function TurnMessage({
             <span />
             <span />
           </span>{' '}
-          Thinking…
+          {t('chat.thinking')}
         </p>
       )}
 
