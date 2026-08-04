@@ -1097,7 +1097,7 @@ describe('chatCommand', () => {
     expect(await pending).toBe(0);
   });
 
-  it('shows a generating indicator until the answer starts arriving', async () => {
+  it('says it is thinking until the answer starts arriving', async () => {
     const home = tempHome();
     // A provider that answers only when told to, so the gap the indicator
     // exists to fill is a real one rather than one the test waited out.
@@ -1132,7 +1132,7 @@ describe('chatCommand', () => {
 
     await waitFor(() => out.text().includes('ctrl-g for the menu'));
     input.write('what is going on\n');
-    await waitFor(() => out.text().includes('generating'));
+    await waitFor(() => out.text().includes('thinking…'));
 
     start();
     await waitFor(() => out.text().includes('Answered.'));
@@ -1178,7 +1178,7 @@ describe('chatCommand', () => {
 
     await waitFor(() => out.text().includes('ctrl-g for the menu'));
     input.write('the first question\n');
-    await waitFor(() => out.text().includes('generating'));
+    await waitFor(() => out.text().includes('thinking…'));
 
     // Typed and submitted while the first turn is still open.
     input.write('the queued question\n');

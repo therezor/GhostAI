@@ -186,6 +186,66 @@ describe('/workspace <id>', () => {
   });
 });
 
+describe('/reasoning and /usage', () => {
+  const homes: string[] = [];
+
+  function runtimeIn(): ChatRuntime {
+    const home = mkdtempSync(join(tmpdir(), 'ghostai-shown-'));
+    homes.push(home);
+    mkdirSync(join(home, 'workspace'), { recursive: true });
+    return createChatRuntime({ home });
+  }
+
+  afterEach(() => {
+    while (homes.length > 0) {
+      const dir = homes.pop();
+      if (dir !== undefined) rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('flips reasoning off and back on with no argument', async () => {
+    // No argument flips it, which is what a hand reaching for a switch expects.
+    const { ctx, out } = context(runtimeIn(), 'cli:1');
+    expect(ctx.renderer.reasoningShown).toBe(true);
+
+    await runSlashCommand('/reasoning', ctx);
+    expect(ctx.renderer.reasoningShown).toBe(false);
+    expect(out.text).toContain('reasoning is hidden');
+
+    await runSlashCommand('/reasoning', ctx);
+    expect(ctx.renderer.reasoningShown).toBe(true);
+    expect(out.text).toContain('reasoning is shown');
+  });
+
+  it('says it outright with on and off, for a hand that has lost track', async () => {
+    const { ctx } = context(runtimeIn(), 'cli:1');
+
+    await runSlashCommand('/reasoning off', ctx);
+    await runSlashCommand('/reasoning off', ctx);
+    expect(ctx.renderer.reasoningShown).toBe(false);
+
+    await runSlashCommand('/reasoning on', ctx);
+    await runSlashCommand('/reasoning on', ctx);
+    expect(ctx.renderer.reasoningShown).toBe(true);
+  });
+
+  it('hides the tokens and timing after a turn', async () => {
+    const { ctx, out } = context(runtimeIn(), 'cli:1');
+    expect(ctx.renderer.usageShown).toBe(true);
+
+    await runSlashCommand('/usage off', ctx);
+
+    expect(ctx.renderer.usageShown).toBe(false);
+    expect(out.text).toContain('tokens and timing are hidden');
+  });
+
+  it('treats a word it does not know as a flip rather than an error', async () => {
+    const { ctx } = context(runtimeIn(), 'cli:1');
+    await runSlashCommand('/usage yes-please', ctx);
+    expect(ctx.renderer.usageShown).toBe(false);
+  });
+});
+
 describe('/model', () => {
   const homes: string[] = [];
 

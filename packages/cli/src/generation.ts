@@ -96,7 +96,14 @@ export interface GenerationOptions {
   readonly ticker: (tick: () => void) => () => void;
 }
 
-/** Blank once the first output has arrived — the spinner answers "is it alive". */
+/**
+ * Blank once the first output has arrived — it answers "has it started".
+ *
+ * The wording is the web UI's: it shows "Thinking…" under exactly this
+ * condition, a turn that is streaming and has produced no parts yet. Two
+ * surfaces of one product disagreeing about what the wait is called is a small
+ * thing that costs a reader a moment every time.
+ */
 function spinnerLines(
   tick: number | undefined,
   theme: Theme,

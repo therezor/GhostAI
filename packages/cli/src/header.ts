@@ -95,6 +95,11 @@ export function startupHeader(
     ...lines,
     '',
     truncateToWidth(`  ${theme.dim(hint)}`, width),
+    // A trailing blank, which the prompt's own leading newline then doubles:
+    // the welcome is a block about the install rather than part of the
+    // conversation, and one line of gap reads as though it were the first
+    // message.
+    '',
   ].join('\n');
 }
 

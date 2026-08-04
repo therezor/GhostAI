@@ -249,15 +249,17 @@ describe('TurnRenderer', () => {
     expect(text).toContain('… tool 1.0s');
   });
 
-  it('heads the reasoning stream so it is not read as the answer', () => {
+  it('breaks between the reasoning and the answer, and labels neither', () => {
+    // The reasoning used to carry a `┄ thinking` header. It read as a label on
+    // something that does not need one: reasoning arrives before the answer,
+    // ends at a line break, and is the only dim run in a turn.
     const text = render([
       START,
       { type: 'reasoning.delta', turnId: 't1', text: 'weighing options' },
       { type: 'assistant.delta', turnId: 't1', text: 'Yes.' },
     ]);
-    expect(text).toContain('┄ thinking');
-    expect(text).toContain('weighing options');
-    expect(text).toContain('Yes.');
+    expect(text).toContain('weighing options\nYes.');
+    expect(text).not.toContain('thinking');
   });
 
   it('hides reasoning entirely when asked to', () => {

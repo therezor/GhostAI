@@ -948,10 +948,12 @@ function bindStatus(options: StatusOptions): StatusBinding {
         asking = false;
         bar.clear();
         // Readline has written `\r\n`, so the cursor is one row below the last
-        // row of the block; `blockRows` is the last row's own index. Up by one
-        // more than that is the block's first row, and erasing from there takes
-        // the rule, the caret and the echo with it.
-        bar.eraseBlock(blockRows + 1);
+        // row of the block and `blockRows` is that row's own index. Going up by
+        // exactly that lands on the *rule* rather than on the blank line above
+        // it — which is the point: erasing from there takes the frame and the
+        // echo, and leaves the prompt's own leading newline standing as the one
+        // line of space between one message and the next.
+        bar.eraseBlock(blockRows);
         blockRows = 0;
       }
     },

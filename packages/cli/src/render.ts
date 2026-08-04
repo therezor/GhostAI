@@ -221,8 +221,14 @@ function riskColor(colors: Palette, risk: ToolRisk): (text: string) => string {
 export class TurnRenderer {
   private readonly out: RenderTarget;
   private readonly c: Palette;
-  private readonly showReasoning: boolean;
-  private readonly showUsage: boolean;
+  /**
+   * Both are settable, because `/reasoning` and `/usage` turn them off part way
+   * through a session. The flags that set them at launch — `--no-reasoning`,
+   * and `--json`, which suppresses the lot — are the same two fields; a REPL
+   * simply gets to change its mind.
+   */
+  private showReasoning: boolean;
+  private showUsage: boolean;
   private readonly toolResultLines: number;
   private readonly t: CliT;
   /**
@@ -350,7 +356,7 @@ export class TurnRenderer {
    *
    * The two ends of the delegated turn get a rule of their own, at the *parent's*
    * depth, because they are the boundary rather than something inside it — the
-   * same shape `#stream` uses for the `┄ thinking` header. Everything between
+   * same shape `#stream` uses for a mode change. Everything between
    * renders one level in, through the same `#render` the caller's events use.
    *
    * `#depth` is restored in a `finally` so a renderer is never left indented by
@@ -424,12 +430,37 @@ export class TurnRenderer {
     this.line(`${this.c.yellow('⚠')} ${text}`);
   }
 
+  /** Whether the model's reasoning is streamed. */
+  get reasoningShown(): boolean {
+    return this.showReasoning;
+  }
+
+  setReasoningShown(shown: boolean): void {
+    this.showReasoning = shown;
+  }
+
+  /** Whether the token and timing line is printed after a turn. */
+  get usageShown(): boolean {
+    return this.showUsage;
+  }
+
+  setUsageShown(shown: boolean): void {
+    this.showUsage = shown;
+  }
+
+  /**
+   * Assistant text and reasoning, told apart by the break between them.
+   *
+   * Reasoning carried a `┄ thinking` header, on the argument that dimmed prose
+   * is indistinguishable from the answer on a terminal that renders dim as
+   * plain. In practice it read as a label on something that does not need one:
+   * the reasoning arrives before the answer, ends at a line break, and is the
+   * only dim run in a turn. A row of chrome on every one of them was the more
+   * expensive half of that trade.
+   */
   private stream(mode: 'assistant' | 'reasoning', text: string): void {
     if (this.mode !== mode) {
       this.break();
-      // A header, because dimmed prose is otherwise indistinguishable from the
-      // answer to anyone whose terminal renders dim as plain.
-      if (mode === 'reasoning') this.line(this.c.dim('┄ thinking'));
       this.mode = mode;
     }
     this.write(mode === 'reasoning' ? this.c.dim(text) : text);

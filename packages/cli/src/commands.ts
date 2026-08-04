@@ -158,6 +158,13 @@ const HELP_LAYOUT: readonly HelpSection[] = [
     ],
   },
   {
+    heading: 'slash.sections.output',
+    rows: [
+      { syntax: '/reasoning [on|off]', key: 'slash.help.reasoning' },
+      { syntax: '/usage [on|off]', key: 'slash.help.usage' },
+    ],
+  },
+  {
     heading: 'slash.sections.agents',
     rows: [
       { syntax: '/agent [id]', key: 'slash.help.agent' },
@@ -502,10 +509,57 @@ async function dispatch(
     case 'model':
       return await modelCommand(argv[0], ctx);
 
+    // ── What a turn shows ─────────────────────────────────────
+
+    case 'reasoning':
+      return toggle(argv[0], ctx, {
+        shown: renderer.reasoningShown,
+        set: (on) => {
+          renderer.setReasoningShown(on);
+        },
+        on: 'slash.notes.reasoningOn',
+        off: 'slash.notes.reasoningOff',
+      });
+
+    case 'usage':
+      return toggle(argv[0], ctx, {
+        shown: renderer.usageShown,
+        set: (on) => {
+          renderer.setUsageShown(on);
+        },
+        on: 'slash.notes.usageOn',
+        off: 'slash.notes.usageOff',
+      });
+
     default:
       renderer.warn(t('slash.notes.unknownCommand', { name }));
       return CONTINUE;
   }
+}
+
+/**
+ * `/reasoning` and `/usage`, which are the same command twice.
+ *
+ * No argument flips it, which is what an operator reaching for a switch
+ * expects; `on` and `off` say it outright, for a hand that has lost track. The
+ * setting lasts as long as the process — `--no-reasoning` is how a script says
+ * it once, and a prompt asking to see less for the next few turns has not made
+ * a decision worth writing to `config.json`.
+ */
+function toggle(
+  word: string | undefined,
+  ctx: SlashContext,
+  field: {
+    readonly shown: boolean;
+    readonly set: (on: boolean) => void;
+    readonly on: CliKey;
+    readonly off: CliKey;
+  },
+): SlashOutcome {
+  const wanted = word === 'on' ? true : word === 'off' ? false : !field.shown;
+  field.set(wanted);
+  ctx.renderer.note(ctx.t(wanted ? field.on : field.off));
+  return CONTINUE;
 }
 
 /**

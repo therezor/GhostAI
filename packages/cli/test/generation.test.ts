@@ -139,15 +139,16 @@ describe('the frame while a turn runs', () => {
 
   it('shows the indicator until the first output, and not after', async () => {
     // "Has it started" is the question it answers. Once the answer itself is
-    // arriving, the answer is the better sign.
+    // arriving, the answer is the better sign. The word is the web UI's, which
+    // says "Thinking…" under exactly this condition.
     const test = harness();
     const turn = pending();
     const run = test.generation.run(turn.body);
 
-    expect(test.footers.at(-1)?.[0]).toContain('generating…');
+    expect(test.footers.at(-1)?.[0]).toContain('thinking…');
 
     test.sink()?.('the parser is');
-    expect(test.footers.at(-1)?.[0]).not.toContain('generating…');
+    expect(test.footers.at(-1)?.[0]).not.toContain('thinking…');
 
     turn.finish();
     await run;
