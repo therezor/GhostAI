@@ -29,6 +29,12 @@ const THRESHOLDS: Record<string, { lines: number; branches: number }> = {
   // to the wrong bundle rather than a crash — and there is no I/O here to make
   // the bar expensive to hold.
   i18n: { lines: 90, branches: 90 },
+  // The same argument `i18n` makes: a small package that is almost entirely
+  // pure decision logic with no I/O to make the bar expensive. An untested
+  // branch in the key decoder is an arrow key that silently does nothing on
+  // somebody else's terminal, and an untested branch in the width measurement
+  // is a menu that wraps and leaves fragments behind in the scrollback.
+  tui: { lines: 90, branches: 85 },
   providers: { lines: 80, branches: 75 },
   tools: { lines: 80, branches: 75 },
   mcp: { lines: 80, branches: 75 },

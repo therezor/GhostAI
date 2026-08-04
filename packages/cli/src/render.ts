@@ -37,6 +37,7 @@ import type {
 } from '@ghostai/agent';
 import type { TurnStatsRecord } from '@ghostai/core';
 import { tokensPerSecond, type ToolRisk, type Usage } from '@ghostai/protocol';
+import type { Palette } from '@ghostai/tui';
 import pc from 'picocolors';
 
 import { DEFAULT_LOCALE } from '@ghostai/i18n';
@@ -199,8 +200,11 @@ const STOP_REASONS: Partial<Record<string, CliKey>> = {
   error: 'render.stopReasons.error',
 };
 
-type Palette = ReturnType<typeof pc.createColors>;
-
+/**
+ * `riskColor` stays here rather than moving to `@ghostai/tui` with the rest of
+ * the palette: it takes a `ToolRisk`, and a package whose whole claim is that it
+ * has never heard of an agent cannot be the one that knows `exec` is red.
+ */
 function riskColor(colors: Palette, risk: ToolRisk): (text: string) => string {
   switch (risk) {
     case 'exec':

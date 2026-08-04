@@ -8,6 +8,8 @@
     { "path": "packages/protocol/test" },
     { "path": "packages/i18n" },
     { "path": "packages/i18n/test" },
+    { "path": "packages/tui" },
+    { "path": "packages/tui/test" },
     { "path": "packages/core" },
     { "path": "packages/core/test" },
     { "path": "packages/security" },

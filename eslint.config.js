@@ -288,6 +288,50 @@ export default tseslint.config(
     },
   },
   {
+    /**
+     * Three files in the CLI may touch stdin, and no others.
+     *
+     * `chat.ts` and `init.ts` each open a readline interface because each *is*
+     * an input session — a REPL and a setup wizard. `menu.ts` is the only file
+     * that suspends one: a menu runs while readline is detached, and the
+     * handover (take its keypress listener off the stream, let `Screen` read,
+     * put the listener back) is the piece that is easy to get subtly wrong and
+     * impossible to notice until a terminal is left with no echo.
+     *
+     * Everywhere else the ban is what keeps the seam real. `Screen` takes a
+     * `handover` callback rather than an `Interface`, which is what lets
+     * `@ghostai/tui` stay a package that has never heard of a REPL; a picker
+     * that reached for `createInterface` would become a second owner of the
+     * same stream, and the symptom would be dropped keystrokes rather than
+     * anything that looks like a layering mistake.
+     */
+    files: ['packages/cli/src/**/*.ts'],
+    ignores: [
+      'packages/cli/src/menu.ts',
+      'packages/cli/src/chat.ts',
+      'packages/cli/src/init.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['../../*'],
+              message:
+                'Deep relative imports across package boundaries are banned. Import the package by name (@ghostai/<pkg>) and declare it in package.json dependencies.',
+            },
+            {
+              group: ['node:readline', 'node:readline/promises'],
+              message:
+                'Only menu.ts owns stdin. A caller that needs a menu takes a `Menu`; a screen takes a `handover` callback.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // Tests may be looser: fixtures use non-null assertions and unsafe casts freely.
     files: [
       '**/*.test.{ts,tsx}',

@@ -97,6 +97,7 @@ interface ServeCliOptions {
 
 interface ChatCliOptions {
   readonly session: string;
+  readonly agent?: string;
   readonly model?: string;
   readonly provider?: string;
   readonly workspace?: string;
@@ -212,6 +213,7 @@ export function buildProgram(deps: CliDeps = {}): Command {
     .description(t('chat.description'))
     .argument('[message...]', t('chat.argument'))
     .option('-s, --session <key>', t('chat.options.session'), 'cli:default')
+    .option('-a, --agent <id>', t('chat.options.agent'))
     .option('-m, --model <id>', t('chat.options.model'))
     .option('-p, --provider <id>', t('chat.options.provider'))
     // Two different things, deliberately spelled differently. `-w` moves the
@@ -235,6 +237,7 @@ export function buildProgram(deps: CliDeps = {}): Command {
         const code = await runChat({
           ...(message === '' ? {} : { message }),
           sessionKey: options.session,
+          ...(options.agent === undefined ? {} : { agentId: options.agent }),
           ...(options.model === undefined ? {} : { model: options.model }),
           ...(options.provider === undefined
             ? {}

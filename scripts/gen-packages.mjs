@@ -192,6 +192,17 @@ const PACKAGES = {
     // and a plugin channel cannot reach the agent loop through it.
     internal: ['protocol', 'core'],
   },
+  tui: {
+    description:
+      'A domain-free terminal toolkit: key decoding, display-width text, and a transient selection region.',
+    // No `internal`, and that absence is the whole design. This package knows
+    // strings, keys and streams; it has never heard of an agent, a session or a
+    // translation key. Every string reaching it is already translated, which is
+    // why a caller passes prose rather than a key — and because there is no
+    // `@ghostai/*` in its manifest, an import of one does not resolve. The
+    // layering is a fact about the package graph, not a rule under review.
+    deps: { picocolors: '^1.1.0' },
+  },
   cli: {
     description: 'GhostAI command line interface.',
     internal: [
@@ -204,6 +215,7 @@ const PACKAGES = {
       'runtime',
       'server',
       'channels',
+      'tui',
     ],
     // `@ghostai/web` is a plain dependency and not an `internal`, because the
     // relationship is not a TypeScript one: `resolveUiRoot` finds the built SPA

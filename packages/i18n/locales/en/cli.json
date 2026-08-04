@@ -1,13 +1,25 @@
 {
   "chat": {
+    "agentGone": "“{{agent}}” no longer exists — this turn runs on the default agent",
     "argument": "a single turn to run, instead of the prompt",
     "attachedTo": "attached to {{key}}",
     "banner": "ghost · {{model}} @ {{provider}} · {{workspace}}",
     "description": "Talk to the agent. With no message, opens a prompt.",
+    "header": {
+      "agent": "agent",
+      "hint": "/help for commands",
+      "hintMenu": "/help for commands · ctrl-g for the menu",
+      "model": "model",
+      "provider": "provider",
+      "session": "session",
+      "workspace": "workspace"
+    },
     "helpHint": "{{title}} · /help for commands",
     "interrupted": "interrupted — the prompt is yours again",
     "noProvider": "no provider",
+    "noWorkspace": "no workspace",
     "options": {
+      "agent": "agent this session runs on",
       "json": "emit one agent event per line as JSON",
       "model": "model id, overriding the configured default",
       "new": "clear the session before this turn",
@@ -46,6 +58,23 @@
     "whichProvider": "Which provider?",
     "workspace": "Workspace",
     "workspaceDir": "Workspace directory"
+  },
+  "menu": {
+    "current": "current",
+    "empty": "nothing matches",
+    "footer": "↑↓ move · type to filter · enter choose · esc cancel",
+    "messages_one": "{{count}} message",
+    "messages_other": "{{count}} messages",
+    "noModel": "no model set",
+    "sessions_one": "{{count}} session",
+    "sessions_other": "{{count}} sessions",
+    "titles": {
+      "agent": "Which agent?",
+      "command": "Which command?",
+      "model": "Which model?",
+      "session": "Which session?",
+      "workspace": "Which workspace?"
+    }
   },
   "program": {
     "description": "A self-hosted agent that runs where your files are.",
@@ -108,6 +137,8 @@
   "slash": {
     "errors": {
       "messageGone": "That message is gone",
+      "modelPinned": "--model pinned the model for this run; /model cannot move it",
+      "noAgent": "No agent {{id}}",
       "noSession": "No session {{key}}",
       "notYours": "Message {{seq}} is not one of yours",
       "noWorkspace": "No workspace {{id}}",
@@ -121,6 +152,7 @@
       "workspaceInUse_other": "{{count}} sessions are still in {{id}}. Move them first: /workspace move {{id}} default"
     },
     "help": {
+      "agent": "show agents, or move this session onto one",
       "branch": "fork up to <ref> and attach to the fork",
       "clear": "forget this session's history",
       "context": "what the next turn would send to the model",
@@ -129,11 +161,12 @@
       "exit": "leave",
       "help": "this list",
       "messages": "the last n messages, with their seq numbers",
+      "model": "show the models this install can reach, or pick one",
       "new": "start a fresh session and attach to it",
       "regenerate": "re-run the last turn, or the one <ref> started",
       "rename": "rename this session",
       "session": "show this session, or attach to another",
-      "sessions": "sessions in this workspace, newest first",
+      "sessions": "pick a session to continue, or list them",
       "stats": "the last n turns: model, tokens, tokens/s, time",
       "workspace": "show or switch where new sessions land",
       "workspaceMove": "move sessions between workspaces",
@@ -146,20 +179,26 @@
       "detached": "detached {{id}}",
       "historyCleared": "history cleared",
       "landIn": "new sessions land in {{workspace}}",
+      "modelSet": "this run now uses {{model}} — the settings panel is where a choice is saved",
       "moved_one": "moved {{count}} session from {{from}} to {{to}}",
       "moved_other": "moved {{count}} sessions from {{from}} to {{to}}",
+      "movedAgent": "this session now runs on {{agent}}",
       "movedSession": "moved this session to {{workspace}}",
+      "noModels": "no endpoint published a model list",
       "noSessions": "no sessions yet",
       "nothingSaid": "nothing said in this session yet",
       "nothingToMeasure": "nothing to measure yet — this session has not started",
       "noTurns": "no turns recorded for this session yet",
+      "providerQuiet": "{{id}} did not answer: {{message}}",
       "renamedTo": "renamed to {{title}}",
       "renamedWorkspace": "renamed {{id}} to {{name}}",
       "unknownCommand": "unknown command: /{{name}}",
-      "willLandIn": "new sessions will land in {{workspace}}"
+      "willLandIn": "new sessions will land in {{workspace}}",
+      "willRunOn": "the next session runs on {{agent}}"
     },
     "refNote": "A <ref> is a seq number from /messages, or a negative offset over your own\n  messages: -1 is the last thing you said. It defaults to -1.",
     "sections": {
+      "agents": "agents",
       "context": "context and cost",
       "messages": "messages",
       "sessions": "sessions",

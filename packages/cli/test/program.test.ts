@@ -93,6 +93,8 @@ describe('runCli', () => {
       'qwen3',
       '-p',
       'ollama',
+      '-a',
+      'reviewer',
       '-w',
       '/tmp/ws',
       '--new',
@@ -106,12 +108,21 @@ describe('runCli', () => {
       sessionKey: 'work',
       model: 'qwen3',
       provider: 'ollama',
+      agentId: 'reviewer',
       workspace: '/tmp/ws',
       home: '/srv/ghost',
       fresh: true,
       showReasoning: false,
       tools: false,
     });
+  });
+
+  it('leaves the agent unset when no flag named one, so the stored binding decides', async () => {
+    const run = await cli(['chat', 'hello']);
+    const options = run.calls[0];
+    expect(options === undefined ? [] : Object.keys(options)).not.toContain(
+      'agentId',
+    );
   });
 
   it('defaults the session and leaves unset overrides absent', async () => {

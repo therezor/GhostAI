@@ -39,6 +39,7 @@
     "@ghostai/security": "workspace:*",
     "@ghostai/server": "workspace:*",
     "@ghostai/tools": "workspace:*",
+    "@ghostai/tui": "workspace:*",
     "@ghostai/web": "workspace:*",
     "commander": "^13.0.0",
     "i18next": "^26.3.6",
