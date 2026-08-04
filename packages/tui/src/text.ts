@@ -8,13 +8,13 @@
  * gets away with it because it only ever trims prose that is about to be printed
  * on a line of its own.
  *
- * A menu cannot get away with it. Every erase in `screen.ts` is "move the cursor
- * up N lines", and a line that *wraps* because it was one column too wide
- * occupies two rows instead of one — so the erase stops one row short and leaves
- * a fragment of the menu behind in the scrollback, permanently. Truncation to a
- * measured width is the invariant that keeps a region of N lines N rows tall,
- * which is why this module exists at all and why it is worth more than a
- * `slice`.
+ * A frame cannot get away with it. Every row the renderer addresses is one
+ * entry of an array, and a line that *wraps* because it was one column too wide
+ * occupies two rows instead of one — so every later row's address is out by
+ * one, and what that looks like is an erase taking a line of the conversation
+ * with it. Measuring, cutting and folding to a real width is the invariant the
+ * renderer rests on, which is why this module exists at all and why it is worth
+ * more than a `slice`.
  *
  * The measurement is deliberately a table rather than a dependency. `wcwidth`
  * and its descendants are the classic answer; the ranges below are the same
@@ -45,6 +45,13 @@ const ANSI_PATTERN = new RegExp(
     `${ESC}\\[[\\d;:?]*[ -/]*[@-~]`,
     // OSC: a window title or a hyperlink, terminated by BEL or by ST.
     `${ESC}\\][^${ESC}${BEL}]*(?:${BEL}|${ESC}\\\\)`,
+    // APC, PM and SOS: the other *string* introducers, terminated the same way.
+    // They have to be here rather than falling through to the two-byte rule
+    // below, which matches only the introducer and leaves the payload behind as
+    // visible text. That is not hypothetical — `CURSOR_MARKER` is an APC
+    // string, and without this it measured as **fifteen columns** rather than
+    // none, so the editor folded its line fifteen columns early.
+    `${ESC}[X^_][^${ESC}${BEL}]*(?:${BEL}|${ESC}\\\\)`,
     // Fe: the two-byte forms, `ESC D` through `ESC _`.
     `${ESC}[@-Z\\\\-_]`,
     // Fp: the private two-byte forms, which is where DECSC and DECRC live —
@@ -195,6 +202,28 @@ export function visibleWidth(text: string): number {
 /** `\x1b[0m` — closes every SGR attribute at once. */
 const RESET = `${ESC}[0m`;
 
+/** Exported for callers that end a row while a style is still open. */
+export const STYLE_RESET: string = RESET;
+
+/**
+ * The style sequences still open at the end of `text`, given `open` before it.
+ *
+ * A style that spans a line break has to be re-opened on the next line, because
+ * every row is drawn on its own: a run of dim prose whose `\x1b[2m` sits on the
+ * line above arrives at the terminal with nothing turning it on. That is not a
+ * corner case — a streamed chunk of reasoning is routinely `"\n\nLet me think"`,
+ * wrapped whole, so the opener lands on one line and the first words of the
+ * paragraph on another. They rendered in plain white against dim grey.
+ */
+export function carryStyles(open: string, text: string): string {
+  let carried = open;
+  for (const segment of segments(text)) {
+    if (!segment.ansi) continue;
+    carried = opensStyle(segment.text) ? carried + segment.text : '';
+  }
+  return carried;
+}
+
 /** Whether a sequence turns styling on rather than off. */
 function opensStyle(sequence: string): boolean {
   if (!sequence.startsWith(`${ESC}[`) || !sequence.endsWith('m')) return false;
@@ -301,6 +330,91 @@ export function dropLastGrapheme(text: string): string {
   let last = 0;
   for (const { index } of GRAPHEMES.segment(text)) last = index;
   return text.slice(0, last);
+}
+
+/**
+ * The index one grapheme cluster before `at`, and one after.
+ *
+ * A caret moves by what a person can see, which is a cluster and not a code
+ * point: stepping over `👩‍👩‍👧` by code point lands between two of its members
+ * and the next keystroke splits the family. The same unit `visibleWidth`
+ * measures in and `dropLastGrapheme` deletes.
+ */
+export function previousBoundary(text: string, at: number): number {
+  let boundary = 0;
+  for (const { index } of GRAPHEMES.segment(text.slice(0, at))) {
+    boundary = index;
+  }
+  return boundary;
+}
+
+export function nextBoundary(text: string, at: number): number {
+  for (const { index, segment } of GRAPHEMES.segment(text)) {
+    if (index >= at) return index + segment.length;
+  }
+  return text.length;
+}
+
+/**
+ * One logical line broken into as many drawn rows as `width` needs.
+ *
+ * The renderer's whole arithmetic rests on one row per array entry, so nothing
+ * it is handed may be allowed to reach the terminal's own wrap — which is also
+ * the reason this exists rather than letting the terminal do it. A terminal
+ * rewraps its own scrollback when the window changes size, and where it puts
+ * the rows afterwards is not something a program can ask about or predict.
+ * Wrapping here means a resize is a re-render at the new width instead.
+ *
+ * Breaks at a space when there is one, and mid-cluster when there is not: a URL
+ * or a hash longer than the window still has to be shown. Styling carries
+ * across a break, because a colour that stopped at the fold would be a colour
+ * that changed with the window size.
+ */
+export function wrapToWidth(text: string, width: number): string[] {
+  if (width <= 0) return [text];
+  if (visibleWidth(text) <= width) return [text];
+
+  const rows: string[] = [];
+  let row = '';
+  let used = 0;
+  /** Where in `row` the last space sits, or `-1` when the row has none. */
+  let breakAt = -1;
+  /** Re-opened at the head of every row after the first. */
+  let open = '';
+
+  const flush = (upTo: number, resume: string): void => {
+    rows.push(row.slice(0, upTo));
+    row = open + resume;
+    used = visibleWidth(resume);
+    breakAt = -1;
+  };
+
+  for (const segment of segments(text)) {
+    if (segment.ansi) {
+      row += segment.text;
+      open = opensStyle(segment.text) ? open + segment.text : '';
+      continue;
+    }
+    for (const { segment: cluster } of GRAPHEMES.segment(segment.text)) {
+      const cost = clusterWidth(cluster);
+      // `used > 0` keeps a cluster wider than the whole window from folding
+      // forever onto empty rows: it goes on the row and overhangs by one.
+      if (used + cost > width && used > 0) {
+        if (breakAt >= 0) {
+          // The space itself is dropped: it is what the fold replaces.
+          flush(breakAt, row.slice(breakAt + 1));
+        } else {
+          flush(row.length, '');
+        }
+      }
+      if (cluster === ' ' && used > 0) breakAt = row.length;
+      row += cluster;
+      used += cost;
+    }
+  }
+
+  rows.push(row);
+  return rows;
 }
 
 /**

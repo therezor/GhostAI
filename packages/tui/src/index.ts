@@ -1,9 +1,9 @@
 /**
  * A terminal toolkit that has never heard of an agent.
  *
- * This package knows three things: how to turn bytes from a terminal into keys,
- * how wide a string is when a terminal draws it, and how to keep a block of
- * lines repainting in place without disturbing the scrollback above it. It knows
+ * This package knows four things: how to turn bytes from a terminal into keys,
+ * how wide a string is when a terminal draws it, how to hold a line somebody is
+ * typing, and how to keep a frame of rows on screen and correct. It knows
  * nothing about sessions, models, configuration or translation — every string
  * that reaches it is prose the caller has already translated, which is why
  * `SelectItem.label` is a `string` and not a key.
@@ -11,8 +11,12 @@
  * That boundary is not a convention. `package.json` here declares no
  * `@ghostai/*` dependency at all, so an import of one does not resolve: the
  * layering is a fact about the package graph rather than a rule a reviewer has
- * to remember. The counterpart lives in `packages/cli/src/menu.ts`, which is the
- * only file in the CLI that knows both this package and `node:readline`.
+ * to remember.
+ *
+ * The shape is `@earendil-works/pi`'s: components render rows for a width, and
+ * one renderer owns the whole frame and redraws it whole when the window
+ * changes size. `renderer.ts` says why that last part is the only thing that
+ * works.
  */
 
 export { isCtrl, parseKey, parseKeys } from './keys.js';
@@ -22,13 +26,28 @@ export {
   dropLastGrapheme,
   fitToWidth,
   justify,
+  nextBoundary,
   padToWidth,
+  previousBoundary,
   rule,
   stripAnsi,
   truncateStartToWidth,
   truncateToWidth,
   visibleWidth,
+  wrapToWidth,
 } from './text.js';
+
+export { CURSOR_MARKER } from './component.js';
+export type { Component } from './component.js';
+
+export { createRenderer } from './renderer.js';
+export type { Renderer, RendererOptions } from './renderer.js';
+
+export { createEditor } from './editor.js';
+export type { Editor, EditorOptions, EditorOutcome } from './editor.js';
+
+export { createTranscript } from './transcript.js';
+export type { Transcript } from './transcript.js';
 
 export { PLAIN_THEME, themeFor, themeFrom } from './theme.js';
 export type { Palette, Style, Theme } from './theme.js';
@@ -42,17 +61,18 @@ export {
   spinnerFrame,
 } from './spinner.js';
 
-export { openBottomBar } from './bottom-bar.js';
-export type { BottomBar, BottomBarOptions } from './bottom-bar.js';
-
-export { columnsOf, openScreen, rowsOf } from './screen.js';
+export { columnsOf, openKeyboard, rowsOf } from './terminal.js';
 export type {
-  InputHandover,
-  Screen,
-  ScreenOptions,
+  Keyboard,
+  KeyboardOptions,
   TerminalInput,
   TerminalOutput,
-} from './screen.js';
+} from './terminal.js';
 
-export { select } from './select.js';
-export type { SelectLabels, SelectOptions } from './select.js';
+export { CHROME_ROWS, DEFAULT_MAX_ROWS, createSelect } from './select.js';
+export type {
+  Select,
+  SelectLabels,
+  SelectOptions,
+  SelectOutcome,
+} from './select.js';

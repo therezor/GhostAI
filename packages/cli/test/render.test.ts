@@ -46,12 +46,53 @@ const START: AgentEvent = {
 
 describe('echo', () => {
   it('prints the operator’s own message into the transcript', () => {
-    // readline echoes what was typed, but the whole prompt block is taken down
-    // when a turn starts — the rule above the editor would otherwise be left
-    // behind by every turn — so the message is reprinted here.
+    // The editor clears the line on Return, so nothing else records what was
+    // asked — the frame is not the transcript.
     const out = buffer();
     new TurnRenderer({ out, colors: false }).echo('what is going on');
     expect(out.text).toContain('› what is going on');
+  });
+
+  it('leaves one blank line above it, which is the gap between exchanges', () => {
+    // It used to come from the prompt's own leading newline. With the prompt
+    // gone it has to be written, and two messages in a row would otherwise sit
+    // flush against the answer between them.
+    const out = buffer();
+    const renderer = new TurnRenderer({ out, colors: false });
+    renderer.note('an answer');
+    renderer.echo('and then');
+
+    expect(out.text).toBe('an answer\n\n› and then\n');
+  });
+});
+
+describe('aside', () => {
+  it('starts a diagnostic on its own line, whatever was half-written', () => {
+    // Logs reach the terminal through the same sink the answer does. Without
+    // the break, a pino line lands wherever the cursor is — measured mid-answer
+    // as `- **Edit{"level":40,…} files**`.
+    const out = buffer();
+    const renderer = new TurnRenderer({ out, colors: false });
+    renderer.handle({
+      type: 'assistant.delta',
+      sessionKey: 's',
+      turnId: 't',
+      text: '- **Edit',
+    } as never);
+    renderer.aside('{"level":40,"msg":"mcp server unavailable"}\n');
+
+    expect(out.text).toBe(
+      '- **Edit\n{"level":40,"msg":"mcp server unavailable"}\n',
+    );
+  });
+
+  it('adds no break when a line has just ended', () => {
+    const out = buffer();
+    const renderer = new TurnRenderer({ out, colors: false });
+    renderer.note('a note');
+    renderer.aside('a log\n');
+
+    expect(out.text).toBe('a note\na log\n');
   });
 });
 

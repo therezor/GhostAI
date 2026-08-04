@@ -26,8 +26,6 @@
  * answer twice.
  */
 
-import { createInterface, type Interface } from 'node:readline/promises';
-
 import { describeContext, type AgentLoop } from '@ghostai/agent';
 import { createLogger, isAbortError, type LogLevel } from '@ghostai/core';
 import {
@@ -38,11 +36,20 @@ import {
 import { findCredential } from '@ghostai/runtime';
 import { agentForTurn } from '@ghostai/server';
 import {
+  CHROME_ROWS,
   columnsOf,
-  openBottomBar,
+  createEditor,
+  createRenderer,
+  createSelect,
+  createTranscript,
+  DEFAULT_MAX_ROWS,
+  isCtrl,
+  openKeyboard,
+  spinnerFrame,
   themeFor,
   SPINNER_INTERVAL_MS,
-  type BottomBar,
+  type Component,
+  type Select,
   type TerminalInput,
   type TerminalOutput,
   type Theme,
@@ -58,13 +65,12 @@ import {
 } from './header.js';
 import { completeCommand, pickCommand } from './pickers/palette.js';
 import { translationsFor, type CliT, type Env } from './i18n.js';
-import { createGeneration, NO_GENERATION } from './generation.js';
 import {
   createMenu,
   menuAvailable,
   NO_MENU,
-  suspendReadline,
   type Menu,
+  type MenuRequest,
 } from './menu.js';
 import { createModelCatalogue, type ModelCatalogue } from './models.js';
 import { TurnRenderer } from './render.js';
@@ -272,7 +278,10 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
   const logTarget = {
     write: (text: string): boolean => {
       if (sink === undefined || !shareTerminal) return errOut.write(text);
-      sink(text);
+      // Through the renderer rather than straight at the sink, because only it
+      // knows whether a line is half-written — and a log line arriving in the
+      // middle of one splices itself into a word.
+      renderer.aside(text);
       return true;
     },
   } as unknown as NodeJS.WritableStream;
@@ -490,12 +499,6 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
       };
     };
 
-    if (json === undefined) {
-      renderer.note(
-        startupHeader(view(), columnsOf(terminal), theme, lang.t, menus),
-      );
-    }
-
     return await repl({
       input,
       out,
@@ -506,28 +509,14 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
       theme,
       menus,
       processHooks: options.handleSignals !== false,
-      // A blank line and the caret, and nothing in it that can wrap.
-      //
-      // That is the whole of the resize fix, and it took a while to see. The
-      // prompt is the one part of the frame readline owns, and readline redraws
-      // it by moving up over the rows it last measured. A full-width rule in
-      // there re-wraps the moment the window narrows — a 289-column rule in 90
-      // columns is four rows, so a three-row block becomes six — and every
-      // row of that happened inside the emulator *before* the process was told
-      // anything. Correcting the row count got the arithmetic right and still
-      // could not reach rows that had been reflowed above the cursor.
-      //
-      // Nothing in `\n› ` can wrap, so the block is two rows at every width and
-      // readline's refresh is exact without being told anything. Everything
-      // else — the rule, the status — is below the cursor, where a single
-      // erase-to-end-of-display takes it however many rows it reflowed into.
-      prompt: () => '\n› ',
-      // One column short of the window. Writing exactly `columns` characters
-      // leaves a terminal in a pending-wrap state that different emulators
-      // resolve differently, and every row here is followed by cursor motion
-      // that assumes it knows which row it is on.
-      status: () => statusBar(view(), columnsOf(terminal) - 1, theme),
-      inputRule: () => inputRule(columnsOf(terminal) - 1, theme),
+      // Built at the width the renderer asks for, not at the width the stream
+      // reported when the frame was last drawn. That is the difference between
+      // a status bar and a status bar that survives a resize: the renderer
+      // re-renders at the new width and every row is rebuilt for it.
+      header: () =>
+        startupHeader(view(), columnsOf(terminal), theme, lang.t, menus),
+      status: (width) => statusBar(view(), width, theme),
+      inputRule: (width) => inputRule(width, theme),
       measure: measureContext,
       setSink: (next) => {
         sink = next;
@@ -582,12 +571,12 @@ interface ReplDeps {
   readonly menus: boolean;
   /** Whether this run may register handlers on the process. */
   readonly processHooks: boolean;
-  /** Built fresh each iteration, so the prompt follows the state. */
-  readonly prompt: () => string;
-  /** The rule above the editor, for the turn that draws the frame itself. */
-  readonly inputRule: () => string;
+  /** The banner, written into the transcript once the frame owns the screen. */
+  readonly header: () => string;
+  /** The rule above the editor, at whatever width the frame is being drawn at. */
+  readonly inputRule: (width: number) => string;
   /** The rows drawn under the editor, rebuilt whenever the state moves. */
-  readonly status: () => string[];
+  readonly status: (width: number) => string[];
   /** Re-measures the context window. Awaited after a turn, never before a key. */
   readonly measure: () => Promise<void>;
   /** Routes `TurnRenderer`'s writes through the footer for the turn's duration. */
@@ -614,121 +603,46 @@ interface ReplDeps {
 }
 
 /**
+ * What the prompt loop talks to, so that it does not have to know which one it
+ * got.
+ *
+ * There are two, and the difference is whether the output is a terminal. On one
+ * it is the frame below; on a pipe it is a prompt and a newline, because
+ * escape sequences written into a file are not a status bar, they are noise in
+ * somebody's log.
+ */
+interface Surface {
+  readonly menu: Menu;
+  /** Blocks until a line is submitted, or `undefined` to leave. */
+  next(): Promise<string | undefined>;
+  /** Runs the turn, with whatever the surface shows while one is running. */
+  run(body: () => Promise<TurnOutcome>): Promise<TurnOutcome>;
+  /** Something changed that the surface draws. */
+  refresh(): void;
+  close(): void;
+}
+
+/**
  * The prompt loop.
  *
- * `question` is given an `AbortSignal` rather than being cancelled with
- * `rl.close()`: closing a readline interface while a question is pending leaves
- * that promise unsettled forever, so the process would hang on the very Ctrl-C
- * meant to end it.
+ * Everything about *what* a line means lives here — a slash command, a message,
+ * a re-run — and everything about how it is drawn lives in the surface. That
+ * split is what lets a piped stdout keep working unchanged while the terminal
+ * gets a frame.
  */
 async function repl(deps: ReplDeps): Promise<number> {
-  const rl = createInterface({
-    input: deps.input,
-    output: deps.out,
-    terminal: deps.input.isTTY === true,
-    // Tab over the same table `/help` prints, and only for a line that starts
-    // with a slash: the rest of a prompt is prose, and a completer that guessed
-    // at the middle of a sentence would surprise far more often than it helped.
-    completer: completeCommand,
-  });
-
-  // Built here rather than in `chatCommand` because it needs the interface it
-  // suspends, and this is where that interface exists. Everything that is not a
-  // terminal gets `NO_MENU`, so no caller below has to remember an `if`.
-  const menu = deps.menus
-    ? createMenu({
-        input: deps.input,
-        output: deps.out,
-        rl,
-        theme: deps.theme,
-        // The same flag that governs the SIGINT handler, and for the same
-        // reason: a run that does not own the process must not leave handlers
-        // on it. A suite that opened ten REPLs would otherwise accumulate ten.
-        ...(deps.processHooks
-          ? {}
-          : {
-              onExit: (): void => {
-                /* nothing to unwind: this run installed no handlers */
-              },
-            }),
-      })
-    : NO_MENU;
-
-  const status = bindStatus({
-    input: deps.input,
-    output: deps.out,
-    rl,
-    menus: deps.menus,
-    processHooks: deps.processHooks,
-    prompt: deps.prompt,
-    status: deps.status,
-  });
-
-  const offPalette = bindPalette({
-    input: deps.input,
-    rl,
-    menu,
-    t: deps.t,
-    busy: deps.hasActiveTurn,
-    // A menu draws over the bar's rows and erases them on the way out, and the
-    // bar is not repainted while readline is detached — so without this the
-    // status stays blank until the next keystroke.
-    onClose: () => {
-      status.repaint();
-    },
-  });
-
-  const generation = deps.menus
-    ? createGeneration({
-        input: deps.input,
-        bar: status.bar,
-        suspend: () => suspendReadline(rl, deps.input),
-        status: deps.status,
-        setSink: deps.setSink,
-        interrupt: deps.abortActive,
-        theme: deps.theme,
-        t: deps.t,
-        ticker: deps.ticker,
-      })
-    : NO_GENERATION;
-
-  const prompt = new AbortController();
-  const onSigint = (): void => {
-    // While a turn runs, Ctrl-C belongs to the turn. At an idle prompt it means
-    // "leave", which is what aborting the pending question does.
-    if (deps.hasActiveTurn()) deps.abortActive();
-    else prompt.abort();
-  };
-  rl.on('SIGINT', onSigint);
+  const surface = deps.menus ? framed(deps) : plain(deps);
 
   try {
     for (;;) {
-      // A message typed while the last turn was running runs now, without a
-      // prompt: the operator has already pressed Return on it once.
-      let line = generation.takeQueued();
-      if (line === undefined) {
-        try {
-          line = await status.ask((text) => {
-            const asked = rl.question(text, { signal: prompt.signal });
-            // Half-typed when the last answer arrived, so it goes back into the
-            // editor rather than being thrown away.
-            const partial = generation.takePartial();
-            if (partial !== undefined) rl.write(partial);
-            return asked;
-          });
-        } catch (error) {
-          // Ctrl-C at the prompt, or Ctrl-D closing stdin. Both mean "done".
-          if (isAbortError(error)) return 0;
-          throw error;
-        }
-      }
+      const line = await surface.next();
+      if (line === undefined) return 0;
 
       const content = line.trim();
       if (content === '') continue;
-      // The prompt block came down with the rule, so the message is printed
-      // here instead — which is also what stops the frame from being left
-      // behind between one message and the next.
       deps.echo(content);
+      surface.refresh();
+
       if (content.startsWith('/')) {
         const result = await runSlashCommand(content, {
           renderer: deps.renderer,
@@ -740,7 +654,7 @@ async function repl(deps: ReplDeps): Promise<number> {
           setWorkspace: deps.setWorkspace,
           agentId: deps.agent(),
           setAgent: deps.setAgent,
-          menu,
+          menu: surface.menu,
           models: deps.models,
           modelPinned: deps.modelPinned,
         });
@@ -750,360 +664,359 @@ async function repl(deps: ReplDeps): Promise<number> {
           deps.attach(result.sessionKey);
           // A different conversation is a different context.
           await deps.measure();
+          surface.refresh();
           continue;
         }
         // `/clear` and `/branch` change the history without running a turn.
         if (result.kind === 'continue') {
           await deps.measure();
+          surface.refresh();
           continue;
         }
         // `/edit` and `/regenerate` truncated, and handed the content back
         // rather than running it — so a re-run takes the same path a typed
         // message does, with the same renderer and the same Ctrl-C.
-        const rerun = await generation.run(
+        const rerun = await surface.run(
           async () => await deps.turn(result.content),
         );
         if (rerun.aborted) deps.renderer.note(deps.t('chat.interrupted'));
         await deps.measure();
+        surface.refresh();
         continue;
       }
 
-      const outcome = await generation.run(
-        async () => await deps.turn(content),
-      );
+      const outcome = await surface.run(async () => await deps.turn(content));
       if (outcome.aborted) deps.renderer.note(deps.t('chat.interrupted'));
       // After the turn, never before a keystroke: the context only changes when
       // the history does, so measuring here is both the cheap answer and the
       // exact one.
       await deps.measure();
+      surface.refresh();
     }
   } finally {
-    status.close();
-    offPalette();
-    rl.off('SIGINT', onSigint);
-    rl.close();
+    surface.close();
   }
-}
-
-interface StatusBinding {
-  /**
-   * Runs one prompt with the bar under it.
-   *
-   * On the way out the *whole* prompt block comes down — the rule, the caret
-   * and the echoed line — and the caller prints the message into the transcript
-   * itself. That is what keeps the rule above the editor from being left behind
-   * by every turn, and it is one erase of a block whose height readline
-   * reports, rather than an attempt to find one row inside it.
-   */
-  ask(question: (prompt: string) => Promise<string>): Promise<string>;
-  /** Redraws the bar, for a caller that has just drawn over it. */
-  repaint(): void;
-  /** The footer itself, for the turn that takes it over while it runs. */
-  readonly bar: BottomBar;
-  close(): void;
-}
-
-interface StatusOptions {
-  readonly input: InputStream;
-  readonly output: NodeJS.WritableStream;
-  /** Asked where its cursor is, so the frame's top rule can be taken back. */
-  readonly rl: Interface;
-  /** The same predicate the menu uses: is this an interactive terminal. */
-  readonly menus: boolean;
-  /** Whether this run may register handlers on the process. */
-  readonly processHooks: boolean;
-  readonly prompt: () => string;
-  readonly status: () => string[];
 }
 
 /**
- * The status rows under the editor, and the prompt they sit under.
+ * Lines in, lines out, for a stdout that is not a terminal.
  *
- * Three things have to happen in order, and the order is the whole of it:
- *
- *  1. **Reserve, before the prompt is written.** A transcript grows, so the
- *     prompt keeps arriving at the bottom of the screen; without pushing it up
- *     first the bar would be drawn over the line the operator is typing on.
- *  2. **Paint, after the prompt is written.** `rl.question` writes
- *     synchronously and then returns a promise, so the paint goes between the
- *     call and the `await`.
- *  3. **Repaint after every keystroke**, on a listener *appended* rather than
- *     prepended: readline's line refresh clears from the prompt row to the end
- *     of the display, which is exactly where the bar is, and it does that
- *     synchronously inside its own handler. Running before it would paint a bar
- *     that readline then erased.
- *
- * Everything that is not an interactive terminal gets a binding that does none
- * of it and simply asks the question, so no caller below has to check.
+ * `ghost chat > log` and `ghost chat | tee` still open a prompt, because stdin
+ * is still a keyboard — but nothing here moves a cursor. There is no frame, no
+ * status bar and no menu, and `NO_MENU` is what makes that last part a property
+ * of the type rather than an `if` at every call site.
  */
-function bindStatus(options: StatusOptions): StatusBinding {
-  // `TerminalOutput` adds only optional members to the stream this already is,
-  // so a pipe satisfies it — and `available` is what decides whether the extras
-  // were actually there.
-  const output: TerminalOutput = options.output;
-  const bar = options.menus ? openBottomBar({ output }) : undefined;
+function plain(deps: ReplDeps): Surface {
+  const keyboard = openKeyboard({ input: deps.input, raw: false });
+  const queued: string[] = [];
+  let pendingLine = '';
+  let waiting: ((line: string | undefined) => void) | undefined;
+  let leaving = false;
 
-  if (bar?.available !== true) {
-    // A footer that does nothing, rather than an `if` at every call site.
-    const nothing = (): void => {
-      /* there is no footer on a stream that cannot draw one */
-    };
-    const absent: BottomBar = {
-      columns: 0,
-      available: false,
-      reserve: nothing,
-      paint: nothing,
-      // The one method that still has to do its job: a turn's output has to
-      // reach the terminal whether or not there is a footer to put it above.
-      writeAbove: (text) => {
-        output.write(text);
-      },
-      repaint: nothing,
-      onResize: () => nothing,
-      setCursorVisible: nothing,
-      eraseBlock: nothing,
-      clear: nothing,
-      close: nothing,
-    };
-    return {
-      ask: async (question) => await question(options.prompt()),
-      repaint: (): void => {
-        /* there is no bar to redraw */
-      },
-      bar: absent,
-      close: (): void => {
-        /* nothing was drawn */
-      },
-    };
-  }
-
-  if (options.processHooks) {
-    // The same last-resort restore `createMenu` registers, and for the same
-    // reason: an uncaught error unwinds nothing, and a terminal left with no
-    // cursor is as unusable as one left in raw mode.
-    process.once('exit', () => {
-      bar.close();
-    });
-  }
-
-  let lines: string[] = [];
-  let asking = false;
-  /** How many rows the prompt occupies before the editor's own row. */
-  let promptRows = 0;
-  /** The block's height, read at the last moment readline can still report it. */
-  let blockRows = 0;
-
-  /**
-   * The window changed size, so every measured thing is wrong at once — and the
-   * fix is split in two around readline's own handler.
-   *
-   * Readline registers exactly one `resize` listener when the interface is
-   * created, and it refreshes the line: up over the rows it believes it drew,
-   * clear to the end of the display, write it again. Both halves here hang off
-   * that one refresh.
-   *
-   * **Before it**, the new prompt is handed over — the rule above the editor
-   * lives in the prompt string, and readline would otherwise go on redrawing it
-   * at the old width. Setting it here means the refresh that follows is already
-   * the right one. Asking for a *second* refresh instead is what made text
-   * disappear: each one moves up by a row count measured before the width
-   * changed, so two of them clear their way up into the transcript.
-   *
-   * **After it**, the bar is rebuilt — readline's clear-to-end-of-display
-   * covers exactly where the bar is, so it has to be redrawn, and rebuilt
-   * rather than repainted because the rules are a width in characters and the
-   * status columns are justified to one.
-   */
-  const onResizeBefore = (): void => {
-    if (!asking) return;
-
-    // Readline refreshes by moving up over the rows it believes it drew, and it
-    // believes wrong the moment the window narrows: `prevRows` was measured at
-    // the old width, and the rule above the editor is a column short of it, so
-    // a narrowing re-wraps that rule onto a second row and the block on screen
-    // is one taller than the number readline kept. Measured on a drag: it moved
-    // up 2 every time while the block was 3, so the erase began a row too low
-    // and the block crept down one row per resize, leaving the frame behind.
-    //
-    // `getCursorPos` recomputes from the *current* columns — 2 before the
-    // narrowing and 3 after, against a `prevRows` still saying 2 — so handing
-    // that back is telling readline what is actually on the screen.
-    //
-    // Guarded rather than assumed: `prevRows` is readline's own field, and a
-    // version that no longer keeps it should leave the CLI where it is today
-    // rather than throwing.
-    const state = options.rl as unknown as { prevRows?: number };
-    if (typeof state.prevRows === 'number') {
-      state.prevRows = options.rl.getCursorPos().rows;
-    }
-
-    const text = options.prompt();
-    promptRows = text.split('\n').length - 1;
-    lines = options.status();
-    options.rl.setPrompt(text);
-  };
-
-  const repaint = (): void => {
-    if (!asking) return;
-    const at = options.rl.getCursorPos();
-
-    // A typed line long enough to wrap needs rows the reservation did not
-    // account for, and from then on readline and the bar compete for them:
-    // readline redraws from its own prompt row downward, the bar draws below
-    // the cursor, and a scroll under either one leaves the other a row out.
-    // What that looked like was a message losing its second and third lines.
-    // Standing aside while the line is wrapped is the only version of this
-    // that cannot damage the transcript, and the bar comes back the moment the
-    // line fits again or the turn is sent.
-    if (at.rows > promptRows) {
-      bar.clear();
+  const deliver = (line: string | undefined): void => {
+    if (waiting === undefined) {
+      if (line !== undefined) queued.push(line);
       return;
     }
-    bar.paint(lines, at.cols);
-  };
-  /**
-   * Every key except the one that submits.
-   *
-   * Return is the exception because readline has, by the time this runs, moved
-   * the cursor to the row *below* the editor — which is the bar's first row.
-   * Painting from there puts the bar one row lower than the erase that follows
-   * expects, and the erase then starts from whatever column the paint left the
-   * cursor in. What that looked like was two characters of the rule surviving
-   * at the head of the turn's first line of output.
-   */
-  const onKeypress = (chunk: unknown, key?: { name?: string }): void => {
-    if (key?.name === 'return') return;
-    repaint();
+    const resume = waiting;
+    waiting = undefined;
+    resume(line);
   };
 
-  // Prepended, and for the opposite reason to the repaint: this has to read the
-  // cursor while readline still has a line to report a position within. One key
-  // later the line is gone and so is the number.
-  const measureBlock = (chunk: unknown, key?: { name?: string }): void => {
-    if (asking && key?.name === 'return') {
-      blockRows = options.rl.getCursorPos().rows;
+  keyboard.onKey((key) => {
+    if (isCtrl(key, 'c') || isCtrl(key, 'd')) {
+      if (deps.hasActiveTurn() && isCtrl(key, 'c')) deps.abortActive();
+      else {
+        leaving = true;
+        deliver(undefined);
+      }
+      return;
     }
-  };
-  options.input.prependListener('keypress', measureBlock);
-  options.output.prependListener('resize', onResizeBefore);
-  const offResize = bar.onResize(repaint);
+    if (key.name === 'enter') {
+      const line = pendingLine;
+      pendingLine = '';
+      deliver(line);
+      return;
+    }
+    if (key.name === 'backspace') pendingLine = pendingLine.slice(0, -1);
+    else if (key.name === 'char' && !key.ctrl) pendingLine += key.char;
+  });
 
-  // Appended: readline's refresh clears from the prompt row down, synchronously
-  // inside its own handler, so a listener running before it would paint a bar
-  // readline then erased.
-  options.input.on('keypress', onKeypress);
+  deps.out.write(deps.header());
 
   return {
-    async ask(question): Promise<string> {
-      const text = options.prompt();
-      lines = options.status();
-
-      // The prompt's own lines count too. Reserving only the bar's height
-      // guarantees that many rows below the *cursor*, and the prompt then
-      // writes its own lines beneath it — so the editor ends up inside the rows
-      // the bar is about to claim, and the bar paints over it. That was the
-      // first version of this bug.
-      promptRows = text.split('\n').length - 1;
-      bar.reserve(lines.length + promptRows + 1);
-
-      const pending = question(text);
-      asking = true;
-      bar.paint(lines, options.rl.getCursorPos().cols);
-      try {
-        return await pending;
-      } finally {
-        asking = false;
-        bar.clear();
-        // Readline has written `\r\n`, so the cursor is one row below the last
-        // row of the block and `blockRows` is that row's own index. Going up by
-        // exactly that lands on the *rule* rather than on the blank line above
-        // it — which is the point: erasing from there takes the frame and the
-        // echo, and leaves the prompt's own leading newline standing as the one
-        // line of space between one message and the next.
-        bar.eraseBlock(blockRows);
-        blockRows = 0;
-      }
+    menu: NO_MENU,
+    async next(): Promise<string | undefined> {
+      const held = queued.shift();
+      if (held !== undefined) return held;
+      if (leaving) return undefined;
+      deps.out.write('\n› ');
+      return await new Promise<string | undefined>((resolve) => {
+        waiting = resolve;
+      });
     },
-    repaint,
-    bar,
+    async run(body): Promise<TurnOutcome> {
+      return await body();
+    },
+    refresh(): void {
+      /* nothing on this surface is drawn twice */
+    },
     close(): void {
-      asking = false;
-      options.input.off('keypress', onKeypress);
-      options.input.off('keypress', measureBlock);
-      options.output.removeListener('resize', onResizeBefore);
-      offResize();
-      bar.close();
+      keyboard.stop();
     },
   };
-}
-
-interface PaletteBinding {
-  readonly input: InputStream;
-  readonly rl: Interface;
-  readonly menu: Menu;
-  readonly t: CliT;
-  /** Whether a turn is running, in which case the key belongs to nobody. */
-  readonly busy: () => boolean;
-  /** Called once the palette has closed, whatever it answered. */
-  readonly onClose: () => void;
 }
 
 /**
- * Ctrl-G opens the command palette. Returns the unbind.
+ * The frame, on a terminal.
  *
- * **Ctrl-G, and not Ctrl-L or Ctrl-A.** readline owns almost the whole control
- * alphabet — Ctrl-A and Ctrl-E move the cursor, Ctrl-L clears the screen, Ctrl-U
- * and Ctrl-K kill, Ctrl-R searches, Ctrl-C and Ctrl-D end things. Probing a live
- * interface for keys that leave `rl.line` and `rl.cursor` untouched leaves
- * exactly three: Ctrl-G, Ctrl-O and Ctrl-X. That is the entire budget, so it
- * buys *one* binding — a palette, which contains every command — rather than
- * three feature-specific ones.
+ *     …the conversation so far…
+ *     (blank)
+ *     ───────────────────────────────
+ *     › what is being typed
+ *     ───────────────────────────────
+ *     Default                 default
+ *     3.6%/66k          Ollama/qwen3
  *
- * `prependListener` because readline's own handler is already attached and an
- * EventEmitter has no cancellation: prepending gets this one called *first*,
- * never *instead*. That is exactly why the key has to be one readline ignores.
+ * There is no `readline` in it, and that is the substance of the change rather
+ * than a detail of it. readline draws its own line, at a row it measured for
+ * itself, by moving up over a row count it cached — and every one of those
+ * numbers is invalidated by a resize before the process is told the window
+ * moved. A frame with readline inside it is a frame nobody owns, which is why
+ * resizing used to leave a stranded copy of the footer behind every time.
  *
- * The chosen command is written into the pending `rl.question` rather than run
- * directly, so it flows through the same dispatcher a typed command does — one
- * path, one set of error handling. A cancelled palette puts the half-typed line
- * back where it was.
+ * Here one renderer owns all of it. A keystroke changes the editor row and the
+ * renderer rewrites the editor row; a resize changes every row, and the
+ * renderer prints the frame again at the new width — which it can only do
+ * because the conversation is in the frame too.
+ *
+ * Three things fall out of that, all of them simplifications:
+ *
+ *  - **A menu is rows, not a mode.** It replaces the editor and the status
+ *    while it is open and the same renderer draws it, so there is no region to
+ *    open, no stdin to hand over and nothing to erase afterwards.
+ *  - **A turn changes nothing structural.** The editor stays where it is,
+ *    typing keeps working, and a message submitted while the answer streams is
+ *    queued for the moment it finishes. What used to be a second editor for the
+ *    duration of a turn is now the same frame with a spinner row in it.
+ *  - **Ctrl-C is a key.** Raw mode delivers `0x03` rather than raising SIGINT,
+ *    so one handler covers "stop this turn" and "leave" whether or not a menu
+ *    happens to be open.
  */
-function bindPalette(binding: PaletteBinding): () => void {
-  const { input, rl, menu } = binding;
-  if (!menu.available) {
-    return (): void => {
-      /* nothing was bound, so there is nothing to unbind */
-    };
-  }
+function framed(deps: ReplDeps): Surface {
+  const output: TerminalOutput = deps.out;
+  const frame = createRenderer({ output });
+  const transcript = createTranscript();
+  const editor = createEditor({ theme: deps.theme });
+  const keyboard = openKeyboard({ input: deps.input });
 
-  let open = false;
-
-  const onKeypress = (
-    chunk: unknown,
-    key?: { name?: string; ctrl?: boolean },
-  ) => {
-    if (open || binding.busy()) return;
-    if (key?.ctrl !== true || key.name !== 'g') return;
-
-    open = true;
-    const stash = rl.line;
-    void (async (): Promise<void> => {
-      try {
-        const chosen = await pickCommand({ menu, t: binding.t });
-        // Clear whatever was typed either way: the palette drew over the line,
-        // and readline will redraw it from its own buffer.
-        rl.write(null, { ctrl: true, name: 'u' });
-        rl.write(chosen === undefined ? stash : chosen.command);
-        if (chosen?.submit === true) rl.write(null, { name: 'return' });
-      } finally {
-        open = false;
-        binding.onClose();
+  /** The menu currently in the frame, and the promise it will answer. */
+  let overlay:
+    | {
+        readonly select: Select<unknown>;
+        readonly settle: (value: unknown) => void;
       }
+    | undefined;
+  /** Spinner frame while a turn has said nothing yet; `undefined` once it has. */
+  let thinking: number | undefined;
+  let stopTicking: (() => void) | undefined;
+
+  const queued: string[] = [];
+  let waiting: ((line: string | undefined) => void) | undefined;
+  let leaving = false;
+
+  const menuRows = (): number =>
+    Math.max(1, Math.min(DEFAULT_MAX_ROWS, frame.rows - CHROME_ROWS));
+
+  const view: Component = {
+    render(width: number): readonly string[] {
+      const rows = [...transcript.render(width)];
+      // One blank row between the conversation and the frame, always — the
+      // transcript's last line may or may not have ended in a newline.
+      if (!transcript.atLineStart) rows.push('');
+      rows.push('');
+
+      if (overlay !== undefined) {
+        return [...rows, ...overlay.select.render(width)];
+      }
+
+      return [
+        ...rows,
+        ...(thinking === undefined
+          ? []
+          : [
+              deps.theme.dim(
+                `${spinnerFrame(thinking)} ${deps.t('chat.generating')}`,
+              ),
+            ]),
+        deps.inputRule(width),
+        ...editor.render(width),
+        ...deps.status(width),
+      ];
+    },
+  };
+
+  frame.setRoot(view);
+
+  const deliver = (line: string | undefined): void => {
+    if (waiting === undefined) {
+      if (line !== undefined) queued.push(line);
+      return;
+    }
+    const resume = waiting;
+    waiting = undefined;
+    resume(line);
+  };
+
+  const menu: Menu = createMenu({
+    open: <T>(request: MenuRequest<T>): Promise<T | undefined> =>
+      new Promise<T | undefined>((resolve) => {
+        overlay = {
+          select: createSelect<T>({
+            items: request.items,
+            labels: request.labels,
+            theme: deps.theme,
+            ...(request.index === undefined ? {} : { index: request.index }),
+            maxRows: menuRows(),
+          }),
+          settle: resolve as (value: unknown) => void,
+        };
+        frame.requestRender();
+      }),
+  });
+
+  const openPalette = (): void => {
+    void (async (): Promise<void> => {
+      const chosen = await pickCommand({ menu, t: deps.t });
+      if (chosen !== undefined) {
+        if (chosen.submit) deliver(chosen.command);
+        else editor.setText(chosen.command);
+      }
+      frame.requestRender();
     })();
   };
 
-  input.prependListener('keypress', onKeypress);
-  return () => {
-    input.off('keypress', onKeypress);
+  keyboard.onKey((key) => {
+    if (overlay !== undefined) {
+      const outcome = overlay.select.handleKey(key);
+      if (outcome.kind !== 'open') {
+        const settle = overlay.settle;
+        overlay = undefined;
+        settle(outcome.kind === 'chosen' ? outcome.value : undefined);
+      }
+      frame.requestRender();
+      return;
+    }
+
+    // Ctrl-G is the palette, and it is still the only shortcut. It was one
+    // binding when readline owned all but three control keys, and there is no
+    // reason to spend more now that it does not: the palette lists every
+    // command, and every other control key means what a shell says it means.
+    if (isCtrl(key, 'g') && !deps.hasActiveTurn()) {
+      openPalette();
+      return;
+    }
+
+    // Tab completes a slash command, and only a slash command: the rest of a
+    // prompt is prose, and a completer guessing at the middle of a sentence
+    // would surprise far more often than it helped. It used to be readline's
+    // `completer` option; it is four lines here over the same table `/help`
+    // prints, which is the trade the whole editor makes.
+    if (key.name === 'tab') {
+      const [matches] = completeCommand(editor.text);
+      if (matches.length === 1) editor.setText(`${matches[0] ?? ''} `);
+      frame.requestRender();
+      return;
+    }
+
+    const outcome = editor.handleKey(key);
+    if (outcome.kind === 'submit') {
+      const line = outcome.text.trim();
+      if (line !== '') {
+        editor.remember(line);
+        deliver(line);
+      }
+    } else if (outcome.kind === 'interrupt') {
+      // While a turn runs Ctrl-C belongs to the turn. At an idle prompt it
+      // means "leave", which is what readline's own SIGINT used to mean.
+      if (deps.hasActiveTurn()) deps.abortActive();
+      else {
+        leaving = true;
+        deliver(undefined);
+      }
+    } else if (outcome.kind === 'eof' && !deps.hasActiveTurn()) {
+      leaving = true;
+      deliver(undefined);
+    }
+    frame.requestRender();
+  });
+
+  const offResize = frame.onResize(() => {
+    overlay?.select.setRows(menuRows());
+    frame.render();
+  });
+
+  const restore = (): void => {
+    keyboard.stop();
+    frame.stop();
+  };
+  if (deps.processHooks) process.once('exit', restore);
+
+  // Every write for the rest of the session — the banner, a turn's answer, a
+  // slash command's note, a log line — lands in the transcript rather than on
+  // the stream, because the renderer has to be able to print it again.
+  deps.setSink((text) => {
+    transcript.write(text);
+    // The first word of an answer is what the spinner was standing in for.
+    thinking = undefined;
+    frame.requestRender();
+  });
+  transcript.write(deps.header());
+  frame.render();
+
+  return {
+    menu,
+
+    async next(): Promise<string | undefined> {
+      const held = queued.shift();
+      if (held !== undefined) return held;
+      if (leaving) return undefined;
+      return await new Promise<string | undefined>((resolve) => {
+        waiting = resolve;
+      });
+    },
+
+    async run(body): Promise<TurnOutcome> {
+      thinking = 0;
+      // Nothing to point at until the answer starts: the caret would otherwise
+      // sit on the blank row beside the spinner and read as a stray block.
+      frame.setCursorVisible(false);
+      stopTicking = deps.ticker(() => {
+        if (thinking === undefined) return;
+        thinking += 1;
+        frame.render();
+      });
+      frame.requestRender();
+      try {
+        return await body();
+      } finally {
+        thinking = undefined;
+        stopTicking();
+        stopTicking = undefined;
+        frame.setCursorVisible(true);
+        frame.requestRender();
+      }
+    },
+
+    refresh(): void {
+      frame.requestRender();
+    },
+
+    close(): void {
+      offResize();
+      stopTicking?.();
+      deps.setSink(undefined);
+      restore();
+    },
   };
 }

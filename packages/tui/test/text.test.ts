@@ -11,6 +11,7 @@ import {
   stripAnsi,
   truncateToWidth,
   visibleWidth,
+  wrapToWidth,
 } from '#src/text.js';
 
 const ESC = String.fromCharCode(27);
@@ -270,5 +271,81 @@ describe('the properties the menu relies on', () => {
         expect(visibleWidth(padToWidth(text, width))).toBe(width);
       }),
     );
+  });
+});
+
+describe('the escapes that cost no columns', () => {
+  it('measures an APC string as nothing, payload included', () => {
+    // `CURSOR_MARKER` is one. Matching only the two-byte introducer left
+    // `ghostai:cursor` behind as visible text and measured the marker as
+    // fifteen columns, which folded the editor's line fifteen columns early.
+    // Both terminators: ST is what the marker uses and what the standard says,
+    // BEL is the xterm extension a stray sequence may well arrive with.
+    for (const apc of [
+      `${ESC}_ghostai:cursor${ESC}\\`,
+      `${ESC}_ghostai:cursor${String.fromCharCode(7)}`,
+    ]) {
+      expect(visibleWidth(apc)).toBe(0);
+      expect(stripAnsi(`a${apc}b`)).toBe('ab');
+    }
+  });
+
+  it('measures a hyperlink as its text and nothing else', () => {
+    const osc = `${ESC}]8;;https://example.com${String.fromCharCode(7)}`;
+    expect(visibleWidth(`${osc}link`)).toBe(4);
+  });
+});
+
+describe('wrapToWidth', () => {
+  it('breaks at a space rather than mid-word', () => {
+    expect(wrapToWidth('one two three', 8)).toEqual(['one two', 'three']);
+  });
+
+  it('breaks inside a word that has no space to break at', () => {
+    // A URL or a hash longer than the window still has to be shown.
+    expect(wrapToWidth('abcdefghij', 4)).toEqual(['abcd', 'efgh', 'ij']);
+  });
+
+  it('hands back the line untouched when it fits', () => {
+    expect(wrapToWidth('short', 40)).toEqual(['short']);
+  });
+
+  it('never draws a row wider than the width', () => {
+    fc.assert(
+      fc.property(
+        fc.string(),
+        fc.integer({ min: 1, max: 40 }),
+        (text, width) => {
+          for (const row of wrapToWidth(text, width)) {
+            expect(visibleWidth(row)).toBeLessThanOrEqual(width);
+          }
+        },
+      ),
+    );
+  });
+
+  it('keeps every visible character', () => {
+    fc.assert(
+      fc.property(
+        fc.stringMatching(/^[a-z ]*$/),
+        fc.integer({ min: 2, max: 20 }),
+        (text, width) => {
+          const rows = wrapToWidth(text, width);
+          // Spaces at a fold are what the fold replaces, so compare without them.
+          expect(rows.join('').replaceAll(' ', '')).toBe(
+            text.replaceAll(' ', ''),
+          );
+        },
+      ),
+    );
+  });
+
+  it('carries an open colour across the fold', () => {
+    // A colour that stopped at the fold would be a colour that changed with the
+    // window size.
+    const red = `${String.fromCharCode(27)}[31m`;
+    const rows = wrapToWidth(`${red}one two three`, 8);
+
+    expect(rows[1]?.startsWith(red)).toBe(true);
   });
 });

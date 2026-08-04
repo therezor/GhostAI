@@ -91,13 +91,13 @@ export function startupHeader(
 
   const hint = shortcuts ? t('chat.header.hintMenu') : t('chat.header.hint');
   return [
-    theme.title('  ghost'),
+    theme.title(theme.accent('  ghost')),
     ...lines,
     '',
     truncateToWidth(`  ${theme.dim(hint)}`, width),
-    // A trailing blank, which the prompt's own leading newline then doubles:
-    // the welcome is a block about the install rather than part of the
-    // conversation, and one line of gap reads as though it were the first
+    // A trailing blank, which the frame's own gap above the editor then
+    // doubles: the welcome is a block about the install rather than part of
+    // the conversation, and one line of gap reads as though it were the first
     // message.
     '',
   ].join('\n');

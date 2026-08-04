@@ -32,6 +32,14 @@ export interface Theme {
   readonly match: Style;
   /** A heading. */
   readonly title: Style;
+  /**
+   * The product's own colour, for the few marks that are always ours.
+   *
+   * Deliberately few: the caret, the banner, and the row a menu is sitting on.
+   * Colour that appears everywhere stops meaning anything, and a transcript is
+   * mostly somebody else's words.
+   */
+  readonly accent: Style;
   /** Something the operator should notice. */
   readonly warn: Style;
 }
@@ -45,24 +53,31 @@ export const PLAIN_THEME: Theme = {
   cursor: identity,
   match: identity,
   title: identity,
+  accent: identity,
   warn: identity,
 };
 
 /**
  * The roles, over a palette.
  *
- * `cursor` is cyan rather than an inverse video block: inverse spans the padded
+ * `cursor` is green rather than an inverse video block: inverse spans the padded
  * column width, so a row's highlight would be as wide as the longest label
  * rather than as wide as the label — which reads as a ragged rectangle. The
  * glyph carries the position; the colour only has to draw the eye to it.
+ *
+ * Green because it is the one colour the CLI claims for itself, and it is spent
+ * on three things only: the caret, the banner, and the selected row. Everything
+ * else is the terminal's own foreground or dim — a transcript is mostly the
+ * model's words and the operator's, and neither of those is ours to paint.
  */
 export function themeFrom(palette: Palette): Theme {
   return {
     text: palette.reset,
     dim: palette.dim,
-    cursor: palette.cyan,
+    cursor: palette.green,
     match: palette.yellow,
     title: palette.bold,
+    accent: palette.green,
     warn: palette.yellow,
   };
 }

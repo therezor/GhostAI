@@ -1068,15 +1068,16 @@ describe('chatCommand', () => {
     store.close();
   });
 
-  it('keeps the prompt one height at every window width', async () => {
-    // The resize fix, as a property rather than an arithmetic check. Readline
-    // redraws its prompt by moving up over the rows it last measured, so the
-    // block's height must not depend on the width — a full-width rule in there
-    // re-wraps on a narrowing, and every row of that happens inside the
-    // emulator before the process is told anything.
+  it('prints the whole frame again when the window changes width', async () => {
+    // The resize fix, as the property that replaced the arithmetic. A terminal
+    // rewraps its own screen before the process is told anything, so the rows a
+    // program drew are no longer where it left them — some of them above the
+    // cursor, where no erase can reach. That is what left a stranded copy of
+    // the footer behind on every resize.
     //
-    // `\n› ` cannot wrap, so the move-up is the same number at 60 columns and
-    // at 20, and it is the same number going back up again.
+    // So a width change is not patched. Each one clears the screen and prints
+    // the frame at the new width, banner included, which is only possible
+    // because the conversation is part of the frame.
     const home = tempHome();
     const { fetchImpl } = transport();
     const out = streamSink({ isTTY: true });
@@ -1099,28 +1100,31 @@ describe('chatCommand', () => {
 
     await waitFor(() => out.text().includes('ctrl-g for the menu'));
     await quiet(out);
-    const from = out.text().length;
 
-    for (const columns of [20, 90, 20, 90]) {
-      out.resizeTo(columns);
-      await quiet(out);
-    }
-
-    // Built rather than written as a literal: `no-control-regex` exists to
-    // catch an escape byte that arrived by accident, and one here would be
-    // exactly what it is looking for.
     // Built rather than written as a literal: `no-control-regex` exists to
     // catch an escape byte that arrived by accident, and one here would be
     // exactly what it is looking for. The bracket is escaped because CSI's is
     // a literal one, not the start of a character class.
     const ESC = String.fromCharCode(27);
-    const refresh = new RegExp(`${ESC}\\[(\\d+)A${ESC}\\[1G${ESC}\\[0J`, 'gu');
-    const moves = [...out.text().slice(from).matchAll(refresh)].map(
-      (found) => found[1],
-    );
+    const clear = new RegExp(`${ESC}\\[2J${ESC}\\[H`, 'u');
 
-    expect(moves).toHaveLength(4);
-    expect(new Set(moves).size).toBe(1);
+    for (const columns of [20, 90, 20, 90]) {
+      const from = out.text().length;
+      out.resizeTo(columns);
+      await quiet(out);
+      const drawn = out.text().slice(from);
+
+      expect(drawn).toMatch(clear);
+      // The banner is drawn again, refolded — at 20 columns the hint line is
+      // three rows, which is the point: the conversation re-wraps rather than
+      // being clipped to whatever width it was first printed at.
+      expect(drawn).toContain('ghost');
+      expect(drawn).toContain('ctrl-g');
+      // The status rule is rebuilt for the new width, never refolded from the
+      // old one — a row wider than the window is what wraps, and a wrapped row
+      // is what put every later row's address out by one.
+      expect(drawn).toContain('\u2500'.repeat(columns));
+    }
 
     input.write('/exit\n');
     expect(await pending).toBe(0);
@@ -1305,9 +1309,11 @@ describe('chatCommand', () => {
     expect(await pending).toBe(0);
   });
 
-  it('draws no bar at all on a terminal that will not say how tall it is', async () => {
-    // Guessing a height and addressing a row near the bottom of it would paint
-    // the status into the middle of the conversation.
+  it('draws no frame at all when stdout is not a terminal', async () => {
+    // `ghost chat > log` still opens a prompt, because stdin is still a
+    // keyboard — but escape sequences written into a file are not a status bar,
+    // they are noise in somebody's log. So that path gets a prompt, a newline
+    // and `NO_MENU`, which is the whole of it.
     const home = tempHome();
     const { fetchImpl } = transport();
     const out = streamSink();

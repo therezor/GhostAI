@@ -289,28 +289,23 @@ export default tseslint.config(
   },
   {
     /**
-     * Three files in the CLI may touch stdin, and no others.
+     * One file in the CLI may open a readline interface, and no others.
      *
-     * `chat.ts` and `init.ts` each open a readline interface because each *is*
-     * an input session — a REPL and a setup wizard. `menu.ts` is the only file
-     * that suspends one: a menu runs while readline is detached, and the
-     * handover (take its keypress listener off the stream, let `Screen` read,
-     * put the listener back) is the piece that is easy to get subtly wrong and
-     * impossible to notice until a terminal is left with no echo.
+     * `init.ts` keeps it because the setup wizard genuinely is a sequence of
+     * questions with nothing else on screen — readline is the right tool for
+     * that and always was.
      *
-     * Everywhere else the ban is what keeps the seam real. `Screen` takes a
-     * `handover` callback rather than an `Interface`, which is what lets
-     * `@ghostai/tui` stay a package that has never heard of a REPL; a picker
-     * that reached for `createInterface` would become a second owner of the
-     * same stream, and the symptom would be dropped keystrokes rather than
-     * anything that looks like a layering mistake.
+     * The REPL no longer has one. readline draws its own line, at a row it
+     * measured for itself, by moving up over a row count it cached, and every
+     * one of those numbers is invalidated by a resize before the process is
+     * told the window moved — which is exactly the bug that took the frame
+     * away from it. `chat.ts` builds a renderer and an editor instead, and the
+     * ban is what stops a second owner of stdin from appearing beside them.
+     * The symptom of one would be dropped keystrokes rather than anything that
+     * looks like a layering mistake.
      */
     files: ['packages/cli/src/**/*.ts'],
-    ignores: [
-      'packages/cli/src/menu.ts',
-      'packages/cli/src/chat.ts',
-      'packages/cli/src/init.ts',
-    ],
+    ignores: ['packages/cli/src/init.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -324,7 +319,7 @@ export default tseslint.config(
             {
               group: ['node:readline', 'node:readline/promises'],
               message:
-                'Only menu.ts owns stdin. A caller that needs a menu takes a `Menu`; a screen takes a `handover` callback.',
+                'The REPL owns stdin through `openKeyboard`, and readline would be a second owner of it. A caller that needs a menu takes a `Menu`.',
             },
           ],
         },

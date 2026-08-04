@@ -37,7 +37,7 @@ import type {
 } from '@ghostai/agent';
 import type { TurnStatsRecord } from '@ghostai/core';
 import { tokensPerSecond, type ToolRisk, type Usage } from '@ghostai/protocol';
-import type { Palette } from '@ghostai/tui';
+import { stripAnsi, type Palette } from '@ghostai/tui';
 import pc from 'picocolors';
 
 import { DEFAULT_LOCALE } from '@ghostai/i18n';
@@ -421,16 +421,42 @@ export class TurnRenderer {
   /**
    * The operator's own message, printed into the transcript.
    *
-   * readline echoes what was typed, but the whole prompt block is taken down
-   * when a turn starts — the rule above the editor would otherwise be left
-   * behind by every turn — so the message is reprinted here. It is not an
-   * `AgentEvent` and deliberately does not go through the switch: nothing on
-   * the wire says "a human pressed Return in a terminal", and inventing an
-   * event so that one renderer could draw a caret would be putting a CLI
-   * concern into a union three transports share.
+   * The editor holds the line while it is being typed and clears it on Return,
+   * so nothing would otherwise record what was asked — the frame is not the
+   * transcript. It is not an `AgentEvent` and deliberately does not go through
+   * the switch: nothing on the wire says "a human pressed Return in a
+   * terminal", and inventing an event so that one renderer could draw a caret
+   * would be putting a CLI concern into a union three transports share.
+   *
+   * The blank line above it is the one line of space between one exchange and
+   * the next. It used to come from the prompt's own leading newline; with the
+   * prompt gone it has to be written, and here is the only place that knows a
+   * new exchange is starting.
    */
   echo(text: string): void {
-    this.line(`${this.c.dim('›')} ${text}`);
+    this.break();
+    this.write('\n');
+    // The same caret the editor draws, in the same colour: scrolling back
+    // through a long session, these are what the eye counts exchanges by.
+    this.line(`${this.c.green('›')} ${text}`);
+  }
+
+  /**
+   * A diagnostic from somewhere else, put into the transcript intact.
+   *
+   * Logs reach the terminal through the same sink the turn's text does — a pino
+   * line written straight to the fd would land wherever the cursor happens to
+   * be, which while an answer is streaming is the middle of a word. Routing it
+   * here is only half the fix; the other half is this line break. Measured
+   * without it: `- **Edit{"level":40,…,"msg":"mcp server unavailable"} files**`.
+   *
+   * The text keeps its own newline and its own shape. It is not this renderer's
+   * to reformat, and a JSON log line that has been prettied is a log line that
+   * no longer matches what is in the file.
+   */
+  aside(text: string): void {
+    this.break();
+    this.write(text);
   }
 
   warn(text: string): void {
@@ -593,7 +619,11 @@ export class TurnRenderer {
     this.out.write(
       indent === '' ? text : indented(text, indent, this.atLineStart),
     );
-    this.atLineStart = text.endsWith('\n');
+    // Measured on what a reader sees, not on the bytes. Dimmed reasoning ends
+    // in `\x1b[22m` however its prose ended, so testing the raw string reports
+    // "mid-line" for a chunk that plainly finished one — and the next `break()`
+    // then writes a newline nobody asked for.
+    this.atLineStart = stripAnsi(text).endsWith('\n');
   }
 }
 

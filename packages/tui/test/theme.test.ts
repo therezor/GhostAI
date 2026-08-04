@@ -10,6 +10,7 @@ const ROLES: ReadonlyArray<keyof Theme> = [
   'cursor',
   'match',
   'title',
+  'accent',
   'warn',
 ];
 
@@ -47,5 +48,22 @@ describe('themeFor', () => {
 
   it('produces escape sequences when colour is switched on', () => {
     expect(themeFor(true).cursor('hello')).not.toBe('hello');
+  });
+});
+
+describe('the accent', () => {
+  it('is spent on the three marks that are the CLI’s own', () => {
+    // The caret, the banner and the selected row. Colour that appears
+    // everywhere stops meaning anything, and a transcript is mostly somebody
+    // else's words.
+    const theme = themeFor(true);
+
+    expect(theme.accent('x')).not.toBe('x');
+    expect(theme.accent('x')).toBe(theme.cursor('x'));
+  });
+
+  it('is the identity when colour is off, like every other role', () => {
+    expect(themeFor(false).accent('x')).toBe('x');
+    expect(PLAIN_THEME.accent('x')).toBe('x');
   });
 });

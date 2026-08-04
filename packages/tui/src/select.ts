@@ -1,18 +1,18 @@
 /**
  * A menu: keys in, one value or nothing out.
  *
- * The whole of the interactive part, and it is short because `SelectList` owns
- * every decision and `Screen` owns every byte. What is left here is a key map,
- * a frame, and the promise that ties them together.
+ * Short, because `SelectList` owns every decision about what is selected and
+ * the renderer owns every byte. What is left is a key map and a frame.
  *
- * **Cancelling resolves rather than rejects.** `undefined` is a perfectly
- * ordinary answer to "which agent?" — the operator pressed Escape — and a
- * rejection would make every call site wrap this in a `try` to express that.
+ * It is a component and not a loop of its own, which is the part that changed
+ * when the renderer arrived. A menu used to open its own region, take stdin and
+ * paint itself; now it is rows in the same frame as everything else, so it
+ * refolds on a resize for the same reason the transcript does and there is no
+ * second thing on screen for the two of them to disagree about.
  *
- * **Ctrl-C is handled here, not by a signal handler.** In raw mode the terminal
- * stops translating `0x03` into SIGINT and delivers the byte, so the CLI's
- * `process.on('SIGINT')` does not fire while a menu is open. A menu that did not
- * read `0x03` itself would be a menu Ctrl-C could not close.
+ * **Cancelling answers `undefined` rather than throwing.** The operator pressed
+ * Escape, which is a perfectly ordinary answer to "which agent?"; a rejection
+ * would make every call site wrap this in a `try` to say so.
  *
  * **`Ctrl-P`/`Ctrl-N` move as well as the arrow keys.** They are plain control
  * bytes, which makes them the only movement keys that survive a terminal whose
@@ -20,8 +20,8 @@
  * being the case that actually happens.
  */
 
+import type { Component } from './component.js';
 import { isCtrl, type Key } from './keys.js';
-import type { Screen } from './screen.js';
 import { SelectList, type SelectItem } from './select-list.js';
 import { truncateToWidth } from './text.js';
 import { PLAIN_THEME, type Theme } from './theme.js';
@@ -38,94 +38,64 @@ export interface SelectLabels {
 }
 
 export interface SelectOptions<T> {
-  readonly screen: Screen;
   readonly items: ReadonlyArray<SelectItem<T>>;
   readonly labels: SelectLabels;
   /** Defaults to `PLAIN_THEME`, so a caller that forgets colour still reads. */
   readonly theme?: Theme | undefined;
   readonly index?: number | undefined;
-  /** Visible rows, clamped to what the window can hold. Default 10. */
+  /** Visible rows, clamped by the caller to what the window can hold. */
   readonly maxRows?: number | undefined;
-  readonly signal?: AbortSignal | undefined;
 }
 
-const DEFAULT_MAX_ROWS = 10;
+/** What a keystroke did to the menu. */
+export type SelectOutcome<T> =
+  | { readonly kind: 'open' }
+  | { readonly kind: 'chosen'; readonly value: T }
+  | { readonly kind: 'cancelled' };
+
+export interface Select<T> extends Component {
+  handleKey(key: Key): SelectOutcome<T>;
+  /** Clamps the list to what the window can spare. */
+  setRows(rows: number): void;
+}
+
+export const DEFAULT_MAX_ROWS = 10;
 /** Title, filter, footer, the scroll counter, and a row of breathing space. */
-const CHROME_ROWS = 5;
+export const CHROME_ROWS = 5;
 const DEFAULT_FILTER_PREFIX = '/';
+const OPEN: SelectOutcome<never> = { kind: 'open' };
+const CANCELLED: SelectOutcome<never> = { kind: 'cancelled' };
 
-function clamp(value: number, low: number, high: number): number {
-  return Math.max(low, Math.min(value, high));
-}
-
-/**
- * Runs a menu until it is answered or abandoned.
- *
- * Always erases the region before resolving, on every path including an abort —
- * a menu left painted after its promise settled is a menu the next prompt draws
- * on top of.
- */
-export async function select<T>(
-  options: SelectOptions<T>,
-): Promise<T | undefined> {
-  const { screen, labels } = options;
+export function createSelect<T>(options: SelectOptions<T>): Select<T> {
+  const { labels } = options;
   const theme = options.theme ?? PLAIN_THEME;
   const prefix = labels.filterPrefix ?? DEFAULT_FILTER_PREFIX;
 
-  const visibleRows = (): number =>
-    clamp(
-      options.maxRows ?? DEFAULT_MAX_ROWS,
-      1,
-      Math.max(1, screen.rows - CHROME_ROWS),
-    );
-
   const list = new SelectList({
     items: options.items,
-    rows: visibleRows(),
+    rows: options.maxRows ?? DEFAULT_MAX_ROWS,
     ...(options.index === undefined ? {} : { index: options.index }),
   });
 
-  const frame = (): string[] => {
-    const width = screen.columns;
-    const fit = (text: string): string => truncateToWidth(text, width);
+  return {
+    setRows(rows): void {
+      list.setRows(rows);
+    },
 
-    const rows = list.render(width, theme);
-    return [
-      theme.title(fit(labels.title)),
-      theme.dim(fit(`${prefix}${list.filter}`)),
-      ...(rows.length > 0 ? rows : [theme.dim(fit(`  ${labels.empty}`))]),
-      theme.dim(fit(`  ${labels.footer}`)),
-    ];
-  };
+    render(width): readonly string[] {
+      const fit = (text: string): string => truncateToWidth(text, width);
+      const rows = list.render(width, theme);
+      return [
+        theme.title(fit(labels.title)),
+        theme.dim(fit(`${prefix}${list.filter}`)),
+        ...(rows.length > 0 ? rows : [theme.dim(fit(`  ${labels.empty}`))]),
+        theme.dim(fit(`  ${labels.footer}`)),
+      ];
+    },
 
-  return await new Promise<T | undefined>((resolve) => {
-    let settled = false;
-    // Collected rather than held in named variables, because the handlers are
-    // registered *after* `finish` is defined and `handle` calls `finish` — so
-    // neither order lets both be a `const`.
-    const undo: Array<() => void> = [];
-
-    const finish = (value: T | undefined): void => {
-      if (settled) return;
-      settled = true;
-      for (const off of undo) off();
-      options.signal?.removeEventListener('abort', onAbort);
-      screen.clear();
-      resolve(value);
-    };
-
-    function onAbort(): void {
-      finish(undefined);
-    }
-
-    const draw = (): void => {
-      screen.paint(frame());
-    };
-
-    const handle = (key: Key): void => {
+    handleKey(key): SelectOutcome<T> {
       if (key.name === 'escape' || isCtrl(key, 'c') || isCtrl(key, 'd')) {
-        finish(undefined);
-        return;
+        return CANCELLED;
       }
 
       if (key.name === 'enter') {
@@ -133,9 +103,10 @@ export async function select<T>(
         // Nothing matched: Enter means "give up" rather than "choose the row
         // that is not there". A disabled row is different — it is on screen, so
         // the key doing nothing is the honest answer.
-        if (item === undefined) finish(undefined);
-        else if (item.disabled !== true) finish(item.value);
-        return;
+        if (item === undefined) return CANCELLED;
+        return item.disabled === true
+          ? OPEN
+          : { kind: 'chosen', value: item.value };
       }
 
       if (key.name === 'up' || isCtrl(key, 'p')) list.moveUp();
@@ -152,25 +123,9 @@ export async function select<T>(
       } else if (isCtrl(key, 'u')) list.setFilter('');
       else if (key.name === 'char' && !key.ctrl && !key.meta) {
         list.setFilter(list.filter + key.char);
-      } else return;
+      }
 
-      draw();
-    };
-
-    if (options.signal?.aborted === true) {
-      finish(undefined);
-      return;
-    }
-    options.signal?.addEventListener('abort', onAbort, { once: true });
-
-    undo.push(
-      screen.onKey(handle),
-      screen.onResize(() => {
-        list.setRows(visibleRows());
-        draw();
-      }),
-    );
-
-    draw();
-  });
+      return OPEN;
+    },
+  };
 }

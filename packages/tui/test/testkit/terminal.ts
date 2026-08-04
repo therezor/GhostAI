@@ -1,7 +1,7 @@
 /**
  * A terminal that exists entirely in memory.
  *
- * Everything `Screen` and `select` need from a real one, and nothing else: a
+ * Everything the renderer and the keyboard need from a real one, and nothing else: a
  * readable half to push key bytes into, a writable half that accumulates what
  * was drawn, a size, and a `setRawMode` that records whether it was called. No
  * pty, no child process, no timing.
@@ -14,7 +14,7 @@
 
 import { PassThrough } from 'node:stream';
 
-import type { TerminalInput, TerminalOutput } from '#src/screen.js';
+import type { TerminalInput, TerminalOutput } from '#src/terminal.js';
 
 export interface FakeInput extends TerminalInput {
   /** Every `setRawMode` call, in order. */
@@ -45,8 +45,8 @@ export function fakeInput(options: { isTTY?: boolean } = {}): FakeInput {
     rawModeCalls: calls,
     setRawMode(mode: boolean): void {
       calls.push(mode);
-      // Mirrors the real stream, so `Screen`'s "only turn off a mode I turned
-      // on" check is exercised rather than assumed.
+      // Mirrors the real stream, so the keyboard's "only turn off a mode I
+      // turned on" check is exercised rather than assumed.
       (stream as unknown as { isRaw: boolean }).isRaw = mode;
     },
     type(data: string): void {
@@ -96,9 +96,9 @@ export function fakeOutput(
 /**
  * Lets the stream deliver what was just typed.
  *
- * One macrotask, not a poll for stillness: `Screen`'s data handler is
- * synchronous and `select`'s key handler paints and returns without awaiting
- * anything, so there is exactly one hop to wait for and no race to settle.
+ * One macrotask, not a poll for stillness: the keyboard's data handler is
+ * synchronous and every key handler returns without awaiting anything, so there
+ * is exactly one hop to wait for and no race to settle.
  */
 export async function flush(): Promise<void> {
   await new Promise<void>((resolve) => {

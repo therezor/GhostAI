@@ -1,29 +1,17 @@
 /**
- * The one place that knows both readline and `@ghostai/tui`.
+ * Opening a menu, and deciding whether this terminal can have one.
  *
- * A menu has to read stdin, and in the REPL something else already is: a
- * readline `Interface` in the middle of a pending `question`. This file performs
- * the handover in both directions and nothing else does — which is what lets the
- * toolkit take a `handover` callback and stay a package that has never heard of
- * a REPL, and what the lint zone in `eslint.config.js` enforces.
+ * A menu used to be a second thing on screen: it opened a region of its own,
+ * took stdin away from readline, painted itself on every keystroke and erased
+ * itself on the way out. All of that is gone. A menu is now rows in the same
+ * frame as the transcript and the editor, drawn by the same renderer, so there
+ * is nothing to hand over and nothing to erase — and, the reason it matters, no
+ * second set of row arithmetic to disagree with the first when the window
+ * changes size.
  *
- * Three details make the handover safe, and each of them was wrong in an
- * earlier sketch:
- *
- *  - **`rl.pause()` is not enough.** `emitKeypressEvents`'s own `data` hook
- *    stays attached to the stream, so resuming would feed readline again.
- *    readline's `keypress` listener has to be *detached* and put back, not
- *    starved. Node re-attaches its `data` hook by itself when a `keypress`
- *    listener returns, which is why restoring the saved listeners is the whole
- *    of the restore.
- *  - **Raw mode is never touched here.** readline set it when the interface was
- *    created with `terminal: true`, and it stays set across the takeover. A
- *    `setRawMode` call on either side of this is how a shell ends up with no
- *    echo after the process exits.
- *  - **The pending `question` is never cancelled.** Aborting it to run a menu
- *    would mean restructuring the REPL's single `AbortController`, and it is
- *    unnecessary: the promise is simply still pending when the menu closes, and
- *    resolves normally afterwards.
+ * What is left here is the seam. `open` is supplied by whoever owns the frame,
+ * because only that code knows where a menu goes in it; this file knows only
+ * that a menu can be shown and eventually answers.
  *
  * `NO_MENU` is the other half of the design. Every non-interactive path — a
  * pipe, `--json`, `TERM=dumb`, a one-shot, a test — gets it by construction
@@ -31,19 +19,12 @@
  * are untouched" a property of the type rather than a convention.
  */
 
-import type { Interface } from 'node:readline/promises';
-
 import {
   columnsOf,
-  openScreen,
-  select,
-  type InputHandover,
-  type Screen,
   type SelectItem,
   type SelectLabels,
   type TerminalInput,
   type TerminalOutput,
-  type Theme,
 } from '@ghostai/tui';
 
 import type { Env } from './i18n.js';
@@ -108,92 +89,21 @@ export function menuAvailable(options: MenuAvailableOptions): boolean {
   return columnsOf(options.output) >= MIN_COLUMNS;
 }
 
-/**
- * Detaches readline from stdin, and puts it back.
- *
- * See the note at the top of this file for why each step is what it is. Safe to
- * release twice: a `Screen` closed by both its own `finally` and an exit hook
- * would otherwise restore the listeners twice and leave readline seeing every
- * keystroke in duplicate.
- */
-export function suspendReadline(
-  rl: Interface,
-  input: TerminalInput,
-): InputHandover {
-  rl.pause();
-  const saved = input.listeners('keypress');
-  input.removeAllListeners('keypress');
-
-  let released = false;
-  return {
-    release: (): void => {
-      if (released) return;
-      released = true;
-      for (const listener of saved) {
-        input.on('keypress', listener as (...args: unknown[]) => void);
-      }
-      rl.resume();
-    },
-  };
-}
-
 export interface MenuOptions {
-  readonly input: TerminalInput;
-  readonly output: TerminalOutput;
-  /** The REPL's interface, suspended for the life of each menu. */
-  readonly rl: Interface;
-  readonly theme: Theme;
   /**
-   * Registers the last-resort restore. Injected so a test does not accumulate
-   * listeners on the real process, and so `chatCommand` stays the only place
-   * that decides this run owns them.
+   * Puts the menu into the frame and answers when it closes.
+   *
+   * The frame's owner supplies it, because only that code knows where a menu
+   * belongs among the rows and which keystrokes should reach it.
    */
-  readonly onExit?: ((restore: () => void) => void) | undefined;
+  readonly open: <T>(request: MenuRequest<T>) => Promise<T | undefined>;
 }
 
-/**
- * A menu bound to a running REPL.
- *
- * The exit hook is not belt-and-braces. Under raw mode there is no echo and no
- * line discipline, so a process that dies inside a menu leaves the operator's
- * shell unusable until they type `stty sane` blind. `Screen.close()` in
- * `select`'s own `finally` covers every ordinary path; this covers the rest.
- */
 export function createMenu(options: MenuOptions): Menu {
-  let open: Screen | undefined;
-
-  const register =
-    options.onExit ??
-    ((restore): void => {
-      process.once('exit', restore);
-    });
-  register(() => {
-    open?.close();
-    open = undefined;
-  });
-
   return {
     available: true,
-    async choose<T>(request: MenuRequest<T>): Promise<T | undefined> {
-      const screen = openScreen({
-        input: options.input,
-        output: options.output,
-        handover: () => suspendReadline(options.rl, options.input),
-      });
-      open = screen;
-
-      try {
-        return await select<T>({
-          screen,
-          items: request.items,
-          labels: request.labels,
-          theme: options.theme,
-          ...(request.index === undefined ? {} : { index: request.index }),
-        });
-      } finally {
-        screen.close();
-        open = undefined;
-      }
+    choose<T>(request: MenuRequest<T>): Promise<T | undefined> {
+      return options.open(request);
     },
   };
 }
