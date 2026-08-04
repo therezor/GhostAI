@@ -90,14 +90,24 @@ describe('painting', () => {
     status.close();
   });
 
-  it('truncates every row to the window width rather than letting one wrap', () => {
+  it('keeps every drawn row a column inside the window, whatever it was handed', () => {
+    // The invariant the cursor arithmetic rests on: one line drawn, one row
+    // used. A row *wider* than the window takes two, so the `CURSOR_UP` closing
+    // the paint lands inside the bar rather than above it, and the next paint's
+    // erase starts from there — taking what is below and stranding what is
+    // above. That is reachable from ordinary use, because the editor row is the
+    // caret plus whatever is being typed and typing is not bounded by a window.
+    //
+    // A row exactly as wide as the window is refused too: it leaves the
+    // terminal in the deferred-wrap state, which emulators settle differently,
+    // and the last row drawn carries no newline to settle it.
     const output = fakeOutput({ columns: 12 });
     const status = bar(output);
 
-    status.paint(['a-status-row-far-wider-than-twelve'], 0);
+    status.paint(['a-status-row-far-wider-than-twelve', 'x'.repeat(12)], 0);
 
     for (const line of drawn(output).split('\n')) {
-      expect(visibleWidth(line)).toBeLessThanOrEqual(12);
+      expect(visibleWidth(line)).toBeLessThanOrEqual(11);
     }
     status.close();
   });

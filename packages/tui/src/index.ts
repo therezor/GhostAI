@@ -25,6 +25,7 @@ export {
   padToWidth,
   rule,
   stripAnsi,
+  truncateStartToWidth,
   truncateToWidth,
   visibleWidth,
 } from './text.js';

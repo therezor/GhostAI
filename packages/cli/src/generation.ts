@@ -35,6 +35,7 @@ import {
   isCtrl,
   parseKeys,
   spinnerFrame,
+  truncateStartToWidth,
 } from '@ghostai/tui';
 
 import type { CliT } from './i18n.js';
@@ -72,6 +73,7 @@ export interface GenerationOptions {
   readonly input: NodeJS.ReadableStream;
   /** Draws the footer. Supplied rather than imported: see `menu.ts`. */
   readonly bar: {
+    readonly columns: number;
     writeAbove(text: string, lines: readonly string[]): void;
     repaint(lines: readonly string[]): void;
     onResize(handler: () => void): () => void;
@@ -145,7 +147,10 @@ export function createGeneration(options: GenerationOptions): Generation {
         ...spinnerLines(tick, theme, t),
         '',
         options.inputRule(),
-        `› ${typed}`,
+        // The tail, not the head: the end of a message in progress is the part
+        // being written. The bar would cut it to fit either way — this decides
+        // *which* end survives.
+        `› ${truncateStartToWidth(typed, Math.max(1, bar.columns - 4))}`,
         ...options.status(),
       ];
 

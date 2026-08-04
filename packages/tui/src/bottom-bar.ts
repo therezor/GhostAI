@@ -172,6 +172,27 @@ export function openBottomBar(options: BottomBarOptions): BottomBar {
   // allocated by `script(1)` reports neither — still gets a status bar.
   const width = (): number => columnsOf(output, options.columns);
 
+  /**
+   * One drawn line, guaranteed to occupy exactly one row on screen.
+   *
+   * A column short of the window rather than exactly it, and enforced here
+   * rather than trusted from the caller. Both halves of that matter:
+   *
+   * A line as wide as the window leaves the terminal in the deferred-wrap
+   * state, which emulators resolve differently, and the last line drawn carries
+   * no newline to settle it. A line *wider* than the window is worse — it takes
+   * two rows, so the `CURSOR_UP` that closes a paint lands inside the bar
+   * rather than above it, and the next paint's erase starts from there and
+   * takes everything below with it while stranding the rows above. That is
+   * reachable from ordinary use: the editor row is `› ` plus whatever is being
+   * typed, and nothing about typing is bounded by the window.
+   *
+   * So the invariant belongs to the thing that depends on it. A caller that
+   * sizes its own rows correctly loses nothing.
+   */
+  const fit = (line: string): string =>
+    truncateToWidth(line, Math.max(1, width() - 1));
+
   const frame = (body: string): string =>
     synchronized ? `${SYNC_ON}${body}${SYNC_OFF}` : body;
 
@@ -195,10 +216,7 @@ export function openBottomBar(options: BottomBarOptions): BottomBar {
         return;
       }
 
-      const columns = width();
-      const body = lines
-        .map((line) => truncateToWidth(line, columns))
-        .join('\n');
+      const body = lines.map(fit).join('\n');
 
       // One newline to step off the input row, then erase everything below —
       // which is only ever the previous bar, because `reserve` made sure of it.

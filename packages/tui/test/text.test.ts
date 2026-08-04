@@ -5,6 +5,7 @@ import {
   dropLastGrapheme,
   fitToWidth,
   justify,
+  truncateStartToWidth,
   padToWidth,
   rule,
   stripAnsi,
@@ -131,6 +132,30 @@ describe('truncateToWidth', () => {
 
   it('accepts a different ellipsis', () => {
     expect(truncateToWidth('abcdefghij', 6, '..')).toBe('abcd..');
+  });
+});
+
+describe('truncateStartToWidth', () => {
+  it('keeps the end, which is the part being typed', () => {
+    expect(truncateStartToWidth('abcdefghij', 5)).toBe('…ghij');
+  });
+
+  it('leaves a string that already fits alone', () => {
+    expect(truncateStartToWidth('abc', 5)).toBe('abc');
+  });
+
+  it('never returns more columns than asked for, wide characters included', () => {
+    for (const text of ['abcdefghij', '日本語のラベル', 'a🚀b🚀c🚀d']) {
+      for (const max of [1, 2, 3, 5, 8]) {
+        expect(
+          visibleWidth(truncateStartToWidth(text, max)),
+        ).toBeLessThanOrEqual(max);
+      }
+    }
+  });
+
+  it('is nothing at all for no width', () => {
+    expect(truncateStartToWidth('abc', 0)).toBe('');
   });
 });
 

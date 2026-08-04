@@ -47,6 +47,7 @@ function harness(): Harness {
   const generation = createGeneration({
     input,
     bar: {
+      columns: 60,
       writeAbove: (text, lines) => {
         written.push(text);
         footers.push([...lines]);
@@ -251,6 +252,24 @@ describe('the frame while a turn runs', () => {
 });
 
 describe('typing while it runs', () => {
+  it('shows the tail of a long message, which is the part being written', async () => {
+    // The bar would cut an over-wide row to fit either way — this decides which
+    // end survives, and a field that froze after its first fifty characters
+    // would be a field nobody could use.
+    const test = harness();
+    const turn = pending();
+    const run = test.generation.run(turn.body);
+
+    await typed(test.input, 'a'.repeat(40) + 'THE-END');
+
+    const editor = test.footers.at(-1)?.find((line) => line.startsWith('› '));
+    expect(editor).toContain('THE-END');
+    expect(editor?.endsWith('THE-END')).toBe(true);
+
+    turn.finish();
+    await run;
+  });
+
   it('shows what is typed in the editor', async () => {
     const test = harness();
     const turn = pending();

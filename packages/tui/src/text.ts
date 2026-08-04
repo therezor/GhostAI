@@ -302,3 +302,39 @@ export function dropLastGrapheme(text: string): string {
   for (const { index } of GRAPHEMES.segment(text)) last = index;
   return text.slice(0, last);
 }
+
+/**
+ * The *end* of the string, cut to at most `max` columns.
+ *
+ * `truncateToWidth` keeps the head, which is right for a label and wrong for
+ * something being typed: the interesting end of a message in progress is the
+ * end, and a field that froze after its first fifty characters would be a field
+ * nobody could use.
+ */
+export function truncateStartToWidth(
+  text: string,
+  max: number,
+  ellipsis: string = '…',
+): string {
+  if (max <= 0) return '';
+  if (visibleWidth(text) <= max) return text;
+
+  const mark = visibleWidth(ellipsis) <= max ? ellipsis : '';
+  const budget = max - visibleWidth(mark);
+
+  // Backwards, cluster by cluster, until the tail fills the budget.
+  const clusters = [...GRAPHEMES.segment(stripAnsi(text))].map(
+    (part) => part.segment,
+  );
+  const kept: string[] = [];
+  let width = 0;
+  for (let at = clusters.length - 1; at >= 0; at -= 1) {
+    const cluster = clusters[at] ?? '';
+    const cost = clusterWidth(cluster);
+    if (width + cost > budget) break;
+    kept.unshift(cluster);
+    width += cost;
+  }
+
+  return `${mark}${kept.join('')}`;
+}
