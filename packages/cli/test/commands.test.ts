@@ -186,11 +186,11 @@ describe('/workspace <id>', () => {
   });
 });
 
-describe('/reasoning and /usage', () => {
+describe('/output', () => {
   const homes: string[] = [];
 
   function runtimeIn(): ChatRuntime {
-    const home = mkdtempSync(join(tmpdir(), 'ghostai-shown-'));
+    const home = mkdtempSync(join(tmpdir(), 'ghostai-output-'));
     homes.push(home);
     mkdirSync(join(home, 'workspace'), { recursive: true });
     return createChatRuntime({ home });
@@ -203,46 +203,68 @@ describe('/reasoning and /usage', () => {
     }
   });
 
-  it('flips reasoning off and back on with no argument', async () => {
-    // No argument flips it, which is what a hand reaching for a switch expects.
+  it('lists every switch and its state when asked for nothing', async () => {
+    // The bare form is what makes the switches discoverable at all — two
+    // separate commands never were.
+    const { ctx, out } = context(runtimeIn(), 'cli:1');
+
+    await runSlashCommand('/output', ctx);
+
+    expect(out.text).toContain('reasoning  shown');
+    expect(out.text).toContain('stats      shown');
+  });
+
+  it('flips a field named with no word', async () => {
     const { ctx, out } = context(runtimeIn(), 'cli:1');
     expect(ctx.renderer.reasoningShown).toBe(true);
 
-    await runSlashCommand('/reasoning', ctx);
+    await runSlashCommand('/output reasoning', ctx);
     expect(ctx.renderer.reasoningShown).toBe(false);
-    expect(out.text).toContain('reasoning is hidden');
+    expect(out.text).toContain('hidden: reasoning');
 
-    await runSlashCommand('/reasoning', ctx);
+    await runSlashCommand('/output reasoning', ctx);
     expect(ctx.renderer.reasoningShown).toBe(true);
-    expect(out.text).toContain('reasoning is shown');
+    expect(out.text).toContain('shown: reasoning');
   });
 
   it('says it outright with on and off, for a hand that has lost track', async () => {
     const { ctx } = context(runtimeIn(), 'cli:1');
 
-    await runSlashCommand('/reasoning off', ctx);
-    await runSlashCommand('/reasoning off', ctx);
-    expect(ctx.renderer.reasoningShown).toBe(false);
+    await runSlashCommand('/output stats off', ctx);
+    await runSlashCommand('/output stats off', ctx);
+    expect(ctx.renderer.statsShown).toBe(false);
 
-    await runSlashCommand('/reasoning on', ctx);
-    await runSlashCommand('/reasoning on', ctx);
-    expect(ctx.renderer.reasoningShown).toBe(true);
+    await runSlashCommand('/output stats on', ctx);
+    await runSlashCommand('/output stats on', ctx);
+    expect(ctx.renderer.statsShown).toBe(true);
   });
 
-  it('hides the tokens and timing after a turn', async () => {
+  it('shows the new state in the listing afterwards', async () => {
     const { ctx, out } = context(runtimeIn(), 'cli:1');
-    expect(ctx.renderer.usageShown).toBe(true);
+    await runSlashCommand('/output stats off', ctx);
+    out.text = '';
 
-    await runSlashCommand('/usage off', ctx);
+    await runSlashCommand('/output', ctx);
 
-    expect(ctx.renderer.usageShown).toBe(false);
-    expect(out.text).toContain('tokens and timing are hidden');
+    expect(out.text).toContain('stats      hidden');
+    expect(out.text).toContain('reasoning  shown');
+  });
+
+  it('refuses a field it has never heard of, without changing anything', async () => {
+    // Warned rather than thrown: a mistyped command must not end the REPL.
+    const { ctx, out } = context(runtimeIn(), 'cli:1');
+
+    await runSlashCommand('/output colours off', ctx);
+
+    expect(out.text).toContain('colours');
+    expect(ctx.renderer.reasoningShown).toBe(true);
+    expect(ctx.renderer.statsShown).toBe(true);
   });
 
   it('treats a word it does not know as a flip rather than an error', async () => {
     const { ctx } = context(runtimeIn(), 'cli:1');
-    await runSlashCommand('/usage yes-please', ctx);
-    expect(ctx.renderer.usageShown).toBe(false);
+    await runSlashCommand('/output stats yes-please', ctx);
+    expect(ctx.renderer.statsShown).toBe(false);
   });
 });
 

@@ -55,8 +55,15 @@ export interface TurnRendererOptions {
   readonly colors?: boolean;
   /** Reasoning deltas are dimmed rather than hidden. Default `true`. */
   readonly showReasoning?: boolean;
-  /** The dim token/iteration line after a turn. Default `true`. */
-  readonly showUsage?: boolean;
+  /**
+   * The dim token/iteration line after a turn. Default `true`.
+   *
+   * Called stats rather than usage, which is what it was: `Usage` is the token
+   * record the protocol carries, and this is the *line* — which nobody at a
+   * prompt calls usage. `/output stats off` is how it is turned off, and one
+   * word for one thing is worth the rename.
+   */
+  readonly showStats?: boolean;
   /** Lines of a tool result to preview. `0` prints none. Default `6`. */
   readonly toolResultLines?: number;
   /**
@@ -222,13 +229,13 @@ export class TurnRenderer {
   private readonly out: RenderTarget;
   private readonly c: Palette;
   /**
-   * Both are settable, because `/reasoning` and `/usage` turn them off part way
-   * through a session. The flags that set them at launch — `--no-reasoning`,
-   * and `--json`, which suppresses the lot — are the same two fields; a REPL
-   * simply gets to change its mind.
+   * Both are settable, because `/output` turns them off part way through a
+   * session. The flags that set them at launch — `--no-reasoning`, and
+   * `--json`, which suppresses the lot — are the same two fields; a REPL simply
+   * gets to change its mind.
    */
   private showReasoning: boolean;
-  private showUsage: boolean;
+  private showStats: boolean;
   private readonly toolResultLines: number;
   private readonly t: CliT;
   /**
@@ -260,7 +267,7 @@ export class TurnRenderer {
     this.out = options.out;
     this.c = pc.createColors(options.colors);
     this.showReasoning = options.showReasoning ?? true;
-    this.showUsage = options.showUsage ?? true;
+    this.showStats = options.showStats ?? true;
     this.t = options.t ?? translations(DEFAULT_LOCALE).t;
     this.toolResultLines = options.toolResultLines ?? DEFAULT_TOOL_RESULT_LINES;
   }
@@ -440,12 +447,12 @@ export class TurnRenderer {
   }
 
   /** Whether the token and timing line is printed after a turn. */
-  get usageShown(): boolean {
-    return this.showUsage;
+  get statsShown(): boolean {
+    return this.showStats;
   }
 
-  setUsageShown(shown: boolean): void {
-    this.showUsage = shown;
+  setStatsShown(shown: boolean): void {
+    this.showStats = shown;
   }
 
   /**
@@ -527,7 +534,7 @@ export class TurnRenderer {
     if (reasonKey !== undefined) {
       this.line(this.c.yellow(`  ${this.t(reasonKey)}`));
     }
-    if (!this.showUsage) return;
+    if (!this.showStats) return;
 
     const parts = [this.t('render.steps', { count: iterations })];
     if (usage !== undefined && usage.totalTokens > 0) {

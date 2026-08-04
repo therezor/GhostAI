@@ -160,8 +160,8 @@ const HELP_LAYOUT: readonly HelpSection[] = [
   {
     heading: 'slash.sections.output',
     rows: [
-      { syntax: '/reasoning [on|off]', key: 'slash.help.reasoning' },
-      { syntax: '/usage [on|off]', key: 'slash.help.usage' },
+      { syntax: '/output', key: 'slash.help.output' },
+      { syntax: '/output <field> [on|off]', key: 'slash.help.outputSet' },
     ],
   },
   {
@@ -511,25 +511,8 @@ async function dispatch(
 
     // ── What a turn shows ─────────────────────────────────────
 
-    case 'reasoning':
-      return toggle(argv[0], ctx, {
-        shown: renderer.reasoningShown,
-        set: (on) => {
-          renderer.setReasoningShown(on);
-        },
-        on: 'slash.notes.reasoningOn',
-        off: 'slash.notes.reasoningOff',
-      });
-
-    case 'usage':
-      return toggle(argv[0], ctx, {
-        shown: renderer.usageShown,
-        set: (on) => {
-          renderer.setUsageShown(on);
-        },
-        on: 'slash.notes.usageOn',
-        off: 'slash.notes.usageOff',
-      });
+    case 'output':
+      return outputCommand(argv[0], argv[1], ctx);
 
     default:
       renderer.warn(t('slash.notes.unknownCommand', { name }));
@@ -538,27 +521,90 @@ async function dispatch(
 }
 
 /**
- * `/reasoning` and `/usage`, which are the same command twice.
+ * The parts of a turn that can be turned off, and how to read each one.
  *
- * No argument flips it, which is what an operator reaching for a switch
- * expects; `on` and `off` say it outright, for a hand that has lost track. The
- * setting lasts as long as the process — `--no-reasoning` is how a script says
- * it once, and a prompt asking to see less for the next few turns has not made
- * a decision worth writing to `config.json`.
+ * A table rather than a `switch`, because `/output` with no argument has to
+ * list them — and a listing derived from the same place the command reads
+ * cannot go out of step with what the command accepts.
+ *
+ * The names are what an operator types, so they are syntax and not prose, and
+ * they are the left column of that listing for the same reason `/workspace
+ * move` is never translated.
  */
-function toggle(
+const OUTPUT_FIELDS: ReadonlyArray<{
+  readonly name: string;
+  readonly shown: (renderer: TurnRenderer) => boolean;
+  readonly set: (renderer: TurnRenderer, on: boolean) => void;
+}> = [
+  {
+    name: 'reasoning',
+    shown: (renderer) => renderer.reasoningShown,
+    set: (renderer, on) => {
+      renderer.setReasoningShown(on);
+    },
+  },
+  {
+    name: 'stats',
+    shown: (renderer) => renderer.statsShown,
+    set: (renderer, on) => {
+      renderer.setStatsShown(on);
+    },
+  },
+];
+
+/**
+ * `/output` — what a turn prints, and what it does not.
+ *
+ * One command rather than one per switch. The next thing worth hiding is then a
+ * row in the table above rather than a new verb, a new help line and a new pair
+ * of keys — and the bare form listing what is on is what makes the switches
+ * discoverable at all, which two separate commands never were.
+ *
+ * `stats` and not `usage`: `Usage` is the token record the protocol carries,
+ * and this is the *line*, which nobody at a prompt calls usage.
+ *
+ * Naming a field with no word flips it, which is what a hand reaching for a
+ * switch expects; `on` and `off` say it outright, for one that has lost track.
+ * The setting lasts as long as the process: `--no-reasoning` is how a script
+ * says it once, and a prompt asking to see less for the next few turns has not
+ * made a decision worth writing to `config.json`.
+ */
+function outputCommand(
+  field: string | undefined,
   word: string | undefined,
   ctx: SlashContext,
-  field: {
-    readonly shown: boolean;
-    readonly set: (on: boolean) => void;
-    readonly on: CliKey;
-    readonly off: CliKey;
-  },
 ): SlashOutcome {
-  const wanted = word === 'on' ? true : word === 'off' ? false : !field.shown;
-  field.set(wanted);
-  ctx.renderer.note(ctx.t(wanted ? field.on : field.off));
+  const { renderer, t } = ctx;
+
+  if (field === undefined) {
+    const column = Math.max(...OUTPUT_FIELDS.map((one) => one.name.length));
+    renderer.note(
+      OUTPUT_FIELDS.map(
+        (one) =>
+          `  ${one.name.padEnd(column)}  ${t(
+            one.shown(renderer) ? 'slash.notes.shown' : 'slash.notes.hidden',
+          )}`,
+      ).join('\n'),
+    );
+    return CONTINUE;
+  }
+
+  const found = OUTPUT_FIELDS.find((one) => one.name === field);
+  if (found === undefined) {
+    throw new GhostError(
+      'invalid_input',
+      t('slash.errors.noOutputField', { field }),
+    );
+  }
+
+  const wanted =
+    word === 'on' ? true : word === 'off' ? false : !found.shown(renderer);
+  found.set(renderer, wanted);
+  renderer.note(
+    t(wanted ? 'slash.notes.outputShown' : 'slash.notes.outputHidden', {
+      field,
+    }),
+  );
   return CONTINUE;
 }
 

@@ -24,7 +24,7 @@ function render(
   events: readonly AgentEvent[],
   options: {
     showReasoning?: boolean;
-    showUsage?: boolean;
+    showStats?: boolean;
     toolResultLines?: number;
   } = {},
 ): string {
@@ -347,7 +347,7 @@ describe('TurnRenderer', () => {
           iterations: 2,
         },
       ],
-      { showUsage: false },
+      { showStats: false },
     );
     expect(text).not.toContain('steps');
   });
