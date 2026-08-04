@@ -221,6 +221,39 @@ describe('suspendReadline', () => {
   });
 });
 
+describe('what readline does with a resize', () => {
+  // The status bar's resize handling is split around this, so it is worth
+  // pinning rather than remembering: readline registers exactly one `resize`
+  // listener on the output, and it refreshes the line — up over the rows it
+  // believes it drew, clear to the end of the display, write it again.
+  //
+  // The new prompt therefore has to be handed over *before* that listener runs,
+  // and the bar redrawn *after* it. Asking readline for a second refresh
+  // instead is what made transcript lines disappear: each refresh moves up by a
+  // row count measured before the width changed, so two of them clear their way
+  // up into the conversation.
+  it('registers exactly one listener, which our two can be ordered around', async () => {
+    const { input, output, rl } = repl();
+    expect(output.listenerCount('resize')).toBe(1);
+
+    const order: string[] = [];
+    output.prependListener('resize', () => order.push('before'));
+    output.on('resize', () => order.push('after'));
+
+    const pending = rl.question('> ');
+    input.write('typed');
+    await flush();
+    output.emit('resize');
+    await flush();
+
+    expect(order).toEqual(['before', 'after']);
+
+    rl.write(null, { name: 'return' });
+    await pending;
+    rl.close();
+  });
+});
+
 describe('createMenu', () => {
   it('draws a menu over a live prompt and answers what was chosen', async () => {
     const { input, output, rl } = repl();

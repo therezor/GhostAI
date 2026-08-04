@@ -880,26 +880,32 @@ function bindStatus(options: StatusOptions): StatusBinding {
   let blockRows = 0;
 
   /**
-   * The window changed size, so every measured thing is wrong at once.
+   * The window changed size, so every measured thing is wrong at once — and the
+   * fix is split in two around readline's own handler.
    *
-   * The rules are a width in characters and the status columns are justified to
-   * one, so the lines have to be *rebuilt* rather than redrawn — and the rule
-   * above the editor lives in readline's prompt, which readline will happily go
-   * on refreshing at its old width until it is handed a new one.
+   * Readline registers exactly one `resize` listener when the interface is
+   * created, and it refreshes the line: up over the rows it believes it drew,
+   * clear to the end of the display, write it again. Both halves here hang off
+   * that one refresh.
    *
-   * Readline's own resize handler runs first and clears from its prompt row
-   * down, which is where the bar is; without this the bar simply vanishes until
-   * the next keystroke, and a rule left one column too long wraps and puts the
-   * cursor arithmetic out for the rest of the session.
+   * **Before it**, the new prompt is handed over — the rule above the editor
+   * lives in the prompt string, and readline would otherwise go on redrawing it
+   * at the old width. Setting it here means the refresh that follows is already
+   * the right one. Asking for a *second* refresh instead is what made text
+   * disappear: each one moves up by a row count measured before the width
+   * changed, so two of them clear their way up into the transcript.
+   *
+   * **After it**, the bar is rebuilt — readline's clear-to-end-of-display
+   * covers exactly where the bar is, so it has to be redrawn, and rebuilt
+   * rather than repainted because the rules are a width in characters and the
+   * status columns are justified to one.
    */
-  const onResize = (): void => {
+  const onResizeBefore = (): void => {
     if (!asking) return;
     const text = options.prompt();
     promptRows = text.split('\n').length - 1;
     lines = options.status();
     options.rl.setPrompt(text);
-    options.rl.prompt(true);
-    repaint();
   };
 
   const repaint = (): void => {
@@ -944,7 +950,8 @@ function bindStatus(options: StatusOptions): StatusBinding {
     }
   };
   options.input.prependListener('keypress', measureBlock);
-  const offResize = bar.onResize(onResize);
+  options.output.prependListener('resize', onResizeBefore);
+  const offResize = bar.onResize(repaint);
 
   // Appended: readline's refresh clears from the prompt row down, synchronously
   // inside its own handler, so a listener running before it would paint a bar
@@ -988,6 +995,7 @@ function bindStatus(options: StatusOptions): StatusBinding {
       asking = false;
       options.input.off('keypress', onKeypress);
       options.input.off('keypress', measureBlock);
+      options.output.removeListener('resize', onResizeBefore);
       offResize();
       bar.close();
     },
