@@ -5,12 +5,14 @@
  * which is what makes them assertable without booting anything, and why the
  * caller does the looking-up.
  *
- * **The status sits below the input, and that costs something.** A prompt string
- * can only ever put text *above* the cursor, so the rule under the editor and
- * the two status rows beneath it are drawn by `BottomBar` instead: pinned to the
- * last rows of the screen, repainted after every keystroke because readline's
- * own line refresh erases everything below the prompt row. The rule *above* the
- * editor has no such problem and stays in the prompt where it is free.
+ * **The whole frame is below the input, and that is deliberate.** A prompt
+ * string is the one part written *into* the scrollback, so anything drawn there
+ * survives every turn — a rule above the editor left the transcript with a
+ * separator between every pair of messages. Everything here is drawn by
+ * `BottomBar` instead, under the cursor and repainted after each keystroke,
+ * which makes it transient by construction rather than by an erase that has to
+ * count rows through readline's own line wrapping and blanks a line of the
+ * conversation when it counts wrong.
  *
  * The two rows are laid out with `justify`, so the fields that change — the
  * context budget and the model — are the ones anchored to the right edge and
@@ -126,9 +128,4 @@ export function statusBar(
     theme.dim(justify(view.workspaceName, view.agent, width)),
     theme.dim(justify(context, model, width)),
   ];
-}
-
-/** The rule above the editor, which the prompt string can carry itself. */
-export function inputRule(width: number, theme: Theme): string {
-  return theme.dim(rule(width));
 }

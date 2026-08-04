@@ -41,10 +41,9 @@ import { columnsOf, type TerminalOutput } from './screen.js';
  * invisible in an editor and unsearchable with the tools everyone tries first.
  */
 const ESC = '\u001b';
-/** DECSC/DECRC: save and restore the cursor, including its column. */
-const SAVE_CURSOR = `${ESC}7`;
-const RESTORE_CURSOR = `${ESC}8`;
 const CURSOR_UP = (rows: number): string => `${ESC}[${String(rows)}A`;
+const CURSOR_RIGHT = (cols: number): string =>
+  cols > 0 ? `${ESC}[${String(cols)}C` : '';
 const ERASE_BELOW = `${ESC}[0J`;
 const SYNC_ON = `${ESC}[?2026h`;
 const SYNC_OFF = `${ESC}[?2026l`;
@@ -68,8 +67,14 @@ export interface BottomBar {
    * is the caller's, because only the caller knows how tall its prompt is.
    */
   reserve(rows: number): void;
-  /** Draws the lines under the cursor, and puts the cursor back. */
-  paint(lines: readonly string[]): void;
+  /**
+   * Draws the lines under the cursor, and puts the cursor back on `column`.
+   *
+   * The column is the caller's to supply because only it knows where its own
+   * editor left the cursor — and because asking the terminal would mean a
+   * round trip on every keystroke.
+   */
+  paint(lines: readonly string[], column: number): void;
   /** Erases from the cursor to the end of the display. */
   clear(): void;
   /** Erases and stops. Idempotent. */
@@ -104,7 +109,7 @@ export function openBottomBar(options: BottomBarOptions): BottomBar {
       output.write(`${'\n'.repeat(rows)}${CURSOR_UP(rows)}`);
     },
 
-    paint(lines: readonly string[]): void {
+    paint(lines: readonly string[], column: number): void {
       if (closed) return;
       if (lines.length === 0) {
         bar.clear();
@@ -118,8 +123,16 @@ export function openBottomBar(options: BottomBarOptions): BottomBar {
 
       // One newline to step off the input row, then erase everything below —
       // which is only ever the previous bar, because `reserve` made sure of it.
+      // Coming back is `CURSOR_UP` by exactly the rows just written, then the
+      // column: both are *relative*, and that is the whole point. A saved
+      // position is in screen coordinates, so a single scroll invalidates it —
+      // and an input long enough to wrap past what was reserved makes the
+      // newline above scroll. Relative motion moves with the screen instead,
+      // which turns "the typed line grew" from corruption into one scroll.
       output.write(
-        frame(`${SAVE_CURSOR}\n${ERASE_BELOW}${body}${RESTORE_CURSOR}`),
+        frame(
+          `\n${ERASE_BELOW}${body}${CURSOR_UP(lines.length)}\r${CURSOR_RIGHT(column)}`,
+        ),
       );
       painted = lines.length;
     },
@@ -134,7 +147,11 @@ export function openBottomBar(options: BottomBarOptions): BottomBar {
      */
     clear(): void {
       if (closed || painted === 0) return;
-      output.write(frame(`${SAVE_CURSOR}${ERASE_BELOW}${RESTORE_CURSOR}`));
+      // Back to column zero first, so the erase takes the whole row rather than
+      // the part of it to the right of wherever the cursor happened to be. It
+      // is only ever called with the cursor on the bar's own first row, so
+      // there is nothing to the left of it worth keeping.
+      output.write(frame(`\r${ERASE_BELOW}`));
       painted = 0;
     },
 

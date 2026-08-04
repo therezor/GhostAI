@@ -48,7 +48,6 @@ import {
 
 import { runSlashCommand } from './commands.js';
 import {
-  inputRule,
   startupHeader,
   statusBar,
   type ContextUsage,
@@ -470,10 +469,20 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
       theme,
       menus,
       processHooks: options.handleSignals !== false,
-      // The rule above the editor is free — a prompt string is drawn above the
-      // cursor. Everything below it is the bar's job.
-      prompt: () => `\n${inputRule(columnsOf(terminal), theme)}\n› `,
-      status: () => statusBar(view(), columnsOf(terminal), theme),
+      // A blank line and the caret, and nothing else. The rule that used to sit
+      // above the editor is gone: a prompt string is the one part of the frame
+      // written *into* the scrollback, so it stayed behind after every turn and
+      // the transcript grew a separator between every pair of messages. Taking
+      // it back afterwards meant counting rows through readline's own wrapping,
+      // and counting wrong blanked a line of the conversation. The rule below
+      // the editor is drawn by the bar, is transient by construction, and says
+      // the same thing.
+      prompt: () => '\n› ',
+      // One column short of the window. Writing exactly `columns` characters
+      // leaves a terminal in a pending-wrap state that different emulators
+      // resolve differently, and every row here is followed by cursor motion
+      // that assumes it knows which row it is on.
+      status: () => statusBar(view(), columnsOf(terminal) - 1, theme),
       measure: measureContext,
       session: () => sessionKey,
       attach: (key) => {
@@ -580,6 +589,7 @@ async function repl(deps: ReplDeps): Promise<number> {
   const status = bindStatus({
     input: deps.input,
     output: deps.out,
+    rl,
     menus: deps.menus,
     prompt: deps.prompt,
     status: deps.status,
@@ -686,6 +696,8 @@ interface StatusBinding {
 interface StatusOptions {
   readonly input: InputStream;
   readonly output: NodeJS.WritableStream;
+  /** Asked where its cursor is, so the frame's top rule can be taken back. */
+  readonly rl: Interface;
   /** The same predicate the menu uses: is this an interactive terminal. */
   readonly menus: boolean;
   readonly prompt: () => string;
@@ -733,11 +745,46 @@ function bindStatus(options: StatusOptions): StatusBinding {
 
   let lines: string[] = [];
   let asking = false;
+  /** How many rows the prompt occupies before the editor's own row. */
+  let promptRows = 0;
 
   const repaint = (): void => {
-    if (asking) bar.paint(lines);
+    if (!asking) return;
+    const at = options.rl.getCursorPos();
+
+    // A typed line long enough to wrap needs rows the reservation did not
+    // account for, and from then on readline and the bar compete for them:
+    // readline redraws from its own prompt row downward, the bar draws below
+    // the cursor, and a scroll under either one leaves the other a row out.
+    // What that looked like was a message losing its second and third lines.
+    // Standing aside while the line is wrapped is the only version of this
+    // that cannot damage the transcript, and the bar comes back the moment the
+    // line fits again or the turn is sent.
+    if (at.rows > promptRows) {
+      bar.clear();
+      return;
+    }
+    bar.paint(lines, at.cols);
   };
-  options.input.on('keypress', repaint);
+  /**
+   * Every key except the one that submits.
+   *
+   * Return is the exception because readline has, by the time this runs, moved
+   * the cursor to the row *below* the editor — which is the bar's first row.
+   * Painting from there puts the bar one row lower than the erase that follows
+   * expects, and the erase then starts from whatever column the paint left the
+   * cursor in. What that looked like was two characters of the rule surviving
+   * at the head of the turn's first line of output.
+   */
+  const onKeypress = (chunk: unknown, key?: { name?: string }): void => {
+    if (key?.name === 'return') return;
+    repaint();
+  };
+
+  // Appended: readline's refresh clears from the prompt row down, synchronously
+  // inside its own handler, so a listener running before it would paint a bar
+  // readline then erased.
+  options.input.on('keypress', onKeypress);
 
   return {
     async ask(question): Promise<string> {
@@ -746,15 +793,15 @@ function bindStatus(options: StatusOptions): StatusBinding {
 
       // The prompt's own lines count too. Reserving only the bar's height
       // guarantees that many rows below the *cursor*, and the prompt then
-      // writes its rule and its `›` beneath it — so the input line ends up
-      // inside the rows the bar is about to claim, and the bar paints over it.
-      // That was the bug; the `+ 1` is slack for an input that wraps once.
-      const promptRows = text.split('\n').length - 1;
+      // writes its own lines beneath it — so the editor ends up inside the rows
+      // the bar is about to claim, and the bar paints over it. That was the
+      // first version of this bug.
+      promptRows = text.split('\n').length - 1;
       bar.reserve(lines.length + promptRows + 1);
 
       const pending = question(text);
       asking = true;
-      bar.paint(lines);
+      bar.paint(lines, options.rl.getCursorPos().cols);
       try {
         return await pending;
       } finally {
@@ -765,7 +812,7 @@ function bindStatus(options: StatusOptions): StatusBinding {
     repaint,
     close(): void {
       asking = false;
-      options.input.off('keypress', repaint);
+      options.input.off('keypress', onKeypress);
       bar.close();
     },
   };

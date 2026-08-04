@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 
 import {
   contextLabel,
-  inputRule,
   startupHeader,
   statusBar,
   type HeaderView,
@@ -86,9 +85,10 @@ describe('contextLabel', () => {
 });
 
 describe('statusBar', () => {
-  it('opens with a rule the width of the window', () => {
-    // The closing half of the frame around the editor; the opening half is in
-    // the prompt, which is the only part a prompt string can carry.
+  it('opens with a rule the width it was given', () => {
+    // The whole frame is here rather than half of it in the prompt: a prompt
+    // string is written into the scrollback, so a rule drawn there outlives the
+    // turn and becomes a separator between messages.
     const [first] = statusBar(VIEW, 40, PLAIN_THEME);
     expect(visibleWidth(first ?? '')).toBe(40);
     expect(first).toMatch(/^─+$/u);
@@ -129,11 +129,5 @@ describe('statusBar', () => {
 
   it('is three rows, which is what the caller has to reserve', () => {
     expect(statusBar(VIEW, 40, PLAIN_THEME)).toHaveLength(3);
-  });
-});
-
-describe('inputRule', () => {
-  it('is exactly the window width', () => {
-    expect(visibleWidth(inputRule(37, PLAIN_THEME))).toBe(37);
   });
 });

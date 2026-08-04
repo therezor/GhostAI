@@ -6,12 +6,15 @@ import { fakeOutput, type FakeOutput } from '#testkit/terminal.js';
 
 const ESC = String.fromCharCode(27);
 const CSI = `${ESC}[`;
-const SAVE = `${ESC}7`;
-const RESTORE = `${ESC}8`;
 const ERASE_BELOW = `${CSI}0J`;
 
 function bar(output: FakeOutput) {
   return openBottomBar({ output });
+}
+
+/** What was drawn, with the trailing cursor-return taken off. */
+function drawn(output: FakeOutput): string {
+  return stripAnsi(output.text).replace(/\r$/u, '');
 }
 
 describe('painting', () => {
@@ -22,30 +25,41 @@ describe('painting', () => {
     const output = fakeOutput();
     const status = bar(output);
 
-    status.paint(['one', 'two']);
+    status.paint(['one', 'two'], 0);
 
-    expect(stripAnsi(output.text)).toBe('\none\ntwo');
+    expect(drawn(output)).toBe('\none\ntwo');
     status.close();
   });
 
   it('never addresses a row by number, so it cannot land on the transcript', () => {
     const output = fakeOutput();
     const status = bar(output);
-    status.paint(['one', 'two']);
+    status.paint(['one', 'two'], 0);
     expect(output.text).not.toMatch(/\[\d+;1H/u);
     status.close();
   });
 
-  it('leaves the cursor exactly where it found it', () => {
+  it('comes back by relative motion, so a scroll cannot leave it a row out', () => {
+    // A saved position is in screen coordinates, and an input long enough to
+    // wrap past what was reserved makes the newline above scroll. Moving up by
+    // the rows just written moves with the screen instead.
     const output = fakeOutput();
     const status = bar(output);
 
-    status.paint(['one']);
+    status.paint(['one', 'two'], 7);
 
-    expect(output.text.indexOf(SAVE)).toBeLessThan(output.text.indexOf('one'));
-    expect(output.text.indexOf(RESTORE)).toBeGreaterThan(
-      output.text.indexOf('one'),
-    );
+    expect(output.text).toContain(`${CSI}2A`);
+    expect(output.text).toContain(`\r${CSI}7C`);
+    // No DECSC anywhere: that is the sequence this replaced.
+    expect(output.text).not.toContain(`${ESC}7\r`);
+    status.close();
+  });
+
+  it('returns to column zero without a cursor-right when that is where it was', () => {
+    const output = fakeOutput();
+    const status = bar(output);
+    status.paint(['one'], 0);
+    expect(output.text).not.toContain('C');
     status.close();
   });
 
@@ -55,12 +69,12 @@ describe('painting', () => {
     const output = fakeOutput();
     const status = bar(output);
 
-    status.paint(['one', 'two']);
+    status.paint(['one', 'two'], 0);
     output.reset();
-    status.paint(['one']);
+    status.paint(['one'], 0);
 
     expect(output.text).toContain(ERASE_BELOW);
-    expect(stripAnsi(output.text)).toBe('\none');
+    expect(drawn(output)).toBe('\none');
     status.close();
   });
 
@@ -70,9 +84,9 @@ describe('painting', () => {
     const output = fakeOutput();
     const status = bar(output);
 
-    status.paint(['one', 'two', 'three']);
+    status.paint(['one', 'two', 'three'], 0);
 
-    expect(stripAnsi(output.text).endsWith('three')).toBe(true);
+    expect(drawn(output).endsWith('three')).toBe(true);
     status.close();
   });
 
@@ -80,9 +94,9 @@ describe('painting', () => {
     const output = fakeOutput({ columns: 12 });
     const status = bar(output);
 
-    status.paint(['a-status-row-far-wider-than-twelve']);
+    status.paint(['a-status-row-far-wider-than-twelve'], 0);
 
-    for (const line of stripAnsi(output.text).split('\n')) {
+    for (const line of drawn(output).split('\n')) {
       expect(visibleWidth(line)).toBeLessThanOrEqual(12);
     }
     status.close();
@@ -91,13 +105,13 @@ describe('painting', () => {
   it('treats an empty paint as an erase', () => {
     const output = fakeOutput();
     const status = bar(output);
-    status.paint(['one']);
+    status.paint(['one'], 0);
     output.reset();
 
-    status.paint([]);
+    status.paint([], 0);
 
     expect(output.text).toContain(ERASE_BELOW);
-    expect(stripAnsi(output.text)).toBe('');
+    expect(drawn(output)).toBe('');
     status.close();
   });
 });
@@ -132,13 +146,16 @@ describe('clearing', () => {
     // turn's output would print underneath a stale rule.
     const output = fakeOutput();
     const status = bar(output);
-    status.paint(['one', 'two']);
+    status.paint(['one', 'two'], 0);
     output.reset();
 
     status.clear();
 
-    expect(output.text).toContain(ERASE_BELOW);
-    expect(stripAnsi(output.text)).toBe('');
+    // Column zero first, so the erase takes the whole row rather than the part
+    // to the right of wherever the cursor happened to be — two characters of
+    // the rule used to survive at the head of the turn's first line.
+    expect(output.text).toContain(`\r${ERASE_BELOW}`);
+    expect(drawn(output)).toBe('');
     status.close();
   });
 
@@ -162,9 +179,9 @@ describe('a terminal that will not say how tall it is', () => {
     const status = bar(output);
 
     expect(status.available).toBe(true);
-    status.paint(['one']);
+    status.paint(['one'], 0);
 
-    expect(stripAnsi(output.text)).toBe('\none');
+    expect(drawn(output)).toBe('\none');
     status.close();
   });
 });
@@ -173,7 +190,7 @@ describe('closing', () => {
   it('erases what it drew', () => {
     const output = fakeOutput();
     const status = bar(output);
-    status.paint(['one']);
+    status.paint(['one'], 0);
     output.reset();
 
     status.close();
@@ -184,12 +201,12 @@ describe('closing', () => {
   it('writes nothing more once closed, however many times it is called', () => {
     const output = fakeOutput();
     const status = bar(output);
-    status.paint(['one']);
+    status.paint(['one'], 0);
     status.close();
     output.reset();
 
     status.close();
-    status.paint(['two']);
+    status.paint(['two'], 0);
     status.reserve(2);
 
     expect(output.text).toBe('');
