@@ -127,6 +127,7 @@ function renderer(out: RenderTarget): TurnRenderer {
 function streamSink(options: { isTTY?: boolean } = {}): {
   stream: PassThrough;
   text: () => string;
+  resizeTo: (columns: number) => void;
 } {
   const stream = new PassThrough();
   let text = '';
@@ -139,7 +140,15 @@ function streamSink(options: { isTTY?: boolean } = {}): {
   if (options.isTTY === true) {
     Object.assign(stream, { isTTY: true, columns: 60, rows: 24 });
   }
-  return { stream, text: () => text };
+  return {
+    stream,
+    text: () => text,
+    /** Narrows the window, the way an emulator does before it signals. */
+    resizeTo(columns: number): void {
+      Object.assign(stream, { columns });
+      stream.emit('resize');
+    },
+  };
 }
 
 /** Writes a config with a couple of agents in it, which no install has by default. */
@@ -1057,6 +1066,48 @@ describe('chatCommand', () => {
     const store = new SessionStore({ file: join(home, 'ghost.db') });
     expect(store.getSession('cli:picked')?.agentId).toBe('scout');
     store.close();
+  });
+
+  it('erases the whole prompt block when a resize re-wraps the rule', async () => {
+    // Readline refreshes by moving up over the rows it believes it drew, and it
+    // believes wrong the moment the window narrows: the count was measured at
+    // the old width, and the rule above the editor is a column short of it, so
+    // a narrowing re-wraps that rule and the block on screen is one row taller
+    // than the number readline kept. It then erased a row too low and the frame
+    // was left behind, once per resize.
+    const home = tempHome();
+    const { fetchImpl } = transport();
+    const out = streamSink({ isTTY: true });
+    const input = Object.assign(new PassThrough(), {
+      isTTY: true,
+      setRawMode(): void {
+        /* a PassThrough has no mode to set */
+      },
+    });
+
+    const pending = chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: out.stream,
+      colors: false,
+      input,
+      sessionKey: 'cli:resize',
+    });
+
+    await waitFor(() => out.text().includes('ctrl-g for the menu'));
+    await quiet(out);
+
+    // 60 columns gives a 59-character rule. In 40 it needs two rows, so the
+    // block is three: blank, rule, rule-continued, caret.
+    out.resizeTo(40);
+    await quiet(out);
+
+    const ESC = String.fromCharCode(27);
+    expect(out.text()).toContain(`${ESC}[3A${ESC}[1G${ESC}[0J`);
+
+    input.write('/exit\n');
+    expect(await pending).toBe(0);
   });
 
   // ── The palette and the pickers ─────────────────────────────

@@ -902,6 +902,27 @@ function bindStatus(options: StatusOptions): StatusBinding {
    */
   const onResizeBefore = (): void => {
     if (!asking) return;
+
+    // Readline refreshes by moving up over the rows it believes it drew, and it
+    // believes wrong the moment the window narrows: `prevRows` was measured at
+    // the old width, and the rule above the editor is a column short of it, so
+    // a narrowing re-wraps that rule onto a second row and the block on screen
+    // is one taller than the number readline kept. Measured on a drag: it moved
+    // up 2 every time while the block was 3, so the erase began a row too low
+    // and the block crept down one row per resize, leaving the frame behind.
+    //
+    // `getCursorPos` recomputes from the *current* columns — 2 before the
+    // narrowing and 3 after, against a `prevRows` still saying 2 — so handing
+    // that back is telling readline what is actually on the screen.
+    //
+    // Guarded rather than assumed: `prevRows` is readline's own field, and a
+    // version that no longer keeps it should leave the CLI where it is today
+    // rather than throwing.
+    const state = options.rl as unknown as { prevRows?: number };
+    if (typeof state.prevRows === 'number') {
+      state.prevRows = options.rl.getCursorPos().rows;
+    }
+
     const text = options.prompt();
     promptRows = text.split('\n').length - 1;
     lines = options.status();
