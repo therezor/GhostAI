@@ -74,14 +74,14 @@ the schema, and changing either revokes every other session.
 
 ### Sessions
 
-| Method               | Path                          | Auth       | Notes                                                             |
-| -------------------- | ----------------------------- | ---------- | ----------------------------------------------------------------- |
-| GET / POST           | `/api/sessions`               | `required` | Filterable by origin and workspace. Excludes subagent sessions.   |
-| GET / PATCH / DELETE | `/api/sessions/:key`          | `required` |                                                                   |
-| GET / DELETE         | `/api/sessions/:key/messages` | `required` |                                                                   |
-| GET                  | `/api/sessions/:key/context`  | `required` | What would be sent to the model, and the token breakdown.         |
-| GET                  | `/api/sessions/:key/turns`    | `required` | Per-turn stats: model, provider, iterations, stop reason, tokens. |
-| POST                 | `/api/sessions/:key/branch`   | `required` | Forks the session at a message.                                   |
+| Method               | Path                          | Auth       | Notes                                                                |
+| -------------------- | ----------------------------- | ---------- | -------------------------------------------------------------------- |
+| GET / POST           | `/api/sessions`               | `required` | Filterable by origin and workspace. Excludes subagent sessions.      |
+| GET / PATCH / DELETE | `/api/sessions/:key`          | `required` | `PATCH` renames, or moves the session to another agent or workspace. |
+| GET / DELETE         | `/api/sessions/:key/messages` | `required` |                                                                      |
+| GET                  | `/api/sessions/:key/context`  | `required` | What would be sent to the model, and the token breakdown.            |
+| GET                  | `/api/sessions/:key/turns`    | `required` | Per-turn stats: model, provider, iterations, stop reason, tokens.    |
+| POST                 | `/api/sessions/:key/branch`   | `required` | Forks the session at a message.                                      |
 
 ### Agents, tools, toolboxes
 

@@ -26,6 +26,7 @@ import { useTranslation } from 'react-i18next';
 
 import {
   DEFAULT_AGENT_ID,
+  DEFAULT_WORKSPACE_ID,
   type AutomationJob,
   type AutomationRun,
   type RunStatus,
@@ -185,6 +186,37 @@ function Editor({ job }: { readonly job?: AutomationJob }): JSX.Element {
     }
     return options;
   }, [agents.data, form.agentId, t]);
+
+  // The same shape as the agents above, and for the same reasons — including
+  // the deleted-binding branch: a job pointing at a detached workspace keeps
+  // showing it, because hiding it would make the editor lie about what runs.
+  const workspaces = useQuery({
+    queryKey: queryKeys.workspaces,
+    queryFn: ({ signal }) => api.workspaces(signal),
+  });
+  const workspaceOptions = useMemo(() => {
+    const known = workspaces.data?.workspaces ?? [];
+    const options = [
+      { value: DEFAULT_WORKSPACE_ID, label: t('automation.workspaceDefault') },
+    ];
+    for (const workspace of known) {
+      if (workspace.id === DEFAULT_WORKSPACE_ID) continue;
+      options.push({
+        value: workspace.id,
+        label: workspace.name === '' ? workspace.id : workspace.name,
+      });
+    }
+    if (
+      form.workspaceId !== '' &&
+      !options.some((option) => option.value === form.workspaceId)
+    ) {
+      options.push({
+        value: form.workspaceId,
+        label: t('automation.workspaceMissing', { id: form.workspaceId }),
+      });
+    }
+    return options;
+  }, [workspaces.data, form.workspaceId, t]);
 
   // Called unconditionally — hooks cannot be conditional — and inert on create:
   // `useSaveJob('')` is never invoked, and `useAutomationRuns('')` is disabled.
@@ -394,6 +426,29 @@ function Editor({ job }: { readonly job?: AutomationJob }): JSX.Element {
               // a blank trigger, and the payload's rule is that an absent
               // `agentId` means the default — so the two map onto each other.
               update('agentId', value === DEFAULT_AGENT_ID ? '' : value);
+            }}
+          />
+          <SelectField
+            label={t('automation.workspaceLabel')}
+            // The caveat only when it bites. A job pinned to a session runs in
+            // *that* session's workspace, because the stored row wins over
+            // anything a run claims — so this field is inert, and a hint that
+            // always said so is a hint nobody reads.
+            hint={
+              form.sessionKey.trim() === ''
+                ? t('automation.workspaceHint')
+                : t('automation.workspacePinned')
+            }
+            value={
+              form.workspaceId === '' ? DEFAULT_WORKSPACE_ID : form.workspaceId
+            }
+            options={workspaceOptions}
+            onValueChange={(value) => {
+              // Same sentinel as the agent field above, for the same reason.
+              update(
+                'workspaceId',
+                value === DEFAULT_WORKSPACE_ID ? '' : value,
+              );
             }}
           />
         </FieldGrid>

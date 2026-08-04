@@ -750,6 +750,70 @@
     }
   }
 
+  /* ---------------------------------------------------------------------
+   * The pickers, at the head of the meta row
+   *
+   * Shared by the agent picker and the workspace picker rather than declared
+   * once per feature. What the rules describe is not agents or workspaces —
+   * it is being a small muted control under the message box — and two
+   * stylesheets agreeing about that is two stylesheets that eventually will
+   * not.
+   * ------------------------------------------------------------------ */
+
+  /* One flex item, so the `space-between` above does not push the two apart.
+     `min-width: 0` so a long workspace name truncates inside the row instead
+     of widening it past the composer. */
+  .composer__pickers {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+
+  /* Muted and small: these name what the turn will run under, which is context
+     rather than an action, and a primary-looking control there would compete
+     with Send. */
+  .composer__picker {
+    gap: var(--space-2);
+    max-width: 14rem;
+    padding-inline: var(--space-2);
+    color: var(--fg-2);
+    font-size: var(--text-sm);
+  }
+
+  /* The binding is not in the listing: an agent deleted or switched off, a
+     workspace detached. Colour rather than a badge, because the trigger is
+     already at the small end of the type scale and a second element beside it
+     would be the loudest thing in the composer for a state the turn survives.
+     `--warning-fg` is the text variant; the fill is the menu's own. */
+  .composer__picker.is-missing {
+    color: var(--warning-fg);
+  }
+
+  .composer__picker-caret {
+    flex-shrink: 0;
+    width: var(--size-icon-sm);
+    height: var(--size-icon-sm);
+    color: var(--fg-3);
+  }
+
+  /* Wraps, unlike the label above it: this is a sentence explaining a state
+     rather than a heading, and truncating it would hide the half that says what
+     to do about it. */
+  .composer__picker-notice {
+    max-width: 18rem;
+    color: var(--warning-fg);
+    white-space: normal;
+  }
+
+  .composer__picker-hint {
+    margin-inline-start: auto;
+    padding-inline-start: var(--space-3);
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
+    color: var(--fg-3);
+  }
+
   .composer__hint {
     display: flex;
     align-items: center;

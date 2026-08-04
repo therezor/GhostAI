@@ -842,11 +842,15 @@ export class AgentLoop {
 
     // Ensure first, then read what came back. `input.workspaceId` can only ever
     // *create* a session in a workspace — `ensureSession` ignores it for a row
-    // that already exists — so the workspace a turn runs in is the one the
-    // conversation was born in, never the one this request happens to claim.
-    // That is what makes switching workspaces in the UI safe while a turn is
-    // running, and what stops a crafted frame from pointing an existing
-    // session's tools at another workspace's files.
+    // that already exists — so the workspace a turn runs in is the one stored
+    // on the session, never the one this request happens to claim. That is what
+    // makes switching workspaces in the UI safe while a turn is running, and
+    // what stops a crafted frame from pointing an existing session's tools at
+    // another workspace's files.
+    //
+    // A session *can* be moved, but only through `updateSession`, which is
+    // reached by `PATCH /api/sessions/:key` and nothing else. The move lands
+    // here on the next turn, because the read below is what resolves the jail.
     const session = this.store.ensureSession(sessionKey, {
       origin: channel,
       ...(input.workspaceId === undefined
@@ -1243,6 +1247,11 @@ export class AgentLoop {
       turnId,
       sessionKey,
       agentId: session.agentId ?? '',
+      // The workspace this turn actually ran in, read off the row the jail was
+      // resolved from at the top of the turn. Recorded rather than derived
+      // later: the session can be moved afterwards, and then nothing else could
+      // say which files this turn was able to reach.
+      workspaceId: session.workspaceId,
       provider: this.chatProvider.id,
       model: this.modelId,
       startedAtMs,

@@ -136,6 +136,72 @@ describe('sessions CRUD', () => {
     expect(runtime.store.getSession('web-1')?.title).toBe('New');
   });
 
+  it('moves a session to another workspace', async () => {
+    const { server, headers, runtime } = await start();
+    runtime.workspaces.create({ name: 'Research', id: 'research' });
+    runtime.store.ensureSession('web-1', { title: 'A session' });
+
+    const response = await server.app.inject({
+      method: 'PATCH',
+      url: '/api/sessions/web-1',
+      headers,
+      payload: { workspaceId: 'research' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().workspaceId).toBe('research');
+    expect(runtime.store.getSession('web-1')?.workspaceId).toBe('research');
+  });
+
+  it('refuses to move a session to a workspace that does not exist', async () => {
+    // `updateSession` would store any string, and a conversation bound to a
+    // workspace nothing can list is one the UI can never show the files for.
+    const { server, headers, runtime } = await start();
+    runtime.store.ensureSession('web-1');
+
+    const response = await server.app.inject({
+      method: 'PATCH',
+      url: '/api/sessions/web-1',
+      headers,
+      payload: { workspaceId: 'nope' },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(runtime.store.getSession('web-1')?.workspaceId).toBe('default');
+  });
+
+  it('moves a session while a turn is running on it', async () => {
+    // Deliberately not refused. The loop captures its jail when the turn
+    // starts, so the turn in flight finishes where it began and the next one
+    // picks up the move — there is no state for a guard to protect.
+    const test = await start({ runner: hangingRunner() });
+    test.runtime.workspaces.create({ name: 'Research', id: 'research' });
+    test.runtime.store.ensureSession('web-1');
+
+    const client = test.hub.connect({
+      send: () => undefined,
+      sessionKey: 'web-1',
+    });
+    client.receive({
+      type: 'user.message',
+      sessionKey: 'web-1',
+      content: 'go',
+    });
+
+    const response = await test.server.app.inject({
+      method: 'PATCH',
+      url: '/api/sessions/web-1',
+      headers: test.headers,
+      payload: { workspaceId: 'research' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(test.runtime.store.getSession('web-1')?.workspaceId).toBe(
+      'research',
+    );
+    expect(test.hub.busy('web-1')).toBe(true);
+  });
+
   it('refuses to bind a new session to an agent that does not exist', async () => {
     // Where almost every dangling binding came from: the adjacent `workspaceId`
     // was checked against the registry and this was not, so any string landed
@@ -543,6 +609,7 @@ describe('GET /api/sessions/:key/messages', () => {
       turnId: 't1',
       sessionKey: 'web-1',
       agentId: 'default',
+      workspaceId: 'default',
       provider: 'ollama',
       model: 'test-model',
       startedAtMs: 1,
@@ -557,6 +624,7 @@ describe('GET /api/sessions/:key/messages', () => {
       turnId: 't2',
       sessionKey: 'web-1',
       agentId: 'default',
+      workspaceId: 'default',
       provider: 'ollama',
       model: 'test-model',
       startedAtMs: 3,
@@ -842,6 +910,7 @@ describe('turn stats', () => {
     turnId,
     sessionKey: 'web-1',
     agentId: 'default',
+    workspaceId: 'default',
     provider: 'anthropic',
     model: 'claude-opus-5',
     startedAtMs: 1000,

@@ -22,6 +22,7 @@
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import {
+  Boxes,
   BrainCircuit,
   CalendarClock,
   FolderOpen,
@@ -52,7 +53,6 @@ import {
 } from '@/components/ui/dropdown-menu.js';
 import { ScrollArea } from '@/components/ui/scroll-area.js';
 import { useTurnStore } from '@/state/turn.js';
-import { WorkspaceSwitcher } from '@/workspaces/workspace-switcher.js';
 import { useAgent } from '@/agents/agent-context.js';
 import { useWorkspace } from '@/workspaces/workspace-context.js';
 import { useDeleteSession, useRenameSession } from '@/sessions/use-sessions.js';
@@ -64,19 +64,16 @@ interface NavItem {
 }
 
 /**
- * Two things this list deliberately does not carry.
+ * One thing this list deliberately does not carry, and one it now must.
  *
- * **No `/workspaces` row.** The switcher sits directly above it and carries
- * "Manage workspaces…" as its last item, which is the same destination one
- * control higher and in the place someone is already thinking about workspaces.
- * A nav row beside it was a second door into one room — and it named the *only*
- * thing in the column that the control above it already scopes.
- *
- * That argument was once made about `/sessions` too, and it was wrong for a
- * reason worth keeping: the list below is a *shortlist* of thirty, not the
- * room. The switcher genuinely holds every workspace, so a row beside it
- * duplicated it; the session list holds the newest fraction, so a row pointing
- * at the whole set is a different destination rather than a second door.
+ * **`/workspaces` is a row again.** It was left out while a switcher sat at the
+ * top of this column carrying "Manage workspaces…" as its last item — a nav row
+ * beside it would have been a second door into one room. That switcher is gone:
+ * it scoped the session list and implied a workspace was a folder conversations
+ * are filed under, when a workspace is where a conversation's *files* live.
+ * Which one a conversation uses is chosen in the composer, next to the agent.
+ * With the switcher removed this row is the only door left, and a screen
+ * reachable from nowhere is a screen nobody maintains.
  *
  * **No `/tokens` row.** The style guide is a developer surface: its copy names
  * tokens and CSS values rather than addressing a user, which is why it is the
@@ -100,6 +97,10 @@ const NAV: readonly NavItem[] = [
   { to: '/sessions', label: 'nav.sessions', icon: MessagesSquare },
   { to: '/agents', label: 'nav.agents', icon: BrainCircuit },
   { to: '/files', label: 'nav.files', icon: FolderOpen },
+  // Directly after Files, because that is what a workspace holds. The Files
+  // page browses the default tree and every named workspace is a folder inside
+  // it; this row is where they are created, renamed and detached.
+  { to: '/workspaces', label: 'nav.workspaces', icon: Boxes },
   // Before Settings, and a row of its own rather than a settings panel: the
   // jobs are a list an operator keeps, which is the same kind of thing as
   // Agents. The scheduler's own switches live on that page for the reason
@@ -158,20 +159,23 @@ export function Sidebar({
     // Nothing is written yet: the row appears in the list below when the first
     // message lands, so pressing this and changing your mind leaves no trace.
     // See `newSession` for why the key is minted client-side.
-    // The agent goes with it: a session is bound when it is created, and after
-    // that the binding is the stored row's rather than the switcher's.
+    // The agent and the workspace go with it: a session is bound to both when
+    // it is created, and after that the binding is the stored row's rather than
+    // the picker's. Both come from the composer's pickers, which is where the
+    // choice is actually made.
     const key = newSession(workspaceId, agentId);
     onNavigate?.();
     void navigate({ to: '/', search: { session: key } });
   }
 
-  // Scoped to the workspace: a session list mixing three workspaces' worth of
-  // conversations, with no way to tell which is which, is a list nobody can
-  // navigate. The switcher sits directly above it for the same reason.
+  // Every conversation, whatever workspace it is in. It used to be scoped to a
+  // switcher in this column, which meant a session moved out of the workspace
+  // you were browsing simply vanished from the list — and the only way to find
+  // it again was to guess which workspace it had gone to. A workspace is where
+  // a conversation's *files* are, not a folder conversations are filed under.
   const sessions = useQuery({
-    queryKey: queryKeys.sessions(workspaceId),
-    queryFn: ({ signal }) =>
-      api.sessions({ workspaceId, limit: SIDEBAR_SESSIONS, signal }),
+    queryKey: queryKeys.sessions(),
+    queryFn: ({ signal }) => api.sessions({ limit: SIDEBAR_SESSIONS, signal }),
   });
 
   const rows = sessions.data?.sessions ?? [];
@@ -203,18 +207,6 @@ export function Sidebar({
 
   return (
     <div className="stack sidebar">
-      <div className="sidebar__scope">
-        {/* Labelled the same way the session list is, by the same component: it
-            is a named group in this column, and the label is what makes the
-            control below it self-describing rather than an icon and a word. */}
-        <Section title={t('sessions.workspaceHeading')}>
-          <WorkspaceSwitcher
-            rowClassName="sidebar__link"
-            {...(onNavigate === undefined ? {} : { onNavigate })}
-          />
-        </Section>
-      </div>
-
       <nav aria-label={t('shell.sections')} className="stack sidebar__nav">
         {/* A row in this list rather than a button above it. It goes to the
             same place the rows below it go — a screen — and giving it a

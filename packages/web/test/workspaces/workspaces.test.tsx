@@ -1,20 +1,13 @@
 /**
- * The switcher, the workspaces page and the query keys that keep them apart.
+ * The workspaces page, and the query keys that keep two workspaces apart.
  *
  * The cache test is the one that matters most: two workspaces both contain
  * `notes.md`, so a key that forgot the workspace would serve one workspace's
- * listing for the other the instant the switcher moved — silently, and only in
- * a browser.
+ * listing for the other the instant the Files page walked into it — silently,
+ * and only in a browser.
  */
 
-import {
-  Outlet,
-  RouterProvider,
-  createMemoryHistory,
-  createRootRoute,
-  createRoute,
-  createRouter,
-} from '@tanstack/react-router';
+import { RouterProvider, createMemoryHistory } from '@tanstack/react-router';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -24,13 +17,11 @@ import { createAppRouter } from '@/app/router.js';
 import { queryKeys } from '@/lib/query.js';
 import { STATUS } from '@testkit/fixtures.js';
 import {
-  renderWithProviders,
   stubApi,
   testQueryClient,
   type RecordedRequest,
   type StubRoute,
 } from '@testkit/render.js';
-import { WorkspaceSwitcher } from '@/workspaces/workspace-switcher.js';
 import { DEFAULT_WORKSPACE_ID } from '@/workspaces/workspace-context.js';
 
 function workspace(
@@ -108,102 +99,18 @@ describe('query keys', () => {
     }
   });
 
-  it('keep the scoped session list under the unscoped prefix', () => {
+  it('keep every session view under one prefix', () => {
     // One `invalidateQueries({ queryKey: ['sessions'] })` after a turn has to
-    // reach whichever workspace is on screen.
-    expect(queryKeys.sessions('acme')[0]).toBe(queryKeys.sessions()[0]);
-  });
-});
-
-/**
- * The switcher, over a router that is only as big as it needs to be.
- *
- * It carries a `<Link>` to `/workspaces` now — a real link rather than a
- * dialog trigger, so middle-click and open-in-new-tab work — and a `Link`
- * outside a router throws. Two routes is enough to give it one; mounting the
- * whole application to assert that a menu lists two names would be testing the
- * shell again, which `shell.test.tsx` already does.
- */
-function renderSwitcher(): ReturnType<typeof renderWithProviders> {
-  const rootRoute = createRootRoute({ component: () => <Outlet /> });
-  const indexRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: '/',
-    component: () => <WorkspaceSwitcher />,
-  });
-  const workspacesRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: '/workspaces',
-    component: () => <p>workspaces</p>,
-  });
-
-  const router = createRouter({
-    routeTree: rootRoute.addChildren([indexRoute, workspacesRoute]),
-    history: createMemoryHistory({ initialEntries: ['/'] }),
-  });
-
-  return renderWithProviders(<RouterProvider router={router as never} />);
-}
-
-describe('the workspace switcher', () => {
-  it('names the current workspace and lists the others', async () => {
-    stubApi({ 'GET /api/workspaces': [200, TWO] });
-    renderSwitcher();
-
-    await screen.findByRole('button', { name: /Workspace: Default/ });
-    await userEvent.click(
-      screen.getByRole('button', { name: /Workspace: Default/ }),
-    );
-
+    // reach the sidebar, the management page and each of its pages. The list is
+    // no longer scoped by workspace — a workspace says where a conversation's
+    // files are, not which list it belongs in — so there is one key here and a
+    // `workspaceId` argument would be a filter nothing applies.
+    const prefix = queryKeys.sessions()[0];
     expect(
-      await screen.findByRole('menuitemradio', { name: /Client Acme/ }),
-    ).toBeInTheDocument();
-  });
-
-  it('does not repeat what the workspaces page already explains', async () => {
-    // `default` containing the others is explained once, on the page this menu
-    // links to. A standing paragraph under the trigger restated the most
-    // ordinary state in the app on every render of the sidebar.
-    stubApi({ 'GET /api/workspaces': [200, TWO] });
-    renderSwitcher();
-
-    expect(
-      await screen.findByRole('button', { name: /^Workspace: / }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/reach their files/)).not.toBeInTheDocument();
-  });
-
-  it('sends you to the page rather than opening a dialog', async () => {
-    stubApi({ 'GET /api/workspaces': [200, TWO] });
-    renderSwitcher();
-
-    await userEvent.click(
-      await screen.findByRole('button', { name: /^Workspace: / }),
-    );
-
-    // A link, so it can be middle-clicked and opened in a new tab — which a
-    // `<button>` that set some state could never be.
-    expect(
-      await screen.findByRole('menuitem', { name: /Manage workspaces/ }),
-    ).toHaveAttribute('href', '/workspaces');
-  });
-
-  it('remembers the choice across a remount', async () => {
-    stubApi({ 'GET /api/workspaces': [200, TWO] });
-    const first = renderSwitcher();
-
-    await userEvent.click(
-      await screen.findByRole('button', { name: /Workspace: Default/ }),
-    );
-    await userEvent.click(
-      await screen.findByRole('menuitemradio', { name: /Client Acme/ }),
-    );
-    first.unmount();
-
-    renderSwitcher();
-    expect(
-      await screen.findByRole('button', { name: /Workspace: Client Acme/ }),
-    ).toBeInTheDocument();
+      queryKeys.sessionPage({ page: 1, q: '', sort: 'updated', desc: true })[0],
+    ).toBe(prefix);
+    expect(queryKeys.session('k')[0]).toBe(prefix);
+    expect(queryKeys.turns('k')[0]).toBe(prefix);
   });
 });
 

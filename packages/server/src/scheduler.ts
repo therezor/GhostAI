@@ -43,6 +43,7 @@
  */
 
 import {
+  DEFAULT_WORKSPACE_ID,
   GhostError,
   nextCronRun,
   parseCron,
@@ -129,6 +130,14 @@ export interface SchedulerConnectOptions {
   readonly sessionKey?: string;
   readonly channel?: string;
   readonly agentId?: string;
+  /**
+   * The workspace a session this run *creates* lands in.
+   *
+   * Narrows `ConnectOptions.workspaceId` on the hub and carries its rule: a run
+   * pinned to a session that already exists leaves that session's workspace
+   * alone.
+   */
+  readonly workspaceId?: string;
   /** Always true here: nobody is on the other end of a scheduled run. */
   readonly unattended?: boolean;
 }
@@ -156,11 +165,18 @@ export type SchedulerChat = (input: {
   readonly signal?: AbortSignal;
 }) => Promise<ChatResult>;
 
-/** Reads one workspace-relative file, or throws. Absent means no heartbeat. */
-export type SchedulerReadFile = (
-  path: string,
-  maxBytes: number,
-) => Promise<string>;
+/**
+ * Reads one workspace-relative file, or throws. Absent means no heartbeat.
+ *
+ * An options object rather than positional arguments on purpose: `path` and
+ * `workspaceId` are both strings, so adding the workspace as a third parameter
+ * would make a transposition at a call site something the compiler cannot see.
+ */
+export type SchedulerReadFile = (input: {
+  readonly workspaceId: string;
+  readonly path: string;
+  readonly maxBytes: number;
+}) => Promise<string>;
 
 export interface SchedulerOptions {
   readonly jobs: AutomationStore;
@@ -941,6 +957,9 @@ export class Scheduler implements SchedulerPort {
       ...(job.payload.agentId === undefined
         ? {}
         : { agentId: job.payload.agentId }),
+      ...(job.payload.workspaceId === undefined
+        ? {}
+        : { workspaceId: job.payload.workspaceId }),
     });
 
     const onAbort = (): void => {
@@ -1000,7 +1019,13 @@ export class Scheduler implements SchedulerPort {
 
     let contents: string;
     try {
-      contents = await readFile(payload.file, MAX_TASK_FILE_BYTES);
+      // Defaulted here rather than at each composition root, so "the job named
+      // no workspace" has one answer instead of one per wiring.
+      contents = await readFile({
+        workspaceId: payload.workspaceId ?? DEFAULT_WORKSPACE_ID,
+        path: payload.file,
+        maxBytes: MAX_TASK_FILE_BYTES,
+      });
     } catch (caught) {
       const failure = toGhostError(caught);
       if (failure.kind === 'not_found') {

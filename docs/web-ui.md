@@ -93,8 +93,19 @@ or move the folder on disk — which renames the directory and repoints the sess
 Move sessions between workspaces. A workspace with sessions cannot be deleted
 until they move.
 
-Switching workspace moves the Files page and the session list. Workspaces do not see each
-other.
+A workspace is where a conversation's **files** live, not a drawer conversations are
+filed under — so there is exactly one control for it, and the session list is never
+scoped by it. The workspace picker sits beside the agent picker under the message box:
+it names which workspace the open conversation's tools use, and moving it writes the
+binding on the session. The move takes effect from the next turn — a turn already
+running finishes in the workspace it started in.
+
+The Files page opens at the default workspace, which is the parent of every named one,
+so they appear there as ordinary folders and are opened by clicking into them. Named
+workspaces cannot see each other.
+
+Which workspace a given turn actually ran in is recorded per turn and shown in the turn
+details popover, because a conversation that has been moved spans more than one.
 
 ## Agents
 

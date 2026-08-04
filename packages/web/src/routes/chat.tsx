@@ -39,6 +39,7 @@ import { useTranslation } from 'react-i18next';
 import { useTurnStore } from '@/state/turn.js';
 import { toast } from '@/components/ui/toast.js';
 import { AgentPicker } from '@/agents/agent-picker.js';
+import { WorkspacePicker } from '@/workspaces/workspace-picker.js';
 import { useAgent } from '@/agents/agent-context.js';
 import { Composer } from '@/chat/composer.js';
 import type { MessageAction } from '@/chat/message.js';
@@ -192,15 +193,30 @@ export function ChatRoute(): JSX.Element {
       )}
 
       <Composer
-        // Which agent the next turn runs on. In the session rather than the
-        // sidebar: choosing one is part of asking the question.
+        // What the next turn runs under, both halves of it: which agent, and
+        // which workspace its files are in. In the session rather than the
+        // sidebar, because choosing either is part of asking the question.
         //
-        // A control, and only a control. Where the session came from used to sit
-        // beside it as a badge, which put the word `web` under almost every
+        // Controls, and only controls. Where the session came from used to sit
+        // beside them as a badge, which put the word `web` under almost every
         // message box and said nothing — the same reason the list does not badge
         // it either (`sessions-page.tsx`). It reads from the turn details now.
+        //
+        // The workspace one is second: the agent is the more frequent decision,
+        // and the first position is the one the eye lands on.
         lead={
-          <AgentPicker {...(sessionKey === undefined ? {} : { sessionKey })} />
+          // Wrapped rather than passed as a fragment: `.composer__meta` is a
+          // `space-between` row, so two bare children would be pushed to
+          // opposite ends of it instead of sitting together as one control
+          // cluster.
+          <div className="composer__pickers">
+            <AgentPicker
+              {...(sessionKey === undefined ? {} : { sessionKey })}
+            />
+            <WorkspacePicker
+              {...(sessionKey === undefined ? {} : { sessionKey })}
+            />
+          </div>
         }
         // The line under the box is the budget's now: it is the one thing there
         // that changes, and it used to share the row with a keyboard hint that

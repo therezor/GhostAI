@@ -41,7 +41,6 @@ import { queryKeys } from '@/lib/query.js';
 export type SessionSortKey = 'updated' | 'created' | 'title';
 
 export interface SessionQuery {
-  readonly workspaceId: string;
   readonly page: number;
   readonly q: string;
   readonly sort: SessionSortKey;
@@ -63,7 +62,6 @@ export function useSessionPage(
     queryKey: queryKeys.sessionPage(query),
     queryFn: ({ signal }) =>
       api.sessions({
-        workspaceId: query.workspaceId,
         limit: PAGE_SIZE,
         offset: (query.page - 1) * PAGE_SIZE,
         q: query.q,

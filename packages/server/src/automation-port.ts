@@ -83,7 +83,7 @@ export function createAutomationResolver(
 
   return {
     forTurn(request: ToolboxRequest): AutomationPort {
-      const { agentId, sessionKey } = request;
+      const { agentId, sessionKey, workspaceId } = request;
 
       /** Whether this turn is itself a scheduled run. */
       const nested = (): boolean =>
@@ -132,7 +132,15 @@ export function createAutomationResolver(
             // ran on a different prompt and a different tool grant than the one
             // that wrote it — which reads, from the outside, as the agent not
             // understanding the tool.
-            payload: { ...input.payload, agentId },
+            //
+            // `workspaceId` is stamped on the same argument and answers the same
+            // failure: a job scheduled during a turn in a named workspace used
+            // to run in the default one, so the follow-up work could not see the
+            // files that prompted it. The turn's workspace is also the only one
+            // this agent has any claim to — a model naming its own would be a
+            // way out of the jail it is working in. It comes from the *stored*
+            // session row, so it is always a real, legal id.
+            payload: { ...input.payload, agentId, workspaceId },
             enabled: input.enabled,
             deleteAfterRun: input.deleteAfterRun,
             nextRunAtMs,

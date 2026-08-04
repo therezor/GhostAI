@@ -1891,3 +1891,62 @@ describe('SessionHub agent routing', () => {
     expect(tracked.asked).toEqual(['writer']);
   });
 });
+
+describe('announcing a workspace move', () => {
+  it('re-emits the status with the workspace the store now holds', async () => {
+    // The route writes, then says so in one verb. The hub is not handed the new
+    // id — it re-reads the row — so the two cannot disagree about what landed.
+    const h = harness();
+    const client = h.connect();
+    await send(client, {
+      type: 'user.message',
+      sessionKey: SESSION,
+      content: 'hello',
+    });
+    await h.runner.turn(0).end();
+
+    h.store.updateSession(SESSION, { workspaceId: 'research' });
+    h.hub.sessionMoved(SESSION);
+
+    expect(client.of('session.status').at(-1)).toMatchObject({
+      workspaceId: 'research',
+    });
+  });
+
+  it('says nothing for a session nobody has open', () => {
+    // `sessions.get`, not `session`: a PATCH for a conversation with no hub
+    // state must not bring any into existence for it.
+    const h = harness();
+    expect(() => {
+      h.hub.sessionMoved('never-opened');
+    }).not.toThrow();
+  });
+
+  it('does not bump seq for a session with no client attached', async () => {
+    // The `broadcast` contract: a counter moved for nobody leaves a later
+    // reconnect resuming at a `lastSeq` that accounts for a frame it was never
+    // sent, which `replay` then reports as an incomplete gap.
+    //
+    // Read through the `connected` frame's `lastSeq`, which is where a
+    // reconnecting client resumes from — the number the hazard is actually
+    // about.
+    const h = harness();
+    const client = h.connect();
+    await send(client, {
+      type: 'user.message',
+      sessionKey: SESSION,
+      content: 'hello',
+    });
+    await h.runner.turn(0).end();
+    client.close();
+
+    const probe = h.connect();
+    const before = probe.of('connected')[0]?.lastSeq;
+    probe.close();
+
+    h.hub.sessionMoved(SESSION);
+
+    const reopened = h.connect();
+    expect(reopened.of('connected')[0]?.lastSeq).toBe(before);
+  });
+});

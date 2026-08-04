@@ -3,9 +3,9 @@
  *
  * The unit suites already prove the pieces: the jail clamps, the registry
  * refuses a path, the routes scope by workspace, the query keys carry it. What
- * only a browser can show is that they are wired to each other — that switching
- * in the sidebar actually moves the Files page, and that a file uploaded into
- * one workspace is not visible from another.
+ * only a browser can show is that they are wired to each other — that walking
+ * into a workspace's folder actually moves the Files page, and that a file
+ * uploaded into one workspace is not visible from another.
  *
  * That last assertion is the one worth the cost of a browser. A missing
  * workspace segment in a React Query key is invisible to every layer below the
@@ -30,10 +30,15 @@ async function workspacesOf(
   return body.workspaces.map((row) => ({ id: row.id, name: row.name }));
 }
 
-/** Picks a workspace from the sidebar switcher. */
-async function switchTo(app: Page, name: string): Promise<void> {
-  await app.getByRole('button', { name: /^Workspace: / }).click();
-  await app.getByRole('menuitemradio', { name }).click();
+/**
+ * Opens a named workspace on the Files page by clicking into its folder.
+ *
+ * There is no workspace control here to drive: the page opens at the default
+ * workspace, which is the parent of every named one, so they are ordinary
+ * folders and the tree *is* the navigation.
+ */
+async function openFolder(app: Page, id: string): Promise<void> {
+  await app.getByRole('link', { name: id, exact: true }).click();
 }
 
 test.describe('workspaces', () => {
@@ -167,7 +172,7 @@ test.describe('workspaces', () => {
     await expect(app.getByText(/no folder of its own to move/)).toBeVisible();
   });
 
-  test('switching moves the Files page, and workspaces do not see each other', async ({
+  test('the Files tree walks into a workspace, and they do not see each other', async ({
     app,
     harness,
   }) => {
@@ -195,7 +200,7 @@ test.describe('workspaces', () => {
       app.getByRole('link', { name: 'acme', exact: true }),
     ).toBeVisible();
 
-    await switchTo(app, 'Acme');
+    await openFolder(app, 'acme');
     await expect(
       app.getByRole('link', { name: 'acme-only.md', exact: true }),
     ).toBeVisible();
@@ -203,15 +208,77 @@ test.describe('workspaces', () => {
       app.getByRole('link', { name: 'research-only.md', exact: true }),
     ).toHaveCount(0);
 
-    await switchTo(app, 'Research');
+    // Straight to the other one by URL, which is what a link out of the
+    // workspaces manager does. The assertion the query key exists for: a cached
+    // listing from the previous workspace would still be on screen here.
+    await app.goto(`${harness.url}/files?workspace=research`);
     await expect(
       app.getByRole('link', { name: 'research-only.md', exact: true }),
     ).toBeVisible();
-    // The assertion the query key exists for: a cached listing from the
-    // previous workspace would still be on screen here.
     await expect(
       app.getByRole('link', { name: 'acme-only.md', exact: true }),
     ).toHaveCount(0);
+  });
+
+  test('the composer picker moves the conversation, and the next turn follows', async ({
+    app,
+    harness,
+  }) => {
+    // The whole point of the feature, and the one assertion only a browser can
+    // make: the picker writes the binding, and the *next* turn resolves its jail
+    // from that binding rather than from the workspace the session was born in.
+    const created = await app.request.post(`${harness.url}/api/workspaces`, {
+      data: { name: 'Research', id: 'research' },
+    });
+    expect(created.ok()).toBe(true);
+    await app.request.put(`${harness.url}/api/files/text`, {
+      data: {
+        path: 'research-only.md',
+        content: 'r',
+        workspaceId: 'research',
+      },
+    });
+    // The picker's listing is fetched on mount, so a workspace created after
+    // the page loaded is not in it yet.
+    await app.reload();
+
+    // A first turn, so the session has a row for the picker to move.
+    await app.getByRole('textbox', { name: 'Message' }).fill('list the files');
+    await app.getByRole('button', { name: 'Send' }).click();
+    await expect(
+      app.getByRole('region', { name: 'Tool call: list_dir' }),
+    ).toBeVisible();
+
+    const key = new URL(app.url()).searchParams.get('session') ?? '';
+    expect(key).not.toBe('');
+
+    await app
+      .getByRole('button', { name: /^Workspace for this session: / })
+      .click();
+    await app.getByRole('menuitemradio', { name: 'Research' }).click();
+
+    // The durable half: the binding the server holds. Not the toast, and not
+    // the moment the sidebar re-scopes.
+    await expect
+      .poll(async () => {
+        const response = await app.request.get(
+          `${harness.url}/api/sessions/${key}`,
+        );
+        return ((await response.json()) as { workspaceId: string }).workspaceId;
+      })
+      .toBe('research');
+
+    // The half that proves it reached the jail: the next turn's `list_dir` sees
+    // the new workspace's files and not the old one's.
+    await app.getByRole('textbox', { name: 'Message' }).fill('list the files');
+    await app.getByRole('button', { name: 'Send' }).click();
+
+    const cards = app.getByRole('region', { name: 'Tool call: list_dir' });
+    await expect(cards).toHaveCount(2);
+    const second = cards.nth(1);
+    await second.getByRole('button', { expanded: false }).click();
+    await expect(second.getByText('research-only.md')).toBeVisible();
+    await expect(second.getByText('notes.md')).toHaveCount(0);
   });
 
   test('the workspace survives a reload, because it is in the URL', async ({
@@ -273,58 +340,24 @@ test.describe('workspaces', () => {
     ).toBe(204);
   });
 
-  test('is not sitting under the drawer close button on a phone', async ({
+  test('the sidebar has no workspace control, and a way to the manager', async ({
     app,
   }) => {
-    await app.setViewportSize({ width: 420, height: 840 });
-    await app.getByRole('button', { name: 'Open menu' }).click();
-
-    const drawer = app.getByRole('dialog');
-    await expect(drawer).toBeVisible();
-
-    const close = drawer.getByRole('button', { name: 'Close' });
-    const picker = drawer.getByRole('button', { name: /^Workspace:/u });
-
-    const closeBox = await close.boundingBox();
-    const pickerBox = await picker.boundingBox();
-    if (closeBox === null || pickerBox === null) {
-      throw new Error('no layout to measure');
-    }
-
-    // The drawer is a dialog with no padding of its own, so its absolutely
-    // positioned close button landed squarely on the first control in the
-    // column. Two rectangles that do not overlap is the whole assertion.
-    const overlaps =
-      closeBox.x < pickerBox.x + pickerBox.width &&
-      closeBox.x + closeBox.width > pickerBox.x &&
-      closeBox.y < pickerBox.y + pickerBox.height &&
-      closeBox.y + closeBox.height > pickerBox.y;
-    expect(overlaps, 'the close button overlaps the workspace picker').toBe(
-      false,
-    );
-  });
-
-  test('reads as a labelled picker rather than another nav row', async ({
-    app,
-  }) => {
+    // The switcher that used to sit at the top of this column is gone: it
+    // scoped the session list, which made a conversation moved to another
+    // workspace vanish from it. Which workspace a conversation uses is chosen
+    // in the composer now, beside the agent.
     const sidebar = app.getByRole('complementary', { name: 'Sidebar' });
 
-    // The label names the group the way the session list's does, so the control
-    // under it does not have to name itself with an icon.
-    await expect(sidebar.getByText('Workspace', { exact: true })).toBeVisible();
+    await expect(
+      sidebar.getByRole('button', { name: /^Workspace: /u }),
+    ).toHaveCount(0);
 
-    const trigger = sidebar.getByRole('button', { name: /^Workspace:/u });
-    await expect(trigger).toBeVisible();
-
-    // The same box as the rows beneath it — it wore a bordered surface for a
-    // while and was the loudest thing in a column whose subject is elsewhere.
-    // The chevron is what says it opens something.
-    const [triggerBox, rowBox] = await Promise.all([
-      trigger.evaluate((el) => getComputedStyle(el).height),
-      sidebar
-        .getByRole('link', { name: 'Files' })
-        .evaluate((el) => getComputedStyle(el).height),
-    ]);
-    expect(triggerBox).toBe(rowBox);
+    // And the manager is still reachable, which it would not be without a row:
+    // the switcher's menu used to be the only door.
+    await sidebar.getByRole('link', { name: 'Workspaces' }).click();
+    await expect(
+      app.getByRole('heading', { name: 'Workspaces' }),
+    ).toBeVisible();
   });
 });

@@ -532,9 +532,19 @@ function workspaceCommand(
         );
       }
       ctx.setWorkspace(verb);
-      // Worth stating rather than leaving to be discovered: a session's
-      // workspace is fixed at birth, so this moves nothing that exists.
-      renderer.note(t('slash.notes.willLandIn', { workspace: verb }));
+
+      // A conversation that exists moves with the switch; one nobody has spoken
+      // in has no row to move, and the choice is only where it will land.
+      //
+      // The `getSession` guard is load-bearing: `updateSession` calls
+      // `ensureSession` internally, so patching an unspoken session would mint
+      // an empty row for it — which is what makes it show up in the sidebar.
+      if (runtime.store.getSession(ctx.sessionKey) === undefined) {
+        renderer.note(t('slash.notes.willLandIn', { workspace: verb }));
+        return CONTINUE;
+      }
+      runtime.store.updateSession(ctx.sessionKey, { workspaceId: verb });
+      renderer.note(t('slash.notes.movedSession', { workspace: verb }));
       return CONTINUE;
     }
   }

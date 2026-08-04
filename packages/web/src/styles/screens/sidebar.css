@@ -99,16 +99,6 @@
     color: var(--fg-3);
   }
 
-  /* The switcher is the scope everything below it runs in — the conversations,
-   * the files, the workspace a new session lands in — so the column is divided
-   * there. A rule and the space around it, which is how this UI states a
-   * boundary everywhere else: a stroke, not a shadow and not a box. The control
-   * itself is a plain row; the division is what separates it, not its weight. */
-  .sidebar__scope {
-    padding-bottom: var(--space-4);
-    border-bottom: var(--hairline) solid var(--line);
-  }
-
   /* Sessions are what this column is *for*, so the list takes the room the nav
    * above it does not, rather than the fixed height it had when it was the
    * fourth thing down. */

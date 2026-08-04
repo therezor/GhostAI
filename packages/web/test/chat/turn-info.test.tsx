@@ -42,7 +42,10 @@ const TURN: TurnItem = {
   failure: undefined,
 };
 
-function sessionRow(origin: string): Record<string, [number, unknown]> {
+function sessionRow(
+  origin: string,
+  workspaceId = 'default',
+): Record<string, [number, unknown]> {
   return {
     [`/api/sessions/${encodeURIComponent(SESSION)}`]: [
       200,
@@ -53,7 +56,7 @@ function sessionRow(origin: string): Record<string, [number, unknown]> {
         createdAtMs: 1,
         updatedAtMs: 2,
         origin,
-        workspaceId: 'default',
+        workspaceId,
       },
     ],
   };
@@ -106,5 +109,25 @@ describe('where a session came from', () => {
 
     expect(await screen.findByText('Model')).toBeInTheDocument();
     expect(screen.queryByText('Started by')).not.toBeInTheDocument();
+  });
+});
+
+describe('which workspace the turn ran in', () => {
+  it('names it once the conversation is somewhere other than the default', async () => {
+    stubFetch(sessionRow('web', 'research'));
+    await openDetails();
+
+    expect(await screen.findByText('Workspace')).toBeInTheDocument();
+    expect(screen.getByText('research')).toBeInTheDocument();
+  });
+
+  it('says nothing while the conversation is in the default', async () => {
+    // The same objection the origin row answers: a line that is always present
+    // and always says `default` is a line nobody reads.
+    stubFetch(sessionRow('web'));
+    await openDetails();
+
+    expect(await screen.findByText('Model')).toBeInTheDocument();
+    expect(screen.queryByText('Workspace')).not.toBeInTheDocument();
   });
 });

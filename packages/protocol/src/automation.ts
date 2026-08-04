@@ -84,6 +84,18 @@ const deliveryFields = {
    * default of "fresh session per run" is deliberate.
    */
   sessionKey: z.string().optional(),
+  /**
+   * The workspace a run's session is created in. Absent means the default.
+   *
+   * Only ever *creates*, exactly like the workspace on a socket frame. A job
+   * pinned to a `sessionKey` that already exists runs in whatever workspace
+   * that session is bound to and this is ignored — the stored row wins.
+   *
+   * A job an agent schedules for itself is stamped with the workspace that
+   * agent was working in; the model does not get to name one, for the same
+   * reason it does not get to name `agentId`.
+   */
+  workspaceId: z.string().min(1).optional(),
   agentId: z.string().optional(),
   /** Additional channel id → address fan-out. */
   targets: z.record(z.string(), z.string()).default({}),

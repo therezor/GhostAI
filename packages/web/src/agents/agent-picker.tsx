@@ -131,9 +131,7 @@ export function AgentPicker({
           variant="ghost"
           size="sm"
           className={
-            missing
-              ? 'agent-picker__trigger is-missing'
-              : 'agent-picker__trigger'
+            missing ? 'composer__picker is-missing' : 'composer__picker'
           }
           aria-label={
             missing
@@ -147,7 +145,7 @@ export function AgentPicker({
             <BrainCircuit aria-hidden="true" />
           )}
           <span className="truncate">{label}</span>
-          <ChevronDown className="agent-picker__caret" aria-hidden="true" />
+          <ChevronDown className="composer__picker-caret" aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
 
@@ -157,7 +155,7 @@ export function AgentPicker({
             with no item checked reads as a rendering bug rather than as a
             conversation pointing at an agent that no longer exists. */}
         {missing && (
-          <DropdownMenuLabel className="agent-picker__missing" role="alert">
+          <DropdownMenuLabel className="composer__picker-notice" role="alert">
             {t('agents.missingNotice', { id: current })}
           </DropdownMenuLabel>
         )}
@@ -173,7 +171,7 @@ export function AgentPicker({
             <DropdownMenuRadioItem key={agent.id} value={agent.id}>
               <span className="truncate">{agent.label}</span>
               {agent.model !== '' && (
-                <span className="agent-picker__hint">{agent.model}</span>
+                <span className="composer__picker-hint">{agent.model}</span>
               )}
             </DropdownMenuRadioItem>
           ))}

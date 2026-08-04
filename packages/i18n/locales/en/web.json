@@ -259,7 +259,12 @@
     "title": "Automation",
     "toHint": "The channel, user or room to send to.",
     "toLabel": "Destination",
-    "warning": "Warning"
+    "warning": "Warning",
+    "workspaceDefault": "Default workspace",
+    "workspaceHint": "Which workspace the run's files are in.",
+    "workspaceLabel": "Workspace",
+    "workspaceMissing": "{{id}} (no longer listed)",
+    "workspacePinned": "This job is pinned to a session, so it runs in that session’s workspace and this is ignored."
   },
   "chat": {
     "approvalClosed": "The approval window closed. The call was refused.",
@@ -411,7 +416,8 @@
     "automation": "Automation",
     "files": "Files",
     "sessions": "Sessions",
-    "settings": "Settings"
+    "settings": "Settings",
+    "workspaces": "Workspaces"
   },
   "notifications": {
     "allRead": "All caught up.",
@@ -494,8 +500,7 @@
     "title": "Sessions",
     "titleColumn": "Title",
     "untitled": "New session",
-    "updated": "Last active",
-    "workspaceHeading": "Workspace"
+    "updated": "Last active"
   },
   "settings": {
     "appearance": {
@@ -747,7 +752,8 @@
     "rate": "Rate",
     "reasoning": "Reasoning",
     "steps": "Steps",
-    "stopped": "Stopped"
+    "stopped": "Stopped",
+    "workspace": "Workspace"
   },
   "workspaces": {
     "backToWorkspaces": "Back to workspaces",
@@ -765,6 +771,7 @@
     "folderReserved": "That folder name is reserved and cannot name a workspace.",
     "folderShape": "Use 1–40 lowercase letters, digits and hyphens, starting and ending with a letter or digit.",
     "folderTaken": "A workspace already uses that folder.",
+    "forThisSession": "For this session",
     "identity": "Identity",
     "identityDesc": "What this workspace is called, and where its files are.",
     "loadError": "Could not load workspaces: {{message}}",
@@ -772,6 +779,10 @@
     "loadListError": "Could not load the workspaces: {{message}}",
     "loadOneError": "Could not load the workspace: {{message}}",
     "manage": "Manage workspaces…",
+    "missingLabel": "{{id}} is no longer listed",
+    "missingNotice": "“{{id}}” is no longer listed. This session still runs in it until you choose another.",
+    "moveFailed": "Could not move the session",
+    "moveThisSession": "Move this session",
     "moveTitle": "Move the sessions first?",
     "namedNote_one": "Isolated from the other named workspaces — it cannot reach their files, and they cannot reach its. {{count}} session runs in it, last updated {{updated}}.",
     "namedNote_other": "Isolated from the other named workspaces — it cannot reach their files, and they cannot reach its. {{count}} sessions run in it, last updated {{updated}}.",
@@ -782,6 +793,7 @@
     "newTitle": "New workspace",
     "noSuchWorkspace": "There is no workspace called “{{id}}”.",
     "note": "A workspace is a folder the agent works in. Default holds all the others, so it can reach their files; the named ones cannot reach each other.",
+    "pickerLabel": "Workspace for this session: {{name}}",
     "sessionCount_one": "{{count}} session",
     "sessionCount_other": "{{count}} sessions",
     "sessions": "Sessions",

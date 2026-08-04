@@ -265,9 +265,29 @@ describe('toJobRequest', () => {
     const result = toJobRequest(form({ name: 'x', message: 'go' }), t, TZ);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    for (const key of ['agentId', 'sessionKey', 'channel', 'to']) {
+    for (const key of [
+      'agentId',
+      'workspaceId',
+      'sessionKey',
+      'channel',
+      'to',
+    ]) {
       expect(result.create.payload).not.toHaveProperty(key);
     }
+  });
+
+  it('carries a workspace onto both bodies', () => {
+    // Create and update are built as one object precisely so a field cannot be
+    // added to one and forgotten on the other.
+    const result = toJobRequest(
+      form({ name: 'x', message: 'go', workspaceId: 'research' }),
+      t,
+      TZ,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.create.payload).toMatchObject({ workspaceId: 'research' });
+    expect(result.update.payload).toMatchObject({ workspaceId: 'research' });
   });
 
   it('round-trips a job unchanged through the form', () => {

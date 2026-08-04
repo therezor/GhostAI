@@ -179,7 +179,8 @@ export interface ConnectOptions {
    * Never applied to a session that already exists — the loop reads the stored
    * row and ignores this. A tab connects before it has sent anything, and the
    * store holds no row until the first message lands, so this is what carries
-   * the user's chosen workspace across that gap.
+   * the user's chosen workspace across that gap. Moving a session that does
+   * exist is `PATCH /api/sessions/:key`, never a frame.
    */
   readonly workspaceId?: string;
 }
@@ -273,7 +274,7 @@ interface QueuedTurn {
   readonly content: string | readonly ContentPart[];
   readonly agentId: string | undefined;
   readonly channel: string;
-  /** Only ever creates; an existing session keeps the workspace it was born in. */
+  /** Only ever creates; an existing session keeps the workspace it is bound to. */
   readonly workspaceId: string | undefined;
   /** Parsed at submit time, so a queued message is not reparsed to run it. */
   readonly mentions: ParsedMentions;
@@ -514,6 +515,29 @@ export class SessionHub {
   /** Carries one agent's standing tool approvals to its new id. */
   renameAgent(from: string, to: string): void {
     this.approvals.renameAgent(from, to);
+  }
+
+  /**
+   * Re-announces a session's workspace after something moved it.
+   *
+   * Called by `PATCH /api/sessions/:key`, so a second tab — or the Files page
+   * beside the conversation — learns about the move now rather than at the next
+   * turn. The route performs the write and then says so in one verb; the hub is
+   * not handed the new id, because `status` re-reads the stored row itself.
+   * Route and hub therefore cannot disagree about what was written.
+   *
+   * `sessions.get`, not `session`: the latter allocates state with a replay ring
+   * and runs an eviction pass, and a PATCH for a conversation nobody has open
+   * must not bring hub state into existence for it.
+   *
+   * Sessions with no client attached are skipped for the reason `broadcast`
+   * gives at length: bumping `seq` for nobody leaves a later reconnect resuming
+   * at a `lastSeq` that accounts for an event it was never sent.
+   */
+  sessionMoved(sessionKey: string): void {
+    const state = this.sessions.get(sessionKey);
+    if (state === undefined || state.clients.size === 0) return;
+    this.status(state);
   }
 
   // -------------------------------------------------------------------------

@@ -49,6 +49,7 @@ export interface JobForm {
   readonly file: string;
   readonly model: string;
   readonly agentId: string;
+  readonly workspaceId: string;
   readonly sessionKey: string;
   readonly deliver: boolean;
   readonly channel: string;
@@ -86,6 +87,7 @@ export function emptyJobForm(timeZone: string, nowMs = Date.now()): JobForm {
     file: 'TASK.md',
     model: '',
     agentId: '',
+    workspaceId: '',
     sessionKey: '',
     deliver: false,
     channel: '',
@@ -116,6 +118,7 @@ export function toJobForm(job: AutomationJob, timeZone: string): JobForm {
       ? { file: payload.file, model: payload.model ?? '' }
       : {}),
     agentId: payload.agentId ?? '',
+    workspaceId: payload.workspaceId ?? '',
     sessionKey: payload.sessionKey ?? '',
     deliver: payload.deliver,
     channel: payload.channel ?? '',
@@ -205,6 +208,9 @@ export function toJobRequest(
 
   const optional = {
     ...(form.agentId.trim() === '' ? {} : { agentId: form.agentId.trim() }),
+    ...(form.workspaceId.trim() === ''
+      ? {}
+      : { workspaceId: form.workspaceId.trim() }),
     ...(form.sessionKey.trim() === ''
       ? {}
       : { sessionKey: form.sessionKey.trim() }),

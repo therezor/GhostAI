@@ -989,6 +989,7 @@ describe('renaming an agent through PATCH /api/settings', () => {
       turnId: 't1',
       sessionKey: 'mine',
       agentId: 'reviewer',
+      workspaceId: 'default',
       provider: 'ollama',
       model: 'qwen3:8b',
       startedAtMs: 1,

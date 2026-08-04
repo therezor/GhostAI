@@ -139,6 +139,43 @@ describe('AutomationPayloadSchema', () => {
     expect(heartbeat).toMatchObject({ targets: { telegram: '12345' } });
   });
 
+  it('carries a workspace on both kinds, and leaves it unset by default', () => {
+    // Unset means the default workspace, which is what every job written
+    // before the field existed relies on.
+    expect(
+      AutomationPayloadSchema.parse({ kind: 'heartbeat' }),
+    ).not.toHaveProperty('workspaceId');
+
+    expect(
+      AutomationPayloadSchema.parse({
+        kind: 'scheduled',
+        message: 'x',
+        workspaceId: 'research',
+      }),
+    ).toMatchObject({ workspaceId: 'research' });
+    expect(
+      AutomationPayloadSchema.parse({
+        kind: 'heartbeat',
+        workspaceId: 'research',
+      }),
+    ).toMatchObject({ workspaceId: 'research' });
+  });
+
+  it('still rejects an unknown key on both kinds', () => {
+    // Both variants are `strictObject`, and adding a field must not have
+    // relaxed that — an unknown key is a typo the author should hear about.
+    expect(
+      AutomationPayloadSchema.safeParse({
+        kind: 'scheduled',
+        message: 'x',
+        workspace: 'research',
+      }).success,
+    ).toBe(false);
+    expect(
+      AutomationPayloadSchema.safeParse({ kind: 'heartbeat', nope: 1 }).success,
+    ).toBe(false);
+  });
+
   it('leaves sessionKey unset so each run gets an isolated session', () => {
     // Pinning a sessionKey is how a nightly job grows an unbounded context
     // window, so it must be explicit.

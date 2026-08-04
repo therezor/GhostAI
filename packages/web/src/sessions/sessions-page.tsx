@@ -21,9 +21,11 @@
  * messages": the count is a correlated subquery, so ordering by it would scan
  * the messages table once per session row — see `SessionStore.listSessions`.
  *
- * **Scoped to the current workspace**, like the sidebar above it. The switcher
- * is how you change scope, and a second workspace control on this page would be
- * a second door into the thing the column on the left already decides.
+ * **Every session, whatever workspace it is in.** This was once scoped to a
+ * switcher in the sidebar, which meant a conversation moved to another
+ * workspace silently left the list and the only way back was to guess where it
+ * had gone. A workspace says where a conversation's *files* are, not which
+ * drawer it is filed in — so it is a column here, not a filter.
  */
 
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -91,14 +93,13 @@ export function SessionsRoute(): JSX.Element {
   >(undefined);
 
   // Page first, total after: the request needs a page number before there is a
-  // response to count. Changing the workspace, the search or the order changes
-  // which rows are being paged, so each of them sends the reader back to page 1.
+  // response to count. Changing the search or the order changes which rows are
+  // being paged, so each of them sends the reader back to page 1.
   const page = usePagination({
-    resetOn: `${workspaceId}|${filter}|${sort.key}|${String(sort.descending)}`,
+    resetOn: `${filter}|${sort.key}|${String(sort.descending)}`,
   });
 
   const sessions = useSessionPage({
-    workspaceId,
     page: page.page,
     q: filter,
     sort: sort.key,

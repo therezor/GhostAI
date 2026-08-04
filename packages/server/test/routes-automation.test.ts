@@ -254,6 +254,69 @@ describe('automation jobs CRUD', () => {
   });
 });
 
+describe('a job′s workspace', () => {
+  it('round-trips a workspace that exists', async () => {
+    const test = await start();
+    test.runtime.workspaces.create({ name: 'Research', id: 'research' });
+
+    const response = await test.server.app.inject({
+      method: 'POST',
+      url: '/api/automation/jobs',
+      headers: test.headers,
+      payload: {
+        ...CRON_BODY,
+        payload: { ...CRON_BODY.payload, workspaceId: 'research' },
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json<AutomationJob>().payload).toMatchObject({
+      workspaceId: 'research',
+    });
+  });
+
+  it('404s on create for a workspace nothing can list', async () => {
+    // Checked at authoring time because the alternative surfaces far later and
+    // far worse: the jail throws on an id that is not a legal slug, so a typo
+    // becomes a heartbeat that fails every interval forever.
+    const test = await start();
+
+    const response = await test.server.app.inject({
+      method: 'POST',
+      url: '/api/automation/jobs',
+      headers: test.headers,
+      payload: {
+        ...CRON_BODY,
+        payload: { ...CRON_BODY.payload, workspaceId: 'nope' },
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('404s on update for a workspace nothing can list', async () => {
+    const test = await start();
+    const created = await test.server.app.inject({
+      method: 'POST',
+      url: '/api/automation/jobs',
+      headers: test.headers,
+      payload: CRON_BODY,
+    });
+    const { id } = created.json<AutomationJob>();
+
+    const response = await test.server.app.inject({
+      method: 'PATCH',
+      url: `/api/automation/jobs/${id}`,
+      headers: test.headers,
+      payload: {
+        payload: { ...CRON_BODY.payload, workspaceId: 'nope' },
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+});
+
 describe('automation validation', () => {
   it('answers 422 naming the field for a cron expression it cannot honour', async () => {
     // `parseCron` throws `GhostError('config')`, whose default mapping is a 500

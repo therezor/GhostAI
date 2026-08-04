@@ -76,7 +76,29 @@ const AGENTS = {
   ],
 };
 
+const WORKSPACES = {
+  workspaces: [
+    {
+      id: 'default',
+      name: 'Default',
+      isDefault: true,
+      createdAtMs: 1,
+      updatedAtMs: 2,
+      sessionCount: 1,
+    },
+    {
+      id: 'research',
+      name: 'Research',
+      isDefault: false,
+      createdAtMs: 1,
+      updatedAtMs: 2,
+      sessionCount: 0,
+    },
+  ],
+};
+
 const SHELL_ROUTES: Record<string, StubRoute> = {
+  '/api/workspaces': [200, WORKSPACES],
   '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
   '/api/setup': [200, { required: false }],
   '/api/status': [200, STATUS],
@@ -403,6 +425,32 @@ describe('the job editor', () => {
     expect(await screen.findByLabelText('Agent')).toHaveTextContent(
       'no longer exists',
     );
+  });
+
+  it('offers the real workspaces, so a run′s files can be somewhere of their own', async () => {
+    mount('/automation/job-1');
+    const workspace = await screen.findByLabelText('Workspace');
+
+    expect(workspace).toHaveTextContent('Default workspace');
+    await userEvent.setup().click(workspace);
+    expect(
+      await screen.findByRole('option', { name: 'Research' }),
+    ).toBeInTheDocument();
+  });
+
+  it('says the workspace is ignored once the job is pinned to a session', async () => {
+    // The stored session row wins over anything a run claims, so the field is
+    // inert here — and a hint that always said so is a hint nobody reads.
+    mount('/automation/job-1');
+
+    expect(await screen.findByLabelText('Workspace')).toBeInTheDocument();
+    expect(screen.queryByText(/runs in that session/)).not.toBeInTheDocument();
+
+    await userEvent
+      .setup()
+      .type(screen.getByLabelText('Session key'), 'pinned');
+
+    expect(await screen.findByText(/runs in that session/)).toBeInTheDocument();
   });
 
   it('names the install zone on the cron field rather than offering a per-job one', async () => {

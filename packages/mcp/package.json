@@ -1,0 +1,44 @@
+{
+  "name": "@ghostai/mcp",
+  "version": "0.0.0",
+  "description": "MCP client, connection lifecycle, and the bridge onto the tool registry.",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testkit": {
+      "types": "./test/testkit/index.ts",
+      "default": "./test/testkit/index.ts"
+    }
+  },
+  "imports": {
+    "#src/*": "./src/*",
+    "#testkit/*": "./test/testkit/*"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "test/testkit"
+  ],
+  "scripts": {
+    "build": "tsup && tsc -b",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "lint": "eslint src test"
+  },
+  "dependencies": {
+    "@ghostai/core": "workspace:*",
+    "@ghostai/protocol": "workspace:*",
+    "@ghostai/security": "workspace:*",
+    "@ghostai/tools": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.30.0"
+  },
+  "devDependencies": {
+    "zod": "^4.0.0"
+  }
+}

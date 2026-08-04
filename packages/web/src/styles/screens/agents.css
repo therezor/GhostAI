@@ -8,53 +8,10 @@
  */
 
 @layer screens {
-  /* ---------------------------------------------------------------------
-   * The picker, in the composer
-   * ------------------------------------------------------------------ */
-
-  /* Sits at the head of `.composer__meta`, before the hint. Muted and small:
-     it names what the turn will run on, which is context rather than an
-     action, and a primary-looking control there would compete with Send. */
-  .agent-picker__trigger {
-    gap: var(--space-2);
-    max-width: 14rem;
-    padding-inline: var(--space-2);
-    color: var(--fg-2);
-    font-size: var(--text-sm);
-  }
-
-  /* The bound agent is not in the listing: deleted, or switched off. Colour
-     rather than a badge, because the trigger is already at the small end of the
-     type scale and a second element beside it would be the loudest thing in the
-     composer for a state the turn survives. `--warning-fg` is the text variant;
-     the fill is the menu's own. */
-  .agent-picker__trigger.is-missing {
-    color: var(--warning-fg);
-  }
-
-  .agent-picker__caret {
-    flex-shrink: 0;
-    width: var(--size-icon-sm);
-    height: var(--size-icon-sm);
-    color: var(--fg-3);
-  }
-
-  /* Wraps, unlike the label above it: this is a sentence explaining a state
-     rather than a heading, and truncating it would hide the half that says what
-     to do about it. */
-  .agent-picker__missing {
-    max-width: 18rem;
-    color: var(--warning-fg);
-    white-space: normal;
-  }
-
-  .agent-picker__hint {
-    margin-inline-start: auto;
-    padding-inline-start: var(--space-3);
-    font-size: var(--text-sm);
-    line-height: var(--leading-sm);
-    color: var(--fg-3);
-  }
+  /* The picker that sits in the composer is not here. It shares its rules with
+     the workspace picker beside it, under `.composer__picker` in `chat.css` —
+     what they describe is the shape of a small muted control under the message
+     box, which is not a fact about agents. */
 
   /* ---------------------------------------------------------------------
    * The index

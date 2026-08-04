@@ -336,8 +336,7 @@ export async function startHarness(
     // Over the scripted provider, which is what lets a spec cover a heartbeat
     // without an endpoint.
     ...(directChat === undefined ? {} : { chat: directChat }),
-    readFile: async (path, maxBytes) =>
-      await readJailed(runtime, path, maxBytes),
+    readFile: async (input) => await readJailed(runtime, input),
     logger: silentLogger,
   });
   engine.current = scheduler;
@@ -591,10 +590,14 @@ function harnessRuntime(
  */
 async function readJailed(
   runtime: GhostRuntime,
-  path: string,
-  maxBytes: number,
+  input: {
+    readonly workspaceId: string;
+    readonly path: string;
+    readonly maxBytes: number;
+  },
 ): Promise<string> {
-  const verdict = runtime.jail.check(path);
+  const { workspaceId, path, maxBytes } = input;
+  const verdict = runtime.jails.forWorkspace(workspaceId).check(path);
   if (!verdict.ok) {
     throw new GhostError(
       'jail_escape',

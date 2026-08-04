@@ -166,11 +166,15 @@ describe('the sessions page', () => {
     ).toBeVisible();
   });
 
-  it('scopes the request to the workspace on screen', async () => {
+  it('asks for every session, whatever workspace it is in', async () => {
+    // The page used to scope itself to a sidebar switcher, which meant a
+    // conversation moved to another workspace silently left the list and the
+    // only way back was to guess where it had gone. A workspace says where a
+    // conversation's files are, not which list it belongs in.
     const { calls } = mount();
 
     await screen.findByRole('link', { name: 'Open Fix the login throttle' });
-    expect(listCalls(calls).at(-1)?.query.get('workspace')).toBe('default');
+    expect(listCalls(calls).at(-1)?.query.get('workspace')).toBeNull();
   });
 });
 

@@ -32,6 +32,7 @@ interface RunView {
   readonly id: string;
   readonly status: string;
   readonly output?: string;
+  readonly sessionKey?: string;
 }
 
 const jobsOf = async (app: Page, url: string): Promise<JobView[]> => {
@@ -240,6 +241,38 @@ test('running a job on demand produces a real turn that settles', async ({
   await expect
     .poll(async () => (await jobsOf(app, harness.url))[0]?.state.lastStatus)
     .toBe('ok');
+});
+
+test('a job runs in the workspace it names', async ({ app, harness }) => {
+  // The chain only a real composition root exercises: the payload's workspace
+  // reaches `SchedulerConnectOptions`, the hub carries it into `ensureSession`,
+  // and the run's session is created there rather than in the default.
+  const created = await app.request.post(`${harness.url}/api/workspaces`, {
+    data: { name: 'Research', id: 'research' },
+  });
+  expect(created.ok()).toBe(true);
+
+  const seeded = await seedJob(app, harness.url, {
+    payload: {
+      kind: 'scheduled',
+      message: 'say hello',
+      workspaceId: 'research',
+    },
+  });
+  await app.request.post(`${harness.url}/api/automation/jobs/${seeded.id}/run`);
+
+  await expect
+    .poll(async () => (await runsOf(app, harness.url, seeded.id))[0]?.status, {
+      timeout: 15_000,
+    })
+    .toBe('ok');
+
+  const key = (await runsOf(app, harness.url, seeded.id))[0]?.sessionKey ?? '';
+  expect(key).not.toBe('');
+  const session = await app.request.get(`${harness.url}/api/sessions/${key}`);
+  expect(((await session.json()) as { workspaceId: string }).workspaceId).toBe(
+    'research',
+  );
 });
 
 test('a run leaves a session that is listed like any other', async ({

@@ -73,9 +73,12 @@ export interface SessionRecord {
   /**
    * The workspace this session's tools run inside.
    *
-   * Set once, at creation, and never moved: a turn resolves its jail from
-   * *this* value rather than from whatever the request said, which is what
-   * makes switching workspaces in the UI safe while a turn is still running.
+   * A turn resolves its jail from *this* value rather than from whatever the
+   * request said, which is what makes switching workspaces in the UI safe
+   * while a turn is still running. That much is unchanged by the fact that it
+   * can now move: the only thing that moves it is an explicit
+   * `updateSession`, and a turn already running captured its jail when it
+   * started, so the move lands from the next turn.
    */
   readonly workspaceId: string;
   readonly agentId: string | undefined;
@@ -156,6 +159,14 @@ export interface CreateSessionOptions {
 export interface UpdateSessionOptions {
   readonly title?: string;
   readonly agentId?: string | null;
+  /**
+   * Moves the conversation to another workspace.
+   *
+   * The only thing that moves one. `ensureSession` deliberately cannot — see
+   * `SessionRecord.workspaceId` — so a turn, a socket frame and a scheduled
+   * run all leave an existing session where it is.
+   */
+  readonly workspaceId?: string;
   readonly metadata?: Readonly<Record<string, unknown>>;
   readonly lastConsolidatedSeq?: number;
   readonly lastLearnedSeq?: number;
@@ -260,6 +271,14 @@ export interface TurnStatsRecord {
   readonly sessionKey: string;
   /** Which agent ran the turn. Empty on a turn recorded before agents existed. */
   readonly agentId: string;
+  /**
+   * Which workspace the turn ran in — the files it could actually reach.
+   *
+   * Not the session's current workspace: a conversation can be moved between
+   * them, and every turn before the move ran somewhere else. `default` on a
+   * turn recorded before this was captured.
+   */
+  readonly workspaceId: string;
   readonly provider: string;
   readonly model: string;
   readonly startedAtMs: number;
@@ -331,6 +350,10 @@ CREATE TABLE IF NOT EXISTS turn_stats (
   turn_id           TEXT    PRIMARY KEY,
   session_key       TEXT    NOT NULL REFERENCES sessions(key) ON DELETE CASCADE,
   agent_id          TEXT    NOT NULL DEFAULT '',
+  -- Where this turn actually ran, not where the session is now. A session can
+  -- be moved between workspaces mid-conversation, so the two genuinely differ
+  -- and only this column can say which files a given turn could reach.
+  workspace_id      TEXT    NOT NULL DEFAULT '${DEFAULT_WORKSPACE_ID}',
   provider          TEXT    NOT NULL DEFAULT '',
   model             TEXT    NOT NULL DEFAULT '',
   started_at_ms     INTEGER NOT NULL,
@@ -374,6 +397,7 @@ function rowToTurnStats(row: Row): TurnStatsRecord {
     turnId: read.string(row, 'turn_id'),
     sessionKey: read.string(row, 'session_key'),
     agentId: read.string(row, 'agent_id'),
+    workspaceId: read.string(row, 'workspace_id'),
     provider: read.string(row, 'provider'),
     model: read.string(row, 'model'),
     startedAtMs: read.int(row, 'started_at_ms'),
@@ -527,6 +551,41 @@ export class SessionStore {
     // SQLite defaults foreign keys *off* for backwards compatibility.
     this.db.exec('PRAGMA foreign_keys = ON');
     this.db.exec(SCHEMA);
+    this.addMissingColumns();
+  }
+
+  /**
+   * Adds columns that a database created by an older build does not have.
+   *
+   * `CREATE TABLE IF NOT EXISTS` does nothing to a table that already exists, so
+   * a column added to `SCHEMA` reaches a fresh install and no other. Deliberately
+   * not a migration framework — the same argument `AutomationStore` makes beside
+   * its own copy of this, which is the idiom being followed here: a versioned
+   * ledger for two `ALTER TABLE`s is a mechanism with one caller.
+   *
+   * `error` is in the list because it was always meant to be. `rowToTurnStats`
+   * says it tolerates a database written before that column existed — which was
+   * true of the read and false of the write, since the insert names it and would
+   * have failed with `no such column` on exactly the databases the comment was
+   * about.
+   */
+  private addMissingColumns(): void {
+    const present = new Set(
+      this.db
+        .prepare('PRAGMA table_info(turn_stats)')
+        .all()
+        .map((row) => read.optionalString(row, 'name') ?? ''),
+    );
+
+    for (const [column, ddl] of [
+      [
+        'workspace_id',
+        `ALTER TABLE turn_stats ADD COLUMN workspace_id TEXT NOT NULL DEFAULT '${DEFAULT_WORKSPACE_ID}'`,
+      ],
+      ['error', 'ALTER TABLE turn_stats ADD COLUMN error TEXT'],
+    ] as const) {
+      if (!present.has(column)) this.db.exec(ddl);
+    }
   }
 
   /**
@@ -611,9 +670,9 @@ export class SessionStore {
       key,
       options.title ?? '',
       options.origin ?? 'web',
-      // `OR IGNORE`, so this only lands when the row is created. A session's
-      // workspace is fixed at birth: a turn arriving with a different one must
-      // not move a conversation's files out from under it.
+      // `OR IGNORE`, so this only lands when the row is created. A turn
+      // arriving with a different workspace must not move a conversation's
+      // files out from under it; moving one is an explicit `updateSession`.
       options.workspaceId ?? DEFAULT_WORKSPACE_ID,
       options.agentId ?? null,
       now,
@@ -933,6 +992,7 @@ export class SessionStore {
         patch.agentId === undefined
           ? existing.agentId
           : (patch.agentId ?? undefined),
+      workspaceId: patch.workspaceId ?? existing.workspaceId,
       metadata: patch.metadata ?? existing.metadata,
       lastConsolidatedSeq:
         patch.lastConsolidatedSeq ?? existing.lastConsolidatedSeq,
@@ -941,12 +1001,13 @@ export class SessionStore {
 
     this.stmt(
       `UPDATE sessions
-          SET title = ?, agent_id = ?, metadata_json = ?,
+          SET title = ?, agent_id = ?, workspace_id = ?, metadata_json = ?,
               last_consolidated_seq = ?, last_learned_seq = ?, updated_at_ms = ?
         WHERE key = ?`,
     ).run(
       next.title,
       next.agentId ?? null,
+      next.workspaceId,
       JSON.stringify(next.metadata),
       next.lastConsolidatedSeq,
       next.lastLearnedSeq,
@@ -1258,12 +1319,14 @@ export class SessionStore {
     this.assertOpen();
     this.stmt(
       `INSERT INTO turn_stats
-         (turn_id, session_key, agent_id, provider, model, started_at_ms, ended_at_ms,
+         (turn_id, session_key, agent_id, workspace_id, provider, model,
+          started_at_ms, ended_at_ms,
           iterations, stop_reason, prompt_tokens, completion_tokens, total_tokens,
           cached_tokens, reasoning_tokens, error)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(turn_id) DO UPDATE SET
          agent_id = excluded.agent_id,
+         workspace_id = excluded.workspace_id,
          provider = excluded.provider, model = excluded.model,
          started_at_ms = excluded.started_at_ms, ended_at_ms = excluded.ended_at_ms,
          iterations = excluded.iterations, stop_reason = excluded.stop_reason,
@@ -1276,6 +1339,7 @@ export class SessionStore {
       stats.turnId,
       stats.sessionKey,
       stats.agentId,
+      stats.workspaceId,
       stats.provider,
       stats.model,
       stats.startedAtMs,

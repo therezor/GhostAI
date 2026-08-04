@@ -140,6 +140,22 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
     }
   }
 
+  /**
+   * Refuses a workspace the manager cannot list, for create and for update.
+   *
+   * `ensureSession` and `updateSession` would both happily store any string, and
+   * a conversation bound to a workspace nothing can list is one the UI can never
+   * show the files for. Shared by the two routes that accept an id so there is a
+   * single spelling of the sentence — they had drifted once already, with create
+   * checking and update not existing yet.
+   */
+  function requireWorkspace(workspaceId: string | undefined): void {
+    if (workspaceId === undefined) return;
+    if (deps.runtime.workspaces.get(workspaceId) === undefined) {
+      throw notFound(`No such workspace: ${workspaceId}`);
+    }
+  }
+
   return {
     'sessions.list': {
       summary: 'Sessions, newest activity first',
@@ -219,16 +235,7 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
         // `ensureSession` is idempotent, so a client that retries a create it
         // never saw the response to gets its session rather than a 409 about a
         // session it already owns.
-        // The workspace has to exist before a session can be opened in one:
-        // `ensureSession` would happily store any string, and a conversation
-        // bound to a workspace the manager cannot list is one the UI can never
-        // show the files for.
-        if (
-          body.workspaceId !== undefined &&
-          deps.runtime.workspaces.get(body.workspaceId) === undefined
-        ) {
-          throw notFound(`No such workspace: ${body.workspaceId}`);
-        }
+        requireWorkspace(body.workspaceId);
         requireAgent(body.agentId);
 
         const record = store.ensureSession(body.key ?? newUuid(), {
@@ -263,7 +270,7 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
     },
 
     'sessions.update': {
-      summary: 'Rename a session or move it to another agent',
+      summary: 'Rename a session, or move it to another agent or workspace',
       schema: {
         params: SessionParamsSchema,
         body: UpdateSessionRequestSchema,
@@ -273,11 +280,23 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
         const { key } = params(request);
         requireSession(key);
         const body = request.body as UpdateSessionRequest;
+        requireWorkspace(body.workspaceId);
         requireAgent(body.agentId);
         const updated = store.updateSession(key, {
           ...(body.title === undefined ? {} : { title: body.title }),
           ...(body.agentId === undefined ? {} : { agentId: body.agentId }),
+          ...(body.workspaceId === undefined
+            ? {}
+            : { workspaceId: body.workspaceId }),
         });
+
+        // Deliberately not refused while a turn is running. The loop captures
+        // its jail once, when the turn starts, so the turn in flight finishes
+        // in the workspace it began in and the next one picks up the move —
+        // there is no state for a guard here to protect. Announced, though, so
+        // a second tab does not keep showing the workspace it moved out of.
+        if (body.workspaceId !== undefined) deps.hub.sessionMoved(key);
+
         return toSummary({ ...updated, messageCount: store.messageCount(key) });
       },
     },

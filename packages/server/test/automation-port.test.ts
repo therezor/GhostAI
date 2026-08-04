@@ -126,6 +126,33 @@ describe('creating a job', () => {
     expect(created.value?.payload).toMatchObject({ agentId: 'reviewer' });
   });
 
+  it('runs the job in the workspace the turn was working in', () => {
+    // Before this, a job scheduled during a turn in a named workspace ran in
+    // the default one, so the follow-up work could not see the files that
+    // prompted it.
+    const h = harness();
+    h.sessions.ensureSession('web:1', { origin: 'web' });
+
+    const created = h.port({ workspaceId: 'research' }).create(JOB);
+
+    expect(created.value?.payload).toMatchObject({ workspaceId: 'research' });
+  });
+
+  it('does not let the tool name a workspace of its own', () => {
+    // The same argument that keeps `agentId` out of the tool's hands: the turn
+    // runs on arguments a model wrote, and a model naming its own workspace
+    // would be a way out of the jail it is working in.
+    const h = harness();
+    h.sessions.ensureSession('web:1', { origin: 'web' });
+
+    const created = h.port({ workspaceId: 'research' }).create({
+      ...JOB,
+      payload: { ...JOB.payload, workspaceId: 'somebody-elses' },
+    });
+
+    expect(created.value?.payload).toMatchObject({ workspaceId: 'research' });
+  });
+
   it('re-arms the timer, so a job made mid-turn actually fires', () => {
     const h = harness();
     h.sessions.ensureSession('web:1', { origin: 'web' });

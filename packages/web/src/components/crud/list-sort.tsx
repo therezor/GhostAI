@@ -14,7 +14,7 @@
  * than the search box it sits next to, for something read far less often. And
  * the direction lived in a bare icon button beside it, which is two controls
  * and two visual weights for one decision. What is here instead is the shape
- * `.agent-picker__trigger` already uses for "a quiet control naming its current
+ * `.composer__picker` already uses for "a quiet control naming its current
  * value": muted, small, no border until you point at it.
  *
  * Inside, two radio groups rather than one clever list. Picking the column and

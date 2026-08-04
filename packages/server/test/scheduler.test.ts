@@ -1238,3 +1238,94 @@ describe('Scheduler heartbeat', () => {
     await h.scheduler.stop();
   });
 });
+
+describe('a job′s workspace', () => {
+  it('opens the run′s connection in the workspace the job names', async () => {
+    const h = harness({ script: answers('done') });
+    h.jobs.createJob(
+      job({
+        payload: {
+          kind: 'scheduled',
+          message: 'go',
+          workspaceId: 'research',
+          deliver: false,
+          targets: {},
+        },
+      }),
+    );
+    h.scheduler.start();
+    await tick(60_000);
+
+    expect(h.runs[0]?.options.workspaceId).toBe('research');
+    await h.scheduler.stop();
+  });
+
+  it('passes no workspace for a job that names none, so the default applies', async () => {
+    const h = harness({ script: answers('done') });
+    h.jobs.createJob(job());
+    h.scheduler.start();
+    await tick(60_000);
+
+    expect(h.runs[0]?.options.workspaceId).toBeUndefined();
+    await h.scheduler.stop();
+  });
+
+  it('reads the heartbeat′s task file from the job′s own workspace', async () => {
+    // The bug this closes: `TASK.md` was always read through the default
+    // workspace's jail, so a heartbeat in a named workspace skipped forever on
+    // a file it could not see.
+    const seen: Array<{ workspaceId: string; path: string }> = [];
+    const h = harness({
+      readFile: (input) => {
+        seen.push({ workspaceId: input.workspaceId, path: input.path });
+        return Promise.resolve('Fix the build');
+      },
+      chat: (input) =>
+        Promise.resolve(
+          completion(
+            input.tools[0]?.name ?? '',
+            JSON.stringify({ action: 'skip', reason: 'not now' }),
+          ),
+        ),
+    });
+    h.jobs.createJob(
+      heartbeatJob({
+        payload: {
+          kind: 'heartbeat',
+          file: 'TASK.md',
+          workspaceId: 'research',
+          deliver: false,
+          targets: {},
+        },
+      }),
+    );
+    h.scheduler.start();
+    await tick(60_000);
+
+    expect(seen[0]).toEqual({ workspaceId: 'research', path: 'TASK.md' });
+    await h.scheduler.stop();
+  });
+
+  it('reads the task file from the default workspace when the job names none', async () => {
+    const seen: string[] = [];
+    const h = harness({
+      readFile: (input) => {
+        seen.push(input.workspaceId);
+        return Promise.resolve('Fix the build');
+      },
+      chat: (input) =>
+        Promise.resolve(
+          completion(
+            input.tools[0]?.name ?? '',
+            JSON.stringify({ action: 'skip', reason: 'not now' }),
+          ),
+        ),
+    });
+    h.jobs.createJob(heartbeatJob());
+    h.scheduler.start();
+    await tick(60_000);
+
+    expect(seen[0]).toBe('default');
+    await h.scheduler.stop();
+  });
+});

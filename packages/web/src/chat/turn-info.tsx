@@ -19,6 +19,7 @@ import type { JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import {
+  DEFAULT_WORKSPACE_ID,
   tokensPerSecond,
   type StopReason,
   type Usage,
@@ -101,6 +102,25 @@ function TurnInfoBody({
   const origin = session.data?.origin ?? '';
   const row = stored.data?.turns.find((entry) => entry.turnId === turn.id);
 
+  /**
+   * Which workspace this turn ran in, and whether saying so tells anyone
+   * anything.
+   *
+   * A turn in flight has no stored row yet, so it is running in wherever the
+   * session is bound now. A stored one carries its own — and the two genuinely
+   * differ once a conversation has been moved, which is the case this row
+   * exists for: a transcript can span several workspaces, and only this says
+   * which files a given turn could reach.
+   *
+   * Hidden when it is the default *and* the session is still there, on the same
+   * argument the `origin` row makes below: a row that is always present and
+   * always says the same word is a row nobody reads.
+   */
+  const ranIn = row?.workspaceId ?? session.data?.workspaceId ?? '';
+  const boundTo = session.data?.workspaceId ?? '';
+  const showWorkspace =
+    ranIn !== '' && (ranIn !== DEFAULT_WORKSPACE_ID || ranIn !== boundTo);
+
   const usage: Usage | undefined = turn.usage ?? row?.usage;
   const model = turn.model === '' ? (row?.model ?? '') : turn.model;
   const provider = turn.provider === '' ? (row?.provider ?? '') : turn.provider;
@@ -128,6 +148,7 @@ function TurnInfoBody({
       {origin !== '' && origin !== 'web' && (
         <Row label={t('turn.origin')} value={origin} />
       )}
+      {showWorkspace && <Row label={t('turn.workspace')} value={ranIn} />}
       <Row label={t('turn.model')} value={model === '' ? '—' : model} />
       <Row
         label={t('turn.provider')}

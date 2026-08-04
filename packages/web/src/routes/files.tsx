@@ -56,7 +56,7 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type { FileEntry } from '@ghostai/protocol';
+import { DEFAULT_WORKSPACE_ID, type FileEntry } from '@ghostai/protocol';
 
 import { cn } from '@/lib/cn.js';
 import { api } from '@/lib/api.js';
@@ -85,7 +85,6 @@ import { RowActions } from '@/components/crud/row-actions.js';
 import { DataList, DataListRow } from '@/components/crud/data-list.js';
 import { ListSort } from '@/components/crud/list-sort.js';
 import { FilePreview } from '@/files/file-preview.js';
-import { useWorkspace } from '@/workspaces/workspace-context.js';
 import {
   breadcrumbs,
   DEFAULT_SORT,
@@ -113,11 +112,14 @@ export function FilesRoute(): JSX.Element {
     workspace: fromUrl,
     file: openPath,
   } = useSearch({ from: '/files' });
-  const { workspaceId } = useWorkspace();
   // The URL wins when it has one, so a link to a file is complete and
   // shareable — this page's own doctrine is that its location lives in the
-  // address bar. The context is what the parameter defaults to.
-  const workspace = fromUrl ?? workspaceId;
+  // address bar. Without one it is the default workspace, which is the *parent*
+  // of every named one: they appear here as ordinary folders and are opened by
+  // clicking into them. That is why this page needs no workspace control of its
+  // own — the tree is the navigation. `/workspaces` is where they are created
+  // and renamed, and its rows link back here with the parameter set.
+  const workspace = fromUrl ?? DEFAULT_WORKSPACE_ID;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 

@@ -305,6 +305,23 @@ export const api = {
       body: { agentId },
     }),
 
+  /**
+   * Moves a conversation to another workspace.
+   *
+   * The same shape as the agent move above, and the only way to change it for
+   * the same reason: a frame naming a workspace is ignored for a session that
+   * already exists. The move lands on the next turn — one already running
+   * captured its jail when it started and finishes where it began.
+   */
+  moveSessionToWorkspace: (
+    key: string,
+    workspaceId: string,
+  ): Promise<SessionSummary> =>
+    request(`/api/sessions/${encodeURIComponent(key)}`, SessionSummarySchema, {
+      method: 'PATCH',
+      body: { workspaceId },
+    }),
+
   deleteSession: (key: string): Promise<void> =>
     requestVoid(`/api/sessions/${encodeURIComponent(key)}`, {
       method: 'DELETE',

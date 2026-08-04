@@ -200,10 +200,17 @@ function coalesce(act: () => void): () => void {
  */
 async function readWorkspaceFile(
   runtime: GhostRuntime,
-  path: string,
-  maxBytes: number,
+  input: {
+    readonly workspaceId: string;
+    readonly path: string;
+    readonly maxBytes: number;
+  },
 ): Promise<string> {
-  const verdict = runtime.jail.check(path);
+  const { workspaceId, path, maxBytes } = input;
+  // The job's own workspace, not `runtime.jail` — that one is the default
+  // workspace's, so a heartbeat in a named workspace used to read the default
+  // one's `TASK.md` and skip forever on the file it could not see.
+  const verdict = runtime.jails.forWorkspace(workspaceId).check(path);
   if (!verdict.ok) {
     throw new GhostError(
       'jail_escape',
@@ -427,8 +434,7 @@ export async function startServer(
       deleteSession: (sessionKey) => {
         built.store.deleteSession(sessionKey);
       },
-      readFile: async (path, maxBytes) =>
-        await readWorkspaceFile(built, path, maxBytes),
+      readFile: async (input) => await readWorkspaceFile(built, input),
       ...(directChat === undefined ? {} : { chat: directChat }),
       logger,
     });

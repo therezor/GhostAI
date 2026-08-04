@@ -148,6 +148,7 @@
       "landIn": "new sessions land in {{workspace}}",
       "moved_one": "moved {{count}} session from {{from}} to {{to}}",
       "moved_other": "moved {{count}} sessions from {{from}} to {{to}}",
+      "movedSession": "moved this session to {{workspace}}",
       "noSessions": "no sessions yet",
       "nothingSaid": "nothing said in this session yet",
       "nothingToMeasure": "nothing to measure yet — this session has not started",

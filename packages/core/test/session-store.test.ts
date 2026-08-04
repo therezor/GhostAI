@@ -422,6 +422,42 @@ describe('sessions', () => {
     store.close();
   });
 
+  it('moves a session to another workspace', () => {
+    const store = makeStore();
+    store.ensureSession('a', { title: 'Title', workspaceId: 'research' });
+
+    const updated = store.updateSession('a', { workspaceId: 'archive' });
+    expect(updated.workspaceId).toBe('archive');
+    expect(updated.title).toBe('Title');
+    expect(store.getSession('a')?.workspaceId).toBe('archive');
+    store.close();
+  });
+
+  it('leaves the workspace alone for a patch that does not name one', () => {
+    const store = makeStore();
+    store.ensureSession('a', { workspaceId: 'research' });
+
+    expect(store.updateSession('a', { title: 'x' }).workspaceId).toBe(
+      'research',
+    );
+    expect(store.getSession('a')?.workspaceId).toBe('research');
+    store.close();
+  });
+
+  it('still refuses to move a session through ensureSession', () => {
+    // The guarantee `updateSession` did not weaken: a turn, a frame or a
+    // scheduled run arriving with a different workspace must not move a
+    // conversation's files out from under it. Only the explicit patch may.
+    const store = makeStore();
+    store.ensureSession('a', { workspaceId: 'research' });
+
+    expect(
+      store.ensureSession('a', { workspaceId: 'archive' }).workspaceId,
+    ).toBe('research');
+    expect(store.getSession('a')?.workspaceId).toBe('research');
+    store.close();
+  });
+
   it('round-trips metadata', () => {
     const store = makeStore();
     store.ensureSession('a', { metadata: { topicId: 42 } });
@@ -1052,6 +1088,7 @@ describe('turn stats', () => {
     turnId,
     sessionKey: 's',
     agentId: 'default',
+    workspaceId: 'default',
     provider: 'anthropic',
     model: 'claude-opus-5',
     startedAtMs: NOW,
@@ -1068,6 +1105,44 @@ describe('turn stats', () => {
     store.recordTurnStats(stats('t1'));
 
     expect(store.turnStats('s')).toEqual([stats('t1')]);
+    store.close();
+  });
+
+  it('adds its columns to a database an older build created', () => {
+    // `CREATE TABLE IF NOT EXISTS` does nothing to a table that already exists,
+    // so a column added to the schema reaches a fresh install and no other.
+    //
+    // The real schema with the two newest columns dropped back off it, rather
+    // than a hand-written stub: a stub would drift from the thing it stands in
+    // for, and this is exactly the shape an older build left behind.
+    const database = new DatabaseSync(':memory:');
+    new SessionStore({ database, clock: fixedClock }).close();
+    database.exec('ALTER TABLE turn_stats DROP COLUMN workspace_id');
+    database.exec('ALTER TABLE turn_stats DROP COLUMN error');
+
+    const store = new SessionStore({ database, clock: fixedClock });
+    store.ensureSession('s');
+    // Would throw `no such column` if the ledger had not run — which is what
+    // the `error` column silently did before it was in the list.
+    store.recordTurnStats(stats('t1', { workspaceId: 'research' }));
+
+    expect(store.turnStats('s')[0]?.workspaceId).toBe('research');
+    store.close();
+    database.close();
+  });
+
+  it('records the workspace the turn ran in, not where the session ends up', () => {
+    // The reason this column exists: a conversation can be moved between
+    // workspaces, so a transcript can span several and only the turn row can
+    // say which files a given turn was able to reach.
+    const store = makeStore();
+    store.ensureSession('s', { workspaceId: 'research' });
+    store.recordTurnStats(stats('t1', { workspaceId: 'research' }));
+
+    store.updateSession('s', { workspaceId: 'archive' });
+
+    expect(store.turnStats('s')[0]?.workspaceId).toBe('research');
+    expect(store.getSession('s')?.workspaceId).toBe('archive');
     store.close();
   });
 
@@ -1316,6 +1391,7 @@ describe('reassigning an agent', () => {
       turnId: 't1',
       sessionKey: 's',
       agentId: 'reviewer',
+      workspaceId: 'default',
       provider: 'anthropic',
       model: 'claude-opus-5',
       startedAtMs: NOW,

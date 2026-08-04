@@ -234,7 +234,7 @@
     padding-inline-start: calc(var(--space-3) * 2 + var(--size-icon-sm));
   }
 
-  /* The same treatment as `.agent-picker__trigger`, and for the same reason:
+  /* The same treatment as `.composer__picker`, and for the same reason:
      both are a quiet control that names the value it currently holds. Muted and
      small, because which column a list is ordered by is context rather than an
      action — the bordered select this replaced read as the loudest thing in a

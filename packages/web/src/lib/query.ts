@@ -29,16 +29,17 @@ export const queryKeys = {
   /** Live connection state, which is not in the settings tree. See `use-mcp.ts`. */
   mcp: ['mcp'] as const,
   /**
-   * Scoped by workspace, because a session list is per workspace now.
+   * Every conversation, unscoped.
    *
-   * A function rather than a constant so the unscoped form stays expressible:
-   * `['sessions']` is still the prefix every scoped key starts with, so one
-   * invalidation after a turn still refreshes whichever workspace is showing.
+   * It was once keyed by workspace, when the sidebar filtered by one. Nothing
+   * filters now — a workspace says where a conversation's files are, not which
+   * list it belongs in — so there is one list and one key.
+   *
+   * Still a function rather than a constant: this is the prefix `sessionPage`,
+   * `session`, `messages`, `turns` and `context` all sit under, and every
+   * caller invalidating the lot spells it `queryKeys.sessions()`.
    */
-  sessions: (workspaceId?: string) =>
-    workspaceId === undefined
-      ? (['sessions'] as const)
-      : (['sessions', { workspaceId }] as const),
+  sessions: () => ['sessions'] as const,
   /**
    * One page of the sessions management screen.
    *
@@ -49,7 +50,6 @@ export const queryKeys = {
    * rows for the new query until the refetch landed.
    */
   sessionPage: (params: {
-    readonly workspaceId: string;
     readonly page: number;
     readonly q: string;
     readonly sort: string;

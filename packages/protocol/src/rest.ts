@@ -369,7 +369,13 @@ export const SessionSummarySchema = z.object({
   updatedAtMs: z.number().int().nonnegative(),
   /** Channel that owns it — `web`, `telegram`, `automation`, a plugin id. */
   origin: z.string().default('web'),
-  /** Fixed when the session was created; see `SessionRecord.workspaceId`. */
+  /**
+   * The workspace this session's tools run in.
+   *
+   * Set at creation and moved only by `PATCH /api/sessions/:key`; a socket
+   * frame naming one is still ignored for a session that already exists. See
+   * `SessionRecord.workspaceId`.
+   */
   workspaceId: z.string().min(1).default('default'),
   agentId: z.string().optional(),
   totalUsage: UsageSchema.optional(),
@@ -434,6 +440,18 @@ export type CreateSessionRequest = z.infer<typeof CreateSessionRequestSchema>;
 export const UpdateSessionRequestSchema = z.object({
   title: z.string().min(1).optional(),
   agentId: z.string().optional(),
+  /**
+   * Moves the conversation to another workspace.
+   *
+   * The only path that moves one. `session.new` carries a workspace too, but
+   * it can only ever *create* — a frame naming one is ignored for a session
+   * that already exists, so a crafted frame cannot point an open
+   * conversation's tools at another workspace's files.
+   *
+   * The move takes effect from the next turn: a turn already running captured
+   * its jail when it started and finishes in the workspace it began in.
+   */
+  workspaceId: z.string().min(1).optional(),
 });
 export type UpdateSessionRequest = z.infer<typeof UpdateSessionRequestSchema>;
 
@@ -499,6 +517,15 @@ export const TurnStatsSchema = z.object({
   turnId: z.string().min(1),
   sessionKey: z.string().min(1),
   agentId: z.string().default(''),
+  /**
+   * Which workspace this turn ran in — the files it could actually reach.
+   *
+   * Deliberately not the session's current workspace: a conversation can be
+   * moved between workspaces, so a transcript can span several and only this
+   * says which one a given turn saw. Defaulted for turns recorded before it was
+   * captured.
+   */
+  workspaceId: z.string().min(1).default('default'),
   provider: z.string(),
   model: z.string(),
   startedAtMs: z.number().int().nonnegative(),

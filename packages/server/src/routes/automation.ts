@@ -112,6 +112,21 @@ export function automationRoutes(
     return scheduler;
   };
 
+  /**
+   * Refuses a payload naming a workspace nothing can list.
+   *
+   * Checked at authoring time because the alternative surfaces much later and
+   * much worse: `JailCache.forWorkspace` throws on an id that is not a legal
+   * slug, so a typo here becomes a heartbeat that fails every interval forever,
+   * reported as a run failure rather than as the mistake it is.
+   */
+  const requireWorkspace = (workspaceId: string | undefined): void => {
+    if (workspaceId === undefined) return;
+    if (deps.runtime.workspaces.get(workspaceId) === undefined) {
+      throw notFound(`No such workspace: ${workspaceId}`);
+    }
+  };
+
   return {
     'automation.list': {
       summary: 'Every scheduled job',
@@ -127,6 +142,7 @@ export function automationRoutes(
       },
       handler: (request, reply): FastifyReply => {
         const body = request.body as CreateAutomationJob;
+        requireWorkspace(body.payload.workspaceId);
         const created = store.createJob({
           name: body.name,
           schedule: body.schedule,
@@ -171,6 +187,7 @@ export function automationRoutes(
         const body = request.body as UpdateAutomationJob;
         const existing = store.getJob(id);
         if (existing === undefined) throw notFound(`No automation job "${id}"`);
+        requireWorkspace(body.payload?.workspaceId);
 
         // Recomputed whenever either half of "when does this fire" moves.
         // Leaving the old instant behind is how a job edited to run at 9am
