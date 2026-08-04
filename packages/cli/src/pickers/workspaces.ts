@@ -1,9 +1,10 @@
 /**
  * Workspaces, as rows.
  *
- * The counts arrive as a map rather than being looked up here, because counting
- * is `store.countByWorkspace` and this file is not allowed a store — the same
- * rule that keeps a picker from being able to run a turn.
+ * **No session count.** A workspace is where a conversation *starts*, and one
+ * can be moved to another afterwards — so a count beside the name answers a
+ * question nobody asked and implies an ownership that does not hold. The id is
+ * what goes there instead, because it is what `/workspace <id>` takes.
  */
 
 import type { WorkspaceRecord } from '@ghostai/core';
@@ -15,38 +16,29 @@ import type { Menu } from '../menu.js';
 export interface WorkspacePickerDeps {
   readonly menu: Menu;
   readonly workspaces: readonly WorkspaceRecord[];
-  readonly counts: ReadonlyMap<string, number>;
   readonly current: string | undefined;
   readonly t: CliT;
 }
 
 export function workspaceItems(
   workspaces: readonly WorkspaceRecord[],
-  counts: ReadonlyMap<string, number>,
   current: string | undefined,
   t: CliT,
 ): Array<SelectItem<string>> {
-  return workspaces.map((workspace) => {
-    const count = counts.get(workspace.id) ?? 0;
-    const hint = t('menu.sessions', { count });
-    return {
-      value: workspace.id,
-      label: workspace.name,
-      hint: workspace.id === current ? `${hint} · ${t('menu.current')}` : hint,
-      keywords: workspace.id,
-    };
-  });
+  return workspaces.map((workspace) => ({
+    value: workspace.id,
+    label: workspace.name,
+    hint:
+      workspace.id === current
+        ? `${workspace.id} · ${t('menu.current')}`
+        : workspace.id,
+  }));
 }
 
 export async function pickWorkspace(
   deps: WorkspacePickerDeps,
 ): Promise<string | undefined> {
-  const items = workspaceItems(
-    deps.workspaces,
-    deps.counts,
-    deps.current,
-    deps.t,
-  );
+  const items = workspaceItems(deps.workspaces, deps.current, deps.t);
   const at = items.findIndex((item) => item.value === deps.current);
 
   return await deps.menu.choose({

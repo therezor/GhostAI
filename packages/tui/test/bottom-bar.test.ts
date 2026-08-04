@@ -277,6 +277,53 @@ describe('a terminal that will not say how tall it is', () => {
   });
 });
 
+describe('the terminal cursor', () => {
+  const HIDE = `${CSI}?25l`;
+  const SHOW = `${CSI}?25h`;
+
+  it('hides and shows it', () => {
+    const output = fakeOutput();
+    const status = bar(output);
+
+    status.setCursorVisible(false);
+    expect(output.text).toContain(HIDE);
+
+    output.reset();
+    status.setCursorVisible(true);
+    expect(output.text).toContain(SHOW);
+    status.close();
+  });
+
+  it('says nothing when it is already in that state', () => {
+    // The indicator repaints ten times a second, and a terminal receiving
+    // DECTCEM on every frame is one doing ten times the work for no change.
+    const output = fakeOutput();
+    const status = bar(output);
+
+    status.setCursorVisible(true);
+    expect(output.text).toBe('');
+
+    status.setCursorVisible(false);
+    output.reset();
+    status.setCursorVisible(false);
+    expect(output.text).toBe('');
+    status.close();
+  });
+
+  it('is shown again when the bar closes, whatever state it was left in', () => {
+    // A terminal left with no cursor is the same class of damage as one left in
+    // raw mode, so the restore is unconditional rather than a matching call.
+    const output = fakeOutput();
+    const status = bar(output);
+    status.setCursorVisible(false);
+    output.reset();
+
+    status.close();
+
+    expect(output.text).toContain(SHOW);
+  });
+});
+
 describe('closing', () => {
   it('erases what it drew', () => {
     const output = fakeOutput();

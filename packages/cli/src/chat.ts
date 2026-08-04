@@ -644,6 +644,7 @@ async function repl(deps: ReplDeps): Promise<number> {
     output: deps.out,
     rl,
     menus: deps.menus,
+    processHooks: deps.processHooks,
     prompt: deps.prompt,
     status: deps.status,
   });
@@ -795,6 +796,8 @@ interface StatusOptions {
   readonly rl: Interface;
   /** The same predicate the menu uses: is this an interactive terminal. */
   readonly menus: boolean;
+  /** Whether this run may register handlers on the process. */
+  readonly processHooks: boolean;
   readonly prompt: () => string;
   readonly status: () => string[];
 }
@@ -842,6 +845,7 @@ function bindStatus(options: StatusOptions): StatusBinding {
         output.write(text);
       },
       repaint: nothing,
+      setCursorVisible: nothing,
       eraseBlock: nothing,
       clear: nothing,
       close: nothing,
@@ -856,6 +860,15 @@ function bindStatus(options: StatusOptions): StatusBinding {
         /* nothing was drawn */
       },
     };
+  }
+
+  if (options.processHooks) {
+    // The same last-resort restore `createMenu` registers, and for the same
+    // reason: an uncaught error unwinds nothing, and a terminal left with no
+    // cursor is as unusable as one left in raw mode.
+    process.once('exit', () => {
+      bar.close();
+    });
   }
 
   let lines: string[] = [];

@@ -74,6 +74,7 @@ export interface GenerationOptions {
   readonly bar: {
     writeAbove(text: string, lines: readonly string[]): void;
     repaint(lines: readonly string[]): void;
+    setCursorVisible(visible: boolean): void;
     clear(): void;
   };
   /** Takes stdin from whoever owns it, and gives it back. */
@@ -145,7 +146,10 @@ export function createGeneration(options: GenerationOptions): Generation {
       };
 
       const write = (text: string): void => {
+        // The first word is what the cursor was waiting for: from here it
+        // trails the answer, which is where a reader expects to find it.
         tick = undefined;
+        bar.setCursorVisible(true);
         bar.writeAbove(text, footer());
       };
 
@@ -178,6 +182,9 @@ export function createGeneration(options: GenerationOptions): Generation {
       options.input.on('data', onData);
       options.input.resume();
       options.setSink(write);
+      // Nothing to point at until the answer starts: the cursor would otherwise
+      // sit on the blank row above the indicator, reading as a block beside it.
+      bar.setCursorVisible(false);
       const stopTicking = options.ticker(() => {
         if (tick === undefined) return;
         tick += 1;
@@ -189,6 +196,7 @@ export function createGeneration(options: GenerationOptions): Generation {
         return await body();
       } finally {
         stopTicking();
+        bar.setCursorVisible(true);
         options.setSink(undefined);
         options.input.off('data', onData);
         options.input.pause();

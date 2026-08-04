@@ -642,11 +642,6 @@ async function workspaceCommand(
         const chosen = await pickWorkspace({
           menu: ctx.menu,
           workspaces: runtime.workspaces.list(),
-          counts: new Map(
-            runtime.workspaces
-              .list()
-              .map((one) => [one.id, runtime.store.countByWorkspace(one.id)]),
-          ),
           current: pending,
           t,
         });

@@ -45,6 +45,9 @@ const CURSOR_UP = (rows: number): string => `${ESC}[${String(rows)}A`;
 const CURSOR_RIGHT = (cols: number): string =>
   cols > 0 ? `${ESC}[${String(cols)}C` : '';
 const ERASE_BELOW = `${ESC}[0J`;
+/** DECTCEM: the terminal's own cursor, hidden and shown. */
+const HIDE_CURSOR = `${ESC}[?25l`;
+const SHOW_CURSOR = `${ESC}[?25h`;
 const SYNC_ON = `${ESC}[?2026h`;
 const SYNC_OFF = `${ESC}[?2026l`;
 
@@ -107,6 +110,19 @@ export interface BottomBar {
    * scroll between the measurement and the erase cannot move it.
    */
   eraseBlock(rows: number): void;
+  /**
+   * Hides or shows the terminal's own cursor.
+   *
+   * For the stretch where there is nothing to point at: while a turn is waiting
+   * to say its first word, the cursor sits on the blank row above the indicator
+   * and reads as a stray block beside it. It comes back the moment there is
+   * text for it to trail.
+   *
+   * `close` restores it unconditionally, and a caller that can crash should
+   * arrange for `close` to run — a terminal left with no cursor is the same
+   * class of damage as one left in raw mode.
+   */
+  setCursorVisible(visible: boolean): void;
   /** Erases from the cursor to the end of the display. */
   clear(): void;
   /** Erases and stops. Idempotent. */
@@ -134,6 +150,7 @@ export function openBottomBar(options: BottomBarOptions): BottomBar {
 
   let painted = 0;
   let closed = false;
+  let cursorVisible = true;
   /** Where the transcript's own cursor sits, between writes above the footer. */
   let column = 0;
 
@@ -223,6 +240,15 @@ export function openBottomBar(options: BottomBarOptions): BottomBar {
       column = 0;
     },
 
+    setCursorVisible(visible: boolean): void {
+      // Tracked rather than sent every time: the indicator repaints ten times a
+      // second, and a terminal that receives DECTCEM on every frame is a
+      // terminal doing ten times the work for no change.
+      if (closed || visible === cursorVisible) return;
+      cursorVisible = visible;
+      output.write(visible ? SHOW_CURSOR : HIDE_CURSOR);
+    },
+
     clear(): void {
       if (closed || painted === 0) return;
       // Back to column zero first, so the erase takes the whole row rather than
@@ -237,6 +263,7 @@ export function openBottomBar(options: BottomBarOptions): BottomBar {
     close(): void {
       if (closed) return;
       bar.clear();
+      bar.setCursorVisible(true);
       closed = true;
     },
   };

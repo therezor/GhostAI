@@ -68,8 +68,6 @@
     "messages_one": "{{count}} message",
     "messages_other": "{{count}} messages",
     "noModel": "no model set",
-    "sessions_one": "{{count}} session",
-    "sessions_other": "{{count}} sessions",
     "titles": {
       "agent": "Which agent?",
       "command": "Which command?",

@@ -27,6 +27,8 @@ interface Harness {
   /** Advances the spinner by one frame, the way the real interval would. */
   readonly tick: () => void;
   readonly sink: () => ((text: string) => void) | undefined;
+  /** Every `setCursorVisible` call, in order. */
+  readonly cursor: boolean[];
 }
 
 function harness(): Harness {
@@ -37,6 +39,7 @@ function harness(): Harness {
   let interrupts = 0;
   let ticker: (() => void) | undefined;
   let sink: ((text: string) => void) | undefined;
+  const cursor: boolean[] = [];
 
   const generation = createGeneration({
     input,
@@ -47,6 +50,9 @@ function harness(): Harness {
       },
       repaint: (lines) => {
         footers.push([...lines]);
+      },
+      setCursorVisible: (visible) => {
+        cursor.push(visible);
       },
       clear: () => {
         /* nothing is on screen to erase in a bar made of arrays */
@@ -86,6 +92,7 @@ function harness(): Harness {
       ticker?.();
     },
     sink: () => sink,
+    cursor,
   };
 }
 
@@ -144,6 +151,33 @@ describe('the frame while a turn runs', () => {
 
     turn.finish();
     await run;
+  });
+
+  it('hides the cursor while there is nothing to point at, and brings it back', async () => {
+    // Before the first word the cursor sits on the blank row above the
+    // indicator and reads as a stray block beside it. From the first word on it
+    // trails the answer, which is where a reader looks for it.
+    const test = harness();
+    const turn = pending();
+    const run = test.generation.run(turn.body);
+
+    expect(test.cursor).toEqual([false]);
+
+    test.sink()?.('the parser is');
+    expect(test.cursor).toEqual([false, true]);
+
+    turn.finish();
+    await run;
+  });
+
+  it('brings the cursor back even when the turn never says anything', async () => {
+    const test = harness();
+    const turn = pending();
+    const run = test.generation.run(turn.body);
+    turn.finish();
+    await run;
+
+    expect(test.cursor.at(-1)).toBe(true);
   });
 
   it('animates the indicator without a clock of its own', async () => {
