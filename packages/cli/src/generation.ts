@@ -82,8 +82,6 @@ export interface GenerationOptions {
   };
   /** Takes stdin from whoever owns it, and gives it back. */
   readonly suspend: () => InputHandover;
-  /** The rule above the editor, which the idle prompt draws for itself. */
-  readonly inputRule: () => string;
   /** The rows under the editor, rebuilt as the turn changes them. */
   readonly status: () => string[];
   /** Where `TurnRenderer`'s writes are routed for the duration. */
@@ -140,13 +138,12 @@ export function createGeneration(options: GenerationOptions): Generation {
       // it started", and once it has, the answer itself is the better sign.
       let tick: number | undefined = 0;
 
-      // The same frame the idle prompt has, drawn entirely from here: the rule
-      // above the editor is the prompt's own when readline holds it, and this
-      // one's while a turn runs.
+      // The same frame the idle prompt has, and for the same reason it has no
+      // rule above the editor: one that appeared the moment Return was pressed
+      // would read as the frame changing shape.
       const footer = (): string[] => [
         ...spinnerLines(tick, theme, t),
         '',
-        options.inputRule(),
         // The tail, not the head: the end of a message in progress is the part
         // being written. The bar would cut it to fit either way — this decides
         // *which* end survives.

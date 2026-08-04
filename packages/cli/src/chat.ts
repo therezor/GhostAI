@@ -506,13 +506,28 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
       theme,
       menus,
       processHooks: options.handleSignals !== false,
-      prompt: () => `\n${inputRule(columnsOf(terminal) - 1, theme)}\n› `,
-      inputRule: () => inputRule(columnsOf(terminal) - 1, theme),
+      // A blank line and the caret, and nothing in it that can wrap.
+      //
+      // That is the whole of the resize fix, and it took a while to see. The
+      // prompt is the one part of the frame readline owns, and readline redraws
+      // it by moving up over the rows it last measured. A full-width rule in
+      // there re-wraps the moment the window narrows — a 289-column rule in 90
+      // columns is four rows, so a three-row block becomes six — and every
+      // row of that happened inside the emulator *before* the process was told
+      // anything. Correcting the row count got the arithmetic right and still
+      // could not reach rows that had been reflowed above the cursor.
+      //
+      // Nothing in `\n› ` can wrap, so the block is two rows at every width and
+      // readline's refresh is exact without being told anything. Everything
+      // else — the rule, the status — is below the cursor, where a single
+      // erase-to-end-of-display takes it however many rows it reflowed into.
+      prompt: () => '\n› ',
       // One column short of the window. Writing exactly `columns` characters
       // leaves a terminal in a pending-wrap state that different emulators
       // resolve differently, and every row here is followed by cursor motion
       // that assumes it knows which row it is on.
       status: () => statusBar(view(), columnsOf(terminal) - 1, theme),
+      inputRule: () => inputRule(columnsOf(terminal) - 1, theme),
       measure: measureContext,
       setSink: (next) => {
         sink = next;
@@ -668,7 +683,6 @@ async function repl(deps: ReplDeps): Promise<number> {
         input: deps.input,
         bar: status.bar,
         suspend: () => suspendReadline(rl, deps.input),
-        inputRule: deps.inputRule,
         status: deps.status,
         setSink: deps.setSink,
         interrupt: deps.abortActive,

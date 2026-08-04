@@ -73,7 +73,6 @@ function harness(): Harness {
         released += 1;
       },
     }),
-    inputRule: () => '────',
     status: () => ['────', 'Default   default', '1.0%/66k  ollama/qwen3'],
     setSink: (next) => {
       sink = next;
@@ -142,9 +141,11 @@ describe('the frame while a turn runs', () => {
     const footer = test.footers.at(-1);
     expect(footer).toContain('› ');
     expect(footer).toContain('Default   default');
-    // Two rules: one above the editor and one under it, the same frame the
-    // idle prompt has.
-    expect(footer?.filter((line) => line === '────')).toHaveLength(2);
+    // One rule, under the editor — the same frame the idle prompt has. There is
+    // none above it, because the only place a rule above could live is
+    // readline's prompt, and a full-width line there re-wraps on a narrowing
+    // and takes the frame's height with it.
+    expect(footer?.filter((line) => line === '────')).toHaveLength(1);
 
     turn.finish();
     await run;

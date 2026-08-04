@@ -1068,13 +1068,15 @@ describe('chatCommand', () => {
     store.close();
   });
 
-  it('erases the whole prompt block when a resize re-wraps the rule', async () => {
-    // Readline refreshes by moving up over the rows it believes it drew, and it
-    // believes wrong the moment the window narrows: the count was measured at
-    // the old width, and the rule above the editor is a column short of it, so
-    // a narrowing re-wraps that rule and the block on screen is one row taller
-    // than the number readline kept. It then erased a row too low and the frame
-    // was left behind, once per resize.
+  it('keeps the prompt one height at every window width', async () => {
+    // The resize fix, as a property rather than an arithmetic check. Readline
+    // redraws its prompt by moving up over the rows it last measured, so the
+    // block's height must not depend on the width — a full-width rule in there
+    // re-wraps on a narrowing, and every row of that happens inside the
+    // emulator before the process is told anything.
+    //
+    // `\n› ` cannot wrap, so the move-up is the same number at 60 columns and
+    // at 20, and it is the same number going back up again.
     const home = tempHome();
     const { fetchImpl } = transport();
     const out = streamSink({ isTTY: true });
@@ -1097,14 +1099,28 @@ describe('chatCommand', () => {
 
     await waitFor(() => out.text().includes('ctrl-g for the menu'));
     await quiet(out);
+    const from = out.text().length;
 
-    // 60 columns gives a 59-character rule. In 40 it needs two rows, so the
-    // block is three: blank, rule, rule-continued, caret.
-    out.resizeTo(40);
-    await quiet(out);
+    for (const columns of [20, 90, 20, 90]) {
+      out.resizeTo(columns);
+      await quiet(out);
+    }
 
+    // Built rather than written as a literal: `no-control-regex` exists to
+    // catch an escape byte that arrived by accident, and one here would be
+    // exactly what it is looking for.
+    // Built rather than written as a literal: `no-control-regex` exists to
+    // catch an escape byte that arrived by accident, and one here would be
+    // exactly what it is looking for. The bracket is escaped because CSI's is
+    // a literal one, not the start of a character class.
     const ESC = String.fromCharCode(27);
-    expect(out.text()).toContain(`${ESC}[3A${ESC}[1G${ESC}[0J`);
+    const refresh = new RegExp(`${ESC}\\[(\\d+)A${ESC}\\[1G${ESC}\\[0J`, 'gu');
+    const moves = [...out.text().slice(from).matchAll(refresh)].map(
+      (found) => found[1],
+    );
+
+    expect(moves).toHaveLength(4);
+    expect(new Set(moves).size).toBe(1);
 
     input.write('/exit\n');
     expect(await pending).toBe(0);
