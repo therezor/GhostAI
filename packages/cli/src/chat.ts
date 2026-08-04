@@ -741,9 +741,18 @@ function bindStatus(options: StatusOptions): StatusBinding {
 
   return {
     async ask(question): Promise<string> {
+      const text = options.prompt();
       lines = options.status();
-      bar.reserve(lines.length);
-      const pending = question(options.prompt());
+
+      // The prompt's own lines count too. Reserving only the bar's height
+      // guarantees that many rows below the *cursor*, and the prompt then
+      // writes its rule and its `›` beneath it — so the input line ends up
+      // inside the rows the bar is about to claim, and the bar paints over it.
+      // That was the bug; the `+ 1` is slack for an input that wraps once.
+      const promptRows = text.split('\n').length - 1;
+      bar.reserve(lines.length + promptRows + 1);
+
+      const pending = question(text);
       asking = true;
       bar.paint(lines);
       try {
