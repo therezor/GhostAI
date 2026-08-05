@@ -46,10 +46,10 @@ What every agent inherits, and what an install with no named agents runs as.
 | `learningInterval`             | int > 0                      | `10`     | _Declared, not yet read._                                                                                                                      |
 | `memoryMaxPromptTokens`        | int ≥ 0                      | `2000`   | _Declared, not yet read._                                                                                                                      |
 | `memoryCompactThresholdTokens` | int ≥ 0                      | `1600`   | _Declared, not yet read._ Lower than the cap on purpose: compaction should start before a turn discovers the limit.                            |
-| `pinnedSkills`                 | string[]                     | `[]`     | _Declared, not yet read._                                                                                                                      |
-| `maxPinnedSkills`              | int ≥ 0                      | `5`      | _Declared, not yet read._                                                                                                                      |
+| `pinnedSkills`                 | string[]                     | `[]`     | Skills whose body is inlined into the prompt, in this order. Everything else in `skills/` is indexed. See [Skills](skills.md).                 |
+| `maxPinnedSkills`              | int ≥ 0                      | `5`      | How many of the above are inlined. Names past it fall back to an index line.                                                                   |
 
-The keys marked _declared, not yet read_ belong to memory and skills, which are in
+The keys marked _declared, not yet read_ belong to memory, which is in
 [ROADMAP.md](ROADMAP.md). They parse and persist; nothing consumes them.
 
 ## `agents.list.<id>`

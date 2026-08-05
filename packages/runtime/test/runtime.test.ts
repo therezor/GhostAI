@@ -1,4 +1,10 @@
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -976,5 +982,71 @@ describe('agent references surviving a delete', () => {
 
     expect(runtime.agents.map((agent) => agent.id)).toEqual(['default']);
     expect(runtime.agents[0]?.label).toBe('default');
+  });
+});
+
+describe('skills', () => {
+  /**
+   * A runtime whose workspace holds one skill.
+   *
+   * The workspace is `<home>/workspace`, which is where `resolveGhostPaths`
+   * puts it when nothing overrides it — so writing the skill before the
+   * runtime is built is enough.
+   */
+  function withSkill(
+    name: string,
+    body: string,
+    defaults: Record<string, unknown> = {},
+  ): GhostRuntime {
+    const home = tempHome({
+      agents: {
+        defaults: { provider: 'ollama', model: 'qwen3:8b', ...defaults },
+      },
+    });
+    const dir = join(home, 'workspace', 'skills', name);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, 'SKILL.md'),
+      `---\ndescription: What ${name} does.\n---\n\n${body}\n`,
+    );
+    return build({ home });
+  }
+
+  it('indexes the workspace skills in the loop the runtime built', async () => {
+    // The composition root is the only place that decides an install has
+    // skills at all — `AgentLoop` takes contributors and never constructs one.
+    // Asserting through `previewPrompt` is what proves the wiring rather than
+    // the renderer: it is the same assembly a turn runs.
+    const runtime = withSkill('code-review', 'Read the diff.');
+
+    const preview = await runtime.requireLoop().previewPrompt({
+      sessionKey: 'session-1',
+    });
+
+    expect(preview.staticPrompt).toContain('## Skills');
+    expect(preview.staticPrompt).toContain('`skills/code-review/SKILL.md`');
+    // Indexed, not inlined: nothing pinned it.
+    expect(preview.staticPrompt).not.toContain('Read the diff.');
+  });
+
+  it('inlines a skill named in pinnedSkills', async () => {
+    const runtime = withSkill('code-review', 'Read the diff.', {
+      pinnedSkills: ['code-review'],
+    });
+
+    const preview = await runtime.requireLoop().previewPrompt({
+      sessionKey: 'session-1',
+    });
+
+    expect(preview.staticPrompt).toContain('### Skill: code-review');
+    expect(preview.staticPrompt).toContain('Read the diff.');
+  });
+
+  it('places no section when the workspace has no skills folder', async () => {
+    const preview = await ollama()
+      .requireLoop()
+      .previewPrompt({ sessionKey: 'session-1' });
+
+    expect(preview.staticPrompt).not.toContain('## Skills');
   });
 });

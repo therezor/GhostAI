@@ -58,6 +58,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import {
   AgentLoop,
   type PromptToolbox,
+  SkillsContributor,
   SteeringQueue,
   subagentMap,
   type ApprovalGate,
@@ -1041,6 +1042,18 @@ class Runtime implements GhostRuntime {
       // the same reason: both are resolved once, here, so a turn never asks the
       // config who it is allowed to call.
       subagents: subagentMap(agent.subagents),
+      // Which sources may write into the prompt is a composition decision, not
+      // the loop's — `AgentLoop` composes and caches sections and deliberately
+      // knows nothing about where one came from. The contributor itself is
+      // stateless and reads the workspace named by each turn's context, so one
+      // instance per loop serves every session on this agent.
+      contributors: [
+        new SkillsContributor({
+          pinned: agent.defaults.pinnedSkills,
+          maxPinned: agent.defaults.maxPinnedSkills,
+          logger: this.logger,
+        }),
+      ],
       resolveLoop,
       model,
       agent: {

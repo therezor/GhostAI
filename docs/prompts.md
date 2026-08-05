@@ -363,4 +363,9 @@ there is paid five or ten times per turn.
 Contributor sections are appended after the built-in ones, in the order given, so the
 cached prefix grows at the end rather than shifting when a contributor is added.
 
-This is how memory, skills and RAG will inject content when they land.
+**[Skills](skills.md) arrive this way**, and are the worked example of both halves:
+`SkillsContributor.staticSection` reads `<workspace>/skills/` once per turn and renders
+the index and any pinned bodies, while `runtimeSection` places the one line that a
+`@skill:` mention on _this message_ earns. It is wired in the composition root — the
+loop composes and caches sections and deliberately knows nothing about where one came
+from. Memory and RAG will inject content the same way when they land.

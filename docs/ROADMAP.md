@@ -10,8 +10,6 @@ building a second one beside it.
 
 ## Planned
 
-- [ ] **Skills** — reusable instruction bundles, some pinned, the rest loaded
-      when relevant.
 - [ ] **Memory** — the agent remembers across sessions and compacts before it
       outgrows the prompt.
 - [ ] **Slash commands in the browser** — the terminal REPL's commands, in the
@@ -23,6 +21,12 @@ building a second one beside it.
 
 ## Done
 
+- [x] **Skills** — reusable instruction bundles in `<workspace>/skills/`, one
+      directory per skill. Every skill's description is indexed into the static
+      prompt and the agent opens the sheet itself with `read_file`; a skill in
+      `pinnedSkills` is inlined instead. Arrives through `ContextContributor`,
+      wired in the composition root. A settings panel to author them is the
+      Extensions screen's business and is still to come.
 - [x] **Telegram** — hold a session with an agent from a phone: the terminal's
       whole command set as bot commands, inline menus for the four pickers, and
       tool approvals answerable from the chat. One adapter over the Bot API in

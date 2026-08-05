@@ -72,6 +72,26 @@ export {
   type StaticPromptContext,
 } from './prompt.js';
 
+export { parseFrontmatter, type Frontmatter } from './frontmatter.js';
+
+export {
+  MAX_DESCRIPTION_CHARS,
+  MAX_SKILLS,
+  SKILLS_DIRNAME,
+  SKILL_FILENAME,
+  SKILL_MAX_BYTES,
+  readSkills,
+  type ReadSkillsOptions,
+  type Skill,
+} from './skills.js';
+
+export {
+  SkillsContributor,
+  renderSkills,
+  type SkillBudget,
+  type SkillsContributorOptions,
+} from './skills-contributor.js';
+
 export {
   MAX_PENDING_STEER,
   STEERING_PREFIX,

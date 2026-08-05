@@ -111,6 +111,8 @@ Everything under `~/.ghostai`, or `$GHOSTAI_HOME`:
 
 **A Telegram bot** — the same conversations, from a phone. The terminal's whole command set as bot commands, inline menus for sessions, agents, models and workspaces, and tool approvals answerable with a button. It is not a second code path: a Telegram turn goes through the same hub, the same queue and the same approval gate a browser turn does, and the session it writes is the one the sidebar lists. Long polling, so there is no public URL to expose — but the bot answers **only** the Telegram ids you list, and refuses to start without one. Set it up in Settings → Channels: the token goes to the encrypted vault, and saving reconnects the bot without touching the terminal. See [Configuration](docs/configuration.md#channelstelegram) and [Security](docs/security.md#channels).
 
+**Skills** — drop a folder into `<workspace>/skills/` and the agent knows it is there. One directory per skill, holding a `SKILL.md` and whatever else it needs; its description is indexed into the prompt for about twenty tokens and the agent opens the sheet itself when the description says it applies. Name one in `pinnedSkills` and the body is in the prompt from the start instead. No new tool and no settings to fill in — a skill is a file you commit beside the project it describes. See [Skills](docs/skills.md).
+
 **MCP servers** — add one in Settings → Extensions over stdio, Streamable HTTP or SSE, with OAuth where a server wants it. Its tools land in the same registry as the built-ins, as `mcp_<server>_<tool>`, and each agent decides for itself which of them it may call — nothing is granted implicitly. A server that goes away takes its tools with it and reconnects on its own. See [Tools](docs/tools.md#mcp-servers).
 
 ---
@@ -190,15 +192,14 @@ Every key under `agents.defaults` is overridable per agent, and `agents.list.<id
 
 The wire schemas, config blocks and seams for these already ship — which is why they appear in the settings tree and the UI. The implementations do not. [`docs/ROADMAP.md`](docs/ROADMAP.md) tracks them, one line each.
 
-| Feature                    | Ships today                                                         | Missing                                      |
-| -------------------------- | ------------------------------------------------------------------- | -------------------------------------------- |
-| **Memory**                 | The tuning keys, `lastConsolidatedSeq`, the prompt contributor seam | The store, retrieval and consolidation pass  |
-| **Skills**                 | `pinnedSkills`, `maxPinnedSkills`                                   | The on-disk format, loader and prompt budget |
-| **RAG**                    | Embedder and chunking config, hybrid search constants               | The index, embedder client and retrieval     |
-| **Heartbeat delivery**     | The decide/run/evaluate triad, as a scheduled job's payload         | `targets` reaching a channel                 |
-| **Plugins**                | Load specs, `allowUnverified`, `unregisterBySource`                 | Discovery, loader and manifest format        |
-| **Browser slash commands** | The terminal's command table                                        | A shared table and the composer UI           |
-| **Session search**         | Keyset pagination and filters                                       | Text search over message content             |
+| Feature                    | Ships today                                                         | Missing                                     |
+| -------------------------- | ------------------------------------------------------------------- | ------------------------------------------- |
+| **Memory**                 | The tuning keys, `lastConsolidatedSeq`, the prompt contributor seam | The store, retrieval and consolidation pass |
+| **RAG**                    | Embedder and chunking config, hybrid search constants               | The index, embedder client and retrieval    |
+| **Heartbeat delivery**     | The decide/run/evaluate triad, as a scheduled job's payload         | `targets` reaching a channel                |
+| **Plugins**                | Load specs, `allowUnverified`, `unregisterBySource`                 | Discovery, loader and manifest format       |
+| **Browser slash commands** | The terminal's command table                                        | A shared table and the composer UI          |
+| **Session search**         | Keyset pagination and filters                                       | Text search over message content            |
 
 Two smaller ones, so nothing here reads as more finished than it is: only the `openai-chat` wire adapter exists, so `anthropic` is in the provider registry but reaches Anthropic through an OpenAI-compatible path rather than its native API; and the translation layer is complete while **English is the only shipped locale** — adding one is a folder plus a line.
 
@@ -217,6 +218,7 @@ Two smaller ones, so nothing here reads as more finished than it is: only the `o
 | [Prompts](docs/prompts.md)             | The three templates, placeholders, and the caching split |
 | [Providers](docs/providers.md)         | The registry, instances, resolution, resilience          |
 | [Tools & permissions](docs/tools.md)   | The built-ins, and who is allowed to call them           |
+| [Skills](docs/skills.md)               | Instruction sheets in the workspace, indexed or pinned   |
 | [Toolboxes](docs/toolboxes.md)         | Container sandboxes, manifests and approval              |
 | [Security](docs/security.md)           | Each guard, the attack it closes, and its limits         |
 | [API](docs/api.md)                     | REST and WebSocket                                       |
