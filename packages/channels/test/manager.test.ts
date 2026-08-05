@@ -682,4 +682,150 @@ describe('ChannelManager', () => {
 
     expect(manager.channels).toHaveLength(1);
   });
+
+  it('carries a draft’s metadata through to the outbound message', async () => {
+    const { hub, channel } = await harness();
+
+    channel().context.publish({
+      sessionKey: '4471',
+      senderId: 'u1',
+      content: [textPart('run it')],
+    });
+    await flush();
+    hub.only().emit({
+      type: 'tool.approvalRequest',
+      seq: 1,
+      turnId: 't1',
+      callId: 'c1',
+      name: 'exec',
+      args: {},
+      risk: 'exec',
+      expiresAtMs: 5,
+    });
+    await flush();
+    await flush();
+
+    expect(channel().sent[0]?.metadata).toEqual({
+      approval: {
+        callId: 'c1',
+        name: 'exec',
+        risk: 'exec',
+        expiresAtMs: 5,
+      },
+      turnId: 't1',
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// control
+// ---------------------------------------------------------------------------
+
+describe('ChannelManager.control', () => {
+  it('delivers on the same connection publish uses', async () => {
+    const { hub, channel } = await harness();
+
+    channel().context.publish({
+      sessionKey: '4471',
+      senderId: 'u1',
+      content: [textPart('a slow question')],
+    });
+    await flush();
+    channel().context.control({
+      sessionKey: '4471',
+      frame: { type: 'turn.stop', sessionKey: '4471' },
+    });
+
+    // One connection, not two: a control frame is about a conversation the
+    // channel is already in.
+    expect(hub.connections).toHaveLength(1);
+    expect(hub.only().frames[1]).toEqual({
+      type: 'turn.stop',
+      sessionKey: 'loopback:4471',
+    });
+  });
+
+  it('rewrites the session key into the frame, not just onto the route', async () => {
+    // The hub reads the key off the frame. A bare one would address a session
+    // it cannot find; another channel's would address one that is not ours.
+    const { hub, channel } = await harness();
+
+    channel().context.control({
+      sessionKey: '4471',
+      frame: { type: 'turn.regenerate', sessionKey: 'web:someone-else' },
+    });
+
+    expect(hub.only().frames[0]).toEqual({
+      type: 'turn.regenerate',
+      sessionKey: 'loopback:4471',
+    });
+  });
+
+  it('leaves an already namespaced key alone', async () => {
+    const { hub, channel } = await harness();
+
+    channel().context.control({
+      sessionKey: 'loopback:4471',
+      frame: { type: 'turn.stop', sessionKey: 'loopback:4471' },
+    });
+
+    expect(hub.only().sessionKey).toBe('loopback:4471');
+    expect(hub.only().frames[0]).toMatchObject({
+      sessionKey: 'loopback:4471',
+    });
+  });
+
+  it('passes through a frame that carries no session of its own', async () => {
+    // `tool.approve` is keyed by `callId` alone. The envelope says which
+    // connection to deliver it on; the frame itself is untouched.
+    const { hub, channel } = await harness();
+
+    channel().context.control({
+      sessionKey: '4471',
+      frame: {
+        type: 'tool.approve',
+        callId: 'c1',
+        approved: true,
+        scope: 'once',
+      },
+    });
+
+    expect(hub.only().frames[0]).toEqual({
+      type: 'tool.approve',
+      callId: 'c1',
+      approved: true,
+      scope: 'once',
+    });
+  });
+
+  it('opens a connection when the conversation has none yet', async () => {
+    // A re-run typed into a chat that has sat idle long enough to be evicted.
+    // Dropping it would be a silent no-op with nothing to debug.
+    const { hub, channel } = await harness();
+
+    channel().context.control({
+      sessionKey: 'cold',
+      frame: { type: 'turn.regenerate', sessionKey: 'cold' },
+    });
+
+    expect(hub.connections).toHaveLength(1);
+    expect(hub.only().sessionKey).toBe('loopback:cold');
+  });
+
+  it('binds to the calling channel, so one cannot drive another’s session', async () => {
+    const { hub, channel } = await harness({ ids: ['a', 'b'] });
+
+    channel('a').context.control({
+      sessionKey: 'shared',
+      frame: { type: 'turn.stop', sessionKey: 'b:shared' },
+    });
+
+    // Namespaced under `a`, whatever the frame said — the same binding
+    // `publish` gets, and for the same reason.
+    expect(hub.only().sessionKey).toBe('a:shared');
+    expect(hub.only().frames[0]).toEqual({
+      type: 'turn.stop',
+      sessionKey: 'a:shared',
+    });
+  });
 });

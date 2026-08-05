@@ -25,6 +25,8 @@ export {
   DEFAULT_ACCEPTED_KINDS,
   type Channel,
   type ChannelContext,
+  type ChannelControl,
+  type ChannelControlFrame,
   type ChannelFactory,
   type ChannelInbound,
 } from './channel.js';
@@ -40,6 +42,7 @@ export {
 
 export {
   TurnProjection,
+  type ApprovalDraftDetail,
   type OutboundDraft,
   type TurnProjectionOptions,
 } from './projection.js';

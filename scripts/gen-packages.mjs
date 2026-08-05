@@ -191,6 +191,10 @@ const PACKAGES = {
     // structural port, so this package cannot reach into the transport it feeds
     // and a plugin channel cannot reach the agent loop through it.
     internal: ['protocol', 'core'],
+    // A channel parses its own settings block — `ChannelsConfigSchema` is a
+    // `looseObject` precisely so that a channel needs no schema change in
+    // `protocol` — and parsing it means owning a schema.
+    deps: { zod: '^4.0.0' },
   },
   tui: {
     description:

@@ -31,7 +31,7 @@
  */
 
 import type { OutboundKind } from '@ghostai/core';
-import type { ServerMessage, StopReason } from '@ghostai/protocol';
+import type { ServerMessage, StopReason, ToolRisk } from '@ghostai/protocol';
 
 /** One message the projection wants sent, before the manager addresses it. */
 export interface OutboundDraft {
@@ -39,6 +39,31 @@ export interface OutboundDraft {
   readonly text: string;
   /** Present for everything scoped to a turn, so a channel can group edits. */
   readonly turnId?: string;
+  /**
+   * Structured detail for a transport that can render more than a line of text.
+   *
+   * The text is always the whole message: a channel that ignores this renders
+   * exactly what it rendered before, which is what lets an approval grow
+   * buttons on Telegram without changing what the loopback channel says. The
+   * manager copies it onto `OutboundMessage.metadata`.
+   */
+  readonly metadata?: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * `metadata.approval` on the draft an approval request produces.
+ *
+ * `args` is deliberately absent. It is `z.unknown()` — model-authored and
+ * unbounded — and a channel that pasted it into a chat would be forwarding
+ * whatever the model wrote to the one person whose judgement is the last check
+ * on it. What a decision actually needs is the tool and its risk band; a
+ * channel that wants a preview reads `tool.call` and caps it itself.
+ */
+export interface ApprovalDraftDetail {
+  readonly callId: string;
+  readonly name: string;
+  readonly risk: ToolRisk;
+  readonly expiresAtMs: number;
 }
 
 export interface TurnProjectionOptions {
@@ -137,17 +162,32 @@ export class TurnProjection {
         return [this.draft('notice', `${name} failed.`)];
       }
 
-      case 'tool.approvalRequest':
-        // Ungated, unlike the hints. A channel has no approval UI yet, so this
-        // call is going to sit until it expires and the turn will look hung —
-        // saying so is the difference between a wait and a mystery.
+      case 'tool.approvalRequest': {
+        // Ungated, unlike the hints. Whether this can be answered where it
+        // lands depends on the transport, and either way the turn is now
+        // stopped until somebody says yes — saying so is the difference
+        // between a wait and a mystery.
+        //
+        // The text names no particular place to answer. It used to say "in the
+        // web UI", which was true only while nothing else could, and would go
+        // on being shown by every channel that ignores the detail below.
+        const approval: ApprovalDraftDetail = {
+          callId: message.callId,
+          name: message.name,
+          risk: message.risk,
+          expiresAtMs: message.expiresAtMs,
+        };
         return [
-          this.draft(
-            'notice',
-            `${message.name} needs approval before it can run. Approve it in the web UI; ` +
-              'it is denied automatically if nobody answers.',
-          ),
+          {
+            kind: 'notice',
+            text:
+              `${message.name} needs approval before it can run. ` +
+              'It is denied automatically if nobody answers.',
+            ...this.turn(message.turnId),
+            metadata: { approval },
+          },
         ];
+      }
 
       case 'notice':
         return [this.draft('notice', message.message)];

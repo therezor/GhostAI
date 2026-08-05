@@ -52,10 +52,15 @@ import {
   DEFAULT_ACCEPTED_KINDS,
   type Channel,
   type ChannelContext,
+  type ChannelControl,
   type ChannelFactory,
   type ChannelInbound,
 } from './channel.js';
-import { TurnProjection, type TurnProjectionOptions } from './projection.js';
+import {
+  TurnProjection,
+  type OutboundDraft,
+  type TurnProjectionOptions,
+} from './projection.js';
 
 /**
  * The hub, as this package needs it.
@@ -212,6 +217,25 @@ function toFrameContent(content: readonly ContentPart[]): {
     );
   }
   return { text: texts.join('\n'), attachments };
+}
+
+/**
+ * A draft's metadata as `publishOutbound` wants it: absent, or one object.
+ *
+ * `turnId` is merged in last rather than living in the projection's own
+ * metadata, because the manager is what knows it belongs there — the draft
+ * carries it as a field precisely so a projection cannot forget to.
+ */
+function metadataOf(draft: OutboundDraft): {
+  metadata?: Readonly<Record<string, unknown>>;
+} {
+  if (draft.metadata === undefined && draft.turnId === undefined) return {};
+  return {
+    metadata: {
+      ...draft.metadata,
+      ...(draft.turnId === undefined ? {} : { turnId: draft.turnId }),
+    },
+  };
 }
 
 /** The reply address a channel gave us, if it gave one. */
@@ -393,7 +417,37 @@ export class ChannelManager {
       // nor reach the outbound queue it does not own.
       publish: (message: ChannelInbound) =>
         this.messageBus.publishInbound({ ...message, channelId: id }),
+      control: (command: ChannelControl) => {
+        this.toHubControl(id, command);
+      },
     };
+  }
+
+  /**
+   * Delivers one control frame on the channel's own connection.
+   *
+   * The `sessionKey` is namespaced here and *rewritten into the frame*, which
+   * is the load-bearing half: the hub reads the key off the frame rather than
+   * off the connection, so a channel that wrote a bare id — or another
+   * channel's — would otherwise address a session that is not its own.
+   * `tool.approve` carries no key and is passed through as it stands.
+   *
+   * Straight to the connection rather than through the bus, because none of
+   * these is content: a `turn.stop` queued behind the turn it is stopping is a
+   * stop that arrives after the thing it was for.
+   */
+  private toHubControl(channelId: string, command: ChannelControl): void {
+    const sessionKey = this.sessionKey(channelId, command.sessionKey);
+    const bridged = this.bridgeFor(
+      channelId,
+      sessionKey,
+      command.target ?? command.sessionKey,
+    );
+    bridged.connection.receive(
+      'sessionKey' in command.frame
+        ? { ...command.frame, sessionKey }
+        : command.frame,
+    );
   }
 
   private async pumpInbound(): Promise<void> {
@@ -438,8 +492,31 @@ export class ChannelManager {
    * `sessionKey` is namespaced here rather than trusted: see the module header.
    */
   private connect(message: InboundMessage): Bridged {
-    const sessionKey = this.sessionKey(message.channelId, message.sessionKey);
-    const key = `${message.channelId} ${sessionKey}`;
+    return this.bridgeFor(
+      message.channelId,
+      this.sessionKey(message.channelId, message.sessionKey),
+      targetOf(message),
+    );
+  }
+
+  /**
+   * The `(channel, session)` pair, made if this is the first ask for it.
+   *
+   * Made rather than looked up, for both callers. A `tool.approve` always
+   * finds a live pair — a session with an approval parked on it is busy, and
+   * `evict` leaves busy ones alone — but a re-run typed into a chat that has
+   * sat idle can arrive after eviction, and dropping it there would be a
+   * silent no-op with nothing to debug.
+   *
+   * `sessionKey` arrives already namespaced: both callers have to know the
+   * final key for themselves anyway, so passing it in beats namespacing twice.
+   */
+  private bridgeFor(
+    channelId: string,
+    sessionKey: string,
+    target: string,
+  ): Bridged {
+    const key = `${channelId} ${sessionKey}`;
     const existing = this.bridged.get(key);
     if (existing !== undefined) {
       // Re-inserting moves the key to the end, so the map's iteration order is
@@ -451,14 +528,14 @@ export class ChannelManager {
 
     const bridged: Bridged = {
       key,
-      channelId: message.channelId,
+      channelId,
       sessionKey,
-      target: targetOf(message),
+      target,
       busy: false,
       projection: new TurnProjection(this.projectionOptions),
       connection: this.hub.connect({
         sessionKey,
-        channel: message.channelId,
+        channel: channelId,
         ...(this.workspaceId === undefined
           ? {}
           : { workspaceId: this.workspaceId }),
@@ -516,9 +593,7 @@ export class ChannelManager {
         target: bridged.target,
         kind: draft.kind,
         content: [textPart(draft.text)],
-        ...(draft.turnId === undefined
-          ? {}
-          : { metadata: { turnId: draft.turnId } }),
+        ...metadataOf(draft),
       });
       if (result.kind !== 'accepted') {
         this.logger.warn(

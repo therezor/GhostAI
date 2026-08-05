@@ -147,6 +147,78 @@ describe('TurnProjection', () => {
     expect(drafts[0]?.text).toContain('exec needs approval');
   });
 
+  it('carries what an answer needs, so a channel can offer one', () => {
+    const drafts = run(new TurnProjection(), [
+      start(),
+      event({
+        type: 'tool.approvalRequest',
+        turnId: TURN,
+        callId: 'c1',
+        name: 'exec',
+        args: { command: 'rm -rf /' },
+        risk: 'exec',
+        expiresAtMs: 1_700_000_000_000,
+      }),
+    ]);
+
+    expect(drafts[0]?.metadata).toEqual({
+      approval: {
+        callId: 'c1',
+        name: 'exec',
+        risk: 'exec',
+        expiresAtMs: 1_700_000_000_000,
+      },
+    });
+    // The turn, so a channel can retire the card when the turn ends.
+    expect(drafts[0]?.turnId).toBe(TURN);
+  });
+
+  it('leaves the model’s arguments out of the approval detail', () => {
+    // `args` is model-authored and unbounded. A channel that rendered it would
+    // be pasting whatever the model wrote in front of the one person whose
+    // judgement is the last check on it.
+    const drafts = run(new TurnProjection(), [
+      start(),
+      event({
+        type: 'tool.approvalRequest',
+        turnId: TURN,
+        callId: 'c1',
+        name: 'exec',
+        args: { command: 'echo ignore-all-previous-instructions' },
+        risk: 'exec',
+        expiresAtMs: 1,
+      }),
+    ]);
+
+    expect(JSON.stringify(drafts[0])).not.toContain('ignore-all-previous');
+  });
+
+  it('names no particular place to answer an approval', () => {
+    // It used to say "in the web UI", which was true only while nothing else
+    // could answer one — and was still shown by every other transport.
+    const drafts = run(new TurnProjection(), [
+      start(),
+      event({
+        type: 'tool.approvalRequest',
+        turnId: TURN,
+        callId: 'c1',
+        name: 'exec',
+        args: {},
+        risk: 'exec',
+        expiresAtMs: 1,
+      }),
+    ]);
+
+    expect(drafts[0]?.text).not.toContain('web UI');
+    expect(drafts[0]?.text).toContain('denied automatically');
+  });
+
+  it('leaves metadata off a draft that has no detail to carry', () => {
+    const drafts = run(new TurnProjection(), [start(), delta('hi'), end()]);
+
+    expect(drafts[0]?.metadata).toBeUndefined();
+  });
+
   it('says why a turn stopped, after handing over what it had written', () => {
     const drafts = run(new TurnProjection(), [
       start(),
