@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "@ghostai/core": "workspace:*",
-    "@ghostai/protocol": "workspace:*"
+    "@ghostai/protocol": "workspace:*",
+    "zod": "^4.0.0"
   }
 }

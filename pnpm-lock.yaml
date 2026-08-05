@@ -112,6 +112,9 @@ importers:
       '@ghostai/protocol':
         specifier: workspace:*
         version: link:../protocol
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
 
   packages/cli:
     dependencies:

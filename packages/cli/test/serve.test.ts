@@ -244,7 +244,7 @@ describe('startServer', () => {
     };
     const server = await start(home(), { channels: [factory] });
 
-    expect(server.channels.channels.map((channel) => channel.id)).toEqual([
+    expect(server.channels?.channels.map((channel) => channel.id)).toEqual([
       'loopback',
     ]);
     // The same hub the socket serves — not a second one built for channels.

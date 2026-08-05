@@ -79,6 +79,9 @@ function settingsResponse(deps: RouteDeps): SettingsResponse {
   return {
     config: deps.runtime.config(),
     credentialsPresent: deps.runtime.credentialsPresent(),
+    // Empty for a runtime that has no channels to report — a route test
+    // standing in for one, and any build that ships none.
+    channels: [...(deps.runtime.channels?.() ?? [])],
     ...(loadError === undefined ? {} : { loadError }),
     // Read fresh on every response rather than only after a write: a warning
     // most often comes from the file as it was found at boot, and the first

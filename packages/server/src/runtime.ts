@@ -17,6 +17,7 @@
 
 import type { SessionStore, WorkspaceStore } from '@ghostai/core';
 import type {
+  ChannelStatus,
   ChatMessage,
   Config,
   ConfigPatch,
@@ -246,6 +247,22 @@ export interface ServerRuntime {
    * just pulled a new model must not have to wait out a TTL to see it.
    */
   models?(options?: { readonly refresh?: boolean }): Promise<ModelsResponse>;
+
+  /**
+   * The channels this build ships, and what each is doing.
+   *
+   * Optional for the reason `models` is: a route test standing in for a runtime
+   * has no channel manager, and a required member would make every one of them
+   * invent an answer. Read on each request rather than cached, because
+   * `running` is the field an operator is watching change.
+   *
+   * A *function* rather than a field, and that matters here more than
+   * elsewhere: the composition root builds the channel manager after it builds
+   * this port, and rebuilds it whenever the settings that configure it are
+   * saved. A snapshot taken at construction would report the manager that has
+   * since been replaced.
+   */
+  channels?(): readonly ChannelStatus[];
 
   /**
    * Whether one connection can be reached, and with which models.

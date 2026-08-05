@@ -109,6 +109,8 @@ Everything under `~/.ghostai`, or `$GHOSTAI_HOME`:
 
 **An API** — REST and WebSocket on the same port, with an OpenAPI 3.1 document generated from the same Zod schemas the server validates against, served at `/api/openapi.json`. See [API](docs/api.md).
 
+**A Telegram bot** — the same conversations, from a phone. The terminal's whole command set as bot commands, inline menus for sessions, agents, models and workspaces, and tool approvals answerable with a button. It is not a second code path: a Telegram turn goes through the same hub, the same queue and the same approval gate a browser turn does, and the session it writes is the one the sidebar lists. Long polling, so there is no public URL to expose — but the bot answers **only** the Telegram ids you list, and refuses to start without one. Set it up in Settings → Channels: the token goes to the encrypted vault, and saving reconnects the bot without touching the terminal. See [Configuration](docs/configuration.md#channelstelegram) and [Security](docs/security.md#channels).
+
 **MCP servers** — add one in Settings → Extensions over stdio, Streamable HTTP or SSE, with OAuth where a server wants it. Its tools land in the same registry as the built-ins, as `mcp_<server>_<tool>`, and each agent decides for itself which of them it may call — nothing is granted implicitly. A server that goes away takes its tools with it and reconnects on its own. See [Tools](docs/tools.md#mcp-servers).
 
 ---
@@ -193,8 +195,7 @@ The wire schemas, config blocks and seams for these already ship — which is wh
 | **Memory**                 | The tuning keys, `lastConsolidatedSeq`, the prompt contributor seam | The store, retrieval and consolidation pass  |
 | **Skills**                 | `pinnedSkills`, `maxPinnedSkills`                                   | The on-disk format, loader and prompt budget |
 | **RAG**                    | Embedder and chunking config, hybrid search constants               | The index, embedder client and retrieval     |
-| **Heartbeat delivery**     | The decide/run/evaluate triad, as a scheduled job's payload         | `targets` reaching a channel. Needs Telegram |
-| **Telegram**               | The `Channel` contract, `ChannelManager`, `TurnProjection`          | One adapter over the Bot API                 |
+| **Heartbeat delivery**     | The decide/run/evaluate triad, as a scheduled job's payload         | `targets` reaching a channel                 |
 | **Plugins**                | Load specs, `allowUnverified`, `unregisterBySource`                 | Discovery, loader and manifest format        |
 | **Browser slash commands** | The terminal's command table                                        | A shared table and the composer UI           |
 | **Session search**         | Keyset pagination and filters                                       | Text search over message content             |

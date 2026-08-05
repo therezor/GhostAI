@@ -33,7 +33,7 @@ describe('the settings panels', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('ship the six the phase builds', () => {
+  it('ship the seven the phase builds', () => {
     // No `agent` panel: the settings it held *are* the default agent's, so they
     // are edited on that agent rather than in a second room describing the same
     // subtree. Agents are a page of their own, and picking one happens in the
@@ -49,8 +49,11 @@ describe('the settings panels', () => {
     // install-wide tool settings are in Settings.
     //
     // `extensions` joined them with the MCP client. It is the one built panel
-    // that still lists planned systems — see `PLANNED_SYSTEMS` — because four
-    // fifths of what it will hold has not landed.
+    // that still lists planned systems — see `PLANNED_SYSTEMS` — because most
+    // of what it will hold has not landed.
+    //
+    // `channels` joined them with Telegram, and left `PLANNED_SYSTEMS` on the
+    // way: it was listed under Extensions until it had a panel of its own.
     const built = SETTINGS_PANELS.filter((panel) => !isPlanned(panel)).map(
       (panel) => panel.id,
     );
@@ -61,16 +64,20 @@ describe('the settings panels', () => {
       'appearance',
       'automation',
       'extensions',
+      'channels',
     ]);
   });
 
-  it('no longer advertise profiles as unbuilt, now that agents ship', () => {
+  it('no longer advertise what has since shipped', () => {
     // A built panel still listed as a planned system tells an operator to wait
-    // for something that is already on the screen next to it.
+    // for something that is already on the screen next to it. Profiles became
+    // Agents; channels became a panel.
     const planned = Object.values(PLANNED_SYSTEMS)
       .flat()
       .map((system) => t(system.name).toLowerCase());
-    expect(planned.some((name) => name.includes('profile'))).toBe(false);
+    for (const shipped of ['profile', 'channel']) {
+      expect(planned.some((name) => name.includes(shipped))).toBe(false);
+    }
   });
 
   it('give every unbuilt panel a list of what lands in it', () => {

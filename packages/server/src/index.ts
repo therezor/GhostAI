@@ -106,6 +106,8 @@ export {
   type SessionListCursor,
 } from './cursor.js';
 
+export { buildContextResponse, type ContextRuntime } from './context.js';
+
 export {
   DEFAULT_MIME_TYPE,
   inlineSafe,

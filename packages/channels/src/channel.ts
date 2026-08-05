@@ -62,12 +62,55 @@ import type {
   OutboundMessage,
   PublishResult,
 } from '@ghostai/core';
+import type { ClientMessage } from '@ghostai/protocol';
 
 /**
  * An inbound message as a channel writes it: everything but the `channelId`,
  * which the manager stamps.
  */
 export type ChannelInbound = Omit<InboundMessageInput, 'channelId'>;
+
+/**
+ * The frames a channel may send that are not a message somebody typed.
+ *
+ * Deliberately five, rather than "everything except `user.message`". The three
+ * that are missing — `session.new`, `session.switch`, `session.resume` — move
+ * the *connection*, and the manager derives a session from what the channel
+ * publishes: a channel that sent one would move where its events arrive while
+ * its next message still went to the old conversation, and the two halves would
+ * disagree with nothing to say so. A channel changes conversation by publishing
+ * a different `sessionKey`, which is the same thing the loopback channel's
+ * `conversation` option does.
+ *
+ * `ping` and `audio.transcribe` are absent because neither means anything here:
+ * there is no socket to keep alive, and no channel produces audio yet.
+ */
+export type ChannelControlFrame = Extract<
+  ClientMessage,
+  {
+    readonly type:
+      | 'tool.approve'
+      | 'turn.stop'
+      | 'turn.steer'
+      | 'turn.regenerate'
+      | 'user.edit';
+  }
+>;
+
+/** A control frame, addressed to one of this channel's own conversations. */
+export interface ChannelControl {
+  /**
+   * The conversation it is about, namespaced by the manager exactly as the one
+   * on `publish` is.
+   *
+   * Required even for `tool.approve`, which carries no session of its own: the
+   * manager delivers on a connection, and this is what names which.
+   */
+  readonly sessionKey: string;
+  /** Where a reply this produces goes. Defaults to `sessionKey`. */
+  readonly target?: string;
+  readonly frame: ChannelControlFrame;
+}
 
 /**
  * What the manager gives a channel, and the whole of what a channel may reach.
@@ -101,6 +144,24 @@ export interface ChannelContext {
    * already bound to this channel's id, and that binding is the whole point.
    */
   readonly publish: (message: ChannelInbound) => PublishResult;
+  /**
+   * The frames a browser sends that are not messages, on this channel's own
+   * conversation. This is what lets a transport answer an approval, stop a
+   * turn, or re-run one.
+   *
+   * The fifth member the header above anticipated, and supplied the same way
+   * `publish` is: the manager namespaces the `sessionKey` and rewrites it into
+   * the frame, so a channel can no more drive another channel's conversation
+   * through here than it can forge a `channelId` through `publish`. That
+   * symmetry is the whole reason this is a member rather than a hub handed over
+   * at construction.
+   *
+   * Does not go through the bus. The bus queues *content* — a message and a
+   * reply — and applies a per-sender rate limit to it; a stop is not content,
+   * and a stop that queued behind the turn it is trying to stop would never
+   * arrive in time to do anything.
+   */
+  readonly control: (command: ChannelControl) => void;
 }
 
 /** Kinds delivered to a channel that does not say which it renders. */

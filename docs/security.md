@@ -255,6 +255,47 @@ working ten minutes later.
 
 ---
 
+## Channels
+
+**Stops:** someone reaching the agent through a chat app the operator invited it into.
+
+A channel is a door with no password on it. A bot username is discoverable, the transport
+decides who may send to it, and behind it is an agent with the operator's credentials,
+their workspace and — depending on the permission map — `exec`. So the allowlist is the
+whole boundary, and it is strict in three ways that a convenience-first design would not
+be.
+
+- **An empty allowlist refuses to start.** The same shape as the binding rule above, and
+  for the same reason: the two failure modes are "answers nobody", which looks exactly
+  like a broken token, and "answers anybody", which is a remote shell. A refusal that
+  names the config key distinguishes them at the only moment anyone is looking.
+- **The sender is checked, not the chat.** In a group both must be listed — the group and
+  the person typing. Checking the chat alone hands the agent to everyone else in the room,
+  including whoever they invite next.
+- **A button press is checked exactly like a message.** Any member of a group can tap a
+  button the bot posted, so an approval answered from an inline keyboard is an
+  authorisation decision arriving from an unauthenticated source unless it goes through
+  the same list. This is the easiest of the three to leave open and the worst to.
+
+An unrecognised sender is **dropped silently and logged once per id**. Replying confirms
+the bot is live and spends the rate limit on whoever is knocking; logging every message
+lets them fill a disk. That single line is also the intended onboarding path — message the
+bot, read the log, add the id.
+
+Beyond the allowlist, `admins` narrows the commands that reach past one conversation:
+`/model` moves the whole install onto another model, and `/workspace rm|move` rewrites
+where sessions live. Empty means every allowed sender is an admin, so a single-operator
+install pays nothing for the distinction.
+
+Bot tokens belong in the **credential vault** under `channels`, not in `config.json`; a
+token found in the config file is used and warned about. Settings → Channels writes to the
+vault, and the panel can never read one back — it is told only whether one is stored, which
+is what lets it show a saved token without ever holding it. The Bot API puts the token in the
+request URL, so nothing in the adapter logs a URL and its errors carry the API method
+instead.
+
+---
+
 ## Logging
 
 Secrets are redacted **by path, not by scanning values** — a scanner cannot tell an API
