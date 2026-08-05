@@ -288,7 +288,9 @@ where sessions live. Empty means every allowed sender is an admin, so a single-o
 install pays nothing for the distinction.
 
 Bot tokens belong in the **credential vault** under `channels`, not in `config.json`; a
-token found in the config file is used and warned about. The Bot API puts the token in the
+token found in the config file is used and warned about. Settings → Channels writes to the
+vault, and the panel can never read one back — it is told only whether one is stored, which
+is what lets it show a saved token without ever holding it. The Bot API puts the token in the
 request URL, so nothing in the adapter logs a URL and its errors carry the API method
 instead.
 

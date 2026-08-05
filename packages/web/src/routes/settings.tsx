@@ -36,6 +36,7 @@ import { PlannedPanel } from '@/settings/planned-panel.js';
 import { ProvidersPanel } from '@/settings/providers-panel.js';
 import { ToolsPanel } from '@/settings/tools-panel.js';
 import { AutomationPanel } from '@/settings/automation-panel.js';
+import { ChannelsPanel } from '@/settings/channels-panel.js';
 import { isPlanned, panelById, SETTINGS_PANELS } from '@/settings/panels.js';
 import { useSettings } from '@/settings/use-settings.js';
 
@@ -147,5 +148,11 @@ function PanelBody({ panelId }: { readonly panelId: string }): JSX.Element {
   if (panel.id === 'tools') return <ToolsPanel config={config} />;
   if (panel.id === 'automation') return <AutomationPanel config={config} />;
   if (panel.id === 'extensions') return <ExtensionsPanel config={config} />;
+  if (panel.id === 'channels') {
+    // The only panel that needs more than the config: whether the bot is
+    // actually answering is not a setting, and the vault is write-only so
+    // "a token is saved" cannot be read off `config` either.
+    return <ChannelsPanel config={config} channels={settings.data.channels} />;
+  }
   return <ProvidersPanel />;
 }

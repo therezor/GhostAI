@@ -520,6 +520,32 @@
       "timezoneHint": "`System` reads your browser’s zone and saves it as a real timezone, so the answer does not change when you open the app somewhere else.",
       "timezoneTitle": "Date and time"
     },
+    "channels": {
+      "accessDesc": "The bot answers these Telegram accounts and nobody else. A messaging app has no password on it, so this list is the whole boundary.",
+      "accessTitle": "Who may use it",
+      "adminNotAllowed": "{{entry}} is not on the allowlist, so it cannot reach the bot at all.",
+      "admins": "Administrators",
+      "adminsHint": "One id per line. These may change the model and manage workspaces — commands that move the whole install, not just their own session. Leave empty to make everyone above an administrator.",
+      "allowlist": "Allowed accounts",
+      "allowlistHint": "One per line, as the numeric id or id|label. Message the bot and read the server log to find your own. A negative id is a group, and inside one both the group and the person typing must be listed.",
+      "allowlistRequired": "Add at least one account, or the bot would answer nobody.",
+      "badId": "{{entry}} is not a Telegram id. Use the number, optionally as id|label.",
+      "enabled": "Enabled",
+      "enabledHint": "Connects the bot when the server has a token for it.",
+      "state": {
+        "connected": "Connected",
+        "needsToken": "Needs a token",
+        "off": "Off",
+        "starting": "Not connected"
+      },
+      "telegramDesc": "Talk to the same agent from a phone. A Telegram turn runs on this install, in the sessions the sidebar lists.",
+      "telegramTitle": "Telegram",
+      "token": "Bot token",
+      "tokenHint": "From @BotFather. Stored in the encrypted vault, and never sent back to this page.",
+      "tokenPlaceholder": "123456:ABC-DEF…",
+      "tokenReplaceHint": "A token is saved. Type to replace it, or clear this field and save to remove it.",
+      "tokenSaved": "Saved"
+    },
     "fields": {
       "mustBeAtLeast": "Must be at least {{min}}",
       "mustBeAtMost": "Must be at most {{max}}",
@@ -616,6 +642,10 @@
         "label": "Automation",
         "summary": "How the scheduler behaves. The jobs themselves are on the Automation page."
       },
+      "channels": {
+        "label": "Channels",
+        "summary": "Reach the same agent from a messaging app."
+      },
       "extensions": {
         "label": "Extensions",
         "summary": "MCP servers, and the extension points still to come."
@@ -634,10 +664,6 @@
       }
     },
     "planned": {
-      "channels": {
-        "detail": "Reach the same agent from Telegram.",
-        "name": "Channels"
-      },
       "knowledgeBase": {
         "detail": "Ingest documents and search them from a turn.",
         "name": "Knowledge base"

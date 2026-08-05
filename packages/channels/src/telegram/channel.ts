@@ -457,7 +457,7 @@ class Telegram implements TelegramChannel {
         this.console.store.updateSession(chat.sessionKey, {
           agentId: payload.agentId,
         });
-        return `This conversation now runs on \`${payload.agentId}\`.`;
+        return `This session now runs on \`${payload.agentId}\`.`;
 
       case 'model': {
         if (!this.access.admits({ userId, chatId })) {
@@ -472,7 +472,7 @@ class Telegram implements TelegramChannel {
         this.console.store.updateSession(chat.sessionKey, {
           workspaceId: payload.workspaceId,
         });
-        return `This conversation now lives in \`${payload.workspaceId}\`.`;
+        return `This session now lives in \`${payload.workspaceId}\`.`;
 
       case 'delete': {
         this.console.store.deleteSession(payload.sessionKey);
@@ -631,7 +631,7 @@ function scopeWords(scope: ApprovalScope): string {
     case 'once':
       return 'once';
     case 'session':
-      return 'for this conversation';
+      return 'for this session';
     case 'always':
       return 'for this agent, from now on';
   }

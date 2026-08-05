@@ -211,7 +211,7 @@ describe('the command table', () => {
   });
 });
 
-describe('conversations', () => {
+describe('sessions', () => {
   it('/new starts one and attaches to it', async () => {
     const h = harness();
     const before = h.sessionKey();
@@ -261,7 +261,7 @@ describe('conversations', () => {
     expect(h.sessionKey()).toBe(target);
   });
 
-  it('/sessions offers only this channel’s conversations', async () => {
+  it('/sessions offers only this channel’s sessions', async () => {
     const h = harness();
     h.console.store.ensureSession('telegram:42:a', {
       origin: 'telegram',
@@ -277,7 +277,7 @@ describe('conversations', () => {
 
   it('/sessions says so when there are none', async () => {
     await expect(harness().run('/sessions')).resolves.toMatchObject({
-      text: 'No conversations here yet.',
+      text: 'No sessions here yet.',
     });
   });
 
@@ -309,11 +309,11 @@ describe('conversations', () => {
     expect(result.text).toContain('cannot be undone');
   });
 
-  it('/delete refuses a conversation that does not exist', async () => {
+  it('/delete refuses a session that does not exist', async () => {
     await expect(
       harness().run('/delete telegram:42:ghost'),
     ).resolves.toMatchObject({
-      text: expect.stringContaining('No conversation') as unknown,
+      text: expect.stringContaining('No session') as unknown,
     });
   });
 
@@ -342,7 +342,7 @@ describe('conversations', () => {
     expect(h.console.store.getSession(h.sessionKey())).toBeDefined();
   });
 
-  it('/exit detaches back to the chat’s own conversation', async () => {
+  it('/exit detaches back to the chat’s own session', async () => {
     const h = harness();
     await h.run('/new');
     expect(h.sessionKey()).toContain(':id');
@@ -603,14 +603,14 @@ describe('workspaces', () => {
     expect(h.console.workspaces.list()).toHaveLength(1);
   });
 
-  it('/workspace rm refuses one that still holds conversations', async () => {
+  it('/workspace rm refuses one that still holds sessions', async () => {
     const h = harness();
     h.console.workspaces.create({ name: 'Notes' });
     h.console.store.ensureSession('telegram:42:x', { workspaceId: 'notes' });
 
     const result = await h.run('/workspace rm notes', { isAdmin: true });
 
-    expect(result.text).toContain('still holds 1 conversations');
+    expect(result.text).toContain('still holds 1 sessions');
     expect(h.console.workspaces.get('notes')).toBeDefined();
   });
 
@@ -623,7 +623,7 @@ describe('workspaces', () => {
       isAdmin: true,
     });
 
-    expect(result.text).toContain('Moved 1 conversations');
+    expect(result.text).toContain('Moved 1 sessions');
   });
 
   it('/workspace rename renames for an admin', async () => {

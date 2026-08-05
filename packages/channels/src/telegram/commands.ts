@@ -128,7 +128,7 @@ export function resolveSeq(
     if (record === undefined) {
       throw new GhostError(
         'not_found',
-        `No message ${String(raw)} in this conversation.`,
+        `No message ${String(raw)} in this session.`,
       );
     }
     return raw;
@@ -142,8 +142,8 @@ export function resolveSeq(
     throw new GhostError(
       'not_found',
       spoken.length === 0
-        ? 'You have not said anything in this conversation yet.'
-        : `Only ${String(spoken.length)} of your messages are in this conversation.`,
+        ? 'You have not said anything in this session yet.'
+        : `Only ${String(spoken.length)} of your messages are in this session.`,
     );
   }
   return record.seq;
@@ -199,7 +199,7 @@ const COMMANDS: readonly TelegramCommand[] = [
 
   {
     name: 'clear',
-    description: 'Forget this conversation’s history, keeping the conversation',
+    description: 'Forget this session’s history, keeping the session',
     run: (input) => {
       input.console.store.clearMessages(input.chat.sessionKey);
       return { text: 'History cleared.' };
@@ -212,7 +212,7 @@ const COMMANDS: readonly TelegramCommand[] = [
     // Telegram's menu doing something rather than nothing.
     name: 'exit',
     aliases: ['quit'],
-    description: 'Detach: the next message starts a fresh conversation',
+    description: 'Detach: the next message starts a fresh session',
     run: (input) => {
       input.menus.forget(input.chatId);
       input.attach(defaultSessionKey(input.channelId, input.chatId));
@@ -223,10 +223,10 @@ const COMMANDS: readonly TelegramCommand[] = [
   {
     name: 'sessions',
     usage: '[n]',
-    description: 'Pick a conversation',
+    description: 'Pick a session',
     run: (input) => {
       const sessions = ownSessions(input, positive(input.args[0], 20));
-      if (sessions.length === 0) return { text: 'No conversations here yet.' };
+      if (sessions.length === 0) return { text: 'No sessions here yet.' };
 
       const rows: PickerRow[] = sessions.map((session) => ({
         label: `${titleOf(session)} · ${String(session.messageCount)}`,
@@ -234,7 +234,7 @@ const COMMANDS: readonly TelegramCommand[] = [
         payload: { kind: 'session', sessionKey: session.key },
       }));
       return {
-        text: 'Which conversation?',
+        text: 'Which session?',
         keyboard: pickerKeyboard({
           rows,
           menu: 'sessions',
@@ -248,7 +248,7 @@ const COMMANDS: readonly TelegramCommand[] = [
   {
     name: 'new',
     usage: '[title]',
-    description: 'Start a fresh conversation',
+    description: 'Start a fresh session',
     run: (input) => {
       const key = newSessionKey(input.channelId, input.chatId, input.newId());
       input.console.store.ensureSession(key, {
@@ -259,7 +259,7 @@ const COMMANDS: readonly TelegramCommand[] = [
       return {
         text:
           input.tail === ''
-            ? 'Started a new conversation.'
+            ? 'Started a new session.'
             : `Started “${input.tail}”.`,
       };
     },
@@ -268,7 +268,7 @@ const COMMANDS: readonly TelegramCommand[] = [
   {
     name: 'session',
     usage: '[key]',
-    description: 'Show this conversation, or attach to another by key',
+    description: 'Show this session, or attach to another by key',
     run: (input) => {
       const store = input.console.store;
       if (input.tail === '') {
@@ -288,7 +288,7 @@ const COMMANDS: readonly TelegramCommand[] = [
       if (!ownsSessionKey(input.channelId, input.tail)) {
         throw new GhostError(
           'invalid_input',
-          'That conversation belongs to another channel. Use /sessions to pick one here.',
+          'That session belongs to another channel. Use /sessions to pick one here.',
         );
       }
       input.attach(input.tail);
@@ -299,7 +299,7 @@ const COMMANDS: readonly TelegramCommand[] = [
   {
     name: 'rename',
     usage: '<title>',
-    description: 'Retitle this conversation',
+    description: 'Retitle this session',
     run: (input) => {
       if (input.tail === '') {
         throw new GhostError('invalid_input', 'Usage: /rename <title>');
@@ -317,18 +317,18 @@ const COMMANDS: readonly TelegramCommand[] = [
   {
     name: 'delete',
     usage: '[key]',
-    description: 'Delete a conversation, after confirming',
+    description: 'Delete a session, after confirming',
     run: (input) => {
       const key = input.tail === '' ? input.chat.sessionKey : input.tail;
       if (!ownsSessionKey(input.channelId, key)) {
         throw new GhostError(
           'invalid_input',
-          'That conversation belongs to another channel.',
+          'That session belongs to another channel.',
         );
       }
       const session = input.console.store.getSession(key);
       if (session === undefined) {
-        throw new GhostError('not_found', `No conversation \`${key}\`.`);
+        throw new GhostError('not_found', `No session \`${key}\`.`);
       }
       // A button rather than a second command, because this is the one thing
       // here that cannot be undone.
@@ -346,7 +346,7 @@ const COMMANDS: readonly TelegramCommand[] = [
   {
     name: 'branch',
     usage: '[ref]',
-    description: 'Fork this conversation at a message and continue there',
+    description: 'Fork this session at a message and continue there',
     run: (input) => {
       const seq = resolveSeq(
         input.console.store,
@@ -421,7 +421,7 @@ const COMMANDS: readonly TelegramCommand[] = [
 
   {
     name: 'context',
-    description: 'How much of the model’s window this conversation fills',
+    description: 'How much of the model’s window this session fills',
     run: async (input) => {
       const report = await input.console.context(input.chat.sessionKey);
       if (report === undefined) return { text: 'Nothing to measure yet.' };
@@ -507,7 +507,7 @@ const COMMANDS: readonly TelegramCommand[] = [
   {
     name: 'agent',
     usage: '[id]',
-    description: 'Which agent this conversation runs on',
+    description: 'Which agent this session runs on',
     run: (input) => {
       const agents = input.console.agents();
       const session = input.console.store.getSession(input.chat.sessionKey);
@@ -535,7 +535,7 @@ const COMMANDS: readonly TelegramCommand[] = [
       input.console.store.updateSession(input.chat.sessionKey, {
         agentId: input.tail,
       });
-      return { text: `This conversation now runs on \`${input.tail}\`.` };
+      return { text: `This session now runs on \`${input.tail}\`.` };
     },
   },
 
@@ -589,7 +589,7 @@ const COMMANDS: readonly TelegramCommand[] = [
     name: 'workspace',
     usage:
       '[id] | new <name> | rename <id> <name> | rm <id> | move <from> <to>',
-    description: 'Move this conversation, or manage workspaces (verbs: admin)',
+    description: 'Move this session, or manage workspaces (verbs: admin)',
     run: (input) => runWorkspace(input),
   },
 ];
@@ -622,7 +622,7 @@ function runWorkspace(input: CommandInput): CommandResult {
     const session = input.console.store.getSession(input.chat.sessionKey);
     const current = session?.workspaceId ?? 'default';
     return {
-      text: 'Which workspace should this conversation live in?',
+      text: 'Which workspace should this session live in?',
       keyboard: pickerKeyboard({
         rows: workspaces.list().map((workspace) => ({
           label: workspace.name,
@@ -670,7 +670,7 @@ function runWorkspace(input: CommandInput): CommandResult {
       if (held > 0) {
         throw new GhostError(
           'invalid_input',
-          `\`${id}\` still holds ${String(held)} conversations. Move them first with /workspace move.`,
+          `\`${id}\` still holds ${String(held)} sessions. Move them first with /workspace move.`,
         );
       }
       workspaces.delete(id);
@@ -687,7 +687,7 @@ function runWorkspace(input: CommandInput): CommandResult {
         );
       }
       const moved = input.console.store.reassignWorkspace(from, to);
-      return { text: `Moved ${String(moved)} conversations to \`${to}\`.` };
+      return { text: `Moved ${String(moved)} sessions to \`${to}\`.` };
     }
 
     default:
@@ -706,7 +706,7 @@ function switchWorkspace(input: CommandInput, id: string): CommandResult {
   input.console.store.updateSession(input.chat.sessionKey, {
     workspaceId: id,
   });
-  return { text: `This conversation now lives in \`${id}\`.` };
+  return { text: `This session now lives in \`${id}\`.` };
 }
 
 // ---------------------------------------------------------------------------

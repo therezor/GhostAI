@@ -349,6 +349,12 @@ in the room is not a decision you made.
 To find your id: message the bot and read the log line it writes for the sender it
 refused. That is the whole onboarding path.
 
+**Settings → Channels edits all of this from the browser**, and puts the token in the
+vault rather than in this file. Saving there restarts the channel, so a bot switched on in
+the UI connects without anyone touching the terminal — and the panel says whether it did.
+The keys below the line (`pollTimeoutSec`, `editIntervalMs`, `apiBase`) are file-only:
+they are tuning knobs, and a panel row for each would be four rows nobody reads.
+
 `admins` gates the commands that reach past one conversation — `/model`, which moves the
 whole install onto another model, and `/workspace new|rename|rm|move`.
 
