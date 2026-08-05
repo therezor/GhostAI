@@ -318,7 +318,43 @@ different real instant after a migration nobody connected to it.
 | `sendToolHints` | boolean | `false` |
 
 This object is **loose** by design: each channel — built-in or plugin — parses its own
-block, so installing a channel does not require a schema change here.
+block, so installing a channel does not require a schema change here. Both keys above are
+read once when the channel manager is built, so they are install-wide rather than per
+conversation.
+
+### `channels.telegram`
+
+| Key              | Type       | Default                                      |
+| ---------------- | ---------- | -------------------------------------------- |
+| `enabled`        | boolean    | `true`                                       |
+| `allowlist`      | string[]   | `[]` — **and empty refuses to start**        |
+| `admins`         | string[]   | `[]` — empty means everyone on the allowlist |
+| `agentId`        | string     | _unset_                                      |
+| `workspaceId`    | string     | _unset_                                      |
+| `pollTimeoutSec` | 1–50       | `30`                                         |
+| `editIntervalMs` | number ≥ 0 | `2000`                                       |
+| `apiBase`        | string     | `https://api.telegram.org`                   |
+
+**The bot token does not go here.** Put it in the credential vault under
+`channels`/`telegram`, or in `TELEGRAM_BOT_TOKEN`. A `token` key in this block is read as
+a last resort and logs a warning at startup, because `config.json` is a plain file that
+backups, dotfile repositories and screen shares all reach.
+
+An `allowlist` entry is `<telegram id>` or `<telegram id>|<label>`; the label is for
+whoever reads the file and the logs, and nothing matches on it. One list covers people and
+groups, because Telegram numbers them apart — a user id is positive and a group id is
+negative. **Inside a group both must be listed**, the group and the person typing: being
+in the room is not a decision you made.
+
+To find your id: message the bot and read the log line it writes for the sender it
+refused. That is the whole onboarding path.
+
+`admins` gates the commands that reach past one conversation — `/model`, which moves the
+whole install onto another model, and `/workspace new|rename|rm|move`.
+
+Telegram is registered only when a token resolves, so an install that has never configured
+a bot starts exactly as it did before. A token that resolves and is then refused by the
+API fails startup rather than leaving a channel silently dead.
 
 ## `audio`
 

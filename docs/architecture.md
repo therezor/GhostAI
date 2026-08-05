@@ -19,7 +19,7 @@ tests and its own coverage bar.
 | `@ghostai/mcp`       | The MCP client, connection lifecycle and the bridge from a remote tool onto `Tool`                                  |
 | `@ghostai/agent`     | `AgentLoop`, the approval contract, prompt assembly, steering, subagents                                            |
 | `@ghostai/runtime`   | The composition root: config → provider, jail, store, registry, one loop per agent                                  |
-| `@ghostai/channels`  | The `Channel` contract, `ChannelManager` and `TurnProjection`                                                       |
+| `@ghostai/channels`  | The `Channel` contract, `ChannelManager`, `TurnProjection` and the Telegram adapter                                 |
 | `@ghostai/server`    | Fastify: REST, the WebSocket hub, auth, static UI, OpenAPI                                                          |
 | `@ghostai/web`       | The React SPA                                                                                                       |
 | `@ghostai/cli`       | The `ghost` binary                                                                                                  |

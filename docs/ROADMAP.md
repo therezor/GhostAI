@@ -10,8 +10,6 @@ building a second one beside it.
 
 ## Planned
 
-- [ ] **Telegram** — hold a session with an agent from Telegram. Unblocks
-      heartbeat `targets` delivery.
 - [ ] **Skills** — reusable instruction bundles, some pinned, the rest loaded
       when relevant.
 - [ ] **Memory** — the agent remembers across sessions and compacts before it
@@ -25,6 +23,11 @@ building a second one beside it.
 
 ## Done
 
+- [x] **Telegram** — hold a session with an agent from a phone: the terminal's
+      whole command set as bot commands, inline menus for the four pickers, and
+      tool approvals answerable from the chat. One adapter over the Bot API in
+      `@ghostai/channels`, registered by `ghost serve` like any other
+      `ChannelFactory`. Unblocks heartbeat `targets` delivery.
 - [x] **Connect MCP servers** — third-party MCP tools appear beside the
       built-ins, as `mcp_<server>_<tool>` rows in each agent's permission map.
       All three transports and OAuth; the client is `@ghostai/mcp`.
