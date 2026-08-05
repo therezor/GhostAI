@@ -22,7 +22,7 @@ import type { SessionStore } from '@ghostai/core';
 
 import type { ChannelControlFrame } from '../channel.js';
 import type { ChatState } from './chats.js';
-import { newSessionKey, ownsSessionKey } from './chats.js';
+import { defaultSessionKey, newSessionKey, ownsSessionKey } from './chats.js';
 import type { TelegramConsole } from './console.js';
 import type { BotCommand, InlineKeyboardMarkup } from './api.js';
 import {
@@ -215,7 +215,7 @@ const COMMANDS: readonly TelegramCommand[] = [
     description: 'Detach: the next message starts a fresh conversation',
     run: (input) => {
       input.menus.forget(input.chatId);
-      input.attach(`${input.channelId}:${String(input.chatId)}`);
+      input.attach(defaultSessionKey(input.channelId, input.chatId));
       return { text: 'Detached. The next message starts here again.' };
     },
   },

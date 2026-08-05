@@ -46,3 +46,11 @@ export {
   type OutboundDraft,
   type TurnProjectionOptions,
 } from './projection.js';
+
+export {
+  telegramChannel,
+  type TelegramChannel,
+  type TelegramChannelOptions,
+  type TelegramConsole,
+  type TelegramSettings,
+} from './telegram/index.js';

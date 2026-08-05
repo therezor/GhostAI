@@ -113,17 +113,4 @@ export class ChatBook {
     state.liveTurnId = undefined;
     return state;
   }
-
-  /** Back to the chat's own default. What `/exit` does. */
-  detach(chatId: number): ChatState {
-    return this.attach(chatId, defaultSessionKey(this.channelId, chatId));
-  }
-
-  /** Which chat is attached to a conversation, if any is. */
-  chatFor(sessionKey: string): number | undefined {
-    for (const [chatId, state] of this.states) {
-      if (state.sessionKey === sessionKey) return chatId;
-    }
-    return undefined;
-  }
 }

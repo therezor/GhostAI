@@ -48,6 +48,21 @@ export class FakeBotApi {
   /** The `fetch` a `BotApi` is built over. */
   get fetch(): FetchLike {
     return async (url, init) => {
+      // A macrotask before anything else, because a real call is not
+      // synchronous — and because a poll loop retrying against a purely
+      // microtask fake would starve the event loop and hang the test rather
+      // than failing it.
+      await new Promise<void>((resolve) => {
+        setImmediate(resolve);
+      });
+
+      // What undici does, and the reason this is checked here rather than only
+      // inside the park below: a signal that fires while the call is in flight
+      // has already dispatched by the time a listener is added, so a fake that
+      // only ever waited for the *event* would hang for ever on the one call
+      // that was airborne at shutdown.
+      if (init.signal?.aborted === true) throw abortError();
+
       const method = url.slice(url.lastIndexOf('/') + 1);
       const body = JSON.parse(init.body) as Record<string, unknown>;
       this.calls.push({ method, body });
@@ -165,15 +180,29 @@ export class FakeBotApi {
     signal: AbortSignal | undefined,
   ): Promise<readonly TelegramUpdate[]> {
     if (this.pending.length === 0) {
-      await new Promise<void>((resolve) => {
-        this.waiting = resolve;
+      if (signal?.aborted === true) throw abortError();
+      // Resolved *with* the reason rather than checked afterwards: a check
+      // after the await reads `signal.aborted`, which TypeScript has already
+      // narrowed to `false` from the guard above.
+      const aborted = await new Promise<boolean>((resolve) => {
+        this.waiting = () => {
+          resolve(false);
+        };
         signal?.addEventListener('abort', () => {
-          resolve();
+          resolve(true);
         });
       });
+      if (aborted) throw abortError();
     }
     return this.pending.splice(0);
   }
+}
+
+/** What `fetch` rejects with when its signal has fired. */
+function abortError(): Error {
+  const error = new Error('This operation was aborted');
+  error.name = 'AbortError';
+  return error;
 }
 
 /** A message update, with the boilerplate a private chat always carries. */
