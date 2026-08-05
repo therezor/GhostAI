@@ -135,7 +135,7 @@ describe('ghost serve with a bot configured', () => {
       TELEGRAM_BOT_TOKEN: undefined,
     });
 
-    expect(server.channels.channels).toHaveLength(0);
+    expect(server.channels?.channels).toHaveLength(0);
   });
 
   it('refuses the boot when a token resolves but nobody is allowed', async () => {
@@ -157,7 +157,7 @@ describe('ghost serve with a bot configured', () => {
       { TELEGRAM_BOT_TOKEN: 'test-token' },
     );
 
-    expect(server.channels.channels.map((channel) => channel.id)).toEqual([
+    expect(server.channels?.channels.map((channel) => channel.id)).toEqual([
       'telegram',
     ]);
     // The startup handshake, in order: confirm the token, clear a stale
@@ -188,7 +188,7 @@ describe('ghost serve with a bot configured', () => {
 
     // No conversation has arrived, so nothing is bridged yet — and the hub is
     // the one `createServer` was given.
-    expect(server.channels.sessionCount).toBe(0);
+    expect(server.channels?.sessionCount).toBe(0);
     expect(server.hub.sessionCount).toBe(0);
   });
 
@@ -237,3 +237,151 @@ describe('ghost serve with a bot configured', () => {
     expect(running).toHaveLength(0);
   });
 });
+
+describe('reconfiguring from the settings panel', () => {
+  /** Authenticates without going through the login route. */
+  function bearer(server: RunningServer): Record<string, string> {
+    return { authorization: `Bearer ${server.server.auth.issue('t').token}` };
+  }
+
+  it('reports the channel on the settings response', async () => {
+    const stub = await botApiStub();
+    const server = await start(
+      home({ allowlist: [ALLOWED], apiBase: stub.base }),
+      { TELEGRAM_BOT_TOKEN: 'test-token' },
+    );
+
+    const response = await fetch(`${server.url}/api/settings`, {
+      headers: bearer(server),
+    });
+    const body = (await response.json()) as {
+      channels: Array<Record<string, unknown>>;
+    };
+
+    expect(body.channels).toEqual([
+      {
+        id: 'telegram',
+        enabled: true,
+        configured: true,
+        running: true,
+        detail: '@ghost_test_bot',
+      },
+    ]);
+  });
+
+  it('never sends the token back, only that there is one', async () => {
+    // The vault is write-only over HTTP. `configured` is the whole of what the
+    // panel is allowed to know.
+    const stub = await botApiStub();
+    const server = await start(
+      home({ allowlist: [ALLOWED], apiBase: stub.base }),
+      { TELEGRAM_BOT_TOKEN: 'a-secret-token' },
+    );
+
+    const response = await fetch(`${server.url}/api/settings`, {
+      headers: bearer(server),
+    });
+
+    expect(await response.text()).not.toContain('a-secret-token');
+  });
+
+  it('starts the channel when a save turns it on', async () => {
+    // The point of the whole exercise: configure it in the browser, and the bot
+    // works without anyone going near the terminal.
+    const stub = await botApiStub();
+    const server = await start(home({ enabled: false, apiBase: stub.base }), {
+      TELEGRAM_BOT_TOKEN: 'test-token',
+    });
+    expect(server.channels?.channels).toHaveLength(0);
+
+    const response = await fetch(`${server.url}/api/settings`, {
+      method: 'PATCH',
+      headers: { ...bearer(server), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        channels: { telegram: { enabled: true, allowlist: [ALLOWED] } },
+      }),
+    });
+    expect(response.status).toBe(200);
+
+    await settled(() => (server.channels?.channels.length ?? 0) > 0);
+    expect(server.channels?.channels.map((channel) => channel.id)).toEqual([
+      'telegram',
+    ]);
+  });
+
+  it('stops the channel when a save turns it off', async () => {
+    const stub = await botApiStub();
+    const server = await start(
+      home({ allowlist: [ALLOWED], apiBase: stub.base }),
+      { TELEGRAM_BOT_TOKEN: 'test-token' },
+    );
+    expect(server.channels?.channels).toHaveLength(1);
+
+    await fetch(`${server.url}/api/settings`, {
+      method: 'PATCH',
+      headers: { ...bearer(server), 'content-type': 'application/json' },
+      body: JSON.stringify({ channels: { telegram: { enabled: false } } }),
+    });
+
+    await settled(() => server.channels?.channels.length === 0);
+    expect(server.channels?.channels).toHaveLength(0);
+  });
+
+  it('keeps serving when the new settings will not start', async () => {
+    // A mistyped allowlist must cost a red line in the panel, not the server.
+    const stub = await botApiStub();
+    const server = await start(
+      home({ allowlist: [ALLOWED], apiBase: stub.base }),
+      { TELEGRAM_BOT_TOKEN: 'test-token' },
+    );
+
+    const response = await fetch(`${server.url}/api/settings`, {
+      method: 'PATCH',
+      headers: { ...bearer(server), 'content-type': 'application/json' },
+      body: JSON.stringify({ channels: { telegram: { allowlist: [] } } }),
+    });
+
+    // The save itself succeeded — it did happen.
+    expect(response.status).toBe(200);
+    await settled(() => server.channels === undefined);
+    // And the server is still answering.
+    const health = await fetch(`${server.url}/api/health`);
+    expect(health.status).toBe(200);
+  });
+
+  it('says why the channel is down, on the panel that broke it', async () => {
+    const stub = await botApiStub();
+    const server = await start(
+      home({ allowlist: [ALLOWED], apiBase: stub.base }),
+      { TELEGRAM_BOT_TOKEN: 'test-token' },
+    );
+
+    await fetch(`${server.url}/api/settings`, {
+      method: 'PATCH',
+      headers: { ...bearer(server), 'content-type': 'application/json' },
+      body: JSON.stringify({ channels: { telegram: { allowlist: [] } } }),
+    });
+    await settled(() => server.channels === undefined);
+
+    const response = await fetch(`${server.url}/api/settings`, {
+      headers: bearer(server),
+    });
+    const body = (await response.json()) as {
+      channels: Array<Record<string, unknown>>;
+    };
+
+    expect(body.channels[0]).toMatchObject({ running: false });
+    expect(String(body.channels[0]?.detail)).toContain('allowlist is empty');
+  });
+});
+
+/** Waits for a rebuild, which a save deliberately does not block on. */
+async function settled(until: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    if (until()) return;
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 10);
+    });
+  }
+  throw new Error('The channels never settled');
+}

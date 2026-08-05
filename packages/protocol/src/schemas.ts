@@ -159,6 +159,7 @@ export const PROTOCOL_SCHEMAS = {
   HealthResponse: rest.HealthResponseSchema,
   ConfigWarning: rest.ConfigWarningSchema,
   AgentRename: rest.AgentRenameSchema,
+  ChannelStatus: rest.ChannelStatusSchema,
   SettingsPatchRequest: rest.SettingsPatchRequestSchema,
   SettingsResponse: rest.SettingsResponseSchema,
   SetCredentialRequest: rest.SetCredentialRequestSchema,

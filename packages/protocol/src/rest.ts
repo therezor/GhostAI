@@ -149,6 +149,36 @@ export const ConfigWarningSchema = z.object({
 export type ConfigWarning = z.infer<typeof ConfigWarningSchema>;
 
 /**
+ * One channel, as the settings panel needs to see it.
+ *
+ * Four fields rather than one, because "is my bot working" has four distinct
+ * answers and collapsing them loses the one the operator has to act on. A
+ * channel that is `enabled` but not `configured` needs a token; one that is
+ * both but not `running` either failed to start — `detail` says why — or has
+ * not been restarted yet.
+ *
+ * `configured` exists because the vault is write-only over HTTP: the panel can
+ * never read a token back, so a boolean is the only way it can say "a token is
+ * saved" instead of showing an empty box over a working bot.
+ */
+export const ChannelStatusSchema = z.object({
+  /** The channel id, which is also its `config.channels` key. */
+  id: z.string().min(1),
+  /** What the settings say. */
+  enabled: z.boolean(),
+  /** A credential is stored. Never the credential itself. */
+  configured: z.boolean(),
+  /** The channel is connected right now. */
+  running: z.boolean(),
+  /**
+   * What to show beside the state: the bot's username when connected, or why
+   * it is not. Absent when there is nothing to add.
+   */
+  detail: z.string().optional(),
+});
+export type ChannelStatus = z.infer<typeof ChannelStatusSchema>;
+
+/**
  * Config as served to the UI. Credentials never appear — the vault is
  * write-only over HTTP — so the panel gets a per-provider boolean instead.
  */
@@ -156,6 +186,15 @@ export const SettingsResponseSchema = z.object({
   config: ConfigSchema,
   /** Provider *instance* id → whether a usable key exists in the vault. */
   credentialsPresent: z.record(z.string(), z.boolean()),
+  /**
+   * Channels this build ships, whether configured or not.
+   *
+   * A separate field rather than more keys in `credentialsPresent`, which is
+   * documented as provider instances and is indexed by id — a `telegram` entry
+   * there would collide with an endpoint an operator happened to name the same
+   * thing, and would carry none of the other three answers a panel needs.
+   */
+  channels: z.array(ChannelStatusSchema).default([]),
   /** Set when the file on disk failed to parse and defaults are in use. */
   loadError: z.string().optional(),
   /**
@@ -223,6 +262,8 @@ export const SetCredentialRequestSchema = z.object({
     'audio',
     'mcp_servers',
     'plugins',
+    /** A channel's own credential — a bot token, keyed by channel id. */
+    'channels',
   ]),
   key: z.string().min(1),
   /** `null` deletes the entry. */

@@ -35,7 +35,11 @@ import { existsSync } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 
-import { ChannelManager, type ChannelFactory } from '@ghostai/channels';
+import {
+  ChannelManager,
+  type ChannelFactory,
+  type TelegramChannel,
+} from '@ghostai/channels';
 import {
   GhostError,
   createLogger,
@@ -58,6 +62,7 @@ import {
   createAutomationResolver,
   createServer,
   type GhostServer,
+  type ServerRuntime,
 } from '@ghostai/server';
 import type { AutomationResolver } from '@ghostai/tools';
 import pc from 'picocolors';
@@ -65,7 +70,11 @@ import pc from 'picocolors';
 import { translationsFor, type CliT } from './i18n.js';
 
 import { createServerRuntime } from './server-runtime.js';
-import { telegramFactories } from './telegram.js';
+import {
+  CHANNEL_CREDENTIAL_NAMESPACE,
+  telegramFactories,
+  telegramStatus,
+} from './telegram.js';
 
 export interface ServeOptions {
   /** Overrides `server.host` for this run. */
@@ -114,7 +123,16 @@ export interface RunningServer {
   readonly server: GhostServer;
   readonly runtime: GhostRuntime;
   readonly hub: SessionHub;
-  readonly channels: ChannelManager;
+  /**
+   * The channels that are up, or `undefined` when a rebuild failed.
+   *
+   * A getter rather than a field: a settings save replaces the manager, because
+   * `ChannelManager` fixes its factories at construction. `undefined` is
+   * reachable only after boot — a channel that will not start at boot fails the
+   * boot — and it means the last save left nothing running, with the reason on
+   * the settings panel.
+   */
+  readonly channels: ChannelManager | undefined;
   /** The directory the SPA is served from, or `undefined` for API-only. */
   readonly ui: string | undefined;
   /**
@@ -294,6 +312,14 @@ export async function startServer(
   let hub: SessionHub | undefined;
   let server: GhostServer | undefined;
   let channels: ChannelManager | undefined;
+  /**
+   * Why the last rebuild failed, when one did.
+   *
+   * Held rather than thrown, because a rebuild happens *after* a settings save
+   * has been written and answered — see `rebuildChannels`. This is what carries
+   * the reason to the panel that caused it.
+   */
+  let channelError: string | undefined;
   /** Detaches the `tools.changed` producer. Declared out here so `catch` can. */
   let releaseTools: (() => void) | undefined;
   // Declared out here so the catch below can stop a timer a later step failed
@@ -378,11 +404,101 @@ export async function startServer(
       logger,
     });
 
+    const sessionHub = hub;
     const ui = resolveUiRoot(options.ui);
     const serverRuntime = createServerRuntime(built, { env });
     // Captured rather than reached through the object at call time, so the
     // optional-method check and the call cannot disagree.
     const directChat = serverRuntime.chat?.bind(serverRuntime);
+
+    /**
+     * Rebuilds the channels from the settings as they now stand.
+     *
+     * A new manager rather than a restart of the old one: `ChannelManager`
+     * fixes its factories at construction and `register` refuses to run after
+     * `start`, which is the property that stops a channel appearing halfway
+     * through a process's life without anyone deciding it should.
+     *
+     * `fatal` is the difference between the two callers. At boot a channel that
+     * will not start is a startup error. Afterwards the settings have already
+     * been written and answered, so throwing would report a save that did
+     * happen as one that did not — and the thing the operator actually needs,
+     * the reason, reaches them through `telegramStatus` on the panel they are
+     * looking at.
+     */
+    const rebuildChannels = async (fatal: boolean): Promise<void> => {
+      await channels?.stop();
+      channelError = undefined;
+      const next = new ChannelManager({
+        hub: sessionHub,
+        channels: built.config.channels,
+        factories: [
+          ...(options.channels ?? []),
+          ...telegramFactories({
+            runtime: built,
+            server: serverRuntime,
+            paths: loaded.paths,
+            env,
+            logger,
+          }),
+        ],
+        logger,
+      });
+      try {
+        await next.start();
+        channels = next;
+      } catch (error) {
+        channels = undefined;
+        channelError = error instanceof Error ? error.message : String(error);
+        // At boot it is fatal, and deliberately: a bad token should stop the
+        // process rather than leave a channel silently dead, which is what
+        // `channel.ts` documents. After boot it must not be — the server is
+        // already serving, and taking it down over a mistyped token in a
+        // settings panel would be a far worse answer than a red line in it.
+        if (fatal) throw error;
+        logger.error({ err: error }, 'channels could not be restarted');
+      }
+    };
+
+    /**
+     * The port `createServer` gets, with the two writes that move a channel
+     * decorated.
+     *
+     * A decorator here rather than an option on `createServerRuntime`, because
+     * only this file knows a channel manager exists — the adapter is about
+     * config, credentials and the model catalogue, and handing it a channel to
+     * restart would be handing it a second job.
+     *
+     * The rebuild is not awaited: `applySettings` answers a Config
+     * synchronously, and a save that blocked on a Telegram round trip would be
+     * a settings panel that hangs on someone else's network. The panel reads
+     * `running` back on its next fetch.
+     */
+    const runtimeForServer: ServerRuntime = {
+      ...serverRuntime,
+      applySettings: (patch) => {
+        const saved = serverRuntime.applySettings(patch);
+        void rebuildChannels(false);
+        return saved;
+      },
+      setCredential: (request) => {
+        serverRuntime.setCredential(request);
+        // Only a channel's own credential moves a channel. A provider key
+        // save must not bounce a bot that has nothing to do with it.
+        if (request.namespace === CHANNEL_CREDENTIAL_NAMESPACE) {
+          void rebuildChannels(false);
+        }
+      },
+      channels: () => [
+        telegramStatus({
+          runtime: built,
+          paths: loaded.paths,
+          env,
+          channel: channels?.channel('telegram') as TelegramChannel | undefined,
+          startError: channelError,
+        }),
+      ],
+    };
 
     // `scheduler` is still undefined here and is filled in below.
     // `createServer` builds the stores the engine runs over, so the engine
@@ -390,7 +506,7 @@ export async function startServer(
     // way `openapiDocument` is untied inside `createServer`.
     server = await createServer({
       config: built.config,
-      runtime: serverRuntime,
+      runtime: runtimeForServer,
       hub,
       database,
       logger,
@@ -400,7 +516,6 @@ export async function startServer(
       ...(ui === undefined ? {} : { ui: { root: ui } }),
     });
 
-    const sessionHub = hub;
     const listener = server;
 
     // The producer for `tools.changed`, and the reason it hangs off the
@@ -447,24 +562,7 @@ export async function startServer(
       logger,
     });
 
-    channels = new ChannelManager({
-      hub,
-      channels: built.config.channels,
-      // The built-ins come last, so a factory passed in by a test wins on a
-      // clash rather than colliding with one this resolved from the vault.
-      factories: [
-        ...(options.channels ?? []),
-        ...telegramFactories({
-          runtime: built,
-          server: serverRuntime,
-          paths: loaded.paths,
-          env,
-          logger,
-        }),
-      ],
-      logger,
-    });
-    await channels.start();
+    await rebuildChannels(true);
 
     // After `createServer`, which is where `--password` is applied: minting a
     // code for an install that was just given a password would print a
@@ -483,7 +581,6 @@ export async function startServer(
     scheduler.start();
 
     let closed = false;
-    const bridge = channels;
     const sessions = hub;
     const engine = scheduler;
     const running: RunningServer = {
@@ -491,7 +588,9 @@ export async function startServer(
       server: listener,
       runtime: built,
       hub: sessions,
-      channels: bridge,
+      get channels() {
+        return channels;
+      },
       ui,
       setupCode,
       close: async (): Promise<void> => {
@@ -506,7 +605,7 @@ export async function startServer(
         // turns through the hub: stopping the hub underneath an in-flight run
         // would leave the run row `pending` with nothing to close it.
         await engine.stop();
-        await bridge.stop();
+        await channels?.stop();
         // Before the hub, so a registry mutation during `built.close()` — an
         // MCP server's tools going as it disconnects — does not try to
         // broadcast to sockets that are being torn down.
@@ -574,7 +673,9 @@ export function banner(
     [t('serve.ui'), running.ui ?? c.dim(t('serve.uiUnbuilt'))],
   ];
 
-  const channels = running.channels.channels.map((channel) => channel.id);
+  const channels = (running.channels?.channels ?? []).map(
+    (channel) => channel.id,
+  );
   if (channels.length > 0) {
     rows.push([t('serve.channels'), channels.join(', ')]);
   }

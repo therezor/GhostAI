@@ -23,9 +23,9 @@
 import { existsSync } from 'node:fs';
 
 import { telegramChannel, type TelegramConsole } from '@ghostai/channels';
-import type { ChannelFactory } from '@ghostai/channels';
+import type { ChannelFactory, TelegramChannel } from '@ghostai/channels';
 import type { GhostPaths, Logger } from '@ghostai/core';
-import type { ContextResponse } from '@ghostai/protocol';
+import type { ChannelStatus, ContextResponse } from '@ghostai/protocol';
 import { openVault, type GhostRuntime } from '@ghostai/runtime';
 import { buildContextResponse, type ServerRuntime } from '@ghostai/server';
 
@@ -111,6 +111,73 @@ export function createTelegramConsole(
   };
 }
 
+/** `config.channels.telegram`, narrowed. Unknown to the type, loose by design. */
+export function telegramSettingsOf(
+  runtime: GhostRuntime,
+): Readonly<Record<string, unknown>> {
+  const block = runtime.config.channels.telegram;
+  return typeof block === 'object' && block !== null && !Array.isArray(block)
+    ? (block as Readonly<Record<string, unknown>>)
+    : {};
+}
+
+export interface TelegramStatusOptions {
+  readonly runtime: GhostRuntime;
+  readonly paths: GhostPaths;
+  readonly env: Readonly<Record<string, string | undefined>>;
+  /** The channel, when one is running. */
+  readonly channel: TelegramChannel | undefined;
+  /** Why the last start failed, when it did. */
+  readonly startError?: string | undefined;
+}
+
+/**
+ * What the settings panel shows for Telegram.
+ *
+ * Four separate answers, because "is my bot working" has four and the operator
+ * has to act on a different one in each case. `configured` is a boolean and
+ * never the token: the vault is write-only over HTTP, so this is the only way
+ * the panel can say a token is saved rather than showing an empty box over a
+ * bot that is running perfectly well.
+ */
+export function telegramStatus(options: TelegramStatusOptions): ChannelStatus {
+  const settings = telegramSettingsOf(options.runtime);
+  const token = resolveTelegramToken({
+    paths: options.paths,
+    env: options.env,
+    settings,
+  });
+  const running = options.channel !== undefined;
+  const username = options.channel?.username;
+
+  return {
+    id: 'telegram',
+    // Absent means enabled: `ChannelManager` only skips a channel whose block
+    // says `enabled: false`, so the panel has to read the same default.
+    enabled: settings.enabled !== false,
+    configured: token !== undefined,
+    running,
+    ...detailOf({
+      running,
+      ...(username === undefined ? {} : { username }),
+      ...(options.startError === undefined
+        ? {}
+        : { startError: options.startError }),
+    }),
+  };
+}
+
+function detailOf(input: {
+  running: boolean;
+  username?: string;
+  startError?: string;
+}): { detail?: string } {
+  if (input.running) {
+    return input.username === undefined ? {} : { detail: `@${input.username}` };
+  }
+  return input.startError === undefined ? {} : { detail: input.startError };
+}
+
 export interface TelegramFactoriesOptions {
   readonly runtime: GhostRuntime;
   readonly server: ServerRuntime;
@@ -130,12 +197,7 @@ export interface TelegramFactoriesOptions {
 export function telegramFactories(
   options: TelegramFactoriesOptions,
 ): readonly ChannelFactory[] {
-  const block = options.runtime.config.channels.telegram;
-  const settings =
-    typeof block === 'object' && block !== null && !Array.isArray(block)
-      ? (block as Readonly<Record<string, unknown>>)
-      : {};
-
+  const settings = telegramSettingsOf(options.runtime);
   const token = resolveTelegramToken({
     paths: options.paths,
     env: options.env,
