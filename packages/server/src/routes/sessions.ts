@@ -44,7 +44,6 @@ import {
   type Usage,
 } from '@ghostai/protocol';
 import { toStoredMessage, type SessionSummaryRecord } from '@ghostai/core';
-import { describeContext } from '@ghostai/agent';
 import type { FastifyReply } from 'fastify';
 
 import {
@@ -55,6 +54,7 @@ import {
   encodeSessionCursor,
   paginate,
 } from '../cursor.js';
+import { buildContextResponse } from '../context.js';
 import { conflict, notFound } from '../errors.js';
 import {
   PageQuerySchema,
@@ -378,55 +378,13 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
       },
       handler: async (request): Promise<ContextResponse> => {
         const { key } = params(request);
-        const session = requireSession(key);
-        // The session's own agent, not the default: its tool list, its prompt
-        // and its context budget are what a turn here would actually carry, and
-        // a meter measured against another agent's window is simply wrong.
-        //
-        // Unless it names one that is gone, in which case the honest answer is
-        // the one a turn *would* get — the default agent — rather than a 404
-        // for a conversation that lists and opens perfectly well. Reported
-        // through `requestedAgentId` so the panel can say what it is showing
-        // instead of quietly measuring something else.
-        const bound = session.agentId;
-        const missing =
-          bound !== undefined &&
-          bound !== '' &&
-          !deps.runtime.agents().some((agent) => agent.id === bound);
-        const effectiveId = missing ? undefined : bound;
-        const agent = deps.runtime.agent(effectiveId);
+        requireSession(key);
 
-        // The measurement itself lives in `@ghostai/agent`, so the CLI's
-        // `/context` reports the same numbers from the same code rather than a
-        // second implementation of the windowing rules.
-        const report = await describeContext({
-          store,
-          loop: { previewPrompt: (input) => agent.systemPrompt(input) },
-          tools: agent.tools,
-          sessionKey: key,
-          channel: 'web',
-          // The effective id, not the stored one: this reaches `previewPrompt`,
-          // and a preview built for an agent that will not run is a preview of
-          // something that is not going to happen.
-          ...(effectiveId === undefined ? {} : { agentId: effectiveId }),
-          contextWindowTokens: agent.contextWindowTokens,
-        });
+        // The agent-resolution policy lives in `context.ts`, so the chat
+        // channels measure against the same agent this panel does.
+        const report = await buildContextResponse(deps.runtime, key);
         if (report === undefined) throw notFound(`No session "${key}"`);
-
-        return {
-          sessionKey: report.sessionKey,
-          systemPrompt: report.systemPrompt,
-          runtimeBlock: report.runtimeBlock,
-          tools: [...report.tools],
-          messages: report.messages.map(toStoredMessage),
-          estimatedTokens: report.estimatedTokens,
-          contextWindowTokens: report.contextWindowTokens,
-          breakdown: { ...report.breakdown },
-          agentId: agent.id,
-          // Present only on a fallback, so a client can treat its presence as
-          // the whole signal rather than comparing two ids on every response.
-          ...(missing ? { requestedAgentId: bound } : {}),
-        };
+        return report;
       },
     },
 

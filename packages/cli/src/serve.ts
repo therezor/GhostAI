@@ -65,6 +65,7 @@ import pc from 'picocolors';
 import { translationsFor, type CliT } from './i18n.js';
 
 import { createServerRuntime } from './server-runtime.js';
+import { telegramFactories } from './telegram.js';
 
 export interface ServeOptions {
   /** Overrides `server.host` for this run. */
@@ -92,7 +93,14 @@ export interface ServeOptions {
   readonly username?: string | undefined;
   /** A built SPA to serve. Absent looks for `@ghostai/web`, then serves the API alone. */
   readonly ui?: string | undefined;
-  /** Registered before the pumps start. Empty until Telegram lands in Phase 3. */
+  /**
+   * Registered before the pumps start, ahead of the built-ins.
+   *
+   * The built-in Telegram channel is added here too, but only when a bot token
+   * resolves — see `telegramFactories`. A test that passes its own factory
+   * still gets exactly that one, because no token resolves in a test
+   * environment.
+   */
   readonly channels?: readonly ChannelFactory[];
   readonly logger?: Logger;
   readonly logLevel?: LogLevel;
@@ -442,7 +450,18 @@ export async function startServer(
     channels = new ChannelManager({
       hub,
       channels: built.config.channels,
-      factories: options.channels ?? [],
+      // The built-ins come last, so a factory passed in by a test wins on a
+      // clash rather than colliding with one this resolved from the vault.
+      factories: [
+        ...(options.channels ?? []),
+        ...telegramFactories({
+          runtime: built,
+          server: serverRuntime,
+          paths: loaded.paths,
+          env,
+          logger,
+        }),
+      ],
       logger,
     });
     await channels.start();
