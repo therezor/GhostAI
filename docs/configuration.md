@@ -28,29 +28,28 @@ Writes are atomic: validate, write `config.json.tmp` at mode `0600`, rename.
 
 What every agent inherits, and what an install with no named agents runs as.
 
-| Key                     | Type                         | Default  | Notes                                                                                                                                                 |
-| ----------------------- | ---------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `workspace`             | string                       | `''`     | Empty means `<root>/workspace`. Deliberately not the literal path, so moving the root with `GHOSTAI_HOME` moves the workspace with it.                |
-| `model`                 | string                       | `''`     | Empty means **unconfigured**, not "pick one". There is no model-picking code; an empty model makes every turn refuse with a message saying so.        |
-| `provider`              | string                       | `'auto'` | An instance id, a bare provider type, or `auto`.                                                                                                      |
-| `maxTokens`             | int > 0                      | `8192`   | Output cap per response.                                                                                                                              |
-| `contextWindowTokens`   | int > 0                      | `65536`  | What the context inspector measures against.                                                                                                          |
-| `temperature`           | 0–2                          | _unset_  | Unset means the request carries no `temperature` at all, which is the only correct answer for models that reject it.                                  |
-| `maxToolIterations`     | int > 0                      | `40`     | Tool rounds in one turn.                                                                                                                              |
-| `toolTimeoutMs`         | int ≥ 0                      | `0`      |                                                                                                                                                       |
-| `loopWallTimeoutMs`     | int ≥ 0                      | `0`      | Wall-clock cap on a turn, checked at the top of each iteration.                                                                                       |
-| `subagentTimeoutMs`     | int ≥ 0                      | `0`      | Applies to delegations _this_ agent makes.                                                                                                            |
-| `reasoningEffort`       | `minimal\|low\|medium\|high` | _unset_  | Unset sends nothing.                                                                                                                                  |
-| `memoryMaxPromptTokens` | int ≥ 0                      | `2000`   | What the [memory](memory.md) **index** may cost in every prompt. `0` keeps the files on disk and out of the prompt. `MAX_MEMORIES` (200) binds first. |
-| `pinnedSkills`          | string[]                     | `[]`     | Skills whose body is inlined into the prompt, in this order. Everything else in `skills/` is indexed. See [Skills](skills.md).                        |
-| `maxPinnedSkills`       | int ≥ 0                      | `5`      | How many of the above are inlined. Names past it fall back to an index line.                                                                          |
+| Key                   | Type                         | Default  | Notes                                                                                                                                          |
+| --------------------- | ---------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workspace`           | string                       | `''`     | Empty means `<root>/workspace`. Deliberately not the literal path, so moving the root with `GHOSTAI_HOME` moves the workspace with it.         |
+| `model`               | string                       | `''`     | Empty means **unconfigured**, not "pick one". There is no model-picking code; an empty model makes every turn refuse with a message saying so. |
+| `provider`            | string                       | `'auto'` | An instance id, a bare provider type, or `auto`.                                                                                               |
+| `maxTokens`           | int > 0                      | `8192`   | Output cap per response.                                                                                                                       |
+| `contextWindowTokens` | int > 0                      | `65536`  | What the context inspector measures against.                                                                                                   |
+| `temperature`         | 0–2                          | _unset_  | Unset means the request carries no `temperature` at all, which is the only correct answer for models that reject it.                           |
+| `maxToolIterations`   | int > 0                      | `40`     | Tool rounds in one turn.                                                                                                                       |
+| `toolTimeoutMs`       | int ≥ 0                      | `0`      |                                                                                                                                                |
+| `loopWallTimeoutMs`   | int ≥ 0                      | `0`      | Wall-clock cap on a turn, checked at the top of each iteration.                                                                                |
+| `subagentTimeoutMs`   | int ≥ 0                      | `0`      | Applies to delegations _this_ agent makes.                                                                                                     |
+| `reasoningEffort`     | `minimal\|low\|medium\|high` | _unset_  | Unset sends nothing.                                                                                                                           |
+| `pinnedSkills`        | string[]                     | `[]`     | Skills whose body is inlined into the prompt, in this order. Everything else in `skills/` is indexed. See [Skills](skills.md).                 |
+| `maxPinnedSkills`     | int ≥ 0                      | `5`      | How many of the above are inlined. Names past it fall back to an index line.                                                                   |
 
 **Five keys were removed and there is no migration.** `memoryCompactThresholdTokens` and
 `consolidationModel` went with the compaction they served; `learningEnabled` and
 `learningInterval` were declared and never read, and belonged to a proactive-learning pass
 that was never built; `agents.list.<id>.memory.shared` chose between an agent's own memory
 layer and a shared one, and there is no per-agent layer for it to fall back to — a folder
-in the workspace is a property of the *folder*, so it is shared by construction.
+in the workspace is a property of the _folder_, so it is shared by construction.
 
 `AgentDefaultsSchema` and `AgentEntrySchema` are plain zod objects, so they strip what they
 do not know: a `config.json` still carrying any of the five parses without error and loses
@@ -69,22 +68,22 @@ inherit-unless-set — plus the keys below. The id also names the agent's direct
 `workspace` is deliberately not overridable: the working folder is a property of the
 session, shared by every agent that opens it.
 
-| Key                | Type                                 | Default            | Notes                                                                                                        |
-| ------------------ | ------------------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------ |
-| `label`            | string                               | `''`               | Falls back to the id.                                                                                        |
-| `systemPrompt`     | string                               | `''`               | The agent's **whole** identity prompt as a template. Empty inherits the built-in. See [Prompts](prompts.md). |
-| `livePrompt`       | string                               | `''`               | The per-iteration live-state block. Empty inherits; a single space deletes the section.                      |
-| `wrapUpPrompt`     | string                               | `''`               | Appended in the last few iterations. Empty inherits; a single space silences it.                             |
-| `platformPrompt`   | string                               | `''`               | Fills `{{platformPolicy}}` — the `## Running commands` section. Two built-ins, host and toolbox.             |
-| `toolboxPrompt`    | string                               | `''`               | The `## Toolbox: <name>` section. Only rendered while `toolbox.name` is set.                                 |
-| `toolPolicyPrompt` | string                               | `''`               | The tool-output policy. A template naming neither `{{tag}}` nor `{{nonce}}` saves with a warning.            |
-| `promptMode`       | `template\|raw`                      | `'template'`       | `raw` makes `systemPrompt` the entire system message — nothing is placed around it.                          |
-| `toolPrompts`      | `Record<string, ToolPromptOverride>` | `{}`               | Per-tool replacements for the description and the argument descriptions. See [Tools](tools.md).              |
-| `enabled`          | boolean                              | `true`             |                                                                                                              |
-| `tools`            | `Record<string, allow\|ask\|deny>`   | see below          | **Replaces, never merges.** A tool absent from the map is not enabled.                                       |
-| `exec`             | patch of `tools.exec`                | _unset_            | Merged over the install-wide exec config, so one agent can hold a tighter allow-list.                        |
-| `toolbox`          | `{ name, network }`                  | `{ name: '', … }`  | Empty name runs `exec` on the host. See [Toolboxes](toolboxes.md).                                           |
-| `subagents`        | `{ id, prompt, permission }[]`       | `[]`               | Agents this one may delegate to, in the order the model sees them.                                           |
+| Key                | Type                                 | Default           | Notes                                                                                                        |
+| ------------------ | ------------------------------------ | ----------------- | ------------------------------------------------------------------------------------------------------------ |
+| `label`            | string                               | `''`              | Falls back to the id.                                                                                        |
+| `systemPrompt`     | string                               | `''`              | The agent's **whole** identity prompt as a template. Empty inherits the built-in. See [Prompts](prompts.md). |
+| `livePrompt`       | string                               | `''`              | The per-iteration live-state block. Empty inherits; a single space deletes the section.                      |
+| `wrapUpPrompt`     | string                               | `''`              | Appended in the last few iterations. Empty inherits; a single space silences it.                             |
+| `platformPrompt`   | string                               | `''`              | Fills `{{platformPolicy}}` — the `## Running commands` section. Two built-ins, host and toolbox.             |
+| `toolboxPrompt`    | string                               | `''`              | The `## Toolbox: <name>` section. Only rendered while `toolbox.name` is set.                                 |
+| `toolPolicyPrompt` | string                               | `''`              | The tool-output policy. A template naming neither `{{tag}}` nor `{{nonce}}` saves with a warning.            |
+| `promptMode`       | `template\|raw`                      | `'template'`      | `raw` makes `systemPrompt` the entire system message — nothing is placed around it.                          |
+| `toolPrompts`      | `Record<string, ToolPromptOverride>` | `{}`              | Per-tool replacements for the description and the argument descriptions. See [Tools](tools.md).              |
+| `enabled`          | boolean                              | `true`            |                                                                                                              |
+| `tools`            | `Record<string, allow\|ask\|deny>`   | see below         | **Replaces, never merges.** A tool absent from the map is not enabled.                                       |
+| `exec`             | patch of `tools.exec`                | _unset_           | Merged over the install-wide exec config, so one agent can hold a tighter allow-list.                        |
+| `toolbox`          | `{ name, network }`                  | `{ name: '', … }` | Empty name runs `exec` on the host. See [Toolboxes](toolboxes.md).                                           |
+| `subagents`        | `{ id, prompt, permission }[]`       | `[]`              | Agents this one may delegate to, in the order the model sees them.                                           |
 
 The six prompt templates share one rule: **`''` inherits the built-in, and a single space
 deletes the section.** Empty has to keep meaning "I have not chosen" or an install would

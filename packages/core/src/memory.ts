@@ -93,16 +93,16 @@ export const MEMORY_INDEX_PATH: string = `${MEMORY_DIRNAME}/${MEMORY_INDEX_FILEN
 /**
  * The most of one memory that is read at all.
  *
- * A different job from `memoryMaxPromptTokens`, and the two are not
- * interchangeable: this one stops a runaway file from reaching a Buffer, and the
- * token budget decides how many index lines a model sees.
+ * A different job from `MAX_MEMORIES`, and the two are not interchangeable:
+ * this one stops a runaway *file* from reaching a Buffer, and that one bounds
+ * how many index lines a model is shown.
  *
  * The same figure as `SKILL_MAX_BYTES`, and the argument transfers: this is what
  * a `read_file` on one of these costs when the model opens it. It used to be
- * 256 KB — twenty times the prompt budget — because the whole file was inlined
- * and compaction needed something oversized to compact. Nothing here reaches the
- * prompt now, and one fact does not need twelve kilobytes, let alone twenty
- * times that.
+ * 256 KB — twenty times the prompt budget of the day — because the whole file
+ * was inlined and compaction needed something oversized to compact. Nothing here
+ * reaches the prompt now, and one fact does not need twelve kilobytes, let alone
+ * twenty times that.
  */
 export const MEMORY_MAX_BYTES: number = 12 * 1024;
 

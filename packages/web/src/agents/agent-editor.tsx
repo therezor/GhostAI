@@ -234,6 +234,21 @@ const VOLATILE: readonly string[] = [
  * manifest order is the useful order.
  */
 const EXEC_TOOL = 'exec';
+
+/**
+ * The two tools that are the write half of a whole feature.
+ *
+ * Grouped away from the action tools because denying one of these does more than
+ * refuse a call: `runtime.ts` gates the skills catalogue and the memory index on
+ * exactly these permissions, so an operator flipping one here also changes what
+ * every prompt on the workspace carries. That is a different size of decision
+ * from "may this agent write a file", and a row in the same alphabetical list
+ * does not say so.
+ *
+ * Kept as names rather than derived from a risk band: both are `write`, and so
+ * is `write_file`, which is squarely an action tool.
+ */
+const FEATURE_TOOLS: ReadonlySet<string> = new Set(['memory', 'skill']);
 /**
  * The dropdown's stand-in for "no toolbox".
  *
@@ -522,7 +537,6 @@ function Editor({
     maxTokens: bind('maxTokens'),
     contextWindowTokens: bind('contextWindowTokens'),
     toolTimeoutSeconds: bind('toolTimeoutSeconds'),
-    memoryMaxPromptTokens: bind('memoryMaxPromptTokens'),
   } satisfies Record<string, Bound>;
 
   const switches = {
@@ -610,6 +624,30 @@ function Editor({
     });
   }, [tools.data, form.tools, toolboxToolNames]);
 
+  /**
+   * `memory` and `skill`, split out of the list above into a group of their own.
+   *
+   * They are not the same kind of thing as the rows they sat among. `read_file`,
+   * `exec` and the rest are *actions* an agent takes during a turn, and a
+   * permission on one is about that call. These two are the write halves of two
+   * whole features, and denying one also removes a section from every prompt on
+   * the workspace — so an operator setting `memory` to `deny` in an alphabetical
+   * list beside `list_dir` is making a much larger decision than the row admits.
+   *
+   * The switches above are the front door for that decision. This group is the
+   * same values with the `ask` state and the wording overrides the switches do
+   * not offer, which is why both exist and why they are next to each other.
+   */
+  const featureToolNames = useMemo(
+    () => toolNames.filter((name) => FEATURE_TOOLS.has(name)),
+    [toolNames],
+  );
+
+  const actionToolNames = useMemo(
+    () => toolNames.filter((name) => !FEATURE_TOOLS.has(name)),
+    [toolNames],
+  );
+
   const registered = useMemo(
     () => new Map((tools.data?.tools ?? []).map((tool) => [tool.name, tool])),
     [tools.data],
@@ -623,11 +661,18 @@ function Editor({
    */
   const toolsOff = !switches.toolsEnabled.checked;
 
-  // The memory section is gated on the `memory` tool rather than on
-  // `toolsEnabled`, exactly as `runtime.ts` gates the contributor. Absent counts
-  // as denied there, so it counts as denied here.
+  // Both prompt sections are gated on their own tool rather than on
+  // `toolsEnabled`, exactly as `runtime.ts` gates the two contributors. Absent
+  // counts as denied there, so it counts as denied here.
+  //
+  // `ask` reads as on, because it is: the capability is granted and answered per
+  // call, and `runtime.ts` places the section for it. Switching off and on again
+  // therefore lands on `allow` rather than back on `ask` — the Tools row below
+  // is where that distinction is made, and this switch does not pretend to.
   const memoryOff =
     form.tools.memory === undefined || form.tools.memory === 'deny';
+  const skillsOff =
+    form.tools.skill === undefined || form.tools.skill === 'deny';
 
   const setToolPermission = (
     name: string,
@@ -641,6 +686,35 @@ function Editor({
     // the way to the patch — doing it here instead would delete a row from under
     // the operator the moment they cleared the box to start again.
     update('toolPrompts', { ...form.toolPrompts, [name]: override });
+  };
+
+  /**
+   * One row, so the two groups below cannot drift apart.
+   *
+   * They render the same control over the same state and differ only in which
+   * heading they sit under — which is exactly the case where two copies of the
+   * JSX end up with two sets of props.
+   */
+  const toolRow = (name: string): JSX.Element => {
+    const tool = registered.get(name);
+    return (
+      <ToolRow
+        key={name}
+        name={name}
+        detail={tool?.description ?? ''}
+        risk={tool?.risk}
+        permission={form.tools[name] ?? 'deny'}
+        fields={tool === undefined ? [] : parameterFields(tool.parameters)}
+        override={form.toolPrompts[name]}
+        disabled={toolsOff}
+        onChange={(next) => {
+          setToolPermission(name, next);
+        }}
+        onOverrideChange={(next) => {
+          setToolPrompt(name, next);
+        }}
+      />
+    );
   };
 
   const setSubagents = (next: readonly SubagentRef[]): void => {
@@ -1066,37 +1140,37 @@ function Editor({
             message={t('agents.toolsOffNote')}
           />
         )}
-        {toolNames.length > 0 && (
+        {actionToolNames.length > 0 && (
           <ul
             className={cn(
               'stack agent-editor__tools',
               toolsOff && 'agent-editor__tools--off',
             )}
           >
-            {toolNames.map((name) => {
-              const tool = registered.get(name);
-              return (
-                <ToolRow
-                  key={name}
-                  name={name}
-                  detail={tool?.description ?? ''}
-                  risk={tool?.risk}
-                  permission={form.tools[name] ?? 'deny'}
-                  fields={
-                    tool === undefined ? [] : parameterFields(tool.parameters)
-                  }
-                  override={form.toolPrompts[name]}
-                  disabled={toolsOff}
-                  onChange={(next) => {
-                    setToolPermission(name, next);
-                  }}
-                  onOverrideChange={(next) => {
-                    setToolPrompt(name, next);
-                  }}
-                />
-              );
-            })}
+            {actionToolNames.map((name) => toolRow(name))}
           </ul>
+        )}
+
+        {/* Below the action tools rather than above them, and under the same
+            kind of heading the toolbox group uses. An operator scanning for
+            "what may this agent do in a turn" reads the list above; these two
+            are read when the question is "does this agent have memory at all",
+            which is the question the switches near the top answer. */}
+        {featureToolNames.length > 0 && (
+          <>
+            <h3 className="agent-editor__tool-group">
+              {t('agents.featureToolsGroup')}
+            </h3>
+            <p className="page__note">{t('agents.featureToolsNote')}</p>
+            <ul
+              className={cn(
+                'stack agent-editor__tools',
+                toolsOff && 'agent-editor__tools--off',
+              )}
+            >
+              {featureToolNames.map((name) => toolRow(name))}
+            </ul>
+          </>
         )}
 
         {/* Only when the box exposes callables. A `prompt` toolbox's programs
@@ -1317,19 +1391,39 @@ function Editor({
         </FieldGrid>
       </Section>
 
-      {/* After Limits, because it *is* a budget — and before the prompt, which
-          is where the memory it describes ends up. Whether this agent may
-          remember at all is the `memory` row in Tools above: the permission is
-          the switch, so there is deliberately no second one here to disagree
-          with it. */}
-      <Section title={t('agents.memory')} description={t('agents.memoryDesc')}>
+      {/* Before the prompt section, which is where both of these end up.
+
+          These two switches *are* the `memory` and `skill` rows in Tools below —
+          they write the same `allow`/`deny`, and the row moves when the switch
+          does. That is deliberate, and is why there is no second config key: a
+          boolean beside the permission would be a way for the two to disagree,
+          and the permission is the one the runtime already gates the prompt
+          section on.
+
+          What they buy over the rows is that the rows do not look like feature
+          switches. `memory` and `skill` sit in an alphabetical list of file and
+          shell tools, where "this agent does not remember" reads as one denied
+          call rather than as the whole capability being off. */}
+      <Section
+        title={t('agents.knowledge')}
+        description={t('agents.knowledgeDesc')}
+      >
         <FieldGrid>
-          <BoundField
-            label={t('agents.memoryBudget')}
-            bound={fields.memoryMaxPromptTokens}
-            inputMode="numeric"
-            error={errors.memoryMaxPromptTokens}
-            hint={t('agents.memoryBudgetHint')}
+          <SwitchRow
+            label={t('agents.memoryEnabled')}
+            hint={t('agents.memoryEnabledHint')}
+            checked={!memoryOff}
+            onCheckedChange={(next) => {
+              setToolPermission('memory', next ? 'allow' : 'deny');
+            }}
+          />
+          <SwitchRow
+            label={t('agents.skillsEnabled')}
+            hint={t('agents.skillsEnabledHint')}
+            checked={!skillsOff}
+            onCheckedChange={(next) => {
+              setToolPermission('skill', next ? 'allow' : 'deny');
+            }}
           />
         </FieldGrid>
       </Section>

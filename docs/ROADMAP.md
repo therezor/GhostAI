@@ -27,8 +27,10 @@ building a second one beside it.
       name again. The section's wording is `memoryPrompt`, the seventh editable
       prompt template. The tool's permission is the feature's only switch, which
       is also how `skill` gained one. **Compaction was removed** with the single
-      accumulating file it folded into; proactive learning (`learningInterval`,
-      `last_learned_seq`) is still to come, as is `/memory` in the browser
+      accumulating file it folded into, and the config keys that served it went
+      with it — as did `learningEnabled`, `learningInterval` and `memory.shared`,
+      three that were declared and never read. Proactive learning over
+      `last_learned_seq` is still to come, as is `/memory` in the browser
       composer, and there is no delete operation.
 - [x] **Skills** — reusable instruction bundles in `<workspace>/skills/`, one
       directory per skill. Every skill's description is indexed into the static

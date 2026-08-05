@@ -93,7 +93,7 @@ export {
 export {
   MemoryContributor,
   renderMemorySection,
-  type MemoryBudget,
+  type MemorySectionOptions,
   type MemoryContributorOptions,
 } from './memory-contributor.js';
 

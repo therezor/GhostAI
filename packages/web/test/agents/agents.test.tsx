@@ -765,6 +765,40 @@ describe('the default agent', () => {
     ).toBeInTheDocument();
   });
 
+  it('switches memory off by denying the tool the section is gated on', async () => {
+    // The switch and the Tools row are one value, not two that can disagree.
+    // Asserted through the row, because that is where the runtime reads it.
+    const { user } = mount('/agents/default');
+
+    await user.click(await screen.findByLabelText('Remember across sessions'));
+
+    expect(
+      await screen.findByRole('combobox', { name: 'Permission for memory' }),
+    ).toHaveTextContent('Disabled');
+  });
+
+  it('switches skills off the same way, through its own tool', async () => {
+    const { user } = mount('/agents/default');
+
+    await user.click(
+      await screen.findByLabelText('Use the workspace’s skills'),
+    );
+
+    expect(
+      await screen.findByRole('combobox', { name: 'Permission for skill' }),
+    ).toHaveTextContent('Disabled');
+  });
+
+  it('follows the Tools row, since the two are the same value', async () => {
+    // The other direction: denying in the table must move the switch, or the
+    // screen shows one thing enabled and the same thing disabled.
+    const { user } = mount('/agents/default');
+
+    await pick(user, 'memory', 'Disabled');
+
+    expect(screen.getByLabelText('Remember across sessions')).not.toBeChecked();
+  });
+
   it('removes a section with a button, since a single space cannot be typed visibly', async () => {
     const { user } = mount('/agents/default');
 
@@ -1149,6 +1183,55 @@ describe('a named agent', () => {
     });
     // The defaults are not touched by editing one agent.
     expect(patch?.agents).not.toHaveProperty('defaults');
+  });
+
+  it('groups memory and skill away from the action tools', async () => {
+    // Denying one of these removes a prompt section for the whole workspace,
+    // which is a different size of decision from denying a file write — and an
+    // alphabetical list beside `list_dir` does not say so.
+    mount('/agents/reviewer', {
+      '/api/tools': [
+        200,
+        {
+          tools: [
+            { name: 'exec', description: '', risk: 'exec', parameters: {} },
+            {
+              name: 'read_file',
+              description: '',
+              risk: 'safe',
+              parameters: {},
+            },
+            { name: 'memory', description: '', risk: 'write', parameters: {} },
+            { name: 'skill', description: '', risk: 'safe', parameters: {} },
+          ],
+        },
+      ],
+    });
+
+    // `memory`, not `read_file`: the fixture's own tool map already renders a
+    // `read_file` row before the registry answers, so awaiting that one proves
+    // nothing about whether the mocked tools have arrived.
+    await screen.findByRole('combobox', { name: 'Permission for memory' });
+    const lists = within(
+      screen.getByRole('region', { name: 'Tools' }),
+    ).getAllByRole('list');
+
+    // Two lists, and the feature tools are the whole of the second one. A row's
+    // text opens with the tool's own name, so the grouping is readable off the
+    // prefixes — the same handle the ordering test above uses.
+    const named = lists.map((list) =>
+      within(list)
+        .getAllByRole('listitem')
+        .map((row) => row.textContent),
+    );
+
+    expect(named[0]?.some((row) => row.startsWith('memory'))).toBe(false);
+    expect(named[0]?.some((row) => row.startsWith('skill'))).toBe(false);
+    expect(named[0]?.some((row) => row.startsWith('exec'))).toBe(true);
+
+    expect(named[1]).toHaveLength(2);
+    expect(named[1]?.[0]?.startsWith('memory')).toBe(true);
+    expect(named[1]?.[1]?.startsWith('skill')).toBe(true);
   });
 
   it('puts exec at the top, above the alphabetical rest', async () => {

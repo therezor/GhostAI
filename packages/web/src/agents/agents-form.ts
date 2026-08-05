@@ -113,7 +113,6 @@ export interface AgentForm {
   readonly loopWallTimeoutSeconds: string;
   readonly visionEnabled: boolean;
   readonly toolsEnabled: boolean;
-  readonly memoryMaxPromptTokens: string;
 }
 
 export const REASONING_EFFORTS: readonly ReasoningEffort[] = [
@@ -138,7 +137,6 @@ export function toAgentForm(defaults: AgentDefaults): AgentForm {
     loopWallTimeoutSeconds: msToSeconds(defaults.loopWallTimeoutMs),
     visionEnabled: defaults.visionEnabled,
     toolsEnabled: defaults.toolsEnabled,
-    memoryMaxPromptTokens: String(defaults.memoryMaxPromptTokens),
   };
 }
 
@@ -174,10 +172,6 @@ export function toAgentPatch(form: AgentForm, t: TFunction): PatchResult {
   const loopWallTimeout = parseNumber(form.loopWallTimeoutSeconds, t, {
     min: 0,
   });
-  const memoryMax = parseNumber(form.memoryMaxPromptTokens, t, {
-    integer: true,
-    min: 0,
-  });
 
   const collect = (
     field: string,
@@ -191,7 +185,6 @@ export function toAgentPatch(form: AgentForm, t: TFunction): PatchResult {
   collect('maxToolIterations', maxToolIterations);
   collect('toolTimeoutSeconds', toolTimeout);
   collect('loopWallTimeoutSeconds', loopWallTimeout);
-  collect('memoryMaxPromptTokens', memoryMax);
 
   if (form.provider.trim() === '') errors.provider = 'Required';
   // An empty model is not "resolve one for me" — see `MODEL_REQUIRED`.
@@ -203,7 +196,6 @@ export function toAgentPatch(form: AgentForm, t: TFunction): PatchResult {
     !maxToolIterations.ok ||
     !toolTimeout.ok ||
     !loopWallTimeout.ok ||
-    !memoryMax.ok ||
     Object.keys(errors).length > 0
   ) {
     return { ok: false, errors };
@@ -232,7 +224,6 @@ export function toAgentPatch(form: AgentForm, t: TFunction): PatchResult {
           loopWallTimeoutMs: secondsToMs(loopWallTimeout.value),
           visionEnabled: form.visionEnabled,
           toolsEnabled: form.toolsEnabled,
-          memoryMaxPromptTokens: memoryMax.value,
           // `null` when blank rather than omitted, and that is the whole of
           // being able to clear these two. `agents.defaults` merges per field,
           // so an omitted key preserves what is stored — emptying the
@@ -311,7 +302,6 @@ export interface AgentEntryForm {
    * permission in `tools` below, and a second switch beside it is how the two
    * come to disagree.
    */
-  readonly memoryMaxPromptTokens: string;
   /**
    * Tool name → permission. A name absent from the map is not enabled.
    *
@@ -387,9 +377,6 @@ export function toAgentEntryForm(
     maxTokens: String(entry.maxTokens ?? defaults.maxTokens),
     contextWindowTokens: String(
       entry.contextWindowTokens ?? defaults.contextWindowTokens,
-    ),
-    memoryMaxPromptTokens: String(
-      entry.memoryMaxPromptTokens ?? defaults.memoryMaxPromptTokens,
     ),
     // Not `?? ''` on the whole expression: `0` is a temperature, and a falsy
     // check here would render it as "the provider's own".
@@ -513,7 +500,6 @@ function ownFields(form: AgentEntryForm, entry: AgentEntry): AgentOwnFields {
     toolTimeoutMs,
     toolbox,
     subagents,
-    memoryMaxPromptTokens,
     ...carried
   } = entry;
 
@@ -663,17 +649,11 @@ export function toAgentEntryPatch(
     min: 0,
     max: 2,
   });
-  const memoryMax = required(
-    'memoryMaxPromptTokens',
-    form.memoryMaxPromptTokens,
-    { integer: true, min: 0 },
-  );
 
   if (
     maxTokens === undefined ||
     contextWindowTokens === undefined ||
     toolTimeout === undefined ||
-    memoryMax === undefined ||
     Object.keys(errors).length > 0
   ) {
     return { ok: false, errors };
@@ -691,7 +671,6 @@ export function toAgentEntryPatch(
             maxTokens,
             contextWindowTokens,
             toolTimeoutMs: secondsToMs(toolTimeout),
-            memoryMaxPromptTokens: memoryMax,
             ...(temperature === undefined ? {} : { temperature }),
             ...(isReasoningEffort(form.reasoningEffort)
               ? { reasoningEffort: form.reasoningEffort }

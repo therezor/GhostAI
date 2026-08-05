@@ -45,21 +45,34 @@ writing the generated index over it.
 
 ## The switch is the tool
 
-There is no `memoryEnabled` setting, deliberately. A tool already carries `allow`, `ask`
-or `deny` per agent, already appears in the settings UI, and already lives in
+There is no `memoryEnabled` config key, deliberately. A tool already carries `allow`,
+`ask` or `deny` per agent, already appears in the settings UI, and already lives in
 `config.json` — which is exactly "this capability is on, off, or gated". A boolean beside
 it would be a second way to say the same thing, and two switches for one thing is how
 they come to disagree.
 
-Denying `memory` removes the prompt section as well as the tool. An agent that cannot
-write its memory should not still be paying for it in every request.
+**There is a switch on the screen, and it writes that permission.** The agent editor's
+_Memory and skills_ section carries `Remember across sessions` and `Use the workspace's
+skills`, and each one sets `tools.memory` / `tools.skill` to `allow` or `deny`. It is the
+same value the Tools table below shows, and the row moves when the switch does. What the
+switch buys is that the row does not read as a feature: `memory` sits in an alphabetical
+list beside `read_file` and `exec`, where turning it off looks like denying one call
+rather than switching off the whole capability.
 
-| You want                                    | Do this                                   |
-| ------------------------------------------- | ----------------------------------------- |
-| This agent to stop remembering              | Set `memory` to `deny`, or `/memory off`  |
-| Memories kept on disk but out of the prompt | `memoryMaxPromptTokens: 0`                |
-| To approve each thing it records            | Set `memory` to `ask` — the section stays |
-| The section gone, but the tool kept         | `memoryPrompt: " "` — a single space      |
+Denying `memory` removes the prompt section as well as the tool — that gating is in
+`runtime.ts`, and it is what makes one switch enough. An agent that cannot write its
+memory should not still be paying to be told what it knows.
+
+| You want                            | Do this                                      |
+| ----------------------------------- | -------------------------------------------- |
+| This agent to stop remembering      | The switch, `/memory off`, or `memory: deny` |
+| To approve each thing it records    | Set `memory` to `ask` — the section stays    |
+| The section gone, but the tool kept | `memoryPrompt: " "` — a single space         |
+
+**Off means off, in both directions.** There is no way to keep the index in the prompt
+while denying the write, and no way to record while paying nothing — `memoryMaxPromptTokens: 0`
+used to be the second of those and is gone. Both are coherent things to want; neither was
+worth a second key that could disagree with the first.
 
 `/memory off` changes the **agent**, not the session: every conversation on that agent is
 affected, which is the same thing ticking the box in Settings does.
@@ -216,18 +229,27 @@ write. There is no migration.
 windowing, fork and truncate — but nothing advances it any more. It is a floor at zero
 until something else needs one.
 
-## The budget
+## The bounds
 
-| Cap                     | Value                  | What it bounds                                   |
-| ----------------------- | ---------------------- | ------------------------------------------------ |
-| `memoryMaxPromptTokens` | config, default `2000` | What the **index** costs. `0` places no section. |
-| `MAX_MEMORIES`          | 200                    | How many are advertised at all.                  |
-| `MEMORY_MAX_BYTES`      | 12 KB                  | How much of one file is read.                    |
-| `MAX_MEMORY_NAME_CHARS` | 64                     | How long a slug may be.                          |
+**None of these is configurable, and there is no token budget.**
 
-**`MAX_MEMORIES` is the cap that actually binds.** An index line is roughly fifteen
-tokens, so the default budget affords well over a hundred of them and the 200 wall
-arrives first. The token budget is the backstop; `0` is the setting people reach for.
+| Cap                            | Value | What it bounds                  |
+| ------------------------------ | ----- | ------------------------------- |
+| `MAX_MEMORIES`                 | 200   | How many are advertised at all. |
+| `MAX_MEMORY_DESCRIPTION_CHARS` | 200   | How long one index line runs.   |
+| `MEMORY_MAX_BYTES`             | 12 KB | How much of one file is read.   |
+| `MAX_MEMORY_NAME_CHARS`        | 64    | How long a slug may be.         |
+
+`memoryMaxPromptTokens` used to sit above these and was removed. It never bound: an index
+line is roughly fifteen tokens, so its default of 2000 afforded well over a hundred lines
+while `MAX_MEMORIES` stopped at 200 — a knob whose value never decides anything reads as a
+lever and is not one. Its second job, `0` meaning "on disk, out of the prompt", belonged
+to the permission and is now the switch.
+
+The ceiling that remains is the product of the first two: 200 lines of at most ~200
+characters is roughly 12k tokens in the static half if a workspace really fills the
+folder. That is the cost of a very large memory store, and it is paid once per turn in
+the cached prefix rather than per request.
 
 `MEMORY_MAX_BYTES` is the same figure as `SKILL_MAX_BYTES` and the argument transfers: it
 is what a `read_file` on one of these costs when the model opens it. It was 256 KB when

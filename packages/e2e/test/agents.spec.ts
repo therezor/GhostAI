@@ -119,34 +119,45 @@ test.describe('agents', () => {
       .toBe(2048);
   });
 
-  test('a memory budget saves onto the agent that set it', async ({
+  test('the memory switch denies the tool that gates the section', async ({
     app,
     harness,
   }) => {
     await app.request.patch(`${harness.url}/api/settings`, {
-      data: { agents: { list: { reviewer: { label: 'Reviewer' } } } },
+      data: {
+        agents: {
+          list: {
+            reviewer: {
+              label: 'Reviewer',
+              tools: { memory: 'allow', skill: 'allow' },
+            },
+          },
+        },
+      },
     });
 
     await app.goto(`${harness.url}/agents/reviewer`);
-    await app.getByLabel('Memory index in the prompt (tokens)').fill('900');
+    await app.getByLabel('Remember across sessions').click();
     await app.getByRole('button', { name: 'Save changes' }).click();
 
-    // The persisted value, read back from the API — not the saving state the
-    // button passes through, which is the transient this suite must never
-    // assert on.
+    // The permission, read back from the API — the switch and the Tools row are
+    // one value, and this is the one that decides whether the section is placed.
     await expect
       .poll(async () => {
         const response = await app.request.get(`${harness.url}/api/settings`);
         const body = (await response.json()) as {
           config: {
             agents: {
-              list: Record<string, { memoryMaxPromptTokens?: number }>;
+              list: Record<
+                string,
+                { tools?: Record<string, string> } | undefined
+              >;
             };
           };
         };
-        return body.config.agents.list.reviewer?.memoryMaxPromptTokens;
+        return body.config.agents.list.reviewer?.tools?.memory;
       })
-      .toBe(900);
+      .toBe('deny');
   });
 
   test('a memory prompt saves onto the agent that wrote it', async ({

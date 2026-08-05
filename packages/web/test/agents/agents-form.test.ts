@@ -780,44 +780,47 @@ describe('subagents', () => {
   });
 });
 
-describe('memory settings', () => {
-  it('shows the defaults for an agent that stored none', () => {
-    const shown = toAgentEntryForm(EMPTY, DEFAULTS);
+describe('memory and skills', () => {
+  it('reads a granted tool as on, and an absent one as off', () => {
+    // Absent is denied, which is `runtime.ts`'s rule for the contributor too —
+    // an install predating these tools has no key and gets no section.
+    const granted = AgentEntrySchema.parse({
+      tools: { memory: 'allow', skill: 'allow' },
+    });
+    const absent = AgentEntrySchema.parse({ tools: { read_file: 'allow' } });
 
-    expect(shown.memoryMaxPromptTokens).toBe(
-      String(DEFAULTS.memoryMaxPromptTokens),
-    );
+    expect(toAgentEntryForm(granted, DEFAULTS).tools).toMatchObject({
+      memory: 'allow',
+      skill: 'allow',
+    });
+    expect(toAgentEntryForm(absent, DEFAULTS).tools.memory).toBeUndefined();
+    expect(toAgentEntryForm(absent, DEFAULTS).tools.skill).toBeUndefined();
   });
 
-  it('shows what the agent stored over the default', () => {
-    const entry = AgentEntrySchema.parse({ memoryMaxPromptTokens: 500 });
-    expect(toAgentEntryForm(entry, DEFAULTS).memoryMaxPromptTokens).toBe('500');
-  });
+  it('writes the permission the switch stands for, and nothing beside it', () => {
+    // The switch and the Tools row are one value. A second key here is what the
+    // permission was chosen over, so the patch must carry no other trace.
+    const stored = AgentEntrySchema.parse({
+      tools: { read_file: 'allow', memory: 'allow', skill: 'allow' },
+    });
 
-  it('writes the budget onto the entry', () => {
     const patch = parsed(
       toAgentEntryPatch(
         'reviewer',
-        form({ memoryMaxPromptTokens: '900' }),
-        EMPTY,
+        {
+          ...toAgentEntryForm(stored, DEFAULTS),
+          tools: { read_file: 'allow', memory: 'deny', skill: 'deny' },
+        },
+        stored,
         t,
       ),
     );
 
-    expect(patch).toMatchObject({ memoryMaxPromptTokens: 900 });
-  });
-
-  it('accepts zero, which is how memory is kept out of the prompt', () => {
-    const patch = parsed(
-      toAgentEntryPatch(
-        'reviewer',
-        form({ memoryMaxPromptTokens: '0' }),
-        EMPTY,
-        t,
-      ),
-    );
-
-    expect(patch).toMatchObject({ memoryMaxPromptTokens: 0 });
+    expect(patch).toMatchObject({
+      tools: { read_file: 'allow', memory: 'deny', skill: 'deny' },
+    });
+    expect(patch).not.toHaveProperty('memoryEnabled');
+    expect(patch).not.toHaveProperty('skillsEnabled');
   });
 
   it('carries the memory prompt raw, so a space can delete the section', () => {
@@ -852,7 +855,7 @@ describe('memory settings', () => {
         'reviewer',
         {
           ...toAgentEntryForm(stored, DEFAULTS),
-          memoryMaxPromptTokens: '2500',
+          memoryPrompt: '## What I know\n\n{{index}}',
         },
         stored,
         t,
@@ -860,7 +863,7 @@ describe('memory settings', () => {
     );
 
     expect(patch).toMatchObject({
-      memoryMaxPromptTokens: 2500,
+      memoryPrompt: '## What I know\n\n{{index}}',
       label: 'Reviewer',
       enabled: false,
       tools: { read_file: 'allow', memory: 'deny' },

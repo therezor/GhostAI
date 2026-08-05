@@ -1069,7 +1069,6 @@ class Runtime implements GhostRuntime {
         ...(granted(agent.tools, 'memory')
           ? [
               new MemoryContributor({
-                maxTokens: agent.defaults.memoryMaxPromptTokens,
                 // The seventh section template, and the only one that does not
                 // travel on `agent` below: the other six are what the *prompt
                 // builder* needs, and this section is a contributor's. So the

@@ -205,16 +205,6 @@ export const AgentDefaultsSchema = z.object({
    * be used at all.
    */
   toolsEnabled: z.boolean().default(true),
-  /**
-   * What the memory *index* may cost in the prompt.
-   *
-   * It bounds an index rather than a file now: memory is one file per fact and
-   * only the index lines reach the prompt, so this is a cap on how many of them
-   * are advertised, not on how much of one memory is shown. Zero places no
-   * section at all, which keeps memory on disk and out of the prompt with no
-   * second key to say so.
-   */
-  memoryMaxPromptTokens: z.number().int().nonnegative().default(2000),
   pinnedSkills: z.array(z.string()).default([]),
   maxPinnedSkills: z.number().int().nonnegative().default(5),
 });

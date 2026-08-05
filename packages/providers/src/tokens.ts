@@ -16,10 +16,9 @@
  * consolidation budget as the reason the second exists, and both halves of that
  * turned out to be wrong. There is no memory *package* — memory reaches the
  * prompt through `ContextContributor`, so it lives in `@ghostai/agent` beside
- * skills. And what `memoryMaxPromptTokens` now bounds is an *index*, where being
- * wrong by 15% costs a line either way and `MAX_MEMORIES` is the cap that
- * actually binds. A character heuristic erring high on prose is the right shape
- * for that. See `docs/memory.md`.
+ * skills. And memory has no token budget at all any more — what bounds its index
+ * is `MAX_MEMORIES`, a count of files, which no tokenizer is involved in. See
+ * `docs/memory.md`.
  *
  * `loadTokenCounter` therefore has no caller in the tree today. It is kept
  * because the question it answers is real — it is what a future feature sizing

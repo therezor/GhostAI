@@ -122,7 +122,7 @@ describe('toAgentPatch', () => {
         ...toAgentForm(defaults()),
         maxTokens: '',
         temperature: '9',
-        memoryMaxPromptTokens: 'x',
+        maxToolIterations: 'x',
       },
       t,
     );
@@ -133,7 +133,7 @@ describe('toAgentPatch', () => {
     expect(result.errors).toEqual({
       maxTokens: 'Required',
       temperature: 'Must be at most 2',
-      memoryMaxPromptTokens: 'Must be a number',
+      maxToolIterations: 'Must be a number',
     });
   });
 
