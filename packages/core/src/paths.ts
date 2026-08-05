@@ -76,14 +76,25 @@ export interface GhostPaths {
    */
   readonly workspace: string;
   /**
-   * The parent of every agent's own directory — its memory and its skills.
+   * The parent of every agent's own directory, beside the workspace.
    *
-   * Beside the workspace rather than inside it, and that is a security
-   * boundary rather than tidiness: the jail root *is* the workspace, so memory
-   * kept in there would be readable and **writable** by `write_file`, which
-   * turns prompt injection into a way of rewriting the agent's own system
-   * prompt. What an agent has learned is changed through memory tools or not
-   * at all.
+   * **Nothing writes here yet, and memory is no longer what will.** This was
+   * described as the home of an agent's memory and skills, on the argument that
+   * the jail root *is* the workspace — so anything kept inside it is readable
+   * and **writable** by `write_file`, which turns prompt injection into a way of
+   * rewriting the agent's own system prompt.
+   *
+   * That argument is still true, and both features were placed inside the
+   * workspace anyway: `<workspace>/skills/` and `<workspace>/memory/memory.md`.
+   * The trade was taken deliberately in both cases — a skill sheet is meant to
+   * be committed beside the project it describes, and memory a person cannot see
+   * in a directory listing is memory they cannot correct. `docs/memory.md` and
+   * `docs/skills.md` each carry the argument and name the mitigation
+   * (`write_file: 'ask'`).
+   *
+   * The directory and `agentDirFor` are kept because the reasoning above is
+   * sound and a per-agent layer may still want it; `paths.test.ts` still asserts
+   * it stays outside the workspace.
    */
   readonly agentsDir: string;
   /**

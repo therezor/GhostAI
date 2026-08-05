@@ -119,6 +119,40 @@ test.describe('agents', () => {
       .toBe(2048);
   });
 
+  test('a memory budget saves onto the agent that set it', async ({
+    app,
+    harness,
+  }) => {
+    await app.request.patch(`${harness.url}/api/settings`, {
+      data: { agents: { list: { reviewer: { label: 'Reviewer' } } } },
+    });
+
+    await app.goto(`${harness.url}/agents/reviewer`);
+    // Both, and in this order deliberately: the threshold has to stay under the
+    // cap, so lowering only the cap is refused — which is the rule working, not
+    // a fixture detail to route around.
+    await app.getByLabel('Rewrite the notes above (tokens)').fill('700');
+    await app.getByLabel('Memory in the prompt (tokens)').fill('900');
+    await app.getByRole('button', { name: 'Save changes' }).click();
+
+    // The persisted value, read back from the API — not the saving state the
+    // button passes through, which is the transient this suite must never
+    // assert on.
+    await expect
+      .poll(async () => {
+        const response = await app.request.get(`${harness.url}/api/settings`);
+        const body = (await response.json()) as {
+          config: {
+            agents: {
+              list: Record<string, { memoryMaxPromptTokens?: number }>;
+            };
+          };
+        };
+        return body.config.agents.list.reviewer?.memoryMaxPromptTokens;
+      })
+      .toBe(900);
+  });
+
   test('a new agent is created holding the default’s settings', async ({
     app,
     harness,

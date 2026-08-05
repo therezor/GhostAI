@@ -2,17 +2,25 @@
 
 ## The built-ins
 
-Six, and the count is deliberate: anything expressible as a command is `exec`'s job. A
+Eight, and the count is deliberate: anything expressible as a command is `exec`'s job. A
 `grep` tool would be a worse `rg`, and a `move_file` tool would be a worse `mv`.
 
-| Tool         | Args                                        | Risk band | Does                                                           |
-| ------------ | ------------------------------------------- | --------- | -------------------------------------------------------------- |
-| `read_file`  | `path`, `offset?`, `limit?`                 | `safe`    | Reads a file in the workspace.                                 |
-| `list_dir`   | `path`, `recursive?`, `maxEntries?`         | `safe`    | Lists a directory.                                             |
-| `write_file` | `path`, `content`                           | `write`   | Creates or overwrites.                                         |
-| `edit_file`  | `path`, `oldText`, `newText`, `replaceAll?` | `write`   | Exact-match replacement.                                       |
-| `exec`       | `argv: string[]`, `timeoutMs?`              | `exec`    | Runs a program — on the host, or in a [toolbox](toolboxes.md). |
-| `automation` | `action`, plus a name, message and schedule | `exec`    | Schedules a turn for later. See below.                         |
+Six of them are capabilities the agent cannot get any other way. The last two —
+`memory` and `skill` — are not, and are here for a second reason: a tool carries a
+per-agent permission, so being a tool is what makes each feature switchable without a
+config flag beside it that could disagree. Denying either removes its prompt section too.
+See [Memory](memory.md) and [Skills](skills.md).
+
+| Tool         | Args                                        | Risk band | Does                                                             |
+| ------------ | ------------------------------------------- | --------- | ---------------------------------------------------------------- |
+| `read_file`  | `path`, `offset?`, `limit?`                 | `safe`    | Reads a file in the workspace.                                   |
+| `list_dir`   | `path`, `recursive?`, `maxEntries?`         | `safe`    | Lists a directory.                                               |
+| `write_file` | `path`, `content`                           | `write`   | Creates or overwrites.                                           |
+| `edit_file`  | `path`, `oldText`, `newText`, `replaceAll?` | `write`   | Exact-match replacement.                                         |
+| `exec`       | `argv: string[]`, `timeoutMs?`              | `exec`    | Runs a program — on the host, or in a [toolbox](toolboxes.md).   |
+| `automation` | `action`, plus a name, message and schedule | `exec`    | Schedules a turn for later. See below.                           |
+| `memory`     | `note`                                      | `write`   | Appends a durable note to [memory](memory.md). No path argument. |
+| `skill`      | `name`                                      | `safe`    | Opens one of the workspace's [skills](skills.md).                |
 
 All file paths resolve inside the workspace jail; see [Security](security.md). `exec`
 takes an argv array, never a command string.

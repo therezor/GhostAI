@@ -518,3 +518,144 @@ describe('/agent', () => {
     expect(out.text).toContain('scout  ·  scout');
   });
 });
+
+describe('/memory', () => {
+  const homes: string[] = [];
+
+  function runtimeIn(config?: unknown): ChatRuntime {
+    const home = mkdtempSync(join(tmpdir(), 'ghostai-memory-'));
+    homes.push(home);
+    mkdirSync(join(home, 'workspace'), { recursive: true });
+    if (config !== undefined) {
+      writeFileSync(join(home, 'config.json'), JSON.stringify(config));
+    }
+    return createChatRuntime({ home });
+  }
+
+  afterEach(() => {
+    while (homes.length > 0) {
+      const dir = homes.pop();
+      if (dir !== undefined) rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('says the tool is not granted on an install that predates it', async () => {
+    // The migration case, and the one everybody upgrading meets first:
+    // `DEFAULT_AGENT_TOOLS` seeds a *new* agent, so an existing config has no
+    // `memory` key and the answer must say so rather than reporting an empty
+    // memory.
+    const runtime = runtimeIn({
+      agents: { list: { default: { tools: { read_file: 'allow' } } } },
+    });
+    const { ctx, out } = context(runtime, 'cli:1');
+
+    await runSlashCommand('/memory', ctx);
+
+    expect(out.text).toContain('does not have the memory tool');
+  });
+
+  it('reports an empty memory once the tool is granted', async () => {
+    const runtime = runtimeIn();
+    const { ctx, out } = context(runtime, 'cli:1');
+
+    await runSlashCommand('/memory', ctx);
+
+    expect(out.text).toContain('nothing remembered yet');
+  });
+
+  it('reports what the memory costs when there is one', async () => {
+    const runtime = runtimeIn();
+    mkdirSync(join(runtime.jail.root, 'memory'), { recursive: true });
+    writeFileSync(
+      join(runtime.jail.root, 'memory', 'memory.md'),
+      '## Session 2026-08-05\n\n- Prefers rem over px.\n',
+    );
+    const { ctx, out } = context(runtime, 'cli:1');
+
+    await runSlashCommand('/memory', ctx);
+
+    expect(out.text).toContain('memory/memory.md');
+    expect(out.text).toContain('tokens');
+  });
+
+  it('mints no session row for a conversation that never spoke', async () => {
+    // `updateSession` calls `ensureSession`, so a command that wrote to the
+    // session row here would put an empty conversation in the web sidebar.
+    const runtime = runtimeIn();
+    const { ctx } = context(runtime, 'cli:never-spoken');
+
+    await runSlashCommand('/memory', ctx);
+    await runSlashCommand('/memory off', ctx);
+
+    expect(runtime.store.getSession('cli:never-spoken')).toBeUndefined();
+  });
+
+  it('turns memory off on the agent, and back on', async () => {
+    const runtime = runtimeIn();
+    const { ctx, out } = context(runtime, 'cli:1');
+
+    await runSlashCommand('/memory off', ctx);
+    expect(runtime.config.agents.list.default?.tools.memory).toBe('deny');
+    expect(out.text).toContain('no longer remembers');
+
+    await runSlashCommand('/memory on', ctx);
+    expect(runtime.config.agents.list.default?.tools.memory).toBe('allow');
+  });
+
+  it('keeps every other permission when it flips this one', async () => {
+    // `agents.list.*` is REPLACE_WHOLESALE, so a patch carrying only
+    // `{tools: {memory: 'deny'}}` would delete the rest of the map. This is the
+    // most likely way for this command to be wrong.
+    const runtime = runtimeIn({
+      agents: {
+        list: {
+          default: {
+            label: 'Primary',
+            tools: { read_file: 'allow', exec: 'deny', memory: 'allow' },
+          },
+        },
+      },
+    });
+    const { ctx } = context(runtime, 'cli:1');
+
+    await runSlashCommand('/memory off', ctx);
+
+    const entry = runtime.config.agents.list.default;
+    expect(entry?.tools).toMatchObject({
+      read_file: 'allow',
+      exec: 'deny',
+      memory: 'deny',
+    });
+    // And nothing else on the entry was dropped either.
+    expect(entry?.label).toBe('Primary');
+  });
+
+  it('refuses to compress for an agent that cannot remember', async () => {
+    const runtime = runtimeIn({
+      agents: { list: { default: { tools: { memory: 'deny' } } } },
+    });
+    const { ctx, out } = context(runtime, 'cli:1');
+
+    await runSlashCommand('/memory compress', ctx);
+
+    expect(out.text).toContain('does not have the memory tool');
+  });
+
+  it('says so when there is nothing to measure yet', async () => {
+    const runtime = runtimeIn();
+    const { ctx, out } = context(runtime, 'cli:never-spoken');
+
+    await runSlashCommand('/memory compress', ctx);
+
+    expect(out.text).toContain('nothing');
+  });
+
+  it('names its verbs when given one it does not know', async () => {
+    const runtime = runtimeIn();
+    const { ctx, out } = context(runtime, 'cli:1');
+
+    await runSlashCommand('/memory sideways', ctx);
+
+    expect(out.text).toContain('/memory compress');
+  });
+});

@@ -93,6 +93,35 @@ export {
 } from './skills-contributor.js';
 
 export {
+  MemoryContributor,
+  renderMemory,
+  type MemoryBudget,
+  type MemoryContributorOptions,
+} from './memory-contributor.js';
+
+export {
+  COMPACT_INSTRUCTION,
+  CONSOLIDATE_AT_FRACTION,
+  CONSOLIDATE_INSTRUCTION,
+  CONSOLIDATE_TO_FRACTION,
+  KEEP_RECENT_TURNS,
+  compactSections,
+  selectSpan,
+  transcript,
+  type SelectSpanOptions,
+  type Span,
+  type SpanRecord,
+} from './consolidation.js';
+
+export {
+  MemoryConsolidator,
+  type CompressionInput,
+  type CompressionResult,
+  type MemoryConsolidatorOptions,
+  type TurnConsolidator,
+} from './consolidator.js';
+
+export {
   MAX_PENDING_STEER,
   STEERING_PREFIX,
   SteeringQueue,

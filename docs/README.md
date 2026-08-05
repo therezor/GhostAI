@@ -10,8 +10,9 @@ in [ROADMAP.md](ROADMAP.md) and is not documented as though it works.
 | [Configuration](configuration.md) | Every key in `config.json`, its type and its default. Env vars. Patch semantics.     |
 | [Prompts](prompts.md)             | The three editable templates, their placeholders, and the caching split behind them. |
 | [Providers](providers.md)         | The registry, provider instances, resolution order, credentials, resilience.         |
-| [Tools & permissions](tools.md)   | The five built-in tools, and the `allow \| ask \| deny` model that gates them.       |
+| [Tools & permissions](tools.md)   | The eight built-in tools, and the `allow \| ask \| deny` model that gates them.      |
 | [Skills](skills.md)               | Instruction sheets in `<workspace>/skills/`, indexed or pinned into the prompt.      |
+| [Memory](memory.md)               | What an agent remembers between sessions, in `<workspace>/memory/memory.md`.         |
 | [Toolboxes](toolboxes.md)         | Running `exec` inside a pinned, hash-approved container instead of on the host.      |
 | [Web UI](web-ui.md)               | The screens, and what each one lets you do.                                          |
 

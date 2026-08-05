@@ -137,6 +137,22 @@ export {
   type SessionHistorySource,
 } from './history.js';
 
+export {
+  MEMORY_DIRNAME,
+  MEMORY_FILENAME,
+  MEMORY_MAX_BYTES,
+  MEMORY_PATH,
+  appendMemory,
+  parseSections,
+  readMemory,
+  renderMemoryFile,
+  withMemoryLock,
+  writeMemory,
+  type MemorySection,
+  type ParsedMemory,
+  type ReadMemoryOptions,
+} from './memory.js';
+
 export { MAX_TITLE_CHARS, deriveSessionTitle } from './session-title.js';
 
 export {

@@ -1050,3 +1050,142 @@ describe('skills', () => {
     expect(preview.staticPrompt).not.toContain('## Skills');
   });
 });
+
+describe('memory', () => {
+  /**
+   * A runtime whose workspace already holds a memory.
+   *
+   * `tools` is written onto the *default agent's entry*, because that is where
+   * a permission map lives — the whole point of the feature switch being the
+   * permission is that there is no key on `defaults` to set instead.
+   */
+  function withMemory(
+    text: string,
+    tools?: Record<string, string>,
+  ): GhostRuntime {
+    const home = tempHome({
+      agents: {
+        defaults: { provider: 'ollama', model: 'qwen3:8b' },
+        ...(tools === undefined ? {} : { list: { default: { tools } } }),
+      },
+    });
+    const dir = join(home, 'workspace', 'memory');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'memory.md'), text);
+    return build({ home });
+  }
+
+  it('inlines the workspace memory in the loop the runtime built', async () => {
+    // Through `previewPrompt` for the reason the skills block gives: it proves
+    // the composition root wired a contributor, not that the renderer works.
+    const runtime = withMemory('- Prefers rem over px.\n');
+
+    const preview = await runtime.requireLoop().previewPrompt({
+      sessionKey: 'session-1',
+    });
+
+    expect(preview.staticPrompt).toContain('## Memory');
+    expect(preview.staticPrompt).toContain('- Prefers rem over px.');
+  });
+
+  it('places no section when the workspace has no memory', async () => {
+    const preview = await ollama()
+      .requireLoop()
+      .previewPrompt({ sessionKey: 'session-1' });
+
+    expect(preview.staticPrompt).not.toContain('## Memory');
+  });
+
+  it('places no section for an agent that denied the tool', async () => {
+    // Denying `memory` has to remove the section as well as the tool. An agent
+    // that cannot write its memory should not still be paying for it in every
+    // prompt.
+    const runtime = withMemory('- Prefers rem over px.\n', {
+      read_file: 'allow',
+      memory: 'deny',
+    });
+
+    const preview = await runtime.requireLoop().previewPrompt({
+      sessionKey: 'session-1',
+    });
+
+    expect(preview.staticPrompt).not.toContain('## Memory');
+    expect(preview.staticPrompt).not.toContain('- Prefers rem over px.');
+  });
+
+  it('places no section for an agent whose map predates the tool', async () => {
+    // The migration case, and the one everybody upgrading will hit:
+    // `DEFAULT_AGENT_TOOLS` seeds a *new* agent, so an existing install has no
+    // `memory` key at all. Absent is denied — `docs/tools.md`'s rule.
+    const runtime = withMemory('- Prefers rem over px.\n', {
+      read_file: 'allow',
+      write_file: 'allow',
+    });
+
+    const preview = await runtime.requireLoop().previewPrompt({
+      sessionKey: 'session-1',
+    });
+
+    expect(preview.staticPrompt).not.toContain('## Memory');
+  });
+
+  it('still places the section when the tool is set to ask', async () => {
+    // `ask` is a capability this agent has, answered per call. The section
+    // belongs there; only `deny` removes it.
+    const runtime = withMemory('- Prefers rem over px.\n', {
+      memory: 'ask',
+    });
+
+    const preview = await runtime.requireLoop().previewPrompt({
+      sessionKey: 'session-1',
+    });
+
+    expect(preview.staticPrompt).toContain('## Memory');
+  });
+
+  it('drops the skills catalogue for an agent that denied that tool too', async () => {
+    const home = tempHome({
+      agents: {
+        defaults: { provider: 'ollama', model: 'qwen3:8b' },
+        list: { default: { tools: { skill: 'deny' } } },
+      },
+    });
+    const dir = join(home, 'workspace', 'skills', 'code-review');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'SKILL.md'), '---\ndescription: X.\n---\n\nY.\n');
+
+    const preview = await build({ home })
+      .requireLoop()
+      .previewPrompt({ sessionKey: 'session-1' });
+
+    expect(preview.staticPrompt).not.toContain('## Skills');
+  });
+
+  it('places skills before memory, so the cached prefix grows at the end', async () => {
+    // Ordering is a decision, not an accident: memory is the section a turn can
+    // rewrite, so it sits where a change invalidates the least. Asserted so it
+    // cannot be quietly reversed.
+    const home = tempHome({
+      agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } },
+    });
+    const skills = join(home, 'workspace', 'skills', 'code-review');
+    mkdirSync(skills, { recursive: true });
+    writeFileSync(
+      join(skills, 'SKILL.md'),
+      '---\ndescription: X.\n---\n\nY.\n',
+    );
+    mkdirSync(join(home, 'workspace', 'memory'), { recursive: true });
+    writeFileSync(
+      join(home, 'workspace', 'memory', 'memory.md'),
+      '- A fact.\n',
+    );
+
+    const preview = await build({ home })
+      .requireLoop()
+      .previewPrompt({ sessionKey: 'session-1' });
+
+    expect(preview.staticPrompt.indexOf('## Skills')).toBeLessThan(
+      preview.staticPrompt.indexOf('## Memory'),
+    );
+  });
+});

@@ -12,7 +12,7 @@
  *    keys and for the same reason: the vault is the documented home, and a
  *    token sitting in `config.json` is plaintext on disk.
  *
- *  - **Filling in `TelegramConsole`.** Six members, four of which
+ *  - **Filling in `TelegramConsole`.** Eight members, four of which
  *    `ServerRuntime` already answers. The channel states the port; this
  *    satisfies it.
  *
@@ -23,10 +23,29 @@
 import { existsSync } from 'node:fs';
 
 import { telegramChannel, type TelegramConsole } from '@ghostai/channels';
-import type { ChannelFactory, TelegramChannel } from '@ghostai/channels';
-import type { GhostPaths, Logger } from '@ghostai/core';
+import type {
+  ChannelFactory,
+  MemoryCompression,
+  MemoryState,
+  TelegramChannel,
+} from '@ghostai/channels';
+import { CONSOLIDATE_AT_FRACTION, MemoryConsolidator } from '@ghostai/agent';
+import {
+  DEFAULT_AGENT_ID,
+  DEFAULT_WORKSPACE_ID,
+  GhostError,
+  readMemory,
+  type GhostPaths,
+  type Logger,
+  type SessionRecord,
+} from '@ghostai/core';
 import type { ChannelStatus, ContextResponse } from '@ghostai/protocol';
-import { openVault, type GhostRuntime } from '@ghostai/runtime';
+import { estimateTokens } from '@ghostai/providers';
+import {
+  openVault,
+  type EffectiveAgent,
+  type GhostRuntime,
+} from '@ghostai/runtime';
 import { buildContextResponse, type ServerRuntime } from '@ghostai/server';
 
 /** The vault namespace a channel's credentials live under. */
@@ -108,6 +127,95 @@ export function createTelegramConsole(
     },
     context: async (sessionKey): Promise<ContextResponse | undefined> =>
       await buildContextResponse(server, sessionKey),
+
+    memory: async (sessionKey): Promise<MemoryState> => {
+      const { agent, session } = memoryTargets(runtime, sessionKey);
+      const permission = agent?.tools.memory;
+      const granted = permission !== undefined && permission !== 'deny';
+
+      const text = granted
+        ? ((await readMemory(
+            runtime.jails.forWorkspace(
+              session?.workspaceId ?? DEFAULT_WORKSPACE_ID,
+            ).root,
+          )) ?? '')
+        : '';
+
+      const historyTokens =
+        session === undefined
+          ? 0
+          : runtime.store
+              .messages(sessionKey, { afterSeq: session.lastConsolidatedSeq })
+              .reduce(
+                (sum, record) =>
+                  sum + estimateTokens(JSON.stringify(record.message)),
+                0,
+              );
+
+      const window =
+        agent?.defaults.contextWindowTokens ??
+        runtime.config.agents.defaults.contextWindowTokens;
+
+      return {
+        granted,
+        tokens: estimateTokens(text),
+        historyTokens,
+        suggestAboveTokens: Math.floor(window * CONSOLIDATE_AT_FRACTION),
+      };
+    },
+
+    compressMemory: async (sessionKey): Promise<MemoryCompression> => {
+      const { agent, session } = memoryTargets(runtime, sessionKey);
+      if (session === undefined) return { folded: 0, tokens: 0 };
+
+      const resolved = runtime.providerFor(
+        agent?.id,
+        agent?.defaults.consolidationModel,
+      );
+      if (resolved === null) {
+        throw new GhostError(
+          'config',
+          'No provider is configured, so there is nothing to summarise with.',
+        );
+      }
+
+      const defaults = agent?.defaults ?? runtime.config.agents.defaults;
+      const result = await new MemoryConsolidator({
+        store: runtime.store,
+        provider: resolved.provider,
+        model: resolved.model,
+        contextWindowTokens: defaults.contextWindowTokens,
+        maxPromptTokens: defaults.memoryMaxPromptTokens,
+        compactThresholdTokens: defaults.memoryCompactThresholdTokens,
+      }).compress({
+        sessionKey,
+        workspaceRoot: runtime.jails.forWorkspace(session.workspaceId).root,
+      });
+
+      return { folded: result.folded, tokens: result.memoryTokens };
+    },
+  };
+}
+
+/**
+ * The agent and session a `/memory` call is about.
+ *
+ * Read together because both come from the stored row rather than the incoming
+ * message — a chat is bound to a conversation, and the conversation names the
+ * agent.
+ */
+function memoryTargets(
+  runtime: GhostRuntime,
+  sessionKey: string,
+): {
+  readonly agent: EffectiveAgent | undefined;
+  readonly session: SessionRecord | undefined;
+} {
+  const session = runtime.store.getSession(sessionKey);
+  const agentId = session?.agentId ?? DEFAULT_AGENT_ID;
+  return {
+    agent: runtime.agents.find((entry) => entry.id === agentId),
+    session,
   };
 }
 

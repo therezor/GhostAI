@@ -41,16 +41,22 @@ What every agent inherits, and what an install with no named agents runs as.
 | `loopWallTimeoutMs`            | int ≥ 0                      | `0`      | Wall-clock cap on a turn, checked at the top of each iteration.                                                                                |
 | `subagentTimeoutMs`            | int ≥ 0                      | `0`      | Applies to delegations _this_ agent makes.                                                                                                     |
 | `reasoningEffort`              | `minimal\|low\|medium\|high` | _unset_  | Unset sends nothing.                                                                                                                           |
-| `consolidationModel`           | string                       | _unset_  | A cheaper model for compaction. Falls back to `model`.                                                                                         |
+| `consolidationModel`           | string                       | _unset_  | A cheaper model for `/memory compress`. Falls back to `model`. Must be one the agent's own provider instance hosts.                            |
 | `learningEnabled`              | boolean                      | `true`   | _Declared, not yet read._                                                                                                                      |
 | `learningInterval`             | int > 0                      | `10`     | _Declared, not yet read._                                                                                                                      |
-| `memoryMaxPromptTokens`        | int ≥ 0                      | `2000`   | _Declared, not yet read._                                                                                                                      |
-| `memoryCompactThresholdTokens` | int ≥ 0                      | `1600`   | _Declared, not yet read._ Lower than the cap on purpose: compaction should start before a turn discovers the limit.                            |
+| `memoryMaxPromptTokens`        | int ≥ 0                      | `2000`   | What [memory](memory.md) may cost in every prompt. `0` keeps the file on disk and out of the prompt.                                           |
+| `memoryCompactThresholdTokens` | int ≥ 0                      | `1600`   | Where the notes get rewritten smaller. Must stay under the cap: notes cut before they are compacted lose what was learned.                     |
 | `pinnedSkills`                 | string[]                     | `[]`     | Skills whose body is inlined into the prompt, in this order. Everything else in `skills/` is indexed. See [Skills](skills.md).                 |
 | `maxPinnedSkills`              | int ≥ 0                      | `5`      | How many of the above are inlined. Names past it fall back to an index line.                                                                   |
 
-The keys marked _declared, not yet read_ belong to memory, which is in
-[ROADMAP.md](ROADMAP.md). They parse and persist; nothing consumes them.
+`learningEnabled` and `learningInterval` are still _declared, not yet read_. They belong
+to proactive learning — a periodic pass over `last_learned_seq` — which is not built;
+`/memory compress` is manual and reads neither. They parse and persist; nothing consumes
+them. See [Memory](memory.md).
+
+Whether an agent may remember at all is **not** here: it is the `memory` tool's permission
+in `agents.list.<id>.tools`. Skills work the same way through `skill`. One switch per
+feature, and it is the one already in the permission map.
 
 ## `agents.list.<id>`
 
@@ -75,7 +81,7 @@ session, shared by every agent that opens it.
 | `tools`            | `Record<string, allow\|ask\|deny>`   | see below          | **Replaces, never merges.** A tool absent from the map is not enabled.                                       |
 | `exec`             | patch of `tools.exec`                | _unset_            | Merged over the install-wide exec config, so one agent can hold a tighter allow-list.                        |
 | `toolbox`          | `{ name, network }`                  | `{ name: '', … }`  | Empty name runs `exec` on the host. See [Toolboxes](toolboxes.md).                                           |
-| `memory`           | `{ shared: boolean }`                | `{ shared: true }` | Whether this agent also reads the layer shared by every agent in the folder.                                 |
+| `memory`           | `{ shared: boolean }`                | `{ shared: true }` | _Declared, not yet read._ Memory is a file in the workspace, so it is already shared by every agent there.   |
 | `subagents`        | `{ id, prompt, permission }[]`       | `[]`               | Agents this one may delegate to, in the order the model sees them.                                           |
 
 The six prompt templates share one rule: **`''` inherits the built-in, and a single space

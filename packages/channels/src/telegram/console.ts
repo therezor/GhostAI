@@ -51,4 +51,41 @@ export interface TelegramConsole {
   setModel(id: string): void;
   /** `undefined` when the session has nothing to measure yet. */
   context(sessionKey: string): Promise<ContextResponse | undefined>;
+  /**
+   * What this chat's agent remembers, and whether it may.
+   *
+   * A read, so it belongs on this side of the split rather than in a frame.
+   */
+  memory(sessionKey: string): Promise<MemoryState>;
+  /**
+   * Folds the oldest part of a conversation into memory.
+   *
+   * **This is the one member that sits awkwardly on this side of the split.** It
+   * rewrites what the next turn will send, which is the description of something
+   * that should go out as a `ChannelControlFrame` so an open browser tab learns
+   * the history moved. It does not, and the cost is bounded: the marker is read
+   * at the *top* of a turn, so nothing breaks — a tab that was already open
+   * simply shows a transcript longer than what is now sent, until it reloads.
+   * Promoting this to a frame is a protocol change and a hub change; see
+   * `docs/memory.md`.
+   */
+  compressMemory(sessionKey: string): Promise<MemoryCompression>;
+}
+
+/** Everything `/memory` prints without changing anything. */
+export interface MemoryState {
+  /** Whether the agent holds the `memory` tool. Absent counts as denied. */
+  readonly granted: boolean;
+  /** Estimated tokens the memory file costs in every prompt. `0` when empty. */
+  readonly tokens: number;
+  /** Estimated tokens of history not yet folded. */
+  readonly historyTokens: number;
+  /** Above this, `/memory` suggests compressing. Never acts on it. */
+  readonly suggestAboveTokens: number;
+}
+
+/** What one `/memory compress` did. */
+export interface MemoryCompression {
+  readonly folded: number;
+  readonly tokens: number;
 }

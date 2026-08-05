@@ -448,6 +448,48 @@ const COMMANDS: readonly TelegramCommand[] = [
   },
 
   {
+    name: 'memory',
+    usage: '[compress]',
+    description: 'What this agent remembers, or fold old messages into it',
+    run: async (input) => {
+      const state = await input.console.memory(input.chat.sessionKey);
+
+      if (input.args[0] !== 'compress') {
+        if (!state.granted) {
+          return {
+            text:
+              'This agent does not have the `memory` tool, so nothing is ' +
+              'remembered and no memory reaches its prompt. Grant it in ' +
+              'Settings → Agents.',
+          };
+        }
+        const size =
+          state.tokens === 0
+            ? 'Nothing remembered yet.'
+            : `Memory costs about ${String(state.tokens)} tokens in every prompt.`;
+        const nudge =
+          state.historyTokens > state.suggestAboveTokens
+            ? `\nThis session is about ${String(state.historyTokens)} tokens — /memory compress folds the oldest part into memory.`
+            : '';
+        return { text: `${size}${nudge}` };
+      }
+
+      // Deliberately *not* admin-gated, unlike `/model`: compression rewrites
+      // what this one session sends, and reaches nothing outside it.
+      if (!state.granted) {
+        return { text: 'This agent does not have the `memory` tool.' };
+      }
+      const result = await input.console.compressMemory(input.chat.sessionKey);
+      return {
+        text:
+          result.folded === 0
+            ? 'Nothing to fold — this session is short enough to send whole.'
+            : `Folded ${String(result.folded)} messages into memory, now about ${String(result.tokens)} tokens.`,
+      };
+    },
+  },
+
+  {
     name: 'stats',
     usage: '[n]',
     description: 'What the last few turns cost',

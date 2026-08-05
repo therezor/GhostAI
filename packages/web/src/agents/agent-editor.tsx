@@ -520,6 +520,8 @@ function Editor({
     maxTokens: bind('maxTokens'),
     contextWindowTokens: bind('contextWindowTokens'),
     toolTimeoutSeconds: bind('toolTimeoutSeconds'),
+    memoryMaxPromptTokens: bind('memoryMaxPromptTokens'),
+    memoryCompactThresholdTokens: bind('memoryCompactThresholdTokens'),
   } satisfies Record<string, Bound>;
 
   const switches = {
@@ -1305,6 +1307,30 @@ function Editor({
               hint={t('agents.zeroDisablesHint')}
             />
           )}
+        </FieldGrid>
+      </Section>
+
+      {/* After Limits, because it *is* a budget — and before the prompt, which
+          is where the memory it describes ends up. Whether this agent may
+          remember at all is the `memory` row in Tools above: the permission is
+          the switch, so there is deliberately no second one here to disagree
+          with it. */}
+      <Section title={t('agents.memory')} description={t('agents.memoryDesc')}>
+        <FieldGrid>
+          <BoundField
+            label={t('agents.memoryBudget')}
+            bound={fields.memoryMaxPromptTokens}
+            inputMode="numeric"
+            error={errors.memoryMaxPromptTokens}
+            hint={t('agents.memoryBudgetHint')}
+          />
+          <BoundField
+            label={t('agents.memoryCompactAt')}
+            bound={fields.memoryCompactThresholdTokens}
+            inputMode="numeric"
+            error={errors.memoryCompactThresholdTokens}
+            hint={t('agents.memoryCompactAtHint')}
+          />
         </FieldGrid>
       </Section>
 

@@ -1,11 +1,17 @@
 /**
  * The built-in tool set.
  *
- * Five tools, and the reason there are only five is that every one of them is a
- * capability the agent cannot obtain any other way. Anything expressible as a
+ * Eight tools, and the reason there are only eight is that every one of them is
+ * a capability the agent cannot obtain any other way. Anything expressible as a
  * command — `grep`, `find`, `git` — is `exec`'s job, and adding a tool per
  * command would spend context on definitions the model already knows how to
  * write in argv form.
+ *
+ * `memory` and `skill` are the two that do not quite fit that test, and they are
+ * here for a second reason: a tool carries a per-agent permission, so being a
+ * tool is what makes each feature switchable without a config flag beside it
+ * that could disagree. `skill` in particular reverses a decision
+ * `skills-contributor.ts` argued for; both files say so.
  *
  * `exec` is registered conditionally. A disabled exec tool that still appears in
  * the definitions list is worse than no exec tool at all: the model spends a
@@ -27,7 +33,9 @@ import { automationTool } from './automation.js';
 import { editFileTool } from './edit-file.js';
 import { execTool } from './exec.js';
 import { listDirTool } from './list-dir.js';
+import { memoryTool } from './memory.js';
 import { readFileTool } from './read-file.js';
+import { skillTool } from './skill.js';
 import { writeFileTool } from './write-file.js';
 
 export { automationTool } from './automation.js';
@@ -41,7 +49,9 @@ export { formatBytes } from './shared.js';
 export { editFileTool } from './edit-file.js';
 export { execTool } from './exec.js';
 export { listDirTool } from './list-dir.js';
+export { memoryTool } from './memory.js';
 export { readFileTool } from './read-file.js';
+export { skillTool } from './skill.js';
 export { writeFileTool } from './write-file.js';
 
 /** Every built-in, including `exec` and `automation`. */
@@ -52,6 +62,8 @@ export const BUILTIN_TOOLS: readonly AnyTool[] = Object.freeze([
   listDirTool,
   execTool,
   automationTool,
+  memoryTool,
+  skillTool,
 ]);
 
 /** Which of the conditionally-registered built-ins this install wants. */

@@ -64,6 +64,8 @@ export {
   telegramChannel,
   type TelegramChannel,
   type TelegramChannelOptions,
+  type MemoryCompression,
+  type MemoryState,
   type TelegramConsole,
   type TelegramSettings,
 } from './telegram/index.js';

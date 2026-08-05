@@ -10,8 +10,6 @@ building a second one beside it.
 
 ## Planned
 
-- [ ] **Memory** — the agent remembers across sessions and compacts before it
-      outgrows the prompt.
 - [ ] **Slash commands in the browser** — the terminal REPL's commands, in the
       composer.
 - [ ] **Session search page** — find a session by what was said in it.
@@ -21,6 +19,15 @@ building a second one beside it.
 
 ## Done
 
+- [x] **Memory** — the agent remembers across sessions in
+      `<workspace>/memory/memory.md`, placed whole into the static prompt and
+      appended to through a `memory` tool. `/memory compress` folds an over-long
+      session into it and advances `last_consolidated_seq`; compaction merges the
+      dated sections and never touches the prose above them. The tool's
+      permission is the feature's only switch, which is also how `skill` gained
+      one. **Compaction is manual** — a threshold is suggested, never acted on —
+      and proactive learning (`learningInterval`, `last_learned_seq`) is still to
+      come, as is `/memory` in the browser composer.
 - [x] **Skills** — reusable instruction bundles in `<workspace>/skills/`, one
       directory per skill. Every skill's description is indexed into the static
       prompt and the agent opens the sheet itself with `read_file`; a skill in

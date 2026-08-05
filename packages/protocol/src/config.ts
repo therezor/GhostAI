@@ -497,6 +497,13 @@ export const DEFAULT_AGENT_TOOLS: Readonly<Record<string, ToolPermission>> =
     write_file: 'allow',
     edit_file: 'allow',
     exec: 'ask',
+    // These two are the switches for memory and skills — denying the tool also
+    // removes the prompt section it feeds. Seeded on, because an agent that
+    // silently fails to remember reads as broken rather than as unconfigured.
+    // Note this is the seed for a *new* agent: an install that predates them has
+    // neither until an operator grants it. See `docs/memory.md`.
+    memory: 'allow',
+    skill: 'allow',
   });
 
 /**

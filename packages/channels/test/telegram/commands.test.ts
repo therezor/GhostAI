@@ -643,3 +643,86 @@ describe('workspaces', () => {
     });
   });
 });
+
+describe('/memory', () => {
+  it('says the tool is not granted when the agent lacks it', async () => {
+    const h = harness();
+    h.console.setMemory({
+      granted: false,
+      tokens: 0,
+      historyTokens: 0,
+      suggestAboveTokens: 32_768,
+    });
+
+    const result = await h.run('/memory');
+
+    expect(result.text).toContain('does not have the `memory` tool');
+  });
+
+  it('reports an empty memory', async () => {
+    const h = harness();
+    const result = await h.run('/memory');
+    expect(result.text).toContain('Nothing remembered yet');
+  });
+
+  it('reports what memory costs, without nudging under the threshold', async () => {
+    const h = harness();
+    h.console.setMemory({
+      granted: true,
+      tokens: 420,
+      historyTokens: 100,
+      suggestAboveTokens: 32_768,
+    });
+
+    const result = await h.run('/memory');
+
+    expect(result.text).toContain('420 tokens');
+    expect(result.text).not.toContain('compress');
+  });
+
+  it('nudges only once history is past the advisory threshold', async () => {
+    // The one place `CONSOLIDATE_AT_FRACTION` is read. Nothing acts on it.
+    const h = harness();
+    h.console.setMemory({
+      granted: true,
+      tokens: 420,
+      historyTokens: 40_000,
+      suggestAboveTokens: 32_768,
+    });
+
+    const result = await h.run('/memory');
+
+    expect(result.text).toContain('/memory compress');
+  });
+
+  it('compresses on request, and says what it folded', async () => {
+    const h = harness();
+
+    const result = await h.run('/memory compress');
+
+    expect(h.console.compressed).toEqual([h.sessionKey()]);
+    expect(result.text).toContain('Folded 12 messages');
+  });
+
+  it('refuses to compress for an agent that cannot remember', async () => {
+    const h = harness();
+    h.console.setMemory({
+      granted: false,
+      tokens: 0,
+      historyTokens: 0,
+      suggestAboveTokens: 32_768,
+    });
+
+    const result = await h.run('/memory compress');
+
+    expect(h.console.compressed).toEqual([]);
+    expect(result.text).toContain('does not have the `memory` tool');
+  });
+
+  it('is offered to a non-admin, because it reaches only this chat', async () => {
+    // Unlike `/model`, which moves the whole process.
+    const h = harness();
+    const result = await h.run('/memory', { isAdmin: false });
+    expect(result.text).not.toContain('Only an admin');
+  });
+});

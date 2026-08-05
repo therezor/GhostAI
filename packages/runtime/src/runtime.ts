@@ -58,6 +58,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import {
   AgentLoop,
   type PromptToolbox,
+  MemoryContributor,
   SkillsContributor,
   SteeringQueue,
   subagentMap,
@@ -1047,12 +1048,32 @@ class Runtime implements GhostRuntime {
       // knows nothing about where one came from. The contributor itself is
       // stateless and reads the workspace named by each turn's context, so one
       // instance per loop serves every session on this agent.
+      //
+      // Each is gated on its tool's permission, which is the feature's only
+      // switch: denying `memory` has to remove the section as well as the tool,
+      // or an agent that cannot write its memory would still be paying for it in
+      // every prompt. A second `memoryEnabled` flag beside the permission map
+      // would be a way for the two to disagree.
       contributors: [
-        new SkillsContributor({
-          pinned: agent.defaults.pinnedSkills,
-          maxPinned: agent.defaults.maxPinnedSkills,
-          logger: this.logger,
-        }),
+        ...(granted(agent.tools, 'skill')
+          ? [
+              new SkillsContributor({
+                pinned: agent.defaults.pinnedSkills,
+                maxPinned: agent.defaults.maxPinnedSkills,
+                logger: this.logger,
+              }),
+            ]
+          : []),
+        // After skills: sections are appended in order, so the cached prefix
+        // grows at the end, and memory is the one a turn can rewrite.
+        ...(granted(agent.tools, 'memory')
+          ? [
+              new MemoryContributor({
+                maxTokens: agent.defaults.memoryMaxPromptTokens,
+                logger: this.logger,
+              }),
+            ]
+          : []),
       ],
       resolveLoop,
       model,
@@ -1221,4 +1242,20 @@ function toolboxPromptOf(
 ): { toolboxPrompt?: PromptToolbox } {
   const prompt = prompts.get(agentId);
   return prompt === undefined ? {} : { toolboxPrompt: prompt };
+}
+
+/**
+ * Whether an agent may call a tool at all.
+ *
+ * **Absent counts as denied**, which is the rule `docs/tools.md` already states
+ * — "a tool absent from the map is not enabled" — and it is the whole migration
+ * story for `memory` and `skill`: `DEFAULT_AGENT_TOOLS` seeds a *new* agent, so
+ * an install that predates them has neither until an operator grants it.
+ *
+ * `ask` counts as granted. The operator answers per call; the capability is
+ * still one this agent has, so its prompt section belongs there.
+ */
+function granted(tools: ToolPermissions, name: string): boolean {
+  const permission = tools[name];
+  return permission !== undefined && permission !== 'deny';
 }

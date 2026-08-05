@@ -28,7 +28,7 @@ import type {
   ModelsResponse,
 } from '@ghostai/protocol';
 
-import type { TelegramConsole } from '#src/telegram/console.js';
+import type { MemoryState, TelegramConsole } from '#src/telegram/console.js';
 
 const NOW = 1_700_000_000_000;
 
@@ -49,8 +49,19 @@ export interface FakeConsole extends TelegramConsole {
   setAgents(agents: readonly AgentSummary[]): void;
   /** Replaces what `context()` answers. */
   setContext(report: ContextResponse | undefined): void;
+  /** Replaces what `memory()` answers. */
+  setMemory(state: MemoryState): void;
+  /** Sessions `compressMemory` was called for, in order. */
+  readonly compressed: readonly string[];
   close(): void;
 }
+
+const DEFAULT_MEMORY: MemoryState = {
+  granted: true,
+  tokens: 0,
+  historyTokens: 0,
+  suggestAboveTokens: 32_768,
+};
 
 const DEFAULT_AGENTS: readonly AgentSummary[] = [
   { id: 'default', label: 'Default', model: 'gpt-4o', provider: 'openai' },
@@ -80,7 +91,9 @@ export function fakeConsole(): FakeConsole {
 
   let agents = DEFAULT_AGENTS;
   let report: ContextResponse | undefined;
+  let memory: MemoryState = DEFAULT_MEMORY;
   const modelsSet: string[] = [];
+  const compressed: string[] = [];
 
   return {
     store,
@@ -91,12 +104,21 @@ export function fakeConsole(): FakeConsole {
       modelsSet.push(id);
     },
     context: () => Promise.resolve(report),
+    memory: () => Promise.resolve(memory),
+    compressMemory: (sessionKey) => {
+      compressed.push(sessionKey);
+      return Promise.resolve({ folded: 12, tokens: 340 });
+    },
     modelsSet,
+    compressed,
     setAgents: (next) => {
       agents = next;
     },
     setContext: (next) => {
       report = next;
+    },
+    setMemory: (next) => {
+      memory = next;
     },
     close: () => {
       database.close();

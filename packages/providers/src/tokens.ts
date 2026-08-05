@@ -7,9 +7,24 @@
  *    turns to drop after a context-length rejection. It runs on the failure
  *    path, needs no precision, and must not make the failure path slower than
  *    the success path. That is `estimateTokens`, a character heuristic.
- *  - **"Exactly how big is this?"** — the memory package's consolidation budget,
- *    where being wrong by 15% means either wasting a third of the window or
- *    overflowing it. That is `loadTokenCounter`, and it is `async` on purpose.
+ *  - **"Exactly how big is this?"** — a caller sizing something against a hard
+ *    limit, where being wrong by 15% means either wasting a third of the window
+ *    or overflowing it. That is `loadTokenCounter`, and it is `async` on
+ *    purpose.
+ *
+ * **Memory deliberately uses the first one.** This comment used to name memory's
+ * consolidation budget as the reason the second exists, and both halves of that
+ * turned out to be wrong. There is no memory *package* — memory reaches the
+ * prompt through `ContextContributor`, so it lives in `@ghostai/agent` beside
+ * skills. And `memoryMaxPromptTokens` and `memoryCompactThresholdTokens` only
+ * mean anything relative to each other, so measuring them with two different
+ * rulers is how "the threshold is below the cap" silently inverts. One ruler,
+ * erring high on prose, is the right shape for a bound. See `docs/memory.md`.
+ *
+ * `loadTokenCounter` therefore has no caller in the tree today. It is kept
+ * because the question it answers is real — it is what a future feature sizing
+ * against a provider's hard limit should reach for — not because anything is
+ * currently waiting on it.
  *
  * `gpt-tokenizer` carries its merge ranks as data: importing it costs ~40 ms and
  * ~50 MB of resident memory. Paying that at module load would charge every

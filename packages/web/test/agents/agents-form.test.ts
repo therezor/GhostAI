@@ -779,3 +779,108 @@ describe('subagents', () => {
     expect(result.patch.agents?.list?.main?.subagents).toEqual([RESEARCHER]);
   });
 });
+
+describe('memory settings', () => {
+  it('shows the defaults for an agent that stored none', () => {
+    const shown = toAgentEntryForm(EMPTY, DEFAULTS);
+
+    expect(shown.memoryMaxPromptTokens).toBe(
+      String(DEFAULTS.memoryMaxPromptTokens),
+    );
+    expect(shown.memoryCompactThresholdTokens).toBe(
+      String(DEFAULTS.memoryCompactThresholdTokens),
+    );
+  });
+
+  it('shows what the agent stored over the default', () => {
+    const entry = AgentEntrySchema.parse({ memoryMaxPromptTokens: 500 });
+    expect(toAgentEntryForm(entry, DEFAULTS).memoryMaxPromptTokens).toBe('500');
+  });
+
+  it('writes both onto the entry', () => {
+    const patch = parsed(
+      toAgentEntryPatch(
+        'reviewer',
+        form({
+          memoryMaxPromptTokens: '900',
+          memoryCompactThresholdTokens: '700',
+        }),
+        EMPTY,
+        t,
+      ),
+    );
+
+    expect(patch).toMatchObject({
+      memoryMaxPromptTokens: 900,
+      memoryCompactThresholdTokens: 700,
+    });
+  });
+
+  it('refuses a threshold above the cap', () => {
+    // Cross-field: a threshold over the cap means the notes are truncated
+    // before they are ever compacted, which loses what was learned rather than
+    // shortening it.
+    const result = toAgentEntryPatch(
+      'reviewer',
+      form({
+        memoryMaxPromptTokens: '500',
+        memoryCompactThresholdTokens: '900',
+      }),
+      EMPTY,
+      t,
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.memoryCompactThresholdTokens).toContain(
+        'below the prompt cap',
+      );
+    }
+  });
+
+  it('accepts zero, which is how memory is kept out of the prompt', () => {
+    const patch = parsed(
+      toAgentEntryPatch(
+        'reviewer',
+        form({
+          memoryMaxPromptTokens: '0',
+          memoryCompactThresholdTokens: '0',
+        }),
+        EMPTY,
+        t,
+      ),
+    );
+
+    expect(patch).toMatchObject({ memoryMaxPromptTokens: 0 });
+  });
+
+  it('carries every other override through a memory-only edit', () => {
+    // `agents.list.*` is REPLACE_WHOLESALE, so a patch that dropped what it did
+    // not touch would delete the rest of this agent. `ownFields` is what stops
+    // that, and this is the assertion that keeps it honest.
+    const stored = AgentEntrySchema.parse({
+      label: 'Reviewer',
+      tools: { read_file: 'allow', memory: 'deny' },
+      enabled: false,
+    });
+
+    const patch = parsed(
+      toAgentEntryPatch(
+        'reviewer',
+        {
+          ...toAgentEntryForm(stored, DEFAULTS),
+          memoryMaxPromptTokens: '2500',
+        },
+        stored,
+        t,
+      ),
+    );
+
+    expect(patch).toMatchObject({
+      memoryMaxPromptTokens: 2500,
+      label: 'Reviewer',
+      enabled: false,
+      tools: { read_file: 'allow', memory: 'deny' },
+    });
+  });
+});

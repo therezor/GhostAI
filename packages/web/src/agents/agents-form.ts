@@ -115,6 +115,8 @@ export interface AgentForm {
   readonly toolsEnabled: boolean;
   readonly learningEnabled: boolean;
   readonly learningInterval: string;
+  readonly memoryMaxPromptTokens: string;
+  readonly memoryCompactThresholdTokens: string;
 }
 
 export const REASONING_EFFORTS: readonly ReasoningEffort[] = [
@@ -141,6 +143,8 @@ export function toAgentForm(defaults: AgentDefaults): AgentForm {
     toolsEnabled: defaults.toolsEnabled,
     learningEnabled: defaults.learningEnabled,
     learningInterval: String(defaults.learningInterval),
+    memoryMaxPromptTokens: String(defaults.memoryMaxPromptTokens),
+    memoryCompactThresholdTokens: String(defaults.memoryCompactThresholdTokens),
   };
 }
 
@@ -180,6 +184,14 @@ export function toAgentPatch(form: AgentForm, t: TFunction): PatchResult {
     integer: true,
     min: 1,
   });
+  const memoryMax = parseNumber(form.memoryMaxPromptTokens, t, {
+    integer: true,
+    min: 0,
+  });
+  const memoryCompact = parseNumber(form.memoryCompactThresholdTokens, t, {
+    integer: true,
+    min: 0,
+  });
 
   const collect = (
     field: string,
@@ -194,6 +206,20 @@ export function toAgentPatch(form: AgentForm, t: TFunction): PatchResult {
   collect('toolTimeoutSeconds', toolTimeout);
   collect('loopWallTimeoutSeconds', loopWallTimeout);
   collect('learningInterval', learningInterval);
+  collect('memoryMaxPromptTokens', memoryMax);
+  collect('memoryCompactThresholdTokens', memoryCompact);
+
+  // Cross-field, so it belongs here rather than on either box. The threshold is
+  // *when* the notes get rewritten smaller and the cap is *where they are cut*;
+  // a threshold above the cap means compaction never runs before truncation
+  // does, which is the one arrangement that silently loses what was remembered.
+  if (
+    memoryMax.ok &&
+    memoryCompact.ok &&
+    memoryCompact.value > memoryMax.value
+  ) {
+    errors.memoryCompactThresholdTokens = t('agents.memoryThresholdTooHigh');
+  }
 
   if (form.provider.trim() === '') errors.provider = 'Required';
   // An empty model is not "resolve one for me" — see `MODEL_REQUIRED`.
@@ -206,6 +232,8 @@ export function toAgentPatch(form: AgentForm, t: TFunction): PatchResult {
     !toolTimeout.ok ||
     !loopWallTimeout.ok ||
     !learningInterval.ok ||
+    !memoryMax.ok ||
+    !memoryCompact.ok ||
     Object.keys(errors).length > 0
   ) {
     return { ok: false, errors };
@@ -236,6 +264,8 @@ export function toAgentPatch(form: AgentForm, t: TFunction): PatchResult {
           toolsEnabled: form.toolsEnabled,
           learningEnabled: form.learningEnabled,
           learningInterval: learningInterval.value,
+          memoryMaxPromptTokens: memoryMax.value,
+          memoryCompactThresholdTokens: memoryCompact.value,
           // `null` when blank rather than omitted, and that is the whole of
           // being able to clear these two. `agents.defaults` merges per field,
           // so an omitted key preserves what is stored — emptying the
@@ -299,6 +329,16 @@ export interface AgentEntryForm {
   readonly visionEnabled: boolean;
   readonly toolsEnabled: boolean;
   readonly toolTimeoutSeconds: string;
+  /**
+   * What this agent's memory may cost, and when it gets rewritten smaller.
+   *
+   * Per agent for the reason the budget above is: an agent on a small window
+   * cannot afford the same memory as one on a large one. Whether it remembers
+   * *at all* is not here — that is the `memory` tool's permission in `tools`
+   * below, and a second switch beside it is how the two come to disagree.
+   */
+  readonly memoryMaxPromptTokens: string;
+  readonly memoryCompactThresholdTokens: string;
   /**
    * Tool name → permission. A name absent from the map is not enabled.
    *
@@ -373,6 +413,13 @@ export function toAgentEntryForm(
     maxTokens: String(entry.maxTokens ?? defaults.maxTokens),
     contextWindowTokens: String(
       entry.contextWindowTokens ?? defaults.contextWindowTokens,
+    ),
+    memoryMaxPromptTokens: String(
+      entry.memoryMaxPromptTokens ?? defaults.memoryMaxPromptTokens,
+    ),
+    memoryCompactThresholdTokens: String(
+      entry.memoryCompactThresholdTokens ??
+        defaults.memoryCompactThresholdTokens,
     ),
     // Not `?? ''` on the whole expression: `0` is a temperature, and a falsy
     // check here would render it as "the provider's own".
@@ -496,6 +543,8 @@ function ownFields(form: AgentEntryForm, entry: AgentEntry): AgentOwnFields {
     toolTimeoutMs,
     toolbox,
     subagents,
+    memoryMaxPromptTokens,
+    memoryCompactThresholdTokens,
     ...carried
   } = entry;
 
@@ -643,11 +692,34 @@ export function toAgentEntryPatch(
     min: 0,
     max: 2,
   });
+  const memoryMax = required(
+    'memoryMaxPromptTokens',
+    form.memoryMaxPromptTokens,
+    { integer: true, min: 0 },
+  );
+  const memoryCompact = required(
+    'memoryCompactThresholdTokens',
+    form.memoryCompactThresholdTokens,
+    { integer: true, min: 0 },
+  );
+
+  // The same cross-field rule `toAgentPatch` applies, and for the same reason:
+  // a threshold above the cap means the notes are truncated before they are
+  // ever compacted, which is the one arrangement that loses what was learned.
+  if (
+    memoryMax !== undefined &&
+    memoryCompact !== undefined &&
+    memoryCompact > memoryMax
+  ) {
+    errors.memoryCompactThresholdTokens = t('agents.memoryThresholdTooHigh');
+  }
 
   if (
     maxTokens === undefined ||
     contextWindowTokens === undefined ||
     toolTimeout === undefined ||
+    memoryMax === undefined ||
+    memoryCompact === undefined ||
     Object.keys(errors).length > 0
   ) {
     return { ok: false, errors };
@@ -665,6 +737,8 @@ export function toAgentEntryPatch(
             maxTokens,
             contextWindowTokens,
             toolTimeoutMs: secondsToMs(toolTimeout),
+            memoryMaxPromptTokens: memoryMax,
+            memoryCompactThresholdTokens: memoryCompact,
             ...(temperature === undefined ? {} : { temperature }),
             ...(isReasoningEffort(form.reasoningEffort)
               ? { reasoningEffort: form.reasoningEffort }

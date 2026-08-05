@@ -368,4 +368,11 @@ cached prefix grows at the end rather than shifting when a contributor is added.
 the index and any pinned bodies, while `runtimeSection` places the one line that a
 `@skill:` mention on _this message_ earns. It is wired in the composition root — the
 loop composes and caches sections and deliberately knows nothing about where one came
-from. Memory and RAG will inject content the same way when they land.
+from.
+
+**[Memory](memory.md) is the second**, and it uses only the static half: the workspace's
+`memory/memory.md` is a property of the folder, not of one message, so there is no
+runtime counterpart and no `@memory:` mention. It is placed _after_ skills, because
+sections are appended in order and memory is the one a turn can rewrite — so it sits
+where a change invalidates the least of the cached prefix. RAG will inject content the
+same way when it lands.

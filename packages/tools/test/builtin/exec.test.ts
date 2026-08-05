@@ -14,7 +14,11 @@ import { ToolRegistry } from '#src/registry.js';
 import type { CommandRunner, RunRequest } from '#src/runner.js';
 import { createTestWorkspace, type TestWorkspace } from '#testkit/workspace.js';
 import { execTool } from '#src/builtin/exec.js';
-import { builtinTools, registerBuiltins } from '#src/builtin/index.js';
+import {
+  BUILTIN_TOOLS,
+  builtinTools,
+  registerBuiltins,
+} from '#src/builtin/index.js';
 
 const NODE = process.execPath;
 
@@ -240,7 +244,9 @@ describe('the built-in set', () => {
       'edit_file',
       'exec',
       'list_dir',
+      'memory',
       'read_file',
+      'skill',
       'write_file',
     ]);
     expect(registry.sourceOf('exec')).toBe('builtin');
@@ -255,7 +261,9 @@ describe('the built-in set', () => {
         .config,
     );
     expect(registry.has('exec')).toBe(false);
-    expect(registry.size).toBe(5);
+    // Relative to the set rather than a literal, so adding a built-in does not
+    // send someone hunting for which number to bump.
+    expect(registry.size).toBe(BUILTIN_TOOLS.length - 1);
   });
 
   it('does not advertise automation when the scheduler is switched off', () => {
@@ -268,8 +276,8 @@ describe('the built-in set', () => {
   });
 
   it('includes both by default and with no config at all', () => {
-    expect(builtinTools()).toHaveLength(6);
-    expect(builtinTools(context.config)).toHaveLength(6);
+    expect(builtinTools()).toHaveLength(BUILTIN_TOOLS.length);
+    expect(builtinTools(context.config)).toHaveLength(BUILTIN_TOOLS.length);
   });
 });
 

@@ -13,5 +13,9 @@ export {
   type TelegramChannel,
   type TelegramChannelOptions,
 } from './channel.js';
-export type { TelegramConsole } from './console.js';
+export type {
+  MemoryCompression,
+  MemoryState,
+  TelegramConsole,
+} from './console.js';
 export type { TelegramSettings } from './settings.js';
