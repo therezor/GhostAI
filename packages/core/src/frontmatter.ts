@@ -13,18 +13,50 @@
  * get interesting:
  *
  * ```
- *   document    := fence field* fence body
+ *   document    := fence entry* fence body
  *   fence       := "---" EOL
+ *   entry       := field | nest
  *   field       := key ":" value EOL
+ *   nest        := key ":" EOL (indent key ":" value EOL)+
  *   key         := [A-Za-z][A-Za-z0-9_-]*
  *   value       := any text, optionally wrapped in one pair of quotes
  * ```
  *
- * Anything else inside the fence — a list, a nested mapping, a stray line — is
+ * Anything else inside the fence — a list, a deeper mapping, a stray line — is
  * skipped rather than refused. A skill is loaded on the strength of the two
  * fields it must have (`skills.ts` enforces that), and failing the whole file
  * because someone left a `tags:` list in it would refuse a skill over a field
  * nobody reads.
+ *
+ * ## One level of nesting, flattened to a dotted key
+ *
+ * ```yaml
+ * metadata:
+ *   type: user
+ * ```
+ *
+ * yields `{'metadata': '', 'metadata.type': 'user'}`. The return type is still
+ * `Record<string, string>`, so no caller learns about a tree — `memory.ts` asks
+ * for `fields['metadata.type']` and reads as the thing that is in the file.
+ *
+ * **This is eight lines bought to close a hazard, not a feature anybody asked
+ * for.** Before it, every line was trimmed before being matched, so an indented
+ * `type: user` was stored as a *top-level* `type` — and a nested `name:` under
+ * any key silently overwrote the real one, in a skill as much as in a memory.
+ * The grammar block above used to claim a nested mapping was "skipped", which
+ * was false. Depending on the hoist would have made a latent bug load-bearing:
+ * nobody could then fix the shadowing without breaking memory.
+ *
+ * Only one level, and only under a key whose own value is empty. That is the
+ * whole of what the memory format needs, and every step past it is a step
+ * towards the YAML parser this file exists not to be.
+ *
+ * ## Why it lives in `@ghostai/core`
+ *
+ * It started in `@ghostai/agent` beside `skills.ts`, its only caller. The
+ * `memory` tool is the second, and it is in `@ghostai/tools`, which depends on
+ * core and not on agent. One parser at the bottom of the graph beats two copies
+ * of the same thirty lines drifting apart.
  */
 
 /** A parsed document: its frontmatter fields, and everything after the fence. */
@@ -60,11 +92,28 @@ export function parseFrontmatter(text: string): Frontmatter {
   if (close === -1) return { fields: {}, body: text.trim() };
 
   const fields: Record<string, string> = {};
+  // The key an indented line hangs off: the last one at column zero whose own
+  // value was empty. Cleared by anything else, so an indented line under
+  // `name: Deploy` is a stray rather than `name.something`.
+  let parent: string | undefined;
+
   for (const line of lines.slice(1, close)) {
     const field = parseField(line);
+    if (field === undefined) {
+      parent = undefined;
+      continue;
+    }
+
+    const indented = /^\s/.test(line);
+    if (indented) {
+      if (parent !== undefined) fields[`${parent}.${field.key}`] = field.value;
+      continue;
+    }
+
     // Last wins, which is the only rule that does not need explaining when a
     // key appears twice.
-    if (field !== undefined) fields[field.key] = field.value;
+    fields[field.key] = field.value;
+    parent = field.value === '' ? field.key : undefined;
   }
 
   return {

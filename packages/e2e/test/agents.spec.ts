@@ -128,11 +128,7 @@ test.describe('agents', () => {
     });
 
     await app.goto(`${harness.url}/agents/reviewer`);
-    // Both, and in this order deliberately: the threshold has to stay under the
-    // cap, so lowering only the cap is refused — which is the rule working, not
-    // a fixture detail to route around.
-    await app.getByLabel('Rewrite the notes above (tokens)').fill('700');
-    await app.getByLabel('Memory in the prompt (tokens)').fill('900');
+    await app.getByLabel('Memory index in the prompt (tokens)').fill('900');
     await app.getByRole('button', { name: 'Save changes' }).click();
 
     // The persisted value, read back from the API — not the saving state the
@@ -151,6 +147,33 @@ test.describe('agents', () => {
         return body.config.agents.list.reviewer?.memoryMaxPromptTokens;
       })
       .toBe(900);
+  });
+
+  test('a memory prompt saves onto the agent that wrote it', async ({
+    app,
+    harness,
+  }) => {
+    await app.request.patch(`${harness.url}/api/settings`, {
+      data: { agents: { list: { scribe: { label: 'Scribe' } } } },
+    });
+
+    await app.goto(`${harness.url}/agents/scribe`);
+    await app.getByText('Advanced prompt settings').click();
+    const box = app.getByLabel('Memory for Scribe');
+    await box.fill('## What I know\n\n{{index}}');
+    await app.getByRole('button', { name: 'Save changes' }).click();
+
+    await expect
+      .poll(async () => {
+        const response = await app.request.get(`${harness.url}/api/settings`);
+        const body = (await response.json()) as {
+          config: {
+            agents: { list: Record<string, { memoryPrompt?: string }> };
+          };
+        };
+        return body.config.agents.list.scribe?.memoryPrompt;
+      })
+      .toContain('## What I know');
   });
 
   test('a new agent is created holding the default’s settings', async ({

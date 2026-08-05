@@ -563,18 +563,20 @@ describe('/memory', () => {
     expect(out.text).toContain('nothing remembered yet');
   });
 
-  it('reports what the memory costs when there is one', async () => {
+  it('counts the memories, and says what their index costs', async () => {
     const runtime = runtimeIn();
     mkdirSync(join(runtime.jail.root, 'memory'), { recursive: true });
-    writeFileSync(
-      join(runtime.jail.root, 'memory', 'memory.md'),
-      '## Session 2026-08-05\n\n- Prefers rem over px.\n',
-    );
+    for (const name of ['rem-over-px', 'ci-gate']) {
+      writeFileSync(
+        join(runtime.jail.root, 'memory', `${name}.md`),
+        `---\ndescription: about ${name}\nmetadata:\n  type: project\n---\n\nBody.\n`,
+      );
+    }
     const { ctx, out } = context(runtime, 'cli:1');
 
     await runSlashCommand('/memory', ctx);
 
-    expect(out.text).toContain('memory/memory.md');
+    expect(out.text).toContain('2 memories');
     expect(out.text).toContain('tokens');
   });
 
@@ -630,32 +632,14 @@ describe('/memory', () => {
     expect(entry?.label).toBe('Primary');
   });
 
-  it('refuses to compress for an agent that cannot remember', async () => {
-    const runtime = runtimeIn({
-      agents: { list: { default: { tools: { memory: 'deny' } } } },
-    });
-    const { ctx, out } = context(runtime, 'cli:1');
-
-    await runSlashCommand('/memory compress', ctx);
-
-    expect(out.text).toContain('does not have the memory tool');
-  });
-
-  it('says so when there is nothing to measure yet', async () => {
-    const runtime = runtimeIn();
-    const { ctx, out } = context(runtime, 'cli:never-spoken');
-
-    await runSlashCommand('/memory compress', ctx);
-
-    expect(out.text).toContain('nothing');
-  });
-
   it('names its verbs when given one it does not know', async () => {
     const runtime = runtimeIn();
     const { ctx, out } = context(runtime, 'cli:1');
 
     await runSlashCommand('/memory sideways', ctx);
 
-    expect(out.text).toContain('/memory compress');
+    expect(out.text).toContain('/memory on');
+    // `compress` was a third verb, and went with the format it folded into.
+    expect(out.text).not.toContain('compress');
   });
 });

@@ -787,9 +787,6 @@ describe('memory settings', () => {
     expect(shown.memoryMaxPromptTokens).toBe(
       String(DEFAULTS.memoryMaxPromptTokens),
     );
-    expect(shown.memoryCompactThresholdTokens).toBe(
-      String(DEFAULTS.memoryCompactThresholdTokens),
-    );
   });
 
   it('shows what the agent stored over the default', () => {
@@ -797,61 +794,47 @@ describe('memory settings', () => {
     expect(toAgentEntryForm(entry, DEFAULTS).memoryMaxPromptTokens).toBe('500');
   });
 
-  it('writes both onto the entry', () => {
+  it('writes the budget onto the entry', () => {
     const patch = parsed(
       toAgentEntryPatch(
         'reviewer',
-        form({
-          memoryMaxPromptTokens: '900',
-          memoryCompactThresholdTokens: '700',
-        }),
+        form({ memoryMaxPromptTokens: '900' }),
         EMPTY,
         t,
       ),
     );
 
-    expect(patch).toMatchObject({
-      memoryMaxPromptTokens: 900,
-      memoryCompactThresholdTokens: 700,
-    });
-  });
-
-  it('refuses a threshold above the cap', () => {
-    // Cross-field: a threshold over the cap means the notes are truncated
-    // before they are ever compacted, which loses what was learned rather than
-    // shortening it.
-    const result = toAgentEntryPatch(
-      'reviewer',
-      form({
-        memoryMaxPromptTokens: '500',
-        memoryCompactThresholdTokens: '900',
-      }),
-      EMPTY,
-      t,
-    );
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.errors.memoryCompactThresholdTokens).toContain(
-        'below the prompt cap',
-      );
-    }
+    expect(patch).toMatchObject({ memoryMaxPromptTokens: 900 });
   });
 
   it('accepts zero, which is how memory is kept out of the prompt', () => {
     const patch = parsed(
       toAgentEntryPatch(
         'reviewer',
-        form({
-          memoryMaxPromptTokens: '0',
-          memoryCompactThresholdTokens: '0',
-        }),
+        form({ memoryMaxPromptTokens: '0' }),
         EMPTY,
         t,
       ),
     );
 
     expect(patch).toMatchObject({ memoryMaxPromptTokens: 0 });
+  });
+
+  it('carries the memory prompt raw, so a space can delete the section', () => {
+    // `''` and `' '` mean different things — inherit the built-in, and remove
+    // the section — so a trim anywhere on the way through would make deleting
+    // it impossible to express.
+    expect(
+      parsed(
+        toAgentEntryPatch('reviewer', form({ memoryPrompt: ' ' }), EMPTY, t),
+      ),
+    ).toMatchObject({ memoryPrompt: ' ' });
+
+    expect(
+      parsed(
+        toAgentEntryPatch('reviewer', form({ memoryPrompt: '' }), EMPTY, t),
+      ),
+    ).toMatchObject({ memoryPrompt: '' });
   });
 
   it('carries every other override through a memory-only edit', () => {

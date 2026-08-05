@@ -648,8 +648,15 @@ const ITERATION_WARNING_AT = 3;
  * default, while a single space is the only way to say "I want this section
  * gone". `systemPrompt` treats whitespace as empty because an identity-less agent
  * is never what anyone meant; an install with no live-state section is coherent.
+ *
+ * Exported for `memory-contributor.ts`, which owns the seventh template and is
+ * not one of the sections this file places. A seventh spelling of the rule is
+ * how the seven come to disagree about what a space means.
  */
-function templateOr(stored: string | undefined, fallback: string): string {
+export function templateOr(
+  stored: string | undefined,
+  fallback: string,
+): string {
   return stored === undefined || stored === '' ? fallback : stored;
 }
 

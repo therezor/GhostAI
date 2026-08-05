@@ -72,8 +72,6 @@ export {
   type StaticPromptContext,
 } from './prompt.js';
 
-export { parseFrontmatter, type Frontmatter } from './frontmatter.js';
-
 export {
   MAX_DESCRIPTION_CHARS,
   MAX_SKILLS,
@@ -94,32 +92,10 @@ export {
 
 export {
   MemoryContributor,
-  renderMemory,
+  renderMemorySection,
   type MemoryBudget,
   type MemoryContributorOptions,
 } from './memory-contributor.js';
-
-export {
-  COMPACT_INSTRUCTION,
-  CONSOLIDATE_AT_FRACTION,
-  CONSOLIDATE_INSTRUCTION,
-  CONSOLIDATE_TO_FRACTION,
-  KEEP_RECENT_TURNS,
-  compactSections,
-  selectSpan,
-  transcript,
-  type SelectSpanOptions,
-  type Span,
-  type SpanRecord,
-} from './consolidation.js';
-
-export {
-  MemoryConsolidator,
-  type CompressionInput,
-  type CompressionResult,
-  type MemoryConsolidatorOptions,
-  type TurnConsolidator,
-} from './consolidator.js';
 
 export {
   MAX_PENDING_STEER,

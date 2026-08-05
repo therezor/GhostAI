@@ -68,7 +68,6 @@ export const PROTOCOL_SCHEMAS = {
   ToolsConfig: config.ToolsConfigSchema,
   AgentToolboxNetwork: config.AgentToolboxNetworkSchema,
   AgentToolbox: config.AgentToolboxSchema,
-  AgentMemoryScope: config.AgentMemoryScopeSchema,
   SubagentRef: config.SubagentRefSchema,
   SubagentRunRef: subagent.SubagentRunRefSchema,
   AgentEntry: config.AgentEntrySchema,

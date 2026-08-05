@@ -113,7 +113,7 @@ Everything under `~/.ghostai`, or `$GHOSTAI_HOME`:
 
 **Skills** — drop a folder into `<workspace>/skills/` and the agent knows it is there. One directory per skill, holding a `SKILL.md` and whatever else it needs; its description is indexed into the prompt for about twenty tokens and the agent opens the sheet itself when the description says it applies. Name one in `pinnedSkills` and the body is in the prompt from the start instead. No settings to fill in — a skill is a file you commit beside the project it describes — and whether an agent may reach them at all is the `skill` tool's permission. See [Skills](docs/skills.md).
 
-**Memory** — the agent keeps what it learns in `<workspace>/memory/memory.md`, a plain markdown file placed whole into every prompt on that folder. It appends with the `memory` tool; you edit it with an editor, and everything above the first dated heading is yours and is never rewritten. `/memory compress` folds an over-long session into it rather than letting the window fill up — manually, because a summary is lossy in a way worth looking at. Whether an agent remembers at all is the `memory` tool's permission, so there is one switch and not two. See [Memory](docs/memory.md).
+**Memory** — the agent keeps what it learns in `<workspace>/memory/`, one plain markdown file per fact with frontmatter saying what it is about. Only the generated index reaches the prompt; the agent opens a memory with `read_file` when its line looks relevant, and corrects one by writing the same name again. You edit them with an editor and commit them beside the project. The wording of the section is a prompt template you own, and whether an agent remembers at all is the `memory` tool's permission — so there is one switch and not two. See [Memory](docs/memory.md).
 
 **MCP servers** — add one in Settings → Extensions over stdio, Streamable HTTP or SSE, with OAuth where a server wants it. Its tools land in the same registry as the built-ins, as `mcp_<server>_<tool>`, and each agent decides for itself which of them it may call — nothing is granted implicitly. A server that goes away takes its tools with it and reconnects on its own. See [Tools](docs/tools.md#mcp-servers).
 
@@ -220,7 +220,7 @@ Two smaller ones, so nothing here reads as more finished than it is: only the `o
 | [Providers](docs/providers.md)         | The registry, instances, resolution, resilience          |
 | [Tools & permissions](docs/tools.md)   | The built-ins, and who is allowed to call them           |
 | [Skills](docs/skills.md)               | Instruction sheets in the workspace, indexed or pinned   |
-| [Memory](docs/memory.md)               | What an agent remembers between sessions, and compaction |
+| [Memory](docs/memory.md)               | What an agent remembers between sessions, and how        |
 | [Toolboxes](docs/toolboxes.md)         | Container sandboxes, manifests and approval              |
 | [Security](docs/security.md)           | Each guard, the attack it closes, and its limits         |
 | [API](docs/api.md)                     | REST and WebSocket                                       |

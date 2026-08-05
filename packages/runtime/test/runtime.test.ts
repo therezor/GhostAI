@@ -1060,32 +1060,48 @@ describe('memory', () => {
    * permission is that there is no key on `defaults` to set instead.
    */
   function withMemory(
-    text: string,
-    tools?: Record<string, string>,
+    entry?: Record<string, unknown>,
+    name = 'rem-over-px',
   ): GhostRuntime {
     const home = tempHome({
       agents: {
         defaults: { provider: 'ollama', model: 'qwen3:8b' },
-        ...(tools === undefined ? {} : { list: { default: { tools } } }),
+        ...(entry === undefined ? {} : { list: { default: entry } }),
       },
     });
     const dir = join(home, 'workspace', 'memory');
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, 'memory.md'), text);
+    writeFileSync(
+      join(dir, `${name}.md`),
+      [
+        '---',
+        `name: ${name}`,
+        'description: prefers rem over px',
+        'metadata:',
+        '  type: user',
+        '---',
+        '',
+        'An explicit design token layer, please.',
+        '',
+      ].join('\n'),
+    );
     return build({ home });
   }
 
-  it('inlines the workspace memory in the loop the runtime built', async () => {
+  it('indexes the workspace memory in the loop the runtime built', async () => {
     // Through `previewPrompt` for the reason the skills block gives: it proves
     // the composition root wired a contributor, not that the renderer works.
-    const runtime = withMemory('- Prefers rem over px.\n');
+    const runtime = withMemory();
 
     const preview = await runtime.requireLoop().previewPrompt({
       sessionKey: 'session-1',
     });
 
     expect(preview.staticPrompt).toContain('## Memory');
-    expect(preview.staticPrompt).toContain('- Prefers rem over px.');
+    expect(preview.staticPrompt).toContain('memory/rem-over-px.md');
+    expect(preview.staticPrompt).toContain('prefers rem over px');
+    // The index, not the bodies — the model opens what it wants.
+    expect(preview.staticPrompt).not.toContain('design token layer');
   });
 
   it('places no section when the workspace has no memory', async () => {
@@ -1100,9 +1116,8 @@ describe('memory', () => {
     // Denying `memory` has to remove the section as well as the tool. An agent
     // that cannot write its memory should not still be paying for it in every
     // prompt.
-    const runtime = withMemory('- Prefers rem over px.\n', {
-      read_file: 'allow',
-      memory: 'deny',
+    const runtime = withMemory({
+      tools: { read_file: 'allow', memory: 'deny' },
     });
 
     const preview = await runtime.requireLoop().previewPrompt({
@@ -1110,16 +1125,15 @@ describe('memory', () => {
     });
 
     expect(preview.staticPrompt).not.toContain('## Memory');
-    expect(preview.staticPrompt).not.toContain('- Prefers rem over px.');
+    expect(preview.staticPrompt).not.toContain('rem-over-px');
   });
 
   it('places no section for an agent whose map predates the tool', async () => {
     // The migration case, and the one everybody upgrading will hit:
     // `DEFAULT_AGENT_TOOLS` seeds a *new* agent, so an existing install has no
     // `memory` key at all. Absent is denied — `docs/tools.md`'s rule.
-    const runtime = withMemory('- Prefers rem over px.\n', {
-      read_file: 'allow',
-      write_file: 'allow',
+    const runtime = withMemory({
+      tools: { read_file: 'allow', write_file: 'allow' },
     });
 
     const preview = await runtime.requireLoop().previewPrompt({
@@ -1132,15 +1146,41 @@ describe('memory', () => {
   it('still places the section when the tool is set to ask', async () => {
     // `ask` is a capability this agent has, answered per call. The section
     // belongs there; only `deny` removes it.
-    const runtime = withMemory('- Prefers rem over px.\n', {
-      memory: 'ask',
-    });
+    const runtime = withMemory({ tools: { memory: 'ask' } });
 
     const preview = await runtime.requireLoop().previewPrompt({
       sessionKey: 'session-1',
     });
 
     expect(preview.staticPrompt).toContain('## Memory');
+  });
+
+  it('removes the section for an agent whose template is a single space', async () => {
+    // The contract the other six templates keep, proved end to end: schema →
+    // `EffectiveAgent` → the composition root → the contributor.
+    const runtime = withMemory({ memoryPrompt: ' ' });
+
+    const preview = await runtime.requireLoop().previewPrompt({
+      sessionKey: 'session-1',
+    });
+
+    expect(preview.staticPrompt).not.toContain('## Memory');
+  });
+
+  it('renders the section from a template the agent stores', async () => {
+    // The only test that proves the whole of the second change: a stored
+    // `memoryPrompt` replaces the built-in wording, and `{{index}}` is filled.
+    const runtime = withMemory({
+      memoryPrompt: '## What I know\n\n{{index}}',
+    });
+
+    const preview = await runtime.requireLoop().previewPrompt({
+      sessionKey: 'session-1',
+    });
+
+    expect(preview.staticPrompt).toContain('## What I know');
+    expect(preview.staticPrompt).toContain('memory/rem-over-px.md');
+    expect(preview.staticPrompt).not.toContain('## Memory');
   });
 
   it('drops the skills catalogue for an agent that denied that tool too', async () => {
@@ -1176,8 +1216,8 @@ describe('memory', () => {
     );
     mkdirSync(join(home, 'workspace', 'memory'), { recursive: true });
     writeFileSync(
-      join(home, 'workspace', 'memory', 'memory.md'),
-      '- A fact.\n',
+      join(home, 'workspace', 'memory', 'a-fact.md'),
+      '---\ndescription: a fact\nmetadata:\n  type: project\n---\n\nBody.\n',
     );
 
     const preview = await build({ home })

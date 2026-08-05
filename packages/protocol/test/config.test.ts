@@ -237,18 +237,46 @@ describe('AgentEntrySchema', () => {
     expect(agent).not.toHaveProperty('reasoningEffort');
   });
 
+  it('drops the keys a config from before the memory rewrite carries', () => {
+    // `AgentDefaultsSchema` is a plain `z.object`, so it strips what it does not
+    // know. That is the whole of the upgrade path for the keys compaction took
+    // with it, and for the two proactive-learning knobs that were declared and
+    // never read — no migration, and no error on a config written yesterday.
+    const parsed = AgentDefaultsSchema.parse({
+      memoryCompactThresholdTokens: 1600,
+      consolidationModel: 'haiku',
+      learningEnabled: true,
+      learningInterval: 10,
+    });
+
+    expect(parsed).not.toHaveProperty('memoryCompactThresholdTokens');
+    expect(parsed).not.toHaveProperty('consolidationModel');
+    expect(parsed).not.toHaveProperty('learningEnabled');
+    expect(parsed).not.toHaveProperty('learningInterval');
+  });
+
+  it('drops a memory scope an older agent entry carries', () => {
+    // Same rule one level down: `AgentEntrySchema` is built from `patchOf`, and
+    // an unknown key is stripped rather than refused.
+    const agent = AgentEntrySchema.parse({ memory: { shared: false } });
+
+    expect(agent).not.toHaveProperty('memory');
+  });
+
   it('defaults the fields that belong to the agent itself', () => {
     const agent = AgentEntrySchema.parse({});
 
     expect(agent.label).toBe('');
     expect(agent.systemPrompt).toBe('');
+    // Empty means "inherit the built-in", which is what keeps an install that
+    // never customised a section receiving improvements to it on upgrade.
+    expect(agent.memoryPrompt).toBe('');
     expect(agent.enabled).toBe(true);
     expect(agent.tools).toEqual(DEFAULT_AGENT_TOOLS);
     expect(agent.toolbox).toEqual({
       name: '',
       network: { mode: 'none', allow: [] },
     });
-    expect(agent.memory).toEqual({ shared: true });
   });
 
   it('does not let an agent pin its own workspace', () => {

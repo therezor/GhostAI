@@ -16,10 +16,10 @@
  * consolidation budget as the reason the second exists, and both halves of that
  * turned out to be wrong. There is no memory *package* — memory reaches the
  * prompt through `ContextContributor`, so it lives in `@ghostai/agent` beside
- * skills. And `memoryMaxPromptTokens` and `memoryCompactThresholdTokens` only
- * mean anything relative to each other, so measuring them with two different
- * rulers is how "the threshold is below the cap" silently inverts. One ruler,
- * erring high on prose, is the right shape for a bound. See `docs/memory.md`.
+ * skills. And what `memoryMaxPromptTokens` now bounds is an *index*, where being
+ * wrong by 15% costs a line either way and `MAX_MEMORIES` is the cap that
+ * actually binds. A character heuristic erring high on prose is the right shape
+ * for that. See `docs/memory.md`.
  *
  * `loadTokenCounter` therefore has no caller in the tree today. It is kept
  * because the question it answers is real — it is what a future feature sizing

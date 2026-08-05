@@ -44,7 +44,7 @@ describe('toAgentForm', () => {
     expect(form.model).toBe('gpt-5');
     expect(form.maxTokens).toBe('8192');
     expect(form.toolTimeoutSeconds).toBe('30');
-    expect(form.learningEnabled).toBe(true);
+    expect(form.visionEnabled).toBe(true);
   });
 
   it('shows an unset reasoning effort as empty rather than inventing one', () => {
@@ -122,7 +122,7 @@ describe('toAgentPatch', () => {
         ...toAgentForm(defaults()),
         maxTokens: '',
         temperature: '9',
-        learningInterval: 'x',
+        memoryMaxPromptTokens: 'x',
       },
       t,
     );
@@ -133,7 +133,7 @@ describe('toAgentPatch', () => {
     expect(result.errors).toEqual({
       maxTokens: 'Required',
       temperature: 'Must be at most 2',
-      learningInterval: 'Must be a number',
+      memoryMaxPromptTokens: 'Must be a number',
     });
   });
 

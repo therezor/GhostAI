@@ -1,21 +1,26 @@
 /**
  * Memory, as a section of the prompt.
  *
- * The whole file, inlined. There is no index and no "open it when relevant"
- * half, which is the opposite of what `skills-contributor.ts` does, and the
- * difference is worth stating: a workspace has many skills and needs at most one
- * of them per turn, so an index earns its keep. It has exactly one memory, and
- * memory that the model has to decide to go and read is memory it will forget to
- * consult. Inlining it is also what makes the `memory` tool an append rather
- * than a read-modify-write — the current bytes are already in front of the model
- * when it decides to add to them.
+ * **An index, not the contents.** One line per memory — the file to open, its
+ * name, and what it is about — and the model opens the one it wants with
+ * `read_file`. That is the same shape `skills-contributor.ts` uses, and it is a
+ * reversal of what this file used to do: memory was one `memory.md` inlined
+ * whole on every request, on the argument that memory a model has to decide to
+ * go and read is memory it will forget to consult.
+ *
+ * The argument was not wrong, it was priced for a different object. A single
+ * summary is worth inlining. A *store* — one file per fact, growing for as long
+ * as the workspace does — is not: inlining it re-sends everything ever learned
+ * on every request of every turn, and the only lever is a token cap that decides
+ * what to forget by age rather than by relevance. An index costs a line each and
+ * puts the choice where the question is.
  *
  * ## Which half it lands in
  *
  * `staticSection` only. Memory is a property of the *workspace*, so it belongs
  * in the provider's cached prefix, read once per turn. There is no
  * `runtimeSection` and no `@memory:` mention: `ParsedMentions` carries `kb`,
- * `mcp` and `skill` and nothing about memory is a property of one message.
+ * `mcp` and `skill`, and nothing about memory is a property of one message.
  *
  * It is placed *after* skills in the contributor list, and that ordering is a
  * decision rather than an accident. Sections are appended in order so the cached
@@ -25,109 +30,159 @@
  * ## Nothing is cached on the instance
  *
  * One `AgentLoop` serves every session on an agent, and those sessions can be
- * bound to different workspaces. A contributor that remembered the file it read
- * last turn would hand one workspace's memory to a concurrent turn in another.
- * So `staticSection` re-reads — one small file, once per turn.
+ * bound to different workspaces. A contributor that remembered what it read last
+ * turn would hand one workspace's memory to a concurrent turn in another. So
+ * `staticSection` re-reads — a directory of small files, once per turn.
  */
 
 import {
-  MEMORY_PATH,
-  readMemory,
+  MEMORY_DIRNAME,
+  MEMORY_INDEX_PATH,
+  readMemories,
   silentLogger,
   type Logger,
+  type Memory,
 } from '@ghostai/core';
+import {
+  DEFAULT_MEMORY_TEMPLATE,
+  renderPromptTemplate,
+} from '@ghostai/protocol';
 import { estimateTokens } from '@ghostai/providers';
 
-import type { ContextContributor, StaticPromptContext } from './prompt.js';
-
-const HEADING = '## Memory';
-
-/**
- * Placed only when there is something to explain.
- *
- * It names the tool because a block of facts with no instruction to add to it is
- * read as background, not as somewhere to write.
- */
-const PREAMBLE = [
-  `What you have learned about this workspace, kept in \`${MEMORY_PATH}\`.`,
-  'To record something durable, call the `memory` tool — it appends, so',
-  'nothing here is lost. Keep entries short: this file is in every prompt on',
-  'this folder.',
-].join(' ');
-
-const TRUNCATION_NOTE = `[Truncated — read ${MEMORY_PATH} for the rest.]`;
+import {
+  templateOr,
+  type ContextContributor,
+  type StaticPromptContext,
+} from './prompt.js';
 
 export interface MemoryBudget {
   /**
    * `memoryMaxPromptTokens`. Zero places no section at all.
    *
-   * The schema already allows zero, and it is the natural reading of an empty
-   * budget — so it doubles as a way to keep memory on disk while keeping it out
-   * of the prompt, with no second key to express that.
-   *
-   * It bounds the **memory**, not the section: the heading and the preamble are
-   * added over it. That is `truncateHeadTail`'s convention, and it exists so
-   * that rewording the framing does not quietly change how much of a user's
-   * memory survives.
+   * It bounds the **index**, not the section: the operator's framing around it
+   * is added over the top. That is `renderSkills`' convention and it exists so
+   * that rewording the template does not quietly change how many memories a
+   * model is told about.
    */
   readonly maxTokens: number;
+  /**
+   * `agents.list.<id>.memoryPrompt`. Empty means `DEFAULT_MEMORY_TEMPLATE`.
+   *
+   * A single space renders nothing, which is how an operator deletes the section
+   * — the same contract the five section templates keep. See `docs/prompts.md`.
+   */
+  readonly template?: string;
 }
 
 /**
- * The section text for a memory and a budget.
+ * The section text for a set of memories and a budget.
  *
  * Pure, and separate from the contributor for the reason `renderSkills` is: the
- * budget, the truncation and what an empty memory renders as are the parts worth
+ * budget, the ordering and what an empty folder renders as are the parts worth
  * testing, and none of them needs a filesystem.
  *
- * An empty memory renders as `''`, never as a bare heading — `contributorSections`
+ * An empty folder renders as `''`, never as a bare heading — `contributorSections`
  * drops a section that trims to nothing, so this is how "no memory" becomes "no
  * section".
  */
-export function renderMemory(text: string, budget: MemoryBudget): string {
-  if (budget.maxTokens <= 0) return '';
+export function renderMemorySection(
+  memories: readonly Memory[],
+  budget: MemoryBudget,
+): string {
+  // Before the template is resolved, not after: an empty folder rendered
+  // through the built-in would place a paragraph explaining an index that is
+  // not there.
+  if (budget.maxTokens <= 0 || memories.length === 0) return '';
 
-  const trimmed = text.trim();
-  if (trimmed === '') return '';
+  // The one statement of "empty inherits, whitespace deletes", shared with the
+  // five section templates rather than spelled a seventh time.
+  const template = templateOr(budget.template, DEFAULT_MEMORY_TEMPLATE);
+  if (template.trim() === '') return '';
 
-  return [HEADING, PREAMBLE, fit(trimmed, budget.maxTokens)].join('\n\n');
+  const { index, shown } = fit(memories, budget.maxTokens);
+  return renderPromptTemplate(template, {
+    path: MEMORY_DIRNAME,
+    index,
+    count: String(shown),
+  }).trim();
 }
 
 /**
- * Keeps the newest text, drops the oldest.
+ * As many index lines as the budget affords, oldest-alphabetical first.
  *
- * The opposite of `truncateHeadTail`, and deliberately: a memory file is written
- * newest-last, so the tail is what a recent session learned and the head is what
- * compaction has already summarised once. Cutting the head loses the least.
- *
- * `estimateTokens` is `ceil(length / 4)`, which is what makes the character
- * bound below exact rather than a converging loop.
+ * **Whole lines, and the count of what was dropped.** The section this replaced
+ * cut mid-string, which was right for a blob of prose and wrong for an index: an
+ * index line missing its second half names a file the model cannot open, which
+ * is worse than a memory it was never told about. Saying how many are missing
+ * costs one line and is the difference between a model that knows to look and
+ * one that concludes it has seen everything.
  */
-function fit(text: string, maxTokens: number): string {
-  if (estimateTokens(text) <= maxTokens) return text;
+function fit(
+  memories: readonly Memory[],
+  maxTokens: number,
+): { readonly index: string; readonly shown: number } {
+  const lines = memories.map(indexLine);
 
-  const maxChars = maxTokens * 4 - TRUNCATION_NOTE.length - 2;
-  if (maxChars <= 0) return TRUNCATION_NOTE;
+  const whole = lines.join('\n');
+  if (estimateTokens(whole) <= maxTokens) {
+    return { index: whole, shown: lines.length };
+  }
 
-  // From a line boundary, so the section the model reads first is a whole one.
-  const tail = text.slice(-maxChars);
-  const newline = tail.indexOf('\n');
-  return `${TRUNCATION_NOTE}\n${newline === -1 ? tail : tail.slice(newline + 1)}`;
+  const kept: string[] = [];
+  let tokens = 0;
+  for (const line of lines) {
+    // The note costs tokens too, and it is only written when something is
+    // dropped — which, once we are in this branch, is certain.
+    const next = tokens + estimateTokens(`${line}\n`);
+    if (next > maxTokens) break;
+    kept.push(line);
+    tokens = next;
+  }
+
+  const dropped = lines.length - kept.length;
+  return {
+    index: [...kept, note(dropped)].join('\n'),
+    shown: kept.length,
+  };
+}
+
+/**
+ * The path first, because that is the string handed back to `read_file`.
+ *
+ * `renderIndex` in `@ghostai/core` writes the same memories as relative markdown
+ * links, and the two are deliberately different: `MEMORY.md` sits inside
+ * `memory/` and is read by a person, while this is read by a model that has to
+ * pass the path to a tool. A prefix it reconstructs is one it can reconstruct
+ * wrongly.
+ *
+ * The name is not repeated beside the path, because the path already ends in it.
+ * The *kind* is, at two tokens a line, because a stated preference and a pointer
+ * to a document are not the same claim and the description alone does not always
+ * say which one this is.
+ */
+function indexLine(memory: Memory): string {
+  return `- \`${memory.path}\` (${memory.type}) — ${memory.description}`;
+}
+
+function note(dropped: number): string {
+  return `[${String(dropped)} more not shown — the whole list is in \`${MEMORY_INDEX_PATH}\`.]`;
 }
 
 export interface MemoryContributorOptions extends MemoryBudget {
   readonly logger?: Logger;
 }
 
-/** Reads the workspace's memory and places it in the static prompt. */
+/** Reads the workspace's memories and indexes them in the static prompt. */
 export class MemoryContributor implements ContextContributor {
   readonly name: string = 'memory';
 
   private readonly maxTokens: number;
+  private readonly template: string;
   private readonly logger: Logger;
 
   constructor(options: MemoryContributorOptions) {
     this.maxTokens = options.maxTokens;
+    this.template = options.template ?? '';
     this.logger = options.logger ?? silentLogger;
   }
 
@@ -135,15 +190,18 @@ export class MemoryContributor implements ContextContributor {
     context: StaticPromptContext,
   ): Promise<string | undefined> {
     // Checked before the read: a budget of zero means the section is not placed,
-    // and reading a file to then discard it is work with no output.
+    // and scanning a directory to then discard it is work with no output.
     if (this.maxTokens <= 0) return undefined;
 
-    const text = await readMemory(context.workspaceRoot, {
+    const memories = await readMemories(context.workspaceRoot, {
       logger: this.logger,
     });
-    if (text === undefined) return undefined;
+    if (memories.length === 0) return undefined;
 
-    const section = renderMemory(text, { maxTokens: this.maxTokens });
+    const section = renderMemorySection(memories, {
+      maxTokens: this.maxTokens,
+      template: this.template,
+    });
     return section === '' ? undefined : section;
   }
 }

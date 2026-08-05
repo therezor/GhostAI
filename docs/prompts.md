@@ -72,9 +72,10 @@ The context inspector reports the two halves separately, so the figure you can a
 what each step of a turn costs again — is a number on the screen rather than an
 inference.
 
-## The six templates
+## The seven templates
 
-All six live on the agent, in `config.json`, and all six are edited in the agent editor.
+All seven live on the agent, in `config.json`, and all seven are edited in the agent
+editor.
 
 | Config key                          | Fills                      | Default constant                                        |
 | ----------------------------------- | -------------------------- | ------------------------------------------------------- |
@@ -84,6 +85,7 @@ All six live on the agent, in `config.json`, and all six are edited in the agent
 | `agents.list.<id>.platformPrompt`   | `{{platformPolicy}}`       | `DEFAULT_PLATFORM_HOST_TEMPLATE` / `…_TOOLBOX_TEMPLATE` |
 | `agents.list.<id>.toolboxPrompt`    | The toolbox advertisement  | `DEFAULT_TOOLBOX_TEMPLATE`                              |
 | `agents.list.<id>.toolPolicyPrompt` | The tool-output policy     | `DEFAULT_TOOL_POLICY_TEMPLATE`                          |
+| `agents.list.<id>.memoryPrompt`     | The memory section         | `DEFAULT_MEMORY_TEMPLATE`                               |
 
 The last three used to be composed in code with no key to reach them. They are the
 same kind of thing as the first three — prose telling the model what is true — and the
@@ -101,16 +103,16 @@ created.
 
 - `systemPrompt` treats whitespace-only as empty. A template of three newlines is not a
   decision anyone made, and an identity-less agent is never what was meant.
-- The other five do not. **Set any of them to a single space to delete the section
+- The other six do not. **Set any of them to a single space to delete the section
   entirely** — since empty already means "inherit", a space is the only way to say "I want
   this gone".
 
 A space is invisible, so the editor does not ask anyone to type one: each section has a
 **Remove section** button that writes it, and says `Removed` with a way back.
 
-Only `systemPrompt` is on the screen by default. The other five are behind an **Advanced
+Only `systemPrompt` is on the screen by default. The other six are behind an **Advanced
 prompt settings** disclosure in the same section, because most agents only ever want the
-first one and a screen that opens with six editors reads as harder than it is.
+first one and a screen that opens with seven editors reads as harder than it is.
 
 **No stored template carries whitespace whose job is invisible.** `wrapUpPrompt` used to
 open with two newlines, so that `Current time: {{time}}{{wrapUp}}` broke its paragraph and
@@ -178,6 +180,8 @@ where it is written should be visible as a mistake rather than render as blank.
 |                    | `{{reference}}` / `{{docs}}`                     | The `### … reference` heading and `TOOLS.md` / just it. |
 |                    | `{{notes}}`                                      | The manifest's notes.                                   |
 | `toolPolicyPrompt` | `{{tag}}`, `{{nonce}}`                           | The turn's delimiter, and the random half of it.        |
+| `memoryPrompt`     | `{{index}}`                                      | One line per memory. The section's whole content.       |
+|                    | `{{path}}`, `{{count}}`                          | The folder, and how many lines the index carries.       |
 
 **Two defaults, one override.** `platformPrompt` has a different built-in depending on
 whether `exec` lands on the host or in a container, because one _function_ has to serve
@@ -371,8 +375,14 @@ loop composes and caches sections and deliberately knows nothing about where one
 from.
 
 **[Memory](memory.md) is the second**, and it uses only the static half: the workspace's
-`memory/memory.md` is a property of the folder, not of one message, so there is no
-runtime counterpart and no `@memory:` mention. It is placed _after_ skills, because
-sections are appended in order and memory is the one a turn can rewrite — so it sits
-where a change invalidates the least of the cached prefix. RAG will inject content the
-same way when it lands.
+`memory/` folder is a property of the folder, not of one message, so there is no runtime
+counterpart and no `@memory:` mention. It is placed _after_ skills, because sections are
+appended in order and memory is the one a turn can rewrite — so it sits where a change
+invalidates the least of the cached prefix. RAG will inject content the same way when it
+lands.
+
+`memoryPrompt` is therefore the one section template that does **not** travel on
+`PromptAgent` with the other six: those fill sections the prompt builder writes, and this
+one is a contributor's. The composition root hands it to `MemoryContributor` directly. In
+the editor that distinction is invisible, and deliberately — an operator editing their
+prompt does not care which of the two wrote a paragraph.

@@ -205,13 +205,16 @@ export const AgentDefaultsSchema = z.object({
    * be used at all.
    */
   toolsEnabled: z.boolean().default(true),
-  learningEnabled: z.boolean().default(true),
-  /** Turns between proactive-learning passes. */
-  learningInterval: z.number().int().positive().default(10),
+  /**
+   * What the memory *index* may cost in the prompt.
+   *
+   * It bounds an index rather than a file now: memory is one file per fact and
+   * only the index lines reach the prompt, so this is a cap on how many of them
+   * are advertised, not on how much of one memory is shown. Zero places no
+   * section at all, which keeps memory on disk and out of the prompt with no
+   * second key to say so.
+   */
   memoryMaxPromptTokens: z.number().int().nonnegative().default(2000),
-  memoryCompactThresholdTokens: z.number().int().nonnegative().default(1600),
-  /** A cheaper model for consolidation/compaction; falls back to `model`. */
-  consolidationModel: z.string().optional(),
   pinnedSkills: z.array(z.string()).default([]),
   maxPinnedSkills: z.number().int().nonnegative().default(5),
 });
@@ -551,12 +554,6 @@ export const AgentToolboxSchema = z.object({
 });
 export type AgentToolbox = z.infer<typeof AgentToolboxSchema>;
 
-export const AgentMemoryScopeSchema = z.object({
-  /** Also read the layer shared by every agent working in this folder. */
-  shared: z.boolean().default(true),
-});
-export type AgentMemoryScope = z.infer<typeof AgentMemoryScopeSchema>;
-
 /**
  * Another agent this one may hand a task to.
  *
@@ -691,6 +688,21 @@ export const AgentEntrySchema = patchOf(AgentDefaultsSchema)
      */
     toolPolicyPrompt: z.string().default(''),
     /**
+     * The `## Memory` section, as a template.
+     *
+     * Only rendered while the agent may call `memory` and the workspace has at
+     * least one — a permission of `deny` produces no section whatever this says,
+     * and neither does an empty `memory/` folder. Empty means the built-in; a
+     * single space removes the section, which is how an operator whose own
+     * `systemPrompt` already explains the folder stops paying for it twice.
+     *
+     * Its vocabulary is `MEMORY_PROMPT_PLACEHOLDERS`, and `{{index}}` is the one
+     * that matters: the generated lines are the section's content, and a
+     * template omitting it advertises a memory folder while naming nothing in
+     * it.
+     */
+    memoryPrompt: z.string().default(''),
+    /**
      * Per-tool replacements for the description and the parameter descriptions
      * the model is sent.
      *
@@ -713,7 +725,6 @@ export const AgentEntrySchema = patchOf(AgentDefaultsSchema)
     /** Merged over `tools.exec`, so one agent can hold a tighter allow-list. */
     exec: patchOf(ExecToolConfigSchema).optional(),
     toolbox: AgentToolboxSchema.prefault({}),
-    memory: AgentMemoryScopeSchema.prefault({}),
     /**
      * Agents this one may delegate to. Order is the order the model sees them.
      *
@@ -967,7 +978,6 @@ export const ConfigPatchSchema = z.object({
                   network: patchOf(AgentToolboxNetworkSchema).optional(),
                 })
                 .optional(),
-              memory: patchOf(AgentMemoryScopeSchema).optional(),
               // `subagents` is deliberately *not* restated beside these. It is
               // an array, so it already replaces wholesale — there is no
               // per-field merge for `patchOf` to be non-recursive about, and

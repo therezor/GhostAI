@@ -5,9 +5,14 @@
  * nothing ever updates a row in `messages`. That is not a stylistic preference
  * — a provider's prompt cache keys on an exact prefix, so editing history
  * invalidates the cache for every turn that follows and quietly multiplies the
- * cost of a long conversation. Consolidation therefore advances a marker
- * (`last_consolidated_seq`) rather than rewriting what it summarised, and the
- * summaries live in the memory files instead.
+ * cost of a long conversation. So history is *windowed* rather than rewritten:
+ * `last_consolidated_seq` is a floor a reader starts above.
+ *
+ * **Nothing advances that marker today.** `/memory compress` did, and was
+ * removed with the accumulating memory file it folded into. The column, the
+ * windowing below and the translations fork and truncate apply to it are all
+ * correct with a permanent zero, and are kept because the question "where does
+ * this session's replayable history start" is real and will be asked again.
  *
  * **`truncateAfter` does not break that rule, and it is worth being precise
  * about why.** The rule forbids *rewriting* — an `UPDATE` on a `messages` row,
@@ -1101,9 +1106,9 @@ export class SessionStore {
    * declared the calls, which every provider rejects with a 400 — the mirror of
    * the defect `findLegalStart` repairs at the other end of the window. Only the
    * *unconsolidated* tail is examined, because everything at or below
-   * `last_consolidated_seq` is represented by the memory files rather than
-   * replayed, so pairing across that boundary is not a thing a provider ever
-   * sees.
+   * `last_consolidated_seq` is below the window a turn replays, so pairing
+   * across that boundary is not a thing a provider ever sees. Nothing moves
+   * that marker at present; see the header.
    */
   private legalSeq(session: SessionRecord, seq: number): number {
     const floor = Math.min(session.lastConsolidatedSeq, seq);

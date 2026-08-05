@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -60,70 +60,126 @@ async function failure(
   return error;
 }
 
-function memory(): string {
-  return readFileSync(join(root, 'memory', 'memory.md'), 'utf8');
+function stored(name: string): string {
+  return readFileSync(join(root, 'memory', `${name}.md`), 'utf8');
 }
 
-describe('memory', () => {
-  it('appends under a dated heading', async () => {
-    await text(memoryTool, { note: '- Prefers rem over px.' });
+function index(): string {
+  return readFileSync(join(root, 'memory', 'MEMORY.md'), 'utf8');
+}
 
-    expect(memory()).toBe('## Session 2026-08-05\n\n- Prefers rem over px.\n');
+function names(): string[] {
+  return readdirSync(join(root, 'memory')).sort();
+}
+
+const NOTE = {
+  name: 'ui-stack-preferences',
+  description: 'no shadcn/ui; Tailwind in rem, not px',
+  type: 'user',
+  body: 'The user wants an explicit design token layer.',
+};
+
+describe('memory', () => {
+  it('writes one file per fact, with its frontmatter', async () => {
+    await text(memoryTool, NOTE);
+
+    expect(stored('ui-stack-preferences')).toBe(
+      [
+        '---',
+        'name: ui-stack-preferences',
+        'description: no shadcn/ui; Tailwind in rem, not px',
+        'metadata:',
+        '  type: user',
+        '---',
+        '',
+        'The user wants an explicit design token layer.',
+        '',
+      ].join('\n'),
+    );
   });
 
   it('says where it went, so the model knows the next turn will carry it', async () => {
-    const result = await text(memoryTool, { note: '- A fact.' });
-    expect(result).toContain('memory/memory.md');
+    const result = await text(memoryTool, NOTE);
+    expect(result).toContain('memory/ui-stack-preferences.md');
+    expect(result).toContain('Recorded');
   });
 
-  it('adds to what is there rather than replacing it', async () => {
-    // The property that makes this not a worse `write_file`: two calls are two
-    // notes, and the first cannot be lost by the second.
-    await text(memoryTool, { note: '- The first.' });
-    await text(memoryTool, { note: '- The second.' });
-
-    expect(memory()).toContain('- The first.');
-    expect(memory()).toContain('- The second.');
+  it('indexes it, so the next prompt names it', async () => {
+    await text(memoryTool, NOTE);
+    expect(index()).toContain('(ui-stack-preferences.md)');
   });
 
-  it('opens a new section when the day has moved on', async () => {
-    await text(memoryTool, { note: '- Monday.' });
-    await text(
-      memoryTool,
-      { note: '- Wednesday.' },
-      { ...context, clock: at(Date.parse('2026-08-07T09:00:00Z')) },
+  it('keeps two differently-named facts apart', async () => {
+    await text(memoryTool, NOTE);
+    await text(memoryTool, { ...NOTE, name: 'run-full-ci-gate' });
+
+    expect(names()).toEqual([
+      'MEMORY.md',
+      'run-full-ci-gate.md',
+      'ui-stack-preferences.md',
+    ]);
+  });
+
+  it('replaces a fact written under a name it already used', async () => {
+    // The whole of how a model corrects itself. Two contradictory memories with
+    // nothing to say which is current is the failure this prevents.
+    await text(memoryTool, { ...NOTE, body: 'The old answer.' });
+    const second = await text(memoryTool, { ...NOTE, body: 'The new answer.' });
+
+    expect(second).toContain('Replaced');
+    expect(stored('ui-stack-preferences')).toContain('The new answer.');
+    expect(stored('ui-stack-preferences')).not.toContain('The old answer.');
+  });
+
+  it('slugs a name a model typed as prose, and reports the one it used', async () => {
+    const result = await text(memoryTool, {
+      ...NOTE,
+      name: 'Build Conventions',
+    });
+
+    expect(result).toContain('memory/build-conventions.md');
+    expect(result).toContain('named `build-conventions`');
+  });
+
+  it('cannot be pointed outside the workspace by its name', async () => {
+    // The guarantee taking no `path` used to give for free. A name is not a
+    // path, but it does reach a filename, so the slug is what restores it.
+    await text(memoryTool, { ...NOTE, name: '../../etc/passwd' });
+
+    expect(names()).toEqual(['MEMORY.md', 'etc-passwd.md']);
+  });
+
+  it('reports a name with nothing usable in it rather than throwing', async () => {
+    const result = toToolResult(
+      await memoryTool.run({ ...NOTE, name: '???' }, context),
     );
 
-    expect(memory()).toContain('## Session 2026-08-05');
-    expect(memory()).toContain('## Session 2026-08-07');
-  });
-
-  it('leaves prose above the first heading untouched', async () => {
-    mkdirSync(join(root, 'memory'), { recursive: true });
-    writeFileSync(
-      join(root, 'memory', 'memory.md'),
-      'Always deploy with `make release`.\n',
-    );
-
-    await text(memoryTool, { note: '- A fact.' });
-
-    expect(memory()).toContain('Always deploy with `make release`.');
+    expect(result.isError).toBe(true);
+    expect(result.content).toContain('Names are letters, digits and hyphens');
   });
 
   it('takes no path, so there is none to point outside the workspace', async () => {
     // The schema is strict, so the argument a caller would reach for to escape
-    // the workspace is refused before `execute` runs at all. This is the whole
-    // reason the tool is not a worse `write_file`.
+    // the workspace is refused before `execute` runs at all.
     const error = await failure(memoryTool, {
-      note: '- A fact.',
+      ...NOTE,
       path: '../../etc/passwd',
     });
     expect(error.kind).toBe('invalid_input');
   });
 
-  it('refuses a note longer than the cap', async () => {
-    // Memory is read on every turn, so an unbounded note is a cost paid forever.
-    const error = await failure(memoryTool, { note: 'x'.repeat(2001) });
+  it('refuses a kind outside the four', async () => {
+    const error = await failure(memoryTool, { ...NOTE, type: 'whatever' });
+    expect(error.kind).toBe('invalid_input');
+  });
+
+  it('refuses a body longer than the cap', async () => {
+    // The format says one fact per file, and two thousand characters is already
+    // several.
+    const error = await failure(memoryTool, {
+      ...NOTE,
+      body: 'x'.repeat(2001),
+    });
     expect(error.kind).toBe('invalid_input');
   });
 });

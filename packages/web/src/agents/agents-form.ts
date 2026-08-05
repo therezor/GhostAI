@@ -113,10 +113,7 @@ export interface AgentForm {
   readonly loopWallTimeoutSeconds: string;
   readonly visionEnabled: boolean;
   readonly toolsEnabled: boolean;
-  readonly learningEnabled: boolean;
-  readonly learningInterval: string;
   readonly memoryMaxPromptTokens: string;
-  readonly memoryCompactThresholdTokens: string;
 }
 
 export const REASONING_EFFORTS: readonly ReasoningEffort[] = [
@@ -141,10 +138,7 @@ export function toAgentForm(defaults: AgentDefaults): AgentForm {
     loopWallTimeoutSeconds: msToSeconds(defaults.loopWallTimeoutMs),
     visionEnabled: defaults.visionEnabled,
     toolsEnabled: defaults.toolsEnabled,
-    learningEnabled: defaults.learningEnabled,
-    learningInterval: String(defaults.learningInterval),
     memoryMaxPromptTokens: String(defaults.memoryMaxPromptTokens),
-    memoryCompactThresholdTokens: String(defaults.memoryCompactThresholdTokens),
   };
 }
 
@@ -180,15 +174,7 @@ export function toAgentPatch(form: AgentForm, t: TFunction): PatchResult {
   const loopWallTimeout = parseNumber(form.loopWallTimeoutSeconds, t, {
     min: 0,
   });
-  const learningInterval = parseNumber(form.learningInterval, t, {
-    integer: true,
-    min: 1,
-  });
   const memoryMax = parseNumber(form.memoryMaxPromptTokens, t, {
-    integer: true,
-    min: 0,
-  });
-  const memoryCompact = parseNumber(form.memoryCompactThresholdTokens, t, {
     integer: true,
     min: 0,
   });
@@ -205,21 +191,7 @@ export function toAgentPatch(form: AgentForm, t: TFunction): PatchResult {
   collect('maxToolIterations', maxToolIterations);
   collect('toolTimeoutSeconds', toolTimeout);
   collect('loopWallTimeoutSeconds', loopWallTimeout);
-  collect('learningInterval', learningInterval);
   collect('memoryMaxPromptTokens', memoryMax);
-  collect('memoryCompactThresholdTokens', memoryCompact);
-
-  // Cross-field, so it belongs here rather than on either box. The threshold is
-  // *when* the notes get rewritten smaller and the cap is *where they are cut*;
-  // a threshold above the cap means compaction never runs before truncation
-  // does, which is the one arrangement that silently loses what was remembered.
-  if (
-    memoryMax.ok &&
-    memoryCompact.ok &&
-    memoryCompact.value > memoryMax.value
-  ) {
-    errors.memoryCompactThresholdTokens = t('agents.memoryThresholdTooHigh');
-  }
 
   if (form.provider.trim() === '') errors.provider = 'Required';
   // An empty model is not "resolve one for me" — see `MODEL_REQUIRED`.
@@ -231,9 +203,7 @@ export function toAgentPatch(form: AgentForm, t: TFunction): PatchResult {
     !maxToolIterations.ok ||
     !toolTimeout.ok ||
     !loopWallTimeout.ok ||
-    !learningInterval.ok ||
     !memoryMax.ok ||
-    !memoryCompact.ok ||
     Object.keys(errors).length > 0
   ) {
     return { ok: false, errors };
@@ -262,10 +232,7 @@ export function toAgentPatch(form: AgentForm, t: TFunction): PatchResult {
           loopWallTimeoutMs: secondsToMs(loopWallTimeout.value),
           visionEnabled: form.visionEnabled,
           toolsEnabled: form.toolsEnabled,
-          learningEnabled: form.learningEnabled,
-          learningInterval: learningInterval.value,
           memoryMaxPromptTokens: memoryMax.value,
-          memoryCompactThresholdTokens: memoryCompact.value,
           // `null` when blank rather than omitted, and that is the whole of
           // being able to clear these two. `agents.defaults` merges per field,
           // so an omitted key preserves what is stored — emptying the
@@ -286,19 +253,25 @@ export interface AgentEntryForm {
   readonly label: string;
   readonly systemPrompt: string;
   /**
-   * The five other templates an agent owns, and the mode that decides whether
+   * The six other templates an agent owns, and the mode that decides whether
    * any of them are placed.
    *
    * Held raw, unlike almost everything else on this form: `''` and `' '` mean
    * different things — inherit the built-in, and delete the section — so a
    * trim anywhere on the way through would make deleting one impossible to
    * express. `systemPrompt` above has always been raw for the same reason.
+   *
+   * `memoryPrompt` is the odd one out in *where it is placed* rather than in how
+   * it is held: the other five fill sections the prompt builder writes, while
+   * that one is a contributor's. It is edited beside them because an operator
+   * editing their prompt does not care which of the two wrote a paragraph.
    */
   readonly livePrompt: string;
   readonly wrapUpPrompt: string;
   readonly platformPrompt: string;
   readonly toolboxPrompt: string;
   readonly toolPolicyPrompt: string;
+  readonly memoryPrompt: string;
   readonly promptMode: string;
   /**
    * Tool name → the operator's replacement for what it tells the model.
@@ -330,15 +303,15 @@ export interface AgentEntryForm {
   readonly toolsEnabled: boolean;
   readonly toolTimeoutSeconds: string;
   /**
-   * What this agent's memory may cost, and when it gets rewritten smaller.
+   * What this agent's memory index may cost in the prompt.
    *
    * Per agent for the reason the budget above is: an agent on a small window
-   * cannot afford the same memory as one on a large one. Whether it remembers
-   * *at all* is not here — that is the `memory` tool's permission in `tools`
-   * below, and a second switch beside it is how the two come to disagree.
+   * cannot afford to be told about as many memories as one on a large one.
+   * Whether it remembers *at all* is not here — that is the `memory` tool's
+   * permission in `tools` below, and a second switch beside it is how the two
+   * come to disagree.
    */
   readonly memoryMaxPromptTokens: string;
-  readonly memoryCompactThresholdTokens: string;
   /**
    * Tool name → permission. A name absent from the map is not enabled.
    *
@@ -405,6 +378,7 @@ export function toAgentEntryForm(
     platformPrompt: entry.platformPrompt,
     toolboxPrompt: entry.toolboxPrompt,
     toolPolicyPrompt: entry.toolPolicyPrompt,
+    memoryPrompt: entry.memoryPrompt,
     promptMode: entry.promptMode,
     toolPrompts: { ...entry.toolPrompts },
     enabled: entry.enabled,
@@ -416,10 +390,6 @@ export function toAgentEntryForm(
     ),
     memoryMaxPromptTokens: String(
       entry.memoryMaxPromptTokens ?? defaults.memoryMaxPromptTokens,
-    ),
-    memoryCompactThresholdTokens: String(
-      entry.memoryCompactThresholdTokens ??
-        defaults.memoryCompactThresholdTokens,
     ),
     // Not `?? ''` on the whole expression: `0` is a temperature, and a falsy
     // check here would render it as "the provider's own".
@@ -544,7 +514,6 @@ function ownFields(form: AgentEntryForm, entry: AgentEntry): AgentOwnFields {
     toolbox,
     subagents,
     memoryMaxPromptTokens,
-    memoryCompactThresholdTokens,
     ...carried
   } = entry;
 
@@ -552,13 +521,15 @@ function ownFields(form: AgentEntryForm, entry: AgentEntry): AgentOwnFields {
     ...carried,
     label: form.label.trim(),
     systemPrompt: form.systemPrompt,
-    // Untrimmed, all six. A single space is how an operator deletes a section,
-    // and it is the only way to say it — empty already means "inherit".
+    // Untrimmed, all seven. A single space is how an operator deletes a
+    // section, and it is the only way to say it — empty already means
+    // "inherit".
     livePrompt: form.livePrompt,
     wrapUpPrompt: form.wrapUpPrompt,
     platformPrompt: form.platformPrompt,
     toolboxPrompt: form.toolboxPrompt,
     toolPolicyPrompt: form.toolPolicyPrompt,
+    memoryPrompt: form.memoryPrompt,
     promptMode: isPromptMode(form.promptMode) ? form.promptMode : 'template',
     // Sent whole for the same reason `tools` is: the merge replaces
     // `agents.list.*` wholesale, so this is also the only way an override can be
@@ -697,29 +668,12 @@ export function toAgentEntryPatch(
     form.memoryMaxPromptTokens,
     { integer: true, min: 0 },
   );
-  const memoryCompact = required(
-    'memoryCompactThresholdTokens',
-    form.memoryCompactThresholdTokens,
-    { integer: true, min: 0 },
-  );
-
-  // The same cross-field rule `toAgentPatch` applies, and for the same reason:
-  // a threshold above the cap means the notes are truncated before they are
-  // ever compacted, which is the one arrangement that loses what was learned.
-  if (
-    memoryMax !== undefined &&
-    memoryCompact !== undefined &&
-    memoryCompact > memoryMax
-  ) {
-    errors.memoryCompactThresholdTokens = t('agents.memoryThresholdTooHigh');
-  }
 
   if (
     maxTokens === undefined ||
     contextWindowTokens === undefined ||
     toolTimeout === undefined ||
     memoryMax === undefined ||
-    memoryCompact === undefined ||
     Object.keys(errors).length > 0
   ) {
     return { ok: false, errors };
@@ -738,7 +692,6 @@ export function toAgentEntryPatch(
             contextWindowTokens,
             toolTimeoutMs: secondsToMs(toolTimeout),
             memoryMaxPromptTokens: memoryMax,
-            memoryCompactThresholdTokens: memoryCompact,
             ...(temperature === undefined ? {} : { temperature }),
             ...(isReasoningEffort(form.reasoningEffort)
               ? { reasoningEffort: form.reasoningEffort }
@@ -824,6 +777,7 @@ export function toNewAgentPatch(
           platformPrompt: template.platformPrompt,
           toolboxPrompt: template.toolboxPrompt,
           toolPolicyPrompt: template.toolPolicyPrompt,
+          memoryPrompt: template.memoryPrompt,
           promptMode: template.promptMode,
           toolPrompts: structuredClone(template.toolPrompts),
           tools: { ...template.tools },
@@ -846,7 +800,6 @@ export function toNewAgentPatch(
           // model will use it.
           subagents: [],
           toolbox: { ...template.toolbox },
-          memory: { ...template.memory },
           provider: template.provider ?? defaults.provider,
           model: template.model ?? defaults.model,
           maxTokens: template.maxTokens ?? defaults.maxTokens,

@@ -10,7 +10,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DEFAULT_MEMORY_TEMPLATE,
   DEFAULT_SYSTEM_PROMPT_TEMPLATE,
+  MEMORY_PROMPT_PLACEHOLDERS,
   PROMPT_PLACEHOLDERS,
   RAW_PROMPT_PLACEHOLDERS,
   renderPromptTemplate,
@@ -95,6 +97,36 @@ describe('unknownPlaceholders', () => {
 
   it('ignores the spaced literal form', () => {
     expect(unknownPlaceholders('{{ nmae }}')).toEqual([]);
+  });
+});
+
+describe('DEFAULT_MEMORY_TEMPLATE', () => {
+  it('names no placeholder that nothing will fill', () => {
+    expect(
+      unknownPlaceholders(DEFAULT_MEMORY_TEMPLATE, MEMORY_PROMPT_PLACEHOLDERS),
+    ).toEqual([]);
+  });
+
+  it('places the index, which is the whole of what the section carries', () => {
+    // A template without it advertises a memory folder and names nothing in
+    // it, which is the one way this section can be actively misleading.
+    expect(DEFAULT_MEMORY_TEMPLATE).toContain('{{index}}');
+    expect(DEFAULT_MEMORY_TEMPLATE).toContain('{{path}}');
+  });
+
+  it('offers a count it does not use', () => {
+    // The same convention as `{{workspaceRoot}}` above: available for a custom
+    // template, declined by the default, and not removable without silently
+    // changing every stored template that named it.
+    expect(MEMORY_PROMPT_PLACEHOLDERS).toContain('count');
+    expect(DEFAULT_MEMORY_TEMPLATE).not.toContain('{{count}}');
+  });
+
+  it('tells the model to open a file, not to read the section', () => {
+    // A list of paths with no instruction to open them reads as a list of
+    // things that exist. The skills index learned this first.
+    expect(DEFAULT_MEMORY_TEMPLATE).toContain('read_file');
+    expect(DEFAULT_MEMORY_TEMPLATE).toContain('`memory` tool');
   });
 });
 

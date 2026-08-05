@@ -28,31 +28,34 @@ Writes are atomic: validate, write `config.json.tmp` at mode `0600`, rename.
 
 What every agent inherits, and what an install with no named agents runs as.
 
-| Key                            | Type                         | Default  | Notes                                                                                                                                          |
-| ------------------------------ | ---------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `workspace`                    | string                       | `''`     | Empty means `<root>/workspace`. Deliberately not the literal path, so moving the root with `GHOSTAI_HOME` moves the workspace with it.         |
-| `model`                        | string                       | `''`     | Empty means **unconfigured**, not "pick one". There is no model-picking code; an empty model makes every turn refuse with a message saying so. |
-| `provider`                     | string                       | `'auto'` | An instance id, a bare provider type, or `auto`.                                                                                               |
-| `maxTokens`                    | int > 0                      | `8192`   | Output cap per response.                                                                                                                       |
-| `contextWindowTokens`          | int > 0                      | `65536`  | What the context inspector measures against.                                                                                                   |
-| `temperature`                  | 0–2                          | _unset_  | Unset means the request carries no `temperature` at all, which is the only correct answer for models that reject it.                           |
-| `maxToolIterations`            | int > 0                      | `40`     | Tool rounds in one turn.                                                                                                                       |
-| `toolTimeoutMs`                | int ≥ 0                      | `0`      |                                                                                                                                                |
-| `loopWallTimeoutMs`            | int ≥ 0                      | `0`      | Wall-clock cap on a turn, checked at the top of each iteration.                                                                                |
-| `subagentTimeoutMs`            | int ≥ 0                      | `0`      | Applies to delegations _this_ agent makes.                                                                                                     |
-| `reasoningEffort`              | `minimal\|low\|medium\|high` | _unset_  | Unset sends nothing.                                                                                                                           |
-| `consolidationModel`           | string                       | _unset_  | A cheaper model for `/memory compress`. Falls back to `model`. Must be one the agent's own provider instance hosts.                            |
-| `learningEnabled`              | boolean                      | `true`   | _Declared, not yet read._                                                                                                                      |
-| `learningInterval`             | int > 0                      | `10`     | _Declared, not yet read._                                                                                                                      |
-| `memoryMaxPromptTokens`        | int ≥ 0                      | `2000`   | What [memory](memory.md) may cost in every prompt. `0` keeps the file on disk and out of the prompt.                                           |
-| `memoryCompactThresholdTokens` | int ≥ 0                      | `1600`   | Where the notes get rewritten smaller. Must stay under the cap: notes cut before they are compacted lose what was learned.                     |
-| `pinnedSkills`                 | string[]                     | `[]`     | Skills whose body is inlined into the prompt, in this order. Everything else in `skills/` is indexed. See [Skills](skills.md).                 |
-| `maxPinnedSkills`              | int ≥ 0                      | `5`      | How many of the above are inlined. Names past it fall back to an index line.                                                                   |
+| Key                     | Type                         | Default  | Notes                                                                                                                                                 |
+| ----------------------- | ---------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workspace`             | string                       | `''`     | Empty means `<root>/workspace`. Deliberately not the literal path, so moving the root with `GHOSTAI_HOME` moves the workspace with it.                |
+| `model`                 | string                       | `''`     | Empty means **unconfigured**, not "pick one". There is no model-picking code; an empty model makes every turn refuse with a message saying so.        |
+| `provider`              | string                       | `'auto'` | An instance id, a bare provider type, or `auto`.                                                                                                      |
+| `maxTokens`             | int > 0                      | `8192`   | Output cap per response.                                                                                                                              |
+| `contextWindowTokens`   | int > 0                      | `65536`  | What the context inspector measures against.                                                                                                          |
+| `temperature`           | 0–2                          | _unset_  | Unset means the request carries no `temperature` at all, which is the only correct answer for models that reject it.                                  |
+| `maxToolIterations`     | int > 0                      | `40`     | Tool rounds in one turn.                                                                                                                              |
+| `toolTimeoutMs`         | int ≥ 0                      | `0`      |                                                                                                                                                       |
+| `loopWallTimeoutMs`     | int ≥ 0                      | `0`      | Wall-clock cap on a turn, checked at the top of each iteration.                                                                                       |
+| `subagentTimeoutMs`     | int ≥ 0                      | `0`      | Applies to delegations _this_ agent makes.                                                                                                            |
+| `reasoningEffort`       | `minimal\|low\|medium\|high` | _unset_  | Unset sends nothing.                                                                                                                                  |
+| `memoryMaxPromptTokens` | int ≥ 0                      | `2000`   | What the [memory](memory.md) **index** may cost in every prompt. `0` keeps the files on disk and out of the prompt. `MAX_MEMORIES` (200) binds first. |
+| `pinnedSkills`          | string[]                     | `[]`     | Skills whose body is inlined into the prompt, in this order. Everything else in `skills/` is indexed. See [Skills](skills.md).                        |
+| `maxPinnedSkills`       | int ≥ 0                      | `5`      | How many of the above are inlined. Names past it fall back to an index line.                                                                          |
 
-`learningEnabled` and `learningInterval` are still _declared, not yet read_. They belong
-to proactive learning — a periodic pass over `last_learned_seq` — which is not built;
-`/memory compress` is manual and reads neither. They parse and persist; nothing consumes
-them. See [Memory](memory.md).
+**Five keys were removed and there is no migration.** `memoryCompactThresholdTokens` and
+`consolidationModel` went with the compaction they served; `learningEnabled` and
+`learningInterval` were declared and never read, and belonged to a proactive-learning pass
+that was never built; `agents.list.<id>.memory.shared` chose between an agent's own memory
+layer and a shared one, and there is no per-agent layer for it to fall back to — a folder
+in the workspace is a property of the *folder*, so it is shared by construction.
+
+`AgentDefaultsSchema` and `AgentEntrySchema` are plain zod objects, so they strip what they
+do not know: a `config.json` still carrying any of the five parses without error and loses
+it on the next write. A declared key nothing reads is worse than a missing one — it reads
+as a setting that does nothing, and there is no way to find that out from the file.
 
 Whether an agent may remember at all is **not** here: it is the `memory` tool's permission
 in `agents.list.<id>.tools`. Skills work the same way through `skill`. One switch per
@@ -81,7 +84,6 @@ session, shared by every agent that opens it.
 | `tools`            | `Record<string, allow\|ask\|deny>`   | see below          | **Replaces, never merges.** A tool absent from the map is not enabled.                                       |
 | `exec`             | patch of `tools.exec`                | _unset_            | Merged over the install-wide exec config, so one agent can hold a tighter allow-list.                        |
 | `toolbox`          | `{ name, network }`                  | `{ name: '', … }`  | Empty name runs `exec` on the host. See [Toolboxes](toolboxes.md).                                           |
-| `memory`           | `{ shared: boolean }`                | `{ shared: true }` | _Declared, not yet read._ Memory is a file in the workspace, so it is already shared by every agent there.   |
 | `subagents`        | `{ id, prompt, permission }[]`       | `[]`               | Agents this one may delegate to, in the order the model sees them.                                           |
 
 The six prompt templates share one rule: **`''` inherits the built-in, and a single space

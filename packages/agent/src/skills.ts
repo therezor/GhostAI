@@ -37,9 +37,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { silentLogger, type Logger } from '@ghostai/core';
-
-import { parseFrontmatter } from './frontmatter.js';
+import { parseFrontmatter, silentLogger, type Logger } from '@ghostai/core';
 
 /** The folder inside the workspace that holds them. */
 export const SKILLS_DIRNAME = 'skills';

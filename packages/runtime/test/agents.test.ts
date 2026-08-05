@@ -93,21 +93,17 @@ describe('resolveAgent', () => {
   });
 
   it('carries an override for a field that has no default at all', () => {
-    // `reasoningEffort` and `consolidationModel` are optional with no default,
-    // so they are absent from a parsed `agents.defaults`. A merge driven by the
-    // keys that happen to be present would drop exactly these two.
+    // `reasoningEffort` is optional with no default, so it is absent from a
+    // parsed `agents.defaults`. A merge driven by the keys that happen to be
+    // present would drop exactly this one.
     const config = configWith({
-      agents: {
-        list: {
-          reviewer: { reasoningEffort: 'high', consolidationModel: 'haiku' },
-        },
-      },
+      agents: { list: { reviewer: { reasoningEffort: 'high' } } },
     });
-    const agent = resolveAgent(config, 'reviewer');
 
-    expect(agent.defaults.reasoningEffort).toBe('high');
-    expect(agent.defaults.consolidationModel).toBe('haiku');
-    // And the default agent still has neither.
+    expect(resolveAgent(config, 'reviewer').defaults.reasoningEffort).toBe(
+      'high',
+    );
+    // And the default agent still has none.
     expect(
       resolveAgent(config, undefined).defaults.reasoningEffort,
     ).toBeUndefined();

@@ -86,6 +86,43 @@ describe('parseFrontmatter', () => {
     expect(parsed.fields).toEqual({ tags: '', description: 'Kept.' });
   });
 
+  it('flattens one level of nesting to a dotted key', () => {
+    // What a memory file's `metadata.type` rides on. The return type is still
+    // flat, so no caller learns about a tree.
+    const parsed = parseFrontmatter(
+      ['---', 'name: x', 'metadata:', '  type: user', '---', ''].join('\n'),
+    );
+
+    expect(parsed.fields).toEqual({
+      name: 'x',
+      metadata: '',
+      'metadata.type': 'user',
+    });
+  });
+
+  it('does not let a nested key shadow a real one', () => {
+    // The hazard the nesting rule was added to close. Before it, every line was
+    // trimmed before matching, so this `name:` overwrote the one above it.
+    const parsed = parseFrontmatter(
+      ['---', 'name: real', 'metadata:', '  name: nested', '---', ''].join(
+        '\n',
+      ),
+    );
+
+    expect(parsed.fields.name).toBe('real');
+    expect(parsed.fields['metadata.name']).toBe('nested');
+  });
+
+  it('does not hang an indented line off a key that has a value', () => {
+    // `parent` is only set by a key whose own value was empty, so this is a
+    // stray line rather than `name.something`.
+    const parsed = parseFrontmatter(
+      ['---', 'name: Deploy', '  stray: value', '---', ''].join('\n'),
+    );
+
+    expect(parsed.fields).toEqual({ name: 'Deploy' });
+  });
+
   it('lets a repeated key win last', () => {
     const parsed = parseFrontmatter('---\na: first\na: second\n---\n');
 

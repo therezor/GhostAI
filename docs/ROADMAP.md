@@ -20,14 +20,16 @@ building a second one beside it.
 ## Done
 
 - [x] **Memory** — the agent remembers across sessions in
-      `<workspace>/memory/memory.md`, placed whole into the static prompt and
-      appended to through a `memory` tool. `/memory compress` folds an over-long
-      session into it and advances `last_consolidated_seq`; compaction merges the
-      dated sections and never touches the prose above them. The tool's
-      permission is the feature's only switch, which is also how `skill` gained
-      one. **Compaction is manual** — a threshold is suggested, never acted on —
-      and proactive learning (`learningInterval`, `last_learned_seq`) is still to
-      come, as is `/memory` in the browser composer.
+      `<workspace>/memory/`, one markdown file per fact with frontmatter naming
+      it, describing it and saying which of four kinds it is. Only the generated
+      index reaches the static prompt; the model opens a memory with `read_file`
+      when its line bears on the question, and corrects one by writing the same
+      name again. The section's wording is `memoryPrompt`, the seventh editable
+      prompt template. The tool's permission is the feature's only switch, which
+      is also how `skill` gained one. **Compaction was removed** with the single
+      accumulating file it folded into; proactive learning (`learningInterval`,
+      `last_learned_seq`) is still to come, as is `/memory` in the browser
+      composer, and there is no delete operation.
 - [x] **Skills** — reusable instruction bundles in `<workspace>/skills/`, one
       directory per skill. Every skill's description is indexed into the static
       prompt and the agent opens the sheet itself with `read_file`; a skill in

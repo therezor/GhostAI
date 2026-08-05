@@ -44,6 +44,7 @@ import {
   AgentEntrySchema,
   DEFAULT_AGENT_ID,
   DEFAULT_LIVE_STATE_TEMPLATE,
+  DEFAULT_MEMORY_TEMPLATE,
   DEFAULT_PLATFORM_HOST_TEMPLATE,
   DEFAULT_PLATFORM_TOOLBOX_TEMPLATE,
   DEFAULT_SYSTEM_PROMPT_TEMPLATE,
@@ -52,6 +53,7 @@ import {
   DEFAULT_WRAP_UP_TEMPLATE,
   deriveAgentId,
   LIVE_PROMPT_PLACEHOLDERS,
+  MEMORY_PROMPT_PLACEHOLDERS,
   PLATFORM_PROMPT_PLACEHOLDERS,
   PROMPT_PLACEHOLDERS,
   RAW_PROMPT_PLACEHOLDERS,
@@ -104,8 +106,8 @@ import { ToolRow, parameterFields } from './tool-row.js';
  * The fields both halves of the form hold as strings under the same name.
  *
  * Intersecting the two keeps `bind` honest: a field that exists on only one of
- * them — `learningEnabled`, `tools` — cannot be bound this way, and trying
- * is a compile error rather than a control that silently edits nothing.
+ * them — `loopWallTimeoutSeconds`, `tools` — cannot be bound this way, and
+ * trying is a compile error rather than a control that silently edits nothing.
  */
 type StringField = {
   [K in keyof AgentForm & keyof AgentEntryForm]: AgentForm[K] extends string
@@ -118,9 +120,9 @@ type StringField = {
 /**
  * The same intersection for the switches.
  *
- * `learningEnabled` is on the defaults form only, so it falls out here exactly
- * as it does above — which is the point of writing the constraint twice rather
- * than loosening `StringField` to cover both.
+ * `enabled` is on the entry form only, so it falls out here exactly as
+ * `loopWallTimeoutSeconds` does above — which is the point of writing the
+ * constraint twice rather than loosening `StringField` to cover both.
  */
 type BooleanField = {
   [K in keyof AgentForm & keyof AgentEntryForm]: AgentForm[K] extends boolean
@@ -521,7 +523,6 @@ function Editor({
     contextWindowTokens: bind('contextWindowTokens'),
     toolTimeoutSeconds: bind('toolTimeoutSeconds'),
     memoryMaxPromptTokens: bind('memoryMaxPromptTokens'),
-    memoryCompactThresholdTokens: bind('memoryCompactThresholdTokens'),
   } satisfies Record<string, Bound>;
 
   const switches = {
@@ -621,6 +622,12 @@ function Editor({
    * about the next turn instead of about the last one.
    */
   const toolsOff = !switches.toolsEnabled.checked;
+
+  // The memory section is gated on the `memory` tool rather than on
+  // `toolsEnabled`, exactly as `runtime.ts` gates the contributor. Absent counts
+  // as denied there, so it counts as denied here.
+  const memoryOff =
+    form.tools.memory === undefined || form.tools.memory === 'deny';
 
   const setToolPermission = (
     name: string,
@@ -1324,13 +1331,6 @@ function Editor({
             error={errors.memoryMaxPromptTokens}
             hint={t('agents.memoryBudgetHint')}
           />
-          <BoundField
-            label={t('agents.memoryCompactAt')}
-            bound={fields.memoryCompactThresholdTokens}
-            inputMode="numeric"
-            error={errors.memoryCompactThresholdTokens}
-            hint={t('agents.memoryCompactAtHint')}
-          />
         </FieldGrid>
       </Section>
 
@@ -1529,6 +1529,31 @@ function Editor({
                           : {})}
                     onChange={(next) => {
                       update('toolPolicyPrompt', next);
+                    }}
+                  />
+                  <TemplateEditor
+                    key={`${String(formEpoch)}-memory`}
+                    name={name}
+                    label="agents.promptMemory"
+                    builtIn={DEFAULT_MEMORY_TEMPLATE}
+                    value={form.memoryPrompt}
+                    placeholders={MEMORY_PROMPT_PLACEHOLDERS}
+                    hint="agents.promptMemoryHint"
+                    // Its own gate, not `toolsOff`: this section is placed while
+                    // the agent may call `memory`, whatever the rest of the
+                    // toolbox is doing. Without the notice, writing a memory
+                    // prompt for an agent that cannot remember looks like it
+                    // worked and silently does nothing.
+                    {...(memoryOff
+                      ? {
+                          warning: {
+                            title: t('agents.toolsOffTitle'),
+                            message: t('agents.promptNotPlacedNoMemory'),
+                          },
+                        }
+                      : {})}
+                    onChange={(next) => {
+                      update('memoryPrompt', next);
                     }}
                   />
                 </>

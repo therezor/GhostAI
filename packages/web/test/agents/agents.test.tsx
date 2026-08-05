@@ -181,7 +181,7 @@ async function pick(
  * Scoped to the named list rather than swept off the document: a page can hold
  * more than one `<ul>`, and an open kebab menu is one of them.
  */
-/** Opens the prompt section's disclosure, where the five section templates live. */
+/** Opens the prompt section's disclosure, where the six section templates live. */
 async function openAdvanced(
   user: ReturnType<typeof userEvent.setup>,
 ): Promise<void> {
@@ -733,6 +733,35 @@ describe('the default agent', () => {
     expect(screen.getByLabelText(/^Running commands for/)).toBeInTheDocument();
     expect(
       screen.getByLabelText(/^Tool output policy for/),
+    ).toBeInTheDocument();
+    // `getByLabelText`, not `getByText`: the Memory *section* above the prompt
+    // carries the same word, so only the editor's own label distinguishes them.
+    expect(screen.getByLabelText(/^Memory for/)).toBeInTheDocument();
+  });
+
+  it('removes the memory section with its own button', async () => {
+    // The seventh template, and the cheapest place to prove it is wired to the
+    // same three-state machine as the other six rather than merely rendered.
+    const { user } = mount('/agents/default');
+
+    await openAdvanced(user);
+    await user.click(
+      screen.getByRole('button', { name: 'Remove the Memory section' }),
+    );
+
+    expect(screen.queryByLabelText(/^Memory for/)).not.toBeInTheDocument();
+  });
+
+  it('says the memory section is not placed for an agent that cannot remember', async () => {
+    // Its own gate, not `toolsEnabled`: writing a memory prompt for an agent
+    // without the tool otherwise looks like it worked and silently does not.
+    const { user } = mount('/agents/default');
+
+    await pick(user, 'memory', 'Disabled');
+    await openAdvanced(user);
+
+    expect(
+      screen.getByText(/does not have the memory tool/),
     ).toBeInTheDocument();
   });
 
@@ -1560,7 +1589,13 @@ describe('a named agent', () => {
     await user.click(prompt);
     await user.paste('You are {{nmae}}.');
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('{{nmae}}');
+    // `findAll`, because this fixture's tool map predates `memory` and the
+    // Memory box is therefore also warning that its section is not placed. Two
+    // legitimate alerts on one screen is the arrangement, not a bug.
+    const alerts = await screen.findAllByRole('alert');
+    expect(alerts.map((alert) => alert.textContent).join('\n')).toContain(
+      '{{nmae}}',
+    );
   });
 
   it('says so rather than silently creating one for a stale link', async () => {

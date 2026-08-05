@@ -28,19 +28,14 @@
  * terminal's selection *is* its copy mechanism.
  */
 
-import {
-  CONSOLIDATE_AT_FRACTION,
-  MemoryConsolidator,
-  describeContext,
-  type ContextReport,
-} from '@ghostai/agent';
+import { describeContext, type ContextReport } from '@ghostai/agent';
 import {
   DEFAULT_AGENT_ID,
   DEFAULT_WORKSPACE_ID,
   GhostError,
-  MEMORY_PATH,
+  MEMORY_DIRNAME,
   isGhostError,
-  readMemory,
+  readMemories,
   textOf,
   type SessionStore,
 } from '@ghostai/core';
@@ -186,7 +181,6 @@ const HELP_LAYOUT: readonly HelpSection[] = [
     rows: [
       { syntax: '/memory', key: 'slash.help.memory' },
       { syntax: '/memory on|off', key: 'slash.help.memoryOnOff' },
-      { syntax: '/memory compress', key: 'slash.help.memoryCompress' },
     ],
   },
   {
@@ -748,12 +742,17 @@ async function chooseModel(ctx: SlashContext): Promise<string | undefined> {
 }
 
 /**
- * `/memory`, and its three verbs.
+ * `/memory`, and its two verbs.
  *
  * The switch is the `memory` tool's permission, not a setting of its own — see
  * `docs/memory.md`. That is why `on`/`off` reconfigure rather than writing to
  * the session row: the capability belongs to the agent, and a session-scoped
  * override would be a second source of truth for one question.
+ *
+ * There was a third, `compress`, which folded the oldest messages of a session
+ * into a dated heading in the one `memory.md`. It went with the format: there is
+ * no single accumulating file to compact, and a summary of a conversation is not
+ * a fact about a workspace.
  */
 async function memoryCommand(
   argv: readonly string[],
@@ -768,9 +767,6 @@ async function memoryCommand(
     case 'on':
     case 'off':
       return setMemoryPermission(verb === 'on', ctx);
-
-    case 'compress':
-      return await compressMemory(ctx);
 
     default:
       throw new GhostError('invalid_input', ctx.t('slash.errors.usageMemory'));
@@ -799,41 +795,27 @@ async function memoryStatus(ctx: SlashContext): Promise<SlashOutcome> {
     return CONTINUE;
   }
 
-  const text = await readMemory(
+  const memories = await readMemories(
     runtime.jails.forWorkspace(
       runtime.store.getSession(ctx.sessionKey)?.workspaceId ??
         DEFAULT_WORKSPACE_ID,
     ).root,
   );
 
+  // A count and what the index costs, which are the two numbers an operator can
+  // act on. The line this replaced measured one file, and there is no one file.
   renderer.note(
-    text === undefined || text.trim() === ''
-      ? t('slash.notes.memoryEmpty', { path: MEMORY_PATH })
-      : t('slash.notes.memorySize', {
-          path: MEMORY_PATH,
-          tokens: formatNumber(estimateTokens(text), ctx.locale),
+    memories.length === 0
+      ? t('slash.notes.memoryEmpty', { path: MEMORY_DIRNAME })
+      : t('slash.notes.memoryCount', {
+          count: memories.length,
+          path: MEMORY_DIRNAME,
+          tokens: formatNumber(
+            estimateTokens(memories.map((m) => m.description).join('\n')),
+            ctx.locale,
+          ),
         }),
   );
-
-  // The nudge, and the only thing `CONSOLIDATE_AT_FRACTION` is read for.
-  // Nothing compresses on its own.
-  const session = runtime.store.getSession(ctx.sessionKey);
-  if (session !== undefined) {
-    const window = runtime.config.agents.defaults.contextWindowTokens;
-    const history = runtime.store
-      .messages(ctx.sessionKey, { afterSeq: session.lastConsolidatedSeq })
-      .reduce(
-        (sum, record) => sum + estimateTokens(JSON.stringify(record.message)),
-        0,
-      );
-    if (history > window * CONSOLIDATE_AT_FRACTION) {
-      renderer.note(
-        t('slash.notes.memoryHistoryLarge', {
-          tokens: formatNumber(history, ctx.locale),
-        }),
-      );
-    }
-  }
 
   return CONTINUE;
 }
@@ -870,53 +852,6 @@ function setMemoryPermission(on: boolean, ctx: SlashContext): SlashOutcome {
     on
       ? t('slash.notes.memoryEnabled', { agent: agentId })
       : t('slash.notes.memoryDisabled', { agent: agentId }),
-  );
-  return CONTINUE;
-}
-
-async function compressMemory(ctx: SlashContext): Promise<SlashOutcome> {
-  const { renderer, runtime, t } = ctx;
-  const agentId = memoryAgentId(ctx);
-
-  if (!memoryGranted(ctx, agentId)) {
-    throw new GhostError('permission_denied', t('slash.errors.memoryDenied'));
-  }
-
-  const session = runtime.store.getSession(ctx.sessionKey);
-  if (session === undefined) {
-    renderer.note(t('slash.notes.nothingToMeasure'));
-    return CONTINUE;
-  }
-
-  const agent = runtime.agents.find((entry) => entry.id === agentId);
-  const resolved = runtime.providerFor(
-    agentId,
-    agent?.defaults.consolidationModel,
-  );
-  if (resolved === null) {
-    throw new GhostError('config', t('slash.errors.memoryNoProvider'));
-  }
-
-  const defaults = agent?.defaults ?? runtime.config.agents.defaults;
-  const result = await new MemoryConsolidator({
-    store: runtime.store,
-    provider: resolved.provider,
-    model: resolved.model,
-    contextWindowTokens: defaults.contextWindowTokens,
-    maxPromptTokens: defaults.memoryMaxPromptTokens,
-    compactThresholdTokens: defaults.memoryCompactThresholdTokens,
-  }).compress({
-    sessionKey: ctx.sessionKey,
-    workspaceRoot: runtime.jails.forWorkspace(session.workspaceId).root,
-  });
-
-  renderer.note(
-    result.folded === 0
-      ? t('slash.notes.memoryNothingToCompress')
-      : t('slash.notes.memoryCompressed', {
-          count: result.folded,
-          tokens: formatNumber(result.memoryTokens, ctx.locale),
-        }),
   );
   return CONTINUE;
 }

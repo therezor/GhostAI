@@ -25,16 +25,13 @@ import { existsSync } from 'node:fs';
 import { telegramChannel, type TelegramConsole } from '@ghostai/channels';
 import type {
   ChannelFactory,
-  MemoryCompression,
   MemoryState,
   TelegramChannel,
 } from '@ghostai/channels';
-import { CONSOLIDATE_AT_FRACTION, MemoryConsolidator } from '@ghostai/agent';
 import {
   DEFAULT_AGENT_ID,
   DEFAULT_WORKSPACE_ID,
-  GhostError,
-  readMemory,
+  readMemories,
   type GhostPaths,
   type Logger,
   type SessionRecord,
@@ -133,66 +130,23 @@ export function createTelegramConsole(
       const permission = agent?.tools.memory;
       const granted = permission !== undefined && permission !== 'deny';
 
-      const text = granted
-        ? ((await readMemory(
+      const memories = granted
+        ? await readMemories(
             runtime.jails.forWorkspace(
               session?.workspaceId ?? DEFAULT_WORKSPACE_ID,
             ).root,
-          )) ?? '')
-        : '';
-
-      const historyTokens =
-        session === undefined
-          ? 0
-          : runtime.store
-              .messages(sessionKey, { afterSeq: session.lastConsolidatedSeq })
-              .reduce(
-                (sum, record) =>
-                  sum + estimateTokens(JSON.stringify(record.message)),
-                0,
-              );
-
-      const window =
-        agent?.defaults.contextWindowTokens ??
-        runtime.config.agents.defaults.contextWindowTokens;
+          )
+        : [];
 
       return {
         granted,
-        tokens: estimateTokens(text),
-        historyTokens,
-        suggestAboveTokens: Math.floor(window * CONSOLIDATE_AT_FRACTION),
+        count: memories.length,
+        // What the *index* costs, which is what reaches the prompt. The bodies
+        // are on disk until something opens one.
+        tokens: estimateTokens(
+          memories.map((memory) => memory.description).join('\n'),
+        ),
       };
-    },
-
-    compressMemory: async (sessionKey): Promise<MemoryCompression> => {
-      const { agent, session } = memoryTargets(runtime, sessionKey);
-      if (session === undefined) return { folded: 0, tokens: 0 };
-
-      const resolved = runtime.providerFor(
-        agent?.id,
-        agent?.defaults.consolidationModel,
-      );
-      if (resolved === null) {
-        throw new GhostError(
-          'config',
-          'No provider is configured, so there is nothing to summarise with.',
-        );
-      }
-
-      const defaults = agent?.defaults ?? runtime.config.agents.defaults;
-      const result = await new MemoryConsolidator({
-        store: runtime.store,
-        provider: resolved.provider,
-        model: resolved.model,
-        contextWindowTokens: defaults.contextWindowTokens,
-        maxPromptTokens: defaults.memoryMaxPromptTokens,
-        compactThresholdTokens: defaults.memoryCompactThresholdTokens,
-      }).compress({
-        sessionKey,
-        workspaceRoot: runtime.jails.forWorkspace(session.workspaceId).root,
-      });
-
-      return { folded: result.folded, tokens: result.memoryTokens };
     },
   };
 }

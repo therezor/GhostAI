@@ -11,16 +11,16 @@ per-agent permission, so being a tool is what makes each feature switchable with
 config flag beside it that could disagree. Denying either removes its prompt section too.
 See [Memory](memory.md) and [Skills](skills.md).
 
-| Tool         | Args                                        | Risk band | Does                                                             |
-| ------------ | ------------------------------------------- | --------- | ---------------------------------------------------------------- |
-| `read_file`  | `path`, `offset?`, `limit?`                 | `safe`    | Reads a file in the workspace.                                   |
-| `list_dir`   | `path`, `recursive?`, `maxEntries?`         | `safe`    | Lists a directory.                                               |
-| `write_file` | `path`, `content`                           | `write`   | Creates or overwrites.                                           |
-| `edit_file`  | `path`, `oldText`, `newText`, `replaceAll?` | `write`   | Exact-match replacement.                                         |
-| `exec`       | `argv: string[]`, `timeoutMs?`              | `exec`    | Runs a program — on the host, or in a [toolbox](toolboxes.md).   |
-| `automation` | `action`, plus a name, message and schedule | `exec`    | Schedules a turn for later. See below.                           |
-| `memory`     | `note`                                      | `write`   | Appends a durable note to [memory](memory.md). No path argument. |
-| `skill`      | `name`                                      | `safe`    | Opens one of the workspace's [skills](skills.md).                |
+| Tool         | Args                                        | Risk band | Does                                                               |
+| ------------ | ------------------------------------------- | --------- | ------------------------------------------------------------------ |
+| `read_file`  | `path`, `offset?`, `limit?`                 | `safe`    | Reads a file in the workspace.                                     |
+| `list_dir`   | `path`, `recursive?`, `maxEntries?`         | `safe`    | Lists a directory.                                                 |
+| `write_file` | `path`, `content`                           | `write`   | Creates or overwrites.                                             |
+| `edit_file`  | `path`, `oldText`, `newText`, `replaceAll?` | `write`   | Exact-match replacement.                                           |
+| `exec`       | `argv: string[]`, `timeoutMs?`              | `exec`    | Runs a program — on the host, or in a [toolbox](toolboxes.md).     |
+| `automation` | `action`, plus a name, message and schedule | `exec`    | Schedules a turn for later. See below.                             |
+| `memory`     | `name`, `description`, `type`, `body`       | `write`   | Records one durable fact in [memory](memory.md). No path argument. |
+| `skill`      | `name`                                      | `safe`    | Opens one of the workspace's [skills](skills.md).                  |
 
 All file paths resolve inside the workspace jail; see [Security](security.md). `exec`
 takes an argv array, never a command string.

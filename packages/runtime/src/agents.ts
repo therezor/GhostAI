@@ -42,7 +42,6 @@ import {
   subagentToolName,
   type AgentDefaults,
   type AgentEntry,
-  type AgentMemoryScope,
   type AgentTools,
   type AgentToolbox,
   type Config,
@@ -56,10 +55,10 @@ import { parseCidr } from '@ghostai/security';
 /**
  * Which of an entry's fields belong to `AgentDefaults`.
  *
- * From the schema rather than from a parsed default object: `reasoningEffort`
- * and `consolidationModel` are optional with no default, so they are *absent*
- * from a parsed `agents.defaults` — and a key walk over that instance would
- * silently drop exactly the overrides an operator went out of their way to set.
+ * From the schema rather than from a parsed default object: `reasoningEffort` is
+ * optional with no default, so it is *absent* from a parsed `agents.defaults` —
+ * and a key walk over that instance would silently drop exactly the overrides an
+ * operator went out of their way to set.
  */
 const AGENT_DEFAULT_KEYS: readonly string[] = Object.keys(
   AgentDefaultsSchema.shape,
@@ -90,6 +89,8 @@ export interface EffectiveAgent {
   readonly platformPrompt: string;
   readonly toolboxPrompt: string;
   readonly toolPolicyPrompt: string;
+  /** The `## Memory` section. Empty means the built-in; a space removes it. */
+  readonly memoryPrompt: string;
   readonly promptMode: PromptMode;
   /** This agent's replacements for what its tools say about themselves. */
   readonly toolPrompts: ToolPromptOverrides;
@@ -100,7 +101,6 @@ export interface EffectiveAgent {
   /** `config.tools` with this agent's exec overrides applied. */
   readonly toolsConfig: ToolsConfig;
   readonly toolbox: AgentToolbox;
-  readonly memory: AgentMemoryScope;
   /**
    * The agents this one may delegate to, in the operator's order.
    *
@@ -390,6 +390,7 @@ function build(
     platformPrompt: entry?.platformPrompt ?? '',
     toolboxPrompt: entry?.toolboxPrompt ?? '',
     toolPolicyPrompt: entry?.toolPolicyPrompt ?? '',
+    memoryPrompt: entry?.memoryPrompt ?? '',
     promptMode: entry?.promptMode ?? 'template',
     toolPrompts: entry?.toolPrompts ?? {},
     defaults: mergeDefaults(config.agents.defaults, entry),
@@ -402,7 +403,6 @@ function build(
       name: '',
       network: { mode: 'none', allow: [] },
     },
-    memory: entry?.memory ?? { shared: true },
     subagents: resolveSubagents(config, id, entry, warn),
   };
   assertBuildable(agent, warn);

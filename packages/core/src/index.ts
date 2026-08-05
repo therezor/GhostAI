@@ -137,20 +137,27 @@ export {
   type SessionHistorySource,
 } from './history.js';
 
+export { parseFrontmatter, type Frontmatter } from './frontmatter.js';
+
 export {
+  MAX_MEMORIES,
+  MAX_MEMORY_DESCRIPTION_CHARS,
+  MAX_MEMORY_NAME_CHARS,
   MEMORY_DIRNAME,
-  MEMORY_FILENAME,
+  MEMORY_INDEX_FILENAME,
+  MEMORY_INDEX_PATH,
   MEMORY_MAX_BYTES,
-  MEMORY_PATH,
-  appendMemory,
-  parseSections,
-  readMemory,
-  renderMemoryFile,
-  withMemoryLock,
-  writeMemory,
-  type MemorySection,
-  type ParsedMemory,
-  type ReadMemoryOptions,
+  MEMORY_TYPES,
+  memorySlug,
+  readMemories,
+  renderIndex,
+  renderMemory,
+  saveMemory,
+  type Memory,
+  type MemoryInput,
+  type MemoryType,
+  type ReadMemoriesOptions,
+  type SaveMemoryResult,
 } from './memory.js';
 
 export { MAX_TITLE_CHARS, deriveSessionTitle } from './session-title.js';
