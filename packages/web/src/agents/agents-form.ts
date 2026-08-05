@@ -244,7 +244,7 @@ export interface AgentEntryForm {
   readonly label: string;
   readonly systemPrompt: string;
   /**
-   * The six other templates an agent owns, and the mode that decides whether
+   * The seven other templates an agent owns, and the mode that decides whether
    * any of them are placed.
    *
    * Held raw, unlike almost everything else on this form: `''` and `' '` mean
@@ -252,10 +252,11 @@ export interface AgentEntryForm {
    * trim anywhere on the way through would make deleting one impossible to
    * express. `systemPrompt` above has always been raw for the same reason.
    *
-   * `memoryPrompt` is the odd one out in *where it is placed* rather than in how
-   * it is held: the other five fill sections the prompt builder writes, while
-   * that one is a contributor's. It is edited beside them because an operator
-   * editing their prompt does not care which of the two wrote a paragraph.
+   * `memoryPrompt` and `skillsPrompt` are the odd ones out in *where they are
+   * placed* rather than in how they are held: the other five fill sections the
+   * prompt builder writes, while those two are contributors'. They are edited
+   * beside the rest because an operator editing their prompt does not care which
+   * of the two wrote a paragraph.
    */
   readonly livePrompt: string;
   readonly wrapUpPrompt: string;
@@ -263,6 +264,7 @@ export interface AgentEntryForm {
   readonly toolboxPrompt: string;
   readonly toolPolicyPrompt: string;
   readonly memoryPrompt: string;
+  readonly skillsPrompt: string;
   readonly promptMode: string;
   /**
    * Tool name → the operator's replacement for what it tells the model.
@@ -369,6 +371,7 @@ export function toAgentEntryForm(
     toolboxPrompt: entry.toolboxPrompt,
     toolPolicyPrompt: entry.toolPolicyPrompt,
     memoryPrompt: entry.memoryPrompt,
+    skillsPrompt: entry.skillsPrompt,
     promptMode: entry.promptMode,
     toolPrompts: { ...entry.toolPrompts },
     enabled: entry.enabled,
@@ -507,7 +510,7 @@ function ownFields(form: AgentEntryForm, entry: AgentEntry): AgentOwnFields {
     ...carried,
     label: form.label.trim(),
     systemPrompt: form.systemPrompt,
-    // Untrimmed, all seven. A single space is how an operator deletes a
+    // Untrimmed, all eight. A single space is how an operator deletes a
     // section, and it is the only way to say it — empty already means
     // "inherit".
     livePrompt: form.livePrompt,
@@ -516,6 +519,7 @@ function ownFields(form: AgentEntryForm, entry: AgentEntry): AgentOwnFields {
     toolboxPrompt: form.toolboxPrompt,
     toolPolicyPrompt: form.toolPolicyPrompt,
     memoryPrompt: form.memoryPrompt,
+    skillsPrompt: form.skillsPrompt,
     promptMode: isPromptMode(form.promptMode) ? form.promptMode : 'template',
     // Sent whole for the same reason `tools` is: the merge replaces
     // `agents.list.*` wholesale, so this is also the only way an override can be
@@ -757,6 +761,7 @@ export function toNewAgentPatch(
           toolboxPrompt: template.toolboxPrompt,
           toolPolicyPrompt: template.toolPolicyPrompt,
           memoryPrompt: template.memoryPrompt,
+          skillsPrompt: template.skillsPrompt,
           promptMode: template.promptMode,
           toolPrompts: structuredClone(template.toolPrompts),
           tools: { ...template.tools },

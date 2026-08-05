@@ -170,9 +170,32 @@ If you want the injection-proof arrangement instead, keep the workspace's `skill
 the agent's write permissions: an agent whose `write_file` is `deny` or `ask` reads its
 skills and cannot author them.
 
+## The section is a template you own
+
+`agents.list.<id>.skillsPrompt` holds the heading and the prose, on the contract the
+other seven keep: empty inherits `DEFAULT_SKILLS_TEMPLATE`, a single space deletes the
+section, anything else is this agent's own. It is edited under **Advanced prompt
+settings** in the agent editor. See [Prompts](prompts.md).
+
+What stays in code is the _shape_ of the two generated blocks — an index line, and a
+pinned body under its own `### Skill:` sub-heading — because those are what the catalogue
+and `read_file` agree on, not prose. `{{index}}` and `{{pinned}}` each carry their own
+leading blank line, so a catalogue with nothing pinned and an agent that pinned everything
+both render without a gap.
+
+Whether the section is placed at all is the `skill` tool's permission, not this template.
+Denying it removes both.
+
+So does `toolsEnabled: false`, which is broader: with no tool list advertised there is
+nothing to open a sheet _with_, and a catalogue of paths plus prose naming `read_file` is
+cost the model cannot act on. **This takes a pinned skill with it**, whose body is inlined
+and would still have been readable — deliberately. Half a section whose own wording points
+at a tool that is not there is worse than no section, and an agent with no tools and a
+fixed instruction sheet is what `systemPrompt` is for.
+
 ## What is not built yet
 
-- **No settings panel.** Skills are authored by writing files. Settings → Extensions still
-  lists Skills as planned, and it means the screen.
+- **No settings panel for the skills themselves.** They are authored by writing files.
+  Settings → Extensions still lists Skills as planned, and it means the screen.
 - **No REST route listing them**, so the composer's `@skill:` autocomplete has nothing to
   offer yet. The mention itself works — it reaches the prompt.

@@ -558,6 +558,57 @@ delimiter appearing inside an envelope has been escaped with a backslash before
 its slash, and is part of the data.`;
 
 /**
+ * What a *skills* template may ask for.
+ *
+ * Two generated blocks rather than one, because a skill reaches the model two
+ * ways and either half can be empty: everything indexed and nothing pinned is
+ * the ordinary case, and an operator who pinned all four of their skills has the
+ * opposite. **Both carry their own leading blank line**, which is the convention
+ * `{{notes}}` and `{{tools}}` already keep on the toolbox template — a section
+ * whose optional half is absent should leave no gap where it would have been,
+ * and a pass afterwards collapsing blank lines would rewrite an operator's
+ * spacing to fix a problem the renderer created.
+ *
+ * That is the one way this differs from `MEMORY_PROMPT_PLACEHOLDERS`, whose
+ * `{{index}}` carries no leading blank line. It does not need to: the memory
+ * section is not placed at all when the folder is empty, so its index is never
+ * the empty string.
+ */
+export const SKILLS_PROMPT_PLACEHOLDERS = [
+  /** The folder, workspace-relative and POSIX, with no trailing slash. */
+  'path',
+  /** One line per indexed skill, with a leading blank line. Empty when all are pinned. */
+  'index',
+  /** Just the index lines, with no leading blank line. */
+  'indexLines',
+  /** The `### Skill: <name>` blocks for pinned skills, with a leading blank line. */
+  'pinned',
+  /** How many skills the workspace has, indexed and pinned together. */
+  'count',
+] as const;
+
+export type SkillsPromptPlaceholder =
+  (typeof SKILLS_PROMPT_PLACEHOLDERS)[number];
+
+/**
+ * The skills section: a catalogue, and what to do with it.
+ *
+ * It names `read_file` for the reason the memory template does — a list of paths
+ * with no instruction to open them reads as a list of things that exist rather
+ * than a list of things to consult.
+ *
+ * The prose deliberately says "a line below" rather than "each line below". An
+ * agent whose skills are all pinned has no index and the sentence still has to
+ * be true; the old hardcoded wording dodged that by dropping the whole paragraph
+ * when the index was empty, which is a conditional a template cannot express.
+ */
+export const DEFAULT_SKILLS_TEMPLATE = `## Skills
+
+Instruction sheets kept in this workspace under \`{{path}}/\`. A line below is a
+summary, not the skill — open the file with \`read_file\` before acting on what it
+names.{{index}}{{pinned}}`;
+
+/**
  * The memory section: an index, and what to do with it.
  *
  * **It advertises files rather than carrying their contents**, which is the

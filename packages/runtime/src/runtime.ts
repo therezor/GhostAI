@@ -1054,19 +1054,36 @@ class Runtime implements GhostRuntime {
       // or an agent that cannot write its memory would still be paying for it in
       // every prompt. A second `memoryEnabled` flag beside the permission map
       // would be a way for the two to disagree.
+      //
+      // `toolsEnabled` gates both on top of that, and it is the broader of the
+      // two conditions: off, the request advertises no tools at all, so there is
+      // nothing to open a memory or a skill *with*. Both sections are an index
+      // of paths plus prose telling the model to read one — handed to a model
+      // that cannot call `read_file`, the index is unusable and the prose is
+      // false. The whole of it is cost with no way to act on it.
+      //
+      // The one thing this loses is a *pinned* skill, whose body is inlined and
+      // would still be readable. That is deliberate rather than overlooked: an
+      // agent with no tools and a fixed instruction sheet is what `systemPrompt`
+      // is for, and half a section whose own wording points at a tool that is
+      // not there is worse than no section.
       contributors: [
-        ...(granted(agent.tools, 'skill')
+        ...(agent.defaults.toolsEnabled && granted(agent.tools, 'skill')
           ? [
               new SkillsContributor({
                 pinned: agent.defaults.pinnedSkills,
                 maxPinned: agent.defaults.maxPinnedSkills,
+                // Beside `memoryPrompt` below, and for the same reason: both
+                // are section templates a *contributor* owns rather than the
+                // prompt builder, so the composition root hands them over here.
+                template: agent.skillsPrompt,
                 logger: this.logger,
               }),
             ]
           : []),
         // After skills: sections are appended in order, so the cached prefix
         // grows at the end, and memory is the one a turn can rewrite.
-        ...(granted(agent.tools, 'memory')
+        ...(agent.defaults.toolsEnabled && granted(agent.tools, 'memory')
           ? [
               new MemoryContributor({
                 // The seventh section template, and the only one that does not

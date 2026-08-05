@@ -734,9 +734,11 @@ describe('the default agent', () => {
     expect(
       screen.getByLabelText(/^Tool output policy for/),
     ).toBeInTheDocument();
-    // `getByLabelText`, not `getByText`: the Memory *section* above the prompt
-    // carries the same word, so only the editor's own label distinguishes them.
+    // `getByLabelText`, not `getByText`: the Memory and skills *section* above
+    // the prompt carries both words, so only the editor's own label tells them
+    // apart.
     expect(screen.getByLabelText(/^Memory for/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Skills for/)).toBeInTheDocument();
   });
 
   it('removes the memory section with its own button', async () => {
@@ -750,6 +752,17 @@ describe('the default agent', () => {
     );
 
     expect(screen.queryByLabelText(/^Memory for/)).not.toBeInTheDocument();
+  });
+
+  it('says the skills section is not placed for an agent without the tool', async () => {
+    const { user } = mount('/agents/default');
+
+    await pick(user, 'skill', 'Disabled');
+    await openAdvanced(user);
+
+    expect(
+      screen.getByText(/does not have the skill tool/),
+    ).toBeInTheDocument();
   });
 
   it('says the memory section is not placed for an agent that cannot remember', async () => {
@@ -861,18 +874,26 @@ describe('the default agent', () => {
 
     await user.click(screen.getByRole('switch', { name: 'Tool calling' }));
 
-    // Every tool-shaped section on screen, which is two here: the third —
-    // Toolbox — renders only for an agent that has one, and this agent runs on
-    // the host. `Running commands` is the one worth pinning, because it is not
-    // obviously about tools until you notice every line of it describes `exec`
-    // landing somewhere. The count is the assertion: a bare plural query would
-    // pass while silently leaving a section unmarked.
+    // Every tool-shaped section on screen, which is four here: Running commands,
+    // Tool output policy, Memory and Skills. The fifth — Toolbox — renders only
+    // for an agent that has one, and this agent runs on the host.
+    //
+    // `Running commands` is the one worth pinning, because it is not obviously
+    // about tools until you notice every line of it describes `exec` landing
+    // somewhere. Memory and Skills joined the count when they started being
+    // gated on `toolsEnabled` too: with no tool list there is nothing to open a
+    // memory or a skill with, so an index of paths is cost nothing can act on.
+    //
+    // The count is the assertion: a bare plural query would pass while silently
+    // leaving a section unmarked.
     expect(
       await screen.findAllByText(/This section isn’t sent to the model/),
-    ).toHaveLength(2);
+    ).toHaveLength(4);
     // Still editable, and the stored wording still on screen.
     expect(screen.getByLabelText(/^Tool output policy for/)).toBeEnabled();
     expect(screen.getByLabelText(/^Running commands for/)).toBeEnabled();
+    expect(screen.getByLabelText(/^Memory for/)).toBeEnabled();
+    expect(screen.getByLabelText(/^Skills for/)).toBeEnabled();
   });
 
   it('replaces the delimiter warnings rather than stacking on them', async () => {

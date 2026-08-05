@@ -36,11 +36,16 @@
  */
 
 import { silentLogger, type Logger } from '@ghostai/core';
+import {
+  DEFAULT_SKILLS_TEMPLATE,
+  renderPromptTemplate,
+} from '@ghostai/protocol';
 
-import type {
-  ContextContributor,
-  RuntimePromptContext,
-  StaticPromptContext,
+import {
+  templateOr,
+  type ContextContributor,
+  type RuntimePromptContext,
+  type StaticPromptContext,
 } from './prompt.js';
 import {
   SKILLS_DIRNAME,
@@ -48,20 +53,6 @@ import {
   readSkills,
   type Skill,
 } from './skills.js';
-
-const HEADING = '## Skills';
-
-/**
- * Placed only when there is an index to explain.
- *
- * It names `read_file` because a list of files with no instruction to open them
- * is read as a list of things that exist, not as a list of things to use.
- */
-const INDEX_PREAMBLE = [
-  `Instruction sheets kept in this workspace under \`${SKILLS_DIRNAME}/\`.`,
-  'Each line below is a summary, not the skill — open the file with',
-  '`read_file` before acting on what it names.',
-].join(' ');
 
 export interface SkillBudget {
   /**
@@ -74,6 +65,13 @@ export interface SkillBudget {
   readonly pinned: readonly string[];
   /** `maxPinnedSkills`. Names past it fall back to an index line. */
   readonly maxPinned: number;
+  /**
+   * `agents.list.<id>.skillsPrompt`. Empty means `DEFAULT_SKILLS_TEMPLATE`.
+   *
+   * A single space renders nothing, which is how an operator deletes the
+   * section — the same contract the other seven templates keep.
+   */
+  readonly template?: string;
 }
 
 /**
@@ -86,12 +84,22 @@ export interface SkillBudget {
  * An empty catalogue renders as `''`, never as a bare heading — `contributorSections`
  * drops a section that trims to nothing, so this is how "no skills" becomes "no
  * section" rather than a `## Skills` with nothing under it.
+ *
+ * The heading and the prose come from the operator's `skillsPrompt`, on the same
+ * contract the other seven templates keep: empty inherits
+ * `DEFAULT_SKILLS_TEMPLATE`, a single space deletes the section. What stays in
+ * code is the *shape* of the two generated blocks — an index line, and a pinned
+ * body under its own sub-heading — because those are what `read_file` and the
+ * catalogue agree on, not prose.
  */
 export function renderSkills(
   skills: readonly Skill[],
   budget: SkillBudget,
 ): string {
   if (skills.length === 0) return '';
+
+  const template = templateOr(budget.template, DEFAULT_SKILLS_TEMPLATE);
+  if (template.trim() === '') return '';
 
   const byName = new Map(skills.map((skill) => [skill.name, skill]));
   const pinned: Skill[] = [];
@@ -107,15 +115,21 @@ export function renderSkills(
   }
 
   const indexed = skills.filter((skill) => !inlined.has(skill.name));
+  const indexLines = indexed.map(indexLine).join('\n');
+  const bodies = pinned
+    .map((skill) => `### Skill: ${skill.name}\n\n${skill.body}`)
+    .join('\n\n');
 
-  const sections: string[] = [HEADING];
-  if (indexed.length > 0) {
-    sections.push(INDEX_PREAMBLE, indexed.map(indexLine).join('\n'));
-  }
-  for (const skill of pinned) {
-    sections.push(`### Skill: ${skill.name}\n\n${skill.body}`);
-  }
-  return sections.join('\n\n');
+  // Each carries its own leading blank line, so a catalogue that is all pinned
+  // or all indexed leaves no gap where the other half would have been. See the
+  // convention noted beside the placeholders in `@ghostai/protocol`.
+  return renderPromptTemplate(template, {
+    path: SKILLS_DIRNAME,
+    index: indexLines === '' ? '' : `\n\n${indexLines}`,
+    indexLines,
+    pinned: bodies === '' ? '' : `\n\n${bodies}`,
+    count: String(skills.length),
+  }).trim();
 }
 
 function indexLine(skill: Skill): string {
@@ -132,11 +146,13 @@ export class SkillsContributor implements ContextContributor {
 
   private readonly pinned: readonly string[];
   private readonly maxPinned: number;
+  private readonly template: string;
   private readonly logger: Logger;
 
   constructor(options: SkillsContributorOptions) {
     this.pinned = options.pinned;
     this.maxPinned = options.maxPinned;
+    this.template = options.template ?? '';
     this.logger = options.logger ?? silentLogger;
   }
 
@@ -149,10 +165,14 @@ export class SkillsContributor implements ContextContributor {
     if (skills.length === 0) return undefined;
 
     this.warnAboutPins(skills, context.workspaceId);
-    return renderSkills(skills, {
+    const section = renderSkills(skills, {
       pinned: this.pinned,
       maxPinned: this.maxPinned,
+      template: this.template,
     });
+    // A template of a single space renders nothing, and an undefined here is
+    // what stops `contributorSections` placing an empty section.
+    return section === '' ? undefined : section;
   }
 
   /**

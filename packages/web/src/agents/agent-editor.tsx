@@ -45,6 +45,7 @@ import {
   DEFAULT_AGENT_ID,
   DEFAULT_LIVE_STATE_TEMPLATE,
   DEFAULT_MEMORY_TEMPLATE,
+  DEFAULT_SKILLS_TEMPLATE,
   DEFAULT_PLATFORM_HOST_TEMPLATE,
   DEFAULT_PLATFORM_TOOLBOX_TEMPLATE,
   DEFAULT_SYSTEM_PROMPT_TEMPLATE,
@@ -54,6 +55,7 @@ import {
   deriveAgentId,
   LIVE_PROMPT_PLACEHOLDERS,
   MEMORY_PROMPT_PLACEHOLDERS,
+  SKILLS_PROMPT_PLACEHOLDERS,
   PLATFORM_PROMPT_PLACEHOLDERS,
   PROMPT_PLACEHOLDERS,
   RAW_PROMPT_PLACEHOLDERS,
@@ -1633,21 +1635,55 @@ function Editor({
                     value={form.memoryPrompt}
                     placeholders={MEMORY_PROMPT_PLACEHOLDERS}
                     hint="agents.promptMemoryHint"
-                    // Its own gate, not `toolsOff`: this section is placed while
-                    // the agent may call `memory`, whatever the rest of the
-                    // toolbox is doing. Without the notice, writing a memory
-                    // prompt for an agent that cannot remember looks like it
-                    // worked and silently does nothing.
-                    {...(memoryOff
+                    // Two conditions, broadest first. `toolsEnabled` off means
+                    // the request advertises no tools at all, so nothing can
+                    // open a memory and the section is not placed whatever the
+                    // `memory` permission says — naming the narrower reason
+                    // there would send an operator to fix the wrong switch.
+                    {...(toolsOff
                       ? {
                           warning: {
                             title: t('agents.toolsOffTitle'),
-                            message: t('agents.promptNotPlacedNoMemory'),
+                            message: t('agents.promptNotPlacedNoTools'),
                           },
                         }
-                      : {})}
+                      : memoryOff
+                        ? {
+                            warning: {
+                              title: t('agents.toolsOffTitle'),
+                              message: t('agents.promptNotPlacedNoMemory'),
+                            },
+                          }
+                        : {})}
                     onChange={(next) => {
                       update('memoryPrompt', next);
+                    }}
+                  />
+                  <TemplateEditor
+                    key={`${String(formEpoch)}-skills`}
+                    name={name}
+                    label="agents.promptSkills"
+                    builtIn={DEFAULT_SKILLS_TEMPLATE}
+                    value={form.skillsPrompt}
+                    placeholders={SKILLS_PROMPT_PLACEHOLDERS}
+                    hint="agents.promptSkillsHint"
+                    {...(toolsOff
+                      ? {
+                          warning: {
+                            title: t('agents.toolsOffTitle'),
+                            message: t('agents.promptNotPlacedNoTools'),
+                          },
+                        }
+                      : skillsOff
+                        ? {
+                            warning: {
+                              title: t('agents.toolsOffTitle'),
+                              message: t('agents.promptNotPlacedNoSkills'),
+                            },
+                          }
+                        : {})}
+                    onChange={(next) => {
+                      update('skillsPrompt', next);
                     }}
                   />
                 </>

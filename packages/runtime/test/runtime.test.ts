@@ -1155,6 +1155,20 @@ describe('memory', () => {
     expect(preview.staticPrompt).toContain('## Memory');
   });
 
+  it('places no section for an agent that advertises no tools at all', async () => {
+    // Broader than the permission: with `toolsEnabled` off the request carries
+    // no tool list, so nothing can open a memory. An index of paths plus prose
+    // saying to read one is cost the model has no way to act on.
+    const runtime = withMemory({ toolsEnabled: false });
+
+    const preview = await runtime.requireLoop().previewPrompt({
+      sessionKey: 'session-1',
+    });
+
+    expect(preview.staticPrompt).not.toContain('## Memory');
+    expect(preview.staticPrompt).not.toContain('rem-over-px');
+  });
+
   it('removes the section for an agent whose template is a single space', async () => {
     // The contract the other six templates keep, proved end to end: schema →
     // `EffectiveAgent` → the composition root → the contributor.
@@ -1181,6 +1195,32 @@ describe('memory', () => {
     expect(preview.staticPrompt).toContain('## What I know');
     expect(preview.staticPrompt).toContain('memory/rem-over-px.md');
     expect(preview.staticPrompt).not.toContain('## Memory');
+  });
+
+  it('drops the skills catalogue for an agent that advertises no tools', async () => {
+    // The same gate as memory above, and the case worth stating: a *pinned*
+    // skill's body needs no tool to be useful, and goes anyway. Half a section
+    // whose own wording points at `read_file` is worse than none, and a fixed
+    // instruction sheet is what `systemPrompt` is for.
+    const home = tempHome({
+      agents: {
+        defaults: {
+          provider: 'ollama',
+          model: 'qwen3:8b',
+          toolsEnabled: false,
+        },
+        list: { default: { tools: { skill: 'allow' } } },
+      },
+    });
+    const dir = join(home, 'workspace', 'skills', 'code-review');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'SKILL.md'), '---\ndescription: X.\n---\n\nY.\n');
+
+    const preview = await build({ home })
+      .requireLoop()
+      .previewPrompt({ sessionKey: 'session-1' });
+
+    expect(preview.staticPrompt).not.toContain('## Skills');
   });
 
   it('drops the skills catalogue for an agent that denied that tool too', async () => {

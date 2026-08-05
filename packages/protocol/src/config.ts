@@ -693,6 +693,20 @@ export const AgentEntrySchema = patchOf(AgentDefaultsSchema)
      */
     memoryPrompt: z.string().default(''),
     /**
+     * The `## Skills` section, as a template.
+     *
+     * Only rendered while the agent may call `skill` and the workspace has at
+     * least one — a permission of `deny` produces no section whatever this says,
+     * and neither does an empty `skills/` folder. Empty means the built-in; a
+     * single space removes the section.
+     *
+     * Its vocabulary is `SKILLS_PROMPT_PLACEHOLDERS`. Unlike the memory
+     * template's, its `{{index}}` and `{{pinned}}` each carry their own leading
+     * blank line, because either can be empty and a section should leave no gap
+     * where its absent half would have been.
+     */
+    skillsPrompt: z.string().default(''),
+    /**
      * Per-tool replacements for the description and the parameter descriptions
      * the model is sent.
      *

@@ -57,14 +57,19 @@ describe('renderSkills', () => {
     expect(section).toContain('`skills/b/SKILL.md`');
   });
 
-  it('omits the index preamble when everything is pinned', () => {
-    // The preamble tells the model to open the files below it. With no index
-    // there are no files below it, and the sentence would be describing
-    // nothing.
+  it('keeps the framing when everything is pinned, and adds no empty index', () => {
+    // This reverses an earlier rule, and the reversal is the price of the
+    // section being an operator's template. The preamble used to be dropped
+    // when the index was empty, because it told the model to open the files
+    // below it and there were none — a conditional a placeholder cannot
+    // express. The wording is now true either way ("a line below", not "each
+    // line below"), and what is actually absent is the index block itself.
     const section = renderSkills([make('a')], { pinned: ['a'], maxPinned: 5 });
 
-    expect(section).not.toContain('read_file');
     expect(section).toContain('### Skill: a');
+    expect(section).not.toContain('`skills/a/SKILL.md`');
+    // No gap where the index would have been.
+    expect(section).not.toContain('\n\n\n');
   });
 
   it('pins in the operator order, not the catalogue order', () => {
@@ -186,6 +191,54 @@ function capture(): Capture {
       chunks.map((chunk) => (JSON.parse(chunk) as { msg?: string }).msg ?? ''),
   };
 }
+
+describe('renderSkills templates', () => {
+  it('renders nothing for a template that is a single space', () => {
+    // The contract the other seven templates keep: empty inherits the built-in
+    // and a space deletes the section, because empty already means "inherit".
+    expect(
+      renderSkills([make('deploy'), make('review')], {
+        pinned: [],
+        maxPinned: 0,
+        template: ' ',
+      }),
+    ).toBe('');
+  });
+
+  it('uses an operator template verbatim, filling its placeholders', () => {
+    const section = renderSkills([make('deploy'), make('review')], {
+      pinned: [],
+      maxPinned: 0,
+      template: 'Sheets in {{path}} — {{count}}.\n\n{{indexLines}}',
+    });
+
+    expect(section).toContain('Sheets in skills — 2.');
+    expect(section).not.toContain('## Skills');
+  });
+
+  it('leaves no gap when nothing is pinned', () => {
+    // `{{pinned}}` carries its own leading blank line, so an unpinned catalogue
+    // must not end on the blank line that half would have opened with.
+    const section = renderSkills([make('deploy'), make('review')], {
+      pinned: [],
+      maxPinned: 0,
+    });
+
+    expect(section).not.toMatch(/\n\n$/u);
+    expect(section).not.toContain('### Skill:');
+  });
+
+  it('leaves no gap when everything is pinned', () => {
+    // The opposite half, and the case the old wording dropped a paragraph for.
+    const section = renderSkills([make('deploy'), make('review')], {
+      pinned: ['deploy', 'review'],
+      maxPinned: 5,
+    });
+
+    expect(section).toContain('### Skill: deploy');
+    expect(section).not.toMatch(/\n\n\n/u);
+  });
+});
 
 describe('SkillsContributor', () => {
   it('reads the workspace named by the context, not one it remembers', async () => {

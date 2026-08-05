@@ -63,6 +63,12 @@ Denying `memory` removes the prompt section as well as the tool — that gating 
 `runtime.ts`, and it is what makes one switch enough. An agent that cannot write its
 memory should not still be paying to be told what it knows.
 
+**`toolsEnabled: false` removes it too**, and that is the broader condition. Off, the
+request advertises no tool list at all, so nothing can open a memory — the index is a list
+of paths the model cannot pass to `read_file`, and the prose telling it to is false. The
+agent editor says so on the Memory box, and names _that_ reason rather than the
+permission, because an operator told the narrower one would go and flip the wrong switch.
+
 | You want                            | Do this                                      |
 | ----------------------------------- | -------------------------------------------- |
 | This agent to stop remembering      | The switch, `/memory off`, or `memory: deny` |

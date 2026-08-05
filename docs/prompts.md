@@ -72,9 +72,9 @@ The context inspector reports the two halves separately, so the figure you can a
 what each step of a turn costs again — is a number on the screen rather than an
 inference.
 
-## The seven templates
+## The eight templates
 
-All seven live on the agent, in `config.json`, and all seven are edited in the agent
+All eight live on the agent, in `config.json`, and all eight are edited in the agent
 editor.
 
 | Config key                          | Fills                      | Default constant                                        |
@@ -86,6 +86,7 @@ editor.
 | `agents.list.<id>.toolboxPrompt`    | The toolbox advertisement  | `DEFAULT_TOOLBOX_TEMPLATE`                              |
 | `agents.list.<id>.toolPolicyPrompt` | The tool-output policy     | `DEFAULT_TOOL_POLICY_TEMPLATE`                          |
 | `agents.list.<id>.memoryPrompt`     | The memory section         | `DEFAULT_MEMORY_TEMPLATE`                               |
+| `agents.list.<id>.skillsPrompt`     | The skills section         | `DEFAULT_SKILLS_TEMPLATE`                               |
 
 The last three used to be composed in code with no key to reach them. They are the
 same kind of thing as the first three — prose telling the model what is true — and the
@@ -103,16 +104,16 @@ created.
 
 - `systemPrompt` treats whitespace-only as empty. A template of three newlines is not a
   decision anyone made, and an identity-less agent is never what was meant.
-- The other six do not. **Set any of them to a single space to delete the section
+- The other seven do not. **Set any of them to a single space to delete the section
   entirely** — since empty already means "inherit", a space is the only way to say "I want
   this gone".
 
 A space is invisible, so the editor does not ask anyone to type one: each section has a
 **Remove section** button that writes it, and says `Removed` with a way back.
 
-Only `systemPrompt` is on the screen by default. The other six are behind an **Advanced
+Only `systemPrompt` is on the screen by default. The other seven are behind an **Advanced
 prompt settings** disclosure in the same section, because most agents only ever want the
-first one and a screen that opens with seven editors reads as harder than it is.
+first one and a screen that opens with eight editors reads as harder than it is.
 
 **No stored template carries whitespace whose job is invisible.** `wrapUpPrompt` used to
 open with two newlines, so that `Current time: {{time}}{{wrapUp}}` broke its paragraph and
@@ -170,18 +171,21 @@ removing a placeholder would silently change every stored template that uses it.
 Each has its own vocabulary, for the reason the two halves do: a value that means nothing
 where it is written should be visible as a mistake rather than render as blank.
 
-| Template           | Placeholder                                      | Is                                                      |
-| ------------------ | ------------------------------------------------ | ------------------------------------------------------- |
-| `platformPrompt`   | `{{runtime}}`, `{{platform}}`, `{{workspaceId}}` | The host, its bare platform name, the workspace.        |
-|                    | `{{toolbox}}`, `{{workdir}}`                     | The container and its mount point. Empty on the host.   |
-|                    | `{{shellPolicy}}`                                | The generated shell-tooling paragraph for this host OS. |
-| `toolboxPrompt`    | `{{name}}`, `{{workdir}}`                        | The box and where the workspace is mounted in it.       |
-|                    | `{{tools}}` / `{{toolList}}`                     | `Installed:` and the bullets / just the bullets.        |
-|                    | `{{reference}}` / `{{docs}}`                     | The `### … reference` heading and `TOOLS.md` / just it. |
-|                    | `{{notes}}`                                      | The manifest's notes.                                   |
-| `toolPolicyPrompt` | `{{tag}}`, `{{nonce}}`                           | The turn's delimiter, and the random half of it.        |
-| `memoryPrompt`     | `{{index}}`                                      | One line per memory. The section's whole content.       |
-|                    | `{{path}}`, `{{count}}`                          | The folder, and how many lines the index carries.       |
+| Template           | Placeholder                                      | Is                                                        |
+| ------------------ | ------------------------------------------------ | --------------------------------------------------------- |
+| `platformPrompt`   | `{{runtime}}`, `{{platform}}`, `{{workspaceId}}` | The host, its bare platform name, the workspace.          |
+|                    | `{{toolbox}}`, `{{workdir}}`                     | The container and its mount point. Empty on the host.     |
+|                    | `{{shellPolicy}}`                                | The generated shell-tooling paragraph for this host OS.   |
+| `toolboxPrompt`    | `{{name}}`, `{{workdir}}`                        | The box and where the workspace is mounted in it.         |
+|                    | `{{tools}}` / `{{toolList}}`                     | `Installed:` and the bullets / just the bullets.          |
+|                    | `{{reference}}` / `{{docs}}`                     | The `### … reference` heading and `TOOLS.md` / just it.   |
+|                    | `{{notes}}`                                      | The manifest's notes.                                     |
+| `toolPolicyPrompt` | `{{tag}}`, `{{nonce}}`                           | The turn's delimiter, and the random half of it.          |
+| `memoryPrompt`     | `{{index}}`                                      | One line per memory. The section's whole content.         |
+|                    | `{{path}}`, `{{count}}`                          | The folder, and how many lines the index carries.         |
+| `skillsPrompt`     | `{{index}}` / `{{indexLines}}`                   | The catalogue with a leading blank line / just the lines. |
+|                    | `{{pinned}}`                                     | The `### Skill: …` bodies, with a leading blank line.     |
+|                    | `{{path}}`, `{{count}}`                          | The folder, and how many skills there are.                |
 
 **Two defaults, one override.** `platformPrompt` has a different built-in depending on
 whether `exec` lands on the host or in a container, because one _function_ has to serve
@@ -381,8 +385,22 @@ appended in order and memory is the one a turn can rewrite — so it sits where 
 invalidates the least of the cached prefix. RAG will inject content the same way when it
 lands.
 
-`memoryPrompt` is therefore the one section template that does **not** travel on
-`PromptAgent` with the other six: those fill sections the prompt builder writes, and this
-one is a contributor's. The composition root hands it to `MemoryContributor` directly. In
-the editor that distinction is invisible, and deliberately — an operator editing their
-prompt does not care which of the two wrote a paragraph.
+`memoryPrompt` and `skillsPrompt` are therefore the two section templates that do **not**
+travel on `PromptAgent` with the other six: those fill sections the prompt builder writes,
+and these two are contributors'. The composition root hands them to `MemoryContributor`
+and `SkillsContributor` directly. In the editor that distinction is invisible, and
+deliberately — an operator editing their prompt does not care which of the two wrote a
+paragraph.
+
+Both sections are gated twice over: on their own tool's permission, and on `toolsEnabled`.
+The second is what a reader is most likely to be surprised by — an agent whose model cannot
+call tools carries neither section, however its permissions read, because an index of paths
+is only useful to something that can open one.
+
+**`skillsPrompt` is the one template with two generated halves**, and both `{{index}}` and
+`{{pinned}}` carry their own leading blank line, because either can be empty: a catalogue
+with nothing pinned, or an agent that pinned all of its skills. That is the convention
+`{{notes}}` already keeps on the toolbox template. It also cost a rule: the index preamble
+used to disappear when every skill was pinned, since it told the model to open the files
+below it and there were none. A placeholder cannot express that condition, so the built-in
+wording now says "a line below" rather than "each line below" and is true either way.

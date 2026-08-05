@@ -91,6 +91,8 @@ export interface EffectiveAgent {
   readonly toolPolicyPrompt: string;
   /** The `## Memory` section. Empty means the built-in; a space removes it. */
   readonly memoryPrompt: string;
+  /** The `## Skills` section, on the same contract. */
+  readonly skillsPrompt: string;
   readonly promptMode: PromptMode;
   /** This agent's replacements for what its tools say about themselves. */
   readonly toolPrompts: ToolPromptOverrides;
@@ -391,6 +393,7 @@ function build(
     toolboxPrompt: entry?.toolboxPrompt ?? '',
     toolPolicyPrompt: entry?.toolPolicyPrompt ?? '',
     memoryPrompt: entry?.memoryPrompt ?? '',
+    skillsPrompt: entry?.skillsPrompt ?? '',
     promptMode: entry?.promptMode ?? 'template',
     toolPrompts: entry?.toolPrompts ?? {},
     defaults: mergeDefaults(config.agents.defaults, entry),

@@ -11,8 +11,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_MEMORY_TEMPLATE,
+  DEFAULT_SKILLS_TEMPLATE,
   DEFAULT_SYSTEM_PROMPT_TEMPLATE,
   MEMORY_PROMPT_PLACEHOLDERS,
+  SKILLS_PROMPT_PLACEHOLDERS,
   PROMPT_PLACEHOLDERS,
   RAW_PROMPT_PLACEHOLDERS,
   renderPromptTemplate,
@@ -127,6 +129,32 @@ describe('DEFAULT_MEMORY_TEMPLATE', () => {
     // things that exist. The skills index learned this first.
     expect(DEFAULT_MEMORY_TEMPLATE).toContain('read_file');
     expect(DEFAULT_MEMORY_TEMPLATE).toContain('`memory` tool');
+  });
+});
+
+describe('DEFAULT_SKILLS_TEMPLATE', () => {
+  it('names no placeholder that nothing will fill', () => {
+    expect(
+      unknownPlaceholders(DEFAULT_SKILLS_TEMPLATE, SKILLS_PROMPT_PLACEHOLDERS),
+    ).toEqual([]);
+  });
+
+  it('places both generated halves, since either can be the empty one', () => {
+    expect(DEFAULT_SKILLS_TEMPLATE).toContain('{{index}}');
+    expect(DEFAULT_SKILLS_TEMPLATE).toContain('{{pinned}}');
+  });
+
+  it('leaves no gap when a half renders to nothing', () => {
+    // Both carry their own leading blank line, so the template must not write
+    // one for them — that is what would leave the gap.
+    expect(DEFAULT_SKILLS_TEMPLATE).toContain('names.{{index}}{{pinned}}');
+  });
+
+  it('does not claim every line is an index line', () => {
+    // An agent whose skills are all pinned has no index, and the sentence still
+    // has to be true. The wording this replaced dodged it with a conditional a
+    // template cannot express.
+    expect(DEFAULT_SKILLS_TEMPLATE).not.toContain('Each line below');
   });
 });
 

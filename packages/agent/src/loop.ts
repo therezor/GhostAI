@@ -611,11 +611,17 @@ export class AgentLoop {
   /**
    * The tool-shaped prompt inputs for this turn, or nothing when there are none.
    *
-   * The one place `toolsEnabled` crosses into prompt assembly, and it crosses as
+   * Where `toolsEnabled` crosses into prompt assembly, and it crosses as
    * presence rather than as a flag: off, the prompt layer is handed no
    * `PromptTools` at all and therefore has no toolbox, no policy wording and no
    * command wording to render from. Nothing downstream is told why, and nothing
    * downstream needs a branch to find out.
+   *
+   * It is read in one other place, and not here: the composition root reads it
+   * to decide whether the skills and memory contributors exist at all. Those are
+   * sections a *contributor* owns, and this loop deliberately knows nothing
+   * about where a section came from — so the branch belongs where the list is
+   * built. See `runtime.ts`.
    */
   private get promptTools(): PromptTools | undefined {
     if (!this.config.toolsEnabled) return undefined;
