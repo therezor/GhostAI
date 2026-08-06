@@ -251,6 +251,23 @@ const EXEC_TOOL = 'exec';
  * is `write_file`, which is squarely an action tool.
  */
 const FEATURE_TOOLS: ReadonlySet<string> = new Set(['memory', 'skill']);
+
+/**
+ * The prefix `flattenToolName` puts on every tool an MCP server contributes.
+ *
+ * A fallback for the rows the registry cannot describe. `ToolDefinition.source`
+ * is the answer whenever the tool is registered, and it is the one used first —
+ * but `toolNames` deliberately includes tools this agent has an opinion about
+ * whose server is down, and those have no definition at all. Without this they
+ * would sit in the action list wearing a "not installed" badge, which is the
+ * mixing this grouping exists to undo, on the rows most likely to be looked at.
+ *
+ * A prefix test and nothing more. `mcp_{server}_{tool}` cannot be parsed back —
+ * `sanitise` collapses characters and a long name is truncated onto a digest —
+ * so this asks only whether a name came from a server, never which one.
+ */
+const MCP_TOOL_PREFIX = 'mcp_';
+
 /**
  * The dropdown's stand-in for "no toolbox".
  *
@@ -626,6 +643,11 @@ function Editor({
     });
   }, [tools.data, form.tools, toolboxToolNames]);
 
+  const registered = useMemo(
+    () => new Map((tools.data?.tools ?? []).map((tool) => [tool.name, tool])),
+    [tools.data],
+  );
+
   /**
    * `memory` and `skill`, split out of the list above into a group of their own.
    *
@@ -645,15 +667,38 @@ function Editor({
     [toolNames],
   );
 
-  const actionToolNames = useMemo(
-    () => toolNames.filter((name) => !FEATURE_TOOLS.has(name)),
-    [toolNames],
+  /**
+   * Everything an MCP server contributed, in a group of its own.
+   *
+   * Same kind of thing as an action tool — a call the model makes during a turn
+   * — but from somewhere else, and that difference is what an operator is
+   * reading for. Built-ins are this build's and change when GhostAI is upgraded;
+   * these arrive and leave with a server the operator configured, and one of
+   * them going missing means "the server is down", not "the tool was removed".
+   * Alphabetical order put `mcp_github_search_issues` between `list_dir` and
+   * `read_file`, where nothing said which of the three was which.
+   *
+   * `source` first, the name prefix second — see `MCP_TOOL_PREFIX`. Filtered out
+   * of the action list below rather than merely added here, so the three groups
+   * partition the list instead of overlapping it.
+   */
+  const mcpToolNames = useMemo(
+    () =>
+      toolNames.filter(
+        (name) =>
+          !FEATURE_TOOLS.has(name) &&
+          (registered.get(name)?.source === 'mcp' ||
+            (!registered.has(name) && name.startsWith(MCP_TOOL_PREFIX))),
+      ),
+    [toolNames, registered],
   );
 
-  const registered = useMemo(
-    () => new Map((tools.data?.tools ?? []).map((tool) => [tool.name, tool])),
-    [tools.data],
-  );
+  const actionToolNames = useMemo(() => {
+    const mcp = new Set(mcpToolNames);
+    return toolNames.filter(
+      (name) => !FEATURE_TOOLS.has(name) && !mcp.has(name),
+    );
+  }, [toolNames, mcpToolNames]);
 
   /**
    * Read from the switch rather than from the saved config, so the list greys
@@ -1151,6 +1196,29 @@ function Editor({
           >
             {actionToolNames.map((name) => toolRow(name))}
           </ul>
+        )}
+
+        {/* Directly under the action list, because these are action tools —
+            calls the model makes during a turn, under the same permissions.
+            What separates them is where they came from, which is the thing an
+            operator is scanning for when a row is missing or unfamiliar. Not
+            split per server: `localeCompare` already clusters `mcp_github_*`
+            ahead of `mcp_linear_*`, so the list reads by server for free. */}
+        {mcpToolNames.length > 0 && (
+          <>
+            <h3 className="agent-editor__tool-group">
+              {t('agents.mcpToolsGroup')}
+            </h3>
+            <p className="page__note">{t('agents.mcpToolsNote')}</p>
+            <ul
+              className={cn(
+                'stack agent-editor__tools',
+                toolsOff && 'agent-editor__tools--off',
+              )}
+            >
+              {mcpToolNames.map((name) => toolRow(name))}
+            </ul>
+          </>
         )}
 
         {/* Below the action tools rather than above them, and under the same

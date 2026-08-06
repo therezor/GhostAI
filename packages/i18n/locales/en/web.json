@@ -43,6 +43,8 @@
     "manage": "Manage agents…",
     "maxOutputTokens": "Max output tokens",
     "maxToolIterations": "Max tool iterations",
+    "mcpToolsGroup": "From MCP servers",
+    "mcpToolsNote": "Contributed by your MCP servers, not by GhostAI. A row marked “not installed” means the tool is not being offered right now — its server may be disconnected, disabled, or no longer configured. The permission is kept either way.",
     "memoryEnabled": "Remember across sessions",
     "memoryEnabledHint": "Off, the agent neither records a memory nor sees the index of what it already knows. The files in memory/ are left alone.",
     "missingLabel": "Agent: {{id}} — no longer configured",

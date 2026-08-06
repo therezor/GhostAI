@@ -1255,6 +1255,117 @@ describe('a named agent', () => {
     expect(named[1]?.[1]?.startsWith('skill')).toBe(true);
   });
 
+  it('groups the MCP servers’ tools away from the built-in ones', async () => {
+    // Alphabetical mixed them: `mcp_github_search_issues` sat between
+    // `list_dir` and `read_file`, where nothing said that one of the three
+    // arrives with a server the operator configured and two ship with GhostAI.
+    mount('/agents/reviewer', {
+      '/api/tools': [
+        200,
+        {
+          tools: [
+            { name: 'exec', description: '', risk: 'exec', parameters: {} },
+            {
+              name: 'read_file',
+              description: '',
+              risk: 'safe',
+              parameters: {},
+            },
+            {
+              name: 'mcp_github_search_issues',
+              description: '',
+              risk: 'safe',
+              parameters: {},
+              source: 'mcp',
+            },
+          ],
+        },
+      ],
+    });
+
+    await screen.findByRole('combobox', {
+      name: 'Permission for mcp_github_search_issues',
+    });
+    const lists = within(
+      screen.getByRole('region', { name: 'Tools' }),
+    ).getAllByRole('list');
+    const named = lists.map((list) =>
+      within(list)
+        .getAllByRole('listitem')
+        .map((row) => row.textContent),
+    );
+
+    // Two lists, and the second one is the server's tools and nothing else.
+    expect(
+      named[0]?.some((row) => row.startsWith('mcp_github_search_issues')),
+    ).toBe(false);
+    expect(named[0]?.some((row) => row.startsWith('exec'))).toBe(true);
+    expect(named[0]?.some((row) => row.startsWith('read_file'))).toBe(true);
+
+    expect(named[1]).toHaveLength(1);
+    expect(named[1]?.[0]?.startsWith('mcp_github_search_issues')).toBe(true);
+  });
+
+  it('keeps a tool from a server that is down in the MCP group', async () => {
+    // The row `toolNames` keeps so a save cannot drop an opinion about a tool
+    // whose server is unreachable. It has no definition, so `source` cannot
+    // answer for it — and the action list is exactly where it must not land.
+    mount('/agents/reviewer', {
+      '/api/tools': [
+        200,
+        {
+          tools: [
+            { name: 'exec', description: '', risk: 'exec', parameters: {} },
+            {
+              name: 'read_file',
+              description: '',
+              risk: 'safe',
+              parameters: {},
+            },
+          ],
+        },
+      ],
+      '/api/settings': [
+        200,
+        {
+          ...SETTINGS,
+          config: ConfigSchema.parse({
+            ...CONFIG,
+            agents: {
+              ...CONFIG.agents,
+              list: {
+                reviewer: {
+                  label: 'Reviewer',
+                  tools: { read_file: 'allow', mcp_linear_create_issue: 'ask' },
+                },
+              },
+            },
+          }),
+        },
+      ],
+    });
+
+    await screen.findByRole('combobox', {
+      name: 'Permission for mcp_linear_create_issue',
+    });
+    const lists = within(
+      screen.getByRole('region', { name: 'Tools' }),
+    ).getAllByRole('list');
+    const named = lists.map((list) =>
+      within(list)
+        .getAllByRole('listitem')
+        .map((row) => row.textContent),
+    );
+
+    expect(
+      named[0]?.some((row) => row.startsWith('mcp_linear_create_issue')),
+    ).toBe(false);
+    expect(named[1]).toHaveLength(1);
+    expect(named[1]?.[0]?.startsWith('mcp_linear_create_issue')).toBe(true);
+    // Still the "not installed" row it was — grouping it did not invent a tool.
+    expect(named[1]?.[0]).toContain('not installed');
+  });
+
   it('puts exec at the top, above the alphabetical rest', async () => {
     // The row this section is opened to look at. Alphabetical sorted it second
     // by accident of spelling, between `edit_file` and `list_dir`.
