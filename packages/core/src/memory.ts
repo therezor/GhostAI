@@ -28,13 +28,12 @@
  *
  * ## Why one file per fact
  *
- * It used to be one `memory.md` with dated sections, inlined whole into every
- * prompt on the folder. That is the arrangement a *summary* wants and the wrong
- * one for a *store*: everything ever learned was re-sent on every request
- * whether or not a word of it bore on the question, and the only lever was a
- * token cap that cut the oldest lines off the front. A file per fact gives each
- * one a name to be corrected under, a description to be found by, and a body
- * that costs nothing until something opens it.
+ * A file per fact gives each one a name to be corrected under, a description to
+ * be found by, and a body that costs nothing until something opens it. One
+ * accumulating file is the arrangement a *summary* wants and the wrong one for a
+ * *store*: everything ever learned would be re-sent on every request whether or
+ * not a word of it bore on the question, and the only lever would be a token cap
+ * cutting the oldest lines off the front.
  *
  * ## Four decisions worth stating
  *
@@ -98,11 +97,9 @@ export const MEMORY_INDEX_PATH: string = `${MEMORY_DIRNAME}/${MEMORY_INDEX_FILEN
  * how many index lines a model is shown.
  *
  * The same figure as `SKILL_MAX_BYTES`, and the argument transfers: this is what
- * a `read_file` on one of these costs when the model opens it. It used to be
- * 256 KB — twenty times the prompt budget of the day — because the whole file
- * was inlined and compaction needed something oversized to compact. Nothing here
- * reaches the prompt now, and one fact does not need twelve kilobytes, let alone
- * twenty times that.
+ * a `read_file` on one of these costs when the model opens it. Nothing here
+ * reaches the prompt on its own, and one fact does not need more than twelve
+ * kilobytes.
  */
 export const MEMORY_MAX_BYTES: number = 12 * 1024;
 

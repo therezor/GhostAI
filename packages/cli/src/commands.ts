@@ -749,10 +749,8 @@ async function chooseModel(ctx: SlashContext): Promise<string | undefined> {
  * the session row: the capability belongs to the agent, and a session-scoped
  * override would be a second source of truth for one question.
  *
- * There was a third, `compress`, which folded the oldest messages of a session
- * into a dated heading in the one `memory.md`. It went with the format: there is
- * no single accumulating file to compact, and a summary of a conversation is not
- * a fact about a workspace.
+ * There is no verb that folds a conversation into memory. `memory/` holds facts
+ * about a workspace, and a summary of one session is not one of those.
  */
 async function memoryCommand(
   argv: readonly string[],

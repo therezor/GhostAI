@@ -107,10 +107,9 @@ command looks alive rather than hung.
 
 ### History windowing
 
-`historyForLLM` runs five ordered steps: drop the consolidated prefix, keep the last
-`maxMessages` (default 500), start at the first `user` message, align to a legal
-tool-call boundary, then truncate tool results (default 8,000 characters, head and tail
-with the middle marked).
+`historyForLLM` runs four ordered steps: keep the last `maxMessages` (default 500), start
+at the first `user` message, align to a legal tool-call boundary, then truncate tool
+results (default 8,000 characters, head and tail with the middle marked).
 
 The boundary alignment is the part that matters. A window that cuts through a tool
 exchange leaves either an orphaned tool result or an unanswered tool call, and both are a

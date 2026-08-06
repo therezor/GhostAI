@@ -7,8 +7,8 @@
  * user message from a string, and reading the text back out of one.
  *
  * `textOf` is the load-bearing one. `content` is an array of parts precisely so
- * a message can carry images, but most consumers — the Telegram renderer, the
- * consolidation prompt, a log line, an assertion — want the words. Written
+ * a message can carry images, but most consumers — the Telegram renderer, a
+ * derived session title, a log line, an assertion — want the words. Written
  * inline, that is a `filter`/`map`/`join` that gets subtly different at every
  * call site, and the differences only show up on multimodal input.
  */

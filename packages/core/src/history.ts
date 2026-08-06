@@ -177,12 +177,6 @@ export function truncateHeadTail(
 }
 
 export interface HistoryForLLMOptions {
-  /**
-   * Index of the first message not yet folded into the memory files. Messages
-   * before it are represented by the consolidated summary instead, so replaying
-   * them would send the same content twice.
-   */
-  readonly fromIndex?: number;
   /** Most recent messages to keep. `0` or negative means no limit. */
   readonly maxMessages?: number;
   /** Cap on each `tool` result. `0` disables truncation. */
@@ -205,18 +199,17 @@ export const DEFAULT_MAX_TOOL_RESULT_CHARS = 8_000;
  *
  * Order matters and is not interchangeable:
  *
- *  1. Drop consolidated history, which the memory block now represents.
- *  2. Keep the most recent `maxMessages`.
- *  3. Start at the first `user` message, so the window opens on a complete turn
+ *  1. Keep the most recent `maxMessages`.
+ *  2. Start at the first `user` message, so the window opens on a complete turn
  *     rather than mid-exchange. Skipped entirely when the window contains no
  *     user message, since dropping everything would be worse than starting mid-turn.
- *  4. Align to a legal tool-call boundary — *after* step 3, because step 3 is
+ *  3. Align to a legal tool-call boundary — *after* step 2, because step 2 is
  *     itself capable of stranding a `tool` result whose `assistant` it just cut.
- *  5. Truncate tool results.
+ *  4. Truncate tool results.
  *
  * The system prompt is not handled here. The loop owns `messages[0]` and
  * rewrites it each iteration to keep the static half cache-stable, so any
- * `system` message that reached storage is dropped by step 3 rather than
+ * `system` message that reached storage is dropped by step 2 rather than
  * competing with it.
  */
 export function historyForLLM(
@@ -224,16 +217,14 @@ export function historyForLLM(
   options: HistoryForLLMOptions = {},
 ): ChatMessage[] {
   const {
-    fromIndex = 0,
     maxMessages = DEFAULT_MAX_HISTORY_MESSAGES,
     maxToolResultChars = DEFAULT_MAX_TOOL_RESULT_CHARS,
   } = options;
 
-  const unconsolidated = messages.slice(Math.max(0, fromIndex));
-  let window =
-    maxMessages > 0 && unconsolidated.length > maxMessages
-      ? unconsolidated.slice(-maxMessages)
-      : unconsolidated;
+  let window: readonly ChatMessage[] =
+    maxMessages > 0 && messages.length > maxMessages
+      ? messages.slice(-maxMessages)
+      : messages;
 
   const firstUser = window.findIndex((message) => message.role === 'user');
   if (firstUser > 0) window = window.slice(firstUser);
@@ -266,9 +257,6 @@ export function historyForLLM(
  * here, and an arrow back would be a cycle.
  */
 export interface SessionHistorySource {
-  getSession(
-    sessionKey: string,
-  ): { readonly lastConsolidatedSeq: number } | undefined;
   messages(
     sessionKey: string,
     options: {
@@ -288,24 +276,18 @@ export interface SessionHistorySource {
  * existed. The rows come from the store; the window is this file's, beside
  * `historyForLLM` and the boundary rules it applies.
  *
- * Moving it also puts the two halves of one constraint next to each other. The
- * SQL bound below and the `fromIndex: 0` that follows it must agree: the store
- * has already dropped everything at or before `lastConsolidatedSeq`, so letting
- * `historyForLLM` apply `fromIndex` again would skip a second block of the same
- * size. That agreement used to be a comment in one file about an argument in
- * another.
+ * A session with no stored row reads as no messages rather than as an error:
+ * the SQL below is keyed on the session, so an unknown key selects nothing and
+ * the window over nothing is empty.
  */
 export function sessionHistory(
   source: SessionHistorySource,
   sessionKey: string,
   options: HistoryForLLMOptions = {},
 ): ChatMessage[] {
-  const session = source.getSession(sessionKey);
-  if (session === undefined) return [];
-
   const { maxMessages, ...rest } = options;
   const records = source.messages(sessionKey, {
-    afterSeq: session.lastConsolidatedSeq,
+    afterSeq: 0,
     ...(maxMessages !== undefined && maxMessages > 0
       ? { limit: maxMessages, fromEnd: true }
       : {}),
@@ -315,7 +297,6 @@ export function sessionHistory(
     records.map((record) => record.message),
     {
       ...rest,
-      fromIndex: 0,
       ...(maxMessages === undefined ? {} : { maxMessages }),
     },
   );

@@ -395,22 +395,6 @@ describe('truncateHeadTail', () => {
 });
 
 describe('historyForLLM', () => {
-  it('drops consolidated messages', () => {
-    const messages = [
-      userMessage('one'),
-      assistantMessage('two'),
-      userMessage('three'),
-    ];
-    expect(historyForLLM(messages, { fromIndex: 2 })).toEqual([
-      userMessage('three'),
-    ]);
-  });
-
-  it('ignores a negative fromIndex rather than slicing from the end', () => {
-    const messages = [userMessage('one'), assistantMessage('two')];
-    expect(historyForLLM(messages, { fromIndex: -1 })).toHaveLength(2);
-  });
-
   it('keeps the most recent maxMessages', () => {
     const messages = [userMessage('a'), userMessage('b'), userMessage('c')];
     expect(historyForLLM(messages, { maxMessages: 2 })).toEqual([

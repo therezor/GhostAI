@@ -151,11 +151,10 @@ describe('describeContext', () => {
     store.close();
   });
 
-  it('reads only past the consolidation marker, as the loop does', async () => {
+  it('reads the whole stored conversation, as the loop does', async () => {
     const store = makeStore();
-    store.append(SESSION, userMessage('old and summarised'));
-    store.append(SESSION, userMessage('still in the window'));
-    store.updateSession(SESSION, { lastConsolidatedSeq: 1 });
+    store.append(SESSION, userMessage('the first thing said'));
+    store.append(SESSION, userMessage('and the last'));
 
     const report = await describeContext({
       store,
@@ -165,7 +164,7 @@ describe('describeContext', () => {
       contextWindowTokens: 10_000,
     });
 
-    expect(report?.messages.map((record) => record.seq)).toEqual([2]);
+    expect(report?.messages.map((record) => record.seq)).toEqual([1, 2]);
     store.close();
   });
 });

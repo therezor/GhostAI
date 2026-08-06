@@ -12,36 +12,23 @@ correct.
 > feature has no `memory` key in its permission map — and an absent tool is a denied one.
 > Grant it in Settings → Agents, or run `/memory on`. This applies to `skill` too.
 
-## What changed, and why
+## Why one file per fact
 
-This replaces a single `memory/memory.md` that was inlined **whole** into every prompt,
-with dated `## Session` headings the agent appended to. Two things were wrong with it,
-and both are properties of the shape rather than of the code:
+The shape is the whole design, and two properties follow from it that a single
+accumulating file cannot have:
 
-- **One file is one blob.** Everything ever learned was re-sent on every request of every
-  turn, whether or not a word of it bore on the question, and the only lever was a token
-  cap that decided what to forget by _age_.
-- **Nothing could be corrected.** Appending never rewrites, so a fact that changed could
-  only be recorded a second time — leaving two contradictory lines with nothing to say
-  which was current. The failure mode of a wrong memory is every future turn on that
-  folder.
+- **Nothing is re-sent to be re-read.** Only the index lines reach the prompt, so a fact
+  costs a line until something opens it — rather than everything ever learned costing its
+  full length on every request of every turn, whichever one the question is about.
+- **A fact can be corrected.** Writing a name that exists replaces that memory, so a fact
+  that has changed does not become two contradictory lines with nothing to say which is
+  current. The failure mode of a wrong memory is every future turn on that folder.
 
-`memory-contributor.ts` used to argue the opposite of what it now does, and the argument
-deserves an answer rather than a quiet deletion:
-
-> a workspace has many skills and needs at most one per turn, so an index earns its keep.
-> It has exactly one memory, and memory the model has to decide to go and read is memory
-> it will forget to consult.
-
-That was not wrong; it was priced for a different object. A single summary is worth
-inlining. A _store_ is not — and a workspace no longer has exactly one memory, so the
-premise the argument rested on is gone.
-
-**An existing `memory/memory.md` is left on disk and is no longer read.** It is not
-migrated. `readMemories` skips it deliberately and silently, so it costs nothing and warns
-about nothing. On a case-insensitive filesystem — macOS, Windows — that file _is_ the path
-`MEMORY.md` resolves to, so the first save renames it to `memory.md.replaced` rather than
-writing the generated index over it.
+**A `memory/memory.md` is not one of these and is never read.** A folder that has one is
+left exactly as it is: `readMemories` skips it deliberately and silently, so it costs
+nothing and warns about nothing. On a case-insensitive filesystem — macOS, Windows — that
+file _is_ the path `MEMORY.md` resolves to, so the first save renames it to
+`memory.md.replaced` rather than writing the generated index over it.
 
 ## The switch is the tool
 
@@ -75,10 +62,11 @@ permission, because an operator told the narrower one would go and flip the wron
 | To approve each thing it records    | Set `memory` to `ask` — the section stays    |
 | The section gone, but the tool kept | `memoryPrompt: " "` — a single space         |
 
-**Off means off, in both directions.** There is no way to keep the index in the prompt
-while denying the write, and no way to record while paying nothing — `memoryMaxPromptTokens: 0`
-used to be the second of those and is gone. Both are coherent things to want; neither was
-worth a second key that could disagree with the first.
+**The permission does not split.** There is no way to keep the index in the prompt while
+denying the write: an agent told what it knows and forbidden to correct it is the shape
+this feature exists to avoid. The other direction — recording without paying for the
+index — is the last row of the table, and it is the prompt template rather than a second
+switch.
 
 `/memory off` changes the **agent**, not the session: every conversation on that agent is
 affected, which is the same thing ticking the box in Settings does.
@@ -213,27 +201,20 @@ is intended; see the placement section below.
 `/memory` exists in the terminal REPL and in Telegram. It is **not** in the browser
 composer yet: slash commands there are still on [the roadmap](ROADMAP.md).
 
-| Command                     | Does                                                                 |
-| --------------------------- | -------------------------------------------------------------------- |
-| `/memory`                   | Whether the tool is granted, how many memories, what the index costs |
-| `/memory on`, `/memory off` | Grants or denies the `memory` tool on this agent                     |
+| Command                     | Where          | Does                                                                 |
+| --------------------------- | -------------- | -------------------------------------------------------------------- |
+| `/memory`                   | REPL, Telegram | Whether the tool is granted, how many memories, what the index costs |
+| `/memory on`, `/memory off` | REPL           | Grants or denies the `memory` tool on this agent                     |
+
+**Telegram's `/memory` takes no verbs.** It reports, and when the tool is denied it says
+where to grant it rather than granting it — the same status the REPL prints, without the
+two commands that reconfigure the agent.
 
 There is no `/memory edit`: `read_file` and `write_file` already open these, and a command
 whose whole job is to hand a path to an editor is what [Tools](tools.md) argues against.
 
-**`/memory compress` is gone**, and with it `consolidation.ts`, `consolidator.ts`,
-`memoryCompactThresholdTokens` and `consolidationModel`. It folded the oldest messages of
-a long session into a dated heading in the one accumulating file. There is no such file,
-and a summary of a conversation is not a fact about a workspace — the two were only ever
-in the same place because the same file held both.
-
-`AgentDefaultsSchema` is a plain `z.object`, so it strips what it does not know: a
-`config.json` carrying either dead key parses without error and loses it on the next
-write. There is no migration.
-
-**`last_consolidated_seq` remains** in the sessions table and is still honoured by history
-windowing, fork and truncate — but nothing advances it any more. It is a floor at zero
-until something else needs one.
+There is no command that summarises a session into memory either. A summary of a
+conversation is not a fact about a workspace, and `memory/` holds the second kind.
 
 ## The bounds
 
@@ -246,20 +227,20 @@ until something else needs one.
 | `MEMORY_MAX_BYTES`             | 12 KB | How much of one file is read.   |
 | `MAX_MEMORY_NAME_CHARS`        | 64    | How long a slug may be.         |
 
-`memoryMaxPromptTokens` used to sit above these and was removed. It never bound: an index
-line is roughly fifteen tokens, so its default of 2000 afforded well over a hundred lines
-while `MAX_MEMORIES` stopped at 200 — a knob whose value never decides anything reads as a
-lever and is not one. Its second job, `0` meaning "on disk, out of the prompt", belonged
-to the permission and is now the switch.
+**A count of files, not a token budget**, and the two are not interchangeable. An index
+line is roughly fifteen tokens, so a budget in tokens would afford more lines than
+`MAX_MEMORIES` ever admits — it would be a lever whose value never decided anything.
+Keeping memory on disk and out of the prompt is a capability question, and it is answered
+by the `memory` tool's permission rather than by a number.
 
-The ceiling that remains is the product of the first two: 200 lines of at most ~200
+The ceiling is therefore the product of the first two rows: 200 lines of at most ~200
 characters is roughly 12k tokens in the static half if a workspace really fills the
 folder. That is the cost of a very large memory store, and it is paid once per turn in
 the cached prefix rather than per request.
 
 `MEMORY_MAX_BYTES` is the same figure as `SKILL_MAX_BYTES` and the argument transfers: it
-is what a `read_file` on one of these costs when the model opens it. It was 256 KB when
-the file was inlined and compaction needed something oversized to compact.
+is what a `read_file` on one of these costs when the model opens it. One fact does not
+need more.
 
 See [Configuration](configuration.md).
 
@@ -301,11 +282,10 @@ If you want the injection-proof arrangement, set `write_file` to `ask` or `deny`
   takes effect on the very next turn with nothing to resynchronise.
 - **No ranking.** The index is alphabetical, which is what keeps the cached prefix stable.
   `metadata.type` is shown on each line but does not reorder them.
-- **No automatic learning.** A periodic pass over `last_learned_seq` folding what a
-  session established into memory is a real idea and is not built. `learningEnabled` and
-  `learningInterval` used to be declared for it and were never read; they are gone, on the
-  grounds that a config key nothing consumes reads as a setting that does nothing. The
-  column is still there for whatever builds it.
+- **No automatic learning.** Everything in `memory/` was written by a model calling the
+  tool or by a person with an editor. A periodic pass folding what a session established
+  into memory is a real idea, and nothing in the tree does it — there is no marker of how
+  far such a pass has read, because there is no pass.
 - **No settings panel for the files themselves**, and no REST route reading them. The
-  budget and the prompt are editable per agent; the content is a folder.
+  section's wording is editable per agent; the content is a folder.
 - **No `/memory` in the browser**, pending slash commands in the composer.

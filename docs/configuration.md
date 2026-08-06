@@ -44,17 +44,15 @@ What every agent inherits, and what an install with no named agents runs as.
 | `pinnedSkills`        | string[]                     | `[]`     | Skills whose body is inlined into the prompt, in this order. Everything else in `skills/` is indexed. See [Skills](skills.md).                 |
 | `maxPinnedSkills`     | int ≥ 0                      | `5`      | How many of the above are inlined. Names past it fall back to an index line.                                                                   |
 
-**Five keys were removed and there is no migration.** `memoryCompactThresholdTokens` and
-`consolidationModel` went with the compaction they served; `learningEnabled` and
-`learningInterval` were declared and never read, and belonged to a proactive-learning pass
-that was never built; `agents.list.<id>.memory.shared` chose between an agent's own memory
-layer and a shared one, and there is no per-agent layer for it to fall back to — a folder
-in the workspace is a property of the _folder_, so it is shared by construction.
-
 `AgentDefaultsSchema` and `AgentEntrySchema` are plain zod objects, so they strip what they
-do not know: a `config.json` still carrying any of the five parses without error and loses
-it on the next write. A declared key nothing reads is worse than a missing one — it reads
-as a setting that does nothing, and there is no way to find that out from the file.
+do not know: a `config.json` carrying a key this table does not list parses without error
+and loses it on the next write. There is no migration and no error, which is the whole of
+the upgrade path — a declared key nothing reads is worse than a missing one, because it
+reads as a setting that does nothing and the file gives no way to find that out.
+
+How much memory costs in the prompt is **not** here either: it is bounded by a count of
+files rather than a token budget, and none of the bounds is configurable. See
+[Memory](memory.md).
 
 Whether an agent may remember at all is **not** here: it is the `memory` tool's permission
 in `agents.list.<id>.tools`. Skills work the same way through `skill`. One switch per

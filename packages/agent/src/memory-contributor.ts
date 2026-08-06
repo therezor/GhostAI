@@ -3,15 +3,10 @@
  *
  * **An index, not the contents.** One line per memory — the file to open, its
  * name, and what it is about — and the model opens the one it wants with
- * `read_file`. That is the same shape `skills-contributor.ts` uses, and it is a
- * reversal of what this file used to do: memory was one `memory.md` inlined
- * whole on every request, on the argument that memory a model has to decide to
- * go and read is memory it will forget to consult.
- *
- * The argument was not wrong, it was priced for a different object. A single
- * summary is worth inlining. A *store* — one file per fact, growing for as long
- * as the workspace does — is not: inlining it re-sends everything ever learned
- * on every request of every turn, and the only lever is a token cap that decides
+ * `read_file`. That is the same shape `skills-contributor.ts` uses, and it is
+ * what a *store* wants: one file per fact, growing for as long as the workspace
+ * does. Inlining such a thing would re-send everything ever learned on every
+ * request of every turn, and the only lever left would be a token cap deciding
  * what to forget by age rather than by relevance. An index costs a line each and
  * puts the choice where the question is.
  *
@@ -74,17 +69,15 @@ export interface MemorySectionOptions {
  * drops a section that trims to nothing, so this is how "no memory" becomes "no
  * section".
  *
- * **There is no token budget, and `MAX_MEMORIES` is the only bound.** There used
- * to be a `memoryMaxPromptTokens` that cut the index short and appended a note
- * saying how many were missing. It went because the two numbers were never
- * independent: an index line is roughly fifteen tokens, so the default budget
- * afforded well over a hundred lines and the 200-file cap always arrived first.
- * A knob whose value never binds reads as a lever and is not one.
+ * **There is no token budget, and `MAX_MEMORIES` is the only bound.** A budget
+ * in tokens would never bind: an index line is roughly fifteen tokens, so any
+ * plausible one affords more lines than the 200-file cap admits, and a number
+ * that never decides anything reads as a lever and is not one.
  *
- * It also carried a second job it should not have: `0` was how an operator kept
- * memory on disk and out of the prompt. That is a capability question, and it is
- * answered where the other one is — the `memory` tool's permission, which
- * `runtime.ts` gates this whole contributor on.
+ * Keeping memory on disk and out of the prompt is the other thing such a budget
+ * gets asked to do, and it is a capability question rather than a size one. It
+ * is answered by the `memory` tool's permission, which `runtime.ts` gates this
+ * whole contributor on.
  */
 export function renderMemorySection(
   memories: readonly Memory[],

@@ -76,8 +76,6 @@ describe('sessions', () => {
       origin: 'web',
       agentId: undefined,
       createdAtMs: NOW,
-      lastConsolidatedSeq: 0,
-      lastLearnedSeq: 0,
       metadata: {},
     });
     store.close();
@@ -405,10 +403,10 @@ describe('sessions', () => {
     const store = makeStore();
     store.ensureSession('a', { title: 'Title', agentId: 'p1' });
 
-    const updated = store.updateSession('a', { lastConsolidatedSeq: 4 });
+    const updated = store.updateSession('a', { workspaceId: 'other' });
     expect(updated.title).toBe('Title');
     expect(updated.agentId).toBe('p1');
-    expect(updated.lastConsolidatedSeq).toBe(4);
+    expect(updated.workspaceId).toBe('other');
     store.close();
   });
 
@@ -660,17 +658,6 @@ describe('history', () => {
     store.close();
   });
 
-  it('skips messages already folded into the memory files', () => {
-    const store = makeStore();
-    store.append('s', userMessage('old'));
-    store.append('s', assistantMessage('older answer'));
-    store.append('s', userMessage('current'));
-    store.updateSession('s', { lastConsolidatedSeq: 2 });
-
-    expect(store.history('s')).toEqual([userMessage('current')]);
-    store.close();
-  });
-
   it('applies maxMessages to the newest messages', () => {
     const store = makeStore();
     store.append('s', userMessage('a'));
@@ -684,15 +671,14 @@ describe('history', () => {
     store.close();
   });
 
-  it('does not double-apply the consolidation offset', () => {
+  it('applies maxMessages once, not once per read', () => {
     const store = makeStore();
     for (const text of ['a', 'b', 'c', 'd']) {
       store.append('s', userMessage(text));
     }
-    store.updateSession('s', { lastConsolidatedSeq: 2 });
 
-    // Two consolidated, two remaining — asking for two must return both of the
-    // remaining pair rather than skipping a second block of two.
+    // The SQL bound and `historyForLLM`'s own window are the same number, so
+    // asking for two must return the last pair rather than a block above it.
     expect(store.history('s', { maxMessages: 2 })).toEqual([
       userMessage('c'),
       userMessage('d'),
@@ -796,13 +782,10 @@ describe('clearing', () => {
     const store = makeStore();
     store.append('s', userMessage('one'));
     store.append('s', userMessage('two'));
-    store.updateSession('s', { lastConsolidatedSeq: 2, lastLearnedSeq: 2 });
 
     store.clearMessages('s');
 
     expect(store.messageCount('s')).toBe(0);
-    expect(store.getSession('s')?.lastConsolidatedSeq).toBe(0);
-    expect(store.getSession('s')?.lastLearnedSeq).toBe(0);
     // Sequences never rewind: a reconnecting client's stale cursor must not
     // start addressing different messages.
     expect(store.append('s', userMessage('three')).seq).toBe(3);
@@ -833,34 +816,6 @@ describe('truncating', () => {
     // The load-bearing property: the gap is deliberate. A reconnecting client
     // holding `afterSeq: 2` must not have it start addressing a new message.
     expect(store.append('s', userMessage('next')).seq).toBe(4);
-    store.close();
-  });
-
-  it('clamps both markers to the cut', () => {
-    const store = makeStore();
-    for (const text of ['one', 'two', 'three', 'four']) {
-      store.append('s', userMessage(text));
-    }
-    store.updateSession('s', { lastConsolidatedSeq: 3, lastLearnedSeq: 4 });
-
-    store.truncateAfter('s', 2);
-
-    const session = store.getSession('s');
-    expect(session?.lastConsolidatedSeq).toBe(2);
-    expect(session?.lastLearnedSeq).toBe(2);
-    store.close();
-  });
-
-  it('leaves a marker below the cut where it is', () => {
-    const store = makeStore();
-    for (const text of ['one', 'two', 'three']) {
-      store.append('s', userMessage(text));
-    }
-    store.updateSession('s', { lastConsolidatedSeq: 1 });
-
-    store.truncateAfter('s', 2);
-
-    expect(store.getSession('s')?.lastConsolidatedSeq).toBe(1);
     store.close();
   });
 
@@ -1022,20 +977,6 @@ describe('forking', () => {
       'why does the login throw',
     );
     expect(store.forkSession('titled', 1).session.title).toBe('Named already');
-    store.close();
-  });
-
-  it('remaps the consolidation markers by count', () => {
-    const store = makeStore();
-    for (const text of ['one', 'two', 'three', 'four']) {
-      store.append('s', userMessage(text));
-    }
-    store.updateSession('s', { lastConsolidatedSeq: 2, lastLearnedSeq: 3 });
-
-    const fork = store.forkSession('s', 4);
-
-    expect(fork.session.lastConsolidatedSeq).toBe(2);
-    expect(fork.session.lastLearnedSeq).toBe(3);
     store.close();
   });
 

@@ -12,12 +12,9 @@
  *    or overflowing it. That is `loadTokenCounter`, and it is `async` on
  *    purpose.
  *
- * **Memory deliberately uses the first one.** This comment used to name memory's
- * consolidation budget as the reason the second exists, and both halves of that
- * turned out to be wrong. There is no memory *package* — memory reaches the
- * prompt through `ContextContributor`, so it lives in `@ghostai/agent` beside
- * skills. And memory has no token budget at all any more — what bounds its index
- * is `MAX_MEMORIES`, a count of files, which no tokenizer is involved in. See
+ * **Memory is not a caller of the second one.** What bounds its prompt index is
+ * `MAX_MEMORIES`, a count of files, which no tokenizer is involved in; the
+ * figure `/memory` reports is an estimate and uses the first. See
  * `docs/memory.md`.
  *
  * `loadTokenCounter` therefore has no caller in the tree today. It is kept

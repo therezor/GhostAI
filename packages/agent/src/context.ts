@@ -93,11 +93,9 @@ export async function describeContext(
   const session = input.store.getSession(input.sessionKey);
   if (session === undefined) return undefined;
 
-  // The same window the loop reads — everything past the consolidation marker,
-  // since what precedes it is represented by the memory files.
-  const records = input.store.messages(input.sessionKey, {
-    afterSeq: session.lastConsolidatedSeq,
-  });
+  // The same window the loop reads: the whole stored conversation, which
+  // `historyForLLM` below then bounds exactly as a turn would.
+  const records = input.store.messages(input.sessionKey, { afterSeq: 0 });
 
   // `maxToolResultChars: 0` disables truncation, and that is what makes the
   // returned messages the *same objects* that went in. That identity is how

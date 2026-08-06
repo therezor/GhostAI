@@ -6,13 +6,7 @@
  * — a provider's prompt cache keys on an exact prefix, so editing history
  * invalidates the cache for every turn that follows and quietly multiplies the
  * cost of a long conversation. So history is *windowed* rather than rewritten:
- * `last_consolidated_seq` is a floor a reader starts above.
- *
- * **Nothing advances that marker today.** `/memory compress` did, and was
- * removed with the accumulating memory file it folded into. The column, the
- * windowing below and the translations fork and truncate apply to it are all
- * correct with a permanent zero, and are kept because the question "where does
- * this session's replayable history start" is real and will be asked again.
+ * a reader takes the tail it can afford and leaves the rows alone.
  *
  * **`truncateAfter` does not break that rule, and it is worth being precise
  * about why.** The rule forbids *rewriting* — an `UPDATE` on a `messages` row,
@@ -90,10 +84,6 @@ export interface SessionRecord {
   readonly createdAtMs: number;
   readonly updatedAtMs: number;
   readonly metadata: Readonly<Record<string, unknown>>;
-  /** Messages with `seq` at or below this are represented by the memory files. */
-  readonly lastConsolidatedSeq: number;
-  /** How far proactive learning has read. */
-  readonly lastLearnedSeq: number;
 }
 
 export interface SessionSummaryRecord extends SessionRecord {
@@ -173,8 +163,6 @@ export interface UpdateSessionOptions {
    */
   readonly workspaceId?: string;
   readonly metadata?: Readonly<Record<string, unknown>>;
-  readonly lastConsolidatedSeq?: number;
-  readonly lastLearnedSeq?: number;
 }
 
 /** Which column a session listing is ordered by. */
@@ -314,8 +302,6 @@ CREATE TABLE IF NOT EXISTS sessions (
   created_at_ms         INTEGER NOT NULL,
   updated_at_ms         INTEGER NOT NULL,
   metadata_json         TEXT    NOT NULL DEFAULT '{}',
-  last_consolidated_seq INTEGER NOT NULL DEFAULT 0,
-  last_learned_seq      INTEGER NOT NULL DEFAULT 0,
   next_seq              INTEGER NOT NULL DEFAULT 1
 ) STRICT;
 
@@ -424,8 +410,6 @@ function rowToSession(row: Row): SessionRecord {
     createdAtMs: read.int(row, 'created_at_ms'),
     updatedAtMs: read.int(row, 'updated_at_ms'),
     metadata: parseMetadata(read.string(row, 'metadata_json')),
-    lastConsolidatedSeq: read.int(row, 'last_consolidated_seq'),
-    lastLearnedSeq: read.int(row, 'last_learned_seq'),
   };
 }
 
@@ -999,23 +983,18 @@ export class SessionStore {
           : (patch.agentId ?? undefined),
       workspaceId: patch.workspaceId ?? existing.workspaceId,
       metadata: patch.metadata ?? existing.metadata,
-      lastConsolidatedSeq:
-        patch.lastConsolidatedSeq ?? existing.lastConsolidatedSeq,
-      lastLearnedSeq: patch.lastLearnedSeq ?? existing.lastLearnedSeq,
     };
 
     this.stmt(
       `UPDATE sessions
           SET title = ?, agent_id = ?, workspace_id = ?, metadata_json = ?,
-              last_consolidated_seq = ?, last_learned_seq = ?, updated_at_ms = ?
+              updated_at_ms = ?
         WHERE key = ?`,
     ).run(
       next.title,
       next.agentId ?? null,
       next.workspaceId,
       JSON.stringify(next.metadata),
-      next.lastConsolidatedSeq,
-      next.lastLearnedSeq,
       now,
       sessionKey,
     );
@@ -1093,9 +1072,10 @@ export class SessionStore {
     this.assertOpen();
     this.transaction(() => {
       this.stmt('DELETE FROM messages WHERE session_key = ?').run(sessionKey);
-      this.stmt(
-        'UPDATE sessions SET last_consolidated_seq = 0, last_learned_seq = 0, updated_at_ms = ? WHERE key = ?',
-      ).run(this.clock.now(), sessionKey);
+      this.stmt('UPDATE sessions SET updated_at_ms = ? WHERE key = ?').run(
+        this.clock.now(),
+        sessionKey,
+      );
     });
   }
 
@@ -1104,23 +1084,22 @@ export class SessionStore {
    *
    * A cut through the middle of a tool exchange strands the `assistant` that
    * declared the calls, which every provider rejects with a 400 — the mirror of
-   * the defect `findLegalStart` repairs at the other end of the window. Only the
-   * *unconsolidated* tail is examined, because everything at or below
-   * `last_consolidated_seq` is below the window a turn replays, so pairing
-   * across that boundary is not a thing a provider ever sees. Nothing moves
-   * that marker at present; see the header.
+   * the defect `findLegalStart` repairs at the other end of the window.
+   *
+   * `0` when no cut is legal: every message in the session is at or above seq 1,
+   * so a floor of zero means "keep nothing", which is what a session whose very
+   * first exchange is the unsplittable one has to fall back to.
    */
   private legalSeq(session: SessionRecord, seq: number): number {
-    const floor = Math.min(session.lastConsolidatedSeq, seq);
     const records = this.messages(session.key, {
-      afterSeq: floor,
+      afterSeq: 0,
       beforeSeq: seq + 1,
     });
     const end = findLegalEnd(records.map((record) => record.message));
 
     if (end === records.length) return seq;
-    if (end === 0) return floor;
-    return records[end - 1]?.seq ?? floor;
+    if (end === 0) return 0;
+    return records[end - 1]?.seq ?? 0;
   }
 
   /**
@@ -1168,19 +1147,10 @@ export class SessionStore {
       // Nothing moved, so nothing should be bumped to the top of the session
       // list — a no-op truncation is not activity.
       if (deleted > 0) {
-        // Clamping is not housekeeping. A marker left above the highest
-        // surviving seq makes `history()` read `afterSeq: 100` on a session
-        // whose last message is 50, which is an empty prompt on a conversation
-        // that visibly has messages. It does not un-summarise the memory files;
-        // it restores `marker <= max(seq)`, and the rows it would have skipped
-        // are gone regardless.
-        this.stmt(
-          `UPDATE sessions
-              SET last_consolidated_seq = MIN(last_consolidated_seq, ?),
-                  last_learned_seq      = MIN(last_learned_seq, ?),
-                  updated_at_ms         = ?
-            WHERE key = ?`,
-        ).run(cut, cut, this.clock.now(), sessionKey);
+        this.stmt('UPDATE sessions SET updated_at_ms = ? WHERE key = ?').run(
+          this.clock.now(),
+          sessionKey,
+        );
       }
 
       return { seq: cut, deleted };
@@ -1246,20 +1216,11 @@ export class SessionStore {
             ? ''
             : deriveSessionTitle(textOf(firstUser.message)));
 
-      // Seqs are reseated by position, so translating a marker is a count of
-      // the copied rows it covered — exact rather than approximate.
-      const consolidated = records.filter(
-        (record) => record.seq <= source.lastConsolidatedSeq,
-      ).length;
-      const learned = records.filter(
-        (record) => record.seq <= source.lastLearnedSeq,
-      ).length;
-
       this.stmt(
         `INSERT INTO sessions
            (key, title, origin, workspace_id, agent_id, created_at_ms, updated_at_ms,
-            metadata_json, last_consolidated_seq, last_learned_seq, next_seq)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            metadata_json, next_seq)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         key,
         title,
@@ -1274,8 +1235,6 @@ export class SessionStore {
           ...source.metadata,
           forkedFrom: { key: sourceKey, seq: cut, atMs: now },
         }),
-        consolidated,
-        learned,
         records.length + 1,
       );
 

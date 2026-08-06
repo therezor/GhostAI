@@ -196,8 +196,8 @@ export function truncateOldestTurns(
  * `findLegalStart` in `@ghostai/core` answers the same question for stored
  * history; this is the same invariant applied to a request that a truncation
  * step just reshaped, and it deliberately does not import the history windowing
- * around it — that path owns consolidation and tool-output caps, neither of
- * which applies to a request already on its way out.
+ * around it — that path owns the message window and tool-output caps, neither
+ * of which applies to a request already on its way out.
  */
 function alignToLegalStart(
   messages: readonly ChatMessage[],

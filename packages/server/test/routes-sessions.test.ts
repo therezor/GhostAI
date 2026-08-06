@@ -738,23 +738,6 @@ describe('GET /api/sessions/:key/context', () => {
     ]);
   });
 
-  it('skips messages already folded into the memory files', async () => {
-    const test = await start();
-    test.runtime.store.append('web-1', userMessage('consolidated'));
-    test.runtime.store.append('web-1', userMessage('still here'));
-    test.runtime.store.updateSession('web-1', { lastConsolidatedSeq: 1 });
-
-    const response = await test.server.app.inject({
-      method: 'GET',
-      url: '/api/sessions/web-1/context',
-      headers: test.headers,
-    });
-
-    expect(texts(response.json<ContextResponse>().messages)).toEqual([
-      'still here',
-    ]);
-  });
-
   it('names the agent it measured, and says nothing was substituted', async () => {
     const test = await start();
     test.runtime.store.ensureSession('web-1');
