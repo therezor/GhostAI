@@ -44,7 +44,7 @@ import { toast } from '@/components/ui/toast.js';
 import { CodeEditor } from './code-editor.js';
 import { languageForFile, parentOf } from './paths.js';
 
-export interface FileEditorProps {
+interface FileEditorProps {
   readonly entry: FileEntry;
   /** Which workspace `entry.path` is relative to. */
   readonly workspace: string;

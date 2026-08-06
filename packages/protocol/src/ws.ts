@@ -46,7 +46,6 @@ import {
 
 /** Version of the wire protocol. Bumped on any breaking envelope change. */
 export const PROTOCOL_VERSION = 2 as const;
-export type ProtocolVersion = typeof PROTOCOL_VERSION;
 
 // ---------------------------------------------------------------------------
 // Client → server
@@ -157,13 +156,6 @@ export const ToolApproveMessageSchema = z.object({
   scope: ApprovalScopeSchema.default('once'),
 });
 
-export const TranscribeMessageSchema = z.object({
-  type: z.literal('audio.transcribe'),
-  /** base64-encoded audio. */
-  audio: z.string().min(1),
-  mimeType: z.string().min(1),
-});
-
 /**
  * Mid-turn steering. The loop drains the steer queue and *continues* rather
  * than breaking, so guidance that arrives while the model is composing its
@@ -226,11 +218,9 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   SwitchSessionMessageSchema,
   ResumeSessionMessageSchema,
   ToolApproveMessageSchema,
-  TranscribeMessageSchema,
   SteerMessageSchema,
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
-export type ClientMessageType = ClientMessage['type'];
 
 // ---------------------------------------------------------------------------
 // Server → client
@@ -610,12 +600,6 @@ export const NotificationEventSchema = z.object({
   jobId: z.string().optional(),
 });
 
-export const TranscribeResultEventSchema = z.object({
-  type: z.literal('transcribe.result'),
-  seq,
-  text: z.string(),
-});
-
 /** Tool list changed — an MCP server reconnected, or a plugin loaded/unloaded. */
 export const ToolsChangedEventSchema = z.object({
   type: z.literal('tools.changed'),
@@ -652,7 +636,6 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   SessionReplayEventSchema,
   SessionTruncatedEventSchema,
   NotificationEventSchema,
-  TranscribeResultEventSchema,
   ToolsChangedEventSchema,
   SteerEventSchema,
 ]);
@@ -665,9 +648,6 @@ export const UNSEQUENCED_SERVER_EVENTS = [
   'pong',
   'error',
 ] as const;
-
-export type UnsequencedServerEventType =
-  (typeof UNSEQUENCED_SERVER_EVENTS)[number];
 
 /**
  * Narrows to the events a replay buffer stores. Used by the WS hub to decide

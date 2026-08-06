@@ -68,7 +68,7 @@ export const ACCOUNT_SCOPE = 'account';
 export const FREE_ATTEMPTS = 4;
 
 /** The first delay imposed, doubling from there. */
-export const BASE_DELAY_MS = 1_000;
+const BASE_DELAY_MS = 1_000;
 
 /**
  * The per-address ceiling. Long, because a single address that has guessed
@@ -100,9 +100,9 @@ export const DECAY_MS: number = 60 * 60_000;
  * dropped — which forgives them, and is safe precisely because the account
  * bucket is the one holding the aggregate rate down and is never evicted.
  */
-export const MAX_TRACKED_ADDRESSES = 4096;
+const MAX_TRACKED_ADDRESSES = 4096;
 
-export interface LoginThrottleOptions {
+interface LoginThrottleOptions {
   /** Shared with `AuthStore`, `SessionStore` and everything else. */
   readonly database: DatabaseSync;
   readonly clock?: Clock;

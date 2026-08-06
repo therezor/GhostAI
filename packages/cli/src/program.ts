@@ -67,7 +67,7 @@ const LOG_LEVELS: readonly string[] = [
   'fatal',
 ];
 
-export interface CliDeps {
+interface CliDeps {
   readonly out?: NodeJS.WritableStream;
   readonly errOut?: NodeJS.WritableStream;
   /** Injected so a test can drive the parser without booting an agent. */
@@ -152,7 +152,7 @@ function resolveLogLevel(
   return value as LogLevel;
 }
 
-export function buildProgram(deps: CliDeps = {}): Command {
+function buildProgram(deps: CliDeps = {}): Command {
   const out = deps.out ?? process.stdout;
   const errOut = deps.errOut ?? process.stderr;
   const env = deps.env ?? process.env;
@@ -403,13 +403,11 @@ export function buildProgram(deps: CliDeps = {}): Command {
 async function describeFailure(error: unknown, env: Env): Promise<string> {
   const { isGhostError } = await import('@ghostai/core');
   if (isGhostError(error)) {
+    // Under `GHOSTAI_DEBUG` the stack is what was asked for; otherwise the
+    // sentence the error carries is the whole of what a person needs.
     const debug = (env.GHOSTAI_DEBUG ?? '') !== '';
-    // Under `GHOSTAI_DEBUG` the stack is what was asked for, and a stack is a
-    // developer artefact — English, and paired with the English `message` it
-    // already carries. Translating only the non-debug branch keeps the two from
-    // disagreeing about what the first line says.
     if (debug && error.stack !== undefined) return error.stack;
-    return describeError(error, translationsFor(env));
+    return describeError(error);
   }
   if (error instanceof Error) return error.stack ?? error.message;
   return String(error);

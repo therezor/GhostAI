@@ -85,7 +85,7 @@ export interface GhostPaths {
    * rewriting the agent's own system prompt.
    *
    * That argument is still true, and both features were placed inside the
-   * workspace anyway: `<workspace>/skills/` and `<workspace>/memory/memory.md`.
+   * workspace anyway: `<workspace>/skills/` and `<workspace>/memory/`.
    * The trade was taken deliberately in both cases — a skill sheet is meant to
    * be committed beside the project it describes, and memory a person cannot see
    * in a directory listing is memory they cannot correct. `docs/memory.md` and

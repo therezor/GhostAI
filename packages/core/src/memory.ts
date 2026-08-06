@@ -78,16 +78,7 @@ import { silentLogger, type Logger } from './logger.js';
 export const MEMORY_DIRNAME = 'memory';
 
 /** The generated index inside it. Never read back; see the header. */
-export const MEMORY_INDEX_FILENAME = 'MEMORY.md';
-
-/**
- * Workspace-relative, POSIX.
- *
- * Built with `/` rather than `join`, because these strings are handed to the
- * model to pass back to `read_file`, which takes POSIX separators on every host.
- * A Windows `join` would produce a path the jail then has to guess at.
- */
-export const MEMORY_INDEX_PATH: string = `${MEMORY_DIRNAME}/${MEMORY_INDEX_FILENAME}`;
+const MEMORY_INDEX_FILENAME = 'MEMORY.md';
 
 /**
  * The most of one memory that is read at all.
@@ -155,7 +146,7 @@ export const MEMORY_TYPES = [
   'reference',
 ] as const;
 
-export type MemoryType = (typeof MEMORY_TYPES)[number];
+type MemoryType = (typeof MEMORY_TYPES)[number];
 
 /** One fact, as it is on disk. */
 export interface Memory {
@@ -173,12 +164,12 @@ export interface Memory {
 /** A memory to save. The path is derived, so it is not asked for. */
 export type MemoryInput = Omit<Memory, 'path'>;
 
-export interface ReadMemoriesOptions {
+interface ReadMemoriesOptions {
   readonly logger?: Logger;
 }
 
 /** What `saveMemory` did, so a caller can say which. */
-export interface SaveMemoryResult {
+interface SaveMemoryResult {
   /** The slug actually used, which may differ from the one asked for. */
   readonly name: string;
   /** Workspace-relative, POSIX. */
@@ -240,7 +231,7 @@ export function memorySlug(raw: string): string | undefined {
 const locks = new Map<string, Promise<unknown>>();
 
 /** Serialises work on one workspace's memory folder. */
-export async function withMemoryLock<T>(
+async function withMemoryLock<T>(
   workspaceRoot: string,
   work: () => Promise<T>,
 ): Promise<T> {

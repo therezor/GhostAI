@@ -25,7 +25,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import type { Translations } from './i18n.js';
 
-export interface ToolboxOptions {
+interface ToolboxOptions {
   readonly action: 'list' | 'approve' | 'revoke';
   readonly id?: string | undefined;
   readonly home?: string | undefined;

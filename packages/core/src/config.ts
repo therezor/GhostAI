@@ -41,7 +41,7 @@ import {
   type ResolveGhostPathsOptions,
 } from './paths.js';
 
-export interface LoadConfigOptions extends ResolveGhostPathsOptions {
+interface LoadConfigOptions extends ResolveGhostPathsOptions {
   /** Overrides `<root>/config.json`. */
   readonly file?: string;
 }

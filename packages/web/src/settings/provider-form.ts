@@ -196,7 +196,7 @@ export function toCredentialValue(
  *  - the typed value — probe with what is about to be saved, not with what is
  *    still in the vault.
  */
-export function toProbeKey(
+function toProbeKey(
   field: string,
   credentialsPresent: boolean,
 ): string | undefined {

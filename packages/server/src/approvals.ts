@@ -1,7 +1,7 @@
 /**
  * The approval gate a connected client answers.
  *
- * Step 10 split the decision in two: the loop decides *whether to ask*, which
+ * The decision is split in two: the loop decides *whether to ask*, which
  * is a pure function of the tool's risk band and the deployment's policy, and
  * the gate decides *what the answer is* and how long it holds. This is the
  * second half for anything with a socket attached — the web UI, and every
@@ -85,7 +85,7 @@ export interface UnattendedApproval {
   readonly expiresAtMs: number;
 }
 
-export interface HubApprovalGateOptions {
+interface HubApprovalGateOptions {
   readonly clock?: Clock;
   readonly logger?: Logger;
   /**

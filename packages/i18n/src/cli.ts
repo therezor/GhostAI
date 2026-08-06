@@ -1,5 +1,5 @@
 /**
- * The terminal's instance: `cli` plus `shared`, and nothing the browser renders.
+ * The terminal's instance: `cli`, and nothing the browser renders.
  *
  * The split is not tidiness. `packages/cli/src/program.ts` imports this at
  * module scope on every invocation — including `ghost --help`, which is
@@ -14,8 +14,8 @@ import { DEFAULT_LOCALE, type Locale } from './locale.js';
 import { EN } from './resources.js';
 
 /** Bundles a terminal needs, in the shape i18next wants them. */
-export const CLI_RESOURCES = {
-  en: { cli: EN.cli, shared: EN.shared },
+const CLI_RESOURCES = {
+  en: { cli: EN.cli },
 } as const;
 
 export function createCliI18n(

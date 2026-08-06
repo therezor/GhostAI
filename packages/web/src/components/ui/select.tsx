@@ -1,7 +1,7 @@
 /**
  * Select.
  *
- * Radix rather than a native `<select>` because Step 18's provider and model
+ * Radix rather than a native `<select>` because the provider and model
  * pickers need grouping, descriptions and a searchable-length list, none of
  * which a native control can style — and because a native `<select>` on a dark
  * theme renders its popup in the OS's colours, which is the one place a
@@ -19,7 +19,6 @@ import type { ComponentProps, JSX } from 'react';
 import { cn } from '@/lib/cn.js';
 
 export const Select = SelectPrimitive.Root;
-export const SelectGroup = SelectPrimitive.Group;
 export const SelectValue = SelectPrimitive.Value;
 
 export function SelectTrigger({
@@ -85,17 +84,5 @@ export function SelectItem({
         </SelectPrimitive.ItemIndicator>
       </span>
     </SelectPrimitive.Item>
-  );
-}
-
-export function SelectLabel({
-  className,
-  ...props
-}: ComponentProps<typeof SelectPrimitive.Label>): JSX.Element {
-  return (
-    <SelectPrimitive.Label
-      className={cn('menu__label', className)}
-      {...props}
-    />
   );
 }

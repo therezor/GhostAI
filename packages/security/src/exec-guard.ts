@@ -102,7 +102,7 @@ const EXECUTABLE_EXTENSIONS: ReadonlySet<string> = new Set([
 
 const DRIVE_LETTER = /^[A-Za-z]:/;
 
-export interface ExecGuardOptions {
+interface ExecGuardOptions {
   readonly jail: WorkspaceJail;
   /** Defaults to the schema's own defaults. */
   readonly config?: ExecToolConfig;
@@ -378,14 +378,14 @@ export function guardExec(
   };
 }
 
-export interface OutputCapResult {
+interface OutputCapResult {
   readonly text: string;
   readonly truncated: boolean;
   /** Bytes actually kept, which is the cap when `truncated`. */
   readonly bytes: number;
 }
 
-export interface OutputCap {
+interface OutputCap {
   /** Returns `false` once the budget is spent, so the caller can stop reading. */
   push(chunk: Uint8Array): boolean;
   done(): OutputCapResult;

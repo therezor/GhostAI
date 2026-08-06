@@ -43,7 +43,7 @@ export interface ParsedIp {
  * `allowPrivate` because a LAN deployment is legitimate. Nothing unlocks
  * `link-local` — that is the metadata endpoint.
  */
-export type AddressCategory =
+type AddressCategory =
   | 'loopback'
   | 'private'
   | 'link-local'
@@ -299,7 +299,7 @@ export function parseIpLiteral(host: string): ParsedIp | null {
 // ---------------------------------------------------------------------------
 
 /** A CIDR block, parsed once so containment is a byte comparison. */
-export interface ParsedCidr {
+interface ParsedCidr {
   readonly family: IpFamily;
   /** The network address. Host bits are *not* masked off — see `cidrContains`. */
   readonly bytes: Uint8Array;

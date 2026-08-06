@@ -21,7 +21,6 @@ describe('ConfigSchema', () => {
     expect(config.server.auth.enabled).toBe(true);
     expect(config.tools.exec.enable).toBe(true);
     expect(config.tools.approvalTimeoutMs).toBe(5 * 60 * 1000);
-    expect(config.tools.web.search.provider).toBe('brave');
     expect(config.scheduler.concurrency).toBe(2);
     expect(config.scheduler.runRetention).toBe(200);
     // UTC, not the host zone: a server's own zone moves when the server does.
@@ -51,14 +50,14 @@ describe('ConfigSchema', () => {
     ]);
   });
 
-  // Any array default would do; `corsOrigins` is simply the one nearest the top
-  // of the tree. The defect this guards against is zod handing every parse the
-  // same array instance, so a caller that pushes to one config's list silently
-  // edits every other config in the process.
+  // Any array default would do; `allowedBinaries` is simply one of them. The
+  // defect this guards against is zod handing every parse the same array
+  // instance, so a caller that pushes to one config's list silently edits every
+  // other config in the process.
   it('does not share mutable defaults between parses', () => {
     const a = ConfigSchema.parse({});
     const b = ConfigSchema.parse({});
-    expect(a.server.corsOrigins).not.toBe(b.server.corsOrigins);
+    expect(a.tools.exec.allowedBinaries).not.toBe(b.tools.exec.allowedBinaries);
   });
 
   it('preserves a partial override without dropping siblings', () => {

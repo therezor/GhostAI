@@ -3,7 +3,7 @@
  *
  * `toast()` is a plain function backed by a Zustand store rather than a hook,
  * and that is the whole design: the things that need to report a failure are
- * not components. Step 17's WebSocket transport raises "reconnecting" from a
+ * not components. The WebSocket transport raises "reconnecting" from a
  * socket handler, `api.ts` raises "your session expired" from a fetch, and a
  * mutation raises "saved" from a callback. A `useToast()` hook would be
  * unreachable from all three.
@@ -22,9 +22,9 @@ import { create } from 'zustand';
 
 import { cn } from '@/lib/cn.js';
 
-export type ToastRole = 'info' | 'success' | 'warning' | 'danger';
+type ToastRole = 'info' | 'success' | 'warning' | 'danger';
 
-export interface ToastInput {
+interface ToastInput {
   readonly title: string;
   readonly description?: string;
   readonly role?: ToastRole;

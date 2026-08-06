@@ -35,7 +35,7 @@ export function Label({
   return <label className={cn('label', className)} {...props} />;
 }
 
-export interface FieldProps extends Omit<ComponentProps<'input'>, 'id'> {
+interface FieldProps extends Omit<ComponentProps<'input'>, 'id'> {
   readonly label: ReactNode;
   /** Present means invalid: it sets `aria-invalid` and is announced. */
   readonly error?: string | undefined;

@@ -136,7 +136,7 @@ export function nextInstanceId(type: string, taken: Iterable<string>): string {
   }
 }
 
-export interface ResolveInstanceOptions {
+interface ResolveInstanceOptions {
   readonly providers: ProvidersConfig;
   /** An instance id, a bare provider type, or `auto`. */
   readonly provider?: string | undefined;

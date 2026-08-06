@@ -135,7 +135,7 @@ export interface ToolResult {
   readonly details?: Readonly<Record<string, unknown>>;
 }
 
-export type ToolOutput = string | ToolResult;
+type ToolOutput = string | ToolResult;
 
 export interface ArgIssue {
   /** Dotted path to the offending property, or `''` for the object itself. */
@@ -151,7 +151,7 @@ export type ParseArgsResult<Args> =
       readonly issues: readonly ArgIssue[];
     };
 
-export interface ToolSpec<S extends z.ZodType> {
+interface ToolSpec<S extends z.ZodType> {
   readonly name: string;
   readonly description: string;
   /** Must be a `z.strictObject`. See the module header. */

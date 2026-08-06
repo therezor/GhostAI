@@ -79,7 +79,7 @@ export function afterCredentialWrite(queryClient: QueryClient): void {
   }
 }
 
-export interface SaveHandle<T> {
+interface SaveHandle<T> {
   /**
    * `onSuccess` runs after the write has landed and the cache holds it.
    *

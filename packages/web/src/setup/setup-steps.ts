@@ -90,7 +90,7 @@ export function previousStep(
   return SETUP_STEPS[index - 1] ?? null;
 }
 
-export interface SetupProgress {
+interface SetupProgress {
   /** 1-based, for "Step 2 of 4". `done` is not a step anyone is on. */
   readonly current: number;
   readonly total: number;
@@ -129,7 +129,7 @@ export function initialStep(input: {
   return 'provider';
 }
 
-export interface SetupTitle {
+interface SetupTitle {
   readonly title: string;
   readonly note: string;
 }

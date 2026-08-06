@@ -108,7 +108,7 @@ describe.each(THEMES)('%s theme', (theme) => {
   /**
    * A border is not text, but a border nobody can see is not a border. 1.5:1 is
    * the informal floor for a non-text boundary; WCAG's 3:1 applies to controls
-   * whose *state* the border conveys, which Step 16 will own.
+   * whose *state* the border conveys, which the primitives own.
    */
   it('lines are visible against the surfaces they sit on', () => {
     for (const surface of SURFACES) {

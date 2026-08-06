@@ -29,7 +29,7 @@ import {
 import type { Theme } from './theme.js';
 
 /** What a keystroke asked the surrounding program to do. */
-export type EditorOutcome =
+type EditorOutcome =
   | { readonly kind: 'none' }
   | { readonly kind: 'submit'; readonly text: string }
   /** Ctrl-C. Means "stop what is running", or "leave" when nothing is. */
@@ -39,7 +39,7 @@ export type EditorOutcome =
 
 const NONE: EditorOutcome = { kind: 'none' };
 
-export interface EditorOptions {
+interface EditorOptions {
   readonly theme: Theme;
   /** Drawn before the caret. Defaults to `'› '`. */
   readonly prompt?: string;

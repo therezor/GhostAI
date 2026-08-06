@@ -120,7 +120,7 @@ export function toStoredMessage(record: StoredMessageRecord): StoredMessage {
   };
 }
 
-export interface SessionStoreOptions {
+interface SessionStoreOptions {
   /** Path to the SQLite file. Defaults to an in-memory database. */
   readonly file?: string;
   /**
@@ -137,12 +137,12 @@ export interface SessionStoreOptions {
   readonly newId?: () => string;
 }
 
-export interface AppendOptions {
+interface AppendOptions {
   /** Groups every message produced by one user turn, including tool traffic. */
   readonly turnId?: string;
 }
 
-export interface CreateSessionOptions {
+interface CreateSessionOptions {
   readonly title?: string;
   readonly origin?: string;
   /** Defaults to `default`. Honoured only when the row is actually created. */
@@ -151,7 +151,7 @@ export interface CreateSessionOptions {
   readonly metadata?: Readonly<Record<string, unknown>>;
 }
 
-export interface UpdateSessionOptions {
+interface UpdateSessionOptions {
   readonly title?: string;
   readonly agentId?: string | null;
   /**
@@ -221,12 +221,12 @@ export interface ListSessionsOptions {
 }
 
 /** A position in the `updated_at_ms DESC, key ASC` ordering `listSessions` uses. */
-export interface SessionCursor {
+interface SessionCursor {
   readonly updatedAtMs: number;
   readonly key: string;
 }
 
-export interface ReadMessagesOptions {
+interface ReadMessagesOptions {
   /** Exclusive lower bound on `seq` — the pagination cursor. */
   readonly afterSeq?: number;
   /** Exclusive upper bound on `seq`. */
@@ -236,13 +236,13 @@ export interface ReadMessagesOptions {
   readonly fromEnd?: boolean;
 }
 
-export interface TruncateResult {
+interface TruncateResult {
   /** Where the cut actually landed, after snapping to a legal boundary. */
   readonly seq: number;
   readonly deleted: number;
 }
 
-export interface ForkSessionOptions {
+interface ForkSessionOptions {
   /** Defaults to `<origin>-<uuid>`, matching what the REST create route mints. */
   readonly key?: string;
   readonly title?: string;
@@ -251,7 +251,7 @@ export interface ForkSessionOptions {
   readonly origin?: string;
 }
 
-export interface ForkResult {
+interface ForkResult {
   readonly session: SessionRecord;
   readonly copied: number;
   /** Where the fork actually cut, after snapping. */

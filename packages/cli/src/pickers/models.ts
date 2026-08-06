@@ -19,7 +19,7 @@ import type { SelectItem } from '@ghostai/tui';
 import type { CliT } from '../i18n.js';
 import type { Menu } from '../menu.js';
 
-export interface ModelPickerDeps {
+interface ModelPickerDeps {
   readonly menu: Menu;
   readonly catalogue: ModelsResponse;
   /** The model a turn would use right now. */

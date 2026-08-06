@@ -341,7 +341,7 @@ describe('the shell', () => {
       await screen.findByRole('heading', { name: 'Settings' }),
     ).toBeInTheDocument();
     // The same nodes, not replacements: a remount here would drop the socket
-    // that Step 17 hangs off the shell.
+    // that hangs off the shell.
     expect(screen.getByRole('banner')).toBe(header);
     expect(screen.getByRole('complementary', { name: 'Sidebar' })).toBe(
       sidebar,

@@ -60,7 +60,7 @@ export const NO_MENU: Menu = {
  */
 const MIN_COLUMNS = 12;
 
-export interface MenuAvailableOptions {
+interface MenuAvailableOptions {
   readonly input: TerminalInput;
   readonly output: TerminalOutput;
   /** `--json`: stdout carries one event per line and nothing else. */
@@ -89,7 +89,7 @@ export function menuAvailable(options: MenuAvailableOptions): boolean {
   return columnsOf(options.output) >= MIN_COLUMNS;
 }
 
-export interface MenuOptions {
+interface MenuOptions {
   /**
    * Puts the menu into the frame and answers when it closes.
    *

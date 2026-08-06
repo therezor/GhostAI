@@ -556,7 +556,6 @@ describe('session frames', () => {
         queueDepth: 0,
       },
       { type: 'message.queued', sessionKey: 'web:1', queueDepth: 1 },
-      { type: 'transcribe.result', text: 'x' },
       { type: 'tools.changed', tools: [] },
       {
         type: 'notification',

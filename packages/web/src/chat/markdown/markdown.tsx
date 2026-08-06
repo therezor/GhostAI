@@ -26,7 +26,7 @@ import { safeHref, isSameOrigin } from '@/lib/url.js';
 import { fenceLanguage, inlineTokens, splitBlocks } from './blocks.js';
 import { CodeBlock } from './code-block.js';
 
-export interface MarkdownProps {
+interface MarkdownProps {
   readonly text: string;
   /**
    * True while deltas are still arriving, which makes the last block live.

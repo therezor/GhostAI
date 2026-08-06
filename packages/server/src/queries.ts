@@ -65,7 +65,7 @@ export interface PageQuery {
 export const PageQuerySchema: z.ZodType<PageQuery> = z.object(pageShape);
 
 /** The columns `GET /api/sessions` will order by. Mirrors `SessionOrderBy`. */
-export const SESSION_SORT_KEYS = ['updated', 'created', 'title'] as const;
+const SESSION_SORT_KEYS = ['updated', 'created', 'title'] as const;
 
 export interface SessionListQuery extends PageQuery {
   /** `web`, `telegram`, `automation`, a plugin id. Absent means every origin. */
@@ -239,7 +239,7 @@ export const IdParamsSchema: z.ZodType<IdParams> = z.object({
   id: z.string().min(1),
 });
 
-export interface TokenParams {
+interface TokenParams {
   readonly token: string;
 }
 

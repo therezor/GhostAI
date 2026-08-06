@@ -147,7 +147,7 @@ export function formatRelativeSpan(
  * 59.9 seconds rounding to "60s", a sub-millisecond tool call reporting "0ms"
  * as though it never ran.
  */
-export interface DurationParts {
+interface DurationParts {
   readonly unit: 'ms' | 'second' | 'minute' | 'hour';
   /** The leading number, already rounded for display. */
   readonly value: number;

@@ -23,7 +23,7 @@ import type { SelectItem } from '@ghostai/tui';
 import type { CliT } from '../i18n.js';
 import type { Menu } from '../menu.js';
 
-export interface AgentPickerDeps {
+interface AgentPickerDeps {
   readonly menu: Menu;
   readonly agents: readonly EffectiveAgent[];
   /** The agent this conversation runs on now, if it has one. */

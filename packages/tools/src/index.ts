@@ -36,9 +36,7 @@ export {
   type ParseArgsResult,
   type Tool,
   type ToolContext,
-  type ToolOutput,
   type ToolResult,
-  type ToolSpec,
 } from './define.js';
 
 export type {
@@ -52,18 +50,14 @@ export {
   ToolRegistry,
   withToolboxTools,
   type ToolExecution,
-  type ToolInvocation,
-  type ToolRegistryOptions,
   type ToolScope,
 } from './registry.js';
 
 export { isEnabled, permissionFor } from './scope.js';
 
 export {
-  KILL_GRACE_MS,
   localRunner,
   type CommandRunner,
-  type OutputTee,
   type RunnerResolver,
   type ToolboxRequest,
   type RunOutcome,
@@ -80,10 +74,6 @@ export {
   containerRunDir,
   containerRunner,
   openTranscript,
-  type ContainerCreateOptions,
-  type ContainerExecOptions,
-  type ContainerRunnerOptions,
-  type ToolboxMount,
   type Transcript,
 } from './container-runner.js';
 

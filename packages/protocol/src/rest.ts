@@ -118,7 +118,6 @@ export const HealthCheckSchema = z.object({
   status: z.enum(['ok', 'warn', 'fail', 'skipped']),
   detail: z.string().default(''),
 });
-export type HealthCheck = z.infer<typeof HealthCheckSchema>;
 
 export const HealthResponseSchema = z.object({
   status: z.enum(['ok', 'degraded', 'fail']),
@@ -576,7 +575,6 @@ export const TurnStatsSchema = z.object({
   /** Why it stopped, when `stopReason` is `error`. */
   error: z.string().optional(),
 });
-export type TurnStats = z.infer<typeof TurnStatsSchema>;
 
 export const TurnStatsResponseSchema = z.object({
   sessionKey: z.string().min(1),
@@ -688,7 +686,6 @@ export const ToolboxToolSummarySchema = z.object({
   /** The manifest's default. An agent's `tools` map wins over it. */
   permission: ToolPermissionSchema,
 });
-export type ToolboxToolSummary = z.infer<typeof ToolboxToolSummarySchema>;
 
 export const ToolboxSummarySchema = z.object({
   name: z.string(),
@@ -1068,8 +1065,8 @@ export type AutomationRunListResponse = z.infer<
 export const DEFAULT_USERNAME = 'ghost';
 
 /** Bounds on the login name. */
-export const USERNAME_MIN_LENGTH = 1;
-export const USERNAME_MAX_LENGTH = 64;
+const USERNAME_MIN_LENGTH = 1;
+const USERNAME_MAX_LENGTH = 64;
 
 /**
  * Bounds on the password.

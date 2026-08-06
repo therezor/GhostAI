@@ -222,7 +222,6 @@ export function applyServerMessage(
     case 'message.queued':
     case 'session.status':
     case 'notification':
-    case 'transcribe.result':
     case 'tools.changed':
       return items;
   }

@@ -28,7 +28,6 @@ export {
   MENTION_KINDS,
   isMentionKind,
   parseMentions,
-  type Mention,
   type MentionKind,
   type ParsedMentions,
 } from './mentions.js';
@@ -44,8 +43,4 @@ export * from './toolbox.js';
 export * from './automation.js';
 export * from './ws.js';
 export * from './rest.js';
-export {
-  PROTOCOL_SCHEMAS,
-  SCHEMA_MODULES,
-  type ProtocolSchemaName,
-} from './schemas.js';
+export { PROTOCOL_SCHEMAS, SCHEMA_MODULES } from './schemas.js';

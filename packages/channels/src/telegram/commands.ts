@@ -65,7 +65,7 @@ export interface CommandResult {
   readonly keyboard?: InlineKeyboardMarkup;
 }
 
-export interface TelegramCommand {
+interface TelegramCommand {
   /** Telegram's own spelling: lowercase, no slash, no spaces. */
   readonly name: string;
   /** Extra words the parser reads, shown in `/help`. */
@@ -787,7 +787,7 @@ function switchWorkspace(input: CommandInput, id: string): CommandResult {
 // Parsing, dispatch and the two listings
 // ---------------------------------------------------------------------------
 
-export interface ParsedCommand {
+interface ParsedCommand {
   readonly name: string;
   readonly args: readonly string[];
   readonly tail: string;

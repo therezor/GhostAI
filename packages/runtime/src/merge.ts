@@ -9,8 +9,8 @@
  *  - **A key the patch does not mention is not touched.** This is the whole
  *    point of `patchOf` over `.partial()`, and it is undone by any merge that
  *    walks the *schema* rather than the patch.
- *  - **An array replaces.** `corsOrigins: ['https://a']` means that origin, not
- *    it plus whatever was there; there is no way to express a removal otherwise.
+ *  - **An array replaces.** `allowedBinaries: ['git']` means that binary, not it
+ *    plus whatever was there; there is no way to express a removal otherwise.
  *  - **A record of values edited as a unit replaces too** — see
  *    `REPLACE_WHOLESALE`. Merging `extraHeaders` key-by-key would make deleting
  *    a header impossible, since the patch has no syntax for "absent".

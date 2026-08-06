@@ -94,10 +94,10 @@ import {
 /** Conventional exit code for "terminated by SIGINT". */
 export const SIGINT_EXIT_CODE = 130;
 
-export const DEFAULT_SESSION_KEY = 'cli:default';
+const DEFAULT_SESSION_KEY = 'cli:default';
 
 /** Node's stdin, narrowed to what the REPL needs to know about it. */
-export type InputStream = NodeJS.ReadableStream & { isTTY?: boolean };
+type InputStream = NodeJS.ReadableStream & { isTTY?: boolean };
 
 export interface ChatOptions extends RuntimeOptions {
   /** Present for one-shot mode; absent reads stdin or opens the REPL. */
@@ -152,7 +152,7 @@ export interface TurnOutcome {
   readonly failed: boolean;
 }
 
-export interface RunTurnDeps {
+interface RunTurnDeps {
   readonly loop: AgentLoop;
   readonly renderer: TurnRenderer;
   /**

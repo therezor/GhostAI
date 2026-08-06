@@ -40,7 +40,7 @@ export interface SelectItem<T> {
   readonly disabled?: boolean | undefined;
 }
 
-export interface SelectListOptions<T> {
+interface SelectListOptions<T> {
   readonly items: ReadonlyArray<SelectItem<T>>;
   /** How many rows are visible at once. Default 10. */
   readonly rows?: number;

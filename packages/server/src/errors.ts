@@ -132,7 +132,7 @@ export function conflict(
   return new HttpError(409, 'bad_request', 'conflict', message, details);
 }
 
-export interface ResolvedError {
+interface ResolvedError {
   readonly status: number;
   /**
    * The wire code, still narrowed to the union.
@@ -236,7 +236,7 @@ export function errorBody(
   };
 }
 
-export interface ErrorHandlerOptions {
+interface ErrorHandlerOptions {
   /**
    * A last chance to answer a request no route matched.
    *

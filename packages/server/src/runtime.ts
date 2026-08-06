@@ -310,7 +310,7 @@ export interface ServerRuntime {
 }
 
 /** The narrowest request shape the heartbeat's two decisions need. */
-export interface DirectChatInput {
+interface DirectChatInput {
   readonly agentId?: string;
   /** Overrides the agent's own model — how a cheap heartbeat model is chosen. */
   readonly model?: string;

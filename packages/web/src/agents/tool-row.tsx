@@ -36,7 +36,7 @@ import { PERMISSION_LABELS } from './tool-permissions.js';
 const EMPTY_OVERRIDE: ToolPromptOverride = { description: '', fields: {} };
 
 /** One advertised argument, and what the tool itself says about it. */
-export interface ToolField {
+interface ToolField {
   readonly name: string;
   /** The built-in description, or empty when the schema gives none. */
   readonly description: string;

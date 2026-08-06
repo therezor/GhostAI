@@ -60,7 +60,7 @@ export type MessageAction =
   | { readonly kind: 'regenerate'; readonly seq: number }
   | { readonly kind: 'branch'; readonly seq: number };
 
-export interface MessageProps {
+interface MessageProps {
   readonly item: TranscriptItem;
   /** True for the newest turn while the session is busy. */
   readonly streaming: boolean;

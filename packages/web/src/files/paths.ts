@@ -39,7 +39,7 @@ export function normalisePath(path: string): string {
   return trimmed === '.' ? ROOT_PATH : trimmed;
 }
 
-export interface Crumb {
+interface Crumb {
   readonly label: string;
   readonly path: string;
 }

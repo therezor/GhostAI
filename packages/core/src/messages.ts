@@ -77,7 +77,7 @@ export function userMessage(
   };
 }
 
-export interface AssistantMessageOptions {
+interface AssistantMessageOptions {
   readonly toolCalls?: readonly ToolCall[];
   readonly reasoning?: string;
 }
@@ -96,7 +96,7 @@ export function assistantMessage(
   };
 }
 
-export interface ToolMessageOptions {
+interface ToolMessageOptions {
   readonly isError?: boolean;
   readonly truncated?: boolean;
 }

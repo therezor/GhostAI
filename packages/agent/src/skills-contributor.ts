@@ -160,7 +160,7 @@ export function renderMentionedSkills(
   return blocks.join('\n\n');
 }
 
-export interface SkillsContributorOptions {
+interface SkillsContributorOptions {
   /**
    * `agents.list.<id>.skillsPrompt`. Empty means `DEFAULT_SKILLS_TEMPLATE`.
    *

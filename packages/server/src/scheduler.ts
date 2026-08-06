@@ -94,7 +94,7 @@ import type { CreateNotificationInput } from './notifications.js';
 export const MAX_ARM_MS: number = 24 * 60 * 60 * 1000;
 
 /** How long a single run may take before it is abandoned. */
-export const DEFAULT_RUN_TIMEOUT_MS: number = 30 * 60 * 1000;
+const DEFAULT_RUN_TIMEOUT_MS: number = 30 * 60 * 1000;
 
 /**
  * The floor on a rearm that could otherwise be zero.
@@ -106,10 +106,10 @@ export const DEFAULT_RUN_TIMEOUT_MS: number = 30 * 60 * 1000;
  * but re-read the same rows. A freed slot re-arms directly from the run's
  * `finally`, so this is the backstop rather than the mechanism.
  */
-export const BUSY_RETRY_MS: number = 1000;
+const BUSY_RETRY_MS: number = 1000;
 
 /** What a dead process left behind, read at the next boot. */
-export const INTERRUPTED_BY_RESTART: string = 'Interrupted by a restart.';
+const INTERRUPTED_BY_RESTART: string = 'Interrupted by a restart.';
 const INTERRUPTED_BY_SHUTDOWN = 'Interrupted by shutdown.';
 
 const NO_CHANNEL_WARNING =
@@ -120,7 +120,7 @@ const NO_CHANNEL_WARNING =
 // ---------------------------------------------------------------------------
 
 /** What the scheduler needs of a hub connection. `HubClient` satisfies it. */
-export interface SchedulerConnection {
+interface SchedulerConnection {
   receive(frame: unknown): void;
   close(): void;
 }
@@ -155,7 +155,7 @@ export interface NotificationBroadcast {
 }
 
 /** One direct provider request. Absent means this build has no heartbeat. */
-export type SchedulerChat = (input: {
+type SchedulerChat = (input: {
   readonly agentId?: string;
   readonly model?: string;
   readonly messages: readonly ChatMessage[];
@@ -172,7 +172,7 @@ export type SchedulerChat = (input: {
  * `workspaceId` are both strings, so adding the workspace as a third parameter
  * would make a transposition at a call site something the compiler cannot see.
  */
-export type SchedulerReadFile = (input: {
+type SchedulerReadFile = (input: {
   readonly workspaceId: string;
   readonly path: string;
   readonly maxBytes: number;
@@ -352,7 +352,6 @@ class TurnCollector {
       case 'session.replay':
       case 'session.truncated':
       case 'notification':
-      case 'transcribe.result':
       case 'tools.changed':
       case 'steer':
         return;

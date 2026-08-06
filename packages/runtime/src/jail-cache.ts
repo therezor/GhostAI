@@ -43,7 +43,7 @@ import { WorkspaceJail, type JailResolver } from '@ghostai/security';
  */
 export const MAX_CACHED_JAILS = 8;
 
-export interface JailCacheOptions {
+interface JailCacheOptions {
   readonly paths: GhostPaths;
   readonly max?: number;
   /** Injected by tests, which count constructions rather than touch a disk. */

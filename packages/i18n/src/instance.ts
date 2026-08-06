@@ -31,9 +31,9 @@ import { createInstance, type i18n, type Resource } from 'i18next';
 import { DEFAULT_LOCALE, type Locale } from './locale.js';
 
 /** The namespaces the product splits its strings across. */
-export type Namespace = 'shared' | 'web' | 'cli';
+export type Namespace = 'web' | 'cli';
 
-export interface CreateI18nOptions {
+interface CreateI18nOptions {
   /** The resolved locale. Not negotiated here — see `resolveLocale`. */
   readonly locale?: Locale;
   /** Bundles, keyed by locale then namespace. */

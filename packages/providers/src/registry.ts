@@ -37,10 +37,10 @@ export const WIRE_PROTOCOLS = [
   'openai-responses',
 ] as const;
 
-export type WireProtocol = (typeof WIRE_PROTOCOLS)[number];
+type WireProtocol = (typeof WIRE_PROTOCOLS)[number];
 
 /** A parameter override applied to models whose id contains `match`. */
-export interface ModelOverride {
+interface ModelOverride {
   readonly match: string;
   readonly temperature?: number;
   readonly maxTokens?: number;
@@ -264,7 +264,7 @@ const PROVIDER_TABLE = [
  * without restating them, and deleting a table entry breaks every reference to
  * it at compile time.
  */
-export type ProviderId = (typeof PROVIDER_TABLE)[number]['id'];
+type ProviderId = (typeof PROVIDER_TABLE)[number]['id'];
 
 /**
  * The table, seen as the interface it implements.
@@ -328,7 +328,7 @@ export function findProviderByModel(model: string): ProviderSpec | null {
   );
 }
 
-export interface GatewayHints {
+interface GatewayHints {
   readonly providerId?: string;
   readonly apiKey?: string;
   readonly apiBase?: string;
@@ -368,7 +368,7 @@ export function findGateway(hints: GatewayHints): ProviderSpec | null {
   return null;
 }
 
-export interface ResolveProviderOptions {
+interface ResolveProviderOptions {
   /** From config. `auto` or absent runs the full resolution order. */
   readonly provider?: string;
   readonly model?: string;

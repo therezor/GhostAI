@@ -115,7 +115,7 @@ export interface JailAccept {
   readonly rewrites: readonly PathShape[];
 }
 
-export type JailCheck =
+type JailCheck =
   | JailAccept
   | {
       readonly ok: false;
@@ -123,7 +123,7 @@ export type JailCheck =
       readonly message: string;
     };
 
-export interface WorkspaceJailOptions {
+interface WorkspaceJailOptions {
   readonly root: string;
   /** Create the root if it is missing. Default `true`. */
   readonly create?: boolean;

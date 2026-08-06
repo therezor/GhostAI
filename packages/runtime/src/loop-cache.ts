@@ -36,7 +36,7 @@ import { DEFAULT_AGENT_ID } from '@ghostai/core';
  */
 export const MAX_CACHED_LOOPS = 8;
 
-export interface LoopCacheOptions {
+interface LoopCacheOptions {
   /**
    * Builds the loop for an agent id.
    *

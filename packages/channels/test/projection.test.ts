@@ -349,7 +349,6 @@ describe('TurnProjection', () => {
       event({ type: 'session.reset', sessionKey: 's' }),
       event({ type: 'steer', sessionKey: 's', content: 'actually…' }),
       event({ type: 'tools.changed', tools: [] }),
-      event({ type: 'transcribe.result', text: 'hi' }),
       event({
         type: 'tool.progress',
         turnId: TURN,

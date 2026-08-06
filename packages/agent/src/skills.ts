@@ -90,7 +90,7 @@ export interface Skill {
   readonly path: string;
 }
 
-export interface ReadSkillsOptions {
+interface ReadSkillsOptions {
   readonly logger?: Logger;
 }
 

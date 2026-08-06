@@ -53,7 +53,7 @@ export const CHANNEL_CREDENTIAL_NAMESPACE = 'channels';
 /** The environment variable consulted when the vault holds no token. */
 export const TELEGRAM_TOKEN_ENV_VAR = 'TELEGRAM_BOT_TOKEN';
 
-export interface ResolveTokenOptions {
+interface ResolveTokenOptions {
   readonly paths: GhostPaths;
   readonly env: Readonly<Record<string, string | undefined>>;
   /** `config.channels.telegram`, unparsed. */
@@ -105,7 +105,7 @@ export function resolveTelegramToken(
  * them to the routes: the port is narrow about *behaviour* — what a chat may
  * reach — not about types.
  */
-export function createTelegramConsole(
+function createTelegramConsole(
   runtime: GhostRuntime,
   server: ServerRuntime,
 ): TelegramConsole {
@@ -201,7 +201,7 @@ function memoryTargets(
 }
 
 /** `config.channels.telegram`, narrowed. Unknown to the type, loose by design. */
-export function telegramSettingsOf(
+function telegramSettingsOf(
   runtime: GhostRuntime,
 ): Readonly<Record<string, unknown>> {
   const block = runtime.config.channels.telegram;
@@ -210,7 +210,7 @@ export function telegramSettingsOf(
     : {};
 }
 
-export interface TelegramStatusOptions {
+interface TelegramStatusOptions {
   readonly runtime: GhostRuntime;
   readonly paths: GhostPaths;
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -267,7 +267,7 @@ function detailOf(input: {
   return input.startError === undefined ? {} : { detail: input.startError };
 }
 
-export interface TelegramFactoriesOptions {
+interface TelegramFactoriesOptions {
   readonly runtime: GhostRuntime;
   readonly server: ServerRuntime;
   readonly paths: GhostPaths;

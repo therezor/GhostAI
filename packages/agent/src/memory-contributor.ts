@@ -48,7 +48,7 @@ import {
   type StaticPromptContext,
 } from './prompt.js';
 
-export interface MemorySectionOptions {
+interface MemorySectionOptions {
   /**
    * `agents.list.<id>.memoryPrompt`. Empty means `DEFAULT_MEMORY_TEMPLATE`.
    *
@@ -118,7 +118,7 @@ function indexLine(memory: Memory): string {
   return `- \`${memory.path}\` (${memory.type}) — ${memory.description}`;
 }
 
-export interface MemoryContributorOptions extends MemorySectionOptions {
+interface MemoryContributorOptions extends MemorySectionOptions {
   readonly logger?: Logger;
 }
 

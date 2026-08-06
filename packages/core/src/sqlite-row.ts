@@ -29,7 +29,7 @@ import { GhostError } from './errors.js';
 export type Row = Record<string, SQLOutputValue>;
 
 /** The four readers, bound to the store whose rows they are reading. */
-export interface RowReader {
+interface RowReader {
   /** An integer column. Throws `storage` when it is anything else. */
   int(row: Row, column: string): number;
   /** A text column. Throws `storage` when it is anything else. */

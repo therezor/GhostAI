@@ -36,7 +36,7 @@ import { Button } from '@/components/ui/button.js';
 import { FileEditor } from './file-editor.js';
 import { isImage } from './paths.js';
 
-export interface FilePreviewProps {
+interface FilePreviewProps {
   /** Which workspace `entry.path` is relative to. */
   readonly workspace: string;
   readonly entry: FileEntry;

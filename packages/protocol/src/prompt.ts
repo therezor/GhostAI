@@ -87,7 +87,7 @@ export const PROMPT_PLACEHOLDERS = [
   'runtime',
 ] as const;
 
-export type PromptPlaceholder = (typeof PROMPT_PLACEHOLDERS)[number];
+type PromptPlaceholder = (typeof PROMPT_PLACEHOLDERS)[number];
 
 export type PromptValues = Readonly<Record<PromptPlaceholder, string>>;
 
@@ -186,7 +186,7 @@ export const LIVE_PROMPT_PLACEHOLDERS = [
   'tag',
 ] as const;
 
-export type LivePromptPlaceholder = (typeof LIVE_PROMPT_PLACEHOLDERS)[number];
+type LivePromptPlaceholder = (typeof LIVE_PROMPT_PLACEHOLDERS)[number];
 
 export type LivePromptValues = Readonly<Record<LivePromptPlaceholder, string>>;
 
@@ -404,9 +404,6 @@ export const PLATFORM_PROMPT_PLACEHOLDERS = [
   'shellPolicy',
 ] as const;
 
-export type PlatformPromptPlaceholder =
-  (typeof PLATFORM_PROMPT_PLACEHOLDERS)[number];
-
 /**
  * What a *toolbox* template may ask for.
  *
@@ -430,9 +427,6 @@ export const TOOLBOX_PROMPT_PLACEHOLDERS = [
   'docs',
 ] as const;
 
-export type ToolboxPromptPlaceholder =
-  (typeof TOOLBOX_PROMPT_PLACEHOLDERS)[number];
-
 /**
  * What a *tool-output policy* template may ask for.
  *
@@ -447,8 +441,6 @@ export type ToolboxPromptPlaceholder =
  * should find out before a turn does.
  */
 export const TOOL_POLICY_PLACEHOLDERS = ['nonce', 'tag'] as const;
-
-export type ToolPolicyPlaceholder = (typeof TOOL_POLICY_PLACEHOLDERS)[number];
 
 /**
  * What a *memory* template may ask for.
@@ -472,9 +464,6 @@ export const MEMORY_PROMPT_PLACEHOLDERS = [
   /** How many memories the index carries, as a decimal string. */
   'count',
 ] as const;
-
-export type MemoryPromptPlaceholder =
-  (typeof MEMORY_PROMPT_PLACEHOLDERS)[number];
 
 /** `{{platformPolicy}}` when `exec` runs on this machine. */
 export const DEFAULT_PLATFORM_HOST_TEMPLATE = `## Running commands
@@ -587,9 +576,6 @@ export const SKILLS_PROMPT_PLACEHOLDERS = [
   'count',
 ] as const;
 
-export type SkillsPromptPlaceholder =
-  (typeof SKILLS_PROMPT_PLACEHOLDERS)[number];
-
 /**
  * The skills section: a catalogue, and what to do with it.
  *
@@ -685,5 +671,3 @@ export const RAW_PROMPT_PLACEHOLDERS = [
   /** The one-iteration correction, with a leading blank line. Almost always empty. */
   'correction',
 ] as const;
-
-export type RawPromptPlaceholder = (typeof RAW_PROMPT_PLACEHOLDERS)[number];

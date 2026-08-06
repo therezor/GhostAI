@@ -26,9 +26,9 @@
  *   session is *not* accepted there and a signature is not accepted anywhere
  *   else, so neither carrier widens the other's reach.
  */
-export type RouteAuth = 'public' | 'required' | 'signed';
+type RouteAuth = 'public' | 'required' | 'signed';
 
-export type RouteMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+type RouteMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 
 const MANIFEST = [
   // Status and health

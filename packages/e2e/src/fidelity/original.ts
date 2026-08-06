@@ -64,13 +64,13 @@ const TYPES: Readonly<Record<string, string>> = {
   '.woff2': 'font/woff2',
 };
 
-export interface Reference {
+interface Reference {
   readonly url: string;
   readonly root: string;
   close(): Promise<void>;
 }
 
-export interface ReferenceOptions {
+interface ReferenceOptions {
   readonly root?: string;
   /**
    * Let the document reach the font CDN.

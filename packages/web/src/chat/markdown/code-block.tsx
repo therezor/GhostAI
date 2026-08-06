@@ -28,7 +28,7 @@ import { useCopy } from '@/components/use-copy.js';
 import { useAppTheme } from '@/theme/theme-context.js';
 import type { HighlightedLines } from './highlight.js';
 
-export interface CodeBlockProps {
+interface CodeBlockProps {
   readonly code: string;
   /** The fence's language, already normalised. Empty means none was given. */
   readonly lang: string;

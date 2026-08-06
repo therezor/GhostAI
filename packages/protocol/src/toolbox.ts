@@ -59,7 +59,6 @@ export type ToolboxNetworkMode = z.infer<typeof ToolboxNetworkModeSchema>;
  * instead of the whole install.
  */
 export const ToolboxRuntimeSchema = z.enum(['runc', 'runsc', 'kata']);
-export type ToolboxRuntime = z.infer<typeof ToolboxRuntimeSchema>;
 
 /**
  * One program in the box, as the model is told about it.
@@ -119,7 +118,6 @@ export const ToolboxCapsSchema = z.object({
    */
   add: z.array(z.string()).default([]),
 });
-export type ToolboxCaps = z.infer<typeof ToolboxCapsSchema>;
 
 export const ToolboxSecuritySchema = z.object({
   noNewPrivileges: z.boolean().default(true),
@@ -131,7 +129,6 @@ export const ToolboxSecuritySchema = z.object({
   /** Rootless build needs `/dev/fuse`; nothing else should ask for a device. */
   devices: z.array(z.string()).default([]),
 });
-export type ToolboxSecurity = z.infer<typeof ToolboxSecuritySchema>;
 
 export const ToolboxLimitsSchema = z.object({
   memoryMb: z.coerce.number().int().min(0).default(2048),
@@ -140,7 +137,6 @@ export const ToolboxLimitsSchema = z.object({
   /** Docker's 64m default produces short writes in build and scan workloads. */
   shmSizeMb: z.coerce.number().int().min(0).default(256),
 });
-export type ToolboxLimits = z.infer<typeof ToolboxLimitsSchema>;
 
 export const ToolboxNetworkSchema = z.object({
   maxMode: ToolboxNetworkModeSchema.default('none'),
@@ -157,7 +153,6 @@ export const ToolboxNetworkSchema = z.object({
    */
   proxyAllowHosts: z.array(z.string()).default([]),
 });
-export type ToolboxNetwork = z.infer<typeof ToolboxNetworkSchema>;
 
 export const ToolboxSchema = z.object({
   /** Bumped only for a breaking manifest change; refused when unrecognised. */

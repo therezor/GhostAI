@@ -11,7 +11,7 @@
  * the current frame's work, and a microtask runs before the browser paints.
  */
 
-export interface IdleHandle {
+interface IdleHandle {
   readonly cancel: () => void;
 }
 

@@ -126,14 +126,6 @@ export function ToolsPanel({
         title={t('settings.tools.resultsTitle')}
         description={t('settings.tools.resultsDesc')}
       >
-        <SwitchRow
-          label={t('settings.tools.restrictFiles')}
-          hint={t('settings.tools.restrictFilesHint')}
-          checked={form.restrictToWorkspace}
-          onCheckedChange={(checked) => {
-            update('restrictToWorkspace', checked);
-          }}
-        />
         <TextField
           label={t('settings.tools.maxChars')}
           inputMode="numeric"

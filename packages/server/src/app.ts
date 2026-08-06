@@ -64,7 +64,7 @@ import { SERVER_VERSION } from './version.js';
 export { SERVER_VERSION } from './version.js';
 
 /** Long enough for a signed token over a deep workspace path, and no longer. */
-export const MAX_PARAM_LENGTH = 2048;
+const MAX_PARAM_LENGTH = 2048;
 
 export interface ServerOptions {
   /**
@@ -159,7 +159,7 @@ export interface UiOptions {
   readonly index?: string;
 }
 
-export interface ListenOptions {
+interface ListenOptions {
   readonly host?: string;
   /** Overrides `server.port`. `0` asks the OS for a free one. */
   readonly port?: number;

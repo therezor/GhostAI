@@ -29,8 +29,6 @@ import { z } from 'zod';
 export const ToolRiskSchema = z.enum(['safe', 'write', 'exec', 'network']);
 export type ToolRisk = z.infer<typeof ToolRiskSchema>;
 
-export const TOOL_RISKS = ['safe', 'write', 'exec', 'network'] as const;
-
 /**
  * What an agent may do with one tool.
  *
@@ -172,14 +170,14 @@ export const ToolPromptOverridesSchema = z.record(
 export type ToolPromptOverrides = z.infer<typeof ToolPromptOverridesSchema>;
 
 /** What `applyToolPrompts` could not apply, for the warning sink and the editor. */
-export interface ToolPromptMisses {
+interface ToolPromptMisses {
   /** Override keys naming no advertised tool. */
   readonly unknownTools: readonly string[];
   /** `<tool>.<field>` pairs naming no property in that tool's schema. */
   readonly unknownFields: readonly string[];
 }
 
-export interface AppliedToolPrompts extends ToolPromptMisses {
+interface AppliedToolPrompts extends ToolPromptMisses {
   readonly definitions: readonly ToolDefinition[];
 }
 

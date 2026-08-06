@@ -57,8 +57,8 @@ never drops a running turn.
   when you hit Enter.
 - **`@` autocomplete** for `@mcp:` and `@skill:`, as a real listbox with
   `aria-activedescendant`. The grammar is parsed once, in the protocol, for every channel.
-  _The mention kinds are parsed and carried today; the features behind them are in
-  [ROADMAP.md](ROADMAP.md)._
+  _It offers values for `@skill:` and for nothing else: naming a skill inlines its sheet
+  into that message, so the completion leads somewhere. `@mcp:` does not._
 - An agent picker, and a context budget strip.
 
 ### Message actions
@@ -111,8 +111,9 @@ details popover, because a conversation that has been moved spans more than one.
 
 Create, rename, enable, delete. Per agent: the model, provider, reasoning effort and
 temperature; limits (output tokens, context window, tool iterations, tool timeout, turn
-timeout); the **system prompt**, live-state and wrap-up templates with a warning for stray
-placeholders; the **per-tool permission map**; the **toolbox** and its network mode, with a
+timeout); the **system prompt** on the screen and the other seven templates behind an
+**Advanced prompt settings** disclosure, each with a warning for stray placeholders; the
+**per-tool permission map**; the **toolbox** and its network mode, with a
 warning when a request is narrower than the manifest ceiling; and the **subagent list**,
 each with its own description and permission.
 
@@ -124,15 +125,15 @@ an install with several agents has several answers.
 A page rather than a settings panel, in the nav above Settings, built out of the same CRUD
 chrome as Agents and Workspaces: filter, sort, `DataList` rows, a kebab, a create dialog
 and a confirm on delete. Per job: the schedule (once at a time, on an interval, or on a
-cron expression with its own zone), what it does (a fixed message, or a heartbeat that
+cron expression, read in `ui.timezone`), what it does (a fixed message, or a heartbeat that
 reads a task file and decides), the agent it runs on, an optional pinned session key, and
 delivery. Below it, the **run history** — each run's outcome, output, skip reason, error
 and any warnings.
 
-The scheduler's own switches are **not** here — enabled, catch-up on boot, default
-timezone, concurrency and how much history to keep per job are install-wide, and live in
-Settings → Automation. The split is the one Agents already makes: the agents are a page,
-and only install-wide tool settings sit in Settings.
+The scheduler's own switches are **not** here — enabled, catch-up on boot, concurrency and
+how much history to keep per job are install-wide, and live in Settings → Automation. The
+split is the one Agents already makes: the agents are a page, and only install-wide tool
+settings sit in Settings.
 
 A row reports where the last run **landed** and when the next one is due, never whether one
 is in flight. Keeping that honest would mean polling, and it is exactly the transient state
@@ -168,7 +169,7 @@ to fill in first.
 | Tools      | Built. Install-wide only: approval timeout, `exec` settings, output caps. **No permission matrix here** — permission is per tool per agent.                            |
 | Account    | Built. Username and password together, requires the current password, revokes every other session.                                                                     |
 | Appearance | Built. Language and timezone (install-wide) and theme (this browser only).                                                                                             |
-| Automation | Built. The scheduler engine only: enabled, concurrency, catch-up on boot, run retention, default timezone. **The jobs are a page.**                                    |
+| Automation | Built. The scheduler engine only: enabled, concurrency, catch-up on boot, run retention. **The jobs are a page.**                                                      |
 | Extensions | Built. MCP servers are a list and an editor, each row joining what an operator configured to what came of it.                                                          |
 | Channels   | Built. Reach the same agent from a messaging app. The bot token goes to the vault, never to `config.json`.                                                             |
 

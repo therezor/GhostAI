@@ -32,7 +32,7 @@ import { effectiveToolPolicy, renderPromptTemplate } from '@ghostai/protocol';
 
 import { type RandomSource, systemRandom } from './random.js';
 
-export const TOOL_OUTPUT_TAG_PREFIX = 'tool_output_';
+const TOOL_OUTPUT_TAG_PREFIX = 'tool_output_';
 
 /** 8 bytes — 64 bits of unguessable delimiter, at 16 characters of prompt. */
 export const TOOL_OUTPUT_NONCE_BYTES = 8;
@@ -60,25 +60,22 @@ export function toolOutputTag(nonce: string): string {
   return `${TOOL_OUTPUT_TAG_PREFIX}${nonce}`;
 }
 
-export const INJECTION_SIGNALS = [
+type InjectionSignal =
   /** "ignore previous instructions" and its relatives. */
-  'instruction_override',
+  | 'instruction_override'
   /** An attempt to reassign the agent's identity or loyalty. */
-  'role_override',
+  | 'role_override'
   /** An attempt to have the system prompt or tool schema echoed back. */
-  'prompt_extraction',
+  | 'prompt_extraction'
   /** An attempt to make the agent call a tool on the content's behalf. */
-  'tool_directive',
+  | 'tool_directive'
   /**
    * The content contained the envelope's own delimiter. The strongest signal
    * available: legitimate output has no reason to carry this turn's nonce.
    */
-  'delimiter_forgery',
-] as const;
+  | 'delimiter_forgery';
 
-export type InjectionSignal = (typeof INJECTION_SIGNALS)[number];
-
-export interface InjectionFinding {
+interface InjectionFinding {
   readonly signal: InjectionSignal;
   /** Character offset into the original content. */
   readonly index: number;
@@ -148,7 +145,7 @@ export function detectPromptInjection(
   return findings;
 }
 
-export interface WrapToolOutputOptions {
+interface WrapToolOutputOptions {
   readonly toolName: string;
   /** From `createToolOutputNonce`, regenerated once per turn. */
   readonly nonce: string;
@@ -156,7 +153,7 @@ export interface WrapToolOutputOptions {
   readonly detect?: boolean;
 }
 
-export interface WrappedToolOutput {
+interface WrappedToolOutput {
   /** The envelope, ready to become a `tool` message's content. */
   readonly text: string;
   readonly tag: string;

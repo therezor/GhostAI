@@ -113,9 +113,9 @@ export interface ChannelHub {
  * that a public bot cannot turn one connection per sender into unbounded state
  * in a process that has no other reason to grow.
  */
-export const DEFAULT_MAX_CHANNEL_SESSIONS = 256;
+const DEFAULT_MAX_CHANNEL_SESSIONS = 256;
 
-export interface ChannelManagerOptions {
+interface ChannelManagerOptions {
   readonly hub: ChannelHub;
   /**
    * `config.channels`, whole.

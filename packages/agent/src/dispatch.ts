@@ -200,13 +200,13 @@ export interface TurnScope {
  * real loop — it needs the loop resolver, the store and the lineage. The
  * dispatcher only needs to know that a call may be answered by one.
  */
-export type SubagentDelegate = (
+type SubagentDelegate = (
   call: ToolCall,
   binding: SubagentBinding,
   turn: TurnScope,
 ) => AsyncGenerator<AgentEvent, ToolExecution>;
 
-export interface ToolDispatcherOptions {
+interface ToolDispatcherOptions {
   readonly tools: ToolScope;
   readonly subagents: ReadonlyMap<string, SubagentBinding>;
   /**
@@ -227,7 +227,7 @@ export interface ToolDispatcherOptions {
 }
 
 /** What one assistant turn's tool calls produced. */
-export interface ToolCallOutcome {
+interface ToolCallOutcome {
   readonly cancelled: boolean;
   /**
    * The assistant message and one `tool` message per call, in the order the

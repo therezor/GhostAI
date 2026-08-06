@@ -82,8 +82,8 @@ export type ChannelInbound = Omit<InboundMessageInput, 'channelId'>;
  * a different `sessionKey`, which is the same thing the loopback channel's
  * `conversation` option does.
  *
- * `ping` and `audio.transcribe` are absent because neither means anything here:
- * there is no socket to keep alive, and no channel produces audio yet.
+ * `ping` is absent because it means nothing here: there is no socket to keep
+ * alive.
  */
 export type ChannelControlFrame = Extract<
   ClientMessage,

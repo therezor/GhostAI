@@ -123,14 +123,14 @@ export interface HarnessOptions {
   readonly password?: string | null;
 }
 
-export interface SeedSession {
+interface SeedSession {
   readonly key: string;
   readonly title?: string;
   /** Alternating user/assistant text, starting with the user. */
   readonly turns?: readonly string[];
 }
 
-export interface SeedNotification {
+interface SeedNotification {
   readonly title: string;
   readonly body?: string;
   readonly level?: 'info' | 'warning' | 'error';
@@ -172,7 +172,7 @@ export interface Harness {
  * "the UI is not built" fails here with a sentence rather than as a blank page
  * forty assertions later.
  */
-export function uiRoot(): string {
+function uiRoot(): string {
   const require = createRequire(import.meta.url);
   const root = join(
     dirname(require.resolve('@ghostai/web/package.json')),

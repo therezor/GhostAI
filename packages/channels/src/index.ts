@@ -46,11 +46,9 @@ export {
 
 export {
   ChannelManager,
-  DEFAULT_MAX_CHANNEL_SESSIONS,
   type ChannelHub,
   type ChannelHubConnectOptions,
   type ChannelHubConnection,
-  type ChannelManagerOptions,
 } from './manager.js';
 
 export {

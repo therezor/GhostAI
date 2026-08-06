@@ -228,7 +228,7 @@ interface PromptPreamble {
   readonly staticSections: readonly string[];
 }
 
-export interface LoopAgent extends PromptAgent {
+interface LoopAgent extends PromptAgent {
   readonly id: string;
   /**
    * This agent's replacements for what its tools say about themselves.

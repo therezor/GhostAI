@@ -42,7 +42,7 @@ export interface RendererOptions {
   readonly editIntervalMs: number;
 }
 
-export interface RenderRequest {
+interface RenderRequest {
   readonly chatId: number;
   readonly chat: ChatState;
   readonly text: string;

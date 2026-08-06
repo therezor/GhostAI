@@ -1344,20 +1344,6 @@ describe('SessionHub', () => {
 
       expect(client.types()).toEqual([]);
     });
-
-    it('reports that transcription is not configured', async () => {
-      const h = harness();
-      const client = h.connect();
-      client.reset();
-
-      await send(client, {
-        type: 'audio.transcribe',
-        audio: 'AAAA',
-        mimeType: 'audio/webm',
-      });
-
-      expect(client.of('error')[0]).toMatchObject({ code: 'config_invalid' });
-    });
   });
 });
 

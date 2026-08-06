@@ -35,7 +35,7 @@ const STORAGE_KEY = 'ghostai:agent';
 
 export { DEFAULT_AGENT_ID };
 
-export interface AgentState {
+interface AgentState {
   /** The agent a new conversation starts on. */
   readonly agentId: string;
   /** The user chose this one. Persisted. */

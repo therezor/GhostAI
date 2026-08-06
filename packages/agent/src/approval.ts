@@ -1,10 +1,10 @@
 /**
  * The tool approval gate.
  *
- * `@ghostai/protocol` has described this end to end since Step 2 — a risk band
- * per tool, a policy per band, a scope per answer — and until now nothing read
- * any of it. The loop is where it has to be read, because the loop is the only
- * thing that sits between a model asking for `exec` and a shell running.
+ * `@ghostai/protocol` describes this end to end — a risk band per tool, a policy
+ * per band, a scope per answer — but the loop is where it has to be read,
+ * because the loop is the only thing that sits between a model asking for
+ * `exec` and a shell running.
  *
  * The split is deliberate and it is the whole design:
  *

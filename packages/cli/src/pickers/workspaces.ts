@@ -13,7 +13,7 @@ import type { SelectItem } from '@ghostai/tui';
 import type { CliT } from '../i18n.js';
 import type { Menu } from '../menu.js';
 
-export interface WorkspacePickerDeps {
+interface WorkspacePickerDeps {
   readonly menu: Menu;
   readonly workspaces: readonly WorkspaceRecord[];
   readonly current: string | undefined;

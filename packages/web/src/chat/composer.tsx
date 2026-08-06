@@ -55,7 +55,7 @@ import {
   type MentionSuggestion,
 } from './mentions.js';
 
-export interface ComposerProps {
+interface ComposerProps {
   /**
    * A control at the start of the meta row — in practice the agent picker.
    *

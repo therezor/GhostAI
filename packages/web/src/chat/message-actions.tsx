@@ -31,7 +31,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button.js';
 import { useCopy } from '@/components/use-copy.js';
 
-export interface MessageActionsProps {
+interface MessageActionsProps {
   /** What Copy puts on the clipboard. */
   readonly text: string;
   readonly onEdit?: (() => void) | undefined;

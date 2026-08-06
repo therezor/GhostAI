@@ -92,7 +92,7 @@ export interface RendererOptions {
   readonly synchronized?: boolean;
 }
 
-export interface Renderer {
+interface Renderer {
   readonly columns: number;
   readonly rows: number;
   /** How many frames were printed whole rather than patched. For tests. */

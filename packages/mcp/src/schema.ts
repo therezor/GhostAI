@@ -35,7 +35,7 @@ export interface SchemaIssue {
   readonly message: string;
 }
 
-export interface NormalisedSchema {
+interface NormalisedSchema {
   readonly parameters: Readonly<Record<string, unknown>>;
   readonly issues: readonly SchemaIssue[];
 }

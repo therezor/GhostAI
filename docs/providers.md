@@ -26,9 +26,10 @@ rather than a text box.
 
 **Only the `openai-chat` adapter exists.** Four wire protocols are named
 (`openai-chat`, `anthropic-messages`, `gemini-generate`, `openai-responses`) and one is
-implemented. In practice this means `anthropic` is configured and reachable through an
-OpenAI-compatible path rather than through its native Messages API; selecting a wire that
-has no adapter is a loud configuration error, not a silent fallback.
+implemented. Selecting a wire that has no adapter is a loud configuration error, not a
+silent fallback: `createProvider` refuses at construction rather than letting a
+misconfiguration surface as a 404 mid-turn. Reaching one of those providers today means
+pointing an instance at an endpoint that speaks `openai-chat`.
 
 ## Types and instances
 

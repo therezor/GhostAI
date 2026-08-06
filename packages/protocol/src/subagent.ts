@@ -29,7 +29,7 @@ export const SUBAGENT_ORIGIN = 'subagent';
 export const SUBAGENT_METADATA_KEY = 'subagent';
 
 /** Where a *parent* session records which call produced which child session. */
-export const SUBAGENT_RUNS_METADATA_KEY = 'subagentRuns';
+const SUBAGENT_RUNS_METADATA_KEY = 'subagentRuns';
 
 /** What a subagent's session knows about the call that started it. */
 export interface SubagentLineage {

@@ -38,9 +38,9 @@ import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.
 import type { McpSecretStore } from './store.js';
 
 /** How GhostAI describes itself to an authorization server. */
-export const OAUTH_CLIENT_NAME = 'GhostAI';
+const OAUTH_CLIENT_NAME = 'GhostAI';
 
-export interface OAuthProviderOptions {
+interface OAuthProviderOptions {
   readonly serverId: string;
   readonly config: McpOAuthConfig;
   readonly store: McpSecretStore;

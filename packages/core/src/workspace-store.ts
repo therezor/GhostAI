@@ -58,7 +58,7 @@ export interface WorkspaceRecord {
   readonly metadata: Readonly<Record<string, unknown>>;
 }
 
-export interface WorkspaceStoreOptions {
+interface WorkspaceStoreOptions {
   /** Shared with `SessionStore`; see `SessionStore.database`. */
   readonly database: DatabaseSync;
   /** Needed to create a workspace's directory. */
@@ -66,7 +66,7 @@ export interface WorkspaceStoreOptions {
   readonly clock?: Clock;
 }
 
-export interface CreateWorkspaceOptions {
+interface CreateWorkspaceOptions {
   readonly name: string;
   /** Derived from the name when absent. */
   readonly id?: string;

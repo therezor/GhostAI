@@ -21,10 +21,10 @@
 
 import type { CredentialVault } from '@ghostai/security';
 
-export const MCP_CREDENTIAL_NAMESPACE = 'mcp_servers';
+const MCP_CREDENTIAL_NAMESPACE = 'mcp_servers';
 
 /** What OAuth persists per server. One key each, under the server's id. */
-export type McpSecretSlot = 'tokens' | 'client';
+type McpSecretSlot = 'tokens' | 'client';
 
 export interface McpSecretStore {
   read(serverId: string, slot: McpSecretSlot): string | undefined;

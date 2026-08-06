@@ -58,7 +58,7 @@ export function rowsOf(
   return sizeOf(output.rows, fallback);
 }
 
-export interface KeyboardOptions {
+interface KeyboardOptions {
   readonly input: TerminalInput;
   /**
    * Whether to take the tty out of line mode. Default: whenever it is one.
@@ -69,7 +69,7 @@ export interface KeyboardOptions {
   readonly raw?: boolean;
 }
 
-export interface Keyboard {
+interface Keyboard {
   /** Returns the unsubscribe. */
   onKey(handler: (key: Key) => void): () => void;
   /** Restores the tty and stops listening. Idempotent. */

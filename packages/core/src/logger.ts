@@ -26,7 +26,7 @@ export type LogLevel = pino.Level;
  * instead, callers log the specific sub-object they mean, which is better
  * practice anyway and keeps this list short enough to audit.
  */
-export const REDACT_PATHS: readonly string[] = [
+const REDACT_PATHS: readonly string[] = [
   'apiKey',
   'api_key',
   'token',
@@ -62,7 +62,7 @@ export const REDACT_PATHS: readonly string[] = [
 
 export const REDACT_CENSOR = '[redacted]';
 
-export interface CreateLoggerOptions {
+interface CreateLoggerOptions {
   /** Defaults to `GHOSTAI_LOG_LEVEL`, then `LOG_LEVEL`, then `info`. */
   readonly level?: LogLevel;
   /** Component name, emitted as `name` on every line. */

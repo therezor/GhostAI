@@ -7,7 +7,7 @@
  * would complete it" — which no parser of finished text can answer. So this
  * file owns the partial case and defers to the protocol for everything else:
  * the kinds come from `MENTION_KINDS`, and `mentionsIn` is a straight
- * re-export, so a fourth namespace added there appears here without an edit.
+ * re-export, so a third namespace added there appears here without an edit.
  *
  * **It offers values for `@skill:` and for nothing else**, and the asymmetry is
  * the honest state of the two namespaces rather than an oversight. Naming a
@@ -30,7 +30,7 @@ import {
 export { parseMentions as mentionsIn };
 
 /** A mention being typed at the caret. */
-export interface MentionQuery {
+interface MentionQuery {
   /** Index of the `@` in the source text. */
   readonly start: number;
   /** The caret. Everything between `start` and here is what has been typed. */

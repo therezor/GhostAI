@@ -7,7 +7,7 @@
  * items are not items, a switch whose thumb swallowed the click. Each of these
  * is a mistake that leaves the component looking correct and behaving wrong.
  *
- * Between them they cover Step 16's done-when: keyboard reachability, focus
+ * Between them they cover what the primitives owe: keyboard reachability, focus
  * trapping, and Escape.
  */
 

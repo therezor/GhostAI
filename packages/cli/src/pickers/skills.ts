@@ -23,7 +23,7 @@ import type { Menu } from '../menu.js';
 /** The prefix that opens a mention, and the only thing Tab acts on. */
 const MENTION_PREFIX = '@skill:';
 
-export interface SkillPickerDeps {
+interface SkillPickerDeps {
   readonly menu: Menu;
   readonly skills: readonly Skill[];
   readonly t: CliT;

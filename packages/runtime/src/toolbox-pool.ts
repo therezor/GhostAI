@@ -49,10 +49,10 @@ import {
 } from '@ghostai/security';
 
 /** Beyond this many live containers the least-recently-used session is reaped. */
-export const MAX_LIVE_TOOLBOXES: number = 4;
+const MAX_LIVE_TOOLBOXES: number = 4;
 
 /** How long a container may sit unused before it is stopped. */
-export const TOOLBOX_IDLE_MS: number = 10 * 60_000;
+const TOOLBOX_IDLE_MS: number = 10 * 60_000;
 
 /**
  * Label naming the process that created a sandbox.
@@ -669,7 +669,7 @@ function sleepBriefly(): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
 }
 
-export interface DockerEngineOptions {
+interface DockerEngineOptions {
   /** `podman` is wire-compatible for everything used here. */
   readonly bin?: string;
   /** Defaults to `ownerTag()`, matching `ToolboxPool`'s default. */

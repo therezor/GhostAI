@@ -23,7 +23,7 @@ import type { ContextResponse } from '@ghostai/protocol';
 import type { ServerRuntime } from './runtime.js';
 
 /** The slice of the runtime this needs. Structural, so a test can stand in. */
-export type ContextRuntime = Pick<ServerRuntime, 'agents' | 'agent' | 'store'>;
+type ContextRuntime = Pick<ServerRuntime, 'agents' | 'agent' | 'store'>;
 
 /**
  * Measures one session, or `undefined` when there is nothing to measure.

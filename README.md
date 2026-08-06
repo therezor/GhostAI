@@ -16,7 +16,7 @@ ghost serve
 ## Why this one
 
 **It stays on your machine, and that is tested rather than promised.**
-Zero telemetry — a repo-wide grep for `telemetry|analytics|posthog|sentry|mixpanel` returns exactly one hit, and it is the comment in the test that forbids them. [`self-contained.test.ts`](packages/web/src/self-contained.test.ts) fails the build if a CDN link, a `preconnect` or a cross-origin stylesheet appears in the UI; fonts ship from npm. [`offline.spec.ts`](packages/e2e/src/tests/offline.spec.ts) blocks every foreign origin in a real browser and drives the whole app anyway. The server binds `127.0.0.1`, and a non-loopback bind with auth disabled **refuses to start**.
+Zero telemetry — a repo-wide grep for `telemetry|analytics|posthog|sentry|mixpanel` returns exactly one hit, and it is the comment in the test that forbids them. [`self-contained.test.ts`](packages/web/test/self-contained.test.ts) fails the build if a CDN link, a `preconnect` or a cross-origin stylesheet appears in the UI; fonts ship from npm. [`offline.spec.ts`](packages/e2e/src/tests/offline.spec.ts) blocks every foreign origin in a real browser and drives the whole app anyway. The server binds `127.0.0.1`, and a non-loopback bind with auth disabled **refuses to start**.
 
 **Local models are the default, not the fallback.**
 Ollama, LM Studio, llama.cpp and vLLM ship in the registry with loopback defaults and live model listing. Cloud providers — OpenAI, Anthropic, Gemini, OpenRouter, DeepSeek, Groq, xAI — are opt-in, and `custom` takes any OpenAI-compatible endpoint. Two boxes running Ollama are two entries in one config file.
@@ -25,7 +25,7 @@ Ollama, LM Studio, llama.cpp and vLLM ship in the registry with loopback default
 The system prompt is split in two around the provider's cache prefix: a static half that is byte-identical for the life of a session, and a small runtime half at the tail. Tool definitions and the per-turn nonce are computed once per _turn_, not per iteration. The session key, the channel label and the iteration counter were deliberately deleted from the uncached half — the counter now prints only in the last three iterations, when it is actionable. A toolbox advertises a whole container of programs in about forty tokens, where tool schemas would cost sixty to eighty **each, on every request**. See [Prompts](docs/prompts.md).
 
 **Every prompt is yours.**
-Three templates — the identity prompt, the live-state block and the wrap-up sentence — live in config and are edited in the UI. `systemPrompt` **replaces** the built-in text; it is not appended to a hidden preamble. Leave one empty and you inherit improvements on upgrade; set it to a single space and the section is gone. A typo renders verbatim instead of silently deleting a line.
+Eight templates — the identity prompt, the live-state block, the wrap-up sentence and the five section templates — live in config and are edited in the UI. `systemPrompt` **replaces** the built-in text; it is not appended to a hidden preamble. Leave one empty and you inherit improvements on upgrade; set it to a single space and the section is gone. A typo renders verbatim instead of silently deleting a line.
 
 **Permission is per tool, per agent.**
 `allow | ask | deny`, and a tool absent from the map is not enabled at all — it never reaches the definitions the model is sent. Risk bands seed a new agent and then decide nothing. An `ask` tool shows the operator the arguments before it runs, with once / this-session / always as the answer.
@@ -122,7 +122,10 @@ Everything under `~/.ghostai`, or `$GHOSTAI_HOME`:
 ## How it works
 
 ```
-protocol → core → { security, providers } → tools → { mcp, agent } → runtime → server → cli
+{ protocol, i18n } → core → security → { providers, tools } → { mcp, agent } → runtime → server ┐
+{ protocol, i18n } → web                                                                        │
+             core → channels                                                                    ├→ cli
+                    tui                                                                         ┘
 ```
 
 Packages may only depend downward, and that is enforced mechanically rather than by review: pnpm's isolated `node_modules` means a package can only resolve `@ghostai/x` if it declares it, so an undeclared import fails to _resolve_, not merely to lint.
@@ -201,7 +204,7 @@ The wire schemas, config blocks and seams for these already ship. The implementa
 | **Browser slash commands** | The terminal's command table                                | A shared table and the composer UI    |
 | **Session search**         | Keyset pagination and filters                               | Text search over message content      |
 
-Two smaller ones, so nothing here reads as more finished than it is: only the `openai-chat` wire adapter exists, so `anthropic` is in the provider registry but reaches Anthropic through an OpenAI-compatible path rather than its native API; and the translation layer is complete while **English is the only shipped locale** — adding one is a folder plus a line.
+Two smaller ones, so nothing here reads as more finished than it is: only the `openai-chat` wire adapter exists, so the registry entries that name another wire — `anthropic`, `gemini` — are refused at construction rather than falling back, and reaching those providers today means an endpoint that speaks `openai-chat`; and the translation layer is complete while **English is the only shipped locale** — adding one is a folder plus a line.
 
 ---
 
@@ -215,7 +218,7 @@ Two smaller ones, so nothing here reads as more finished than it is: only the `o
 | -------------------------------------- | -------------------------------------------------------- |
 | [Architecture](docs/architecture.md)   | Packages, the turn, events, subagents, persistence       |
 | [Configuration](docs/configuration.md) | Every config key, its type and its default               |
-| [Prompts](docs/prompts.md)             | The three templates, placeholders, and the caching split |
+| [Prompts](docs/prompts.md)             | The eight templates, placeholders, and the caching split |
 | [Providers](docs/providers.md)         | The registry, instances, resolution, resilience          |
 | [Tools & permissions](docs/tools.md)   | The built-ins, and who is allowed to call them           |
 | [Skills](docs/skills.md)               | Instruction sheets in the workspace, indexed or named    |

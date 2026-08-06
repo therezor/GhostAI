@@ -135,7 +135,7 @@ export function hasUnansweredToolCall(
   return pending.size > 0;
 }
 
-export interface TruncationResult {
+interface TruncationResult {
   readonly text: string;
   readonly truncated: boolean;
   /** Characters dropped from the middle. `0` when nothing was truncated. */
@@ -183,7 +183,7 @@ export interface HistoryForLLMOptions {
   readonly maxToolResultChars?: number;
 }
 
-export const DEFAULT_MAX_HISTORY_MESSAGES = 500;
+const DEFAULT_MAX_HISTORY_MESSAGES = 500;
 
 /**
  * The cap the loop applies to a single tool result before it enters history.
@@ -256,7 +256,7 @@ export function historyForLLM(
  * without this file importing it — `session-store.ts` already imports from
  * here, and an arrow back would be a cycle.
  */
-export interface SessionHistorySource {
+interface SessionHistorySource {
   messages(
     sessionKey: string,
     options: {

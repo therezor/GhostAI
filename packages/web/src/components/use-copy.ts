@@ -16,9 +16,9 @@ import { useEffect, useState } from 'react';
 import { copyToClipboard } from '@/lib/clipboard.js';
 
 /** How long the confirmation holds. Long enough to read, short enough to forget. */
-export const COPY_CONFIRM_MS = 1500;
+const COPY_CONFIRM_MS = 1500;
 
-export interface CopyState {
+interface CopyState {
   readonly copied: boolean;
   readonly copy: () => void;
 }

@@ -43,7 +43,7 @@ const STORAGE_KEY = 'ghostai:workspace';
  */
 export { DEFAULT_WORKSPACE_ID };
 
-export interface WorkspaceState {
+interface WorkspaceState {
   readonly workspaceId: string;
   /** The user chose this one. Persisted. */
   readonly select: (workspaceId: string) => void;

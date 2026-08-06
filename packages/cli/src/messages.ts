@@ -92,7 +92,7 @@ export function resolveSeq(
   return record.seq;
 }
 
-export interface MessageLine {
+interface MessageLine {
   readonly seq: number;
   readonly role: string;
   readonly text: string;

@@ -66,13 +66,13 @@ import type {
 import type { McpConnectionSpec } from './spec.js';
 
 /** What GhostAI calls itself in the MCP initialise handshake. */
-export const CLIENT_NAME = 'ghostai';
-export const CLIENT_VERSION = '0.0.0';
+const CLIENT_NAME = 'ghostai';
+const CLIENT_VERSION = '0.0.0';
 
 /** Beyond this many stderr bytes per server, logging stops. */
 const STDERR_BUDGET_BYTES = 64 * 1024;
 
-export interface SdkConnectorOptions {
+interface SdkConnectorOptions {
   readonly logger: Logger;
   readonly clientName?: string;
   readonly clientVersion?: string;
@@ -171,7 +171,7 @@ function pipeStderr(
  * operator now has to go somewhere — a state, not a failure to retry — so it is
  * tagged rather than folded into the general error path.
  */
-export const NEEDS_AUTHORIZATION = 'needsAuthorization';
+const NEEDS_AUTHORIZATION = 'needsAuthorization';
 
 function asGhostError(error: unknown): GhostError {
   if (error instanceof UnauthorizedError) {
@@ -182,12 +182,6 @@ function asGhostError(error: unknown): GhostError {
     );
   }
   return toGhostError(error, 'network');
-}
-
-export function isNeedsAuthorization(error: unknown): boolean {
-  return (
-    error instanceof GhostError && error.details[NEEDS_AUTHORIZATION] === true
-  );
 }
 
 /**

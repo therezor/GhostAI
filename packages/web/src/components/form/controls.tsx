@@ -66,7 +66,7 @@ export function FieldGrid({
   return <div className="settings-grid">{children}</div>;
 }
 
-export interface TextareaFieldProps extends Omit<
+interface TextareaFieldProps extends Omit<
   ComponentProps<'textarea'>,
   'id' | 'onChange'
 > {
@@ -134,7 +134,7 @@ export function TextareaField({
   );
 }
 
-export interface TextFieldProps extends Omit<
+interface TextFieldProps extends Omit<
   ComponentProps<'input'>,
   'id' | 'onChange'
 > {

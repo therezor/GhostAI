@@ -57,7 +57,7 @@ import { parseCidr } from './ip.js';
  * token after the image happens to be one docker rejects, but it survives by
  * accident of argument order rather than by design.
  */
-export const IMAGE_DIGEST_PATTERN: RegExp =
+const IMAGE_DIGEST_PATTERN: RegExp =
   /^[a-z0-9][a-z0-9._\-/:]*@sha256:[0-9a-f]{64}$|^sha256:[0-9a-f]{64}$/;
 
 /**
@@ -72,7 +72,7 @@ export const IMAGE_DIGEST_PATTERN: RegExp =
 export { BUILTIN_TOOL_NAMES };
 
 /** Capabilities a toolbox may never request. See the module header. */
-export const FORBIDDEN_CAPABILITIES: readonly string[] = [
+const FORBIDDEN_CAPABILITIES: readonly string[] = [
   'NET_ADMIN',
   'SYS_ADMIN',
   'SYS_MODULE',

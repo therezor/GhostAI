@@ -19,7 +19,7 @@ const THRESHOLDS: Record<string, { lines: number; branches: number }> = {
   channels: { lines: 90, branches: 85 },
   // The token layer is the UI's `security`: an untested branch in the contrast
   // resolver or a gate regex is a rule that reports "clean" without checking.
-  // Only the `.ts` half is measured — the components are `.tsx`, and Step 19's
+  // Only the `.ts` half is measured — the components are `.tsx`, and the
   // Playwright run is what covers those.
   web: { lines: 85, branches: 80 },
   // Above the default because the package is small and almost entirely pure
@@ -39,8 +39,6 @@ const THRESHOLDS: Record<string, { lines: number; branches: number }> = {
   tools: { lines: 80, branches: 75 },
   mcp: { lines: 80, branches: 75 },
 };
-
-const DEFAULT_THRESHOLD = { lines: 70, branches: 65 };
 
 export default defineConfig({
   test: {
@@ -75,5 +73,3 @@ export default defineConfig({
     },
   },
 });
-
-export { THRESHOLDS, DEFAULT_THRESHOLD };

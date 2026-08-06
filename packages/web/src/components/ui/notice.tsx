@@ -17,7 +17,7 @@ import type { ComponentType, JSX, ReactNode } from 'react';
 import type { BadgeProps } from '@/components/ui/badge.js';
 import { cn } from '@/lib/cn.js';
 
-export type NoticeTone = NonNullable<BadgeProps['tone']>;
+type NoticeTone = NonNullable<BadgeProps['tone']>;
 
 /** Neutral is the base rule in `notice.css`, so it needs no modifier. */
 const TONE_CLASSES: Readonly<Record<NoticeTone, string>> = {
@@ -29,7 +29,7 @@ const TONE_CLASSES: Readonly<Record<NoticeTone, string>> = {
   neutral: '',
 };
 
-export interface NoticeBlockProps {
+interface NoticeBlockProps {
   /** The bold half. A phrase, not a sentence — it is followed by a full stop. */
   readonly title: string;
   readonly message: ReactNode;

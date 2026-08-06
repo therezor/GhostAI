@@ -287,7 +287,6 @@ export const AuthConfigSchema = z.object({
     .positive()
     .default(10 * 60 * 1000),
 });
-export type AuthConfig = z.infer<typeof AuthConfigSchema>;
 
 export const ServerConfigSchema = z.object({
   host: z.string().min(1).default('127.0.0.1'),
@@ -298,15 +297,12 @@ export const ServerConfigSchema = z.object({
    */
   port: z.number().int().min(1).max(65_535).default(3000),
   auth: AuthConfigSchema.prefault({}),
-  /** Extra browser origins allowed to hit the API. Same-origin always works. */
-  corsOrigins: z.array(z.string()).default([]),
   /**
    * How many server events to retain per session so a reconnecting tab can
    * replay an in-flight turn from its last `seq` instead of losing it.
    */
   replayBufferSize: z.number().int().nonnegative().default(512),
 });
-export type ServerConfig = z.infer<typeof ServerConfigSchema>;
 
 /**
  * Whether `host` binds only to the local machine.
@@ -331,19 +327,6 @@ export function isLoopbackHost(host: string): boolean {
 // Tools
 // ---------------------------------------------------------------------------
 
-export const WebSearchConfigSchema = z.object({
-  provider: z.string().min(1).default('brave'),
-  baseUrl: z.string().default(''),
-  maxResults: z.number().int().positive().default(5),
-});
-export type WebSearchConfig = z.infer<typeof WebSearchConfigSchema>;
-
-export const WebToolsConfigSchema = z.object({
-  proxy: z.string().optional(),
-  search: WebSearchConfigSchema.prefault({}),
-});
-export type WebToolsConfig = z.infer<typeof WebToolsConfigSchema>;
-
 export const ExecToolConfigSchema = z.object({
   enable: z.boolean().default(true),
   timeoutMs: OptionalDurationMs.default(0),
@@ -366,11 +349,6 @@ export const ExecToolConfigSchema = z.object({
     .int()
     .positive()
     .default(1024 * 1024),
-  installAudit: z.boolean().default(true),
-  installAuditTimeoutMs: OptionalDurationMs.default(0),
-  installAuditBlockSeverity: z
-    .enum(['low', 'moderate', 'high', 'critical'])
-    .default('high'),
 });
 export type ExecToolConfig = z.infer<typeof ExecToolConfigSchema>;
 
@@ -403,7 +381,6 @@ export const McpServerConfigSchema = z.object({
 export type McpServerConfig = z.infer<typeof McpServerConfigSchema>;
 
 export const ToolsConfigSchema = z.object({
-  web: WebToolsConfigSchema.prefault({}),
   exec: ExecToolConfigSchema.prefault({}),
   /**
    * How long to wait for a decision before treating an `ask` call as denied.
@@ -418,7 +395,6 @@ export const ToolsConfigSchema = z.object({
     .int()
     .positive()
     .default(5 * 60 * 1000),
-  restrictToWorkspace: z.boolean().default(true),
   /**
    * Head+tail truncation budget for a single tool result.
    *
@@ -751,23 +727,10 @@ export const AgentsConfigSchema = z.object({
   defaults: AgentDefaultsSchema.prefault({}),
   list: z.record(z.string(), AgentEntrySchema).default({}),
 });
-export type AgentsConfig = z.infer<typeof AgentsConfigSchema>;
 
 // ---------------------------------------------------------------------------
-// Audio, scheduler, channels, plugins
+// Scheduler, channels, plugins
 // ---------------------------------------------------------------------------
-
-export const AudioConfigSchema = z.object({
-  providerUrl: z.string().optional(),
-  model: z.string().default('whisper-large-v3-turbo'),
-  ttsEnabled: z.boolean().default(false),
-  ttsProvider: z.string().default('browser'),
-  ttsVoice: z.string().default('en_female'),
-  ttsSpeed: z.number().positive().default(1.0),
-  ttsLang: z.string().default('en'),
-  ttsModelPath: z.string().optional(),
-});
-export type AudioConfig = z.infer<typeof AudioConfigSchema>;
 
 /**
  * The engine, and nothing about any one job.
@@ -800,7 +763,6 @@ export const SchedulerConfigSchema = z.object({
    */
   runRetention: z.number().int().positive().default(200),
 });
-export type SchedulerConfig = z.infer<typeof SchedulerConfigSchema>;
 
 /**
  * Channel settings. Loose by design: each channel — built-in or plugin — parses
@@ -823,7 +785,6 @@ export const PluginsConfigSchema = z.object({
   /** Lets a later-discovered plugin shadow an earlier id instead of erroring. */
   allowOverride: z.boolean().default(false),
 });
-export type PluginsConfig = z.infer<typeof PluginsConfigSchema>;
 
 /**
  * What the install looks and reads like, for both surfaces.
@@ -883,7 +844,6 @@ export const UiConfigSchema = z.object({
    */
   timezone: z.string().min(1).default('UTC'),
 });
-export type UiConfig = z.infer<typeof UiConfigSchema>;
 
 // ---------------------------------------------------------------------------
 // Root
@@ -895,7 +855,6 @@ export const ConfigSchema = z.object({
   server: ServerConfigSchema.prefault({}),
   tools: ToolsConfigSchema.prefault({}),
   channels: ChannelsConfigSchema.prefault({}),
-  audio: AudioConfigSchema.prefault({}),
   scheduler: SchedulerConfigSchema.prefault({}),
   plugins: PluginsConfigSchema.prefault({}),
   ui: UiConfigSchema.prefault({}),
@@ -996,9 +955,6 @@ export const ConfigPatchSchema = z.object({
     .optional(),
   tools: patchOf(ToolsConfigSchema)
     .extend({
-      web: patchOf(WebToolsConfigSchema)
-        .extend({ search: patchOf(WebSearchConfigSchema).optional() })
-        .optional(),
       exec: patchOf(ExecToolConfigSchema).optional(),
       /**
        * `null` deletes the server, exactly as it does for a provider instance.
@@ -1041,7 +997,6 @@ export const ConfigPatchSchema = z.object({
       sendToolHints: z.boolean().optional(),
     })
     .optional(),
-  audio: patchOf(AudioConfigSchema).optional(),
   scheduler: patchOf(SchedulerConfigSchema).optional(),
   plugins: patchOf(PluginsConfigSchema).optional(),
   ui: patchOf(UiConfigSchema).optional(),

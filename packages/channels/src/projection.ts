@@ -270,7 +270,6 @@ export class TurnProjection {
       case 'session.replay':
       case 'session.truncated':
       case 'notification':
-      case 'transcribe.result':
       case 'tools.changed':
       case 'steer':
         return [];

@@ -9,12 +9,12 @@
  * **Imported by package self-reference, not by relative path, and that detail is
  * load-bearing.** `tsc` copies the specifier into `dist/resources.d.ts`
  * verbatim, and it does not copy JSON — it compiles TypeScript. A relative
- * `./locales/en/shared.json` therefore points, from inside `dist`, at a file
+ * `./locales/en/web.json` therefore points, from inside `dist`, at a file
  * that was never emitted there. The failure is silent in the worst way:
- * `skipLibCheck` swallows the unresolved import, `SharedResources` degrades to
- * `any`, `SharedMessageKey` widens from a union of real keys to
- * `shared:${string}`, and every consumer goes on compiling with nothing
- * checked — which is the entire guarantee this package exists to provide.
+ * `skipLibCheck` swallows the unresolved import, `WebResources` degrades to
+ * `any`, every key type widens to `string`, and every consumer goes on
+ * compiling with nothing checked — which is the entire guarantee this package
+ * exists to provide.
  *
  * `@ghostai/i18n/locales/…` resolves through this package's own `exports` map
  * instead, which reads the same from `src`, from `dist`, and from a consumer
@@ -26,14 +26,9 @@
  */
 
 import cli from '@ghostai/i18n/locales/en/cli.json' with { type: 'json' };
-import shared from '@ghostai/i18n/locales/en/shared.json' with { type: 'json' };
 import web from '@ghostai/i18n/locales/en/web.json' with { type: 'json' };
 
-export const EN = { shared, web, cli } as const;
+export const EN = { web, cli } as const;
 
-/** Every bundle, keyed the way i18next wants them. */
-export const RESOURCES = { en: EN } as const;
-
-export type SharedResources = typeof shared;
 export type WebResources = typeof web;
 export type CliResources = typeof cli;

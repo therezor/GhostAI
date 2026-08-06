@@ -35,7 +35,6 @@ export {
   formatRelativeSpan,
   pluralCategory,
   relativeSpan,
-  type DurationParts,
   type RelativeSpan,
 } from './format.js';
 
@@ -45,30 +44,8 @@ export {
   zonedInputValue,
 } from './zoned-time.js';
 
-export {
-  createI18n,
-  type CreateI18nOptions,
-  type Namespace,
-} from './instance.js';
+export { createI18n, type Namespace } from './instance.js';
 
-export {
-  EN,
-  RESOURCES,
-  type CliResources,
-  type SharedResources,
-  type WebResources,
-} from './resources.js';
+export { EN, type CliResources, type WebResources } from './resources.js';
 
 export type { ResourceKeys } from './keys.js';
-
-import type { ResourceKeys } from './keys.js';
-import type { SharedResources } from './resources.js';
-
-/**
- * A key in the `shared` namespace, fully qualified.
- *
- * `GhostError.messageKey` is typed as this, which is what stops a `throw` in
- * `@ghostai/runtime` from naming a string that only exists in the UI bundle —
- * or one that does not exist at all.
- */
-export type SharedMessageKey = `shared:${ResourceKeys<SharedResources>}`;

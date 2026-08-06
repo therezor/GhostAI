@@ -69,7 +69,7 @@ function jitteredDelay(ceilingMs: number): number {
 }
 
 /** Where an authorization link is asked for, and where the code comes back. */
-export interface AuthorizationAttempt {
+interface AuthorizationAttempt {
   readonly auth: McpAuthProvider;
   readonly code: () => Promise<string>;
   cancel(reason: string): void;
@@ -83,7 +83,7 @@ export interface AuthorizationBroker {
   begin(serverId: string): Promise<AuthorizationAttempt>;
 }
 
-export interface McpConnectionOptions {
+interface McpConnectionOptions {
   readonly spec: McpConnectionSpec;
   readonly connect: McpConnector;
   /** Called whenever this server's contribution to the registry changes. */

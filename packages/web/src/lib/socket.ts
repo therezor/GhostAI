@@ -40,7 +40,7 @@ export type ConnectionStatus =
  * for five seconds after a one-second outage assumes the app broke. The tail is
  * long because the other common cause is a laptop that closed its lid.
  */
-export const RECONNECT_DELAYS_MS: readonly number[] = [
+const RECONNECT_DELAYS_MS: readonly number[] = [
   400, 1_000, 2_500, 5_000, 10_000, 20_000,
 ];
 
@@ -51,7 +51,7 @@ export const RECONNECT_DELAYS_MS: readonly number[] = [
  * with a key stuck under a finger grows an unbounded array. Past the cap the
  * oldest goes, because the newest frame is the one the user just produced.
  */
-export const MAX_BUFFERED_FRAMES = 32;
+const MAX_BUFFERED_FRAMES = 32;
 
 /** The parts of `WebSocket` this uses, so a test can supply a fake. */
 export interface SocketLike {

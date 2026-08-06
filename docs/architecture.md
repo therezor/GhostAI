@@ -6,7 +6,7 @@ split-process topology and the reconnect-and-fall-back-to-HTTP client that would
 
 ## The packages
 
-Fourteen, plus one example. Each is a published-shaped workspace package with its own
+Fifteen, plus one example. Each is a published-shaped workspace package with its own
 tests and its own coverage bar.
 
 | Package              | Does                                                                                                                |
@@ -24,13 +24,21 @@ tests and its own coverage bar.
 | `@ghostai/web`       | The React SPA                                                                                                       |
 | `@ghostai/cli`       | The `ghost` binary                                                                                                  |
 | `@ghostai/i18n`      | The i18next instance, locale negotiation, typed keys                                                                |
+| `@ghostai/tui`       | A domain-free terminal toolkit: key decoding, display-width text, a transient selection region                      |
 | `@ghostai/e2e`       | Playwright, plus the optional design-fidelity gate                                                                  |
 
 ### Layering
 
 ```
-protocol → core → { security, providers } → tools → { mcp, agent } → runtime → server → cli
+{ protocol, i18n } → core → security → { providers, tools } → { mcp, agent } → runtime → server ┐
+{ protocol, i18n } → web                                                                        │
+             core → channels                                                                    ├→ cli
+                    tui                                                                         ┘
 ```
+
+`protocol`, `i18n` and `tui` declare no workspace dependency at all. `tui` is a terminal
+toolkit that knows nothing about this application, which is why it sits beside the roots
+rather than under them, and why only `cli` reaches for it.
 
 Dependencies only run downward, and the rule is enforced two ways, both mechanical:
 

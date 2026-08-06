@@ -2,9 +2,9 @@
  * The living style guide: every token at the size it is used, and every
  * primitive beside it.
  *
- * It started as Step 15's swatch grid and kept its job — a seed change is
- * something you can look at rather than something you discover in the chat view
- * three steps later — and Step 16 added the primitives. That is what makes
+ * It started as a swatch grid and kept its job — a seed change is something you
+ * can look at rather than something you discover in the chat view later — and
+ * the primitives joined it afterwards. That is what makes
  * "reviewed in both themes" a five-second check on one page rather than a tour
  * of the application, and it is why every recipe is exercised here in every
  * variant instead of only in the two places the shell happens to use.

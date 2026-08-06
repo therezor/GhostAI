@@ -164,7 +164,7 @@ export function deriveAgentId(label: string): string {
 }
 
 /** The prefix that keeps a subagent's tool name out of every other namespace. */
-export const SUBAGENT_TOOL_PREFIX = 'ask_';
+const SUBAGENT_TOOL_PREFIX = 'ask_';
 
 /**
  * The tool name a model calls to hand work to a subagent.

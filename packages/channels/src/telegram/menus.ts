@@ -28,7 +28,7 @@ import type { ApprovalScope } from '@ghostai/protocol';
 import type { InlineKeyboardButton, InlineKeyboardMarkup } from './api.js';
 
 /** Which listing a paging button belongs to. */
-export type MenuKind = 'sessions' | 'agents' | 'models' | 'workspaces';
+type MenuKind = 'sessions' | 'agents' | 'models' | 'workspaces';
 
 /** What a button does when it is pressed. */
 export type CallbackPayload =
@@ -58,14 +58,14 @@ interface CallbackEntry {
 }
 
 /** Why a press did nothing, when it did nothing. */
-export type CallbackRefusal = 'expired' | 'wrong_chat';
+type CallbackRefusal = 'expired' | 'wrong_chat';
 
-export type CallbackLookup =
+type CallbackLookup =
   | { readonly ok: true; readonly payload: CallbackPayload }
   | { readonly ok: false; readonly reason: CallbackRefusal };
 
 /** How long a menu button stays live when nothing else says. */
-export const DEFAULT_CALLBACK_TTL_MS: number = 30 * 60 * 1000;
+const DEFAULT_CALLBACK_TTL_MS: number = 30 * 60 * 1000;
 
 /** How many live buttons the process will remember at once. */
 export const MAX_CALLBACK_ENTRIES = 500;
@@ -181,7 +181,7 @@ export interface PickerRow {
   readonly payload: CallbackPayload;
 }
 
-export interface PickerInput {
+interface PickerInput {
   readonly rows: readonly PickerRow[];
   readonly menu: MenuKind;
   readonly chatId: number;
@@ -240,7 +240,7 @@ export function pickerKeyboard(input: PickerInput): InlineKeyboardMarkup {
   return { inline_keyboard: keyboard };
 }
 
-export interface ApprovalKeyboardInput {
+interface ApprovalKeyboardInput {
   readonly callId: string;
   readonly sessionKey: string;
   readonly chatId: number;

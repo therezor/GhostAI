@@ -17,10 +17,9 @@ import type { ComponentProps, JSX, ReactNode } from 'react';
 import { cn } from '@/lib/cn.js';
 
 export const TooltipProvider = TooltipPrimitive.Provider;
-export const TooltipRoot = TooltipPrimitive.Root;
-export const TooltipTrigger = TooltipPrimitive.Trigger;
+const TooltipTrigger = TooltipPrimitive.Trigger;
 
-export function TooltipContent({
+function TooltipContent({
   className,
   sideOffset = 6,
   ...props

@@ -39,7 +39,7 @@ export interface SseEvent {
  */
 export const MAX_SSE_FRAME_CHARS = 1_048_576;
 
-export interface ParseSseOptions {
+interface ParseSseOptions {
   readonly providerId?: string | undefined;
   readonly maxFrameChars?: number | undefined;
 }

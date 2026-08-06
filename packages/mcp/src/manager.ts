@@ -66,7 +66,7 @@ export interface McpToolSink {
   replace(serverId: string, tools: readonly AnyTool[]): readonly string[];
 }
 
-export interface McpManagerOptions {
+interface McpManagerOptions {
   readonly sink: McpToolSink;
   /** Defaults to the real SDK connector; a test supplies a fake. */
   readonly connect: McpConnector;

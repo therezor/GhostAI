@@ -41,10 +41,10 @@ export { CURSOR_MARKER } from './component.js';
 export type { Component } from './component.js';
 
 export { createRenderer } from './renderer.js';
-export type { Renderer, RendererOptions } from './renderer.js';
+export type { RendererOptions } from './renderer.js';
 
 export { createEditor } from './editor.js';
-export type { Editor, EditorOptions, EditorOutcome } from './editor.js';
+export type { Editor } from './editor.js';
 
 export { createTranscript } from './transcript.js';
 export type { Transcript } from './transcript.js';
@@ -53,7 +53,7 @@ export { PLAIN_THEME, themeFor, themeFrom } from './theme.js';
 export type { Palette, Style, Theme } from './theme.js';
 
 export { SelectList } from './select-list.js';
-export type { SelectItem, SelectListOptions } from './select-list.js';
+export type { SelectItem } from './select-list.js';
 
 export {
   SPINNER_FRAMES,
@@ -62,17 +62,7 @@ export {
 } from './spinner.js';
 
 export { columnsOf, openKeyboard, rowsOf } from './terminal.js';
-export type {
-  Keyboard,
-  KeyboardOptions,
-  TerminalInput,
-  TerminalOutput,
-} from './terminal.js';
+export type { TerminalInput, TerminalOutput } from './terminal.js';
 
 export { CHROME_ROWS, DEFAULT_MAX_ROWS, createSelect } from './select.js';
-export type {
-  Select,
-  SelectLabels,
-  SelectOptions,
-  SelectOutcome,
-} from './select.js';
+export type { Select, SelectLabels } from './select.js';

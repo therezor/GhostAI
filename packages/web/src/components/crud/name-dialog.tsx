@@ -1,10 +1,9 @@
 /**
  * Naming one thing: a new file, a new folder, a new agent, a workspace.
  *
- * Five call sites wrote this out by hand, and the copies had already drifted —
- * two used `DialogHeading`/`DialogSubheading` and one used the unstyled
- * `DialogTitle`/`DialogDescription`, which is the same markup wearing a
- * different type scale.
+ * Five call sites wrote this out by hand, and the copies had already drifted:
+ * some carried a subheading and some did not, and they disagreed about the type
+ * scale.
  *
  * Three behaviours belong to the component because they are the ones a copy
  * forgets:
@@ -34,7 +33,7 @@ import {
 } from '@/components/ui/dialog.js';
 import { Input, Label } from '@/components/ui/field.js';
 
-export interface NameValidation {
+interface NameValidation {
   readonly ok: boolean;
   /** Shown under the box in both states — what will happen, or why it will not. */
   readonly hint?: ReactNode;

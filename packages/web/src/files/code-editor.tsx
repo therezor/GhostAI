@@ -34,7 +34,7 @@ import { onIdle } from '@/lib/idle.js';
 import { useAppTheme } from '@/theme/theme-context.js';
 import type { HighlightedLines } from '@/chat/markdown/highlight.js';
 
-export interface CodeEditorProps {
+interface CodeEditorProps {
   readonly value: string;
   readonly onChange: (value: string) => void;
   readonly readOnly: boolean;

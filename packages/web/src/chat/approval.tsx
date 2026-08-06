@@ -32,7 +32,7 @@ import { Button } from '@/components/ui/button.js';
 import { Tooltip } from '@/components/ui/tooltip.js';
 import type { ToolApprovalState } from '@/state/transcript.js';
 
-export interface ApprovalPromptProps {
+interface ApprovalPromptProps {
   readonly toolName: string;
   readonly approval: ToolApprovalState;
   readonly onAnswer: (approved: boolean, scope: ApprovalScope) => void;

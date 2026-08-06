@@ -30,7 +30,7 @@ export const MENTION_KINDS = ['mcp', 'skill'] as const;
 export type MentionKind = (typeof MENTION_KINDS)[number];
 
 /** A single mention occurrence, with its span in the source text. */
-export interface Mention {
+interface Mention {
   readonly kind: MentionKind;
   readonly value: string;
   /** Index of the `@`. */

@@ -7,12 +7,11 @@
  *    answer. Retrying it three times delays the login overlay by a second and
  *    burns three requests against the login rate limit for nothing.
  *  - **`refetchOnWindowFocus` is off.** The live surfaces here are driven by the
- *    WebSocket, not by polling — Step 17's transport pushes turn state, and
+ *    WebSocket, not by polling — the socket transport pushes turn state, and
  *    refetching every REST query each time the tab regains focus would fight it.
  *
- * Query keys live here rather than beside their components so that a mutation
- * in Step 18 can invalidate what a panel in Step 17 rendered without importing
- * it.
+ * Query keys live here rather than beside their components so that a mutation in
+ * one panel can invalidate what another rendered without importing it.
  */
 
 import { QueryClient } from '@tanstack/react-query';

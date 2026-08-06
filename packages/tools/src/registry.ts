@@ -56,7 +56,7 @@ import {
 } from './define.js';
 import { isEnabled, permissionFor } from './scope.js';
 
-export interface ToolRegistryOptions {
+interface ToolRegistryOptions {
   /**
    * Wall-clock cap on a single tool call. `0` disables it.
    *
@@ -69,7 +69,7 @@ export interface ToolRegistryOptions {
 }
 
 /** A call as the provider adapters produce it. `ToolCall` is assignable. */
-export interface ToolInvocation {
+interface ToolInvocation {
   readonly name: string;
   /** Raw JSON as the model emitted it. Empty or absent means no arguments. */
   readonly argumentsJson?: string;

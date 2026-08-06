@@ -65,7 +65,7 @@ import type { CredentialVault, FetchImplementation } from '@ghostai/security';
 
 import { createModelCatalogue } from './models.js';
 
-export interface ServerRuntimeOptions {
+interface ServerRuntimeOptions {
   /** Defaults to `process.env`; the presence flags read provider key variables. */
   readonly env?: Readonly<Record<string, string | undefined>>;
   /** Replaces the on-disk vault. Injected by tests, which have no keychain. */

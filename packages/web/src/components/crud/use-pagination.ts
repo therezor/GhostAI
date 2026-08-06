@@ -55,7 +55,7 @@ export interface Pagination {
 }
 
 /** A page number and the means to change it, before any total is known. */
-export interface PageState {
+interface PageState {
   /** What to ask the server for. Never clamped, because nothing here can clamp it yet. */
   readonly page: number;
   readonly setPage: (next: number) => void;

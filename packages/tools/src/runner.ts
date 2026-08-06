@@ -34,13 +34,10 @@ import type { AgentToolboxNetwork } from '@ghostai/protocol';
 import { createOutputCap, type ExecPlan } from '@ghostai/security';
 
 /** Grace between asking a child to stop and insisting. */
-export const KILL_GRACE_MS = 2_000;
+const KILL_GRACE_MS = 2_000;
 
 /** Receives every byte a command writes, before the output budget is applied. */
-export type OutputTee = (
-  stream: 'stdout' | 'stderr',
-  chunk: Uint8Array,
-) => void;
+type OutputTee = (stream: 'stdout' | 'stderr', chunk: Uint8Array) => void;
 
 export interface RunRequest {
   /** What to run. Already guarded — a runner does not re-decide policy. */

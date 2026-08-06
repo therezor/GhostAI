@@ -112,7 +112,7 @@ export const systemCommandRunner: CommandRunner = (file, args, input) => {
   };
 };
 
-export interface KeyFileStoreOptions {
+interface KeyFileStoreOptions {
   readonly file: string;
   /** Defaults to `process.platform`. Only win32 changes behaviour. */
   readonly platform?: NodeJS.Platform;
@@ -172,7 +172,7 @@ export function keyFileStore(options: KeyFileStoreOptions): KeyStore {
   };
 }
 
-export interface KeychainStoreOptions {
+interface KeychainStoreOptions {
   /** Defaults to `process.platform`. */
   readonly platform?: NodeJS.Platform;
   readonly run?: CommandRunner;
@@ -285,13 +285,13 @@ export function keychainStore(options: KeychainStoreOptions = {}): KeyStore {
   };
 }
 
-export interface ResolveVaultKeyOptions {
+interface ResolveVaultKeyOptions {
   /** Tried in order for both load and save. */
   readonly stores: readonly KeyStore[];
   readonly random?: RandomSource;
 }
 
-export interface ResolvedVaultKey {
+interface ResolvedVaultKey {
   readonly key: Buffer;
   /** The `name` of the store the key came from, or was written to. */
   readonly source: string;
@@ -345,7 +345,7 @@ interface VaultEnvelope {
  */
 type VaultContents = Map<string, Map<string, string>>;
 
-export interface CredentialVaultOptions {
+interface CredentialVaultOptions {
   readonly file: string;
   /** 32 bytes, from `resolveVaultKey`. */
   readonly key: Buffer;

@@ -59,8 +59,6 @@ export const PROTOCOL_SCHEMAS = {
   ProvidersConfig: config.ProvidersConfigSchema,
   AuthConfig: config.AuthConfigSchema,
   ServerConfig: config.ServerConfigSchema,
-  WebSearchConfig: config.WebSearchConfigSchema,
-  WebToolsConfig: config.WebToolsConfigSchema,
   ExecToolConfig: config.ExecToolConfigSchema,
   McpOAuthConfig: config.McpOAuthConfigSchema,
   McpTransport: config.McpTransportSchema,
@@ -71,7 +69,6 @@ export const PROTOCOL_SCHEMAS = {
   SubagentRef: config.SubagentRefSchema,
   SubagentRunRef: subagent.SubagentRunRefSchema,
   AgentEntry: config.AgentEntrySchema,
-  AudioConfig: config.AudioConfigSchema,
   SchedulerConfig: config.SchedulerConfigSchema,
   ChannelsConfig: config.ChannelsConfigSchema,
   PluginsConfig: config.PluginsConfigSchema,
@@ -116,7 +113,6 @@ export const PROTOCOL_SCHEMAS = {
   SwitchSessionMessage: ws.SwitchSessionMessageSchema,
   ResumeSessionMessage: ws.ResumeSessionMessageSchema,
   ToolApproveMessage: ws.ToolApproveMessageSchema,
-  TranscribeMessage: ws.TranscribeMessageSchema,
   SteerMessage: ws.SteerMessageSchema,
   ClientMessage: ws.ClientMessageSchema,
 
@@ -144,7 +140,6 @@ export const PROTOCOL_SCHEMAS = {
   SessionReplayEvent: ws.SessionReplayEventSchema,
   SessionTruncatedEvent: ws.SessionTruncatedEventSchema,
   NotificationEvent: ws.NotificationEventSchema,
-  TranscribeResultEvent: ws.TranscribeResultEventSchema,
   ToolsChangedEvent: ws.ToolsChangedEventSchema,
   SteerEvent: ws.SteerEventSchema,
   ServerMessage: ws.ServerMessageSchema,
@@ -221,8 +216,6 @@ export const PROTOCOL_SCHEMAS = {
   SetupClaimRequest: rest.SetupClaimRequestSchema,
   SetupPasswordRequest: rest.SetupPasswordRequestSchema,
 } satisfies Record<string, z.ZodType>;
-
-export type ProtocolSchemaName = keyof typeof PROTOCOL_SCHEMAS;
 
 /** The modules the completeness test reflects over to catch unregistered exports. */
 export const SCHEMA_MODULES = {

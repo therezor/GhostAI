@@ -39,8 +39,7 @@ export interface InboundMessage {
  * place and posts a `reply` as a new one — and a channel that does not
  * distinguish them can treat every kind as a reply.
  */
-export const OUTBOUND_KINDS = ['reply', 'progress', 'notice', 'error'] as const;
-export type OutboundKind = (typeof OUTBOUND_KINDS)[number];
+export type OutboundKind = 'reply' | 'progress' | 'notice' | 'error';
 
 export interface OutboundMessage {
   readonly id: string;
@@ -64,7 +63,7 @@ export interface InboundMessageInput {
   readonly id?: string;
 }
 
-export interface OutboundMessageInput {
+interface OutboundMessageInput {
   readonly channelId: string;
   readonly sessionKey: string;
   readonly target: string;
@@ -167,7 +166,7 @@ class AsyncQueue<T> {
   }
 }
 
-export interface RateLimitOptions {
+interface RateLimitOptions {
   /** Messages per sender per minute. `0` disables the limit. */
   readonly perMinute?: number;
   /** Messages allowed back-to-back. Defaults to `perMinute`, capped at 10. */

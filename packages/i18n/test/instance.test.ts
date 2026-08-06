@@ -13,11 +13,11 @@ const RESOURCES = {
       blank: '',
       settings: { title: 'Settings' },
     },
-    shared: { boom: 'It broke' },
+    cli: { boom: 'It broke' },
   },
   de: {
     web: { greeting: 'Hallo {{name}}' },
-    shared: {},
+    cli: {},
   },
 };
 
@@ -69,7 +69,7 @@ describe('the instance', () => {
   it('addresses another namespace by prefix', () => {
     const t = build();
 
-    expect(t('shared:boom')).toBe('It broke');
+    expect(t('cli:boom')).toBe('It broke');
   });
 
   it('falls back to English for a key the locale has not translated', () => {
@@ -107,14 +107,13 @@ describe('strict mode', () => {
 });
 
 describe('the per-surface instances', () => {
-  it('give the browser its own bundle and the shared one', () => {
+  it('give the browser its own bundle', () => {
     const i18n = createWebI18n('en', false);
 
     expect(i18n.t('settings.title')).toBe('Settings');
-    expect(i18n.t('shared:server.internal')).toBe('Internal server error');
   });
 
-  it('give the terminal its own bundle and the shared one', () => {
+  it('give the terminal its own bundle', () => {
     // Addressed as `cli:` rather than bare: the type-level `defaultNS` is `web`,
     // so a CLI file that reaches for the unscoped `t` fails to compile. That is
     // deliberate — see the note in `types.ts`.
@@ -123,7 +122,6 @@ describe('the per-surface instances', () => {
     expect(i18n.t('cli:program.description')).toBe(
       'A self-hosted agent that runs where your files are.',
     );
-    expect(i18n.t('shared:server.internal')).toBe('Internal server error');
   });
 
   it('keep the surfaces apart, so neither ships the other’s strings', () => {

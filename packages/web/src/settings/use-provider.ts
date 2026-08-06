@@ -31,7 +31,7 @@ import { toast } from '@/components/ui/toast.js';
 import { toDeleteProviderPatch } from './provider-form.js';
 import { afterCredentialWrite, afterSettingsWrite } from './use-settings.js';
 
-export interface SaveProviderInput {
+interface SaveProviderInput {
   readonly instanceId: string;
   /** The connection half — never contains a credential. */
   readonly patch: ConfigPatch;
@@ -47,13 +47,13 @@ export interface SaveProviderInput {
   readonly test: ProviderTestRequest | null;
 }
 
-export interface ProbeHandle {
+interface ProbeHandle {
   readonly result: ProviderTestResponse | null;
   readonly probing: boolean;
   readonly clear: () => void;
 }
 
-export interface SaveProviderHandle extends ProbeHandle {
+interface SaveProviderHandle extends ProbeHandle {
   readonly save: (
     input: SaveProviderInput,
     options?: {
@@ -71,7 +71,7 @@ export interface SaveProviderHandle extends ProbeHandle {
   readonly saving: boolean;
 }
 
-export interface TestProviderHandle extends ProbeHandle {
+interface TestProviderHandle extends ProbeHandle {
   readonly test: (request: ProviderTestRequest) => void;
 }
 

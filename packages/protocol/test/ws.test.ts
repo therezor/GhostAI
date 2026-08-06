@@ -83,7 +83,6 @@ describe('ClientMessageSchema', () => {
     const types = variantTypes(ClientMessageSchema);
     expect(new Set(types).size).toBe(types.length);
     expect(types).toContain('turn.steer');
-    expect(types).toContain('audio.transcribe');
   });
 });
 

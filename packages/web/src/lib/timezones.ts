@@ -29,7 +29,7 @@ export const SYSTEM_TZ = '__system__';
  * covers a runtime without it — the list is short and deliberately not a guess
  * at what the operator wants, since UTC is always first and always correct.
  */
-export function timezoneNames(): readonly string[] {
+function timezoneNames(): readonly string[] {
   try {
     const supported = Intl.supportedValuesOf('timeZone');
     return supported.length > 0 ? supported : FALLBACK_ZONES;

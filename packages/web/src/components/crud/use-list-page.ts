@@ -36,10 +36,7 @@ import {
 } from './sort.js';
 import { pageRows, usePagination, type Pagination } from './use-pagination.js';
 
-export interface ListPageOptions<
-  T,
-  K extends string,
-> extends SortRowsOptions<T> {
+interface ListPageOptions<T, K extends string> extends SortRowsOptions<T> {
   /** The whole list, before anything is narrowed. */
   readonly rows: readonly T[];
   /**
@@ -62,7 +59,7 @@ export interface ListPageOptions<
   readonly comparators: Comparators<T, K>;
 }
 
-export interface ListPage<T, K extends string> {
+interface ListPage<T, K extends string> {
   readonly filter: string;
   readonly setFilter: (next: string) => void;
   readonly sort: SortOrder<K>;

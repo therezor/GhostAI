@@ -1,5 +1,5 @@
 /**
- * The browser's instance: `web` plus `shared`, and nothing the terminal says.
+ * The browser's instance: `web`, and nothing the terminal says.
  */
 
 import type { i18n } from 'i18next';
@@ -9,8 +9,8 @@ import { DEFAULT_LOCALE, type Locale } from './locale.js';
 import { EN } from './resources.js';
 
 /** Bundles a browser needs, in the shape i18next wants them. */
-export const WEB_RESOURCES = {
-  en: { web: EN.web, shared: EN.shared },
+const WEB_RESOURCES = {
+  en: { web: EN.web },
 } as const;
 
 export function createWebI18n(

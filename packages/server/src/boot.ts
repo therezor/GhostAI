@@ -22,7 +22,7 @@
 import { GhostError } from '@ghostai/core';
 import { isLoopbackHost, type Config } from '@ghostai/protocol';
 
-export interface BootPolicyInput {
+interface BootPolicyInput {
   readonly config: Config;
 }
 

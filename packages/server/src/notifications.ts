@@ -52,7 +52,7 @@ const LEVELS: ReadonlySet<string> = new Set([
   'error',
 ]);
 
-export interface NotificationStoreOptions {
+interface NotificationStoreOptions {
   /** Shared with `SessionStore` and `AuthStore`: one file, one WAL. */
   readonly database: DatabaseSync;
   readonly clock?: Clock;
@@ -67,7 +67,7 @@ export interface CreateNotificationInput {
   readonly jobId?: string;
 }
 
-export interface ListNotificationsOptions {
+interface ListNotificationsOptions {
   readonly limit?: number;
   /**
    * For a numbered pager, where `after` is for a sequential reader.

@@ -32,7 +32,7 @@
 import { marked, type Token, type Tokens } from 'marked';
 
 /** One top-level markdown block, with the key and the raw text memoisation needs. */
-export interface MarkdownBlock {
+interface MarkdownBlock {
   /**
    * Stable across frames.
    *

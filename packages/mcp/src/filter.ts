@@ -18,7 +18,7 @@ import type { McpToolDescriptor } from './session.js';
 /** The schema's own default: everything the server advertises. */
 const WILDCARD = '*';
 
-export interface ToolSelection {
+interface ToolSelection {
   readonly selected: readonly McpToolDescriptor[];
   /** Entries that matched nothing — a warning, never a failure. */
   readonly unmatched: readonly string[];

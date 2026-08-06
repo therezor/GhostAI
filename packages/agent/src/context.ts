@@ -23,7 +23,7 @@ import { estimateTokens } from '@ghostai/providers';
 
 import type { AgentLoop } from './loop.js';
 
-export interface ContextBreakdown {
+interface ContextBreakdown {
   readonly systemPrompt: number;
   readonly tools: number;
   readonly messages: number;
@@ -69,7 +69,7 @@ export interface ContextReport {
   readonly breakdown: ContextBreakdown;
 }
 
-export interface DescribeContextInput {
+interface DescribeContextInput {
   readonly store: SessionStore;
   /** Structural, so a test can supply a prompt without building a whole loop. */
   readonly loop: Pick<AgentLoop, 'previewPrompt'>;

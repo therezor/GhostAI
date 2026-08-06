@@ -3,11 +3,11 @@
  *
  * Written in TypeScript rather than generated from a file convention: the
  * generated route tree is a build artefact that has to be committed or
- * regenerated, and it buys convenience the five routes here do not need. This
+ * regenerated, and it buys convenience the routes here do not need. This
  * file is the whole map of the application.
  *
  * The root route is the shell, so navigation never remounts the sidebar, the
- * header or — once Step 17 lands — the WebSocket that hangs off them.
+ * header or the WebSocket that hangs off them.
  */
 
 import {

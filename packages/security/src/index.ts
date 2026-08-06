@@ -41,27 +41,19 @@ export {
   pathShapes,
   singleJail,
   type JailAccept,
-  type JailCheck,
   type JailRejection,
   type JailResolver,
   type PathShape,
-  type WorkspaceJailOptions,
 } from './jail.js';
 
 export {
-  INJECTION_SIGNALS,
   TOOL_OUTPUT_NONCE_BYTES,
-  TOOL_OUTPUT_TAG_PREFIX,
   createToolOutputNonce,
   describeInjectionFindings,
   detectPromptInjection,
   toolOutputPolicy,
   toolOutputTag,
   wrapToolOutput,
-  type InjectionFinding,
-  type InjectionSignal,
-  type WrapToolOutputOptions,
-  type WrappedToolOutput,
 } from './nonce.js';
 
 export {
@@ -70,10 +62,8 @@ export {
   classifyAddress,
   parseCidr,
   parseIpLiteral,
-  type AddressCategory,
   type AddressRange,
   type IpFamily,
-  type ParsedCidr,
   type ParsedIp,
 } from './ip.js';
 
@@ -82,13 +72,10 @@ export {
   ToolboxStore,
   type ApprovedToolbox,
   type ToolboxListing,
-  type ToolboxStoreOptions,
 } from './toolbox-store.js';
 
 export {
   BUILTIN_TOOL_NAMES,
-  FORBIDDEN_CAPABILITIES,
-  IMAGE_DIGEST_PATTERN,
   assertNetworkWithinCeiling,
   assertToolboxPolicy,
   effectiveNetwork,
@@ -99,20 +86,13 @@ export {
 } from './toolbox.js';
 
 export {
-  DEFAULT_MAX_BYTES,
-  DEFAULT_MAX_REDIRECTS,
-  DEFAULT_TIMEOUT_MS,
   guardedFetch,
   pinnedLookup,
   systemResolver,
   validateTarget,
   type DnsResolver,
   type FetchImplementation,
-  type GuardedFetchOptions,
-  type GuardedFetchResult,
-  type NetworkPolicy,
   type PinnedAddress,
-  type PinnedTarget,
 } from './fetch.js';
 
 export {
@@ -120,10 +100,7 @@ export {
   binaryName,
   createOutputCap,
   guardExec,
-  type ExecGuardOptions,
   type ExecPlan,
-  type OutputCap,
-  type OutputCapResult,
 } from './exec-guard.js';
 
 export {
@@ -135,12 +112,7 @@ export {
   systemCommandRunner,
   type CommandResult,
   type CommandRunner,
-  type CredentialVaultOptions,
-  type KeyFileStoreOptions,
   type KeyStore,
-  type KeychainStoreOptions,
-  type ResolveVaultKeyOptions,
-  type ResolvedVaultKey,
 } from './vault.js';
 
 export { systemRandom, type RandomSource } from './random.js';

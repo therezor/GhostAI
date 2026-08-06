@@ -47,7 +47,7 @@ import type { FetchImplementation } from '@ghostai/security';
  * not a puzzle. A `refresh` bypasses it outright, which is what the refresh
  * button in the UI is for.
  */
-export const MODEL_CACHE_TTL_MS = 60_000;
+const MODEL_CACHE_TTL_MS = 60_000;
 
 /**
  * How long one endpoint gets to answer before it is reported as unreachable.
@@ -68,11 +68,11 @@ export interface Connection {
 }
 
 /** A catalogue, or why there is not one. */
-export type ProbeResult =
+type ProbeResult =
   | { readonly models: ModelInfo[] }
   | { readonly reason: string; readonly message: string };
 
-export interface ModelCatalogueOptions {
+interface ModelCatalogueOptions {
   /** Injected by tests so nothing here opens a socket. */
   readonly fetchImpl?: FetchImplementation | undefined;
   /** Injected so a test does not wait out a real timeout. */

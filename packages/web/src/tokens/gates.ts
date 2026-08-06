@@ -26,7 +26,7 @@
  */
 
 /** One violation, addressed the way an editor addresses it. */
-export interface Violation {
+interface Violation {
   readonly rule: GateRule;
   /** Package-relative, POSIX separators. */
   readonly file: string;
@@ -35,7 +35,7 @@ export interface Violation {
   readonly match: string;
 }
 
-export type GateRule = 'no-px' | 'no-raw-color' | 'accent-position';
+type GateRule = 'no-px' | 'no-raw-color' | 'accent-position';
 
 /** A file to check: package-relative path and its contents. */
 export interface SourceFile {

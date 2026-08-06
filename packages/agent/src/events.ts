@@ -147,7 +147,7 @@ export interface NoticeEvent {
  * however it ended. A consumer that only tracks turn lifecycle can ignore this
  * event entirely.
  */
-export interface AgentErrorEvent {
+interface AgentErrorEvent {
   readonly type: 'error';
   readonly code: ErrorCode;
   readonly message: string;

@@ -54,7 +54,7 @@ import { firstRunAt } from './scheduler.js';
  */
 export const MAX_AGENT_JOBS = 25;
 
-export interface AutomationPortOptions {
+interface AutomationPortOptions {
   readonly jobs: AutomationStore;
   /** Read for the calling session's origin — the `nested` guard. */
   readonly sessions: SessionStore;

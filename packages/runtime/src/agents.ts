@@ -145,7 +145,7 @@ const IGNORE_WARNINGS: WarningSink = () => {
 /** Why an id did not name an agent that could run. */
 export type AgentMissReason = 'unknown' | 'disabled';
 
-export interface AgentResolution {
+interface AgentResolution {
   /** What was asked for, verbatim — including an id that names nothing. */
   readonly requestedId: string;
   /** What would actually run. Never null: `default` when the request missed. */

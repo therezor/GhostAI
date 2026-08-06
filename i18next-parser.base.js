@@ -4,7 +4,7 @@
  * This is one of two gates and it catches only one direction. The parser finds
  * keys that are *used*; it cannot find copy that was never wrapped in `t()` at
  * all — a hardcoded string is invisible to it, because there is nothing to
- * parse. The source sweep in `packages/web/src/i18n/untranslated.test.ts` is the
+ * parse. The source sweep in `packages/web/test/i18n/untranslated.test.ts` is the
  * other direction, and neither substitutes for the other.
  *
  * What it is really for is translators. `pnpm i18n:extract` regenerates the

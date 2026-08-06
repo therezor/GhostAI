@@ -35,9 +35,9 @@ import { systemRandom, type RandomSource } from '@ghostai/security';
  * dynamic registration, which is the common case for MCP, registers whatever
  * this reports.
  */
-export const DEFAULT_CALLBACK_PORT = 33_418;
+const DEFAULT_CALLBACK_PORT = 33_418;
 
-export const CALLBACK_PATH = '/mcp/callback';
+const CALLBACK_PATH = '/mcp/callback';
 
 /** Twelve bytes of CSPRNG, hex. Long enough that guessing is not a strategy. */
 const STATE_BYTES = 12;
@@ -54,7 +54,7 @@ interface Pending {
   readonly timer: ReturnType<Clock['setTimeout']>;
 }
 
-export interface CallbackListenerOptions {
+interface CallbackListenerOptions {
   readonly clock: Clock;
   readonly logger: Logger;
   readonly random?: RandomSource;
@@ -62,7 +62,7 @@ export interface CallbackListenerOptions {
   readonly port?: number;
 }
 
-export interface AuthorizationHandle {
+interface AuthorizationHandle {
   readonly state: string;
   readonly redirectUrl: string;
   /** Resolves with the authorization code, or rejects on timeout or cancel. */

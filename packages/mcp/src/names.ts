@@ -22,7 +22,7 @@
 
 import { TOOL_NAME_PATTERN } from '@ghostai/tools';
 
-export const MCP_TOOL_PREFIX = 'mcp';
+const MCP_TOOL_PREFIX = 'mcp';
 
 /** The cap in `TOOL_NAME_PATTERN`, restated because the arithmetic needs it. */
 const MAX_NAME_LENGTH = 64;

@@ -31,29 +31,18 @@ export {
   toolPromptWarnings,
   type AgentConfigWarning,
   type AgentMissReason,
-  type AgentResolution,
   type EffectiveAgent,
 } from './agents.js';
 
-export {
-  JailCache,
-  MAX_CACHED_JAILS,
-  type JailCacheOptions,
-} from './jail-cache.js';
+export { JailCache, MAX_CACHED_JAILS } from './jail-cache.js';
 
-export {
-  LoopCache,
-  MAX_CACHED_LOOPS,
-  type LoopCacheOptions,
-} from './loop-cache.js';
+export { LoopCache, MAX_CACHED_LOOPS } from './loop-cache.js';
 
 export { registryToolSink } from './mcp-tools.js';
 
 export {
-  MAX_CACHED_PROVIDERS,
   ProviderCache,
   providerCacheKey,
-  type ProviderCacheOptions,
   type ProviderRequest,
 } from './provider-cache.js';
 
@@ -64,14 +53,11 @@ export {
 } from './runtime.js';
 
 export {
-  MAX_LIVE_TOOLBOXES,
   OWNER_LABEL,
-  TOOLBOX_IDLE_MS,
   ToolboxPool,
   dockerEngine,
   ownerProcessLooksAlive,
   ownerTag,
   type ContainerEngine,
-  type DockerEngineOptions,
   type ToolboxPoolOptions,
 } from './toolbox-pool.js';

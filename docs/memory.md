@@ -152,7 +152,7 @@ standing beside its correction.
 ```
 
 **Every word of that is editable** — it is `agents.list.<id>.memoryPrompt`, the seventh
-prompt template, and it follows the contract the other six keep: empty inherits the
+prompt template, and it follows the contract the other seven keep: empty inherits the
 built-in, a single space deletes the section, anything else is this agent's own. See
 [Prompts](prompts.md).
 

@@ -22,7 +22,7 @@ import { oklchToRgba, rgb255ToRgba, type Rgba } from './color.js';
 export type ThemeName = 'dark' | 'light';
 
 /** Absolute path to the one file the gates exempt. */
-export const TOKENS_CSS: string = join(
+const TOKENS_CSS: string = join(
   dirname(fileURLToPath(import.meta.url)),
   '..',
   'styles',
@@ -30,7 +30,7 @@ export const TOKENS_CSS: string = join(
 );
 
 /** One `--custom-property: value` pair, with the selector that declared it. */
-export interface Declaration {
+interface Declaration {
   readonly property: string;
   readonly value: string;
   readonly selector: string;

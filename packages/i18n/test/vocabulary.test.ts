@@ -25,7 +25,7 @@
  * regex nobody could review.
  *
  * The bundles rather than the source, because the bundles *are* the copy —
- * `packages/web/src/i18n/untranslated.test.ts` is what proves no English sits
+ * `packages/web/test/i18n/untranslated.test.ts` is what proves no English sits
  * outside them. Key paths are checked as well as values, deliberately: a key is
  * what the next person greps for, so a surviving `openConversation` teaches the
  * old word back even while its value reads correctly. That also makes this the

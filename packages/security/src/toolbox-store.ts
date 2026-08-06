@@ -88,7 +88,7 @@ export interface ToolboxListing {
   readonly problem: string | undefined;
 }
 
-export interface ToolboxStoreOptions {
+interface ToolboxStoreOptions {
   readonly database: DatabaseSync;
   /** `<root>/toolboxes`, outside the jail. */
   readonly dir: string;

@@ -20,7 +20,7 @@ import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/cn.js';
 
-export interface ReasoningBlockProps {
+interface ReasoningBlockProps {
   readonly text: string;
   /** True while this is the newest thing on a turn that has produced no answer yet. */
   readonly live?: boolean;

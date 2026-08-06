@@ -17,7 +17,7 @@ import type { SelectItem } from '@ghostai/tui';
 import type { CliT } from '../i18n.js';
 import type { Menu } from '../menu.js';
 
-export interface SessionPickerDeps {
+interface SessionPickerDeps {
   readonly menu: Menu;
   readonly sessions: readonly SessionSummaryRecord[];
   /** The conversation the prompt is on now. */

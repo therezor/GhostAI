@@ -49,12 +49,6 @@ describe('translations', () => {
     );
   });
 
-  it('scopes `ts` to the shared bundle the errors name', () => {
-    const { ts } = translations('en');
-
-    expect(ts('server.internal')).toBe('Internal server error');
-  });
-
   it('interpolates without escaping, because a terminal has no entities', () => {
     const { t } = translations('en');
 
@@ -69,33 +63,14 @@ describe('translations', () => {
 });
 
 describe('describeError', () => {
-  const lang = translations('en');
-
-  it('translates an error that carries a key', () => {
-    const error = new GhostError('config', 'the English original', {
-      messageKey: 'shared:runtime.noModel',
-      messageParams: {
-        provider: 'Ollama',
-        configFile: '/etc/ghost/config.json',
-      },
-    });
-
-    expect(describeError(error, lang)).toContain(
-      'No model configured for Ollama.',
-    );
-    expect(describeError(error, lang)).toContain('/etc/ghost/config.json');
-  });
-
-  it('falls back to the English message when nobody has keyed it yet', () => {
-    // Most errors are not keyed, and the untranslated path has to stay the
-    // useful one rather than degrading to a key on screen.
+  it('reports the English message a GhostError carries', () => {
     const error = new GhostError('internal', 'something specific went wrong');
 
-    expect(describeError(error, lang)).toBe('something specific went wrong');
+    expect(describeError(error)).toBe('something specific went wrong');
   });
 
   it('survives a throw that was never an Error', () => {
-    expect(describeError('a bare string', lang)).toBe('a bare string');
-    expect(describeError(undefined, lang)).toBe('undefined');
+    expect(describeError('a bare string')).toBe('a bare string');
+    expect(describeError(undefined)).toBe('undefined');
   });
 });

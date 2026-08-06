@@ -46,12 +46,7 @@ export {
   modelOverrideFor,
   resolveModelId,
   resolveProvider,
-  type GatewayHints,
-  type ModelOverride,
-  type ProviderId,
   type ProviderSpec,
-  type ResolveProviderOptions,
-  type WireProtocol,
 } from './registry.js';
 
 export {
@@ -62,7 +57,6 @@ export {
   nextInstanceId,
   resolveInstance,
   type ProviderInstance,
-  type ResolveInstanceOptions,
 } from './instances.js';
 
 export {
@@ -72,7 +66,6 @@ export {
   isProviderError,
   parseRetryAfter,
   toProviderError,
-  type ProviderErrorOptions,
   type ProviderErrorReason,
   type TransportContext,
   type WireErrorBody,
@@ -92,29 +85,20 @@ export {
   MAX_SSE_FRAME_CHARS,
   parseSse,
   readByteStream,
-  type ParseSseOptions,
   type SseEvent,
 } from './sse.js';
 
 export {
-  DEFAULT_REQUEST_TIMEOUT_MS,
-  DEFAULT_STREAM_IDLE_TIMEOUT_MS,
   assertUsableApiBase,
   createOpenAIChatProvider,
-  encodeMessage,
-  type OpenAIChatOptions,
 } from './openai-chat.js';
 
 export {
-  DEFAULT_BASE_DELAY_MS,
   DEFAULT_DEGRADATION_STEPS,
-  DEFAULT_MAX_ATTEMPTS,
-  DEFAULT_MAX_DELAY_MS,
   backoffDelayMs,
   synthesiseStream,
   truncateOldestTurns,
   withResilience,
-  type DegradationStep,
   type ResilienceNotice,
   type ResilienceOptions,
 } from './resilience.js';
@@ -125,8 +109,4 @@ export {
   type CreateProviderOptions,
 } from './factory.js';
 
-export {
-  estimateTokens,
-  loadTokenCounter,
-  type TokenCounter,
-} from './tokens.js';
+export { estimateTokens, loadTokenCounter } from './tokens.js';

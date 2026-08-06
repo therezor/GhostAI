@@ -31,16 +31,16 @@ describe('mergeConfigPatch', () => {
   });
 
   it('replaces an array rather than appending to it', () => {
-    const withOrigins = mergeConfigPatch(base, {
-      server: { corsOrigins: ['https://a.test', 'https://b.test'] },
+    const withBinaries = mergeConfigPatch(base, {
+      tools: { exec: { allowedBinaries: ['git', 'rg'] } },
     });
-    const replaced = mergeConfigPatch(withOrigins, {
-      server: { corsOrigins: ['https://c.test'] },
+    const replaced = mergeConfigPatch(withBinaries, {
+      tools: { exec: { allowedBinaries: ['git'] } },
     });
 
     // There is no patch syntax for a removal, so a merging array would make
     // withdrawing an entry impossible.
-    expect(replaced.server.corsOrigins).toEqual(['https://c.test']);
+    expect(replaced.tools.exec.allowedBinaries).toEqual(['git']);
   });
 
   it('replaces extraHeaders wholesale, so a header can be deleted', () => {

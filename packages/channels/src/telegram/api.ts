@@ -98,13 +98,13 @@ export interface TelegramUser {
   readonly username?: string;
 }
 
-export interface TelegramChat {
+interface TelegramChat {
   readonly id: number;
   /** `private`, `group`, `supergroup`, `channel`. */
   readonly type: string;
 }
 
-export interface TelegramMessageEntity {
+interface TelegramMessageEntity {
   readonly type: string;
   readonly offset: number;
   readonly length: number;
@@ -146,7 +146,7 @@ export interface BotCommand {
   readonly description: string;
 }
 
-export interface SendMessageInput {
+interface SendMessageInput {
   readonly chatId: number;
   readonly text: string;
   /** Omitted entirely for the plain-text retry. */
@@ -154,11 +154,11 @@ export interface SendMessageInput {
   readonly replyMarkup?: InlineKeyboardMarkup | undefined;
 }
 
-export interface EditMessageInput extends SendMessageInput {
+interface EditMessageInput extends SendMessageInput {
   readonly messageId: number;
 }
 
-export interface BotApiOptions {
+interface BotApiOptions {
   readonly token: string;
   readonly apiBase: string;
   /** Defaults to the global `fetch`. Every test supplies its own. */

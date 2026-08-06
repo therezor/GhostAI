@@ -1,7 +1,7 @@
 /**
  * The live-turn store.
  *
- * Two of these four actions carry a rule that Step 17's socket depends on and
+ * Two of these four actions carry a rule that the socket depends on and
  * that would be invisible if it broke: `lastSeq` must never move backwards, and
  * switching sessions must not carry a sequence number into a different replay
  * buffer. Both produce the same symptom — a reconnect that replays the wrong

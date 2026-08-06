@@ -101,7 +101,7 @@ const RETRYABLE_BY_REASON: Readonly<Record<ProviderErrorReason, boolean>> = {
 };
 
 /** `?: T | undefined` throughout, so a caller can forward a field it may not have. */
-export interface ProviderErrorOptions {
+interface ProviderErrorOptions {
   readonly providerId?: string | undefined;
   readonly status?: number | undefined;
   /** The parameter the provider named as the problem, when it named one. */

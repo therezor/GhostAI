@@ -51,7 +51,7 @@ import { formatBytes } from '@ghostai/tools';
  * the attachment stays in the context window. A photo from a phone fits; a
  * screen recording does not, and becomes a path.
  */
-export const MAX_INLINE_IMAGE_BYTES: number = 4 * 1024 * 1024;
+const MAX_INLINE_IMAGE_BYTES: number = 4 * 1024 * 1024;
 
 /**
  * The most file text pasted into a request.
@@ -75,9 +75,9 @@ export const MAX_INLINE_TEXT_BYTES: number = 32 * 1024;
  * one body. Past this budget attachments still appear, as their path: degraded,
  * which is the whole failure model here, rather than an out-of-memory kill.
  */
-export const MAX_TOTAL_INLINE_BYTES: number = 16 * 1024 * 1024;
+const MAX_TOTAL_INLINE_BYTES: number = 16 * 1024 * 1024;
 
-export interface MaterialiseOptions {
+interface MaterialiseOptions {
   readonly maxImageBytes?: number;
   readonly maxTextBytes?: number;
   readonly maxTotalBytes?: number;

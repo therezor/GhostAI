@@ -40,7 +40,7 @@ import type { ConnectionStatus } from '@/lib/socket.js';
 
 export type { ConnectionStatus };
 
-export interface TurnState {
+interface TurnState {
   /** The session the socket is attached to, or `undefined` before the first. */
   readonly sessionKey: string | undefined;
   /**

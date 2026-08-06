@@ -31,13 +31,9 @@ export {
   resolveSpec,
   transportFingerprint,
   type McpConnectionSpec,
-  type McpHttpSpec,
-  type McpStdioSpec,
-  type SpecResolution,
 } from './spec.js';
 
 export {
-  MCP_TOOL_PREFIX,
   flattenToolName,
   flattenToolNames,
   isAdvertisableName,
@@ -46,7 +42,6 @@ export {
 export {
   compileValidator,
   normaliseSchema,
-  type NormalisedSchema,
   type SchemaIssue,
 } from './schema.js';
 
@@ -61,55 +56,26 @@ export type {
   McpToolDescriptor,
 } from './session.js';
 
-export {
-  bridgeTool,
-  flattenContent,
-  type BridgeOptions,
-  type BridgedTool,
-} from './bridge.js';
+export { bridgeTool, flattenContent } from './bridge.js';
 
-export { selectTools, type ToolSelection } from './filter.js';
+export { selectTools } from './filter.js';
 
 export {
-  MCP_CREDENTIAL_NAMESPACE,
   memorySecretStore,
   vaultSecretStore,
-  type McpSecretSlot,
   type McpSecretStore,
 } from './store.js';
 
-export {
-  CALLBACK_PATH,
-  CallbackListener,
-  DEFAULT_CALLBACK_PORT,
-  type AuthorizationHandle,
-  type CallbackListenerOptions,
-} from './callback.js';
+export { CallbackListener } from './callback.js';
 
-export {
-  OAUTH_CLIENT_NAME,
-  VaultOAuthProvider,
-  type OAuthProviderOptions,
-} from './oauth.js';
+export { VaultOAuthProvider } from './oauth.js';
 
-export {
-  CLIENT_NAME,
-  CLIENT_VERSION,
-  NEEDS_AUTHORIZATION,
-  isNeedsAuthorization,
-  sdkConnector,
-  type SdkConnectorOptions,
-} from './sdk-connector.js';
+export { sdkConnector } from './sdk-connector.js';
 
 export {
   McpConnection,
   type AuthorizationBroker,
   type BackoffOptions,
-  type McpConnectionOptions,
 } from './connection.js';
 
-export {
-  McpManager,
-  type McpManagerOptions,
-  type McpToolSink,
-} from './manager.js';
+export { McpManager, type McpToolSink } from './manager.js';

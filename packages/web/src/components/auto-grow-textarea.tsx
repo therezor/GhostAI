@@ -20,7 +20,7 @@ import type { ComponentProps, JSX } from 'react';
 
 import { cn } from '@/lib/cn.js';
 
-export type AutoGrowTextareaProps = Omit<ComponentProps<'textarea'>, 'rows'> & {
+type AutoGrowTextareaProps = Omit<ComponentProps<'textarea'>, 'rows'> & {
   readonly value: string;
 };
 

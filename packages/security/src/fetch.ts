@@ -52,7 +52,7 @@ export type DnsResolver = (
   hostname: string,
 ) => Promise<readonly PinnedAddress[]>;
 
-export interface NetworkPolicy {
+interface NetworkPolicy {
   /** Permit 127.0.0.0/8 and `::1`. Needed to reach a model server on this host. */
   readonly allowLoopback?: boolean;
   /** Permit RFC 1918 and unique-local ranges. For a LAN deployment. */
@@ -75,16 +75,16 @@ export interface NetworkPolicy {
   readonly timeoutMs?: number;
 }
 
-export const DEFAULT_MAX_REDIRECTS = 3;
-export const DEFAULT_MAX_BYTES: number = 5 * 1024 * 1024;
-export const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_MAX_REDIRECTS = 3;
+const DEFAULT_MAX_BYTES: number = 5 * 1024 * 1024;
+const DEFAULT_TIMEOUT_MS = 30_000;
 
 export type FetchImplementation = (
   url: string,
   init: RequestInit,
 ) => Promise<Response>;
 
-export interface GuardedFetchOptions extends NetworkPolicy {
+interface GuardedFetchOptions extends NetworkPolicy {
   readonly method?: string;
   readonly headers?: Readonly<Record<string, string>>;
   readonly body?: string | Uint8Array;
@@ -94,7 +94,7 @@ export interface GuardedFetchOptions extends NetworkPolicy {
   readonly fetchImpl?: FetchImplementation;
 }
 
-export interface PinnedTarget {
+interface PinnedTarget {
   readonly url: string;
   readonly host: string;
   /** Validated and in connection order. The dispatcher may use only these. */
@@ -103,7 +103,7 @@ export interface PinnedTarget {
   readonly exempt: boolean;
 }
 
-export interface GuardedFetchResult {
+interface GuardedFetchResult {
   /** Body already capped. `status`, `headers` and streaming are untouched. */
   readonly response: Response;
   /** The final URL. Differs from the request when redirects were followed. */

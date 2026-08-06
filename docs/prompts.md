@@ -13,7 +13,7 @@ telling the model what is true. The jail and the exec guard are enforced in code
 never read a word of the prompt. **Deleting the workspace paragraph changes what the agent
 _knows_, not what it _can do_.**
 
-The same argument later took the last three sections with it — see
+The same argument later took the last five sections with it — see
 [What you can edit, and what that does not change](#what-you-can-edit-and-what-that-does-not-change).
 And if filling in sections is not enough, one switch hands you
 [the whole string](#sending-only-the-system-prompt).
@@ -88,7 +88,7 @@ editor.
 | `agents.list.<id>.memoryPrompt`     | The memory section         | `DEFAULT_MEMORY_TEMPLATE`                               |
 | `agents.list.<id>.skillsPrompt`     | The skills section         | `DEFAULT_SKILLS_TEMPLATE`                               |
 
-The last three used to be composed in code with no key to reach them. They are the
+The last five used to be composed in code with no key to reach them. They are the
 same kind of thing as the first three — prose telling the model what is true — and the
 argument that opened the identity half applies to them unchanged. See
 [What you can edit, and what that does not change](#what-you-can-edit-and-what-that-does-not-change).
@@ -166,7 +166,7 @@ removing a placeholder would silently change every stored template that uses it.
 
 `{{iterationsLeft}}` is also the one placeholder `wrapUpPrompt` may use.
 
-### The three section templates
+### The five section templates
 
 Each has its own vocabulary, for the reason the two halves do: a value that means nothing
 where it is written should be visible as a mistake rather than render as blank.
@@ -299,8 +299,8 @@ Read files. Say what is wrong. Do not write.
 ```
 
 `RAW_PROMPT_PLACEHOLDERS` is the union of both vocabularies plus the sections the loop
-would otherwise have placed: `{{toolbox}}`, `{{toolPolicy}}`, `{{nonce}}`, `{{tag}}`,
-`{{contributors}}`, `{{runtimeSections}}` and `{{correction}}`.
+would otherwise have placed: `{{platformPolicy}}`, `{{toolbox}}`, `{{toolPolicy}}`,
+`{{nonce}}`, `{{tag}}`, `{{contributors}}`, `{{runtimeSections}}` and `{{correction}}`.
 
 The section templates still apply — `{{platformPolicy}}` renders from `platformPrompt`,
 `{{toolbox}}` from `toolboxPrompt` — so raw controls the _layout_ rather than discarding

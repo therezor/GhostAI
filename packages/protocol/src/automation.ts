@@ -102,7 +102,6 @@ const deliveryFields = {
 };
 
 export const AutomationDeliverySchema = z.object(deliveryFields);
-export type AutomationDelivery = z.infer<typeof AutomationDeliverySchema>;
 
 /**
  * Sends a fixed message to the agent.
@@ -150,7 +149,6 @@ export const AutomationJobStateSchema = z.object({
   lastError: z.string().default(''),
   runCount: z.number().int().nonnegative().default(0),
 });
-export type AutomationJobState = z.infer<typeof AutomationJobStateSchema>;
 
 export const AutomationJobSchema = z.object({
   id: z.string().min(1),

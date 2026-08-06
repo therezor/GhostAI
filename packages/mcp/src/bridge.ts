@@ -43,7 +43,7 @@ import type {
 /** Placeholder for a part the model cannot read. See `flattenContent`. */
 const BINARY_PLACEHOLDER_TYPES = new Set(['image', 'audio']);
 
-export interface BridgeOptions {
+interface BridgeOptions {
   readonly serverId: string;
   readonly descriptor: McpToolDescriptor;
   /** Already flattened and deduplicated by `names.ts`. */
@@ -56,7 +56,7 @@ export interface BridgeOptions {
   ) => Promise<McpCallResult>;
 }
 
-export interface BridgedTool {
+interface BridgedTool {
   readonly tool: AnyTool;
   readonly upstreamName: string;
   readonly issues: readonly SchemaIssue[];

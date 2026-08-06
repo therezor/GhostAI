@@ -81,7 +81,7 @@ import {
   type FinishReason,
 } from './types.js';
 
-export interface OpenAIChatOptions {
+interface OpenAIChatOptions {
   readonly spec: ProviderSpec;
   /** From the credential vault, never from config. Absent for local servers. */
   readonly apiKey?: string | undefined;
@@ -105,9 +105,9 @@ export interface OpenAIChatOptions {
 }
 
 /** Time to first byte. Generous, because a cold local model loads weights first. */
-export const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
 /** Between chunks, not total: a long answer is not a hung connection. */
-export const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 120_000;
+const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 120_000;
 
 /**
  * Rejects a configuration that would put an API key on the wire in cleartext.
@@ -212,7 +212,7 @@ function encodeContent(
     : encoded;
 }
 
-export function encodeMessage(message: ChatMessage): WireMessage {
+function encodeMessage(message: ChatMessage): WireMessage {
   switch (message.role) {
     case 'system':
       return { role: 'system', content: message.content };

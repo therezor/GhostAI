@@ -101,7 +101,7 @@ const KILL_SCRIPT =
   'p=$(cat "$1" 2>/dev/null); case "$p" in "" | *[!0-9]* ) exit 0 ;; esac; kill -"$2" "$p" 2>/dev/null || true';
 
 /** How a container sees the workspace, and where the daemon finds it. */
-export interface ToolboxMount {
+interface ToolboxMount {
   /**
    * The workspace as **the daemon** resolves it, which is not always as GhostAI
    * sees it: a containerised GhostAI asking for its own `/data/workspace` gets
@@ -112,7 +112,7 @@ export interface ToolboxMount {
   readonly containerPath: string;
 }
 
-export interface ContainerCreateOptions {
+interface ContainerCreateOptions {
   readonly toolbox: Toolbox;
   readonly network: EffectiveNetwork;
   readonly mount: ToolboxMount;
@@ -273,7 +273,7 @@ export function containerCreateArgv(options: ContainerCreateOptions): string[] {
   return argv;
 }
 
-export interface ContainerExecOptions {
+interface ContainerExecOptions {
   readonly plan: ExecPlan;
   readonly toolbox: Toolbox;
   readonly containerName: string;
@@ -450,7 +450,7 @@ export function containerIsGone(outcome: RunOutcome): boolean {
   );
 }
 
-export interface ContainerRunnerOptions {
+interface ContainerRunnerOptions {
   readonly toolbox: Toolbox;
   readonly containerName: string;
   /**

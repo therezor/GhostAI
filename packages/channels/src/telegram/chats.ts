@@ -20,7 +20,7 @@
  */
 
 /** Rendering preferences a chat owns, and the `/output` command toggles. */
-export interface RenderPrefs {
+interface RenderPrefs {
   /**
    * Whether a turn is a message that fills in, or one final reply.
    *

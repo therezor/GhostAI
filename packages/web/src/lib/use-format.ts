@@ -29,7 +29,7 @@ import {
   formatTokens,
 } from './format.js';
 
-export interface Formatters {
+interface Formatters {
   /** A token count with the locale's grouping separator. */
   readonly tokens: (value: number) => string;
   /** `just now`, `5m ago`, or a date once counting back stops working. */

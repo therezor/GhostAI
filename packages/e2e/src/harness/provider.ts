@@ -59,7 +59,7 @@ const SPEC: ProviderSpec = findProvider('ollama') ?? {
  * the same history and therefore lands on the same index — which is what makes
  * the resume spec assert on an answer rather than on a coincidence.
  */
-export function turnIndex(messages: readonly ChatMessage[]): number {
+function turnIndex(messages: readonly ChatMessage[]): number {
   let index = 0;
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
@@ -88,7 +88,7 @@ function isRuntimeReminder(message: ChatMessage): boolean {
 }
 
 /** The last thing the user said, or `''` before they have said anything. */
-export function lastUserText(messages: readonly ChatMessage[]): string {
+function lastUserText(messages: readonly ChatMessage[]): string {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
     if (message === undefined || isRuntimeReminder(message)) continue;

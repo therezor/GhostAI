@@ -48,8 +48,7 @@ describe('the settings panels', () => {
     //
     // `extensions` joined them with the MCP client, and `channels` with
     // Telegram. There is no eighth entry naming a future phase: a panel is on
-    // this list once it has something to configure, and `knowledge` was
-    // removed along with the retrieval feature it was holding a seat for.
+    // this list once it has something to configure.
     expect(SETTINGS_PANELS.map((panel) => panel.id)).toEqual([
       'providers',
       'tools',

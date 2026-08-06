@@ -40,7 +40,7 @@ import { queryKeys } from '@/lib/query.js';
 /** Which column the sessions list is ordered by. Mirrors the server's `SessionOrderBy`. */
 export type SessionSortKey = 'updated' | 'created' | 'title';
 
-export interface SessionQuery {
+interface SessionQuery {
   readonly page: number;
   readonly q: string;
   readonly sort: SessionSortKey;

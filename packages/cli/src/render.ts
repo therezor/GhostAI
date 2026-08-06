@@ -49,7 +49,7 @@ export interface RenderTarget {
   write(text: string): void;
 }
 
-export interface TurnRendererOptions {
+interface TurnRendererOptions {
   readonly out: RenderTarget;
   /** Defaults to picocolors' own TTY/`NO_COLOR` detection. */
   readonly colors?: boolean;
@@ -180,7 +180,7 @@ export function formatRate(
   return rate === undefined ? undefined : `${rate.toFixed(1)} tok/s`;
 }
 
-export function formatUsage(usage: Usage): string {
+function formatUsage(usage: Usage): string {
   const parts = [
     `${formatCount(usage.promptTokens)} in`,
     `${formatCount(usage.completionTokens)} out`,

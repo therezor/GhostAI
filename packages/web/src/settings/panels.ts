@@ -14,7 +14,7 @@
 
 import type { WebKey } from '@/i18n/keys.js';
 
-export interface SettingsPanel {
+interface SettingsPanel {
   /** Also the tab value and the `?panel=` search parameter. */
   readonly id: string;
   /**
@@ -73,7 +73,7 @@ export const DEFAULT_PANEL_ID: string = PROVIDERS_PANEL.id;
 /** The panel a `?panel=` value names, falling back rather than 404ing. */
 export function panelById(id: string | undefined): SettingsPanel {
   const found = SETTINGS_PANELS.find((panel) => panel.id === id);
-  // A stale bookmark to a panel that was renamed lands on Agent, which is a
+  // A stale bookmark to a panel that was renamed lands on Providers, which is a
   // settings screen. The alternative is an empty tab panel, which is not.
   return found ?? PROVIDERS_PANEL;
 }

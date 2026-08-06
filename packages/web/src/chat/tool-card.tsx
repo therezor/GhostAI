@@ -84,7 +84,7 @@ const RISK: Record<
   network: { label: 'network', tone: 'warning' },
 };
 
-export interface ToolCardProps {
+interface ToolCardProps {
   readonly tool: ToolPart;
   readonly onApprove: (
     callId: string,
@@ -233,7 +233,7 @@ export function ToolCard({ tool, onApprove }: ToolCardProps): JSX.Element {
  * reader can tell whose `exec` they are approving, which is the one thing a
  * nested card must not leave ambiguous.
  */
-export function SubagentRun({
+function SubagentRun({
   run,
   onApprove,
 }: {

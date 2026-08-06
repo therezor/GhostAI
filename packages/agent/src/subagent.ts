@@ -91,7 +91,7 @@ const TASK_PARAMETERS: Readonly<Record<string, unknown>> = Object.freeze({
  * The fallback names the agent and says the one thing a model cannot infer:
  * that the subagent starts from nothing and answers in prose.
  */
-export function describeSubagent(binding: SubagentBinding): string {
+function describeSubagent(binding: SubagentBinding): string {
   const own = binding.prompt.trim();
   if (own !== '') return own;
   // The sentence itself lives in `@ghostai/protocol` because the settings UI
@@ -122,7 +122,7 @@ export function subagentDefinition(binding: SubagentBinding): ToolDefinition {
  * refused can answer without it, and a turn that dies instead leaves the
  * operator with an error where an answer was possible.
  */
-export type DelegationRefusal = 'unconfigured' | 'cycle' | 'too-deep';
+type DelegationRefusal = 'unconfigured' | 'cycle' | 'too-deep';
 
 /** The task string, as the model supplied it — or a refusal to parse it. */
 export function parseTask(
@@ -156,7 +156,7 @@ export function refuseDelegation(
 }
 
 /** What the model reads. Phrased to stop a retry, as `deniedToolResult` is. */
-export function refusalText(
+function refusalText(
   refusal: DelegationRefusal,
   binding: SubagentBinding,
   chain: readonly string[],
@@ -200,7 +200,7 @@ export function refusedExecution(
 }
 
 /** What a delegation returns when the subagent ran to the end and said nothing. */
-export const EMPTY_SUBAGENT_RESULT =
+const EMPTY_SUBAGENT_RESULT =
   'The subagent finished without writing an answer. Treat it as having found nothing.';
 
 /**

@@ -20,7 +20,7 @@ import { GhostError } from '@ghostai/core';
 import type { McpOAuthConfig, McpServerConfig } from '@ghostai/protocol';
 
 /** What `StdioClientTransport` needs, with nothing left to infer. */
-export interface McpStdioSpec {
+interface McpStdioSpec {
   readonly kind: 'stdio';
   readonly serverId: string;
   readonly command: string;
@@ -31,7 +31,7 @@ export interface McpStdioSpec {
 }
 
 /** What either HTTP transport needs. */
-export interface McpHttpSpec {
+interface McpHttpSpec {
   readonly kind: 'streamableHttp' | 'sse';
   readonly serverId: string;
   readonly url: string;
@@ -43,7 +43,7 @@ export interface McpHttpSpec {
 
 export type McpConnectionSpec = McpStdioSpec | McpHttpSpec;
 
-export type SpecResolution =
+type SpecResolution =
   | { readonly ok: true; readonly spec: McpConnectionSpec }
   | { readonly ok: false; readonly error: GhostError };
 

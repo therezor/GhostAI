@@ -37,7 +37,7 @@ export interface SelectLabels {
   readonly filterPrefix?: string | undefined;
 }
 
-export interface SelectOptions<T> {
+interface SelectOptions<T> {
   readonly items: ReadonlyArray<SelectItem<T>>;
   readonly labels: SelectLabels;
   /** Defaults to `PLAIN_THEME`, so a caller that forgets colour still reads. */
@@ -48,7 +48,7 @@ export interface SelectOptions<T> {
 }
 
 /** What a keystroke did to the menu. */
-export type SelectOutcome<T> =
+type SelectOutcome<T> =
   | { readonly kind: 'open' }
   | { readonly kind: 'chosen'; readonly value: T }
   | { readonly kind: 'cancelled' };

@@ -38,12 +38,12 @@ import { systemRandom, type RandomSource } from '@ghostai/security';
 import type { Algorithm as Argon2Algorithm } from '@node-rs/argon2';
 
 /** Bytes of entropy in the secret half of a token. */
-export const TOKEN_SECRET_BYTES = 32;
+const TOKEN_SECRET_BYTES = 32;
 /** Bytes in the lookup half. Not a secret — only a row address. */
-export const TOKEN_ID_BYTES = 12;
+const TOKEN_ID_BYTES = 12;
 
 /** Bytes in a named server secret — an HMAC key, not a password. */
-export const SECRET_BYTES = 32;
+const SECRET_BYTES = 32;
 
 /**
  * How stale `last_seen_at_ms` may get before a read writes.
@@ -164,7 +164,7 @@ export const argon2Hasher: PasswordHasher = {
   },
 };
 
-export interface AuthStoreOptions {
+interface AuthStoreOptions {
   /** Shared with `SessionStore` and the scheduler. */
   readonly database: DatabaseSync;
   /** How long a newly issued token lives. */
@@ -182,7 +182,7 @@ export interface AuthSession {
   readonly expiresAtMs: number;
 }
 
-export interface IssuedToken {
+interface IssuedToken {
   /** The only time this value exists. Only its digest is stored. */
   readonly token: string;
   readonly id: string;

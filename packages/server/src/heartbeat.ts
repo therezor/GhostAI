@@ -38,7 +38,7 @@ import type { ChatResult } from '@ghostai/providers';
 export const MAX_TASK_FILE_BYTES: number = 64 * 1024;
 
 /** `skipReason` goes in a column and onto a card; the model does not know that. */
-export const MAX_REASON_LENGTH = 256;
+const MAX_REASON_LENGTH = 256;
 
 /**
  * What the model is told to send instead of prose.
@@ -112,9 +112,9 @@ const EvaluationArgumentsSchema = z.object({
   summary: z.string().optional(),
 });
 
-export type HeartbeatAction = 'skip' | 'run';
+type HeartbeatAction = 'skip' | 'run';
 
-export interface HeartbeatDecision {
+interface HeartbeatDecision {
   readonly action: HeartbeatAction;
   /** Populated for both outcomes; becomes `skipReason` on a skip. */
   readonly reason: string;
@@ -124,7 +124,7 @@ export interface HeartbeatDecision {
   readonly warnings: readonly string[];
 }
 
-export interface HeartbeatEvaluation {
+interface HeartbeatEvaluation {
   readonly notify: boolean;
   readonly title: string;
   readonly summary: string;
@@ -167,7 +167,7 @@ function parseJson(raw: string): unknown {
 // Decide
 // ---------------------------------------------------------------------------
 
-export interface DecideMessagesInput {
+interface DecideMessagesInput {
   /** Workspace-relative, for the model's benefit and the reason text. */
   readonly file: string;
   readonly contents: string;
@@ -282,7 +282,7 @@ export function readDecision(
 // Evaluate
 // ---------------------------------------------------------------------------
 
-export interface EvaluateMessagesInput {
+interface EvaluateMessagesInput {
   readonly instruction: string;
   readonly output: string;
 }

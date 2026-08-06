@@ -46,13 +46,13 @@ export const STEERING_PREFIX =
  */
 export const MAX_PENDING_STEER = 16;
 
-export interface SteeringMessage {
+interface SteeringMessage {
   readonly content: string;
   /** Wall-clock epoch milliseconds, from the caller's clock. */
   readonly receivedAtMs: number;
 }
 
-export interface SteeringQueueOptions {
+interface SteeringQueueOptions {
   readonly maxPending?: number;
   readonly logger?: Logger;
 }

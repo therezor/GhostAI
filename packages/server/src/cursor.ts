@@ -35,12 +35,12 @@
 import { badRequest } from './errors.js';
 
 /** Where a message listing resumes: the `seq` of the last row already sent. */
-export interface MessageCursor {
+interface MessageCursor {
   readonly seq: number;
 }
 
 /** Where a session listing resumes, in the `updatedAtMs DESC, key ASC` order. */
-export interface SessionListCursor {
+interface SessionListCursor {
   readonly updatedAtMs: number;
   readonly key: string;
 }

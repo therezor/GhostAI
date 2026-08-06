@@ -56,7 +56,7 @@ export interface JobForm {
   readonly to: string;
 }
 
-export type JobFormResult =
+type JobFormResult =
   | {
       readonly ok: true;
       readonly create: CreateAutomationJob;

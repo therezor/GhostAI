@@ -36,7 +36,7 @@ function workspace(): { root: string; jail: WorkspaceJail } {
 }
 
 // `mimeTypeFor` and `readText` moved to `@ghostai/core` and are covered by
-// `core/src/workspace-files.test.ts`.
+// `core/test/workspace-files.test.ts`.
 
 describe('inlineSafe', () => {
   it.each(['photo.png', 'notes.md', 'data.json'])('allows %s', (path) => {

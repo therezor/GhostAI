@@ -31,7 +31,6 @@ import {
   resolveFirstLocale,
   type CliResources,
   type ResourceKeys,
-  type SharedMessageKey,
 } from '@ghostai/i18n';
 import { createCliI18n } from '@ghostai/i18n/cli';
 import type { i18n, TFunction } from 'i18next';
@@ -69,12 +68,10 @@ export type CliT = TFunction<'cli'>;
  */
 export type CliKey = ResourceKeys<CliResources>;
 
-/** The two scoped `t`s a command needs, bound to one instance. */
+/** The scoped `t` a command needs, bound to one instance. */
 export interface Translations {
   /** Keys in the `cli` bundle, unprefixed. */
   readonly t: CliT;
-  /** Keys in the `shared` bundle — the ones `GhostError` names. */
-  readonly ts: TFunction<'shared'>;
   readonly locale: string;
   readonly i18n: i18n;
 }
@@ -83,7 +80,6 @@ export function translations(locale: string): Translations {
   const instance = createCliI18n(locale);
   return {
     t: instance.getFixedT(null, 'cli'),
-    ts: instance.getFixedT(null, 'shared'),
     locale,
     i18n: instance,
   };
@@ -95,37 +91,14 @@ export function translationsFor(env: Env, configured?: string): Translations {
 }
 
 /**
- * The English form of a `GhostError`, or its translation when it has one.
+ * The sentence to print when something a person asked for failed.
  *
- * Errors carry both: `message` is the original and stays authoritative for logs
- * and pipes, `messageKey` is the same sentence for a terminal that has a locale.
- * Everything that prints an error to a person goes through here, and everything
- * that writes one to a log does not.
+ * A `GhostError`'s `message` is authoritative — logs, pipes and `curl` all want
+ * the same English original — so this is a funnel rather than a translation:
+ * everything that prints an error to a person goes through here, and a throw
+ * that was never an `Error` still comes out as a string rather than `[object
+ * Object]`.
  */
-export function describeError(error: unknown, { i18n }: Translations): string {
-  if (!isKeyed(error)) {
-    return error instanceof Error ? error.message : String(error);
-  }
-  // The unscoped `t`, not the shared-scoped one: the key arrives fully
-  // qualified (`shared:runtime.noProvider`) because that is what a package with
-  // no namespace of its own can name unambiguously.
-  return i18n.t(error.messageKey, error.messageParams ?? {});
-}
-
-interface KeyedError {
-  readonly messageKey: SharedMessageKey;
-  readonly messageParams?: Readonly<Record<string, string | number>>;
-}
-
-/**
- * Structural rather than `instanceof GhostError`, for the reason `isGhostError`
- * gives: a plugin resolving its own copy of `@ghostai/core` produces a different
- * class identity. Checking for the field is also what keeps this file free of a
- * runtime import of core.
- */
-function isKeyed(value: unknown): value is KeyedError {
-  return (
-    value instanceof Error &&
-    typeof (value as { messageKey?: unknown }).messageKey === 'string'
-  );
+export function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

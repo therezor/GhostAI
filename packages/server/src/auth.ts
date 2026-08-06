@@ -117,7 +117,7 @@ export function clearSessionCookie(
   });
 }
 
-export interface AuthHookOptions {
+interface AuthHookOptions {
   readonly config: Config;
   readonly auth: AuthStore;
 }
@@ -175,7 +175,7 @@ export function mediaClaimOf(request: FastifyRequest): MediaClaim | undefined {
   return MEDIA_CLAIMS.get(request);
 }
 
-export interface SignedHookOptions {
+interface SignedHookOptions {
   readonly auth: AuthStore;
   readonly clock?: Clock;
 }

@@ -28,7 +28,6 @@ export interface ToolsForm {
   readonly execEnabled: boolean;
   readonly execTimeoutSeconds: string;
   readonly execMaxOutputBytes: string;
-  readonly restrictToWorkspace: boolean;
   readonly maxOutputChars: string;
 }
 
@@ -38,7 +37,6 @@ export function toToolsForm(tools: ToolsConfig): ToolsForm {
     execEnabled: tools.exec.enable,
     execTimeoutSeconds: msToSeconds(tools.exec.timeoutMs),
     execMaxOutputBytes: String(tools.exec.maxOutputBytes),
-    restrictToWorkspace: tools.restrictToWorkspace,
     maxOutputChars: String(tools.maxOutputChars),
   };
 }
@@ -88,7 +86,6 @@ export function toToolsPatch(form: ToolsForm, t: TFunction): PatchResult {
           timeoutMs: secondsToMs(execTimeout.value),
           maxOutputBytes: execMaxOutputBytes.value,
         },
-        restrictToWorkspace: form.restrictToWorkspace,
         maxOutputChars: maxOutputChars.value,
       },
     },

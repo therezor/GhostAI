@@ -34,7 +34,7 @@
  */
 
 /** Counts tokens in a string. Exact for OpenAI models, close for the rest. */
-export type TokenCounter = (text: string) => number;
+type TokenCounter = (text: string) => number;
 
 /**
  * Average characters per token across English prose, code and JSON.

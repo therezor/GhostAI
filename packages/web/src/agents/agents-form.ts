@@ -396,7 +396,7 @@ export function toAgentEntryForm(
   };
 }
 
-export type AgentPatchResult =
+type AgentPatchResult =
   | { readonly ok: true; readonly patch: ConfigPatch }
   | { readonly ok: false; readonly errors: Readonly<Record<string, string>> };
 
@@ -417,9 +417,9 @@ export function isToolPermission(value: string): value is ToolPermission {
 }
 
 /** The two prompt modes, in the order the toggle offers them. */
-export const PROMPT_MODES: readonly PromptMode[] = ['template', 'raw'];
+const PROMPT_MODES: readonly PromptMode[] = ['template', 'raw'];
 
-export function isPromptMode(value: string): value is PromptMode {
+function isPromptMode(value: string): value is PromptMode {
   return (PROMPT_MODES as readonly string[]).includes(value);
 }
 

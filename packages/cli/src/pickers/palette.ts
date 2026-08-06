@@ -19,14 +19,14 @@ import { commandRows, type CommandRow } from '../commands.js';
 import type { CliT } from '../i18n.js';
 import type { Menu } from '../menu.js';
 
-export interface CommandChoice {
+interface CommandChoice {
   /** What to put on the line: `/workspace move`, not `/workspace move <a> <b>`. */
   readonly command: string;
   /** Whether to press Return, or leave the operator typing the arguments. */
   readonly submit: boolean;
 }
 
-export interface PalettePickerDeps {
+interface PalettePickerDeps {
   readonly menu: Menu;
   readonly t: CliT;
 }

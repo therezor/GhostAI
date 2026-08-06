@@ -32,7 +32,7 @@
  *    `safeParse`d and every failure is an `error` event on the socket that sent
  *    it. A hub that throws on a malformed frame is a hub a client can kill.
  *
- * The turn's `AbortSignal` is the one from Step 10: `turn.stop` aborts the
+ * The turn's `AbortSignal` is the one the turn already carries: `turn.stop` aborts the
  * controller, and the same signal reaches the provider fetch, the running tool
  * and its child process. There is no second cancellation path.
  */
@@ -80,7 +80,7 @@ import { ReplayBuffer, type SequencedServerMessage } from './replay.js';
  * `session_busy` — the one error code in the protocol that exists for exactly
  * this, and the one honest answer to "I cannot hold any more of these".
  */
-export const DEFAULT_MAX_QUEUE_DEPTH = 8;
+const DEFAULT_MAX_QUEUE_DEPTH = 8;
 
 /**
  * How many sessions keep their replay ring in memory.
@@ -91,7 +91,7 @@ export const DEFAULT_MAX_QUEUE_DEPTH = 8;
  * attached, a running turn or a queue is never evicted — the cap yields to
  * anything live rather than dropping work to satisfy a number.
  */
-export const DEFAULT_MAX_SESSIONS = 64;
+const DEFAULT_MAX_SESSIONS = 64;
 
 /**
  * Stored messages returned when a replay could not cover the gap.
@@ -101,7 +101,7 @@ export const DEFAULT_MAX_SESSIONS = 64;
  * false` still says "refetch from REST" — this is what saves the round trip in
  * the common case, not a replacement for the route.
  */
-export const RESUME_MESSAGE_LIMIT = 200;
+const RESUME_MESSAGE_LIMIT = 200;
 
 /**
  * What an install with no model says, in the one place that says it.
@@ -110,7 +110,7 @@ export const RESUME_MESSAGE_LIMIT = 200;
  * regenerate that checks *before* truncating. Both must say the same thing, or
  * the same install describes itself two ways.
  */
-export const NO_MODEL_MESSAGE: string =
+const NO_MODEL_MESSAGE: string =
   'No model is configured. Add a provider and choose a model in Settings, ' +
   'or run `ghost init` from a terminal.';
 
@@ -195,7 +195,7 @@ export interface HubClient {
   close(): void;
 }
 
-export interface SessionHubOptions {
+interface SessionHubOptions {
   /** Read for `server.replayBufferSize` when a session is first seen. */
   readonly config: Config;
   /**
@@ -668,14 +668,6 @@ export class SessionHub {
         }
         return;
       }
-
-      case 'audio.transcribe':
-        this.error(
-          connection,
-          'config_invalid',
-          'Audio transcription is not configured on this server',
-        );
-        return;
     }
   }
 

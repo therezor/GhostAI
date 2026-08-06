@@ -105,7 +105,7 @@ CREATE INDEX IF NOT EXISTS automation_runs_job
   ON automation_runs(job_id, started_at_ms DESC, id ASC);
 `;
 
-export interface AutomationStoreOptions {
+interface AutomationStoreOptions {
   /** Shared with `SessionStore`, `AuthStore` and `NotificationStore`: one WAL. */
   readonly database: DatabaseSync;
   readonly clock?: Clock;
@@ -137,7 +137,7 @@ export interface CreateJobInput {
  * that shape. A bare `?:` would force the route to destructure and rebuild,
  * which is how a field added later gets silently dropped.
  */
-export interface UpdateJobInput {
+interface UpdateJobInput {
   readonly name?: string | undefined;
   readonly schedule?: AutomationSchedule | undefined;
   readonly payload?: AutomationPayload | undefined;
@@ -146,7 +146,7 @@ export interface UpdateJobInput {
   readonly nextRunAtMs?: number | undefined;
 }
 
-export interface ListRunsOptions {
+interface ListRunsOptions {
   readonly limit?: number;
   /**
    * For a numbered pager, where `after` is for a sequential reader.
@@ -160,12 +160,12 @@ export interface ListRunsOptions {
   readonly after?: AutomationRunCursor;
 }
 
-export interface StartRunInput {
+interface StartRunInput {
   readonly jobId: string;
   readonly sessionKey?: string;
 }
 
-export interface FinishRunInput {
+interface FinishRunInput {
   readonly status: RunStatus;
   readonly output?: string;
   readonly error?: string;
@@ -174,7 +174,7 @@ export interface FinishRunInput {
 }
 
 /** What a trimmed run took with it, so its session can be cleaned up too. */
-export interface TrimmedRun {
+interface TrimmedRun {
   readonly id: string;
   readonly sessionKey: string | undefined;
 }

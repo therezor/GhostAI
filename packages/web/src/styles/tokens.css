@@ -33,7 +33,7 @@
  *    whole UI — not just its type — scales with the browser setting. The one
  *    exception is `--hairline`, below, which has a comment explaining itself.
  *
- * The seed values are not free parameters: `src/tokens/contrast.test.ts`
+ * The seed values are not free parameters: `test/tokens/contrast.test.ts`
  * resolves this file for both themes and asserts every text-on-surface pairing
  * meets WCAG AA, so a seed edit that darkens text past the line fails the suite.
  */
@@ -129,7 +129,7 @@
  * Declared twice, deliberately. A media query and an attribute selector cannot
  * share a selector list, and the alternative — one block plus an indirection
  * layer — trades duplicated numbers for duplicated plumbing. The two blocks are
- * asserted identical by `src/styles/tokens.test.ts`, and the contrast
+ * asserted identical by `test/styles/tokens.test.ts`, and the contrast
  * assertion resolves the attribute branch, so a value that drifted in only one
  * of them fails the suite rather than shipping.
  *

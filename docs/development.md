@@ -14,7 +14,7 @@ to compile and no prebuilds to go missing.
 ## The gate
 
 **`pnpm check` is not the CI gate.** It runs `typecheck`, `lint` and `test`, and CI runs
-five more things on top — most local sessions that end green and then fail CI fail on
+six more things on top — most local sessions that end green and then fail CI fail on
 `format:check`, which `pnpm check` never calls.
 
 CI is [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), and it is three jobs.

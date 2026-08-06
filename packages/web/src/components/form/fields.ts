@@ -17,14 +17,14 @@
 import type { ConfigPatch } from '@ghostai/protocol';
 import type { TFunction } from 'i18next';
 
-export interface NumberConstraint {
+interface NumberConstraint {
   readonly min?: number;
   readonly max?: number;
   /** Rejects `1.5`, rather than rounding it behind the operator's back. */
   readonly integer?: boolean;
 }
 
-export type ParseResult<T> =
+type ParseResult<T> =
   | { readonly ok: true; readonly value: T }
   | {
       readonly ok: false;
@@ -158,7 +158,7 @@ export function formatRecord(record: Readonly<Record<string, string>>): string {
     .join('\n');
 }
 
-export interface ModelChoice {
+interface ModelChoice {
   readonly id: string;
   readonly providerId: string;
 }

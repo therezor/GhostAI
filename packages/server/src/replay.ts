@@ -38,7 +38,7 @@ import type { ServerMessage } from '@ghostai/protocol';
  */
 export type SequencedServerMessage = Extract<ServerMessage, { seq: number }>;
 
-export interface ReplaySlice {
+interface ReplaySlice {
   /** Everything retained after `lastSeq`, in emission order. */
   readonly messages: readonly SequencedServerMessage[];
   /** False when the buffer could not account for every `seq` after `lastSeq`. */

@@ -79,6 +79,8 @@ session, shared by every agent that opens it.
 | `platformPrompt`   | string                               | `''`              | Fills `{{platformPolicy}}` — the `## Running commands` section. Two built-ins, host and toolbox.             |
 | `toolboxPrompt`    | string                               | `''`              | The `## Toolbox: <name>` section. Only rendered while `toolbox.name` is set.                                 |
 | `toolPolicyPrompt` | string                               | `''`              | The tool-output policy. A template naming neither `{{tag}}` nor `{{nonce}}` saves with a warning.            |
+| `memoryPrompt`     | string                               | `''`              | The memory section. Only rendered while the `memory` tool is granted. See [Memory](memory.md).               |
+| `skillsPrompt`     | string                               | `''`              | The skills section. Only rendered while the `skill` tool is granted. See [Skills](skills.md).                |
 | `promptMode`       | `template\|raw`                      | `'template'`      | `raw` makes `systemPrompt` the entire system message — nothing is placed around it.                          |
 | `toolPrompts`      | `Record<string, ToolPromptOverride>` | `{}`              | Per-tool replacements for the description and the argument descriptions. See [Tools](tools.md).              |
 | `enabled`          | boolean                              | `true`            |                                                                                                              |
@@ -87,7 +89,7 @@ session, shared by every agent that opens it.
 | `toolbox`          | `{ name, network }`                  | `{ name: '', … }` | Empty name runs `exec` on the host. See [Toolboxes](toolboxes.md).                                           |
 | `subagents`        | `{ id, prompt, permission }[]`       | `[]`              | Agents this one may delegate to, in the order the model sees them.                                           |
 
-The six prompt templates share one rule: **`''` inherits the built-in, and a single space
+The eight prompt templates share one rule: **`''` inherits the built-in, and a single space
 deletes the section.** Empty has to keep meaning "I have not chosen" or an install would
 freeze on the wording that shipped the day each agent was made, which leaves a space as
 the only way to say "I want this gone". `systemPrompt` is the exception — whitespace-only
@@ -114,9 +116,16 @@ A new agent is seeded with:
   "list_dir": "allow",
   "write_file": "allow",
   "edit_file": "allow",
-  "exec": "ask"
+  "exec": "ask",
+  "memory": "allow",
+  "skill": "allow"
 }
 ```
+
+`memory` and `skill` are the switches for their two prompt sections — denying the tool
+also removes the section it feeds. They are seeded on, because an agent that silently
+fails to remember reads as broken rather than as unconfigured. This is the seed for a
+_new_ agent: an install that predates them has neither until an operator grants it.
 
 That seeding is the one place a tool's risk band turns into a permission, and it happens
 at creation where the operator can see the result and change it. Nothing reads a risk band
@@ -188,7 +197,6 @@ See [Providers](providers.md) for the registry table and the resolution order.
 | ------------------------- | ----------- | ------------- | ------------------------------------------------------------------------------- |
 | `host`                    | string      | `'127.0.0.1'` | A non-loopback host with `auth.enabled: false` **refuses to start**.            |
 | `port`                    | int 1–65535 | `3000`        | One port for the API, the WebSocket and the UI.                                 |
-| `corsOrigins`             | string[]    | `[]`          | Extra browser origins. Same-origin always works.                                |
 | `replayBufferSize`        | int ≥ 0     | `512`         | Events retained per session so a reconnecting tab can replay an in-flight turn. |
 | `auth.enabled`            | boolean     | `true`        |                                                                                 |
 | `auth.sessionTtlMs`       | int > 0     | 30 days       |                                                                                 |
@@ -206,40 +214,27 @@ past, and the result is an unauthenticated shell-capable agent on a LAN address.
 Install-wide tool settings. **Which tools an agent may call is not here** — that is
 `agents.list.<id>.tools`. See [Tools & permissions](tools.md).
 
-| Key                   | Type    | Default   | Notes                                                                                                                                                                                      |
-| --------------------- | ------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `approvalTimeoutMs`   | int > 0 | 5 minutes | How long an `ask` prompt stays open before it counts as denied.                                                                                                                            |
-| `restrictToWorkspace` | boolean | `true`    |                                                                                                                                                                                            |
-| `maxOutputChars`      | int > 0 | `8192`    | Head+tail budget for one tool result. **`0` does not mean unlimited here** — `read_file` sizes its buffer from this, so `0` would read one byte of every file. Set a large number instead. |
+| Key                 | Type    | Default   | Notes                                                                                                                                                                                      |
+| ------------------- | ------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `approvalTimeoutMs` | int > 0 | 5 minutes | How long an `ask` prompt stays open before it counts as denied.                                                                                                                            |
+| `maxOutputChars`    | int > 0 | `8192`    | Head+tail budget for one tool result. **`0` does not mean unlimited here** — `read_file` sizes its buffer from this, so `0` would read one byte of every file. Set a large number instead. |
 
 ### `tools.exec`
 
-| Key                         | Type                            | Default                       | Notes                                                                                                                                                                                                  |
-| --------------------------- | ------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `enable`                    | boolean                         | `true`                        | `false` removes `exec` from the definitions entirely, rather than advertising a tool that refuses.                                                                                                     |
-| `timeoutMs`                 | int ≥ 0                         | `0`                           |                                                                                                                                                                                                        |
-| `pathAppend`                | string                          | `''`                          | Appended to the child's `PATH`.                                                                                                                                                                        |
-| `allowedBinaries`           | string[]                        | `[]`                          | `argv[0]` allow-list, matched on basename. **Empty means "anything not denied"** — the opposite convention to `agents.*.tools`, and deliberately so: this narrows a tool the operator already enabled. |
-| `deniedBinaries`            | string[]                        | `[]`                          | Checked first.                                                                                                                                                                                         |
-| `envAllowlist`              | string[]                        | `['PATH','HOME','LANG','TZ']` | Everything else is scrubbed from the child's environment.                                                                                                                                              |
-| `maxOutputBytes`            | int > 0                         | `1048576`                     | Enforced while the child writes, not after it exits.                                                                                                                                                   |
-| `installAudit`              | boolean                         | `true`                        |                                                                                                                                                                                                        |
-| `installAuditTimeoutMs`     | int ≥ 0                         | `0`                           |                                                                                                                                                                                                        |
-| `installAuditBlockSeverity` | `low\|moderate\|high\|critical` | `'high'`                      |                                                                                                                                                                                                        |
+| Key               | Type     | Default                       | Notes                                                                                                                                                                                                  |
+| ----------------- | -------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `enable`          | boolean  | `true`                        | `false` removes `exec` from the definitions entirely, rather than advertising a tool that refuses.                                                                                                     |
+| `timeoutMs`       | int ≥ 0  | `0`                           |                                                                                                                                                                                                        |
+| `pathAppend`      | string   | `''`                          | Appended to the child's `PATH`.                                                                                                                                                                        |
+| `allowedBinaries` | string[] | `[]`                          | `argv[0]` allow-list, matched on basename. **Empty means "anything not denied"** — the opposite convention to `agents.*.tools`, and deliberately so: this narrows a tool the operator already enabled. |
+| `deniedBinaries`  | string[] | `[]`                          | Checked first.                                                                                                                                                                                         |
+| `envAllowlist`    | string[] | `['PATH','HOME','LANG','TZ']` | Everything else is scrubbed from the child's environment.                                                                                                                                              |
+| `maxOutputBytes`  | int > 0  | `1048576`                     | Enforced while the child writes, not after it exits.                                                                                                                                                   |
 
 There are no patterns here for `$(...)`, backticks or `| sh`. The exec tool takes
 `argv: string[]` and calls `execFile` with `shell: false`, so there is no string for a
 shell metacharacter to live in — scanning for them would reject legitimate commands while
 blocking nothing.
-
-### `tools.web`
-
-| Key                 | Type    | Default   |
-| ------------------- | ------- | --------- |
-| `proxy`             | string  | _unset_   |
-| `search.provider`   | string  | `'brave'` |
-| `search.baseUrl`    | string  | `''`      |
-| `search.maxResults` | int > 0 | `5`       |
 
 ### `tools.mcpServers.<id>`
 
@@ -371,25 +366,12 @@ Telegram is registered only when a token resolves, so an install that has never 
 a bot starts exactly as it did before. A token that resolves and is then refused by the
 API fails startup rather than leaving a channel silently dead.
 
-## `audio`
-
-| Key            | Type       | Default                    |
-| -------------- | ---------- | -------------------------- |
-| `providerUrl`  | string     | _unset_                    |
-| `model`        | string     | `'whisper-large-v3-turbo'` |
-| `ttsEnabled`   | boolean    | `false`                    |
-| `ttsProvider`  | string     | `'browser'`                |
-| `ttsVoice`     | string     | `'en_female'`              |
-| `ttsSpeed`     | number > 0 | `1.0`                      |
-| `ttsLang`      | string     | `'en'`                     |
-| `ttsModelPath` | string     | _unset_                    |
-
 ## `scheduler`
 
 Read and honoured. Edited in **Settings → Automation**. The jobs themselves are a page of
 their own — a list an operator keeps is not a setting.
 
-Five knobs, and every one of them is true of the **engine**. None describes a task —
+Four knobs, and every one of them is true of the **engine**. None describes a task —
 that is what a job is for.
 
 | Key                       | Type    | Default                               |
@@ -432,10 +414,6 @@ twenty-five times that day.
 
 When **day-of-month and day-of-week are both restricted, a day matches if _either_ does**.
 `0 0 13 * 5` is "the 13th, and also every Friday", not "Friday the 13th".
-
-A wall-clock time a zone skips (spring forward) does not fire that day; one that happens
-twice (fall back) fires **once**, at the earlier instant — so an hourly job sees 23 or 25
-wall-clock hours rather than running twice.
 
 ### The heartbeat payload
 
@@ -519,6 +497,10 @@ vault wins over the environment**:
 
 `OPENAI_API_KEY` · `ANTHROPIC_API_KEY` · `OPENROUTER_API_KEY` · `GEMINI_API_KEY` ·
 `DEEPSEEK_API_KEY` · `GROQ_API_KEY` · `XAI_API_KEY` · `VLLM_API_KEY`
+
+One key per registry entry, whether or not that entry can be built today: `anthropic` and
+`gemini` name wires with no adapter, so an instance of either is refused at construction.
+See [Providers](providers.md).
 
 ---
 

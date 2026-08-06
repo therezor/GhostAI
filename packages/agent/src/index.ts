@@ -14,7 +14,6 @@
  */
 
 export type {
-  AgentErrorEvent,
   AgentEvent,
   AgentEventType,
   AssistantDeltaEvent,
@@ -32,12 +31,10 @@ export type {
 
 export {
   MAX_SUBAGENT_DEPTH,
-  describeSubagent,
   refuseDelegation,
   subagentDefinition,
   subagentMap,
   subagentResult,
-  type DelegationRefusal,
   type SubagentBinding,
 } from './subagent.js';
 
@@ -51,12 +48,10 @@ export {
 } from './approval.js';
 
 export {
-  MAX_INLINE_IMAGE_BYTES,
   MAX_INLINE_TEXT_BYTES,
   materialiseAttachments,
   materialiseFilePart,
   type AttachmentCache,
-  type MaterialiseOptions,
 } from './attachments.js';
 
 export {
@@ -79,7 +74,6 @@ export {
   SKILL_FILENAME,
   SKILL_MAX_BYTES,
   readSkills,
-  type ReadSkillsOptions,
   type Skill,
 } from './skills.js';
 
@@ -87,14 +81,11 @@ export {
   SkillsContributor,
   renderMentionedSkills,
   renderSkills,
-  type SkillsContributorOptions,
 } from './skills-contributor.js';
 
 export {
   MemoryContributor,
   renderMemorySection,
-  type MemorySectionOptions,
-  type MemoryContributorOptions,
 } from './memory-contributor.js';
 
 export {
@@ -102,23 +93,15 @@ export {
   STEERING_PREFIX,
   SteeringQueue,
   steeringText,
-  type SteeringMessage,
-  type SteeringQueueOptions,
 } from './steering.js';
 
-export {
-  describeContext,
-  type ContextBreakdown,
-  type ContextReport,
-  type DescribeContextInput,
-} from './context.js';
+export { describeContext, type ContextReport } from './context.js';
 
 export { CANCELLED_TOOL_RESULT, TOOL_HEARTBEAT_MS } from './dispatch.js';
 
 export {
   AgentLoop,
   type AgentLoopOptions,
-  type LoopAgent,
   type PromptPreview,
   type PromptPreviewInput,
   type TurnInput,

@@ -60,7 +60,7 @@
  */
 
 /** A parsed document: its frontmatter fields, and everything after the fence. */
-export interface Frontmatter {
+interface Frontmatter {
   readonly fields: Readonly<Record<string, string>>;
   readonly body: string;
 }

@@ -28,7 +28,7 @@
  */
 
 /** One parsed allowlist entry. */
-export interface AllowedParty {
+interface AllowedParty {
   /** The Telegram id. Positive for a user, negative for a group. */
   readonly id: number;
   /** Whatever the operator wrote after the pipe. For logs, never matched on. */
@@ -36,7 +36,7 @@ export interface AllowedParty {
 }
 
 /** Who is asking, and where. */
-export interface Requester {
+interface Requester {
   /** `from.id` — the person, on a message or on a button press. */
   readonly userId: number;
   /** `chat.id` — equal to `userId` in a private chat, negative in a group. */

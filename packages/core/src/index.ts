@@ -23,7 +23,6 @@ export {
   toGhostError,
   type AbortSubscription,
   type ErrorKind,
-  type GhostErrorOptions,
 } from './errors.js';
 
 export { systemClock, type Clock, type TimerHandle } from './clock.js';
@@ -67,19 +66,9 @@ export {
   slugify,
 } from './slug-id.js';
 
-export {
-  parseMetadata,
-  rowReader,
-  type Row,
-  type RowReader,
-} from './sqlite-row.js';
+export { parseMetadata, rowReader, type Row } from './sqlite-row.js';
 
-export {
-  WorkspaceStore,
-  type CreateWorkspaceOptions,
-  type WorkspaceRecord,
-  type WorkspaceStoreOptions,
-} from './workspace-store.js';
+export { WorkspaceStore, type WorkspaceRecord } from './workspace-store.js';
 
 export {
   DEFAULT_MIME_TYPE,
@@ -93,16 +82,13 @@ export {
   loadConfig,
   parseConfig,
   saveConfig,
-  type LoadConfigOptions,
   type LoadedConfig,
 } from './config.js';
 
 export {
   REDACT_CENSOR,
-  REDACT_PATHS,
   createLogger,
   silentLogger,
-  type CreateLoggerOptions,
   type LogLevel,
   type Logger,
 } from './logger.js';
@@ -118,12 +104,9 @@ export {
   toolMessage,
   userMessage,
   withoutImages,
-  type AssistantMessageOptions,
-  type ToolMessageOptions,
 } from './messages.js';
 
 export {
-  DEFAULT_MAX_HISTORY_MESSAGES,
   DEFAULT_MAX_TOOL_RESULT_CHARS,
   findLegalEnd,
   findLegalStart,
@@ -132,20 +115,16 @@ export {
   historyForLLM,
   truncateHeadTail,
   type HistoryForLLMOptions,
-  type TruncationResult,
   sessionHistory,
-  type SessionHistorySource,
 } from './history.js';
 
-export { parseFrontmatter, type Frontmatter } from './frontmatter.js';
+export { parseFrontmatter } from './frontmatter.js';
 
 export {
   MAX_MEMORIES,
   MAX_MEMORY_DESCRIPTION_CHARS,
   MAX_MEMORY_NAME_CHARS,
   MEMORY_DIRNAME,
-  MEMORY_INDEX_FILENAME,
-  MEMORY_INDEX_PATH,
   MEMORY_MAX_BYTES,
   MEMORY_TYPES,
   memorySlug,
@@ -155,9 +134,6 @@ export {
   saveMemory,
   type Memory,
   type MemoryInput,
-  type MemoryType,
-  type ReadMemoriesOptions,
-  type SaveMemoryResult,
 } from './memory.js';
 
 export { MAX_TITLE_CHARS, deriveSessionTitle } from './session-title.js';
@@ -165,33 +141,21 @@ export { MAX_TITLE_CHARS, deriveSessionTitle } from './session-title.js';
 export {
   SessionStore,
   toStoredMessage,
-  type AppendOptions,
   type ChatMessageInput,
-  type CreateSessionOptions,
   type ListSessionsOptions,
-  type ReadMessagesOptions,
-  type SessionCursor,
   type SessionRecord,
-  type SessionStoreOptions,
   type SessionSummaryRecord,
   type StoredMessageRecord,
-  type TruncateResult,
   type TurnStatsRecord,
-  type UpdateSessionOptions,
-  type ForkResult,
-  type ForkSessionOptions,
 } from './session-store.js';
 
 export {
   MessageBus,
-  OUTBOUND_KINDS,
   RateLimiter,
   type InboundMessage,
   type InboundMessageInput,
   type MessageBusOptions,
   type OutboundKind,
   type OutboundMessage,
-  type OutboundMessageInput,
   type PublishResult,
-  type RateLimitOptions,
 } from './message-bus.js';

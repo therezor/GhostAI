@@ -72,7 +72,7 @@ export interface ContextSegment {
   readonly cacheable: boolean;
 }
 
-export interface ContextBudget {
+interface ContextBudget {
   readonly segments: readonly ContextSegment[];
   readonly usedTokens: number;
   readonly windowTokens: number;
@@ -90,7 +90,7 @@ export interface ContextBudget {
   readonly uncachedTokens: number;
 }
 
-export interface ContextInput {
+interface ContextInput {
   readonly breakdown: Readonly<Record<string, number>>;
   readonly estimatedTokens: number;
   readonly contextWindowTokens: number;

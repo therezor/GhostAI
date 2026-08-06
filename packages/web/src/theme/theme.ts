@@ -26,7 +26,7 @@ export type ResolvedTheme = 'dark' | 'light';
 export const THEME_STORAGE_KEY = 'ghostai.theme';
 
 /** The media query both implementations ask. */
-export const LIGHT_QUERY = '(prefers-color-scheme: light)';
+const LIGHT_QUERY = '(prefers-color-scheme: light)';
 
 const PREFERENCES: readonly ThemePreference[] = ['dark', 'light', 'system'];
 

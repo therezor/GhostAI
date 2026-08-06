@@ -18,7 +18,6 @@
     "@ghostai/protocol": "workspace:*",
     "@ghostai/providers": "workspace:*",
     "@ghostai/runtime": "workspace:*",
-    "@ghostai/security": "workspace:*",
     "@ghostai/server": "workspace:*",
     "@ghostai/tools": "workspace:*",
     "@ghostai/web": "workspace:*"

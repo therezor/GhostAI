@@ -38,7 +38,7 @@ import { formatBytes } from '@/lib/format.js';
 import { queryKeys } from '@/lib/query.js';
 import { isImage } from '@/files/paths.js';
 
-export interface AttachmentListProps {
+interface AttachmentListProps {
   readonly attachments: readonly Attachment[];
   /** Which workspace the paths are relative to. */
   readonly workspace: string;
