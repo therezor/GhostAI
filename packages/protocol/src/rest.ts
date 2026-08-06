@@ -630,6 +630,31 @@ export const AgentListResponseSchema = z.object({
 export type AgentListResponse = z.infer<typeof AgentListResponseSchema>;
 
 // ---------------------------------------------------------------------------
+// Skills
+// ---------------------------------------------------------------------------
+
+/**
+ * One skill, as the composer's `@skill:` autocomplete needs it.
+ *
+ * **No body.** A sheet runs to 12 KB and this is a list of names — the body's
+ * one destination is the prompt, put there by naming the skill on a message,
+ * and a client that held a copy would be holding it to display nothing. The
+ * description is here because it is what tells a person which name they want.
+ */
+export const SkillSummarySchema = z.object({
+  /** The directory name, and exactly what `@skill:` takes. */
+  name: z.string().min(1),
+  description: z.string(),
+});
+export type SkillSummary = z.infer<typeof SkillSummarySchema>;
+
+export const SkillListResponseSchema = z.object({
+  /** Sorted by name, the order the catalogue reaches the model in. */
+  skills: z.array(SkillSummarySchema),
+});
+export type SkillListResponse = z.infer<typeof SkillListResponseSchema>;
+
+// ---------------------------------------------------------------------------
 // Tools
 // ---------------------------------------------------------------------------
 

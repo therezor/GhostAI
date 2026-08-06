@@ -14,7 +14,7 @@
  *
  * `staticSection` only. Memory is a property of the *workspace*, so it belongs
  * in the provider's cached prefix, read once per turn. There is no
- * `runtimeSection` and no `@memory:` mention: `ParsedMentions` carries `kb`,
+ * `runtimeSection` and no `@memory:` mention: `ParsedMentions` carries
  * `mcp` and `skill`, and nothing about memory is a property of one message.
  *
  * It is placed *after* skills in the contributor list, and that ordering is a

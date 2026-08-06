@@ -84,6 +84,7 @@ interface GlobalOptions {
   readonly home?: string;
   readonly logLevel?: string;
   readonly color: boolean;
+  readonly verbose: boolean;
 }
 
 interface ServeCliOptions {
@@ -189,6 +190,15 @@ export function buildProgram(deps: CliDeps = {}): Command {
       '--log-level <level>',
       t('program.options.logLevel', { levels: LOG_LEVELS.join(', ') }),
     )
+    // Global, beside `--log-level` rather than on `chat`, because that is where
+    // someone looks for it: `chat` is the default command, so `ghost --help` is
+    // the help for what plain `ghost` does, and a flag that governs plain
+    // `ghost` and is absent from that page may as well not exist.
+    //
+    // No `-v`: the program already spends it on `--version`, and a short flag
+    // meaning one thing before the subcommand and another after it is worse
+    // than no short flag.
+    .option('--verbose', t('program.options.verbose'), false)
     .option('--no-color', t('program.options.noColor'))
     // Commander builds its own five section headings into `formatHelp`, so
     // `styleTitle` — its hook for colouring them — is the only seam that reaches
@@ -230,6 +240,7 @@ export function buildProgram(deps: CliDeps = {}): Command {
       async (words: string[], options: ChatCliOptions, command: Command) => {
         const globals = command.parent?.opts<GlobalOptions>() ?? {
           color: true,
+          verbose: false,
         };
         const level = resolveLogLevel(globals.logLevel, t);
         const message = words.join(' ').trim();
@@ -258,7 +269,15 @@ export function buildProgram(deps: CliDeps = {}): Command {
           colors: options.json ? false : globals.color,
           out,
           errOut,
-          ...(level === undefined ? {} : { logLevel: level }),
+          // An explicit `--log-level` wins over `--verbose`, because it is the
+          // more specific request: someone who named `debug` has asked for
+          // something `--verbose` cannot spell. Neither leaves `chatCommand` to
+          // apply its own `error`.
+          ...(level === undefined
+            ? globals.verbose
+              ? { logLevel: 'info' as const }
+              : {}
+            : { logLevel: level }),
         });
         command.setOptionValue('exitCode', code);
       },
@@ -268,7 +287,10 @@ export function buildProgram(deps: CliDeps = {}): Command {
     .command('init')
     .description(t('init.description'))
     .action(async (options: unknown, command: Command) => {
-      const globals = command.parent?.opts<GlobalOptions>() ?? { color: true };
+      const globals = command.parent?.opts<GlobalOptions>() ?? {
+        color: true,
+        verbose: false,
+      };
       const code = await runInit({
         ...(globals.home === undefined ? {} : { home: globals.home }),
         colors: globals.color,
@@ -288,6 +310,7 @@ export function buildProgram(deps: CliDeps = {}): Command {
     (id: string | undefined, options: unknown, command: Command) => {
       const globals = command.parent?.parent?.opts<GlobalOptions>() ?? {
         color: true,
+        verbose: false,
       };
       const code = runToolbox({
         action,
@@ -332,7 +355,10 @@ export function buildProgram(deps: CliDeps = {}): Command {
     .option('--username <username>', t('serve.options.username'))
     .option('--ui <dir>', t('serve.options.ui'))
     .action(async (options: ServeCliOptions, command: Command) => {
-      const globals = command.parent?.opts<GlobalOptions>() ?? { color: true };
+      const globals = command.parent?.opts<GlobalOptions>() ?? {
+        color: true,
+        verbose: false,
+      };
       const level = resolveLogLevel(globals.logLevel, t);
       // The environment is read here rather than in `serveCommand`, which then
       // stays testable without anyone mutating `process.env`.
@@ -352,8 +378,9 @@ export function buildProgram(deps: CliDeps = {}): Command {
         ...(options.ui === undefined ? {} : { ui: options.ui }),
         ...(globals.home === undefined ? {} : { home: globals.home }),
         // A server is a long-running process, and `warn` on one is a process
-        // that says nothing about the requests it is serving.
-        logLevel: level ?? 'info',
+        // that says nothing about the requests it is serving. `--verbose` is
+        // one notch below that, the same relative move it makes on `chat`.
+        logLevel: level ?? (globals.verbose ? 'debug' : 'info'),
         colors: globals.color,
         out,
         errOut,

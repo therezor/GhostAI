@@ -65,6 +65,8 @@ export {
   type TelegramChannel,
   type TelegramChannelOptions,
   type MemoryState,
+  type SkillSummary,
+  type SkillsState,
   type TelegramConsole,
   type TelegramSettings,
 } from './telegram/index.js';

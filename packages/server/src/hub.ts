@@ -723,7 +723,7 @@ export class SessionHub {
     this.enqueue(connection, state, {
       content: toContent(message.content, message.attachments),
       // Here, and only here. Parsing mentions in the WebSocket handler would
-      // make `@kb:` a browser feature: a channel bridging through this hub
+      // make `@skill:` a browser feature: a channel bridging through this hub
       // sends the same frame and would get none of it. The text is never
       // modified — the model sees exactly what the user typed.
       mentions: parseMentions(message.content),

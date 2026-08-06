@@ -105,13 +105,13 @@ Everything under `~/.ghostai`, or `$GHOSTAI_HOME`:
 
 **A web UI** — chat with streaming answers, a collapsible reasoning block, a card per tool call with live progress, approval prompts showing the arguments before the call runs, and subagent runs nested inside the card that started them. Plus a file browser and editor, multiple workspaces, an agent editor, provider setup with live connection testing, and a context inspector that shows exactly what would be sent to the model and where the window went. Dark, light and system themes, all held to WCAG AA by a test that parses the real stylesheet. See [Web UI](docs/web-ui.md).
 
-**A CLI** — `ghost chat` as a one-shot, a pipe target or a REPL with slash commands for sessions, branching, editing, regeneration, workspaces, memory and context. `ghost serve`, `ghost init`, `ghost toolbox`.
+**A CLI** — `ghost chat` as a one-shot, a pipe target or a REPL with slash commands for sessions, branching, editing, regeneration, workspaces, memory, skills and context. Tab completes a slash command or a `@skill:` name and nothing else. `ghost serve`, `ghost init`, `ghost toolbox`.
 
 **An API** — REST and WebSocket on the same port, with an OpenAPI 3.1 document generated from the same Zod schemas the server validates against, served at `/api/openapi.json`. See [API](docs/api.md).
 
 **A Telegram bot** — the same conversations, from a phone. The terminal's whole command set as bot commands, inline menus for sessions, agents, models and workspaces, and tool approvals answerable with a button. It is not a second code path: a Telegram turn goes through the same hub, the same queue and the same approval gate a browser turn does, and the session it writes is the one the sidebar lists. Long polling, so there is no public URL to expose — but the bot answers **only** the Telegram ids you list, and refuses to start without one. Set it up in Settings → Channels: the token goes to the encrypted vault, and saving reconnects the bot without touching the terminal. See [Configuration](docs/configuration.md#channelstelegram) and [Security](docs/security.md#channels).
 
-**Skills** — drop a folder into `<workspace>/skills/` and the agent knows it is there. One directory per skill, holding a `SKILL.md` and whatever else it needs; its description is indexed into the prompt for about twenty tokens and the agent opens the sheet itself when the description says it applies. Name one in `pinnedSkills` and the body is in the prompt from the start instead. No settings to fill in — a skill is a file you commit beside the project it describes — and whether an agent may reach them at all is the `skill` tool's permission. See [Skills](docs/skills.md).
+**Skills** — drop a folder into `<workspace>/skills/` and the agent knows it is there. One directory per skill, holding a `SKILL.md` and whatever else it needs; its description is indexed into the prompt for about twenty tokens and the agent opens the sheet itself when the description says it applies. Name one on a message — `@skill:code-review` — and its whole body goes with that message instead. Works the same from the browser, the terminal and Telegram, because the parse happens where every channel meets. No settings to fill in — a skill is a file you commit beside the project it describes — and whether an agent may reach them at all is the `skill` tool's permission. See [Skills](docs/skills.md).
 
 **Memory** — the agent keeps what it learns in `<workspace>/memory/`, one plain markdown file per fact with frontmatter saying what it is about. Only the generated index reaches the prompt; the agent opens a memory with `read_file` when its line looks relevant, and corrects one by writing the same name again. You edit them with an editor and commit them beside the project. The wording of the section is a prompt template you own, and whether an agent remembers at all is the `memory` tool's permission — so there is one switch and not two. See [Memory](docs/memory.md).
 
@@ -219,7 +219,7 @@ Two smaller ones, so nothing here reads as more finished than it is: only the `o
 | [Prompts](docs/prompts.md)             | The three templates, placeholders, and the caching split |
 | [Providers](docs/providers.md)         | The registry, instances, resolution, resilience          |
 | [Tools & permissions](docs/tools.md)   | The built-ins, and who is allowed to call them           |
-| [Skills](docs/skills.md)               | Instruction sheets in the workspace, indexed or pinned   |
+| [Skills](docs/skills.md)               | Instruction sheets in the workspace, indexed or named    |
 | [Memory](docs/memory.md)               | What an agent remembers between sessions, and how        |
 | [Toolboxes](docs/toolboxes.md)         | Container sandboxes, manifests and approval              |
 | [Security](docs/security.md)           | Each guard, the attack it closes, and its limits         |

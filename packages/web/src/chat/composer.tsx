@@ -25,6 +25,7 @@
  */
 
 import { ArrowUp, Paperclip, Square, X } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import {
@@ -42,6 +43,7 @@ import { newUuid, type Attachment } from '@ghostai/protocol';
 
 import { cn } from '@/lib/cn.js';
 import { api } from '@/lib/api.js';
+import { queryKeys } from '@/lib/query.js';
 import { useWorkspace } from '@/workspaces/workspace-context.js';
 import { formatBytes } from '@/lib/format.js';
 import { Button } from '@/components/ui/button.js';
@@ -117,13 +119,39 @@ export function Composer({
   const [files, setFiles] = useState<readonly StagedFile[]>([]);
   const [highlight, setHighlight] = useState(0);
   const [dismissed, setDismissed] = useState(false);
+  /**
+   * The caret, as state rather than as a read of `textareaRef` during render.
+   *
+   * A ref is not reactive, and that is the whole of the bug this replaced.
+   * Accepting `@skill:` sets the text and then moves the caret in an animation
+   * frame — so the render that follows the accept saw the *old* DOM position,
+   * decided the caret was no longer inside a mention, and closed the popover.
+   * Moving a caret does not re-render, so nothing ever reopened it: picking
+   * `skill` from the menu dismissed the menu instead of narrowing it.
+   */
+  const [caret, setCaret] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listboxId = 'composer-mentions';
 
-  const caret = textareaRef.current?.selectionStart ?? text.length;
   const query = dismissed ? undefined : mentionAtCaret(text, caret);
-  const suggestions = query === undefined ? [] : mentionSuggestions(query);
+
+  // Fetched as soon as *any* mention is being typed, not only once the kind is
+  // `skill`. Waiting for the kind means the list is still in flight at the
+  // moment it is wanted — accepting `@skill:` would close the popover and
+  // reopen it when the response landed, which reads as a flicker rather than as
+  // a menu. Still lazy: nothing is requested until an `@` is on the line, and
+  // react-query serves the second mention in a session from cache.
+  const skills = useQuery({
+    queryKey: queryKeys.skills(workspaceId),
+    queryFn: ({ signal }) => api.skills(workspaceId, signal),
+    enabled: query !== undefined,
+  });
+
+  const suggestions =
+    query === undefined
+      ? []
+      : mentionSuggestions(query, skills.data?.skills ?? []);
   const open = suggestions.length > 0;
 
   const ready = files.every(
@@ -139,6 +167,7 @@ export function Composer({
     if (!canSend) return;
     onSend(text.trim(), attachments);
     setText('');
+    setCaret(0);
     setFiles([]);
     setDismissed(false);
   }, [attachments, canSend, onSend, text]);
@@ -149,8 +178,14 @@ export function Composer({
       const next = applyMention(text, query, suggestion);
       setText(next.text);
       setHighlight(0);
-      // The caret has to be restored after React writes the value, or it lands
-      // at the end of the text rather than after the namespace just inserted.
+      // Both halves, and both are needed. This one is what the *next render*
+      // reads, so the popover recomputes against the caret as it will be —
+      // which is what turns accepting `@skill:` into the skill list rather than
+      // into a closed menu.
+      setCaret(next.caret);
+      // And this one moves the real caret, after React has written the value.
+      // Without it the cursor lands at the end of the text rather than after
+      // the namespace just inserted.
       requestAnimationFrame(() => {
         textareaRef.current?.setSelectionRange(next.caret, next.caret);
       });
@@ -361,8 +396,16 @@ export function Composer({
               rows={1}
               onChange={(event) => {
                 setText(event.target.value);
+                setCaret(event.target.selectionStart);
                 setDismissed(false);
                 setHighlight(0);
+              }}
+              // Every other way a caret moves: a click, an arrow key, a drag,
+              // ⌘←. `onSelect` is the one event that covers all of them, and
+              // without it the popover would answer for wherever the caret was
+              // when the text last changed.
+              onSelect={(event) => {
+                setCaret(event.currentTarget.selectionStart);
               }}
               onKeyDown={onKeyDown}
               onPaste={onPaste}

@@ -120,11 +120,21 @@ describe('the Extensions panel', () => {
   });
 
   it('still lists what has not been built, under what has', async () => {
-    // Four fifths of what this screen will hold has not landed, and dropping
-    // them the moment one sibling shipped would make it read as finished.
+    // Most of what this screen will hold has not landed, and dropping them the
+    // moment one sibling shipped would make it read as finished.
     mount();
-    expect(await screen.findByText('Skills')).toBeInTheDocument();
+    expect(await screen.findByText('OAuth connections')).toBeInTheDocument();
     expect(screen.getByText('Plugins')).toBeInTheDocument();
+  });
+
+  it('does not promise a screen for skills', async () => {
+    // Skills left this list without being built, which is the one way out of it
+    // the others do not have. A skill is named on a message with `@skill:`, so
+    // the panel it was waiting for is not coming — and a "planned" row would go
+    // on promising a settings screen instead of teaching the mention.
+    mount();
+    await screen.findByText('OAuth connections');
+    expect(screen.queryByText('Skills')).not.toBeInTheDocument();
   });
 
   it('joins the configured servers to their live state', async () => {

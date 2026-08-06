@@ -9,21 +9,22 @@
  * the kinds come from `MENTION_KINDS`, and `mentionsIn` is a straight
  * re-export, so a fourth namespace added there appears here without an edit.
  *
- * What it deliberately does *not* do is offer values. `@kb:`, `@mcp:` and
- * `@skill:` scope to a knowledge base, an MCP server and a skill. MCP servers
- * exist now, but **nothing reads the mention yet** — honouring it means
- * narrowing a turn's tool scope, which is `AgentLoop`'s business rather than
- * this file's, and offering a value the turn will then ignore is worse than
- * offering none. The other two have no catalogue to read at all. A completion
- * list that either says "no results" or completes to something inert reads as
- * broken rather than as absent, so the autocomplete completes the namespace and
- * gets out of the way.
+ * **It offers values for `@skill:` and for nothing else**, and the asymmetry is
+ * the honest state of the two namespaces rather than an oversight. Naming a
+ * skill inlines its sheet into that message, so the completion leads somewhere
+ * the turn will actually go. `@mcp:` does not: honouring it means narrowing a
+ * turn's tool scope, which is `AgentLoop`'s business rather than this file's.
+ * Offering a value the turn will then ignore is worse than offering none — a
+ * list that completes to something inert reads as broken, where a namespace
+ * that completes and stops reads as absent. So `@mcp:` completes the namespace
+ * and gets out of the way.
  */
 
 import {
   MENTION_KINDS,
   parseMentions,
   type MentionKind,
+  type SkillSummary,
 } from '@ghostai/protocol';
 
 export { parseMentions as mentionsIn };
@@ -78,7 +79,7 @@ export function mentionAtCaret(
 
   if (start === -1) return undefined;
 
-  // `a@kb:x` is an address fragment, not a mention. The protocol's own pattern
+  // `a@skill:x` is an address fragment, not a mention. The protocol's pattern
   // does not anchor, but every real mention in practice starts a word.
   const preceding = start === 0 ? undefined : text[start - 1];
   if (preceding !== undefined && !/[\s([]/.test(preceding)) return undefined;
@@ -99,12 +100,30 @@ export function mentionAtCaret(
 /**
  * What could complete this query.
  *
- * Empty once a namespace has been chosen — see the file docblock. An empty list
- * is what the caller renders as "no popover", not as "nothing found".
+ * An empty list is what the caller renders as "no popover", not as "nothing
+ * found" — which is why `@mcp:` returns one: see the file docblock.
+ *
+ * `skills` is the workspace's catalogue, and an empty array is the honest answer
+ * while it is still being fetched. The popover simply does not open until it
+ * arrives, rather than flashing "no results" at a workspace that has plenty.
  */
 export function mentionSuggestions(
   query: MentionQuery,
+  skills: readonly SkillSummary[] = [],
 ): readonly MentionSuggestion[] {
+  if (query.kind === 'skill') {
+    const typed = query.query.toLowerCase();
+    return skills
+      .filter((skill) => skill.name.toLowerCase().startsWith(typed))
+      .map((skill) => ({
+        // The trailing space closes the mention, so the next word is prose
+        // rather than more of the name.
+        insert: `@skill:${skill.name} `,
+        label: `@skill:${skill.name}`,
+        hint: skill.description,
+      }));
+  }
+
   if (query.kind !== undefined) return [];
 
   return MENTION_KINDS.filter((kind) => kind.startsWith(query.query)).map(
@@ -117,9 +136,8 @@ export function mentionSuggestions(
 }
 
 const HINTS: Record<MentionKind, string> = {
-  kb: 'Scope retrieval to a knowledge base',
   mcp: 'Restrict tools to one MCP server',
-  skill: 'Pin a skill into this turn',
+  skill: 'Send a skill’s whole sheet with this message',
 };
 
 /** The text and caret after accepting a suggestion. */

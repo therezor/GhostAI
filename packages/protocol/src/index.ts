@@ -7,7 +7,7 @@
  * document is generated from these same objects — never hand-maintained.
  *
  * No logic and no I/O beyond four pure functions that must behave identically
- * everywhere they run: `parseMentions` (every channel must resolve `@kb:` the
+ * everywhere they run: `parseMentions` (every channel must resolve `@skill:` the
  * same way), `isLoopbackHost` (the server and the CLI must agree on what
  * counts as a remote bind before refusing to start without auth),
  * `tokensPerSecond` (the terminal and the browser must report the same rate for

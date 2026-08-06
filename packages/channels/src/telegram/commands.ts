@@ -175,6 +175,18 @@ const COMMANDS: readonly TelegramCommand[] = [
     run: (input) => ({ text: helpText(input.isAdmin) }),
   },
 
+  // Telegram opens every first conversation with this, and until now it was the
+  // one command the bot did not have — so the first thing a new chat ever saw
+  // was "No command `/start`". It is `/help` with a sentence in front rather
+  // than a second listing, because two lists disagree eventually.
+  {
+    name: 'start',
+    description: 'What this bot is, and what it understands',
+    run: (input) => ({
+      text: `This chat is a GhostAI session. Send a message and the agent answers; the conversation is kept, so you can pick it up later.\n\n${helpText(input.isAdmin)}`,
+    }),
+  },
+
   {
     name: 'messages',
     usage: '[n]',
@@ -468,6 +480,43 @@ const COMMANDS: readonly TelegramCommand[] = [
           state.count === 0
             ? 'Nothing remembered yet — the first one is written when the agent uses its `memory` tool.'
             : `${String(state.count)} memories in \`memory/\`, indexed in every prompt for about ${String(state.tokens)} tokens.`,
+      };
+    },
+  },
+
+  // Discovery, not capability. The catalogue is already in the agent's prompt;
+  // what a person cannot see from a phone is the *name*, and `@skill:` needs it
+  // exact.
+  {
+    name: 'skills',
+    usage: '',
+    description: 'The sheets this workspace holds, and the names @skill: takes',
+    run: async (input) => {
+      const state = await input.console.skills(input.chat.sessionKey);
+
+      if (!state.granted) {
+        return {
+          text:
+            'This agent does not have the `skill` tool, so no catalogue ' +
+            'reaches its prompt and `@skill:` has nothing to inline. Grant it ' +
+            'in Settings → Agents.',
+        };
+      }
+
+      if (state.skills.length === 0) {
+        return {
+          text: 'No skills here yet — a folder with a `SKILL.md` in `skills/` becomes one.',
+        };
+      }
+
+      return {
+        text: [
+          'Name one on a message and its whole sheet goes to the agent for that message:',
+          '',
+          ...state.skills.map(
+            (skill) => `\`@skill:${skill.name}\` — ${skill.description}`,
+          ),
+        ].join('\n'),
       };
     },
   },

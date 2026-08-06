@@ -64,6 +64,7 @@
   "menu": {
     "current": "current",
     "empty": "nothing matches",
+    "emptySkills": "no skills in this workspace",
     "footer": "↑↓ move · type to filter · enter choose · esc cancel",
     "messages_one": "{{count}} message",
     "messages_other": "{{count}} messages",
@@ -73,6 +74,7 @@
       "command": "Which command?",
       "model": "Which model?",
       "session": "Which session?",
+      "skill": "Which skill?",
       "workspace": "Which workspace?"
     }
   },
@@ -81,8 +83,9 @@
     "notAPort": "\"{{value}}\" is not a port number",
     "options": {
       "home": "GhostAI home directory (default: $GHOSTAI_HOME or ~/.ghostai)",
-      "logLevel": "one of {{levels}} (default: warn)",
-      "noColor": "disable colour output"
+      "logLevel": "one of {{levels}}; overrides --verbose (default: error, or info while serving)",
+      "noColor": "disable colour output",
+      "verbose": "report more of what the install is doing, not only the answer"
     },
     "unknownLogLevel": "Unknown log level \"{{value}}\""
   },
@@ -174,6 +177,7 @@
       "rename": "rename this session",
       "session": "show this session, or attach to another",
       "sessions": "pick a session to continue, or list them",
+      "skills": "the sheets this workspace holds, and the names @skill: takes",
       "stats": "the last n turns: model, tokens, tokens/s, time",
       "workspace": "show or switch where new sessions land",
       "workspaceMove": "move sessions between workspaces",
@@ -209,6 +213,8 @@
       "renamedTo": "renamed to {{title}}",
       "renamedWorkspace": "renamed {{id}} to {{name}}",
       "shown": "shown",
+      "skillsEmpty": "no skills yet — a folder with a SKILL.md in {{path}}/ becomes one",
+      "skillsOff": "{{agent}} does not have the skill tool, so no catalogue reaches the prompt and @skill: has nothing to inline",
       "unknownCommand": "unknown command: /{{name}}",
       "willLandIn": "new sessions will land in {{workspace}}",
       "willRunOn": "the next session runs on {{agent}}"

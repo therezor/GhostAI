@@ -139,21 +139,23 @@ describe('DEFAULT_SKILLS_TEMPLATE', () => {
     ).toEqual([]);
   });
 
-  it('places both generated halves, since either can be the empty one', () => {
+  it('places the catalogue, and nothing a message decides', () => {
+    // One generated block, not two. A body reaches the model only when a message
+    // names it with `@skill:`, and that goes in the runtime half — which no
+    // template owns, because it is rebuilt per iteration and never cached.
     expect(DEFAULT_SKILLS_TEMPLATE).toContain('{{index}}');
-    expect(DEFAULT_SKILLS_TEMPLATE).toContain('{{pinned}}');
+    expect(DEFAULT_SKILLS_TEMPLATE).not.toContain('{{pinned}}');
   });
 
-  it('leaves no gap when a half renders to nothing', () => {
-    // Both carry their own leading blank line, so the template must not write
-    // one for them — that is what would leave the gap.
-    expect(DEFAULT_SKILLS_TEMPLATE).toContain('names.{{index}}{{pinned}}');
+  it('leaves no gap when the index renders to nothing', () => {
+    // `{{index}}` carries its own leading blank line, so the template must not
+    // write one for it — that is what would leave the gap.
+    expect(DEFAULT_SKILLS_TEMPLATE).toContain('names.{{index}}');
   });
 
   it('does not claim every line is an index line', () => {
-    // An agent whose skills are all pinned has no index, and the sentence still
-    // has to be true. The wording this replaced dodged it with a conditional a
-    // template cannot express.
+    // The wording has to stay true of a catalogue of one. What it replaced
+    // dodged the question with a conditional a template cannot express.
     expect(DEFAULT_SKILLS_TEMPLATE).not.toContain('Each line below');
   });
 });

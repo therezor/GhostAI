@@ -52,12 +52,14 @@ describe('ConfigSchema', () => {
     ]);
   });
 
+  // Any array default would do; `corsOrigins` is simply the one nearest the top
+  // of the tree. The defect this guards against is zod handing every parse the
+  // same array instance, so a caller that pushes to one config's list silently
+  // edits every other config in the process.
   it('does not share mutable defaults between parses', () => {
     const a = ConfigSchema.parse({});
     const b = ConfigSchema.parse({});
-    expect(a.agents.defaults.pinnedSkills).not.toBe(
-      b.agents.defaults.pinnedSkills,
-    );
+    expect(a.server.corsOrigins).not.toBe(b.server.corsOrigins);
   });
 
   it('preserves a partial override without dropping siblings', () => {

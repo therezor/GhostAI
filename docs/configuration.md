@@ -41,8 +41,12 @@ What every agent inherits, and what an install with no named agents runs as.
 | `loopWallTimeoutMs`   | int ≥ 0                      | `0`      | Wall-clock cap on a turn, checked at the top of each iteration.                                                                                |
 | `subagentTimeoutMs`   | int ≥ 0                      | `0`      | Applies to delegations _this_ agent makes.                                                                                                     |
 | `reasoningEffort`     | `minimal\|low\|medium\|high` | _unset_  | Unset sends nothing.                                                                                                                           |
-| `pinnedSkills`        | string[]                     | `[]`     | Skills whose body is inlined into the prompt, in this order. Everything else in `skills/` is indexed. See [Skills](skills.md).                 |
-| `maxPinnedSkills`     | int ≥ 0                      | `5`      | How many of the above are inlined. Names past it fall back to an index line.                                                                   |
+
+There is no key here for skills. Which sheets an agent gets is decided per message with
+`@skill:` rather than per install; see [Skills](skills.md). `pinnedSkills` and
+`maxPinnedSkills` used to live in this table and are the worked example of the paragraph
+below — a `config.json` still carrying them parses, and loses them the next time it is
+written.
 
 `AgentDefaultsSchema` and `AgentEntrySchema` are plain zod objects, so they strip what they
 do not know: a `config.json` carrying a key this table does not list parses without error

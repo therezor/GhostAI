@@ -28,7 +28,11 @@ import type {
   ModelsResponse,
 } from '@ghostai/protocol';
 
-import type { MemoryState, TelegramConsole } from '#src/telegram/console.js';
+import type {
+  MemoryState,
+  SkillsState,
+  TelegramConsole,
+} from '#src/telegram/console.js';
 
 const NOW = 1_700_000_000_000;
 
@@ -51,6 +55,8 @@ export interface FakeConsole extends TelegramConsole {
   setContext(report: ContextResponse | undefined): void;
   /** Replaces what `memory()` answers. */
   setMemory(state: MemoryState): void;
+  /** Replaces what `skills()` answers. */
+  setSkills(state: SkillsState): void;
   /** Sessions `compressMemory` was called for, in order. */
   close(): void;
 }
@@ -59,6 +65,11 @@ const DEFAULT_MEMORY: MemoryState = {
   granted: true,
   count: 0,
   tokens: 0,
+};
+
+const DEFAULT_SKILLS: SkillsState = {
+  granted: true,
+  skills: [],
 };
 
 const DEFAULT_AGENTS: readonly AgentSummary[] = [
@@ -90,6 +101,7 @@ export function fakeConsole(): FakeConsole {
   let agents = DEFAULT_AGENTS;
   let report: ContextResponse | undefined;
   let memory: MemoryState = DEFAULT_MEMORY;
+  let skills: SkillsState = DEFAULT_SKILLS;
   const modelsSet: string[] = [];
 
   return {
@@ -102,6 +114,7 @@ export function fakeConsole(): FakeConsole {
     },
     context: () => Promise.resolve(report),
     memory: () => Promise.resolve(memory),
+    skills: () => Promise.resolve(skills),
     modelsSet,
     setAgents: (next) => {
       agents = next;
@@ -111,6 +124,9 @@ export function fakeConsole(): FakeConsole {
     },
     setMemory: (next) => {
       memory = next;
+    },
+    setSkills: (next) => {
+      skills = next;
     },
     close: () => {
       database.close();

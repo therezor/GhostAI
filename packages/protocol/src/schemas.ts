@@ -180,6 +180,8 @@ export const PROTOCOL_SCHEMAS = {
   BranchSessionRequest: rest.BranchSessionRequestSchema,
   AgentSummary: rest.AgentSummarySchema,
   AgentListResponse: rest.AgentListResponseSchema,
+  SkillSummary: rest.SkillSummarySchema,
+  SkillListResponse: rest.SkillListResponseSchema,
   ToolListResponse: rest.ToolListResponseSchema,
   ToolboxToolSummary: rest.ToolboxToolSummarySchema,
   ToolboxSummary: rest.ToolboxSummarySchema,

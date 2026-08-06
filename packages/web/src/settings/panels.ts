@@ -101,21 +101,18 @@ export interface PlannedSystem {
  * still has systems to come.
  *
  * The entries are more specific than the panel itself because the phases differ
- * within one screen: skills arrive in Phase 3 and the plugin host in Phase 4,
+ * within one screen: OAuth arrives in Phase 3 and the plugin host in Phase 4,
  * and a single "coming in Phase 3" over both would be wrong about one of them.
  * That is also why MCP servers left this list rather than the panel doing so —
  * the panel is built and the systems still under it are not. Channels left the
- * same way, and by a different door: it grew a panel of its own.
+ * same way, and by a different door: it grew a panel of its own. Skills left by
+ * a third: the screen they were waiting for is not being built, because a skill
+ * is named on a message with `@skill:` rather than configured.
  */
 export const PLANNED_SYSTEMS: Readonly<
   Record<string, readonly PlannedSystem[]>
 > = {
   extensions: [
-    {
-      name: 'settings.planned.skills.name',
-      detail: 'settings.planned.skills.detail',
-      phase: 3,
-    },
     {
       name: 'settings.planned.oauth.name',
       detail: 'settings.planned.oauth.detail',

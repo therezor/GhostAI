@@ -4,29 +4,28 @@
  * This lives in the protocol package, not in the WebSocket handler, so every
  * channel — web, Telegram, plugin channels, the scheduler's synthetic turns —
  * gets byte-identical behaviour from one tested implementation. Parsing
- * mentions at the transport layer instead is how `@kb:` scoping ends up working
- * in the browser and silently doing nothing everywhere else.
+ * mentions at the transport layer instead is how `@skill:` ends up working in
+ * the browser and silently doing nothing everywhere else.
  *
  * Grammar:
  *
  * ```
  *   mention  := "@" kind ":" value
- *   kind     := "kb" | "mcp" | "skill"
+ *   kind     := "mcp" | "skill"
  *   value    := '"' [^"]+ '"'          // quoted: may contain spaces
  *             | [^\s"@]+               // bare: trailing punctuation trimmed
  * ```
  *
  * Two rules worth stating because the naive alternation gets them wrong:
  *
- *  1. `@kb:""` yields no mention. An alternation that tries quoted-then-bare
- *     falls through to the bare branch and captures the literal `""` as a
- *     knowledge-base name.
- *  2. Bare values shed trailing punctuation, so `see @kb:docs.` scopes to
- *     `docs` rather than `docs.`. Quote the value to keep punctuation.
+ *  1. `@skill:""` yields no mention. An alternation that tries quoted-then-bare
+ *     falls through to the bare branch and captures the literal `""` as a name.
+ *  2. Bare values shed trailing punctuation, so `see @skill:deploy.` names
+ *     `deploy` rather than `deploy.`. Quote the value to keep punctuation.
  */
 
 /** The mention namespaces GhostAI understands. */
-export const MENTION_KINDS = ['kb', 'mcp', 'skill'] as const;
+export const MENTION_KINDS = ['mcp', 'skill'] as const;
 
 export type MentionKind = (typeof MENTION_KINDS)[number];
 
@@ -41,11 +40,9 @@ export interface Mention {
 }
 
 export interface ParsedMentions {
-  /** Knowledge bases to scope retrieval to, de-duplicated, first-seen order. */
-  readonly kb: readonly string[];
-  /** MCP servers to restrict tool exposure to. */
+  /** MCP servers to restrict tool exposure to. De-duplicated, first-seen order. */
   readonly mcp: readonly string[];
-  /** Skills to pin into the system prompt for this turn. */
+  /** Skills whose whole sheet is inlined for this turn. */
   readonly skill: readonly string[];
   /** Every occurrence in source order, including repeats. */
   readonly all: readonly Mention[];
@@ -53,10 +50,10 @@ export interface ParsedMentions {
 
 /**
  * Bare values stop at whitespace, a quote, or a second `@`. Excluding `@` is
- * what makes adjacent mentions (`@kb:a@skill:b`) parse as two rather than one
+ * what makes adjacent mentions (`@mcp:a@skill:b`) parse as two rather than one
  * mention whose value swallowed the next.
  */
-const MENTION_PATTERN = /@(kb|mcp|skill):(?:"([^"]+)"|([^\s"@]+))/g;
+const MENTION_PATTERN = /@(mcp|skill):(?:"([^"]+)"|([^\s"@]+))/g;
 
 /** Sentence punctuation that is far more likely to be prose than part of a name. */
 const TRAILING_PUNCTUATION = /[.,;:!?)\]}>]+$/;
@@ -66,16 +63,15 @@ export function isMentionKind(value: string): value is MentionKind {
 }
 
 /**
- * Extract `@kb:`, `@mcp:` and `@skill:` mentions from message text.
+ * Extract `@mcp:` and `@skill:` mentions from message text.
  *
  * The text is never modified — the model sees what the user typed. Callers use
  * the returned spans if they want to render or strip the mentions.
  */
 export function parseMentions(text: string): ParsedMentions {
   const all: Mention[] = [];
-  const buckets: Record<MentionKind, string[]> = { kb: [], mcp: [], skill: [] };
+  const buckets: Record<MentionKind, string[]> = { mcp: [], skill: [] };
   const seen: Record<MentionKind, Set<string>> = {
-    kb: new Set(),
     mcp: new Set(),
     skill: new Set(),
   };
@@ -103,7 +99,7 @@ export function parseMentions(text: string): ParsedMentions {
       continue;
     }
 
-    // `@kb:...` trims to nothing — punctuation, not a name.
+    // `@skill:...` trims to nothing — punctuation, not a name.
     if (value === '') continue;
 
     all.push({ kind, value, start: match.index, end });
@@ -113,5 +109,5 @@ export function parseMentions(text: string): ParsedMentions {
     }
   }
 
-  return { kb: buckets.kb, mcp: buckets.mcp, skill: buckets.skill, all };
+  return { mcp: buckets.mcp, skill: buckets.skill, all };
 }

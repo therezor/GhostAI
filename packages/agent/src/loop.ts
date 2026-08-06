@@ -390,7 +390,7 @@ export interface TurnInput {
   /** Supplied by the caller when it has already told a client the id. */
   readonly turnId?: string;
   /**
-   * `@kb:`, `@mcp:` and `@skill:` mentions found in the message.
+   * `@mcp:` and `@skill:` mentions found in the message.
    *
    * Parsed by the transport rather than here, and by exactly one transport: the
    * hub does it for every channel, so a mention means the same thing typed into
@@ -425,6 +425,14 @@ export interface PromptPreviewInput {
   /** Defaults to `web`. The CLI's `/context` passes `cli`. */
   readonly channel?: string;
   readonly agentId?: string;
+  /**
+   * The mentions on the message being previewed, if there is one.
+   *
+   * Optional because the inspector is usually asked about a session rather than
+   * a draft. When it is asked about a draft, omitting these would show a prompt
+   * a turn on that text will not send — `@skill:` inlines a whole sheet.
+   */
+  readonly mentions?: ParsedMentions;
 }
 
 /**
@@ -701,6 +709,7 @@ export class AgentLoop {
       sessionKey: input.sessionKey,
       agentId: input.agentId,
       channel: input.channel ?? 'web',
+      carry: new Map(),
     };
 
     return this.composePrompt(
@@ -710,6 +719,10 @@ export class AgentLoop {
         iteration: 1,
         maxIterations: this.config.maxToolIterations,
         nowMs: this.clock.now(),
+        // A preview that dropped the mentions would show a prompt the turn will
+        // not send: `@skill:` inlines a body, and the inspector exists to show
+        // what actually goes.
+        ...(input.mentions === undefined ? {} : { mentions: input.mentions }),
       },
       createToolOutputNonce(this.random),
     );
@@ -883,6 +896,9 @@ export class AgentLoop {
       sessionKey,
       agentId: session.agentId,
       channel,
+      // One map per turn, so what a contributor's static half leaves for its
+      // runtime half cannot outlive the turn or reach another workspace's.
+      carry: new Map(),
     };
 
     const opening = this.store.append(sessionKey, userMessage(input.content), {

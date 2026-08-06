@@ -85,8 +85,8 @@ export {
 
 export {
   SkillsContributor,
+  renderMentionedSkills,
   renderSkills,
-  type SkillBudget,
   type SkillsContributorOptions,
 } from './skills-contributor.js';
 

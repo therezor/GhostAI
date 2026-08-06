@@ -76,8 +76,11 @@ test.describe('MCP servers', () => {
     await expect(
       app.getByRole('link', { name: 'New MCP server' }),
     ).toBeVisible();
-    // And still says what has not been built, which is four fifths of it.
-    await expect(app.getByText('Skills')).toBeVisible();
+    // And still says what has not been built, which is most of it. Skills are
+    // deliberately absent: a skill is named on a message with `@skill:` rather
+    // than configured, so the screen it was waiting for is not coming.
+    await expect(app.getByText('OAuth connections')).toBeVisible();
+    await expect(app.getByText('Skills')).toHaveCount(0);
   });
 
   test('creating one writes nothing until Save', async ({ app, harness }) => {

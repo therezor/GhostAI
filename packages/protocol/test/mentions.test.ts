@@ -5,7 +5,7 @@ import { MENTION_KINDS, isMentionKind, parseMentions } from '#src/mentions.js';
 describe('parseMentions', () => {
   it('returns empty buckets for text with no mentions', () => {
     const result = parseMentions('just a normal message');
-    expect(result).toEqual({ kb: [], mcp: [], skill: [], all: [] });
+    expect(result).toEqual({ mcp: [], skill: [], all: [] });
   });
 
   it('handles an empty string', () => {
@@ -14,118 +14,124 @@ describe('parseMentions', () => {
 
   describe('unquoted form', () => {
     it('extracts each kind', () => {
-      const result = parseMentions('@kb:docs @mcp:notion @skill:git');
-      expect(result.kb).toEqual(['docs']);
+      const result = parseMentions('@mcp:notion @skill:git');
       expect(result.mcp).toEqual(['notion']);
       expect(result.skill).toEqual(['git']);
     });
 
     it('stops at whitespace', () => {
-      expect(parseMentions('@kb:docs and more text').kb).toEqual(['docs']);
+      expect(parseMentions('@skill:docs and more text').skill).toEqual([
+        'docs',
+      ]);
     });
 
     it('accepts names with internal punctuation', () => {
-      expect(parseMentions('@kb:my-docs_v2.1').kb).toEqual(['my-docs_v2.1']);
+      expect(parseMentions('@skill:my-docs_v2.1').skill).toEqual([
+        'my-docs_v2.1',
+      ]);
     });
 
     it('trims trailing sentence punctuation', () => {
-      expect(parseMentions('see @kb:docs.').kb).toEqual(['docs']);
-      expect(parseMentions('see @kb:docs, please').kb).toEqual(['docs']);
-      expect(parseMentions('(@kb:docs)').kb).toEqual(['docs']);
-      expect(parseMentions('@kb:docs?!').kb).toEqual(['docs']);
+      expect(parseMentions('see @skill:docs.').skill).toEqual(['docs']);
+      expect(parseMentions('see @skill:docs, please').skill).toEqual(['docs']);
+      expect(parseMentions('(@skill:docs)').skill).toEqual(['docs']);
+      expect(parseMentions('@skill:docs?!').skill).toEqual(['docs']);
     });
 
     it('yields no mention when the value is only punctuation', () => {
-      expect(parseMentions('@kb:...').all).toEqual([]);
+      expect(parseMentions('@skill:...').all).toEqual([]);
     });
   });
 
   describe('quoted form', () => {
     it('captures values containing spaces', () => {
-      expect(parseMentions('@kb:"My Project Docs"').kb).toEqual([
+      expect(parseMentions('@skill:"My Project Docs"').skill).toEqual([
         'My Project Docs',
       ]);
     });
 
     it('preserves punctuation inside quotes', () => {
-      expect(parseMentions('@kb:"docs."').kb).toEqual(['docs.']);
+      expect(parseMentions('@skill:"docs."').skill).toEqual(['docs.']);
     });
 
     it('treats an empty quoted value as no mention', () => {
       // A quoted-then-bare alternation falls through to the bare branch here
-      // and captures the literal `""` as a knowledge-base name.
-      expect(parseMentions('@kb:""').all).toEqual([]);
+      // and captures the literal `""` as a name.
+      expect(parseMentions('@skill:""').all).toEqual([]);
     });
 
     it('does not let a quoted value run past its closing quote', () => {
-      const result = parseMentions('@kb:"a b" trailing');
-      expect(result.kb).toEqual(['a b']);
+      const result = parseMentions('@skill:"a b" trailing');
+      expect(result.skill).toEqual(['a b']);
     });
   });
 
   describe('adjacent forms', () => {
     it('parses two mentions separated only by whitespace', () => {
-      expect(parseMentions('@kb:a @kb:b').kb).toEqual(['a', 'b']);
+      expect(parseMentions('@skill:a @skill:b').skill).toEqual(['a', 'b']);
     });
 
     it('parses mentions jammed together with no separator', () => {
       // A bare value excludes `@`, so the second mention is not swallowed.
-      const result = parseMentions('@kb:a@skill:b');
-      expect(result.kb).toEqual(['a']);
+      const result = parseMentions('@mcp:a@skill:b');
+      expect(result.mcp).toEqual(['a']);
       expect(result.skill).toEqual(['b']);
     });
 
     it('parses a quoted mention immediately followed by another', () => {
-      const result = parseMentions('@kb:"a b"@mcp:c');
-      expect(result.kb).toEqual(['a b']);
+      const result = parseMentions('@skill:"a b"@mcp:c');
+      expect(result.skill).toEqual(['a b']);
       expect(result.mcp).toEqual(['c']);
     });
 
     it('parses mentions adjacent to surrounding prose', () => {
-      const result = parseMentions('use@kb:docs now');
-      expect(result.kb).toEqual(['docs']);
+      const result = parseMentions('use@skill:docs now');
+      expect(result.skill).toEqual(['docs']);
     });
   });
 
   describe('de-duplication', () => {
     it('de-duplicates per kind, keeping first-seen order', () => {
-      expect(parseMentions('@kb:b @kb:a @kb:b').kb).toEqual(['b', 'a']);
+      expect(parseMentions('@skill:b @skill:a @skill:b').skill).toEqual([
+        'b',
+        'a',
+      ]);
     });
 
     it('keeps every occurrence in `all`', () => {
-      expect(parseMentions('@kb:b @kb:b').all).toHaveLength(2);
+      expect(parseMentions('@skill:b @skill:b').all).toHaveLength(2);
     });
 
     it('keeps identical values in different namespaces separate', () => {
-      const result = parseMentions('@kb:x @mcp:x');
-      expect(result.kb).toEqual(['x']);
+      const result = parseMentions('@skill:x @mcp:x');
+      expect(result.skill).toEqual(['x']);
       expect(result.mcp).toEqual(['x']);
     });
   });
 
   describe('spans', () => {
     it('reports the span of the whole mention', () => {
-      const text = 'hi @kb:docs';
+      const text = 'hi @skill:docs';
       const [mention] = parseMentions(text).all;
       expect(mention).toBeDefined();
-      expect(text.slice(mention!.start, mention!.end)).toBe('@kb:docs');
+      expect(text.slice(mention!.start, mention!.end)).toBe('@skill:docs');
     });
 
     it('excludes trimmed punctuation from the span', () => {
-      const text = 'hi @kb:docs.';
+      const text = 'hi @skill:docs.';
       const [mention] = parseMentions(text).all;
-      expect(text.slice(mention!.start, mention!.end)).toBe('@kb:docs');
+      expect(text.slice(mention!.start, mention!.end)).toBe('@skill:docs');
     });
 
     it('includes the quotes in a quoted span', () => {
-      const text = 'hi @kb:"a b" x';
+      const text = 'hi @skill:"a b" x';
       const [mention] = parseMentions(text).all;
-      expect(text.slice(mention!.start, mention!.end)).toBe('@kb:"a b"');
+      expect(text.slice(mention!.start, mention!.end)).toBe('@skill:"a b"');
     });
 
     it('reports spans in source order across kinds', () => {
-      const result = parseMentions('@skill:z @kb:a');
-      expect(result.all.map((m) => m.kind)).toEqual(['skill', 'kb']);
+      const result = parseMentions('@skill:z @mcp:a');
+      expect(result.all.map((m) => m.kind)).toEqual(['skill', 'mcp']);
       expect(result.all[0]!.start).toBeLessThan(result.all[1]!.start);
     });
   });
@@ -136,7 +142,7 @@ describe('parseMentions', () => {
     });
 
     it('ignores a bare @ and a namespace with no value', () => {
-      expect(parseMentions('@ @kb: @kb').all).toEqual([]);
+      expect(parseMentions('@ @skill: @skill').all).toEqual([]);
     });
 
     it('does not match inside an email address', () => {
@@ -144,11 +150,11 @@ describe('parseMentions', () => {
     });
 
     it('is case-sensitive on the namespace', () => {
-      expect(parseMentions('@KB:docs').all).toEqual([]);
+      expect(parseMentions('@SKILL:docs').all).toEqual([]);
     });
 
     it('does not treat a multi-line message as a barrier', () => {
-      expect(parseMentions('line one\n@kb:docs\nline three').kb).toEqual([
+      expect(parseMentions('line one\n@skill:docs\nline three').skill).toEqual([
         'docs',
       ]);
     });
@@ -156,14 +162,14 @@ describe('parseMentions', () => {
 
   it('does not modify the source text', () => {
     // The model sees exactly what the user typed; callers use spans to strip.
-    const text = 'check @kb:"My Docs" for that';
+    const text = 'check @skill:"My Docs" for that';
     parseMentions(text);
-    expect(text).toBe('check @kb:"My Docs" for that');
+    expect(text).toBe('check @skill:"My Docs" for that');
   });
 
   it('is not affected by regex lastIndex across calls', () => {
-    const first = parseMentions('@kb:a');
-    const second = parseMentions('@kb:a');
+    const first = parseMentions('@skill:a');
+    const second = parseMentions('@skill:a');
     expect(second).toEqual(first);
   });
 });

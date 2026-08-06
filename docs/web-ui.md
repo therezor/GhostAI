@@ -55,7 +55,7 @@ never drops a running turn.
 - **Steering** — what you type mid-turn reaches the running turn, not the next one.
 - **Attachments upload when you pick them**, not on send, so a large file is already there
   when you hit Enter.
-- **`@` autocomplete** for `@kb:`, `@mcp:` and `@skill:`, as a real listbox with
+- **`@` autocomplete** for `@mcp:` and `@skill:`, as a real listbox with
   `aria-activedescendant`. The grammar is parsed once, in the protocol, for every channel.
   _The mention kinds are parsed and carried today; the features behind them are in
   [ROADMAP.md](ROADMAP.md)._

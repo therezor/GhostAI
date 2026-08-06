@@ -28,7 +28,12 @@
  * terminal's selection *is* its copy mechanism.
  */
 
-import { describeContext, type ContextReport } from '@ghostai/agent';
+import {
+  SKILLS_DIRNAME,
+  describeContext,
+  readSkills,
+  type ContextReport,
+} from '@ghostai/agent';
 import {
   DEFAULT_AGENT_ID,
   DEFAULT_WORKSPACE_ID,
@@ -181,6 +186,7 @@ const HELP_LAYOUT: readonly HelpSection[] = [
     rows: [
       { syntax: '/memory', key: 'slash.help.memory' },
       { syntax: '/memory on|off', key: 'slash.help.memoryOnOff' },
+      { syntax: '/skills', key: 'slash.help.skills' },
     ],
   },
   {
@@ -484,6 +490,9 @@ async function dispatch(
     case 'memory':
       return await memoryCommand(argv, ctx);
 
+    case 'skills':
+      return await skillsCommand(ctx);
+
     case 'stats': {
       const limit = positiveCount(argv[0]) ?? 10;
       const rows = store.turnStats(ctx.sessionKey, { limit });
@@ -769,6 +778,45 @@ async function memoryCommand(
     default:
       throw new GhostError('invalid_input', ctx.t('slash.errors.usageMemory'));
   }
+}
+
+/**
+ * The workspace's skills, as a list you can then name with `@skill:`.
+ *
+ * The catalogue is already in the prompt, so this is not what tells the *model*
+ * about a skill. It is what tells the person: `@skill:` inlines a sheet for one
+ * message, and a name typed from memory is a name typed wrong.
+ */
+async function skillsCommand(ctx: SlashContext): Promise<SlashOutcome> {
+  const { renderer, runtime, t } = ctx;
+  const agentId = memoryAgentId(ctx);
+
+  // The same gate the contributor uses, and the same reason: `deny` takes the
+  // catalogue out of the prompt, so offering names to mention would be offering
+  // something this agent cannot act on. Absent counts as denied.
+  const permission = runtime.agents.find((agent) => agent.id === agentId)?.tools
+    .skill;
+  if (permission === undefined || permission === 'deny') {
+    renderer.note(t('slash.notes.skillsOff', { agent: agentId }));
+    return CONTINUE;
+  }
+
+  const skills = await readSkills(
+    runtime.jails.forWorkspace(
+      runtime.store.getSession(ctx.sessionKey)?.workspaceId ??
+        DEFAULT_WORKSPACE_ID,
+    ).root,
+  );
+
+  renderer.note(
+    skills.length === 0
+      ? t('slash.notes.skillsEmpty', { path: SKILLS_DIRNAME })
+      : skills
+          .map((skill) => `@skill:${skill.name}  ·  ${skill.description}`)
+          .join('\n'),
+  );
+
+  return CONTINUE;
 }
 
 /** Which agent this conversation runs on, whether or not it has spoken yet. */

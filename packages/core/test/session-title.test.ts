@@ -33,7 +33,7 @@ describe('deriveSessionTitle', () => {
   });
 
   it('strips mention tokens', () => {
-    expect(deriveSessionTitle('@kb:runbooks how do I rotate the key')).toBe(
+    expect(deriveSessionTitle('@skill:runbooks how do I rotate the key')).toBe(
       'how do I rotate the key',
     );
     expect(

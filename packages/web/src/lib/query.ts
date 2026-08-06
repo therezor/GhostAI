@@ -79,6 +79,10 @@ export const queryKeys = {
   providers: ['providers'] as const,
   models: ['models'] as const,
   tools: ['tools'] as const,
+  // Workspace at index 1, on the rule stated for `files` below: two workspaces
+  // hold different `skills/` folders, and a key without the id would offer one
+  // workspace's catalogue the instant the switcher moved.
+  skills: (workspace: string) => ['skills', workspace] as const,
   // The workspace comes *second*, before the path, and that placement is the
   // point. Two workspaces both contain `notes.md`, so a key of `['files', path]`
   // would serve one workspace's listing for the other the instant the switcher

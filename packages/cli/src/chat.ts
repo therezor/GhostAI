@@ -26,10 +26,14 @@
  * answer twice.
  */
 
-import { describeContext, type AgentLoop } from '@ghostai/agent';
+import pc from 'picocolors';
+
+import { describeContext, readSkills, type AgentLoop } from '@ghostai/agent';
 import { createLogger, isAbortError, type LogLevel } from '@ghostai/core';
 import {
   DEFAULT_AGENT_ID,
+  DEFAULT_WORKSPACE_ID,
+  parseMentions,
   type ContentPart,
   type StopReason,
 } from '@ghostai/protocol';
@@ -64,7 +68,14 @@ import {
   type HeaderView,
 } from './header.js';
 import { completeCommand, pickCommand } from './pickers/palette.js';
+import {
+  applySkill,
+  completeSkill,
+  mentionPrefix,
+  pickSkill,
+} from './pickers/skills.js';
 import { translationsFor, type CliT, type Env } from './i18n.js';
+import { formatLogLine } from './log-line.js';
 import {
   createMenu,
   menuAvailable,
@@ -175,6 +186,20 @@ export interface RunTurnDeps {
  * with the event stream, and a test can hand it a loop and a string buffer
  * without a terminal, a database or a provider.
  */
+/**
+ * The typed part of a message, for the mention parser.
+ *
+ * The same join the channel manager makes on the way to the hub, so a `@skill:`
+ * split across an attachment and its caption is read the same way here as there.
+ */
+function textIn(content: string | readonly ContentPart[]): string {
+  if (typeof content === 'string') return content;
+  return content
+    .filter((part) => part.type === 'text')
+    .map((part) => part.text)
+    .join('\n');
+}
+
 export async function runTurn(
   deps: RunTurnDeps,
   content: string | readonly ContentPart[],
@@ -186,9 +211,15 @@ export async function runTurn(
   // every other transport will have, rather than something only the CLI can see.
   let stopReason: StopReason | undefined;
 
+  // Parsed here because the CLI runs the loop in-process and never crosses the
+  // hub, which is where every other channel's mentions are read. Without this
+  // `@skill:` would be a feature of every transport but the local one.
+  const mentions = parseMentions(textIn(content));
+
   const turn = deps.loop.run({
     sessionKey: deps.sessionKey,
     content,
+    mentions,
     signal: deps.signal,
     channel: 'cli',
     ...(deps.workspaceId === undefined
@@ -264,6 +295,11 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
       : { showReasoning: options.showReasoning }),
   });
 
+  // The renderer keeps its own palette private, so this is a second one built
+  // from the same flag. `createColors(false)` is the identity, which is what
+  // makes `--no-color` and `NO_COLOR` one branch here rather than two.
+  const logColors = pc.createColors(options.colors ?? true);
+
   // Logs go to stderr at `warn` by default. On stdout they would interleave
   // with the answer, and at `info` a local model's per-request lines would bury
   // it — so the CLI is quieter than the library default rather than the same.
@@ -277,11 +313,13 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
   const shareTerminal = (errOut as { isTTY?: boolean }).isTTY === true;
   const logTarget = {
     write: (text: string): boolean => {
+      // A redirected stderr keeps the JSON: the thing reading it then is a
+      // program, and `ghost chat 2>chat.log | jq` has to keep working.
       if (sink === undefined || !shareTerminal) return errOut.write(text);
       // Through the renderer rather than straight at the sink, because only it
       // knows whether a line is half-written — and a log line arriving in the
       // middle of one splices itself into a word.
-      renderer.aside(text);
+      renderer.aside(formatLogLine(text, logColors));
       return true;
     },
   } as unknown as NodeJS.WritableStream;
@@ -290,7 +328,13 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
     options.logger ??
     createLogger({
       name: 'ghost',
-      level: options.logLevel ?? 'warn',
+      // `error`, where `serve` uses `info`. A warning here is worth reading and
+      // worth acting on, but this is the one surface where it interrupts a
+      // conversation to say something about the install rather than about the
+      // answer — and the ones that recur do so on *every turn*, because the
+      // catalogue they warn about is re-read on every turn. `--verbose` brings
+      // them back, now legible.
+      level: options.logLevel ?? 'error',
       destination: logTarget,
     });
 
@@ -896,6 +940,43 @@ function framed(deps: ReplDeps): Surface {
     })();
   };
 
+  /**
+   * Tab inside a half-typed `@skill:`.
+   *
+   * The read is here rather than once at startup because `skills/` is workspace
+   * content: a turn can write one, and `/workspace` moves which folder is meant.
+   * It is a `readdir` and a few small files, on a keypress, and only on the
+   * keypress that is already asking about them.
+   */
+  const completeMention = (): void => {
+    void (async (): Promise<void> => {
+      const skills = await readSkills(
+        deps.runtime.jails.forWorkspace(
+          deps.runtime.store.getSession(deps.session())?.workspaceId ??
+            DEFAULT_WORKSPACE_ID,
+        ).root,
+      );
+      const matches = completeSkill(editor.text, skills);
+
+      // One match is inserted and several open the picker — the same rule the
+      // command completer keeps, so Tab means one thing in both places.
+      if (matches.length === 1) {
+        editor.setText(applySkill(editor.text, matches[0] ?? ''));
+      } else if (matches.length > 1) {
+        const named = new Set(matches);
+        const chosen = await pickSkill({
+          menu,
+          skills: skills.filter((skill) => named.has(skill.name)),
+          t: deps.t,
+        });
+        if (chosen !== undefined) {
+          editor.setText(applySkill(editor.text, chosen));
+        }
+      }
+      frame.requestRender();
+    })();
+  };
+
   keyboard.onKey((key) => {
     if (overlay !== undefined) {
       const outcome = overlay.select.handleKey(key);
@@ -917,12 +998,16 @@ function framed(deps: ReplDeps): Surface {
       return;
     }
 
-    // Tab completes a slash command, and only a slash command: the rest of a
-    // prompt is prose, and a completer guessing at the middle of a sentence
-    // would surprise far more often than it helped. It used to be readline's
-    // `completer` option; it is four lines here over the same table `/help`
-    // prints, which is the trade the whole editor makes.
+    // Tab completes a slash command or a `@skill:` mention, and nothing else:
+    // the rest of a prompt is prose, and a completer guessing at the middle of a
+    // sentence would surprise far more often than it helped. Both of these are
+    // tokens with a known vocabulary rather than guesses at a word — the
+    // mention's names come off disk, the commands off the table `/help` prints.
     if (key.name === 'tab') {
+      if (mentionPrefix(editor.text) !== undefined) {
+        completeMention();
+        return;
+      }
       const [matches] = completeCommand(editor.text);
       if (matches.length === 1) editor.setText(`${matches[0] ?? ''} `);
       frame.requestRender();

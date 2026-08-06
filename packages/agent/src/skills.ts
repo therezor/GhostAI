@@ -48,12 +48,23 @@ export const SKILL_FILENAME = 'SKILL.md';
 /**
  * The most of one skill's body that reaches the prompt.
  *
- * The same figure as `TOOLBOX_DOCS_MAX_BYTES`, and for the same reason: a
- * pinned skill sits in the cached half of every request for the life of a
- * session, so its size is a decision rather than an accident. Roughly three
+ * The same figure as `TOOLBOX_DOCS_MAX_BYTES`, and for the same reason: a body
+ * a message names with `@skill:` is re-sent on every iteration of that turn at
+ * full price, so its size is a decision rather than an accident. Roughly three
  * thousand tokens.
  */
 export const SKILL_MAX_BYTES: number = 12 * 1024;
+
+/**
+ * How many skills one message may inline with `@skill:`.
+ *
+ * A constant rather than a setting. The bound exists to stop a single message
+ * costing `n × SKILL_MAX_BYTES` of uncached prompt on every iteration, and that
+ * hazard does not vary by install the way a taste for long prompts does. Names
+ * past it still reach the model — as the path line an unmentioned skill would
+ * have got — so the cap degrades a message rather than dropping from it.
+ */
+export const MAX_MENTIONED_SKILLS = 5;
 
 /**
  * The most skills one workspace advertises.

@@ -677,3 +677,65 @@ describe('/memory', () => {
     expect(result.text).not.toContain('Only an admin');
   });
 });
+
+describe('/skills', () => {
+  it('says the tool is not granted when the agent lacks it', async () => {
+    const h = harness();
+    h.console.setSkills({ granted: false, skills: [] });
+
+    const result = await h.run('/skills');
+
+    expect(result.text).toContain('does not have the `skill` tool');
+  });
+
+  it('says so when the workspace holds none', async () => {
+    const h = harness();
+    const result = await h.run('/skills');
+    expect(result.text).toContain('No skills here yet');
+  });
+
+  it('lists each skill as the mention that sends it', async () => {
+    // The name alone would be the thing a person then has to guess the syntax
+    // for. `@skill:deploy` is copyable, which is the whole job of this command.
+    const h = harness();
+    h.console.setSkills({
+      granted: true,
+      skills: [
+        { name: 'deploy', description: 'Ship a release.' },
+        { name: 'code-review', description: 'Review a diff.' },
+      ],
+    });
+
+    const result = await h.run('/skills');
+
+    expect(result.text).toContain('`@skill:deploy` — Ship a release.');
+    expect(result.text).toContain('`@skill:code-review` — Review a diff.');
+  });
+
+  it('is offered to a non-admin, because it only reads', async () => {
+    const h = harness();
+    const result = await h.run('/skills', { isAdmin: false });
+    expect(result.text).not.toContain('Only an admin');
+  });
+});
+
+describe('/start', () => {
+  it('answers rather than falling through to "no command"', async () => {
+    // Telegram opens every first conversation with this, so until it existed
+    // the first thing a new chat ever saw was an error.
+    const h = harness();
+    const result = await h.run('/start');
+
+    expect(result.text).not.toContain('No command');
+    expect(result.text).toContain('GhostAI');
+  });
+
+  it('carries the same listing as /help, rather than a second one', async () => {
+    // Two lists disagree eventually, and the one that drifts is the one nobody
+    // reads twice.
+    const h = harness();
+    const [start, help] = await Promise.all([h.run('/start'), h.run('/help')]);
+
+    expect(start.text).toContain(help.text);
+  });
+});

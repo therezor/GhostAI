@@ -184,7 +184,6 @@ where it is written should be visible as a mistake rather than render as blank.
 | `memoryPrompt`     | `{{index}}`                                      | One line per memory. The section's whole content.         |
 |                    | `{{path}}`, `{{count}}`                          | The folder, and how many lines the index carries.         |
 | `skillsPrompt`     | `{{index}}` / `{{indexLines}}`                   | The catalogue with a leading blank line / just the lines. |
-|                    | `{{pinned}}`                                     | The `### Skill: …` bodies, with a leading blank line.     |
 |                    | `{{path}}`, `{{count}}`                          | The folder, and how many skills there are.                |
 
 **Two defaults, one override.** `platformPrompt` has a different built-in depending on
@@ -372,11 +371,19 @@ Contributor sections are appended after the built-in ones, in the order given, s
 cached prefix grows at the end rather than shifting when a contributor is added.
 
 **[Skills](skills.md) arrive this way**, and are the worked example of both halves:
-`SkillsContributor.staticSection` reads `<workspace>/skills/` once per turn and renders
-the index and any pinned bodies, while `runtimeSection` places the one line that a
-`@skill:` mention on _this message_ earns. It is wired in the composition root — the
-loop composes and caches sections and deliberately knows nothing about where one came
-from.
+`SkillsContributor.staticSection` reads `<workspace>/skills/` once per turn and renders the
+index, while `runtimeSection` inlines the body of whatever this message named with
+`@skill:`. It is wired in the composition root — the loop composes and caches sections and
+deliberately knows nothing about where one came from.
+
+It is also the worked example of `carry`, the per-turn map on `StaticPromptContext`. The
+two halves have incompatible budgets — the static one may do I/O and runs once a turn, the
+runtime one is synchronous and runs every iteration — so a contributor needing bytes down
+there would otherwise have to choose between reading files on every iteration and keeping
+an instance cache that outlives the turn. `staticSection` has already read every body by
+the time it renders a line of the index, so it leaves them in `carry` and `runtimeSection`
+spends a map lookup. The map is created per turn by the loop, which is what stops it being
+either of the things it replaces.
 
 **[Memory](memory.md) is the second**, and it uses only the static half: the workspace's
 `memory/` folder is a property of the folder, not of one message, so there is no runtime
@@ -397,10 +404,13 @@ The second is what a reader is most likely to be surprised by — an agent whose
 call tools carries neither section, however its permissions read, because an index of paths
 is only useful to something that can open one.
 
-**`skillsPrompt` is the one template with two generated halves**, and both `{{index}}` and
-`{{pinned}}` carry their own leading blank line, because either can be empty: a catalogue
-with nothing pinned, or an agent that pinned all of its skills. That is the convention
-`{{notes}}` already keeps on the toolbox template. It also cost a rule: the index preamble
-used to disappear when every skill was pinned, since it told the model to open the files
-below it and there were none. A placeholder cannot express that condition, so the built-in
-wording now says "a line below" rather than "each line below" and is true either way.
+**`skillsPrompt`'s `{{index}}` carries its own leading blank line**, so a template that
+places it straight after its prose leaves no gap when there is nothing to list. That is the
+convention `{{notes}}` already keeps on the toolbox template. It also cost a rule: the
+preamble used to disappear when the index was empty, since it told the model to open the
+files below it and there were none. A placeholder cannot express that condition, so the
+built-in wording says "a line below" rather than "each line below" and is true either way.
+
+There is no placeholder for a skill's body. `@skill:` writes into the runtime half, which
+no template owns — it is rebuilt every iteration, so there is no operator wording to keep
+stable there.

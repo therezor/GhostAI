@@ -205,8 +205,6 @@ export const AgentDefaultsSchema = z.object({
    * be used at all.
    */
   toolsEnabled: z.boolean().default(true),
-  pinnedSkills: z.array(z.string()).default([]),
-  maxPinnedSkills: z.number().int().nonnegative().default(5),
 });
 export type AgentDefaults = z.infer<typeof AgentDefaultsSchema>;
 
@@ -701,9 +699,12 @@ export const AgentEntrySchema = patchOf(AgentDefaultsSchema)
      * single space removes the section.
      *
      * Its vocabulary is `SKILLS_PROMPT_PLACEHOLDERS`. Unlike the memory
-     * template's, its `{{index}}` and `{{pinned}}` each carry their own leading
-     * blank line, because either can be empty and a section should leave no gap
-     * where its absent half would have been.
+     * template's, its `{{index}}` carries its own leading blank line, because it
+     * can be empty and a section should leave no gap where it would have been.
+     *
+     * The bodies a `@skill:` mention inlines are not here. They belong to one
+     * message rather than to the workspace, so they are written into the runtime
+     * half of the prompt, which no template owns.
      */
     skillsPrompt: z.string().default(''),
     /**

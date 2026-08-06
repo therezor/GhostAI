@@ -22,10 +22,12 @@
 
 import { existsSync } from 'node:fs';
 
+import { readSkills } from '@ghostai/agent';
 import { telegramChannel, type TelegramConsole } from '@ghostai/channels';
 import type {
   ChannelFactory,
   MemoryState,
+  SkillsState,
   TelegramChannel,
 } from '@ghostai/channels';
 import {
@@ -146,6 +148,31 @@ export function createTelegramConsole(
         tokens: estimateTokens(
           memories.map((memory) => memory.description).join('\n'),
         ),
+      };
+    },
+
+    skills: async (sessionKey): Promise<SkillsState> => {
+      // The same targets `/memory` reads, and the same gate: a denied tool
+      // takes the catalogue out of the prompt, so there is nothing to offer.
+      const { agent, session } = memoryTargets(runtime, sessionKey);
+      const permission = agent?.tools.skill;
+      const granted = permission !== undefined && permission !== 'deny';
+
+      const skills = granted
+        ? await readSkills(
+            runtime.jails.forWorkspace(
+              session?.workspaceId ?? DEFAULT_WORKSPACE_ID,
+            ).root,
+          )
+        : [];
+
+      // Name and description only. A body runs to 12 KB and this is a listing.
+      return {
+        granted,
+        skills: skills.map((skill) => ({
+          name: skill.name,
+          description: skill.description,
+        })),
       };
     },
   };

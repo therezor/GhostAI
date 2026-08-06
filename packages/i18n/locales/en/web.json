@@ -85,7 +85,7 @@
     "promptRestore": "Restore",
     "promptRestoreFor": "Restore the {{label}} section",
     "promptSkills": "Skills",
-    "promptSkillsHint": "The section that lists the workspace’s instruction sheets. {{index}} is the generated catalogue and {{pinned}} the bodies of the pinned ones; each brings its own blank line, so a template that has neither leaves no gap.",
+    "promptSkillsHint": "The section that lists the workspace’s instruction sheets. {{index}} is the generated catalogue, and it brings its own blank line so a template without it leaves no gap. A sheet’s body is not here — naming it on a message with @skill: is what sends it, for that message only.",
     "promptStray": "Nothing will fill {{names}} — it will appear in the prompt exactly as written.",
     "promptStrayTitle": "Placeholder nothing fills",
     "promptSystem": "System prompt",
@@ -666,7 +666,7 @@
       },
       "knowledge": {
         "label": "Knowledge",
-        "summary": "The retrieval index behind `@kb:` mentions."
+        "summary": "Retrieval over your own documents. Not built yet."
       },
       "providers": {
         "label": "Providers",
@@ -690,10 +690,6 @@
       "plugins": {
         "detail": "Install and remove capabilities from the UI.",
         "name": "Plugins"
-      },
-      "skills": {
-        "detail": "Reusable instructions an agent can pin.",
-        "name": "Skills"
       }
     },
     "title": "Settings",

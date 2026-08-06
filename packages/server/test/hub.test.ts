@@ -554,19 +554,19 @@ describe('SessionHub', () => {
       await send(client, {
         type: 'user.message',
         sessionKey: SESSION,
-        content: 'check @kb:"release notes" and @skill:triage before answering',
+        content:
+          'check @mcp:"release notes" and @skill:triage before answering',
       });
 
       const input = h.runner.turn(0).input;
       expect(input.mentions).toMatchObject({
-        kb: ['release notes'],
-        mcp: [],
+        mcp: ['release notes'],
         skill: ['triage'],
       });
       // The text is untouched: the model sees exactly what was typed, and the
       // spans are what a renderer uses to highlight them.
       expect(input.content).toBe(
-        'check @kb:"release notes" and @skill:triage before answering',
+        'check @mcp:"release notes" and @skill:triage before answering',
       );
       expect(input.channel).toBe('telegram');
     });

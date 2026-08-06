@@ -197,6 +197,10 @@ const MANIFEST = [
   // conversations and standing approvals.
   { id: 'agents.list', method: 'GET', url: '/api/agents', auth: 'required' },
   { id: 'tools.list', method: 'GET', url: '/api/tools', auth: 'required' },
+  // Read-only and workspace-scoped, for the composer's `@skill:` autocomplete.
+  // Not part of the settings tree: a skill is a folder in the workspace, not a
+  // key in `config.json`, so there is nothing here to write back.
+  { id: 'skills.list', method: 'GET', url: '/api/skills', auth: 'required' },
   {
     id: 'toolboxes.list',
     method: 'GET',

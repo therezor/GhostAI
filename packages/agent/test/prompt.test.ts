@@ -28,6 +28,7 @@ const CONTEXT: StaticPromptContext = {
   sessionKey: 'web:1',
   agentId: undefined,
   channel: 'cli',
+  carry: new Map(),
 };
 
 const RUNTIME: RuntimePromptContext = {
@@ -634,16 +635,15 @@ describe('buildRuntimeBlock', () => {
       nonce: 'a1b2c3d4e5f60718',
       contributors: [
         {
-          name: 'kb',
-          runtimeSection: (context) =>
-            `Active knowledge base: ${context.sessionKey}`,
+          name: 'loud',
+          runtimeSection: (context) => `Speaking for: ${context.sessionKey}`,
         },
         { name: 'quiet', runtimeSection: () => '' },
         { name: 'silent' },
       ],
     });
 
-    expect(block).toContain('Active knowledge base: web:1');
+    expect(block).toContain('Speaking for: web:1');
     // Live state and the one contributor — nothing for the others, and no
     // policy section, which now caches with the static half.
     expect(block.split('\n\n##')).toHaveLength(1);

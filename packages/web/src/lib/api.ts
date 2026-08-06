@@ -49,6 +49,7 @@ import {
   WorkspaceSummarySchema,
   StatusResponseSchema,
   AgentListResponseSchema,
+  SkillListResponseSchema,
   ToolboxListResponseSchema,
   ToolListResponseSchema,
   UploadResponseSchema,
@@ -86,6 +87,7 @@ import {
   type StatusResponse,
   type AgentListResponse,
   type ToolboxListResponse,
+  type SkillListResponse,
   type ToolListResponse,
   type UploadResponse,
 } from '@ghostai/protocol';
@@ -483,6 +485,22 @@ export const api = {
     request('/api/tools', ToolListResponseSchema, {
       ...(signal ? { signal } : {}),
     }),
+
+  /**
+   * The workspace's skill catalogue, for the `@skill:` autocomplete.
+   *
+   * Workspace-scoped, because `skills/` is a folder inside one — the same
+   * reason `files` carries the id rather than reading a server-side default.
+   */
+  skills: (
+    workspace: string,
+    signal?: AbortSignal,
+  ): Promise<SkillListResponse> =>
+    request(
+      `/api/skills?workspace=${encodeURIComponent(workspace)}`,
+      SkillListResponseSchema,
+      { ...(signal ? { signal } : {}) },
+    ),
 
   /**
    * Toolboxes installed on this machine.

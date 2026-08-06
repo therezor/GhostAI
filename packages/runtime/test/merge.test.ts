@@ -31,16 +31,16 @@ describe('mergeConfigPatch', () => {
   });
 
   it('replaces an array rather than appending to it', () => {
-    const withSkills = mergeConfigPatch(base, {
-      agents: { defaults: { pinnedSkills: ['a', 'b'] } },
+    const withOrigins = mergeConfigPatch(base, {
+      server: { corsOrigins: ['https://a.test', 'https://b.test'] },
     });
-    const replaced = mergeConfigPatch(withSkills, {
-      agents: { defaults: { pinnedSkills: ['c'] } },
+    const replaced = mergeConfigPatch(withOrigins, {
+      server: { corsOrigins: ['https://c.test'] },
     });
 
     // There is no patch syntax for a removal, so a merging array would make
-    // un-pinning a skill impossible.
-    expect(replaced.agents.defaults.pinnedSkills).toEqual(['c']);
+    // withdrawing an entry impossible.
+    expect(replaced.server.corsOrigins).toEqual(['https://c.test']);
   });
 
   it('replaces extraHeaders wholesale, so a header can be deleted', () => {

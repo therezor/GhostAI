@@ -8,13 +8,16 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { createLogger, type Logger } from '@ghostai/core';
 import type { ParsedMentions } from '@ghostai/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { RuntimePromptContext, StaticPromptContext } from '#src/prompt.js';
-import { SkillsContributor, renderSkills } from '#src/skills-contributor.js';
-import type { Skill } from '#src/skills.js';
+import {
+  SkillsContributor,
+  renderMentionedSkills,
+  renderSkills,
+} from '#src/skills-contributor.js';
+import { MAX_MENTIONED_SKILLS, type Skill } from '#src/skills.js';
 
 function make(name: string, body = `Body of ${name}.`): Skill {
   return {
@@ -25,17 +28,15 @@ function make(name: string, body = `Body of ${name}.`): Skill {
   };
 }
 
-const NONE = { pinned: [], maxPinned: 5 };
-
 describe('renderSkills', () => {
   it('renders nothing for an empty catalogue', () => {
     // Empty rather than a bare heading: `contributorSections` drops a section
     // that trims to nothing, so this is how "no skills" becomes "no section".
-    expect(renderSkills([], NONE)).toBe('');
+    expect(renderSkills([])).toBe('');
   });
 
   it('indexes a skill as one line naming its path', () => {
-    const section = renderSkills([make('review')], NONE);
+    const section = renderSkills([make('review')]);
 
     expect(section).toContain('## Skills');
     expect(section).toContain(
@@ -45,83 +46,109 @@ describe('renderSkills', () => {
     expect(section).not.toContain('Body of review.');
   });
 
-  it('inlines a pinned skill and drops it from the index', () => {
-    const section = renderSkills([make('a'), make('b')], {
-      pinned: ['a'],
-      maxPinned: 5,
-    });
+  it('indexes every skill, because the catalogue cannot know the message', () => {
+    // The counterpart to the old "a pinned skill drops out of the index" rule.
+    // Nothing drops out now: what a message inlines is decided per turn, and
+    // this half is the cached prefix shared by every turn in the session.
+    const section = renderSkills([make('a'), make('b')]);
 
-    expect(section).toContain('### Skill: a');
-    expect(section).toContain('Body of a.');
-    expect(section).not.toContain('`skills/a/SKILL.md`');
+    expect(section).toContain('`skills/a/SKILL.md`');
     expect(section).toContain('`skills/b/SKILL.md`');
+    expect(section).not.toContain('### Skill:');
   });
 
-  it('keeps the framing when everything is pinned, and adds no empty index', () => {
-    // This reverses an earlier rule, and the reversal is the price of the
-    // section being an operator's template. The preamble used to be dropped
-    // when the index was empty, because it told the model to open the files
-    // below it and there were none — a conditional a placeholder cannot
-    // express. The wording is now true either way ("a line below", not "each
-    // line below"), and what is actually absent is the index block itself.
-    const section = renderSkills([make('a')], { pinned: ['a'], maxPinned: 5 });
+  it('leaves no gap after the index', () => {
+    // `{{index}}` carries its own leading blank line, so a section must not end
+    // on the blank line it opened with.
+    const section = renderSkills([make('deploy'), make('review')]);
 
-    expect(section).toContain('### Skill: a');
-    expect(section).not.toContain('`skills/a/SKILL.md`');
-    // No gap where the index would have been.
+    expect(section).not.toMatch(/\n\n$/u);
     expect(section).not.toContain('\n\n\n');
   });
 
-  it('pins in the operator order, not the catalogue order', () => {
-    // `pinnedSkills: ['c', 'a']` under a cap of one means c. Taking the
-    // catalogue's order would silently pin whichever sorted first.
-    const section = renderSkills([make('a'), make('c')], {
-      pinned: ['c', 'a'],
-      maxPinned: 1,
-    });
-
-    expect(section).toContain('### Skill: c');
-    expect(section).not.toContain('### Skill: a');
-    expect(section).toContain('`skills/a/SKILL.md`');
+  it('renders nothing for a template that is a single space', () => {
+    // The contract the other seven templates keep: empty inherits the built-in
+    // and a space deletes the section, because empty already means "inherit".
+    expect(renderSkills([make('deploy'), make('review')], ' ')).toBe('');
   });
 
-  it('falls back to an index line past maxPinnedSkills', () => {
-    const section = renderSkills([make('a'), make('b')], {
-      pinned: ['a', 'b'],
-      maxPinned: 1,
-    });
+  it('uses an operator template verbatim, filling its placeholders', () => {
+    const section = renderSkills(
+      [make('deploy'), make('review')],
+      'Sheets in {{path}} — {{count}}.\n\n{{indexLines}}',
+    );
 
-    expect(section).toContain('### Skill: a');
-    expect(section).toContain('`skills/b/SKILL.md`');
+    expect(section).toContain('Sheets in skills — 2.');
+    expect(section).not.toContain('## Skills');
+  });
+});
+
+describe('renderMentionedSkills', () => {
+  const bodies = (...names: string[]) =>
+    function bodyOf(name: string): string | undefined {
+      return names.includes(name) ? `Body of ${name}.` : undefined;
+    };
+
+  it('renders nothing when the message named none', () => {
+    expect(renderMentionedSkills([], bodies('a'))).toBeUndefined();
   });
 
-  it('pins nothing when maxPinnedSkills is zero', () => {
-    const section = renderSkills([make('a')], { pinned: ['a'], maxPinned: 0 });
+  it('inlines the body of a skill the message named', () => {
+    const block = renderMentionedSkills(['a'], bodies('a'));
 
-    expect(section).not.toContain('### Skill: a');
-    expect(section).toContain('`skills/a/SKILL.md`');
+    expect(block).toContain('### Skill: a');
+    expect(block).toContain('Body of a.');
   });
 
-  it('ignores a pin that names nothing', () => {
-    const section = renderSkills([make('a')], {
-      pinned: ['ghost'],
-      maxPinned: 5,
-    });
+  it('keeps the message order, not the catalogue order', () => {
+    // The cap truncates, so someone who named three skills expects the first
+    // two to survive a cap of two. Sorting here would drop an arbitrary one.
+    const block = renderMentionedSkills(['c', 'a'], bodies('a', 'c')) ?? '';
 
-    expect(section).toContain('`skills/a/SKILL.md`');
-    expect(section).not.toContain('ghost');
+    expect(block.indexOf('### Skill: c')).toBeLessThan(
+      block.indexOf('### Skill: a'),
+    );
   });
 
-  it('counts a repeated pin once', () => {
-    // Otherwise `['a', 'a']` under a cap of two would spend the whole budget on
-    // one skill and index the other.
-    const section = renderSkills([make('a'), make('b')], {
-      pinned: ['a', 'a', 'b'],
-      maxPinned: 2,
-    });
+  it('inlines a repeated name once', () => {
+    const block = renderMentionedSkills(['a', 'a'], bodies('a')) ?? '';
 
-    expect(section).toContain('### Skill: a');
-    expect(section).toContain('### Skill: b');
+    expect(block.match(/### Skill: a/gu)).toHaveLength(1);
+  });
+
+  it('falls back to a path line for a name the workspace does not have', () => {
+    // A typo, or a skill deleted since the message was written. It costs one
+    // `read_file` answering "no such file", which the model recovers from —
+    // which is why the names are not validated against the catalogue.
+    const block = renderMentionedSkills(['ghost'], bodies('a'));
+
+    expect(block).toBe(
+      'Skills named on this message: read `skills/ghost/SKILL.md` ' +
+        'before answering.',
+    );
+  });
+
+  it('falls back to a path line past the cap, rather than dropping the name', () => {
+    const named = Array.from(
+      { length: MAX_MENTIONED_SKILLS + 1 },
+      (unused, index) => `s${String(index)}`,
+    );
+    const block = renderMentionedSkills(named, bodies(...named)) ?? '';
+
+    expect(block.match(/### Skill:/gu)).toHaveLength(MAX_MENTIONED_SKILLS);
+    // The sheet is still reachable; it is the inlining that is capped.
+    const last = named[MAX_MENTIONED_SKILLS] ?? '';
+    expect(block).toContain(`\`skills/${last}/SKILL.md\``);
+  });
+
+  it('puts the paths to open before the bodies already here', () => {
+    // An instruction to go and read something is useless after three thousand
+    // tokens of what was read for you.
+    const block = renderMentionedSkills(['ghost', 'a'], bodies('a')) ?? '';
+
+    expect(block.indexOf('read `skills/ghost/SKILL.md`')).toBeLessThan(
+      block.indexOf('### Skill: a'),
+    );
   });
 });
 
@@ -154,12 +181,18 @@ function staticContext(workspaceRoot: string): StaticPromptContext {
     sessionKey: 'session-1',
     agentId: 'default',
     channel: 'web',
+    carry: new Map(),
   };
 }
 
-function runtimeContext(mentions?: ParsedMentions): RuntimePromptContext {
+function runtimeContext(
+  context: StaticPromptContext,
+  mentions?: ParsedMentions,
+): RuntimePromptContext {
   return {
-    ...staticContext('/unused'),
+    // Spread rather than shared by reference, because this is what the loop
+    // does — and it is what carries `carry` from one half to the other.
+    ...context,
     iteration: 1,
     maxIterations: 40,
     nowMs: 0,
@@ -168,84 +201,15 @@ function runtimeContext(mentions?: ParsedMentions): RuntimePromptContext {
 }
 
 function mentioning(...skill: string[]): ParsedMentions {
-  return { kb: [], mcp: [], skill, all: [] };
+  return { mcp: [], skill, all: [] };
 }
-
-interface Capture {
-  readonly logger: Logger;
-  readonly messages: () => string[];
-}
-
-function capture(): Capture {
-  const chunks: string[] = [];
-  return {
-    logger: createLogger({
-      level: 'warn',
-      destination: {
-        write(chunk: string): void {
-          chunks.push(chunk);
-        },
-      },
-    }),
-    messages: () =>
-      chunks.map((chunk) => (JSON.parse(chunk) as { msg?: string }).msg ?? ''),
-  };
-}
-
-describe('renderSkills templates', () => {
-  it('renders nothing for a template that is a single space', () => {
-    // The contract the other seven templates keep: empty inherits the built-in
-    // and a space deletes the section, because empty already means "inherit".
-    expect(
-      renderSkills([make('deploy'), make('review')], {
-        pinned: [],
-        maxPinned: 0,
-        template: ' ',
-      }),
-    ).toBe('');
-  });
-
-  it('uses an operator template verbatim, filling its placeholders', () => {
-    const section = renderSkills([make('deploy'), make('review')], {
-      pinned: [],
-      maxPinned: 0,
-      template: 'Sheets in {{path}} — {{count}}.\n\n{{indexLines}}',
-    });
-
-    expect(section).toContain('Sheets in skills — 2.');
-    expect(section).not.toContain('## Skills');
-  });
-
-  it('leaves no gap when nothing is pinned', () => {
-    // `{{pinned}}` carries its own leading blank line, so an unpinned catalogue
-    // must not end on the blank line that half would have opened with.
-    const section = renderSkills([make('deploy'), make('review')], {
-      pinned: [],
-      maxPinned: 0,
-    });
-
-    expect(section).not.toMatch(/\n\n$/u);
-    expect(section).not.toContain('### Skill:');
-  });
-
-  it('leaves no gap when everything is pinned', () => {
-    // The opposite half, and the case the old wording dropped a paragraph for.
-    const section = renderSkills([make('deploy'), make('review')], {
-      pinned: ['deploy', 'review'],
-      maxPinned: 5,
-    });
-
-    expect(section).toContain('### Skill: deploy');
-    expect(section).not.toMatch(/\n\n\n/u);
-  });
-});
 
 describe('SkillsContributor', () => {
   it('reads the workspace named by the context, not one it remembers', async () => {
     // One AgentLoop serves every session on an agent, and those sessions can be
     // bound to different workspaces. A contributor that cached its first answer
     // would hand one workspace's skills to a turn in another.
-    const contributor = new SkillsContributor({ pinned: [], maxPinned: 5 });
+    const contributor = new SkillsContributor();
     const first = workspace({ alpha: 'From the first.' });
     const second = workspace({ beta: 'From the second.' });
 
@@ -258,74 +222,67 @@ describe('SkillsContributor', () => {
   });
 
   it('places no section when the workspace has no skills', async () => {
-    const contributor = new SkillsContributor({ pinned: [], maxPinned: 5 });
+    const contributor = new SkillsContributor();
 
     expect(
       await contributor.staticSection(staticContext(workspace())),
     ).toBeUndefined();
   });
 
-  it('warns when a pin names a skill the workspace does not have', async () => {
-    const log = capture();
-    const contributor = new SkillsContributor({
-      pinned: ['missing'],
-      maxPinned: 5,
-      logger: log.logger,
-    });
+  it('places nothing in the runtime half without @skill: mentions', async () => {
+    const contributor = new SkillsContributor();
+    const context = staticContext(workspace({ a: 'A.' }));
+    await contributor.staticSection(context);
 
-    await contributor.staticSection(staticContext(workspace({ real: 'A.' })));
-    expect(log.messages()).toContain(
-      'pinnedSkills names a skill this workspace does not have',
+    expect(contributor.runtimeSection(runtimeContext(context))).toBeUndefined();
+    expect(
+      contributor.runtimeSection(runtimeContext(context, mentioning())),
+    ).toBeUndefined();
+  });
+
+  it('inlines the body of a skill the message named', async () => {
+    // The whole feature end to end: the static half reads the bodies and leaves
+    // them in `carry`, and the runtime half — which cannot do I/O — spends one
+    // map lookup to inline the one this message asked for.
+    const contributor = new SkillsContributor();
+    const context = staticContext(workspace({ a: 'A.', b: 'B.' }));
+    await contributor.staticSection(context);
+
+    const block = contributor.runtimeSection(
+      runtimeContext(context, mentioning('a')),
     );
+
+    expect(block).toContain('### Skill: a');
+    expect(block).toContain('Body of a.');
+    expect(block).not.toContain('Body of b.');
   });
 
-  it('warns when more skills are pinned than the cap allows', async () => {
-    const log = capture();
-    const contributor = new SkillsContributor({
-      pinned: ['a', 'b'],
-      maxPinned: 1,
-      logger: log.logger,
-    });
+  it('leaves the cached half untouched by what a message named', async () => {
+    // The reason the bodies go in the runtime half at all. A static section
+    // that varied with the message would end the session's cached prefix on
+    // every turn, which is the cost the two-half split exists to avoid.
+    const contributor = new SkillsContributor();
+    const first = staticContext(workspace({ a: 'A.' }));
+    const second = staticContext(first.workspaceRoot);
 
-    await contributor.staticSection(
-      staticContext(workspace({ a: 'A.', b: 'B.' })),
-    );
-    expect(log.messages()).toContain(
-      'more skills pinned than maxPinnedSkills allows; the rest are indexed',
-    );
+    const withoutMention = await contributor.staticSection(first);
+    await contributor.staticSection(second);
+    contributor.runtimeSection(runtimeContext(second, mentioning('a')));
+
+    expect(await contributor.staticSection(second)).toBe(withoutMention);
   });
 
-  it('does not count a repeated pin towards the cap when warning', async () => {
-    const log = capture();
-    const contributor = new SkillsContributor({
-      pinned: ['a', 'a'],
-      maxPinned: 1,
-      logger: log.logger,
-    });
-
-    await contributor.staticSection(staticContext(workspace({ a: 'A.' })));
-    expect(log.messages()).toEqual([]);
-  });
-
-  it('places nothing in the runtime half without @skill: mentions', () => {
-    const contributor = new SkillsContributor({ pinned: [], maxPinned: 5 });
-
-    expect(contributor.runtimeSection(runtimeContext())).toBeUndefined();
-    expect(contributor.runtimeSection(runtimeContext(mentioning()))) //
-      .toBeUndefined();
-  });
-
-  it('tells the model to read the skills this message named', () => {
-    // The runtime half rather than the static one: this is a property of one
-    // message, and a static section that moved per turn would end the
-    // session's cached prefix on every turn.
-    const contributor = new SkillsContributor({ pinned: [], maxPinned: 5 });
+  it('falls back to a path line when the static half never ran', () => {
+    // `toolsEnabled: false` and a denied `skill` permission both drop the
+    // contributor entirely, but a turn that reaches the runtime half with an
+    // empty carry must still say something the model can act on.
+    const contributor = new SkillsContributor();
+    const context = staticContext('/unused');
 
     expect(
-      contributor.runtimeSection(runtimeContext(mentioning('a', 'b'))),
+      contributor.runtimeSection(runtimeContext(context, mentioning('a'))),
     ).toBe(
-      'Skills named on this message: read `skills/a/SKILL.md`, ' +
-        '`skills/b/SKILL.md` before answering.',
+      'Skills named on this message: read `skills/a/SKILL.md` before answering.',
     );
   });
 });

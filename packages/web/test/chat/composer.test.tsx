@@ -153,7 +153,6 @@ describe('the @ autocomplete', () => {
 
     const options = screen.getAllByRole('option');
     expect(options.map((option) => option.textContent)).toEqual([
-      expect.stringContaining('@kb:'),
       expect.stringContaining('@mcp:'),
       expect.stringContaining('@skill:'),
     ]);
@@ -164,10 +163,10 @@ describe('the @ autocomplete', () => {
       'composer-mentions-0',
     );
 
-    await user.keyboard('{ArrowDown}{ArrowDown}');
+    await user.keyboard('{ArrowDown}');
     expect(box()).toHaveAttribute(
       'aria-activedescendant',
-      'composer-mentions-2',
+      'composer-mentions-1',
     );
 
     await user.keyboard('{Enter}');
@@ -181,25 +180,78 @@ describe('the @ autocomplete', () => {
     const user = userEvent.setup();
     mount();
 
-    await user.type(box(), '@k');
+    await user.type(box(), '@m');
     expect(screen.getAllByRole('option')).toHaveLength(1);
 
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('option')).not.toBeInTheDocument();
 
-    await user.keyboard('b');
+    await user.keyboard('c');
     expect(screen.getAllByRole('option')).toHaveLength(1);
   });
 
-  it('offers nothing once the namespace is chosen', async () => {
+  it('offers nothing once a namespace nothing reads is chosen', async () => {
     const user = userEvent.setup();
     mount();
 
-    await user.type(box(), '@kb:handbook');
+    await user.type(box(), '@mcp:notion');
 
-    // There is no knowledge base to list before Phase 3, and a menu reading
+    // Nothing narrows a turn's tool scope by mention yet, and a menu reading
     // "no results" for a feature that was never turned on reads as broken.
     expect(screen.queryByRole('option')).not.toBeInTheDocument();
+  });
+
+  it('accepting @skill: narrows the menu to the catalogue', async () => {
+    // The bug this replaced: the caret was read from a ref during render, so
+    // the render after an accept saw the *old* DOM position, decided the caret
+    // was outside a mention and closed the popover. Moving a caret does not
+    // re-render, so nothing ever reopened it — picking `skill` dismissed the
+    // menu instead of narrowing it.
+    const user = userEvent.setup();
+    stubFetch({
+      '/api/skills': [
+        200,
+        {
+          skills: [
+            { name: 'code-review', description: 'Review a diff.' },
+            { name: 'deploy', description: 'Ship a release.' },
+          ],
+        },
+      ],
+    });
+    mount();
+
+    await user.type(box(), '@skill');
+    await user.keyboard('{Enter}');
+    expect(box()).toHaveValue('@skill:');
+
+    const options = await screen.findAllByRole('option');
+    expect(options.map((option) => option.textContent)).toEqual([
+      expect.stringContaining('@skill:code-review'),
+      expect.stringContaining('@skill:deploy'),
+    ]);
+  });
+
+  it('accepting a skill closes the menu and leaves a usable mention', async () => {
+    const user = userEvent.setup();
+    stubFetch({
+      '/api/skills': [
+        200,
+        { skills: [{ name: 'deploy', description: 'Ship a release.' }] },
+      ],
+    });
+    const { sent } = mount();
+
+    await user.type(box(), '@skill:dep');
+    const option = await screen.findByRole('option');
+    await user.click(option);
+
+    // The trailing space closes the mention, so what is typed next is prose.
+    await waitFor(() => {
+      expect(box()).toHaveValue('@skill:deploy ');
+    });
+    expect(screen.queryByRole('option')).not.toBeInTheDocument();
+    expect(sent).toEqual([]);
   });
 });
 

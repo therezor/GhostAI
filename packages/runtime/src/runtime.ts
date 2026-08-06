@@ -1062,17 +1062,15 @@ class Runtime implements GhostRuntime {
       // that cannot call `read_file`, the index is unusable and the prose is
       // false. The whole of it is cost with no way to act on it.
       //
-      // The one thing this loses is a *pinned* skill, whose body is inlined and
-      // would still be readable. That is deliberate rather than overlooked: an
-      // agent with no tools and a fixed instruction sheet is what `systemPrompt`
-      // is for, and half a section whose own wording points at a tool that is
-      // not there is worse than no section.
+      // This takes a `@skill:` mention with it, whose body would still have been
+      // readable. That is deliberate rather than overlooked: an agent with no
+      // tools and a fixed instruction sheet is what `systemPrompt` is for, and
+      // half a section whose own wording points at a tool that is not there is
+      // worse than no section.
       contributors: [
         ...(agent.defaults.toolsEnabled && granted(agent.tools, 'skill')
           ? [
               new SkillsContributor({
-                pinned: agent.defaults.pinnedSkills,
-                maxPinned: agent.defaults.maxPinnedSkills,
                 // Beside `memoryPrompt` below, and for the same reason: both
                 // are section templates a *contributor* owns rather than the
                 // prompt builder, so the composition root hands them over here.

@@ -148,6 +148,44 @@ describe('runCli', () => {
     expect(run.calls[0]?.colors).toBe(false);
   });
 
+  it('leaves the log level unset without --verbose, so chat picks its own', async () => {
+    // `chatCommand` defaults to `error`: a chat prints the conversation, and a
+    // warning about the install interrupts it on every turn to say the same
+    // thing. Passing a level here would take that decision away from it.
+    const run = await cli(['chat', 'hi']);
+    expect(run.calls[0]?.logLevel).toBeUndefined();
+  });
+
+  it('--verbose asks for the install’s own reporting', async () => {
+    // Before the subcommand: it is a global, listed on `ghost --help`, which is
+    // where someone looks for it because `chat` is the default command.
+    const run = await cli(['--verbose', 'chat', 'hi']);
+    expect(run.calls[0]?.logLevel).toBe('info');
+  });
+
+  it('takes --verbose after the subcommand too, where a hand lands', async () => {
+    // Commander accepts a global option in either position, and `ghost chat
+    // --verbose` is what someone types who has already started the sentence.
+    const run = await cli(['chat', '--verbose', 'hi']);
+    expect(run.calls[0]?.logLevel).toBe('info');
+  });
+
+  it('leaves -v as --version, rather than shadowing it per subcommand', async () => {
+    // `--verbose` has no short flag on purpose. A `-v` that printed the version
+    // before `chat` and raised the log level after it is the kind of thing
+    // nobody discovers until it bites.
+    const run = await cli(['chat', '-v']);
+    expect(run.out).toContain(VERSION);
+    expect(run.calls).toHaveLength(0);
+  });
+
+  it('lets an explicit --log-level win over --verbose', async () => {
+    // The more specific request: someone who named `debug` has asked for
+    // something `--verbose` cannot spell.
+    const run = await cli(['--log-level', 'debug', 'chat', '--verbose', 'hi']);
+    expect(run.calls[0]?.logLevel).toBe('debug');
+  });
+
   it('rejects a log level pino would not understand', async () => {
     // pino throws on an unknown level, and losing the logger loses the
     // diagnostics needed to work out why it was lost.
@@ -220,6 +258,14 @@ describe('ghost serve', () => {
     });
     return { code, err: errOut.text, calls };
   }
+
+  it('drops one notch under its own default for --verbose', async () => {
+    // `info` is already the floor here, because a server that says nothing
+    // about the requests it is serving is a server nobody can debug. So
+    // `--verbose` means `debug` — the same relative move it makes on `chat`.
+    const run = await serve(['--verbose', 'serve']);
+    expect(run.calls[0]?.logLevel).toBe('debug');
+  });
 
   it('maps every flag onto the serve options', async () => {
     const run = await serve([

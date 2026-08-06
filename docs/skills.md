@@ -6,8 +6,9 @@ something an install carries in its settings.
 
 Every skill's name and description reach the prompt on every turn — about twenty tokens
 each. The instructions themselves stay on disk until the agent decides the skill applies
-and opens the file with `read_file`. A skill listed in `pinnedSkills` skips that step: its
-body is in the prompt before the agent does anything.
+and opens the file with `read_file`. Naming one on a message with `@skill:code-review`
+skips that step: its body is in the prompt before the agent does anything, for that
+message.
 
 ## The folder
 
@@ -60,7 +61,7 @@ read.
 
 That is a deliberate stopping point rather than a subset on the way to something. Nothing
 else in this repository parses YAML, and what a skill's frontmatter holds is two strings.
-See the header of `packages/agent/src/frontmatter.ts`.
+See the header of `packages/core/src/frontmatter.ts`.
 
 ## What reaches the prompt
 
@@ -69,20 +70,30 @@ In the **static** half — the part a provider caches for the life of a session:
 ```
 ## Skills
 
-Instruction sheets kept in this workspace under `skills/`. Each line below is a
+Instruction sheets kept in this workspace under `skills/`. A line below is a
 summary, not the skill — open the file with `read_file` before acting on what it names.
 
+- `skills/code-review/SKILL.md` — **code-review**: Review a diff for correctness, then style.
 - `skills/release-notes/SKILL.md` — **release-notes**: Draft release notes from a git range.
+```
 
+Every skill is here, and none of their bodies. Skills are sorted by name, because the
+section sits in the provider's cached prefix and a `readdir` order that varied between
+hosts would move that prefix for no visible reason.
+
+In the **runtime** half — the trailing block rebuilt on every iteration and never cached —
+whatever this message named:
+
+```
 ### Skill: code-review
 
 Read the diff with `exec git diff`. Take correctness first: …
 ```
 
-A pinned skill is inlined under its own heading and drops out of the index; it is already
-there. Skills are sorted by name, because the section sits in the provider's cached prefix
-and a `readdir` order that varied between hosts would move that prefix for no visible
-reason.
+A named skill therefore appears twice: as its index line above and as its body here. That
+is deliberate and it costs about twenty tokens. Dropping the line would mean varying the
+cached half with the message, which is the expense the two halves exist to avoid — and it
+would cost the whole prefix rather than a line of it.
 
 There **is** a `skill` tool, and it exists for a reason the argument against it never
 addressed.
@@ -110,30 +121,52 @@ a sheet with `read_file`: the tool is the intended path, not the only one.
 
 ### `@skill:` on a message
 
-`@skill:code-review` in a message adds one line to the **runtime** half — the trailing
-`<system-reminder>` — telling the model to read that skill before answering. It is a
-property of one message rather than of the workspace, and the two halves are cached
-differently, so it cannot go in the section above: a static half that changed per turn
-would end the session's cached prefix on every turn. See [Prompts](prompts.md).
+`@skill:code-review` sends that whole sheet with the message. It is the only way a body
+reaches the prompt without the agent opening the file itself, and it lasts exactly one
+message — the next turn is back to the index unless it says so again.
 
-The name is not checked against the folder. A mention that matches nothing costs one
-`read_file` answering "no such file", which the model recovers from; checking would cost
-either a disk read on every iteration or a cache that would hand one workspace's skills to
-a concurrent turn in another.
+This replaced a config key. `pinnedSkills` named skills whose bodies were inlined into the
+cached half for the life of a session: one decision, made by an operator, applied to every
+turn. Which message needs the deploy sheet is not knowable when the config is written, and
+it is obvious to the person typing — so the decision moved to them.
+
+It reaches the prompt the same way from anywhere, because the parse happens in the hub that
+every channel bridges through rather than in any one client. Typed in the browser, in
+`ghost chat`, or to the Telegram bot, `@skill:` means the same thing. Where to find the
+names differs:
+
+| Surface  | How to find a name                                                |
+| -------- | ----------------------------------------------------------------- |
+| Web      | Type `@skill:` and the composer completes from `GET /api/skills`. |
+| CLI      | Tab after `@skill:`, or `/skills` for the list.                   |
+| Telegram | `/skills`.                                                        |
+
+The name is not checked against the folder. A mention that matches nothing — a typo, or a
+skill deleted since the message was written — falls back to the line it would have got
+anyway: read this path. That costs one `read_file` answering "no such file", which the
+model recovers from, where checking would cost either a disk read on every iteration or a
+cache that would hand one workspace's skills to a concurrent turn in another.
+
+**One message starting with `/` is the exception**, on every channel that has commands: it
+routes to the command handler and never reaches the hub, so a mention in a command's tail
+is dropped. `/edit` and `/regenerate` are themselves exceptions to that, because both
+re-parse the text they rewrite.
 
 ## The budget
 
-| Cap               | Value             | What it bounds                                            |
-| ----------------- | ----------------- | --------------------------------------------------------- |
-| `maxPinnedSkills` | config, default 5 | Inlined bodies. Names past it fall back to an index line. |
-| `SKILL_MAX_BYTES` | 12 KB             | One body. Past it, the body is cut and says that it was.  |
-| `MAX_SKILLS`      | 100               | Index lines. Past it, the rest are not advertised at all. |
-| description       | 200 characters    | One index line stays one line.                            |
+| Cap                    | Value          | What it bounds                                                |
+| ---------------------- | -------------- | ------------------------------------------------------------- |
+| `MAX_MENTIONED_SKILLS` | 5              | Bodies inlined by one message. Past it, a name gets its path. |
+| `SKILL_MAX_BYTES`      | 12 KB          | One body. Past it, the body is cut and says that it was.      |
+| `MAX_SKILLS`           | 100            | Index lines. Past it, the rest are not advertised at all.     |
+| description            | 200 characters | One index line stays one line.                                |
 
-`pinnedSkills` is read in **your** order, not the folder's, because `maxPinnedSkills`
-truncates it — an operator who wrote three names under a cap of two expects the first two.
-Both keys live under `agents.defaults` and are overridable per agent; see
-[Configuration](configuration.md).
+The mention cap is a constant rather than a setting. It exists to stop one message costing
+five figures of uncached prompt on every iteration of its turn, and that hazard does not
+vary by install the way a taste for long prompts does. Names past it are not dropped — they
+fall back to a path line, so the sheet stays reachable and it is only the inlining that is
+capped. They are read in **the message's** order, so someone who names three skills under a
+cap of two gets the first two.
 
 ## Where these live, and what it costs
 
@@ -177,25 +210,27 @@ other seven keep: empty inherits `DEFAULT_SKILLS_TEMPLATE`, a single space delet
 section, anything else is this agent's own. It is edited under **Advanced prompt
 settings** in the agent editor. See [Prompts](prompts.md).
 
-What stays in code is the _shape_ of the two generated blocks — an index line, and a
-pinned body under its own `### Skill:` sub-heading — because those are what the catalogue
-and `read_file` agree on, not prose. `{{index}}` and `{{pinned}}` each carry their own
-leading blank line, so a catalogue with nothing pinned and an agent that pinned everything
-both render without a gap.
+What stays in code is the _shape_ of the index line, because that is what the catalogue and
+`read_file` agree on, not prose. `{{index}}` carries its own leading blank line, so a
+template that places it straight after its prose leaves no gap when there is nothing to
+list.
+
+The template has no placeholder for a body. A `@skill:` mention writes into the runtime
+half, which no template owns — it is rebuilt every iteration, so there is no operator
+wording to keep stable there.
 
 Whether the section is placed at all is the `skill` tool's permission, not this template.
 Denying it removes both.
 
 So does `toolsEnabled: false`, which is broader: with no tool list advertised there is
 nothing to open a sheet _with_, and a catalogue of paths plus prose naming `read_file` is
-cost the model cannot act on. **This takes a pinned skill with it**, whose body is inlined
-and would still have been readable — deliberately. Half a section whose own wording points
-at a tool that is not there is worse than no section, and an agent with no tools and a
-fixed instruction sheet is what `systemPrompt` is for.
+cost the model cannot act on. **This takes a `@skill:` mention with it**, whose body would
+still have been readable — deliberately. Half a section whose own wording points at a tool
+that is not there is worse than no section, and an agent with no tools and a fixed
+instruction sheet is what `systemPrompt` is for.
 
 ## What is not built yet
 
-- **No settings panel for the skills themselves.** They are authored by writing files.
-  Settings → Extensions still lists Skills as planned, and it means the screen.
-- **No REST route listing them**, so the composer's `@skill:` autocomplete has nothing to
-  offer yet. The mention itself works — it reaches the prompt.
+- **No settings panel for the skills themselves.** They are authored by writing files, and
+  no screen is planned: a skill is named on a message rather than configured, so Settings →
+  Extensions no longer lists one as coming.
