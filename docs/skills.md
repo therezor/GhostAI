@@ -6,9 +6,7 @@ something an install carries in its settings.
 
 Every skill's name and description reach the prompt on every turn — about twenty tokens
 each. The instructions themselves stay on disk until the agent decides the skill applies
-and opens the file with `read_file`. Naming one on a message with `@skill:code-review`
-skips that step: its body is in the prompt before the agent does anything, for that
-message.
+and opens the file with `read_file`.
 
 ## The folder
 
@@ -119,54 +117,24 @@ is granted** — `DEFAULT_AGENT_TOOLS` seeds a newly created agent, so a config 
 this has no `skill` key, and an absent tool is a denied one. And the model can still reach
 a sheet with `read_file`: the tool is the intended path, not the only one.
 
-### `@skill:` on a message
+### Seeing what a workspace holds
 
-`@skill:code-review` sends that whole sheet with the message. It is the only way a body
-reaches the prompt without the agent opening the file itself, and it lasts exactly one
-message — the next turn is back to the index unless it says so again.
-
-This replaced a config key. `pinnedSkills` named skills whose bodies were inlined into the
-cached half for the life of a session: one decision, made by an operator, applied to every
-turn. Which message needs the deploy sheet is not knowable when the config is written, and
-it is obvious to the person typing — so the decision moved to them.
-
-It reaches the prompt the same way from anywhere, because the parse happens in the hub that
-every channel bridges through rather than in any one client. Typed in the browser, in
-`ghost chat`, or to the Telegram bot, `@skill:` means the same thing. Where to find the
-names differs:
-
-| Surface  | How to find a name                                                |
-| -------- | ----------------------------------------------------------------- |
-| Web      | Type `@skill:` and the composer completes from `GET /api/skills`. |
-| CLI      | Tab after `@skill:`, or `/skills` for the list.                   |
-| Telegram | `/skills`.                                                        |
-
-The name is not checked against the folder. A mention that matches nothing — a typo, or a
-skill deleted since the message was written — falls back to the line it would have got
-anyway: read this path. That costs one `read_file` answering "no such file", which the
-model recovers from, where checking would cost either a disk read on every iteration or a
-cache that would hand one workspace's skills to a concurrent turn in another.
-
-**One message starting with `/` is the exception**, on every channel that has commands: it
-routes to the command handler and never reaches the hub, so a mention in a command's tail
-is dropped. `/edit` and `/regenerate` are themselves exceptions to that, because both
-re-parse the text they rewrite.
+The catalogue is in the agent's prompt, not on your screen. `/skills` prints it — the name
+and description of every sheet the workspace holds — in `ghost chat` and from the Telegram
+bot. It is a listing and nothing more; it is gated on the same `skill` permission, because
+a catalogue this agent cannot open is not worth printing.
 
 ## The budget
 
-| Cap                    | Value          | What it bounds                                                |
-| ---------------------- | -------------- | ------------------------------------------------------------- |
-| `MAX_MENTIONED_SKILLS` | 5              | Bodies inlined by one message. Past it, a name gets its path. |
-| `SKILL_MAX_BYTES`      | 12 KB          | One body. Past it, the body is cut and says that it was.      |
-| `MAX_SKILLS`           | 100            | Index lines. Past it, the rest are not advertised at all.     |
-| description            | 200 characters | One index line stays one line.                                |
+| Cap               | Value          | What it bounds                                            |
+| ----------------- | -------------- | --------------------------------------------------------- |
+| `SKILL_MAX_BYTES` | 12 KB          | One body. Past it, the body is cut and says that it was.  |
+| `MAX_SKILLS`      | 100            | Index lines. Past it, the rest are not advertised at all. |
+| description       | 200 characters | One index line stays one line.                            |
 
-The mention cap is a constant rather than a setting. It exists to stop one message costing
-five figures of uncached prompt on every iteration of its turn, and that hazard does not
-vary by install the way a taste for long prompts does. Names past it are not dropped — they
-fall back to a path line, so the sheet stays reachable and it is only the inlining that is
-capped. They are read in **the message's** order, so someone who names three skills under a
-cap of two gets the first two.
+These are constants rather than settings. They exist to stop a workspace that has
+accumulated files quietly costing five figures of prompt on every turn, and that hazard
+does not vary by install the way a taste for long prompts does.
 
 ## Where these live, and what it costs
 
@@ -215,22 +183,20 @@ What stays in code is the _shape_ of the index line, because that is what the ca
 template that places it straight after its prose leaves no gap when there is nothing to
 list.
 
-The template has no placeholder for a body. A `@skill:` mention writes into the runtime
-half, which no template owns — it is rebuilt every iteration, so there is no operator
-wording to keep stable there.
+The template has no placeholder for a body. A sheet is never templated into the prompt at
+all — the agent opens the file the index names, long after the section is rendered.
 
 Whether the section is placed at all is the `skill` tool's permission, not this template.
 Denying it removes both.
 
 So does `toolsEnabled: false`, which is broader: with no tool list advertised there is
 nothing to open a sheet _with_, and a catalogue of paths plus prose naming `read_file` is
-cost the model cannot act on. **This takes a `@skill:` mention with it**, whose body would
-still have been readable — deliberately. Half a section whose own wording points at a tool
-that is not there is worse than no section, and an agent with no tools and a fixed
-instruction sheet is what `systemPrompt` is for.
+cost the model cannot act on. Half a section whose own wording points at a tool that is not
+there is worse than no section, and an agent with no tools and a fixed instruction sheet is
+what `systemPrompt` is for.
 
 ## What is not built yet
 
 - **No settings panel for the skills themselves.** They are authored by writing files, and
-  no screen is planned: a skill is named on a message rather than configured, so Settings →
-  Extensions no longer lists one as coming.
+  no screen is planned: a skill is a folder committed beside the project rather than
+  configuration, so Settings → Extensions no longer lists one as coming.

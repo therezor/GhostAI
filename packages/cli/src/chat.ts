@@ -28,12 +28,10 @@
 
 import pc from 'picocolors';
 
-import { describeContext, readSkills, type AgentLoop } from '@ghostai/agent';
+import { describeContext, type AgentLoop } from '@ghostai/agent';
 import { createLogger, isAbortError, type LogLevel } from '@ghostai/core';
 import {
   DEFAULT_AGENT_ID,
-  DEFAULT_WORKSPACE_ID,
-  parseMentions,
   type ContentPart,
   type StopReason,
 } from '@ghostai/protocol';
@@ -68,12 +66,6 @@ import {
   type HeaderView,
 } from './header.js';
 import { completeCommand, pickCommand } from './pickers/palette.js';
-import {
-  applySkill,
-  completeSkill,
-  mentionPrefix,
-  pickSkill,
-} from './pickers/skills.js';
 import { translationsFor, type CliT, type Env } from './i18n.js';
 import { formatLogLine } from './log-line.js';
 import {
@@ -186,20 +178,6 @@ interface RunTurnDeps {
  * with the event stream, and a test can hand it a loop and a string buffer
  * without a terminal, a database or a provider.
  */
-/**
- * The typed part of a message, for the mention parser.
- *
- * The same join the channel manager makes on the way to the hub, so a `@skill:`
- * split across an attachment and its caption is read the same way here as there.
- */
-function textIn(content: string | readonly ContentPart[]): string {
-  if (typeof content === 'string') return content;
-  return content
-    .filter((part) => part.type === 'text')
-    .map((part) => part.text)
-    .join('\n');
-}
-
 export async function runTurn(
   deps: RunTurnDeps,
   content: string | readonly ContentPart[],
@@ -211,15 +189,9 @@ export async function runTurn(
   // every other transport will have, rather than something only the CLI can see.
   let stopReason: StopReason | undefined;
 
-  // Parsed here because the CLI runs the loop in-process and never crosses the
-  // hub, which is where every other channel's mentions are read. Without this
-  // `@skill:` would be a feature of every transport but the local one.
-  const mentions = parseMentions(textIn(content));
-
   const turn = deps.loop.run({
     sessionKey: deps.sessionKey,
     content,
-    mentions,
     signal: deps.signal,
     channel: 'cli',
     ...(deps.workspaceId === undefined
@@ -940,43 +912,6 @@ function framed(deps: ReplDeps): Surface {
     })();
   };
 
-  /**
-   * Tab inside a half-typed `@skill:`.
-   *
-   * The read is here rather than once at startup because `skills/` is workspace
-   * content: a turn can write one, and `/workspace` moves which folder is meant.
-   * It is a `readdir` and a few small files, on a keypress, and only on the
-   * keypress that is already asking about them.
-   */
-  const completeMention = (): void => {
-    void (async (): Promise<void> => {
-      const skills = await readSkills(
-        deps.runtime.jails.forWorkspace(
-          deps.runtime.store.getSession(deps.session())?.workspaceId ??
-            DEFAULT_WORKSPACE_ID,
-        ).root,
-      );
-      const matches = completeSkill(editor.text, skills);
-
-      // One match is inserted and several open the picker — the same rule the
-      // command completer keeps, so Tab means one thing in both places.
-      if (matches.length === 1) {
-        editor.setText(applySkill(editor.text, matches[0] ?? ''));
-      } else if (matches.length > 1) {
-        const named = new Set(matches);
-        const chosen = await pickSkill({
-          menu,
-          skills: skills.filter((skill) => named.has(skill.name)),
-          t: deps.t,
-        });
-        if (chosen !== undefined) {
-          editor.setText(applySkill(editor.text, chosen));
-        }
-      }
-      frame.requestRender();
-    })();
-  };
-
   keyboard.onKey((key) => {
     if (overlay !== undefined) {
       const outcome = overlay.select.handleKey(key);
@@ -998,16 +933,11 @@ function framed(deps: ReplDeps): Surface {
       return;
     }
 
-    // Tab completes a slash command or a `@skill:` mention, and nothing else:
-    // the rest of a prompt is prose, and a completer guessing at the middle of a
-    // sentence would surprise far more often than it helped. Both of these are
-    // tokens with a known vocabulary rather than guesses at a word — the
-    // mention's names come off disk, the commands off the table `/help` prints.
+    // Tab completes a slash command and nothing else: the rest of a prompt is
+    // prose, and a completer guessing at the middle of a sentence would surprise
+    // far more often than it helped. A command is a token with a known
+    // vocabulary — the table `/help` prints — rather than a guess at a word.
     if (key.name === 'tab') {
-      if (mentionPrefix(editor.text) !== undefined) {
-        completeMention();
-        return;
-      }
       const [matches] = completeCommand(editor.text);
       if (matches.length === 1) editor.setText(`${matches[0] ?? ''} `);
       frame.requestRender();

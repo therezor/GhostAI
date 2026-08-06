@@ -42,8 +42,8 @@ What every agent inherits, and what an install with no named agents runs as.
 | `subagentTimeoutMs`   | int ≥ 0                      | `0`      | Applies to delegations _this_ agent makes.                                                                                                     |
 | `reasoningEffort`     | `minimal\|low\|medium\|high` | _unset_  | Unset sends nothing.                                                                                                                           |
 
-There is no key here for skills. Which sheets an agent gets is decided per message with
-`@skill:` rather than per install; see [Skills](skills.md). `pinnedSkills` and
+There is no key here for skills. Every sheet the workspace holds is indexed in the prompt
+and the agent opens the one it needs; see [Skills](skills.md). `pinnedSkills` and
 `maxPinnedSkills` used to live in this table and are the worked example of the paragraph
 below — a `config.json` still carrying them parses, and loses them the next time it is
 written.

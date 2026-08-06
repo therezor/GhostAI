@@ -89,7 +89,6 @@ the schema, and changing either revokes every other session.
 | ------ | ---------------- | ---------- | --------------------------------------------------------------------------- |
 | GET    | `/api/agents`    | `required` | **Read-only.** Agents are created and edited through `PATCH /api/settings`. |
 | GET    | `/api/tools`     | `required` | What is registered, with source and risk band.                              |
-| GET    | `/api/skills`    | `required` | `?workspace=` — names and descriptions, for the `@skill:` autocomplete.     |
 | GET    | `/api/toolboxes` | `required` | Installed manifests and their approval state.                               |
 | GET    | `/api/mcp`       | `required` | Each configured MCP server's live state. See below.                         |
 

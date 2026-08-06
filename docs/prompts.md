@@ -370,26 +370,16 @@ there is paid five or ten times per turn.
 Contributor sections are appended after the built-in ones, in the order given, so the
 cached prefix grows at the end rather than shifting when a contributor is added.
 
-**[Skills](skills.md) arrive this way**, and are the worked example of both halves:
-`SkillsContributor.staticSection` reads `<workspace>/skills/` once per turn and renders the
-index, while `runtimeSection` inlines the body of whatever this message named with
-`@skill:`. It is wired in the composition root — the loop composes and caches sections and
-deliberately knows nothing about where one came from.
+**[Skills](skills.md) arrive this way**: `SkillsContributor.staticSection` reads
+`<workspace>/skills/` once per turn and renders the index. It is wired in the composition
+root — the loop composes and caches sections and deliberately knows nothing about where one
+came from.
 
-It is also the worked example of `carry`, the per-turn map on `StaticPromptContext`. The
-two halves have incompatible budgets — the static one may do I/O and runs once a turn, the
-runtime one is synchronous and runs every iteration — so a contributor needing bytes down
-there would otherwise have to choose between reading files on every iteration and keeping
-an instance cache that outlives the turn. `staticSection` has already read every body by
-the time it renders a line of the index, so it leaves them in `carry` and `runtimeSection`
-spends a map lookup. The map is created per turn by the loop, which is what stops it being
-either of the things it replaces.
-
-**[Memory](memory.md) is the second**, and it uses only the static half: the workspace's
-`memory/` folder is a property of the folder, not of one message, so there is no runtime
-counterpart and no `@memory:` mention. It is placed _after_ skills, because sections are
-appended in order and memory is the one a turn can rewrite — so it sits where a change
-invalidates the least of the cached prefix.
+**[Memory](memory.md) is the second**, and it works the same way: the workspace's
+`memory/` folder is a property of the folder rather than of one message, so it too has only
+a static half. It is placed _after_ skills, because sections are appended in order and
+memory is the one a turn can rewrite — so it sits where a change invalidates the least of
+the cached prefix.
 
 `memoryPrompt` and `skillsPrompt` are therefore the two section templates that do **not**
 travel on `PromptAgent` with the other six: those fill sections the prompt builder writes,
@@ -410,6 +400,5 @@ preamble used to disappear when the index was empty, since it told the model to 
 files below it and there were none. A placeholder cannot express that condition, so the
 built-in wording says "a line below" rather than "each line below" and is true either way.
 
-There is no placeholder for a skill's body. `@skill:` writes into the runtime half, which
-no template owns — it is rebuilt every iteration, so there is no operator wording to keep
-stable there.
+There is no placeholder for a skill's body. A sheet is never templated into the prompt at
+all: the agent opens the file the index names, long after this section is rendered.

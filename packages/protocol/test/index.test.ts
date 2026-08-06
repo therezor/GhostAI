@@ -12,14 +12,12 @@ describe('public surface', () => {
     expect(protocol.PROTOCOL_VERSION).toBe(2);
   });
 
-  it.each([
-    'parseMentions',
-    'isMentionKind',
-    'isLoopbackHost',
-    'isSequencedServerMessage',
-  ] as const)('exports %s', (name) => {
-    expect(protocol[name]).toBeTypeOf('function');
-  });
+  it.each(['isLoopbackHost', 'isSequencedServerMessage'] as const)(
+    'exports %s',
+    (name) => {
+      expect(protocol[name]).toBeTypeOf('function');
+    },
+  );
 
   it.each([
     'ChatMessageSchema',

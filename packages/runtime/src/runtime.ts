@@ -1060,13 +1060,8 @@ class Runtime implements GhostRuntime {
       // nothing to open a memory or a skill *with*. Both sections are an index
       // of paths plus prose telling the model to read one — handed to a model
       // that cannot call `read_file`, the index is unusable and the prose is
-      // false. The whole of it is cost with no way to act on it.
-      //
-      // This takes a `@skill:` mention with it, whose body would still have been
-      // readable. That is deliberate rather than overlooked: an agent with no
-      // tools and a fixed instruction sheet is what `systemPrompt` is for, and
-      // half a section whose own wording points at a tool that is not there is
-      // worse than no section.
+      // false. The whole of it is cost with no way to act on it. An agent with
+      // no tools and a fixed instruction sheet is what `systemPrompt` is for.
       contributors: [
         ...(agent.defaults.toolsEnabled && granted(agent.tools, 'skill')
           ? [

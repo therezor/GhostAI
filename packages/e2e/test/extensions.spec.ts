@@ -79,7 +79,7 @@ test.describe('MCP servers', () => {
     // This screen used to end in a "Still to come" list naming OAuth, plugins
     // and skills. It is gone: a settings panel advertising a form an operator
     // cannot open is one they check twice, and skills were never going to get
-    // a screen at all — one is named on a message with `@skill:`.
+    // a screen at all — a skill is a folder in the workspace.
     for (const gone of ['Still to come', 'OAuth connections', 'Skills']) {
       await expect(app.getByText(gone)).toHaveCount(0);
     }

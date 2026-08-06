@@ -22,7 +22,6 @@ import { sessionRoutes } from './routes/sessions.js';
 import { settingsRoutes } from './routes/settings.js';
 import { systemRoutes } from './routes/system.js';
 import { agentRoutes } from './routes/agents.js';
-import { skillRoutes } from './routes/skills.js';
 import { toolboxRoutes } from './routes/toolboxes.js';
 import { toolRoutes } from './routes/tools.js';
 import type { RouteDefinition, RouteDeps } from './routes/types.js';
@@ -52,7 +51,6 @@ export function createRoutes(
     ...sessionRoutes(deps),
     ...agentRoutes(deps),
     ...toolRoutes(deps),
-    ...skillRoutes(deps),
     ...toolboxRoutes(deps),
     ...mcpRoutes(deps),
     ...fileRoutes(deps),

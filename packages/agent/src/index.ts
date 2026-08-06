@@ -77,11 +77,7 @@ export {
   type Skill,
 } from './skills.js';
 
-export {
-  SkillsContributor,
-  renderMentionedSkills,
-  renderSkills,
-} from './skills-contributor.js';
+export { SkillsContributor, renderSkills } from './skills-contributor.js';
 
 export {
   MemoryContributor,

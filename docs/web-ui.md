@@ -55,10 +55,6 @@ never drops a running turn.
 - **Steering** — what you type mid-turn reaches the running turn, not the next one.
 - **Attachments upload when you pick them**, not on send, so a large file is already there
   when you hit Enter.
-- **`@` autocomplete** for `@mcp:` and `@skill:`, as a real listbox with
-  `aria-activedescendant`. The grammar is parsed once, in the protocol, for every channel.
-  _It offers values for `@skill:` and for nothing else: naming a skill inlines its sheet
-  into that message, so the completion leads somewhere. `@mcp:` does not._
 - An agent picker, and a context budget strip.
 
 ### Message actions

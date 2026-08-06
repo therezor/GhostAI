@@ -11,9 +11,9 @@
  * is clipped at the moment it is typed, because a string ending in `\n` and one
  * that does not occupy different heights.
  *
- * The composer has its own copy of these class names for the same reason it has
- * its own mention listbox and upload row: it is a much larger control. This is
- * the widget on its own, for the message editor.
+ * The composer has its own copy of these class names because it is a much
+ * larger control — it carries an upload row and a meta row besides the input.
+ * This is the widget on its own, for the message editor.
  */
 
 import type { ComponentProps, JSX } from 'react';

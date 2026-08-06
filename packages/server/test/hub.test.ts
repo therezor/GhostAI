@@ -547,30 +547,6 @@ describe('SessionHub', () => {
       ]);
     });
 
-    it('parses mentions here, so a channel gets them as a browser does', async () => {
-      const h = harness();
-      const client = h.connect({ channel: 'telegram' });
-
-      await send(client, {
-        type: 'user.message',
-        sessionKey: SESSION,
-        content:
-          'check @mcp:"release notes" and @skill:triage before answering',
-      });
-
-      const input = h.runner.turn(0).input;
-      expect(input.mentions).toMatchObject({
-        mcp: ['release notes'],
-        skill: ['triage'],
-      });
-      // The text is untouched: the model sees exactly what was typed, and the
-      // spans are what a renderer uses to highlight them.
-      expect(input.content).toBe(
-        'check @mcp:"release notes" and @skill:triage before answering',
-      );
-      expect(input.channel).toBe('telegram');
-    });
-
     it('refuses a message with neither text nor attachments', async () => {
       const h = harness();
       const client = h.connect();

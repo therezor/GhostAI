@@ -139,10 +139,9 @@ describe('DEFAULT_SKILLS_TEMPLATE', () => {
     ).toEqual([]);
   });
 
-  it('places the catalogue, and nothing a message decides', () => {
-    // One generated block, not two. A body reaches the model only when a message
-    // names it with `@skill:`, and that goes in the runtime half — which no
-    // template owns, because it is rebuilt per iteration and never cached.
+  it('places the catalogue, and nothing else', () => {
+    // One generated block, not two. A sheet's body is never templated: the model
+    // opens the file the index names, long after this section is rendered.
     expect(DEFAULT_SKILLS_TEMPLATE).toContain('{{index}}');
     expect(DEFAULT_SKILLS_TEMPLATE).not.toContain('{{pinned}}');
   });

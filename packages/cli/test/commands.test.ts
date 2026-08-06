@@ -643,3 +643,95 @@ describe('/memory', () => {
     expect(out.text).not.toContain('compress');
   });
 });
+
+describe('/skills', () => {
+  const homes: string[] = [];
+
+  function runtimeIn(config?: unknown): ChatRuntime {
+    const home = mkdtempSync(join(tmpdir(), 'ghostai-skills-'));
+    homes.push(home);
+    mkdirSync(join(home, 'workspace'), { recursive: true });
+    if (config !== undefined) {
+      writeFileSync(join(home, 'config.json'), JSON.stringify(config));
+    }
+    return createChatRuntime({ home });
+  }
+
+  /** A sheet on disk, as `readSkills` expects to find one. */
+  function sheet(runtime: ChatRuntime, name: string, description: string) {
+    const dir = join(runtime.jail.root, 'skills', name);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, 'SKILL.md'),
+      `---\ndescription: ${description}\n---\n\nBody of ${name}.\n`,
+    );
+  }
+
+  afterEach(() => {
+    while (homes.length > 0) {
+      const dir = homes.pop();
+      if (dir !== undefined) rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('says the tool is not granted on an install that predates it', async () => {
+    // The same gate the contributor uses: `deny` takes the catalogue out of the
+    // prompt, so listing sheets would be listing what this agent cannot open.
+    // An absent key counts as denied, which is what an upgrade looks like.
+    const runtime = runtimeIn({
+      agents: { list: { default: { tools: { read_file: 'allow' } } } },
+    });
+    const { ctx, out } = context(runtime, 'cli:1');
+
+    await runSlashCommand('/skills', ctx);
+
+    expect(out.text).toContain('does not have the skill tool');
+  });
+
+  it('says so when the workspace holds none', async () => {
+    const runtime = runtimeIn();
+    const { ctx, out } = context(runtime, 'cli:1');
+
+    await runSlashCommand('/skills', ctx);
+
+    expect(out.text).toContain('no skills yet');
+  });
+
+  it('lists every sheet with its description', async () => {
+    const runtime = runtimeIn();
+    sheet(runtime, 'deploy', 'Ship a release.');
+    sheet(runtime, 'code-review', 'Review a diff.');
+    const { ctx, out } = context(runtime, 'cli:1');
+
+    await runSlashCommand('/skills', ctx);
+
+    expect(out.text).toContain('deploy');
+    expect(out.text).toContain('Ship a release.');
+    expect(out.text).toContain('code-review');
+    expect(out.text).toContain('Review a diff.');
+  });
+
+  it('prints a name and nothing to type it into', async () => {
+    // The listing is informational: it says which sheets exist so a person can
+    // ask for one in words. A row carrying syntax would be teaching a way to
+    // invoke a skill that does not exist — the agent opens the file itself.
+    const runtime = runtimeIn();
+    sheet(runtime, 'deploy', 'Ship a release.');
+    const { ctx, out } = context(runtime, 'cli:1');
+
+    await runSlashCommand('/skills', ctx);
+
+    expect(out.text).not.toContain('@');
+  });
+
+  it('mints no session row for a conversation that never spoke', async () => {
+    // It reads the session to find the workspace, and a read that wrote would
+    // put an empty conversation in the web sidebar.
+    const runtime = runtimeIn();
+    const { ctx } = context(runtime, 'cli:never-spoken');
+
+    await runSlashCommand('/skills', ctx);
+
+    expect(runtime.store.getSession('cli:never-spoken')).toBeUndefined();
+  });
+});

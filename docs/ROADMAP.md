@@ -31,11 +31,10 @@ building a second one beside it.
       the slash commands above.
 - [x] **Skills** — reusable instruction bundles in `<workspace>/skills/`, one
       directory per skill. Every skill's description is indexed into the static
-      prompt and the agent opens the sheet itself with `read_file`; naming one on
-      a message with `@skill:` inlines its whole body for that message. Arrives
+      prompt and the agent opens the sheet itself with `read_file`. Arrives
       through `ContextContributor`, wired in the composition root. No settings
-      panel is planned: a skill is named on a message rather than configured, and
-      the names are discoverable from the composer, `/skills` and Tab.
+      panel is planned: a skill is a folder committed beside the project rather
+      than configuration, and `/skills` lists what a workspace holds.
 - [x] **Telegram** — hold a session with an agent from a phone: the terminal's
       whole command set as bot commands, inline menus for the four pickers, and
       tool approvals answerable from the chat. One adapter over the Bot API in

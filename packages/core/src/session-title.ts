@@ -16,10 +16,8 @@
  * What it strips is chosen by what a first message actually looks like. Fenced
  * code is the common case that ruins a title: someone pastes a stack trace under
  * one line of question, and a naive slice names the conversation after the
- * stack. Mentions are scoping directives rather than subject matter — a title of
- * `@skill:runbooks how do I rotate` reads as noise where `how do I rotate` reads as
- * the question. Markdown furniture is stripped for the same reason a heading is
- * not part of its own text.
+ * stack. Markdown furniture is stripped for the same reason a heading is not
+ * part of its own text.
  */
 
 /**
@@ -41,7 +39,6 @@ export const MAX_TITLE_CHARS = 60;
 const BOUNDARY_FRACTION = 1 / 3;
 
 const FENCED_CODE = /```[\s\S]*?```/gu;
-const MENTION = /@(?:mcp|skill):[\w./-]+/gu;
 /** Leading list markers, headings and quotes — per line, not per string. */
 const LINE_FURNITURE =
   /^[ \t]*(?:#{1,6}[ \t]+|>[ \t]*|[-*][ \t]+|\d+\.[ \t]+)/gmu;
@@ -68,7 +65,7 @@ export function deriveSessionTitle(
   // the identifier rather than the markup around it.
   if (cleaned.trim() === '') cleaned = text.replaceAll('`', ' ');
 
-  cleaned = cleaned.replaceAll(MENTION, ' ').replaceAll(LINE_FURNITURE, ' ');
+  cleaned = cleaned.replaceAll(LINE_FURNITURE, ' ');
 
   const flat = cleaned.replaceAll(/\s+/gu, ' ').trim();
   if (flat === '') return '';

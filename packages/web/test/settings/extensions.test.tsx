@@ -122,8 +122,8 @@ describe('the Extensions panel', () => {
     // This panel used to end in a "Still to come" list naming OAuth, plugins
     // and — before them — skills and channels. It is gone: a settings screen
     // advertising a form an operator cannot open is a screen they check twice.
-    // Skills in particular are named on a message with `@skill:` rather than
-    // configured, so a row promising them taught the wrong thing.
+    // Skills in particular are workspace folders rather than configuration, so
+    // a row promising them taught the wrong thing.
     mount();
     await screen.findByText('files');
 

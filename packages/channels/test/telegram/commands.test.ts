@@ -694,9 +694,7 @@ describe('/skills', () => {
     expect(result.text).toContain('No skills here yet');
   });
 
-  it('lists each skill as the mention that sends it', async () => {
-    // The name alone would be the thing a person then has to guess the syntax
-    // for. `@skill:deploy` is copyable, which is the whole job of this command.
+  it('lists each skill with its description', async () => {
     const h = harness();
     h.console.setSkills({
       granted: true,
@@ -708,8 +706,8 @@ describe('/skills', () => {
 
     const result = await h.run('/skills');
 
-    expect(result.text).toContain('`@skill:deploy` — Ship a release.');
-    expect(result.text).toContain('`@skill:code-review` — Review a diff.');
+    expect(result.text).toContain('`deploy` — Ship a release.');
+    expect(result.text).toContain('`code-review` — Review a diff.');
   });
 
   it('is offered to a non-admin, because it only reads', async () => {

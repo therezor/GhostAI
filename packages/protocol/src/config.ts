@@ -678,9 +678,8 @@ export const AgentEntrySchema = patchOf(AgentDefaultsSchema)
      * template's, its `{{index}}` carries its own leading blank line, because it
      * can be empty and a section should leave no gap where it would have been.
      *
-     * The bodies a `@skill:` mention inlines are not here. They belong to one
-     * message rather than to the workspace, so they are written into the runtime
-     * half of the prompt, which no template owns.
+     * The sheets themselves are not here. The template renders the catalogue;
+     * a body reaches the model only when the agent opens the file it names.
      */
     skillsPrompt: z.string().default(''),
     /**

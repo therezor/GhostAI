@@ -1029,21 +1029,6 @@ describe('skills', () => {
     expect(preview.staticPrompt).not.toContain('Read the diff.');
   });
 
-  it('inlines a skill a message named with @skill:', async () => {
-    const runtime = withSkill('code-review', 'Read the diff.');
-
-    const preview = await runtime.requireLoop().previewPrompt({
-      sessionKey: 'session-1',
-      mentions: { mcp: [], skill: ['code-review'], all: [] },
-    });
-
-    // The runtime half, not the static one. Inlining into the cached prefix is
-    // what the config key used to do, and what ended that prefix every turn.
-    expect(preview.runtimeBlock).toContain('### Skill: code-review');
-    expect(preview.runtimeBlock).toContain('Read the diff.');
-    expect(preview.staticPrompt).not.toContain('Read the diff.');
-  });
-
   it('places no section when the workspace has no skills folder', async () => {
     const preview = await ollama()
       .requireLoop()

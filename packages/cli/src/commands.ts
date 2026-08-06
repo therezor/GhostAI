@@ -781,19 +781,19 @@ async function memoryCommand(
 }
 
 /**
- * The workspace's skills, as a list you can then name with `@skill:`.
+ * The workspace's skills, as a list.
  *
  * The catalogue is already in the prompt, so this is not what tells the *model*
- * about a skill. It is what tells the person: `@skill:` inlines a sheet for one
- * message, and a name typed from memory is a name typed wrong.
+ * about a skill — the agent opens the sheet itself when the description says it
+ * applies. It is what tells the person which sheets this workspace holds.
  */
 async function skillsCommand(ctx: SlashContext): Promise<SlashOutcome> {
   const { renderer, runtime, t } = ctx;
   const agentId = memoryAgentId(ctx);
 
   // The same gate the contributor uses, and the same reason: `deny` takes the
-  // catalogue out of the prompt, so offering names to mention would be offering
-  // something this agent cannot act on. Absent counts as denied.
+  // catalogue out of the prompt, so listing sheets would be listing something
+  // this agent cannot reach. Absent counts as denied.
   const permission = runtime.agents.find((agent) => agent.id === agentId)?.tools
     .skill;
   if (permission === undefined || permission === 'deny') {
@@ -812,7 +812,7 @@ async function skillsCommand(ctx: SlashContext): Promise<SlashOutcome> {
     skills.length === 0
       ? t('slash.notes.skillsEmpty', { path: SKILLS_DIRNAME })
       : skills
-          .map((skill) => `@skill:${skill.name}  ·  ${skill.description}`)
+          .map((skill) => `${skill.name}  ·  ${skill.description}`)
           .join('\n'),
   );
 

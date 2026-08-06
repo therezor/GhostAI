@@ -32,15 +32,6 @@ describe('deriveSessionTitle', () => {
     );
   });
 
-  it('strips mention tokens', () => {
-    expect(deriveSessionTitle('@skill:runbooks how do I rotate the key')).toBe(
-      'how do I rotate the key',
-    );
-    expect(
-      deriveSessionTitle('check @mcp:github/issues and @skill:review please'),
-    ).toBe('check and please');
-  });
-
   it('strips leading markdown furniture', () => {
     expect(deriveSessionTitle('## Plan the migration')).toBe(
       'Plan the migration',

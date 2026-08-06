@@ -485,12 +485,11 @@ const COMMANDS: readonly TelegramCommand[] = [
   },
 
   // Discovery, not capability. The catalogue is already in the agent's prompt;
-  // what a person cannot see from a phone is the *name*, and `@skill:` needs it
-  // exact.
+  // what a person cannot see from a phone is which sheets the workspace holds.
   {
     name: 'skills',
     usage: '',
-    description: 'The sheets this workspace holds, and the names @skill: takes',
+    description: 'The sheets this workspace holds',
     run: async (input) => {
       const state = await input.console.skills(input.chat.sessionKey);
 
@@ -498,8 +497,8 @@ const COMMANDS: readonly TelegramCommand[] = [
         return {
           text:
             'This agent does not have the `skill` tool, so no catalogue ' +
-            'reaches its prompt and `@skill:` has nothing to inline. Grant it ' +
-            'in Settings → Agents.',
+            'reaches its prompt and it cannot open a sheet. Grant it in ' +
+            'Settings → Agents.',
         };
       }
 
@@ -510,13 +509,9 @@ const COMMANDS: readonly TelegramCommand[] = [
       }
 
       return {
-        text: [
-          'Name one on a message and its whole sheet goes to the agent for that message:',
-          '',
-          ...state.skills.map(
-            (skill) => `\`@skill:${skill.name}\` — ${skill.description}`,
-          ),
-        ].join('\n'),
+        text: state.skills
+          .map((skill) => `\`${skill.name}\` — ${skill.description}`)
+          .join('\n'),
       };
     },
   },

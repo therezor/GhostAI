@@ -276,68 +276,6 @@ describe('runTurn', () => {
     expect(out.text).toContain('Hi.');
   });
 
-  /**
-   * The CLI runs the loop in-process and never crosses the hub, which is where
-   * every other channel's mentions are parsed. Without this the terminal was
-   * the one transport where `@skill:` silently did nothing.
-   */
-  it('parses mentions, because nothing upstream of the loop will', async () => {
-    let seen: TurnInput | undefined;
-    const loop = fakeLoop(async function* (input) {
-      seen = input;
-      yield {
-        type: 'turn.end',
-        turnId: 't1',
-        stopReason: 'complete',
-        iterations: 1,
-      } satisfies AgentEvent;
-      return undefined;
-    });
-
-    await runTurn(
-      {
-        loop,
-        renderer: renderer(buffer()),
-        sessionKey: 's',
-        signal: new AbortController().signal,
-      },
-      'read @skill:code-review before you start',
-    );
-
-    expect(seen?.mentions?.skill).toEqual(['code-review']);
-  });
-
-  it('reads the mentions out of the text parts of a rich message', async () => {
-    // An attachment's caption is where a mention most plausibly lands, and the
-    // parser takes a string.
-    let seen: TurnInput | undefined;
-    const loop = fakeLoop(async function* (input) {
-      seen = input;
-      yield {
-        type: 'turn.end',
-        turnId: 't1',
-        stopReason: 'complete',
-        iterations: 1,
-      } satisfies AgentEvent;
-      return undefined;
-    });
-
-    await runTurn(
-      {
-        loop,
-        renderer: renderer(buffer()),
-        sessionKey: 's',
-        signal: new AbortController().signal,
-      },
-      [
-        { type: 'text', text: 'use @skill:deploy' },
-        { type: 'file', mimeType: 'text/plain', path: 'notes.txt' },
-      ],
-    );
-
-    expect(seen?.mentions?.skill).toEqual(['deploy']);
-  });
-
   it('reports a turn that stopped at a cap without calling it a failure', async () => {
     const loop = fakeLoop(async function* () {
       yield {

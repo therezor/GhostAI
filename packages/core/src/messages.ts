@@ -126,7 +126,7 @@ export function toolMessage(
  * the first word of the next.
  *
  * Image and file parts contribute nothing, deliberately. This feeds
- * `deriveSessionTitle` and `parseMentions`, and a session titled
+ * `deriveSessionTitle`, and a session titled
  * `[file: uploads/ab12cd34-scan.pdf]` is worse than one left untitled — which
  * is what an attachment-only first message now gets.
  */

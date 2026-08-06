@@ -44,7 +44,6 @@ import {
   isAbortError,
   silentLogger,
   systemClock,
-  textOf,
   textPart,
   toStoredMessage,
   type Clock,
@@ -56,13 +55,11 @@ import {
   ClientMessageSchema,
   PROTOCOL_VERSION,
   newUuid,
-  parseMentions,
   type Attachment,
   type ClientMessage,
   type Config,
   type ContentPart,
   type ErrorCode,
-  type ParsedMentions,
   type ServerMessage,
 } from '@ghostai/protocol';
 
@@ -276,8 +273,6 @@ interface QueuedTurn {
   readonly channel: string;
   /** Only ever creates; an existing session keeps the workspace it is bound to. */
   readonly workspaceId: string | undefined;
-  /** Parsed at submit time, so a queued message is not reparsed to run it. */
-  readonly mentions: ParsedMentions;
 }
 
 interface RunningTurn {
@@ -714,11 +709,6 @@ export class SessionHub {
 
     this.enqueue(connection, state, {
       content: toContent(message.content, message.attachments),
-      // Here, and only here. Parsing mentions in the WebSocket handler would
-      // make `@skill:` a browser feature: a channel bridging through this hub
-      // sends the same frame and would get none of it. The text is never
-      // modified — the model sees exactly what the user typed.
-      mentions: parseMentions(message.content),
       ...(clientMessageId === undefined ? {} : { clientMessageId }),
       ...(message.agentId === undefined ? {} : { agentId: message.agentId }),
     });
@@ -737,7 +727,6 @@ export class SessionHub {
     state: SessionState,
     turn: {
       readonly content: string | readonly ContentPart[];
-      readonly mentions: ParsedMentions;
       readonly clientMessageId?: string;
       readonly agentId?: string;
     },
@@ -763,7 +752,6 @@ export class SessionHub {
       agentId: turn.agentId ?? connection.agentId,
       channel: connection.channel,
       workspaceId: connection.workspaceId,
-      mentions: turn.mentions,
     });
 
     this.emit(state, {
@@ -838,7 +826,6 @@ export class SessionHub {
     this.rewind(state, target.seq);
     this.enqueue(connection, state, {
       content,
-      mentions: parseMentions(textOf(target.message)),
       // Forwarded exactly as `#edit` does. The rewind above deletes the question
       // and the loop appends it again, so the asking client is showing an
       // optimistic bubble in the gap; this is what the ack uses to claim it.
@@ -883,7 +870,6 @@ export class SessionHub {
     this.rewind(state, message.seq);
     this.enqueue(connection, state, {
       content: toContent(message.content, message.attachments),
-      mentions: parseMentions(message.content),
       ...(message.clientMessageId === undefined
         ? {}
         : { clientMessageId: message.clientMessageId }),
@@ -1062,7 +1048,6 @@ export class SessionHub {
         signal: controller.signal,
         channel: turn.channel,
         turnId: turn.id,
-        mentions: turn.mentions,
         ...(turn.workspaceId === undefined
           ? {}
           : { workspaceId: turn.workspaceId }),

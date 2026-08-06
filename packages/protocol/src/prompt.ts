@@ -549,10 +549,9 @@ its slash, and is part of the data.`;
 /**
  * What a *skills* template may ask for.
  *
- * One generated block: the catalogue. A body reaches the model only when a
- * message names it with `@skill:`, and that is a property of the message rather
- * than of the workspace, so it is written into the runtime half of the prompt —
- * which no template owns. This vocabulary describes the cached half alone.
+ * One generated block: the catalogue. A sheet's body is never templated — it
+ * reaches the model only when the agent opens the file the index names, which
+ * happens long after this section is rendered.
  *
  * **`{{index}}` carries its own leading blank line**, the convention `{{notes}}`
  * and `{{tools}}` already keep on the toolbox template — a section whose optional

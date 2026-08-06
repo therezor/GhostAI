@@ -1,7 +1,7 @@
 /**
  * The composer.
  *
- * Four things that are each slightly harder than they look:
+ * Three things that are each slightly harder than they look:
  *
  *  - **It grows with the text without measuring anything.** The usual
  *    implementation reads `scrollHeight` and writes a pixel height, which is a
@@ -18,14 +18,9 @@
  *    when Send is pressed is four seconds of a button that appears to have done
  *    nothing. Uploading on selection puts the wait where the user chose to
  *    cause it, and Send is instant afterwards.
- *  - **The `@` autocomplete is a listbox, not a div.** It is the one popover
- *    here a keyboard user has to drive, and `role="listbox"` with
- *    `aria-activedescendant` is what makes the arrow keys mean something to a
- *    screen reader while focus stays in the textarea where the typing is.
  */
 
 import { ArrowUp, Paperclip, Square, X } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import {
@@ -43,17 +38,10 @@ import { newUuid, type Attachment } from '@ghostai/protocol';
 
 import { cn } from '@/lib/cn.js';
 import { api } from '@/lib/api.js';
-import { queryKeys } from '@/lib/query.js';
 import { useWorkspace } from '@/workspaces/workspace-context.js';
 import { formatBytes } from '@/lib/format.js';
 import { Button } from '@/components/ui/button.js';
 import { toast } from '@/components/ui/toast.js';
-import {
-  applyMention,
-  mentionAtCaret,
-  mentionSuggestions,
-  type MentionSuggestion,
-} from './mentions.js';
 
 interface ComposerProps {
   /**
@@ -117,42 +105,7 @@ export function Composer({
   const { workspaceId } = useWorkspace();
   const [text, setText] = useState('');
   const [files, setFiles] = useState<readonly StagedFile[]>([]);
-  const [highlight, setHighlight] = useState(0);
-  const [dismissed, setDismissed] = useState(false);
-  /**
-   * The caret, as state rather than as a read of `textareaRef` during render.
-   *
-   * A ref is not reactive, and that is the whole of the bug this replaced.
-   * Accepting `@skill:` sets the text and then moves the caret in an animation
-   * frame — so the render that follows the accept saw the *old* DOM position,
-   * decided the caret was no longer inside a mention, and closed the popover.
-   * Moving a caret does not re-render, so nothing ever reopened it: picking
-   * `skill` from the menu dismissed the menu instead of narrowing it.
-   */
-  const [caret, setCaret] = useState(0);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const listboxId = 'composer-mentions';
-
-  const query = dismissed ? undefined : mentionAtCaret(text, caret);
-
-  // Fetched as soon as *any* mention is being typed, not only once the kind is
-  // `skill`. Waiting for the kind means the list is still in flight at the
-  // moment it is wanted — accepting `@skill:` would close the popover and
-  // reopen it when the response landed, which reads as a flicker rather than as
-  // a menu. Still lazy: nothing is requested until an `@` is on the line, and
-  // react-query serves the second mention in a session from cache.
-  const skills = useQuery({
-    queryKey: queryKeys.skills(workspaceId),
-    queryFn: ({ signal }) => api.skills(workspaceId, signal),
-    enabled: query !== undefined,
-  });
-
-  const suggestions =
-    query === undefined
-      ? []
-      : mentionSuggestions(query, skills.data?.skills ?? []);
-  const open = suggestions.length > 0;
 
   const ready = files.every(
     (file) => file.attachment !== undefined || file.failed,
@@ -167,57 +120,10 @@ export function Composer({
     if (!canSend) return;
     onSend(text.trim(), attachments);
     setText('');
-    setCaret(0);
     setFiles([]);
-    setDismissed(false);
   }, [attachments, canSend, onSend, text]);
 
-  const accept = useCallback(
-    (suggestion: MentionSuggestion) => {
-      if (query === undefined) return;
-      const next = applyMention(text, query, suggestion);
-      setText(next.text);
-      setHighlight(0);
-      // Both halves, and both are needed. This one is what the *next render*
-      // reads, so the popover recomputes against the caret as it will be —
-      // which is what turns accepting `@skill:` into the skill list rather than
-      // into a closed menu.
-      setCaret(next.caret);
-      // And this one moves the real caret, after React has written the value.
-      // Without it the cursor lands at the end of the text rather than after
-      // the namespace just inserted.
-      requestAnimationFrame(() => {
-        textareaRef.current?.setSelectionRange(next.caret, next.caret);
-      });
-    },
-    [query, text],
-  );
-
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
-    if (open) {
-      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        event.preventDefault();
-        const step = event.key === 'ArrowDown' ? 1 : -1;
-        setHighlight(
-          (value) => (value + step + suggestions.length) % suggestions.length,
-        );
-        return;
-      }
-      if (event.key === 'Enter' || event.key === 'Tab') {
-        const suggestion = suggestions[highlight];
-        if (suggestion !== undefined) {
-          event.preventDefault();
-          accept(suggestion);
-          return;
-        }
-      }
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        setDismissed(true);
-        return;
-      }
-    }
-
     // Shift+Enter is a newline; Enter sends. The other way round is what chat
     // apps that are also editors do, and this is a chat app.
     if (
@@ -329,41 +235,6 @@ export function Composer({
         )}
 
         <div className="composer__box">
-          {open && (
-            <ul
-              id={listboxId}
-              role="listbox"
-              aria-label={t('chat.mentions')}
-              className="composer__mentions"
-            >
-              {suggestions.map((suggestion, index) => (
-                <li
-                  key={suggestion.insert}
-                  id={`${listboxId}-${String(index)}`}
-                  role="option"
-                  aria-selected={index === highlight}
-                  onMouseDown={(event) => {
-                    // `mousedown`, not `click`: `click` fires after the blur
-                    // that closes the popover, so the suggestion is gone by then.
-                    event.preventDefault();
-                    accept(suggestion);
-                  }}
-                  className={cn(
-                    'composer__mention',
-                    index === highlight && 'composer__mention--active',
-                  )}
-                >
-                  <span className="composer__mention-label">
-                    {suggestion.label}
-                  </span>
-                  <span className="composer__mention-hint truncate">
-                    {suggestion.hint}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-
           <Button
             variant="ghost"
             size="icon"
@@ -391,21 +262,10 @@ export function Composer({
               {`${text}\n`}
             </div>
             <textarea
-              ref={textareaRef}
               value={text}
               rows={1}
               onChange={(event) => {
                 setText(event.target.value);
-                setCaret(event.target.selectionStart);
-                setDismissed(false);
-                setHighlight(0);
-              }}
-              // Every other way a caret moves: a click, an arrow key, a drag,
-              // ⌘←. `onSelect` is the one event that covers all of them, and
-              // without it the popover would answer for wherever the caret was
-              // when the text last changed.
-              onSelect={(event) => {
-                setCaret(event.currentTarget.selectionStart);
               }}
               onKeyDown={onKeyDown}
               onPaste={onPaste}
@@ -418,19 +278,6 @@ export function Composer({
                   : t('chat.noModel')
               }
               aria-label={t('chat.message')}
-              // `aria-expanded` and `aria-activedescendant`, but deliberately
-              // *not* `role="combobox"`. The role would have to be present
-              // whether the popover is open or not — a control whose role
-              // changes as you type is a control a screen reader re-announces
-              // mid-sentence — and a permanent combobox is the wrong promise
-              // for a box whose main job is multi-line prose.
-              aria-expanded={open}
-              {...(open
-                ? {
-                    'aria-controls': listboxId,
-                    'aria-activedescendant': `${listboxId}-${String(highlight)}`,
-                  }
-                : {})}
               className="composer__input"
             />
           </div>

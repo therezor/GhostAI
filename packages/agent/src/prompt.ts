@@ -94,7 +94,6 @@ import {
   renderPromptTemplate,
   renderWrapUp,
   type LivePromptValues,
-  type ParsedMentions,
   type PromptMode,
   toolPolicyUsesNonce,
 } from '@ghostai/protocol';
@@ -126,23 +125,6 @@ export interface StaticPromptContext {
   readonly agentId: string | undefined;
   /** The channel the turn arrived on — `cli`, `web`, `telegram`, a plugin id. */
   readonly channel: string;
-  /**
-   * Where a contributor's static half leaves what its runtime half needs.
-   *
-   * The two halves have incompatible budgets: `staticSection` may do I/O and
-   * runs once per turn, `runtimeSection` is synchronous and runs on every
-   * iteration. Without a carrier, a contributor that needs bytes in the runtime
-   * half has only bad options — I/O per iteration, or an instance cache that
-   * outlives the turn and hands one workspace's files to a concurrent turn on
-   * another.
-   *
-   * The map is created per turn by the loop, so it can do neither. It reaches
-   * `runtimeSection` because `RuntimePromptContext` extends this interface and
-   * is built by spreading the static context, which copies the reference — a
-   * property the type checker enforces rather than one the spread happens to
-   * have. Keys are namespaced by contributor, so `skills` writes `skill:<name>`.
-   */
-  readonly carry: Map<string, string>;
 }
 
 export interface RuntimePromptContext extends StaticPromptContext {
@@ -151,19 +133,6 @@ export interface RuntimePromptContext extends StaticPromptContext {
   readonly maxIterations: number;
   /** Wall-clock epoch milliseconds, from the injected clock. */
   readonly nowMs: number;
-  /**
-   * The `@mcp:` / `@skill:` mentions on the message that started this
-   * turn, parsed once by the transport for every channel.
-   *
-   * Here rather than on `StaticPromptContext` because it changes per turn, and
-   * a contributor that read a per-turn value from `staticSection` would be
-   * claiming a section is stable when it is not. `@skill:` reads it, and inlines
-   * the named sheet for this message only. `@mcp:` does not yet —
-   * narrowing a turn's tool scope is a change to how the scope is built rather
-   * than to the client — and a mention that never reaches the prompt is a
-   * feature the UI advertises and the agent cannot see.
-   */
-  readonly mentions?: ParsedMentions;
 }
 
 /**

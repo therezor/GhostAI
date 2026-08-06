@@ -28,7 +28,6 @@ const CONTEXT: StaticPromptContext = {
   sessionKey: 'web:1',
   agentId: undefined,
   channel: 'cli',
-  carry: new Map(),
 };
 
 const RUNTIME: RuntimePromptContext = {

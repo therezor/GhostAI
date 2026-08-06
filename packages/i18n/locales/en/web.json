@@ -83,7 +83,7 @@
     "promptRestore": "Restore",
     "promptRestoreFor": "Restore the {{label}} section",
     "promptSkills": "Skills",
-    "promptSkillsHint": "The section that lists the workspace’s instruction sheets. {{index}} is the generated catalogue, and it brings its own blank line so a template without it leaves no gap. A sheet’s body is not here — naming it on a message with @skill: is what sends it, for that message only.",
+    "promptSkillsHint": "The section that lists the workspace’s instruction sheets. {{index}} is the generated catalogue, and it brings its own blank line so a template without it leaves no gap. A sheet’s body is not here — the agent opens the file the catalogue names when it needs one.",
     "promptStray": "Nothing will fill {{names}} — it will appear in the prompt exactly as written.",
     "promptStrayTitle": "Placeholder nothing fills",
     "promptSystem": "System prompt",
@@ -283,7 +283,6 @@
     "editThis": "Edit this message",
     "externalImage": "External image — opens in a new tab rather than loading here",
     "jumpToLatest": "Jump to latest",
-    "mentions": "Mentions",
     "message": "Message",
     "noAnswer": {
       "reasoningOnly": "The model finished its reasoning without writing an answer. Nothing was lost — regenerating usually produces one.",

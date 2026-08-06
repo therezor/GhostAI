@@ -33,7 +33,6 @@ function staticContext(workspaceRoot: string): StaticPromptContext {
     sessionKey: 'session-1',
     agentId: 'default',
     channel: 'web',
-    carry: new Map(),
   };
 }
 

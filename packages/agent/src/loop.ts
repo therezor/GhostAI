@@ -73,7 +73,6 @@ import {
   type AgentToolbox,
   type ContentPart,
   type ErrorCode,
-  type ParsedMentions,
   type StopReason,
   type SubagentLineage,
   type SubagentRunRef,
@@ -390,16 +389,6 @@ export interface TurnInput {
   /** Supplied by the caller when it has already told a client the id. */
   readonly turnId?: string;
   /**
-   * `@mcp:` and `@skill:` mentions found in the message.
-   *
-   * Parsed by the transport rather than here, and by exactly one transport: the
-   * hub does it for every channel, so a mention means the same thing typed into
-   * a browser and typed into a chat app. The loop only carries it — it reaches
-   * `runtimeSection`, which is where the contributors that act on it arrive in
-   * Phase 3, and nothing in this package reads it.
-   */
-  readonly mentions?: ParsedMentions;
-  /**
    * The agents already running above this turn, oldest first.
    *
    * Empty for a turn a person started. Carried on the input rather than held on
@@ -425,14 +414,6 @@ export interface PromptPreviewInput {
   /** Defaults to `web`. The CLI's `/context` passes `cli`. */
   readonly channel?: string;
   readonly agentId?: string;
-  /**
-   * The mentions on the message being previewed, if there is one.
-   *
-   * Optional because the inspector is usually asked about a session rather than
-   * a draft. When it is asked about a draft, omitting these would show a prompt
-   * a turn on that text will not send — `@skill:` inlines a whole sheet.
-   */
-  readonly mentions?: ParsedMentions;
 }
 
 /**
@@ -709,7 +690,6 @@ export class AgentLoop {
       sessionKey: input.sessionKey,
       agentId: input.agentId,
       channel: input.channel ?? 'web',
-      carry: new Map(),
     };
 
     return this.composePrompt(
@@ -719,10 +699,6 @@ export class AgentLoop {
         iteration: 1,
         maxIterations: this.config.maxToolIterations,
         nowMs: this.clock.now(),
-        // A preview that dropped the mentions would show a prompt the turn will
-        // not send: `@skill:` inlines a body, and the inspector exists to show
-        // what actually goes.
-        ...(input.mentions === undefined ? {} : { mentions: input.mentions }),
       },
       createToolOutputNonce(this.random),
     );
@@ -896,9 +872,6 @@ export class AgentLoop {
       sessionKey,
       agentId: session.agentId,
       channel,
-      // One map per turn, so what a contributor's static half leaves for its
-      // runtime half cannot outlive the turn or reach another workspace's.
-      carry: new Map(),
     };
 
     const opening = this.store.append(sessionKey, userMessage(input.content), {
@@ -1032,11 +1005,6 @@ export class AgentLoop {
             iteration,
             maxIterations,
             nowMs: this.clock.now(),
-            // Turn-scoped, so it belongs to the half of the prompt that is
-            // rebuilt every iteration and never to the cached prefix.
-            ...(input.mentions === undefined
-              ? {}
-              : { mentions: input.mentions }),
           },
           nonce,
           correction,

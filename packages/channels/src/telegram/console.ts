@@ -62,8 +62,8 @@ export interface TelegramConsole {
    *
    * Beside `memory` and for the same reason: a read against a store this package
    * may not open for itself. What it feeds is discovery rather than the prompt —
-   * the catalogue is already in the prompt, and this is what lets a *person* find
-   * the name `@skill:` takes.
+   * the catalogue is already in the prompt, and this is what puts it on a
+   * person's screen.
    */
   skills(sessionKey: string): Promise<SkillsState>;
 }
