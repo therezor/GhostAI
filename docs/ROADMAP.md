@@ -15,7 +15,6 @@ building a second one beside it.
 - [ ] **Session search page** — find a session by what was said in it.
 - [ ] **Extensions** — third-party packages that add tools, channels or
       providers.
-- [ ] **RAG** — index the workspace, put the relevant chunks in the prompt.
 
 ## Done
 

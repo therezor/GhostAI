@@ -126,8 +126,8 @@ export interface SessionStoreOptions {
   /**
    * An existing connection to share.
    *
-   * The scheduler, the auth store and the knowledge base all live in this same
-   * file; handing them one connection keeps every write in a single WAL and
+   * The scheduler and the auth store both live in this same file; handing
+   * them one connection keeps every write in a single WAL and
    * makes cross-table transactions possible. A store given a connection does
    * not close it — whoever opened it owns its lifetime.
    */

@@ -1,11 +1,11 @@
 /**
  * The panel registry.
  *
- * The rules asserted here are the ones that make a placeholder honest: a panel
- * either has a form or names a phase, never both and never neither, and a panel
- * that names a phase actually lists what is coming. The failure this prevents is
- * a built panel still advertising "Phase 5" months after it shipped, which is
- * the sort of thing nobody notices because it looks deliberate.
+ * The rules asserted here are the ones a tab strip built from data can get
+ * wrong without anybody noticing: a duplicate id, and a label or summary whose
+ * key never made it into the bundle. Both render as something that looks
+ * deliberate — a tab that silently shadows another, or a heading reading
+ * `settings.panels.x.summary` — rather than as an error.
  */
 
 import { createWebI18n } from '@ghostai/i18n/web';
@@ -13,9 +13,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_PANEL_ID,
-  isPlanned,
   panelById,
-  PLANNED_SYSTEMS,
   SETTINGS_PANELS,
 } from '@/settings/panels.js';
 
@@ -33,7 +31,7 @@ describe('the settings panels', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('ship the seven the phase builds', () => {
+  it('are the seven that are built, in the order the strip shows them', () => {
     // No `agent` panel: the settings it held *are* the default agent's, so they
     // are edited on that agent rather than in a second room describing the same
     // subtree. Agents are a page of their own, and picking one happens in the
@@ -48,16 +46,11 @@ describe('the settings panels', () => {
     // is the split Agents already makes: the agents are a page, and only
     // install-wide tool settings are in Settings.
     //
-    // `extensions` joined them with the MCP client. It is the one built panel
-    // that still lists planned systems — see `PLANNED_SYSTEMS` — because most
-    // of what it will hold has not landed.
-    //
-    // `channels` joined them with Telegram, and left `PLANNED_SYSTEMS` on the
-    // way: it was listed under Extensions until it had a panel of its own.
-    const built = SETTINGS_PANELS.filter((panel) => !isPlanned(panel)).map(
-      (panel) => panel.id,
-    );
-    expect(built).toEqual([
+    // `extensions` joined them with the MCP client, and `channels` with
+    // Telegram. There is no eighth entry naming a future phase: a panel is on
+    // this list once it has something to configure, and `knowledge` was
+    // removed along with the retrieval feature it was holding a seat for.
+    expect(SETTINGS_PANELS.map((panel) => panel.id)).toEqual([
       'providers',
       'tools',
       'account',
@@ -66,66 +59,6 @@ describe('the settings panels', () => {
       'extensions',
       'channels',
     ]);
-  });
-
-  it('no longer advertise what has since shipped', () => {
-    // A built panel still listed as a planned system tells an operator to wait
-    // for something that is already on the screen next to it. Profiles became
-    // Agents; channels became a panel.
-    const planned = Object.values(PLANNED_SYSTEMS)
-      .flat()
-      .map((system) => t(system.name).toLowerCase());
-    for (const shipped of ['profile', 'channel']) {
-      expect(planned.some((name) => name.includes(shipped))).toBe(false);
-    }
-  });
-
-  it('give every unbuilt panel a list of what lands in it', () => {
-    for (const panel of SETTINGS_PANELS.filter(isPlanned)) {
-      const systems = PLANNED_SYSTEMS[panel.id];
-      expect(
-        systems,
-        `${panel.id} names a phase but lists nothing`,
-      ).toBeDefined();
-      expect(systems?.length).toBeGreaterThan(0);
-    }
-  });
-
-  /**
-   * This used to read "never lists a system in a panel that is already built",
-   * and the MCP client made that false: Extensions ships while skills, OAuth,
-   * channels and plugins do not. What it was actually protecting is the rule
-   * below — a *system* that has shipped must not still be advertised as coming
-   * — and that is the half worth keeping. A built panel that renders its
-   * remaining systems is telling the truth; one that lists a system already on
-   * the screen beside it is not.
-   */
-  it('never advertises a system that has already shipped', () => {
-    const shipped = new Set(['mcp servers']);
-    const planned = Object.values(PLANNED_SYSTEMS)
-      .flat()
-      .map((system) => t(system.name).toLowerCase());
-
-    for (const name of planned) {
-      expect(shipped.has(name), `${name} has shipped`).toBe(false);
-    }
-  });
-
-  it('lists every planned system in a panel that exists', () => {
-    for (const id of Object.keys(PLANNED_SYSTEMS)) {
-      expect(
-        SETTINGS_PANELS.find((panel) => panel.id === id),
-        `${id} names no panel`,
-      ).toBeDefined();
-    }
-  });
-
-  it('never promises a system earlier than the panel that holds it', () => {
-    for (const panel of SETTINGS_PANELS.filter(isPlanned)) {
-      for (const system of PLANNED_SYSTEMS[panel.id] ?? []) {
-        expect(system.phase).toBeGreaterThanOrEqual(panel.phase ?? 0);
-      }
-    }
   });
 
   it('gives every panel a summary, which is the line under the heading', () => {

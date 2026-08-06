@@ -258,7 +258,6 @@ export const SetCredentialRequestSchema = z.object({
   namespace: z.enum([
     'providers',
     'tools',
-    'rag',
     'audio',
     'mcp_servers',
     'plugins',

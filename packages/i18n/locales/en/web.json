@@ -607,8 +607,6 @@
       "noMatch": "No MCP server matches “{{filter}}”.",
       "none": "No MCP servers yet. Add one to give your agents tools this install does not ship.",
       "noSuchServer": "There is no MCP server called “{{id}}”.",
-      "plannedDescription": "The rest of what this panel will hold.",
-      "plannedTitle": "Still to come",
       "scopes": "Scopes",
       "scopesHint": "One per line.",
       "serverId": "Name",
@@ -662,11 +660,7 @@
       },
       "extensions": {
         "label": "Extensions",
-        "summary": "MCP servers, and the extension points still to come."
-      },
-      "knowledge": {
-        "label": "Knowledge",
-        "summary": "Retrieval over your own documents. Not built yet."
+        "summary": "MCP servers, and the tools they contribute."
       },
       "providers": {
         "label": "Providers",
@@ -675,21 +669,6 @@
       "tools": {
         "label": "Tools",
         "summary": "What the agent may do on its own, and what it has to ask about first."
-      }
-    },
-    "planned": {
-      "knowledgeBase": {
-        "detail": "Ingest documents and search them from a turn.",
-        "name": "Knowledge base"
-      },
-      "oauth": {
-        "detail": "Authorise a provider without pasting a key.",
-        "name": "OAuth connections"
-      },
-      "phase": "Phase {{phase}}",
-      "plugins": {
-        "detail": "Install and remove capabilities from the UI.",
-        "name": "Plugins"
       }
     },
     "title": "Settings",

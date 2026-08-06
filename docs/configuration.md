@@ -466,23 +466,16 @@ Three rules make it safe to leave running:
 - **Errors always notify.** The evaluate step never gets to veto a failure. A job that has
   quietly not worked for a week is worse than a spurious toast.
 
-## `rag`, `plugins`
+## `plugins`
 
-_Both are schema-only today. See [ROADMAP.md](ROADMAP.md)._
+_Schema-only today. See [ROADMAP.md](ROADMAP.md)._
 
-| Key                              | Type     | Default                                                          |
-| -------------------------------- | -------- | ---------------------------------------------------------------- |
-| `rag.provider`                   | string   | `'local'` (Ollama `/api/embed`)                                  |
-| `rag.apiBase`                    | string   | `''`                                                             |
-| `rag.model`                      | string   | `'nomic-embed-text'`                                             |
-| `rag.chunkSize` / `chunkOverlap` | int      | `1024` / `128`                                                   |
-| `rag.topK`                       | int > 0  | `8`                                                              |
-| `rag.hybrid`                     | boolean  | `true`                                                           |
-| `rag.rrfK`                       | int > 0  | `60` — the constant from the reciprocal-rank-fusion paper        |
-| `plugins.load`                   | string[] | `[]`                                                             |
-| `plugins.disabled`               | string[] | `[]`                                                             |
-| `plugins.allowUnverified`        | boolean  | `false` — required before an arbitrary npm spec may be installed |
-| `plugins.allowOverride`          | boolean  | `false`                                                          |
+| Key                       | Type     | Default                                                          |
+| ------------------------- | -------- | ---------------------------------------------------------------- |
+| `plugins.load`            | string[] | `[]`                                                             |
+| `plugins.disabled`        | string[] | `[]`                                                             |
+| `plugins.allowUnverified` | boolean  | `false` — required before an arbitrary npm spec may be installed |
+| `plugins.allowOverride`   | boolean  | `false`                                                          |
 
 ---
 

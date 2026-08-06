@@ -28,7 +28,6 @@ describe('ConfigSchema', () => {
     // It lives on `ui` rather than `scheduler` because one install-wide zone
     // both renders every timestamp and reads every cron expression.
     expect(config.ui.timezone).toBe('UTC');
-    expect(config.rag.rrfK).toBe(60);
     expect(config.channels.sendProgress).toBe(true);
     expect(config.plugins.allowUnverified).toBe(false);
   });

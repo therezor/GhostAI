@@ -389,8 +389,7 @@ either of the things it replaces.
 `memory/` folder is a property of the folder, not of one message, so there is no runtime
 counterpart and no `@memory:` mention. It is placed _after_ skills, because sections are
 appended in order and memory is the one a turn can rewrite — so it sits where a change
-invalidates the least of the cached prefix. RAG will inject content the same way when it
-lands.
+invalidates the least of the cached prefix.
 
 `memoryPrompt` and `skillsPrompt` are therefore the two section templates that do **not**
 travel on `PromptAgent` with the other six: those fill sections the prompt builder writes,

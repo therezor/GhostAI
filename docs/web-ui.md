@@ -169,15 +169,15 @@ to fill in first.
 | Account    | Built. Username and password together, requires the current password, revokes every other session.                                                                     |
 | Appearance | Built. Language and timezone (install-wide) and theme (this browser only).                                                                                             |
 | Automation | Built. The scheduler engine only: enabled, concurrency, catch-up on boot, run retention, default timezone. **The jobs are a page.**                                    |
-| Extensions | **Partly built.** MCP servers are a list and an editor; skills, OAuth, channels and plugins are still listed as coming.                                                |
-| Knowledge  | Placeholder — the knowledge base.                                                                                                                                      |
+| Extensions | Built. MCP servers are a list and an editor, each row joining what an operator configured to what came of it.                                                          |
+| Channels   | Built. Reach the same agent from a messaging app. The bot token goes to the vault, never to `config.json`.                                                             |
 
-The placeholders are shown rather than hidden, and each names what it will hold. A
-setting that silently does not exist is worse than one that says when it will.
+Every panel on that list is built, and a panel arrives on it once it has something to
+configure. There are deliberately no placeholders naming a future phase: a settings
+screen advertising a form an operator cannot open is one they check twice. Unbuilt work
+is tracked in [ROADMAP.md](ROADMAP.md) instead.
 
-Extensions is the first panel to be both at once, and deliberately: dropping the four
-unbuilt systems the moment MCP shipped would make the screen read as finished when four
-fifths of it is not. Each MCP row joins two requests — `GET /api/settings` for what was
+Each MCP row joins two requests — `GET /api/settings` for what was
 configured, `GET /api/mcp` for what came of it — and settles on its own, because the
 `tools.changed` frame a server connecting or dropping already produces is what
 invalidates the status query. The reason a server is unreachable is on the row; the

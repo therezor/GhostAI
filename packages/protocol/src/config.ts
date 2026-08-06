@@ -754,7 +754,7 @@ export const AgentsConfigSchema = z.object({
 export type AgentsConfig = z.infer<typeof AgentsConfigSchema>;
 
 // ---------------------------------------------------------------------------
-// Audio, RAG, scheduler, channels, plugins
+// Audio, scheduler, channels, plugins
 // ---------------------------------------------------------------------------
 
 export const AudioConfigSchema = z.object({
@@ -768,23 +768,6 @@ export const AudioConfigSchema = z.object({
   ttsModelPath: z.string().optional(),
 });
 export type AudioConfig = z.infer<typeof AudioConfigSchema>;
-
-export const RagConfigSchema = z.object({
-  /** Embedder backend. `local` is Ollama `/api/embed`. */
-  provider: z.string().min(1).default('local'),
-  apiBase: z.string().default(''),
-  model: z.string().default('nomic-embed-text'),
-  chunkSize: z.number().int().positive().default(1024),
-  chunkOverlap: z.number().int().nonnegative().default(128),
-  topK: z.number().int().positive().default(8),
-  /**
-   * Reciprocal-rank-fusion constant for blending BM25 and vector rankings.
-   * 60 is the value from the original RRF paper.
-   */
-  rrfK: z.number().int().positive().default(60),
-  hybrid: z.boolean().default(true),
-});
-export type RagConfig = z.infer<typeof RagConfigSchema>;
 
 /**
  * The engine, and nothing about any one job.
@@ -913,7 +896,6 @@ export const ConfigSchema = z.object({
   tools: ToolsConfigSchema.prefault({}),
   channels: ChannelsConfigSchema.prefault({}),
   audio: AudioConfigSchema.prefault({}),
-  rag: RagConfigSchema.prefault({}),
   scheduler: SchedulerConfigSchema.prefault({}),
   plugins: PluginsConfigSchema.prefault({}),
   ui: UiConfigSchema.prefault({}),
@@ -1060,7 +1042,6 @@ export const ConfigPatchSchema = z.object({
     })
     .optional(),
   audio: patchOf(AudioConfigSchema).optional(),
-  rag: patchOf(RagConfigSchema).optional(),
   scheduler: patchOf(SchedulerConfigSchema).optional(),
   plugins: patchOf(PluginsConfigSchema).optional(),
   ui: patchOf(UiConfigSchema).optional(),

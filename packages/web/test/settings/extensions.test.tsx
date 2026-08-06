@@ -108,10 +108,9 @@ const patchesOf = (calls: readonly RecordedRequest[]): ConfigPatch[] =>
     .map((call) => call.body as ConfigPatch);
 
 describe('the Extensions panel', () => {
-  it('is a panel now, not a placeholder naming a phase', async () => {
-    // The difference is a control: a placeholder lists what is coming and has
-    // nothing to press, which is the whole reason it reads as honest rather
-    // than broken. This one has a list and a way to add to it.
+  it('shows the servers and a way to add one', async () => {
+    // The two halves of a settings panel that is actually a settings panel:
+    // what is configured, and a control that changes it.
     mount();
     expect(await screen.findByText('MCP servers')).toBeInTheDocument();
     expect(
@@ -119,22 +118,18 @@ describe('the Extensions panel', () => {
     ).toBeInTheDocument();
   });
 
-  it('still lists what has not been built, under what has', async () => {
-    // Most of what this screen will hold has not landed, and dropping them the
-    // moment one sibling shipped would make it read as finished.
+  it('promises no screen that is not on it', async () => {
+    // This panel used to end in a "Still to come" list naming OAuth, plugins
+    // and — before them — skills and channels. It is gone: a settings screen
+    // advertising a form an operator cannot open is a screen they check twice.
+    // Skills in particular are named on a message with `@skill:` rather than
+    // configured, so a row promising them taught the wrong thing.
     mount();
-    expect(await screen.findByText('OAuth connections')).toBeInTheDocument();
-    expect(screen.getByText('Plugins')).toBeInTheDocument();
-  });
+    await screen.findByText('files');
 
-  it('does not promise a screen for skills', async () => {
-    // Skills left this list without being built, which is the one way out of it
-    // the others do not have. A skill is named on a message with `@skill:`, so
-    // the panel it was waiting for is not coming — and a "planned" row would go
-    // on promising a settings screen instead of teaching the mention.
-    mount();
-    await screen.findByText('OAuth connections');
-    expect(screen.queryByText('Skills')).not.toBeInTheDocument();
+    for (const gone of ['Still to come', 'OAuth connections', 'Skills']) {
+      expect(screen.queryByText(gone)).not.toBeInTheDocument();
+    }
   });
 
   it('joins the configured servers to their live state', async () => {

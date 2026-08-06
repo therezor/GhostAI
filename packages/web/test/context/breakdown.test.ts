@@ -85,7 +85,7 @@ describe('summariseContext', () => {
     const budget = summariseContext(
       {
         ...input,
-        breakdown: { ...input.breakdown, knowledge_base: 500, memory: 200 },
+        breakdown: { ...input.breakdown, scratch_buffer: 500, memory: 200 },
         estimatedTokens: 5700,
       },
       t,
@@ -95,10 +95,10 @@ describe('summariseContext', () => {
       'systemPrompt',
       'tools',
       'messages',
-      'knowledge_base',
       'memory',
+      'scratch_buffer',
     ]);
-    expect(budget.segments.at(3)?.label).toBe('Knowledge base');
+    expect(budget.segments.at(4)?.label).toBe('Scratch buffer');
   });
 
   it('survives a window of zero rather than dividing by it', () => {

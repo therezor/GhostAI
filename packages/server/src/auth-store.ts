@@ -165,7 +165,7 @@ export const argon2Hasher: PasswordHasher = {
 };
 
 export interface AuthStoreOptions {
-  /** Shared with `SessionStore`, the scheduler and the knowledge base. */
+  /** Shared with `SessionStore` and the scheduler. */
   readonly database: DatabaseSync;
   /** How long a newly issued token lives. */
   readonly sessionTtlMs: number;

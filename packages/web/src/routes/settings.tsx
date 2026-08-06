@@ -32,12 +32,11 @@ import {
 import { AppearancePanel } from '@/settings/appearance-panel.js';
 import { AccountPanel } from '@/settings/account-panel.js';
 import { ExtensionsPanel } from '@/settings/extensions-panel.js';
-import { PlannedPanel } from '@/settings/planned-panel.js';
 import { ProvidersPanel } from '@/settings/providers-panel.js';
 import { ToolsPanel } from '@/settings/tools-panel.js';
 import { AutomationPanel } from '@/settings/automation-panel.js';
 import { ChannelsPanel } from '@/settings/channels-panel.js';
-import { isPlanned, panelById, SETTINGS_PANELS } from '@/settings/panels.js';
+import { panelById, SETTINGS_PANELS } from '@/settings/panels.js';
 import { useSettings } from '@/settings/use-settings.js';
 
 export function SettingsRoute(): JSX.Element {
@@ -118,8 +117,6 @@ function PanelBody({ panelId }: { readonly panelId: string }): JSX.Element {
   const { t } = useTranslation();
   const settings = useSettings();
   const panel = panelById(panelId);
-
-  if (isPlanned(panel)) return <PlannedPanel panel={panel} />;
 
   // Before the settings gate, and the only panel that goes before it: a
   // credential is not in `config.json`, so this panel has nothing to wait for —

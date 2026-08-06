@@ -72,7 +72,6 @@ export const PROTOCOL_SCHEMAS = {
   SubagentRunRef: subagent.SubagentRunRefSchema,
   AgentEntry: config.AgentEntrySchema,
   AudioConfig: config.AudioConfigSchema,
-  RagConfig: config.RagConfigSchema,
   SchedulerConfig: config.SchedulerConfigSchema,
   ChannelsConfig: config.ChannelsConfigSchema,
   PluginsConfig: config.PluginsConfigSchema,

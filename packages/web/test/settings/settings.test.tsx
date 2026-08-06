@@ -417,29 +417,21 @@ describe('the tools panel', () => {
   });
 });
 
-describe('a panel whose system lands in a later phase', () => {
-  it('says which phase rather than rendering a form that does nothing', async () => {
-    mount('/settings?panel=extensions');
-
-    expect(await screen.findByText('MCP servers')).toBeInTheDocument();
-    expect(screen.getByText('Plugins').closest('li')?.textContent).toContain(
-      'Phase 4',
-    );
-    expect(
-      screen.queryByRole('button', { name: 'Save changes' }),
-    ).not.toBeInTheDocument();
-  });
-
-  it('is reachable from the tab strip and lands in the URL', async () => {
-    // Knowledge rather than Automation: the scheduler ships, so Automation is a
-    // real panel now and this case is about the placeholder.
+describe('the tab strip', () => {
+  it('puts the panel it opens in the URL', async () => {
+    // Appearance rather than a panel behind the settings request: the point
+    // here is the routing, and this one renders without waiting on the server.
+    //
+    // This used to be asserted on `Knowledge`, the one panel that rendered a
+    // "Phase 5" placeholder instead of a form. That panel is gone, but the
+    // behaviour it happened to cover is not — the panel being in the URL is
+    // what makes "set your key here" a link rather than a sentence describing
+    // four clicks.
     const { user, router } = mount();
 
-    await user.click(await screen.findByRole('tab', { name: 'Knowledge' }));
-    expect(await screen.findByText('Knowledge base')).toBeInTheDocument();
-    // The panel is in the URL, which is what makes "set your key here" a link
-    // rather than a sentence describing four clicks.
-    expect(router.state.location.searchStr).toContain('panel=knowledge');
+    await user.click(await screen.findByRole('tab', { name: 'Appearance' }));
+
+    expect(router.state.location.searchStr).toContain('panel=appearance');
   });
 });
 

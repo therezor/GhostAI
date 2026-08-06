@@ -192,15 +192,14 @@ Every key under `agents.defaults` is overridable per agent, and `agents.list.<id
 
 ## Roadmap
 
-The wire schemas, config blocks and seams for these already ship — which is why they appear in the settings tree and the UI. The implementations do not. [`docs/ROADMAP.md`](docs/ROADMAP.md) tracks them, one line each.
+The wire schemas, config blocks and seams for these already ship. The implementations do not, and nothing in the UI advertises them: a settings screen naming a feature you cannot open is one an operator checks twice. [`docs/ROADMAP.md`](docs/ROADMAP.md) tracks them, one line each.
 
-| Feature                    | Ships today                                                 | Missing                                  |
-| -------------------------- | ----------------------------------------------------------- | ---------------------------------------- |
-| **RAG**                    | Embedder and chunking config, hybrid search constants       | The index, embedder client and retrieval |
-| **Heartbeat delivery**     | The decide/run/evaluate triad, as a scheduled job's payload | `targets` reaching a channel             |
-| **Plugins**                | Load specs, `allowUnverified`, `unregisterBySource`         | Discovery, loader and manifest format    |
-| **Browser slash commands** | The terminal's command table                                | A shared table and the composer UI       |
-| **Session search**         | Keyset pagination and filters                               | Text search over message content         |
+| Feature                    | Ships today                                                 | Missing                               |
+| -------------------------- | ----------------------------------------------------------- | ------------------------------------- |
+| **Heartbeat delivery**     | The decide/run/evaluate triad, as a scheduled job's payload | `targets` reaching a channel          |
+| **Plugins**                | Load specs, `allowUnverified`, `unregisterBySource`         | Discovery, loader and manifest format |
+| **Browser slash commands** | The terminal's command table                                | A shared table and the composer UI    |
+| **Session search**         | Keyset pagination and filters                               | Text search over message content      |
 
 Two smaller ones, so nothing here reads as more finished than it is: only the `openai-chat` wire adapter exists, so `anthropic` is in the provider registry but reaches Anthropic through an OpenAI-compatible path rather than its native API; and the translation layer is complete while **English is the only shipped locale** — adding one is a folder plus a line.
 

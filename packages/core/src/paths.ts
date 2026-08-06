@@ -131,7 +131,7 @@ export interface GhostPaths {
    */
   readonly runsDir: string;
   readonly configFile: string;
-  /** One SQLite file: sessions, messages, jobs, runs, auth, KB vectors. */
+  /** One SQLite file: sessions, messages, jobs, runs, auth. */
   readonly dbFile: string;
   readonly logsDir: string;
   /** A private npm project, never a scan of the host's `node_modules`. */

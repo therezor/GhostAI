@@ -102,7 +102,7 @@ export interface ServerOptions {
    */
   readonly ui?: UiOptions;
   /**
-   * The connection `SessionStore`, the scheduler and the knowledge base share.
+   * The connection `SessionStore` and the scheduler share.
    *
    * Required rather than opened here: one WAL is the point, and a server that
    * quietly opened its own would put auth writes in a second connection to the

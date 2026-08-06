@@ -67,7 +67,7 @@ async function seed(app: Page, url: string): Promise<void> {
 }
 
 test.describe('MCP servers', () => {
-  test('the Extensions panel is a form now, not a placeholder', async ({
+  test('the Extensions panel is a form, and promises nothing else', async ({
     app,
     harness,
   }) => {
@@ -76,11 +76,13 @@ test.describe('MCP servers', () => {
     await expect(
       app.getByRole('link', { name: 'New MCP server' }),
     ).toBeVisible();
-    // And still says what has not been built, which is most of it. Skills are
-    // deliberately absent: a skill is named on a message with `@skill:` rather
-    // than configured, so the screen it was waiting for is not coming.
-    await expect(app.getByText('OAuth connections')).toBeVisible();
-    await expect(app.getByText('Skills')).toHaveCount(0);
+    // This screen used to end in a "Still to come" list naming OAuth, plugins
+    // and skills. It is gone: a settings panel advertising a form an operator
+    // cannot open is one they check twice, and skills were never going to get
+    // a screen at all — one is named on a message with `@skill:`.
+    for (const gone of ['Still to come', 'OAuth connections', 'Skills']) {
+      await expect(app.getByText(gone)).toHaveCount(0);
+    }
   });
 
   test('creating one writes nothing until Save', async ({ app, harness }) => {

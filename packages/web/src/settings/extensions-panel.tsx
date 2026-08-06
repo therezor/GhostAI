@@ -1,12 +1,5 @@
 /**
- * The Extensions panel: MCP servers, and what is still coming.
- *
- * It stopped being a placeholder when the MCP client landed, and it is the
- * first panel to hold both — a built system and a list of unbuilt ones under
- * it. That mixture is deliberate rather than a transitional state: the unbuilt
- * systems are part of the shape of the product, and dropping them the moment
- * one sibling shipped would make the screen read as finished when four of the
- * five things it will hold are not there yet.
+ * The Extensions panel: the MCP servers this install talks to.
  *
  * The list is the configured servers joined to their live state, and the join
  * is the whole reason this screen needs two requests. `GET /api/settings` says
@@ -39,9 +32,7 @@ import { useListPage } from '@/components/crud/use-list-page.js';
 import { SearchFilter } from '@/components/ui/search-filter.js';
 import { Section } from '@/components/form/controls.js';
 import type { WebKey } from '@/i18n/keys.js';
-import { PlannedList } from './planned-panel.js';
 import { toMcpEnabledPatch, transportOf } from './mcp-form.js';
-import { PLANNED_SYSTEMS } from './panels.js';
 import { useMcpServers, useRemoveMcpServer } from './use-mcp.js';
 import { useSaveSettings } from './use-settings.js';
 
@@ -281,14 +272,6 @@ export function ExtensionsPanel({
           label={t('settings.mcp.title')}
         />
       </Section>
-
-      {/* The rest of what this panel will hold. See the module header for why
-          it stays on a screen that is now partly built. */}
-      <PlannedList
-        title={t('settings.mcp.plannedTitle')}
-        description={t('settings.mcp.plannedDescription')}
-        systems={PLANNED_SYSTEMS.extensions ?? []}
-      />
 
       <ConfirmDialog
         open={pendingDelete !== undefined}

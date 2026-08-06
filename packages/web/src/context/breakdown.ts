@@ -11,7 +11,7 @@
  *    always appear in that order regardless of the key order the JSON happened
  *    to arrive in. A section neither this file nor the server's current
  *    implementation knows about still renders — sorted after the known ones —
- *    so adding memory or knowledge on the server does not need a change here.
+ *    so adding a section on the server does not need a change here.
  *  - **The gap.** `estimatedTokens` is the server's own total; the sections do
  *    not have to sum to it. Whatever is unaccounted for is shown as one segment
  *    rather than silently dropped, because a bar that does not add up to the
@@ -146,8 +146,8 @@ function compareSections(a: { key: string }, b: { key: string }): number {
 
 /**
  * `camelCase` and `snake_case` become words when the key is one this file has
- * never heard of, so a section the server adds tomorrow reads as "Knowledge
- * base" rather than `knowledge_base`.
+ * never heard of, so a section the server adds tomorrow reads as "Scratch
+ * buffer" rather than `scratch_buffer`.
  */
 /**
  * The four sections the server reports have translations; anything else does

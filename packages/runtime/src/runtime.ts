@@ -211,8 +211,8 @@ export interface RuntimeOptions {
   /**
    * A connection to share.
    *
-   * The auth store, the scheduler and the knowledge base live in the same file;
-   * handing them one `DatabaseSync` keeps every write in a single WAL and makes
+   * The auth store and the scheduler live in the same file; handing them
+   * one `DatabaseSync` keeps every write in a single WAL and makes
    * cross-table transactions possible. A borrowed connection is not closed by
    * `close()`.
    */
