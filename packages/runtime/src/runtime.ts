@@ -69,8 +69,10 @@ import {
   GhostError,
   SessionStore,
   WorkspaceStore,
+  extensionDataDirFor,
   loadConfig,
   resolveGhostPaths,
+  systemClock,
   silentLogger,
   type Clock,
   type GhostPaths,
@@ -89,8 +91,10 @@ import {
   type ChatProvider,
   type ProviderInstance,
   type ProviderSpec,
+  type WireAdapters,
 } from '@ghostai/providers';
 import {
+  ExtensionStore,
   ToolboxStore,
   assertNetworkWithinCeiling,
   type CredentialVault,
@@ -107,6 +111,7 @@ import {
   type AnyTool,
   type AutomationResolver,
   type RunnerResolver,
+  type ToolSink,
 } from '@ghostai/tools';
 import {
   McpManager,
@@ -114,6 +119,7 @@ import {
   type BackoffOptions,
   type McpConnector,
 } from '@ghostai/mcp';
+import { ExtensionHost, type ExtensionLoader } from '@ghostai/extension-host';
 
 import {
   assertWritableAgentIds,
@@ -206,6 +212,23 @@ export interface RuntimeOptions {
         readonly backoff?: BackoffOptions;
         /** Overrides the loopback OAuth callback port. */
         readonly callbackPort?: number;
+      }
+    | undefined;
+  /**
+   * The extension host. `false` switches it off exactly as `mcp: false` does,
+   * and for the same two reasons: an install with nothing in
+   * `~/.ghostai/extensions` pays nothing either way, and a test that wants to
+   * prove the registry holds only built-ins can say so.
+   *
+   * `load` is the seam a test replaces so that nothing imports a real module;
+   * the default is `importExtension`.
+   */
+  readonly extensions?:
+    | false
+    | {
+        readonly load?: ExtensionLoader;
+        /** Overrides `<root>/extensions`, for a test with a fixture tree. */
+        readonly dir?: string;
       }
     | undefined;
   /**
@@ -347,6 +370,26 @@ export interface GhostRuntime {
    * serving. A turn already running keeps the loop it started on.
    */
   reload(): Config;
+
+  /**
+   * The extension host, or `undefined` when this build has none.
+   *
+   * Exposed rather than kept private because two callers above this layer need
+   * it and neither belongs here: `ghost serve` collects the channel factories
+   * extensions contributed, and the extensions route reports their status. Both
+   * are read-only uses of it — loading is this class's job.
+   */
+  readonly extensions: ExtensionHost | undefined;
+
+  /**
+   * Re-reads the extensions directory and applies what changed.
+   *
+   * The path an *approval* takes. Approving records a row in a table rather
+   * than editing `config.json`, so `reconfigure` and `reload` — which both
+   * start from settings — would never notice it.
+   */
+  reloadExtensions(): Promise<void>;
+
   close(): void;
 
   /**
@@ -476,6 +519,8 @@ class Runtime implements GhostRuntime {
   readonly tools: ToolRegistry;
   readonly steering: SteeringQueue;
   readonly file: string;
+  /** Survives a reconfigure, for the reason `tools` does. */
+  readonly extensions: ExtensionHost | undefined;
 
   private readonly options: RuntimeOptions;
   private readonly env: Readonly<Record<string, string | undefined>>;
@@ -485,6 +530,10 @@ class Runtime implements GhostRuntime {
   private readonly ownsProviders: boolean;
   /** Survives a reconfigure, for the reason `tools` does. */
   private readonly mcp: McpManager | undefined;
+  /** Where an extension's tools land, remembered by extension id. */
+  private readonly extensionSink: ToolSink;
+  /** Re-entry guard for `onExtensionsChanged`; see its comment. */
+  private rebuilding = false;
   private current: Resolved;
 
   constructor(options: RuntimeOptions) {
@@ -530,6 +579,11 @@ class Runtime implements GhostRuntime {
     // the registry is: a settings save must not tear down every connection and
     // open it again. `#build` hands it the servers and it diffs them.
     this.mcp = this.createMcpManager(loaded.paths);
+    // The same placement, the same argument. A reconcile leaves an unchanged
+    // extension running, so a save on an unrelated panel must not be able to
+    // reach a fresh host that has never loaded anything.
+    this.extensions = this.createExtensionHost(loaded.paths);
+    this.extensionSink = registryToolSink(this.tools, 'extension');
     this.steering = new SteeringQueue({ logger: this.logger });
 
     try {
@@ -537,8 +591,178 @@ class Runtime implements GhostRuntime {
     } catch (error) {
       this.store.close();
       void this.mcp?.close();
+      void this.extensions?.stop();
       throw error;
     }
+
+    // Subscribed *after* the first build, and that ordering is the whole
+    // mechanism. `build` starts the first reconcile without waiting for it —
+    // it cannot wait, `import()` is asynchronous and `build` is not — so the
+    // extensions an install has are not loaded yet when the first resolve
+    // happens. When they land, the host announces, and this puts their tools in
+    // the registry and rebuilds so their provider types and prompt sections are
+    // resolved too. Registering here is safe because `reconcile` yields at its
+    // first `await`, so no announcement can be missed.
+    this.extensions?.subscribe(() => {
+      this.onExtensionsChanged();
+    });
+  }
+
+  /**
+   * Every provider type resolution may see: the table, plus extensions'.
+   *
+   * The built-ins come first, so an extension cannot shadow `ollama` by
+   * declaring a spec with that id — `findProvider` takes the first match. An
+   * extension's provider id is namespaced to it anyway, which makes the
+   * collision unreachable rather than merely losable; the ordering is the belt.
+   */
+  private providerSpecs(): readonly ProviderSpec[] {
+    const extra = this.extensions?.providers() ?? [];
+    return extra.length === 0
+      ? PROVIDERS
+      : [...PROVIDERS, ...extra.map((one) => one.spec)];
+  }
+
+  /**
+   * The wire adapters extensions brought, or nothing.
+   *
+   * `undefined` rather than `{}` when there are none, so the overwhelmingly
+   * common install passes no object at all and `createProvider` reaches the
+   * built-in table directly.
+   */
+  private extensionWires(): WireAdapters | undefined {
+    const entries = (this.extensions?.providers() ?? []).flatMap((one) =>
+      one.wire === undefined ? [] : [[one.spec.wire, one.wire] as const],
+    );
+    return entries.length === 0 ? undefined : Object.fromEntries(entries);
+  }
+
+  /**
+   * Reconciles the host and puts its tools in the registry.
+   *
+   * The two halves are here rather than in `ExtensionHost` for the reason
+   * `registryToolSink` exists at all: the host knows what an extension asked
+   * for and this layer knows where such things go. `replace` per extension id
+   * rather than `unregisterBySource('extension')`, because the latter would
+   * take every *other* extension's tools with it — the same grain problem one
+   * MCP server reconnecting has.
+   *
+   * Swallows rather than rethrows, and the `void` at the call site is why: this
+   * runs detached from `build`, so a rejection would be an unhandled one. The
+   * host itself does not throw; this is the belt for the case where a future
+   * change to it does.
+   */
+  private async applyExtensions(config: Config): Promise<void> {
+    const host = this.extensions;
+    if (host === undefined) return;
+    try {
+      await host.reconcile(config.extensions);
+    } catch (error) {
+      this.logger.warn({ error }, 'extensions could not be reconciled');
+    }
+  }
+
+  /**
+   * What to do when the set of loaded extensions moves.
+   *
+   * Two halves, and they answer different questions. The sink is the one this
+   * layer owes `ToolRegistry` — `replace` per extension id rather than
+   * `unregisterBySource('extension')`, because the latter would take every
+   * *other* extension's tools with it, the same grain problem one MCP server
+   * reconnecting has.
+   *
+   * The rebuild is the one nothing else would do. A provider spec and a prompt
+   * section are read *during* `build`, not looked up per turn the way a tool
+   * is, so an extension that loaded after the last build would contribute
+   * neither until something else happened to trigger one. A failed rebuild is
+   * logged and dropped: the runtime keeps serving what it was serving, which is
+   * the same contract `reconfigure` has.
+   */
+  private onExtensionsChanged(): void {
+    const host = this.extensions;
+    if (host === undefined) return;
+
+    for (const status of host.status()) {
+      this.extensionSink.replace(
+        status.id,
+        host.tools().filter((tool) => status.tools.includes(tool.name)),
+      );
+    }
+
+    // Guarded, because `build` starts a reconcile of its own: an announcement
+    // from inside a rebuild would recurse. `reconcile` is a no-op when nothing
+    // changed, so the recursion is shallow rather than infinite — the guard
+    // makes it zero.
+    if (this.rebuilding) return;
+    this.rebuilding = true;
+    try {
+      this.current = this.build(this.current.config, this.current);
+    } catch (error) {
+      this.logger.warn(
+        { error },
+        'settings could not be rebuilt after an extension changed',
+      );
+    } finally {
+      this.rebuilding = false;
+    }
+  }
+
+  /**
+   * Re-reads the extensions directory and applies what changed.
+   *
+   * The path an *approval* takes, which a settings save does not: approving is
+   * a row in a table rather than an edit to `config.json`, so nothing else in
+   * this class would notice it. `ghost serve` composes this with a channel
+   * rebuild, because a newly approved extension may have brought one.
+   */
+  async reloadExtensions(): Promise<void> {
+    await this.applyExtensions(this.current.config);
+  }
+
+  /**
+   * The extension host, or nothing.
+   *
+   * Shares the runtime's `DatabaseSync`, so the approval rows land in the same
+   * WAL as everything else and a future "delete this extension and its
+   * settings" can be one transaction.
+   *
+   * The vault is opened lazily and never fatally, exactly as it is for MCP: a
+   * keychain that will not answer means an extension's `secret()` answers
+   * `undefined`, which is a reason for that extension to refuse to start and
+   * not a reason for the install to.
+   */
+  private createExtensionHost(paths: GhostPaths): ExtensionHost | undefined {
+    const settings = this.options.extensions;
+    if (settings === false) return undefined;
+
+    let vault: CredentialVault | undefined;
+    if (this.options.vault !== false) {
+      try {
+        vault = this.options.vault ?? openVault(paths);
+      } catch (error) {
+        this.logger.debug(
+          { error },
+          'extension secrets are unavailable: the vault could not be opened',
+        );
+      }
+    }
+
+    return new ExtensionHost({
+      store: new ExtensionStore({
+        database: this.store.database,
+        dir: settings?.dir ?? paths.extensionsDir,
+        ...(this.options.clock === undefined
+          ? {}
+          : { clock: this.options.clock }),
+      }),
+      dataDirFor: (id) => extensionDataDirFor(paths, id),
+      ...(vault === undefined
+        ? {}
+        : { secretFor: (id: string) => vault.get('extensions', id) }),
+      logger: this.logger,
+      clock: this.options.clock ?? systemClock,
+      ...(settings?.load === undefined ? {} : { load: settings.load }),
+    });
   }
 
   /**
@@ -752,6 +976,13 @@ class Runtime implements GhostRuntime {
 
   close(): void {
     this.current.toolboxPool?.close();
+    // Not awaited, for the reason the MCP close below is not: `close` is
+    // synchronous everywhere it is called from, and an extension's
+    // `deactivate` is best-effort by the same argument a stdio child's signal
+    // is.
+    void this.extensions?.stop().catch((error: unknown) => {
+      this.logger.debug({ error }, 'extension shutdown failed');
+    });
     // Not awaited, because `close` is synchronous everywhere it is called from
     // — `serve.ts` unwinds a listener, a WAL and a timer in order, and none of
     // them is a promise. Closing a session is best-effort: a stdio child gets a
@@ -873,6 +1104,15 @@ class Runtime implements GhostRuntime {
     // pool takes by not probing the daemon here.
     this.mcp?.reconcile(config.tools.mcpServers);
 
+    // The one asynchronous thing in this region, and it is started rather than
+    // awaited: loading a module is `import()`, and `build` is synchronous past
+    // the line above by contract. Nothing is lost by not waiting — an
+    // extension's tools reach the registry when they reach it, and
+    // `ToolRegistry.subscribe` already turns that into a `tools.changed` frame
+    // for every client. A turn that begins first sees the tools that were
+    // there, which is exactly what a turn during an MCP reconnect sees.
+    void this.applyExtensions(config);
+
     // A fresh cache per build: every loop in the old one was derived from the
     // settings that just changed. A turn already running keeps the loop it
     // started on, because it holds the object rather than looking it up again.
@@ -941,12 +1181,17 @@ class Runtime implements GhostRuntime {
     const model = this.options.model ?? agent.defaults.model;
     const providerId = this.options.provider ?? agent.defaults.provider;
 
+    // `specs` rather than the built-in table alone, so `providers.<id>.type`
+    // can name a provider this build did not ship. An extension that failed to
+    // load contributes none, which is what makes a config referring to its
+    // provider read as "unconfigured" rather than crashing the resolve.
     const instance =
       resolveInstance({
         providers: config.providers,
         provider: providerId,
         model,
         hasCredential: (id) => this.hasStoredCredential(config, id),
+        specs: this.providerSpecs(),
       }) ?? instanceFromEnv(this.env);
 
     const unconfigured =
@@ -973,6 +1218,7 @@ class Runtime implements GhostRuntime {
             ...resolveConnection(instance.spec, instance.config),
             apiKey,
             fetchImpl: this.options.fetchImpl,
+            wires: this.extensionWires(),
           });
 
     return {
@@ -1088,6 +1334,13 @@ class Runtime implements GhostRuntime {
               }),
             ]
           : []),
+        // Last, and ungated. Last for the reason memory follows skills:
+        // sections append in order, so an extension loading or unloading moves
+        // only the tail of the cached prefix. Ungated because there is no tool
+        // permission to gate on — an extension's section is not paired with a
+        // tool the way `skill` and `memory` are, and the switch an operator
+        // has for it is the extension itself.
+        ...(this.extensions?.contributors() ?? []),
       ],
       resolveLoop,
       model,
