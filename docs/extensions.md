@@ -82,6 +82,37 @@ connection to close, a file to flush. Most extensions need neither.
 
 `examples/hello-extension` is the whole contract in under a hundred lines.
 
+### Building one
+
+**Ship a bundled entry.** An extension directory is not an npm project — nothing
+resolves a bare specifier from it at load time — so whatever `activate` imports
+has to be in the file. The digest walks the whole directory anyway, and the
+file-count cap that keeps that walk bounded is what makes an unbundled
+dependency tree fail loudly instead of slowly.
+
+Two bundler settings are not optional, and both fail at `import()` time — which
+is to say **after** an operator has already approved it:
+
+- **`removeNodeProtocol: false`.** tsup and esbuild rewrite `node:sqlite` to
+  `sqlite`, a compatibility shim for node older than 14.18. `node:sqlite` has no
+  unprefixed form, so the rewrite is unloadable.
+- **A `createRequire` banner.** Reaching `defineTool` pulls in `@ghostai/core`,
+  which pulls in `pino`, which is CommonJS and calls `require('node:os')` at
+  module scope. An ESM bundle has no `require`, so the bundler emits a stub that
+  throws `Dynamic require of "node:os" is not supported`.
+
+  ```ts
+  banner: {
+    js: [
+      "import { createRequire as __req } from 'node:module';",
+      'const require = __req(import.meta.url);',
+    ].join('\n'),
+  }
+  ```
+
+`examples/hello-extension/tsup.config.ts` is both of them with the reasoning
+beside each.
+
 ## What `activate` is handed
 
 Everything an extension can reach is a member of `ExtensionContext`. There is no
