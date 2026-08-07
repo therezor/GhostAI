@@ -127,6 +127,9 @@ importers:
       '@ghostai/core':
         specifier: workspace:*
         version: link:../core
+      '@ghostai/extension-host':
+        specifier: workspace:*
+        version: link:../extension-host
       '@ghostai/i18n':
         specifier: workspace:*
         version: link:../i18n
@@ -320,6 +323,9 @@ importers:
       '@ghostai/core':
         specifier: workspace:*
         version: link:../core
+      '@ghostai/extension-host':
+        specifier: workspace:*
+        version: link:../extension-host
       '@ghostai/mcp':
         specifier: workspace:*
         version: link:../mcp

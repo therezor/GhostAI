@@ -11,22 +11,25 @@
       "default": "./dist/index.js"
     },
     "./testkit": {
-      "development": "./test/testkit/index.ts",
-      "types": "./dist/test/testkit/index.d.ts",
-      "default": "./dist/test/testkit/index.js"
+      "types": "./test/testkit/index.ts",
+      "default": "./test/testkit/index.ts"
     }
+  },
+  "imports": {
+    "#src/*": "./src/*",
+    "#testkit/*": "./test/testkit/*"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
-    "!dist/**/*.test.*"
+    "test/testkit"
   ],
   "scripts": {
     "build": "tsup && tsc -b",
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "lint": "eslint src"
+    "lint": "eslint src test"
   },
   "dependencies": {
     "@ghostai/agent": "workspace:*",

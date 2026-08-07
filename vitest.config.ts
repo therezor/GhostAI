@@ -10,6 +10,12 @@ const THRESHOLDS: Record<string, { lines: number; branches: number }> = {
   core: { lines: 90, branches: 85 },
   agent: { lines: 85, branches: 80 },
   runtime: { lines: 85, branches: 80 },
+  // The same bar as `runtime`, and for the same reason: it is a composition
+  // seam whose whole job is to survive things going wrong. Every refusal here —
+  // an unapproved extension, one that throws in `activate`, one registering a
+  // name it may not — is a branch, and an untested one is a boot that dies on
+  // an install nobody could reproduce.
+  'extension-host': { lines: 85, branches: 80 },
   // Above the 70/65 default: an untested branch in the auth surface is a way
   // in, and the route manifest only guarantees what the matrix actually runs.
   server: { lines: 85, branches: 80 },

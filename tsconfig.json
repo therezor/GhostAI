@@ -22,6 +22,8 @@
     { "path": "packages/mcp/test" },
     { "path": "packages/agent" },
     { "path": "packages/agent/test" },
+    { "path": "packages/extension-host" },
+    { "path": "packages/extension-host/test" },
     { "path": "packages/runtime" },
     { "path": "packages/runtime/test" },
     { "path": "packages/server" },

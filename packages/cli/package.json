@@ -32,6 +32,7 @@
     "@ghostai/agent": "workspace:*",
     "@ghostai/channels": "workspace:*",
     "@ghostai/core": "workspace:*",
+    "@ghostai/extension-host": "workspace:*",
     "@ghostai/i18n": "workspace:*",
     "@ghostai/protocol": "workspace:*",
     "@ghostai/providers": "workspace:*",

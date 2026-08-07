@@ -45,7 +45,7 @@ function withNotes(json, notes) {
   return out;
 }
 
-/** @type {Record<string, { description: string; deps?: Record<string,string>; devDeps?: Record<string,string>; internal?: string[]; bin?: Record<string,string>; compilerOptions?: Record<string, unknown>; tsconfigNotes?: Record<string,string> }>} */
+/** @type {Record<string, { description: string; deps?: Record<string,string>; devDeps?: Record<string,string>; internal?: string[]; bin?: Record<string,string>; subpaths?: Record<string,string>; testkit?: boolean; compilerOptions?: Record<string, unknown>; tsconfigNotes?: Record<string,string> }>} */
 const PACKAGES = {
   protocol: {
     description:
@@ -70,7 +70,10 @@ const PACKAGES = {
   core: {
     description:
       'Canonical message types, session store, message bus, logger, clock.',
-    internal: ['protocol'],
+    // `i18n` is declared and currently unimported: the keyed-error layer that
+    // used it was removed and the manifest was not. Left in place rather than
+    // dropped here, because a generator run is the wrong place to decide that.
+    internal: ['protocol', 'i18n'],
     deps: { pino: '^9.5.0', zod: '^4.0.0' },
   },
   security: {
@@ -87,6 +90,11 @@ const PACKAGES = {
     // per-provider dispatcher, and the pool's idle timeouts are what tell a
     // hung model server apart from a slow one.
     deps: { 'gpt-tokenizer': '^2.8.0', undici: '^7.2.0' },
+    // A conformance suite and a recording clock, importable from inside this
+    // package only. Unlike `tools` and `channels`, nothing outside the repo has
+    // a reason to run it: a wire adapter is code an extension supplies, and it
+    // is exercised through `createProvider` like any other.
+    testkit: true,
   },
   tools: {
     description: 'Tool definition helper, registry, and built-in tools.',
@@ -122,7 +130,7 @@ const PACKAGES = {
     // browser test drives behave differently from the one every loop test
     // asserts against. Unlike the provider and tool conformance suites this
     // imports no `vitest`, so the entry pulls no test framework into a graph.
-    subpaths: { './testkit': 'src/testkit/index.ts' },
+    subpaths: { './testkit': 'test/testkit/index.ts' },
     // Tests only — the tests here define tools with `defineTool`. Nothing in
     // this package's runtime graph imports zod.
     devDeps: { zod: '^4.0.0' },
@@ -176,7 +184,9 @@ const PACKAGES = {
     // `providers` is here for its registry alone — `describeProvider` over the
     // `PROVIDERS` table is what `GET /api/providers` serves — not for an
     // adapter: nothing in this package makes a model request.
-    internal: ['protocol', 'core', 'security', 'providers', 'agent'],
+    // `tools` is here for `AutomationPort` alone: `automation-port.ts` is the
+    // adapter between the scheduler's stores and the tool that reaches them.
+    internal: ['protocol', 'core', 'security', 'providers', 'tools', 'agent'],
     // `zod` is a runtime dependency here, unlike in `agent` and `runtime`: the
     // route helper calls `z.toJSONSchema` to generate the OpenAPI document and
     // `safeParse` to validate every request body.
@@ -198,22 +208,24 @@ const PACKAGES = {
       '@types/ws': '^8.5.0',
       ws: '^8.18.0',
     },
+    // A scripted hub, a clock and an in-process server, importable from inside
+    // this package only.
+    testkit: true,
   },
   channels: {
     description:
       'The channel contract and the manager bridging MessageBus to the session hub.',
-    // The one package that exports its testkit. `channelConformance` has to be
-    // runnable by a channel that lives *outside* this repo — a plugin channel
-    // in Phase 4 — and the provider and tool suites' rule (importable only from
-    // inside the package) would make the contract unverifiable exactly where it
-    // matters most. It stays off the package entry, so `vitest` is still not in
-    // anyone's runtime graph unless they ask for it by subpath.
-    subpaths: { './testkit': 'src/testkit/index.ts' },
-    external: ['vitest'],
+    // One of the four packages that *export* a testkit. `channelConformance`
+    // has to be runnable by a channel living outside this repo, and the
+    // provider and tui suites' rule — importable only from inside the package —
+    // would make the contract unverifiable exactly where it matters most. It
+    // stays off the package entry, so `vitest` is never in anyone's runtime
+    // graph unless they ask for it by subpath.
+    subpaths: { './testkit': 'test/testkit/index.ts' },
     // Neither `server` nor `agent`. A channel publishes an `InboundMessage` and
     // consumes `OutboundMessage`s; the hub it bridges to is stated here as a
     // structural port, so this package cannot reach into the transport it feeds
-    // and a plugin channel cannot reach the agent loop through it.
+    // and an extension channel cannot reach the agent loop through it.
     internal: ['protocol', 'core'],
     // A channel parses its own settings block — `ChannelsConfigSchema` is a
     // `looseObject` precisely so that a channel needs no schema change in
@@ -230,11 +242,21 @@ const PACKAGES = {
     // `@ghostai/*` in its manifest, an import of one does not resolve. The
     // layering is a fact about the package graph, not a rule under review.
     deps: { picocolors: '^1.1.0' },
+    // A fake terminal, importable from inside this package only.
+    testkit: true,
+    tsconfigNotes: {
+      references: [
+        'No references, and that absence is the point: this package depends on no',
+        '`@ghostai/*` at all, which is what makes "domain-free" a fact the build',
+        'graph enforces rather than a rule a reviewer has to remember.',
+      ].join('\n'),
+    },
   },
   cli: {
     description: 'GhostAI command line interface.',
     internal: [
       'protocol',
+      'i18n',
       'core',
       'security',
       'providers',
@@ -255,6 +277,10 @@ const PACKAGES = {
     deps: {
       '@ghostai/web': 'workspace:*',
       commander: '^13.0.0',
+      // The CLI holds the i18next instance directly: `translationsFor` picks a
+      // locale from `GHOSTAI_LANG`, `config.ui.locale` and the POSIX chain, and
+      // there is no React provider out here to do it.
+      i18next: '^26.3.6',
       picocolors: '^1.1.0',
     },
     // `ws` is the socket client `serve.test.ts` drives the running server with;
@@ -285,31 +311,35 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
         types: './dist/index.d.ts',
         default: './dist/index.js',
       },
+      // A testkit resolves straight to TypeScript and is never built. Every
+      // consumer of one is a test runner — vitest for `examples/*`, Playwright
+      // for `packages/e2e` — and both read TypeScript, so a build step would
+      // buy nothing and a `src/` entry would put vitest in the bundle. See
+      // CLAUDE.md, "A `testkit/` is never in `src/`".
       ...Object.fromEntries(
-        Object.entries(cfg.subpaths ?? {}).map(([subpath, entry]) => {
-          const out = entry.replace(/^src\//, '').replace(/\.ts$/, '');
-          return [
-            subpath,
-            {
-              development: `./${entry}`,
-              types: `./dist/${out}.d.ts`,
-              default: `./dist/${out}.js`,
-            },
-          ];
-        }),
+        Object.entries(cfg.subpaths ?? {}).map(([subpath, entry]) => [
+          subpath,
+          { types: `./${entry}`, default: `./${entry}` },
+        ]),
       ),
+    },
+    imports: {
+      '#src/*': './src/*',
+      ...((cfg.subpaths ?? cfg.testkit)
+        ? { '#testkit/*': './test/testkit/*' }
+        : {}),
     },
     main: './dist/index.js',
     types: './dist/index.d.ts',
-    // Tests are colocated in src/ so they are typechecked and linted like
-    // everything else; the negation keeps them out of the published tarball.
-    files: ['dist', '!dist/**/*.test.*'],
+    // Tests live in `test/`, so nothing has to be excluded here. A testkit is
+    // listed beside `dist` because its subpath export resolves outside it.
+    files: cfg.subpaths ? ['dist', 'test/testkit'] : ['dist'],
     ...(cfg.bin ? { bin: cfg.bin } : {}),
     scripts: {
       build: 'tsup && tsc -b',
       typecheck: 'tsc -b',
       test: 'vitest run',
-      lint: 'eslint src',
+      lint: 'eslint src test',
     },
     dependencies: Object.keys(dependencies).length
       ? Object.fromEntries(Object.entries(dependencies).sort())
@@ -338,11 +368,6 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
     })),
   };
 
-  const entries = [
-    "'src/index.ts'",
-    ...Object.values(cfg.subpaths ?? {}).map((e) => `'${e}'`),
-  ];
-
   // Without a config of its own, a package running `vitest run` from its own
   // directory finds the *root* config and inherits its `projects` globs — which
   // are relative to the root, match nothing from inside `packages/x`, and fail
@@ -357,7 +382,7 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
 export default defineConfig({
   test: {
     name: '${name}',
-    include: ['src/**/*.test.ts'],
+    include: ['test/**/*.test.ts'],
   },
 });
 `;
@@ -365,7 +390,7 @@ export default defineConfig({
   const tsup = `import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: [${entries.join(', ')}],
+  entry: ['src/index.ts'],
   format: ['esm'],
   target: 'node22',
   // tsc -b writes its declarations and .tsbuildinfo into this same dist, so
@@ -373,15 +398,7 @@ export default defineConfig({
   // Removing dist by hand is what forces a full rebuild of both tools.
   clean: false,
   dts: false, // tsc -b emits declarations; rollup-plugin-dts is the slow path
-  sourcemap: true,${
-    cfg.external === undefined
-      ? ''
-      : `
-  // tsup bundles anything it can resolve that is not a declared dependency, and
-  // a test framework resolvable from the workspace root is exactly that: without
-  // this, half a megabyte of ${cfg.external.join(', ')} ends up inside dist/.
-  external: [${cfg.external.map((name) => `'${name}'`).join(', ')}],`
-  }
+  sourcemap: true,
   // tsup rewrites \`node:sqlite\` to \`sqlite\` otherwise — a compatibility shim for
   // node versions older than 14.18 that turns a builtin into a missing package.
   // \`node:sqlite\` has no unprefixed form at all, so the rewrite is unloadable.
