@@ -211,6 +211,44 @@ const MANIFEST = [
   // ambiguous the moment a server id contains an underscore.
   { id: 'mcp.list', method: 'GET', url: '/api/mcp', auth: 'required' },
 
+  // Extensions, and the two writes that are not settings patches. An approval
+  // records the digest of the files on disk *now*; putting it in `config.json`
+  // would make it survive an edit to the very files it was about. `POST` for
+  // both because neither is idempotent across such an edit — see
+  // `routes/extensions.ts`.
+  {
+    id: 'extensions.list',
+    method: 'GET',
+    url: '/api/extensions',
+    auth: 'required',
+  },
+  {
+    id: 'extensions.approve',
+    method: 'POST',
+    url: '/api/extensions/:id/approve',
+    auth: 'required',
+  },
+  {
+    id: 'extensions.revoke',
+    method: 'POST',
+    url: '/api/extensions/:id/revoke',
+    auth: 'required',
+  },
+  // The one command surface that is not a table compiled into a client: an
+  // extension's command has one definition and three places it has to appear.
+  {
+    id: 'commands.list',
+    method: 'GET',
+    url: '/api/commands',
+    auth: 'required',
+  },
+  {
+    id: 'commands.run',
+    method: 'POST',
+    url: '/api/commands/:id',
+    auth: 'required',
+  },
+
   // Files, upload and signed media
   { id: 'files.list', method: 'GET', url: '/api/files', auth: 'required' },
   { id: 'files.delete', method: 'DELETE', url: '/api/files', auth: 'required' },

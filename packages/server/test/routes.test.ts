@@ -1189,3 +1189,233 @@ describe('GET /api/status: the workspace', () => {
     }
   });
 });
+
+const READY_EXTENSION = {
+  id: 'slack',
+  state: 'ready' as const,
+  version: '1.0.0',
+  label: 'Slack',
+  description: 'Talk to the agent from Slack.',
+  contributes: ['channels' as const, 'commands' as const],
+  tools: [],
+  channels: ['slack'],
+  providers: [],
+  commands: ['slack-post'],
+  digest: 'a'.repeat(64),
+  approvedAtMs: 1,
+  warnings: [],
+};
+
+describe('GET /api/extensions', () => {
+  it('reports live state the settings tree has nowhere to put', async () => {
+    // The same split `GET /api/mcp` makes: `config.json` says which extensions
+    // an operator disabled, and this says what happened when the install tried
+    // to load them.
+    const drifted = {
+      ...READY_EXTENSION,
+      id: 'zulip',
+      state: 'drifted' as const,
+      channels: [],
+      commands: [],
+      lastError: 'Extension "zulip" has changed since it was approved.',
+    };
+    const { server, headers } = await start({
+      extensions: [READY_EXTENSION, drifted],
+    });
+
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/extensions',
+      headers,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      extensions: [READY_EXTENSION, drifted],
+    });
+  });
+
+  it('answers with an empty list on a build that has no host', async () => {
+    // A 200 rather than a 501: "which extensions do you have" has a true answer
+    // on an install with no extension host, and it is "none".
+    const { server, headers } = await start();
+
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/extensions',
+      headers,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ extensions: [] });
+  });
+
+  it('counts only the running ones on the status line', async () => {
+    const { server, headers } = await start({
+      extensions: [
+        READY_EXTENSION,
+        { ...READY_EXTENSION, id: 'zulip', state: 'unapproved' as const },
+      ],
+    });
+
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/status',
+      headers,
+    });
+
+    expect(response.json().extensionsLoaded).toBe(1);
+  });
+});
+
+describe('POST /api/extensions/:id/approve', () => {
+  it('approves by id and answers with the whole list', async () => {
+    // The whole list rather than the one row: approving loads the extension,
+    // which can move another row — an id it shadows, a tool name it takes.
+    const { server, headers, runtime } = await start({
+      extensions: [READY_EXTENSION],
+    });
+
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/extensions/slack/approve',
+      headers,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(runtime.approvals).toEqual(['slack']);
+    expect(response.json().extensions).toHaveLength(1);
+  });
+
+  it('revokes the same way', async () => {
+    const { server, headers, runtime } = await start({
+      extensions: [READY_EXTENSION],
+    });
+
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/extensions/slack/revoke',
+      headers,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(runtime.revocations).toEqual(['slack']);
+  });
+
+  it('refuses on a build with no host, where the listing does not', async () => {
+    // The asymmetry is deliberate. "Which extensions do you have" has a true
+    // answer here; "approve this one" does not.
+    const { server, headers } = await start();
+
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/extensions/slack/approve',
+      headers,
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('needs authentication, like every other write', async () => {
+    const { server } = await start({ extensions: [READY_EXTENSION] });
+
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/extensions/slack/approve',
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+});
+
+describe('the command routes', () => {
+  const COMMAND = {
+    id: 'slack-post',
+    extensionId: 'slack',
+    description: 'Post to Slack.',
+    argsHint: 'the message',
+  };
+
+  it('lists what extensions contribute, for every surface to fetch', async () => {
+    const { server, headers } = await start({ commands: [COMMAND] });
+
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/commands',
+      headers,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ commands: [COMMAND] });
+  });
+
+  it('answers with an empty list on an install with no extensions', async () => {
+    const { server, headers } = await start();
+
+    const response = await server.app.inject({
+      method: 'GET',
+      url: '/api/commands',
+      headers,
+    });
+
+    expect(response.json()).toEqual({ commands: [] });
+  });
+
+  it('runs one and answers with text rather than a resource key', async () => {
+    // An extension's copy ships with the extension, so the translation layer
+    // has never seen it and the UI renders what it is given.
+    const { server, headers } = await start({
+      commands: [COMMAND],
+      runCommand: (id, input) => ({
+        message: `${id}: ${input.args}`,
+        ok: true,
+      }),
+    });
+
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/commands/slack-post',
+      headers,
+      payload: { args: 'hello' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      message: 'slack-post: hello',
+      ok: true,
+    });
+  });
+
+  it('carries a failure as a 200 with ok false', async () => {
+    // An extension's bug should read as "that did not work" in the composer,
+    // not as a 500 in the console — the operator typed a command, which is not
+    // the kind of act that deserves an error envelope.
+    const { server, headers } = await start({
+      commands: [COMMAND],
+      runCommand: () => ({ message: 'Slack is down', ok: false }),
+    });
+
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/commands/slack-post',
+      headers,
+      payload: { args: '' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ message: 'Slack is down', ok: false });
+  });
+
+  it('404s a command that does not exist, which is the client’s error', async () => {
+    const { server, headers } = await start();
+
+    const response = await server.app.inject({
+      method: 'POST',
+      url: '/api/commands/nope',
+      headers,
+      payload: { args: '' },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+});

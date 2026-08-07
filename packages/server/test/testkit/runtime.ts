@@ -25,7 +25,11 @@ import {
   ConfigSchema,
   type Config,
   type ConfigPatch,
+  type ExtensionCommand,
+  type ExtensionStatus,
   type McpServerStatus,
+  type RunCommandRequest,
+  type RunCommandResponse,
   type ToolDefinition,
 } from '@ghostai/protocol';
 import { WorkspaceJail, type ToolboxListing } from '@ghostai/security';
@@ -59,6 +63,18 @@ export interface FakeRuntimeOptions {
    * answer for without a 501.
    */
   readonly mcpServers?: readonly McpServerStatus[];
+  /**
+   * Omitted entirely leaves the port's methods absent, which is what a build
+   * with `extensions: false` looks like — a case the listing answers with `[]`
+   * and the two writes answer with a 404.
+   */
+  readonly extensions?: readonly ExtensionStatus[];
+  readonly commands?: readonly ExtensionCommand[];
+  /** What `POST /api/commands/:id` answers with, when a test wires one. */
+  readonly runCommand?: (
+    id: string,
+    input: RunCommandRequest,
+  ) => RunCommandResponse;
   readonly credentialsPresent?: Readonly<Record<string, boolean>>;
   readonly systemPrompt?: string;
   /** The trailing turn the loop appends after the history. */
@@ -87,6 +103,9 @@ export interface FakeRuntime extends ServerRuntime {
     key: string;
     value: string | null;
   }>;
+  /** Every extension id an approve or revoke route asked for, in order. */
+  readonly approvals: string[];
+  readonly revocations: string[];
 }
 
 /**
@@ -142,6 +161,8 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
   const jail = jailFor(DEFAULT_WORKSPACE_ID);
   const workspaces = new WorkspaceStore({ database: options.database, paths });
   const patches: ConfigPatch[] = [];
+  const approvals: string[] = [];
+  const revocations: string[] = [];
   const reloads: Config[] = [];
   const credentialWrites: Array<{
     namespace: string;
@@ -213,7 +234,9 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
       mcpServersConnected: (options.mcpServers ?? []).filter(
         (server) => server.state === 'ready',
       ).length,
-      extensionsLoaded: 0,
+      extensionsLoaded: (options.extensions ?? []).filter(
+        (extension) => extension.state === 'ready',
+      ).length,
     }),
     // Present only when a test supplies servers, so the absent case — a build
     // with no MCP client at all — is the default rather than something a test
@@ -221,6 +244,32 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
     ...(options.mcpServers === undefined
       ? {}
       : { mcpServers: () => options.mcpServers ?? [] }),
+    // The same arrangement, for the same reason: absent is the default, so a
+    // test about a build with no extension host arranges nothing.
+    ...(options.extensions === undefined
+      ? {}
+      : {
+          extensionStatuses: () => options.extensions ?? [],
+          approveExtension: (id: string) => {
+            approvals.push(id);
+            return Promise.resolve();
+          },
+          revokeExtension: (id: string) => {
+            revocations.push(id);
+            return Promise.resolve();
+          },
+        }),
+    ...(options.commands === undefined
+      ? {}
+      : {
+          commands: () => options.commands ?? [],
+          runCommand: (id, input) =>
+            Promise.resolve(
+              options.runCommand?.(id, input) ?? { message: '', ok: true },
+            ),
+        }),
+    approvals,
+    revocations,
     patches,
     reloads,
     credentialWrites,

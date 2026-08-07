@@ -17,7 +17,11 @@ import type { Clock } from '@ghostai/core';
 import {
   ConfigSchema,
   type Config,
+  type ExtensionCommand,
+  type ExtensionStatus,
   type McpServerStatus,
+  type RunCommandRequest,
+  type RunCommandResponse,
   type ToolDefinition,
 } from '@ghostai/protocol';
 
@@ -45,6 +49,13 @@ export interface TestServerOptions {
   readonly credentialsPresent?: Readonly<Record<string, boolean>>;
   /** Omitted leaves the port's optional method absent. See `FakeRuntimeOptions`. */
   readonly mcpServers?: readonly McpServerStatus[];
+  /** Omitted leaves the port's methods absent — a build with no host. */
+  readonly extensions?: readonly ExtensionStatus[];
+  readonly commands?: readonly ExtensionCommand[];
+  readonly runCommand?: (
+    id: string,
+    input: RunCommandRequest,
+  ) => RunCommandResponse;
   readonly provider?: string;
   readonly model?: string;
   /** `false` drives the routes as a fresh install with no provider or model. */
@@ -116,6 +127,13 @@ export async function startTestServer(
     ...(options.mcpServers === undefined
       ? {}
       : { mcpServers: options.mcpServers }),
+    ...(options.extensions === undefined
+      ? {}
+      : { extensions: options.extensions }),
+    ...(options.commands === undefined ? {} : { commands: options.commands }),
+    ...(options.runCommand === undefined
+      ? {}
+      : { runCommand: options.runCommand }),
   });
 
   const { hub, runner } = createTestHub(

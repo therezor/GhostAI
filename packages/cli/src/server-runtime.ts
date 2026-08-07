@@ -40,10 +40,13 @@ import { DEFAULT_AGENT_ID, GhostError, saveConfig } from '@ghostai/core';
 import type {
   Config,
   ConfigPatch,
+  ExtensionCommand,
+  ExtensionStatus,
   McpServerStatus,
   ModelsResponse,
   ProviderTestRequest,
   ProviderTestResponse,
+  RunCommandResponse,
   SetCredentialRequest,
   ToolDefinition,
 } from '@ghostai/protocol';
@@ -53,7 +56,7 @@ import {
   resolveConnection,
   type ChatResult,
 } from '@ghostai/providers';
-import { ToolboxStore } from '@ghostai/security';
+import { ExtensionStore, ToolboxStore } from '@ghostai/security';
 import { openVault, resolveAgent, type GhostRuntime } from '@ghostai/runtime';
 import type {
   AgentSummary,
@@ -74,6 +77,17 @@ interface ServerRuntimeOptions {
   readonly fetchImpl?: FetchImplementation;
   /** Injected so a test does not wait out a real timeout. */
   readonly modelTimeoutMs?: number;
+  /**
+   * Rebuilds what only `ghost serve` owns, after an extension was loaded.
+   *
+   * The knot this unties: approving an extension can bring a `ChannelFactory`
+   * with it, and `ChannelManager` fixes its factories at construction and
+   * refuses `register` after `start`. Rebuilding the manager is `serve.ts`'s
+   * job — it owns the hub, the bus and the shutdown order — and this adapter is
+   * the only thing the route can reach. So `serve.ts` passes the callback in,
+   * the same late binding `ServerOptions.scheduler` uses for the same knot.
+   */
+  readonly onExtensionsChanged?: () => Promise<void> | void;
 }
 
 export function createServerRuntime(
@@ -89,6 +103,24 @@ export function createServerRuntime(
     if (!create && !existsSync(runtime.paths.vaultFile)) return undefined;
     vault = openVault(runtime.paths);
     return vault;
+  };
+
+  const extensionStore = (): ExtensionStore =>
+    new ExtensionStore({
+      database: runtime.store.database,
+      dir: runtime.paths.extensionsDir,
+    });
+
+  /**
+   * Loads what the approval just changed, then lets `serve.ts` catch up.
+   *
+   * Two steps and they are not interchangeable: the runtime has to reconcile
+   * first, because the channel factories `serve.ts` is about to collect only
+   * exist once the extension has been activated.
+   */
+  const reloadExtensions = async (): Promise<void> => {
+    await runtime.reloadExtensions();
+    await options.onExtensionsChanged?.();
   };
 
   const readCredential = (
@@ -167,10 +199,45 @@ export function createServerRuntime(
       mcpServersConnected: runtime
         .mcpServers()
         .filter((server) => server.state === 'ready').length,
-      extensionsLoaded: 0,
+      // `ready` here too, and for the same reason: an extension that is
+      // installed, unapproved or broken is not one a turn can use.
+      extensionsLoaded: runtime.extensions?.loadedCount ?? 0,
     }),
 
     mcpServers: (): readonly McpServerStatus[] => runtime.mcpServers(),
+
+    extensionStatuses: (): readonly ExtensionStatus[] =>
+      runtime.extensions?.status() ?? [],
+
+    approveExtension: async (id: string): Promise<void> => {
+      // Through a store of its own rather than the host's, for the reason
+      // `ToolboxStore` is constructed per use: it is a thin object over the
+      // shared connection, and passing the host's out would make the approval
+      // gate reachable from anything holding a host.
+      extensionStore().approve(id);
+      await reloadExtensions();
+    },
+
+    revokeExtension: async (id: string): Promise<void> => {
+      extensionStore().revoke(id);
+      await reloadExtensions();
+    },
+
+    commands: (): readonly ExtensionCommand[] =>
+      runtime.extensions?.commands() ?? [],
+
+    runCommand: async (id, input): Promise<RunCommandResponse> => {
+      const host = runtime.extensions;
+      if (host === undefined) {
+        throw new GhostError('not_found', `No command called "${id}"`);
+      }
+      const result = await host.runCommand(id, {
+        args: input.args,
+        sessionKey: input.sessionKey,
+        signal: input.signal,
+      });
+      return { message: result.message, ok: result.ok ?? true };
+    },
 
     configWarnings: () => runtime.configWarnings,
 

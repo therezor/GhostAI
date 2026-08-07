@@ -406,7 +406,17 @@ export async function startServer(
 
     const sessionHub = hub;
     const ui = resolveUiRoot(options.ui);
-    const serverRuntime = createServerRuntime(built, { env });
+    // `onExtensionsChanged` is a late binding onto `rebuildChannels`, declared
+    // below: approving an extension can bring a `ChannelFactory` with it, and
+    // only this file knows a channel manager exists. Reached through the
+    // closure for the reason the two bindings above are — the alternative is a
+    // holder object that exists to be filled in.
+    const serverRuntime = createServerRuntime(built, {
+      env,
+      onExtensionsChanged: async () => {
+        await rebuildChannels(false);
+      },
+    });
     // Captured rather than reached through the object at call time, so the
     // optional-method check and the call cannot disagree.
     const directChat = serverRuntime.chat?.bind(serverRuntime);
@@ -434,6 +444,11 @@ export async function startServer(
         channels: built.config.channels,
         factories: [
           ...(options.channels ?? []),
+          // After the injected ones and before the built-in: an extension's
+          // channel is something an operator installed, and `ChannelManager`
+          // refuses a duplicate id outright, so the ordering decides nothing
+          // except which of two identical ids is reported first.
+          ...(built.extensions?.channels() ?? []),
           ...telegramFactories({
             runtime: built,
             server: serverRuntime,
