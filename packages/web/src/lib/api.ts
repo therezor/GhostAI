@@ -279,6 +279,18 @@ export const api = {
       },
     ),
 
+  /**
+   * Drops a conversation's transcript, keeping the conversation.
+   *
+   * Nothing has to be done with the answer: the server announces the clear as a
+   * `session.reset` frame, so every attached tab — including the one that asked
+   * — empties from the socket rather than from this promise.
+   */
+  clearMessages: (key: string): Promise<void> =>
+    requestVoid(`/api/sessions/${encodeURIComponent(key)}/messages`, {
+      method: 'DELETE',
+    }),
+
   renameSession: (key: string, title: string): Promise<SessionSummary> =>
     request(`/api/sessions/${encodeURIComponent(key)}`, SessionSummarySchema, {
       method: 'PATCH',

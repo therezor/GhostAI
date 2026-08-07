@@ -535,6 +535,25 @@ export class SessionHub {
     this.status(state);
   }
 
+  /**
+   * Announces that a session's history is gone.
+   *
+   * Called by `DELETE /api/sessions/:key/messages`, and the same shape as
+   * `sessionMoved` above for the same reason: the route performs the write and
+   * then says so in one verb, so route and hub cannot disagree about what
+   * happened. Without it a tab that cleared its own conversation carries on
+   * rendering it, and a second tab never finds out at all.
+   *
+   * `session.reset` rather than a status: a transcript that is now empty is not
+   * something `busy` and `queueDepth` can express, and every client already
+   * knows what the event means.
+   */
+  sessionCleared(sessionKey: string): void {
+    const state = this.sessions.get(sessionKey);
+    if (state === undefined || state.clients.size === 0) return;
+    this.emit(state, { type: 'session.reset', sessionKey });
+  }
+
   // -------------------------------------------------------------------------
   // Inbound
   // -------------------------------------------------------------------------

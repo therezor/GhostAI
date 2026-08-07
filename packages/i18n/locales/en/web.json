@@ -281,6 +281,37 @@
     "attachmentDownload": "Download {{name}}",
     "attachTooLarge": "{{name}} is larger than {{limit}} and was not attached.",
     "branchHere": "Branch from here",
+    "commands": {
+      "agent": "Which agent this session runs on",
+      "branch": "Fork this session at your last message",
+      "clear": "Forget this session’s history, keeping the session",
+      "errors": {
+        "failed": "The command did not go through",
+        "noAgent": "No agent {{id}}.",
+        "noModel": "No model {{id}}.",
+        "nothingToBranch": "Nothing to branch from: you have not said anything here.",
+        "nothingYet": "Send a message first — there is no session to act on yet.",
+        "notRunning": "No turn is running.",
+        "unknown": "No command /{{name}}. Type / to see them all.",
+        "usageAgent": "Usage: /agent <id>",
+        "usageModel": "Usage: /model <id>",
+        "usageRename": "Usage: /rename <title>"
+      },
+      "label": "Commands",
+      "model": "Which model this install runs on",
+      "new": "Start a fresh session",
+      "notes": {
+        "agentSet": "This session now runs on {{id}}.",
+        "branched": "Branched at message {{seq}}.",
+        "cleared": "History cleared.",
+        "modelSet": "Now running {{id}}. Saved as the default for this install.",
+        "renamed": "Renamed to “{{title}}”.",
+        "started": "Started a new session.",
+        "stopping": "Stopping."
+      },
+      "rename": "Retitle this session",
+      "stop": "Abort the turn that is running"
+    },
     "editMessage": "Edit message",
     "editThis": "Edit this message",
     "externalImage": "External image — opens in a new tab rather than loading here",
@@ -320,7 +351,7 @@
     "stopTurn": "Stop the current turn",
     "thinking": "Thinking…",
     "turnRunning": "A turn is running. Enter queues your message.",
-    "welcomeHint": "Enter to send · Shift+Enter for a new line · @ to scope the turn",
+    "welcomeHint": "Enter to send · Shift+Enter for a new line · / for commands",
     "welcomeNote": "The agent reads and writes inside its workspace, and asks before it runs a command or reaches the network. Every tool call shows up in the transcript with its arguments and its output."
   },
   "common": {

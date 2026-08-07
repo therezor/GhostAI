@@ -366,6 +366,10 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
         const { key } = params(request);
         requireSession(key);
         store.clearMessages(key);
+        // The same courtesy `sessions.update` pays above: a tab attached to
+        // this conversation is still rendering the history that has just been
+        // deleted, and `session.reset` is what empties it.
+        deps.hub.sessionCleared(key);
         return reply.status(204).send();
       },
     },

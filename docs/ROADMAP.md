@@ -10,14 +10,22 @@ building a second one beside it.
 
 ## Planned
 
-- [ ] **Slash commands in the browser** — the terminal REPL's commands, in the
-      composer.
 - [ ] **Session search page** — find a session by what was said in it.
 - [ ] **Extensions** — third-party packages that add tools, channels or
       providers.
 
 ## Done
 
+- [x] **Slash commands in the composer** — `/new`, `/clear`, `/rename`,
+      `/stop`, `/branch`, `/agent` and `/model`, each reporting in a toast, with
+      a `/` autocomplete that also completes an agent or model id. Three read
+      differently from the terminal on purpose and each says why at its
+      definition in `packages/web/src/chat/commands.ts`: `/new` takes no title,
+      `/branch` takes no ref, and `/model` persists. A third table rather than a
+      shared core, for the reason `packages/channels/src/telegram/commands.ts`
+      gives about `resolveSeq`. `DELETE /api/sessions/:key/messages` announces
+      itself as `session.reset`, which is what makes `/clear` empty a second tab
+      as well as this one.
 - [x] **Memory** — the agent remembers across sessions in
       `<workspace>/memory/`, one markdown file per fact with frontmatter naming
       it, describing it and saying which of four kinds it is. Only the generated
@@ -27,8 +35,8 @@ building a second one beside it.
       prompt template. The tool's permission is the feature's only switch, which
       is also how `skill` gained one, and no bound on the index is configurable.
       Two things are deliberately not built: a delete operation, and a pass that
-      folds a session into memory on its own. `/memory` reaches the browser with
-      the slash commands above.
+      folds a session into memory on its own. `/memory` lists what is held from
+      the terminal and from Telegram.
 - [x] **Skills** — reusable instruction bundles in `<workspace>/skills/`, one
       directory per skill. Every skill's description is indexed into the static
       prompt and the agent opens the sheet itself with `read_file`. Arrives

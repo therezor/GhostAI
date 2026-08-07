@@ -198,8 +198,7 @@ is intended; see the placement section below.
 
 ## The commands
 
-`/memory` exists in the terminal REPL and in Telegram. It is **not** in the browser
-composer yet: slash commands there are still on [the roadmap](ROADMAP.md).
+`/memory` exists in the terminal REPL and in Telegram.
 
 | Command                     | Where          | Does                                                                 |
 | --------------------------- | -------------- | -------------------------------------------------------------------- |
@@ -288,4 +287,3 @@ If you want the injection-proof arrangement, set `write_file` to `ask` or `deny`
   far such a pass has read, because there is no pass.
 - **No settings panel for the files themselves**, and no REST route reading them. The
   section's wording is editable per agent; the content is a folder.
-- **No `/memory` in the browser**, pending slash commands in the composer.

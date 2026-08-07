@@ -905,6 +905,37 @@ describe('stopping', () => {
     expect(await screen.findByText('Stopped.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument();
   });
+
+  it('does the same from the composer, without the message reaching the wire', async () => {
+    // The whole of what a slash command has to be true about: `/stop` typed
+    // into the box is a command, so it sends the frame the Stop button sends
+    // and does *not* arrive as a question for the model.
+    const user = userEvent.setup();
+    mount();
+    await connect();
+
+    deliver(START, {
+      type: 'session.status',
+      workspaceId: 'default',
+      sessionKey: SESSION,
+      busy: true,
+      queueDepth: 0,
+      turnId: 't1',
+    });
+
+    const box = screen.getByRole('textbox', { name: 'Message' });
+    // One keypress: the list closes as soon as `/stop` is complete, because
+    // there is nothing left to complete.
+    await user.type(box, '/stop{Enter}');
+
+    await waitFor(() => {
+      expect(framesOf('turn.stop')).toEqual([
+        { type: 'turn.stop', sessionKey: SESSION },
+      ]);
+    });
+    expect(framesOf('user.message')).toEqual([]);
+    expect(box).toHaveValue('');
+  });
 });
 
 describe('the approval gate', () => {

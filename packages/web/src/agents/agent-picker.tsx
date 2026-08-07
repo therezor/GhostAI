@@ -6,16 +6,10 @@
  * the question, not part of configuring the application. A picker three
  * columns away from the message box is one nobody touches.
  *
- * The control means two different things and says so, which is the whole of its
- * design:
- *
- *  - **Before the first message** there is no session row, so the choice is
- *    only a preference for the conversation about to start. It is kept in the
- *    agent context, which is also what `newSession` sends.
- *  - **After the first message** the binding lives on the session row, and
- *    changing it is a real edit — `PATCH /api/sessions/:key`. A frame naming an
- *    agent is ignored for a session that already exists, deliberately, so this
- *    is the only way to move one.
+ * The control means two different things and says so. Which of them applies is
+ * `useAgentChoice`'s to decide — the composer's `/agent` command asks the same
+ * question and must get the same answer — and this file is what that decision
+ * looks like on screen.
  *
  * The second case is worth a word of warning in the menu rather than a refusal.
  * Moving a conversation mid-way is a legitimate thing to want — start with a
@@ -23,7 +17,6 @@
  * the prompt, tools and permissions the *next* turn runs under.
  */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import {
   BrainCircuit,
@@ -31,10 +24,8 @@ import {
   Settings2,
   TriangleAlert,
 } from 'lucide-react';
-import { useEffect, type JSX } from 'react';
+import type { JSX } from 'react';
 import { useTranslation } from 'react-i18next';
-
-import { DEFAULT_AGENT_ID } from '@ghostai/protocol';
 
 import { Button } from '@/components/ui/button.js';
 import {
@@ -47,10 +38,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu.js';
-import { api } from '@/lib/api.js';
-import { queryKeys } from '@/lib/query.js';
 import { toast } from '@/components/ui/toast.js';
-import { useAgent } from './agent-context.js';
+import { useAgentChoice } from './use-agent-choice.js';
 
 export function AgentPicker({
   sessionKey,
@@ -58,70 +47,23 @@ export function AgentPicker({
   readonly sessionKey?: string;
 }): JSX.Element {
   const { t } = useTranslation();
-  const { agentId: preferred, select, adopt } = useAgent();
-  const queryClient = useQueryClient();
-
-  const agents = useQuery({
-    queryKey: queryKeys.agents,
-    queryFn: ({ signal }) => api.agents(signal),
-  });
-
-  // A conversation nobody has spoken in has no row, so this 404s until the
-  // first turn lands. That is the signal, not a failure: no row means the
-  // choice is still only a preference.
-  const stored = useQuery({
-    queryKey: queryKeys.session(sessionKey ?? ''),
-    queryFn: ({ signal }) => api.session(sessionKey ?? '', signal),
-    enabled: sessionKey !== undefined,
-    retry: false,
-  });
-
-  const bound = stored.data?.agentId;
-  const current = bound ?? preferred;
-  const rows = agents.data?.agents ?? [];
-  const match = rows.find((row) => row.id === current);
+  const {
+    agents: rows,
+    current,
+    bound,
+    match,
+    missing,
+    choose: pick,
+  } = useAgentChoice(sessionKey);
   const label = match?.label ?? current;
-  // Only once the listing has actually arrived. While it is in flight every id
-  // looks missing, and a picker that flagged the agent on each cold load would
-  // cry wolf until the query settled.
-  const missing = agents.isSuccess && match === undefined;
-
-  // A stale *preference* is corrected here, because this is the first place
-  // that holds both the remembered id and the list to check it against — the
-  // agent context is mounted above the data layer and has no listing.
-  //
-  // Only a preference, never a binding: moving a conversation is a real edit
-  // and belongs to the operator. The remembered id is otherwise only ever fixed
-  // in the browser that did the deleting, so every other tab and device keeps
-  // sending a dead id indefinitely.
-  useEffect(() => {
-    if (!missing || bound !== undefined) return;
-    select(DEFAULT_AGENT_ID);
-  }, [missing, bound, select]);
-
-  const move = useMutation({
-    mutationFn: (agentId: string) =>
-      api.moveSessionToAgent(sessionKey ?? '', agentId),
-    onSuccess: (updated) => {
-      queryClient.setQueryData(queryKeys.session(updated.key), updated);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
-      // The switcher follows the conversation rather than claiming to have set
-      // it — see `adopt` in the context.
-      adopt(updated.agentId ?? DEFAULT_AGENT_ID);
-    },
-    onError: (error: Error) => {
-      toast.error(t('agents.moveFailed'), error.message);
-    },
-  });
 
   const choose = (agentId: string): void => {
-    if (agentId === current) return;
-    if (bound === undefined) {
-      // No row yet: this is the agent the conversation will be created with.
-      select(agentId);
-      return;
-    }
-    move.mutate(agentId);
+    void pick(agentId).catch((error: unknown) => {
+      toast.error(
+        t('agents.moveFailed'),
+        error instanceof Error ? error.message : undefined,
+      );
+    });
   };
 
   return (

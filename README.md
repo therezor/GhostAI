@@ -103,7 +103,7 @@ Everything under `~/.ghostai`, or `$GHOSTAI_HOME`:
 
 ## What you get
 
-**A web UI** — chat with streaming answers, a collapsible reasoning block, a card per tool call with live progress, approval prompts showing the arguments before the call runs, and subagent runs nested inside the card that started them. Plus a file browser and editor, multiple workspaces, an agent editor, provider setup with live connection testing, and a context inspector that shows exactly what would be sent to the model and where the window went. Dark, light and system themes, all held to WCAG AA by a test that parses the real stylesheet. See [Web UI](docs/web-ui.md).
+**A web UI** — chat with streaming answers, a collapsible reasoning block, a card per tool call with live progress, approval prompts showing the arguments before the call runs, and subagent runs nested inside the card that started them. Slash commands in the composer, with completion for agent and model ids. Plus a file browser and editor, multiple workspaces, an agent editor, provider setup with live connection testing, and a context inspector that shows exactly what would be sent to the model and where the window went. Dark, light and system themes, all held to WCAG AA by a test that parses the real stylesheet. See [Web UI](docs/web-ui.md).
 
 **A CLI** — `ghost chat` as a one-shot, a pipe target or a REPL with slash commands for sessions, branching, editing, regeneration, workspaces, memory, skills and context. Tab completes a slash command and nothing else. `ghost serve`, `ghost init`, `ghost toolbox`.
 
@@ -197,12 +197,11 @@ Every key under `agents.defaults` is overridable per agent, and `agents.list.<id
 
 The wire schemas, config blocks and seams for these already ship. The implementations do not, and nothing in the UI advertises them: a settings screen naming a feature you cannot open is one an operator checks twice. [`docs/ROADMAP.md`](docs/ROADMAP.md) tracks them, one line each.
 
-| Feature                    | Ships today                                                 | Missing                               |
-| -------------------------- | ----------------------------------------------------------- | ------------------------------------- |
-| **Heartbeat delivery**     | The decide/run/evaluate triad, as a scheduled job's payload | `targets` reaching a channel          |
-| **Plugins**                | Load specs, `allowUnverified`, `unregisterBySource`         | Discovery, loader and manifest format |
-| **Browser slash commands** | The terminal's command table                                | A shared table and the composer UI    |
-| **Session search**         | Keyset pagination and filters                               | Text search over message content      |
+| Feature                | Ships today                                                 | Missing                               |
+| ---------------------- | ----------------------------------------------------------- | ------------------------------------- |
+| **Heartbeat delivery** | The decide/run/evaluate triad, as a scheduled job's payload | `targets` reaching a channel          |
+| **Plugins**            | Load specs, `allowUnverified`, `unregisterBySource`         | Discovery, loader and manifest format |
+| **Session search**     | Keyset pagination and filters                               | Text search over message content      |
 
 Two smaller ones, so nothing here reads as more finished than it is: only the `openai-chat` wire adapter exists, so the registry entries that name another wire — `anthropic`, `gemini` — are refused at construction rather than falling back, and reaching those providers today means an endpoint that speaks `openai-chat`; and the translation layer is complete while **English is the only shipped locale** — adding one is a folder plus a line.
 

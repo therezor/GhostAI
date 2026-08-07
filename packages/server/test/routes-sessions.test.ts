@@ -318,6 +318,51 @@ describe('sessions CRUD', () => {
     expect(runtime.store.messageCount('web-1')).toBe(0);
   });
 
+  it('tells an attached tab its transcript is gone', async () => {
+    // Without this the browser that ran `/clear` carries on rendering the
+    // history it just deleted, and a second tab never finds out at all. Every
+    // client already knows what `session.reset` means — this route was simply
+    // the emitter it never had.
+    const test = await start();
+    test.runtime.store.append('web-1', userMessage('hello'));
+
+    const seen: string[] = [];
+    test.hub.connect({
+      send: (message) => seen.push(message.type),
+      sessionKey: 'web-1',
+    });
+
+    await test.server.app.inject({
+      method: 'DELETE',
+      url: '/api/sessions/web-1/messages',
+      headers: test.headers,
+    });
+
+    expect(seen).toContain('session.reset');
+  });
+
+  it('bumps nothing for a session nobody is watching', async () => {
+    // The rule `broadcast` states at length: raising `seq` for no one leaves a
+    // later reconnect resuming at a cursor that accounts for an event it was
+    // never sent.
+    const test = await start();
+    test.runtime.store.append('web-1', userMessage('hello'));
+
+    await test.server.app.inject({
+      method: 'DELETE',
+      url: '/api/sessions/web-1/messages',
+      headers: test.headers,
+    });
+
+    const seen: string[] = [];
+    test.hub.connect({
+      send: (message) => seen.push(message.type),
+      sessionKey: 'web-1',
+    });
+
+    expect(seen).not.toContain('session.reset');
+  });
+
   // A missing session is a 404 everywhere, rather than an empty listing on one
   // route and a silently created session on another.
   it.each([

@@ -4,7 +4,7 @@
  * Four behaviours, each of which is invisible when it breaks and infuriating
  * when it does: Enter sends and Shift+Enter does not, the box grows with the
  * text, an attachment is uploaded when it is chosen rather than when Send is
- * pressed, and the `@` popover is drivable without touching the mouse.
+ * pressed, and the `/` popover is drivable without touching the mouse.
  */
 
 import { screen, waitFor } from '@testing-library/react';
@@ -13,7 +13,9 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { Attachment } from '@ghostai/protocol';
 
+import { parseCommand } from '@/chat/commands.js';
 import { Composer } from '@/chat/composer.js';
+import { AGENTS } from '@testkit/fixtures.js';
 import { renderWithProviders, stubFetch } from '@testkit/render.js';
 
 interface Sent {
@@ -26,9 +28,11 @@ function mount(
 ): {
   readonly sent: Sent[];
   readonly stops: number[];
+  readonly commands: string[];
 } {
   const sent: Sent[] = [];
   const stops: number[] = [];
+  const commands: string[] = [];
 
   renderWithProviders(
     <Composer
@@ -38,11 +42,20 @@ function mount(
       configured
       onSend={(text, attachments) => sent.push({ text, attachments })}
       onStop={() => stops.push(1)}
+      // The real parser behind a fake dispatcher. What is under test here is
+      // what the box does with each answer, and deciding *which* answer a line
+      // earns is `commands.test.ts`'s job — a hand-rolled stub would be a
+      // second, quietly divergent copy of that rule.
+      onCommand={(text) => {
+        if (parseCommand(text) === undefined) return false;
+        commands.push(text);
+        return true;
+      }}
       {...overrides}
     />,
   );
 
-  return { sent, stops };
+  return { sent, stops, commands };
 }
 
 const box = (): HTMLElement => screen.getByRole('textbox', { name: 'Message' });
@@ -141,6 +154,157 @@ describe('sending', () => {
 
     expect(screen.getByText(/A turn is running/)).toBeInTheDocument();
     expect(screen.getByText(/2 messages waiting/)).toBeInTheDocument();
+  });
+});
+
+describe('the / autocomplete', () => {
+  it('opens on a slash, moves with the arrow keys and accepts with Enter', async () => {
+    const user = userEvent.setup();
+    const { sent } = mount();
+
+    await user.type(box(), '/');
+
+    const options = screen.getAllByRole('option');
+    expect(options[0]?.textContent).toContain('/new');
+    // Focus stays in the textarea; `aria-activedescendant` is what tells a
+    // screen reader which option the arrow keys are on.
+    expect(box()).toHaveAttribute(
+      'aria-activedescendant',
+      'composer-commands-0',
+    );
+
+    await user.keyboard('{ArrowDown}');
+    expect(box()).toHaveAttribute(
+      'aria-activedescendant',
+      'composer-commands-1',
+    );
+
+    await user.keyboard('{Enter}');
+
+    // Enter accepted the highlighted suggestion rather than sending.
+    expect(sent).toEqual([]);
+    expect(box()).toHaveValue('/clear ');
+  });
+
+  it('closes on Escape and stays closed until the next keystroke', async () => {
+    const user = userEvent.setup();
+    mount();
+
+    await user.type(box(), '/re');
+    expect(screen.getAllByRole('option')).toHaveLength(1);
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('option')).not.toBeInTheDocument();
+
+    await user.keyboard('n');
+    expect(screen.getAllByRole('option')).toHaveLength(1);
+  });
+
+  it('offers nothing once a command that takes free text is chosen', async () => {
+    const user = userEvent.setup();
+    mount();
+
+    await user.type(box(), '/rename a title');
+
+    // `/rename` takes prose, so there is nothing to complete. A menu reading
+    // "no results" there would look broken where an absent one reads as absent.
+    expect(screen.queryByRole('option')).not.toBeInTheDocument();
+  });
+
+  it('accepting /agent narrows the menu to the configured agents', async () => {
+    // The bug this guards: the caret was read from a ref during render, so the
+    // render after an accept saw the *old* DOM position, decided the caret was
+    // outside a command and closed the popover. Moving a caret does not
+    // re-render, so nothing ever reopened it.
+    const user = userEvent.setup();
+    stubFetch({ '/api/agents': [200, AGENTS] });
+    mount();
+
+    await user.type(box(), '/agent');
+    await user.keyboard('{Enter}');
+    expect(box()).toHaveValue('/agent ');
+
+    const options = await screen.findAllByRole('option');
+    expect(options.map((option) => option.textContent)).toEqual([
+      expect.stringContaining('default'),
+      expect.stringContaining('researcher'),
+    ]);
+  });
+
+  it('accepts a value with the mouse and closes', async () => {
+    const user = userEvent.setup();
+    stubFetch({ '/api/agents': [200, AGENTS] });
+    const { sent } = mount();
+
+    await user.type(box(), '/agent res');
+    const option = await screen.findByRole('option');
+    await user.click(option);
+
+    // The trailing space closes the argument, so what is typed next is not
+    // more of the id.
+    await waitFor(() => {
+      expect(box()).toHaveValue('/agent researcher ');
+    });
+    expect(screen.queryByRole('option')).not.toBeInTheDocument();
+    expect(sent).toEqual([]);
+  });
+});
+
+describe('running a command', () => {
+  it('sends a command to the dispatcher instead of to the model', async () => {
+    const user = userEvent.setup();
+    const { sent, commands } = mount();
+
+    // One keypress. `/stop` is typed in full and takes no argument, so the
+    // list has already closed and Enter submits rather than inserting a space.
+    await user.type(box(), '/stop{Enter}');
+
+    expect(commands).toEqual(['/stop']);
+    expect(sent).toEqual([]);
+    expect(box()).toHaveValue('');
+  });
+
+  it('leaves prose alone', async () => {
+    const user = userEvent.setup();
+    const { sent, commands } = mount();
+
+    // The trap the parser exists for. Nothing here opens a popover, and the
+    // sentence reaches the model intact.
+    await user.type(box(), '/usr/bin/env is on the path{Enter}');
+
+    expect(commands).toEqual([]);
+    expect(sent).toEqual([
+      { text: '/usr/bin/env is on the path', attachments: [] },
+    ]);
+  });
+
+  it('never treats a message carrying a file as a command', async () => {
+    const user = userEvent.setup();
+    stubFetch({
+      '/api/files/upload': [
+        201,
+        { path: 'uploads/a-x.txt', sizeBytes: 1, mimeType: 'text/plain' },
+      ],
+    });
+    const { sent, commands } = mount();
+
+    await user.upload(filePicker(), new File(['x'], 'x.txt'));
+    await screen.findByText('1 B');
+
+    await user.type(box(), '/stop{Enter}');
+
+    // Running the command would have discarded the upload without saying so.
+    expect(commands).toEqual([]);
+    expect(sent[0]?.text).toBe('/stop');
+  });
+
+  it('opens the whole list on a bare slash', async () => {
+    const user = userEvent.setup();
+    mount();
+
+    await user.type(box(), '/');
+
+    expect(screen.getAllByRole('option').length).toBeGreaterThan(1);
   });
 });
 

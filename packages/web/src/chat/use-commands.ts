@@ -1,0 +1,186 @@
+/**
+ * The one place the command table meets the application.
+ *
+ * `commands.ts` names what it needs and translates nothing; this file supplies
+ * both. It is the only file in the feature that knows about `api`, the socket,
+ * the router, the query cache or a toast, which is what keeps the table itself
+ * testable against a plain object.
+ *
+ * **What it returns is synchronous, and that is load-bearing.** Enter has to
+ * decide *now* whether what was typed is a command, because the answer decides
+ * whether the box clears — and `parseCommand` is pure, so it can. The effect is
+ * then fired and not awaited. An `await` between the keypress and the clear is a
+ * window in which a second Enter runs the same command again, and `/branch`
+ * forking twice is not a hazard worth a lock. It is the shape `runAction` in
+ * `routes/chat.tsx` already has, for the same reason.
+ */
+
+import { useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
+import type { TFunction } from 'i18next';
+import { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+
+import type { ModelInfo } from '@ghostai/protocol';
+
+import { useAgent } from '@/agents/agent-context.js';
+import { useAgentChoice } from '@/agents/use-agent-choice.js';
+import { toast } from '@/components/ui/toast.js';
+import { api } from '@/lib/api.js';
+import { newSession, stopTurn } from '@/lib/connection.js';
+import { queryKeys } from '@/lib/query.js';
+import { useTurnStore } from '@/state/turn.js';
+import type { Transcript } from '@/state/transcript.js';
+import { useWorkspace } from '@/workspaces/workspace-context.js';
+import {
+  parseCommand,
+  runCommand,
+  type CommandContext,
+  type CommandOutcome,
+} from './commands.js';
+
+/**
+ * Runs what was typed if it is a command, and says whether it was one.
+ *
+ * `true` means consumed — the effect is under way and the box should clear.
+ * `false` means prose, and the message goes out as it always did.
+ */
+export type RunCommand = (text: string) => boolean;
+
+export function useCommands(): RunCommand {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
+
+  const sessionKey = useTurnStore((state) => state.sessionKey);
+  const busy = useTurnStore((state) => state.busy);
+  const transcript = useTurnStore((state) => state.transcript);
+
+  // The *preference*, not this conversation's binding — the two differ once a
+  // session has been moved, and `/new` means the same thing the sidebar's New
+  // session button means. `useAgentChoice` owns the other question.
+  const { agentId } = useAgent();
+  const { agents, stored, choose } = useAgentChoice(sessionKey);
+
+  return useCallback(
+    (text: string): boolean => {
+      const parsed = parseCommand(text);
+      if (parsed === undefined) return false;
+
+      // Every command that reaches a route needs one, and every one of those is
+      // behind the `stored` guard — which is false when there is no key at all.
+      const key = sessionKey ?? '';
+      const ctx: CommandContext = {
+        sessionKey,
+        workspaceId,
+        agentId,
+        busy,
+        stored,
+        lastUserSeq: lastUserSeq(transcript),
+        agents,
+        models: async (): Promise<readonly ModelInfo[]> =>
+          (
+            await queryClient.ensureQueryData({
+              queryKey: queryKeys.models,
+              queryFn: ({ signal }) => api.models(signal),
+            })
+          ).models,
+        newSession: () => newSession(workspaceId, agentId),
+        openSession: (target) => {
+          void navigate({ to: '/', search: { session: target } });
+        },
+        rename: async (title) => {
+          await api.renameSession(key, title);
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.sessions(),
+          });
+        },
+        clear: async () => {
+          await api.clearMessages(key);
+          // The transcript on screen empties from the `session.reset` frame the
+          // route answers with; this is for the stored copy React Query holds,
+          // which a reload would otherwise read back.
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.messages(key),
+          });
+        },
+        branch: async (seq) => {
+          const fork = await api.branchSession(key, seq);
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.sessions(),
+          });
+          return fork.key;
+        },
+        stop: stopTurn,
+        chooseAgent: choose,
+        setModel: async (model) => {
+          // Both halves, because they are one setting: `agents.defaults` merges
+          // per field, so sending the model alone would leave `provider` naming
+          // an instance that never offered it. This is the pair the agent
+          // editor's Save writes.
+          await api.patchSettings({
+            agents: {
+              defaults: { provider: model.providerId, model: model.id },
+            },
+          });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.agents });
+        },
+      };
+
+      // Fired, not awaited — see the file docblock. A rejected request is the
+      // only failure the table cannot describe itself, so it is reported here,
+      // with the words the server sent.
+      runCommand(parsed, ctx)
+        .then((outcome) => {
+          report(outcome, t);
+        })
+        .catch((error: unknown) => {
+          toast.error(
+            t('chat.commands.errors.failed'),
+            error instanceof Error ? error.message : undefined,
+          );
+        });
+      return true;
+    },
+    [
+      agentId,
+      agents,
+      busy,
+      choose,
+      navigate,
+      queryClient,
+      sessionKey,
+      stored,
+      t,
+      transcript,
+      workspaceId,
+    ],
+  );
+}
+
+/**
+ * The seq `/branch` forks at: the last thing the user said.
+ *
+ * Unchanged, unlike the transcript's own "Branch from here", which passes
+ * `seq - 1` so the message it is under can be re-asked. This is the terminal's
+ * reading of `/branch` — fork inclusively at the resolved seq — and the two
+ * differ by one on purpose.
+ */
+function lastUserSeq(transcript: Transcript): number | undefined {
+  for (let index = transcript.length - 1; index >= 0; index -= 1) {
+    const item = transcript[index];
+    if (item?.kind === 'user' && item.seq !== undefined) return item.seq;
+  }
+  return undefined;
+}
+
+function report(outcome: CommandOutcome, t: TFunction): void {
+  const sentence = t(outcome.key, outcome.values ?? {});
+  if (outcome.kind === 'error') {
+    toast.error(sentence);
+    return;
+  }
+  toast.success(sentence);
+}

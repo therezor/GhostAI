@@ -42,6 +42,7 @@ import { AgentPicker } from '@/agents/agent-picker.js';
 import { WorkspacePicker } from '@/workspaces/workspace-picker.js';
 import { useAgent } from '@/agents/agent-context.js';
 import { Composer } from '@/chat/composer.js';
+import { useCommands } from '@/chat/use-commands.js';
 import type { MessageAction } from '@/chat/message.js';
 import { ContextStrip } from '@/context/context-strip.js';
 import { TranscriptView } from '@/chat/transcript-view.js';
@@ -62,6 +63,11 @@ export function ChatRoute(): JSX.Element {
   const sessionKey = useTurnStore((state) => state.sessionKey);
 
   const queryClient = useQueryClient();
+
+  // The composer's slash commands. Assembled here rather than in the composer
+  // because every one of them needs the router, the query cache or the socket,
+  // and the composer is a leaf its own tests mount without any of the three.
+  const runSlashCommand = useCommands();
 
   /**
    * Branch is the one action that is a request rather than a frame.
@@ -230,6 +236,7 @@ export function ChatRoute(): JSX.Element {
         // working install.
         configured={status.data?.configured ?? true}
         onStop={stopTurn}
+        onCommand={runSlashCommand}
         onSend={(text, attachments) => {
           sendUserMessage(text, attachments, agentId);
           // The URL catches up with the session the server named, so a reload

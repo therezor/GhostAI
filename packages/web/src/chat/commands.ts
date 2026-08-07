@@ -1,0 +1,371 @@
+/**
+ * The composer's slash commands.
+ *
+ * The third table of its kind — `packages/cli/src/commands.ts` and
+ * `packages/channels/src/telegram/commands.ts` are the other two — and the third
+ * rather than a shared one for the reason the Telegram file gives about
+ * `resolveSeq`: the surfaces agree on a vocabulary, not on an implementation,
+ * and a common core would have to be the union of three sets of constraints to
+ * serve any of them. What is shared is the discipline, and there are two halves
+ * to it.
+ *
+ * **Nothing here translates anything.** A command answers with a key and its
+ * values; the caller renders it. That is what keeps this file free of React and
+ * of `t`, so the whole table can be exercised against a plain object.
+ *
+ * **Nothing here reaches for a singleton.** Everything a command can touch is a
+ * member of `CommandContext`, assembled once in `use-commands.ts`. The nine
+ * verbs on it are close to one per command, which looks like ceremony until you
+ * try to test `/branch` — at which point it is the difference between a fake and
+ * a mocked module.
+ *
+ * Three commands differ from their terminal spelling on purpose, and each says
+ * why at its own definition: `/new`, `/branch` and `/model`.
+ */
+
+import type { AgentSummary, ModelInfo } from '@ghostai/protocol';
+
+import type { WebKey } from '@/i18n/keys.js';
+
+/** Interpolation for the sentence a command answers with. */
+type Values = Readonly<Record<string, string | number>>;
+
+/** What a command answers with, in words the caller renders. */
+export type CommandOutcome =
+  | { readonly kind: 'note'; readonly key: WebKey; readonly values?: Values }
+  | { readonly kind: 'error'; readonly key: WebKey; readonly values?: Values };
+
+/** Everything a command may reach. Assembled once, in `use-commands.ts`. */
+export interface CommandContext {
+  /** The conversation the socket is attached to, before anything is stored. */
+  readonly sessionKey: string | undefined;
+  /** Where a *new* conversation lands. */
+  readonly workspaceId: string;
+  /** Which agent a *new* conversation runs on. */
+  readonly agentId: string | undefined;
+  /** True between `turn.start` and `turn.end` — only `/stop` reads it. */
+  readonly busy: boolean;
+  /**
+   * Whether this conversation has a stored row yet.
+   *
+   * Three commands need it, because `PATCH`, `DELETE` and `POST …/branch` all
+   * 404 against a conversation nobody has spoken in. Refusing here says why;
+   * letting the request go says "Not Found".
+   */
+  readonly stored: boolean;
+  /** The last thing the user said, for `/branch`. */
+  readonly lastUserSeq: number | undefined;
+  /** Every configured agent, so `/agent x` can refuse an id that is not one. */
+  readonly agents: readonly AgentSummary[];
+
+  /**
+   * Every reachable model, for the same refusal — and a request, not a field.
+   *
+   * The listing is only fetched when something wants it, and `/model gpt-4o`
+   * typed straight past the completion list is exactly the case where nothing
+   * has. A field would be empty there, and the command would refuse a model
+   * that exists.
+   */
+  models(): Promise<readonly ModelInfo[]>;
+  /** Mints a key and points the socket at it. Persists nothing. */
+  newSession(): string;
+  /** Takes the browser to a conversation. */
+  openSession(key: string): void;
+  rename(title: string): Promise<void>;
+  clear(): Promise<void>;
+  branch(seq: number): Promise<string>;
+  stop(): void;
+  chooseAgent(id: string): Promise<void>;
+  /**
+   * The whole model, not its id.
+   *
+   * A model and the endpoint that serves it are one setting: writing
+   * `agents.defaults.model` alone on a two-provider install leaves `provider`
+   * naming an instance that has never heard of it. The agent editor has always
+   * saved the pair for this reason, and `modelOptions` in
+   * `components/form/fields.ts` is the same rule read the other way round.
+   */
+  setModel(model: ModelInfo): Promise<void>;
+}
+
+/** What the parser hands a command. */
+export interface CommandInput {
+  /** Whitespace-split arguments, without the command word. */
+  readonly args: readonly string[];
+  /** Everything after the command word, untouched. `/rename` wants this. */
+  readonly tail: string;
+  readonly ctx: CommandContext;
+}
+
+export interface WebCommand {
+  /** Typed by the user, so never translated. */
+  readonly name: string;
+  /** Extra words the parser reads. `<a>` is required, `[a]` is not. */
+  readonly usage?: string;
+  /** Prose, so always a key. */
+  readonly description: WebKey;
+  /**
+   * What completes this command's argument, if anything does.
+   *
+   * The browser's answer to Telegram's picker keyboard and the terminal's menu:
+   * with no listing surface, a command that takes an id has to be able to offer
+   * the ids. Absent means the argument is free text, or there is none.
+   */
+  readonly values?: (ctx: CommandValues) => readonly ValueSuggestion[];
+  run(input: CommandInput): Promise<CommandOutcome> | CommandOutcome;
+}
+
+/** What the completion list knows. A subset of the context, and read-only. */
+export interface CommandValues {
+  readonly agents: readonly AgentSummary[];
+  readonly models: readonly ModelInfo[];
+}
+
+export interface ValueSuggestion {
+  /** What is typed after the command word. */
+  readonly value: string;
+  /** The line beside it, already prose. */
+  readonly hint: string;
+}
+
+const COMMANDS: readonly WebCommand[] = [
+  {
+    // **No title, unlike the terminal's `/new [title]`.** The browser mints a
+    // key and sends `session.new`; no row exists until the first message lands,
+    // so there is nothing to title yet. `POST /api/sessions` would create one
+    // eagerly and is the thing `newSession` documents not doing — a sidebar
+    // filling with conversations nobody had. `/rename` afterwards.
+    name: 'new',
+    description: 'chat.commands.new',
+    run: ({ ctx }) => {
+      ctx.openSession(ctx.newSession());
+      return { kind: 'note', key: 'chat.commands.notes.started' };
+    },
+  },
+
+  {
+    name: 'clear',
+    description: 'chat.commands.clear',
+    run: async ({ ctx }) => {
+      const refusal = requireStored(ctx);
+      if (refusal !== undefined) return refusal;
+      await ctx.clear();
+      // No transcript work here. The server answers the clear with a
+      // `session.reset` frame, and every tab — this one included — empties from
+      // that rather than from the promise.
+      return { kind: 'note', key: 'chat.commands.notes.cleared' };
+    },
+  },
+
+  {
+    name: 'rename',
+    usage: '<title>',
+    description: 'chat.commands.rename',
+    run: async ({ tail, ctx }) => {
+      if (tail === '') {
+        return { kind: 'error', key: 'chat.commands.errors.usageRename' };
+      }
+      const refusal = requireStored(ctx);
+      if (refusal !== undefined) return refusal;
+      await ctx.rename(tail);
+      return {
+        kind: 'note',
+        key: 'chat.commands.notes.renamed',
+        values: { title: tail },
+      };
+    },
+  },
+
+  {
+    name: 'stop',
+    description: 'chat.commands.stop',
+    run: ({ ctx }) => {
+      if (!ctx.busy) {
+        return { kind: 'error', key: 'chat.commands.errors.notRunning' };
+      }
+      ctx.stop();
+      return { kind: 'note', key: 'chat.commands.notes.stopping' };
+    },
+  },
+
+  {
+    // **No ref, unlike the terminal's `/branch [ref]`.** There is no
+    // `resolveSeq` in the browser and no reason to invent one: every message on
+    // screen carries its own Branch action, so the only point a *typed* command
+    // can usefully name is the last thing said. The seq goes to the route
+    // unchanged — terminal parity, where `/branch` forks inclusively at the
+    // resolved seq. The transcript's own "Branch from here" passes `seq - 1`
+    // instead, because forking *before* a message is what lets you re-ask it.
+    name: 'branch',
+    description: 'chat.commands.branch',
+    run: async ({ ctx }) => {
+      const refusal = requireStored(ctx);
+      if (refusal !== undefined) return refusal;
+      const seq = ctx.lastUserSeq;
+      if (seq === undefined) {
+        return { kind: 'error', key: 'chat.commands.errors.nothingToBranch' };
+      }
+      ctx.openSession(await ctx.branch(seq));
+      return {
+        kind: 'note',
+        key: 'chat.commands.notes.branched',
+        values: { seq },
+      };
+    },
+  },
+
+  {
+    name: 'agent',
+    usage: '<id>',
+    description: 'chat.commands.agent',
+    values: (ctx) =>
+      ctx.agents.map((agent) => ({ value: agent.id, hint: agent.label })),
+    run: async ({ args, ctx }) => {
+      const id = args[0];
+      if (id === undefined) {
+        return { kind: 'error', key: 'chat.commands.errors.usageAgent' };
+      }
+      if (!ctx.agents.some((agent) => agent.id === id)) {
+        return {
+          kind: 'error',
+          key: 'chat.commands.errors.noAgent',
+          values: { id },
+        };
+      }
+      await ctx.chooseAgent(id);
+      return {
+        kind: 'note',
+        key: 'chat.commands.notes.agentSet',
+        values: { id },
+      };
+    },
+  },
+
+  {
+    // **It persists, unlike the terminal's and the bot's.** Both of those call
+    // `runtime.reconfigure`, which lasts as long as the process — a browser has
+    // no process to scope a choice to, so this is `PATCH /api/settings`: the
+    // same write the Agents panel makes, against the same field. The note says
+    // so rather than leaving it to be discovered on the next restart.
+    name: 'model',
+    usage: '<id>',
+    description: 'chat.commands.model',
+    values: (ctx) =>
+      ctx.models.map((model) => ({
+        value: model.id,
+        hint: model.providerId,
+      })),
+    run: async ({ args, ctx }) => {
+      const id = args[0];
+      if (id === undefined) {
+        return { kind: 'error', key: 'chat.commands.errors.usageModel' };
+      }
+      const models = await ctx.models();
+      const chosen = models.find((model) => model.id === id);
+      if (chosen === undefined) {
+        return {
+          kind: 'error',
+          key: 'chat.commands.errors.noModel',
+          values: { id },
+        };
+      }
+      await ctx.setModel(chosen);
+      return {
+        kind: 'note',
+        key: 'chat.commands.notes.modelSet',
+        values: { id },
+      };
+    },
+  },
+];
+
+const BY_NAME = new Map(COMMANDS.map((command) => [command.name, command]));
+
+/**
+ * Every command, for the completion list.
+ *
+ * One table, two readers — the same discipline the other two surfaces hold, and
+ * for the same reason: a second list beside this one eventually offers a
+ * command that does not exist.
+ */
+export function commandRows(): readonly WebCommand[] {
+  return COMMANDS;
+}
+
+export function findCommand(name: string): WebCommand | undefined {
+  return BY_NAME.get(name);
+}
+
+export interface ParsedCommand {
+  readonly name: string;
+  readonly args: readonly string[];
+  readonly tail: string;
+}
+
+/**
+ * Reads a command out of what was typed, or decides it is prose.
+ *
+ * Telegram gets this for free: it matches on a `bot_command` entity at offset 0
+ * rather than on a character, so a message that merely *mentions* `/clear` is
+ * not one. A browser has no entities, so the rule has to be written down, and it
+ * is load-bearing — `/usr/bin/env is on the path` must reach the model as the
+ * sentence it is.
+ *
+ * A command is a leading slash followed by nothing but lowercase letters. That
+ * one shape is what makes every path prose: `/usr/bin/env` and `/etc/hosts`
+ * carry a second slash, `/Users/rezor` carries a capital, and none of them is
+ * ever a command however this table grows.
+ *
+ * A name that fits the shape and matches nothing is a typo rather than prose,
+ * and is reported as one — the same answer both other surfaces give, because a
+ * surface that silently sends a mistyped `/rname` to the model looks broken.
+ */
+export function parseCommand(text: string): ParsedCommand | undefined {
+  const trimmed = text.trim();
+  const [word = '', ...args] = trimmed.split(/\s+/u);
+  if (!/^\/[a-z]+$/u.test(word)) return undefined;
+
+  return {
+    name: word.slice(1),
+    args,
+    tail: trimmed.slice(word.length).trim(),
+  };
+}
+
+/**
+ * Runs one command.
+ *
+ * Never throws for anything a person typed: a guard answers with
+ * `{kind: 'error'}` and the box comes back, which is the rule
+ * `runSlashCommand` and Telegram's `runCommand` both hold. A rejected request
+ * is the caller's to report — it has the message, and this file has no words.
+ *
+ * Whether what was typed *is* a command is `parseCommand`'s question, and it is
+ * answered synchronously. This one is only about what happens next, so the
+ * message box never waits on it.
+ */
+export async function runCommand(
+  parsed: ParsedCommand,
+  ctx: CommandContext,
+): Promise<CommandOutcome> {
+  const command = BY_NAME.get(parsed.name);
+  if (command === undefined) {
+    return {
+      kind: 'error',
+      key: 'chat.commands.errors.unknown',
+      values: { name: parsed.name },
+    };
+  }
+  return await command.run({ args: parsed.args, tail: parsed.tail, ctx });
+}
+
+/**
+ * The refusal three commands share.
+ *
+ * `PATCH`, `DELETE` and `POST …/branch` all answer 404 for a conversation with
+ * no stored row, and "Not Found" is a worse sentence than the one this returns.
+ */
+function requireStored(ctx: CommandContext): CommandOutcome | undefined {
+  if (ctx.sessionKey !== undefined && ctx.stored) return undefined;
+  return { kind: 'error', key: 'chat.commands.errors.nothingYet' };
+}

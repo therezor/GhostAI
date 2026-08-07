@@ -57,6 +57,38 @@ never drops a running turn.
   when you hit Enter.
 - An agent picker, and a context budget strip.
 
+### Slash commands
+
+Type `/` in the composer and the completion list opens: arrow keys move, Enter or Tab
+accepts, Escape closes. Focus never leaves the box, so the sentence you are part-way
+through is never interrupted.
+
+| Command           | What it does                                         |
+| ----------------- | ---------------------------------------------------- |
+| `/new`            | Starts a fresh session and goes to it                |
+| `/clear`          | Drops this session's transcript, keeping the session |
+| `/rename <title>` | Retitles this session                                |
+| `/stop`           | Aborts the turn that is running                      |
+| `/branch`         | Forks at your last message and continues in the fork |
+| `/agent <id>`     | Which agent this session runs on                     |
+| `/model <id>`     | Which model this install runs on                     |
+
+`/agent` and `/model` complete their argument as you type it, which is the browser's
+answer to the terminal's arrow-key menu and Telegram's picker keyboard. A command that
+needs nothing further closes the list as soon as it is spelled out, so `/stop` and Enter
+is one keypress.
+
+Three read differently from the terminal, on purpose. `/new` takes no title — nothing is
+stored until the first message, so there is nothing to title yet; use `/rename`.
+`/branch` takes no ref — every message on screen carries its own Branch action, so the
+only point a typed command usefully names is the last thing you said. And `/model`
+**persists**: the terminal's version lasts as long as the process, and a browser has no
+process to scope a choice to, so this writes the same field the Agents panel does.
+
+A message is only a command when it opens with a slash followed by nothing but lowercase
+letters, so `/usr/bin/env is on the path` reaches the model as the sentence it is. A
+message carrying an attachment is never a command either.
+
 ### Message actions
 
 **Edit** a user message and re-run from the new wording. **Regenerate** an answer.
