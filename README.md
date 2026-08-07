@@ -44,6 +44,10 @@ Needs Node ≥ 22.13. Nothing else.
 
 </div>
 
+<div align="center">
+  <img alt="A terminal recording: ghost chat is launched, asked what is in the workspace, calls the list_dir tool, and streams back an answer with a code block — finishing in 2 steps." src="docs/screenshots/demo.svg" width="100%">
+</div>
+
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/chat.light.png">
   <img alt="GhostAI's chat view: a streaming answer with a highlighted code block, the session sidebar, and the context budget under the composer." src="docs/screenshots/chat.dark.png">
@@ -53,11 +57,11 @@ Needs Node ≥ 22.13. Nothing else.
 
 ## What it does
 
-|                 |                                                                           |
-|-----------------| ------------------------------------------------------------------------- |
-| **Acts**        | Reads files, edits them, runs commands, browses the web from a sandbox.   |
+|                  |                                                                           |
+| ---------------- | ------------------------------------------------------------------------- |
+| **Acts**         | Reads files, edits them, runs commands, browses the web from a sandbox.   |
 | **Four ways in** | Browser, terminal, REST API, Telegram. Same conversations, same database. |
-| **Remembers**   | Plain markdown in your project, which you read, edit and commit.          |
+| **Remembers**    | Plain markdown in your project, which you read, edit and commit.          |
 
 Built for long, tool-heavy work on infrastructure you control — recon and pen-test runs,
 codebase surgery, research sweeps, scheduled chores.

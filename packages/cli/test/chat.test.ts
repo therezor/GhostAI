@@ -1309,6 +1309,42 @@ describe('chatCommand', () => {
     expect(await pending).toBe(0);
   });
 
+  it('names the default workspace before a session exists to name one', async () => {
+    // Nothing is stored until the first message, so the status bar has no
+    // session row to read a workspace off — and it used to say `no workspace`,
+    // which is a state the store cannot hold: `sessions.workspace_id` is
+    // `NOT NULL DEFAULT 'default'` and `WorkspaceStore` seeds that row when it
+    // is constructed. The browser has always said `Default` here. Two surfaces
+    // of one install disagreeing about which workspace you are in is worse than
+    // either answer, so the bar now falls through to the same constant.
+    const home = tempHome();
+    const { fetchImpl } = transport();
+    const out = streamSink({ isTTY: true });
+    const input = Object.assign(new PassThrough(), {
+      isTTY: true,
+      setRawMode(): void {
+        /* a PassThrough has no mode to set */
+      },
+    });
+
+    const pending = chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: out.stream,
+      colors: false,
+      input,
+      sessionKey: 'cli:unstarted',
+    });
+
+    await waitFor(() => out.text().includes('ctrl-g for the menu'));
+    expect(out.text()).toContain('Default');
+    expect(out.text()).not.toContain('no workspace');
+
+    input.write('/exit\n');
+    expect(await pending).toBe(0);
+  });
+
   it('draws no frame at all when stdout is not a terminal', async () => {
     // `ghost chat > log` still opens a prompt, because stdin is still a
     // keyboard — but escape sequences written into a file are not a status bar,

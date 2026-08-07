@@ -84,6 +84,7 @@ Notes that save a cycle:
 | `pnpm --filter @ghostai/web dev`      | Vite dev server, proxying `/api` and `/ws` to a running `ghost serve` |
 | `pnpm --filter @ghostai/e2e test:e2e` | Playwright, both colour schemes                                       |
 | `pnpm screenshots`                    | Regenerate the documentation's images into `docs/screenshots/`        |
+| `pnpm demo`                           | Regenerate the animated terminal cast in the README                   |
 | `node scripts/gen-packages.mjs`       | Regenerate package manifests after changing the package graph         |
 
 ### Coverage gates
@@ -190,6 +191,35 @@ has to work on any clone. Its header explains the five things that had to be pin
 to get a stable image, and the surprising one is not the clock or the fonts: it is that
 seed rows written in a loop share a millisecond often enough to make a list ordered
 `time DESC, id ASC` reshuffle between runs.
+
+### The terminal cast
+
+`pnpm demo` regenerates `docs/screenshots/demo.svg`, the animated recording at the top of
+the README. `scripts/demo-provider.mjs` stands up a mock `openai-chat` endpoint,
+`scripts/ptyrec.py` records **bash** on a real pty — typing `ghost chat`, waiting for the
+TUI, asking a question — and `svg-term` renders the cast to a self-contained SVG. Every
+byte on screen came back through the pty from the real binary; the keystroke schedule is
+authored so the run reproduces.
+
+Three things that are not obvious:
+
+- **A pipe is not a terminal.** Piping `ghost chat` gets the plain stream it writes for a
+  machine — no session header, no composer, no status bar, no spinner. The child has to
+  believe it is on a tty, and `script(1)` needs a controlling terminal that tooling does
+  not always have. Python's `pty` is stdlib and needs nothing.
+- **The mock must be its own process.** `demo-cast.mjs` drives the recorder with
+  `execFileSync`, which blocks its event loop for the length of the take. A server in that
+  process accepts nothing, and the recording is ten seconds of `thinking…`.
+- **The cast ends at its last byte**, and the answer lands milliseconds after the question
+  is sent. Without the trailing hold in `ptyrec.py` the loop is all typing and a flash of
+  the reply.
+
+The first cast had a doubled status bar and unrenderable glyphs, and both were the same
+bug — the recorder decoded each `os.read` chunk on its own, so a multi-byte character
+split across a read boundary became two U+FFFD, and a split _escape sequence_ corrupted
+the repaint that erases the footer. `ptyrec.py` now holds partial sequences in an
+incremental decoder. If either artifact comes back, that is where to look — not at
+svg-term.
 
 ## Conventions
 
