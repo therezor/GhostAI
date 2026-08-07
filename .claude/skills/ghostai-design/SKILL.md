@@ -74,7 +74,7 @@ This is self-hosted and privacy-first, and some installs are air-gapped.
 - A first paint that reaches a third party leaks every user's IP to it. On a
   machine with no route out it is a page rendering in Times New Roman while a
   fetch times out.
-- `packages/web/src/self-contained.test.ts` scans the shipped sources for any
+- `packages/web/test/self-contained.test.ts` scans the shipped sources for any
   external origin. It is a test rather than a note because the rule is far easier
   to hold than to restore.
 

@@ -183,6 +183,7 @@ table is `STRICT`.
 | `auth_secrets`, `auth_sessions`, `auth_throttle` | Password, username, setup code, sessions, throttle counters       |
 | `notifications`                                  | The bell and the archive                                          |
 | `toolbox_approvals`                              | The sha256 of each approved manifest's exact bytes                |
+| `extension_approvals`                            | The sha256 over every byte of each approved extension directory   |
 | `automation_jobs`                                | Schedule and payload as JSON, plus the indexed `next_run_at_ms`   |
 | `automation_runs`                                | One row per execution: status, output, warnings, session key      |
 

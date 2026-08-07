@@ -152,10 +152,16 @@ delimiter is inert data. An attacker who cannot guess the nonce cannot close the
 Closing tags appearing inside the content are escaped case-insensitively, because the
 model does the parsing and the model is not case-sensitive.
 
-The policy text lives in the runtime half of the prompt, at the tail — the nonce changes
-every turn, and in the cached half it would invalidate the session's prefix every time.
-It is the one part of the prompt an operator cannot edit, because it is a mechanism rather
-than a message.
+The policy text lives in the **static** half of the prompt. It names no delimiter — the
+nonce is one line of live state instead — so two hundred tokens of prose that never
+changes are cached for the life of the session rather than re-read every iteration.
+
+It is an ordinary editable template, `toolPolicyPrompt`, like the other seven. Editing it
+does not weaken the mechanism: the envelopes are emitted by the runtime whatever the
+template says, and the nonce is `randomBytes` that reads no template. What a deleted
+policy costs is the model's _reason_ to treat what is inside an envelope as data — so it
+gets a warning in the editor and a `tool_policy_missing_nonce` config warning, not a
+refusal. See [Prompts](prompts.md#what-you-can-edit-and-what-that-does-not-change).
 
 **Detection is deliberately non-destructive.** When injection-shaped text is spotted, a
 `prompt_injection` notice raises a badge in the UI and **the content passes through

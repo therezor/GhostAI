@@ -510,9 +510,11 @@ vault wins over the environment**:
 `OPENAI_API_KEY` · `ANTHROPIC_API_KEY` · `OPENROUTER_API_KEY` · `GEMINI_API_KEY` ·
 `DEEPSEEK_API_KEY` · `GROQ_API_KEY` · `XAI_API_KEY` · `VLLM_API_KEY`
 
-One key per registry entry, whether or not that entry can be built today: `anthropic` and
-`gemini` name wires with no adapter, so an instance of either is refused at construction.
-See [Providers](providers.md).
+One key per registry entry, whether or not that entry can be built today. `anthropic` is
+the one entry that cannot: it names the `anthropic-messages` wire, and this build ships an
+adapter for `openai-chat` alone, so an instance of it is refused at construction rather
+than falling back. `gemini` speaks `openai-chat` against Google's compatibility endpoint
+and works. See [Providers](providers.md).
 
 ---
 

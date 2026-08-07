@@ -1,0 +1,124 @@
+name: Release
+
+# A tag, not a branch. `ci.yml` runs on pushes to main and on pull requests, so
+# a tag push currently triggers nothing at all — which is why the gate is
+# repeated here rather than depended on. Tagging is the whole release ceremony:
+# bump the root `version`, run `node scripts/gen-packages.mjs` to carry it into
+# every manifest, commit, tag, push.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  # For the GitHub Release and its attached tarballs.
+  contents: write
+  # For `--provenance`. It also needs each package's `repository` field to name
+  # this repository, which `scripts/gen-packages.mjs` writes.
+  id-token: write
+
+jobs:
+  # The same checks `ci.yml` runs, because a tag can be pushed from a branch
+  # that never saw them and an unpublish is only possible for 72 hours — and
+  # never for a name you then want to reuse.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Design token gates
+        run: pnpm --filter @ghostai/web exec tsx src/tokens/run-gates.ts
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Translations are in step
+        run: pnpm i18n:check
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      # The tag has to name the version that would actually publish. Without
+      # this, `git tag v1.1.0` on a tree still saying `1.0.0` republishes 1.0.0
+      # — which fails as "cannot publish over an existing version" only if that
+      # version was already released, and silently ships the wrong number if it
+      # was not.
+      - name: The tag matches the manifests
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          root=$(node -p "require('./package.json').version")
+          if [ "$tag" != "$root" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match root version $root." >&2
+            exit 1
+          fi
+          # Every publishable package moves in lockstep: `pnpm publish` rewrites
+          # `workspace:*` to the exact version, so one package left behind
+          # publishes a dependency range that resolves to nothing.
+          node -e '
+            const {readdirSync, readFileSync} = require("node:fs");
+            const bad = readdirSync("packages").filter((name) => {
+              const pkg = JSON.parse(
+                readFileSync(`packages/${name}/package.json`, "utf8"),
+              );
+              return !pkg.private && pkg.version !== process.argv[1];
+            });
+            if (bad.length) {
+              console.error(`Not at ${process.argv[1]}: ${bad.join(", ")}`);
+              console.error("Run node scripts/gen-packages.mjs and commit.");
+              process.exit(1);
+            }
+          ' "$root"
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: pnpm install --frozen-lockfile
+
+      # From a clean checkout, deliberately. `tsup` runs with `clean: false` —
+      # it has to, or it would delete the declarations `tsc -b` writes into the
+      # same `dist` — so a long-lived working copy accumulates stale chunks that
+      # a local `pnpm pack` would ship. A runner has no such history.
+      - name: Build
+        run: pnpm build
+
+      # `--no-git-checks` because a tagged checkout is a detached HEAD, which
+      # pnpm otherwise refuses. `-r` skips `private: true` on its own, which is
+      # what leaves `@ghostai/e2e` and both `examples/*` behind.
+      - name: Publish to npm
+        run: pnpm -r publish --access public --no-git-checks --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # The air-gapped route: the same tarballs, attached to the release, for an
+      # install that never reaches a registry.
+      - name: Pack tarballs
+        run: pnpm -r exec pnpm pack --pack-destination "$GITHUB_WORKSPACE/dist-tarballs"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist-tarballs/*.tgz
+          generate_release_notes: true

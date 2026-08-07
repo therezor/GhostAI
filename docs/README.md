@@ -1,21 +1,26 @@
 # GhostAI documentation
 
-Everything here describes what is built. Work that is designed but not implemented lives
-in [ROADMAP.md](ROADMAP.md) and is not documented as though it works.
+Everything here describes what is built. Work that is designed but not implemented is not
+documented as though it works.
+
+**New here?** [Getting started](getting-started.md) runs from a clone to a first answer,
+and everything else on this page is reference you can reach for afterwards.
 
 ## Using it
 
-| Page                              | What it covers                                                                        |
-| --------------------------------- | ------------------------------------------------------------------------------------- |
-| [Configuration](configuration.md) | Every key in `config.json`, its type and its default. Env vars. Patch semantics.      |
-| [Prompts](prompts.md)             | The eight editable templates, their placeholders, and the caching split behind them.  |
-| [Providers](providers.md)         | The registry, provider instances, resolution order, credentials, resilience.          |
-| [Tools & permissions](tools.md)   | The eight built-in tools, and the `allow \| ask \| deny` model that gates them.       |
-| [Skills](skills.md)               | Instruction sheets in `<workspace>/skills/`, indexed or named on a message.           |
-| [Memory](memory.md)               | What an agent remembers between sessions, one file per fact in `<workspace>/memory/`. |
-| [Toolboxes](toolboxes.md)         | Running `exec` inside a pinned, hash-approved container instead of on the host.       |
-| [Extensions](extensions.md)       | Third-party code an operator installs and approves, and the five things it may add.   |
-| [Web UI](web-ui.md)               | The screens, and what each one lets you do.                                           |
+| Page                                  | What it covers                                                                        |
+| ------------------------------------- | ------------------------------------------------------------------------------------- |
+| [Getting started](getting-started.md) | Install, first run, first conversation, giving it files, letting it run commands.     |
+| [CLI](cli.md)                         | Every `ghost` command and flag, and the slash commands inside the chat prompt.        |
+| [Configuration](configuration.md)     | Every key in `config.json`, its type and its default. Env vars. Patch semantics.      |
+| [Prompts](prompts.md)                 | The eight editable templates, their placeholders, and the caching split behind them.  |
+| [Providers](providers.md)             | The registry, provider instances, resolution order, credentials, resilience.          |
+| [Tools & permissions](tools.md)       | The eight built-in tools, and the `allow \| ask \| deny` model that gates them.       |
+| [Skills](skills.md)                   | Instruction sheets in `<workspace>/skills/`, indexed or named on a message.           |
+| [Memory](memory.md)                   | What an agent remembers between sessions, one file per fact in `<workspace>/memory/`. |
+| [Toolboxes](toolboxes.md)             | Running `exec` inside a pinned, hash-approved container instead of on the host.       |
+| [Extensions](extensions.md)           | Third-party code an operator installs and approves, and the five things it may add.   |
+| [Web UI](web-ui.md)                   | The screens, and what each one lets you do.                                           |
 
 ## Understanding it
 
@@ -30,7 +35,6 @@ in [ROADMAP.md](ROADMAP.md) and is not documented as though it works.
 | Page                          | What it covers                                                       |
 | ----------------------------- | -------------------------------------------------------------------- |
 | [Development](development.md) | The CI gate, conventions, coverage bars, the UI loop, the e2e suite. |
-| [Roadmap](ROADMAP.md)         | What is built and what is left, as a checklist.                      |
 
 ## Where the truth lives
 

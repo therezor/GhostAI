@@ -21,7 +21,9 @@ Two habits that make this cheap rather than a chore:
 runs six more things on top of that — most sessions that end "green" and then fail
 CI fail on `format:check`, which `pnpm check` never calls.
 
-CI is `.github/workflows/ci.yml`, and it is three jobs. Run all of it:
+CI is `.github/workflows/ci.yml`, and it is three jobs. Run all of it. When this
+list and [Development](docs/development.md#the-gate) disagree, that page is right —
+it is written from the workflow, and this is the copy that goes stale:
 
 ```bash
 # job: check
@@ -50,15 +52,19 @@ Notes that save a cycle:
   without a build the harness fails at `resolveUiRoot`.
 - **The fidelity spec skips without a baseline.** `2 skipped` is the healthy result,
   not a problem to fix.
+- **A visible UI change means `pnpm screenshots`.** The images in the README and
+  `docs/web-ui.md` are generated and committed; two runs produce byte-identical
+  files, so a picture in `git status` means the UI moved. Not a CI gate — nothing
+  catches a stale screenshot but a reader.
 - **`pnpm i18n:check` runs the extractor and then diffs `packages/i18n/locales`.** A
   new `t()` call whose key never reached the bundle fails it; `pnpm i18n:extract`
   fixes it. Note `keepRemoved: true` — the extractor never prunes, so a key going
   stale is _not_ something this gate can see.
-- **Twelve packages have raised coverage gates**, not two: `security` 95/95, `core`
-  90/85, `channels` 90/85, `i18n` 90/90, `tui` 90/85, `agent`/`runtime`/`server`/`web`
-  85/80, and `providers`/`tools`/`mcp` 80/75, against a 70/65 default. They live in
-  `vitest.config.ts`. A new branch in a guard needs a test or `pnpm test:coverage`
-  fails while `pnpm test` passes.
+- **Thirteen packages have raised coverage gates**, not two, against a 70/65
+  default — `security` is 95/95. Do not keep a copy of the numbers here: read them
+  from `vitest.config.ts`, which is the only place they are true, and see
+  [Development](docs/development.md#coverage-gates) for the rationale. A new branch
+  in a guard needs a test, or `pnpm test:coverage` fails while `pnpm test` passes.
 - **A green local e2e run is evidence, not proof.** CI runs on 2 workers on a shared
   runner; a laptop runs 5 with nothing else competing. When CI reports a failure the
   local suite will not reproduce, re-run just that spec under load before concluding
@@ -70,18 +76,14 @@ Notes that save a cycle:
 
 ### Never assert a transient state in an e2e test
 
-This is what actually broke e2e four runs in a row. `approvals.spec.ts` waited for
-`Approved — waiting for the agent.` — the line the approval card shows _between_ the
-operator answering and the tool result arriving. The scripted provider answers inside
-a frame, so whether that line is ever painted depends on how the runner interleaves
-the re-render with the socket message. It passed locally every time and failed CI
-every time.
-
 Assert the **durable** state a step settles into — the card's `Succeeded`/`Failed`
 status, the text in the transcript — and cover the in-between wording in a component
 test, where the state can be held still (`packages/web/test/chat/approval.test.tsx`).
 The rule of thumb: if the only reason you can see it is that the machine was slow,
 it does not belong in an `expect`.
+
+This broke CI four runs in a row while passing locally every time.
+[Development](docs/development.md#never-assert-a-transient-state) has the case.
 
 ## The style guide is Google's, and the linter owns it
 
@@ -228,5 +230,6 @@ The credential surface spans `packages/protocol/src/rest.ts` (DTOs — and every
 exported `*Schema` must also be registered in `schemas.ts`, which a test enforces),
 `packages/server/src/auth-store.ts`, `login-throttle.ts`, `routes/auth.ts`,
 `manifest.ts`, the two web overlays, the Account settings panel, **and the e2e
-harness** (`packages/e2e/src/harness/server.ts`, `fixtures.ts`,
-`fidelity/capture.ts`) — the last of which only unit-tests-plus-e2e catches.
+harness** (`packages/e2e/src/harness/server.ts`, `packages/e2e/src/fixtures.ts`,
+`packages/e2e/src/fidelity/capture.ts`) — the last of which only
+unit-tests-plus-e2e catches.

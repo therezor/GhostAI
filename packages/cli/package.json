@@ -1,9 +1,28 @@
 {
   "name": "@ghostai/cli",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "GhostAI command line interface.",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/therezor/GhostAI.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/therezor/GhostAI",
+  "bugs": "https://github.com/therezor/GhostAI/issues",
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
   "exports": {
     ".": {
       "development": "./src/index.ts",
@@ -17,7 +36,8 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist"
+    "dist/**",
+    "!dist/**/*.map"
   ],
   "bin": {
     "ghost": "./dist/index.js"

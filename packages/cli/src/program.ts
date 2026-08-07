@@ -56,8 +56,12 @@ import type { ServeCommandOptions } from './serve.js';
  * lands in `dist/`, so a relative read resolves differently in development and
  * in the published package, and the failure mode is a version string that is
  * wrong rather than absent.
+ *
+ * This is the one line a release has to change by hand. The rest of a version
+ * bump is the root `package.json` plus `node scripts/gen-packages.mjs`; the
+ * test above is what stops that pair from landing without this.
  */
-export const VERSION = '0.0.0';
+export const VERSION = '1.0.0';
 
 const LOG_LEVELS: readonly string[] = [
   'trace',

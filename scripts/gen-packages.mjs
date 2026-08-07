@@ -6,12 +6,54 @@
  * The `development` export condition points at ./src/index.ts so `tsx` runs
  * the workspace with no build step; `default` points at built output.
  */
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import prettier from 'prettier';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+/**
+ * One version for the whole workspace, taken from the root manifest.
+ *
+ * Every package here is released together and only one of them — the CLI — is
+ * something a person installs by name, so per-package versions would be
+ * bookkeeping with no reader. Bumping the root and re-running this is the whole
+ * release ceremony; there is no changesets bot to keep fed.
+ *
+ * It matters that this is *read* rather than repeated: `pnpm publish` rewrites
+ * `workspace:*` to the exact version at pack time, so a package whose own
+ * version disagreed with its siblings' would publish a dependency range that
+ * resolves to nothing.
+ */
+const { version: VERSION } = JSON.parse(
+  readFileSync(join(ROOT, 'package.json'), 'utf8'),
+);
+
+const REPOSITORY_URL = 'git+https://github.com/therezor/GhostAI.git';
+const HOMEPAGE = 'https://github.com/therezor/GhostAI';
+
+/** A package's subpath exports, shared by the workspace and published maps. */
+const subpathExports = (cfg) =>
+  Object.fromEntries(
+    Object.entries(cfg.subpaths ?? {}).map(([subpath, entry]) => [
+      subpath,
+      { types: `./${entry}`, default: `./${entry}` },
+    ]),
+  );
+
+/**
+ * The `exports` map as a tarball should carry it: no `development` condition.
+ *
+ * See the note beside `publishConfig` below for why that one line cannot be
+ * published. Everything else is identical, deliberately — a published package
+ * that resolved differently from the workspace one would make every bug found
+ * by an installer unreproducible here.
+ */
+const publishedExports = (cfg) => ({
+  '.': { types: './dist/index.d.ts', default: './dist/index.js' },
+  ...subpathExports(cfg),
+});
 
 /** Write a file through Prettier so regenerating never fails `format:check`. */
 async function writeFormatted(path, contents) {
@@ -301,10 +343,40 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
 
   const pkg = {
     name: `@ghostai/${name}`,
-    version: '0.0.0',
+    version: VERSION,
     description: cfg.description,
     type: 'module',
     license: 'MIT',
+    // npm's listing, and `--provenance`'s precondition: the attestation is
+    // refused unless `repository` names the repo the workflow is running in.
+    repository: {
+      type: 'git',
+      url: REPOSITORY_URL,
+      directory: `packages/${name}`,
+    },
+    homepage: HOMEPAGE,
+    bugs: `${HOMEPAGE}/issues`,
+    // A scoped package defaults to `restricted`, which fails the first publish
+    // on an account without a paid plan. Declared here rather than passed as
+    // `--access public` on the command line so the manifest is the record.
+    //
+    // `exports` is overridden rather than repeated. pnpm swaps a
+    // `publishConfig` field into the packed manifest, and the one condition
+    // that must not survive publication is `development`: it points at
+    // `./src/index.ts`, `src` is not in `files`, and Vite's dev server *sets*
+    // that condition — so a published package imported from one would fail to
+    // resolve against a file that was never in the tarball. In the workspace
+    // the same line is what lets `tsx` run the repo with no build.
+    publishConfig: {
+      access: 'public',
+      exports: publishedExports(cfg),
+    },
+    // The floor is `node:sqlite`, and 22.13 is exact rather than cautious: the
+    // module landed in 22.5 behind `--experimental-sqlite` and was unflagged
+    // for the 22 line in 22.13, so 22.12 fails at startup with
+    // ERR_UNKNOWN_BUILTIN_MODULE. Stated on every package and not only the
+    // root, because the root is private and is not what anyone installs.
+    engines: { node: '>=22.13' },
     exports: {
       '.': {
         development: './src/index.ts',
@@ -316,12 +388,12 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
       // for `packages/e2e` — and both read TypeScript, so a build step would
       // buy nothing and a `src/` entry would put vitest in the bundle. See
       // CLAUDE.md, "A `testkit/` is never in `src/`".
-      ...Object.fromEntries(
-        Object.entries(cfg.subpaths ?? {}).map(([subpath, entry]) => [
-          subpath,
-          { types: `./${entry}`, default: `./${entry}` },
-        ]),
-      ),
+      //
+      // It stays in the published map for the same reason: it is TypeScript on
+      // purpose, and the runners that consume it read TypeScript whether the
+      // package came from the workspace or from a tarball. `files` carries
+      // `test/testkit` so the source is actually there.
+      ...subpathExports(cfg),
     },
     imports: {
       '#src/*': './src/*',
@@ -333,7 +405,23 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
     types: './dist/index.d.ts',
     // Tests live in `test/`, so nothing has to be excluded here. A testkit is
     // listed beside `dist` because its subpath export resolves outside it.
-    files: cfg.subpaths ? ['dist', 'test/testkit'] : ['dist'],
+    //
+    // The negation is about what a published tarball should weigh.
+    // `sourcemap: true` is right for a workspace and wrong for an install:
+    // `@ghostai/web`'s maps alone are 8 MB of its 11.8 MB, and they map a
+    // built SPA that nobody installing `ghost` will ever step through — anyone
+    // debugging this has the repo.
+    //
+    // **`dist/**` rather than `dist`, and that is the whole trick.** npm packs
+    // a bare directory name wholesale and never consults a later negation, so
+    // `['dist', '!dist/**/*.map']` silently ships all 37 maps and looks like it
+    // worked. Spelling the include as a glob is what makes the exclude apply.
+    // Verify with `npm pack --dry-run`, not by reading this.
+    files: [
+      'dist/**',
+      '!dist/**/*.map',
+      ...(cfg.subpaths ? ['test/testkit'] : []),
+    ],
     ...(cfg.bin ? { bin: cfg.bin } : {}),
     scripts: {
       build: 'tsup && tsc -b',
@@ -415,4 +503,74 @@ export default defineConfig({
   await writeFormatted(join(dir, 'tsup.config.ts'), tsup);
   await writeFormatted(join(dir, 'vitest.config.ts'), vitest);
   console.log(`generated packages/${name}`);
+}
+
+/**
+ * The release fields of the packages this generator does *not* own.
+ *
+ * Two packages are hand-maintained rather than generated. `web` is a Vite app
+ * rather than a tsup library and exports only its own `package.json` (which is
+ * how the CLI finds `dist/` to serve); `i18n` carries split `./web` and `./cli`
+ * subpath bundles so the terminal never loads browser copy. Regenerating either
+ * from the template above would be writing a shape it does not have.
+ *
+ * But both publish alongside the rest, and `pnpm publish` rewrites
+ * `workspace:*` to an **exact** version — so one left behind on an old number
+ * does not degrade, it publishes a dependency that resolves to nothing. That is
+ * not hypothetical: `i18n` was found sitting at `0.0.0` while every generated
+ * package had moved, and nothing about it looked wrong. Patching the fields
+ * that must agree is narrower than owning the files, and removes the only way
+ * they can drift.
+ *
+ * A package added here later needs adding to this list. The check that catches
+ * a miss is `pnpm -r exec node -p "require('./package.json').version"`.
+ */
+for (const name of ['web', 'i18n']) {
+  const path = join(ROOT, 'packages', name, 'package.json');
+  const pkg = JSON.parse(readFileSync(path, 'utf8'));
+  // Whatever the file already says, minus the one condition a tarball must not
+  // carry. Derived from what is there rather than restated, so a subpath added
+  // by hand is covered without anyone remembering this loop exists.
+  const published = Object.fromEntries(
+    Object.entries(pkg.exports ?? {}).map(([subpath, target]) => {
+      if (typeof target === 'string') return [subpath, target];
+      const { development, ...rest } = target;
+      return [subpath, rest];
+    }),
+  );
+
+  const patched = {
+    ...pkg,
+    version: VERSION,
+    repository: {
+      type: 'git',
+      url: REPOSITORY_URL,
+      directory: `packages/${name}`,
+    },
+    homepage: HOMEPAGE,
+    bugs: `${HOMEPAGE}/issues`,
+    publishConfig: {
+      ...(pkg.publishConfig ?? {}),
+      access: 'public',
+      exports: published,
+    },
+    engines: { node: '>=22.13' },
+    // `dist` becomes `dist/**` so the negation applies at all — see the note on
+    // `files` above. Anything else the package listed (`i18n` ships `locales`)
+    // is kept as it was.
+    //
+    // The filter drops what this loop itself writes, not just `dist`: the
+    // generator promises to be idempotent, and a re-run that appended its own
+    // output produced `["dist/**", "!dist/**/*.map", "dist/**",
+    // "!dist/**/*.map"]` — harmless to npm, and a diff on every run.
+    files: [
+      'dist/**',
+      '!dist/**/*.map',
+      ...(pkg.files ?? []).filter(
+        (entry) => !['dist', 'dist/**', '!dist/**/*.map'].includes(entry),
+      ),
+    ],
+  };
+  await writeFormatted(path, JSON.stringify(patched, null, 2));
+  console.log(`patched packages/${name} (release fields only)`);
 }

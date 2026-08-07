@@ -1,5 +1,14 @@
 # Tools and permissions
 
+What an agent can actually _do_, and who decided it could. Two halves: the tools
+themselves — eight built in, plus whatever MCP servers and extensions contribute — and the
+`allow | ask | deny` map that gates every one of them, per agent.
+
+The short version, if you read one paragraph: **enablement and permission are the same
+map.** A tool the map does not mention is not enabled, and not in a way that has to be
+checked — it never reaches the tool definitions the model is sent, so there is nothing for
+it to call and nothing to refuse.
+
 ## The built-ins
 
 Eight, and the count is deliberate: anything expressible as a command is `exec`'s job. A
