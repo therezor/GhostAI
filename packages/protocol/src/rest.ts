@@ -823,14 +823,20 @@ export type ExtensionListResponse = z.infer<typeof ExtensionListResponseSchema>;
 /**
  * A slash command an extension contributes.
  *
- * The fourth command table, and the first that is not written out by hand.
+ * The first command table that is not written out by hand.
  * `packages/web/src/chat/commands.ts` explains why the three built-in ones do
  * not share a core: the surfaces agree on a vocabulary rather than on an
- * implementation. An extension's command is the case where they *have* to
- * share one, because there is exactly one definition of it and three places it
+ * implementation. An extension's command is the case where they *have* to share
+ * one, because there is exactly one definition of it and more than one place it
  * has to appear — so it is fetched rather than compiled in, and it answers with
  * text rather than a resource key, since its copy ships with the extension and
  * never reaches a locale bundle.
+ *
+ * **Two surfaces, not three.** The composer and the terminal reach these;
+ * Telegram does not. Its commands are `bot_command` entities registered with
+ * the Bot API, whose names are `[a-z0-9_]` — a namespaced `slack-post` cannot
+ * be spelled there at all, and inventing a second spelling for one command is
+ * how a command ends up meaning two things.
  */
 export const ExtensionCommandSchema = z.object({
   /** `<extensionId>` or `<extensionId>-<suffix>`, so `/slack-status` is legal. */

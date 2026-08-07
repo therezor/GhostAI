@@ -78,6 +78,37 @@ interface Loaded {
   readonly abort: AbortController | undefined;
   /** The digest it was loaded at, so a reconcile can tell "unchanged". */
   readonly digest: string;
+  /**
+   * The settings block it was activated with.
+   *
+   * Kept so that editing `config.extensions.settings.<id>` reloads the
+   * extension. An extension reads its settings once, in `activate`, so without
+   * this a changed greeting or a changed channel id would sit in `config.json`
+   * doing nothing until a restart.
+   */
+  readonly settings: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * Whether an extension has already been through `activate` at exactly this
+ * digest and these settings.
+ *
+ * `ready` and `failed` alike — see the call site for why a failure counts.
+ * A `disabled` or refused row carries a digest too, so the state is checked as
+ * well: re-enabling an extension has to re-activate it.
+ */
+function attempted(
+  previous: Loaded,
+  digest: string,
+  settings: Readonly<Record<string, unknown>>,
+): boolean {
+  if (previous.status.state !== 'ready' && previous.status.state !== 'failed') {
+    return false;
+  }
+  return (
+    previous.digest === digest &&
+    JSON.stringify(previous.settings) === JSON.stringify(settings)
+  );
 }
 
 export class ExtensionHost {
@@ -146,9 +177,19 @@ export class ExtensionHost {
         continue;
       }
 
+      // Already attempted at exactly these bytes and these settings — leave
+      // it, whether that attempt succeeded or threw.
+      //
+      // `failed` counts as attempted, and that is the half that is easy to get
+      // wrong: retrying an `activate` that threw cannot produce a different
+      // answer, because Node's module registry hands back the module it already
+      // holds. Retrying it *and* reporting a change would be the live-lock
+      // `settle` exists to stop, one branch over — announce, rebuild,
+      // reconcile, forever. A repaired extension has a different digest and a
+      // re-enabled one has a different state, so both still come back here.
       if (
-        previous?.registration !== undefined &&
-        previous.digest === resolution.digest
+        previous !== undefined &&
+        attempted(previous, resolution.digest, settings)
       ) {
         continue;
       }
@@ -350,6 +391,7 @@ export class ExtensionHost {
       return {
         resolution,
         digest: resolution.digest,
+        settings,
         registration: undefined,
         extension: undefined,
         abort: undefined,
@@ -365,6 +407,7 @@ export class ExtensionHost {
     return {
       resolution,
       digest: resolution.digest,
+      settings,
       registration,
       extension,
       abort,
@@ -494,6 +537,7 @@ function refusedEntry(resolution: ExtensionResolution): Loaded {
   return {
     resolution,
     digest: resolution.digest,
+    settings: {},
     registration: undefined,
     extension: undefined,
     abort: undefined,
@@ -518,6 +562,7 @@ function disabledEntry(resolution: ExtensionResolution): Loaded {
   return {
     resolution,
     digest: resolution.digest,
+    settings: {},
     registration: undefined,
     extension: undefined,
     abort: undefined,

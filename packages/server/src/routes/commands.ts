@@ -8,7 +8,14 @@
  * core would have to be the union of three sets of constraints: the surfaces
  * agree on a vocabulary rather than on an implementation. An extension breaks
  * the symmetry, because there is exactly one definition of `/slack-post` and
- * every surface has to reach it. So this is fetched rather than compiled in.
+ * more than one place has to reach it. So this is fetched rather than compiled
+ * in.
+ *
+ * **The composer and the terminal, not Telegram.** Telegram's commands are
+ * `bot_command` entities registered with the Bot API, and their names are
+ * `[a-z0-9_]` — a namespaced `slack-post` cannot be spelled there. Giving it a
+ * second spelling is how one command ends up meaning two things, so it is left
+ * out rather than transliterated.
  *
  * Two consequences a reader should expect:
  *

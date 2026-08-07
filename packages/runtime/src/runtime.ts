@@ -1111,7 +1111,13 @@ class Runtime implements GhostRuntime {
     // `ToolRegistry.subscribe` already turns that into a `tools.changed` frame
     // for every client. A turn that begins first sees the tools that were
     // there, which is exactly what a turn during an MCP reconnect sees.
-    void this.applyExtensions(config);
+    //
+    // Skipped when this build *is* the answer to a reconcile: the reconcile
+    // that woke `onExtensionsChanged` finished a moment ago, so running another
+    // would at best repeat it. `ExtensionHost.reconcile` is idempotent, so this
+    // is not what stops the loop — it is the second lock on a door that has
+    // already cost one live-lock to get right.
+    if (!this.rebuilding) void this.applyExtensions(config);
 
     // A fresh cache per build: every loop in the old one was derived from the
     // settings that just changed. A turn already running keeps the loop it

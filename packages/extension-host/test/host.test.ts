@@ -506,6 +506,76 @@ describe('ExtensionHost.subscribe', () => {
     expect(listener).not.toHaveBeenCalled();
   });
 
+  it('stays quiet about an extension that already failed', async () => {
+    // The same live-lock, one branch over, and the one the first fix missed:
+    // a `failed` row has no registration, so the "already attempted" guard used
+    // to skip it and re-activate on every reconcile — announcing every time.
+    // Retrying cannot help anyway: Node's module registry hands back the module
+    // it already holds, so the second `activate` is the first one again.
+    install('slack');
+    store.approve('slack');
+    const activate = vi.fn(() => {
+      throw new Error('no token');
+    });
+    const { host } = hostFor({ slack: { activate } });
+    await host.reconcile(CONFIG());
+    expect(host.status()).toMatchObject([{ state: 'failed' }]);
+
+    const listener = vi.fn();
+    host.subscribe(listener);
+    await host.reconcile(CONFIG());
+    await host.reconcile(CONFIG());
+
+    expect(activate).toHaveBeenCalledOnce();
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('retries a failed extension once its files change', async () => {
+    // Which is the whole reason the guard keys on the digest rather than on
+    // "has it been tried": repairing it has to be enough.
+    const dir = install('slack');
+    store.approve('slack');
+    let fail = true;
+    const { host } = hostFor({
+      slack: {
+        activate: () => {
+          if (fail) throw new Error('no token');
+        },
+      },
+    });
+    await host.reconcile(CONFIG());
+    expect(host.status()).toMatchObject([{ state: 'failed' }]);
+
+    fail = false;
+    writeFileSync(join(dir, 'dist', 'index.js'), 'export const extension = 2;');
+    store.approve('slack');
+    await host.reconcile(CONFIG());
+
+    expect(host.status()).toMatchObject([{ state: 'ready' }]);
+  });
+
+  it('reloads when an extension’s settings change', async () => {
+    // An extension reads its settings once, in `activate`, so without this a
+    // changed greeting would sit in `config.json` doing nothing until a
+    // restart.
+    install('slack');
+    store.approve('slack');
+    const seen: unknown[] = [];
+    const { host } = hostFor({
+      slack: {
+        activate: (context) => {
+          seen.push(context.settings);
+        },
+      },
+    });
+
+    await host.reconcile(CONFIG({ settings: { slack: { room: 'ops' } } }));
+    await host.reconcile(CONFIG({ settings: { slack: { room: 'ops' } } }));
+    await host.reconcile(CONFIG({ settings: { slack: { room: 'alerts' } } }));
+
+    expect(seen).toEqual([{ room: 'ops' }, { room: 'alerts' }]);
+  });
+
   it('announces when a refused extension’s reason changes', async () => {
     // The other half of it: quiet is only correct while nothing moved. An
     // unapproved extension whose files were edited has a new digest, and the

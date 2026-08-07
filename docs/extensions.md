@@ -113,6 +113,15 @@ is to say **after** an operator has already approved it:
 `examples/hello-extension/tsup.config.ts` is both of them with the reasoning
 beside each.
 
+**Expect a large artifact.** The example is about sixty lines and builds to
+roughly 1.8 MB, because reaching `defineTool` bundles `@ghostai/tools` and
+everything under it. That is the cost of the rule above rather than a mistake: an
+install directory has no `node_modules`, so an extension either carries what it
+imports or fails at load. An extension that defines its tools as plain objects
+against the `Tool` interface, rather than through `defineTool`, ships a fraction
+of that — which is a real trade and not an obvious one, so it is worth knowing
+before you measure.
+
 ## What `activate` is handed
 
 Everything an extension can reach is a member of `ExtensionContext`. There is no
@@ -238,7 +247,18 @@ explicit instead of turning an unbundled `node_modules` into a ninety-second boo
 URL and has no eviction, so re-importing an edited file returns the module already
 held. The digest gate makes that visible rather than silent: an edited extension
 reads `drifted` and stops loading until it is approved again, and the approval is
-the natural moment to restart.
+the natural moment to restart. A `failed` extension is not retried until its
+digest moves either, for the same reason — a second `activate` would run the same
+module and throw the same error.
+
+**Drift is noticed at the next reconcile, and the two surfaces say so
+differently.** `ghost extension list` reads the directory every time it runs, so
+it reports `DRIFTED` the moment a file changes. `GET /api/extensions` and the
+Settings panel report what the _server has loaded_, which is still the old copy
+until something reconciles — a settings save, an approve or revoke, or a restart.
+That is the same split `GET /api/settings` and `GET /api/mcp` make, one layer
+along: the CLI is answering "what is on disk" and the panel is answering "what is
+running", and both are true.
 
 ### What this does and does not buy
 
