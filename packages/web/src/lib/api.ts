@@ -25,8 +25,10 @@ import {
   AutomationRunListResponseSchema,
   AutomationRunSchema,
   AuthSessionResponseSchema,
+  CommandListResponseSchema,
   ContextResponseSchema,
   ErrorResponseSchema,
+  ExtensionListResponseSchema,
   FileEntrySchema,
   FileListResponseSchema,
   FileTextResponseSchema,
@@ -37,6 +39,7 @@ import {
   NotificationSchema,
   ProviderTestResponseSchema,
   ProvidersResponseSchema,
+  RunCommandResponseSchema,
   SessionListResponseSchema,
   SessionMessagesResponseSchema,
   SessionSummarySchema,
@@ -54,6 +57,10 @@ import {
   UploadResponseSchema,
   type AuthSessionResponse,
   type AutomationJob,
+  type CommandListResponse,
+  type ExtensionListResponse,
+  type RunCommandRequest,
+  type RunCommandResponse,
   type AutomationJobListResponse,
   type AutomationRun,
   type AutomationRunListResponse,
@@ -519,6 +526,62 @@ export const api = {
     request('/api/mcp', McpStatusResponseSchema, {
       ...(signal ? { signal } : {}),
     }),
+
+  /**
+   * Every installed extension and the state it is in.
+   *
+   * Separate from `settings()` for the reason `mcpServers()` is: the settings
+   * tree says which extensions an operator disabled, and this says what
+   * happened when the install tried to load them.
+   */
+  extensions: (signal?: AbortSignal): Promise<ExtensionListResponse> =>
+    request('/api/extensions', ExtensionListResponseSchema, {
+      ...(signal ? { signal } : {}),
+    }),
+
+  /**
+   * Approving records the digest of the files on disk *now*.
+   *
+   * A `POST` rather than a settings patch, and not idempotent across an edit to
+   * those files — approving twice either side of one approves two different
+   * things. See `packages/server/src/routes/extensions.ts`.
+   */
+  approveExtension: (id: string): Promise<ExtensionListResponse> =>
+    request(
+      `/api/extensions/${encodeURIComponent(id)}/approve`,
+      ExtensionListResponseSchema,
+      { method: 'POST' },
+    ),
+
+  revokeExtension: (id: string): Promise<ExtensionListResponse> =>
+    request(
+      `/api/extensions/${encodeURIComponent(id)}/revoke`,
+      ExtensionListResponseSchema,
+      { method: 'POST' },
+    ),
+
+  /** The slash commands extensions contribute, for the composer's `/` list. */
+  commands: (signal?: AbortSignal): Promise<CommandListResponse> =>
+    request('/api/commands', CommandListResponseSchema, {
+      ...(signal ? { signal } : {}),
+    }),
+
+  /**
+   * Runs one, and answers with the extension's own words.
+   *
+   * Not a resource key: an extension's copy ships with the extension and the
+   * translation layer has never seen it. The same rule a toolbox's `notes`
+   * follows.
+   */
+  runCommand: (
+    id: string,
+    body: RunCommandRequest,
+  ): Promise<RunCommandResponse> =>
+    request(
+      `/api/commands/${encodeURIComponent(id)}`,
+      RunCommandResponseSchema,
+      { method: 'POST', body },
+    ),
 
   /**
    * The agents a turn can run on, resolved.

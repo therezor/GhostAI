@@ -32,6 +32,7 @@ import { queryKeys } from '@/lib/query.js';
 import { useTurnStore } from '@/state/turn.js';
 import type { Transcript } from '@/state/transcript.js';
 import { useWorkspace } from '@/workspaces/workspace-context.js';
+import { useExtensionCommands } from './use-extension-commands.js';
 import {
   parseCommand,
   runCommand,
@@ -52,6 +53,11 @@ export function useCommands(): RunCommand {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { workspaceId } = useWorkspace();
+  // Fetched, because the answer changes while the page is open: approving an
+  // extension adds a command to a composer nobody reloaded. Its own hook rather
+  // than a field on the extensions query — the composer wants four strings on
+  // every `/`, and the panel wants a row's `lastError`.
+  const extensionCommands = useExtensionCommands();
 
   const sessionKey = useTurnStore((state) => state.sessionKey);
   const busy = useTurnStore((state) => state.busy);
@@ -114,6 +120,14 @@ export function useCommands(): RunCommand {
         },
         stop: stopTurn,
         chooseAgent: choose,
+        extensionCommands: extensionCommands.map((command) => command.id),
+        runExtensionCommand: async (id, args) => {
+          const answer = await api.runCommand(id, {
+            args,
+            ...(sessionKey === undefined ? {} : { sessionKey }),
+          });
+          return { message: answer.message, ok: answer.ok };
+        },
         setModel: async (model) => {
           // Both halves, because they are one setting: `agents.defaults` merges
           // per field, so sending the model alone would leave `provider` naming
@@ -149,6 +163,7 @@ export function useCommands(): RunCommand {
       agents,
       busy,
       choose,
+      extensionCommands,
       navigate,
       queryClient,
       sessionKey,
@@ -177,7 +192,11 @@ function lastUserSeq(transcript: Transcript): number | undefined {
 }
 
 function report(outcome: CommandOutcome, t: TFunction): void {
-  const sentence = t(outcome.key, outcome.values ?? {});
+  // An extension's answer arrives as words rather than a key — its copy ships
+  // with the extension, so there is nothing here to look up. See
+  // `CommandOutcome`.
+  const sentence =
+    'text' in outcome ? outcome.text : t(outcome.key, outcome.values ?? {});
   if (outcome.kind === 'error') {
     toast.error(sentence);
     return;

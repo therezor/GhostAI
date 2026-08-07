@@ -18,6 +18,7 @@ import type { AgentSummary, ModelInfo } from '@ghostai/protocol';
 
 import {
   commandRows,
+  commandRowsFor,
   parseCommand,
   runCommand,
   type CommandContext,
@@ -78,6 +79,11 @@ function context(
       calls.push(`model:${model.providerId}/${model.id}`);
       return Promise.resolve();
     },
+    extensionCommands: [],
+    runExtensionCommand: (id, args) => {
+      calls.push(`extension:${id}:${args}`);
+      return Promise.resolve({ message: `ran ${id}`, ok: true });
+    },
     ...overrides,
   };
 }
@@ -108,11 +114,29 @@ describe('deciding what is a command', () => {
     'clear the history',
     'try /clear next time',
     '',
-    // Digits and dashes are not command names either.
-    '/agent-2',
+    // A leading digit is not a command name: every id that can reach this is a
+    // slug, and a slug starts with a letter.
     '/404',
+    '/2fa-setup',
   ])('treats %j as prose', (text) => {
     expect(parseCommand(text)).toBeUndefined();
+  });
+
+  it('reads a hyphenated name, because an extension’s command is one', () => {
+    // `/agent-2` used to be prose, and this is the line that changed. Every id
+    // an extension contributes is `<extensionId>` or `<extensionId>-<suffix>`,
+    // so a parser that could not spell `slack-post` could not offer it.
+    //
+    // What it widens is what counts as a *typo*, not what counts as a path: the
+    // three cases above still hold, because a path that is not a single
+    // lowercase segment carries a second slash or a capital. A single-segment
+    // one was already answered as an unknown command before this — `/etc` has
+    // always parsed — so the exposure is not new, only slightly wider.
+    expect(parseCommand('/slack-post hello')).toEqual({
+      name: 'slack-post',
+      args: ['hello'],
+      tail: 'hello',
+    });
   });
 
   it('answers a name that fits the shape but matches nothing', async () => {
@@ -319,5 +343,65 @@ describe('/model', () => {
       kind: 'error',
       key: 'chat.commands.errors.usageModel',
     });
+  });
+});
+
+describe('a command an extension contributed', () => {
+  it('forwards it rather than refusing it', async () => {
+    // The table stays hand-written for the reason its header gives. An
+    // extension's command has one definition and three surfaces that have to
+    // find it, so it is fetched and forwarded.
+    const ctx = context({
+      extensionCommands: ['slack-post'],
+    });
+
+    const outcome = await run('/slack-post hello there', ctx);
+
+    expect(ctx.calls).toEqual(['extension:slack-post:hello there']);
+    expect(outcome).toEqual({ kind: 'note', text: 'ran slack-post' });
+  });
+
+  it('answers with the extension’s own words, not a key', async () => {
+    // Its copy ships with the extension and the locale bundle has never seen
+    // it. The same rule a toolbox's `notes` follows.
+    const ctx = context({
+      extensionCommands: ['slack'],
+      runExtensionCommand: () =>
+        Promise.resolve({ message: 'Slack is down', ok: false }),
+    });
+
+    expect(await run('/slack', ctx)).toEqual({
+      kind: 'error',
+      text: 'Slack is down',
+    });
+  });
+
+  it('still refuses a name nobody registered', async () => {
+    expect(await run('/slack-post', context())).toEqual({
+      kind: 'error',
+      key: 'chat.commands.errors.unknown',
+      values: { name: 'slack-post' },
+    });
+  });
+
+  it('offers it to the completion list, which the static table cannot', async () => {
+    // The answer changes while the page is open: approving an extension adds a
+    // command to a composer nobody reloaded.
+    const rows = commandRowsFor([
+      {
+        id: 'slack-post',
+        extensionId: 'slack',
+        description: 'Post to Slack.',
+        argsHint: 'the message',
+      },
+    ]);
+
+    expect(rows.map((row) => row.name)).toContain('slack-post');
+    expect(rows.at(-1)).toEqual({
+      name: 'slack-post',
+      usage: 'the message',
+      text: 'Post to Slack.',
+    });
+    expect(commandRows().map((row) => row.name)).not.toContain('slack-post');
   });
 });

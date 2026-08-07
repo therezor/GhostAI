@@ -27,6 +27,16 @@ export const queryKeys = {
   toolboxes: ['toolboxes'] as const,
   /** Live connection state, which is not in the settings tree. See `use-mcp.ts`. */
   mcp: ['mcp'] as const,
+  /** Which extensions loaded, and why the rest did not. See `use-extensions.ts`. */
+  extensions: ['extensions'] as const,
+  /**
+   * The slash commands extensions contribute.
+   *
+   * Its own key rather than a field on `extensions`, because the composer reads
+   * it on every keystroke of a `/` and the panel does not: one of them wants a
+   * cached list of four strings and the other wants a row's `lastError`.
+   */
+  commands: ['commands'] as const,
   /**
    * Every conversation, unscoped.
    *

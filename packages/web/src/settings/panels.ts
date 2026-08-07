@@ -66,6 +66,11 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = [
     label: 'settings.panels.channels.label',
     summary: 'settings.panels.channels.summary',
   },
+  {
+    id: 'extensions',
+    label: 'settings.panels.extensions.label',
+    summary: 'settings.panels.extensions.summary',
+  },
 ];
 
 export const DEFAULT_PANEL_ID: string = PROVIDERS_PANEL.id;

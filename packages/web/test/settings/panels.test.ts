@@ -31,7 +31,7 @@ describe('the settings panels', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('are the seven that are built, in the order the strip shows them', () => {
+  it('are the eight that are built, in the order the strip shows them', () => {
     // No `agent` panel: the settings it held *are* the default agent's, so they
     // are edited on that agent rather than in a second room describing the same
     // subtree. Agents are a page of their own, and picking one happens in the
@@ -46,9 +46,9 @@ describe('the settings panels', () => {
     // is the split Agents already makes: the agents are a page, and only
     // install-wide tool settings are in Settings.
     //
-    // `mcp` joined them with the MCP client, and `channels` with Telegram.
-    // There is no entry naming a future phase: a panel is on this list once it
-    // has something to configure.
+    // `mcp` joined them with the MCP client, `channels` with Telegram, and
+    // `extensions` with the extension host. There is no entry naming a future
+    // phase: a panel is on this list once it has something to configure.
     expect(SETTINGS_PANELS.map((panel) => panel.id)).toEqual([
       'providers',
       'tools',
@@ -57,6 +57,7 @@ describe('the settings panels', () => {
       'automation',
       'mcp',
       'channels',
+      'extensions',
     ]);
   });
 

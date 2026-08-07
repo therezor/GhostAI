@@ -83,6 +83,20 @@ toast.error = (title: string, description?: string): number =>
     ...(description === undefined ? {} : { description }),
   });
 
+/**
+ * The third of the three, and the one that was missing until something needed
+ * it: a request that *succeeded* and produced a state the operator has to look
+ * at. Approving an extension whose `activate` throws is exactly that — the
+ * approval worked, and the extension did not — and reporting it as `success`
+ * would put a green toast over a red row.
+ */
+toast.warning = (title: string, description?: string): number =>
+  toast({
+    title,
+    role: 'warning',
+    ...(description === undefined ? {} : { description }),
+  });
+
 const ICONS: Record<ToastRole, typeof Info> = {
   info: Info,
   success: CheckCircle2,
