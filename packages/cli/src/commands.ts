@@ -229,6 +229,22 @@ export function commandRows(): readonly CommandRow[] {
   return HELP_LAYOUT.flatMap((section) => section.rows);
 }
 
+/**
+ * The rows above, plus whatever extensions contribute right now.
+ *
+ * A function of the runtime rather than a constant, because the answer changes
+ * while the REPL is running: approving an extension in a browser adds a command
+ * to a terminal that is already open. The Tab completer and the palette call
+ * this; `helpText` does not, because `/help` is laid out in sections and an
+ * extension's command belongs to no section this file wrote.
+ */
+export function commandRowsFor(runtime: ChatRuntime): readonly CommandRow[] {
+  const extras = (runtime.extensions?.commands() ?? []).map((command) => ({
+    syntax: `/${command.id}`,
+  }));
+  return [...commandRows(), ...extras];
+}
+
 export function helpText(t: CliT): string {
   const width = Math.max(
     ...HELP_LAYOUT.flatMap((section) =>
@@ -539,9 +555,50 @@ async function dispatch(
       return outputCommand(argv[0], argv[1], ctx);
 
     default:
-      renderer.warn(t('slash.notes.unknownCommand', { name }));
-      return CONTINUE;
+      // Before the refusal, not instead of it: an extension's command reaches
+      // the terminal through the *host* rather than through this table,
+      // because there is one definition of it and three surfaces that have to
+      // find it. The table above stays hand-written for the reason its header
+      // gives — these are the commands this surface implements, and an
+      // extension's is one it merely forwards.
+      return await extensionCommand(name, tail, ctx);
   }
+}
+
+/**
+ * `/<id>` for a command an extension contributed, or the usual refusal.
+ *
+ * Answers with the extension's own text rather than a resource key: its copy
+ * ships with the extension and the terminal's bundle has never seen it. The
+ * same rule the toolbox's `notes` follows, and the same one the composer
+ * applies to the identical answer.
+ */
+async function extensionCommand(
+  name: string,
+  tail: string,
+  ctx: SlashContext,
+): Promise<SlashOutcome> {
+  const { renderer, runtime, t } = ctx;
+  const host = runtime.extensions;
+  const known = host?.commands().some((command) => command.id === name);
+
+  if (host === undefined || known !== true) {
+    renderer.warn(t('slash.notes.unknownCommand', { name }));
+    return CONTINUE;
+  }
+
+  const result = await host.runCommand(name, {
+    args: tail,
+    sessionKey: ctx.sessionKey,
+    // The REPL has no per-command cancellation — Ctrl-C stops the process —
+    // so this is a signal that never fires rather than a lie about one that
+    // does. The web composer passes the request's, which does.
+    signal: new AbortController().signal,
+  });
+
+  if (result.ok === false) renderer.warn(result.message);
+  else renderer.note(result.message);
+  return CONTINUE;
 }
 
 /**

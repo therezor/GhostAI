@@ -62,7 +62,7 @@ describe('bridgeTool', () => {
     const { bridged } = bridge(ECHO_TOOL);
     if (!('tool' in bridged)) throw new Error('expected a tool');
     expect(bridged.tool.definition().source).toBe('mcp');
-    expect(bridged.tool.definition('plugin').source).toBe('plugin');
+    expect(bridged.tool.definition('extension').source).toBe('extension');
   });
 
   it('takes a read-only claim at face value and nothing else', () => {

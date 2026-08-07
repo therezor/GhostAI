@@ -2,7 +2,7 @@
  * Structured logging.
  *
  * The redaction list is the point of this module. An agent runtime logs
- * provider requests, tool arguments, plugin config and channel payloads, and
+ * provider requests, tool arguments, extension config and channel payloads, and
  * every one of those is a plausible carrier for an API key, a bearer token or a
  * Telegram bot secret. Redaction is applied by *path* rather than by scanning
  * values, because scanning cannot tell a key from any other opaque string and

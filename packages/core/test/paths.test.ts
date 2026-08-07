@@ -8,6 +8,8 @@ import {
   HOME_ENV_VAR,
   agentDirFor,
   ensureDir,
+  extensionDataDirFor,
+  extensionDirFor,
   expandHome,
   resolveGhostPaths,
   resolvePath,
@@ -93,7 +95,8 @@ describe('resolveGhostPaths', () => {
       configFile: join(root, 'config.json'),
       dbFile: join(root, 'ghost.db'),
       logsDir: join(root, 'logs'),
-      pluginsDir: join(root, 'plugins'),
+      extensionsDir: join(root, 'extensions'),
+      extensionDataDir: join(root, 'extension-data'),
       vaultFile: join(root, 'vault.json'),
       keyFile: join(root, 'vault.key'),
     });
@@ -224,5 +227,41 @@ describe('sharedDirFor', () => {
 
   it.each(['..', 'a/b', 'Work', ''])('refuses %j', (id) => {
     expect(() => sharedDirFor(paths, id)).toThrow(/Not a workspace id/);
+  });
+});
+
+describe('extensionDirFor and extensionDataDirFor', () => {
+  const paths = resolveGhostPaths({ home: HOME, env: {} });
+
+  it('gives each extension an install directory of its own', () => {
+    expect(extensionDirFor(paths, 'slack')).toBe(
+      join(paths.extensionsDir, 'slack'),
+    );
+  });
+
+  it('keeps what an extension writes out of what was approved', () => {
+    // The approval is a digest over every byte under the install directory, so
+    // state written in there would revoke the extension's own approval on the
+    // first write. Sibling directories, never nested.
+    const install = extensionDirFor(paths, 'slack');
+    const data = extensionDataDirFor(paths, 'slack');
+
+    expect(data).toBe(join(paths.extensionDataDir, 'slack'));
+    expect(data.startsWith(install)).toBe(false);
+    expect(install.startsWith(data)).toBe(false);
+  });
+
+  it('keeps both outside the workspace the tools can reach', () => {
+    expect(extensionDirFor(paths, 'slack').startsWith(paths.workspace)).toBe(
+      false,
+    );
+    expect(
+      extensionDataDirFor(paths, 'slack').startsWith(paths.workspace),
+    ).toBe(false);
+  });
+
+  it.each(['..', 'a/b', 'Slack', '', '~evil'])('refuses %j', (id) => {
+    expect(() => extensionDirFor(paths, id)).toThrow(/Not an extension id/);
+    expect(() => extensionDataDirFor(paths, id)).toThrow(/Not an extension id/);
   });
 });

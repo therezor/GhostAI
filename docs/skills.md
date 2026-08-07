@@ -199,4 +199,4 @@ what `systemPrompt` is for.
 
 - **No settings panel for the skills themselves.** They are authored by writing files, and
   no screen is planned: a skill is a folder committed beside the project rather than
-  configuration, so Settings → Extensions no longer lists one as coming.
+  configuration, so no settings screen lists one as coming.

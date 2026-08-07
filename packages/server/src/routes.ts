@@ -16,6 +16,8 @@ import { authRoutes } from './routes/auth.js';
 import { automationRoutes } from './routes/automation.js';
 import { fileRoutes } from './routes/files.js';
 import { mcpRoutes } from './routes/mcp.js';
+import { extensionRoutes } from './routes/extensions.js';
+import { commandRoutes } from './routes/commands.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { providerRoutes } from './routes/providers.js';
 import { sessionRoutes } from './routes/sessions.js';
@@ -53,6 +55,8 @@ export function createRoutes(
     ...toolRoutes(deps),
     ...toolboxRoutes(deps),
     ...mcpRoutes(deps),
+    ...extensionRoutes(deps),
+    ...commandRoutes(deps),
     ...fileRoutes(deps),
     ...workspaceRoutes(deps),
     ...notificationRoutes(deps),

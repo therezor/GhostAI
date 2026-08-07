@@ -31,6 +31,18 @@
     },
     "queued": "queued — it runs when this turn finishes"
   },
+  "extension": {
+    "approve": {
+      "description": "Approve an extension's current files so the server may load it."
+    },
+    "description": "List, approve and revoke extensions.",
+    "list": {
+      "description": "Show every installed extension and the state it is in."
+    },
+    "revoke": {
+      "description": "Withdraw approval. The files stay installed but stop loading."
+    }
+  },
   "help": {
     "arguments": "Arguments:",
     "commands": "Commands:",

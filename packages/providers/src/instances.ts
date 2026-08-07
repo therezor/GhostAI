@@ -21,6 +21,7 @@ import type {
 } from '@ghostai/protocol';
 
 import {
+  PROVIDERS,
   findProvider,
   findGateway,
   findProviderByModel,
@@ -84,10 +85,11 @@ export function describeInstance(
  */
 export function listInstances(
   providers: ProvidersConfig,
+  specs: readonly ProviderSpec[] = PROVIDERS,
 ): readonly ProviderInstance[] {
   const instances: ProviderInstance[] = [];
   for (const [id, config] of Object.entries(providers)) {
-    const spec = findProvider(config.type);
+    const spec = findProvider(config.type, specs);
     if (spec !== null) instances.push({ id, spec, config });
   }
   return instances;
@@ -96,10 +98,11 @@ export function listInstances(
 export function findInstance(
   providers: ProvidersConfig,
   id: string,
+  specs: readonly ProviderSpec[] = PROVIDERS,
 ): ProviderInstance | null {
   const config = providers[id];
   if (config === undefined) return null;
-  const spec = findProvider(config.type);
+  const spec = findProvider(config.type, specs);
   return spec === null ? null : { id, spec, config };
 }
 
@@ -143,6 +146,14 @@ interface ResolveInstanceOptions {
   readonly model?: string | undefined;
   /** Consulted only to break a tie under `auto`; never to reject an instance. */
   readonly hasCredential?: ((instanceId: string) => boolean) | undefined;
+  /**
+   * The provider types resolution may see.
+   *
+   * Defaults to the built-in table. The composition root passes the built-ins
+   * plus whatever extensions contributed, which is what makes
+   * `providers.<id>.type` able to name a provider this build did not ship.
+   */
+  readonly specs?: readonly ProviderSpec[] | undefined;
 }
 
 /**
@@ -163,7 +174,8 @@ interface ResolveInstanceOptions {
 export function resolveInstance(
   options: ResolveInstanceOptions,
 ): ProviderInstance | null {
-  const enabled = listInstances(options.providers).filter(
+  const specs = options.specs ?? PROVIDERS;
+  const enabled = listInstances(options.providers, specs).filter(
     (instance) => instance.config.enabled,
   );
   const named = options.provider;
@@ -172,7 +184,7 @@ export function resolveInstance(
     const exact = enabled.find((instance) => instance.id === named);
     if (exact !== undefined) return exact;
 
-    const spec = findProvider(named);
+    const spec = findProvider(named, specs);
     if (spec !== null) {
       return (
         enabled.find((instance) => instance.spec.id === spec.id) ??
@@ -187,7 +199,9 @@ export function resolveInstance(
   if (enabled.length === 0) return null;
 
   const byModel =
-    options.model === undefined ? null : findProviderByModel(options.model);
+    options.model === undefined
+      ? null
+      : findProviderByModel(options.model, specs);
   if (byModel !== null) {
     const match = enabled.find((instance) => instance.spec.id === byModel.id);
     if (match !== undefined) return match;

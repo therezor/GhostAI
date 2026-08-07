@@ -10,6 +10,7 @@ import {
   nextInstanceId,
   resolveInstance,
 } from '#src/instances.js';
+import { PROVIDERS, type ProviderSpec } from '#src/registry.js';
 
 function instance(
   type: string,
@@ -171,5 +172,49 @@ describe('resolveInstance', () => {
 
   it('returns null when nothing is configured, rather than guessing', () => {
     expect(resolveInstance({ providers: {} })).toBeNull();
+  });
+  it('resolves a provider type an extension contributed', () => {
+    // The other half of the extension seam: `createProvider` takes a spec
+    // directly, but `providers.<id>.type` naming one has to resolve too, or an
+    // extension's provider could never be *configured* — only passed by hand.
+    const spec: ProviderSpec = {
+      id: 'corp-llm',
+      displayName: 'Corp LLM',
+      wire: 'openai-chat',
+      keywords: ['corp'],
+      defaultApiBase: 'https://llm.corp.invalid/v1',
+    };
+    const providers: ProvidersConfig = { house: instance('corp-llm') };
+
+    expect(resolveInstance({ providers, provider: 'house' })).toBeNull();
+    expect(
+      resolveInstance({
+        providers,
+        provider: 'house',
+        specs: [...PROVIDERS, spec],
+      })?.spec.id,
+    ).toBe('corp-llm');
+  });
+
+  it('lets an extension’s keywords answer an auto resolution', () => {
+    const spec: ProviderSpec = {
+      id: 'corp-llm',
+      displayName: 'Corp LLM',
+      wire: 'openai-chat',
+      keywords: ['corp'],
+    };
+    const providers: ProvidersConfig = {
+      local: instance('ollama'),
+      house: instance('corp-llm'),
+    };
+
+    expect(
+      resolveInstance({
+        providers,
+        provider: 'auto',
+        model: 'corp-large',
+        specs: [...PROVIDERS, spec],
+      })?.id,
+    ).toBe('house');
   });
 });

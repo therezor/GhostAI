@@ -4,6 +4,17 @@ React 19 and Vite, served by the same process as the agent. TanStack Router and 
 Zustand for chat state, Radix for the headless primitives, Shiki for highlighting loaded
 on demand.
 
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="screenshots/chat.light.png">
+  <img alt="The chat view: a streaming answer with a highlighted code block, the session sidebar, and the context budget under the composer." src="screenshots/chat.dark.png">
+</picture>
+
+Every picture on this page and in the README is generated, not taken by hand:
+`pnpm screenshots` boots the same harness the browser suite runs against and drives each
+screen to the state worth showing. Two runs on one machine produce byte-identical files,
+so a changed image in a diff means the UI changed. See
+[Development](development.md#screenshots).
+
 **No CSS framework.** Hand-written CSS in five cascade layers — `reset`, `base`,
 `layout`, `components`, `screens` — declared in that order. A component names what it _is_
 (`.tool-card`, `.sidebar__link`) and the stylesheet says what that looks like.
@@ -46,6 +57,21 @@ never drops a running turn.
 - **Turn info** — tokens in and out, cached tokens, elapsed, tokens per second, model,
   provider, step count, stop reason.
 - Markdown with highlighted code blocks.
+
+A tool card, expanded to show what the call returned:
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="screenshots/chat-tool-call.light.png">
+  <img alt="A list_dir tool card, expanded to show the files it returned." src="screenshots/chat-tool-call.dark.png">
+</picture>
+
+An approval prompt. The turn is parked here — the arguments are on screen and nothing has
+run yet:
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="screenshots/chat-approval.light.png">
+  <img alt="An approval prompt for exec, showing the argv it would run, with Once, This session, Always and Deny." src="screenshots/chat-approval.dark.png">
+</picture>
 
 ### Composer
 
@@ -107,12 +133,22 @@ returns, so all three agree.
 
 This is the screen that answers "why did it forget what I said".
 
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="screenshots/context.light.png">
+  <img alt="The context inspector: 2,631 of 65,536 tokens, broken down into system prompt, tool definitions, session and live state." src="screenshots/context.dark.png">
+</picture>
+
 ## Files
 
 Browse the workspace tree with filter and sort. Upload by button or drop. Create folders
 and files, rename, move, delete with a confirm. Text editing with syntax highlighting, and
 **save-conflict detection** — if the agent changed the file underneath you, the save is
 refused rather than silently winning. Media previews go through short-lived signed URLs.
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="screenshots/files.light.png">
+  <img alt="The file browser, listing the workspace tree." src="screenshots/files.dark.png">
+</picture>
 
 ## Workspaces
 
@@ -191,20 +227,25 @@ to fill in first.
 
 ## Settings
 
-| Panel      | State                                                                                                                                                                  |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Providers  | Built. Add by type, save endpoint and key in one press, test the connection before saving, per-endpoint model catalogue, enable/disable, delete takes the key with it. |
-| Tools      | Built. Install-wide only: approval timeout, `exec` settings, output caps. **No permission matrix here** — permission is per tool per agent.                            |
-| Account    | Built. Username and password together, requires the current password, revokes every other session.                                                                     |
-| Appearance | Built. Language and timezone (install-wide) and theme (this browser only).                                                                                             |
-| Automation | Built. The scheduler engine only: enabled, concurrency, catch-up on boot, run retention. **The jobs are a page.**                                                      |
-| Extensions | Built. MCP servers are a list and an editor, each row joining what an operator configured to what came of it.                                                          |
-| Channels   | Built. Reach the same agent from a messaging app. The bot token goes to the vault, never to `config.json`.                                                             |
+| Panel       | State                                                                                                                                                                  |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Providers   | Built. Add by type, save endpoint and key in one press, test the connection before saving, per-endpoint model catalogue, enable/disable, delete takes the key with it. |
+| Tools       | Built. Install-wide only: approval timeout, `exec` settings, output caps. **No permission matrix here** — permission is per tool per agent.                            |
+| Account     | Built. Username and password together, requires the current password, revokes every other session.                                                                     |
+| Appearance  | Built. Language and timezone (install-wide) and theme (this browser only).                                                                                             |
+| Automation  | Built. The scheduler engine only: enabled, concurrency, catch-up on boot, run retention. **The jobs are a page.**                                                      |
+| MCP servers | Built. A list and an editor, each row joining what an operator configured to what came of it.                                                                          |
+| Channels    | Built. Reach the same agent from a messaging app. The bot token goes to the vault, never to `config.json`.                                                             |
+| Extensions  | Built. Approve, withdraw and disable. **No editor** — an extension is a directory an operator put on the box, and a form would imply this screen could change it.      |
 
 Every panel on that list is built, and a panel arrives on it once it has something to
 configure. There are deliberately no placeholders naming a future phase: a settings
-screen advertising a form an operator cannot open is one they check twice. Unbuilt work
-is tracked in [ROADMAP.md](ROADMAP.md) instead.
+screen advertising a form an operator cannot open is one they check twice.
+
+Approving is the only reversible action in Settings that asks first. It grants the code
+the server's own access, so it goes through the confirm dialog with the sentence that
+says so; a one-click toggle would make the digest gate decorative. Withdrawing does not
+ask, because it takes access away and leaves the files where they are.
 
 Each MCP row joins two requests — `GET /api/settings` for what was
 configured, `GET /api/mcp` for what came of it — and settles on its own, because the
@@ -219,6 +260,11 @@ everything after it is prose. The code and password are mandatory; the provider 
 are skippable, and skipping lands you in a working app — files, workspaces, settings and
 notifications all work, and only the composer is disabled, with a link to the panel that
 fixes it.
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="screenshots/setup.light.png">
+  <img alt="The first-run wizard on its language step." src="screenshots/setup.dark.png">
+</picture>
 
 ## Theme
 

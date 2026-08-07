@@ -127,7 +127,7 @@ describe('registration', () => {
     const registry = new ToolRegistry();
     registry.register(echo);
     expect(() => {
-      registry.register(echo, 'plugin');
+      registry.register(echo, 'extension');
     }).toThrow(/already registered by builtin/);
     expect(registry.sourceOf('echo')).toBe('builtin');
   });
@@ -136,9 +136,9 @@ describe('registration', () => {
     const registry = new ToolRegistry();
     registry.register(failing);
     expect(() => {
-      registry.registerAll([echo, failing], 'plugin');
+      registry.registerAll([echo, failing], 'extension');
     }).toThrow(/already registered/);
-    // A half-installed plugin is worse than one that failed to install.
+    // A half-installed extension is worse than one that failed to install.
     expect(registry.has('echo')).toBe(false);
     expect(registry.sourceOf('failing')).toBe('builtin');
   });
@@ -146,9 +146,9 @@ describe('registration', () => {
   it('removes exactly what one source registered', () => {
     const registry = new ToolRegistry();
     registry.register(echo, 'builtin');
-    registry.register(failing, 'plugin');
-    registry.register(flagged, 'plugin');
-    expect(registry.unregisterBySource('plugin')).toBe(2);
+    registry.register(failing, 'extension');
+    registry.register(flagged, 'extension');
+    expect(registry.unregisterBySource('extension')).toBe(2);
     expect(registry.names()).toEqual(['echo']);
     expect(registry.unregisterBySource('mcp')).toBe(0);
   });
@@ -184,8 +184,8 @@ describe('subscribe', () => {
     expect(fired).toBe(2);
     registry.unregisterBySource('mcp');
     expect(fired).toBe(3);
-    // Nothing was registered by a plugin, so nothing changed.
-    registry.unregisterBySource('plugin');
+    // Nothing was registered by an extension, so nothing changed.
+    registry.unregisterBySource('extension');
     expect(fired).toBe(3);
     registry.clear();
     expect(fired).toBe(4);
@@ -261,7 +261,7 @@ describe('definitions', () => {
     registry.register(echo);
     const first = registry.definitions();
     expect(registry.unregister('absent')).toBe(false);
-    expect(registry.unregisterBySource('plugin')).toBe(0);
+    expect(registry.unregisterBySource('extension')).toBe(0);
     expect(registry.definitions()).toBe(first);
   });
 
@@ -421,7 +421,7 @@ describe('execute', () => {
 
   it('takes a new timeout from a settings change', async () => {
     // Editable at runtime because the alternative — a new registry when
-    // `toolTimeoutMs` changes — throws away every MCP and plugin registration
+    // `toolTimeoutMs` changes — throws away every MCP and extension registration
     // on it, which is far more than the operator asked to change.
     const clock = manualClock();
     const registry = new ToolRegistry({ timeoutMs: 30_000, clock });

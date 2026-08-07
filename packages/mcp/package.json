@@ -1,9 +1,32 @@
 {
   "name": "@ghostai/mcp",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "MCP client, connection lifecycle, and the bridge onto the tool registry.",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/therezor/GhostAI.git",
+    "directory": "packages/mcp"
+  },
+  "homepage": "https://github.com/therezor/GhostAI",
+  "bugs": "https://github.com/therezor/GhostAI/issues",
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./testkit": {
+        "types": "./test/testkit/index.ts",
+        "default": "./test/testkit/index.ts"
+      }
+    }
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
   "exports": {
     ".": {
       "development": "./src/index.ts",
@@ -22,7 +45,8 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist",
+    "dist/**",
+    "!dist/**/*.map",
     "test/testkit"
   ],
   "scripts": {

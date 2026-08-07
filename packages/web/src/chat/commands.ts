@@ -23,17 +23,33 @@
  * why at its own definition: `/new`, `/branch` and `/model`.
  */
 
-import type { AgentSummary, ModelInfo } from '@ghostai/protocol';
+import type {
+  AgentSummary,
+  ExtensionCommand,
+  ModelInfo,
+} from '@ghostai/protocol';
 
 import type { WebKey } from '@/i18n/keys.js';
 
 /** Interpolation for the sentence a command answers with. */
 type Values = Readonly<Record<string, string | number>>;
 
-/** What a command answers with, in words the caller renders. */
+/**
+ * What a command answers with, in words the caller renders.
+ *
+ * Two shapes, and the difference is where the words came from. A built-in
+ * answers with a **key**, because this file translates nothing and its copy
+ * ships in the locale bundle. An extension's command answers with **text**,
+ * because its copy ships with the extension and the translation layer has never
+ * seen it — the same rule a toolbox's `notes` follows. Neither can be
+ * substituted for the other, so both are in the union rather than one being
+ * squeezed into the other's shape.
+ */
 export type CommandOutcome =
   | { readonly kind: 'note'; readonly key: WebKey; readonly values?: Values }
-  | { readonly kind: 'error'; readonly key: WebKey; readonly values?: Values };
+  | { readonly kind: 'error'; readonly key: WebKey; readonly values?: Values }
+  | { readonly kind: 'note'; readonly text: string }
+  | { readonly kind: 'error'; readonly text: string };
 
 /** Everything a command may reach. Assembled once, in `use-commands.ts`. */
 export interface CommandContext {
@@ -86,6 +102,19 @@ export interface CommandContext {
    * `components/form/fields.ts` is the same rule read the other way round.
    */
   setModel(model: ModelInfo): Promise<void>;
+  /**
+   * The ids extensions currently contribute, fetched rather than compiled in.
+   *
+   * A list of names rather than a table of runnable things: this file has no
+   * `api` and never will, so what it can do is *recognise* one and hand it
+   * back. `use-commands.ts` supplies both halves, as it does for everything
+   * else here.
+   */
+  readonly extensionCommands: readonly string[];
+  runExtensionCommand(
+    id: string,
+    args: string,
+  ): Promise<{ readonly message: string; readonly ok: boolean }>;
 }
 
 /** What the parser hands a command. */
@@ -292,6 +321,45 @@ export function commandRows(): readonly WebCommand[] {
   return COMMANDS;
 }
 
+/**
+ * The rows above, plus whatever extensions contribute right now.
+ *
+ * A function of the fetched list rather than a constant, because the answer
+ * changes while the page is open: approving an extension adds a command to a
+ * composer nobody reloaded. The `description` is the extension's own text and
+ * so is not a key — see `CommandOutcome`.
+ */
+export function commandRowsFor(
+  extensions: readonly ExtensionCommand[],
+): readonly CommandRow[] {
+  return [
+    ...COMMANDS.map((command) => ({
+      name: command.name,
+      ...(command.usage === undefined ? {} : { usage: command.usage }),
+      description: command.description,
+    })),
+    ...extensions.map((command) => ({
+      name: command.id,
+      ...(command.argsHint === '' ? {} : { usage: command.argsHint }),
+      text: command.description,
+    })),
+  ];
+}
+
+/**
+ * One line of the `/` list.
+ *
+ * `description` is a key and `text` is words, for the reason `CommandOutcome`
+ * carries both: one side's copy is in the locale bundle and the other's ships
+ * with an extension.
+ */
+export interface CommandRow {
+  readonly name: string;
+  readonly usage?: string | undefined;
+  readonly description?: WebKey | undefined;
+  readonly text?: string | undefined;
+}
+
 export function findCommand(name: string): WebCommand | undefined {
   return BY_NAME.get(name);
 }
@@ -311,10 +379,19 @@ export interface ParsedCommand {
  * is load-bearing — `/usr/bin/env is on the path` must reach the model as the
  * sentence it is.
  *
- * A command is a leading slash followed by nothing but lowercase letters. That
- * one shape is what makes every path prose: `/usr/bin/env` and `/etc/hosts`
- * carry a second slash, `/Users/rezor` carries a capital, and none of them is
- * ever a command however this table grows.
+ * A command is a leading slash followed by a slug — a lowercase letter, then
+ * lowercase letters, digits and hyphens. That one shape is what makes every
+ * path prose: `/usr/bin/env` and `/etc/hosts` carry a second slash,
+ * `/Users/rezor` carries a capital, and none of them is ever a command however
+ * this table grows.
+ *
+ * The hyphens and digits are for extensions. Every id an extension contributes
+ * is `<extensionId>` or `<extensionId>-<suffix>` — see
+ * `packages/extension-host/src/registration.ts` — so a table that could not
+ * spell `slack-post` could not offer it. It widens what counts as a *typo*
+ * rather than what counts as a command: `/foo-bar` matching nothing is still
+ * reported as a mistake instead of being sent to the model, which is the answer
+ * all three surfaces already give.
  *
  * A name that fits the shape and matches nothing is a typo rather than prose,
  * and is reported as one — the same answer both other surfaces give, because a
@@ -323,7 +400,7 @@ export interface ParsedCommand {
 export function parseCommand(text: string): ParsedCommand | undefined {
   const trimmed = text.trim();
   const [word = '', ...args] = trimmed.split(/\s+/u);
-  if (!/^\/[a-z]+$/u.test(word)) return undefined;
+  if (!/^\/[a-z][a-z0-9-]*$/u.test(word)) return undefined;
 
   return {
     name: word.slice(1),
@@ -350,6 +427,16 @@ export async function runCommand(
 ): Promise<CommandOutcome> {
   const command = BY_NAME.get(parsed.name);
   if (command === undefined) {
+    // An extension's, if anything. The table above stays hand-written for the
+    // reason its header gives — these are the commands this surface implements
+    // — and an extension's is one it merely forwards, so it reaches the server
+    // rather than this file.
+    if (ctx.extensionCommands.includes(parsed.name)) {
+      const answer = await ctx.runExtensionCommand(parsed.name, parsed.tail);
+      return answer.ok
+        ? { kind: 'note', text: answer.message }
+        : { kind: 'error', text: answer.message };
+    }
     return {
       kind: 'error',
       key: 'chat.commands.errors.unknown',

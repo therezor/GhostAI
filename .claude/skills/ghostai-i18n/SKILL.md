@@ -120,7 +120,7 @@ pnpm test          # includes untranslated.test.ts: prose that never became a ke
 `packages/i18n/locales`. A dirty tree means the bundles are out of step — run
 `pnpm i18n:extract`, fill in any new English, and commit the result.
 
-`packages/web/src/i18n/untranslated.test.ts` sweeps `.tsx` sources for English
+`packages/web/test/i18n/untranslated.test.ts` sweeps `.tsx` sources for English
 prose in JSX text and in copy-carrying attributes (`aria-label`, `placeholder`,
 `title`, `alt`, `description`, `label`). It is deliberately conservative — two or
 more words — so `{'·'}` and `qwen3:8b` do not trip it. It has an allowlist, and

@@ -15,6 +15,7 @@ import type { z } from 'zod';
 
 import * as automation from './automation.js';
 import * as config from './config.js';
+import * as extension from './extension.js';
 import * as messages from './messages.js';
 import * as toolbox from './toolbox.js';
 import * as rest from './rest.js';
@@ -71,7 +72,7 @@ export const PROTOCOL_SCHEMAS = {
   AgentEntry: config.AgentEntrySchema,
   SchedulerConfig: config.SchedulerConfigSchema,
   ChannelsConfig: config.ChannelsConfigSchema,
-  PluginsConfig: config.PluginsConfigSchema,
+  ExtensionsConfig: config.ExtensionsConfigSchema,
   UiConfig: config.UiConfigSchema,
   Config: config.ConfigSchema,
   ConfigPatch: config.ConfigPatchSchema,
@@ -85,6 +86,10 @@ export const PROTOCOL_SCHEMAS = {
   ToolboxLimits: toolbox.ToolboxLimitsSchema,
   ToolboxNetwork: toolbox.ToolboxNetworkSchema,
   Toolbox: toolbox.ToolboxSchema,
+
+  // extension
+  ExtensionContribution: extension.ExtensionContributionSchema,
+  ExtensionManifest: extension.ExtensionManifestSchema,
 
   // automation
   AtSchedule: automation.AtScheduleSchema,
@@ -213,12 +218,20 @@ export const PROTOCOL_SCHEMAS = {
   SetupStatusResponse: rest.SetupStatusResponseSchema,
   SetupClaimRequest: rest.SetupClaimRequestSchema,
   SetupPasswordRequest: rest.SetupPasswordRequestSchema,
+  ExtensionState: rest.ExtensionStateSchema,
+  ExtensionStatus: rest.ExtensionStatusSchema,
+  ExtensionListResponse: rest.ExtensionListResponseSchema,
+  ExtensionCommand: rest.ExtensionCommandSchema,
+  CommandListResponse: rest.CommandListResponseSchema,
+  RunCommandRequest: rest.RunCommandRequestSchema,
+  RunCommandResponse: rest.RunCommandResponseSchema,
 } satisfies Record<string, z.ZodType>;
 
 /** The modules the completeness test reflects over to catch unregistered exports. */
 export const SCHEMA_MODULES = {
   automation,
   config,
+  extension,
   messages,
   rest,
   subagent,

@@ -42,7 +42,7 @@ const STATUS = {
   authEnabled: true,
   toolCount: 4,
   mcpServersConnected: 0,
-  pluginsLoaded: 0,
+  extensionsLoaded: 0,
 };
 
 describe('request', () => {

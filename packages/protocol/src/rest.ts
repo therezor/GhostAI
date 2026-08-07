@@ -27,6 +27,7 @@ import {
 import { SubagentRunRefSchema } from './subagent.js';
 import { ToolDefinitionSchema, ToolPermissionSchema } from './tools.js';
 import { AutomationJobSchema, AutomationRunSchema } from './automation.js';
+import { ExtensionContributionSchema } from './extension.js';
 
 // ---------------------------------------------------------------------------
 // Envelopes
@@ -108,7 +109,7 @@ export const StatusResponseSchema = z.object({
   authEnabled: z.boolean(),
   toolCount: z.number().int().nonnegative(),
   mcpServersConnected: z.number().int().nonnegative(),
-  pluginsLoaded: z.number().int().nonnegative(),
+  extensionsLoaded: z.number().int().nonnegative(),
 });
 export type StatusResponse = z.infer<typeof StatusResponseSchema>;
 
@@ -259,7 +260,8 @@ export const SetCredentialRequestSchema = z.object({
     'tools',
     'audio',
     'mcp_servers',
-    'plugins',
+    /** An extension's own credential, keyed by extension id. */
+    'extensions',
     /** A channel's own credential — a bot token, keyed by channel id. */
     'channels',
   ]),
@@ -406,7 +408,7 @@ export const SessionSummarySchema = z.object({
   messageCount: z.number().int().nonnegative(),
   createdAtMs: z.number().int().nonnegative(),
   updatedAtMs: z.number().int().nonnegative(),
-  /** Channel that owns it — `web`, `telegram`, `automation`, a plugin id. */
+  /** Channel that owns it — `web`, `telegram`, `automation`, an extension id. */
   origin: z.string().default('web'),
   /**
    * The workspace this session's tools run in.
@@ -753,6 +755,126 @@ export const McpStatusResponseSchema = z.object({
   servers: z.array(McpServerStatusSchema),
 });
 export type McpStatusResponse = z.infer<typeof McpStatusResponseSchema>;
+
+// ---------------------------------------------------------------------------
+// Extensions
+// ---------------------------------------------------------------------------
+
+/**
+ * What an extension is doing right now.
+ *
+ * Four of the five are reasons it is *not* running, and each is distinct
+ * because each has a different fix: approve it, re-approve it, enable it, or
+ * repair it. Collapsing them into one `failed` would put the operator back to
+ * reading logs, which is the state this row exists to replace.
+ */
+export const ExtensionStateSchema = z.enum([
+  /** Loaded and activated. */
+  'ready',
+  /** Discovered, never approved. */
+  'unapproved',
+  /** Approved once; the bytes on disk have changed since. */
+  'drifted',
+  /** Named in `extensions.disabled`. */
+  'disabled',
+  /** Approved and enabled, and it threw. */
+  'failed',
+]);
+export type ExtensionState = z.infer<typeof ExtensionStateSchema>;
+
+export const ExtensionStatusSchema = z.object({
+  id: z.string().min(1),
+  state: ExtensionStateSchema,
+  version: z.string().default(''),
+  label: z.string().default(''),
+  description: z.string().default(''),
+  /** What the manifest declares. Empty on an extension that failed to parse. */
+  contributes: z.array(ExtensionContributionSchema).default([]),
+  /** The tool names it registered, flattened and sorted. */
+  tools: z.array(z.string()).default([]),
+  channels: z.array(z.string()).default([]),
+  providers: z.array(z.string()).default([]),
+  commands: z.array(z.string()).default([]),
+  /** Present once it has been approved, so the panel can show what it holds. */
+  digest: z.string().default(''),
+  approvedAtMs: z.number().int().nonnegative().optional(),
+  /**
+   * Why it is not running, phrased for the operator.
+   *
+   * A field on the row rather than a `ConfigWarning`, for the reason
+   * `McpServerStatus.lastError` gives: a warning is a property of the settings
+   * tree and true until someone edits it, and an extension that threw on
+   * activation is not.
+   */
+  lastError: z.string().optional(),
+  /**
+   * Problems that did not stop it loading: a registration whose id broke the
+   * namespace rule, or one whose kind `contributes` never declared.
+   */
+  warnings: z.array(z.string()).default([]),
+});
+export type ExtensionStatus = z.infer<typeof ExtensionStatusSchema>;
+
+export const ExtensionListResponseSchema = z.object({
+  extensions: z.array(ExtensionStatusSchema),
+});
+export type ExtensionListResponse = z.infer<typeof ExtensionListResponseSchema>;
+
+/**
+ * A slash command an extension contributes.
+ *
+ * The first command table that is not written out by hand.
+ * `packages/web/src/chat/commands.ts` explains why the three built-in ones do
+ * not share a core: the surfaces agree on a vocabulary rather than on an
+ * implementation. An extension's command is the case where they *have* to share
+ * one, because there is exactly one definition of it and more than one place it
+ * has to appear — so it is fetched rather than compiled in, and it answers with
+ * text rather than a resource key, since its copy ships with the extension and
+ * never reaches a locale bundle.
+ *
+ * **Two surfaces, not three.** The composer and the terminal reach these;
+ * Telegram does not. Its commands are `bot_command` entities registered with
+ * the Bot API, whose names are `[a-z0-9_]` — a namespaced `slack-post` cannot
+ * be spelled there at all, and inventing a second spelling for one command is
+ * how a command ends up meaning two things.
+ */
+export const ExtensionCommandSchema = z.object({
+  /** `<extensionId>` or `<extensionId>-<suffix>`, so `/slack-status` is legal. */
+  id: z.string().min(1),
+  extensionId: z.string().min(1),
+  /** The line the autocomplete shows. */
+  description: z.string().default(''),
+  /** What to write after the name, in prose. Empty means it takes none. */
+  argsHint: z.string().default(''),
+});
+export type ExtensionCommand = z.infer<typeof ExtensionCommandSchema>;
+
+export const CommandListResponseSchema = z.object({
+  commands: z.array(ExtensionCommandSchema),
+});
+export type CommandListResponse = z.infer<typeof CommandListResponseSchema>;
+
+export const RunCommandRequestSchema = z.object({
+  /** Everything the operator typed after the command name. */
+  args: z.string().default(''),
+  /** The conversation it was typed in, when there is one. */
+  sessionKey: z.string().optional(),
+});
+export type RunCommandRequest = z.infer<typeof RunCommandRequestSchema>;
+
+export const RunCommandResponseSchema = z.object({
+  /**
+   * What to show the operator, verbatim.
+   *
+   * Not a resource key: an extension's copy ships with the extension, so the
+   * translation layer has never seen it. The same rule a toolbox's `notes`
+   * follows.
+   */
+  message: z.string().default(''),
+  /** `false` renders the message as an error rather than a note. */
+  ok: z.boolean().default(true),
+});
+export type RunCommandResponse = z.infer<typeof RunCommandResponseSchema>;
 
 // ---------------------------------------------------------------------------
 // Files

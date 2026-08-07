@@ -45,6 +45,7 @@ import type { LogLevel } from '@ghostai/core';
 import type { ChatOptions } from './chat.js';
 import { describeError, translationsFor, type CliT, type Env } from './i18n.js';
 import type { InitOptions } from './init.js';
+import { runExtension } from './extension.js';
 import { runToolbox } from './toolbox.js';
 import type { ServeCommandOptions } from './serve.js';
 
@@ -55,8 +56,12 @@ import type { ServeCommandOptions } from './serve.js';
  * lands in `dist/`, so a relative read resolves differently in development and
  * in the published package, and the failure mode is a version string that is
  * wrong rather than absent.
+ *
+ * This is the one line a release has to change by hand. The rest of a version
+ * bump is the root `package.json` plus `node scripts/gen-packages.mjs`; the
+ * test above is what stops that pair from landing without this.
  */
-export const VERSION = '0.0.0';
+export const VERSION = '1.0.0';
 
 const LOG_LEVELS: readonly string[] = [
   'trace',
@@ -344,6 +349,49 @@ function buildProgram(deps: CliDeps = {}): Command {
     .argument('<id>')
     .description(t('toolbox.revoke.description'))
     .action(toolboxAction('revoke'));
+
+  const extension = program
+    .command('extension')
+    .description(t('extension.description'));
+  const extensionAction =
+    (action: 'list' | 'approve' | 'revoke') =>
+    (id: string | undefined, options: unknown, command: Command) => {
+      const globals = command.parent?.parent?.opts<GlobalOptions>() ?? {
+        color: true,
+        verbose: false,
+      };
+      const code = runExtension({
+        action,
+        ...(id === undefined ? {} : { id }),
+        ...(globals.home === undefined ? {} : { home: globals.home }),
+        out: (line) => {
+          out.write(`${line}\n`);
+        },
+        errOut: (line) => {
+          errOut.write(`${line}\n`);
+        },
+        env,
+        t: translations,
+      });
+      command.setOptionValue('exitCode', code);
+    };
+
+  extension
+    .command('list')
+    .description(t('extension.list.description'))
+    .action((options: unknown, command: Command) => {
+      extensionAction('list')(undefined, options, command);
+    });
+  extension
+    .command('approve')
+    .argument('<id>')
+    .description(t('extension.approve.description'))
+    .action(extensionAction('approve'));
+  extension
+    .command('revoke')
+    .argument('<id>')
+    .description(t('extension.revoke.description'))
+    .action(extensionAction('revoke'));
 
   program
     .command('serve')

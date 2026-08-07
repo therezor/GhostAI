@@ -8,8 +8,8 @@
  * a failure. The flag is the truth; the message is for humans.
  *
  * `GhostError` is a class rather than a plain object because it has to survive
- * being thrown through code we do not own — `node:sqlite`, `undici`, a plugin's
- * `setup()` — and come back out of a `catch` still identifiable. `toGhostError`
+ * being thrown through code we do not own — `node:sqlite`, `undici`, an
+ * extension's `activate()` — and come back out of a `catch` still identifiable. `toGhostError`
  * is the funnel: every `catch` block normalises through it, so an `unknown` from
  * anywhere becomes a typed value exactly once, at the boundary.
  * */
@@ -21,7 +21,7 @@ export const ERROR_KINDS = [
   'invalid_input',
   'not_found',
   'conflict',
-  /** An approval was refused, or a plugin lacked the declared capability. */
+  /** An approval was refused, or an extension lacked the declared capability. */
   'permission_denied',
   /** A path resolved outside the workspace jail. Always security-relevant. */
   'jail_escape',
@@ -36,7 +36,7 @@ export const ERROR_KINDS = [
   'rate_limited',
   /** SQLite, or the filesystem underneath it. */
   'storage',
-  'plugin',
+  'extension',
   /** An invariant this codebase is supposed to uphold did not hold. */
   'internal',
 ] as const;
@@ -66,7 +66,7 @@ const RETRYABLE_BY_KIND: Readonly<Record<ErrorKind, boolean>> = {
   aborted: false,
   rate_limited: true,
   storage: false,
-  plugin: false,
+  extension: false,
   internal: false,
 };
 
@@ -108,7 +108,7 @@ export class GhostError extends Error {
 /**
  * Structural, not `instanceof`.
  *
- * A plugin resolving its own copy of `@ghostai/core` produces a `GhostError`
+ * An extension resolving its own copy of `@ghostai/core` produces a `GhostError`
  * from a different class identity, and `instanceof` would silently reclassify
  * every one of them as `internal`.
  */

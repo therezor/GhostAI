@@ -47,6 +47,7 @@ export {
   resolveModelId,
   resolveProvider,
   type ProviderSpec,
+  type WireProtocol,
 } from './registry.js';
 
 export {
@@ -79,7 +80,11 @@ export {
   type ChatStreamEvent,
   type FinishReason,
   type ToolChoice,
+  type WireAdapter,
+  type WireAdapterOptions,
 } from './types.js';
+
+export { BUILTIN_WIRES, wireAdapterFor, type WireAdapters } from './wires.js';
 
 export {
   MAX_SSE_FRAME_CHARS,

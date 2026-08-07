@@ -152,10 +152,16 @@ delimiter is inert data. An attacker who cannot guess the nonce cannot close the
 Closing tags appearing inside the content are escaped case-insensitively, because the
 model does the parsing and the model is not case-sensitive.
 
-The policy text lives in the runtime half of the prompt, at the tail — the nonce changes
-every turn, and in the cached half it would invalidate the session's prefix every time.
-It is the one part of the prompt an operator cannot edit, because it is a mechanism rather
-than a message.
+The policy text lives in the **static** half of the prompt. It names no delimiter — the
+nonce is one line of live state instead — so two hundred tokens of prose that never
+changes are cached for the life of the session rather than re-read every iteration.
+
+It is an ordinary editable template, `toolPolicyPrompt`, like the other seven. Editing it
+does not weaken the mechanism: the envelopes are emitted by the runtime whatever the
+template says, and the nonce is `randomBytes` that reads no template. What a deleted
+policy costs is the model's _reason_ to treat what is inside an envelope as data — so it
+gets a warning in the editor and a `tool_policy_missing_nonce` config warning, not a
+refusal. See [Prompts](prompts.md#what-you-can-edit-and-what-that-does-not-change).
 
 **Detection is deliberately non-destructive.** When injection-shaped text is spotted, a
 `prompt_injection` notice raises a badge in the UI and **the content passes through
@@ -199,6 +205,46 @@ Two things are refused outright: an image that is not digest-pinned, and any of
 it, so `write_file` plus an injection cannot rewrite them.
 
 Full detail in [Toolboxes](toolboxes.md).
+
+---
+
+## Extension authorisation
+
+**Stops:** code an operator never reviewed loading itself into the agent's
+process. **Does not stop:** anything that code does once it is running.
+
+An extension is authorised by **content digest, not signature**, exactly as a
+toolbox is — the question is "are these the exact bytes approved?", not "who
+wrote them". It diverges from the toolbox in one place, and the divergence is
+what makes the analogy hold: the digest covers **every file under the install
+directory**, not the manifest alone. A toolbox manifest pins an immutable image,
+so approving the manifest approves the code; an extension manifest names a
+_path_, so approving it would approve a pointer and the file behind it could be
+swapped afterwards without moving an approved byte.
+
+Editing any file, adding one, removing one or renaming one moves the digest and
+revokes the approval, and the next reconcile refuses with a sentence naming the
+drift. Nobody has to remember to re-approve.
+
+**The limit is stated rather than papered over.** An extension that passes runs
+in the server process with full `node:` access: it can read the vault file, spawn
+a process and open a socket, and nothing in this repository stops it. That is the
+same trust level as a toolbox with host `exec`, and it is why approving one asks
+a question in the UI rather than being a toggle.
+
+The manifest's `contributes` list is **disclosure, not enforcement**. The host
+drops a registration whose kind is not declared, which keeps the approval screen
+honest and turns an honest mistake into a visible one — but the code is already
+running by then, so it is not a boundary and this page does not call it one.
+
+Two smaller rules fall out of the same reasoning. `entry` is resolved through
+`realpath` and refused if it lands outside the extension's own directory, since
+an entry the digest does not cover is code that was never reviewed. And an
+extension's runtime state is written to a _sibling_ directory
+(`~/.ghostai/extension-data/<id>`), never inside the install, because the first
+write would otherwise revoke its own approval.
+
+Full detail in [Extensions](extensions.md).
 
 ---
 

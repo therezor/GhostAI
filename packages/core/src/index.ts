@@ -36,6 +36,8 @@ export {
   resolveGhostPaths,
   resolvePath,
   agentDirFor,
+  extensionDataDirFor,
+  extensionDirFor,
   sharedDirFor,
   workspaceDirFor,
   type GhostPaths,
@@ -57,6 +59,8 @@ export {
   deriveAgentId,
   isAgentId,
 } from './agent-id.js';
+
+export { EXTENSION_ID_PATTERN, isExtensionId } from './extension-id.js';
 
 export {
   MAX_SLUG_ID_LENGTH,

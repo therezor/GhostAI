@@ -771,7 +771,7 @@ describe('rate limiting', () => {
   // The general limit protects the process from load; the login's own limit
   // protects a single password from being guessed, and it is not the same
   // setting. A correct password does not trip the throttle, so this is what
-  // reaches the plugin's own counter.
+  // reaches the extension's own counter.
   it('limits login attempts even with the global limit disabled', async () => {
     const server = await start({
       config: config({ auth: { rateLimitPerMinute: 0 } }),

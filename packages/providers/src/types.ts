@@ -21,6 +21,9 @@
  * per adapter and once per streaming variant.
  */
 
+import type { Dispatcher } from 'undici';
+
+import type { FetchImplementation } from '@ghostai/security';
 import type {
   AssistantMessage,
   ChatMessage,
@@ -119,6 +122,50 @@ export interface ChatProvider {
   /** Releases the keep-alive connection pool. Idempotent. */
   close(): Promise<void>;
 }
+
+/**
+ * What every wire adapter is handed.
+ *
+ * The union of what a connection needs and nothing about a conversation: the
+ * adapter is constructed once per provider instance and then answers many
+ * requests, so anything that varies per turn belongs on `ChatRequest`.
+ *
+ * Declared here rather than beside `createOpenAIChatProvider` so that
+ * `wires.ts` can name it without importing an adapter, which is what keeps the
+ * map of adapters from being a cycle.
+ */
+export interface WireAdapterOptions {
+  readonly spec: ProviderSpec;
+  /** From the credential vault, never from config. Absent for local servers. */
+  readonly apiKey?: string | undefined;
+  /** Overrides `spec.defaultApiBase`. Operator configuration, not model input. */
+  readonly apiBase?: string | undefined;
+  readonly extraHeaders?: Readonly<Record<string, string>> | undefined;
+  /** Injected in tests. Production goes through undici with a pooled agent. */
+  readonly fetchImpl?: FetchImplementation | undefined;
+  /**
+   * Replaces the pooled agent this provider would otherwise build — a
+   * `ProxyAgent`, or a `MockAgent` for a test that wants the real fetch path.
+   * `requestTimeoutMs` and `streamIdleTimeoutMs` then belong to the caller.
+   */
+  readonly dispatcher?: Dispatcher | undefined;
+  /** Time to first response header. Not a cap on generation. */
+  readonly requestTimeoutMs?: number | undefined;
+  /** Longest gap between stream chunks before the connection is considered dead. */
+  readonly streamIdleTimeoutMs?: number | undefined;
+  /** Tool-call ids for providers that omit them. Injected so tests are stable. */
+  readonly generateId?: (() => string) | undefined;
+}
+
+/**
+ * A wire protocol, as code.
+ *
+ * `ProviderSpec` says which wire a provider speaks; this is the thing that
+ * speaks it. Separating them is what lets a provider be *data* — the claim the
+ * whole package is organised around — and it is also the seam an extension
+ * reaches to add a wire this build does not ship.
+ */
+export type WireAdapter = (options: WireAdapterOptions) => ChatProvider;
 
 export function emptyUsage(): Usage {
   return { promptTokens: 0, completionTokens: 0, totalTokens: 0 };

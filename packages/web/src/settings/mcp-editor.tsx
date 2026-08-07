@@ -55,11 +55,7 @@ const TRANSPORTS: readonly McpTransport[] = ['stdio', 'streamableHttp', 'sse'];
 function BackLink(): JSX.Element {
   const { t } = useTranslation();
   return (
-    <Link
-      to="/settings"
-      search={{ panel: 'extensions' }}
-      className="page__back"
-    >
+    <Link to="/settings" search={{ panel: 'mcp' }} className="page__back">
       <ArrowLeft aria-hidden="true" />
       {t('settings.mcp.backToExtensions')}
     </Link>
@@ -198,7 +194,7 @@ function Editor({
         // Back to the list on a create, because the row that just appeared is
         // the thing the operator wants to see connect. An edit stays put.
         if (creating) {
-          void navigate({ to: '/settings', search: { panel: 'extensions' } });
+          void navigate({ to: '/settings', search: { panel: 'mcp' } });
         }
       },
     });
@@ -478,7 +474,7 @@ function Editor({
               setConfirmingDelete(false);
               void navigate({
                 to: '/settings',
-                search: { panel: 'extensions' },
+                search: { panel: 'mcp' },
               });
             },
           });

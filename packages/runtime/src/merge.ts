@@ -53,6 +53,11 @@ const REPLACE_WHOLESALE: readonly string[] = [
   // Unlike `providers.*`, which merges per instance: a provider's fields all
   // have values, so none of them has a "cleared" state to express.
   'agents.list.*',
+  // An extension parses its own block, so this layer does not know its shape
+  // and cannot know which of its keys is a struct field and which a record
+  // entry. Replacing is the only rule that is right without that knowledge —
+  // and it is what the extension's own settings form sends anyway.
+  'extensions.settings.*',
 ];
 
 /**
@@ -87,6 +92,9 @@ const DELETE_BY_NULL: readonly string[] = [
   'agents.list.*',
   'agents.defaults.temperature',
   'agents.defaults.reasoningEffort',
+  // A record an operator adds to and removes from, like `providers.*`:
+  // uninstalling an extension has to be able to take its settings with it.
+  'extensions.settings.*',
 ];
 
 function matchesPath(

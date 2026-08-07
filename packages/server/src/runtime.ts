@@ -22,10 +22,14 @@ import type {
   Config,
   ConfigPatch,
   ConfigWarning,
+  ExtensionCommand,
+  ExtensionStatus,
   McpServerStatus,
   ModelsResponse,
   ProviderTestRequest,
   ProviderTestResponse,
+  RunCommandRequest,
+  RunCommandResponse,
   SetCredentialRequest,
   ToolDefinition,
 } from '@ghostai/protocol';
@@ -103,10 +107,10 @@ export interface AgentSummary {
   readonly provider: string;
 }
 
-/** Counts `GET /api/status` reports for subsystems that land in later phases. */
+/** Counts `GET /api/status` reports for the two pluggable subsystems. */
 export interface ExtensionCounts {
   readonly mcpServersConnected: number;
-  readonly pluginsLoaded: number;
+  readonly extensionsLoaded: number;
 }
 
 export interface ServerRuntime {
@@ -133,7 +137,7 @@ export interface ServerRuntime {
    * The other direction from `applySettings`, which takes a patch from a client
    * and writes it out. This one takes what the *file* says and leaves it alone,
    * so it is the answer to every edit a running server cannot see: a config
-   * changed in an editor, a plugin dropped in beside it, an endpoint that came
+   * changed in an editor, an extension dropped in beside it, an endpoint that came
    * back on a different port.
    *
    * Throws without applying anything when the file cannot be built, leaving the
@@ -275,7 +279,6 @@ export interface ServerRuntime {
    */
   testProvider?(request: ProviderTestRequest): Promise<ProviderTestResponse>;
 
-  /** `pluginsLoaded` stays zero until `@ghostai/plugin-host` exists. */
   extensions(): ExtensionCounts;
 
   /**
@@ -291,6 +294,42 @@ export interface ServerRuntime {
    * and the settings tree is what gets written back.
    */
   mcpServers?(): readonly McpServerStatus[];
+
+  /**
+   * Every installed extension and the state it is actually in.
+   *
+   * Optional and live, for both of `mcpServers`' reasons: a build with
+   * `extensions: false` has nothing to report, and "failed to activate at
+   * 12:04" is not something to write into `config.json`.
+   */
+  extensionStatuses?(): readonly ExtensionStatus[];
+
+  /**
+   * Records the digest of an extension's files as approved, and loads it.
+   *
+   * A route rather than a settings patch, because an approval is not
+   * configuration: it is a statement about the exact bytes on disk right now,
+   * and writing it into `config.json` would make it survive an edit to the very
+   * files it was about.
+   *
+   * Throws where the listing answers. This one is a request about one
+   * extension, so a refusal — never installed, will not parse — is its answer.
+   */
+  approveExtension?(id: string): Promise<void>;
+  revokeExtension?(id: string): Promise<void>;
+
+  /**
+   * Every slash command extensions contribute, and the runner behind them.
+   *
+   * Served rather than compiled into each surface, which the three built-in
+   * command tables are: there is one definition of an extension's command and
+   * more than one place it has to appear. See `ExtensionCommand`.
+   */
+  commands?(): readonly ExtensionCommand[];
+  runCommand?(
+    id: string,
+    input: RunCommandRequest & { readonly signal: AbortSignal },
+  ): Promise<RunCommandResponse>;
 
   /**
    * One provider request that is **not** a turn.

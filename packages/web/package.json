@@ -1,14 +1,31 @@
 {
   "name": "@ghostai/web",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "The browser UI: design tokens, app shell, chat view.",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/therezor/GhostAI.git",
+    "directory": "packages/web"
+  },
+  "homepage": "https://github.com/therezor/GhostAI",
+  "bugs": "https://github.com/therezor/GhostAI/issues",
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      "./package.json": "./package.json"
+    }
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
   "exports": {
     "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist/**",
+    "!dist/**/*.map"
   ],
   "scripts": {
     "build": "vite build",

@@ -123,7 +123,7 @@ export interface StaticPromptContext {
   readonly workspaceId: string;
   readonly sessionKey: string;
   readonly agentId: string | undefined;
-  /** The channel the turn arrived on — `cli`, `web`, `telegram`, a plugin id. */
+  /** The channel the turn arrived on — `cli`, `web`, `telegram`, an extension id. */
   readonly channel: string;
 }
 

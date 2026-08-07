@@ -7,7 +7,7 @@
  * against a server that does not exist, and a browser test has no way to hold
  * that still — it is exactly the shape of the `approvals.spec.ts` flake that was
  * red in CI four runs running while green on every laptop. Those states are
- * asserted in `packages/web/test/settings/extensions.test.tsx`, where the status
+ * asserted in `packages/web/test/settings/mcp.test.tsx`, where the status
  * response is a fixture.
  *
  * What is left is what only a browser can show: that the panel, the editor, the
@@ -67,16 +67,16 @@ async function seed(app: Page, url: string): Promise<void> {
 }
 
 test.describe('MCP servers', () => {
-  test('the Extensions panel is a form, and promises nothing else', async ({
+  test('the MCP servers panel is a form, and promises nothing else', async ({
     app,
     harness,
   }) => {
-    await app.goto(`${harness.url}/settings?panel=extensions`);
+    await app.goto(`${harness.url}/settings?panel=mcp`);
 
     await expect(
       app.getByRole('link', { name: 'New MCP server' }),
     ).toBeVisible();
-    // This screen used to end in a "Still to come" list naming OAuth, plugins
+    // This screen used to end in a "Still to come" list naming OAuth, extensions
     // and skills. It is gone: a settings panel advertising a form an operator
     // cannot open is one they check twice, and skills were never going to get
     // a screen at all — a skill is a folder in the workspace.
@@ -86,7 +86,7 @@ test.describe('MCP servers', () => {
   });
 
   test('creating one writes nothing until Save', async ({ app, harness }) => {
-    await app.goto(`${harness.url}/settings?panel=extensions`);
+    await app.goto(`${harness.url}/settings?panel=mcp`);
     await app.getByRole('link', { name: 'New MCP server' }).click();
 
     await app.getByLabel('Name').fill('files');
@@ -107,7 +107,7 @@ test.describe('MCP servers', () => {
     harness,
   }) => {
     await seed(app, harness.url);
-    await app.goto(`${harness.url}/settings?panel=extensions`);
+    await app.goto(`${harness.url}/settings?panel=mcp`);
 
     await expect(serverRow(app, 'files')).toBeVisible();
     await app.reload();
@@ -159,7 +159,7 @@ test.describe('MCP servers', () => {
     harness,
   }) => {
     await seed(app, harness.url);
-    await app.goto(`${harness.url}/settings?panel=extensions`);
+    await app.goto(`${harness.url}/settings?panel=mcp`);
 
     await app.getByRole('button', { name: 'Actions for files' }).click();
     await app.getByRole('menuitem', { name: 'Disable' }).click();

@@ -29,6 +29,9 @@
       "path": "../agent/tsconfig.json"
     },
     {
+      "path": "../extension-host/tsconfig.json"
+    },
+    {
       "path": "../runtime/tsconfig.json"
     },
     {

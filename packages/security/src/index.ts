@@ -34,6 +34,12 @@
  *    toolbox, by making the image and its capability set a hash-authorised
  *    manifest an operator installs rather than a field any config patch could
  *    reach.
+ *  - `extensionDigest` / `ExtensionStore` — code loading itself into this
+ *    process, by hashing every byte of an install directory and refusing to
+ *    load one whose digest is not the one an operator approved. It answers
+ *    "are these the bytes that were reviewed?" and nothing more: an extension
+ *    that passes runs in-process with full `node:` access, which
+ *    `docs/security.md` states rather than papers over.
  */
 
 export {
@@ -66,6 +72,18 @@ export {
   type IpFamily,
   type ParsedIp,
 } from './ip.js';
+
+export { ExtensionStore, type ExtensionResolution } from './extension-store.js';
+
+export {
+  EXTENSION_MANIFEST_FILE,
+  MAX_EXTENSION_BYTES,
+  MAX_EXTENSION_FILES,
+  assertExtensionPolicy,
+  extensionDigest,
+  parseExtension,
+  readExtensionManifest,
+} from './extension.js';
 
 export {
   TOOLBOX_DOCS_MAX_BYTES,

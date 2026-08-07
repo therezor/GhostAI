@@ -87,7 +87,7 @@ describe('generated shapes', () => {
     expect(output.required ?? []).toContain('maxToolIterations');
   });
 
-  it('leaves the channels block open to plugin-supplied keys', () => {
+  it('leaves the channels block open to extension-supplied keys', () => {
     const json = z.toJSONSchema(PROTOCOL_SCHEMAS.ChannelsConfig) as {
       additionalProperties?: unknown;
     };

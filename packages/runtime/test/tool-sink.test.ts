@@ -2,7 +2,7 @@ import { ToolRegistry, defineTool, type AnyTool } from '@ghostai/tools';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { registryToolSink } from '#src/mcp-tools.js';
+import { registryToolSink } from '#src/tool-sink.js';
 
 function tool(name: string): AnyTool {
   return defineTool({
@@ -16,7 +16,7 @@ function tool(name: string): AnyTool {
 describe('registryToolSink', () => {
   it('registers a server tools under the mcp source', () => {
     const registry = new ToolRegistry();
-    const sink = registryToolSink(registry);
+    const sink = registryToolSink(registry, 'mcp');
 
     expect(sink.replace('demo', [tool('mcp_demo_a')])).toEqual([]);
     expect(registry.sourceOf('mcp_demo_a')).toBe('mcp');
@@ -26,7 +26,7 @@ describe('registryToolSink', () => {
     // `unregisterBySource('mcp')` is the wrong grain here: it would take every
     // *other* server's tools with it.
     const registry = new ToolRegistry();
-    const sink = registryToolSink(registry);
+    const sink = registryToolSink(registry, 'mcp');
     sink.replace('one', [tool('mcp_one_a')]);
     sink.replace('two', [tool('mcp_two_a')]);
 
@@ -37,7 +37,7 @@ describe('registryToolSink', () => {
 
   it('unregisters everything for a server that went away', () => {
     const registry = new ToolRegistry();
-    const sink = registryToolSink(registry);
+    const sink = registryToolSink(registry, 'mcp');
     sink.replace('demo', [tool('mcp_demo_a'), tool('mcp_demo_b')]);
 
     sink.replace('demo', []);
@@ -47,7 +47,7 @@ describe('registryToolSink', () => {
 
   it('is idempotent, so a repeated publish does not double-register', () => {
     const registry = new ToolRegistry();
-    const sink = registryToolSink(registry);
+    const sink = registryToolSink(registry, 'mcp');
     sink.replace('demo', [tool('mcp_demo_a')]);
 
     expect(() => {
@@ -61,7 +61,7 @@ describe('registryToolSink', () => {
     // take down the reconcile that was registering them.
     const registry = new ToolRegistry();
     registry.register(tool('read_file'), 'builtin');
-    const sink = registryToolSink(registry);
+    const sink = registryToolSink(registry, 'mcp');
 
     const rejected = sink.replace('demo', [
       tool('read_file'),
@@ -76,7 +76,7 @@ describe('registryToolSink', () => {
   it('does not later unregister a name it never owned', () => {
     const registry = new ToolRegistry();
     registry.register(tool('read_file'), 'builtin');
-    const sink = registryToolSink(registry);
+    const sink = registryToolSink(registry, 'mcp');
     sink.replace('demo', [tool('read_file'), tool('mcp_demo_ok')]);
 
     sink.replace('demo', []);

@@ -2,7 +2,7 @@
  * A bridged tool, put through the same suite every built-in holds.
  *
  * `toolConformance`'s own header says the contract covers a tool "built-in,
- * plugin-supplied, or proxied from an MCP server", and this is the third of
+ * extension-supplied, or proxied from an MCP server", and this is the third of
  * those finally being checked. It is why `@ghostai/tools` grew a `./testkit`
  * subpath: a contract only verifiable from inside the package that declares it
  * goes unverified exactly where it matters.

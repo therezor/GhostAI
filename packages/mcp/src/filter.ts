@@ -48,7 +48,7 @@ export function selectTools(
     enabledTools.some((pattern) => matches(pattern, descriptor.name)),
   );
   // Reported so an operator who mistyped a tool name finds out from the
-  // Extensions row rather than from a model that never reaches for it.
+  // MCP servers row rather than from a model that never reaches for it.
   const unmatched = enabledTools.filter(
     (pattern) =>
       !advertised.some((descriptor) => matches(pattern, descriptor.name)),

@@ -579,7 +579,7 @@ export class AgentLoop {
     const subagents: ToolDefinition[] = [];
     for (const binding of this.subagents.values()) {
       // The registry wins. A name can only collide with one an MCP server or a
-      // plugin registered — no built-in starts with the subagent prefix — and
+      // extension registered — no built-in starts with the subagent prefix — and
       // silently shadowing it would take a tool away from the model with
       // nothing anywhere saying so.
       if (registered.has(binding.toolName)) {
@@ -627,7 +627,7 @@ export class AgentLoop {
    * The operator's wording in place of the compiled one.
    *
    * Last, and after the subagents are appended, so one pass covers built-ins,
-   * toolbox programs, MCP and plugin tools and `ask_<id>` alike — and so an
+   * toolbox programs, MCP and extension tools and `ask_<id>` alike — and so an
    * override for a subagent tool beats `subagents[].prompt`, being the more
    * specific of the two. Doing it in the registry instead would have to happen
    * before the subagents exist, and would put per-agent text into a list that is

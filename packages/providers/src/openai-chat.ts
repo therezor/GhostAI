@@ -79,30 +79,15 @@ import {
   type ChatResult,
   type ChatStreamEvent,
   type FinishReason,
+  type WireAdapterOptions,
 } from './types.js';
 
-interface OpenAIChatOptions {
-  readonly spec: ProviderSpec;
-  /** From the credential vault, never from config. Absent for local servers. */
-  readonly apiKey?: string | undefined;
-  /** Overrides `spec.defaultApiBase`. Operator configuration, not model input. */
-  readonly apiBase?: string | undefined;
-  readonly extraHeaders?: Readonly<Record<string, string>> | undefined;
-  /** Injected in tests. Production goes through undici with a pooled agent. */
-  readonly fetchImpl?: FetchImplementation | undefined;
-  /**
-   * Replaces the pooled agent this provider would otherwise build — a
-   * `ProxyAgent`, or a `MockAgent` for a test that wants the real fetch path.
-   * `requestTimeoutMs` and `streamIdleTimeoutMs` then belong to the caller.
-   */
-  readonly dispatcher?: Dispatcher | undefined;
-  /** Time to first response header. Not a cap on generation. */
-  readonly requestTimeoutMs?: number | undefined;
-  /** Longest gap between stream chunks before the connection is considered dead. */
-  readonly streamIdleTimeoutMs?: number | undefined;
-  /** Tool-call ids for providers that omit them. Injected so tests are stable. */
-  readonly generateId?: (() => string) | undefined;
-}
+/**
+ * The connection half of what this adapter needs, which is exactly
+ * `WireAdapterOptions` — so the adapter satisfies `WireAdapter` structurally
+ * and can go in the wire table beside one an extension supplies.
+ */
+type OpenAIChatOptions = WireAdapterOptions;
 
 /** Time to first byte. Generous, because a cold local model loads weights first. */
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;

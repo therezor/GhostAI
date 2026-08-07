@@ -6,7 +6,7 @@ import {
 } from '@ghostai/protocol';
 import type { FastifySchema } from 'fastify';
 // `summary` and `operationId` are not fastify's — `@fastify/swagger` merges them
-// onto `FastifySchema`. `src/app.ts` is what imports the plugin, and while the
+// onto `FastifySchema`. `src/app.ts` is what imports the extension, and while the
 // tests lived in `src/` they shared a program with it and inherited the
 // augmentation for free. From here the only file in scope is the one under
 // test, so the declaration has to be asked for by name.

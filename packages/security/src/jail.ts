@@ -1,7 +1,7 @@
 /**
  * The workspace jail.
  *
- * Every path that reaches the filesystem from a model, a channel, a plugin or
+ * Every path that reaches the filesystem from a model, a channel, an extension or
  * an MCP server passes through here first. It is the only thing in GhostAI
  * permitted to decide that an agent-supplied path is acceptable, which is why
  * `@ghostai/core` documents its own path helpers as *not* being a safety check.

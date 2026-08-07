@@ -1,0 +1,70 @@
+{
+  "name": "@ghostai/extension-host",
+  "version": "1.0.0",
+  "description": "Discovers, authorises, loads and unloads extensions, and collects what they contribute.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/therezor/GhostAI.git",
+    "directory": "packages/extension-host"
+  },
+  "homepage": "https://github.com/therezor/GhostAI",
+  "bugs": "https://github.com/therezor/GhostAI/issues",
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./testkit": {
+        "types": "./test/testkit/index.ts",
+        "default": "./test/testkit/index.ts"
+      }
+    }
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testkit": {
+      "types": "./test/testkit/index.ts",
+      "default": "./test/testkit/index.ts"
+    }
+  },
+  "imports": {
+    "#src/*": "./src/*",
+    "#testkit/*": "./test/testkit/*"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/**",
+    "!dist/**/*.map",
+    "test/testkit"
+  ],
+  "scripts": {
+    "build": "tsup && tsc -b",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "lint": "eslint src test"
+  },
+  "dependencies": {
+    "@ghostai/agent": "workspace:*",
+    "@ghostai/channels": "workspace:*",
+    "@ghostai/core": "workspace:*",
+    "@ghostai/protocol": "workspace:*",
+    "@ghostai/providers": "workspace:*",
+    "@ghostai/security": "workspace:*",
+    "@ghostai/tools": "workspace:*"
+  },
+  "devDependencies": {
+    "zod": "^4.0.0"
+  }
+}

@@ -78,7 +78,7 @@ describe('parseMetadata', () => {
 
   it('tolerates anything that is not an object', () => {
     // The one column where tolerance is right: metadata is written by channels
-    // and plugins, so one bad write must not cost the user their conversation.
+    // and extensions, so one bad write must not cost the user their conversation.
     for (const raw of ['not json', '[]', 'null', '7', '"text"', '']) {
       expect(parseMetadata(raw)).toEqual({});
     }

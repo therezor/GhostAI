@@ -54,6 +54,21 @@ importers:
         specifier: ^3.0.0
         version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(jsdom@30.0.0)(lightningcss@1.33.0)(supports-color@7.2.0)(tsx@4.23.1)(yaml@2.9.0)
 
+  examples/hello-extension:
+    dependencies:
+      '@ghostai/extension-host':
+        specifier: workspace:*
+        version: link:../../packages/extension-host
+      '@ghostai/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@ghostai/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
+
   examples/loopback-channel:
     dependencies:
       '@ghostai/channels':
@@ -127,6 +142,9 @@ importers:
       '@ghostai/core':
         specifier: workspace:*
         version: link:../core
+      '@ghostai/extension-host':
+        specifier: workspace:*
+        version: link:../extension-host
       '@ghostai/i18n':
         specifier: workspace:*
         version: link:../i18n
@@ -232,6 +250,34 @@ importers:
         specifier: ^4.0.0
         version: 4.4.3
 
+  packages/extension-host:
+    dependencies:
+      '@ghostai/agent':
+        specifier: workspace:*
+        version: link:../agent
+      '@ghostai/channels':
+        specifier: workspace:*
+        version: link:../channels
+      '@ghostai/core':
+        specifier: workspace:*
+        version: link:../core
+      '@ghostai/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@ghostai/providers':
+        specifier: workspace:*
+        version: link:../providers
+      '@ghostai/security':
+        specifier: workspace:*
+        version: link:../security
+      '@ghostai/tools':
+        specifier: workspace:*
+        version: link:../tools
+    devDependencies:
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
+
   packages/i18n:
     dependencies:
       i18next:
@@ -292,6 +338,9 @@ importers:
       '@ghostai/core':
         specifier: workspace:*
         version: link:../core
+      '@ghostai/extension-host':
+        specifier: workspace:*
+        version: link:../extension-host
       '@ghostai/mcp':
         specifier: workspace:*
         version: link:../mcp

@@ -6,12 +6,54 @@
  * The `development` export condition points at ./src/index.ts so `tsx` runs
  * the workspace with no build step; `default` points at built output.
  */
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import prettier from 'prettier';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+/**
+ * One version for the whole workspace, taken from the root manifest.
+ *
+ * Every package here is released together and only one of them — the CLI — is
+ * something a person installs by name, so per-package versions would be
+ * bookkeeping with no reader. Bumping the root and re-running this is the whole
+ * release ceremony; there is no changesets bot to keep fed.
+ *
+ * It matters that this is *read* rather than repeated: `pnpm publish` rewrites
+ * `workspace:*` to the exact version at pack time, so a package whose own
+ * version disagreed with its siblings' would publish a dependency range that
+ * resolves to nothing.
+ */
+const { version: VERSION } = JSON.parse(
+  readFileSync(join(ROOT, 'package.json'), 'utf8'),
+);
+
+const REPOSITORY_URL = 'git+https://github.com/therezor/GhostAI.git';
+const HOMEPAGE = 'https://github.com/therezor/GhostAI';
+
+/** A package's subpath exports, shared by the workspace and published maps. */
+const subpathExports = (cfg) =>
+  Object.fromEntries(
+    Object.entries(cfg.subpaths ?? {}).map(([subpath, entry]) => [
+      subpath,
+      { types: `./${entry}`, default: `./${entry}` },
+    ]),
+  );
+
+/**
+ * The `exports` map as a tarball should carry it: no `development` condition.
+ *
+ * See the note beside `publishConfig` below for why that one line cannot be
+ * published. Everything else is identical, deliberately — a published package
+ * that resolved differently from the workspace one would make every bug found
+ * by an installer unreproducible here.
+ */
+const publishedExports = (cfg) => ({
+  '.': { types: './dist/index.d.ts', default: './dist/index.js' },
+  ...subpathExports(cfg),
+});
 
 /** Write a file through Prettier so regenerating never fails `format:check`. */
 async function writeFormatted(path, contents) {
@@ -45,7 +87,7 @@ function withNotes(json, notes) {
   return out;
 }
 
-/** @type {Record<string, { description: string; deps?: Record<string,string>; devDeps?: Record<string,string>; internal?: string[]; bin?: Record<string,string>; compilerOptions?: Record<string, unknown>; tsconfigNotes?: Record<string,string> }>} */
+/** @type {Record<string, { description: string; deps?: Record<string,string>; devDeps?: Record<string,string>; internal?: string[]; bin?: Record<string,string>; subpaths?: Record<string,string>; testkit?: boolean; compilerOptions?: Record<string, unknown>; tsconfigNotes?: Record<string,string> }>} */
 const PACKAGES = {
   protocol: {
     description:
@@ -70,7 +112,10 @@ const PACKAGES = {
   core: {
     description:
       'Canonical message types, session store, message bus, logger, clock.',
-    internal: ['protocol'],
+    // `i18n` is declared and currently unimported: the keyed-error layer that
+    // used it was removed and the manifest was not. Left in place rather than
+    // dropped here, because a generator run is the wrong place to decide that.
+    internal: ['protocol', 'i18n'],
     deps: { pino: '^9.5.0', zod: '^4.0.0' },
   },
   security: {
@@ -87,6 +132,11 @@ const PACKAGES = {
     // per-provider dispatcher, and the pool's idle timeouts are what tell a
     // hung model server apart from a slow one.
     deps: { 'gpt-tokenizer': '^2.8.0', undici: '^7.2.0' },
+    // A conformance suite and a recording clock, importable from inside this
+    // package only. Unlike `tools` and `channels`, nothing outside the repo has
+    // a reason to run it: a wire adapter is code an extension supplies, and it
+    // is exercised through `createProvider` like any other.
+    testkit: true,
   },
   tools: {
     description: 'Tool definition helper, registry, and built-in tools.',
@@ -122,10 +172,33 @@ const PACKAGES = {
     // browser test drives behave differently from the one every loop test
     // asserts against. Unlike the provider and tool conformance suites this
     // imports no `vitest`, so the entry pulls no test framework into a graph.
-    subpaths: { './testkit': 'src/testkit/index.ts' },
+    subpaths: { './testkit': 'test/testkit/index.ts' },
     // Tests only — the tests here define tools with `defineTool`. Nothing in
     // this package's runtime graph imports zod.
     devDeps: { zod: '^4.0.0' },
+  },
+  'extension-host': {
+    description:
+      'Discovers, authorises, loads and unloads extensions, and collects what they contribute.',
+    // Above every registry it hands work to and below the composition root that
+    // applies it. `channels` is in the list for its `ChannelFactory` type alone,
+    // which is also why this package rather than `runtime` owns the host:
+    // `runtime` has no business importing `channels`, and an extension
+    // contributing a channel has to be able to say so somewhere.
+    internal: [
+      'protocol',
+      'core',
+      'security',
+      'providers',
+      'tools',
+      'agent',
+      'channels',
+    ],
+    // Tests only — the conformance suite builds a tool with `defineTool` to
+    // prove an extension's registration reaches the registry intact.
+    devDeps: { zod: '^4.0.0' },
+    // The suite an out-of-tree extension runs against its own `activate`.
+    subpaths: { './testkit': 'test/testkit/index.ts' },
   },
   runtime: {
     description: 'The shared composition root: config in, a running agent out.',
@@ -137,6 +210,7 @@ const PACKAGES = {
       'tools',
       'mcp',
       'agent',
+      'extension-host',
     ],
     // Tests only — one test registers a tool with `defineTool` to prove a
     // reconfigure does not drop it. Nothing in the runtime graph imports zod.
@@ -152,7 +226,9 @@ const PACKAGES = {
     // `providers` is here for its registry alone — `describeProvider` over the
     // `PROVIDERS` table is what `GET /api/providers` serves — not for an
     // adapter: nothing in this package makes a model request.
-    internal: ['protocol', 'core', 'security', 'providers', 'agent'],
+    // `tools` is here for `AutomationPort` alone: `automation-port.ts` is the
+    // adapter between the scheduler's stores and the tool that reaches them.
+    internal: ['protocol', 'core', 'security', 'providers', 'tools', 'agent'],
     // `zod` is a runtime dependency here, unlike in `agent` and `runtime`: the
     // route helper calls `z.toJSONSchema` to generate the OpenAPI document and
     // `safeParse` to validate every request body.
@@ -174,22 +250,24 @@ const PACKAGES = {
       '@types/ws': '^8.5.0',
       ws: '^8.18.0',
     },
+    // A scripted hub, a clock and an in-process server, importable from inside
+    // this package only.
+    testkit: true,
   },
   channels: {
     description:
       'The channel contract and the manager bridging MessageBus to the session hub.',
-    // The one package that exports its testkit. `channelConformance` has to be
-    // runnable by a channel that lives *outside* this repo — a plugin channel
-    // in Phase 4 — and the provider and tool suites' rule (importable only from
-    // inside the package) would make the contract unverifiable exactly where it
-    // matters most. It stays off the package entry, so `vitest` is still not in
-    // anyone's runtime graph unless they ask for it by subpath.
-    subpaths: { './testkit': 'src/testkit/index.ts' },
-    external: ['vitest'],
+    // One of the four packages that *export* a testkit. `channelConformance`
+    // has to be runnable by a channel living outside this repo, and the
+    // provider and tui suites' rule — importable only from inside the package —
+    // would make the contract unverifiable exactly where it matters most. It
+    // stays off the package entry, so `vitest` is never in anyone's runtime
+    // graph unless they ask for it by subpath.
+    subpaths: { './testkit': 'test/testkit/index.ts' },
     // Neither `server` nor `agent`. A channel publishes an `InboundMessage` and
     // consumes `OutboundMessage`s; the hub it bridges to is stated here as a
     // structural port, so this package cannot reach into the transport it feeds
-    // and a plugin channel cannot reach the agent loop through it.
+    // and an extension channel cannot reach the agent loop through it.
     internal: ['protocol', 'core'],
     // A channel parses its own settings block — `ChannelsConfigSchema` is a
     // `looseObject` precisely so that a channel needs no schema change in
@@ -206,16 +284,27 @@ const PACKAGES = {
     // `@ghostai/*` in its manifest, an import of one does not resolve. The
     // layering is a fact about the package graph, not a rule under review.
     deps: { picocolors: '^1.1.0' },
+    // A fake terminal, importable from inside this package only.
+    testkit: true,
+    tsconfigNotes: {
+      references: [
+        'No references, and that absence is the point: this package depends on no',
+        '`@ghostai/*` at all, which is what makes "domain-free" a fact the build',
+        'graph enforces rather than a rule a reviewer has to remember.',
+      ].join('\n'),
+    },
   },
   cli: {
     description: 'GhostAI command line interface.',
     internal: [
       'protocol',
+      'i18n',
       'core',
       'security',
       'providers',
       'tools',
       'agent',
+      'extension-host',
       'runtime',
       'server',
       'channels',
@@ -230,6 +319,10 @@ const PACKAGES = {
     deps: {
       '@ghostai/web': 'workspace:*',
       commander: '^13.0.0',
+      // The CLI holds the i18next instance directly: `translationsFor` picks a
+      // locale from `GHOSTAI_LANG`, `config.ui.locale` and the POSIX chain, and
+      // there is no React provider out here to do it.
+      i18next: '^26.3.6',
       picocolors: '^1.1.0',
     },
     // `ws` is the socket client `serve.test.ts` drives the running server with;
@@ -250,41 +343,91 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
 
   const pkg = {
     name: `@ghostai/${name}`,
-    version: '0.0.0',
+    version: VERSION,
     description: cfg.description,
     type: 'module',
     license: 'MIT',
+    // npm's listing, and `--provenance`'s precondition: the attestation is
+    // refused unless `repository` names the repo the workflow is running in.
+    repository: {
+      type: 'git',
+      url: REPOSITORY_URL,
+      directory: `packages/${name}`,
+    },
+    homepage: HOMEPAGE,
+    bugs: `${HOMEPAGE}/issues`,
+    // A scoped package defaults to `restricted`, which fails the first publish
+    // on an account without a paid plan. Declared here rather than passed as
+    // `--access public` on the command line so the manifest is the record.
+    //
+    // `exports` is overridden rather than repeated. pnpm swaps a
+    // `publishConfig` field into the packed manifest, and the one condition
+    // that must not survive publication is `development`: it points at
+    // `./src/index.ts`, `src` is not in `files`, and Vite's dev server *sets*
+    // that condition — so a published package imported from one would fail to
+    // resolve against a file that was never in the tarball. In the workspace
+    // the same line is what lets `tsx` run the repo with no build.
+    publishConfig: {
+      access: 'public',
+      exports: publishedExports(cfg),
+    },
+    // The floor is `node:sqlite`, and 22.13 is exact rather than cautious: the
+    // module landed in 22.5 behind `--experimental-sqlite` and was unflagged
+    // for the 22 line in 22.13, so 22.12 fails at startup with
+    // ERR_UNKNOWN_BUILTIN_MODULE. Stated on every package and not only the
+    // root, because the root is private and is not what anyone installs.
+    engines: { node: '>=22.13' },
     exports: {
       '.': {
         development: './src/index.ts',
         types: './dist/index.d.ts',
         default: './dist/index.js',
       },
-      ...Object.fromEntries(
-        Object.entries(cfg.subpaths ?? {}).map(([subpath, entry]) => {
-          const out = entry.replace(/^src\//, '').replace(/\.ts$/, '');
-          return [
-            subpath,
-            {
-              development: `./${entry}`,
-              types: `./dist/${out}.d.ts`,
-              default: `./dist/${out}.js`,
-            },
-          ];
-        }),
-      ),
+      // A testkit resolves straight to TypeScript and is never built. Every
+      // consumer of one is a test runner — vitest for `examples/*`, Playwright
+      // for `packages/e2e` — and both read TypeScript, so a build step would
+      // buy nothing and a `src/` entry would put vitest in the bundle. See
+      // CLAUDE.md, "A `testkit/` is never in `src/`".
+      //
+      // It stays in the published map for the same reason: it is TypeScript on
+      // purpose, and the runners that consume it read TypeScript whether the
+      // package came from the workspace or from a tarball. `files` carries
+      // `test/testkit` so the source is actually there.
+      ...subpathExports(cfg),
+    },
+    imports: {
+      '#src/*': './src/*',
+      ...((cfg.subpaths ?? cfg.testkit)
+        ? { '#testkit/*': './test/testkit/*' }
+        : {}),
     },
     main: './dist/index.js',
     types: './dist/index.d.ts',
-    // Tests are colocated in src/ so they are typechecked and linted like
-    // everything else; the negation keeps them out of the published tarball.
-    files: ['dist', '!dist/**/*.test.*'],
+    // Tests live in `test/`, so nothing has to be excluded here. A testkit is
+    // listed beside `dist` because its subpath export resolves outside it.
+    //
+    // The negation is about what a published tarball should weigh.
+    // `sourcemap: true` is right for a workspace and wrong for an install:
+    // `@ghostai/web`'s maps alone are 8 MB of its 11.8 MB, and they map a
+    // built SPA that nobody installing `ghost` will ever step through — anyone
+    // debugging this has the repo.
+    //
+    // **`dist/**` rather than `dist`, and that is the whole trick.** npm packs
+    // a bare directory name wholesale and never consults a later negation, so
+    // `['dist', '!dist/**/*.map']` silently ships all 37 maps and looks like it
+    // worked. Spelling the include as a glob is what makes the exclude apply.
+    // Verify with `npm pack --dry-run`, not by reading this.
+    files: [
+      'dist/**',
+      '!dist/**/*.map',
+      ...(cfg.subpaths ? ['test/testkit'] : []),
+    ],
     ...(cfg.bin ? { bin: cfg.bin } : {}),
     scripts: {
       build: 'tsup && tsc -b',
       typecheck: 'tsc -b',
       test: 'vitest run',
-      lint: 'eslint src',
+      lint: 'eslint src test',
     },
     dependencies: Object.keys(dependencies).length
       ? Object.fromEntries(Object.entries(dependencies).sort())
@@ -313,11 +456,6 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
     })),
   };
 
-  const entries = [
-    "'src/index.ts'",
-    ...Object.values(cfg.subpaths ?? {}).map((e) => `'${e}'`),
-  ];
-
   // Without a config of its own, a package running `vitest run` from its own
   // directory finds the *root* config and inherits its `projects` globs — which
   // are relative to the root, match nothing from inside `packages/x`, and fail
@@ -332,7 +470,7 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
 export default defineConfig({
   test: {
     name: '${name}',
-    include: ['src/**/*.test.ts'],
+    include: ['test/**/*.test.ts'],
   },
 });
 `;
@@ -340,7 +478,7 @@ export default defineConfig({
   const tsup = `import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: [${entries.join(', ')}],
+  entry: ['src/index.ts'],
   format: ['esm'],
   target: 'node22',
   // tsc -b writes its declarations and .tsbuildinfo into this same dist, so
@@ -348,15 +486,7 @@ export default defineConfig({
   // Removing dist by hand is what forces a full rebuild of both tools.
   clean: false,
   dts: false, // tsc -b emits declarations; rollup-plugin-dts is the slow path
-  sourcemap: true,${
-    cfg.external === undefined
-      ? ''
-      : `
-  // tsup bundles anything it can resolve that is not a declared dependency, and
-  // a test framework resolvable from the workspace root is exactly that: without
-  // this, half a megabyte of ${cfg.external.join(', ')} ends up inside dist/.
-  external: [${cfg.external.map((name) => `'${name}'`).join(', ')}],`
-  }
+  sourcemap: true,
   // tsup rewrites \`node:sqlite\` to \`sqlite\` otherwise — a compatibility shim for
   // node versions older than 14.18 that turns a builtin into a missing package.
   // \`node:sqlite\` has no unprefixed form at all, so the rewrite is unloadable.
@@ -373,4 +503,74 @@ export default defineConfig({
   await writeFormatted(join(dir, 'tsup.config.ts'), tsup);
   await writeFormatted(join(dir, 'vitest.config.ts'), vitest);
   console.log(`generated packages/${name}`);
+}
+
+/**
+ * The release fields of the packages this generator does *not* own.
+ *
+ * Two packages are hand-maintained rather than generated. `web` is a Vite app
+ * rather than a tsup library and exports only its own `package.json` (which is
+ * how the CLI finds `dist/` to serve); `i18n` carries split `./web` and `./cli`
+ * subpath bundles so the terminal never loads browser copy. Regenerating either
+ * from the template above would be writing a shape it does not have.
+ *
+ * But both publish alongside the rest, and `pnpm publish` rewrites
+ * `workspace:*` to an **exact** version — so one left behind on an old number
+ * does not degrade, it publishes a dependency that resolves to nothing. That is
+ * not hypothetical: `i18n` was found sitting at `0.0.0` while every generated
+ * package had moved, and nothing about it looked wrong. Patching the fields
+ * that must agree is narrower than owning the files, and removes the only way
+ * they can drift.
+ *
+ * A package added here later needs adding to this list. The check that catches
+ * a miss is `pnpm -r exec node -p "require('./package.json').version"`.
+ */
+for (const name of ['web', 'i18n']) {
+  const path = join(ROOT, 'packages', name, 'package.json');
+  const pkg = JSON.parse(readFileSync(path, 'utf8'));
+  // Whatever the file already says, minus the one condition a tarball must not
+  // carry. Derived from what is there rather than restated, so a subpath added
+  // by hand is covered without anyone remembering this loop exists.
+  const published = Object.fromEntries(
+    Object.entries(pkg.exports ?? {}).map(([subpath, target]) => {
+      if (typeof target === 'string') return [subpath, target];
+      const { development, ...rest } = target;
+      return [subpath, rest];
+    }),
+  );
+
+  const patched = {
+    ...pkg,
+    version: VERSION,
+    repository: {
+      type: 'git',
+      url: REPOSITORY_URL,
+      directory: `packages/${name}`,
+    },
+    homepage: HOMEPAGE,
+    bugs: `${HOMEPAGE}/issues`,
+    publishConfig: {
+      ...(pkg.publishConfig ?? {}),
+      access: 'public',
+      exports: published,
+    },
+    engines: { node: '>=22.13' },
+    // `dist` becomes `dist/**` so the negation applies at all — see the note on
+    // `files` above. Anything else the package listed (`i18n` ships `locales`)
+    // is kept as it was.
+    //
+    // The filter drops what this loop itself writes, not just `dist`: the
+    // generator promises to be idempotent, and a re-run that appended its own
+    // output produced `["dist/**", "!dist/**/*.map", "dist/**",
+    // "!dist/**/*.map"]` — harmless to npm, and a diff on every run.
+    files: [
+      'dist/**',
+      '!dist/**/*.map',
+      ...(pkg.files ?? []).filter(
+        (entry) => !['dist', 'dist/**', '!dist/**/*.map'].includes(entry),
+      ),
+    ],
+  };
+  await writeFormatted(path, JSON.stringify(patched, null, 2));
+  console.log(`patched packages/${name} (release fields only)`);
 }

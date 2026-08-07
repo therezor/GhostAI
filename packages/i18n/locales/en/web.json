@@ -584,6 +584,26 @@
       "tokenReplaceHint": "A token is saved. Type to replace it, or clear this field and save to remove it.",
       "tokenSaved": "Saved"
     },
+    "extensions": {
+      "approve": "Approve",
+      "approveHint": "An extension runs inside the server, with the access the server has. Approving records a digest of the files it holds right now — editing any of them withdraws this approval automatically.",
+      "approveTitle": "Approve {{name}}?",
+      "declares": "Adds {{kinds}}",
+      "declaresNothing": "Declares nothing",
+      "description": "Directories under ~/.ghostai/extensions. Each one has to be approved before anything in it runs.",
+      "filter": "Filter extensions",
+      "noMatch": "No extension matches “{{filter}}”.",
+      "none": "No extensions installed. Put a directory holding a ghostai.extension.json under ~/.ghostai/extensions, then approve it here.",
+      "revoke": "Withdraw approval",
+      "state": {
+        "disabled": "Off",
+        "drifted": "Changed since approval",
+        "failed": "Failed",
+        "ready": "Loaded",
+        "unapproved": "Not approved"
+      },
+      "title": "Extensions"
+    },
     "fields": {
       "mustBeAtLeast": "Must be at least {{min}}",
       "mustBeAtMost": "Must be at most {{max}}",
@@ -684,7 +704,11 @@
       },
       "extensions": {
         "label": "Extensions",
-        "summary": "MCP servers, and the tools they contribute."
+        "summary": "Third-party code this install loads, and what you have approved."
+      },
+      "mcp": {
+        "label": "MCP servers",
+        "summary": "Model Context Protocol servers, and the tools they contribute."
       },
       "providers": {
         "label": "Providers",

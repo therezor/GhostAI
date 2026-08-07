@@ -6,34 +6,35 @@ split-process topology and the reconnect-and-fall-back-to-HTTP client that would
 
 ## The packages
 
-Fifteen, plus one example. Each is a published-shaped workspace package with its own
+Sixteen, plus two examples. Each is a published-shaped workspace package with its own
 tests and its own coverage bar.
 
-| Package              | Does                                                                                                                |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `@ghostai/protocol`  | Zod schemas → types, JSON Schema and OpenAPI. Zero runtime deps but `zod`.                                          |
-| `@ghostai/core`      | Message types, `SessionStore`, `WorkspaceStore`, `MessageBus`, `Logger`, `Clock`, config loading, history windowing |
-| `@ghostai/security`  | `WorkspaceJail`, `guardExec`, `guardedFetch`, `CredentialVault`, nonce fencing, toolbox manifests and approvals     |
-| `@ghostai/providers` | The provider registry, the `openai-chat` wire adapter, SSE parsing, `withResilience`, token counting                |
-| `@ghostai/tools`     | `defineTool`, `ToolRegistry`, the built-in tools, the local and container runners                                   |
-| `@ghostai/mcp`       | The MCP client, connection lifecycle and the bridge from a remote tool onto `Tool`                                  |
-| `@ghostai/agent`     | `AgentLoop`, the approval contract, prompt assembly, steering, subagents                                            |
-| `@ghostai/runtime`   | The composition root: config → provider, jail, store, registry, one loop per agent                                  |
-| `@ghostai/channels`  | The `Channel` contract, `ChannelManager`, `TurnProjection` and the Telegram adapter                                 |
-| `@ghostai/server`    | Fastify: REST, the WebSocket hub, auth, static UI, OpenAPI                                                          |
-| `@ghostai/web`       | The React SPA                                                                                                       |
-| `@ghostai/cli`       | The `ghost` binary                                                                                                  |
-| `@ghostai/i18n`      | The i18next instance, locale negotiation, typed keys                                                                |
-| `@ghostai/tui`       | A domain-free terminal toolkit: key decoding, display-width text, a transient selection region                      |
-| `@ghostai/e2e`       | Playwright, plus the optional design-fidelity gate                                                                  |
+| Package                   | Does                                                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `@ghostai/protocol`       | Zod schemas → types, JSON Schema and OpenAPI. Zero runtime deps but `zod`.                                          |
+| `@ghostai/core`           | Message types, `SessionStore`, `WorkspaceStore`, `MessageBus`, `Logger`, `Clock`, config loading, history windowing |
+| `@ghostai/security`       | `WorkspaceJail`, `guardExec`, `guardedFetch`, `CredentialVault`, nonce fencing, toolbox and extension approvals     |
+| `@ghostai/providers`      | The provider registry, the `openai-chat` wire adapter, SSE parsing, `withResilience`, token counting                |
+| `@ghostai/tools`          | `defineTool`, `ToolRegistry`, the built-in tools, the local and container runners                                   |
+| `@ghostai/mcp`            | The MCP client, connection lifecycle and the bridge from a remote tool onto `Tool`                                  |
+| `@ghostai/agent`          | `AgentLoop`, the approval contract, prompt assembly, steering, subagents                                            |
+| `@ghostai/extension-host` | Discovery, the approval check, `import()`, `activate`, and what an extension contributed                            |
+| `@ghostai/runtime`        | The composition root: config → provider, jail, store, registry, one loop per agent                                  |
+| `@ghostai/channels`       | The `Channel` contract, `ChannelManager`, `TurnProjection` and the Telegram adapter                                 |
+| `@ghostai/server`         | Fastify: REST, the WebSocket hub, auth, static UI, OpenAPI                                                          |
+| `@ghostai/web`            | The React SPA                                                                                                       |
+| `@ghostai/cli`            | The `ghost` binary                                                                                                  |
+| `@ghostai/i18n`           | The i18next instance, locale negotiation, typed keys                                                                |
+| `@ghostai/tui`            | A domain-free terminal toolkit: key decoding, display-width text, a transient selection region                      |
+| `@ghostai/e2e`            | Playwright, plus the optional design-fidelity gate                                                                  |
 
 ### Layering
 
 ```
-{ protocol, i18n } → core → security → { providers, tools } → { mcp, agent } → runtime → server ┐
-{ protocol, i18n } → web                                                                        │
-             core → channels                                                                    ├→ cli
-                    tui                                                                         ┘
+{ protocol, i18n } → core → security → { providers, tools } → { mcp, agent } ─┬→ runtime → server ┐
+{ protocol, i18n } → web                                                      │                   │
+             core → channels ────────────────→ extension-host ────────────────┘                   ├→ cli
+                    tui                                                                           ┘
 ```
 
 `protocol`, `i18n` and `tui` declare no workspace dependency at all. `tui` is a terminal
@@ -163,7 +164,9 @@ Everything under `~/.ghostai`, or `$GHOSTAI_HOME`. Directories are created `0700
 | `shared/<workspaceId>/`   | The layer agents in one folder share. Also outside the jail.                                                       |
 | `toolboxes/<name>/`       | Installed manifests. Outside the workspace, so injection cannot edit the policy the agent runs under.              |
 | `runs/<containerId>/`     | Sandbox command transcripts. Outside the workspace — a symlink-planting escape was demonstrated before this moved. |
-| `logs/`, `plugins/`       | —                                                                                                                  |
+| `extensions/<id>/`        | Installed extensions. Approved by a digest over every byte, so state is written elsewhere.                         |
+| `extension-data/<id>/`    | What an extension writes at runtime — a sibling of its install directory, never a child.                           |
+| `logs/`                   | —                                                                                                                  |
 
 ### The database
 
@@ -180,13 +183,14 @@ table is `STRICT`.
 | `auth_secrets`, `auth_sessions`, `auth_throttle` | Password, username, setup code, sessions, throttle counters       |
 | `notifications`                                  | The bell and the archive                                          |
 | `toolbox_approvals`                              | The sha256 of each approved manifest's exact bytes                |
+| `extension_approvals`                            | The sha256 over every byte of each approved extension directory   |
 | `automation_jobs`                                | Schedule and payload as JSON, plus the indexed `next_run_at_ms`   |
 | `automation_runs`                                | One row per execution: status, output, warnings, session key      |
 
 `seq` is both the ordering and the pagination cursor. Timestamps are not usable for
 either, because a turn writing parallel tool results collides on them.
 
-`sessions.origin` is `web`, `cli`, `telegram`, `automation`, `subagent`, or a plugin id.
+`sessions.origin` is `web`, `cli`, `telegram`, `automation`, `subagent`, or an extension id.
 Session listing excludes `subagent` **and `automation`** unless asked for one by name.
 Both are real rows and neither is a session: one turn, started by a model. Automation
 is the one that scales badly if it leaks — a job on a five-minute interval writes about

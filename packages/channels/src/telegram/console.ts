@@ -13,7 +13,7 @@
  * This is that second half, and it is a **factory option rather than a
  * `ChannelContext` member** on purpose. `channel.ts` states that a channel
  * never sees a session store; putting one on the context would hand it to every
- * plugin channel that is ever registered. The composition root compiles this
+ * channel any extension registers. The composition root compiles this
  * channel in and hands it a store deliberately, which is a different act.
  *
  * Typed entirely in `@ghostai/core` and `@ghostai/protocol` vocabulary, because

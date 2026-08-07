@@ -1,13 +1,12 @@
 /**
- * The Extensions panel and the MCP editor, driven through the real router.
+ * The Extensions panel, driven through the real router.
  *
- * **This is where the connection states are asserted**, and it is deliberate
- * that they are asserted here and nowhere else. Whether a row reads
- * `Connecting`, `Unreachable` or `Connected` depends on when a background dial
- * settles, and the e2e suite has no way to hold that still — asserting it there
- * is the class of flake `CLAUDE.md` names, red in CI four runs running while
- * green on every laptop. Here the status response is a fixture, so the state is
- * a fact rather than a race.
+ * **This is where the approval flow is asserted**, and it is deliberate that it
+ * is asserted here rather than in the end-to-end suite. Approving is a request
+ * whose answer decides what the row says next, and whether a row reads `Loaded`
+ * or `Failed` depends on when that request settles — the class of flake
+ * `CLAUDE.md` names. Here the response is a fixture, so the state is a fact
+ * rather than a race.
  */
 
 import { RouterProvider, createMemoryHistory } from '@tanstack/react-router';
@@ -30,37 +29,38 @@ import { STATUS } from '@testkit/fixtures.js';
 const CONFIG = ConfigSchema.parse({
   agents: { defaults: { model: 'llama3', provider: 'ollama' } },
   providers: { ollama: { type: 'ollama' } },
-  tools: {
-    mcpServers: {
-      files: { command: 'npx', args: ['-y', 'server-filesystem'] },
-      github: { url: 'https://mcp.github.test/mcp' },
-    },
-  },
 });
 
 const READY = {
-  id: 'files',
-  transport: 'stdio',
+  id: 'slack',
   state: 'ready',
-  enabled: true,
-  tools: ['mcp_files_read', 'mcp_files_write'],
-  filteredTools: [],
-  serverName: 'filesystem',
-  serverVersion: '1.0.0',
+  version: '1.2.0',
+  label: 'Slack',
+  description: 'Talk to the agent from a Slack workspace.',
+  contributes: ['channels', 'commands'],
+  tools: [],
+  channels: ['slack'],
+  providers: [],
+  commands: ['slack-post'],
+  digest: 'a'.repeat(64),
+  approvedAtMs: 1,
   warnings: [],
 };
 
-const FAILED = {
-  id: 'github',
-  transport: 'streamableHttp',
-  state: 'failed',
-  enabled: true,
-  tools: [],
-  filteredTools: [],
-  serverName: '',
-  serverVersion: '',
-  warnings: [],
-  lastError: 'ECONNREFUSED 140.82.121.5:443',
+const UNAPPROVED = {
+  ...READY,
+  id: 'zulip',
+  state: 'unapproved',
+  label: '',
+  description: '',
+  contributes: ['tools'],
+  channels: [],
+  commands: [],
+  digest: 'b'.repeat(64),
+  lastError:
+    'Extension "zulip" is installed but has never been approved.\n' +
+    '  Review what it contributes with `ghost extension list`, then\n' +
+    '  `ghost extension approve zulip`.',
 };
 
 const SHELL_ROUTES: Record<string, StubRoute> = {
@@ -71,10 +71,7 @@ const SHELL_ROUTES: Record<string, StubRoute> = {
   '/api/notifications': [200, { notifications: [], unreadCount: 0, total: 0 }],
 };
 
-function mount(
-  path = '/settings?panel=extensions',
-  overrides: Record<string, StubRoute> = {},
-): {
+function mount(overrides: Record<string, StubRoute> = {}): {
   readonly user: ReturnType<typeof userEvent.setup>;
   readonly calls: RecordedRequest[];
 } {
@@ -86,13 +83,19 @@ function mount(
     '/api/providers': [200, { types: [], instances: [] }],
     '/api/models': [200, { models: [], errors: {} }],
     '/api/tools': [200, { tools: [] }],
-    '/api/mcp': [200, { servers: [READY, FAILED] }],
+    '/api/mcp': [200, { servers: [] }],
+    '/api/commands': [200, { commands: [] }],
+    '/api/extensions': [200, { extensions: [READY, UNAPPROVED] }],
     ...overrides,
   });
 
   const user = userEvent.setup();
   const router = createAppRouter();
-  router.update({ history: createMemoryHistory({ initialEntries: [path] }) });
+  router.update({
+    history: createMemoryHistory({
+      initialEntries: ['/settings?panel=extensions'],
+    }),
+  });
   render(
     <Providers client={testQueryClient()}>
       <RouterProvider router={router} />
@@ -107,212 +110,176 @@ const patchesOf = (calls: readonly RecordedRequest[]): ConfigPatch[] =>
     .filter((call) => call.method === 'PATCH')
     .map((call) => call.body as ConfigPatch);
 
+const posts = (calls: readonly RecordedRequest[]): string[] =>
+  calls.filter((call) => call.method === 'POST').map((call) => call.path);
+
 describe('the Extensions panel', () => {
-  it('shows the servers and a way to add one', async () => {
-    // The two halves of a settings panel that is actually a settings panel:
-    // what is configured, and a control that changes it.
+  it('shows what each extension is and what it declares', async () => {
+    // The `contributes` line is the one to read before pressing Approve: it is
+    // what the operator is being asked about, and the host drops anything the
+    // extension registers beyond it.
     mount();
-    expect(await screen.findByText('MCP servers')).toBeInTheDocument();
+
+    expect(await screen.findByText('Slack')).toBeInTheDocument();
+    expect(screen.getByText('Adds channels, commands')).toBeInTheDocument();
+    expect(screen.getByText('Adds tools')).toBeInTheDocument();
+    expect(screen.getByText('Not approved')).toBeInTheDocument();
+  });
+
+  it('falls back to the id when an extension carries no label', async () => {
+    mount();
+    await screen.findByText('Slack');
+
+    // `zulip` appears twice — once as the name and once as the code. Both are
+    // the id, which is the point.
+    expect(screen.getAllByText('zulip').length).toBeGreaterThan(0);
+  });
+
+  it('shows the first line of a refusal, not the whole terminal message', async () => {
+    // `ExtensionStore` writes for a terminal: a sentence, then the command that
+    // fixes it. The command is not what to offer someone already looking at the
+    // button that does it.
+    mount();
+
     expect(
-      screen.getByRole('link', { name: 'New MCP server' }),
+      await screen.findByText(
+        'Extension "zulip" is installed but has never been approved.',
+      ),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/ghost extension approve/)).toBeNull();
   });
 
-  it('promises no screen that is not on it', async () => {
-    // This panel used to end in a "Still to come" list naming OAuth, plugins
-    // and — before them — skills and channels. It is gone: a settings screen
-    // advertising a form an operator cannot open is a screen they check twice.
-    // Skills in particular are workspace folders rather than configuration, so
-    // a row promising them taught the wrong thing.
-    mount();
-    await screen.findByText('files');
-
-    for (const gone of ['Still to come', 'OAuth connections', 'Skills']) {
-      expect(screen.queryByText(gone)).not.toBeInTheDocument();
-    }
-  });
-
-  it('joins the configured servers to their live state', async () => {
-    // The whole reason the screen makes two requests: `GET /api/settings` says
-    // what was asked for and `GET /api/mcp` says what came of it.
-    mount();
-
-    // Awaited, because the two halves arrive on their own schedule: the row
-    // exists as soon as the settings do, and its badge as soon as the status
-    // does. Both are durable once settled.
-    expect(await screen.findByText('files')).toBeInTheDocument();
-    expect(await screen.findByText('Connected')).toBeInTheDocument();
-    expect(screen.getByText('2 tools')).toBeInTheDocument();
-
-    expect(screen.getByText('github')).toBeInTheDocument();
-    expect(screen.getByText('Unreachable')).toBeInTheDocument();
-  });
-
-  it('shows the reason a server is down, which is the sentence nothing else carries', async () => {
-    mount();
-    expect(
-      await screen.findByText(/ECONNREFUSED 140\.82\.121\.5/),
-    ).toBeInTheDocument();
-  });
-
-  it('says so rather than guessing when the client has no answer', async () => {
-    // A build with `mcp: false` answers `{servers: []}`, and a configured
-    // server it knows nothing about is `Unknown` rather than a guess at `Off`.
-    mount('/settings?panel=extensions', { '/api/mcp': [200, { servers: [] }] });
-    expect(await screen.findByText('files')).toBeInTheDocument();
-    expect(screen.getAllByText('Unknown')).toHaveLength(2);
-  });
-
-  it('switches a server off without opening the editor', async () => {
-    const { user, calls } = mount();
-    await screen.findByText('files');
+  it('asks before approving, and says what is being granted', async () => {
+    // The only reversible action in Settings that asks. A one-click toggle here
+    // would make the digest gate decorative.
+    const { user } = mount();
+    await screen.findByText('Slack');
 
     await user.click(
-      await screen.findByRole('button', { name: 'Actions for files' }),
+      await screen.findByRole('button', { name: 'Actions for zulip' }),
+    );
+    await user.click(await screen.findByRole('menuitem', { name: 'Approve' }));
+
+    expect(await screen.findByText('Approve zulip?')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /runs inside the server, with the access the server has/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('posts the approval only after the question is answered', async () => {
+    const { user, calls } = mount({
+      'POST /api/extensions/zulip/approve': [
+        200,
+        { extensions: [READY, { ...UNAPPROVED, state: 'ready' }] },
+      ],
+    });
+    await screen.findByText('Slack');
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Actions for zulip' }),
+    );
+    await user.click(await screen.findByRole('menuitem', { name: 'Approve' }));
+    // The question is on screen and nothing has been sent yet: that gap is the
+    // whole point of asking.
+    expect(posts(calls)).toEqual([]);
+
+    await user.click(await screen.findByRole('button', { name: 'Approve' }));
+
+    await waitFor(() => {
+      expect(posts(calls)).toEqual(['/api/extensions/zulip/approve']);
+    });
+  });
+
+  it('offers Approve again on an extension that failed, not only a new one', async () => {
+    // One that threw may have been repaired since, and re-approving is how the
+    // digest catches up.
+    const { user } = mount({
+      '/api/extensions': [
+        200,
+        {
+          extensions: [
+            { ...UNAPPROVED, state: 'failed', lastError: 'no token' },
+          ],
+        },
+      ],
+    });
+    await screen.findByText('no token');
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Actions for zulip' }),
+    );
+
+    expect(
+      await screen.findByRole('menuitem', { name: 'Approve' }),
+    ).toBeInTheDocument();
+  });
+
+  it('does not offer Approve on one that is already loaded', async () => {
+    const { user } = mount({
+      '/api/extensions': [200, { extensions: [READY] }],
+    });
+    await screen.findByText('Slack');
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Actions for slack' }),
+    );
+
+    expect(
+      await screen.findByRole('menuitem', { name: 'Withdraw approval' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Approve' })).toBeNull();
+  });
+
+  it('withdraws without asking, because it takes access away', async () => {
+    const { user, calls } = mount({
+      'POST /api/extensions/slack/revoke': [200, { extensions: [] }],
+    });
+    await screen.findByText('Slack');
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Actions for slack' }),
+    );
+    await user.click(
+      await screen.findByRole('menuitem', { name: 'Withdraw approval' }),
+    );
+
+    await waitFor(() => {
+      expect(posts(calls)).toEqual(['/api/extensions/slack/revoke']);
+    });
+  });
+
+  it('turns one off through the settings tree, where that state belongs', async () => {
+    // Disabled is configuration — an operator's standing decision — and unlike
+    // an approval it survives an edit to the files.
+    const { user, calls } = mount();
+    await screen.findByText('Slack');
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Actions for slack' }),
     );
     await user.click(await screen.findByRole('menuitem', { name: 'Disable' }));
 
     await waitFor(() => {
       expect(patchesOf(calls)).toEqual([
-        { tools: { mcpServers: { files: { enabled: false } } } },
+        { extensions: { disabled: ['slack'] } },
       ]);
     });
   });
 
-  it('asks before deleting, and deletes with a null', async () => {
-    const { user, calls } = mount();
-    await screen.findByText('github');
+  it('says where to put one when there are none', async () => {
+    // Installing is not an action this screen can offer: an extension arrives
+    // on the box by some means the browser has no part in.
+    mount({ '/api/extensions': [200, { extensions: [] }] });
 
-    await user.click(
-      await screen.findByRole('button', { name: 'Actions for github' }),
-    );
-    await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
-    // The question is asked: a delete takes the server's tools away from every
-    // agent that had been granted one.
-    expect(await screen.findByRole('dialog')).toHaveTextContent('github');
-
-    await user.click(await screen.findByRole('button', { name: 'Delete' }));
-
-    await waitFor(() => {
-      expect(patchesOf(calls)).toEqual([
-        { tools: { mcpServers: { github: null } } },
-      ]);
-    });
-  });
-});
-
-describe('the MCP editor', () => {
-  it('opens on the stored settings, on the right half of the form', async () => {
-    mount('/settings/mcp/files');
-
-    expect(await screen.findByLabelText('Command')).toHaveValue('npx');
-    expect(screen.getByLabelText('Arguments')).toHaveValue(
-      '-y\nserver-filesystem',
-    );
-    // The URL half belongs to another transport and is not on screen.
-    expect(screen.queryByLabelText('URL')).not.toBeInTheDocument();
-  });
-
-  it('has no Authorization section for a transport that cannot carry one', async () => {
-    mount('/settings/mcp/files');
-    await screen.findByLabelText('Command');
-    expect(screen.queryByText('Authorization')).not.toBeInTheDocument();
-  });
-
-  it('offers Authorization on an HTTP server, and only when asked for', async () => {
-    mount('/settings/mcp/github');
-
-    expect(await screen.findByLabelText('URL')).toHaveValue(
-      'https://mcp.github.test/mcp',
-    );
-    expect(screen.getByText('Authorization')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Client ID')).not.toBeInTheDocument();
-  });
-
-  it('clears the other transport half when the transport moves', async () => {
-    // `resolveSpec` refuses an entry naming both a command and a url, so a
-    // switched transport has to take the old one back out.
-    const { user, calls } = mount('/settings/mcp/files');
-    await screen.findByLabelText('Command');
-
-    await user.click(screen.getByRole('combobox', { name: 'Transport' }));
-    await user.click(
-      await screen.findByRole('option', { name: 'Streamable HTTP' }),
-    );
-    await user.type(await screen.findByLabelText('URL'), 'https://a.test/mcp');
-    await user.click(screen.getByRole('button', { name: 'Save changes' }));
-
-    await waitFor(() => {
-      const [patch] = patchesOf(calls);
-      expect(patch?.tools?.mcpServers?.files).toMatchObject({
-        type: 'streamableHttp',
-        url: 'https://a.test/mcp',
-        command: '',
-        args: [],
-      });
-    });
-  });
-
-  it('refuses to save a URL this client will not dial', async () => {
-    const { user, calls } = mount('/settings/mcp/github');
-    const url = await screen.findByLabelText('URL');
-
-    await user.clear(url);
-    await user.type(url, 'file:///etc/passwd');
-    await user.click(screen.getByRole('button', { name: 'Save changes' }));
-
-    expect(await screen.findByText(/http/)).toBeInTheDocument();
-    expect(patchesOf(calls)).toEqual([]);
-  });
-
-  it('says so on a link to a server that is not there', async () => {
-    mount('/settings/mcp/gone');
-    expect(await screen.findByRole('alert')).toHaveTextContent('gone');
-  });
-
-  it('surfaces the authorize link for a server waiting on an operator', async () => {
-    mount('/settings/mcp/github', {
-      '/api/mcp': [
-        200,
-        {
-          servers: [
-            {
-              ...FAILED,
-              state: 'needs_authorization',
-              lastError: undefined,
-              authorizationUrl: 'https://auth.github.test/authorize?state=abc',
-            },
-          ],
-        },
-      ],
-    });
-
-    const link = await screen.findByRole('link', {
-      name: /Authorize GhostAI with github/,
-    });
-    expect(link).toHaveAttribute(
-      'href',
-      'https://auth.github.test/authorize?state=abc',
-    );
-  });
-
-  it('shows what a server warned about, beside the field that fixes it', async () => {
-    mount('/settings/mcp/files', {
-      '/api/mcp': [
-        200,
-        {
-          servers: [
-            {
-              ...READY,
-              warnings: [
-                '"nope" in enabledTools matches no tool this server offers',
-              ],
-            },
-          ],
-        },
-      ],
-    });
-
-    expect(await screen.findByText(/matches no tool/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/No extensions installed/),
+    ).toBeInTheDocument();
+    // Twice — the section's description says it too, which is what makes the
+    // empty state a repetition rather than the only mention.
+    expect(
+      screen.getAllByText(/~\/.ghostai\/extensions/).length,
+    ).toBeGreaterThan(0);
   });
 });

@@ -1,26 +1,38 @@
 /**
- * The Extensions panel: the MCP servers this install talks to.
+ * The Extensions panel: third-party code this install has been given, and
+ * whether the operator has said yes to it.
  *
- * The list is the configured servers joined to their live state, and the join
- * is the whole reason this screen needs two requests. `GET /api/settings` says
- * what an operator asked for; `GET /api/mcp` says what came of it. A server
- * that is unreachable is not something to write into `config.json`, so the row
- * takes its name and its transport from the first and its badge and its reason
- * from the second.
+ * Shaped like MCP servers next door, because it is the same kind of screen — a
+ * list joined to live state, a `RowActions` kebab, a badge with a word in it.
+ * Two things are deliberately different, and both come from the fact that this
+ * list is about *code*:
  *
- * Shaped like Providers, because it is the same kind of thing: a list that
- * picks, a `RowActions` kebab for what needs no form, and an editor route for
- * the rest.
+ *  - **There is no editor route.** An extension is a directory an operator put
+ *    on the box; nothing about it is editable from here. The panel's whole job
+ *    is the decision — approve, withdraw, disable — and a form would imply this
+ *    screen could change what the extension does.
+ *  - **Approve asks, and says what it is asking about.** Every other reversible
+ *    action in Settings just happens. This one grants the code the server's own
+ *    access, so it goes through `ConfirmDialog` with the sentence that says so.
+ *    The panel that made this a one-click toggle would be the panel that made
+ *    the digest gate decorative.
+ *
+ * The row's `contributes` is the line to read before the button: it is what the
+ * extension declared, and the host drops anything it registers beyond it. It is
+ * disclosure rather than a boundary — in-process code can reach `node:fs`
+ * regardless — and `docs/security.md` says so rather than implying otherwise.
  */
 
-import { Plug, Pencil, Plus, Power, PowerOff, Trash2 } from 'lucide-react';
+import { Blocks, Check, Power, PowerOff, ShieldOff } from 'lucide-react';
 import { useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useNavigate } from '@tanstack/react-router';
-import type { Config, McpServerStatus } from '@ghostai/protocol';
+import type {
+  Config,
+  ExtensionStatus,
+  ExtensionState,
+} from '@ghostai/protocol';
 
 import { Badge } from '@/components/ui/badge.js';
-import { Button } from '@/components/ui/button.js';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu.js';
 import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';
 import { DataList, DataListRow } from '@/components/crud/data-list.js';
@@ -32,67 +44,68 @@ import { useListPage } from '@/components/crud/use-list-page.js';
 import { SearchFilter } from '@/components/ui/search-filter.js';
 import { Section } from '@/components/form/controls.js';
 import type { WebKey } from '@/i18n/keys.js';
-import { toMcpEnabledPatch, transportOf } from './mcp-form.js';
-import { useMcpServers, useRemoveMcpServer } from './use-mcp.js';
+import { useApproveExtension, useExtensions } from './use-extensions.js';
 import { useSaveSettings } from './use-settings.js';
 
-/** One configured server, with whatever the client knows about it. */
-interface ServerRow {
-  readonly id: string;
-  readonly transport: string;
-  readonly enabled: boolean;
-  readonly status: McpServerStatus | undefined;
-}
+type SortKey = 'name' | 'status';
 
-type SortKey = 'name' | 'transport' | 'status';
-
-/** All three are text, and text reads from A. See `sortBy`. */
-const ASCENDING_FIRST: readonly SortKey[] = ['name', 'transport', 'status'];
+/** Both are text, and text reads from A. See `sortBy`. */
+const ASCENDING_FIRST: readonly SortKey[] = ['name', 'status'];
 
 /**
  * How loudly a row's state should read.
  *
- * `warning` and not `danger` for a failure, deliberately: a server that is
- * unreachable is an ordinary state — a laptop closed, a container not started —
- * and the panel is read by someone watching a machine. The loudest thing on the
- * screen should be something that went wrong, not something that is retrying.
+ * `warning` for `unapproved`, not `danger`: an extension nobody has approved is
+ * the *correct* state for one that was just installed, and the loudest thing on
+ * this screen should be something that went wrong. `drifted` is the same tone
+ * for the same reason — files changed, which is what editing an extension is
+ * supposed to do.
  */
 const TONES: Readonly<
-  Record<McpServerStatus['state'], 'success' | 'warning' | 'neutral' | 'info'>
+  Record<ExtensionState, 'success' | 'warning' | 'neutral' | 'danger'>
 > = {
   ready: 'success',
-  connecting: 'info',
-  needs_authorization: 'warning',
-  failed: 'warning',
+  unapproved: 'warning',
+  drifted: 'warning',
   disabled: 'neutral',
+  failed: 'danger',
 };
 
-const STATE_LABELS: Readonly<Record<McpServerStatus['state'], WebKey>> = {
-  ready: 'settings.mcp.state.ready',
-  connecting: 'settings.mcp.state.connecting',
-  needs_authorization: 'settings.mcp.state.needsAuthorization',
-  failed: 'settings.mcp.state.failed',
-  disabled: 'settings.mcp.state.disabled',
+const STATE_LABELS: Readonly<Record<ExtensionState, WebKey>> = {
+  ready: 'settings.extensions.state.ready',
+  unapproved: 'settings.extensions.state.unapproved',
+  drifted: 'settings.extensions.state.drifted',
+  disabled: 'settings.extensions.state.disabled',
+  failed: 'settings.extensions.state.failed',
 };
 
-/** Ranked for the sort, worst first: "what is broken" is one press away. */
-const STATE_ORDER: Readonly<Record<McpServerStatus['state'], number>> = {
+/** Ranked for the sort, worst first: "what needs me" is one press away. */
+const STATE_ORDER: Readonly<Record<ExtensionState, number>> = {
   failed: 0,
-  needs_authorization: 1,
-  connecting: 2,
+  drifted: 1,
+  unapproved: 2,
   disabled: 3,
   ready: 4,
 };
 
-function rank(row: ServerRow): number {
-  return row.status === undefined ? 2 : STATE_ORDER[row.status.state];
-}
-
-const COMPARE: Comparators<ServerRow, SortKey> = {
+const COMPARE: Comparators<ExtensionStatus, SortKey> = {
   name: (a, b) => a.id.localeCompare(b.id),
-  transport: (a, b) => a.transport.localeCompare(b.transport),
-  status: (a, b) => rank(a) - rank(b),
+  status: (a, b) => STATE_ORDER[a.state] - STATE_ORDER[b.state],
 };
+
+/** The patch that turns one extension off, or back on. */
+function toEnabledPatch(
+  config: Config,
+  id: string,
+  enabled: boolean,
+): { readonly extensions: { readonly disabled: string[] } } {
+  const disabled = config.extensions.disabled.filter((one) => one !== id);
+  // Arrays replace, so the whole list is sent — which is also the only way to
+  // express a removal. See `docs/configuration.md#patching`.
+  return {
+    extensions: { disabled: enabled ? disabled : [...disabled, id] },
+  };
+}
 
 export function ExtensionsPanel({
   config,
@@ -100,33 +113,22 @@ export function ExtensionsPanel({
   readonly config: Config;
 }): JSX.Element {
   const { t } = useTranslation();
-  const [pendingDelete, setPendingDelete] = useState<ServerRow | undefined>(
-    undefined,
-  );
+  const [pendingApprove, setPendingApprove] = useState<
+    ExtensionStatus | undefined
+  >(undefined);
+  const { approve, revoke, pending } = useApproveExtension();
   const { save, saving } = useSaveSettings();
-  const { remove, removing } = useRemoveMcpServer();
-  const navigate = useNavigate();
-  const live = useMcpServers();
+  const live = useExtensions();
 
-  const byId = new Map(
-    (live.data?.servers ?? []).map((server) => [server.id, server]),
-  );
-  const all: readonly ServerRow[] = Object.entries(config.tools.mcpServers).map(
-    ([id, server]) => ({
-      id,
-      transport: transportOf(server),
-      enabled: server.enabled,
-      status: byId.get(id),
-    }),
-  );
+  const all: readonly ExtensionStatus[] = live.data?.extensions ?? [];
 
   const { filter, setFilter, sort, setSort, matched, pagination, rows } =
     useListPage({
       rows: all,
-      initialSort: { key: 'name', descending: false },
-      // The transport is in the haystack because it is on screen under every
-      // name: a list that shows a value it will not match on reads as broken.
-      haystack: (row) => `${row.id} ${row.transport}`,
+      initialSort: { key: 'status', descending: false },
+      // The label and the description are in the haystack because both are on
+      // screen: a list that shows a value it will not match on reads as broken.
+      haystack: (row) => `${row.id} ${row.label} ${row.description}`,
       comparators: COMPARE,
       tiebreak: (a, b) => a.id.localeCompare(b.id),
     });
@@ -134,34 +136,19 @@ export function ExtensionsPanel({
   return (
     <div className="stack settings-panel">
       <Section
-        title={t('settings.mcp.title')}
-        description={t('settings.mcp.description')}
+        title={t('settings.extensions.title')}
+        description={t('settings.extensions.description')}
       >
-        <div className="cluster">
-          <span className="spacer" />
-          {/* A link, not a dialog: adding a server is the same form as editing
-              one, and nothing is written until it is saved. */}
-          <Button asChild>
-            <Link to="/settings/mcp/new">
-              <Plus />
-              {t('settings.mcp.newServer')}
-            </Link>
-          </Button>
-        </div>
-
-        {/* Only once there is something to narrow. A search box over two rows
-            is furniture. */}
         {all.length > 0 && (
           <div className="row list-toolbar">
             <SearchFilter
               value={filter}
-              label={t('settings.mcp.filter')}
+              label={t('settings.extensions.filter')}
               onValueChange={setFilter}
             />
             <ListSort
               options={[
                 { key: 'name', label: t('common.name') },
-                { key: 'transport', label: t('settings.mcp.transport') },
                 { key: 'status', label: t('common.status') },
               ]}
               sort={sort}
@@ -172,92 +159,115 @@ export function ExtensionsPanel({
         )}
 
         {all.length === 0 ? (
-          <p className="page__note">{t('settings.mcp.none')}</p>
+          // The empty state names the directory, because "install one" is not
+          // an action this screen can offer — an extension arrives on the box
+          // by some means the browser has no part in.
+          <p className="page__note">{t('settings.extensions.none')}</p>
         ) : matched.length === 0 ? (
-          <p className="page__note">{t('settings.mcp.noMatch', { filter })}</p>
+          <p className="page__note">
+            {t('settings.extensions.noMatch', { filter })}
+          </p>
         ) : (
-          <DataList label={t('settings.mcp.title')}>
+          <DataList label={t('settings.extensions.title')}>
             {rows.map((row) => (
               <DataListRow
                 key={row.id}
                 primary={
-                  <Link
-                    to="/settings/mcp/$serverId"
-                    params={{ serverId: row.id }}
-                    className="data-list__open"
-                    aria-label={t('settings.mcp.editServer', { name: row.id })}
-                  >
-                    <Plug />
+                  <span className="data-list__open">
+                    <Blocks />
                     <span className="row">
-                      <span className="truncate">{row.id}</span>
+                      <span className="truncate">
+                        {row.label === '' ? row.id : row.label}
+                      </span>
                     </span>
-                  </Link>
+                  </span>
                 }
                 meta={
                   <>
-                    <span className="data-list__code">{row.transport}</span>
+                    <span className="data-list__code">{row.id}</span>
                     {/* A badge with a word in it, not a bare coloured dot:
                         colour alone is the one encoding some readers do not
                         receive. */}
-                    <Badge
-                      tone={
-                        row.status === undefined
-                          ? 'neutral'
-                          : TONES[row.status.state]
-                      }
-                    >
-                      {row.status === undefined
-                        ? t('settings.mcp.state.unknown')
-                        : t(STATE_LABELS[row.status.state])}
+                    <Badge tone={TONES[row.state]}>
+                      {t(STATE_LABELS[row.state])}
                     </Badge>
-                    {row.status !== undefined &&
-                      row.status.tools.length > 0 && (
-                        <span>
-                          {t('settings.mcp.toolCount', {
-                            count: row.status.tools.length,
+                    {row.version !== '' && (
+                      <span className="data-list__code">{row.version}</span>
+                    )}
+                    {/* The line to read before pressing Approve. */}
+                    <span>
+                      {row.contributes.length === 0
+                        ? t('settings.extensions.declaresNothing')
+                        : t('settings.extensions.declares', {
+                            kinds: row.contributes.join(', '),
                           })}
-                        </span>
-                      )}
-                    {/* The sentence an operator came for. It is the only place
-                        the reason exists — see `McpServerStatus.lastError`. */}
-                    {row.status?.lastError !== undefined && (
+                    </span>
+                    {row.description !== '' && (
                       <span className="data-list__detail truncate">
-                        {row.status.lastError}
+                        {row.description}
                       </span>
                     )}
+                    {/* The sentence an operator came for. It is the only place
+                        the reason exists — see `ExtensionStatus.lastError`. */}
+                    {row.lastError !== undefined && (
+                      <span className="data-list__detail truncate">
+                        {firstLine(row.lastError)}
+                      </span>
+                    )}
+                    {row.warnings.map((warning) => (
+                      <span
+                        key={warning}
+                        className="data-list__detail truncate"
+                      >
+                        {warning}
+                      </span>
+                    ))}
                   </>
                 }
                 actions={
                   <RowActions label={row.id}>
+                    {/* Approve is offered whenever the digest is not the one on
+                        record — which is `unapproved` and `drifted` alike, and
+                        `failed` too, because an extension that threw may have
+                        been repaired since. */}
+                    {row.state !== 'ready' && (
+                      <DropdownMenuItem
+                        disabled={pending}
+                        onSelect={() => {
+                          setPendingApprove(row);
+                        }}
+                      >
+                        <Check />
+                        {t('settings.extensions.approve')}
+                      </DropdownMenuItem>
+                    )}
+                    {/* Withdrawing needs no confirmation: it takes access away,
+                        and the files stay where they are. */}
                     <DropdownMenuItem
+                      disabled={pending}
                       onSelect={() => {
-                        void navigate({
-                          to: '/settings/mcp/$serverId',
-                          params: { serverId: row.id },
-                        });
+                        revoke(row.id);
                       }}
                     >
-                      <Pencil />
-                      {t('common.edit')}
+                      <ShieldOff />
+                      {t('settings.extensions.revoke')}
                     </DropdownMenuItem>
-                    {/* Reversible where Delete is not, so it does not ask. */}
                     <DropdownMenuItem
                       disabled={saving}
                       onSelect={() => {
-                        save(toMcpEnabledPatch(row.id, !row.enabled));
+                        save(
+                          toEnabledPatch(
+                            config,
+                            row.id,
+                            row.state === 'disabled',
+                          ),
+                        );
                       }}
                     >
-                      {row.enabled ? <PowerOff /> : <Power />}
-                      {row.enabled ? t('common.disable') : t('common.enable')}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className="menu__item--danger"
-                      onSelect={() => {
-                        setPendingDelete(row);
-                      }}
-                    >
-                      <Trash2 />
-                      {t('common.delete')}
+                      {row.state === 'disabled' ? <Power /> : <PowerOff />}
+                      {row.state === 'disabled'
+                        ? t('common.enable')
+                        : t('common.disable')}
                     </DropdownMenuItem>
                   </RowActions>
                 }
@@ -269,32 +279,39 @@ export function ExtensionsPanel({
         <Pagination
           pagination={pagination}
           total={matched.length}
-          label={t('settings.mcp.title')}
+          label={t('settings.extensions.title')}
         />
       </Section>
 
       <ConfirmDialog
-        open={pendingDelete !== undefined}
+        open={pendingApprove !== undefined}
         onOpenChange={(open) => {
-          if (!open) setPendingDelete(undefined);
+          if (!open) setPendingApprove(undefined);
         }}
-        title={t('settings.mcp.deleteTitle')}
-        description={t('settings.mcp.deleteHint', {
-          name: pendingDelete?.id ?? '',
+        title={t('settings.extensions.approveTitle', {
+          name: pendingApprove?.id ?? '',
         })}
-        confirmLabel={t('common.delete')}
-        pending={removing}
+        description={t('settings.extensions.approveHint')}
+        confirmLabel={t('settings.extensions.approve')}
+        pending={pending}
         onConfirm={() => {
-          if (pendingDelete === undefined) return;
-          // Closed on success, not on the press: a delete that failed should
-          // leave the question on screen with its error.
-          remove(pendingDelete.id, {
-            onSuccess: () => {
-              setPendingDelete(undefined);
-            },
-          });
+          if (pendingApprove === undefined) return;
+          approve(pendingApprove.id);
+          setPendingApprove(undefined);
         }}
       />
     </div>
   );
+}
+
+/**
+ * The first line of a multi-line refusal.
+ *
+ * `ExtensionStore` writes its messages for a terminal — a sentence, then two
+ * indented lines naming the command that fixes it. The command is not what to
+ * offer someone already looking at the button that does it, so the row shows
+ * the sentence and `ghost extension list` shows the rest.
+ */
+function firstLine(message: string): string {
+  return message.split('\n')[0] ?? message;
 }

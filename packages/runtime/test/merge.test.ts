@@ -293,7 +293,7 @@ describe('mergeConfigPatch', () => {
     expect(merged.agents.defaults.temperature).toBe(0.3);
   });
 
-  it('keeps a channel plugin block the schema does not name', () => {
+  it('keeps a channel extension block the schema does not name', () => {
     const merged = mergeConfigPatch(base, {
       channels: { telegram: { token: 'abc' } },
     });
@@ -333,5 +333,41 @@ describe('mergeConfigPatch', () => {
     expect(merged.agents.list.main?.subagents.map((ref) => ref.id)).toEqual([
       'researcher',
     ]);
+  });
+  it('replaces one extension’s settings block wholesale', () => {
+    // This layer does not know the block's shape — the extension parses it —
+    // so it cannot tell a struct field from a record entry, and replacing is
+    // the only rule that is right without knowing which.
+    const before = mergeConfigPatch(base, {
+      extensions: { settings: { slack: { channel: '#ops', quiet: true } } },
+    });
+    const after = mergeConfigPatch(before, {
+      extensions: { settings: { slack: { channel: '#alerts' } } },
+    });
+
+    expect(after.extensions.settings.slack).toEqual({ channel: '#alerts' });
+  });
+
+  it('deletes an extension’s settings on an explicit null', () => {
+    const before = mergeConfigPatch(base, {
+      extensions: { settings: { slack: { channel: '#ops' } } },
+    });
+    const after = mergeConfigPatch(before, {
+      extensions: { settings: { slack: null } },
+    });
+
+    expect(after.extensions.settings.slack).toBeUndefined();
+  });
+
+  it('leaves the other extension keys alone while settings change', () => {
+    const before = mergeConfigPatch(base, {
+      extensions: { disabled: ['slack'], settings: { slack: { a: 1 } } },
+    });
+    const after = mergeConfigPatch(before, {
+      extensions: { settings: { slack: { a: 2 } } },
+    });
+
+    expect(after.extensions.disabled).toEqual(['slack']);
+    expect(after.extensions.settings.slack).toEqual({ a: 2 });
   });
 });

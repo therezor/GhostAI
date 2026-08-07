@@ -6,7 +6,7 @@
  * or keeps answering after `stop()`, looks fine in a manual test and breaks a
  * property something else depends on. Those properties are stated here once and
  * checked against every implementation — the loopback reference channel today,
- * Telegram in Phase 3, and whatever a plugin registers after that.
+ * Telegram in Phase 3, and whatever an extension registers after that.
  *
  * The suite drives the channel through a real `ChannelManager` against a
  * scripted hub, because the contract is about what the manager sees and what

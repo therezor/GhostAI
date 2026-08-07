@@ -1,6 +1,6 @@
 {
   "name": "@ghostai/i18n",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "The translation layer: i18next instance, locale negotiation and locale-aware formatting primitives.",
   "type": "module",
   "license": "MIT",
@@ -29,7 +29,8 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist",
+    "dist/**",
+    "!dist/**/*.map",
     "locales"
   ],
   "scripts": {
@@ -40,5 +41,34 @@
   },
   "dependencies": {
     "i18next": "^26.3.6"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/therezor/GhostAI.git",
+    "directory": "packages/i18n"
+  },
+  "homepage": "https://github.com/therezor/GhostAI",
+  "bugs": "https://github.com/therezor/GhostAI/issues",
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./web": {
+        "types": "./dist/web.d.ts",
+        "default": "./dist/web.js"
+      },
+      "./cli": {
+        "types": "./dist/cli.d.ts",
+        "default": "./dist/cli.js"
+      },
+      "./locales/*": "./locales/*",
+      "./package.json": "./package.json"
+    }
+  },
+  "engines": {
+    "node": ">=22.13"
   }
 }

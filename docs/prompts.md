@@ -270,8 +270,10 @@ the editor as you type, and as a `tool_policy_missing_nonce` config warning on
 `GET /api/settings` — but it is not worth being the single exception to a promise the
 rest of the prompt keeps. See [Security](security.md) for the mechanism.
 
-It still lives in the runtime half, because the nonce is regenerated every turn; in the
-static half it would invalidate the session's cached prefix on every turn.
+Where it lives follows from what you write in it. The built-in names no delimiter, so it
+is session-stable and sits in the static half; a template that spells out `{{tag}}` or
+`{{nonce}}` changes every turn and moves back to the runtime half, at the caching cost
+the editor warns about.
 
 The same holds one layer down and for the same reason. **Deleting the workspace paragraph
 does not widen the sandbox** — `WorkspaceJail` and `guardExec` are enforced on every call

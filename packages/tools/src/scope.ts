@@ -11,7 +11,7 @@
  *
  *  - **Absent means disabled.** Not "unrestricted" — the opposite. A tool the
  *    map does not mention never reaches the definitions the model is sent, so
- *    an agent holds exactly what somebody enabled on it and nothing a plugin
+ *    an agent holds exactly what somebody enabled on it and nothing an extension
  *    registered later quietly joins. This replaces an `{allow, deny}` pair
  *    where an empty `allow` meant "everything", which made a freshly created
  *    agent the most powerful one in the install.

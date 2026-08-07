@@ -29,7 +29,12 @@
 import pc from 'picocolors';
 
 import { describeContext, type AgentLoop } from '@ghostai/agent';
-import { createLogger, isAbortError, type LogLevel } from '@ghostai/core';
+import {
+  DEFAULT_WORKSPACE_ID,
+  createLogger,
+  isAbortError,
+  type LogLevel,
+} from '@ghostai/core';
 import {
   DEFAULT_AGENT_ID,
   type ContentPart,
@@ -57,7 +62,7 @@ import {
   type Theme,
 } from '@ghostai/tui';
 
-import { runSlashCommand } from './commands.js';
+import { commandRowsFor, runSlashCommand } from './commands.js';
 import {
   inputRule,
   startupHeader,
@@ -497,16 +502,26 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
     const view = (): HeaderView => {
       const opened = runtime.store.getSession(sessionKey);
       const id = agentForTurnQuietly();
-      const where = opened?.workspaceId ?? workspaceId;
+      /**
+       * Falls through to `default`, and the last step is the point.
+       *
+       * Nothing is stored until the first message, so `getSession` is
+       * `undefined` on a prompt nobody has typed into yet — and without a third
+       * fallback the bar said `no workspace`, which reports a state the store
+       * cannot hold. `sessions.workspace_id` is `NOT NULL DEFAULT 'default'`
+       * and `WorkspaceStore` seeds that row on construction, so the session is
+       * going to land in `Default` the moment it exists. The browser already
+       * says so — `workspace-context.tsx` falls back to the same constant — and
+       * two surfaces of one install disagreeing about which workspace you are
+       * in is worse than either answer.
+       */
+      const where = opened?.workspaceId ?? workspaceId ?? DEFAULT_WORKSPACE_ID;
       return {
         agent: runtime.agents.find((one) => one.id === id)?.label ?? id,
         model: runtime.model,
         provider: runtime.spec?.displayName ?? lang.t('chat.noProvider'),
         workspace: runtime.paths.workspace,
-        workspaceName:
-          where === undefined
-            ? lang.t('chat.noWorkspace')
-            : (runtime.workspaces.get(where)?.name ?? where),
+        workspaceName: runtime.workspaces.get(where)?.name ?? where,
         session:
           opened === undefined || opened.title === ''
             ? sessionKey
@@ -903,7 +918,11 @@ function framed(deps: ReplDeps): Surface {
 
   const openPalette = (): void => {
     void (async (): Promise<void> => {
-      const chosen = await pickCommand({ menu, t: deps.t });
+      const chosen = await pickCommand({
+        menu,
+        t: deps.t,
+        rows: commandRowsFor(deps.runtime),
+      });
       if (chosen !== undefined) {
         if (chosen.submit) deliver(chosen.command);
         else editor.setText(chosen.command);
@@ -938,7 +957,10 @@ function framed(deps: ReplDeps): Surface {
     // far more often than it helped. A command is a token with a known
     // vocabulary — the table `/help` prints — rather than a guess at a word.
     if (key.name === 'tab') {
-      const [matches] = completeCommand(editor.text);
+      const [matches] = completeCommand(
+        editor.text,
+        commandRowsFor(deps.runtime),
+      );
       if (matches.length === 1) editor.setText(`${matches[0] ?? ''} `);
       frame.requestRender();
       return;

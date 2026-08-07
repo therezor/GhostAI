@@ -57,14 +57,19 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = [
     summary: 'settings.panels.automation.summary',
   },
   {
-    id: 'extensions',
-    label: 'settings.panels.extensions.label',
-    summary: 'settings.panels.extensions.summary',
+    id: 'mcp',
+    label: 'settings.panels.mcp.label',
+    summary: 'settings.panels.mcp.summary',
   },
   {
     id: 'channels',
     label: 'settings.panels.channels.label',
     summary: 'settings.panels.channels.summary',
+  },
+  {
+    id: 'extensions',
+    label: 'settings.panels.extensions.label',
+    summary: 'settings.panels.extensions.summary',
   },
 ];
 

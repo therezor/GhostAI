@@ -28,7 +28,8 @@ describe('ConfigSchema', () => {
     // both renders every timestamp and reads every cron expression.
     expect(config.ui.timezone).toBe('UTC');
     expect(config.channels.sendProgress).toBe(true);
-    expect(config.plugins.allowUnverified).toBe(false);
+    expect(config.extensions.allowOverride).toBe(false);
+    expect(config.extensions.settings).toEqual({});
   });
 
   it('keeps the scheduler block to the engine, with nothing describing a task', () => {
@@ -68,7 +69,7 @@ describe('ConfigSchema', () => {
     expect(config.agents.defaults.maxTokens).toBe(8192);
   });
 
-  it('accepts unknown channel blocks so a channel plugin needs no schema change', () => {
+  it('accepts unknown channel blocks so a channel extension needs no schema change', () => {
     const config = ConfigSchema.parse({
       channels: { telegram: { token: 'x', allowlist: ['1|me'] } },
     });

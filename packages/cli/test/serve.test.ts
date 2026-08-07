@@ -151,7 +151,7 @@ describe('startServer', () => {
   it('tells every open tab when the tool list moves, once per burst', async () => {
     // The producer for `tools.changed`, which four places have consumed since
     // before anything emitted it. It hangs off the registry rather than off
-    // the MCP manager so that a plugin host gets it for free — and it closes a
+    // the MCP manager so that an extension host gets it for free — and it closes a
     // gap that predates MCP: switching `exec` off already mutated the registry
     // and nothing told the browser.
     const server = await start(home());
