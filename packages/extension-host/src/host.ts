@@ -135,16 +135,14 @@ export class ExtensionHost {
       const previous = this.loaded.get(id);
 
       if (disabled.has(id)) {
-        if (previous !== undefined) await this.unload(previous);
-        this.loaded.set(id, disabledEntry(resolution));
-        changed = true;
+        changed = this.settle(previous, disabledEntry(resolution)) || changed;
+        if (previous?.registration !== undefined) await this.unload(previous);
         continue;
       }
 
       if (resolution.state !== 'approved') {
-        if (previous !== undefined) await this.unload(previous);
-        this.loaded.set(id, refusedEntry(resolution));
-        changed = true;
+        changed = this.settle(previous, refusedEntry(resolution)) || changed;
+        if (previous?.registration !== undefined) await this.unload(previous);
         continue;
       }
 
@@ -161,6 +159,30 @@ export class ExtensionHost {
     }
 
     if (changed) this.announce();
+  }
+
+  /**
+   * Records a row that is *not* loaded, and says whether it moved.
+   *
+   * The "and says whether it moved" is the whole of it, and leaving it out was
+   * a live-lock rather than a missed optimisation. A reconcile that announced
+   * unconditionally for an unapproved extension woke the composition root,
+   * which rebuilt, which reconciled again — and since the extension was still
+   * unapproved, again, forever, on a thread nothing else could run on. An
+   * install with one unapproved extension stopped answering requests.
+   *
+   * Compared on the three fields that can move without the id moving: the
+   * state, the digest of what is on disk, and the sentence explaining the
+   * refusal. Everything else on the row is derived from the manifest, which
+   * cannot change without the digest changing.
+   */
+  private settle(previous: Loaded | undefined, next: Loaded): boolean {
+    this.loaded.set(next.status.id, next);
+    return (
+      previous?.status.state !== next.status.state ||
+      previous.digest !== next.digest ||
+      previous.status.lastError !== next.status.lastError
+    );
   }
 
   /** Unloads everything. Idempotent, and safe to call on a failed boot. */

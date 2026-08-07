@@ -481,6 +481,47 @@ describe('ExtensionHost.subscribe', () => {
     expect(listener).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['unapproved', (): void => undefined],
+    ['disabled', (): void => undefined],
+  ])('stays quiet about an extension that is still %s', async (state) => {
+    // A live-lock rather than a missed optimisation, and it took a real install
+    // to find: announcing unconditionally woke the composition root, which
+    // rebuilt, which reconciled again — and since the extension was still
+    // unapproved, again, forever, on the thread everything else runs on. An
+    // install with one unapproved extension stopped answering requests.
+    install('slack');
+    if (state === 'disabled') store.approve('slack');
+    const config =
+      state === 'disabled' ? CONFIG({ disabled: ['slack'] }) : CONFIG();
+    const { host } = hostFor({ slack: { activate: () => undefined } });
+    await host.reconcile(config);
+    expect(host.status()).toMatchObject([{ state }]);
+
+    const listener = vi.fn();
+    host.subscribe(listener);
+    await host.reconcile(config);
+    await host.reconcile(config);
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('announces when a refused extension’s reason changes', async () => {
+    // The other half of it: quiet is only correct while nothing moved. An
+    // unapproved extension whose files were edited has a new digest, and the
+    // panel has to hear about it.
+    const dir = install('slack');
+    const { host } = hostFor({ slack: { activate: () => undefined } });
+    await host.reconcile(CONFIG());
+
+    const listener = vi.fn();
+    host.subscribe(listener);
+    writeFileSync(join(dir, 'dist', 'index.js'), 'export const extension = 2;');
+    await host.reconcile(CONFIG());
+
+    expect(listener).toHaveBeenCalledOnce();
+  });
+
   it('stops calling a listener that unsubscribed', async () => {
     install('slack');
     store.approve('slack');
