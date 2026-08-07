@@ -191,20 +191,26 @@ to fill in first.
 
 ## Settings
 
-| Panel      | State                                                                                                                                                                  |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Providers  | Built. Add by type, save endpoint and key in one press, test the connection before saving, per-endpoint model catalogue, enable/disable, delete takes the key with it. |
-| Tools      | Built. Install-wide only: approval timeout, `exec` settings, output caps. **No permission matrix here** — permission is per tool per agent.                            |
-| Account    | Built. Username and password together, requires the current password, revokes every other session.                                                                     |
-| Appearance | Built. Language and timezone (install-wide) and theme (this browser only).                                                                                             |
-| Automation | Built. The scheduler engine only: enabled, concurrency, catch-up on boot, run retention. **The jobs are a page.**                                                      |
-| Extensions | Built. MCP servers are a list and an editor, each row joining what an operator configured to what came of it.                                                          |
-| Channels   | Built. Reach the same agent from a messaging app. The bot token goes to the vault, never to `config.json`.                                                             |
+| Panel       | State                                                                                                                                                                  |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Providers   | Built. Add by type, save endpoint and key in one press, test the connection before saving, per-endpoint model catalogue, enable/disable, delete takes the key with it. |
+| Tools       | Built. Install-wide only: approval timeout, `exec` settings, output caps. **No permission matrix here** — permission is per tool per agent.                            |
+| Account     | Built. Username and password together, requires the current password, revokes every other session.                                                                     |
+| Appearance  | Built. Language and timezone (install-wide) and theme (this browser only).                                                                                             |
+| Automation  | Built. The scheduler engine only: enabled, concurrency, catch-up on boot, run retention. **The jobs are a page.**                                                      |
+| MCP servers | Built. A list and an editor, each row joining what an operator configured to what came of it.                                                                          |
+| Channels    | Built. Reach the same agent from a messaging app. The bot token goes to the vault, never to `config.json`.                                                             |
+| Extensions  | Built. Approve, withdraw and disable. **No editor** — an extension is a directory an operator put on the box, and a form would imply this screen could change it.      |
 
 Every panel on that list is built, and a panel arrives on it once it has something to
 configure. There are deliberately no placeholders naming a future phase: a settings
 screen advertising a form an operator cannot open is one they check twice. Unbuilt work
 is tracked in [ROADMAP.md](ROADMAP.md) instead.
+
+Approving is the only reversible action in Settings that asks first. It grants the code
+the server's own access, so it goes through the confirm dialog with the sentence that
+says so; a one-click toggle would make the digest gate decorative. Withdrawing does not
+ask, because it takes access away and leaves the files where they are.
 
 Each MCP row joins two requests — `GET /api/settings` for what was
 configured, `GET /api/mcp` for what came of it — and settles on its own, because the

@@ -202,6 +202,46 @@ Full detail in [Toolboxes](toolboxes.md).
 
 ---
 
+## Extension authorisation
+
+**Stops:** code an operator never reviewed loading itself into the agent's
+process. **Does not stop:** anything that code does once it is running.
+
+An extension is authorised by **content digest, not signature**, exactly as a
+toolbox is — the question is "are these the exact bytes approved?", not "who
+wrote them". It diverges from the toolbox in one place, and the divergence is
+what makes the analogy hold: the digest covers **every file under the install
+directory**, not the manifest alone. A toolbox manifest pins an immutable image,
+so approving the manifest approves the code; an extension manifest names a
+_path_, so approving it would approve a pointer and the file behind it could be
+swapped afterwards without moving an approved byte.
+
+Editing any file, adding one, removing one or renaming one moves the digest and
+revokes the approval, and the next reconcile refuses with a sentence naming the
+drift. Nobody has to remember to re-approve.
+
+**The limit is stated rather than papered over.** An extension that passes runs
+in the server process with full `node:` access: it can read the vault file, spawn
+a process and open a socket, and nothing in this repository stops it. That is the
+same trust level as a toolbox with host `exec`, and it is why approving one asks
+a question in the UI rather than being a toggle.
+
+The manifest's `contributes` list is **disclosure, not enforcement**. The host
+drops a registration whose kind is not declared, which keeps the approval screen
+honest and turns an honest mistake into a visible one — but the code is already
+running by then, so it is not a boundary and this page does not call it one.
+
+Two smaller rules fall out of the same reasoning. `entry` is resolved through
+`realpath` and refused if it lands outside the extension's own directory, since
+an entry the digest does not cover is code that was never reviewed. And an
+extension's runtime state is written to a _sibling_ directory
+(`~/.ghostai/extension-data/<id>`), never inside the install, because the first
+write would otherwise revoke its own approval.
+
+Full detail in [Extensions](extensions.md).
+
+---
+
 ## Authentication
 
 **Stops:** someone reaching the server.

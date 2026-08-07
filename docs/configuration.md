@@ -241,7 +241,7 @@ blocking nothing.
 The id is part of every tool name this server contributes (`mcp_<id>_<tool>`),
 and those names are the keys of every agent's permission map — so renaming a
 server revokes its tools from every agent that had been granted one. The
-Extensions panel treats the id as fixed once created for that reason.
+MCP servers panel treats the id as fixed once created for that reason.
 
 | Key                      | Type                                                         | Default          | Notes                                            |
 | ------------------------ | ------------------------------------------------------------ | ---------------- | ------------------------------------------------ |
@@ -256,7 +256,7 @@ Extensions panel treats the id as fixed once created for that reason.
 **`type` is inferred but never guessed at `sse`.** An entry with a `command` is
 `stdio`, one with a `url` is `streamableHttp`, and one with both is refused —
 reaching the deprecated transport takes an explicit `"type": "sse"`. An entry
-that names neither is refused too, as a row on the Extensions panel rather than
+that names neither is refused too, as a row on the MCP servers panel rather than
 a settings save the operator loses.
 
 **`env` and `headers` replace rather than merge**, like `providers.<id>.extraHeaders`:

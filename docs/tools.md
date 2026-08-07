@@ -79,7 +79,7 @@ from a subagent, which appears as `ask_<id>` (see
 
 ## MCP servers
 
-An operator adds one in **Settings → Extensions**, over stdio, Streamable HTTP or the
+An operator adds one in **Settings → MCP servers**, over stdio, Streamable HTTP or the
 legacy SSE transport. Its tools land in the same registry as the built-ins and appear as
 ordinary permission rows in the agent editor, so **nothing is granted implicitly** — an
 absent entry in an agent's map already means "not enabled", and an existing agent gains
@@ -130,6 +130,23 @@ between requests.
 
 Every registration carries a source — `builtin`, `mcp` or `extension` — so uninstalling
 an extension can remove exactly its tools, with no module-cache surgery and no restart.
+The source is the _coarse_ grain, though, and neither MCP nor extensions use it for a
+single owner going away: `unregisterBySource('extension')` would take every other
+extension's tools with it, so the names each owner last contributed are remembered and
+removed by name. That is `ToolSink`, and one implementation serves both.
+
+## Extension tools
+
+An extension registers a tool the same way a built-in is defined — `defineTool`, one Zod
+object — and the host rewrites the name to `ext_<extension>_<tool>` on the way in, with
+the same 64-character cap and digest tail `mcp_<server>_<tool>` gets. What arrives in the
+registry is an ordinary `Tool` and nothing downstream can tell the difference.
+
+**Registering one grants nothing.** It joins the registry, and every agent still decides
+for itself whether it may call it through `agents.list.<id>.tools`, where an absent name
+means disabled. There is no permission vocabulary in an extension's manifest,
+deliberately: one reachable from a file the extension ships would be a way to grant
+something the operator never enabled. See [Extensions](extensions.md).
 
 ### Rewriting what a tool says about itself
 

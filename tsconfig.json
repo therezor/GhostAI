@@ -34,6 +34,8 @@
     { "path": "packages/cli" },
     { "path": "packages/cli/test" },
     { "path": "packages/e2e" },
+    { "path": "examples/hello-extension" },
+    { "path": "examples/hello-extension/test" },
     { "path": "examples/loopback-channel" },
     { "path": "examples/loopback-channel/test" }
   ]

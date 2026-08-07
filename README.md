@@ -115,17 +115,19 @@ Everything under `~/.ghostai`, or `$GHOSTAI_HOME`:
 
 **Memory** — the agent keeps what it learns in `<workspace>/memory/`, one plain markdown file per fact with frontmatter saying what it is about. Only the generated index reaches the prompt; the agent opens a memory with `read_file` when its line looks relevant, and corrects one by writing the same name again. You edit them with an editor and commit them beside the project. The wording of the section is a prompt template you own, and whether an agent remembers at all is the `memory` tool's permission — so there is one switch and not two. See [Memory](docs/memory.md).
 
-**MCP servers** — add one in Settings → Extensions over stdio, Streamable HTTP or SSE, with OAuth where a server wants it. Its tools land in the same registry as the built-ins, as `mcp_<server>_<tool>`, and each agent decides for itself which of them it may call — nothing is granted implicitly. A server that goes away takes its tools with it and reconnects on its own. See [Tools](docs/tools.md#mcp-servers).
+**MCP servers** — add one in Settings → MCP servers over stdio, Streamable HTTP or SSE, with OAuth where a server wants it. Its tools land in the same registry as the built-ins, as `mcp_<server>_<tool>`, and each agent decides for itself which of them it may call — nothing is granted implicitly. A server that goes away takes its tools with it and reconnects on its own. See [Tools](docs/tools.md#mcp-servers).
+
+**Extensions** — a directory under `~/.ghostai/extensions` that adds tools, channels, providers, prompt sections and slash commands to a running install. Approving one records a **digest over every byte it holds**, so editing any file revokes that approval automatically — a manifest-only hash would approve a pointer, since an extension's manifest names a path rather than pinning an image the way a toolbox does. One broken extension is a row with a sentence on it, never a boot that refuses. It runs in the server process with the access the server has, and the approval dialog says so rather than implying a sandbox that is not there. Nothing fetches: `extensions.load` takes a path, never a package spec. `examples/hello-extension` is the whole contract in under a hundred lines. See [Extensions](docs/extensions.md).
 
 ---
 
 ## How it works
 
 ```
-{ protocol, i18n } → core → security → { providers, tools } → { mcp, agent } → runtime → server ┐
-{ protocol, i18n } → web                                                                        │
-             core → channels                                                                    ├→ cli
-                    tui                                                                         ┘
+{ protocol, i18n } → core → security → { providers, tools } → { mcp, agent } ─┬→ runtime → server ┐
+{ protocol, i18n } → web                                                      │                   │
+             core → channels ────────────────→ extension-host ────────────────┘                   ├→ cli
+                    tui                                                                           ┘
 ```
 
 Packages may only depend downward, and that is enforced mechanically rather than by review: pnpm's isolated `node_modules` means a package can only resolve `@ghostai/x` if it declares it, so an undeclared import fails to _resolve_, not merely to lint.
@@ -197,13 +199,12 @@ Every key under `agents.defaults` is overridable per agent, and `agents.list.<id
 
 The wire schemas, config blocks and seams for these already ship. The implementations do not, and nothing in the UI advertises them: a settings screen naming a feature you cannot open is one an operator checks twice. [`docs/ROADMAP.md`](docs/ROADMAP.md) tracks them, one line each.
 
-| Feature                | Ships today                                                 | Missing                               |
-| ---------------------- | ----------------------------------------------------------- | ------------------------------------- |
-| **Heartbeat delivery** | The decide/run/evaluate triad, as a scheduled job's payload | `targets` reaching a channel          |
-| **Plugins**            | Load specs, `allowUnverified`, `unregisterBySource`         | Discovery, loader and manifest format |
-| **Session search**     | Keyset pagination and filters                               | Text search over message content      |
+| Feature                | Ships today                                                 | Missing                          |
+| ---------------------- | ----------------------------------------------------------- | -------------------------------- |
+| **Heartbeat delivery** | The decide/run/evaluate triad, as a scheduled job's payload | `targets` reaching a channel     |
+| **Session search**     | Keyset pagination and filters                               | Text search over message content |
 
-Two smaller ones, so nothing here reads as more finished than it is: only the `openai-chat` wire adapter exists, so the registry entries that name another wire — `anthropic`, `gemini` — are refused at construction rather than falling back, and reaching those providers today means an endpoint that speaks `openai-chat`; and the translation layer is complete while **English is the only shipped locale** — adding one is a folder plus a line.
+Two smaller ones, so nothing here reads as more finished than it is: only the `openai-chat` wire adapter ships, so a registry entry naming another wire — `anthropic`, `gemini` — is refused at construction rather than falling back, and reaching those providers today means an endpoint that speaks `openai-chat` or an extension that contributes the wire; and the translation layer is complete while **English is the only shipped locale** — adding one is a folder plus a line.
 
 ---
 

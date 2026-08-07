@@ -1,0 +1,9 @@
+{
+  "schema": "ghostai.extension/1",
+  "id": "hello",
+  "version": "1.0.0",
+  "label": "Hello",
+  "description": "A reference extension: one tool, one prompt section, one command.",
+  "entry": "dist/index.js",
+  "contributes": ["tools", "context", "commands"]
+}

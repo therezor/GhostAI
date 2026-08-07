@@ -11,10 +11,31 @@ building a second one beside it.
 ## Planned
 
 - [ ] **Session search page** — find a session by what was said in it.
-- [ ] **Extensions** — third-party packages that add tools, channels or
-      providers.
 
 ## Done
+
+- [x] **Extensions** — a directory an operator installs under
+      `~/.ghostai/extensions`, approved by a digest over every byte it holds,
+      loaded into the server process. It may add tools, channels, providers,
+      prompt sections and slash commands — the five registries that already
+      existed, plus a command surface that did not. `ExtensionContext` is a
+      _recorder_ rather than the registries: `activate` fills a bag and the host
+      applies it, which is what makes unload exact and a half-finished
+      `activate` install nothing at all. `reconcile` never throws, so one broken
+      extension is a row with a sentence beside it rather than a boot that
+      refuses. The digest covers the **directory**, not the manifest, and that
+      is the one place this deliberately diverges from toolboxes: a toolbox
+      manifest pins an immutable image, so hashing it hashes the code, while an
+      extension manifest names a path and hashing it would approve a pointer.
+      Three things are deliberately not built. **There is no sandbox** — an
+      extension runs in-process with full `node:` access, `contributes` is
+      disclosure rather than enforcement, and `docs/security.md` says so instead
+      of implying otherwise. **Nothing fetches**: `extensions.load` takes a
+      path, never a package spec, which is what keeps an air-gapped install
+      air-gapped and is why the drafted `allowUnverified` flag was deleted
+      rather than wired. **Reloading changed code needs a restart**, because
+      Node's module registry has no eviction; the digest gate makes that visible
+      by refusing to load a `drifted` extension at all.
 
 - [x] **Slash commands in the composer** — `/new`, `/clear`, `/rename`,
       `/stop`, `/branch`, `/agent` and `/model`, each reporting in a toast, with

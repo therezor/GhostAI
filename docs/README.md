@@ -14,6 +14,7 @@ in [ROADMAP.md](ROADMAP.md) and is not documented as though it works.
 | [Skills](skills.md)               | Instruction sheets in `<workspace>/skills/`, indexed or named on a message.           |
 | [Memory](memory.md)               | What an agent remembers between sessions, one file per fact in `<workspace>/memory/`. |
 | [Toolboxes](toolboxes.md)         | Running `exec` inside a pinned, hash-approved container instead of on the host.       |
+| [Extensions](extensions.md)       | Third-party code an operator installs and approves, and the five things it may add.   |
 | [Web UI](web-ui.md)               | The screens, and what each one lets you do.                                           |
 
 ## Understanding it
