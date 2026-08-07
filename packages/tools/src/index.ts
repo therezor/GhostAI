@@ -12,7 +12,7 @@
  *  - `defineTool` collapses a tool's schema, its advertised JSON Schema, its
  *    argument validation and its handler's parameter type into one declaration.
  *  - `ToolRegistry` is the source-tagged, per-agent collection: memoised
- *    definitions for the prompt, exact teardown by source for plugin unload, and
+ *    definitions for the prompt, exact teardown by source for extension unload, and
  *    an `execute` that validates, bounds and reports without ever throwing.
  *  - The five built-ins — `read_file`, `write_file`, `edit_file`, `list_dir`,
  *    `exec` — every one of which routes its filesystem access through the
@@ -54,6 +54,14 @@ export {
 } from './registry.js';
 
 export { isEnabled, permissionFor } from './scope.js';
+
+export type { ToolSink } from './sink.js';
+
+export {
+  isAdvertisableName,
+  namespacedToolName,
+  namespacedToolNames,
+} from './names.js';
 
 export {
   localRunner,

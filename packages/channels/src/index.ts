@@ -7,9 +7,9 @@
  *
  * That third part used to say "there is no Telegram here", and the property it
  * was protecting is worth restating now that there is, because it survived:
- * **the built-in consumes exactly the `ChannelFactory` contract a plugin
+ * **the built-in consumes exactly the `ChannelFactory` contract an extension
  * would**. It is registered by `ghost serve` like any other factory, it reaches
- * nothing a plugin could not reach, and `channelConformance` — the suite
+ * nothing an extension could not reach, and `channelConformance` — the suite
  * written for implementations outside this repository — runs against it. The
  * contract cannot rot into "whatever the built-in needed", because the built-in
  * is held to the contract by the same test everyone else is.

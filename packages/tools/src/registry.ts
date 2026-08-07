@@ -6,8 +6,8 @@
  * `_mcp_sessions`, `_mcp_wrapped_tools` and a lock to coordinate them — which is
  * why it has a regression test named after the resulting bug. This is a class,
  * instantiated per agent, and everything registered carries the source that
- * registered it. That tag is what makes `unregisterBySource('plugin')` exact:
- * uninstalling a plugin removes its tools and nothing else, where the Python
+ * registered it. That tag is what makes `unregisterBySource('extension')` exact:
+ * uninstalling an extension removes its tools and nothing else, where the Python
  * equivalent deleted `sys.modules` entries and restarted a subprocess.
  *
  * Two properties matter more than they look:
@@ -155,7 +155,7 @@ export function withToolboxTools(
     definitions(): readonly ToolDefinition[] {
       const underneath = base.definitions();
       // Memoised against the base's own array identity, which the registry
-      // already keys on its revision — so a plugin registering late still shows
+      // already keys on its revision — so an extension registering late still shows
       // up, and a turn that asks twice does not re-sort.
       if (cached !== null && cachedFrom === underneath) return cached;
       const merged = [
@@ -207,7 +207,7 @@ export interface ToolScope {
 /**
  * A restricted view of one registry.
  *
- * Holds the registry rather than a snapshot of it: a plugin registering a tool
+ * Holds the registry rather than a snapshot of it: an extension registering a tool
  * after boot has to become visible to every agent whose permissions admit it,
  * and a view built once at agent-resolution time would never see it. The memo
  * is keyed on the registry's revision for exactly that reason.
@@ -322,7 +322,7 @@ export class ToolRegistry {
   /**
    * Watches for a change to what is registered.
    *
-   * The seam a transport reaches an MCP reconnection or a plugin load through,
+   * The seam a transport reaches an MCP reconnection or an extension load through,
    * without either of them knowing a transport exists. A server connecting
    * calls `register`; `invalidate` is the one funnel every mutation already
    * passes through; the WebSocket's `tools.changed` frame falls out.
@@ -369,7 +369,7 @@ export class ToolRegistry {
    *
    * `agents.defaults.toolTimeoutMs` is editable in the settings panel, and the
    * alternative — building a new registry when it changes — would throw away
-   * every MCP and plugin registration on it, which is far more than the
+   * every MCP and extension registration on it, which is far more than the
    * operator asked to change. A call already in flight keeps the timeout it
    * started under; the timer is armed at entry and never re-read.
    */
@@ -388,7 +388,7 @@ export class ToolRegistry {
    *
    * A duplicate is a `conflict` rather than a silent overwrite: two sources
    * claiming one name means the model's calls would go to whichever registered
-   * last, and which one that is depends on plugin load order. MCP tools are
+   * last, and which one that is depends on extension load order. MCP tools are
    * flattened to `mcp_{server}_{tool}` upstream of here for the same reason.
    */
   register(tool: AnyTool, source: ToolSource = 'builtin'): void {
@@ -430,7 +430,7 @@ export class ToolRegistry {
   /**
    * Removes everything one source registered. Returns how many went.
    *
-   * This is the whole of plugin teardown for tools, and it is exact by
+   * This is the whole of extension teardown for tools, and it is exact by
    * construction — no name matching, no module-cache surgery, no restart.
    */
   unregisterBySource(source: ToolSource): number {

@@ -9,7 +9,7 @@
  * that is deliberately four things.
  *
  * Two decisions in the shape are worth stating, because both close a hole a
- * plugin channel would otherwise be able to walk through:
+ * extension channel would otherwise be able to walk through:
  *
  *  - **A channel publishes through `context.publish`, not through the bus.**
  *    Handing a channel the `MessageBus` would hand it `publishOutbound` — the
@@ -121,8 +121,9 @@ export interface ChannelContext {
   /**
    * This channel's block of `config.channels`, unparsed.
    *
-   * `ChannelsConfigSchema` is a `looseObject` precisely so that installing a
-   * channel plugin does not require a schema change in `@ghostai/protocol`, so
+   * `ChannelsConfigSchema` is a `looseObject` precisely so that installing an
+   * extension that carries a channel does not require a schema change in
+   * `@ghostai/protocol`, so
    * the channel parses its own settings — with its own Zod schema, if it has
    * one — and reports a bad block by refusing to start.
    */
@@ -201,8 +202,8 @@ export interface Channel {
  *
  * The indirection is what lets the manager own the lifecycle — settings,
  * logger, abort signal, the publish function bound to this id — and it is the
- * same contract a plugin's `registerChannel` will hand over in Phase 4. The
- * built-in channels consume it too, so it cannot rot.
+ * same contract `ExtensionContext.registerChannel` hands over. The built-in
+ * channels consume it too, so it cannot rot.
  */
 export interface ChannelFactory {
   readonly id: string;

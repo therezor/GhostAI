@@ -46,16 +46,16 @@ describe('the settings panels', () => {
     // is the split Agents already makes: the agents are a page, and only
     // install-wide tool settings are in Settings.
     //
-    // `extensions` joined them with the MCP client, and `channels` with
-    // Telegram. There is no eighth entry naming a future phase: a panel is on
-    // this list once it has something to configure.
+    // `mcp` joined them with the MCP client, and `channels` with Telegram.
+    // There is no entry naming a future phase: a panel is on this list once it
+    // has something to configure.
     expect(SETTINGS_PANELS.map((panel) => panel.id)).toEqual([
       'providers',
       'tools',
       'account',
       'appearance',
       'automation',
-      'extensions',
+      'mcp',
       'channels',
     ]);
   });

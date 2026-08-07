@@ -232,6 +232,34 @@ importers:
         specifier: ^4.0.0
         version: 4.4.3
 
+  packages/extension-host:
+    dependencies:
+      '@ghostai/agent':
+        specifier: workspace:*
+        version: link:../agent
+      '@ghostai/channels':
+        specifier: workspace:*
+        version: link:../channels
+      '@ghostai/core':
+        specifier: workspace:*
+        version: link:../core
+      '@ghostai/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@ghostai/providers':
+        specifier: workspace:*
+        version: link:../providers
+      '@ghostai/security':
+        specifier: workspace:*
+        version: link:../security
+      '@ghostai/tools':
+        specifier: workspace:*
+        version: link:../tools
+    devDependencies:
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
+
   packages/i18n:
     dependencies:
       i18next:

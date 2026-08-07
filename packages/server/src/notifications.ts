@@ -84,7 +84,7 @@ const read = rowReader('notifications');
 
 /**
  * A level written by something that predates a level being added, or by a
- * plugin, becomes `info` rather than failing the read. The alternative is one
+ * extension, becomes `info` rather than failing the read. The alternative is one
  * bad row making the whole notification list unreadable.
  */
 function readLevel(row: Row): Notification['level'] {

@@ -1,5 +1,5 @@
 /**
- * The Extensions panel and the MCP editor, driven through the real router.
+ * The MCP servers panel and the MCP editor, driven through the real router.
  *
  * **This is where the connection states are asserted**, and it is deliberate
  * that they are asserted here and nowhere else. Whether a row reads
@@ -72,7 +72,7 @@ const SHELL_ROUTES: Record<string, StubRoute> = {
 };
 
 function mount(
-  path = '/settings?panel=extensions',
+  path = '/settings?panel=mcp',
   overrides: Record<string, StubRoute> = {},
 ): {
   readonly user: ReturnType<typeof userEvent.setup>;
@@ -107,19 +107,24 @@ const patchesOf = (calls: readonly RecordedRequest[]): ConfigPatch[] =>
     .filter((call) => call.method === 'PATCH')
     .map((call) => call.body as ConfigPatch);
 
-describe('the Extensions panel', () => {
+describe('the MCP servers panel', () => {
   it('shows the servers and a way to add one', async () => {
     // The two halves of a settings panel that is actually a settings panel:
     // what is configured, and a control that changes it.
+    //
+    // Both awaited, and the first one deliberately is not the words `MCP
+    // servers`: the tab strip renders that immediately from the panel table,
+    // so a `findByText` for it would resolve before `GET /api/settings` had
+    // answered and leave the second assertion racing an empty tabpanel.
     mount();
-    expect(await screen.findByText('MCP servers')).toBeInTheDocument();
     expect(
-      screen.getByRole('link', { name: 'New MCP server' }),
+      await screen.findByRole('link', { name: 'New MCP server' }),
     ).toBeInTheDocument();
+    expect(await screen.findByText('files')).toBeInTheDocument();
   });
 
   it('promises no screen that is not on it', async () => {
-    // This panel used to end in a "Still to come" list naming OAuth, plugins
+    // This panel used to end in a "Still to come" list naming OAuth, extensions
     // and — before them — skills and channels. It is gone: a settings screen
     // advertising a form an operator cannot open is a screen they check twice.
     // Skills in particular are workspace folders rather than configuration, so
@@ -158,7 +163,7 @@ describe('the Extensions panel', () => {
   it('says so rather than guessing when the client has no answer', async () => {
     // A build with `mcp: false` answers `{servers: []}`, and a configured
     // server it knows nothing about is `Unknown` rather than a guess at `Off`.
-    mount('/settings?panel=extensions', { '/api/mcp': [200, { servers: [] }] });
+    mount('/settings?panel=mcp', { '/api/mcp': [200, { servers: [] }] });
     expect(await screen.findByText('files')).toBeInTheDocument();
     expect(screen.getAllByText('Unknown')).toHaveLength(2);
   });

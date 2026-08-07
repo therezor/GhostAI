@@ -600,7 +600,7 @@ export const NotificationEventSchema = z.object({
   jobId: z.string().optional(),
 });
 
-/** Tool list changed — an MCP server reconnected, or a plugin loaded/unloaded. */
+/** Tool list changed — an MCP server reconnected, or an extension loaded/unloaded. */
 export const ToolsChangedEventSchema = z.object({
   type: z.literal('tools.changed'),
   seq,

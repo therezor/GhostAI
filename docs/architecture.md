@@ -163,7 +163,9 @@ Everything under `~/.ghostai`, or `$GHOSTAI_HOME`. Directories are created `0700
 | `shared/<workspaceId>/`   | The layer agents in one folder share. Also outside the jail.                                                       |
 | `toolboxes/<name>/`       | Installed manifests. Outside the workspace, so injection cannot edit the policy the agent runs under.              |
 | `runs/<containerId>/`     | Sandbox command transcripts. Outside the workspace — a symlink-planting escape was demonstrated before this moved. |
-| `logs/`, `plugins/`       | —                                                                                                                  |
+| `extensions/<id>/`        | Installed extensions. Approved by a digest over every byte, so state is written elsewhere.                         |
+| `extension-data/<id>/`    | What an extension writes at runtime — a sibling of its install directory, never a child.                           |
+| `logs/`                   | —                                                                                                                  |
 
 ### The database
 
@@ -186,7 +188,7 @@ table is `STRICT`.
 `seq` is both the ordering and the pagination cursor. Timestamps are not usable for
 either, because a turn writing parallel tool results collides on them.
 
-`sessions.origin` is `web`, `cli`, `telegram`, `automation`, `subagent`, or a plugin id.
+`sessions.origin` is `web`, `cli`, `telegram`, `automation`, `subagent`, or an extension id.
 Session listing excludes `subagent` **and `automation`** unless asked for one by name.
 Both are real rows and neither is a session: one turn, started by a model. Automation
 is the one that scales badly if it leaks — a job on a five-minute interval writes about

@@ -34,7 +34,7 @@ const STATUS = {
   authEnabled: false,
   toolCount: 3,
   mcpServersConnected: 0,
-  pluginsLoaded: 0,
+  extensionsLoaded: 0,
 };
 
 const AGENTS = {

@@ -39,7 +39,7 @@ export const TOOL_OUTPUT_NONCE_BYTES = 8;
 
 const NONCE_PATTERN = /^[0-9a-f]{8,}$/i;
 
-/** Tool names reach the envelope from MCP servers and plugins, so they are constrained. */
+/** Tool names reach the envelope from MCP servers and extensions, so they are constrained. */
 const UNSAFE_NAME_CHARS = /[^\w.:-]+/g;
 
 export function createToolOutputNonce(

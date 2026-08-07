@@ -84,7 +84,7 @@ describe('GET /api/status', () => {
       authEnabled: true,
       toolCount: 1,
       mcpServersConnected: 0,
-      pluginsLoaded: 0,
+      extensionsLoaded: 0,
     });
   });
 

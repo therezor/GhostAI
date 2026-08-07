@@ -519,7 +519,7 @@ export async function startServer(
     const listener = server;
 
     // The producer for `tools.changed`, and the reason it hangs off the
-    // *registry* rather than off the MCP manager: a plugin host will need the
+    // *registry* rather than off the MCP manager: the extension host needs the
     // same seam in Phase 4, and the registry is the thing they have in common.
     // `@ghostai/mcp` calls `sink.replace`, the registry's revision moves, and
     // every open tab learns without either of them knowing a socket exists.

@@ -67,7 +67,7 @@ export type ChatMessageInput = z.input<typeof ChatMessageSchema>;
 export interface SessionRecord {
   readonly key: string;
   readonly title: string;
-  /** Channel that owns it — `web`, `telegram`, `automation`, a plugin id. */
+  /** Channel that owns it — `web`, `telegram`, `automation`, an extension id. */
   readonly origin: string;
   /**
    * The workspace this session's tools run inside.

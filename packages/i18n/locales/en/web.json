@@ -682,9 +682,9 @@
         "label": "Channels",
         "summary": "Reach the same agent from a messaging app."
       },
-      "extensions": {
-        "label": "Extensions",
-        "summary": "MCP servers, and the tools they contribute."
+      "mcp": {
+        "label": "MCP servers",
+        "summary": "Model Context Protocol servers, and the tools they contribute."
       },
       "providers": {
         "label": "Providers",

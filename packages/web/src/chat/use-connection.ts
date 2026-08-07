@@ -10,7 +10,7 @@
  * Query cache. Three server events invalidate fetched state, and none of them
  * can be discovered by polling — a turn ending changes the session list's
  * message counts, a notification changes the sidebar badge, and `tools.changed`
- * means an MCP server or a plugin moved under the settings panel's feet.
+ * means an MCP server or an extension moved under the settings panel's feet.
  */
 
 import { useQueryClient } from '@tanstack/react-query';

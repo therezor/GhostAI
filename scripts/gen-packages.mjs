@@ -127,6 +127,29 @@ const PACKAGES = {
     // this package's runtime graph imports zod.
     devDeps: { zod: '^4.0.0' },
   },
+  'extension-host': {
+    description:
+      'Discovers, authorises, loads and unloads extensions, and collects what they contribute.',
+    // Above every registry it hands work to and below the composition root that
+    // applies it. `channels` is in the list for its `ChannelFactory` type alone,
+    // which is also why this package rather than `runtime` owns the host:
+    // `runtime` has no business importing `channels`, and an extension
+    // contributing a channel has to be able to say so somewhere.
+    internal: [
+      'protocol',
+      'core',
+      'security',
+      'providers',
+      'tools',
+      'agent',
+      'channels',
+    ],
+    // Tests only — the conformance suite builds a tool with `defineTool` to
+    // prove an extension's registration reaches the registry intact.
+    devDeps: { zod: '^4.0.0' },
+    // The suite an out-of-tree extension runs against its own `activate`.
+    subpaths: { './testkit': 'test/testkit/index.ts' },
+  },
   runtime: {
     description: 'The shared composition root: config in, a running agent out.',
     internal: [
@@ -137,6 +160,7 @@ const PACKAGES = {
       'tools',
       'mcp',
       'agent',
+      'extension-host',
     ],
     // Tests only — one test registers a tool with `defineTool` to prove a
     // reconfigure does not drop it. Nothing in the runtime graph imports zod.
@@ -216,6 +240,7 @@ const PACKAGES = {
       'providers',
       'tools',
       'agent',
+      'extension-host',
       'runtime',
       'server',
       'channels',

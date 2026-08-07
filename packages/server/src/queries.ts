@@ -68,7 +68,7 @@ export const PageQuerySchema: z.ZodType<PageQuery> = z.object(pageShape);
 const SESSION_SORT_KEYS = ['updated', 'created', 'title'] as const;
 
 export interface SessionListQuery extends PageQuery {
-  /** `web`, `telegram`, `automation`, a plugin id. Absent means every origin. */
+  /** `web`, `telegram`, `automation`, an extension id. Absent means every origin. */
   readonly origin?: string | undefined;
   /** Absent means every workspace, which is what the unscoped sidebar asks for. */
   readonly workspace?: string | undefined;

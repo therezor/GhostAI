@@ -1,5 +1,5 @@
 /**
- * The Extensions panel: the MCP servers this install talks to.
+ * The MCP servers panel: the servers this install talks to.
  *
  * The list is the configured servers joined to their live state, and the join
  * is the whole reason this screen needs two requests. `GET /api/settings` says
@@ -94,11 +94,7 @@ const COMPARE: Comparators<ServerRow, SortKey> = {
   status: (a, b) => rank(a) - rank(b),
 };
 
-export function ExtensionsPanel({
-  config,
-}: {
-  readonly config: Config;
-}): JSX.Element {
+export function McpPanel({ config }: { readonly config: Config }): JSX.Element {
   const { t } = useTranslation();
   const [pendingDelete, setPendingDelete] = useState<ServerRow | undefined>(
     undefined,

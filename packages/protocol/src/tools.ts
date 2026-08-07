@@ -73,7 +73,7 @@ export const BUILTIN_TOOL_NAMES: readonly string[] = [
 ];
 
 /** Where a registered tool came from, so `unregisterBySource` can be exact. */
-export const ToolSourceSchema = z.enum(['builtin', 'mcp', 'plugin']);
+export const ToolSourceSchema = z.enum(['builtin', 'mcp', 'extension']);
 export type ToolSource = z.infer<typeof ToolSourceSchema>;
 
 /**

@@ -271,10 +271,10 @@ export async function startHarness(
     env: { PATH: process.env.PATH ?? '', HOME: home },
   });
 
-  // `source: 'plugin'` rather than `'builtin'`, because every reconfigure calls
+  // `source: 'extension'` rather than `'builtin'`, because every reconfigure calls
   // `unregisterBySource('builtin')` — a settings save in the middle of a spec
   // would otherwise take the wait tool out from under the turn using it.
-  runtime.tools.register(waitTool, 'plugin');
+  runtime.tools.register(waitTool, 'extension');
 
   const hub = new SessionHub({
     config: runtime.config,
@@ -523,7 +523,7 @@ function harnessRuntime(
     },
 
     // The catalogue the agent editor picks from, unnarrowed — including the
-    // harness's own `e2e_wait`, which is registered as a plugin tool.
+    // harness's own `e2e_wait`, which is registered as an extension tool.
     registeredTools: () => runtime.tools.definitions(),
 
     // Wired here as well as in the real adapter, because this harness has its
@@ -539,7 +539,7 @@ function harnessRuntime(
       mcpServersConnected: runtime
         .mcpServers()
         .filter((server) => server.state === 'ready').length,
-      pluginsLoaded: 0,
+      extensionsLoaded: 0,
     }),
     mcpServers: (): readonly McpServerStatus[] => runtime.mcpServers(),
 

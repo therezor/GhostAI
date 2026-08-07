@@ -128,8 +128,8 @@ than letting the model read what went wrong and try something else. `definitions
 memoised and sorted by name, so the prompt prefix a provider caches does not shuffle
 between requests.
 
-Every registration carries a source — `builtin`, `mcp` or `plugin` — so uninstalling a
-plugin can remove exactly its tools, with no module-cache surgery and no restart.
+Every registration carries a source — `builtin`, `mcp` or `extension` — so uninstalling
+an extension can remove exactly its tools, with no module-cache surgery and no restart.
 
 ### Rewriting what a tool says about itself
 
@@ -167,7 +167,7 @@ this page to find out what it was. The row then shows whichever description the 
 actually receives, so the list cannot disagree with the payload.
 
 The rewrite happens in `AgentLoop.toolDefinitions`, after the subagent definitions are
-appended — one pass covering built-ins, toolbox programs, MCP and plugin tools and
+appended — one pass covering built-ins, toolbox programs, MCP and extension tools and
 `ask_<id>` alike, and the reason `toolPrompts` beats `subagents[].prompt`. It cannot
 happen in the registry: `definitions()` is memoised and shared by every agent in the
 process, so one agent's wording would become everyone's.

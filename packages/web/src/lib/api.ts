@@ -556,7 +556,7 @@ export const api = {
    *
    * Not a restart: the process, the socket and any turn already running all
    * survive. It is for the changes a running server cannot see — a config
-   * edited by hand, a plugin dropped in beside it — and it answers with the
+   * edited by hand, an extension dropped in beside it — and it answers with the
    * settings it is now serving, so a caller can tell a reload that changed
    * something from one that changed nothing.
    */

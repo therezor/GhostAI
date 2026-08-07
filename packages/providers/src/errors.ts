@@ -153,7 +153,7 @@ export class ProviderError extends GhostError {
 }
 
 /**
- * Structural, like `isGhostError` and for the same reason: a plugin bundling its
+ * Structural, like `isGhostError` and for the same reason: an extension bundling its
  * own copy of this package produces a different class identity, and `instanceof`
  * would silently reclassify every error it raised.
  */

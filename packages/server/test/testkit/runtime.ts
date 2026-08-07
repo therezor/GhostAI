@@ -213,7 +213,7 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
       mcpServersConnected: (options.mcpServers ?? []).filter(
         (server) => server.state === 'ready',
       ).length,
-      pluginsLoaded: 0,
+      extensionsLoaded: 0,
     }),
     // Present only when a test supplies servers, so the absent case — a build
     // with no MCP client at all — is the default rather than something a test

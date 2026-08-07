@@ -1,0 +1,43 @@
+{
+  "name": "@ghostai/extension-host",
+  "version": "0.0.0",
+  "description": "Discovers, authorises, loads and unloads extensions, and collects what they contribute.",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testkit": {
+      "development": "./test/testkit/index.ts",
+      "types": "./dist/test/testkit/index.d.ts",
+      "default": "./dist/test/testkit/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "!dist/**/*.test.*"
+  ],
+  "scripts": {
+    "build": "tsup && tsc -b",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@ghostai/agent": "workspace:*",
+    "@ghostai/channels": "workspace:*",
+    "@ghostai/core": "workspace:*",
+    "@ghostai/protocol": "workspace:*",
+    "@ghostai/providers": "workspace:*",
+    "@ghostai/security": "workspace:*",
+    "@ghostai/tools": "workspace:*"
+  },
+  "devDependencies": {
+    "zod": "^4.0.0"
+  }
+}

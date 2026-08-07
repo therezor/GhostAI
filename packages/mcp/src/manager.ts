@@ -27,7 +27,7 @@
 import { silentLogger, systemClock } from '@ghostai/core';
 import type { Clock, Logger } from '@ghostai/core';
 import type { McpServerConfig, McpServerStatus } from '@ghostai/protocol';
-import type { AnyTool } from '@ghostai/tools';
+import type { ToolSink } from '@ghostai/tools';
 import type { CredentialVault } from '@ghostai/security';
 
 import { CallbackListener } from './callback.js';
@@ -52,19 +52,15 @@ import {
 /**
  * Where a server's tools go.
  *
- * One method, and it replaces rather than adds: a server that reconnects with
- * a shorter list must lose the tools it no longer has, and expressing that as
- * add-plus-remove would put the bookkeeping in two places that can disagree.
- * `ToolRegistry.unregisterBySource('mcp')` is the wrong grain — it would take
- * every *other* server's tools with it.
+ * `ToolSink` in `@ghostai/tools`, under this package's own name for it. The
+ * interface moved there when the extension host turned out to need the same
+ * one, and the alias stays because "the sink a server's tools go to" is how
+ * every call site in this package reads.
  *
  * Implemented in `@ghostai/runtime`, which is the only place that knows both
  * this interface and `ToolRegistry`.
  */
-export interface McpToolSink {
-  /** Returns the names it could not register — a collision with another source. */
-  replace(serverId: string, tools: readonly AnyTool[]): readonly string[];
-}
+export type McpToolSink = ToolSink;
 
 interface McpManagerOptions {
   readonly sink: McpToolSink;
@@ -79,7 +75,7 @@ interface McpManagerOptions {
    * Fired after any change to a server's status or its registered tools.
    *
    * Note this is *not* how a tool-list change reaches a transport — that
-   * happens through `ToolRegistry.subscribe`, because a plugin host will need
+   * happens through `ToolRegistry.subscribe`, because an extension host will need
    * the same seam and the registry is the thing they have in common. This is
    * for the status list, which nothing else can observe.
    */

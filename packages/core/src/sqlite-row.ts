@@ -92,8 +92,8 @@ export function rowReader(store: string): RowReader {
 /**
  * A JSON object column, as a bag.
  *
- * Metadata is written by channels and plugins, so a malformed value is a bug in
- * something else. Failing the whole read over it would make one bad plugin
+ * Metadata is written by channels and extensions, so a malformed value is a bug
+ * in something else. Failing the whole read over it would make one bad extension
  * write cost the user their conversation; an empty bag loses only the metadata.
  * That makes this the one column where tolerance is the right answer, and it is
  * why this is a separate function rather than another `RowReader` method — the

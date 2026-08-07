@@ -687,7 +687,7 @@ export const AgentEntrySchema = patchOf(AgentDefaultsSchema)
      * the model is sent.
      *
      * Keyed by advertised tool name, so it reaches built-ins, toolbox programs,
-     * MCP and plugin tools and `ask_<id>` subagent tools alike. For a subagent
+     * MCP and extension tools and `ask_<id>` subagent tools alike. For a subagent
      * this wins over `subagents[].prompt`, being the more specific of the two.
      *
      * A key naming no advertised tool is a warning, not an error: a tool can
@@ -728,7 +728,7 @@ export const AgentsConfigSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
-// Scheduler, channels, plugins
+// Scheduler, channels, extensions
 // ---------------------------------------------------------------------------
 
 /**
@@ -764,10 +764,10 @@ export const SchedulerConfigSchema = z.object({
 });
 
 /**
- * Channel settings. Loose by design: each channel — built-in or plugin — parses
- * its own block, so installing a channel plugin does not require a schema
- * change here. Telegram ships in the box but consumes the same `ChannelFactory`
- * contract a plugin would, so the contract cannot rot.
+ * Channel settings. Loose by design: each channel — built-in or from an
+ * extension — parses its own block, so installing a channel does not require a
+ * schema change here. Telegram ships in the box but consumes the same
+ * `ChannelFactory` contract an extension would, so the contract cannot rot.
  */
 export const ChannelsConfigSchema = z.looseObject({
   sendProgress: z.boolean().default(true),
@@ -775,15 +775,31 @@ export const ChannelsConfigSchema = z.looseObject({
 });
 export type ChannelsConfig = z.infer<typeof ChannelsConfigSchema>;
 
-export const PluginsConfigSchema = z.object({
-  /** Explicit specs to load, bypassing `~/.ghostai/plugins` discovery. */
+/**
+ * Extension settings.
+ *
+ * Per-extension configuration is a `settings` sub-object rather than the loose
+ * top level `channels` uses, and the difference is not taste: this block
+ * already has keys of its own, so an extension whose id happened to be `load`
+ * or `disabled` would silently overwrite one. Inside `settings` each block is
+ * loose for the same reason a channel's is — installing an extension must not
+ * require a schema change here, and the extension parses its own block.
+ */
+export const ExtensionsConfigSchema = z.object({
+  /**
+   * Extra directories to load from, beside `~/.ghostai/extensions`.
+   *
+   * A path, never a package spec. Nothing here fetches: an extension is a
+   * directory an operator put on the box, which is what keeps an air-gapped
+   * install air-gapped.
+   */
   load: z.array(z.string()).default([]),
   disabled: z.array(z.string()).default([]),
-  /** Required before an arbitrary npm spec may be installed. */
-  allowUnverified: z.boolean().default(false),
-  /** Lets a later-discovered plugin shadow an earlier id instead of erroring. */
+  /** Lets a later-discovered extension shadow an earlier id instead of erroring. */
   allowOverride: z.boolean().default(false),
+  settings: z.record(z.string(), z.looseObject({})).default({}),
 });
+export type ExtensionsConfig = z.infer<typeof ExtensionsConfigSchema>;
 
 /**
  * What the install looks and reads like, for both surfaces.
@@ -855,7 +871,7 @@ export const ConfigSchema = z.object({
   tools: ToolsConfigSchema.prefault({}),
   channels: ChannelsConfigSchema.prefault({}),
   scheduler: SchedulerConfigSchema.prefault({}),
-  plugins: PluginsConfigSchema.prefault({}),
+  extensions: ExtensionsConfigSchema.prefault({}),
   ui: UiConfigSchema.prefault({}),
 });
 export type Config = z.infer<typeof ConfigSchema>;
@@ -987,8 +1003,8 @@ export const ConfigPatchSchema = z.object({
     })
     .optional(),
   /**
-   * Loose, unlike the rest: a channel plugin's config block is an unknown key
-   * here, and a stripping patch schema would drop it on every save.
+   * Loose, unlike the rest: an extension channel's config block is an unknown
+   * key here, and a stripping patch schema would drop it on every save.
    */
   channels: z
     .looseObject({
@@ -997,7 +1013,20 @@ export const ConfigPatchSchema = z.object({
     })
     .optional(),
   scheduler: patchOf(SchedulerConfigSchema).optional(),
-  plugins: patchOf(PluginsConfigSchema).optional(),
+  /**
+   * Written out rather than `patchOf`, for the reason `tools.mcpServers` is:
+   * an extension's settings block has to be deletable, and `patchOf` cannot
+   * make a record's *value* nullable.
+   */
+  extensions: z
+    .object({
+      load: z.array(z.string()).optional(),
+      disabled: z.array(z.string()).optional(),
+      allowOverride: z.boolean().optional(),
+      /** `null` deletes one extension's block. */
+      settings: z.record(z.string(), z.looseObject({}).nullable()).optional(),
+    })
+    .optional(),
   ui: patchOf(UiConfigSchema).optional(),
 });
 export type ConfigPatch = z.infer<typeof ConfigPatchSchema>;

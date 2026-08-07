@@ -103,10 +103,10 @@ export interface AgentSummary {
   readonly provider: string;
 }
 
-/** Counts `GET /api/status` reports for subsystems that land in later phases. */
+/** Counts `GET /api/status` reports for the two pluggable subsystems. */
 export interface ExtensionCounts {
   readonly mcpServersConnected: number;
-  readonly pluginsLoaded: number;
+  readonly extensionsLoaded: number;
 }
 
 export interface ServerRuntime {
@@ -133,7 +133,7 @@ export interface ServerRuntime {
    * The other direction from `applySettings`, which takes a patch from a client
    * and writes it out. This one takes what the *file* says and leaves it alone,
    * so it is the answer to every edit a running server cannot see: a config
-   * changed in an editor, a plugin dropped in beside it, an endpoint that came
+   * changed in an editor, an extension dropped in beside it, an endpoint that came
    * back on a different port.
    *
    * Throws without applying anything when the file cannot be built, leaving the
@@ -275,7 +275,6 @@ export interface ServerRuntime {
    */
   testProvider?(request: ProviderTestRequest): Promise<ProviderTestResponse>;
 
-  /** `pluginsLoaded` stays zero until `@ghostai/plugin-host` exists. */
   extensions(): ExtensionCounts;
 
   /**

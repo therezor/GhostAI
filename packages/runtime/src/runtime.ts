@@ -136,7 +136,7 @@ import {
   type ContainerEngine,
 } from './toolbox-pool.js';
 import { LoopCache } from './loop-cache.js';
-import { registryToolSink } from './mcp-tools.js';
+import { registryToolSink } from './tool-sink.js';
 import { mergeConfigPatch } from './merge.js';
 import { ProviderCache } from './provider-cache.js';
 
@@ -230,7 +230,7 @@ export interface GhostRuntime {
   /** The config file that was read, or would have been. */
   readonly file: string;
   readonly store: SessionStore;
-  /** Survives a reconfigure, so MCP and plugin registrations are not lost. */
+  /** Survives a reconfigure, so MCP and extension registrations are not lost. */
   readonly tools: ToolRegistry;
   /** Survives a reconfigure, so a steer queued mid-turn is not dropped. */
   readonly steering: SteeringQueue;
@@ -335,7 +335,7 @@ export interface GhostRuntime {
    * The counterpart to `reconfigure`, and the difference is where the settings
    * come from: a patch is what a client just sent, and this is what the file
    * says now. It is for the edits a running server cannot see — a config
-   * hand-edited in an editor, a plugin dropped into the directory, an MCP
+   * hand-edited in an editor, an extension dropped into the directory, an MCP
    * server whose command changed — which otherwise wait for a restart.
    *
    * The whole file, not a merge over what is in memory. A settings save that
@@ -565,7 +565,7 @@ class Runtime implements GhostRuntime {
     }
 
     return new McpManager({
-      sink: registryToolSink(this.tools),
+      sink: registryToolSink(this.tools, 'mcp'),
       connect: settings?.connect ?? sdkConnector({ logger: this.logger }),
       logger: this.logger,
       ...(vault === undefined ? {} : { vault }),
@@ -850,7 +850,7 @@ class Runtime implements GhostRuntime {
     // registry describing a runtime that failed to build.
     this.tools.timeoutMs = resolved.agent.defaults.toolTimeoutMs;
     // Exact by source: an `exec` switched off in the settings panel has to
-    // disappear from the definitions the model sees, and MCP and plugin tools
+    // disappear from the definitions the model sees, and MCP and extension tools
     // registered on this same registry must survive that.
     this.tools.unregisterBySource('builtin');
     // `scheduler.enabled: false` drops `automation` for the same reason

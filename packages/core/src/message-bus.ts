@@ -4,12 +4,12 @@
  * Channels never call the agent and the agent never calls a channel. A channel
  * publishes an `InboundMessage` and consumes `OutboundMessage`s addressed to
  * it; the agent does the mirror image. That decoupling is what makes Telegram,
- * the web UI, the scheduler and any plugin channel interchangeable — and it is
+ * the web UI, the scheduler and any extension channel interchangeable — and it is
  * what stops the agent loop from acquiring an import back into the transport
  * layer, which is the cycle this architecture exists to prevent.
  *
  * Rate limiting lives here rather than in each channel because it is the same
- * policy everywhere and a plugin author must not be able to omit it. It applies
+ * policy everywhere and an extension author must not be able to omit it. It applies
  * to inbound traffic only: outbound pacing is a per-channel concern (Telegram's
  * edit interval, a websocket's backpressure) with rules the bus cannot know.
  */
@@ -21,7 +21,7 @@ import { systemClock, type Clock } from './clock.js';
 /** What a channel hands the agent. */
 export interface InboundMessage {
   readonly id: string;
-  /** Channel that produced it — `web`, `telegram`, a plugin id. */
+  /** Channel that produced it — `web`, `telegram`, an extension id. */
   readonly channelId: string;
   readonly sessionKey: string;
   /** Rate-limiting identity. Per *user*, not per session or per channel. */

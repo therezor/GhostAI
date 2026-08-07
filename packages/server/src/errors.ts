@@ -43,7 +43,7 @@ const BY_KIND: Readonly<
   aborted: { status: 499, code: 'internal' },
   rate_limited: { status: 429, code: 'rate_limited' },
   storage: { status: 500, code: 'internal' },
-  plugin: { status: 500, code: 'internal' },
+  extension: { status: 500, code: 'internal' },
   internal: { status: 500, code: 'internal' },
 };
 

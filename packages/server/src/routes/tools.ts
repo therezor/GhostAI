@@ -3,7 +3,7 @@
  *
  * Read from the live registry rather than derived from the settings tree, and
  * the difference is the point: `tools.exec.enable: false` removes a tool, an MCP
- * server connecting adds several, and a plugin can add its own.
+ * server connecting adds several, and an extension can add its own.
  *
  * The registry, and deliberately not one agent's subset. This used to answer
  * with `runtime.agent().tools` — the *default* agent's advertised list — and the

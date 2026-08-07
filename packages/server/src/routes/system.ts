@@ -87,7 +87,7 @@ export function systemRoutes(deps: RouteDeps): RouteGroup<SystemRouteId> {
           authEnabled: deps.config.server.auth.enabled,
           toolCount: agent.tools.length,
           mcpServersConnected: extensions.mcpServersConnected,
-          pluginsLoaded: extensions.pluginsLoaded,
+          extensionsLoaded: extensions.extensionsLoaded,
         };
       },
     },

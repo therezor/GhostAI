@@ -38,7 +38,7 @@ export { JailCache, MAX_CACHED_JAILS } from './jail-cache.js';
 
 export { LoopCache, MAX_CACHED_LOOPS } from './loop-cache.js';
 
-export { registryToolSink } from './mcp-tools.js';
+export { registryToolSink } from './tool-sink.js';
 
 export {
   ProviderCache,

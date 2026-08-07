@@ -64,9 +64,11 @@ describe('isGhostError', () => {
   });
 
   it('recognises one from another copy of the package', () => {
-    // A plugin resolving its own @ghostai/core produces a different class
+    // An extension resolving its own @ghostai/core produces a different class
     // identity; an instanceof check would misclassify every one of these.
-    const foreign = Object.assign(new Error('from a plugin'), { kind: 'tool' });
+    const foreign = Object.assign(new Error('from an extension'), {
+      kind: 'tool',
+    });
     expect(isGhostError(foreign)).toBe(true);
   });
 

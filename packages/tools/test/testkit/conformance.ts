@@ -1,7 +1,7 @@
 /**
  * The tool conformance suite.
  *
- * Every tool — built-in, plugin-supplied, or proxied from an MCP server — has to
+ * Every tool — built-in, extension-supplied, or proxied from an MCP server — has to
  * behave the same way at its edges, and those edges are where tools break in
  * ways that look like the *model* being broken. A schema that advertises a
  * required field it does not need produces hallucinated arguments; a tool that
@@ -112,9 +112,9 @@ export function toolConformance(options: ToolConformanceOptions): void {
       });
 
       it('reports a definition carrying its source', () => {
-        expect(tool.definition('plugin')).toMatchObject({
+        expect(tool.definition('extension')).toMatchObject({
           name: tool.name,
-          source: 'plugin',
+          source: 'extension',
           risk: tool.risk,
           parameters: tool.parameters,
         });

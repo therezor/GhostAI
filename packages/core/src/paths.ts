@@ -19,6 +19,7 @@ import { mkdirSync } from 'node:fs';
 
 import { GhostError } from './errors.js';
 import { isAgentId } from './agent-id.js';
+import { isExtensionId } from './extension-id.js';
 import { DEFAULT_WORKSPACE_ID, isWorkspaceId } from './workspace-id.js';
 
 /** Overrides the root for tests, CI, and multi-instance installs. */
@@ -134,8 +135,24 @@ export interface GhostPaths {
   /** One SQLite file: sessions, messages, jobs, runs, auth. */
   readonly dbFile: string;
   readonly logsDir: string;
-  /** A private npm project, never a scan of the host's `node_modules`. */
-  readonly pluginsDir: string;
+  /**
+   * Installed extensions — one directory per extension, each holding a
+   * `ghostai.extension.json` and the code it names.
+   *
+   * A scan of directories an operator put here, never a package manager's
+   * output and never the host's `node_modules`: nothing fetches at install
+   * time, which is what keeps an air-gapped install air-gapped.
+   */
+  readonly extensionsDir: string;
+  /**
+   * The parent of what an extension writes at runtime.
+   *
+   * Separate from `extensionsDir`, and that separation is the approval gate
+   * rather than tidiness: an extension is authorised by a digest over every
+   * byte of its install directory, so state written beside its code would
+   * revoke its own approval on the first write.
+   */
+  readonly extensionDataDir: string;
   /** The encrypted credential store. Ciphertext only — safe beside the config. */
   readonly vaultFile: string;
   /** The vault's key file, used only when no OS keychain is available. */
@@ -179,7 +196,8 @@ export function resolveGhostPaths(
     configFile: join(root, 'config.json'),
     dbFile: join(root, 'ghost.db'),
     logsDir: join(root, 'logs'),
-    pluginsDir: join(root, 'plugins'),
+    extensionsDir: join(root, 'extensions'),
+    extensionDataDir: join(root, 'extension-data'),
     vaultFile: join(root, 'vault.json'),
     keyFile: join(root, 'vault.key'),
   };
@@ -255,6 +273,38 @@ export function sharedDirFor(paths: GhostPaths, workspaceId: string): string {
     );
   }
   return join(paths.sharedDir, workspaceId);
+}
+
+/**
+ * Where one extension is installed.
+ *
+ * Re-validates for the reason `agentDirFor` does — an extension id reaches here
+ * from a `readdir`, from a route parameter and from `extensions.disabled` in a
+ * hand-edited config file, and a single unchecked call site is the containment
+ * argument gone.
+ */
+export function extensionDirFor(paths: GhostPaths, id: string): string {
+  return join(paths.extensionsDir, assertExtensionId(id));
+}
+
+/**
+ * Where one extension may write.
+ *
+ * A sibling of the install directory rather than a child of it, because the
+ * install directory's every byte is what the operator approved: state written
+ * inside it would move the digest and revoke the approval on the first write.
+ */
+export function extensionDataDirFor(paths: GhostPaths, id: string): string {
+  return join(paths.extensionDataDir, assertExtensionId(id));
+}
+
+function assertExtensionId(id: string): string {
+  if (!isExtensionId(id)) {
+    throw new GhostError('invalid_input', `Not an extension id: ${id}`, {
+      details: { id },
+    });
+  }
+  return id;
 }
 
 export function ensureDir(dir: string): string {

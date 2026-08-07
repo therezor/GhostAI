@@ -109,8 +109,8 @@ describe('resolveError', () => {
     expect(resolveError(error).body.error.code).toBe(code);
   });
 
-  it('does not honour a 5xx statusCode from a plugin', () => {
-    const error = Object.assign(new Error('internal plugin detail'), {
+  it('does not honour a 5xx statusCode from an extension', () => {
+    const error = Object.assign(new Error('internal extension detail'), {
       statusCode: 503,
     });
     expect(resolveError(error).status).toBe(500);

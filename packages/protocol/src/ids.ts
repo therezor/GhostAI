@@ -183,3 +183,27 @@ const SUBAGENT_TOOL_PREFIX = 'ask_';
 export function subagentToolName(agentId: string): string {
   return `${SUBAGENT_TOOL_PREFIX}${agentId.replaceAll('-', '_')}`;
 }
+
+// ---------------------------------------------------------------------------
+// Extensions
+// ---------------------------------------------------------------------------
+
+/**
+ * What may name an extension.
+ *
+ * The same slug rules the other two get, and for a stronger version of the same
+ * reason: an extension id names a directory under `<root>/extensions`, and it
+ * is also the prefix every id that extension contributes must carry — a
+ * channel, a provider, a command and, through the tool namespacer, a tool. One
+ * character class for all four is what makes that rule checkable in one place.
+ *
+ * Nothing is reserved. There is no built-in extension for a name to collide
+ * with, and shadowing between two installed extensions is a `conflict` the host
+ * reports on the offending row rather than a name this pattern can prevent.
+ */
+export const EXTENSION_ID_PATTERN: RegExp = SLUG_ID_PATTERN;
+
+/** Whether a string may be resolved to an extension directory. */
+export function isExtensionId(value: string): boolean {
+  return isSlugId(value);
+}

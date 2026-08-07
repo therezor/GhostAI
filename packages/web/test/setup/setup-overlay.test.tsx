@@ -298,7 +298,7 @@ describe('a claimed, configured install', () => {
           authEnabled: true,
           toolCount: 1,
           mcpServersConnected: 0,
-          pluginsLoaded: 0,
+          extensionsLoaded: 0,
         },
       ],
     });

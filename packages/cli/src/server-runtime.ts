@@ -167,8 +167,7 @@ export function createServerRuntime(
       mcpServersConnected: runtime
         .mcpServers()
         .filter((server) => server.state === 'ready').length,
-      // Still zero until `@ghostai/plugin-host` exists.
-      pluginsLoaded: 0,
+      extensionsLoaded: 0,
     }),
 
     mcpServers: (): readonly McpServerStatus[] => runtime.mcpServers(),
@@ -281,7 +280,7 @@ export function createServerRuntime(
     },
 
     // The bare registry, narrowed by nobody. Built-ins, MCP registrations and
-    // plugin tools — everything an agent could be granted. Toolbox programs are
+    // extension tools — everything an agent could be granted. Toolbox programs are
     // absent because they belong to a toolbox rather than the registry, and the
     // editor reads those from `GET /api/toolboxes` under their own heading.
     registeredTools: (): readonly ToolDefinition[] =>

@@ -102,7 +102,7 @@ counts as empty there, because an identity-less agent is never what was meant.
 | `description` | string                   | `''`    | Replaces what the tool tells the model it does. Empty inherits; a single space advertises none. |
 | `fields`      | `Record<string, string>` | `{}`    | Top-level argument name → its description. A name the schema does not have is a warning.        |
 
-Keyed by advertised tool name, so it reaches built-ins, toolbox programs, MCP and plugin
+Keyed by advertised tool name, so it reaches built-ins, toolbox programs, MCP and extension
 tools and `ask_<id>` subagent tools alike — and for a subagent it wins over
 `subagents[].prompt`, being the more specific of the two. **Types, `required` and `enum`
 are not here**: they stay generated from the tool's own Zod object, which is also what
@@ -321,7 +321,7 @@ different real instant after a migration nobody connected to it.
 | `sendProgress`  | boolean | `true`  |
 | `sendToolHints` | boolean | `false` |
 
-This object is **loose** by design: each channel — built-in or plugin — parses its own
+This object is **loose** by design: each channel — built-in or from an extension — parses its own
 block, so installing a channel does not require a schema change here. Both keys above are
 read once when the channel manager is built, so they are install-wide rather than per
 conversation.
@@ -444,16 +444,28 @@ Three rules make it safe to leave running:
 - **Errors always notify.** The evaluate step never gets to veto a failure. A job that has
   quietly not worked for a week is worse than a spurious toast.
 
-## `plugins`
+## `extensions`
 
-_Schema-only today. See [ROADMAP.md](ROADMAP.md)._
+Full detail in [Extensions](extensions.md).
 
-| Key                       | Type     | Default                                                          |
-| ------------------------- | -------- | ---------------------------------------------------------------- |
-| `plugins.load`            | string[] | `[]`                                                             |
-| `plugins.disabled`        | string[] | `[]`                                                             |
-| `plugins.allowUnverified` | boolean  | `false` — required before an arbitrary npm spec may be installed |
-| `plugins.allowOverride`   | boolean  | `false`                                                          |
+| Key                        | Type     | Default | Notes                                                                 |
+| -------------------------- | -------- | ------- | --------------------------------------------------------------------- |
+| `extensions.load`          | string[] | `[]`    | Extra directories, beside `~/.ghostai/extensions`. Paths, not specs.  |
+| `extensions.disabled`      | string[] | `[]`    | Ids. A disabled extension is discovered and not loaded.               |
+| `extensions.allowOverride` | boolean  | `false` | Lets a later-discovered id shadow an earlier one instead of erroring. |
+| `extensions.settings.<id>` | object   | `{}`    | One extension's own block, loose — it parses its own.                 |
+
+**`load` takes a path, never a package spec.** Nothing here fetches at load time; an
+extension is a directory an operator put on the box, which is what keeps an air-gapped
+install air-gapped.
+
+**Per-extension settings are a sub-object rather than the loose top level `channels`
+uses.** This block already has keys of its own, so an extension whose id happened to be
+`load` would otherwise overwrite one. `null` at `extensions.settings.<id>` deletes the
+block.
+
+**Credentials do not go here.** An extension's secret belongs in the vault under the
+`extensions` namespace, keyed by extension id, the same way a channel's bot token does.
 
 ---
 

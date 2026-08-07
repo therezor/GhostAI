@@ -1,7 +1,7 @@
 /**
  * The tool testkit, as a package subpath.
  *
- * `toolConformance` says a tool is a tool "built-in, plugin-supplied, or proxied
+ * `toolConformance` says a tool is a tool "built-in, extension-supplied, or proxied
  * from an MCP server" — and the second and third of those live in other
  * packages. A suite importable only from inside this one would leave the
  * contract unverified in exactly the place it matters most, which is the

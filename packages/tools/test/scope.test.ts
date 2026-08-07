@@ -150,12 +150,12 @@ describe('ToolRegistry.select', () => {
   });
 
   it('sees a tool registered after the scope was built', async () => {
-    // A plugin loading at runtime must become visible to every agent whose
+    // An extension loading at runtime must become visible to every agent whose
     // permissions admit it; a scope that snapshotted the list never would.
     const scope = registry.select({ ...ALL, exec: 'deny', list_dir: 'allow' });
     expect(scope.definitions()).toHaveLength(2);
 
-    registry.register(tool('list_dir'), 'plugin');
+    registry.register(tool('list_dir'), 'extension');
 
     expect(scope.definitions().map((definition) => definition.name)).toEqual([
       'list_dir',
@@ -168,10 +168,10 @@ describe('ToolRegistry.select', () => {
   });
 
   it('does not admit a late-registered tool the agent never enabled', () => {
-    // The reason absent means denied: a plugin cannot widen an agent by loading.
+    // The reason absent means denied: an extension cannot widen an agent by loading.
     const scope = registry.select({ ...ALL, exec: 'deny' });
 
-    registry.register(tool('list_dir'), 'plugin');
+    registry.register(tool('list_dir'), 'extension');
 
     expect(scope.definitions().map((definition) => definition.name)).toEqual([
       'read_file',

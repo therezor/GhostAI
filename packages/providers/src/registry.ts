@@ -37,7 +37,7 @@ export const WIRE_PROTOCOLS = [
   'openai-responses',
 ] as const;
 
-type WireProtocol = (typeof WIRE_PROTOCOLS)[number];
+export type WireProtocol = (typeof WIRE_PROTOCOLS)[number];
 
 /** A parameter override applied to models whose id contains `match`. */
 interface ModelOverride {
@@ -288,8 +288,19 @@ export function isProviderId(value: string): value is ProviderId {
   return PROVIDERS.some((spec) => spec.id === value);
 }
 
-export function findProvider(id: string): ProviderSpec | null {
-  return PROVIDERS.find((spec) => spec.id === id) ?? null;
+/**
+ * The spec one id names.
+ *
+ * `specs` defaults to the built-in table and is passed only where an
+ * extension's own providers have to be visible — resolution and the settings
+ * listing. Everywhere else the table *is* the answer, and threading a parameter
+ * through would suggest a variability those call sites do not have.
+ */
+export function findProvider(
+  id: string,
+  specs: readonly ProviderSpec[] = PROVIDERS,
+): ProviderSpec | null {
+  return specs.find((spec) => spec.id === id) ?? null;
 }
 
 /** `-` and `_` are interchangeable in every provider and model id in the wild. */
@@ -308,8 +319,11 @@ function normalise(value: string): string {
  * everyone — `openrouter` would match nothing by keyword and match everything by
  * accident — so it is identified by key or base URL instead.
  */
-export function findProviderByModel(model: string): ProviderSpec | null {
-  const direct = PROVIDERS.filter(
+export function findProviderByModel(
+  model: string,
+  specs: readonly ProviderSpec[] = PROVIDERS,
+): ProviderSpec | null {
+  const direct = specs.filter(
     (spec) => spec.isGateway !== true && spec.isLocal !== true,
   );
   const normalised = normalise(model);
