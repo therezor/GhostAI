@@ -11,7 +11,15 @@ import { join } from 'node:path';
 import type { ModelsResponse } from '@ghostai/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { helpText, runSlashCommand, type SlashContext } from '#src/commands.js';
+import { ExtensionStore } from '@ghostai/security';
+
+import {
+  commandRows,
+  commandRowsFor,
+  helpText,
+  runSlashCommand,
+  type SlashContext,
+} from '#src/commands.js';
 import { translations } from '#src/i18n.js';
 import { NO_MENU, type Menu } from '#src/menu.js';
 import type { ModelCatalogue } from '#src/models.js';
@@ -733,5 +741,137 @@ describe('/skills', () => {
     await runSlashCommand('/skills', ctx);
 
     expect(runtime.store.getSession('cli:never-spoken')).toBeUndefined();
+  });
+});
+
+describe('a command an extension contributed', () => {
+  const homes: string[] = [];
+  const opened: ChatRuntime[] = [];
+
+  /** A runtime with one approved extension, loaded through a fake loader. */
+  async function runtimeWith(command: {
+    readonly id: string;
+    readonly run: (input: { readonly args: string }) => {
+      readonly message: string;
+      readonly ok?: boolean;
+    };
+  }): Promise<ChatRuntime> {
+    const home = mkdtempSync(join(tmpdir(), 'ghostai-slash-ext-'));
+    homes.push(home);
+    mkdirSync(join(home, 'workspace'), { recursive: true });
+
+    const dir = join(home, 'extensions', 'slack');
+    mkdirSync(join(dir, 'dist'), { recursive: true });
+    writeFileSync(
+      join(dir, 'ghostai.extension.json'),
+      JSON.stringify({
+        schema: 'ghostai.extension/1',
+        id: 'slack',
+        contributes: ['commands'],
+      }),
+    );
+    writeFileSync(
+      join(dir, 'dist', 'index.js'),
+      'export const extension = {};',
+    );
+
+    const runtime = createChatRuntime({
+      home,
+      vault: false,
+      mcp: false,
+      extensions: {
+        load: () =>
+          Promise.resolve({
+            activate: (context) => {
+              context.registerCommand(command);
+            },
+          }),
+      },
+    });
+    opened.push(runtime);
+
+    await runtime.reloadExtensions();
+    const store = new ExtensionStore({
+      database: runtime.store.database,
+      dir: runtime.paths.extensionsDir,
+    });
+    store.approve('slack');
+    await runtime.reloadExtensions();
+    return runtime;
+  }
+
+  afterEach(() => {
+    while (opened.length > 0) opened.pop()?.close();
+    while (homes.length > 0) {
+      const dir = homes.pop();
+      if (dir !== undefined) rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reaches the terminal without being in the table', async () => {
+    // The three built-in tables stay hand-written for the reason their headers
+    // give. An extension's command has one definition and three surfaces that
+    // have to find it, so it is forwarded rather than compiled in.
+    const runtime = await runtimeWith({
+      id: 'slack-post',
+      run: (input) => ({ message: `posted: ${input.args}` }),
+    });
+    const { ctx, out } = context(runtime, 'cli:1');
+
+    const outcome = await runSlashCommand('/slack-post hello there', ctx);
+
+    expect(outcome).toEqual({ kind: 'continue' });
+    expect(out.text).toContain('posted: hello there');
+  });
+
+  it('renders its own text, not a resource key', async () => {
+    // An extension's copy ships with the extension and the terminal's bundle
+    // has never seen it.
+    const runtime = await runtimeWith({
+      id: 'slack',
+      run: () => ({ message: 'Connected to #ops.' }),
+    });
+    const { ctx, out } = context(runtime, 'cli:1');
+
+    await runSlashCommand('/slack', ctx);
+
+    expect(out.text).toContain('Connected to #ops.');
+  });
+
+  it('shows a failure as a warning rather than throwing', async () => {
+    const runtime = await runtimeWith({
+      id: 'slack',
+      run: () => ({ message: 'Slack is down', ok: false }),
+    });
+    const { ctx, out } = context(runtime, 'cli:1');
+
+    await runSlashCommand('/slack', ctx);
+
+    expect(out.text).toContain('Slack is down');
+  });
+
+  it('still refuses a name nobody registered', async () => {
+    const runtime = await runtimeWith({
+      id: 'slack',
+      run: () => ({ message: 'ok' }),
+    });
+    const { ctx, out } = context(runtime, 'cli:1');
+
+    await runSlashCommand('/nonsense', ctx);
+
+    expect(out.text).toMatch(/nonsense/);
+  });
+
+  it('offers it to the completer, which the static table cannot', async () => {
+    // The answer changes while the REPL is running: approving an extension in
+    // a browser adds a command to a terminal that is already open.
+    const runtime = await runtimeWith({
+      id: 'slack-post',
+      run: () => ({ message: 'ok' }),
+    });
+
+    const rows = commandRowsFor(runtime).map((row) => row.syntax);
+    expect(rows).toContain('/slack-post');
+    expect(commandRows().map((row) => row.syntax)).not.toContain('/slack-post');
   });
 });

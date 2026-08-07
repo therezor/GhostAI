@@ -29,6 +29,15 @@ interface CommandChoice {
 interface PalettePickerDeps {
   readonly menu: Menu;
   readonly t: CliT;
+  /**
+   * Every command, including the ones extensions contribute.
+   *
+   * Passed in rather than computed here, because it changes while the REPL is
+   * running: approving an extension in a browser adds a command to a terminal
+   * that is already open, and a constant captured at start-up would not have
+   * it. `commandRowsFor` is what the caller reads.
+   */
+  readonly rows: readonly CommandRow[];
 }
 
 /**
@@ -75,7 +84,7 @@ export async function pickCommand(
   deps: PalettePickerDeps,
 ): Promise<CommandChoice | undefined> {
   return await deps.menu.choose({
-    items: commandItems(commandRows(), deps.t),
+    items: commandItems(deps.rows, deps.t),
     labels: {
       title: deps.t('menu.titles.command'),
       empty: deps.t('menu.empty'),
@@ -91,8 +100,11 @@ export async function pickCommand(
  * that guessed at the middle of a sentence would be a Tab key that inserted
  * something surprising far more often than it helped.
  */
-export function completeCommand(line: string): [string[], string] {
+export function completeCommand(
+  line: string,
+  rows: readonly CommandRow[] = commandRows(),
+): [string[], string] {
   if (!line.startsWith('/')) return [[], line];
-  const values = new Set(commandRows().map((row) => commandValue(row.syntax)));
+  const values = new Set(rows.map((row) => commandValue(row.syntax)));
   return [[...values].filter((value) => value.startsWith(line)), line];
 }

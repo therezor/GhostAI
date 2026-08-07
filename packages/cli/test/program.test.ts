@@ -66,6 +66,20 @@ describe('runCli', () => {
     expect(run.out.trim()).toBe(VERSION);
   });
 
+  it('offers extension beside toolbox, as the other approval surface', async () => {
+    // Approving code to load into the agent's own process is the one operator
+    // action that cannot be delegated to the agent, and an install driven from
+    // a terminal needs a way to do it without opening a browser.
+    const run = await cli(['--help']);
+    expect(run.out).toContain('extension');
+
+    const help = await cli(['extension', '--help']);
+    expect(help.code).toBe(0);
+    expect(help.out).toContain('list');
+    expect(help.out).toContain('approve');
+    expect(help.out).toContain('revoke');
+  });
+
   it('fails on an unknown option instead of guessing', async () => {
     const run = await cli(['--nonsense']);
     expect(run.code).not.toBe(0);

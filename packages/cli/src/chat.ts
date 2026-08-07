@@ -57,7 +57,7 @@ import {
   type Theme,
 } from '@ghostai/tui';
 
-import { runSlashCommand } from './commands.js';
+import { commandRowsFor, runSlashCommand } from './commands.js';
 import {
   inputRule,
   startupHeader,
@@ -903,7 +903,11 @@ function framed(deps: ReplDeps): Surface {
 
   const openPalette = (): void => {
     void (async (): Promise<void> => {
-      const chosen = await pickCommand({ menu, t: deps.t });
+      const chosen = await pickCommand({
+        menu,
+        t: deps.t,
+        rows: commandRowsFor(deps.runtime),
+      });
       if (chosen !== undefined) {
         if (chosen.submit) deliver(chosen.command);
         else editor.setText(chosen.command);
@@ -938,7 +942,10 @@ function framed(deps: ReplDeps): Surface {
     // far more often than it helped. A command is a token with a known
     // vocabulary — the table `/help` prints — rather than a guess at a word.
     if (key.name === 'tab') {
-      const [matches] = completeCommand(editor.text);
+      const [matches] = completeCommand(
+        editor.text,
+        commandRowsFor(deps.runtime),
+      );
       if (matches.length === 1) editor.setText(`${matches[0] ?? ''} `);
       frame.requestRender();
       return;
