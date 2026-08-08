@@ -18,7 +18,7 @@ import {
   hasOrphanedToolResult,
   textOf,
   textPart,
-} from '@ghostai/core';
+} from '@ghostbot/core';
 import {
   AgentDefaultsSchema,
   type AgentDefaults,
@@ -30,14 +30,14 @@ import {
   subagentRunsOf,
   type ToolPermissions,
   ToolboxSchema,
-} from '@ghostai/protocol';
-import { ProviderError, type ChatRequest } from '@ghostai/providers';
+} from '@ghostbot/protocol';
+import { ProviderError, type ChatRequest } from '@ghostbot/providers';
 import {
   WorkspaceJail,
   singleJail,
   toolOutputTag,
   type JailResolver,
-} from '@ghostai/security';
+} from '@ghostbot/security';
 import {
   DEFAULT_TOOLS_CONFIG,
   ToolRegistry,
@@ -46,7 +46,7 @@ import {
   toolboxTools,
   withToolboxTools,
   type AnyTool,
-} from '@ghostai/tools';
+} from '@ghostbot/tools';
 
 import {
   deniedToolResult,

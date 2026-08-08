@@ -10,7 +10,7 @@
  * Not exported from `index.ts`, like every other testkit in this repo.
  */
 
-import type { ServerMessage } from '@ghostai/protocol';
+import type { ServerMessage } from '@ghostbot/protocol';
 
 import type {
   ChannelHub,

@@ -22,7 +22,7 @@
  * finer `reason` is what the ladder switches on.
  */
 
-import { GhostError, type ErrorKind } from '@ghostai/core';
+import { GhostError, type ErrorKind } from '@ghostbot/core';
 
 export const PROVIDER_ERROR_REASONS = [
   /** 401/403. The key is missing, wrong, or lacks access to the model. */

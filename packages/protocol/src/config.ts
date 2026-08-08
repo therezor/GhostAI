@@ -13,7 +13,7 @@
  *    schema so the child's own defaults apply, which `.default()` (output-typed
  *    in Zod 4) could not do without restating every leaf.
  *  - **No `.transform()` anywhere.** Normalisation (trimming an `apiBase` to
- *    `undefined`, expanding `~`) happens at load time in `@ghostai/core`, which
+ *    `undefined`, expanding `~`) happens at load time in `@ghostbot/core`, which
  *    keeps input and output types identical and every schema here
  *    representable as JSON Schema for the OpenAPI document.
  */
@@ -186,7 +186,7 @@ export const AgentDefaultsSchema = z.object({
    * see it, let me open it" and the request being rejected outright.
    *
    * The reactive half of this already existed: `stripImages` in
-   * `@ghostai/providers` removes images *after* an endpoint has refused them.
+   * `@ghostbot/providers` removes images *after* an endpoint has refused them.
    * This is the same repair moved to before the round trip, for the case where
    * the operator already knows.
    */
@@ -225,12 +225,12 @@ export type AgentDefaults = z.infer<typeof AgentDefaultsSchema>;
  * — a laptop and a GPU box — are two entries with the same `type` and different
  * `apiBase`, which the previous shape (one entry per provider id) could not
  * express at all. It is validated against the registry table by
- * `@ghostai/providers`, not here: this package sits upstream of that table and
+ * `@ghostbot/providers`, not here: this package sits upstream of that table and
  * cannot see it, which is the same reason `ProvidersConfig` is a record rather
  * than one named field per provider.
  */
 export const ProviderConfigSchema = z.object({
-  /** A `@ghostai/providers` registry id — `ollama`, `openai`, `custom`. */
+  /** A `@ghostbot/providers` registry id — `ollama`, `openai`, `custom`. */
   type: z.string().min(1),
   /** Shown in the UI. Empty falls back to the type's display name. */
   label: z.string().default(''),
@@ -254,7 +254,7 @@ export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;
  *
  * It used to be keyed by provider id, which capped the tree at one endpoint per
  * provider. The two are deliberately compatible: an old file's keys *are*
- * provider ids, so the migration in `@ghostai/core` only has to write
+ * provider ids, so the migration in `@ghostbot/core` only has to write
  * `type` = the key, and every credential already in the vault keeps resolving
  * under the same string.
  */
@@ -309,7 +309,7 @@ export const ServerConfigSchema = z.object({
  *
  * A pure predicate rather than a schema refinement: the caller needs to explain
  * *why* startup was refused, and cross-field validation would also make this
- * schema unrepresentable as JSON Schema. `@ghostai/server` calls it during
+ * schema unrepresentable as JSON Schema. `@ghostbot/server` calls it during
  * boot; `0.0.0.0` and `::` are the wildcard binds that must count as remote.
  */
 export function isLoopbackHost(host: string): boolean {
@@ -810,7 +810,7 @@ export type ExtensionsConfig = z.infer<typeof ExtensionsConfigSchema>;
  *
  * `locale` is a bare `z.string()` on purpose. An enum would have to enumerate
  * the shipped languages, which would give `protocol` a dependency on
- * `@ghostai/i18n` for a value that changes every time a translation lands — and
+ * `@ghostbot/i18n` for a value that changes every time a translation lands — and
  * would turn a config naming a language this build does not carry into a parse
  * failure that takes the whole file down. `resolveLocale` narrows an unknown tag
  * to the nearest match and ultimately to English, so an unrecognised value costs
@@ -897,7 +897,7 @@ export const ConfigPatchSchema = z.object({
        * the stored value survived a save that appeared to remove it.
        *
        * `null` is the one token the merge reads as a deletion (see
-       * `DELETE_BY_NULL` in `@ghostai/runtime`). It is safe on exactly these
+       * `DELETE_BY_NULL` in `@ghostbot/runtime`). It is safe on exactly these
        * two because both are `.optional()` in `AgentDefaultsSchema`, so a
        * config with the key gone still re-parses. Doing the same to `model` or
        * `maxTokens` would punch a hole in the struct and fail that re-parse,

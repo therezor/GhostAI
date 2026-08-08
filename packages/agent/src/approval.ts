@@ -1,7 +1,7 @@
 /**
  * The tool approval gate.
  *
- * `@ghostai/protocol` describes this end to end — a risk band per tool, a policy
+ * `@ghostbot/protocol` describes this end to end — a risk band per tool, a policy
  * per band, a scope per answer — but the loop is where it has to be read,
  * because the loop is the only thing that sits between a model asking for
  * `exec` and a shell running.
@@ -24,7 +24,7 @@
  * either way, since refusing needs no one to answer.
  */
 
-import type { ApprovalScope, ToolRisk } from '@ghostai/protocol';
+import type { ApprovalScope, ToolRisk } from '@ghostbot/protocol';
 
 /** One call, waiting on a decision. Mirrors the `tool.approvalRequest` event. */
 export interface ApprovalRequest {

@@ -11,8 +11,8 @@
  * and a person asking the same question of the same rows.
  */
 
-import type { SessionSummaryRecord } from '@ghostai/core';
-import type { SelectItem } from '@ghostai/tui';
+import type { SessionSummaryRecord } from '@ghostbot/core';
+import type { SelectItem } from '@ghostbot/tui';
 
 import type { CliT } from '../i18n.js';
 import type { Menu } from '../menu.js';

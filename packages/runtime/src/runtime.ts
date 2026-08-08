@@ -14,7 +14,7 @@
  *
  * The decisions here that are not obvious:
  *
- *  - **Provider resolution is `@ghostai/providers`' order, not a second one.**
+ *  - **Provider resolution is `@ghostbot/providers`' order, not a second one.**
  *    `resolveInstance` runs explicit instance → provider type → the `auto`
  *    order, and returns `null` rather than guessing. Exactly one step follows
  *    that null: a provider whose `envKey` is set in the environment. An
@@ -63,7 +63,7 @@ import {
   SteeringQueue,
   subagentMap,
   type ApprovalGate,
-} from '@ghostai/agent';
+} from '@ghostbot/agent';
 import {
   DEFAULT_AGENT_ID,
   GhostError,
@@ -77,13 +77,13 @@ import {
   type Clock,
   type GhostPaths,
   type Logger,
-} from '@ghostai/core';
+} from '@ghostbot/core';
 import type {
   Config,
   ConfigPatch,
   McpServerStatus,
   ToolPermissions,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 import {
   PROVIDERS,
   resolveConnection,
@@ -92,7 +92,7 @@ import {
   type ProviderInstance,
   type ProviderSpec,
   type WireAdapters,
-} from '@ghostai/providers';
+} from '@ghostbot/providers';
 import {
   ExtensionStore,
   ToolboxStore,
@@ -101,7 +101,7 @@ import {
   type FetchImplementation,
   type JailResolver,
   type WorkspaceJail,
-} from '@ghostai/security';
+} from '@ghostbot/security';
 import {
   ToolRegistry,
   registerBuiltins,
@@ -112,14 +112,14 @@ import {
   type AutomationResolver,
   type RunnerResolver,
   type ToolSink,
-} from '@ghostai/tools';
+} from '@ghostbot/tools';
 import {
   McpManager,
   sdkConnector,
   type BackoffOptions,
   type McpConnector,
-} from '@ghostai/mcp';
-import { ExtensionHost, type ExtensionLoader } from '@ghostai/extension-host';
+} from '@ghostbot/mcp';
+import { ExtensionHost, type ExtensionLoader } from '@ghostbot/extension-host';
 
 import {
   assertWritableAgentIds,
@@ -270,7 +270,7 @@ export interface GhostRuntime {
    * Drops the cached jail for one workspace, after its folder has moved.
    *
    * A method here rather than `evict` on `JailResolver`: that interface is
-   * `@ghostai/security`'s, it is what decides whether a path may be touched,
+   * `@ghostbot/security`'s, it is what decides whether a path may be touched,
    * and widening it with a cache operation would put "forget this" in front of
    * every implementation of a containment boundary.
    */

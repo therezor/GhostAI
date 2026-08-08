@@ -33,7 +33,7 @@ import {
   type SetCredentialRequest,
   type SettingsPatchRequest,
   type SettingsResponse,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 import type { FastifyReply } from 'fastify';
 
 import { assertBootPolicy } from '../boot.js';

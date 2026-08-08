@@ -1,5 +1,5 @@
 {
-  "name": "@ghostai/tools",
+  "name": "@ghostbot/tools",
   "version": "1.0.0",
   "description": "Tool definition helper, registry, and built-in tools.",
   "type": "module",
@@ -47,6 +47,7 @@
   "files": [
     "dist/**",
     "!dist/**/*.map",
+    "!dist/.tsbuildinfo",
     "test/testkit"
   ],
   "scripts": {
@@ -56,9 +57,9 @@
     "lint": "eslint src test"
   },
   "dependencies": {
-    "@ghostai/core": "workspace:*",
-    "@ghostai/protocol": "workspace:*",
-    "@ghostai/security": "workspace:*",
+    "@ghostbot/core": "workspace:*",
+    "@ghostbot/protocol": "workspace:*",
+    "@ghostbot/security": "workspace:*",
     "zod": "^4.0.0"
   }
 }

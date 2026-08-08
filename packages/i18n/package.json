@@ -1,5 +1,5 @@
 {
-  "name": "@ghostai/i18n",
+  "name": "@ghostbot/i18n",
   "version": "1.0.0",
   "description": "The translation layer: i18next instance, locale negotiation and locale-aware formatting primitives.",
   "type": "module",
@@ -31,6 +31,7 @@
   "files": [
     "dist/**",
     "!dist/**/*.map",
+    "!dist/.tsbuildinfo",
     "locales"
   ],
   "scripts": {

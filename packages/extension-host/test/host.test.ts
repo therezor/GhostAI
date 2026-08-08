@@ -12,14 +12,14 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { silentLogger, systemClock } from '@ghostai/core';
+import { silentLogger, systemClock } from '@ghostbot/core';
 import type {
   ExtensionContribution,
   ExtensionsConfig,
-} from '@ghostai/protocol';
-import { ExtensionsConfigSchema } from '@ghostai/protocol';
-import { ExtensionStore } from '@ghostai/security';
-import { defineTool } from '@ghostai/tools';
+} from '@ghostbot/protocol';
+import { ExtensionsConfigSchema } from '@ghostbot/protocol';
+import { ExtensionStore } from '@ghostbot/security';
+import { defineTool } from '@ghostbot/tools';
 
 import { ExtensionHost } from '#src/host.js';
 import type { Extension, ExtensionContext } from '#src/extension.js';

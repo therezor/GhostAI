@@ -1,7 +1,7 @@
 /**
  * Constructors and accessors for the canonical message union.
  *
- * The shapes themselves live in `@ghostai/protocol` — they cross the wire, so
+ * The shapes themselves live in `@ghostbot/protocol` — they cross the wire, so
  * the schema is their single source of truth. What lives here is the small set
  * of operations everything downstream would otherwise reimplement: building a
  * user message from a string, and reading the text back out of one.
@@ -24,7 +24,7 @@ import type {
   ToolCall,
   ToolMessage,
   UserMessage,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 
 export function textPart(text: string): TextPart {
   return { type: 'text', text };

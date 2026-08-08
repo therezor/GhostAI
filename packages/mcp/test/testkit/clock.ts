@@ -1,7 +1,7 @@
 /**
  * A clock whose timers fire only when a test says so.
  *
- * Local rather than imported from `@ghostai/agent/testkit`, following what
+ * Local rather than imported from `@ghostbot/agent/testkit`, following what
  * `packages/tools/test/registry.test.ts` already does: a dev dependency on a
  * package that sits *above* this one in the layer graph would be an upward edge
  * that pnpm's isolated `node_modules` exists to make impossible, and it would
@@ -12,7 +12,7 @@
  * been closed must not leave a timer armed.
  */
 
-import { GhostError, type Clock, type TimerHandle } from '@ghostai/core';
+import { GhostError, type Clock, type TimerHandle } from '@ghostbot/core';
 
 export interface ManualClock extends Clock {
   /** Moves time forward and fires everything now due, oldest first. */

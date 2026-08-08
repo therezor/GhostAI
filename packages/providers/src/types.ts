@@ -4,7 +4,7 @@
  * Two shapes matter, and both are chosen so the agent loop needs no translation
  * layer of its own:
  *
- *  - A result carries an `AssistantMessage` from `@ghostai/protocol` — the same
+ *  - A result carries an `AssistantMessage` from `@ghostbot/protocol` — the same
  *    canonical shape the session store persists. The loop appends it directly.
  *    An adapter-specific response type would mean every consumer converting, and
  *    conversions are where tool-call ids get lost.
@@ -23,7 +23,7 @@
 
 import type { Dispatcher } from 'undici';
 
-import type { FetchImplementation } from '@ghostai/security';
+import type { FetchImplementation } from '@ghostbot/security';
 import type {
   AssistantMessage,
   ChatMessage,
@@ -31,7 +31,7 @@ import type {
   ReasoningEffort,
   ToolDefinition,
   Usage,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 
 import type { ProviderSpec } from './registry.js';
 

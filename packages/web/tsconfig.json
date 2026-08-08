@@ -9,7 +9,7 @@
 
     // Vite owns the JavaScript here, so `tsc -b` is a checker rather than a
     // compiler — unlike every other package, where tsup emits the JS and tsc
-    // emits the declarations. Nothing imports `@ghostai/web` for its types:
+    // emits the declarations. Nothing imports `@ghostbot/web` for its types:
     // `ghost serve` resolves its `package.json` to find `dist/`, at runtime.
     "noEmit": true,
     "emitDeclarationOnly": false,

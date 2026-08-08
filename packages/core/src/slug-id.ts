@@ -1,9 +1,9 @@
 /**
  * Slug id rules, re-exported.
  *
- * The rules themselves live in `@ghostai/protocol` because the browser mints
+ * The rules themselves live in `@ghostbot/protocol` because the browser mints
  * agent ids and the server resolves them to paths — see that module's header.
- * This file keeps the import path every consumer of `@ghostai/core` already
+ * This file keeps the import path every consumer of `@ghostbot/core` already
  * uses.
  */
 
@@ -13,4 +13,4 @@ export {
   SLUG_ID_PATTERN,
   isSlugId,
   slugify,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';

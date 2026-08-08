@@ -29,7 +29,7 @@ import {
   isRtl,
   resolveFirstLocale,
   type Locale,
-} from '@ghostai/i18n';
+} from '@ghostbot/i18n';
 
 /**
  * What the user chose: a BCP-47 tag, or `SYSTEM` meaning "ask the browser".

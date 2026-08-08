@@ -34,7 +34,7 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type { FileEntry } from '@ghostai/protocol';
+import type { FileEntry } from '@ghostbot/protocol';
 
 import { ApiError, api } from '@/lib/api.js';
 import { formatBytes } from '@/lib/format.js';

@@ -26,7 +26,7 @@ ollama pull qwen3     # a few gigabytes; this is the slow part
 ## 2. Install
 
 ```bash
-npm install -g @ghostai/cli
+npm install -g @ghostbot/cli
 ```
 
 That puts `ghost` on your PATH. There is nothing to compile — `node:sqlite` is built into
@@ -44,11 +44,11 @@ git clone https://github.com/therezor/GhostAI.git
 cd GhostAI
 pnpm install
 pnpm build                                  # → packages/cli/dist/index.js
-pnpm --filter @ghostai/cli link --global    # puts `ghost` on your PATH
+pnpm --filter @ghostbot/cli link --global    # puts `ghost` on your PATH
 ```
 
 `pnpm build` is not optional even if you only want the API: the CLI serves the browser UI
-out of `@ghostai/web/dist`, and without a build `ghost serve` says `UI  not built` and
+out of `@ghostbot/web/dist`, and without a build `ghost serve` says `UI  not built` and
 runs the API alone. See [Development](development.md).
 
 </details>
@@ -68,7 +68,7 @@ GhostAI is listening.
   Auth       enabled
   Agent      not configured — add a provider in the UI, or run `ghost init`
   Workspace  /Users/you/.ghostai/workspace
-  UI         …/node_modules/@ghostai/web/dist
+  UI         …/node_modules/@ghostbot/web/dist
 
 First run. Open the URL above and enter this one-time code:
 

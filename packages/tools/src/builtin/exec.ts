@@ -36,7 +36,7 @@
  * the internet" came out of an agent holding a search tool.
  */
 
-import { guardExec, type ExecPlan } from '@ghostai/security';
+import { guardExec, type ExecPlan } from '@ghostbot/security';
 import { z } from 'zod';
 
 import { assertNotAborted, defineTool, type AnyTool } from '../define.js';

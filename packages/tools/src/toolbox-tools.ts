@@ -30,8 +30,8 @@
  * an entry — it can only make reach the agent already had easier to find.
  */
 
-import { guardExec } from '@ghostai/security';
-import type { Toolbox, ToolboxEntry, ToolPermission } from '@ghostai/protocol';
+import { guardExec } from '@ghostbot/security';
+import type { Toolbox, ToolboxEntry, ToolPermission } from '@ghostbot/protocol';
 import { z } from 'zod';
 
 import {

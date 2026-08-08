@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ProviderConfig, ProvidersConfig } from '@ghostai/protocol';
+import type { ProviderConfig, ProvidersConfig } from '@ghostbot/protocol';
 
 import {
   describeInstance,

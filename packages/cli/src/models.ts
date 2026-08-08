@@ -26,7 +26,7 @@
  *    one, not to the thing listing models.
  */
 
-import type { ModelInfo, ModelsResponse } from '@ghostai/protocol';
+import type { ModelInfo, ModelsResponse } from '@ghostbot/protocol';
 import {
   createProvider,
   isProviderError,
@@ -35,9 +35,9 @@ import {
   type ChatProvider,
   type ProviderInstance,
   type ProviderSpec,
-} from '@ghostai/providers';
-import type { GhostRuntime } from '@ghostai/runtime';
-import type { FetchImplementation } from '@ghostai/security';
+} from '@ghostbot/providers';
+import type { GhostRuntime } from '@ghostbot/runtime';
+import type { FetchImplementation } from '@ghostbot/security';
 
 /**
  * How long a fetched catalogue is served before the endpoints are asked again.

@@ -11,7 +11,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { GhostError } from '@ghostai/core';
+import { GhostError } from '@ghostbot/core';
 
 import { TOOLBOX_DOCS_MAX_BYTES, ToolboxStore } from '#src/toolbox-store.js';
 

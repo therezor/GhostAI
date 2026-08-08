@@ -1,9 +1,9 @@
 /**
  * Query-string and path-parameter schemas.
  *
- * These live here rather than in `@ghostai/protocol` for one reason: a query
+ * These live here rather than in `@ghostbot/protocol` for one reason: a query
  * string carries only strings, so `limit=50` arrives as `"50"` and a schema that
- * validates it has to coerce. `@ghostai/protocol` forbids `.transform()` outright
+ * validates it has to coerce. `@ghostbot/protocol` forbids `.transform()` outright
  * — every schema there must have identical input and output types so the OpenAPI
  * document generated from it describes what the server enforces — and `z.coerce`
  * is a transform wearing a different name.
@@ -25,7 +25,7 @@
  * to point at.
  */
 
-import { DEFAULT_WORKSPACE_ID } from '@ghostai/core';
+import { DEFAULT_WORKSPACE_ID } from '@ghostbot/core';
 import { z } from 'zod';
 
 /** The bounds the protocol's `PaginationQuery` states, restated once. */

@@ -1,5 +1,5 @@
 /**
- * @ghostai/security — the package that has to be right.
+ * @ghostbot/security — the package that has to be right.
  *
  * It exists as its own package for two reasons. The first is the coverage gate:
  * 95% lines *and* branches, because an untested branch in a guard is not a bug
@@ -10,7 +10,7 @@
  * credential is in these six modules and nowhere else, so reviewing the security surface means reading one
  * package rather than grepping for `fetch` across a repo.
  *
- * The layering that makes that true is enforced mechanically: `@ghostai/core`
+ * The layering that makes that true is enforced mechanically: `@ghostbot/core`
  * may not use the network or `child_process` at all, so there is no way to reach
  * either without coming through here first.
  *

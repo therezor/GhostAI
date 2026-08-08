@@ -3,7 +3,7 @@
  *
  * `toolConformance`'s own header says the contract covers a tool "built-in,
  * extension-supplied, or proxied from an MCP server", and this is the third of
- * those finally being checked. It is why `@ghostai/tools` grew a `./testkit`
+ * those finally being checked. It is why `@ghostbot/tools` grew a `./testkit`
  * subpath: a contract only verifiable from inside the package that declares it
  * goes unverified exactly where it matters.
  *
@@ -16,8 +16,8 @@
  * schema is sloppy.
  */
 
-import { createTestWorkspace, toolConformance } from '@ghostai/tools/testkit';
-import type { ToolContext } from '@ghostai/tools';
+import { createTestWorkspace, toolConformance } from '@ghostbot/tools/testkit';
+import type { ToolContext } from '@ghostbot/tools';
 import { afterAll } from 'vitest';
 
 import { bridgeTool } from '#src/bridge.js';

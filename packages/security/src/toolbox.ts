@@ -30,14 +30,14 @@
 
 import { createHash } from 'node:crypto';
 
-import { GhostError } from '@ghostai/core';
+import { GhostError } from '@ghostbot/core';
 import {
   BUILTIN_TOOL_NAMES,
   ToolboxSchema,
   type AgentToolboxNetwork,
   type ToolboxNetworkMode,
   type Toolbox,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 
 import { parseCidr } from './ip.js';
 
@@ -63,8 +63,8 @@ const IMAGE_DIGEST_PATTERN: RegExp =
 /**
  * Tool names a toolbox entry may not take.
  *
- * Re-exported from `@ghostai/protocol` rather than restated, and not imported
- * from `@ghostai/tools` where the tools are actually defined: that package sits
+ * Re-exported from `@ghostbot/protocol` rather than restated, and not imported
+ * from `@ghostbot/tools` where the tools are actually defined: that package sits
  * *above* this one, and security deciding what is allowed by asking the layer
  * it constrains would invert the graph. `protocol` sits under both, and
  * `packages/tools` owns the test that the list still matches `BUILTIN_TOOLS`.

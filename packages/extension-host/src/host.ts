@@ -32,16 +32,16 @@
  * there, which is exactly what a turn during an MCP reconnect sees.
  */
 
-import { GhostError, type Clock, type Logger } from '@ghostai/core';
-import type { ChannelFactory } from '@ghostai/channels';
+import { GhostError, type Clock, type Logger } from '@ghostbot/core';
+import type { ChannelFactory } from '@ghostbot/channels';
 import type {
   ExtensionStatus,
   ExtensionsConfig,
   ExtensionCommand as ExtensionCommandDto,
-} from '@ghostai/protocol';
-import type { ContextContributor } from '@ghostai/agent';
-import type { ExtensionStore, ExtensionResolution } from '@ghostai/security';
-import type { AnyTool } from '@ghostai/tools';
+} from '@ghostbot/protocol';
+import type { ContextContributor } from '@ghostbot/agent';
+import type { ExtensionStore, ExtensionResolution } from '@ghostbot/security';
+import type { AnyTool } from '@ghostbot/tools';
 
 import type {
   CommandInput,
@@ -498,7 +498,7 @@ function settingsFor(
 }
 
 /**
- * Joined here rather than in `@ghostai/security`, which already proved it safe.
+ * Joined here rather than in `@ghostbot/security`, which already proved it safe.
  *
  * `assertExtensionPolicy` resolved this exact pair through `realpath` and
  * refused anything landing outside the directory, so by the time an extension

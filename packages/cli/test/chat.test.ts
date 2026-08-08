@@ -3,9 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough, Readable } from 'node:stream';
 
-import type { AgentEvent, AgentLoop, TurnInput } from '@ghostai/agent';
-import { SessionStore, hasOrphanedToolResult, textOf } from '@ghostai/core';
-import type { FetchImplementation } from '@ghostai/security';
+import type { AgentEvent, AgentLoop, TurnInput } from '@ghostbot/agent';
+import { SessionStore, hasOrphanedToolResult, textOf } from '@ghostbot/core';
+import type { FetchImplementation } from '@ghostbot/security';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { SIGINT_EXIT_CODE, chatCommand, runTurn } from '#src/chat.js';

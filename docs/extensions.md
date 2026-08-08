@@ -54,8 +54,8 @@ an operator approved and the id the host registers under could differ.
 ## The entry module
 
 ```ts
-import type { Extension } from '@ghostai/extension-host';
-import { defineTool } from '@ghostai/tools';
+import type { Extension } from '@ghostbot/extension-host';
+import { defineTool } from '@ghostbot/tools';
 import { z } from 'zod';
 
 export const extension: Extension = {
@@ -96,7 +96,7 @@ is to say **after** an operator has already approved it:
 - **`removeNodeProtocol: false`.** tsup and esbuild rewrite `node:sqlite` to
   `sqlite`, a compatibility shim for node older than 14.18. `node:sqlite` has no
   unprefixed form, so the rewrite is unloadable.
-- **A `createRequire` banner.** Reaching `defineTool` pulls in `@ghostai/core`,
+- **A `createRequire` banner.** Reaching `defineTool` pulls in `@ghostbot/core`,
   which pulls in `pino`, which is CommonJS and calls `require('node:os')` at
   module scope. An ESM bundle has no `require`, so the bundler emits a stub that
   throws `Dynamic require of "node:os" is not supported`.
@@ -114,7 +114,7 @@ is to say **after** an operator has already approved it:
 beside each.
 
 **Expect a large artifact.** The example is about sixty lines and builds to
-roughly 1.8 MB, because reaching `defineTool` bundles `@ghostai/tools` and
+roughly 1.8 MB, because reaching `defineTool` bundles `@ghostbot/tools` and
 everything under it. That is the cost of the rule above rather than a mistake: an
 install directory has no `node_modules`, so an extension either carries what it
 imports or fails at load. An extension that defines its tools as plain objects
@@ -294,11 +294,11 @@ install air-gapped.
 
 ## Testing one
 
-`@ghostai/extension-host/testkit` runs an extension through the host's own
+`@ghostbot/extension-host/testkit` runs an extension through the host's own
 recorder:
 
 ```ts
-import { extensionConformance } from '@ghostai/extension-host/testkit';
+import { extensionConformance } from '@ghostbot/extension-host/testkit';
 
 extensionConformance({
   manifest,

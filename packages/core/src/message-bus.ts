@@ -14,7 +14,7 @@
  * edit interval, a websocket's backpressure) with rules the bus cannot know.
  */
 
-import { newUuid, type ContentPart } from '@ghostai/protocol';
+import { newUuid, type ContentPart } from '@ghostbot/protocol';
 
 import { systemClock, type Clock } from './clock.js';
 

@@ -16,7 +16,7 @@
 
 import type { CSSProperties, JSX, ReactNode } from 'react';
 
-import type { NoticeKind } from '@ghostai/protocol';
+import type { NoticeKind } from '@ghostbot/protocol';
 
 import { Notice } from '@/chat/notice.js';
 import { ToolCard } from '@/chat/tool-card.js';
@@ -442,7 +442,7 @@ const TOOL_CARDS: readonly ToolPart[] = [
     status: 'ok',
     elapsedMs: 0,
     durationMs: 8,
-    content: '{\n  "name": "@ghostai/web"\n}',
+    content: '{\n  "name": "@ghostbot/web"\n}',
     truncated: true,
     approval: undefined,
     notices: [],

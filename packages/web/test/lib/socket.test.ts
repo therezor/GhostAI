@@ -11,7 +11,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ServerMessage } from '@ghostai/protocol';
+import type { ServerMessage } from '@ghostbot/protocol';
 
 import {
   ReconnectingSocket,

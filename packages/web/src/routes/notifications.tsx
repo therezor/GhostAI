@@ -29,7 +29,10 @@ import { Bell, CheckCheck, Trash2 } from 'lucide-react';
 import { useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type { Notification, NotificationListResponse } from '@ghostai/protocol';
+import type {
+  Notification,
+  NotificationListResponse,
+} from '@ghostbot/protocol';
 
 import { cn } from '@/lib/cn.js';
 import { api } from '@/lib/api.js';

@@ -20,7 +20,7 @@
  * name *before* truncation — stable across restarts (the model's prompt cache
  * keys on these) and distinct for names sharing a prefix.
  *
- * It lives here rather than in `@ghostai/mcp`, where it started, because the
+ * It lives here rather than in `@ghostbot/mcp`, where it started, because the
  * extension host needs exactly the same arithmetic under a different prefix,
  * and the alternative was a copy that would drift the first time the cap moved.
  */

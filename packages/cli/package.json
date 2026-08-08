@@ -1,5 +1,5 @@
 {
-  "name": "@ghostai/cli",
+  "name": "@ghostbot/cli",
   "version": "1.0.0",
   "description": "GhostAI command line interface.",
   "type": "module",
@@ -37,7 +37,8 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist/**",
-    "!dist/**/*.map"
+    "!dist/**/*.map",
+    "!dist/.tsbuildinfo"
   ],
   "bin": {
     "ghost": "./dist/index.js"
@@ -49,19 +50,19 @@
     "lint": "eslint src test"
   },
   "dependencies": {
-    "@ghostai/agent": "workspace:*",
-    "@ghostai/channels": "workspace:*",
-    "@ghostai/core": "workspace:*",
-    "@ghostai/extension-host": "workspace:*",
-    "@ghostai/i18n": "workspace:*",
-    "@ghostai/protocol": "workspace:*",
-    "@ghostai/providers": "workspace:*",
-    "@ghostai/runtime": "workspace:*",
-    "@ghostai/security": "workspace:*",
-    "@ghostai/server": "workspace:*",
-    "@ghostai/tools": "workspace:*",
-    "@ghostai/tui": "workspace:*",
-    "@ghostai/web": "workspace:*",
+    "@ghostbot/agent": "workspace:*",
+    "@ghostbot/channels": "workspace:*",
+    "@ghostbot/core": "workspace:*",
+    "@ghostbot/extension-host": "workspace:*",
+    "@ghostbot/i18n": "workspace:*",
+    "@ghostbot/protocol": "workspace:*",
+    "@ghostbot/providers": "workspace:*",
+    "@ghostbot/runtime": "workspace:*",
+    "@ghostbot/security": "workspace:*",
+    "@ghostbot/server": "workspace:*",
+    "@ghostbot/tools": "workspace:*",
+    "@ghostbot/tui": "workspace:*",
+    "@ghostbot/web": "workspace:*",
     "commander": "^13.0.0",
     "i18next": "^26.3.6",
     "picocolors": "^1.1.0"

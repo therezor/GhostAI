@@ -3,7 +3,7 @@
  * drifting from the protocol shape they restate.
  */
 
-import { PaginationQuerySchema } from '@ghostai/protocol';
+import { PaginationQuerySchema } from '@ghostbot/protocol';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -35,7 +35,7 @@ describe('PageQuerySchema', () => {
   /**
    * The reason these schemas are allowed to exist twice.
    *
-   * `@ghostai/protocol` states what a client sends and forbids transforms, so it
+   * `@ghostbot/protocol` states what a client sends and forbids transforms, so it
    * cannot coerce; this states the same shape as it arrives. If the two ever
    * disagree about the default or the cap, the document generated from one
    * describes a server that enforces the other.

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-import { ConfigSchema, type Config } from '@ghostai/protocol';
+import { ConfigSchema, type Config } from '@ghostbot/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { SERVER_VERSION, createServer, type GhostServer } from '#src/app.js';

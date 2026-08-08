@@ -29,8 +29,8 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 
-import { GhostError, type Clock, type Logger } from '@ghostai/core';
-import type { Toolbox } from '@ghostai/protocol';
+import { GhostError, type Clock, type Logger } from '@ghostbot/core';
+import type { Toolbox } from '@ghostbot/protocol';
 import {
   containerCreateArgv,
   containerIsGone,
@@ -40,13 +40,13 @@ import {
   type RunRequest,
   type RunnerResolver,
   type ToolboxRequest,
-} from '@ghostai/tools';
+} from '@ghostbot/tools';
 import {
   assertNetworkWithinCeiling,
   effectiveNetwork,
   type ApprovedToolbox,
   type ToolboxStore,
-} from '@ghostai/security';
+} from '@ghostbot/security';
 
 /** Beyond this many live containers the least-recently-used session is reaped. */
 const MAX_LIVE_TOOLBOXES: number = 4;

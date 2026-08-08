@@ -27,7 +27,7 @@ import type { JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { WebKey } from '@/i18n/keys.js';
 
-import type { NoticeKind } from '@ghostai/protocol';
+import type { NoticeKind } from '@ghostbot/protocol';
 
 import type { BadgeProps } from '@/components/ui/badge.js';
 import { NoticeBlock } from '@/components/ui/notice.js';

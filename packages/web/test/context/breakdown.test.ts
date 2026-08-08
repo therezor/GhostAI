@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { createWebI18n } from '@ghostai/i18n/web';
+import { createWebI18n } from '@ghostbot/i18n/web';
 
 /**
  * A real instance rather than `(key) => key`: these assertions compare the

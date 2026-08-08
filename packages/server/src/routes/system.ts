@@ -16,8 +16,8 @@ import {
   StatusResponseSchema,
   type HealthResponse,
   type StatusResponse,
-} from '@ghostai/protocol';
-import { DEFAULT_WORKSPACE_ID, systemClock } from '@ghostai/core';
+} from '@ghostbot/protocol';
+import { DEFAULT_WORKSPACE_ID, systemClock } from '@ghostbot/core';
 
 import { SERVER_VERSION } from '../version.js';
 import type { RouteDeps, RouteGroup } from './types.js';

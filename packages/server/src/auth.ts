@@ -13,8 +13,8 @@
  * spend it, and there is no second secret to mint, store and rotate.
  */
 
-import { isLoopbackHost, type Config } from '@ghostai/protocol';
-import { systemClock, type Clock } from '@ghostai/core';
+import { isLoopbackHost, type Config } from '@ghostbot/protocol';
+import { systemClock, type Clock } from '@ghostbot/core';
 import type {
   FastifyReply,
   FastifyRequest,

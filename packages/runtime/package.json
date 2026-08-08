@@ -1,5 +1,5 @@
 {
-  "name": "@ghostai/runtime",
+  "name": "@ghostbot/runtime",
   "version": "1.0.0",
   "description": "The shared composition root: config in, a running agent out.",
   "type": "module",
@@ -37,7 +37,8 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist/**",
-    "!dist/**/*.map"
+    "!dist/**/*.map",
+    "!dist/.tsbuildinfo"
   ],
   "scripts": {
     "build": "tsup && tsc -b",
@@ -46,14 +47,14 @@
     "lint": "eslint src test"
   },
   "dependencies": {
-    "@ghostai/agent": "workspace:*",
-    "@ghostai/core": "workspace:*",
-    "@ghostai/extension-host": "workspace:*",
-    "@ghostai/mcp": "workspace:*",
-    "@ghostai/protocol": "workspace:*",
-    "@ghostai/providers": "workspace:*",
-    "@ghostai/security": "workspace:*",
-    "@ghostai/tools": "workspace:*"
+    "@ghostbot/agent": "workspace:*",
+    "@ghostbot/core": "workspace:*",
+    "@ghostbot/extension-host": "workspace:*",
+    "@ghostbot/mcp": "workspace:*",
+    "@ghostbot/protocol": "workspace:*",
+    "@ghostbot/providers": "workspace:*",
+    "@ghostbot/security": "workspace:*",
+    "@ghostbot/tools": "workspace:*"
   },
   "devDependencies": {
     "zod": "^4.0.0"

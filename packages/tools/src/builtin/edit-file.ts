@@ -17,7 +17,7 @@
 
 import { readFile, writeFile } from 'node:fs/promises';
 
-import { GhostError } from '@ghostai/core';
+import { GhostError } from '@ghostbot/core';
 import { z } from 'zod';
 
 import { assertNotAborted, defineTool, type AnyTool } from '../define.js';

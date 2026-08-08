@@ -33,8 +33,8 @@ import {
   GhostError,
   RESERVED_AGENT_IDS,
   isAgentId,
-} from '@ghostai/core';
-import type { SubagentBinding } from '@ghostai/agent';
+} from '@ghostbot/core';
+import type { SubagentBinding } from '@ghostbot/agent';
 import {
   AgentDefaultsSchema,
   DEFAULT_AGENT_TOOLS,
@@ -49,8 +49,8 @@ import {
   type ToolPromptOverrides,
   type ToolsConfig,
   namesDelimiter,
-} from '@ghostai/protocol';
-import { parseCidr } from '@ghostai/security';
+} from '@ghostbot/protocol';
+import { parseCidr } from '@ghostbot/security';
 
 /**
  * Which of an entry's fields belong to `AgentDefaults`.

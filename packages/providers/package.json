@@ -1,5 +1,5 @@
 {
-  "name": "@ghostai/providers",
+  "name": "@ghostbot/providers",
   "version": "1.0.0",
   "description": "LLM provider registry, wire adapters, and resilience decorator.",
   "type": "module",
@@ -38,7 +38,8 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist/**",
-    "!dist/**/*.map"
+    "!dist/**/*.map",
+    "!dist/.tsbuildinfo"
   ],
   "scripts": {
     "build": "tsup && tsc -b",
@@ -47,9 +48,9 @@
     "lint": "eslint src test"
   },
   "dependencies": {
-    "@ghostai/core": "workspace:*",
-    "@ghostai/protocol": "workspace:*",
-    "@ghostai/security": "workspace:*",
+    "@ghostbot/core": "workspace:*",
+    "@ghostbot/protocol": "workspace:*",
+    "@ghostbot/security": "workspace:*",
     "gpt-tokenizer": "^2.8.0",
     "undici": "^7.2.0"
   }

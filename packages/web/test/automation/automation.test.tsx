@@ -21,7 +21,7 @@ import {
   ConfigSchema,
   type AutomationJob,
   type AutomationRun,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 
 import { Providers } from '@/app/providers.js';
 import { createAppRouter } from '@/app/router.js';

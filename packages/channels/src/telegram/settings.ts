@@ -2,7 +2,7 @@
  * `channels.telegram`, parsed by the channel that reads it.
  *
  * `ChannelsConfigSchema` is a `looseObject` precisely so this can live here
- * rather than in `@ghostai/protocol`: a channel owns its own block, and a bad
+ * rather than in `@ghostbot/protocol`: a channel owns its own block, and a bad
  * one is reported by refusing to start rather than by behaving oddly later.
  *
  * The bot token is deliberately **not** here. It is resolved by whoever builds
@@ -23,7 +23,7 @@ const DEFAULT_POLL_TIMEOUT_SEC = 30;
 /**
  * What a parsed block is, written out rather than inferred.
  *
- * `isolatedDeclarations` is on in this package — `@ghostai/protocol` is the one
+ * `isolatedDeclarations` is on in this package — `@ghostbot/protocol` is the one
  * place it is off, precisely because a Zod schema export *is* an inference
  * result — so the schema below stays module-private and this is the shape the
  * rest of the channel sees. The two are kept in step by `parseTelegramSettings`

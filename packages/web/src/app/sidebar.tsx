@@ -35,7 +35,7 @@ import {
 } from 'lucide-react';
 import { useState, type JSX, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { SessionSummary } from '@ghostai/protocol';
+import type { SessionSummary } from '@ghostbot/protocol';
 import type { WebKey } from '@/i18n/keys.js';
 
 import { cn } from '@/lib/cn.js';

@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
-import { isGhostError } from '@ghostai/core';
+import { isGhostError } from '@ghostbot/core';
 
 import type { RandomSource } from '#src/random.js';
 import {
@@ -13,9 +13,9 @@ import {
   toolOutputTag,
   wrapToolOutput,
 } from '#src/nonce.js';
-// Moved to `@ghostai/protocol` beside the placeholders it looks for — the tests
+// Moved to `@ghostbot/protocol` beside the placeholders it looks for — the tests
 // stay here because they are about the policy this package renders.
-import { toolPolicyUsesNonce } from '@ghostai/protocol';
+import { toolPolicyUsesNonce } from '@ghostbot/protocol';
 
 const NONCE = 'a1b2c3d4e5f60718';
 const TAG = `tool_output_${NONCE}`;

@@ -35,8 +35,8 @@ import {
   hasImages,
   systemClock,
   withoutImages,
-} from '@ghostai/core';
-import type { ChatMessage } from '@ghostai/protocol';
+} from '@ghostbot/core';
+import type { ChatMessage } from '@ghostbot/protocol';
 
 import { type ProviderError, toProviderError } from './errors.js';
 import { estimateTokens } from './tokens.js';
@@ -193,7 +193,7 @@ export function truncateOldestTurns(
 /**
  * Drops leading `tool` messages whose `assistant` was cut away.
  *
- * `findLegalStart` in `@ghostai/core` answers the same question for stored
+ * `findLegalStart` in `@ghostbot/core` answers the same question for stored
  * history; this is the same invariant applied to a request that a truncation
  * step just reshaped, and it deliberately does not import the history windowing
  * around it — that path owns the message window and tool-output caps, neither

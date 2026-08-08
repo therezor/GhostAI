@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import type { AgentSummary, ModelInfo } from '@ghostai/protocol';
+import type { AgentSummary, ModelInfo } from '@ghostbot/protocol';
 
 import {
   commandRows,

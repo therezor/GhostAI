@@ -4,7 +4,11 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { resolveGhostPaths, type GhostPaths, type Logger } from '@ghostai/core';
+import {
+  resolveGhostPaths,
+  type GhostPaths,
+  type Logger,
+} from '@ghostbot/core';
 
 import { TELEGRAM_TOKEN_ENV_VAR, resolveTelegramToken } from '#src/telegram.js';
 

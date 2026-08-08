@@ -27,7 +27,7 @@
 import {
   AgentListResponseSchema,
   type AgentListResponse,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 
 import type { RouteDeps, RouteGroup } from './types.js';
 

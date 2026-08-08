@@ -14,8 +14,8 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { createWebI18n } from '@ghostai/i18n/web';
-import type { AutomationJob } from '@ghostai/protocol';
+import { createWebI18n } from '@ghostbot/i18n/web';
+import type { AutomationJob } from '@ghostbot/protocol';
 
 import {
   describeSchedule,

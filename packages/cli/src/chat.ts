@@ -28,20 +28,20 @@
 
 import pc from 'picocolors';
 
-import { describeContext, type AgentLoop } from '@ghostai/agent';
+import { describeContext, type AgentLoop } from '@ghostbot/agent';
 import {
   DEFAULT_WORKSPACE_ID,
   createLogger,
   isAbortError,
   type LogLevel,
-} from '@ghostai/core';
+} from '@ghostbot/core';
 import {
   DEFAULT_AGENT_ID,
   type ContentPart,
   type StopReason,
-} from '@ghostai/protocol';
-import { findCredential } from '@ghostai/runtime';
-import { agentForTurn } from '@ghostai/server';
+} from '@ghostbot/protocol';
+import { findCredential } from '@ghostbot/runtime';
+import { agentForTurn } from '@ghostbot/server';
 import {
   CHROME_ROWS,
   columnsOf,
@@ -60,7 +60,7 @@ import {
   type TerminalInput,
   type TerminalOutput,
   type Theme,
-} from '@ghostai/tui';
+} from '@ghostbot/tui';
 
 import { commandRowsFor, runSlashCommand } from './commands.js';
 import {

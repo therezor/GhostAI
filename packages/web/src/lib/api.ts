@@ -2,7 +2,7 @@
  * The REST client.
  *
  * One `request` function, one error type, and a Zod parse on the way out. The
- * parse is not ceremony: `@ghostai/protocol` is the same module the server
+ * parse is not ceremony: `@ghostbot/protocol` is the same module the server
  * builds its responses from, so a field the server stopped sending is a failing
  * request here rather than `undefined` reaching a component three renders
  * later. It costs one schema lookup per response and it is the only reason the
@@ -95,7 +95,7 @@ import {
   type ToolboxListResponse,
   type ToolListResponse,
   type UploadResponse,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 import type { z } from 'zod';
 
 /** A non-2xx response, or a body that did not match its schema. */

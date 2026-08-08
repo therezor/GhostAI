@@ -24,8 +24,8 @@
 
 import { DatabaseSync } from 'node:sqlite';
 
-import { GhostError, loadConfig } from '@ghostai/core';
-import { ExtensionStore, type ExtensionResolution } from '@ghostai/security';
+import { GhostError, loadConfig } from '@ghostbot/core';
+import { ExtensionStore, type ExtensionResolution } from '@ghostbot/security';
 
 import type { Translations } from './i18n.js';
 

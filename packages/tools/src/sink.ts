@@ -12,8 +12,8 @@
  * reloading would take every sibling's tools with it. `ownerId` is the finer
  * key the implementation remembers names under.
  *
- * It is declared here rather than in `@ghostai/mcp`, where it started, because
- * two packages now consume it and neither may import the other. `@ghostai/tools`
+ * It is declared here rather than in `@ghostbot/mcp`, where it started, because
+ * two packages now consume it and neither may import the other. `@ghostbot/tools`
  * is the one place both already depend on, and the interface is about a
  * registry rather than about MCP.
  */

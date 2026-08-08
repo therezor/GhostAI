@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import type { ServerMessage, StoredMessage } from '@ghostai/protocol';
+import type { ServerMessage, StoredMessage } from '@ghostbot/protocol';
 
 import {
   appendPendingUserMessage,

@@ -17,6 +17,6 @@
  * and puts the error back at the entry that is wrong.
  */
 
-import type { ResourceKeys, WebResources } from '@ghostai/i18n';
+import type { ResourceKeys, WebResources } from '@ghostbot/i18n';
 
 export type WebKey = ResourceKeys<WebResources>;

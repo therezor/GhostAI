@@ -13,7 +13,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { userMessage } from '@ghostai/core';
+import { userMessage } from '@ghostbot/core';
 
 import { buildContextResponse } from '#src/context.js';
 

@@ -1,4 +1,4 @@
-import { McpServerConfigSchema } from '@ghostai/protocol';
+import { McpServerConfigSchema } from '@ghostbot/protocol';
 import { describe, expect, it } from 'vitest';
 
 import {

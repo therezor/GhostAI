@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ServerMessage } from '@ghostai/protocol';
+import type { ServerMessage } from '@ghostbot/protocol';
 
 import { TurnProjection, type OutboundDraft } from '#src/projection.js';
 

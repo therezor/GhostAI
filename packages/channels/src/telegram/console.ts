@@ -16,18 +16,18 @@
  * channel any extension registers. The composition root compiles this
  * channel in and hands it a store deliberately, which is a different act.
  *
- * Typed entirely in `@ghostai/core` and `@ghostai/protocol` vocabulary, because
+ * Typed entirely in `@ghostbot/core` and `@ghostbot/protocol` vocabulary, because
  * that is the whole of what this package may import — and because it happens to
  * be the same vocabulary the REST API answers in, so `serve.ts` satisfies most
  * of it with what `ServerRuntime` already exposes.
  */
 
-import type { SessionStore, WorkspaceStore } from '@ghostai/core';
+import type { SessionStore, WorkspaceStore } from '@ghostbot/core';
 import type {
   AgentSummary,
   ContextResponse,
   ModelsResponse,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 
 export interface TelegramConsole {
   /**

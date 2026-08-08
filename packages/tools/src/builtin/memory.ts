@@ -56,7 +56,7 @@ import {
   MEMORY_TYPES,
   memorySlug,
   saveMemory,
-} from '@ghostai/core';
+} from '@ghostbot/core';
 
 import { assertNotAborted, defineTool, type AnyTool } from '../define.js';
 

@@ -1,5 +1,5 @@
-import { GhostError, ERROR_KINDS } from '@ghostai/core';
-import { ErrorResponseSchema } from '@ghostai/protocol';
+import { GhostError, ERROR_KINDS } from '@ghostbot/core';
+import { ErrorResponseSchema } from '@ghostbot/protocol';
 import { describe, expect, it } from 'vitest';
 
 import {

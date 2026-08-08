@@ -5,9 +5,9 @@ import { join } from 'node:path';
 import fc from 'fast-check';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { GhostError } from '@ghostai/core';
-import { ToolboxSchema, type Toolbox } from '@ghostai/protocol';
-import type { EffectiveNetwork, ExecPlan } from '@ghostai/security';
+import { GhostError } from '@ghostbot/core';
+import { ToolboxSchema, type Toolbox } from '@ghostbot/protocol';
+import type { EffectiveNetwork, ExecPlan } from '@ghostbot/security';
 
 import {
   TOOLBOX_MOUNT_DIR,

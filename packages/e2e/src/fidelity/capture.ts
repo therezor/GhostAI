@@ -1,7 +1,7 @@
 /**
  * Both screens, side by side, and the difference between them.
  *
- * `pnpm --filter @ghostai/e2e baseline` writes three files per screen into
+ * `pnpm --filter @ghostbot/e2e baseline` writes three files per screen into
  * `artifacts/fidelity/`: the reference, the replacement, and a diff map with
  * every changed pixel marked. It prints the percentage and exits zero.
  *

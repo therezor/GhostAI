@@ -12,8 +12,8 @@ import { join } from 'node:path';
 import fc from 'fast-check';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { isGhostError } from '@ghostai/core';
-import { type ExecToolConfig, ExecToolConfigSchema } from '@ghostai/protocol';
+import { isGhostError } from '@ghostbot/core';
+import { type ExecToolConfig, ExecToolConfigSchema } from '@ghostbot/protocol';
 
 import {
   SHELL_BINARIES,

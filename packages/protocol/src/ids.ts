@@ -24,7 +24,7 @@
  * what a name with nothing usable in it falls back to. Those differ between
  * workspaces and agents, so callers pass them in.
  *
- * It lives in `@ghostai/protocol` rather than in `@ghostai/core` because both
+ * It lives in `@ghostbot/protocol` rather than in `@ghostbot/core` because both
  * sides need it: the server turns an id into a path, and the browser *mints*
  * one when an operator creates an agent. Two implementations of a rule whose
  * whole job is that two things cannot collide is not a rule.
@@ -90,7 +90,7 @@ export function slugify(
  * What is specific to a workspace: **`default` is reserved**, because it names
  * the parent of every other workspace rather than a folder beside them.
  *
- * These moved here from `@ghostai/core` for the reason stated at the top of
+ * These moved here from `@ghostbot/core` for the reason stated at the top of
  * this file, which now applies to both kinds: the browser mints one. The create
  * form asks for the folder as its own field, so it has to be able to say —
  * before the request — that `Client Acme` proposes `client-acme` and that `con`

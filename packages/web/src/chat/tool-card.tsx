@@ -49,7 +49,11 @@ import { useTranslation } from 'react-i18next';
 
 import { useQuery } from '@tanstack/react-query';
 
-import type { ApprovalScope, StoredMessage, ToolRisk } from '@ghostai/protocol';
+import type {
+  ApprovalScope,
+  StoredMessage,
+  ToolRisk,
+} from '@ghostbot/protocol';
 
 import { cn } from '@/lib/cn.js';
 import { api } from '@/lib/api.js';

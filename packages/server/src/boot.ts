@@ -19,8 +19,8 @@
  * already looking at, and refuses everything else until it is spent.
  */
 
-import { GhostError } from '@ghostai/core';
-import { isLoopbackHost, type Config } from '@ghostai/protocol';
+import { GhostError } from '@ghostbot/core';
+import { isLoopbackHost, type Config } from '@ghostbot/protocol';
 
 interface BootPolicyInput {
   readonly config: Config;

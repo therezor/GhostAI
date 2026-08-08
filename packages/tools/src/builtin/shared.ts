@@ -10,8 +10,8 @@
  * care about.
  */
 
-import { GhostError, isAbortError, type ErrorKind } from '@ghostai/core';
-import type { JailAccept } from '@ghostai/security';
+import { GhostError, isAbortError, type ErrorKind } from '@ghostbot/core';
+import type { JailAccept } from '@ghostbot/security';
 
 const KIND_BY_CODE: Readonly<Record<string, ErrorKind>> = {
   ENOENT: 'not_found',

@@ -15,7 +15,7 @@
 
 import { Response, type RequestInit } from 'undici';
 
-import type { FetchImplementation } from '@ghostai/security';
+import type { FetchImplementation } from '@ghostbot/security';
 
 export interface RecordedCall {
   readonly url: string;

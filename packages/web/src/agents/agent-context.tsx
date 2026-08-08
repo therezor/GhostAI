@@ -29,7 +29,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { DEFAULT_AGENT_ID } from '@ghostai/protocol';
+import { DEFAULT_AGENT_ID } from '@ghostbot/protocol';
 
 const STORAGE_KEY = 'ghostai:agent';
 

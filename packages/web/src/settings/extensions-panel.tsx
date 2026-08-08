@@ -30,7 +30,7 @@ import type {
   Config,
   ExtensionStatus,
   ExtensionState,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 
 import { Badge } from '@/components/ui/badge.js';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu.js';

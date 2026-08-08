@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 
-import { GhostError } from '@ghostai/core';
+import { GhostError } from '@ghostbot/core';
 import { describe, expect, it } from 'vitest';
 
 import type { ChatOptions } from '#src/chat.js';

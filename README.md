@@ -25,13 +25,13 @@ Cloud providers are opt-in, not assumed.
 
 <!-- Uncomment the moment `v1.0.0` is pushed and npm has the package. Until then
      it renders a red `npm | invalid`, which is worse than no badge at all.
-[![npm](https://img.shields.io/npm/v/@ghostai/cli?style=flat-square&color=3fb950&labelColor=0d1117)](https://www.npmjs.com/package/@ghostai/cli)
+[![npm](https://img.shields.io/npm/v/@ghostbot/cli?style=flat-square&color=3fb950&labelColor=0d1117)](https://www.npmjs.com/package/@ghostbot/cli)
 -->
 
 </div>
 
 ```bash
-npm install -g @ghostai/cli && ghost serve
+npm install -g @ghostbot/cli && ghost serve
 ```
 
 <div align="center">
@@ -221,7 +221,7 @@ git clone https://github.com/therezor/GhostAI.git
 cd GhostAI
 pnpm install
 pnpm build                                  # → packages/cli/dist/index.js
-pnpm --filter @ghostai/cli link --global    # gives you `ghost`
+pnpm --filter @ghostbot/cli link --global    # gives you `ghost`
 ```
 
 Needs pnpm 11 (`corepack enable`). `pnpm build` is not optional — without it

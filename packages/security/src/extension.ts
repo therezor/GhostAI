@@ -30,11 +30,11 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
-import { GhostError, isExtensionId } from '@ghostai/core';
+import { GhostError, isExtensionId } from '@ghostbot/core';
 import {
   ExtensionManifestSchema,
   type ExtensionManifest,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 
 /** The file every installed extension is found by. */
 export const EXTENSION_MANIFEST_FILE = 'ghostai.extension.json';

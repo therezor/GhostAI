@@ -26,8 +26,8 @@
  * refuse calls the server would have accepted.
  */
 
-import { GhostError } from '@ghostai/core';
-import type { ArgIssue, ParseArgsResult } from '@ghostai/tools';
+import { GhostError } from '@ghostbot/core';
+import type { ArgIssue, ParseArgsResult } from '@ghostbot/tools';
 
 /** A problem with what a server advertised. Never fatal on its own. */
 export interface SchemaIssue {

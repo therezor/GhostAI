@@ -265,7 +265,7 @@ to remove an entry. `null` at `tools.mcpServers.<id>` deletes the server, and
 `null` at its `oauth` says it does not use OAuth.
 
 Two guards do **not** apply here, and the reasoning is in the module headers of
-`@ghostai/mcp`. A stdio `command` does not go through `guardExec`: that guard
+`@ghostbot/mcp`. A stdio `command` does not go through `guardExec`: that guard
 constrains argv a _model_ wrote inside the workspace jail, and it refuses the
 absolute paths and `npx`-shaped invocations every MCP server uses. A `url` does
 not go through `guardedFetch`'s SSRF blocklist, because the commonest MCP

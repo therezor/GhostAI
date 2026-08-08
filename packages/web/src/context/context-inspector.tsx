@@ -22,7 +22,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { JSX, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type { StoredMessage, ToolDefinition } from '@ghostai/protocol';
+import type { StoredMessage, ToolDefinition } from '@ghostbot/protocol';
 
 import { api, ApiError } from '@/lib/api.js';
 import { useFormat } from '@/lib/use-format.js';

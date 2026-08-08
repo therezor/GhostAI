@@ -39,7 +39,7 @@ jobs:
         run: pnpm lint
 
       - name: Design token gates
-        run: pnpm --filter @ghostai/web exec tsx src/tokens/run-gates.ts
+        run: pnpm --filter @ghostbot/web exec tsx src/tokens/run-gates.ts
 
       - name: Format check
         run: pnpm format:check
@@ -107,7 +107,7 @@ jobs:
 
       # `--no-git-checks` because a tagged checkout is a detached HEAD, which
       # pnpm otherwise refuses. `-r` skips `private: true` on its own, which is
-      # what leaves `@ghostai/e2e` and both `examples/*` behind.
+      # what leaves `@ghostbot/e2e` and both `examples/*` behind.
       - name: Publish to npm
         run: pnpm -r publish --access public --no-git-checks --provenance
         env:

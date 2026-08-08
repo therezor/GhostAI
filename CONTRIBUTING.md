@@ -7,14 +7,14 @@ git clone https://github.com/therezor/GhostAI.git
 cd GhostAI
 pnpm install
 pnpm build
-pnpm --filter @ghostai/cli link --global    # gives you `ghost`
+pnpm --filter @ghostbot/cli link --global    # gives you `ghost`
 ```
 
 Node ≥ 22.13, pnpm 11 (`corepack enable`). The Node floor is exact — `node:sqlite` was
 unflagged in 22.13, and 22.12 fails at startup rather than degrading.
 
 `link --global` points `ghost` at your working copy, so it shadows any
-`npm install -g @ghostai/cli` you already had. `pnpm --filter @ghostai/cli unlink --global`
+`npm install -g @ghostbot/cli` you already had. `pnpm --filter @ghostbot/cli unlink --global`
 puts the released one back.
 
 ## Before you open a pull request
@@ -26,13 +26,13 @@ never calls.
 ```bash
 pnpm typecheck
 pnpm lint
-pnpm --filter @ghostai/web exec tsx src/tokens/run-gates.ts   # design token gates
+pnpm --filter @ghostbot/web exec tsx src/tokens/run-gates.ts   # design token gates
 pnpm format:check                                             # ← the usual failure
 pnpm i18n:check
 pnpm test
 pnpm build
 pnpm test:coverage                                            # stricter than pnpm test
-pnpm --filter @ghostai/e2e test:e2e                           # needs the build above
+pnpm --filter @ghostbot/e2e test:e2e                           # needs the build above
 ```
 
 [Development](docs/development.md) is the full walkthrough — what each gate catches, the

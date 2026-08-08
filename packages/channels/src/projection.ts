@@ -30,8 +30,8 @@
  *    that explains it and saying it twice is not saying it better.
  */
 
-import type { OutboundKind } from '@ghostai/core';
-import type { ServerMessage, StopReason, ToolRisk } from '@ghostai/protocol';
+import type { OutboundKind } from '@ghostbot/core';
+import type { ServerMessage, StopReason, ToolRisk } from '@ghostbot/protocol';
 
 /** One message the projection wants sent, before the manager addresses it. */
 export interface OutboundDraft {

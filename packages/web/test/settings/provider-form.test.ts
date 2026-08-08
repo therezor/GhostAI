@@ -8,7 +8,7 @@
  * patch goes to a route that answers with the settings tree.
  */
 
-import { ConfigPatchSchema, ProviderConfigSchema } from '@ghostai/protocol';
+import { ConfigPatchSchema, ProviderConfigSchema } from '@ghostbot/protocol';
 import { describe, expect, it } from 'vitest';
 
 import {

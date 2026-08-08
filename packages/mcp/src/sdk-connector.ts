@@ -43,7 +43,7 @@
  *  - the child is killed on `close()`.
  */
 
-import { GhostError, toGhostError, type Logger } from '@ghostai/core';
+import { GhostError, toGhostError, type Logger } from '@ghostbot/core';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js';
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';

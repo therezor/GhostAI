@@ -5,7 +5,7 @@ import fc from 'fast-check';
 import { Response } from 'undici';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { isGhostError } from '@ghostai/core';
+import { isGhostError } from '@ghostbot/core';
 
 import {
   type DnsResolver,

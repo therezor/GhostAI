@@ -27,7 +27,7 @@ import {
   ServerMessageSchema,
   type ClientMessage,
   type ServerMessage,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 
 export type ConnectionStatus =
   'connecting' | 'open' | 'reconnecting' | 'closed';

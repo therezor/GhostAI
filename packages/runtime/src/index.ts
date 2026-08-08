@@ -1,5 +1,5 @@
 /**
- * @ghostai/runtime — config in, a running agent out.
+ * @ghostbot/runtime — config in, a running agent out.
  *
  * One package, one job: hold the wiring that every entry point needs and none
  * of them should own. `ghost chat`, the HTTP server, a channel and the
@@ -8,7 +8,7 @@
  * this package existing, having implemented that wiring once per entry point
  * and drifted between them.
  *
- * **No HTTP, and nothing above `@ghostai/agent`.** A transport builds a runtime;
+ * **No HTTP, and nothing above `@ghostbot/agent`.** A transport builds a runtime;
  * a runtime never knows what is driving it.
  */
 

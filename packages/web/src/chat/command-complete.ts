@@ -21,7 +21,7 @@
 
 import type { TFunction } from 'i18next';
 
-import type { AgentSummary, ModelInfo } from '@ghostai/protocol';
+import type { AgentSummary, ModelInfo } from '@ghostbot/protocol';
 
 import { commandRows, findCommand } from './commands.js';
 

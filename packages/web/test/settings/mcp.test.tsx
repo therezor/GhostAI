@@ -15,7 +15,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
-import { ConfigSchema, type ConfigPatch } from '@ghostai/protocol';
+import { ConfigSchema, type ConfigPatch } from '@ghostbot/protocol';
 
 import { Providers } from '@/app/providers.js';
 import { createAppRouter } from '@/app/router.js';

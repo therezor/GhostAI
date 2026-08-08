@@ -1,7 +1,7 @@
 /**
  * Reading `config.json`.
  *
- * The schema in `@ghostai/protocol` deliberately contains no `.transform()`, so
+ * The schema in `@ghostbot/protocol` deliberately contains no `.transform()`, so
  * that every field stays representable as JSON Schema for the OpenAPI document
  * and the parsed type is identical to the input type. That leaves one job for
  * load time, and this is it: find the file, turn its absence into defaults
@@ -31,7 +31,7 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import { ConfigSchema, type Config } from '@ghostai/protocol';
+import { ConfigSchema, type Config } from '@ghostbot/protocol';
 
 import { GhostError, errnoOf } from './errors.js';
 import {

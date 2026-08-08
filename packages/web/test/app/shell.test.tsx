@@ -13,7 +13,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ConfigSchema } from '@ghostai/protocol';
+import { ConfigSchema } from '@ghostbot/protocol';
 
 import { Providers } from '@/app/providers.js';
 import { createAppRouter } from '@/app/router.js';

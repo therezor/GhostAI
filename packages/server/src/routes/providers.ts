@@ -4,7 +4,7 @@
  * `GET /api/providers` answers two questions at once, because the settings
  * panel asks both: `types` is the catalogue an operator adds an endpoint from,
  * projected from the `PROVIDERS` table, and `instances` is what they have
- * actually configured. Both projections live in `@ghostai/providers` beside the
+ * actually configured. Both projections live in `@ghostbot/providers` beside the
  * table itself, so adding a provider stays a one-line table entry rather than a
  * table entry plus a route change — and this route supplies the one thing
  * neither can know: whether a credential exists, which is the vault's business
@@ -21,13 +21,13 @@ import {
   type ProviderTestRequest,
   type ProviderTestResponse,
   type ProvidersResponse,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 import {
   PROVIDERS,
   describeInstance,
   describeProvider,
   listInstances,
-} from '@ghostai/providers';
+} from '@ghostbot/providers';
 
 import type { RouteDeps, RouteGroup } from './types.js';
 

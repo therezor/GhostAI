@@ -3,7 +3,7 @@
  *
  * **Why a listener of our own rather than a route on the GhostAI server.**
  * Three reasons, and any one of them is sufficient. This package sits below
- * `@ghostai/server` in the layer graph and may not reach it. `ghost chat` in a
+ * `@ghostbot/server` in the layer graph and may not reach it. `ghost chat` in a
  * terminal has no HTTP server at all and still has to be able to authorize a
  * server. And the route manifest's `public` list is three entries long on
  * purpose — an OAuth redirect cannot carry the session cookie, because it
@@ -23,8 +23,8 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import { GhostError, type Clock, type Logger } from '@ghostai/core';
-import { systemRandom, type RandomSource } from '@ghostai/security';
+import { GhostError, type Clock, type Logger } from '@ghostbot/core';
+import { systemRandom, type RandomSource } from '@ghostbot/security';
 
 /**
  * Tried first so the redirect URI is stable across attempts.

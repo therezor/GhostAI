@@ -26,8 +26,12 @@
  * bad combination is caught instead of reaching a provider as a 400.
  */
 
-import { GhostError } from '@ghostai/core';
-import { ConfigSchema, type Config, type ConfigPatch } from '@ghostai/protocol';
+import { GhostError } from '@ghostbot/core';
+import {
+  ConfigSchema,
+  type Config,
+  type ConfigPatch,
+} from '@ghostbot/protocol';
 
 /**
  * Dotted paths whose object value is replaced, not merged. `*` matches one key.

@@ -2,9 +2,9 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { resolveGhostPaths } from '@ghostai/core';
-import { findProvider, type ProviderInstance } from '@ghostai/providers';
-import { CredentialVault } from '@ghostai/security';
+import { resolveGhostPaths } from '@ghostbot/core';
+import { findProvider, type ProviderInstance } from '@ghostbot/providers';
+import { CredentialVault } from '@ghostbot/security';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {

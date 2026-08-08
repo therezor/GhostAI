@@ -1,4 +1,4 @@
-import type { EffectiveAgent } from '@ghostai/runtime';
+import type { EffectiveAgent } from '@ghostbot/runtime';
 import { describe, expect, it } from 'vitest';
 
 import { translations } from '#src/i18n.js';

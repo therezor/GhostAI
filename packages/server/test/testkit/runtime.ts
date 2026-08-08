@@ -20,7 +20,7 @@ import {
   resolveGhostPaths,
   workspaceDirFor,
   type Clock,
-} from '@ghostai/core';
+} from '@ghostbot/core';
 import {
   ConfigSchema,
   type Config,
@@ -31,8 +31,8 @@ import {
   type RunCommandRequest,
   type RunCommandResponse,
   type ToolDefinition,
-} from '@ghostai/protocol';
-import { WorkspaceJail, type ToolboxListing } from '@ghostai/security';
+} from '@ghostbot/protocol';
+import { WorkspaceJail, type ToolboxListing } from '@ghostbot/security';
 import type { DatabaseSync } from 'node:sqlite';
 
 import type { AgentSummary, AgentView, ServerRuntime } from '#src/runtime.js';

@@ -1,7 +1,7 @@
 /**
  * Reading workspace files: what type a file is, and whether it is text.
  *
- * Here rather than in `@ghostai/server`, where both of these used to live,
+ * Here rather than in `@ghostbot/server`, where both of these used to live,
  * because the agent loop needs them too. An attached file has to be turned into
  * something a model can read — bytes for an image, characters for a `.csv` —
  * and that decision has to come out the same way whether it is being made to

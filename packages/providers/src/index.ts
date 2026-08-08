@@ -1,5 +1,5 @@
 /**
- * @ghostai/providers — the provider registry, one wire adapter, and resilience.
+ * @ghostbot/providers — the provider registry, one wire adapter, and resilience.
  *
  * The package is organised around a claim: **a provider is data, and only a wire
  * protocol is code.** `PROVIDERS` is a table; `openai-chat` is the single

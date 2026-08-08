@@ -6,7 +6,7 @@ import importX from 'eslint-plugin-import-x';
 /**
  * Package layering is enforced by two mechanisms working together:
  *
- *  1. pnpm's isolated node_modules. A package can only resolve `@ghostai/x`
+ *  1. pnpm's isolated node_modules. A package can only resolve `@ghostbot/x`
  *     if it declares it in `dependencies`, so the dependency graph in the
  *     package manifests *is* the layer graph — an undeclared import fails to
  *     resolve rather than merely failing lint.
@@ -26,7 +26,7 @@ const crossPackageImportRule = {
         {
           group: ['../../*'],
           message:
-            'Deep relative imports across package boundaries are banned. Import the package by name (@ghostai/<pkg>) and declare it in package.json dependencies.',
+            'Deep relative imports across package boundaries are banned. Import the package by name (@ghostbot/<pkg>) and declare it in package.json dependencies.',
         },
       ],
     },
@@ -314,7 +314,7 @@ export default tseslint.config(
             {
               group: ['../../*'],
               message:
-                'Deep relative imports across package boundaries are banned. Import the package by name (@ghostai/<pkg>) and declare it in package.json dependencies.',
+                'Deep relative imports across package boundaries are banned. Import the package by name (@ghostbot/<pkg>) and declare it in package.json dependencies.',
             },
             {
               group: ['node:readline', 'node:readline/promises'],

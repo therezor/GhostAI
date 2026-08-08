@@ -3,8 +3,8 @@
  *
  * Two rules shape this file, and both are about start-up cost:
  *
- *  - **Nothing from `@ghostai/*` is imported at module scope, with one measured
- *    exception.** Only `commander` and types, which erase. `@ghostai/core` alone
+ *  - **Nothing from `@ghostbot/*` is imported at module scope, with one measured
+ *    exception.** Only `commander` and types, which erase. `@ghostbot/core` alone
  *    pulls in pino, zod and `node:sqlite`, and the agent behind it pulls the
  *    provider adapters and the tool registry — none of which `ghost --help` has
  *    any use for. The subcommand is loaded inside its action handler, and even
@@ -12,7 +12,7 @@
  *    has already failed. tsup's ESM code splitting makes that a real second
  *    chunk rather than a stylistic gesture.
  *
- *    The exception is `./i18n.js`, and through it `@ghostai/i18n/cli`. Help text
+ *    The exception is `./i18n.js`, and through it `@ghostbot/i18n/cli`. Help text
  *    *is* the thing `--help` prints, so there is no later point to load it: the
  *    description of every flag on this page comes out of that bundle. What keeps
  *    it affordable is that the subpath carries the `cli` and `shared` bundles
@@ -22,7 +22,7 @@
  *    Measured on the built bundle: **3.4 ms to import, 0.9 ms to construct the
  *    instance**, against a `ghost --help` that takes ~50 ms end to end. Roughly
  *    a twelfth of the invocation, and the budget that was set for it was 10 ms.
- *    Re-measure with `node -e "import('@ghostai/i18n/cli')"` around
+ *    Re-measure with `node -e "import('@ghostbot/i18n/cli')"` around
  *    `process.hrtime.bigint()` if this file grows another module-scope import;
  *    there is deliberately no test asserting the number, because a wall-clock
  *    budget on a shared CI runner is the transient assertion `CLAUDE.md` bans.
@@ -40,7 +40,7 @@
 
 import { Command, CommanderError } from 'commander';
 
-import type { LogLevel } from '@ghostai/core';
+import type { LogLevel } from '@ghostbot/core';
 
 import type { ChatOptions } from './chat.js';
 import { describeError, translationsFor, type CliT, type Env } from './i18n.js';
@@ -445,11 +445,11 @@ function buildProgram(deps: CliDeps = {}): Command {
  *
  * `isGhostError` is imported here rather than at the top of the file: this runs
  * only on a path that has already failed, so the cost of loading
- * `@ghostai/core` is one nobody is waiting on — and keeping it off module scope
+ * `@ghostbot/core` is one nobody is waiting on — and keeping it off module scope
  * is what keeps `ghost --help` free of the whole dependency graph.
  */
 async function describeFailure(error: unknown, env: Env): Promise<string> {
-  const { isGhostError } = await import('@ghostai/core');
+  const { isGhostError } = await import('@ghostbot/core');
   if (isGhostError(error)) {
     // Under `GHOSTAI_DEBUG` the stack is what was asked for; otherwise the
     // sentence the error carries is the whole of what a person needs.

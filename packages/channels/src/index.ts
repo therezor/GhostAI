@@ -1,5 +1,5 @@
 /**
- * @ghostai/channels — every way into the agent that is not a browser.
+ * @ghostbot/channels — every way into the agent that is not a browser.
  *
  * The package is three things: a contract a transport implements, a manager
  * that bridges `MessageBus` to the session hub, and one channel over that
@@ -30,7 +30,7 @@
  * mistake the provider and tool suites already avoid. It lives in
  * `test/testkit/` — outside `src` entirely, so `tsup` never sees it and there is
  * nothing for a bundler to pull in by accident — and reaches implementors as the
- * `@ghostai/channels/testkit` subpath, which resolves straight to TypeScript
+ * `@ghostbot/channels/testkit` subpath, which resolves straight to TypeScript
  * source. `examples/loopback-channel` is what runs it.
  */
 

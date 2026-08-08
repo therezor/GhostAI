@@ -7,7 +7,7 @@
  * from a browser reaches the right pending authorization.
  */
 
-import { silentLogger } from '@ghostai/core';
+import { silentLogger } from '@ghostbot/core';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { CallbackListener } from '#src/callback.js';

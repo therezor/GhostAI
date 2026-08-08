@@ -25,7 +25,7 @@
 import { useMemo, useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { SUPPORTED_LOCALES } from '@ghostai/i18n';
+import { SUPPORTED_LOCALES } from '@ghostbot/i18n';
 
 import { useAppLocale } from '@/i18n/i18n-context.js';
 import { SYSTEM } from '@/i18n/locale-preference.js';

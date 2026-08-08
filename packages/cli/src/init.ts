@@ -36,24 +36,24 @@ import {
   ConfigSchema,
   type Config,
   type ProviderConfig,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 import {
   GhostError,
   ensureDir,
   loadConfig,
   saveConfig,
   type LoadedConfig,
-} from '@ghostai/core';
+} from '@ghostbot/core';
 import {
   PROVIDERS,
   createProvider,
   nextInstanceId,
   type ProviderSpec,
-} from '@ghostai/providers';
-import { PROVIDER_CREDENTIAL_NAMESPACE, openVault } from '@ghostai/runtime';
+} from '@ghostbot/providers';
+import { PROVIDER_CREDENTIAL_NAMESPACE, openVault } from '@ghostbot/runtime';
 import pc from 'picocolors';
 
-import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from '@ghostai/i18n';
+import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from '@ghostbot/i18n';
 
 import { translationsFor, type CliT } from './i18n.js';
 

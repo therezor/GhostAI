@@ -1,7 +1,7 @@
 /**
  * What the routes need from below the transport, stated as an interface.
  *
- * `@ghostai/runtime` is the composition root: it turns a config file into a
+ * `@ghostbot/runtime` is the composition root: it turns a config file into a
  * provider, a jail, a store, a registry and a loop. This package deliberately
  * does not import it. The dependency would type-check — nothing above the server
  * imports it back — but it would put the whole wiring graph behind every route
@@ -15,7 +15,7 @@
  * Everything that a settings save can move is read through a function.
  */
 
-import type { SessionStore, WorkspaceStore } from '@ghostai/core';
+import type { SessionStore, WorkspaceStore } from '@ghostbot/core';
 import type {
   ChannelStatus,
   ChatMessage,
@@ -32,10 +32,10 @@ import type {
   RunCommandResponse,
   SetCredentialRequest,
   ToolDefinition,
-} from '@ghostai/protocol';
-import type { ChatResult, ToolChoice } from '@ghostai/providers';
-import type { ToolboxListing, WorkspaceJail } from '@ghostai/security';
-import type { PromptPreview, PromptPreviewInput } from '@ghostai/agent';
+} from '@ghostbot/protocol';
+import type { ChatResult, ToolChoice } from '@ghostbot/providers';
+import type { ToolboxListing, WorkspaceJail } from '@ghostbot/security';
+import type { PromptPreview, PromptPreviewInput } from '@ghostbot/agent';
 
 /**
  * The agent as the status and context routes see it.
@@ -86,7 +86,7 @@ export interface AgentView {
 /**
  * Why an id did not name an agent that could run.
  *
- * Declared here rather than imported from `@ghostai/runtime`, which this
+ * Declared here rather than imported from `@ghostbot/runtime`, which this
  * package deliberately does not depend on — the port describes what the server
  * needs, and an adapter supplies it.
  */

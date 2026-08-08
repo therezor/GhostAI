@@ -9,7 +9,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { NotificationListResponse } from '@ghostai/protocol';
+import type { NotificationListResponse } from '@ghostbot/protocol';
 
 import { NotificationStore } from '#src/notifications.js';
 import { manualClock } from '#testkit/clock.js';

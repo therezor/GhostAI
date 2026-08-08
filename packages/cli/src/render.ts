@@ -34,13 +34,13 @@ import type {
   AgentEvent,
   NestedAgentEvent,
   SubagentEvent,
-} from '@ghostai/agent';
-import type { TurnStatsRecord } from '@ghostai/core';
-import { tokensPerSecond, type ToolRisk, type Usage } from '@ghostai/protocol';
-import { stripAnsi, type Palette } from '@ghostai/tui';
+} from '@ghostbot/agent';
+import type { TurnStatsRecord } from '@ghostbot/core';
+import { tokensPerSecond, type ToolRisk, type Usage } from '@ghostbot/protocol';
+import { stripAnsi, type Palette } from '@ghostbot/tui';
 import pc from 'picocolors';
 
-import { DEFAULT_LOCALE } from '@ghostai/i18n';
+import { DEFAULT_LOCALE } from '@ghostbot/i18n';
 
 import { translations, type CliKey, type CliT } from './i18n.js';
 
@@ -208,7 +208,7 @@ const STOP_REASONS: Partial<Record<string, CliKey>> = {
 };
 
 /**
- * `riskColor` stays here rather than moving to `@ghostai/tui` with the rest of
+ * `riskColor` stays here rather than moving to `@ghostbot/tui` with the rest of
  * the palette: it takes a `ToolRisk`, and a package whose whole claim is that it
  * has never heard of an agent cannot be the one that knows `exec` is red.
  */

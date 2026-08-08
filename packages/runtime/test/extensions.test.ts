@@ -16,8 +16,8 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import type { Extension } from '@ghostai/extension-host';
-import { defineTool } from '@ghostai/tools';
+import type { Extension } from '@ghostbot/extension-host';
+import { defineTool } from '@ghostbot/tools';
 
 import {
   createRuntime,

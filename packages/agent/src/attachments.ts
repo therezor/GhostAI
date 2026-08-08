@@ -38,10 +38,10 @@ import {
   mimeTypeFor,
   readText,
   textPart,
-} from '@ghostai/core';
-import type { ChatMessage, ContentPart, FilePart } from '@ghostai/protocol';
-import type { WorkspaceJail } from '@ghostai/security';
-import { formatBytes } from '@ghostai/tools';
+} from '@ghostbot/core';
+import type { ChatMessage, ContentPart, FilePart } from '@ghostbot/protocol';
+import type { WorkspaceJail } from '@ghostbot/security';
+import { formatBytes } from '@ghostbot/tools';
 
 /**
  * The largest image sent inline, as base64.
@@ -142,7 +142,7 @@ function locate(
   // prompt by `header`, where a newline forges the boundary between one
   // attachment's line and the next. `safeName` in the composer already reduces
   // an upload to `[\w.-]`, but this path arrives on a socket frame — and the
-  // channel `attach` port sketched in `@ghostai/channels` will one day carry a
+  // channel `attach` port sketched in `@ghostbot/channels` will one day carry a
   // filename chosen by whoever sent the message. No real path has one.
   // eslint-disable-next-line no-control-regex
   if (/[\u0000-\u001f\u007f]/.test(part.path)) return undefined;

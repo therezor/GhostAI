@@ -25,7 +25,7 @@
  * spent discovering that — and there is no arrangement of one map that can.
  */
 
-import type { ToolPermission, ToolPermissions } from '@ghostai/protocol';
+import type { ToolPermission, ToolPermissions } from '@ghostbot/protocol';
 
 /**
  * What `perms` says about `name`.

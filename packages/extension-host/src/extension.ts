@@ -24,18 +24,18 @@
  *
  * What an extension can still do is everything: it is ordinary JavaScript in
  * the server process and `node:fs` is one import away. The gate in front of it
- * is the approval digest in `@ghostai/security`, and `docs/security.md` says in
+ * is the approval digest in `@ghostbot/security`, and `docs/security.md` says in
  * as many words that this is the same trust level as a toolbox with host
  * `exec`. The recorder is a design for *clarity and exact teardown*, not a
  * sandbox, and reading it as one would be the dangerous mistake.
  */
 
-import type { Clock, Logger } from '@ghostai/core';
-import type { ChannelFactory } from '@ghostai/channels';
-import type { ExtensionManifest } from '@ghostai/protocol';
-import type { ContextContributor } from '@ghostai/agent';
-import type { ProviderSpec, WireAdapter } from '@ghostai/providers';
-import type { AnyTool } from '@ghostai/tools';
+import type { Clock, Logger } from '@ghostbot/core';
+import type { ChannelFactory } from '@ghostbot/channels';
+import type { ExtensionManifest } from '@ghostbot/protocol';
+import type { ContextContributor } from '@ghostbot/agent';
+import type { ProviderSpec, WireAdapter } from '@ghostbot/providers';
+import type { AnyTool } from '@ghostbot/tools';
 
 /**
  * A command the operator invokes, from any surface.

@@ -9,7 +9,7 @@
  * turn refuses with a sentence naming the drift. Nobody has to remember to
  * re-approve, because they cannot avoid it.
  *
- * It lives in `@ghostai/security` rather than `@ghostai/core` for a reason the
+ * It lives in `@ghostbot/security` rather than `@ghostbot/core` for a reason the
  * layer graph makes non-negotiable: `core` may not import `security`, and the
  * approval check needs `parseToolbox` and `assertToolboxPolicy`. Putting the
  * table here also keeps the whole "may this agent run in this container"
@@ -26,8 +26,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
 
-import { GhostError, systemClock, type Clock } from '@ghostai/core';
-import type { Toolbox } from '@ghostai/protocol';
+import { GhostError, systemClock, type Clock } from '@ghostbot/core';
+import type { Toolbox } from '@ghostbot/protocol';
 
 import { assertToolboxPolicy, manifestHash, parseToolbox } from './toolbox.js';
 

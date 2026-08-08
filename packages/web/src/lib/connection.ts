@@ -27,7 +27,7 @@ import {
   type ApprovalScope,
   type Attachment,
   type ServerMessage,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 
 import { useTurnStore } from '@/state/turn.js';
 import { toast } from '@/components/ui/toast.js';

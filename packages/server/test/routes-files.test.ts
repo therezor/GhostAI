@@ -21,7 +21,7 @@ import {
   type FileEntry,
   type FileTextResponse,
   type SignedUrl,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { MEDIA_SECRET_NAME, mediaUrl, signMediaToken } from '#src/signing.js';

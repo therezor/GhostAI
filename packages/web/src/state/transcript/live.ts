@@ -17,7 +17,7 @@
  *    top-level one and a subagent of a subagent free.
  */
 
-import type { Attachment, ServerMessage } from '@ghostai/protocol';
+import type { Attachment, ServerMessage } from '@ghostbot/protocol';
 
 import {
   EMPTY_TRANSCRIPT,

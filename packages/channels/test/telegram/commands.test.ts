@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { userMessage } from '@ghostai/core';
+import { userMessage } from '@ghostbot/core';
 
 import type { ChannelControlFrame } from '#src/channel.js';
 import { ChatBook } from '#src/telegram/chats.js';

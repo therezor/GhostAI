@@ -24,7 +24,7 @@
  * another.
  */
 
-import { silentLogger, type Logger } from '@ghostai/core';
+import { silentLogger, type Logger } from '@ghostbot/core';
 
 /**
  * Marks the message as an interruption rather than the next thing the user

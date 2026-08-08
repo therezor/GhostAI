@@ -34,19 +34,19 @@ import {
   toGhostError,
   truncateHeadTail,
   onAbort,
-} from '@ghostai/core';
+} from '@ghostbot/core';
 import type {
   AbortSubscription,
   Clock,
   ErrorKind,
   Logger,
-} from '@ghostai/core';
+} from '@ghostbot/core';
 import type {
   ToolDefinition,
   ToolPermission,
   ToolPermissions,
   ToolSource,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 
 import {
   toToolResult,

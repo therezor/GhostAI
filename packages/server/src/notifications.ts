@@ -1,7 +1,7 @@
 /**
  * Notifications, on the connection everything else shares.
  *
- * They live in this package rather than in `@ghostai/core` for the same reason
+ * They live in this package rather than in `@ghostbot/core` for the same reason
  * the auth tables do: nothing below the transport raises one. A notification is
  * something a *user interface* shows — an automation run that finished while the
  * tab was closed, an approval that expired unanswered — and the agent loop has
@@ -23,8 +23,8 @@
 
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
 
-import { rowReader, systemClock, type Clock, type Row } from '@ghostai/core';
-import { newUuid, type Notification } from '@ghostai/protocol';
+import { rowReader, systemClock, type Clock, type Row } from '@ghostbot/core';
+import { newUuid, type Notification } from '@ghostbot/protocol';
 
 import type { NotificationCursor } from './cursor.js';
 

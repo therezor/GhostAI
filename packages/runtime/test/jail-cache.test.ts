@@ -16,8 +16,8 @@ import {
   isGhostError,
   resolveGhostPaths,
   type GhostPaths,
-} from '@ghostai/core';
-import { WorkspaceJail } from '@ghostai/security';
+} from '@ghostbot/core';
+import { WorkspaceJail } from '@ghostbot/security';
 
 import { JailCache, MAX_CACHED_JAILS } from '#src/jail-cache.js';
 

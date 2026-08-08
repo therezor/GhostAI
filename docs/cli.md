@@ -184,7 +184,7 @@ worth knowing before you meet them:
 - **`--ui <dir>` must contain an `index.html`.** A directory that does not is an error at
   startup rather than a blank page later.
 
-If `@ghostai/web` has not been built, `serve` says so and runs the API alone rather than
+If `@ghostbot/web` has not been built, `serve` says so and runs the API alone rather than
 serving nothing at a URL it just printed.
 
 ## `ghost toolbox` and `ghost extension`

@@ -1,4 +1,4 @@
-import { PLAIN_THEME, visibleWidth } from '@ghostai/tui';
+import { PLAIN_THEME, visibleWidth } from '@ghostbot/tui';
 import { describe, expect, it } from 'vitest';
 
 import {

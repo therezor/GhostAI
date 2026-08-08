@@ -1,5 +1,5 @@
 {
-  "name": "@ghostai/agent",
+  "name": "@ghostbot/agent",
   "version": "1.0.0",
   "description": "The agent loop, subagent manager, and context contributors.",
   "type": "module",
@@ -47,6 +47,7 @@
   "files": [
     "dist/**",
     "!dist/**/*.map",
+    "!dist/.tsbuildinfo",
     "test/testkit"
   ],
   "scripts": {
@@ -56,11 +57,11 @@
     "lint": "eslint src test"
   },
   "dependencies": {
-    "@ghostai/core": "workspace:*",
-    "@ghostai/protocol": "workspace:*",
-    "@ghostai/providers": "workspace:*",
-    "@ghostai/security": "workspace:*",
-    "@ghostai/tools": "workspace:*"
+    "@ghostbot/core": "workspace:*",
+    "@ghostbot/protocol": "workspace:*",
+    "@ghostbot/providers": "workspace:*",
+    "@ghostbot/security": "workspace:*",
+    "@ghostbot/tools": "workspace:*"
   },
   "devDependencies": {
     "zod": "^4.0.0"

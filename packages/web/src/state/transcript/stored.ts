@@ -12,7 +12,7 @@
  * be showing them the machinery.
  */
 
-import type { StoredMessage, SubagentRunRef } from '@ghostai/protocol';
+import type { StoredMessage, SubagentRunRef } from '@ghostbot/protocol';
 
 import {
   type ToolPart,

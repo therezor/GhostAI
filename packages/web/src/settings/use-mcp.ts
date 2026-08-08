@@ -13,7 +13,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { McpStatusResponse } from '@ghostai/protocol';
+import type { McpStatusResponse } from '@ghostbot/protocol';
 import type { UseQueryResult } from '@tanstack/react-query';
 
 import { api } from '@/lib/api.js';

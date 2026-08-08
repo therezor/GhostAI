@@ -29,14 +29,14 @@
  * line to find.
  */
 
-import type { ChannelFactory } from '@ghostai/channels';
+import type { ChannelFactory } from '@ghostbot/channels';
 import type {
   ExtensionContribution,
   ExtensionManifest,
-} from '@ghostai/protocol';
-import type { ContextContributor } from '@ghostai/agent';
-import type { ProviderSpec, WireAdapter } from '@ghostai/providers';
-import { namespacedToolName, type AnyTool } from '@ghostai/tools';
+} from '@ghostbot/protocol';
+import type { ContextContributor } from '@ghostbot/agent';
+import type { ProviderSpec, WireAdapter } from '@ghostbot/providers';
+import { namespacedToolName, type AnyTool } from '@ghostbot/tools';
 
 import type { ExtensionCommand } from './extension.js';
 

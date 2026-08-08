@@ -44,11 +44,11 @@ import {
   type Clock,
   type Logger,
   type TimerHandle,
-} from '@ghostai/core';
-import type { ToolCall, ToolRisk, ToolsConfig } from '@ghostai/protocol';
-import type { ChatResult } from '@ghostai/providers';
-import { describeInjectionFindings, wrapToolOutput } from '@ghostai/security';
-import type { ToolContext, ToolExecution, ToolScope } from '@ghostai/tools';
+} from '@ghostbot/core';
+import type { ToolCall, ToolRisk, ToolsConfig } from '@ghostbot/protocol';
+import type { ChatResult } from '@ghostbot/providers';
+import { describeInjectionFindings, wrapToolOutput } from '@ghostbot/security';
+import type { ToolContext, ToolExecution, ToolScope } from '@ghostbot/tools';
 
 import {
   deniedNotice,

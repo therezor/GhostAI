@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 
-import { ConfigSchema } from '@ghostai/protocol';
+import { ConfigSchema } from '@ghostbot/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { initCommand, type InitOptions } from '#src/init.js';

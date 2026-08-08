@@ -22,7 +22,7 @@ import {
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ClientMessage, ServerMessage } from '@ghostai/protocol';
+import type { ClientMessage, ServerMessage } from '@ghostbot/protocol';
 
 import { Providers } from '@/app/providers.js';
 import { createAppRouter } from '@/app/router.js';

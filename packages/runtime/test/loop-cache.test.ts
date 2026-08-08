@@ -1,4 +1,4 @@
-import type { AgentLoop } from '@ghostai/agent';
+import type { AgentLoop } from '@ghostbot/agent';
 import { describe, expect, it } from 'vitest';
 
 import { LoopCache, MAX_CACHED_LOOPS } from '#src/loop-cache.js';

@@ -4,7 +4,7 @@
  * What is asserted here is the *review*: that the listing prints what an
  * operator has to weigh before approving, and that approving says what it
  * committed to. The gate itself — the digest, the drift, the four states — is
- * `@ghostai/security`'s, and testing it again through a CLI would be testing
+ * `@ghostbot/security`'s, and testing it again through a CLI would be testing
  * the same branches with more scaffolding.
  */
 

@@ -27,8 +27,8 @@ import {
   textPart,
   toolMessage,
   userMessage,
-} from '@ghostai/core';
-import type { ChatMessage } from '@ghostai/protocol';
+} from '@ghostbot/core';
+import type { ChatMessage } from '@ghostbot/protocol';
 
 import { isProviderError } from '#src/errors.js';
 import { withResilience } from '#src/resilience.js';

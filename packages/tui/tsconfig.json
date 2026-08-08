@@ -8,7 +8,7 @@
   "include": ["src/**/*"],
 
   // No references, and that absence is the point: this package depends on no
-  // `@ghostai/*` at all, which is what makes "domain-free" a fact the build
+  // `@ghostbot/*` at all, which is what makes "domain-free" a fact the build
   // graph enforces rather than a rule a reviewer has to remember.
   "references": []
 }

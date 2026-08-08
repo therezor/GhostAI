@@ -26,7 +26,7 @@ import type {
   AutomationRunListResponse,
   CreateAutomationJob,
   UpdateAutomationJob,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 
 import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';

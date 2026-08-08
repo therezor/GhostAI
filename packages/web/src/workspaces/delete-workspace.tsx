@@ -21,7 +21,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type { WorkspaceSummary } from '@ghostai/protocol';
+import type { WorkspaceSummary } from '@ghostbot/protocol';
 
 import { toast } from '@/components/ui/toast.js';
 import { ConfirmDialog } from '@/components/crud/confirm-dialog.js';

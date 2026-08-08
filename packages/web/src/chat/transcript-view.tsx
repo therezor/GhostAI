@@ -25,7 +25,7 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type { ApprovalScope } from '@ghostai/protocol';
+import type { ApprovalScope } from '@ghostbot/protocol';
 
 import { Button } from '@/components/ui/button.js';
 import type { Transcript } from '@/state/transcript.js';

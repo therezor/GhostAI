@@ -27,14 +27,14 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 
-import { GhostError, systemClock, type Clock } from '@ghostai/core';
+import { GhostError, systemClock, type Clock } from '@ghostbot/core';
 import {
   DEFAULT_USERNAME,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
   UsernameSchema,
-} from '@ghostai/protocol';
-import { systemRandom, type RandomSource } from '@ghostai/security';
+} from '@ghostbot/protocol';
+import { systemRandom, type RandomSource } from '@ghostbot/security';
 import type { Algorithm as Argon2Algorithm } from '@node-rs/argon2';
 
 /** Bytes of entropy in the secret half of a token. */

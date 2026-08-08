@@ -5,7 +5,7 @@ description: The translation layer — how user-facing copy becomes a key, how t
 
 # GhostAI translations
 
-Every sentence a person reads goes through `@ghostai/i18n`. The layer is small,
+Every sentence a person reads goes through `@ghostbot/i18n`. The layer is small,
 and almost all of its design is aimed at one failure: a string that quietly never
 became a key, and is therefore English forever in every locale.
 
@@ -34,7 +34,7 @@ misspelled key is a compile error, not a key rendered on a nav item.
 
 Two consequences that look like trivia and are not:
 
-- **`resources.ts` imports by package self-reference** (`@ghostai/i18n/locales/en/shared.json`),
+- **`resources.ts` imports by package self-reference** (`@ghostbot/i18n/locales/en/shared.json`),
   never by relative path. `tsc` copies the specifier into `dist/` verbatim and
   does not emit JSON, so a relative path resolves to nothing from inside `dist`.
   The failure is silent in the worst way: `skipLibCheck` swallows it,
@@ -100,10 +100,10 @@ a log does not.
 
 The key is fully qualified (`shared:…`) because a package with no namespace of
 its own cannot name a string unambiguously any other way. `SharedMessageKey` is
-what stops a throw in `@ghostai/runtime` from naming a string that only exists in
+what stops a throw in `@ghostbot/runtime` from naming a string that only exists in
 the UI bundle.
 
-The import of `@ghostai/i18n` in `packages/core/src/errors.ts` is **type-only and
+The import of `@ghostbot/i18n` in `packages/core/src/errors.ts` is **type-only and
 must stay that way** — a value import would put the whole translation layer in
 front of every package that touches an error.
 
@@ -144,8 +144,8 @@ done.
 ## What is not done yet
 
 The engine is in place ahead of its adoption. `shared.json` carries `runtime.*`
-and `server.*` keys, and **nothing in `@ghostai/runtime`, `@ghostai/server`,
-`@ghostai/security` or `@ghostai/tools` currently throws with a `messageKey`** —
+and `server.*` keys, and **nothing in `@ghostbot/runtime`, `@ghostbot/server`,
+`@ghostbot/security` or `@ghostbot/tools` currently throws with a `messageKey`** —
 those errors are English-only today. That is a gap rather than a decision: when
 touching an error in those packages, add the key and the bundle entry. The gates
 will not tell you to, because neither of them reads `.ts` outside web and cli.

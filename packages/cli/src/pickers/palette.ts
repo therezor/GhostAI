@@ -13,7 +13,7 @@
  * outright, because there is nothing left to say.
  */
 
-import type { SelectItem } from '@ghostai/tui';
+import type { SelectItem } from '@ghostbot/tui';
 
 import { commandRows, type CommandRow } from '../commands.js';
 import type { CliT } from '../i18n.js';

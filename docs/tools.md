@@ -95,7 +95,7 @@ absent entry in an agent's map already means "not enabled", and an existing agen
 no capability until someone says so. See [Configuration](configuration.md#toolsmcpserversid)
 for the settings and the two security decisions behind them.
 
-Four things about the bridge are worth knowing before reading `@ghostai/mcp`:
+Four things about the bridge are worth knowing before reading `@ghostbot/mcp`:
 
 - **The name is qualified and generated.** `mcp_<server>_<tool>`, sanitised into the
   `[A-Za-z0-9_-]{1,64}` every provider accepts, with a digest suffix when it would not

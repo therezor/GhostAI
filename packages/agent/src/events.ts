@@ -2,7 +2,7 @@
  * What a turn emits.
  *
  * One discriminated union, and every member is a `ServerMessage` from
- * `@ghostai/protocol` minus the fields the transport owns. The WebSocket hub in
+ * `@ghostbot/protocol` minus the fields the transport owns. The WebSocket hub in
  * Phase 2 forwards an event by stamping a `seq` on it — there is no mapping
  * table, no per-event translation function, and therefore no place for the two
  * shapes to drift. `events.test.ts` asserts that literally: every event here,
@@ -29,7 +29,7 @@ import type {
   StopReason,
   ToolRisk,
   Usage,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 
 export interface TurnStartEvent {
   readonly type: 'turn.start';
@@ -201,7 +201,7 @@ export type NestedAgentEvent =
  * The reasoning for the shape — why a wrapper rather than an optional field on
  * every event, why `parentSessionKey` is part of the address, and why depth
  * beyond one level is forwarding rather than nesting — is on
- * `SubagentEventSchema` in `@ghostai/protocol`, which this must stay 1:1 with.
+ * `SubagentEventSchema` in `@ghostbot/protocol`, which this must stay 1:1 with.
  *
  * The one thing worth restating here, because it is the loop's job rather than
  * the schema's: **`turnId` is the root turn, not the subagent's own.** The

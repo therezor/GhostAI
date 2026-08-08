@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
-import type { ChatMessage } from '@ghostai/protocol';
+import type { ChatMessage } from '@ghostbot/protocol';
 
 import {
   DEFAULT_MAX_TOOL_RESULT_CHARS,

@@ -9,24 +9,24 @@ split-process topology and the reconnect-and-fall-back-to-HTTP client that would
 Sixteen, plus two examples. Each is a published-shaped workspace package with its own
 tests and its own coverage bar.
 
-| Package                   | Does                                                                                                                |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `@ghostai/protocol`       | Zod schemas → types, JSON Schema and OpenAPI. Zero runtime deps but `zod`.                                          |
-| `@ghostai/core`           | Message types, `SessionStore`, `WorkspaceStore`, `MessageBus`, `Logger`, `Clock`, config loading, history windowing |
-| `@ghostai/security`       | `WorkspaceJail`, `guardExec`, `guardedFetch`, `CredentialVault`, nonce fencing, toolbox and extension approvals     |
-| `@ghostai/providers`      | The provider registry, the `openai-chat` wire adapter, SSE parsing, `withResilience`, token counting                |
-| `@ghostai/tools`          | `defineTool`, `ToolRegistry`, the built-in tools, the local and container runners                                   |
-| `@ghostai/mcp`            | The MCP client, connection lifecycle and the bridge from a remote tool onto `Tool`                                  |
-| `@ghostai/agent`          | `AgentLoop`, the approval contract, prompt assembly, steering, subagents                                            |
-| `@ghostai/extension-host` | Discovery, the approval check, `import()`, `activate`, and what an extension contributed                            |
-| `@ghostai/runtime`        | The composition root: config → provider, jail, store, registry, one loop per agent                                  |
-| `@ghostai/channels`       | The `Channel` contract, `ChannelManager`, `TurnProjection` and the Telegram adapter                                 |
-| `@ghostai/server`         | Fastify: REST, the WebSocket hub, auth, static UI, OpenAPI                                                          |
-| `@ghostai/web`            | The React SPA                                                                                                       |
-| `@ghostai/cli`            | The `ghost` binary                                                                                                  |
-| `@ghostai/i18n`           | The i18next instance, locale negotiation, typed keys                                                                |
-| `@ghostai/tui`            | A domain-free terminal toolkit: key decoding, display-width text, a transient selection region                      |
-| `@ghostai/e2e`            | Playwright, plus the optional design-fidelity gate                                                                  |
+| Package                    | Does                                                                                                                |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `@ghostbot/protocol`       | Zod schemas → types, JSON Schema and OpenAPI. Zero runtime deps but `zod`.                                          |
+| `@ghostbot/core`           | Message types, `SessionStore`, `WorkspaceStore`, `MessageBus`, `Logger`, `Clock`, config loading, history windowing |
+| `@ghostbot/security`       | `WorkspaceJail`, `guardExec`, `guardedFetch`, `CredentialVault`, nonce fencing, toolbox and extension approvals     |
+| `@ghostbot/providers`      | The provider registry, the `openai-chat` wire adapter, SSE parsing, `withResilience`, token counting                |
+| `@ghostbot/tools`          | `defineTool`, `ToolRegistry`, the built-in tools, the local and container runners                                   |
+| `@ghostbot/mcp`            | The MCP client, connection lifecycle and the bridge from a remote tool onto `Tool`                                  |
+| `@ghostbot/agent`          | `AgentLoop`, the approval contract, prompt assembly, steering, subagents                                            |
+| `@ghostbot/extension-host` | Discovery, the approval check, `import()`, `activate`, and what an extension contributed                            |
+| `@ghostbot/runtime`        | The composition root: config → provider, jail, store, registry, one loop per agent                                  |
+| `@ghostbot/channels`       | The `Channel` contract, `ChannelManager`, `TurnProjection` and the Telegram adapter                                 |
+| `@ghostbot/server`         | Fastify: REST, the WebSocket hub, auth, static UI, OpenAPI                                                          |
+| `@ghostbot/web`            | The React SPA                                                                                                       |
+| `@ghostbot/cli`            | The `ghost` binary                                                                                                  |
+| `@ghostbot/i18n`           | The i18next instance, locale negotiation, typed keys                                                                |
+| `@ghostbot/tui`            | A domain-free terminal toolkit: key decoding, display-width text, a transient selection region                      |
+| `@ghostbot/e2e`            | Playwright, plus the optional design-fidelity gate                                                                  |
 
 ### Layering
 
@@ -43,7 +43,7 @@ rather than under them, and why only `cli` reaches for it.
 
 Dependencies only run downward, and the rule is enforced two ways, both mechanical:
 
-1. **pnpm's isolated `node_modules`.** A package can only resolve `@ghostai/x` if it
+1. **pnpm's isolated `node_modules`.** A package can only resolve `@ghostbot/x` if it
    declares it in `dependencies`. The manifests _are_ the layer graph — an undeclared
    import fails to resolve, not merely to lint.
 2. **`no-restricted-imports`** bans the deep relative imports (`../../*`) that would
@@ -51,7 +51,7 @@ Dependencies only run downward, and the rule is enforced two ways, both mechanic
 
 The agent must never reach back into the HTTP server. One consequence is visible in the
 subagent design below: delegation lives in `AgentLoop` rather than in a tool, because
-`@ghostai/tools` sits underneath it and `ToolContext` has no event sink.
+`@ghostbot/tools` sits underneath it and `ToolContext` has no event sink.
 
 ## A turn
 

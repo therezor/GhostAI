@@ -18,9 +18,9 @@
  * rubber stamp with extra steps.
  */
 
-import { GhostError, loadConfig } from '@ghostai/core';
-import { ToolboxStore, weakenedIn } from '@ghostai/security';
-import type { Toolbox } from '@ghostai/protocol';
+import { GhostError, loadConfig } from '@ghostbot/core';
+import { ToolboxStore, weakenedIn } from '@ghostbot/security';
+import type { Toolbox } from '@ghostbot/protocol';
 import { DatabaseSync } from 'node:sqlite';
 
 import type { Translations } from './i18n.js';

@@ -2,7 +2,7 @@
  * One schema per thing, two artifacts from it.
  *
  * A route declares its body, query and responses as the Zod schemas
- * `@ghostai/protocol` already exports. Those same objects are what validates a
+ * `@ghostbot/protocol` already exports. Those same objects are what validates a
  * request and what `@fastify/swagger` turns into the OpenAPI document, so the
  * reference cannot describe a shape the server does not enforce — the drift
  * that makes a hand-maintained API document worse than none.
@@ -22,7 +22,7 @@
  * schema exists to supply.
  */
 
-import { PROTOCOL_SCHEMAS } from '@ghostai/protocol';
+import { PROTOCOL_SCHEMAS } from '@ghostbot/protocol';
 import type { FastifySchema, FastifySchemaCompiler } from 'fastify';
 import { z } from 'zod';
 

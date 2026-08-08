@@ -11,7 +11,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { Attachment } from '@ghostai/protocol';
+import type { Attachment } from '@ghostbot/protocol';
 
 import { parseCommand } from '@/chat/commands.js';
 import { Composer } from '@/chat/composer.js';

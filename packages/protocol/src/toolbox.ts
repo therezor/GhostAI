@@ -19,7 +19,7 @@
  *
  *  - **`image` must be digest-pinned.** A tag is a mutable pointer, and a toolbox
  *    approved once and then silently repointed is the whole approval gate
- *    defeated. The check lives in `@ghostai/security`, where a refusal can carry
+ *    defeated. The check lives in `@ghostbot/security`, where a refusal can carry
  *    a sentence explaining itself.
  *
  *  - **`network.maxMode` is a ceiling, not a setting.** An agent's own request is
@@ -37,7 +37,7 @@
  * What is deliberately *absent* is the boilerplate every toolbox would otherwise
  * repeat — that a shell is available, that only the workspace is mounted, where
  * truncated output goes. Those are properties of running in a toolbox at all, so
- * they are composed in code (`@ghostai/agent`'s prompt builder) where they are
+ * they are composed in code (`@ghostbot/agent`'s prompt builder) where they are
  * always true, rather than copied into every manifest where they can drift.
  */
 
@@ -178,7 +178,7 @@ export const ToolboxSchema = z.object({
    */
   expose: z.enum(['prompt', 'tools']).default('prompt'),
 
-  /** Must be digest-pinned. Validated in `@ghostai/security`. */
+  /** Must be digest-pinned. Validated in `@ghostbot/security`. */
   image: z.string().min(1),
   runtime: ToolboxRuntimeSchema.default('runc'),
   /** Where the workspace is mounted inside the container. */

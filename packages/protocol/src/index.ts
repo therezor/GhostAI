@@ -1,5 +1,5 @@
 /**
- * @ghostai/protocol — Zod schemas and the types derived from them.
+ * @ghostbot/protocol — Zod schemas and the types derived from them.
  *
  * Every other package imports its shared shapes from here. The schemas are the
  * single source of truth: TypeScript types come from `z.infer`, JSON Schema for

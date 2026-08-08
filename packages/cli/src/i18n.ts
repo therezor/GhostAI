@@ -1,9 +1,9 @@
 /**
  * The terminal's translation layer.
  *
- * **This is the one `@ghostai/*` import `program.ts` makes at module scope**,
+ * **This is the one `@ghostbot/*` import `program.ts` makes at module scope**,
  * and the exception is deliberate rather than an oversight — see the rule at
- * the top of that file. Two things make it affordable: `@ghostai/i18n/cli` is a
+ * the top of that file. Two things make it affordable: `@ghostbot/i18n/cli` is a
  * leaf with one dependency and no side effects, and it carries the `cli` and
  * `shared` bundles only, not the browser's. `program.test.ts` measures what
  * `--help` costs so the exception stays a measured one.
@@ -31,8 +31,8 @@ import {
   resolveFirstLocale,
   type CliResources,
   type ResourceKeys,
-} from '@ghostai/i18n';
-import { createCliI18n } from '@ghostai/i18n/cli';
+} from '@ghostbot/i18n';
+import { createCliI18n } from '@ghostbot/i18n/cli';
 import type { i18n, TFunction } from 'i18next';
 
 /** The environment variables that name a language, most specific first. */

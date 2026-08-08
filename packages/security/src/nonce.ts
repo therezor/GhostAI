@@ -27,8 +27,8 @@
  * byte-for-byte. The nonce does the defending; the findings only inform.
  */
 
-import { GhostError } from '@ghostai/core';
-import { effectiveToolPolicy, renderPromptTemplate } from '@ghostai/protocol';
+import { GhostError } from '@ghostbot/core';
+import { effectiveToolPolicy, renderPromptTemplate } from '@ghostbot/protocol';
 
 import { type RandomSource, systemRandom } from './random.js';
 
@@ -237,7 +237,7 @@ export function describeInjectionFindings(
  * warning, which `assertBuildable` and the editor both raise, and not worth
  * being the single exception to a promise the rest of the prompt keeps.
  *
- * The default lives in `@ghostai/protocol` rather than here so the browser can
+ * The default lives in `@ghostbot/protocol` rather than here so the browser can
  * offer it as a starting point; the layer graph runs protocol → core → security,
  * so this import is the direction that exists.
  */

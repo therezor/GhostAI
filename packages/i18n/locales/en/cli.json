@@ -141,7 +141,7 @@
     "pressCtrlC": "Press Ctrl-C to stop.",
     "stopped": "Stopped.",
     "ui": "UI",
-    "uiUnbuilt": "not built — serving the API only (build @ghostai/web to add it)",
+    "uiUnbuilt": "not built — serving the API only (build @ghostbot/web to add it)",
     "url": "URL",
     "workspace": "Workspace"
   },

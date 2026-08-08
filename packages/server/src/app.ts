@@ -31,9 +31,9 @@ import {
   systemClock,
   type Clock,
   type Logger,
-} from '@ghostai/core';
-import type { Config } from '@ghostai/protocol';
-import type { RandomSource } from '@ghostai/security';
+} from '@ghostbot/core';
+import type { Config } from '@ghostbot/protocol';
+import type { RandomSource } from '@ghostbot/security';
 import Fastify, {
   type FastifyBaseLogger,
   type FastifyInstance,
@@ -342,7 +342,7 @@ export async function createServer(
       info: {
         title: 'GhostAI',
         version: SERVER_VERSION,
-        description: 'Generated from the Zod schemas in @ghostai/protocol.',
+        description: 'Generated from the Zod schemas in @ghostbot/protocol.',
       },
       components: {
         // The `$defs` pool: every protocol schema, so a route references rather

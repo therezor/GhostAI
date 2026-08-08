@@ -2,13 +2,13 @@
 
 The format is [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 uses [semantic versioning](https://semver.org/spec/v2.0.0.html). Every package in the
-repository carries the same version and they are released together; only `@ghostai/cli`
+repository carries the same version and they are released together; only `@ghostbot/cli`
 is something you install by name.
 
 ## [Unreleased] — 1.0.0
 
 **Not published yet.** The manifests say `1.0.0`, the docs describe
-`npm install -g @ghostai/cli`, and [`release.yml`](.github/workflows/release.yml) is armed
+`npm install -g @ghostbot/cli`, and [`release.yml`](.github/workflows/release.yml) is armed
 — but the tag has not been pushed. Until it is, this heading stays `Unreleased` rather
 than claiming a version npm does not have.
 

@@ -9,9 +9,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-import { fakeServer, type FakeServer } from '@ghostai/mcp/testkit';
-import type { ConfigPatch } from '@ghostai/protocol';
-import { defineTool } from '@ghostai/tools';
+import { fakeServer, type FakeServer } from '@ghostbot/mcp/testkit';
+import type { ConfigPatch } from '@ghostbot/protocol';
+import { defineTool } from '@ghostbot/tools';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 

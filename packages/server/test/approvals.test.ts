@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ApprovalRequest } from '@ghostai/agent';
-import type { Clock, TimerHandle } from '@ghostai/core';
+import type { ApprovalRequest } from '@ghostbot/agent';
+import type { Clock, TimerHandle } from '@ghostbot/core';
 
 import { HubApprovalGate, type UnattendedApproval } from '#src/approvals.js';
 

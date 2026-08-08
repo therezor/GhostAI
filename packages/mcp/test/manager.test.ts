@@ -1,6 +1,9 @@
-import { GhostError } from '@ghostai/core';
-import { McpServerConfigSchema, type McpServerConfig } from '@ghostai/protocol';
-import type { AnyTool } from '@ghostai/tools';
+import { GhostError } from '@ghostbot/core';
+import {
+  McpServerConfigSchema,
+  type McpServerConfig,
+} from '@ghostbot/protocol';
+import type { AnyTool } from '@ghostbot/tools';
 import { describe, expect, it } from 'vitest';
 
 import { McpManager, type McpToolSink } from '#src/manager.js';

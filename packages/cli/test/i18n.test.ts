@@ -1,4 +1,4 @@
-import { GhostError } from '@ghostai/core';
+import { GhostError } from '@ghostbot/core';
 import { describe, expect, it } from 'vitest';
 
 import {

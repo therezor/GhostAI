@@ -19,7 +19,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "screenshots": "pnpm build && pnpm --filter @ghostai/e2e exec playwright install chromium && pnpm --filter @ghostai/e2e screenshots",
+    "screenshots": "pnpm build && pnpm --filter @ghostbot/e2e exec playwright install chromium && pnpm --filter @ghostbot/e2e screenshots",
     "demo": "pnpm build && node scripts/demo-cast.mjs",
     "check": "pnpm typecheck && pnpm lint && pnpm test",
     "i18n:extract": "i18next 'packages/web/src/**/*.{ts,tsx}' --config i18next-parser.web.js && i18next 'packages/cli/src/**/*.ts' --config i18next-parser.cli.js",

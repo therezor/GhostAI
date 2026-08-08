@@ -1,5 +1,5 @@
 /**
- * The arithmetic `@ghostai/mcp` and the extension host share.
+ * The arithmetic `@ghostbot/mcp` and the extension host share.
  *
  * `packages/mcp/test/names.test.ts` covers the same rules under the `mcp`
  * prefix, because that is the caller whose collisions an operator actually

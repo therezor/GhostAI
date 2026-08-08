@@ -4,8 +4,8 @@ import { z } from 'zod';
 import {
   ExtensionManifestSchema,
   type ExtensionContribution,
-} from '@ghostai/protocol';
-import { defineTool, type AnyTool } from '@ghostai/tools';
+} from '@ghostbot/protocol';
+import { defineTool, type AnyTool } from '@ghostbot/tools';
 
 import { RegistrationBag, extensionToolName } from '#src/registration.js';
 

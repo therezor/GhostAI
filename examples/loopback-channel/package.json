@@ -1,5 +1,5 @@
 {
-  "name": "@ghostai/example-loopback-channel",
+  "name": "@ghostbot/example-loopback-channel",
   "version": "0.0.0",
   "description": "A reference channel with no network: the shortest complete implementation of the channel contract.",
   "private": true,
@@ -15,15 +15,15 @@
     "lint": "eslint src test"
   },
   "dependencies": {
-    "@ghostai/channels": "workspace:*",
-    "@ghostai/core": "workspace:*",
-    "@ghostai/protocol": "workspace:*"
+    "@ghostbot/channels": "workspace:*",
+    "@ghostbot/core": "workspace:*",
+    "@ghostbot/protocol": "workspace:*"
   },
   "devDependencies": {
-    "@ghostai/agent": "workspace:*",
-    "@ghostai/providers": "workspace:*",
-    "@ghostai/security": "workspace:*",
-    "@ghostai/server": "workspace:*",
-    "@ghostai/tools": "workspace:*"
+    "@ghostbot/agent": "workspace:*",
+    "@ghostbot/providers": "workspace:*",
+    "@ghostbot/security": "workspace:*",
+    "@ghostbot/server": "workspace:*",
+    "@ghostbot/tools": "workspace:*"
   }
 }

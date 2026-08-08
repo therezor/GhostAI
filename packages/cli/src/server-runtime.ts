@@ -1,7 +1,7 @@
 /**
  * `GhostRuntime` as the server's routes want it.
  *
- * `@ghostai/server` states a narrow `ServerRuntime` port rather than importing
+ * `@ghostbot/server` states a narrow `ServerRuntime` port rather than importing
  * the composition root, so that a route test needs neither a provider nor a
  * vault nor a workspace. This is the adapter on the other side of that port,
  * and it lives here because `ghost serve` is where the two halves are wired
@@ -36,7 +36,7 @@
 
 import { existsSync } from 'node:fs';
 
-import { DEFAULT_AGENT_ID, GhostError, saveConfig } from '@ghostai/core';
+import { DEFAULT_AGENT_ID, GhostError, saveConfig } from '@ghostbot/core';
 import type {
   Config,
   ConfigPatch,
@@ -49,22 +49,22 @@ import type {
   RunCommandResponse,
   SetCredentialRequest,
   ToolDefinition,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 import {
   findProvider,
   listInstances,
   resolveConnection,
   type ChatResult,
-} from '@ghostai/providers';
-import { ExtensionStore, ToolboxStore } from '@ghostai/security';
-import { openVault, resolveAgent, type GhostRuntime } from '@ghostai/runtime';
+} from '@ghostbot/providers';
+import { ExtensionStore, ToolboxStore } from '@ghostbot/security';
+import { openVault, resolveAgent, type GhostRuntime } from '@ghostbot/runtime';
 import type {
   AgentSummary,
   AgentView,
   ServerRuntime,
   ExtensionCounts,
-} from '@ghostai/server';
-import type { CredentialVault, FetchImplementation } from '@ghostai/security';
+} from '@ghostbot/server';
+import type { CredentialVault, FetchImplementation } from '@ghostbot/security';
 
 import { createModelCatalogue } from './models.js';
 

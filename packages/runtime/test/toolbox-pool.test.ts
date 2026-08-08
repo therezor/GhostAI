@@ -11,16 +11,16 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { GhostError } from '@ghostai/core';
-import { ToolboxStore } from '@ghostai/security';
-import type { AgentToolboxNetwork } from '@ghostai/protocol';
+import { GhostError } from '@ghostbot/core';
+import { ToolboxStore } from '@ghostbot/security';
+import type { AgentToolboxNetwork } from '@ghostbot/protocol';
 
 import type {
   CommandRunner,
   RunOutcome,
   RunRequest,
   ToolboxRequest,
-} from '@ghostai/tools';
+} from '@ghostbot/tools';
 
 import {
   OWNER_LABEL,

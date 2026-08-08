@@ -1,4 +1,4 @@
-import { isGhostError } from '@ghostai/core';
+import { isGhostError } from '@ghostbot/core';
 import { describe, expect, it } from 'vitest';
 
 import { compileValidator, normaliseSchema } from '#src/schema.js';

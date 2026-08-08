@@ -17,8 +17,8 @@ import {
   isGhostError,
   toGhostError,
   type ErrorKind,
-} from '@ghostai/core';
-import type { ErrorCode, ErrorResponse } from '@ghostai/protocol';
+} from '@ghostbot/core';
+import type { ErrorCode, ErrorResponse } from '@ghostbot/protocol';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 /** Status and wire code for each kind in the core taxonomy. */

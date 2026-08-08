@@ -18,7 +18,7 @@
  * most, a crash whose output is not a record at all.
  */
 
-import type { Palette } from '@ghostai/tui';
+import type { Palette } from '@ghostbot/tui';
 
 /** pino's numeric levels. Anything else prints as the number it was. */
 const LEVELS: Readonly<Record<number, string>> = {
@@ -33,7 +33,7 @@ const LEVELS: Readonly<Record<number, string>> = {
 /**
  * How each level is painted.
  *
- * **The word stays whatever the colour does.** `@ghostai/tui`'s theme states the
+ * **The word stays whatever the colour does.** `@ghostbot/tui`'s theme states the
  * rule this follows — colour is never the only signal — so `warn` reads as
  * `warn` under `NO_COLOR`, in a pipe, and to anyone who cannot tell the yellow
  * from the red. The colour is what makes it findable while scrolling, not what

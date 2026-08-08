@@ -10,9 +10,9 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { SessionStore } from '@ghostai/core';
-import type { CreateAutomationJob } from '@ghostai/protocol';
-import type { AutomationPort, ToolboxRequest } from '@ghostai/tools';
+import { SessionStore } from '@ghostbot/core';
+import type { CreateAutomationJob } from '@ghostbot/protocol';
+import type { AutomationPort, ToolboxRequest } from '@ghostbot/tools';
 
 import { AutomationStore } from '#src/automation-store.js';
 import {

@@ -53,7 +53,7 @@ import {
   type Clock,
   type Logger,
   type TimerHandle,
-} from '@ghostai/core';
+} from '@ghostbot/core';
 import {
   AUTOMATION_ORIGIN,
   newUuid,
@@ -67,8 +67,8 @@ import {
   type RunStatus,
   type ServerMessage,
   type ToolDefinition,
-} from '@ghostai/protocol';
-import type { ChatResult } from '@ghostai/providers';
+} from '@ghostbot/protocol';
+import type { ChatResult } from '@ghostbot/providers';
 
 import type { AutomationStore } from './automation-store.js';
 import {
@@ -269,7 +269,7 @@ interface TurnOutcome {
  *
  * The hub is a broadcast surface, not a request/response one, so this watches
  * for the `turn.end` matching the `turn.start` it saw and resolves there. The
- * shape mirrors `TurnProjection` in `@ghostai/channels`, which does the same
+ * shape mirrors `TurnProjection` in `@ghostbot/channels`, which does the same
  * job for a chat app — deliberately re-derived rather than imported, because
  * that package is a *sibling* of this one and the arrow would be a layering
  * change for twenty lines.

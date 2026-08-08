@@ -9,14 +9,14 @@
 
 import { existsSync } from 'node:fs';
 
-import type { GhostPaths } from '@ghostai/core';
-import type { ProviderInstance } from '@ghostai/providers';
+import type { GhostPaths } from '@ghostbot/core';
+import type { ProviderInstance } from '@ghostbot/providers';
 import {
   CredentialVault,
   keyFileStore,
   keychainStore,
   resolveVaultKey,
-} from '@ghostai/security';
+} from '@ghostbot/security';
 
 /** The vault namespace provider API keys live under. */
 export const PROVIDER_CREDENTIAL_NAMESPACE = 'providers';

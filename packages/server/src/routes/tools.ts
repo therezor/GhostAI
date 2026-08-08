@@ -21,7 +21,7 @@
 import {
   ToolListResponseSchema,
   type ToolListResponse,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 
 import type { RouteDeps, RouteGroup } from './types.js';
 

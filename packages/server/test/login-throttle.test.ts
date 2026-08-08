@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 
-import type { Clock } from '@ghostai/core';
+import type { Clock } from '@ghostbot/core';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {

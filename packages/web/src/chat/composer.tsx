@@ -41,7 +41,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { newUuid, type Attachment } from '@ghostai/protocol';
+import { newUuid, type Attachment } from '@ghostbot/protocol';
 
 import { cn } from '@/lib/cn.js';
 import { api } from '@/lib/api.js';

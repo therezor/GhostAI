@@ -13,7 +13,7 @@
  * step can set `now` independently.
  */
 
-import { GhostError, type Clock, type TimerHandle } from '@ghostai/core';
+import { GhostError, type Clock, type TimerHandle } from '@ghostbot/core';
 
 export interface ManualClock extends Clock {
   /** Moves time forward and fires everything now due, oldest first. */

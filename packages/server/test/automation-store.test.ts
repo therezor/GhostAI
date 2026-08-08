@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { AutomationPayload, AutomationSchedule } from '@ghostai/protocol';
+import type { AutomationPayload, AutomationSchedule } from '@ghostbot/protocol';
 
 import { AutomationStore, type CreateJobInput } from '#src/automation-store.js';
 import { encodeAutomationRunCursor } from '#src/cursor.js';

@@ -1,5 +1,5 @@
 {
-  "name": "@ghostai/protocol",
+  "name": "@ghostbot/protocol",
   "version": "1.0.0",
   "description": "Zod schemas and derived types shared by every GhostAI package.",
   "type": "module",
@@ -37,7 +37,8 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist/**",
-    "!dist/**/*.map"
+    "!dist/**/*.map",
+    "!dist/.tsbuildinfo"
   ],
   "scripts": {
     "build": "tsup && tsc -b",

@@ -1,5 +1,5 @@
-import { createWebI18n } from '@ghostai/i18n/web';
-import { McpServerConfigSchema } from '@ghostai/protocol';
+import { createWebI18n } from '@ghostbot/i18n/web';
+import { McpServerConfigSchema } from '@ghostbot/protocol';
 import { describe, expect, it } from 'vitest';
 
 import {

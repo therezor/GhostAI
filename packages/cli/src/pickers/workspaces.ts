@@ -7,8 +7,8 @@
  * what goes there instead, because it is what `/workspace <id>` takes.
  */
 
-import type { WorkspaceRecord } from '@ghostai/core';
-import type { SelectItem } from '@ghostai/tui';
+import type { WorkspaceRecord } from '@ghostbot/core';
+import type { SelectItem } from '@ghostbot/tui';
 
 import type { CliT } from '../i18n.js';
 import type { Menu } from '../menu.js';

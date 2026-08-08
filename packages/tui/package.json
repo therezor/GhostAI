@@ -1,5 +1,5 @@
 {
-  "name": "@ghostai/tui",
+  "name": "@ghostbot/tui",
   "version": "1.0.0",
   "description": "A domain-free terminal toolkit: key decoding, display-width text, and a transient selection region.",
   "type": "module",
@@ -38,7 +38,8 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist/**",
-    "!dist/**/*.map"
+    "!dist/**/*.map",
+    "!dist/.tsbuildinfo"
   ],
   "scripts": {
     "build": "tsup && tsc -b",

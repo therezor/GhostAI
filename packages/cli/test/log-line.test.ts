@@ -10,7 +10,7 @@
 import pc from 'picocolors';
 import { describe, expect, it } from 'vitest';
 
-import { stripAnsi } from '@ghostai/tui';
+import { stripAnsi } from '@ghostbot/tui';
 
 import { formatLogLine } from '#src/log-line.js';
 
@@ -108,7 +108,7 @@ describe('formatLogLine', () => {
 
 describe('colour', () => {
   const COLOUR = pc.createColors(true);
-  // `@ghostai/tui`'s own, rather than a regex here. A literal escape character
+  // `@ghostbot/tui`'s own, rather than a regex here. A literal escape character
   // is what `no-control-regex` rejects and what `grep` goes blind to — this
   // file already had one, invisible in every read of it.
   const strip = stripAnsi;
@@ -135,7 +135,7 @@ describe('colour', () => {
   });
 
   it('says the level in words, so colour is never the only signal', () => {
-    // `@ghostai/tui`'s theme states this rule. Under NO_COLOR, in a pipe, or to
+    // `@ghostbot/tui`'s theme states this rule. Under NO_COLOR, in a pipe, or to
     // a reader who cannot tell the yellow from the red, `warn` still reads.
     const line = formatLogLine(record({ msg: 'x' }), COLOUR);
 

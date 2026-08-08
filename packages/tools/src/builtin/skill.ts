@@ -33,7 +33,7 @@ import { assertNotAborted, defineTool, type AnyTool } from '../define.js';
 import { fsFailure } from './shared.js';
 
 /**
- * Restated rather than imported: they belong to `skills.ts` in `@ghostai/agent`,
+ * Restated rather than imported: they belong to `skills.ts` in `@ghostbot/agent`,
  * which depends on this package and so cannot be depended on from here. Two
  * short strings is the cheaper of the two costs — the same trade Telegram's
  * command layer makes with `resolveSeq`.

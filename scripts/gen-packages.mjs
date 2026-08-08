@@ -159,7 +159,7 @@ const PACKAGES = {
     // a tool's arguments with zod. Nothing in this package's runtime graph
     // imports it.
     devDeps: { zod: '^4.0.0' },
-    // `@ghostai/runtime`'s tests drive a connector to prove a settings save
+    // `@ghostbot/runtime`'s tests drive a connector to prove a settings save
     // reconciles the right servers, and the composition root has no more
     // business spawning a subprocess than this package does.
     subpaths: { './testkit': 'test/testkit/index.ts' },
@@ -281,7 +281,7 @@ const PACKAGES = {
     // strings, keys and streams; it has never heard of an agent, a session or a
     // translation key. Every string reaching it is already translated, which is
     // why a caller passes prose rather than a key — and because there is no
-    // `@ghostai/*` in its manifest, an import of one does not resolve. The
+    // `@ghostbot/*` in its manifest, an import of one does not resolve. The
     // layering is a fact about the package graph, not a rule under review.
     deps: { picocolors: '^1.1.0' },
     // A fake terminal, importable from inside this package only.
@@ -289,7 +289,7 @@ const PACKAGES = {
     tsconfigNotes: {
       references: [
         'No references, and that absence is the point: this package depends on no',
-        '`@ghostai/*` at all, which is what makes "domain-free" a fact the build',
+        '`@ghostbot/*` at all, which is what makes "domain-free" a fact the build',
         'graph enforces rather than a rule a reviewer has to remember.',
       ].join('\n'),
     },
@@ -310,14 +310,14 @@ const PACKAGES = {
       'channels',
       'tui',
     ],
-    // `@ghostai/web` is a plain dependency and not an `internal`, because the
+    // `@ghostbot/web` is a plain dependency and not an `internal`, because the
     // relationship is not a TypeScript one: `resolveUiRoot` finds the built SPA
-    // through `require.resolve('@ghostai/web/package.json')` and serves the
+    // through `require.resolve('@ghostbot/web/package.json')` and serves the
     // directory. A project reference would make `tsc -b` demand declarations
     // from a package whose tsconfig is `noEmit` — Vite owns its JavaScript, and
     // nothing here imports a type from it.
     deps: {
-      '@ghostai/web': 'workspace:*',
+      '@ghostbot/web': 'workspace:*',
       commander: '^13.0.0',
       // The CLI holds the i18next instance directly: `translationsFor` picks a
       // locale from `GHOSTAI_LANG`, `config.ui.locale` and the POSIX chain, and
@@ -338,11 +338,11 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
 
   const dependencies = { ...(cfg.deps ?? {}) };
   for (const dep of cfg.internal ?? []) {
-    dependencies[`@ghostai/${dep}`] = 'workspace:*';
+    dependencies[`@ghostbot/${dep}`] = 'workspace:*';
   }
 
   const pkg = {
-    name: `@ghostai/${name}`,
+    name: `@ghostbot/${name}`,
     version: VERSION,
     description: cfg.description,
     type: 'module',
@@ -408,7 +408,7 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
     //
     // The negation is about what a published tarball should weigh.
     // `sourcemap: true` is right for a workspace and wrong for an install:
-    // `@ghostai/web`'s maps alone are 8 MB of its 11.8 MB, and they map a
+    // `@ghostbot/web`'s maps alone are 8 MB of its 11.8 MB, and they map a
     // built SPA that nobody installing `ghost` will ever step through — anyone
     // debugging this has the repo.
     //
@@ -417,9 +417,15 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
     // `['dist', '!dist/**/*.map']` silently ships all 37 maps and looks like it
     // worked. Spelling the include as a glob is what makes the exclude apply.
     // Verify with `npm pack --dry-run`, not by reading this.
+    // `.tsbuildinfo` is the other thing `dist/**` sweeps up: `tsc -b` needs
+    // `composite`, `composite` implies `incremental`, and every package points
+    // `tsBuildInfoFile` into `dist`. It is 44-128 kB of compiler bookkeeping
+    // per package — about 1.4 MB across the workspace — that means nothing to
+    // anyone installing this. A dotfile, and `dist/**` matches it anyway.
     files: [
       'dist/**',
       '!dist/**/*.map',
+      '!dist/.tsbuildinfo',
       ...(cfg.subpaths ? ['test/testkit'] : []),
     ],
     ...(cfg.bin ? { bin: cfg.bin } : {}),
@@ -459,7 +465,7 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
   // Without a config of its own, a package running `vitest run` from its own
   // directory finds the *root* config and inherits its `projects` globs — which
   // are relative to the root, match nothing from inside `packages/x`, and fail
-  // with "No projects were found". So `pnpm --filter @ghostai/x test` was broken
+  // with "No projects were found". So `pnpm --filter @ghostbot/x test` was broken
   // everywhere, which is why the build plan noticed it for `protocol` alone: it
   // is the package a contributor is most likely to run on its own.
   //

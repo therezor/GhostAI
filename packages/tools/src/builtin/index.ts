@@ -25,7 +25,7 @@
  * operator grants it.
  */
 
-import type { ToolsConfig } from '@ghostai/protocol';
+import type { ToolsConfig } from '@ghostbot/protocol';
 
 import type { AnyTool } from '../define.js';
 import type { ToolRegistry } from '../registry.js';

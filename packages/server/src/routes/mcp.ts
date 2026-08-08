@@ -18,7 +18,7 @@
 import {
   McpStatusResponseSchema,
   type McpStatusResponse,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 
 import type { RouteDeps, RouteGroup } from './types.js';
 

@@ -16,8 +16,8 @@
  *  - **A URL is checked, not guarded.** See `assertUsableUrl`.
  */
 
-import { GhostError } from '@ghostai/core';
-import type { McpOAuthConfig, McpServerConfig } from '@ghostai/protocol';
+import { GhostError } from '@ghostbot/core';
+import type { McpOAuthConfig, McpServerConfig } from '@ghostbot/protocol';
 
 /** What `StdioClientTransport` needs, with nothing left to infer. */
 interface McpStdioSpec {

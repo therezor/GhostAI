@@ -38,8 +38,8 @@ import {
   type Logger,
   type OutboundKind,
   type OutboundMessage,
-} from '@ghostai/core';
-import { newUuid, type ApprovalScope } from '@ghostai/protocol';
+} from '@ghostbot/core';
+import { newUuid, type ApprovalScope } from '@ghostbot/protocol';
 
 import type {
   Channel,

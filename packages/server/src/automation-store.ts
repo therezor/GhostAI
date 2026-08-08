@@ -1,7 +1,7 @@
 /**
  * Scheduled jobs and their run history.
  *
- * Here rather than in `@ghostai/core` for the reason the auth tables are:
+ * Here rather than in `@ghostbot/core` for the reason the auth tables are:
  * nothing below the transport schedules anything. The agent loop has no opinion
  * about when it is called, and the one thing that does — the scheduler — sits at
  * this level beside the hub it drives turns through.
@@ -40,7 +40,7 @@ import {
   type Clock,
   type Logger,
   type Row,
-} from '@ghostai/core';
+} from '@ghostbot/core';
 import {
   AutomationPayloadSchema,
   AutomationScheduleSchema,
@@ -51,7 +51,7 @@ import {
   type AutomationRun,
   type AutomationSchedule,
   type RunStatus,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 
 import type { AutomationRunCursor } from './cursor.js';
 

@@ -10,7 +10,7 @@
  * naming the drift. Nobody has to remember to re-approve, because they cannot
  * avoid it.
  *
- * It lives in `@ghostai/security` for the reason `ToolboxStore` does, and the
+ * It lives in `@ghostbot/security` for the reason `ToolboxStore` does, and the
  * layer graph makes it non-negotiable: `core` may not import `security`, and
  * the check needs `parseExtension`, `assertExtensionPolicy` and
  * `extensionDigest`. Keeping the table here also keeps the whole "may this code
@@ -34,8 +34,8 @@ import {
   isExtensionId,
   systemClock,
   type Clock,
-} from '@ghostai/core';
-import type { ExtensionManifest, ExtensionState } from '@ghostai/protocol';
+} from '@ghostbot/core';
+import type { ExtensionManifest, ExtensionState } from '@ghostbot/protocol';
 
 import {
   assertExtensionPolicy,

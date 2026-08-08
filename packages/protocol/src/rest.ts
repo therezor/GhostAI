@@ -277,7 +277,7 @@ export type SetCredentialRequest = z.infer<typeof SetCredentialRequestSchema>;
 
 /**
  * A provider *type*, projected from the `PROVIDERS` table in
- * `@ghostai/providers`. The catalogue an operator adds an endpoint from.
+ * `@ghostbot/providers`. The catalogue an operator adds an endpoint from.
  *
  * It carries no credential flag. A credential belongs to a configured
  * instance — two Ollama entries can have different tokens — so the boolean
@@ -363,7 +363,7 @@ export type ModelsResponse = z.infer<typeof ModelsResponseSchema>;
  * which is the thing the check exists to happen before.
  */
 export const ProviderTestRequestSchema = z.object({
-  /** A `@ghostai/providers` registry id. */
+  /** A `@ghostbot/providers` registry id. */
   type: z.string().min(1),
   /** Empty means the type's own default endpoint. */
   apiBase: z.string().default(''),
@@ -705,10 +705,10 @@ export type ToolboxListResponse = z.infer<typeof ToolboxListResponseSchema>;
  * this says what is. Folding the second into the first would mean writing
  * "unreachable" into `config.json`.
  *
- * Declared in `@ghostai/protocol` rather than in `@ghostai/mcp` so that the
+ * Declared in `@ghostbot/protocol` rather than in `@ghostbot/mcp` so that the
  * server and the browser can name it without either of them depending on the
  * client package — the same reason `ToolDefinition` lives here rather than in
- * `@ghostai/tools`.
+ * `@ghostbot/tools`.
  */
 export const McpServerStateSchema = z.enum([
   'connecting',

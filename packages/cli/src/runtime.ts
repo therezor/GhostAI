@@ -1,5 +1,5 @@
 /**
- * The CLI's view of `@ghostai/runtime`.
+ * The CLI's view of `@ghostbot/runtime`.
  *
  * There is nothing CLI-shaped left here. The composition root moved to its own
  * package the moment a second consumer needed it — the server shares one
@@ -17,13 +17,13 @@ import {
   createRuntime,
   type GhostRuntime,
   type RuntimeOptions,
-} from '@ghostai/runtime';
+} from '@ghostbot/runtime';
 
 export {
   PROVIDER_CREDENTIAL_NAMESPACE,
   findCredential,
   type RuntimeOptions,
-} from '@ghostai/runtime';
+} from '@ghostbot/runtime';
 
 export type ChatRuntime = GhostRuntime;
 

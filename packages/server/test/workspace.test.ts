@@ -8,7 +8,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { WorkspaceJail } from '@ghostai/security';
+import { WorkspaceJail } from '@ghostbot/security';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { inlineSafe, listDirectory } from '#src/workspace.js';
@@ -35,7 +35,7 @@ function workspace(): { root: string; jail: WorkspaceJail } {
   return { root: jail.root, jail };
 }
 
-// `mimeTypeFor` and `readText` moved to `@ghostai/core` and are covered by
+// `mimeTypeFor` and `readText` moved to `@ghostbot/core` and are covered by
 // `core/test/workspace-files.test.ts`.
 
 describe('inlineSafe', () => {

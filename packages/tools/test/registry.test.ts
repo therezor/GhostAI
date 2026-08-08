@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import type { Clock, TimerHandle } from '@ghostai/core';
+import type { Clock, TimerHandle } from '@ghostbot/core';
 
 import { defineTool, type AnyTool, type ToolContext } from '#src/define.js';
 import { ToolRegistry } from '#src/registry.js';

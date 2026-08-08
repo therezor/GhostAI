@@ -315,7 +315,7 @@ negotiation, plural handling and right-to-left detection already work.
 
 ## Working on it
 
-Run `pnpm --filter @ghostai/web dev` for an edit-reload loop; Vite proxies `/api` and
+Run `pnpm --filter @ghostbot/web dev` for an edit-reload loop; Vite proxies `/api` and
 `/ws` to a running `ghost serve`.
 
 **Restart `ghost serve` after a production UI build.** It enumerates the UI directory once

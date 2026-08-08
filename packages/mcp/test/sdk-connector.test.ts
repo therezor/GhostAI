@@ -9,8 +9,8 @@
  * on the other.
  */
 
-import { silentLogger } from '@ghostai/core';
-import { McpServerConfigSchema } from '@ghostai/protocol';
+import { silentLogger } from '@ghostbot/core';
+import { McpServerConfigSchema } from '@ghostbot/protocol';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';

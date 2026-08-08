@@ -9,7 +9,7 @@
  *
  * These helpers know nothing about *safety*. Resolving a path here does not
  * make it legal for a tool to touch: that is `WorkspaceJail` in
- * `@ghostai/security`, which verifies through `realpath` and is the only thing
+ * `@ghostbot/security`, which verifies through `realpath` and is the only thing
  * that may decide an agent-supplied path is acceptable.
  */
 

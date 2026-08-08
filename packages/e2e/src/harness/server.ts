@@ -12,7 +12,7 @@
  * Why the credentials are a `Map`: `openVault` mints a keychain entry the first
  * time it runs, and a test suite must not touch the operator's keychain — nor
  * can CI answer a keychain prompt. The vault's own behaviour is
- * `@ghostai/security`'s to prove, at a coverage bar no browser test could
+ * `@ghostbot/security`'s to prove, at a coverage bar no browser test could
  * approach. What the browser suite is actually asserting about credentials is
  * that a key typed into the settings panel goes to exactly one request and
  * comes back as a boolean, and a `Map` behind the port shows that as clearly as
@@ -39,7 +39,7 @@ import {
   saveConfig,
   silentLogger,
   userMessage,
-} from '@ghostai/core';
+} from '@ghostbot/core';
 import {
   ConfigSchema,
   DEFAULT_AGENT_TOOLS,
@@ -48,16 +48,16 @@ import {
   type ConfigPatch,
   type McpServerStatus,
   type SetCredentialRequest,
-} from '@ghostai/protocol';
-import type { ChatProvider } from '@ghostai/providers';
-import type { AutomationResolver } from '@ghostai/tools';
+} from '@ghostbot/protocol';
+import type { ChatProvider } from '@ghostbot/providers';
+import type { AutomationResolver } from '@ghostbot/tools';
 import {
   ProviderCache,
   createRuntime,
   resolveAgent,
   resolveAgentOrDefault,
   type GhostRuntime,
-} from '@ghostai/runtime';
+} from '@ghostbot/runtime';
 import {
   HubApprovalGate,
   Scheduler,
@@ -69,7 +69,7 @@ import {
   type GhostServer,
   type ServerRuntime,
   type ExtensionCounts,
-} from '@ghostai/server';
+} from '@ghostbot/server';
 
 import { routedProvider } from './provider.js';
 import { ROUTES, waitTool } from './script.js';
@@ -175,7 +175,7 @@ export interface Harness {
 function uiRoot(): string {
   const require = createRequire(import.meta.url);
   const root = join(
-    dirname(require.resolve('@ghostai/web/package.json')),
+    dirname(require.resolve('@ghostbot/web/package.json')),
     'dist',
   );
   return root;

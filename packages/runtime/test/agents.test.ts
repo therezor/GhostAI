@@ -1,10 +1,10 @@
-import { isGhostError } from '@ghostai/core';
+import { isGhostError } from '@ghostbot/core';
 import {
   ConfigSchema,
   DEFAULT_AGENT_TOOLS,
   type Config,
   type ConfigPatch,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 import { describe, expect, it } from 'vitest';
 
 import {

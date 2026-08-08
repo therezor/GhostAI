@@ -38,7 +38,7 @@ import {
   type StopReason,
   type StoredMessage,
   type Usage,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 import type { z } from 'zod';
 
 import { systemClock, type Clock } from './clock.js';

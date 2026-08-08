@@ -1,4 +1,4 @@
-import { ConfigSchema } from '@ghostai/protocol';
+import { ConfigSchema } from '@ghostbot/protocol';
 import { describe, expect, it } from 'vitest';
 
 import { mergeConfigPatch } from '#src/merge.js';

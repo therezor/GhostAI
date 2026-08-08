@@ -24,11 +24,11 @@
  * | nothing                           | left entirely alone                       |
  */
 
-import { silentLogger, systemClock } from '@ghostai/core';
-import type { Clock, Logger } from '@ghostai/core';
-import type { McpServerConfig, McpServerStatus } from '@ghostai/protocol';
-import type { ToolSink } from '@ghostai/tools';
-import type { CredentialVault } from '@ghostai/security';
+import { silentLogger, systemClock } from '@ghostbot/core';
+import type { Clock, Logger } from '@ghostbot/core';
+import type { McpServerConfig, McpServerStatus } from '@ghostbot/protocol';
+import type { ToolSink } from '@ghostbot/tools';
+import type { CredentialVault } from '@ghostbot/security';
 
 import { CallbackListener } from './callback.js';
 import {
@@ -52,12 +52,12 @@ import {
 /**
  * Where a server's tools go.
  *
- * `ToolSink` in `@ghostai/tools`, under this package's own name for it. The
+ * `ToolSink` in `@ghostbot/tools`, under this package's own name for it. The
  * interface moved there when the extension host turned out to need the same
  * one, and the alias stays because "the sink a server's tools go to" is how
  * every call site in this package reads.
  *
- * Implemented in `@ghostai/runtime`, which is the only place that knows both
+ * Implemented in `@ghostbot/runtime`, which is the only place that knows both
  * this interface and `ToolRegistry`.
  */
 export type McpToolSink = ToolSink;

@@ -13,7 +13,7 @@
  * module never sees it.
  */
 
-import type { Config } from '@ghostai/protocol';
+import type { Config } from '@ghostbot/protocol';
 import type { TFunction } from 'i18next';
 
 import { formatList, parseList } from '@/components/form/fields.js';

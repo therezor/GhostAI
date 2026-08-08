@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import type { FileEntry } from '@ghostai/protocol';
+import type { FileEntry } from '@ghostbot/protocol';
 
 import {
   breadcrumbs,

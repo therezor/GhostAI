@@ -10,8 +10,8 @@
 import type { DatabaseSync } from 'node:sqlite';
 
 import type { WebSocket } from '@fastify/websocket';
-import type { Clock, Logger } from '@ghostai/core';
-import type { Config } from '@ghostai/protocol';
+import type { Clock, Logger } from '@ghostbot/core';
+import type { Config } from '@ghostbot/protocol';
 import type { FastifyReply, FastifyRequest, FastifySchema } from 'fastify';
 
 import type { AutomationStore } from '../automation-store.js';

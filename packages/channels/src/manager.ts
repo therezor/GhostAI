@@ -6,7 +6,7 @@
  * with the same `ServerMessage` stream a browser gets; this projects it back
  * into `OutboundMessage`s and pushes them to the channel that asked. Both
  * directions go through the bus, so the queueing, the rate limit and the
- * bounded capacity are the ones `@ghostai/core` already implements rather than
+ * bounded capacity are the ones `@ghostbot/core` already implements rather than
  * a second set per channel.
  *
  * What that buys is the point of the whole package: a Telegram turn is not a
@@ -45,8 +45,12 @@ import {
   type MessageBusOptions,
   type OutboundKind,
   type OutboundMessage,
-} from '@ghostai/core';
-import type { Attachment, ContentPart, ServerMessage } from '@ghostai/protocol';
+} from '@ghostbot/core';
+import type {
+  Attachment,
+  ContentPart,
+  ServerMessage,
+} from '@ghostbot/protocol';
 
 import {
   DEFAULT_ACCEPTED_KINDS,
@@ -66,7 +70,7 @@ import {
  * The hub, as this package needs it.
  *
  * Structural rather than an import of `SessionHub`, for the reason
- * `@ghostai/server` states its own `ServerRuntime` port: depending on the
+ * `@ghostbot/server` states its own `ServerRuntime` port: depending on the
  * transport package would put a Fastify instance, an auth store and argon2id
  * behind every channel test, and would point an arrow from the channels at the
  * HTTP server that nothing in the design wants. `SessionHub` satisfies this as

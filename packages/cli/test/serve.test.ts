@@ -27,8 +27,8 @@ import { translations } from '#src/i18n.js';
 /** English, resolved: the banner assertions compare the text an operator reads. */
 const { t } = translations('en');
 
-import type { ChannelFactory } from '@ghostai/channels';
-import type { Config, StatusResponse } from '@ghostai/protocol';
+import type { ChannelFactory } from '@ghostbot/channels';
+import type { Config, StatusResponse } from '@ghostbot/protocol';
 import { WebSocket } from 'ws';
 
 import {
@@ -287,13 +287,13 @@ describe('resolveUiRoot', () => {
     expect(() => resolveUiRoot(root)).toThrow(/index\.html/);
   });
 
-  it('finds the bundle `@ghostai/web` ships, and only when it has been built', () => {
+  it('finds the bundle `@ghostbot/web` ships, and only when it has been built', () => {
     // Two states, both real: `pnpm build` builds the UI before the CLI, and a
     // checkout that has only ever run `pnpm test` has no `dist` at all. The
     // implicit lookup has to answer for whichever one it is standing in.
     const require = createRequire(import.meta.url);
     const root = join(
-      dirname(require.resolve('@ghostai/web/package.json')),
+      dirname(require.resolve('@ghostbot/web/package.json')),
       'dist',
     );
     const built = existsSync(join(root, 'index.html'));

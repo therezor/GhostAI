@@ -30,8 +30,8 @@
 
 import { z } from 'zod';
 
-import type { Extension, ExtensionContext } from '@ghostai/extension-host';
-import { defineTool } from '@ghostai/tools';
+import type { Extension, ExtensionContext } from '@ghostbot/extension-host';
+import { defineTool } from '@ghostbot/tools';
 
 /**
  * The extension's own settings, parsed by the extension.

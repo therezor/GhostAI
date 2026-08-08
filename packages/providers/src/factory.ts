@@ -21,9 +21,9 @@
 
 import type { Dispatcher } from 'undici';
 
-import { GhostError } from '@ghostai/core';
-import type { ProviderConfig } from '@ghostai/protocol';
-import type { FetchImplementation } from '@ghostai/security';
+import { GhostError } from '@ghostbot/core';
+import type { ProviderConfig } from '@ghostbot/protocol';
+import type { FetchImplementation } from '@ghostbot/security';
 
 import { findProvider, type ProviderSpec } from './registry.js';
 import { withResilience, type ResilienceOptions } from './resilience.js';

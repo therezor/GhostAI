@@ -11,7 +11,7 @@ import { join } from 'node:path';
 
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { BUILTIN_TOOL_NAMES, DEFAULT_AGENT_TOOLS } from '@ghostai/protocol';
+import { BUILTIN_TOOL_NAMES, DEFAULT_AGENT_TOOLS } from '@ghostbot/protocol';
 
 import type { ToolContext } from '#src/define.js';
 import { toolConformance } from '#testkit/conformance.js';
@@ -94,7 +94,7 @@ describe('built-in conformance', () => {
 
 /**
  * Two packages below this one hold the built-in *names* without the tools:
- * `@ghostai/protocol` publishes the list, `@ghostai/security` refuses a toolbox
+ * `@ghostbot/protocol` publishes the list, `@ghostbot/security` refuses a toolbox
  * that shadows one, and `DEFAULT_AGENT_TOOLS` seeds a new agent from it. This
  * file is the only place both the names and the implementations are visible, so
  * it is the only place the drift can be caught — and drift is silent otherwise:

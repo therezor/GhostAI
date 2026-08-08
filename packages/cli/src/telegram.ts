@@ -1,7 +1,7 @@
 /**
  * Telegram, wired into `ghost serve`.
  *
- * Two things live here, and both are here rather than in `@ghostai/channels`
+ * Two things live here, and both are here rather than in `@ghostbot/channels`
  * for the same reason: this is the composition root, and it is the only place
  * that has a credential vault and an environment to read. `ChannelContext` has
  * neither, deliberately — a channel that could open the vault could read every
@@ -22,14 +22,14 @@
 
 import { existsSync } from 'node:fs';
 
-import { readSkills } from '@ghostai/agent';
-import { telegramChannel, type TelegramConsole } from '@ghostai/channels';
+import { readSkills } from '@ghostbot/agent';
+import { telegramChannel, type TelegramConsole } from '@ghostbot/channels';
 import type {
   ChannelFactory,
   MemoryState,
   SkillsState,
   TelegramChannel,
-} from '@ghostai/channels';
+} from '@ghostbot/channels';
 import {
   DEFAULT_AGENT_ID,
   DEFAULT_WORKSPACE_ID,
@@ -37,15 +37,15 @@ import {
   type GhostPaths,
   type Logger,
   type SessionRecord,
-} from '@ghostai/core';
-import type { ChannelStatus, ContextResponse } from '@ghostai/protocol';
-import { estimateTokens } from '@ghostai/providers';
+} from '@ghostbot/core';
+import type { ChannelStatus, ContextResponse } from '@ghostbot/protocol';
+import { estimateTokens } from '@ghostbot/providers';
 import {
   openVault,
   type EffectiveAgent,
   type GhostRuntime,
-} from '@ghostai/runtime';
-import { buildContextResponse, type ServerRuntime } from '@ghostai/server';
+} from '@ghostbot/runtime';
+import { buildContextResponse, type ServerRuntime } from '@ghostbot/server';
 
 /** The vault namespace a channel's credentials live under. */
 export const CHANNEL_CREDENTIAL_NAMESPACE = 'channels';
@@ -114,7 +114,7 @@ function createTelegramConsole(
     workspaces: runtime.workspaces,
     agents: () => server.agents(),
     models: async () =>
-      // `models` is optional on the port `@ghostai/server` states, because a
+      // `models` is optional on the port `@ghostbot/server` states, because a
       // route test standing in for a runtime has no provider to ask. The real
       // adapter always has one.
       (await server.models?.()) ?? { models: [], errors: {} },

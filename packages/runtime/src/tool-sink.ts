@@ -1,8 +1,8 @@
 /**
  * The one module that knows both a tool-owning subsystem and `ToolRegistry`.
  *
- * `@ghostai/tools` declares `ToolSink` and never learns what fills it;
- * `@ghostai/mcp` and `@ghostai/extension-host` each hold one and never learn
+ * `@ghostbot/tools` declares `ToolSink` and never learns what fills it;
+ * `@ghostbot/mcp` and `@ghostbot/extension-host` each hold one and never learn
  * what is behind it. This is the composition root's job, and it is thirty lines
  * because the interfaces were designed to meet.
  *
@@ -21,9 +21,9 @@
  * reconcile that was registering them.
  */
 
-import { isGhostError } from '@ghostai/core';
-import type { ToolSource } from '@ghostai/protocol';
-import type { AnyTool, ToolRegistry, ToolSink } from '@ghostai/tools';
+import { isGhostError } from '@ghostbot/core';
+import type { ToolSource } from '@ghostbot/protocol';
+import type { AnyTool, ToolRegistry, ToolSink } from '@ghostbot/tools';
 
 /**
  * No logger, deliberately: the rejected names are *returned*, and the owning

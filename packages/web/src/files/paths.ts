@@ -13,7 +13,7 @@
  * for every caller. These functions decide what to display and what to ask for.
  */
 
-import type { FileEntry } from '@ghostai/protocol';
+import type { FileEntry } from '@ghostbot/protocol';
 
 import {
   filterRows,

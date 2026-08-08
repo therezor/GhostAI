@@ -7,8 +7,8 @@
  * schedule as data says it directly: `expect(clock.sleeps).toEqual([2000])`.
  */
 
-import type { Clock } from '@ghostai/core';
-import { GhostError } from '@ghostai/core';
+import type { Clock } from '@ghostbot/core';
+import { GhostError } from '@ghostbot/core';
 
 export interface RecordingClock extends Clock {
   /** Every delay asked for, in order. Nothing actually waited. */

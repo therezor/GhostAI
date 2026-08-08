@@ -29,7 +29,7 @@
  * `workspace/default`: a directory that does not exist.
  */
 
-import type { WorkspaceSummary } from '@ghostai/protocol';
+import type { WorkspaceSummary } from '@ghostbot/protocol';
 
 /** The workspace tree's root, as this package spells it. */
 export const WORKSPACE_ROOT_PATH = '/';

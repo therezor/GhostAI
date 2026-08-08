@@ -47,14 +47,14 @@ import {
   type SignedUrl,
   type SignedUrlRequest,
   type UploadResponse,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 import {
   DEFAULT_WORKSPACE_ID,
   ensureDir,
   errnoOf,
   systemClock,
-} from '@ghostai/core';
-import type { WorkspaceJail } from '@ghostai/security';
+} from '@ghostbot/core';
+import type { WorkspaceJail } from '@ghostbot/security';
 import type { FastifyReply } from 'fastify';
 
 import { mediaClaimOf } from '../auth.js';

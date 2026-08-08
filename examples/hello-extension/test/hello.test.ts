@@ -13,8 +13,8 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-import { extensionConformance } from '@ghostai/extension-host/testkit';
-import { ExtensionManifestSchema } from '@ghostai/protocol';
+import { extensionConformance } from '@ghostbot/extension-host/testkit';
+import { ExtensionManifestSchema } from '@ghostbot/protocol';
 
 import { extension } from '#src/index.js';
 

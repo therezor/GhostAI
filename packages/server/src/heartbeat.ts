@@ -4,7 +4,7 @@
  * A heartbeat reads a task file on an interval and decides whether there is
  * anything to do. Two of its three steps are **not agent turns** — they are
  * single provider requests carrying one tool with `toolChoice: 'required'`,
- * which is the caller `ToolChoice`'s own doc comment in `@ghostai/providers`
+ * which is the caller `ToolChoice`'s own doc comment in `@ghostbot/providers`
  * was written for.
  *
  * That is a deliberate refusal of the obvious design. Registering a `heartbeat`
@@ -31,8 +31,8 @@ import type {
   AssistantMessage,
   ChatMessage,
   ToolDefinition,
-} from '@ghostai/protocol';
-import type { ChatResult } from '@ghostai/providers';
+} from '@ghostbot/protocol';
+import type { ChatResult } from '@ghostbot/providers';
 
 /** How much of a task file is worth paying to classify, every interval, forever. */
 export const MAX_TASK_FILE_BYTES: number = 64 * 1024;

@@ -5,8 +5,8 @@ import {
   assistantMessage,
   toolMessage,
   userMessage,
-} from '@ghostai/core';
-import type { ToolDefinition } from '@ghostai/protocol';
+} from '@ghostbot/core';
+import type { ToolDefinition } from '@ghostbot/protocol';
 
 import { describeContext } from '#src/context.js';
 

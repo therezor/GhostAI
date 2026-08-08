@@ -56,13 +56,13 @@ importers:
 
   examples/hello-extension:
     dependencies:
-      '@ghostai/extension-host':
+      '@ghostbot/extension-host':
         specifier: workspace:*
         version: link:../../packages/extension-host
-      '@ghostai/protocol':
+      '@ghostbot/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@ghostai/tools':
+      '@ghostbot/tools':
         specifier: workspace:*
         version: link:../../packages/tools
       zod:
@@ -71,47 +71,47 @@ importers:
 
   examples/loopback-channel:
     dependencies:
-      '@ghostai/channels':
+      '@ghostbot/channels':
         specifier: workspace:*
         version: link:../../packages/channels
-      '@ghostai/core':
+      '@ghostbot/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@ghostai/protocol':
+      '@ghostbot/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
     devDependencies:
-      '@ghostai/agent':
+      '@ghostbot/agent':
         specifier: workspace:*
         version: link:../../packages/agent
-      '@ghostai/providers':
+      '@ghostbot/providers':
         specifier: workspace:*
         version: link:../../packages/providers
-      '@ghostai/security':
+      '@ghostbot/security':
         specifier: workspace:*
         version: link:../../packages/security
-      '@ghostai/server':
+      '@ghostbot/server':
         specifier: workspace:*
         version: link:../../packages/server
-      '@ghostai/tools':
+      '@ghostbot/tools':
         specifier: workspace:*
         version: link:../../packages/tools
 
   packages/agent:
     dependencies:
-      '@ghostai/core':
+      '@ghostbot/core':
         specifier: workspace:*
         version: link:../core
-      '@ghostai/protocol':
+      '@ghostbot/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@ghostai/providers':
+      '@ghostbot/providers':
         specifier: workspace:*
         version: link:../providers
-      '@ghostai/security':
+      '@ghostbot/security':
         specifier: workspace:*
         version: link:../security
-      '@ghostai/tools':
+      '@ghostbot/tools':
         specifier: workspace:*
         version: link:../tools
     devDependencies:
@@ -121,10 +121,10 @@ importers:
 
   packages/channels:
     dependencies:
-      '@ghostai/core':
+      '@ghostbot/core':
         specifier: workspace:*
         version: link:../core
-      '@ghostai/protocol':
+      '@ghostbot/protocol':
         specifier: workspace:*
         version: link:../protocol
       zod:
@@ -133,43 +133,43 @@ importers:
 
   packages/cli:
     dependencies:
-      '@ghostai/agent':
+      '@ghostbot/agent':
         specifier: workspace:*
         version: link:../agent
-      '@ghostai/channels':
+      '@ghostbot/channels':
         specifier: workspace:*
         version: link:../channels
-      '@ghostai/core':
+      '@ghostbot/core':
         specifier: workspace:*
         version: link:../core
-      '@ghostai/extension-host':
+      '@ghostbot/extension-host':
         specifier: workspace:*
         version: link:../extension-host
-      '@ghostai/i18n':
+      '@ghostbot/i18n':
         specifier: workspace:*
         version: link:../i18n
-      '@ghostai/protocol':
+      '@ghostbot/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@ghostai/providers':
+      '@ghostbot/providers':
         specifier: workspace:*
         version: link:../providers
-      '@ghostai/runtime':
+      '@ghostbot/runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@ghostai/security':
+      '@ghostbot/security':
         specifier: workspace:*
         version: link:../security
-      '@ghostai/server':
+      '@ghostbot/server':
         specifier: workspace:*
         version: link:../server
-      '@ghostai/tools':
+      '@ghostbot/tools':
         specifier: workspace:*
         version: link:../tools
-      '@ghostai/tui':
+      '@ghostbot/tui':
         specifier: workspace:*
         version: link:../tui
-      '@ghostai/web':
+      '@ghostbot/web':
         specifier: workspace:*
         version: link:../web
       commander:
@@ -191,10 +191,10 @@ importers:
 
   packages/core:
     dependencies:
-      '@ghostai/i18n':
+      '@ghostbot/i18n':
         specifier: workspace:*
         version: link:../i18n
-      '@ghostai/protocol':
+      '@ghostbot/protocol':
         specifier: workspace:*
         version: link:../protocol
       pino:
@@ -206,28 +206,28 @@ importers:
 
   packages/e2e:
     dependencies:
-      '@ghostai/agent':
+      '@ghostbot/agent':
         specifier: workspace:*
         version: link:../agent
-      '@ghostai/core':
+      '@ghostbot/core':
         specifier: workspace:*
         version: link:../core
-      '@ghostai/protocol':
+      '@ghostbot/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@ghostai/providers':
+      '@ghostbot/providers':
         specifier: workspace:*
         version: link:../providers
-      '@ghostai/runtime':
+      '@ghostbot/runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@ghostai/server':
+      '@ghostbot/server':
         specifier: workspace:*
         version: link:../server
-      '@ghostai/tools':
+      '@ghostbot/tools':
         specifier: workspace:*
         version: link:../tools
-      '@ghostai/web':
+      '@ghostbot/web':
         specifier: workspace:*
         version: link:../web
     devDependencies:
@@ -252,25 +252,25 @@ importers:
 
   packages/extension-host:
     dependencies:
-      '@ghostai/agent':
+      '@ghostbot/agent':
         specifier: workspace:*
         version: link:../agent
-      '@ghostai/channels':
+      '@ghostbot/channels':
         specifier: workspace:*
         version: link:../channels
-      '@ghostai/core':
+      '@ghostbot/core':
         specifier: workspace:*
         version: link:../core
-      '@ghostai/protocol':
+      '@ghostbot/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@ghostai/providers':
+      '@ghostbot/providers':
         specifier: workspace:*
         version: link:../providers
-      '@ghostai/security':
+      '@ghostbot/security':
         specifier: workspace:*
         version: link:../security
-      '@ghostai/tools':
+      '@ghostbot/tools':
         specifier: workspace:*
         version: link:../tools
     devDependencies:
@@ -286,16 +286,16 @@ importers:
 
   packages/mcp:
     dependencies:
-      '@ghostai/core':
+      '@ghostbot/core':
         specifier: workspace:*
         version: link:../core
-      '@ghostai/protocol':
+      '@ghostbot/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@ghostai/security':
+      '@ghostbot/security':
         specifier: workspace:*
         version: link:../security
-      '@ghostai/tools':
+      '@ghostbot/tools':
         specifier: workspace:*
         version: link:../tools
       '@modelcontextprotocol/sdk':
@@ -314,13 +314,13 @@ importers:
 
   packages/providers:
     dependencies:
-      '@ghostai/core':
+      '@ghostbot/core':
         specifier: workspace:*
         version: link:../core
-      '@ghostai/protocol':
+      '@ghostbot/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@ghostai/security':
+      '@ghostbot/security':
         specifier: workspace:*
         version: link:../security
       gpt-tokenizer:
@@ -332,28 +332,28 @@ importers:
 
   packages/runtime:
     dependencies:
-      '@ghostai/agent':
+      '@ghostbot/agent':
         specifier: workspace:*
         version: link:../agent
-      '@ghostai/core':
+      '@ghostbot/core':
         specifier: workspace:*
         version: link:../core
-      '@ghostai/extension-host':
+      '@ghostbot/extension-host':
         specifier: workspace:*
         version: link:../extension-host
-      '@ghostai/mcp':
+      '@ghostbot/mcp':
         specifier: workspace:*
         version: link:../mcp
-      '@ghostai/protocol':
+      '@ghostbot/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@ghostai/providers':
+      '@ghostbot/providers':
         specifier: workspace:*
         version: link:../providers
-      '@ghostai/security':
+      '@ghostbot/security':
         specifier: workspace:*
         version: link:../security
-      '@ghostai/tools':
+      '@ghostbot/tools':
         specifier: workspace:*
         version: link:../tools
     devDependencies:
@@ -363,10 +363,10 @@ importers:
 
   packages/security:
     dependencies:
-      '@ghostai/core':
+      '@ghostbot/core':
         specifier: workspace:*
         version: link:../core
-      '@ghostai/protocol':
+      '@ghostbot/protocol':
         specifier: workspace:*
         version: link:../protocol
       undici:
@@ -390,22 +390,22 @@ importers:
       '@fastify/websocket':
         specifier: ^11.0.0
         version: 11.3.0
-      '@ghostai/agent':
+      '@ghostbot/agent':
         specifier: workspace:*
         version: link:../agent
-      '@ghostai/core':
+      '@ghostbot/core':
         specifier: workspace:*
         version: link:../core
-      '@ghostai/protocol':
+      '@ghostbot/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@ghostai/providers':
+      '@ghostbot/providers':
         specifier: workspace:*
         version: link:../providers
-      '@ghostai/security':
+      '@ghostbot/security':
         specifier: workspace:*
         version: link:../security
-      '@ghostai/tools':
+      '@ghostbot/tools':
         specifier: workspace:*
         version: link:../tools
       '@node-rs/argon2':
@@ -430,13 +430,13 @@ importers:
 
   packages/tools:
     dependencies:
-      '@ghostai/core':
+      '@ghostbot/core':
         specifier: workspace:*
         version: link:../core
-      '@ghostai/protocol':
+      '@ghostbot/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@ghostai/security':
+      '@ghostbot/security':
         specifier: workspace:*
         version: link:../security
       zod:
@@ -457,10 +457,10 @@ importers:
       '@fontsource-variable/jetbrains-mono':
         specifier: ^5.3.0
         version: 5.3.0
-      '@ghostai/i18n':
+      '@ghostbot/i18n':
         specifier: workspace:*
         version: link:../i18n
-      '@ghostai/protocol':
+      '@ghostbot/protocol':
         specifier: workspace:*
         version: link:../protocol
       '@radix-ui/react-dialog':

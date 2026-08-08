@@ -15,7 +15,7 @@ import {
   assistantMessage,
   toolMessage,
   userMessage,
-} from '@ghostai/core';
+} from '@ghostbot/core';
 
 import { recentMessages, resolveSeq } from '#src/messages.js';
 

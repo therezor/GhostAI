@@ -1,5 +1,5 @@
 {
-  "name": "@ghostai/security",
+  "name": "@ghostbot/security",
   "version": "1.0.0",
   "description": "Credential vault, workspace jail, SSRF-guarded fetch, exec argv guard.",
   "type": "module",
@@ -37,7 +37,8 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist/**",
-    "!dist/**/*.map"
+    "!dist/**/*.map",
+    "!dist/.tsbuildinfo"
   ],
   "scripts": {
     "build": "tsup && tsc -b",
@@ -46,8 +47,8 @@
     "lint": "eslint src test"
   },
   "dependencies": {
-    "@ghostai/core": "workspace:*",
-    "@ghostai/protocol": "workspace:*",
+    "@ghostbot/core": "workspace:*",
+    "@ghostbot/protocol": "workspace:*",
     "undici": "^7.2.0"
   }
 }

@@ -1,4 +1,4 @@
-import type { AgentEvent, NestedAgentEvent } from '@ghostai/agent';
+import type { AgentEvent, NestedAgentEvent } from '@ghostbot/agent';
 import { describe, expect, it } from 'vitest';
 
 import {

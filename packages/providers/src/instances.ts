@@ -18,7 +18,7 @@ import type {
   ProviderConfig,
   ProviderInstanceInfo,
   ProvidersConfig,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 
 import {
   PROVIDERS,

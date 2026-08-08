@@ -56,7 +56,7 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { DEFAULT_WORKSPACE_ID, type FileEntry } from '@ghostai/protocol';
+import { DEFAULT_WORKSPACE_ID, type FileEntry } from '@ghostbot/protocol';
 
 import { cn } from '@/lib/cn.js';
 import { api } from '@/lib/api.js';

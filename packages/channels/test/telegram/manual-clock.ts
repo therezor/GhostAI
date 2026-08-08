@@ -1,7 +1,7 @@
 /**
  * A clock a test moves by hand.
  *
- * Local rather than imported from `@ghostai/agent/testkit` or `@ghostai/mcp`'s,
+ * Local rather than imported from `@ghostbot/agent/testkit` or `@ghostbot/mcp`'s,
  * for the reason both of those give for having their own: a dev dependency on a
  * package *above* this one in the layer graph is an upward edge that pnpm's
  * isolated `node_modules` exists to make impossible, and it would be one for
@@ -13,7 +13,7 @@
  * a *cadence* (1s, 2s, 4s…) in a suite that finishes in milliseconds.
  */
 
-import { GhostError, type Clock, type TimerHandle } from '@ghostai/core';
+import { GhostError, type Clock, type TimerHandle } from '@ghostbot/core';
 
 export interface ManualClock extends Clock {
   /** Moves time forward and fires everything now due, oldest first. */

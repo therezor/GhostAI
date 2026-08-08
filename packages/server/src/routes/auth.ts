@@ -23,8 +23,8 @@ import {
   type SetupClaimRequest,
   type SetupPasswordRequest,
   type SetupStatusResponse,
-} from '@ghostai/protocol';
-import { systemClock } from '@ghostai/core';
+} from '@ghostbot/protocol';
+import { systemClock } from '@ghostbot/core';
 import type { FastifyReply } from 'fastify';
 
 import { clearSessionCookie, sessionOf, setSessionCookie } from '../auth.js';

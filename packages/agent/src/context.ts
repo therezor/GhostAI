@@ -3,9 +3,9 @@
  *
  * This is the measurement behind the context strip in the web UI and `/context`
  * in the CLI, and it lives here for a reason worth stating: it cannot live in
- * `@ghostai/core`, which has no access to `estimateTokens` or to the prompt the
- * loop assembles; and it must not live in `@ghostai/server`, because the CLI
- * drives `AgentLoop` in-process and never speaks HTTP. `@ghostai/agent` already
+ * `@ghostbot/core`, which has no access to `estimateTokens` or to the prompt the
+ * loop assembles; and it must not live in `@ghostbot/server`, because the CLI
+ * drives `AgentLoop` in-process and never speaks HTTP. `@ghostbot/agent` already
  * depends on both halves, so putting it here adds no dependency edge and gives
  * both front ends one implementation instead of two that drift.
  *
@@ -17,9 +17,9 @@ import {
   historyForLLM,
   type SessionStore,
   type StoredMessageRecord,
-} from '@ghostai/core';
-import type { ChatMessage, ToolDefinition } from '@ghostai/protocol';
-import { estimateTokens } from '@ghostai/providers';
+} from '@ghostbot/core';
+import type { ChatMessage, ToolDefinition } from '@ghostbot/protocol';
+import { estimateTokens } from '@ghostbot/providers';
 
 import type { AgentLoop } from './loop.js';
 

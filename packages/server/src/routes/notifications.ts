@@ -13,7 +13,7 @@ import {
   NotificationSchema,
   type Notification,
   type NotificationListResponse,
-} from '@ghostai/protocol';
+} from '@ghostbot/protocol';
 import type { FastifyReply } from 'fastify';
 
 import {

@@ -22,12 +22,12 @@
  *    actually drifted.
  *  - **`fidelity/capture.ts` writes the pictures.** Both screens and their
  *    pixel diff, into `artifacts/fidelity/`, for the review the plan also asks
- *    for. `pnpm --filter @ghostai/e2e baseline` is the command. It is not a
+ *    for. `pnpm --filter @ghostbot/e2e baseline` is the command. It is not a
  *    threshold, and it does not fail a build.
  *
  * Dark only, because there is no light-mode reference: the product being
  * replaced has one theme. Light is held to the contrast assertion in
- * `@ghostai/web` and the sweep in `a11y.spec.ts`, which is the whole of what
+ * `@ghostbot/web` and the sweep in `a11y.spec.ts`, which is the whole of what
  * can be said about a theme with nothing to compare it to.
  */
 

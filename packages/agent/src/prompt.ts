@@ -44,7 +44,7 @@
  * the prose is cached. See `DEFAULT_TOOL_POLICY_TEMPLATE`.
  *
  * **The identity text is not in this file.** It is a template in
- * `@ghostai/protocol`, because an agent owns its whole system prompt and the
+ * `@ghostbot/protocol`, because an agent owns its whole system prompt and the
  * browser edits it — so the wording and the substitution rules have to be one
  * definition. This module owns the *facts* it is rendered with, which are the
  * ones only the host knows: the platform, the architecture and the Node
@@ -96,14 +96,14 @@ import {
   type LivePromptValues,
   type PromptMode,
   toolPolicyUsesNonce,
-} from '@ghostai/protocol';
-import { toolOutputPolicy, toolOutputTag } from '@ghostai/security';
+} from '@ghostbot/protocol';
+import { toolOutputPolicy, toolOutputTag } from '@ghostbot/security';
 
 /**
  * The separator between top-level sections. Also joins the two halves.
  *
  * Re-exported rather than declared: it is defined beside the prompt template in
- * `@ghostai/protocol`, because the config migration there has to reproduce this
+ * `@ghostbot/protocol`, because the config migration there has to reproduce this
  * exact composition. Everything that imported it from this module still can.
  */
 export { SECTION_SEPARATOR };
@@ -380,7 +380,7 @@ function renderToolbox(
     workdir: toolbox.workdir,
     // Each of these carries its own leading blank line, so a toolbox with no
     // notes leaves no gap where the paragraph would have been. See the
-    // convention noted beside the templates in `@ghostai/protocol`.
+    // convention noted beside the templates in `@ghostbot/protocol`.
     tools: toolList === '' ? '' : `\n\nInstalled:\n${toolList}`,
     toolList,
     notes: notes === '' ? '' : `\n\n${notes}`,
@@ -498,7 +498,7 @@ export async function contributorSections(
 /**
  * The identity section, rendered from whatever template this agent carries.
  *
- * The text itself lives in `@ghostai/protocol`, not here, and an agent that
+ * The text itself lives in `@ghostbot/protocol`, not here, and an agent that
  * stores its own replaces it wholesale — heading, workspace rules, platform
  * note, guidelines and all.
  *
@@ -507,7 +507,7 @@ export async function contributorSections(
  * the grounds that the chroot semantics and the guidelines were "not an
  * operator's to replace by writing a persona". The objection does not survive
  * contact with what those sentences actually are: prose telling the model what
- * is true. The jail and the exec guard live in `@ghostai/security`, are
+ * is true. The jail and the exec guard live in `@ghostbot/security`, are
  * enforced on every call, and have never read a word of this. An operator who
  * deletes the workspace paragraph gets an agent that is less well informed
  * about a sandbox that is exactly as tight as it was before — and in exchange,
