@@ -235,7 +235,12 @@ const PACKAGES = {
     deps: {
       '@fastify/cookie': '^11.0.0',
       '@fastify/rate-limit': '^10.2.0',
-      '@fastify/static': '^8.1.0',
+      // 10.x, not 8.x: every release below 10.1.2 carries a path-traversal or
+      // route-guard-bypass advisory, and this plugin is what serves the built
+      // SPA — the one place a traversal would reach outside the UI root. It
+      // also drags `glob` from 11 to 13, which is where the deprecation
+      // warning on install came from.
+      '@fastify/static': '^10.1.3',
       '@fastify/swagger': '^9.4.0',
       '@fastify/websocket': '^11.0.0',
       '@node-rs/argon2': '^2.0.0',

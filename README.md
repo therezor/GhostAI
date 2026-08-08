@@ -22,11 +22,7 @@ Cloud providers are opt-in, not assumed.
 [![build](https://img.shields.io/github/actions/workflow/status/therezor/GhostAI/ci.yml?style=flat-square&color=3fb950&labelColor=0d1117)](.github/workflows/ci.yml)
 [![telemetry](https://img.shields.io/badge/telemetry-zero-3fb950?style=flat-square&labelColor=0d1117)](packages/web/test/self-contained.test.ts)
 [![runs](https://img.shields.io/badge/runs-offline-3fb950?style=flat-square&labelColor=0d1117)](packages/e2e/test/offline.spec.ts)
-
-<!-- Uncomment the moment `v1.0.0` is pushed and npm has the package. Until then
-     it renders a red `npm | invalid`, which is worse than no badge at all.
 [![npm](https://img.shields.io/npm/v/@ghostbot/cli?style=flat-square&color=3fb950&labelColor=0d1117)](https://www.npmjs.com/package/@ghostbot/cli)
--->
 
 </div>
 
