@@ -31,6 +31,7 @@ export * from './prompt.js';
 export * from './config.js';
 export * from './subagent.js';
 export * from './toolbox.js';
+export * from './preset.js';
 export * from './extension.js';
 export * from './automation.js';
 export * from './ws.js';

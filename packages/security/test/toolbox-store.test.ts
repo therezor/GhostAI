@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { GhostError } from '@ghostbot/core';
 
-import { TOOLBOX_DOCS_MAX_BYTES, ToolboxStore } from '#src/toolbox-store.js';
+import { ToolboxStore } from '#src/toolbox-store.js';
 
 const DIGEST = `sha256:${'d'.repeat(64)}`;
 
@@ -156,68 +156,20 @@ describe('ToolboxStore.list', () => {
   });
 });
 
-/**
- * `TOOLS.md`, loaded from beside the manifest.
- *
- * It used to live only inside the image, where the model had to *choose* to run a
- * command to see it — and it did not. On the host the prompt builder can include
- * it, which is the difference between a reference being discoverable and being
- * read.
- */
-describe('ToolboxStore: toolbox documentation', () => {
-  function writeDocs(name: string, text: string): void {
-    mkdirSync(join(base, name), { recursive: true });
-    writeFileSync(join(base, name, 'TOOLS.md'), text);
-  }
-
-  it('reads it from beside the manifest', () => {
+describe('ToolboxStore: files beside the manifest', () => {
+  it('ignores files beside the manifest, for approval and resolution alike', () => {
+    // The approval hash covers the manifest bytes and nothing else, so a file
+    // an install put beside it neither blocks resolution nor revokes an
+    // approval when it changes. Nothing shipped puts one there today; the
+    // property is what keeps the hash meaning exactly one thing.
     install('research');
-    writeDocs('research', '# research\n\nUse `search --read 3`.');
-    store.approve('research');
-
-    expect(store.require('research').docs).toContain('Use `search --read 3`.');
-  });
-
-  it('reports no documentation as empty rather than as a failure', () => {
-    // A toolbox is complete without it. Refusing to resolve one over a missing
-    // `.md` would make prose load-bearing for whether the container runs at all.
-    install('research');
-    store.approve('research');
-
-    expect(store.require('research').docs).toBe('');
-  });
-
-  it('bounds how much of it is loaded', () => {
-    // It goes into the cached half of the prompt, so the cost is per session
-    // rather than per iteration — but a reference that grew unnoticed would still
-    // take a slice of every window on the install.
-    install('research');
-    writeDocs('research', 'x'.repeat(TOOLBOX_DOCS_MAX_BYTES * 2));
-    store.approve('research');
-
-    expect(store.require('research').docs).toHaveLength(TOOLBOX_DOCS_MAX_BYTES);
-  });
-
-  it('is not part of the approval hash', () => {
-    // The hash covers policy — image, capabilities, network ceiling. Making an
-    // operator re-approve a typo fix in documentation would train them to
-    // re-approve without reading, which is the one thing the gate cannot survive.
-    install('research');
-    writeDocs('research', 'first');
+    writeFileSync(join(base, 'research', 'NOTES.md'), 'first');
     const approved = store.approve('research');
 
-    writeDocs('research', 'second, quite different');
+    writeFileSync(join(base, 'research', 'NOTES.md'), 'second');
 
-    const after = store.require('research');
-    expect(after.manifestSha256).toBe(approved.manifestSha256);
-    expect(after.docs).toBe('second, quite different');
-  });
-
-  it('carries it on approve as well as on require', () => {
-    // `approve` returns the same shape, and the CLI prints from it.
-    install('research');
-    writeDocs('research', 'the reference');
-
-    expect(store.approve('research').docs).toBe('the reference');
+    expect(store.require('research').manifestSha256).toBe(
+      approved.manifestSha256,
+    );
   });
 });

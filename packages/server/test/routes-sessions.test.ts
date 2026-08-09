@@ -426,6 +426,23 @@ describe('GET /api/sessions', () => {
     expect((await page(test, '?origin=telegram')).ids).toEqual(['b']);
   });
 
+  it('excludes one origin, and the total describes the same set', async () => {
+    // What the sidebar sends. The exclusion has to reach `countSessions` as
+    // well as the page, or the column shows two rows above a total of three.
+    const test = await start();
+    test.runtime.store.ensureSession('a', { origin: 'web' });
+    test.runtime.store.ensureSession('b', { origin: 'subagent' });
+    test.runtime.store.ensureSession('c', { origin: 'automation' });
+
+    const excluded = await page(test, '?excludeOrigin=subagent');
+    expect(excluded.ids.sort()).toEqual(['a', 'c']);
+    expect(excluded.total).toBe(2);
+
+    // Unasked-for, the listing is still every origin — `/sessions` is the
+    // screen a delegated run stays reachable from.
+    expect((await page(test, '')).total).toBe(3);
+  });
+
   it('issues a cursor only when there is another row', async () => {
     const test = await start();
     for (const key of ['a', 'b']) test.runtime.store.ensureSession(key);

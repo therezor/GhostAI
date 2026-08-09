@@ -91,6 +91,7 @@ describe('resolveGhostPaths', () => {
       agentsDir: join(root, 'agents'),
       sharedDir: join(root, 'shared'),
       toolboxesDir: join(root, 'toolboxes'),
+      presetsDir: join(root, 'presets'),
       runsDir: join(root, 'runs'),
       configFile: join(root, 'config.json'),
       dbFile: join(root, 'ghost.db'),
@@ -100,6 +101,16 @@ describe('resolveGhostPaths', () => {
       vaultFile: join(root, 'vault.json'),
       keyFile: join(root, 'vault.key'),
     });
+  });
+
+  it('keeps presets out of what the file tools can write', () => {
+    // A preset names an agent's system prompt and its tool permissions, so one
+    // writable through `write_file` would let prompt injection compose the
+    // agent that runs next. The same argument as `toolboxesDir`, one step
+    // sharper.
+    const paths = resolveGhostPaths(options);
+
+    expect(paths.presetsDir.startsWith(paths.workspace)).toBe(false);
   });
 
   it('honours the home environment variable', () => {

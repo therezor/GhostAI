@@ -56,6 +56,7 @@ import pc from 'picocolors';
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from '@ghostbot/i18n';
 
 import { translationsFor, type CliT } from './i18n.js';
+import { runSetup } from './setup.js';
 
 /** A language named in its own language, so the person who needs it can read it. */
 function nameOfLocale(locale: string): string {
@@ -87,6 +88,15 @@ export interface InitOptions {
   ) => Promise<string[]>;
   /** Injected by tests, which have no keychain. */
   readonly saveCredential?: (instanceId: string, value: string) => void;
+  /**
+   * Installs the catalogue. Injected by tests, which have no Docker daemon.
+   *
+   * Offered as the wizard's last question and run *after* the config write, so
+   * the "Ctrl-C wrote nothing" property above still holds for everything the
+   * wizard itself decides: by the time this runs, there is nothing left to
+   * abandon.
+   */
+  readonly install?: (presetsOnly: boolean) => Promise<number> | number;
 }
 
 /** The prompts, bound to one readline interface and one colour setting. */
@@ -303,8 +313,38 @@ export async function initCommand(options: InitOptions = {}): Promise<number> {
     out.write(`  ${c.dim(t('init.provider'))}   ${answers.instanceId}\n`);
     out.write(`  ${c.dim(t('init.model'))}      ${answers.model}\n`);
     out.write(`  ${c.dim(t('init.workspace'))}  ${answers.workspace}\n\n`);
+
+    // Last, and after the write. Building five container images takes minutes
+    // and needs a daemon, so it is a question rather than something `init`
+    // acquires a dependency on — and the middle option is the default because
+    // an install that has never seen Docker should still finish the wizard.
+    out.write(`${t('init.whichAgents')}\n`);
+    const choice = await ask.choose(
+      t('init.agents'),
+      [t('init.agentsAll'), t('init.agentsPresets'), t('init.agentsNone')],
+      1,
+    );
+    if (choice !== 2) {
+      out.write('\n');
+      const install =
+        options.install ??
+        (async (presetsOnly: boolean): Promise<number> =>
+          await runSetup({
+            presetsOnly,
+            // The wizard's own reader, rather than a second one: two readline
+            // interfaces on one stdin fight over keypresses.
+            confirm: async (question) => await ask.confirm(question, false),
+            ...(options.home === undefined ? {} : { home: options.home }),
+            out: (line) => out.write(`${line}\n`),
+            errOut: (line) => errOut.write(`${line}\n`),
+            ...(options.env === undefined ? {} : { env: options.env }),
+            t: translationsFor(options.env ?? process.env),
+          }));
+      await install(choice === 1);
+    }
+
     out.write(
-      `Run ${c.cyan('ghost chat')} to talk to it, or ${c.cyan('ghost serve')} for the UI.\n`,
+      `\nRun ${c.cyan('ghost chat')} to talk to it, or ${c.cyan('ghost serve')} for the UI.\n`,
     );
     return 0;
   } catch (error) {

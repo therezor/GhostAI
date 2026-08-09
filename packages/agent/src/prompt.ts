@@ -222,19 +222,6 @@ export interface PromptToolbox {
   }>;
   /** Caveats about the box as a whole. */
   readonly notes: string;
-  /**
-   * The toolbox's `TOOLS.md`, included verbatim when it has one.
-   *
-   * It used to live only inside the image, reachable by a `tools` command — and a
-   * model that never ran it answered a research question from search snippets
-   * while the reference explaining how to read pages sat one command away.
-   * Discoverable is not the same as read. This is the same file, installed beside
-   * the manifest so the prompt can carry it.
-   *
-   * It is in the *static* half, so a provider caches it once per session rather
-   * than re-sending it per iteration; `TOOLBOX_DOCS_MAX_BYTES` bounds it.
-   */
-  readonly docs?: string;
 }
 
 /**
@@ -369,11 +356,6 @@ function renderToolbox(
     )
     .join('\n');
   const notes = toolbox.notes.trim();
-  // Last, and under its own heading, so the reference reads as a document rather
-  // than as more of this section's prose. It is the longest thing here by an order
-  // of magnitude and the part most likely to answer a question the model would
-  // otherwise guess at.
-  const docs = (toolbox.docs ?? '').trim();
 
   return renderPromptTemplate(stored, {
     name: toolbox.name,
@@ -384,9 +366,6 @@ function renderToolbox(
     tools: toolList === '' ? '' : `\n\nInstalled:\n${toolList}`,
     toolList,
     notes: notes === '' ? '' : `\n\n${notes}`,
-    reference:
-      docs === '' ? '' : `\n\n### ${toolbox.name} reference\n\n${docs}`,
-    docs,
   }).trim();
 }
 

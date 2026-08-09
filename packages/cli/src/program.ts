@@ -42,10 +42,12 @@ import { Command, CommanderError } from 'commander';
 
 import type { LogLevel } from '@ghostbot/core';
 
+import { runAgent } from './agent.js';
 import type { ChatOptions } from './chat.js';
 import { describeError, translationsFor, type CliT, type Env } from './i18n.js';
 import type { InitOptions } from './init.js';
 import { runExtension } from './extension.js';
+import { runSetup } from './setup.js';
 import { runToolbox } from './toolbox.js';
 import type { ServeCommandOptions } from './serve.js';
 
@@ -61,7 +63,7 @@ import type { ServeCommandOptions } from './serve.js';
  * bump is the root `package.json` plus `node scripts/gen-packages.mjs`; the
  * test above is what stops that pair from landing without this.
  */
-export const VERSION = '1.0.0';
+export const VERSION = '1.0.1';
 
 const LOG_LEVELS: readonly string[] = [
   'trace',
@@ -130,6 +132,32 @@ async function defaultRunServe(options: ServeCommandOptions): Promise<number> {
 async function defaultRunInit(options: InitOptions): Promise<number> {
   const { initCommand } = await import('./init.js');
   return await initCommand(options);
+}
+
+/**
+ * One yes/no on a terminal, opened and closed around the question.
+ *
+ * `ghost install` is the only command here that asks anything, so the reader
+ * is created for the one question rather than held for the whole invocation —
+ * and `ghost init`, which does hold one, passes its own in instead of letting
+ * a second reader compete for the same keypresses.
+ */
+function confirmOn(
+  input: NodeJS.ReadableStream & { isTTY?: boolean },
+  out: NodeJS.WritableStream,
+): (question: string) => Promise<boolean> {
+  return async (question: string): Promise<boolean> => {
+    const { createInterface } = await import('node:readline/promises');
+    const rl = createInterface({ input, output: out, terminal: true });
+    try {
+      const answer = (await rl.question(`${question} [y/N]: `))
+        .trim()
+        .toLowerCase();
+      return answer === 'y' || answer === 'yes';
+    } finally {
+      rl.close();
+    }
+  };
 }
 
 /** A port from the command line, refused before anything binds. */
@@ -394,6 +422,100 @@ function buildProgram(deps: CliDeps = {}): Command {
     .action(extensionAction('revoke'));
 
   program
+    .command('install')
+    .description(t('install.description'))
+    .option('--presets-only', t('install.options.presetsOnly'), false)
+    // Declared as a pair rather than as one negatable flag, which is what
+    // makes "neither was passed" distinguishable from "no" — and that third
+    // state is the one that asks.
+    .option('--approve', t('install.options.approve'))
+    .option('--no-approve', t('install.options.noApprove'))
+    .action(
+      async (
+        options: { presetsOnly: boolean; approve?: boolean },
+        command: Command,
+      ) => {
+        const globals = command.parent?.opts<GlobalOptions>() ?? {
+          color: true,
+          verbose: false,
+        };
+        const input = deps.input ?? process.stdin;
+        const code = await runSetup({
+          presetsOnly: options.presetsOnly,
+          ...(options.approve === undefined
+            ? {}
+            : { approve: options.approve }),
+          // Only when there is somebody to answer. A pipe gets the safe
+          // default instead of a question it would answer with EOF.
+          ...(options.approve === undefined && input.isTTY === true
+            ? { confirm: confirmOn(input, out) }
+            : {}),
+          ...(globals.home === undefined ? {} : { home: globals.home }),
+          out: (line) => {
+            out.write(`${line}\n`);
+          },
+          errOut: (line) => {
+            errOut.write(`${line}\n`);
+          },
+          env,
+          t: translations,
+        });
+        command.setOptionValue('exitCode', code);
+      },
+    );
+
+  const agent = program.command('agent').description(t('agent.description'));
+
+  agent
+    .command('install')
+    .argument('<name-or-path>')
+    .description(t('agent.install.description'))
+    .option('--force', t('agent.install.options.force'), false)
+    .action((name: string, options: { force: boolean }, command: Command) => {
+      const globals = command.parent?.parent?.opts<GlobalOptions>() ?? {
+        color: true,
+        verbose: false,
+      };
+      const code = runAgent({
+        action: 'install',
+        name,
+        force: options.force,
+        ...(globals.home === undefined ? {} : { home: globals.home }),
+        out: (line) => {
+          out.write(`${line}\n`);
+        },
+        errOut: (line) => {
+          errOut.write(`${line}\n`);
+        },
+        env,
+        t: translations,
+      });
+      command.setOptionValue('exitCode', code);
+    });
+  agent
+    .command('list')
+    .description(t('agent.list.description'))
+    .action((options: unknown, command: Command) => {
+      const globals = command.parent?.parent?.opts<GlobalOptions>() ?? {
+        color: true,
+        verbose: false,
+      };
+      const code = runAgent({
+        action: 'list',
+        ...(globals.home === undefined ? {} : { home: globals.home }),
+        out: (line) => {
+          out.write(`${line}\n`);
+        },
+        errOut: (line) => {
+          errOut.write(`${line}\n`);
+        },
+        env,
+        t: translations,
+      });
+      command.setOptionValue('exitCode', code);
+    });
+
+  program
     .command('serve')
     .description(t('serve.description'))
     .option('-H, --host <host>', t('serve.options.host'))
@@ -490,9 +612,16 @@ export async function runCli(
 
   // Whichever subcommand ran set it; the others left theirs unset. Reading the
   // one that has a number is what keeps this from having to know which ran.
-  for (const command of program.commands) {
+  // The walk is recursive because an action on a nested subcommand — `ghost
+  // toolbox approve` — receives the *leaf* command and sets the value there;
+  // a sweep of the top level alone read those as success.
+  // Appending mid-iteration is defined behaviour: an array iterator re-reads
+  // the length on every step, so the pushed children are visited too.
+  const pending: Command[] = [...program.commands];
+  for (const command of pending) {
     const code: unknown = command.getOptionValue('exitCode');
     if (typeof code === 'number') return code;
+    pending.push(...command.commands);
   }
   return 0;
 }

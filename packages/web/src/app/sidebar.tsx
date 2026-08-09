@@ -35,7 +35,7 @@ import {
 } from 'lucide-react';
 import { useState, type JSX, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { SessionSummary } from '@ghostbot/protocol';
+import { SUBAGENT_ORIGIN, type SessionSummary } from '@ghostbot/protocol';
 import type { WebKey } from '@/i18n/keys.js';
 
 import { cn } from '@/lib/cn.js';
@@ -150,6 +150,12 @@ export function Sidebar({
   // *after* sending — and the row should highlight on the click.
   const attached = useTurnStore((state) => state.sessionKey);
 
+  // The key this column minted, if it minted one. See `inNewSession` — it is
+  // what separates "started here and not saved yet" from "simply not in these
+  // thirty rows", which stopped being the same thing when the list began
+  // excluding an origin.
+  const [startedKey, setStartedKey] = useState<string | undefined>(undefined);
+
   const [renaming, setRenaming] = useState<string | undefined>(undefined);
   const [pendingDelete, setPendingDelete] = useState<
     SessionSummary | undefined
@@ -164,6 +170,7 @@ export function Sidebar({
     // the picker's. Both come from the composer's pickers, which is where the
     // choice is actually made.
     const key = newSession(workspaceId, agentId);
+    setStartedKey(key);
     onNavigate?.();
     void navigate({ to: '/', search: { session: key } });
   }
@@ -173,9 +180,31 @@ export function Sidebar({
   // you were browsing simply vanished from the list — and the only way to find
   // it again was to guess which workspace it had gone to. A workspace is where
   // a conversation's *files* are, not a folder conversations are filed under.
+  //
+  // Every conversation, but not every *session*. A delegated run gets a session
+  // of its own, and it is not a conversation anybody had — it is a step inside
+  // one, started by the model rather than by a person, and it belongs to the
+  // transcript that caused it. Left in, an agent that delegates three times per
+  // turn fills a thirty-row column with rows nobody chose to open and pushes
+  // yesterday's conversation off the bottom.
+  //
+  // Excluded here rather than hidden everywhere: the store lists every origin on
+  // purpose — see `sessionFilter` — because the run's own turn is what anyone
+  // debugging a bad answer has to read. It stays reachable both ways it was
+  // before: the card in the parent's transcript links to it, and `/sessions`
+  // lists it unfiltered.
+  //
+  // Asked of the server rather than filtered out of the answer, so `limit` still
+  // means thirty conversations rather than thirty rows minus however many
+  // delegations happened to run.
   const sessions = useQuery({
     queryKey: queryKeys.sessions(),
-    queryFn: ({ signal }) => api.sessions({ limit: SIDEBAR_SESSIONS, signal }),
+    queryFn: ({ signal }) =>
+      api.sessions({
+        limit: SIDEBAR_SESSIONS,
+        excludeOrigin: SUBAGENT_ORIGIN,
+        signal,
+      }),
   });
 
   const rows = sessions.data?.sessions ?? [];
@@ -191,12 +220,26 @@ export function Sidebar({
    *
    * Guarded on `isSuccess`, or the row lights up for one render on every load
    * while the list is still in flight.
+   *
+   * **"Unsaved" is not "absent from these rows".** It used to be read that way,
+   * and the two coincided for as long as the column was every session. They
+   * stopped coinciding when it began excluding an origin: a delegated run is
+   * opened from `/sessions` and can *never* appear here, so the old test lit
+   * this row over a real transcript and announced it as the current page. The
+   * same was true, more quietly, of any conversation older than the thirty.
+   *
+   * So the key this column minted is what it asks about. The row still lights on
+   * the press — `startedKey` is set before the navigation — and stops the moment
+   * the first message lands and the real row arrives, which is unchanged. The
+   * `attached === undefined` arm stays: arriving at `/` cold is a new session
+   * that nothing minted.
    */
   const inNewSession =
     pathname === '/' &&
     sessions.isSuccess &&
     (attached === undefined ||
-      !rows.some((session) => session.key === attached));
+      (attached === startedKey &&
+        !rows.some((session) => session.key === attached)));
 
   // Shared with the conversations page rather than written out here. Two
   // implementations of "rename a session" is two sets of toasts and two answers

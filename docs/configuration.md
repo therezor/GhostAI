@@ -70,6 +70,11 @@ inherit-unless-set — plus the keys below. The id also names the agent's direct
 `workspace` is deliberately not overridable: the working folder is a property of the
 session, shared by every agent that opens it.
 
+Entries are created three ways, and they all land in the same shape: the web UI's agent
+editor, editing this file by hand, and `ghost agent install`, which merges a preset —
+a shipped agent definition — into this map ([CLI](cli.md#ghost-agent)). However an entry
+got here, it is edited the same way afterwards.
+
 | Key                | Type                                 | Default           | Notes                                                                                                        |
 | ------------------ | ------------------------------------ | ----------------- | ------------------------------------------------------------------------------------------------------------ |
 | `label`            | string                               | `''`              | Falls back to the id.                                                                                        |

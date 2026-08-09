@@ -118,6 +118,20 @@ export interface GhostPaths {
    */
   readonly toolboxesDir: string;
   /**
+   * Agent presets an operator dropped in — one `<name>.json` per preset.
+   *
+   * Outside the jail for a sharper version of the reason `toolboxesDir` is: a
+   * preset *authors an agent*, naming its system prompt and its tool
+   * permissions, so one writable through `write_file` would let prompt
+   * injection compose the agent that runs next. Nothing here takes effect on
+   * its own — a preset is inert until `ghost agent install` merges it into
+   * `config.json`, which is an operator action at a terminal.
+   *
+   * Presets shipped with the CLI live in that package, not here. This
+   * directory is for what an operator adds, and it usually does not exist.
+   */
+  readonly presetsDir: string;
+  /**
    * Sandbox command transcripts, one directory per container.
    *
    * **Outside the workspace, and that is a security boundary rather than
@@ -192,6 +206,7 @@ export function resolveGhostPaths(
     agentsDir: join(root, 'agents'),
     sharedDir: join(root, 'shared'),
     toolboxesDir: join(root, 'toolboxes'),
+    presetsDir: join(root, 'presets'),
     runsDir: join(root, 'runs'),
     configFile: join(root, 'config.json'),
     dbFile: join(root, 'ghost.db'),

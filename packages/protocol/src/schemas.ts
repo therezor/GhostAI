@@ -17,6 +17,7 @@ import * as automation from './automation.js';
 import * as config from './config.js';
 import * as extension from './extension.js';
 import * as messages from './messages.js';
+import * as preset from './preset.js';
 import * as toolbox from './toolbox.js';
 import * as rest from './rest.js';
 import * as tools from './tools.js';
@@ -90,6 +91,9 @@ export const PROTOCOL_SCHEMAS = {
   // extension
   ExtensionContribution: extension.ExtensionContributionSchema,
   ExtensionManifest: extension.ExtensionManifestSchema,
+
+  // preset
+  AgentPreset: preset.AgentPresetSchema,
 
   // automation
   AtSchedule: automation.AtScheduleSchema,
@@ -233,6 +237,7 @@ export const SCHEMA_MODULES = {
   config,
   extension,
   messages,
+  preset,
   rest,
   subagent,
   tools,

@@ -1437,7 +1437,6 @@ class Runtime implements GhostRuntime {
         workdir: approved.toolbox.workdir,
         tools: approved.toolbox.tools,
         notes: approved.toolbox.notes,
-        docs: approved.docs,
       });
     }
 

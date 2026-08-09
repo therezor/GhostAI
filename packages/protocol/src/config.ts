@@ -635,8 +635,8 @@ export const AgentEntrySchema = patchOf(AgentDefaultsSchema)
      *
      * Only rendered when the agent has a toolbox — an empty `toolbox.name`
      * produces no section whatever this says. Empty means the built-in; a single
-     * space removes it, which is how an operator whose toolbox is described well
-     * enough by its own `TOOLS.md` stops paying for the preamble twice.
+     * space removes it, which is how an operator whose own `systemPrompt`
+     * already describes the box stops paying for the preamble twice.
      */
     toolboxPrompt: z.string().default(''),
     /**

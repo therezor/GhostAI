@@ -251,6 +251,14 @@ export const api = {
       readonly workspaceId?: string;
       readonly limit?: number;
       readonly offset?: number;
+      /**
+       * One origin to leave out — the sidebar's, and it sends `subagent`.
+       *
+       * Asked of the server rather than filtered out of the answer, so a
+       * `limit` of thirty is thirty conversations however many delegations ran
+       * between them.
+       */
+      readonly excludeOrigin?: string;
       /** A title substring. Blank is the same as absent. */
       readonly q?: string;
       readonly sort?: 'updated' | 'created' | 'title';
@@ -263,6 +271,7 @@ export const api = {
       // rather than spread-guarded one at a time.
       query: {
         workspace: options.workspaceId,
+        excludeOrigin: options.excludeOrigin,
         limit: options.limit,
         offset: options.offset,
         q: options.q,

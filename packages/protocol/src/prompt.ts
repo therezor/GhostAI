@@ -407,10 +407,11 @@ export const PLATFORM_PROMPT_PLACEHOLDERS = [
 /**
  * What a *toolbox* template may ask for.
  *
- * Both the composed and the raw form of the two parts that carry text of their
- * own — the `Installed:` label and the `### … reference` heading — because an
- * operator rewriting the section around them needs the pieces, and one keeping
- * the default wants the whole block or nothing.
+ * Both the composed and the raw form of the part that carries text of its own
+ * — the `Installed:` label — because an operator rewriting the section around
+ * it needs the pieces, and one keeping the default wants the whole block or
+ * nothing. Longer-form tool documentation is not offered here at all: it lives
+ * in the agent's own `systemPrompt`, which is where a preset puts it.
  */
 export const TOOLBOX_PROMPT_PLACEHOLDERS = [
   'name',
@@ -421,10 +422,6 @@ export const TOOLBOX_PROMPT_PLACEHOLDERS = [
   'toolList',
   /** The manifest's notes, with a leading blank line. Empty when blank. */
   'notes',
-  /** The `### <name> reference` heading and the docs, with a leading blank line. */
-  'reference',
-  /** The toolbox's `TOOLS.md`, raw and unheaded. */
-  'docs',
 ] as const;
 
 /**
@@ -511,7 +508,7 @@ A shell is available in here, so a pipeline goes through \`["bash","-lc","…"]\
 Nothing from this machine is visible except the workspace, so write findings
 there rather than holding them in context. Output too large to return is kept
 in full under \`/run/ghost-runs/\`; reach it with a shell command, not the file
-tools.{{tools}}{{notes}}{{reference}}`;
+tools.{{tools}}{{notes}}`;
 
 /**
  * The section that makes the tool-output delimiters mean something.

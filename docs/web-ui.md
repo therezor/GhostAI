@@ -40,6 +40,12 @@ The shell is two columns; below `md` the sidebar becomes a drawer rather than a 
 rail. The header carries the wordmark, a connection badge with a Reload action, the
 notification bell and the theme switcher.
 
+The sidebar's session list is a **shortlist of the thirty most recent conversations**, and
+a delegated run is not one of them — a subagent gets a session of its own, but it is a
+step inside a conversation rather than a conversation someone had. Those rows are excluded
+from this column only: `/sessions` lists every origin and badges the machine-started ones,
+and a run is also reachable from the subagent card in the transcript that started it.
+
 **The WebSocket hangs off the root route**, so moving between screens never redials it and
 never drops a running turn.
 

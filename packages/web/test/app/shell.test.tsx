@@ -175,6 +175,27 @@ describe('the shell', () => {
     );
   });
 
+  /**
+   * A delegated run is a step inside a conversation, not a conversation. Left
+   * in, an agent that delegates three times a turn fills a thirty-row column
+   * with rows nobody chose to open.
+   *
+   * Asserted as the request rather than as the absence of a row, because that is
+   * the part that matters: filtering the answer would keep the rows out of the
+   * column while letting them eat the budget that decides how far back it goes.
+   * The store still lists every origin, and `/sessions` still shows them.
+   */
+  it('leaves delegated runs out of the shortlist, at the request', async () => {
+    const { calls } = renderApp();
+
+    await screen.findByText('First session');
+
+    const listed = calls.find(
+      (call) => call.method === 'GET' && call.path === '/api/sessions',
+    );
+    expect(listed?.query.get('excludeOrigin')).toBe('subagent');
+  });
+
   it('opens recent notifications from the header, with a way to the full list', async () => {
     const { user } = renderApp();
 
@@ -453,5 +474,25 @@ describe('the shell', () => {
     // The decoded key reached the history fetch, which is the only thing that
     // proves the router parsed it rather than passing the raw parameter along.
     expect(await screen.findByText('a stored question')).toBeInTheDocument();
+  });
+
+  /**
+   * New session marks a conversation that is *unsaved*, not one that is merely
+   * missing from the column.
+   *
+   * The two used to be the same thing, so "no row matches" stood in for it. They
+   * stopped being the same thing the moment the column began excluding an
+   * origin: a delegated run is opened from `/sessions` and can never appear in
+   * these rows, so the proxy would light New session over a real transcript and
+   * claim it as `aria-current` to a screen reader. `web:7` is the same case
+   * without a subagent — a stored session this list does not carry.
+   */
+  it('does not call a stored conversation a new one, just because the column omits it', async () => {
+    renderApp('/?session=web%3A7');
+
+    expect(await screen.findByText('a stored question')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'New session' }),
+    ).not.toHaveAttribute('aria-current');
   });
 });

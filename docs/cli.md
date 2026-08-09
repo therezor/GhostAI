@@ -16,6 +16,8 @@ same approval gate.
 ghost [chat] [message...]      talk to the agent — the default command
 ghost init                     configure this install, in a wizard
 ghost serve                    serve the web UI and the API on one port
+ghost install                  build the shipped toolboxes and install their agents
+ghost agent     install <name-or-path> [--force] | list
 ghost toolbox   list | approve <id> | revoke <id>
 ghost extension list | approve <id> | revoke <id>
 ghost help [command]
@@ -186,6 +188,94 @@ worth knowing before you meet them:
 
 If `@ghostbot/web` has not been built, `serve` says so and runs the API alone rather than
 serving nothing at a URL it just printed.
+
+## `ghost install`
+
+The tedious half of setting an install up, in one command — six `docker build`s and
+eight config merges, in the right order:
+
+```bash
+ghost install                  # build every shipped toolbox, install every agent
+ghost install --approve        # …approving the toolboxes too, without asking
+ghost install --no-approve     # …approving nothing, without asking
+ghost install --presets-only   # only the agents that need no container; never runs Docker
+```
+
+`ghost init` offers this as its last question, so a fresh install usually never types it.
+
+### Approving, in one keystroke or none
+
+An agent cannot work in a toolbox until that toolbox is **approved** — a recorded
+statement that somebody read what the container may do. `ghost install` builds and
+installs the manifests, then settles that question in the same run, because approving is
+what unblocks the agents and a command that made you run it twice would be doing half
+its job.
+
+| You pass       | It does                                                       |
+| -------------- | ------------------------------------------------------------- |
+| `--approve`    | Approves what it installed. No question.                      |
+| `--no-approve` | Approves nothing, and prints the commands that would.         |
+| neither        | Prints each toolbox's policy, then asks once — on a terminal. |
+
+**The policy is printed before the question, not after it**, so a `y` is an informed one.
+That costs a screen of text and buys the only thing in this command that re-running
+cannot undo.
+
+With no terminal — a pipe, a CI job — and no flag, it approves **nothing**. A default of
+"yes" there would approve container policy nobody read, which is the failure the gate
+exists to stop. Agents needing an unapproved toolbox are held back rather than
+half-installed, since an enabled agent naming one is a config the server refuses to boot
+on.
+
+Two more rules worth knowing:
+
+- **It never overwrites an agent you already have**, because that entry may carry your
+  own edits. An agent already installed is skipped silently.
+- **Delegators install last**, so `team-lead` is snapshotted after its specialists exist.
+  If you approve toolboxes _between_ two runs, its roster is stale — the command says so
+  and prints the `--force` line that refreshes it rather than rewriting it for you.
+
+## `ghost agent`
+
+Installs an agent preset — a JSON file holding a system prompt, tool permissions, a
+toolbox reference and a delegation roster — as an entry in `agents.list`:
+
+```bash
+ghost agent list                      # configured agents, and presets not yet installed
+ghost agent install researcher        # a shipped preset, by its id
+ghost agent install ./my-agent.json   # a preset you wrote, by path
+ghost agent install nano --force      # overwrite an existing agent of the same id
+```
+
+**There is one kind of preset.** A preset is `<id>.json` — the filename is the agent id
+— whether or not the agent works in a container; one that does simply sets
+`toolbox.name`. So there is one lookup, and the argument is either a path or an id
+searched in two directories:
+
+| Searched                       | Holds                                       |
+| ------------------------------ | ------------------------------------------- |
+| `~/.ghostai/presets/<id>.json` | Yours. Drop a file in; that is the install. |
+| `catalogue/presets/<id>.json`  | The eight that ship.                        |
+
+Yours first, so a local `nano.json` wins over the shipped one. Nothing is fetched at any
+point: both are files already on the box, and the shipped ones come from
+`@ghostbot/catalogue`, resolved as a package rather than by a path — the same way the
+server finds the built UI, and for the same reason.
+
+Installing is a config merge and nothing more: afterwards the agent is ordinary config,
+edited in the web UI like any other. Three rules do the real work:
+
+- A preset naming a toolbox that is not installed and approved is **refused**, with the
+  command that fixes it — the server would refuse to boot on the result.
+- An id that already exists is **refused without `--force`**, because the existing entry
+  may carry your own edits.
+- A preset's `subagents` roster is **filtered to the agents installed and enabled at
+  that moment**. Install `team-lead` last — or re-run it with `--force` after adding
+  specialists — and its delegation roster matches what can actually answer.
+
+A preset deliberately cannot name a model, a provider, or anything from the toolbox
+manifest's side of the security boundary. See
+[Toolboxes](toolboxes.md#agent-presets).
 
 ## `ghost toolbox` and `ghost extension`
 

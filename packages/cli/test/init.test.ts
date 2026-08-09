@@ -122,6 +122,7 @@ describe('initCommand', () => {
       '', // API base: the provider's default
       '', // no token
       '1', // the first model offered
+      '3', // agents: nothing for now
     ]);
 
     expect(code).toBe(0);
@@ -141,6 +142,7 @@ describe('initCommand', () => {
       '',
       'proxy-token',
       '1',
+      '3',
     ]);
     expect(credentials).toEqual([
       { instanceId: 'ollama', value: 'proxy-token' },
@@ -148,16 +150,19 @@ describe('initCommand', () => {
   });
 
   it('writes no credential when the token is left blank', async () => {
-    const { credentials } = await run(['', 'ollama', '', '', '', '1']);
+    const { credentials } = await run(['', 'ollama', '', '', '', '1', '3']);
     expect(credentials).toEqual([]);
   });
 
   it('names a second endpoint of the same type rather than overwriting the first', async () => {
     const home = tempHome();
-    await run(['', 'ollama', 'Laptop', '', '', '1'], { home });
-    await run(['', 'ollama', 'GPU box', 'http://gpu.lan:11434/v1', '', '2'], {
-      home,
-    });
+    await run(['', 'ollama', 'Laptop', '', '', '1', '3'], { home });
+    await run(
+      ['', 'ollama', 'GPU box', 'http://gpu.lan:11434/v1', '', '2', '3'],
+      {
+        home,
+      },
+    );
 
     const written = configIn(home) as {
       providers: Record<string, { label?: string }>;
@@ -170,7 +175,7 @@ describe('initCommand', () => {
     // An unreachable Ollama usually means it is not running, which is worth
     // reading rather than working around — but it must not end the wizard.
     const { code, home, output } = await run(
-      ['', 'ollama', '', '', '', 'typed-by-hand'],
+      ['', 'ollama', '', '', '', 'typed-by-hand', '3'],
       {
         listModels: async () => [],
       },
@@ -204,6 +209,41 @@ describe('initCommand', () => {
     expect(existsSync(join(home, 'config.json'))).toBe(false);
   });
 
+  it('offers to install the agents, and runs it after the config is written', async () => {
+    // The question is last and the installer runs after `write`, so the
+    // "Ctrl-C wrote nothing" property still covers everything the wizard
+    // itself decides. By the time this runs there is nothing to abandon.
+    const calls: boolean[] = [];
+    const { code, home, output } = await run(
+      ['', 'ollama', '', '', '', '1', '2'],
+      { install: (presetsOnly) => (calls.push(presetsOnly), 0) },
+    );
+
+    expect(code).toBe(0);
+    expect(output).toContain('Install them now?');
+    // `2` is "just the agents that need no container" — presetsOnly.
+    expect(calls).toEqual([true]);
+    expect(existsSync(join(home, 'config.json'))).toBe(true);
+  });
+
+  it('asks for everything when that is what was chosen', async () => {
+    const calls: boolean[] = [];
+    await run(['', 'ollama', '', '', '', '1', '1'], {
+      install: (presetsOnly) => (calls.push(presetsOnly), 0),
+    });
+
+    expect(calls).toEqual([false]);
+  });
+
+  it('installs nothing when the operator declines', async () => {
+    const calls: boolean[] = [];
+    await run(['', 'ollama', '', '', '', '1', '3'], {
+      install: (presetsOnly) => (calls.push(presetsOnly), 0),
+    });
+
+    expect(calls).toEqual([]);
+  });
+
   it('keeps asking until the provider answer is one of the offered ones', async () => {
     const { code, home, output } = await run([
       '',
@@ -214,6 +254,7 @@ describe('initCommand', () => {
       '',
       '',
       '1',
+      '3',
     ]);
 
     expect(code).toBe(0);

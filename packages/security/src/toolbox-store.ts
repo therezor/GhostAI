@@ -40,42 +40,19 @@ CREATE TABLE IF NOT EXISTS toolbox_approvals (
 ) STRICT;
 `;
 
-/**
- * How much of a `TOOLS.md` is loaded.
- *
- * It goes into the *cached* half of the system prompt, so the cost is paid once
- * per session rather than per iteration — but it is still real, and a reference
- * that grew without anyone noticing would quietly take a slice of every window on
- * the install. 12 KB is about 3,000 tokens, comfortably more than the reference
- * this was written for and small enough to be a decision rather than an accident.
- */
-export const TOOLBOX_DOCS_MAX_BYTES = 12_288;
-
 /** A toolbox that parsed, passed policy, and matches its recorded approval. */
 export interface ApprovedToolbox {
   readonly toolbox: Toolbox;
-  /** Host path of the manifest, for the read-only mount into the container. */
+  /**
+   * Host path of the manifest, for the read-only mount into the container.
+   *
+   * The mount is the manifest's whole directory, so anything an install put
+   * beside `toolbox.json` rides along with it. Nothing here reads any of it —
+   * what the model is told about a toolbox comes from the manifest's own
+   * `tools` entries and from the agent's `systemPrompt`.
+   */
   readonly manifestPath: string;
   readonly manifestSha256: string;
-  /**
-   * `TOOLS.md` from beside the manifest, or `''` when there is none.
-   *
-   * Installed on the host rather than baked into the image, and that move is the
-   * point. Inside the container it could only be read by the model *choosing* to
-   * run `tools` — and it did not: asked a research question it answered from
-   * search snippets while a reference explaining `--read` sat one command away.
-   * Beside the manifest it is readable by the prompt builder, so the model is told
-   * rather than invited to ask. It is still mounted into the container as part of
-   * the manifest directory, so `tools` keeps working for the case where a model
-   * does look.
-   *
-   * **Deliberately not part of the approval hash.** The hash covers policy — the
-   * image, the capabilities, the network ceiling — and prose that reaches the
-   * model changes nothing an operator approved about what the container may *do*.
-   * Making an operator re-approve a typo fix in documentation would train them to
-   * re-approve without reading, which is the one thing the gate cannot survive.
-   */
-  readonly docs: string;
 }
 
 /** What `list` reports, including the toolboxes that are *not* usable. */
@@ -159,7 +136,7 @@ export class ToolboxStore {
       throw new GhostError(
         'config',
         `No toolbox is installed under "${name}".\n` +
-          `  Build and install one with \`toolboxes/build.sh ${name}\`, or clear the agent's toolbox.`,
+          `  Build and install one with \`catalogue/build.sh ${name}\`, or clear the agent's toolbox.`,
         { details: { name } },
       );
     }
@@ -192,7 +169,6 @@ export class ToolboxStore {
       toolbox,
       manifestPath: this.manifestPathFor(name),
       manifestSha256: hash,
-      docs: this.docs(name),
     };
   }
 
@@ -225,33 +201,7 @@ export class ToolboxStore {
       toolbox,
       manifestPath: this.manifestPathFor(name),
       manifestSha256: hash,
-      docs: this.docs(name),
     };
-  }
-
-  /**
-   * `TOOLS.md` from beside the manifest, or `''`.
-   *
-   * Absent is normal, not an error: a toolbox is complete without documentation,
-   * and refusing to resolve one because a `.md` file is missing would make the
-   * prose load-bearing for whether the container runs at all.
-   *
-   * Read on every resolution rather than cached, matching the manifest: editing
-   * the reference should take effect on the next turn, and this is one small file
-   * read beside one the same code path already does.
-   */
-  private docs(name: string): string {
-    try {
-      const bytes = readFileSync(join(this.dir, name, 'TOOLS.md'));
-      // Sliced on *bytes* before decoding, so a huge file is never fully held in
-      // memory as a string. A cut in the middle of a multi-byte character decodes
-      // to a replacement char, which is a cosmetic price for a hard bound.
-      return new TextDecoder().decode(
-        bytes.subarray(0, TOOLBOX_DOCS_MAX_BYTES),
-      );
-    } catch {
-      return '';
-    }
   }
 
   /** Forgets an approval. The manifest stays on disk; it simply stops resolving. */

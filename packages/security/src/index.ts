@@ -86,7 +86,6 @@ export {
 } from './extension.js';
 
 export {
-  TOOLBOX_DOCS_MAX_BYTES,
   ToolboxStore,
   type ApprovedToolbox,
   type ToolboxListing,

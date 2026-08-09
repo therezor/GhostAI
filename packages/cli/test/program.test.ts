@@ -80,6 +80,48 @@ describe('runCli', () => {
     expect(help.out).toContain('revoke');
   });
 
+  it('offers install, the one command that sets an install up', async () => {
+    const run = await cli(['--help']);
+    expect(run.out).toContain('install');
+
+    const help = await cli(['install', '--help']);
+    expect(help.code).toBe(0);
+    expect(help.out).toContain('--presets-only');
+  });
+
+  it('offers agent, the preset installer, beside them', async () => {
+    const run = await cli(['--help']);
+    expect(run.out).toContain('agent');
+
+    const help = await cli(['agent', '--help']);
+    expect(help.code).toBe(0);
+    expect(help.out).toContain('install');
+    expect(help.out).toContain('list');
+  });
+
+  it('returns a nested subcommand failure as its exit code', async () => {
+    // The action on `agent install` receives the leaf command and records its
+    // exit code there. A sweep of the top level alone read every nested
+    // failure as success — `ghost toolbox approve nope` printed the refusal
+    // and exited 0.
+    const errOut = sink();
+    const code = await runCli(
+      [
+        'node',
+        'ghost',
+        '--home',
+        '/nonexistent-ghostai',
+        'agent',
+        'install',
+        'nope',
+      ],
+      { out: sink(), errOut, env: {} },
+    );
+
+    expect(code).toBe(1);
+    expect(errOut.text).toContain('No preset is available under "nope"');
+  });
+
   it('fails on an unknown option instead of guessing', async () => {
     const run = await cli(['--nonsense']);
     expect(run.code).not.toBe(0);

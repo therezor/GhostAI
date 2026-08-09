@@ -172,6 +172,17 @@ export interface ListSessionsOptions {
   readonly limit?: number;
   readonly offset?: number;
   readonly origin?: string;
+  /**
+   * One origin to leave out, for a listing that is a shortlist rather than the
+   * record.
+   *
+   * The opposite of `origin` and not a replacement for it: this narrows by
+   * subtraction, so a caller that wants only conversations a person started can
+   * say so without enumerating every origin that is not `subagent`. Absent
+   * means nothing is excluded, which is what keeps the default listing the whole
+   * table — see `sessionFilter` for why that default is load-bearing.
+   */
+  readonly excludeOrigin?: string;
   /** Restricts the listing to one workspace. */
   readonly workspaceId?: string;
   /**
@@ -449,9 +460,23 @@ interface SessionFilter {
  * session per run, so a list sorted by recency carries a lot of them. That is a
  * presentation problem — a badge, a filter — and this is the wrong layer to
  * solve it by pretending the rows are not there.
+ *
+ * **`excludeOrigin` is that filter, and it is opt-in.** It is what the sidebar
+ * asks for to keep delegated runs out of a list of thirty conversations, and it
+ * is not a re-run of the mistake above for one reason: the default is unchanged.
+ * A caller that names nothing still sees every origin, so every transcript stays
+ * reachable from the screen whose job is to reach them — a subagent's session is
+ * still listed on `/sessions`, still fetchable by key, and still linked from the
+ * card in the parent's transcript. The exclusion narrows one view; it does not
+ * decide what exists.
+ *
+ * Why here rather than after the fetch: the caller asks for a bounded page, so a
+ * client-side filter would let a burst of delegations eat the budget — thirty
+ * rows in, five conversations shown. The count shares this predicate, so `total`
+ * describes the same set.
  */
 function sessionFilter(options: ListSessionsOptions): SessionFilter {
-  const { origin, workspaceId } = options;
+  const { origin, excludeOrigin, workspaceId } = options;
   // Blank is the same as absent: a cleared search box must not become
   // `LIKE '%%'`, which is a full scan that matches everything.
   const query = options.query?.trim();
@@ -463,11 +488,14 @@ function sessionFilter(options: ListSessionsOptions): SessionFilter {
     // combination — `node:sqlite` binds positionally, so the same value is
     // bound twice rather than named once.
     sql: `(? IS NULL OR s.origin = ?)
+          AND (? IS NULL OR s.origin <> ?)
           AND (? IS NULL OR s.workspace_id = ?)
           AND (? IS NULL OR lower(s.title) LIKE ? ESCAPE '\\')`,
     bindings: [
       origin ?? null,
       origin ?? null,
+      excludeOrigin ?? null,
+      excludeOrigin ?? null,
       workspaceId ?? null,
       workspaceId ?? null,
       pattern,

@@ -1,0 +1,244 @@
+{
+  "schema": "ghostai.toolbox/1",
+  "name": "web-research",
+  "version": "6.0.0",
+  "label": "Web research and recon",
+  "tools": [
+    {
+      "name": "search",
+      "use": "Search the web and read the top results. Prints a numbered list plus the text of the top 3 pages, so one call usually answers the question.",
+      "args": "The query as plain words — no quote characters, they become part of it. --read N reads that many pages instead of 3, --read 0 gives links only. --recent day|week|month|year limits by age and is what you want for news. -n N sets list length (default 6). --site DOMAIN restricts to one domain, --region CODE biases to one (uk-en, us-en).",
+      "example": ["best local model for tool calling"],
+      "permission": "allow",
+      "requiresArgs": true
+    },
+    {
+      "name": "fetch",
+      "use": "Read web pages as markdown — headings, lists, tables, code and links kept, navigation and markup discarded.",
+      "args": "One or more URLs. --max-chars 0 removes the 24,000-character cap, --save DIR also writes each page to a file, --links prints the page's links instead of its text.",
+      "example": ["https://sqlite.org/wal.html"],
+      "permission": "allow",
+      "requiresArgs": true
+    },
+    {
+      "name": "doc",
+      "use": "Read a file as text — PDF, Word, Excel, PowerPoint, an image, or anything text. This is how you open a file someone attached: attachments arrive as a path under uploads/ and are the one thing you cannot see without opening.",
+      "args": "One or more file paths. A scanned PDF or a photo of text is read with OCR automatically — add --lang deu (or fra, spa, ita, por, nld, rus, ukr, swe, nor, dan, fin) when it is not English. --max-chars 0 removes the 24,000-character cap, --save DIR also writes the text out.",
+      "example": ["uploads/ab12cd34-report.pdf"],
+      "permission": "allow",
+      "requiresArgs": true
+    },
+    {
+      "name": "nmap",
+      "use": "Port, service and version scan, plus the NSE script library. The core active recon tool once you have a live host.",
+      "args": "-sV fingerprints services and versions, -sS runs a SYN scan (uses NET_RAW, falls back to a connect scan if unavailable), -p PORTS limits the range, --script vuln runs the cheap known-issue checks, -oN FILE writes a report. Ends with the target host or CIDR.",
+      "example": ["-sV", "-p", "80,443", "example.com"],
+      "permission": "allow",
+      "requiresArgs": true
+    },
+    {
+      "name": "masscan",
+      "use": "Sweep a wide port or address range fast, then hand the open ports to nmap for detail.",
+      "args": "A target range and -p PORTS, with --rate PPS to cap the packet rate. -oL FILE writes the open ports. Uses NET_RAW.",
+      "example": ["-p", "1-65535", "--rate", "1000", "192.0.2.0/24"],
+      "permission": "allow",
+      "requiresArgs": true
+    },
+    {
+      "name": "subfinder",
+      "use": "Passive subdomain enumeration from many sources at once.",
+      "args": "-d DOMAIN for the target, -silent prints one host per line with no banner, -all uses every source, -o FILE writes them.",
+      "example": ["-d", "example.com", "-silent"],
+      "permission": "allow",
+      "requiresArgs": true
+    },
+    {
+      "name": "amass",
+      "use": "OWASP subdomain and infrastructure OSINT — the passive mode stays off the target.",
+      "args": "The `enum` subcommand, then -passive to stay off the target (or -active to resolve), -d DOMAIN, -o FILE for output.",
+      "example": ["enum", "-passive", "-d", "example.com"],
+      "permission": "allow",
+      "requiresArgs": true
+    },
+    {
+      "name": "dnsx",
+      "use": "Bulk DNS: resolve a host list, brute a wordlist, pull A/AAAA/CNAME/MX/TXT records, drop wildcards.",
+      "args": "-l HOSTS.txt (or -d DOMAIN -w WORDLIST to brute), with record flags -a/-aaaa/-cname/-mx/-txt, -resp to show the answer and -silent for one line each.",
+      "example": ["-l", "hosts.txt", "-a", "-resp", "-silent"],
+      "permission": "allow",
+      "requiresArgs": true
+    },
+    {
+      "name": "httpx",
+      "use": "Probe a host list for live HTTP — status, title, server, detected tech, TLS — one line each. The first move after subdomain enum.",
+      "args": "-l HOSTS.txt (or -u URL) with -sc for status, -title, -server, -tech-detect, -silent, and -o FILE to write the live ones.",
+      "example": [
+        "-l",
+        "hosts.txt",
+        "-sc",
+        "-title",
+        "-tech-detect",
+        "-silent"
+      ],
+      "permission": "allow",
+      "requiresArgs": true
+    },
+    {
+      "name": "katana",
+      "use": "Crawl a site for endpoints, forms and parameters — the map a deeper test starts from. No JavaScript engine, so it will not reach client-rendered routes.",
+      "args": "-u URL to crawl, -d N sets depth, -jc follows JavaScript-derived endpoints from static analysis, -o FILE writes the URLs found.",
+      "example": ["-u", "https://example.com", "-d", "2"],
+      "permission": "allow",
+      "requiresArgs": true
+    },
+    {
+      "name": "tlsx",
+      "use": "Grab TLS certificate data — subject, SANs, issuer, expiry — across many hosts.",
+      "args": "-l HOSTS.txt (or -u HOST:PORT) with -san, -cn for names, -expired for expiry, -silent for one line each.",
+      "example": ["-l", "hosts.txt", "-san", "-cn", "-silent"],
+      "permission": "allow",
+      "requiresArgs": true
+    },
+    {
+      "name": "gau",
+      "use": "getallurls — pull known URLs for a domain from Wayback, Common Crawl and others (OSINT).",
+      "args": "One or more domains as plain arguments. --subs includes subdomains, --threads N parallelises, --o FILE writes them.",
+      "example": ["example.com"],
+      "permission": "allow",
+      "requiresArgs": true
+    },
+    {
+      "name": "waybackurls",
+      "use": "List every path the Wayback Machine has seen for a host — a cheap map of the surface.",
+      "args": "A domain as the argument, or a list of domains on stdin. Prints one URL per line to redirect into a file.",
+      "example": ["example.com"],
+      "permission": "allow",
+      "requiresArgs": true
+    },
+    {
+      "name": "whois",
+      "use": "Domain and netblock registration OSINT — registrar, dates, name servers, org.",
+      "args": "A domain or IP address.",
+      "example": ["example.com"],
+      "permission": "allow",
+      "requiresArgs": true
+    },
+    {
+      "name": "dig",
+      "use": "Direct DNS queries. `host` and `nslookup` are here too for the same job.",
+      "args": "A name, optionally a record type (A, AAAA, MX, TXT, NS, CNAME) and @resolver. +short trims to the answer.",
+      "example": ["example.com", "MX", "+short"],
+      "permission": "allow",
+      "requiresArgs": true
+    },
+    {
+      "name": "sslscan",
+      "use": "Enumerate a host's TLS versions, ciphers and certificate — the quick TLS posture check.",
+      "args": "A host, or host:port. --no-failed hides rejected ciphers, --xml=FILE writes a report.",
+      "example": ["example.com"],
+      "permission": "allow",
+      "requiresArgs": true
+    },
+    {
+      "name": "rg",
+      "use": "Search inside files you already saved to the workspace.",
+      "args": "A pattern and a path, relative to the workspace. -n prints line numbers, -i ignores case.",
+      "example": ["-n", "-i", "rate limit", "sources"],
+      "permission": "allow",
+      "requiresArgs": true
+    },
+    {
+      "name": "jq",
+      "use": "Filter or reshape JSON, usually from curl or a scanner's -json output.",
+      "args": "A jq filter, then a file — or nothing after it to read stdin.",
+      "example": ["-r", ".items[].name"],
+      "permission": "allow",
+      "requiresArgs": true
+    },
+    {
+      "name": "anew",
+      "use": "Append only new lines to a file — the way to dedupe a growing host or URL list across runs.",
+      "args": "The file to append to, reading candidate lines on stdin; prints only the lines that were new.",
+      "example": ["hosts.txt"],
+      "permission": "allow",
+      "requiresArgs": true
+    },
+    {
+      "name": "gf",
+      "use": "Grep with named patterns (gf ssrf, gf xss, gf sqli) to pull interesting URLs out of a crawl.",
+      "args": "A pattern name — ssrf, xss, sqli, redirect and the like — reading URLs on stdin.",
+      "example": ["xss"],
+      "permission": "allow",
+      "requiresArgs": true
+    },
+    {
+      "name": "curl",
+      "use": "Call an API or fetch raw HTTP, when you want the bytes rather than a rendered page.",
+      "args": "-sSL and a URL for a plain GET; -i includes response headers, -X METHOD, -H 'Header: v' and -d BODY shape a request. Use fetch for anything you intend to read as text.",
+      "example": ["-sSL", "https://api.github.com/repos/sqlite/sqlite"],
+      "permission": "ask",
+      "requiresArgs": true
+    },
+    {
+      "name": "wget",
+      "use": "Download a file or mirror a small path to the workspace.",
+      "args": "A URL. -O FILE names the output, -q silences progress, -r -np -l N mirrors a small subtree.",
+      "example": ["-q", "-O", "robots.txt", "https://example.com/robots.txt"],
+      "permission": "ask",
+      "requiresArgs": true
+    },
+    {
+      "name": "openssl",
+      "use": "Inspect a site's TLS certificate — issuer, subject, the names it covers and when it expires — and do the everyday crypto odd jobs: hashes, base64, random bytes.",
+      "args": "s_client -connect HOST:443 -servername HOST </dev/null 2>/dev/null | openssl x509 -noout -subject -issuer -dates -ext subjectAltName reads a live certificate. Local forms take no network: dgst -sha256 FILE, base64 -d, rand -hex 16.",
+      "example": [
+        "s_client",
+        "-connect",
+        "example.org:443",
+        "-servername",
+        "example.org"
+      ],
+      "permission": "ask",
+      "requiresArgs": true
+    },
+    {
+      "name": "python3",
+      "use": "Run Python, for anything the other commands cannot express — glue between the scanners, or a custom request.",
+      "args": "-c and a program, or a script path. requests, lxml, beautifulsoup4, trafilatura, python-docx, openpyxl, python-pptx and Pillow are installed.",
+      "example": [
+        "-c",
+        "import requests; print(requests.get('https://example.com').status_code)"
+      ],
+      "permission": "ask",
+      "requiresArgs": true
+    }
+  ],
+  "notes": "Two jobs live in this box. For **research**: `search` already reads the top results, so answer from that page text rather than the snippets — and one search is usually enough; if it did not answer, `fetch` one of the URLs it gave you rather than searching again with different words. There is no browser and no JavaScript engine, so a page that renders client-side comes back empty and says so. Use `doc` on a file the user attached — those arrive as a path under uploads/, and for a PDF, a spreadsheet or a scan the path is all you are given. For **recon**: this box reaches the target and the OSINT sources directly, so treat that traffic as attributable to this machine, and only scan hosts you are permitted to. Work in stages and write each to a file — enumerate subdomains (subfinder, amass), resolve them (dnsx), find live HTTP (httpx), scan ports and services (nmap, masscan), crawl for endpoints (katana, gau, waybackurls), gather OSINT (whois), audit TLS (sslscan, tlsx) — and dedupe growing lists with `anew` rather than holding them in context. NET_RAW is granted so `nmap -sS` can raw-scan; it falls back to a connect scan on its own if unavailable. Paths are the same ones the file tools use: write `notes/sources.md`, not an absolute path. Output too large to return inline is kept under /run/ghost-runs/ — reach it with a shell command, not the file tools.",
+  "expose": "tools",
+  "image": "__IMAGE_ID__",
+  "runtime": "runc",
+  "workdir": "/workspace",
+  "user": "1000:1000",
+  "caps": {
+    "drop": ["ALL"],
+    "add": ["NET_RAW"]
+  },
+  "security": {
+    "noNewPrivileges": true,
+    "seccomp": "default",
+    "readOnlyRoot": true,
+    "tmpfs": ["/tmp:rw,nosuid,size=256m", "/home/ghost:rw,nosuid,size=64m"]
+  },
+  "limits": {
+    "memoryMb": 2048,
+    "cpus": 2,
+    "pidsMax": 512,
+    "shmSizeMb": 128
+  },
+  "network": {
+    "maxMode": "open",
+    "dns": [],
+    "proxyAllowHosts": []
+  },
+  "env": ["LANG", "TZ"]
+}

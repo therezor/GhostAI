@@ -19,9 +19,17 @@ import { z } from 'zod';
 /**
  * The origin a subagent's session is recorded under.
  *
- * Load-bearing rather than descriptive: `listSessions` excludes it, which is
- * what keeps one-turn machine-started sessions out of the list of conversations
- * a person had.
+ * Load-bearing rather than descriptive, and the load it bears is *not* that the
+ * store hides these rows. It does not: `listSessions` returns every origin
+ * unless a caller narrows, deliberately, because a delegated run's turn is the
+ * thing anyone debugging a bad answer has to read and a row nothing lists is a
+ * transcript with no way in. See `sessionFilter` in `@ghostbot/core` for the
+ * time that was got wrong.
+ *
+ * What it bears instead is the narrowing itself, in both directions: the web
+ * sidebar passes it as `excludeOrigin`, so a shortlist of thirty is thirty
+ * conversations rather than thirty rows of which most are machinery, while
+ * `/sessions` passes nothing and lists them all.
  */
 export const SUBAGENT_ORIGIN = 'subagent';
 

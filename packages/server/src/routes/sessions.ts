@@ -172,6 +172,9 @@ export function sessionRoutes(deps: RouteDeps): RouteGroup<SessionRouteId> {
         // is a "Page 4 of 3" that only appears once someone searches.
         const filter = {
           ...(query.origin === undefined ? {} : { origin: query.origin }),
+          ...(query.excludeOrigin === undefined
+            ? {}
+            : { excludeOrigin: query.excludeOrigin }),
           ...(query.workspace === undefined
             ? {}
             : { workspaceId: query.workspace }),

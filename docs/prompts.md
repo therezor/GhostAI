@@ -178,7 +178,6 @@ where it is written should be visible as a mistake rather than render as blank.
 |                    | `{{shellPolicy}}`                                | The generated shell-tooling paragraph for this host OS.   |
 | `toolboxPrompt`    | `{{name}}`, `{{workdir}}`                        | The box and where the workspace is mounted in it.         |
 |                    | `{{tools}}` / `{{toolList}}`                     | `Installed:` and the bullets / just the bullets.          |
-|                    | `{{reference}}` / `{{docs}}`                     | The `### … reference` heading and `TOOLS.md` / just it.   |
 |                    | `{{notes}}`                                      | The manifest's notes.                                     |
 | `toolPolicyPrompt` | `{{tag}}`, `{{nonce}}`                           | The turn's delimiter, and the random half of it.          |
 | `memoryPrompt`     | `{{index}}`                                      | One line per memory. The section's whole content.         |
@@ -336,18 +335,18 @@ pretraining. Declaring them as schemas would cost thousands of tokens on every r
 say what forty say once. The rules true of _every_ toolbox — that `exec` lands in a
 container, that a shell is available there, that only the workspace is mounted, where
 oversized output goes — are the built-in wording; the manifest declares only what is
-specific to it, and `{{tools}}`, `{{notes}}` and `{{reference}}` are where it lands.
+specific to it, and `{{tools}}` and `{{notes}}` are where it lands.
 
 `toolboxPrompt` rewrites that wording per agent. The section is only rendered while
 `toolbox.name` is set, so an agent on the host sends nothing here whatever it says — and
-setting it to a single space is how an operator whose `TOOLS.md` already covers the ground
-stops paying for the preamble twice.
+setting it to a single space is how an operator whose own `systemPrompt` already covers
+the ground stops paying for the preamble twice.
 
-A toolbox's `TOOLS.md`, when it has one, is included verbatim under its own heading, in
-the static half, bounded at 12 KB. It used to live only inside the image, reachable by a
-`tools` command — and a model that never ran it answered research questions from search
-snippets while the reference explaining how to read pages sat one command away.
-Discoverable is not the same as read.
+Longer-form tool documentation is the agent's own `systemPrompt`'s job, and each shipped
+toolbox's preset carries it there ([Toolboxes](toolboxes.md#agent-presets)). Nothing
+reads a file from the toolbox directory into the prompt: what a manifest entry declares
+in `use`, `args` and `example` is what reaches the model, and prose repeating it would be
+a second copy to keep in step.
 
 ## Extending the prompt in code
 

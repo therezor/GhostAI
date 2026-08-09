@@ -1,25 +1,33 @@
-# The web-research toolbox: search, fetch, and turn HTML, PDFs and documents
-# into text.
+# The web-research toolbox: search the web, fetch and turn HTML/PDFs/documents
+# into text, and map a target — enumeration, OSINT and network recon.
+#
+# Two jobs in one box on purpose: both are network-open and both start from the
+# same handful of tools (curl, openssl, python3, jq, rg), so a researcher who
+# needs to fingerprint a host and a recon agent who needs to read a page were
+# paying for two container images that overlapped in the middle. Merged, one
+# image serves `researcher` and `recon` alike.
 #
 # Built locally and referenced by image ID, never pulled at runtime — GhostAI has
 # to come up on a machine with no internet, so the only network this image needs
 # is the network that built it.
 #
 # Alpine rather than Debian because the whole point is that this is cheap to
-# start: a session pays one container start, and 60 MB of image is the difference
-# between that being unnoticeable and being a pause.
+# start: a session pays one container start. Absorbing the recon tooling makes
+# this a larger image than the research box alone was — the OCR packs and the
+# static Go scanners are the two heavy things in it — but it is still one start,
+# and the scanners are static single binaries with no runtime dependencies.
 #
 # What is deliberately *absent* is a headless browser. Chromium would multiply
-# the image by twenty and hand the sandbox a JavaScript engine with a network
-# stack, which is a large attack surface to carry for the small number of pages
-# that need it. Text extraction handles the rest.
+# the image and hand the sandbox a JavaScript engine with a network stack, which
+# is a large attack surface to carry for the small number of pages that need it.
+# Text extraction and `katana` (which crawls without JavaScript) handle the rest.
 #
 # ## On the size of the OCR data
 #
-# The paragraph above argues for a small image, and the language packs below are
-# the largest thing in this file — thirteen of them, well over a hundred
-# megabytes, most of which any given install never loads. That is a deliberate
-# reversal of an earlier decision, and the reason is what a toolbox is *for*.
+# The language packs below are the largest thing in this file — thirteen of them,
+# well over a hundred megabytes, most of which any given install never loads.
+# That is a deliberate reversal of an earlier decision, and the reason is what a
+# toolbox is *for*.
 #
 # A file someone attaches reaches the model as a workspace path and nothing
 # else; if it is a scan, the path is the whole of what the model gets. "There is
@@ -30,6 +38,36 @@
 #
 # The packs are one `apk add`, so trimming the list is a one-line edit for an
 # install that only ever sees English.
+
+# --- build stage: compile the Go recon tools, fully static -------------------
+# `golang:alpine` unpinned on purpose, like every base here: the built image's
+# id is the pin, and the ProjectDiscovery tools track a fast-moving Go minimum,
+# so floating to the latest Go keeps them building rather than pinning to a
+# version that goes stale under them.
+FROM golang:alpine AS build
+
+# CGO off so every binary is static and depends on nothing in the final image.
+# GOTOOLCHAIN=auto so a tool that requires a newer Go than the image ships pulls
+# that toolchain itself rather than failing — this stage has network.
+# GOSUMDB=off so a flaky sum.golang.org lookup does not fail the build; modules
+# still come through the proxy and the image is pinned by its id regardless.
+ENV CGO_ENABLED=0 GOFLAGS=-buildvcs=false GOTOOLCHAIN=auto GOSUMDB=off
+
+# Each is a single command the manifest names. `@latest` rather than a pin for
+# the same reason the base image is unpinned: the built image's id is the pin,
+# not the source ref it was built from.
+RUN go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest \
+ && go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest \
+ && go install github.com/projectdiscovery/httpx/cmd/httpx@latest \
+ && go install github.com/projectdiscovery/katana/cmd/katana@latest \
+ && go install github.com/projectdiscovery/tlsx/cmd/tlsx@latest \
+ && go install github.com/lc/gau/v2/cmd/gau@latest \
+ && go install github.com/tomnomnom/waybackurls@latest \
+ && go install github.com/tomnomnom/gf@latest \
+ && go install github.com/tomnomnom/anew@latest \
+ && go install github.com/owasp-amass/amass/v4/...@master
+
+# --- runtime stage -----------------------------------------------------------
 FROM alpine:3.21
 
 # One layer, no cache, and versions unpinned on purpose: the image ID is the
@@ -45,6 +83,7 @@ RUN apk add --no-cache \
       ca-certificates \
       curl \
       jq \
+      openssl \
       ripgrep \
       w3m \
       poppler-utils \
@@ -54,6 +93,22 @@ RUN apk add --no-cache \
       py3-beautifulsoup4 \
       py3-pillow \
       tini \
+ && rm -rf /var/cache/apk/*
+
+# The recon and network layer. `nmap-scripts` is the NSE library `--script vuln`
+# needs; `libpcap` is what the raw-socket scanners link against; `bind-tools`
+# supplies dig/host/nslookup. These reach the target directly, which is why this
+# box's manifest caps network at `open` and adds back `NET_RAW` for `nmap -sS`.
+RUN apk add --no-cache \
+      nmap \
+      nmap-scripts \
+      masscan \
+      libpcap \
+      bind-tools \
+      whois \
+      sslscan \
+      wget \
+      git \
  && rm -rf /var/cache/apk/*
 
 # OCR, for the documents that have no text layer to extract.
@@ -118,15 +173,28 @@ RUN apk add --no-cache --virtual .build py3-pip \
  && apk del .build \
  && rm -rf /root/.cache
 
+# The compiled scanners, dropped where the rest of the PATH already looks.
+COPY --from=build /go/bin/ /usr/local/bin/
+
 # A non-root user whose uid matches the profile's `user`, so anything written
 # into the mounted workspace stays editable by the host's own tools. Root-owned
 # artefacts are the most common complaint about this whole pattern.
 RUN adduser -D -u 1000 -h /home/ghost ghost
 
-# `TOOLS.md` is deliberately *not* copied in. It is installed beside the manifest
-# on the host and reaches the container through the read-only manifest mount at
-# `/run/ghost`, which is the same directory `toolbox.json` arrives in. One copy,
-# two readers: the prompt builder on the host and the `tools` command in here.
+# Every recon binary the manifest promises, asserted at build time. A box whose
+# first `httpx` or `amass` call is "not found" is worse than no box, and finding
+# out here costs one layer. Keep this list in step with the manifest's `tools`.
+RUN for bin in nmap masscan subfinder amass dnsx httpx katana tlsx gau \
+               waybackurls whois dig sslscan wget gf anew \
+               curl openssl python3 jq rg; do \
+      command -v "${bin}" >/dev/null || { echo "missing: ${bin}" >&2; exit 1; }; \
+    done
+
+# Three programs, and no reference file beside them. There used to be a
+# `TOOLS.md` and a `tools` command that printed it, from when the manifest could
+# not describe a flag; now `expose: "tools"` turns every entry's `use`, `args`
+# and `example` into a real tool schema, so the flags reach the model where it
+# is already looking. A second copy in prose was a second thing to keep in step.
 COPY lib/ /opt/ghost/lib/
 COPY bin/ /opt/ghost/bin/
 RUN chmod +x /opt/ghost/bin/*

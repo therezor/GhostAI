@@ -70,6 +70,15 @@ const SESSION_SORT_KEYS = ['updated', 'created', 'title'] as const;
 export interface SessionListQuery extends PageQuery {
   /** `web`, `telegram`, `automation`, an extension id. Absent means every origin. */
   readonly origin?: string | undefined;
+  /**
+   * One origin to leave out. Absent means none is.
+   *
+   * The sidebar sends `subagent`: a shortlist of thirty is a list of
+   * conversations, and a delegated run is a step inside one. Excluded here
+   * rather than dropped from the response so the thirty stay thirty — see
+   * `sessionFilter` in the store.
+   */
+  readonly excludeOrigin?: string | undefined;
   /** Absent means every workspace, which is what the unscoped sidebar asks for. */
   readonly workspace?: string | undefined;
   /** A title substring. Blank is the same as absent — see `ListSessionsOptions.query`. */
@@ -81,6 +90,7 @@ export interface SessionListQuery extends PageQuery {
 export const SessionListQuerySchema: z.ZodType<SessionListQuery> = z.object({
   ...pageShape,
   origin: z.string().min(1).optional(),
+  excludeOrigin: z.string().min(1).optional(),
   workspace: z.string().min(1).optional(),
   // No `.min(1)`: an empty box is a legal thing for a client to send, and the
   // store already treats blank as "no filter". Rejecting it would make clearing

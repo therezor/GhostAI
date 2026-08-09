@@ -1,6 +1,6 @@
 {
   "name": "@ghostbot/tui",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A domain-free terminal toolkit: key decoding, display-width text, and a transient selection region.",
   "type": "module",
   "license": "MIT",

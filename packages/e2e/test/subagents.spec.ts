@@ -140,7 +140,21 @@ test.describe('a delegating agent', () => {
     await expect(run.getByText('There is one file: notes.md.')).toBeVisible();
   });
 
-  test('leaves the subagent run in the sidebar, openable like any session', async ({
+  /**
+   * Both halves of one decision, which is why they are one test.
+   *
+   * A delegation is not a conversation, so it is not in the column of them: the
+   * sidebar is a shortlist of thirty, and an agent that delegates three times a
+   * turn would fill it with rows nobody chose to open.
+   *
+   * But it *is* the turn that produced the answer, and the last time these were
+   * hidden they were hidden everywhere — which left no way to read the run when
+   * the answer was wrong. So the absence is only meaningful next to the
+   * presence, and asserting either alone would let the other regress silently.
+   * The third way in — the card in the parent's transcript — is covered by the
+   * reload test above.
+   */
+  test('keeps the subagent run out of the sidebar, and on the sessions list', async ({
     app,
   }) => {
     await app
@@ -149,11 +163,22 @@ test.describe('a delegating agent', () => {
     await app.getByRole('button', { name: 'Send' }).click();
     await expect(delegation(app).header.getByLabel('Succeeded')).toBeVisible();
 
-    // These used to be hidden on the grounds that a delegation is not a
-    // session. It is still not one — but it is the turn that produced the
-    // answer, and hiding it left no way to read it when the answer was wrong.
+    // The parent conversation is there, so this asserts a filtered list rather
+    // than an empty or still-loading one — without it, a sidebar that failed to
+    // load at all would pass.
     const sidebar = app.getByRole('complementary', { name: 'Sidebar' });
-    await expect(sidebar.getByText(SUBAGENT_TASK)).toHaveCount(1);
+    await expect(
+      sidebar.getByRole('link', { name: /delegate this/ }),
+    ).toBeVisible();
+    await expect(sidebar.getByText(SUBAGENT_TASK)).toHaveCount(0);
+
+    // Still listed where the record is kept, badged for what it is. The row's
+    // link is labelled `Open {{title}}`, hence the pattern rather than the bare
+    // task.
+    await sidebar.getByRole('link', { name: 'Sessions' }).click();
+    await expect(
+      app.getByRole('link', { name: new RegExp(SUBAGENT_TASK) }),
+    ).toBeVisible();
   });
 });
 

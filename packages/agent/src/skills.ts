@@ -48,10 +48,10 @@ export const SKILL_FILENAME = 'SKILL.md';
 /**
  * The most of one skill's body that reaches the prompt.
  *
- * The same figure as `TOOLBOX_DOCS_MAX_BYTES`, and for the same reason: a body
- * the model opens with `read_file` lands in the transcript and is re-sent on
- * every later iteration of that turn at full price, so its size is a decision
- * rather than an accident. Roughly three thousand tokens.
+ * 12 KB is roughly three thousand tokens. The bound exists because a body the
+ * model opens with `read_file` lands in the transcript and is re-sent on every
+ * later iteration of that turn at full price, so its size is a decision rather
+ * than an accident.
  */
 export const SKILL_MAX_BYTES: number = 12 * 1024;
 

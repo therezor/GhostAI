@@ -102,6 +102,22 @@ Prefer the terminal? `ghost init` asks the same questions with no browser, then
 `ghost chat` talks to it. Both surfaces share one `ghost.db`, so a session you start in
 one is the row the other lists.
 
+**`ghost init` ends by offering the shipped agents** — a researcher, an analyst for
+documents and data, a media specialist for audio and video, a coder, a coordinator that
+delegates to all of them, and a no-tools fast lane. Three answers:
+
+- **Everything** builds the container images those agents work in. It needs Docker and
+  takes a few minutes the first time.
+- **Just the agents that need no container** is the default, and adds `team-lead` and
+  `nano` without touching Docker.
+- **Nothing for now** — `ghost install` does the same thing later.
+
+If you pick **Everything**, it shows you what each toolbox asks for — its network
+ceiling, its limits — and asks once whether to approve them. Answering yes finishes the
+job in that run; answering no leaves the images built and inert, and prints the
+`ghost toolbox approve` lines for later. `ghost install --approve` skips the question.
+[Toolboxes](toolboxes.md) explains why approval is a step of its own.
+
 ## 4. Your first conversation
 
 The agent can only read and write inside one folder, called the **workspace** — by default

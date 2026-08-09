@@ -156,6 +156,46 @@ describe('sessions', () => {
     store.close();
   });
 
+  it('leaves out one origin when a caller excludes it, and counts the same set', () => {
+    // The sidebar's request. The default above stays every origin — this
+    // narrows one listing by subtraction rather than deciding what exists.
+    const store = makeStore();
+    store.ensureSession('a', { origin: 'web' });
+    store.ensureSession('sub', { origin: 'subagent' });
+    store.ensureSession('auto', { origin: 'automation' });
+
+    expect(
+      store
+        .listSessions({ excludeOrigin: 'subagent' })
+        .map((s) => s.key)
+        .sort(),
+    ).toEqual(['a', 'auto']);
+    // The count runs under the same predicate, or a pager reports a total for a
+    // different set than the rows beneath it.
+    expect(store.countSessions({ excludeOrigin: 'subagent' })).toBe(2);
+
+    // And excluding nothing excludes nothing — the `? IS NULL` half of the
+    // clause, which is every other caller in the repo.
+    expect(store.countSessions()).toBe(3);
+    store.close();
+  });
+
+  it('combines an exclusion with the other filters', () => {
+    // The clauses are `AND`ed, so a workspace-scoped shortlist still drops
+    // delegated runs. Worth pinning: the bindings are positional.
+    const store = makeStore();
+    store.ensureSession('a', { origin: 'web', workspaceId: 'acme' });
+    store.ensureSession('b', { origin: 'web', workspaceId: 'other' });
+    store.ensureSession('sub', { origin: 'subagent', workspaceId: 'acme' });
+
+    expect(
+      store
+        .listSessions({ excludeOrigin: 'subagent', workspaceId: 'acme' })
+        .map((s) => s.key),
+    ).toEqual(['a']);
+    store.close();
+  });
+
   it('still lists a machine-started origin when asked for it by name', () => {
     // What the run history's "open in chat" link relies on.
     const store = makeStore();

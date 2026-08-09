@@ -1,6 +1,6 @@
 {
   "name": "@ghostbot/cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "GhostAI command line interface.",
   "type": "module",
   "license": "MIT",
@@ -51,6 +51,7 @@
   },
   "dependencies": {
     "@ghostbot/agent": "workspace:*",
+    "@ghostbot/catalogue": "workspace:*",
     "@ghostbot/channels": "workspace:*",
     "@ghostbot/core": "workspace:*",
     "@ghostbot/extension-host": "workspace:*",

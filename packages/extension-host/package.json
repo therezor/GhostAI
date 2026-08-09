@@ -1,6 +1,6 @@
 {
   "name": "@ghostbot/extension-host",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Discovers, authorises, loads and unloads extensions, and collects what they contribute.",
   "type": "module",
   "license": "MIT",

@@ -69,17 +69,29 @@ jobs:
           # Every publishable package moves in lockstep: `pnpm publish` rewrites
           # `workspace:*` to the exact version, so one package left behind
           # publishes a dependency range that resolves to nothing.
+          #
+          # **The list comes from pnpm, not from `readdir packages/`.** It used
+          # to be the latter, and that is a check whose idea of "publishable"
+          # can differ from the one doing the publishing: `@ghostbot/catalogue`
+          # lives at the repository root rather than under `packages/`, so it
+          # published without this ever having looked at it. Asking pnpm for the
+          # workspace — the same enumeration `pnpm -r publish` walks, minus the
+          # `private` ones it skips — is what makes the two impossible to
+          # disagree about, for this package and for whatever is added next.
+          pnpm -r list --depth -1 --json > /tmp/workspace.json
           node -e '
-            const {readdirSync, readFileSync} = require("node:fs");
-            const bad = readdirSync("packages").filter((name) => {
-              const pkg = JSON.parse(
-                readFileSync(`packages/${name}/package.json`, "utf8"),
-              );
-              return !pkg.private && pkg.version !== process.argv[1];
-            });
+            const {readFileSync} = require("node:fs");
+            const want = process.argv[1];
+            const bad = JSON.parse(readFileSync("/tmp/workspace.json", "utf8"))
+              .filter((pkg) => !pkg.private && pkg.version !== want)
+              .map((pkg) => `${pkg.name}@${pkg.version}`);
             if (bad.length) {
-              console.error(`Not at ${process.argv[1]}: ${bad.join(", ")}`);
-              console.error("Run node scripts/gen-packages.mjs and commit.");
+              console.error(`Not at ${want}: ${bad.join(", ")}`);
+              console.error(
+                "Bump the root version, run node scripts/gen-packages.mjs, and" +
+                  " hand-edit any manifest that script does not generate" +
+                  " (catalogue/package.json), then commit.",
+              );
               process.exit(1);
             }
           ' "$root"

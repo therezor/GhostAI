@@ -108,6 +108,21 @@ argv token.
 `NET_ADMIN` shares the egress gateway's network namespace and can flush its rules, which
 would make every other network control decorative.
 
+## tmpfs is memory
+
+`security.tmpfs` and `limits.memoryMb` are not independent budgets. A tmpfs is
+RAM-backed, and its pages are charged to the container's memory cgroup — so a box with
+`/tmp` at 512m and `memoryMb` at 1024 has half its memory reachable by writing files.
+
+It is easy to miss, because the default Docker behaviour hides it: without
+`--memory-swap`, swap is twice the memory limit, so tmpfs pages get swapped and a write
+past the limit succeeds slowly instead of failing. With swap disabled the same write is
+OOM-killed. Size `/tmp` for what a job actually spills, not generously, and count it
+against `memoryMb` when you set that.
+
+Work belongs in the workspace anyway — a bind mount on real disk, outside this budget
+entirely. `/tmp` is for what a program does behind your back.
+
 `seccomp: unconfined` is deliberately _surfaced_ rather than refused — there are real
 tools that need it, and the operator approving the manifest is the right person to make
 that call knowingly.
@@ -130,13 +145,23 @@ operator grants to the box; a tool permission is a judgement about a specific ag
 
 ## Building and approving
 
+All of them at once, which is what `ghost init` offers on a fresh install:
+
 ```bash
-toolboxes/build.sh web-research
+ghost install
+```
+
+Or one at a time, which is also what a repo checkout runs before `pnpm build` has
+produced a CLI to run:
+
+```bash
+catalogue/build.sh web-research
 ```
 
 The script runs `docker build --iidfile`, checks the result is a real `sha256:` image id,
-substitutes it into the manifest and installs to `~/.ghostai/toolboxes/<name>/`, copying
-`TOOLS.md` beside it.
+substitutes it into the manifest and installs to `~/.ghostai/toolboxes/<name>/`. It
+installs no agent — presets are not kept here and are not per-toolbox files; see
+[Agent presets](#agent-presets).
 
 **The image is referenced by its image ID, not by a registry digest.** An image ID is the
 content hash `docker build` produces — a content address, exactly as unrepointable as a
@@ -157,11 +182,82 @@ on disk and the approval is a database row, and the two do not trust each other:
 an installed manifest silently revokes its approval**, and the next turn refuses with a
 sentence naming the drift. There is no `--force` — re-approving is reviewing the new bytes.
 
-`TOOLS.md` is not covered by the approval hash. Prose that changes nothing about what the
-container may _do_ must not force a re-approval.
+The hash covers the manifest bytes and nothing else, so a file an install puts beside
+`toolbox.json` neither blocks resolution nor revokes an approval when it changes.
 
 Toolboxes live beside the workspace, never inside it, so `write_file` plus a prompt
 injection cannot rewrite the policy the agent runs under.
+
+## Agent presets
+
+A toolbox is an environment; the agent that works in it is config. That config is a
+preset — a JSON file in `catalogue/presets/`, named for the agent id it installs — and
+one command turns it into an entry in `agents.list`:
+
+```bash
+ghost agent install researcher
+```
+
+**A preset is not a per-toolbox file.** Every preset lives in that one directory whether
+or not it names a container, because an agent that works in one is not a different kind
+of agent — it is an agent whose `toolbox.name` is set. So `researcher` sits beside
+`nano`, and `ghost agent install` has one place to look (plus `~/.ghostai/presets/` for
+your own). The toolbox directory holds the Dockerfile and the manifest, and nothing else.
+
+The preset carries the agent's `systemPrompt` — which is where the toolbox's tool
+documentation lives, beside what each manifest entry already declares — its tool
+permissions, its toolbox reference and its network request. It deliberately cannot carry
+a model, a provider, or anything from the toolbox manifest's side of the boundary: the
+shape is a strict subset of an `agents.list` entry, so a preset can express nothing a
+settings save could not. See [CLI](cli.md#ghost-agent) for the full resolution order.
+
+Install refuses a preset whose toolbox is not approved (the server would refuse to boot
+on the result) and refuses to overwrite an existing agent without `--force`, because the
+existing entry may carry your own edits.
+
+## The shipped toolboxes
+
+| Toolbox        | What is in it                                                                                                                                                          | Network ceiling |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| `web-research` | search, fetch, doc (with OCR); nmap, masscan, subfinder, amass, dnsx, httpx, katana, tlsx, gau, waybackurls, whois, dig, sslscan; rg, jq, curl, wget, openssl, python3 | `open`          |
+| `data`         | anydoc, mlr (miller), sqlite3, jq, yq, 7z, strings, exiftool, file, rg                                                                                                 | `none`          |
+| `media`        | ffmpeg/ffprobe (x264/x265/VP9/AV1/Opus/MP3), magick, sox, exiftool, mediainfo, gifsicle                                                                                | `none`          |
+| `coding`       | git, node, npm, python3, rg, jq                                                                                                                                        | `open`          |
+| `websec`       | nuclei, ffuf, gobuster, dalfox, sqlmap, commix, nikto, wafw00f, arjun, hydra, john, jwt_tool                                                                           | `open`          |
+
+Five boxes, eight agents: `researcher` and `recon` both work in `web-research` — which
+now carries the network recon and OSINT tools alongside search/fetch/doc, because both
+jobs are network-open and share the same handful of base tools — while `data-analyst`
+works in `data`, `media-ops` in `media`, `coder` in `coding`, and `security-tester` in
+`websec`. `team-lead` and `nano` need no container at all.
+
+`web-research` and `websec` are the worked example of [For security work](#for-security-work):
+both `expose: "tools"`, so each program is a named, listable tool, and both cap network
+at `open`, because a tool that cannot reach the target is inert. `web-research` adds back
+the one capability a port scanner needs, `NET_RAW` (for `nmap -sS`) — a real widening it
+did not carry as a pure research box, recorded in the manifest and re-approved on any
+edit; `websec` keeps every capability dropped, since its tooling is all layer-7 HTTP.
+`websec` runs its tools unattended (`exec` allowed, every tool `allow`) and acts against
+a target, so it is the box to leave uninstalled unless someone is doing authorized
+security testing.
+
+**Documents and data are one box, and one agent, on purpose.** They were two of each,
+and the boundary ran through the middle of a single job: a zip of spreadsheets with a
+PDF summary needs whatever converts the document and whatever counts the rows to be the
+same thing, in the same turn. Split, the one that could read the file could not query
+it — and a coordinator had to guess which of them to ask.
+
+**`coding` is the second box with a network, and the only one that also runs arbitrary
+code.** A coding box that cannot reach a registry cannot run a test suite whose
+dependencies are not vendored, so its ceiling is `open` — but node, python and git are
+already arbitrary execution, and egress turns that into a way out. It is a per-toolbox
+decision recorded in the manifest, and narrowing it back to `none` is a one-word edit
+that forces a re-approval.
+
+There is no scoped middle ground yet: `allowlist` needs an egress gateway container to
+enforce it, and the runner refuses to start a scoped sandbox without one rather than
+quietly running wide open. `proxyAllowHosts` is inert for the same reason. Until a
+gateway ships, the honest choice is between `none` and `open`.
 
 ## Exposure
 
@@ -183,8 +279,8 @@ anything.
 
 - Only `/workspace` is mounted from the host, read-write. Everything else in the
   filesystem disappears when the session ends.
-- The manifest directory is mounted read-only at `/run/ghost`, so the in-container `tools`
-  command finds the same `TOOLS.md` the prompt carries.
+- The manifest directory is mounted read-only at `/run/ghost`, so anything installed
+  beside `toolbox.json` is readable from inside. Nothing shipped uses it today.
 - Output too large to return inline is kept in full under `/run/ghost-runs/<id>/`,
   read-only and outside the workspace — reachable with a shell command, not with the file
   tools. That path is outside the workspace because a symlink-planting escape was

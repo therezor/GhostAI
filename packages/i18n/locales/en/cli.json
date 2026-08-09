@@ -1,4 +1,16 @@
 {
+  "agent": {
+    "description": "Install agent presets, and list agents and presets.",
+    "install": {
+      "description": "Install one agent preset, by its id or by path.",
+      "options": {
+        "force": "overwrite an existing agent with the same id"
+      }
+    },
+    "list": {
+      "description": "Show every configured agent and the presets not yet installed."
+    }
+  },
   "chat": {
     "agentGone": "“{{agent}}” no longer exists — this turn runs on the default agent",
     "argument": "a single turn to run, instead of the prompt",
@@ -53,6 +65,10 @@
     "usage": "Usage:"
   },
   "init": {
+    "agents": "Agents",
+    "agentsAll": "Everything — builds the toolbox container images (needs Docker, takes a few minutes)",
+    "agentsNone": "Nothing for now",
+    "agentsPresets": "Just the agents that need no container",
     "apiBase": "API base",
     "apiKey": "API key",
     "apiToken": "API token (optional, blank to skip)",
@@ -67,9 +83,18 @@
     "local": " (local)",
     "model": "Model",
     "provider": "Provider",
+    "whichAgents": "GhostAI ships a team of agents. Install them now?",
     "whichProvider": "Which provider?",
     "workspace": "Workspace",
     "workspaceDir": "Workspace directory"
+  },
+  "install": {
+    "description": "Build the shipped toolboxes and install the agents that use them.",
+    "options": {
+      "approve": "approve the toolboxes this installs, without asking",
+      "noApprove": "approve nothing, and print the approve commands instead",
+      "presetsOnly": "install only the agents that need no container, and never run Docker"
+    }
   },
   "menu": {
     "current": "current",

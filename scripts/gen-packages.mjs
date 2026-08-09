@@ -323,6 +323,12 @@ const PACKAGES = {
     // nothing here imports a type from it.
     deps: {
       '@ghostbot/web': 'workspace:*',
+      // Like `@ghostbot/web` above and for the same reason: the relationship is
+      // not a TypeScript one. `catalogueDir` finds the shipped agent presets
+      // through `require.resolve('@ghostbot/catalogue/package.json')` and reads
+      // the directory. It has no `src`, so it is hand-written rather than
+      // generated here — its version is bumped by hand at release.
+      '@ghostbot/catalogue': 'workspace:*',
       commander: '^13.0.0',
       // The CLI holds the i18next instance directly: `translationsFor` picks a
       // locale from `GHOSTAI_LANG`, `config.ui.locale` and the POSIX chain, and

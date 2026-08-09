@@ -1,6 +1,6 @@
 {
   "name": "@ghostbot/providers",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "LLM provider registry, wire adapters, and resilience decorator.",
   "type": "module",
   "license": "MIT",

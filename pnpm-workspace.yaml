@@ -1,6 +1,9 @@
 packages:
   - 'packages/*'
   - 'examples/*'
+  # Data, not code: the agent presets and toolbox definitions. A package rather
+  # than a loose folder because the CLI resolves it at runtime — see its README.
+  - 'catalogue'
 allowBuilds:
   # esbuild powers tsup and vitest; unrs-resolver powers eslint-plugin-import-x.
   # Both are build-time only and need their postinstall to fetch a native binary.

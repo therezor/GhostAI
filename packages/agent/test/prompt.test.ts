@@ -400,49 +400,14 @@ describe('buildStaticPrompt: with a toolbox', () => {
     );
   });
 
-  it('includes the toolbox reference, because a model does not go looking for it', async () => {
-    // The failure: `TOOLS.md` lived inside the image, reachable only by the model
-    // choosing to run `tools`. It did not — it answered a research question from
-    // search snippets with the section explaining how to read pages one command
-    // away. Discoverable is not read.
-    const prompt = await staticPrompt({
-      context: CONTEXT,
-      platform: 'linux',
-      tools: {
-        toolbox: { ...TOOLBOX, docs: '## search\n\nReading is the default.' },
-      },
-    });
-
-    expect(prompt).toContain('### web-research reference');
-    expect(prompt).toContain('Reading is the default.');
-    // After the installed list, not instead of it: the list is what a model scans,
-    // the reference is what it consults.
-    expect(prompt.indexOf('- `search`')).toBeLessThan(
-      prompt.indexOf('Reading is the default.'),
-    );
-  });
-
-  it('renders no reference heading for a toolbox without one', async () => {
-    const prompt = await staticPrompt({
-      context: CONTEXT,
-      platform: 'linux',
-      tools: { toolbox: TOOLBOX },
-    });
-
-    // The heading specifically: the fixture's `notes` mention the word, and an
-    // assertion on the bare word would pass for the wrong reason.
-    expect(prompt).toContain('## Toolbox: web-research');
-    expect(prompt).not.toContain('### web-research reference');
-  });
-
-  it('keeps the reference in the cached half', async () => {
-    // A few thousand tokens re-sent on every iteration of every turn would undo
-    // the split this file exists for. Two builds of the same session are
-    // byte-identical, which is what a provider's prefix cache requires.
+  it('is byte-stable across builds of the same session', async () => {
+    // The toolbox section sits in the cached half, and two builds of the same
+    // session must be byte-identical — that is what a provider's prefix cache
+    // requires.
     const options = {
       context: CONTEXT,
       platform: 'linux' as const,
-      tools: { toolbox: { ...TOOLBOX, docs: 'the reference' } },
+      tools: { toolbox: TOOLBOX },
     };
 
     expect(await staticPrompt(options)).toBe(await staticPrompt(options));
@@ -813,35 +778,9 @@ describe('toolboxPrompt', () => {
     expect(prompt).not.toContain('This should never appear.');
   });
 
-  it('offers the docs both raw and under their heading', async () => {
-    const boxed = { ...TOOLBOX, docs: 'Use `search -q`.' };
-
-    const composed = await staticPrompt({
-      context: CONTEXT,
-      platform: 'linux',
-      agent: AGENT,
-      tools: { toolbox: boxed, toolboxPrompt: 'Box.{{reference}}' },
-    });
-    const raw = await staticPrompt({
-      context: CONTEXT,
-      platform: 'linux',
-      agent: AGENT,
-      tools: {
-        toolbox: boxed,
-        toolboxPrompt: 'Box.\n\n## Reading\n\n{{docs}}',
-      },
-    });
-
-    expect(composed).toContain(
-      '### web-research reference\n\nUse `search -q`.',
-    );
-    expect(raw).toContain('## Reading\n\nUse `search -q`.');
-    expect(raw).not.toContain('### web-research reference');
-  });
-
   it('leaves no gap where an absent part would have been', async () => {
     // Every optional placeholder carries its own leading blank line, which is
-    // what stops a toolbox with no notes and no docs rendering a trailing void.
+    // what stops a toolbox with no notes rendering a trailing void.
     const prompt = await staticPrompt({
       context: CONTEXT,
       platform: 'linux',

@@ -12,12 +12,12 @@
 # *run* it until its hash is approved, which is a separate operator action —
 # editing a manifest silently revokes its approval, and that is the point.
 #
-# Usage:  toolboxes/build.sh web-research
+# Usage:  catalogue/build.sh web-research
 set -euo pipefail
 
 name="${1:?usage: build.sh <toolbox-name>}"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-context="${here}/${name}"
+context="${here}/toolboxes/${name}"
 home="${GHOSTAI_HOME:-${HOME}/.ghostai}"
 target="${home}/toolboxes/${name}"
 
@@ -43,21 +43,6 @@ mkdir -p "${target}"
 # apart from one field.
 sed "s|__IMAGE_ID__|${image_id}|" "${context}/toolbox.json" > "${target}/toolbox.json"
 
-# `TOOLS.md` beside the manifest, not only inside the image.
-#
-# Inside the image it was reachable only if the model chose to run `tools`, and it
-# did not — it answered a research question from search snippets with the
-# reference one command away. Here it is readable by the prompt builder, so the
-# model is told rather than invited to ask. The same directory is mounted
-# read-only into the container, so the in-container `tools` command still finds it.
-#
-# Not covered by the approval hash: see `ApprovedToolbox.docs` for why prose that
-# changes nothing about what the container may *do* must not force a re-approval.
-if [[ -f "${context}/TOOLS.md" ]]; then
-  cp "${context}/TOOLS.md" "${target}/TOOLS.md"
-  echo "    docs    ${target}/TOOLS.md"
-fi
-
 echo
 echo "    image   ${image_id}"
 echo "    toolbox ${target}/toolbox.json"
@@ -65,4 +50,18 @@ echo
 echo "Not yet approved. Review the manifest above, then approve it:"
 echo
 echo "    node packages/cli/dist/index.js toolbox approve ${name}"
+
+# The preset that runs in this box, if one ships. Presets live in one directory
+# and name their toolbox rather than sitting beside it, so this is a search
+# rather than a path — and the id it prints is usually not the toolbox's name
+# (`coding` is run by `coder`, `data` by `data-analyst`).
+for preset in "${here}"/presets/*.json; do
+  [[ -f "${preset}" ]] || continue
+  if grep -Eq "\"name\"[[:space:]]*:[[:space:]]*\"${name}\"" "${preset}"; then
+    echo
+    echo "Then install the agent that works in it:"
+    echo
+    echo "    node packages/cli/dist/index.js agent install $(basename "${preset}" .json)"
+  fi
+done
 echo
