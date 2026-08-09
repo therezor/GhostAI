@@ -313,8 +313,8 @@ export function createServerRuntime(
         // it. `runtime.tools.select(agent.tools)` is the built-ins narrowed by the
         // allow-list — correct as far as it goes, and blind to the toolbox tools
         // that `withToolboxTools` composes on top of that scope when the agent has
-        // a toolbox. Rebuilt here, a researcher's `search` and `fetch` were absent
-        // from the context inspector and from its token count.
+        // a toolbox. Rebuilt here, a toolbox agent's tools were absent from the
+        // context inspector and from its token count.
         //
         // The fallback covers an unconfigured install, where there is no loop and
         // so no turn to describe; the narrowed registry is the honest answer

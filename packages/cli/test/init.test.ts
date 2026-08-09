@@ -209,41 +209,6 @@ describe('initCommand', () => {
     expect(existsSync(join(home, 'config.json'))).toBe(false);
   });
 
-  it('offers to install the agents, and runs it after the config is written', async () => {
-    // The question is last and the installer runs after `write`, so the
-    // "Ctrl-C wrote nothing" property still covers everything the wizard
-    // itself decides. By the time this runs there is nothing to abandon.
-    const calls: boolean[] = [];
-    const { code, home, output } = await run(
-      ['', 'ollama', '', '', '', '1', '2'],
-      { install: (presetsOnly) => (calls.push(presetsOnly), 0) },
-    );
-
-    expect(code).toBe(0);
-    expect(output).toContain('Install them now?');
-    // `2` is "just the agents that need no container" — presetsOnly.
-    expect(calls).toEqual([true]);
-    expect(existsSync(join(home, 'config.json'))).toBe(true);
-  });
-
-  it('asks for everything when that is what was chosen', async () => {
-    const calls: boolean[] = [];
-    await run(['', 'ollama', '', '', '', '1', '1'], {
-      install: (presetsOnly) => (calls.push(presetsOnly), 0),
-    });
-
-    expect(calls).toEqual([false]);
-  });
-
-  it('installs nothing when the operator declines', async () => {
-    const calls: boolean[] = [];
-    await run(['', 'ollama', '', '', '', '1', '3'], {
-      install: (presetsOnly) => (calls.push(presetsOnly), 0),
-    });
-
-    expect(calls).toEqual([]);
-  });
-
   it('keeps asking until the provider answer is one of the offered ones', async () => {
     const { code, home, output } = await run([
       '',

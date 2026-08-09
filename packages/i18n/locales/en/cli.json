@@ -65,10 +65,6 @@
     "usage": "Usage:"
   },
   "init": {
-    "agents": "Agents",
-    "agentsAll": "Everything — builds the toolbox container images (needs Docker, takes a few minutes)",
-    "agentsNone": "Nothing for now",
-    "agentsPresets": "Just the agents that need no container",
     "apiBase": "API base",
     "apiKey": "API key",
     "apiToken": "API token (optional, blank to skip)",
@@ -83,18 +79,9 @@
     "local": " (local)",
     "model": "Model",
     "provider": "Provider",
-    "whichAgents": "GhostAI ships a team of agents. Install them now?",
     "whichProvider": "Which provider?",
     "workspace": "Workspace",
     "workspaceDir": "Workspace directory"
-  },
-  "install": {
-    "description": "Build the shipped toolboxes and install the agents that use them.",
-    "options": {
-      "approve": "approve the toolboxes this installs, without asking",
-      "noApprove": "approve nothing, and print the approve commands instead",
-      "presetsOnly": "install only the agents that need no container, and never run Docker"
-    }
   },
   "menu": {
     "current": "current",
@@ -110,6 +97,33 @@
       "session": "Which session?",
       "workspace": "Which workspace?"
     }
+  },
+  "preset": {
+    "description": "Install agent presets from the catalogue, and the toolboxes they run in.",
+    "fetching": "Fetching {{package}}…",
+    "install": {
+      "description": "Install agent presets. With no ids, pick them from a list.",
+      "options": {
+        "approve": "approve the toolboxes this installs, without asking",
+        "force": "overwrite an existing agent with the same id",
+        "from": "install from a checkout of the presets repository instead of fetching",
+        "noApprove": "approve nothing, and print the approve commands instead",
+        "offline": "never fetch; use what is already on this machine",
+        "refresh": "fetch the catalogue again before reading it"
+      }
+    },
+    "installed": "installed",
+    "list": {
+      "description": "Show every preset on offer, and which are already installed."
+    },
+    "notAnOption": "“{{name}}” is not one of these — enter numbers or names.",
+    "nothingChosen": "Nothing chosen. Nothing was installed.",
+    "tools_one": "{{count}} tool",
+    "tools_other": "{{count}} tools",
+    "update": {
+      "description": "Fetch the catalogue again."
+    },
+    "which": "Which agents? (numbers or names, `all`, or blank for none)"
   },
   "program": {
     "description": "A self-hosted agent that runs where your files are.",

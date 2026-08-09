@@ -31,7 +31,12 @@
  */
 
 import { guardExec } from '@ghostbot/security';
-import type { Toolbox, ToolboxEntry, ToolPermission } from '@ghostbot/protocol';
+import {
+  TOOLBOX_DEFAULT_KEY,
+  type Toolbox,
+  type ToolboxEntry,
+  type ToolPermission,
+} from '@ghostbot/protocol';
 import { z } from 'zod';
 
 import {
@@ -151,23 +156,68 @@ export function toolboxTools(toolbox: Toolbox): readonly AnyTool[] {
   return tools;
 }
 
+/** One entry's permission for one agent: its override, the `*` default, the manifest. */
+function resolvePermission(
+  entry: ToolboxEntry,
+  overrides: Readonly<Record<string, ToolPermission>>,
+): ToolPermission {
+  return (
+    overrides[entry.name] ?? overrides[TOOLBOX_DEFAULT_KEY] ?? entry.permission
+  );
+}
+
 /**
- * What the manifest says each of those callables may do.
+ * The entries an agent is told about, which is not always what the box holds.
  *
- * The *defaults* an agent's own `tools` map is laid over, not a ceiling — see
- * `ToolboxEntrySchema.permission`. Derived from `toolboxTools` rather than from
- * `toolbox.tools` so the two cannot disagree: an entry whose name no provider
- * would accept is dropped from the callables, and a permission for a tool that
- * does not exist would read in the settings UI as a row nothing can call.
+ * Separate from `toolboxPermissions` and deliberately blind to `expose`,
+ * because the two answer different questions for different boxes. Under
+ * `expose: 'tools'` this is the prose beside the callables and the two must
+ * list the same programs. Under `expose: 'prompt'` there are no callables and
+ * no permission map at all — every program is reached through `exec` — so this
+ * prose *is* the whole mechanism, and an override that did nothing here would
+ * do nothing anywhere.
+ *
+ * Which makes the guarantee worth stating plainly: under `prompt` this is an
+ * instruction, not a boundary. `exec` can still run a program left out of the
+ * list, exactly as it can run one the manifest never declared. The boundary is
+ * the container and `guardExec`, and it has not moved.
+ */
+export function visibleToolboxEntries(
+  toolbox: Toolbox,
+  overrides: Readonly<Record<string, ToolPermission>> = {},
+): readonly ToolboxEntry[] {
+  return toolbox.tools.filter(
+    (entry) => resolvePermission(entry, overrides) !== 'deny',
+  );
+}
+
+/**
+ * What each of those callables may do, for one agent.
+ *
+ * Three sources, most specific first: the agent's override for that program,
+ * the agent's `*` default, then the manifest's own `permission`. The result is
+ * still only the *defaults* `AgentEntry.tools` is laid over, not a ceiling —
+ * see `ToolboxEntrySchema.permission` and `AgentToolboxSchema.tools`.
+ *
+ * A `deny` here is not a refusal at call time, it is an absence: `select`
+ * drops a denied name from `definitions()`, so the model is never sent the
+ * tool at all. That is the point — the cost this saves is the ~60–80 tokens
+ * per entry the definition would take on every request.
+ *
+ * Derived from `toolboxTools` rather than from `toolbox.tools` so the two
+ * cannot disagree: an entry whose name no provider would accept is dropped
+ * from the callables, and a permission for a tool that does not exist would
+ * read in the settings UI as a row nothing can call.
  */
 export function toolboxPermissions(
   toolbox: Toolbox,
+  overrides: Readonly<Record<string, ToolPermission>> = {},
 ): Record<string, ToolPermission> {
   const permissions: Record<string, ToolPermission> = {};
   if (toolbox.expose !== 'tools') return permissions;
   for (const entry of toolbox.tools) {
     if (!TOOL_NAME_PATTERN.test(entry.name)) continue;
-    permissions[entry.name] = entry.permission;
+    permissions[entry.name] = resolvePermission(entry, overrides);
   }
   return permissions;
 }

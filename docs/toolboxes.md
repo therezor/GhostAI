@@ -143,25 +143,63 @@ Per-tool `permission` runs the other way: the manifest supplies a _default_ and 
 may loosen or tighten it. That asymmetry is intentional. Network is a capability the
 operator grants to the box; a tool permission is a judgement about a specific agent's job.
 
+### Giving an agent part of a box
+
+A box is stocked for a job, not for an agent. A reconnaissance box declares two dozen
+programs because reconnaissance needs all of them somewhere — but an agent that only
+resolves hostnames wants four, and being offered the other twenty costs 60–80 tokens each
+on every request of every turn and gives the model twenty ways to answer the wrong
+question.
+
+So a preset narrows the box it names, in `toolbox.tools`:
+
+```json
+"toolbox": {
+  "name": "recon",
+  "network": { "mode": "open", "allow": [] },
+  "tools": { "*": "deny", "nmap": "allow", "httpx": "allow", "dnsx": "allow" }
+}
+```
+
+`*` is the permission for every program the manifest declares and this map does not name,
+which is what makes "only these four" one line instead of twenty denials. Leave it out and
+each unnamed program keeps the manifest's own default:
+
+```json
+"toolbox": { "name": "coding", "tools": { "npm": "deny" } }
+```
+
+A `deny` is an **absence**, not a refusal at call time: the tool is never sent to the
+model, and the prompt section does not mention it either. That is the point — the cost it
+saves is the definition it would otherwise carry on every request.
+
+Three layers resolve, most specific first: the agent's own `tools` map (which is what the
+web UI edits, one row per program), then this per-box map, then the manifest. **None of
+them is a boundary.** `exec` reaches the program either way, so a manifest permission is
+the box author's opinion about scope, not containment — `network.maxMode`, the
+capabilities and the container are the boundary, and they are not reachable from a preset
+at all.
+
 ## Building and approving
 
-All of them at once, which is what `ghost init` offers on a fresh install:
+Toolbox images are built from the
+[`GhostAI-presets`](https://github.com/therezor/GhostAI-presets) repository, which carries
+each toolbox's `Dockerfile` and manifest. Ordinarily you never do this by hand — picking an
+agent builds the box it needs:
 
 ```bash
-ghost install
+ghost preset install
 ```
 
-Or one at a time, which is also what a repo checkout runs before `pnpm build` has
-produced a CLI to run:
+For a box you are writing, `build.sh` in that repository does the same one at a time:
 
 ```bash
-catalogue/build.sh web-research
+./build.sh web-research
 ```
 
-The script runs `docker build --iidfile`, checks the result is a real `sha256:` image id,
-substitutes it into the manifest and installs to `~/.ghostai/toolboxes/<name>/`. It
-installs no agent — presets are not kept here and are not per-toolbox files; see
-[Agent presets](#agent-presets).
+Either way it is `docker build --iidfile`, a check that the result is a real `sha256:`
+image id, a substitution of that id into the manifest, and an install to
+`~/.ghostai/toolboxes/<name>/`.
 
 **The image is referenced by its image ID, not by a registry digest.** An image ID is the
 content hash `docker build` produces — a content address, exactly as unrepointable as a
@@ -191,18 +229,20 @@ injection cannot rewrite the policy the agent runs under.
 ## Agent presets
 
 A toolbox is an environment; the agent that works in it is config. That config is a
-preset — a JSON file in `catalogue/presets/`, named for the agent id it installs — and
-one command turns it into an entry in `agents.list`:
+preset — a JSON file named for the agent id it installs, from your own
+`~/.ghostai/presets/` or the catalogue's `agents/` — and installing it writes one entry in
+`agents.list`:
 
 ```bash
-ghost agent install researcher
+ghost preset install researcher   # builds its box too, if it needs one
+ghost agent install researcher    # config merge only, box must already be approved
 ```
 
 **A preset is not a per-toolbox file.** Every preset lives in that one directory whether
 or not it names a container, because an agent that works in one is not a different kind
 of agent — it is an agent whose `toolbox.name` is set. So `researcher` sits beside
-`nano`, and `ghost agent install` has one place to look (plus `~/.ghostai/presets/` for
-your own). The toolbox directory holds the Dockerfile and the manifest, and nothing else.
+`nano`, and there is one place to look (plus `~/.ghostai/presets/` for your own). The
+toolbox directory holds the Dockerfile and the manifest, and nothing else.
 
 The preset carries the agent's `systemPrompt` — which is where the toolbox's tool
 documentation lives, beside what each manifest entry already declares — its tool
@@ -215,31 +255,25 @@ Install refuses a preset whose toolbox is not approved (the server would refuse 
 on the result) and refuses to overwrite an existing agent without `--force`, because the
 existing entry may carry your own edits.
 
-## The shipped toolboxes
+## The catalogue's toolboxes
 
-| Toolbox        | What is in it                                                                                                                                                          | Network ceiling |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
-| `web-research` | search, fetch, doc (with OCR); nmap, masscan, subfinder, amass, dnsx, httpx, katana, tlsx, gau, waybackurls, whois, dig, sslscan; rg, jq, curl, wget, openssl, python3 | `open`          |
-| `data`         | anydoc, mlr (miller), sqlite3, jq, yq, 7z, strings, exiftool, file, rg                                                                                                 | `none`          |
-| `media`        | ffmpeg/ffprobe (x264/x265/VP9/AV1/Opus/MP3), magick, sox, exiftool, mediainfo, gifsicle                                                                                | `none`          |
-| `coding`       | git, node, npm, python3, rg, jq                                                                                                                                        | `open`          |
-| `websec`       | nuclei, ffuf, gobuster, dalfox, sqlmap, commix, nikto, wafw00f, arjun, hydra, john, jwt_tool                                                                           | `open`          |
+This repository ships no toolboxes. They live in
+[`GhostAI-presets`](https://github.com/therezor/GhostAI-presets) and are versioned there,
+so the authoritative list is that repository's `toolboxes/` — a table here would be a copy
+that goes stale on somebody else's release. `ghost preset list` prints what the catalogue
+you have actually carries, which is the answer that matters on your machine.
 
-Five boxes, eight agents: `researcher` and `recon` both work in `web-research` — which
-now carries the network recon and OSINT tools alongside search/fetch/doc, because both
-jobs are network-open and share the same handful of base tools — while `data-analyst`
-works in `data`, `media-ops` in `media`, `coder` in `coding`, and `security-tester` in
-`websec`. `team-lead` and `nano` need no container at all.
+What is worth stating here is why they are shaped the way they are, because each is a
+decision this document's rules made:
 
-`web-research` and `websec` are the worked example of [For security work](#for-security-work):
-both `expose: "tools"`, so each program is a named, listable tool, and both cap network
-at `open`, because a tool that cannot reach the target is inert. `web-research` adds back
-the one capability a port scanner needs, `NET_RAW` (for `nmap -sS`) — a real widening it
-did not carry as a pure research box, recorded in the manifest and re-approved on any
-edit; `websec` keeps every capability dropped, since its tooling is all layer-7 HTTP.
-`websec` runs its tools unattended (`exec` allowed, every tool `allow`) and acts against
-a target, so it is the box to leave uninstalled unless someone is doing authorized
-security testing.
+A box whose tools need _different_ permissions sets `expose: "tools"`, so each program is
+a named, listable tool with its own permission rather than one `exec` grant covering all
+of them — that is the worked example of [For security work](#for-security-work). A box
+that reaches a target caps network at `open`, because a scanner that cannot reach the
+target is inert, and one that raw-scans adds back exactly one capability, `NET_RAW` (for
+`nmap -sS`), recorded in the manifest and re-approved on any edit. A box that runs its
+tools unattended against a target is the box to leave uninstalled unless someone is doing
+authorized security testing.
 
 **Documents and data are one box, and one agent, on purpose.** They were two of each,
 and the boundary ran through the middle of a single job: a zip of spreadsheets with a

@@ -90,6 +90,7 @@ export {
   toolboxPermissions,
   toolboxTool,
   toolboxTools,
+  visibleToolboxEntries,
 } from './toolbox-tools.js';
 
 export {

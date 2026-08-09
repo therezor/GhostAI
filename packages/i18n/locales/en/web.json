@@ -142,7 +142,7 @@
     "toolboxNetworkAllowlist": "Only these networks",
     "toolboxNetworkNone": "None",
     "toolboxNetworkOpen": "Open",
-    "toolboxNoProfiles": "No toolboxes installed. Build one with catalogue/build.sh, then approve it.",
+    "toolboxNoProfiles": "No toolboxes installed. Install one with ghost preset install, then approve it.",
     "toolboxNotApproved": "Not approved yet — approve it with `ghost toolbox approve` before an agent can use it.",
     "toolboxProfile": "Toolbox",
     "toolboxSection": "Toolbox",

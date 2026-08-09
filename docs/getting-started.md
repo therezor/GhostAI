@@ -102,20 +102,22 @@ Prefer the terminal? `ghost init` asks the same questions with no browser, then
 `ghost chat` talks to it. Both surfaces share one `ghost.db`, so a session you start in
 one is the row the other lists.
 
-**`ghost init` ends by offering the shipped agents** — a researcher, an analyst for
-documents and data, a media specialist for audio and video, a coder, a coordinator that
-delegates to all of them, and a no-tools fast lane. Three answers:
+**Ready-made agents** — a researcher, an analyst for documents and data, a media
+specialist for audio and video, a coder, a coordinator that delegates to all of them, and
+a no-tools fast lane — live in the separate
+[`GhostAI-presets`](https://github.com/therezor/GhostAI-presets) repository, versioned and
+updated on their own. One command fetches it and asks which ones you want:
 
-- **Everything** builds the container images those agents work in. It needs Docker and
-  takes a few minutes the first time.
-- **Just the agents that need no container** is the default, and adds `team-lead` and
-  `nano` without touching Docker.
-- **Nothing for now** — `ghost install` does the same thing later.
+```bash
+ghost preset install
+```
 
-If you pick **Everything**, it shows you what each toolbox asks for — its network
-ceiling, its limits — and asks once whether to approve them. Answering yes finishes the
-job in that run; answering no leaves the images built and inert, and prints the
-`ghost toolbox approve` lines for later. `ghost install --approve` skips the question.
+Tick the agents you want and it does the rest — including building the container images
+the ones you ticked need, which is why picking only `nano` needs no Docker at all. It
+stops short of one thing: an agent that works in a container cannot run until you
+**approve** that container, so the run prints what each box may do — its network ceiling,
+its limits, any hardening it switches off — and asks. Answering no is fine; it prints the
+`ghost toolbox approve <name>` line and you can read the manifest first.
 [Toolboxes](toolboxes.md) explains why approval is a step of its own.
 
 ## 4. Your first conversation

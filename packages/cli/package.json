@@ -51,7 +51,6 @@
   },
   "dependencies": {
     "@ghostbot/agent": "workspace:*",
-    "@ghostbot/catalogue": "workspace:*",
     "@ghostbot/channels": "workspace:*",
     "@ghostbot/core": "workspace:*",
     "@ghostbot/extension-host": "workspace:*",

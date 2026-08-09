@@ -127,10 +127,29 @@ export interface GhostPaths {
    * its own — a preset is inert until `ghost agent install` merges it into
    * `config.json`, which is an operator action at a terminal.
    *
-   * Presets shipped with the CLI live in that package, not here. This
+   * Presets from the catalogue live under `catalogueDir`, not here. This
    * directory is for what an operator adds, and it usually does not exist.
    */
   readonly presetsDir: string;
+  /**
+   * Where `ghost preset install` puts the fetched catalogue.
+   *
+   * The catalogue is `@ghostbot/catalogue`, published from a repository of its
+   * own, so this is a package manager's output rather than something an
+   * operator writes — the one directory under the root that is. It is an npm
+   * prefix, which is why the package lands a level down at
+   * `<catalogueDir>/node_modules/@ghostbot/catalogue` instead of here directly:
+   * letting npm own the extraction is what buys integrity checking and
+   * `preset update` for free.
+   *
+   * Outside the jail for the same reason as `presetsDir`, and more sharply. A
+   * preset authors an agent; these arrive over the network, so one writable
+   * through `write_file` would let prompt injection compose the agent that runs
+   * next *and* pick which container it runs in. Nothing here takes effect on
+   * its own — the toolbox half still has to clear the approval gate, which is
+   * a hash of bytes an operator read.
+   */
+  readonly catalogueDir: string;
   /**
    * Sandbox command transcripts, one directory per container.
    *
@@ -207,6 +226,7 @@ export function resolveGhostPaths(
     sharedDir: join(root, 'shared'),
     toolboxesDir: join(root, 'toolboxes'),
     presetsDir: join(root, 'presets'),
+    catalogueDir: join(root, 'catalogue'),
     runsDir: join(root, 'runs'),
     configFile: join(root, 'config.json'),
     dbFile: join(root, 'ghost.db'),

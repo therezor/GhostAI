@@ -23,7 +23,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { runAgent } from '#src/agent.js';
 import { translationsFor } from '#src/i18n.js';
-import { cataloguePresetsDir, listPresets, readPreset } from '#src/presets.js';
 import { runToolbox } from '#src/toolbox.js';
 
 let home: string;
@@ -108,39 +107,6 @@ afterEach(() => {
   rmSync(home, { recursive: true, force: true });
 });
 
-describe('the catalogue', () => {
-  const dir = cataloguePresetsDir();
-  const shipped = dir === undefined ? [] : listPresets(dir);
-
-  it('is resolvable from this package', () => {
-    // Through `require.resolve`, which is what makes the same lookup work in a
-    // workspace checkout and in a global npm install.
-    expect(dir).toBeDefined();
-  });
-
-  it('holds every shipped preset in one directory, toolbox or not', () => {
-    // The point of the layout: an agent that needs a container is not a
-    // different kind of preset, so it is not kept in a different place.
-    expect(shipped).toEqual([
-      'coder',
-      'data-analyst',
-      'media-ops',
-      'nano',
-      'recon',
-      'researcher',
-      'security-tester',
-      'team-lead',
-    ]);
-  });
-
-  it.each(shipped)('%s.json parses, and its filename is its id', (id) => {
-    // The filename is what `install` takes and what `list` prints, so a file
-    // whose `id` differs from its name would install under something nobody
-    // typed — and would make a listing a lie, since listing reads names only.
-    expect(readPreset(join(dir!, `${id}.json`)).id).toBe(id);
-  });
-});
-
 describe('ghost agent install', () => {
   it('installs a preset from an explicit path', () => {
     const file = join(home, 'my-agent.json');
@@ -221,13 +187,16 @@ describe('ghost agent install', () => {
   });
 
   it('names the candidates when nothing matches', () => {
+    installPreset('team-lead', presetFor('team-lead'));
+    installPreset('nano', presetFor('nano'));
+
     expect(run('install', 'nope')).toBe(1);
     expect(errOut.join('\n')).toContain('team-lead');
     expect(errOut.join('\n')).toContain('nano');
   });
 
   it('treats a path-shaped argument as a path even when the file is missing', () => {
-    // `./typo.json` must not fall through to a shipped preset and install
+    // `./typo.json` must not fall through to an installable preset and install
     // something other than what was named.
     expect(run('install', './typo.json')).toBe(1);
     expect(errOut.join('\n')).toContain('could not be read');
@@ -242,9 +211,9 @@ describe('ghost agent install', () => {
     expect(savedConfig().agents.list.scribe?.label).toBe('Scribe');
   });
 
-  it('lets an operator preset shadow a shipped one of the same name', () => {
-    // Operator before shipped: what someone put on this machine is more
-    // specific than what this package guessed.
+  it('installs an operator preset by its id', () => {
+    // The drop-in directory is searched by id, so a preset an operator put
+    // there installs by name just like one given by path.
     installPreset('nano', presetFor('nano', { label: 'My Nano' }));
 
     expect(run('install', 'nano')).toBe(0);
@@ -259,7 +228,17 @@ describe('ghost agent install', () => {
     expect(errOut.join('\n')).toContain('not valid JSON');
   });
 
-  it('installs nano with tools off and the live sections deleted', () => {
+  it('installs an agent with tools off and the live sections deleted', () => {
+    installPreset(
+      'nano',
+      presetFor('nano', {
+        toolsEnabled: false,
+        tools: {},
+        livePrompt: ' ',
+        wrapUpPrompt: ' ',
+      }),
+    );
+
     expect(run('install', 'nano')).toBe(0);
 
     const entry = savedConfig().agents.list.nano;
@@ -282,6 +261,17 @@ describe('the team-lead roster snapshot', () => {
     installPreset(id, presetFor(id));
     expect(run('install', id)).toBe(0);
   }
+
+  beforeEach(() => {
+    // The delegator whose roster is under test. Its declared specialists are a
+    // fixed set; which of them reach the snapshot is what each case checks.
+    installPreset(
+      'team-lead',
+      presetFor('team-lead', {
+        subagents: [{ id: 'researcher' }, { id: 'coder' }],
+      }),
+    );
+  });
 
   it('offers only specialists that are installed and enabled', () => {
     installSpecialist('coder');
@@ -345,28 +335,34 @@ describe('the team-lead roster snapshot', () => {
 
 describe('ghost agent list', () => {
   it('shows the installed agents and the presets still available', () => {
+    installPreset('nano', presetFor('nano'));
+    installPreset('team-lead', presetFor('team-lead'));
     run('install', 'nano');
     out = [];
 
     expect(run('list')).toBe(0);
     const text = out.join('\n');
     expect(text).toContain('nano  [enabled]');
-    expect(text).toContain('ghost agent install team-lead');
-    expect(text).not.toContain('ghost agent install nano');
+    expect(text).toContain('team-lead');
+    // Installed, so it is no longer on offer.
+    expect(text).not.toMatch(/not yet installed:.*\bnano\b/);
   });
 
-  it('lists an operator preset beside the shipped ones', () => {
+  it('lists every available operator preset', () => {
     // One listing, because there is one kind of preset and one search.
     installPreset('scribe', presetFor('scribe'));
+    installPreset('researcher', presetFor('researcher'));
 
     run('list');
 
     const text = out.join('\n');
-    expect(text).toContain('ghost agent install scribe');
-    expect(text).toContain('ghost agent install researcher');
+    expect(text).toContain('Presets not yet installed: researcher, scribe');
+    // One command, not one per id, and it names the picker rather than this
+    // command — that is the one that also builds the toolbox an agent needs.
+    expect(text).toContain('ghost preset install');
   });
 
-  it('names a shadowed preset once, not twice', () => {
+  it('names an available preset once', () => {
     installPreset('nano', presetFor('nano'));
 
     run('list');
@@ -374,7 +370,7 @@ describe('ghost agent list', () => {
     const lines = out
       .join('\n')
       .split('\n')
-      .filter((line) => line.includes('install nano'));
+      .filter((line) => line.includes('nano'));
     expect(lines).toHaveLength(1);
   });
 });

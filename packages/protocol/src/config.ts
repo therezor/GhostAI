@@ -511,10 +511,47 @@ export type AgentToolboxNetwork = z.infer<typeof AgentToolboxNetworkSchema>;
  * change the image it runs in" a property of the shape rather than a rule
  * somebody has to enforce.
  */
+/**
+ * The key in `AgentToolbox.tools` standing for "every entry not named above".
+ *
+ * Here rather than in `@ghostbot/tools`, which is where it is resolved, because
+ * three packages need the *spelling* without the resolution: the runtime reads
+ * it, the web editor shows the permission a row actually resolves to, and the
+ * CLI reports what an install granted.
+ */
+export const TOOLBOX_DEFAULT_KEY = '*';
+
 export const AgentToolboxSchema = z.object({
   /** A toolbox name, or empty to run on the host. */
   name: z.string().default(''),
   network: AgentToolboxNetworkSchema.prefault({}),
+  /**
+   * Which of the box's programs this agent gets, overriding the manifest.
+   *
+   * A box is stocked for a job, not for an agent. `recon` declares
+   * twenty-four programs because reconnaissance needs all of them somewhere;
+   * an agent that only resolves hostnames wants four, and being offered the
+   * other twenty costs ~60–80 tokens each on every request of every turn and
+   * gives the model twenty ways to answer the wrong question. So the manifest
+   * says what the box *has* and this says what the agent *sees*.
+   *
+   * **`*` is the default for every entry the manifest declares and this map
+   * does not name.** That is the whole reason the field is a record rather
+   * than a list: `{'*': 'deny', nmap: 'allow'}` is "only nmap", and
+   * `{curl: 'deny'}` is "everything but curl", and both are one line. Without
+   * a default, the first of those means enumerating twenty-three denials.
+   *
+   * The key is only meaningful here. `AgentEntry.tools` is a flat map over
+   * advertised tool names with no wildcard, and it is laid over the resolved
+   * result of this one — a per-tool statement in the agent's own map is more
+   * specific than a default in the box's.
+   *
+   * **These are defaults, not a ceiling**, and may widen as well as narrow. A
+   * manifest's per-tool permission is the box author's opinion about a program
+   * `exec` can reach anyway; `network.maxMode` is the containment boundary and
+   * is intersected rather than overridden. See `assertNetworkWithinCeiling`.
+   */
+  tools: ToolPermissionsSchema.default({}),
 });
 export type AgentToolbox = z.infer<typeof AgentToolboxSchema>;
 

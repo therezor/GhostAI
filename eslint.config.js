@@ -291,9 +291,13 @@ export default tseslint.config(
     /**
      * One file in the CLI may open a readline interface, and no others.
      *
-     * `init.ts` keeps it because the setup wizard genuinely is a sequence of
-     * questions with nothing else on screen — readline is the right tool for
-     * that and always was.
+     * `ask.ts` keeps it, and is the only file that ever did after the prompts
+     * moved out of `init.ts` — a wizard and `ghost preset install` are both a
+     * sequence of questions with nothing else on screen, which is what readline
+     * is right for and always was. Concentrating it in one file is also what
+     * makes the reader's *lifetime* reviewable: `openAsk` hands back the
+     * `close` its caller has to run, because node keeps the process alive while
+     * an interface is open.
      *
      * The REPL no longer has one. readline draws its own line, at a row it
      * measured for itself, by moving up over a row count it cached, and every
@@ -305,7 +309,7 @@ export default tseslint.config(
      * looks like a layering mistake.
      */
     files: ['packages/cli/src/**/*.ts'],
-    ignores: ['packages/cli/src/init.ts'],
+    ignores: ['packages/cli/src/ask.ts'],
     rules: {
       'no-restricted-imports': [
         'error',

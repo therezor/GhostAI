@@ -9,6 +9,25 @@ is something you install by name.
 
 ### Added
 
+- **`ghost preset` — pick agents from the catalogue, and get the boxes they need.**
+  `ghost preset install` with no arguments lists every agent on offer and installs the
+  ones you tick; naming ids instead (`ghost preset install coder nano`) is the scriptable
+  form. A container is built because an agent asked for it, never on its own, so picking
+  only agents that need no container is how an install with no Docker finishes — that is
+  what `ghost install --presets-only` used to mean, and it is a checkbox now. Approval is
+  settled in the same run, because approving is what unblocks the agents: `--approve` and
+  `--no-approve` answer it outright, and with neither it prints each toolbox's policy and
+  asks. A run with nobody to ask approves nothing. `ghost preset list` shows what is on
+  offer and what is installed; `ghost preset update` re-fetches.
+- **A preset can give an agent part of a toolbox, not all of it.** `toolbox.tools` in a
+  preset maps a program to `allow`, `ask` or `deny`, and `"*"` sets the default for every
+  program the manifest declares and the map does not name — so `{"*": "deny", "nmap":
+"allow"}` is "only nmap" in one line, and `{"npm": "deny"}` is "everything but npm". A
+  denied program is never sent to the model and is left out of the prompt section too,
+  which is the point: a two-dozen-program box costs 60–80 tokens per entry on every
+  request. These are defaults an agent's own `tools` map still overrides, not a boundary
+  — `exec` reaches the program either way, and the container is what contains it.
+
 - **A web security-testing capability: the `websec` toolbox and two agents.** `websec`
   (Alpine, network `open`) carries nuclei with its templates baked in, ffuf, gobuster,
   dalfox, sqlmap, commix, nikto, wafw00f, arjun, hydra, john and jwt_tool, with a curated
@@ -23,6 +42,19 @@ is something you install by name.
 
 ### Changed
 
+- **The presets and toolboxes moved to a repository of their own**,
+  [`GhostAI-presets`](https://github.com/therezor/GhostAI-presets), still published as
+  `@ghostbot/catalogue` and now versioned on its own cadence. They are no longer bundled
+  with the CLI: `ghost preset install` fetches the package into `~/.ghostai/catalogue` on
+  demand, and `--from <dir>` reads a checkout instead for anyone writing one. The
+  catalogue's presets moved from `presets/` to `agents/` with the 2.0 layout, so a 1.x
+  package is refused by name rather than read as empty.
+- **`ghost install` is gone, replaced by `ghost preset install`** (above). It built every
+  shipped toolbox and installed every shipped agent because both shipped inside the CLI
+  and there was nothing to choose between; with a catalogue of its own, which of them you
+  want is a real question and the answer decides which images get built. `ghost init` no
+  longer offers it as a last question — the wizard configures the install and
+  `ghost preset install` populates it.
 - **`web-research` also does network recon now.** It gains nmap, masscan, the
   ProjectDiscovery suite (subfinder, dnsx, httpx, katana, tlsx), amass, gau, waybackurls,
   sslscan and the DNS/whois tools, and with them `NET_RAW` for `nmap -sS` — a real

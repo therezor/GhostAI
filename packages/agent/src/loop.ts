@@ -483,6 +483,7 @@ export class AgentLoop {
     this.toolbox = options.toolbox ?? {
       name: '',
       network: { mode: 'none', allow: [] },
+      tools: {},
     };
     this.toolboxPrompt = options.toolboxPrompt;
     this.config = options.config ?? AgentDefaultsSchema.parse({});

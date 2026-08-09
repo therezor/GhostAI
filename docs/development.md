@@ -119,7 +119,7 @@ person installs by name — `@ghostbot/cli`, which is what puts `ghost` on the P
 left behind on an old number does not degrade gracefully: it publishes a dependency that
 resolves to nothing. That is why there is one version and no changesets.
 
-Four edits and a tag:
+Three edits and a tag:
 
 ```bash
 # 1. the root version — the single source every manifest reads
@@ -129,24 +129,19 @@ node scripts/gen-packages.mjs
 # 3. VERSION in packages/cli/src/program.ts        — what `ghost --version` prints
 # 4. SERVER_VERSION in packages/server/src/version.ts — what GET /api/status and
 #    the OpenAPI document report
-# 5. "version" in catalogue/package.json — the one publishable manifest the
-#    generator does not write, because it has no src/ to describe
 
 git commit -am 'Release 1.1.0' && git tag v1.1.0 && git push --follow-tags
 ```
 
-Steps 3 to 5 are the hand edits. Three and four are literals rather than a read of the
-manifest on purpose: the bundle lands in `dist/`, so a relative read resolves differently
-in the workspace and in a published tarball — a version that is silently _wrong_ is worse
-than one that is missing. `program.test.ts` and `app.test.ts` each fail if you forget,
-which is how they are meant to be found.
+Steps 3 and 4 are the hand edits, literals rather than a read of the manifest on purpose:
+the bundle lands in `dist/`, so a relative read resolves differently in the workspace and
+in a published tarball — a version that is silently _wrong_ is worse than one that is
+missing. `program.test.ts` and `app.test.ts` each fail if you forget, which is how they
+are meant to be found.
 
-**Step five has no such test**, and it is the one to watch. `catalogue/` sits at the
-repository root rather than under `packages/`, so it is outside everything the generator
-walks. It published at the right version the first time only because it was set by hand;
-the release workflow's lockstep check now enumerates the workspace through pnpm rather
-than reading `packages/`, so a catalogue left behind fails the tag instead of shipping a
-`workspace:*` that rewrites to a version nobody published.
+The agent presets and toolboxes are no longer part of this repository — they live in the
+separately versioned [`GhostAI-presets`](https://github.com/therezor/GhostAI-presets)
+repository and are released on their own cadence.
 
 The tag fires [`release.yml`](../.github/workflows/release.yml), which runs the whole
 gate again — a tag can be pushed from a branch CI never saw — checks the tag against the

@@ -327,6 +327,23 @@ export interface AgentEntryForm {
   readonly toolboxNetworkMode: string;
   /** Comma-separated CIDR blocks. Only read when the mode is `allowlist`. */
   readonly toolboxAllow: string;
+  /**
+   * The agent's per-box defaults, carried through this screen rather than
+   * edited on it.
+   *
+   * This screen edits `tools`, which sits *above* this map — a row here is
+   * what a program falls back to when `tools` says nothing about it, and `*`
+   * is the fallback for programs the map does not name at all. Only a preset
+   * can write one, because only a preset file has a place to say "all of
+   * them"; a picker with one row per program does not need the shorthand.
+   *
+   * It is in the form purely so that saving does not delete it. `toToolbox`
+   * rebuilds this object from named fields, so a field with nowhere to live
+   * here is a field a settings save silently drops — which is how an agent
+   * installed with four of a box's twenty-four programs would quietly acquire
+   * the other twenty the first time somebody renamed it.
+   */
+  readonly toolboxTools: Readonly<Record<string, ToolPermission>>;
 }
 
 /**
@@ -393,6 +410,7 @@ export function toAgentEntryForm(
     toolboxName: entry.toolbox.name,
     toolboxNetworkMode: entry.toolbox.network.mode,
     toolboxAllow: entry.toolbox.network.allow.join(', '),
+    toolboxTools: { ...entry.toolbox.tools },
   };
 }
 
@@ -572,6 +590,11 @@ function toToolbox(form: AgentEntryForm): AgentEntry['toolbox'] {
       mode,
       allow: mode === 'allowlist' ? parseList(form.toolboxAllow) : [],
     },
+    // Carried, not edited — see `toolboxTools` on the form. Dropped along with
+    // the box when there is no box: a per-program default for a toolbox the
+    // agent no longer works in would take effect again the moment somebody
+    // picked one, which is not something the operator asked for.
+    tools: name === '' ? {} : { ...form.toolboxTools },
   };
 }
 

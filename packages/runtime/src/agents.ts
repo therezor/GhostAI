@@ -405,6 +405,7 @@ function build(
     toolbox: entry?.toolbox ?? {
       name: '',
       network: { mode: 'none', allow: [] },
+      tools: {},
     },
     subagents: resolveSubagents(config, id, entry, warn),
   };

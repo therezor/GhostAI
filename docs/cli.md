@@ -16,7 +16,7 @@ same approval gate.
 ghost [chat] [message...]      talk to the agent — the default command
 ghost init                     configure this install, in a wizard
 ghost serve                    serve the web UI and the API on one port
-ghost install                  build the shipped toolboxes and install their agents
+ghost preset    list | install [ids...] | update
 ghost agent     install <name-or-path> [--force] | list
 ghost toolbox   list | approve <id> | revoke <id>
 ghost extension list | approve <id> | revoke <id>
@@ -189,60 +189,71 @@ worth knowing before you meet them:
 If `@ghostbot/web` has not been built, `serve` says so and runs the API alone rather than
 serving nothing at a URL it just printed.
 
-## `ghost install`
+## `ghost preset`
 
-The tedious half of setting an install up, in one command — six `docker build`s and
-eight config merges, in the right order:
+Picks agents out of the catalogue, and builds the containers those particular agents
+need. This is the command that puts a working team on a fresh machine:
 
 ```bash
-ghost install                  # build every shipped toolbox, install every agent
-ghost install --approve        # …approving the toolboxes too, without asking
-ghost install --no-approve     # …approving nothing, without asking
-ghost install --presets-only   # only the agents that need no container; never runs Docker
+ghost preset install                  # pick from a list
+ghost preset install coder nano       # or name them, for a script
+ghost preset list                     # what is on offer, and what is installed
+ghost preset update                   # fetch the catalogue again
 ```
 
-`ghost init` offers this as its last question, so a fresh install usually never types it.
+The catalogue is `@ghostbot/catalogue`, published from the
+[`GhostAI-presets`](https://github.com/therezor/GhostAI-presets) repository and versioned
+on its own cadence. It is **fetched on demand** into `~/.ghostai/catalogue` — an npm
+prefix, so the package itself lands at
+`~/.ghostai/catalogue/node_modules/@ghostbot/catalogue`. Nothing is fetched at turn time
+and nothing is fetched twice: a copy already there is used until `--refresh` says
+otherwise.
 
-### Approving, in one keystroke or none
+| Flag           | Does                                                             |
+| -------------- | ---------------------------------------------------------------- |
+| `--from <dir>` | Read a checkout of the presets repo instead. Never fetched over. |
+| `--refresh`    | Fetch again before reading, even when a copy is here.            |
+| `--offline`    | Never fetch. Fails rather than reaching a registry.              |
+| `--force`      | Overwrite agents of the same id, which may carry your edits.     |
+| `--approve`    | Approve the toolboxes this installs, without asking.             |
+| `--no-approve` | Approve nothing, and print the `ghost toolbox approve` lines.    |
 
-An agent cannot work in a toolbox until that toolbox is **approved** — a recorded
-statement that somebody read what the container may do. `ghost install` builds and
-installs the manifests, then settles that question in the same run, because approving is
-what unblocks the agents and a command that made you run it twice would be doing half
-its job.
+**A toolbox is built because an agent asked for it, never on its own.** You tick agents;
+the containers fall out of `toolbox.name` on the ones you ticked. Picking only agents
+that need no container is how you install without Docker — there is no flag for it,
+because the checkbox already is one.
 
-| You pass       | It does                                                       |
-| -------------- | ------------------------------------------------------------- |
-| `--approve`    | Approves what it installed. No question.                      |
-| `--no-approve` | Approves nothing, and prints the commands that would.         |
-| neither        | Prints each toolbox's policy, then asks once — on a terminal. |
+**Approving is a separate decision, and the policy is printed before the question.**
+Building an image and installing its manifest are reversible; approving one is a
+statement that you read what that container may do — its network ceiling, the
+capabilities it adds back, the hardening it switches off. So the run prints all of that
+and then asks, and a run with nobody to ask — a pipe, a CI job — approves nothing and
+prints the commands instead. Passing `--approve` is how a script says yes.
 
-**The policy is printed before the question, not after it**, so a `y` is an informed one.
-That costs a screen of text and buys the only thing in this command that re-running
-cannot undo.
+`--from` is what a preset author uses:
 
-With no terminal — a pipe, a CI job — and no flag, it approves **nothing**. A default of
-"yes" there would approve container policy nobody read, which is the failure the gate
-exists to stop. Agents needing an unapproved toolbox are held back rather than
-half-installed, since an enabled agent naming one is a config the server refuses to boot
-on.
+```bash
+git clone https://github.com/therezor/GhostAI-presets
+ghost preset install --from ./GhostAI-presets
+```
 
-Two more rules worth knowing:
-
-- **It never overwrites an agent you already have**, because that entry may carry your
-  own edits. An agent already installed is skipped silently.
-- **Delegators install last**, so `team-lead` is snapshotted after its specialists exist.
-  If you approve toolboxes _between_ two runs, its roster is stale — the command says so
-  and prints the `--force` line that refreshes it rather than rewriting it for you.
+It is never fetched over. Pointing it at a typo fails rather than quietly using the
+registry copy, because a preset installed from somewhere other than where you edited it
+is a preset you have not tested.
 
 ## `ghost agent`
 
-Installs an agent preset — a JSON file holding a system prompt, tool permissions, a
-toolbox reference and a delegation roster — as an entry in `agents.list`:
+Installs one agent preset by id or by path — the single-shot `ghost preset install` is
+built on, and what a script wants when it knows the name. It never touches Docker and
+never fetches: use `ghost preset install` when the agent needs a container that is not
+built yet.
+
+A preset is a JSON file holding a system prompt, tool permissions, a toolbox reference
+and a delegation roster, and installing it writes one entry in `agents.list`:
 
 ```bash
 ghost agent list                      # configured agents, and presets not yet installed
-ghost agent install researcher        # a shipped preset, by its id
+ghost agent install researcher        # a catalogue preset, by its id
 ghost agent install ./my-agent.json   # a preset you wrote, by path
 ghost agent install nano --force      # overwrite an existing agent of the same id
 ```
@@ -252,15 +263,14 @@ ghost agent install nano --force      # overwrite an existing agent of the same 
 `toolbox.name`. So there is one lookup, and the argument is either a path or an id
 searched in two directories:
 
-| Searched                       | Holds                                       |
-| ------------------------------ | ------------------------------------------- |
-| `~/.ghostai/presets/<id>.json` | Yours. Drop a file in; that is the install. |
-| `catalogue/presets/<id>.json`  | The eight that ship.                        |
+| Searched                       | Holds                                            |
+| ------------------------------ | ------------------------------------------------ |
+| `~/.ghostai/presets/<id>.json` | Yours. Drop a file in; that is the install.      |
+| `<catalogue>/agents/<id>.json` | The catalogue's, once `ghost preset` fetched it. |
 
-Yours first, so a local `nano.json` wins over the shipped one. Nothing is fetched at any
-point: both are files already on the box, and the shipped ones come from
-`@ghostbot/catalogue`, resolved as a package rather than by a path — the same way the
-server finds the built UI, and for the same reason.
+Yours first, so a local preset wins over a catalogue one of the same name. Nothing is
+fetched _here_: both are files already on the box by the time this command runs, and a
+machine with no catalogue installs only your own presets rather than failing.
 
 Installing is a config merge and nothing more: afterwards the agent is ordinary config,
 edited in the web UI like any other. Three rules do the real work:

@@ -13,6 +13,7 @@ import {
   toolboxPermissions,
   toolboxTool,
   toolboxTools,
+  visibleToolboxEntries,
 } from '#src/toolbox-tools.js';
 import { registerBuiltins } from '#src/builtin/index.js';
 import type { CommandRunner } from '#src/runner.js';
@@ -158,6 +159,70 @@ describe('toolboxPermissions', () => {
     expect(Object.keys(toolboxPermissions(box))).toEqual(['ok']);
     expect(toolboxTools(box).map((tool) => tool.name)).toEqual(['ok']);
   });
+
+  it("lets an agent's override win over the manifest", () => {
+    const box = toolboxOf({ expose: 'tools' });
+
+    expect(toolboxPermissions(box, { ddgr: 'allow' })).toEqual({
+      ddgr: 'allow',
+      // Unnamed and no `*`, so the manifest still answers for it.
+      fetch: 'ask',
+    });
+  });
+
+  it('takes `*` as the default for every entry left unnamed', () => {
+    // The case the wildcard exists for: "only these" without enumerating the
+    // twenty-three programs the agent is not getting.
+    const box = toolboxOf({ expose: 'tools' });
+
+    expect(toolboxPermissions(box, { '*': 'deny', fetch: 'allow' })).toEqual({
+      ddgr: 'deny',
+      fetch: 'allow',
+    });
+  });
+
+  it('may widen as well as narrow, because a manifest is not a ceiling', () => {
+    // `exec` can reach the program either way, so the manifest's permission is
+    // the box author's opinion. `network.maxMode` is the boundary, and it is
+    // intersected rather than overridden.
+    const box = toolboxOf({
+      expose: 'tools',
+      tools: [{ name: 'nmap', use: 'Scan.', permission: 'deny' }],
+    });
+
+    expect(toolboxPermissions(box, { nmap: 'allow' })).toEqual({
+      nmap: 'allow',
+    });
+  });
+});
+
+describe('visibleToolboxEntries', () => {
+  it('is every entry when nothing is overridden', () => {
+    expect(
+      visibleToolboxEntries(toolboxOf()).map((entry) => entry.name),
+    ).toEqual(['ddgr', 'fetch']);
+  });
+
+  it('drops what the agent denied, so the prose matches the schemas', () => {
+    expect(
+      visibleToolboxEntries(toolboxOf({ expose: 'tools' }), {
+        '*': 'deny',
+        fetch: 'allow',
+      }).map((entry) => entry.name),
+    ).toEqual(['fetch']);
+  });
+
+  it('applies to a prompt-only box, where prose is the whole mechanism', () => {
+    // No callables and so no permission map at all — every program is reached
+    // through `exec`. An override that did nothing here would do nothing
+    // anywhere, which is why this is blind to `expose`.
+    expect(toolboxPermissions(toolboxOf(), { '*': 'deny' })).toEqual({});
+    expect(
+      visibleToolboxEntries(toolboxOf(), { ddgr: 'deny' }).map(
+        (entry) => entry.name,
+      ),
+    ).toEqual(['fetch']);
+  });
 });
 
 describe('withToolboxTools', () => {
@@ -188,6 +253,26 @@ describe('withToolboxTools', () => {
   it('returns the base untouched when nothing is exposed', () => {
     const registry = base();
     expect(withToolboxTools(registry, [], {})).toBe(registry);
+  });
+
+  it('never sends the model a program the agent was not given', () => {
+    // The end of the chain the preset's `toolbox.tools` starts: `{'*': 'deny',
+    // ddgr: 'allow'}` resolves to a permission map, and the map is what decides
+    // which definitions the provider is sent. A `deny` is an absence, not a
+    // refusal at call time — which is the point, because the cost it saves is
+    // the 60–80 tokens the definition would carry on every request.
+    const scope = withToolboxTools(
+      base(),
+      toolboxTools(box),
+      permissionsOf(box, { '*': 'deny', ddgr: 'allow' }),
+    );
+    const names = scope.definitions().map((definition) => definition.name);
+
+    expect(names).toContain('ddgr');
+    expect(names).not.toContain('fetch');
+    // The built-ins are untouched: this map speaks only for the box.
+    expect(names).toContain('read_file');
+    expect(scope.get('fetch')).toBeUndefined();
   });
 
   it('resolves a toolbox name to the toolbox tool, not the registry', () => {

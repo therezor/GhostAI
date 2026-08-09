@@ -13,9 +13,9 @@
  *  - **No prompt library.** `chat.ts` already drives `node:readline/promises`
  *    with an `AbortSignal`, and six questions is not worth a dependency in a
  *    package whose whole point is that `ghost --help` loads almost nothing.
- *    The helpers below are the parts that would otherwise be retyped per
- *    question, and they take their streams as arguments so a test drives them
- *    without a terminal.
+ *    The helpers are in `ask.ts`, which is where they moved when `ghost preset
+ *    install` needed the same four, and they take their streams as arguments so
+ *    a test drives them without a terminal.
  *
  *  - **Nothing is written until every question is answered.** An operator who
  *    presses Ctrl-C at the model prompt should not find a half-configured
@@ -29,8 +29,6 @@
  *    unreachable Ollama at this point usually means it is not running, and that
  *    is worth reading rather than working around.
  */
-
-import { createInterface, type Interface } from 'node:readline/promises';
 
 import {
   ConfigSchema,
@@ -55,8 +53,8 @@ import pc from 'picocolors';
 
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from '@ghostbot/i18n';
 
+import { openAsk, type Ask } from './ask.js';
 import { translationsFor, type CliT } from './i18n.js';
-import { runSetup } from './setup.js';
 
 /** A language named in its own language, so the person who needs it can read it. */
 function nameOfLocale(locale: string): string {
@@ -88,141 +86,6 @@ export interface InitOptions {
   ) => Promise<string[]>;
   /** Injected by tests, which have no keychain. */
   readonly saveCredential?: (instanceId: string, value: string) => void;
-  /**
-   * Installs the catalogue. Injected by tests, which have no Docker daemon.
-   *
-   * Offered as the wizard's last question and run *after* the config write, so
-   * the "Ctrl-C wrote nothing" property above still holds for everything the
-   * wizard itself decides: by the time this runs, there is nothing left to
-   * abandon.
-   */
-  readonly install?: (presetsOnly: boolean) => Promise<number> | number;
-}
-
-/** The prompts, bound to one readline interface and one colour setting. */
-interface Ask {
-  /** A free-text answer, with `fallback` used for an empty line. */
-  text(question: string, fallback?: string): Promise<string>;
-  /** Reads without echoing, so a key does not land in the scrollback. */
-  secret(question: string): Promise<string>;
-  /** A numbered list. Returns the chosen index. */
-  choose(
-    question: string,
-    options: readonly string[],
-    fallbackIndex?: number,
-  ): Promise<number>;
-  confirm(question: string, fallback: boolean): Promise<boolean>;
-}
-
-function createAsk(
-  rl: Interface,
-  out: NodeJS.WritableStream,
-  colors: boolean | undefined,
-  t: CliT,
-): Ask {
-  const c = pc.createColors(colors);
-
-  const text = async (question: string, fallback?: string): Promise<string> => {
-    const suffix =
-      fallback === undefined || fallback === '' ? '' : c.dim(` [${fallback}]`);
-    const answer = (await rl.question(`${question}${suffix}: `)).trim();
-    return answer === '' ? (fallback ?? '') : answer;
-  };
-
-  return {
-    text,
-
-    secret: async (question: string): Promise<string> => {
-      // readline has no masked read, and `_writeToOutput` is the documented
-      // seam for one — the alternative is a key sitting in the terminal's
-      // scrollback for the rest of the session. Swapping the *interface's*
-      // writer rather than the stream's matters: readline holds its own
-      // reference to the output stream, and replacing `write` underneath it
-      // deadlocks the very question being asked.
-      const internal = rl as Interface & {
-        // The leading underscore is node's, not ours: this is the name on
-        // `readline.Interface`, so the guide's rule has nothing to bite on.
-        // eslint-disable-next-line @typescript-eslint/naming-convention
-        _writeToOutput?: (text: string) => void;
-      };
-      const original = internal._writeToOutput?.bind(internal);
-      let masked = false;
-
-      internal._writeToOutput = (text: string): void => {
-        if (!masked) {
-          original?.(text);
-          return;
-        }
-        // The prompt itself still has to be drawn, or the line is invisible;
-        // only what was typed after it is withheld.
-        if (text.includes(question)) original?.(text);
-      };
-
-      try {
-        const promise = rl.question(`${question}: `);
-        masked = true;
-        return (await promise).trim();
-      } finally {
-        masked = false;
-        if (original === undefined) delete internal._writeToOutput;
-        else internal._writeToOutput = original;
-        out.write('\n');
-      }
-    },
-
-    choose: async (
-      question: string,
-      options: readonly string[],
-      fallbackIndex = 0,
-    ): Promise<number> => {
-      for (const [index, option] of options.entries()) {
-        out.write(`  ${c.dim(String(index + 1).padStart(2))}  ${option}\n`);
-      }
-      for (;;) {
-        const answer = await text(question, String(fallbackIndex + 1));
-        const index = Number(answer) - 1;
-        if (Number.isInteger(index) && index >= 0 && index < options.length) {
-          return index;
-        }
-        // By name as well as by number: an operator who types `ollama` has
-        // answered the question, and refusing it would be pedantry.
-        const named = options.findIndex((option) =>
-          option.toLowerCase().startsWith(answer.toLowerCase()),
-        );
-        if (answer !== '' && named >= 0) return named;
-        out.write(
-          c.yellow(`  ${t('init.enterNumber', { max: options.length })}\n`),
-        );
-      }
-    },
-
-    /**
-     * Yes or no, in the operator's language *and* in English.
-     *
-     * The literal `y`/`n` this used to test is an English accident: a German
-     * operator types `j` for ja, and a prompt that reads `J/n` and then ignores
-     * `j` is worse than one that never offered the choice. The localised letters
-     * come from the bundle.
-     *
-     * English stays accepted alongside them rather than being replaced. A
-     * terminal is a place people type from muscle memory, `y` is what a decade
-     * of other tools trained, and there is no locale where accepting it costs
-     * anything — no language's negative begins with `y`, and the localised
-     * letter is tested first regardless.
-     */
-    confirm: async (question: string, fallback: boolean): Promise<boolean> => {
-      const hint = fallback
-        ? t('prompt.yesNoDefaultYes')
-        : t('prompt.yesNoDefaultNo');
-      const answer = (await text(question, hint)).toLowerCase();
-      const yes = t('prompt.yes').toLowerCase();
-      const no = t('prompt.no').toLowerCase();
-
-      if (answer.startsWith(yes) || answer.startsWith('y')) return true;
-      if (answer.startsWith(no) || answer.startsWith('n')) return false;
-      return fallback;
-    },
-  };
 }
 
 /**
@@ -298,8 +161,7 @@ export async function initCommand(options: InitOptions = {}): Promise<number> {
     return 1;
   }
 
-  const rl = createInterface({ input, output: out, terminal: true });
-  const ask = createAsk(rl, out, options.colors, t);
+  const { ask, close } = await openAsk(input, out, options.colors, t);
 
   try {
     out.write(`${c.bold(t('init.heading'))}\n\n`);
@@ -313,35 +175,6 @@ export async function initCommand(options: InitOptions = {}): Promise<number> {
     out.write(`  ${c.dim(t('init.provider'))}   ${answers.instanceId}\n`);
     out.write(`  ${c.dim(t('init.model'))}      ${answers.model}\n`);
     out.write(`  ${c.dim(t('init.workspace'))}  ${answers.workspace}\n\n`);
-
-    // Last, and after the write. Building five container images takes minutes
-    // and needs a daemon, so it is a question rather than something `init`
-    // acquires a dependency on — and the middle option is the default because
-    // an install that has never seen Docker should still finish the wizard.
-    out.write(`${t('init.whichAgents')}\n`);
-    const choice = await ask.choose(
-      t('init.agents'),
-      [t('init.agentsAll'), t('init.agentsPresets'), t('init.agentsNone')],
-      1,
-    );
-    if (choice !== 2) {
-      out.write('\n');
-      const install =
-        options.install ??
-        (async (presetsOnly: boolean): Promise<number> =>
-          await runSetup({
-            presetsOnly,
-            // The wizard's own reader, rather than a second one: two readline
-            // interfaces on one stdin fight over keypresses.
-            confirm: async (question) => await ask.confirm(question, false),
-            ...(options.home === undefined ? {} : { home: options.home }),
-            out: (line) => out.write(`${line}\n`),
-            errOut: (line) => errOut.write(`${line}\n`),
-            ...(options.env === undefined ? {} : { env: options.env }),
-            t: translationsFor(options.env ?? process.env),
-          }));
-      await install(choice === 1);
-    }
 
     out.write(
       `\nRun ${c.cyan('ghost chat')} to talk to it, or ${c.cyan('ghost serve')} for the UI.\n`,
@@ -357,7 +190,7 @@ export async function initCommand(options: InitOptions = {}): Promise<number> {
     }
     throw error;
   } finally {
-    rl.close();
+    close();
   }
 }
 

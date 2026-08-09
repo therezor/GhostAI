@@ -107,6 +107,7 @@ import {
   registerBuiltins,
   toolboxPermissions,
   toolboxTools,
+  visibleToolboxEntries,
   withToolboxTools,
   type AnyTool,
   type AutomationResolver,
@@ -1431,11 +1432,19 @@ class Runtime implements GhostRuntime {
         agent.id,
       );
       exposed.set(agent.id, toolboxTools(approved.toolbox));
-      toolboxPerms.set(agent.id, toolboxPermissions(approved.toolbox));
+      toolboxPerms.set(
+        agent.id,
+        toolboxPermissions(approved.toolbox, agent.toolbox.tools),
+      );
       prompts.set(agent.id, {
         name: approved.toolbox.name,
         workdir: approved.toolbox.workdir,
-        tools: approved.toolbox.tools,
+        // Resolved against the same overrides the permission map is, so the
+        // prose and the tool schemas cannot list different programs. An agent
+        // given four of this box's twenty-four must not be told it has the
+        // other twenty — that is the failure `expose: 'tools'` exists to fix,
+        // pointed the other way.
+        tools: visibleToolboxEntries(approved.toolbox, agent.toolbox.tools),
         notes: approved.toolbox.notes,
       });
     }

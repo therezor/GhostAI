@@ -47,7 +47,6 @@ import type { ChatOptions } from './chat.js';
 import { describeError, translationsFor, type CliT, type Env } from './i18n.js';
 import type { InitOptions } from './init.js';
 import { runExtension } from './extension.js';
-import { runSetup } from './setup.js';
 import { runToolbox } from './toolbox.js';
 import type { ServeCommandOptions } from './serve.js';
 
@@ -132,32 +131,6 @@ async function defaultRunServe(options: ServeCommandOptions): Promise<number> {
 async function defaultRunInit(options: InitOptions): Promise<number> {
   const { initCommand } = await import('./init.js');
   return await initCommand(options);
-}
-
-/**
- * One yes/no on a terminal, opened and closed around the question.
- *
- * `ghost install` is the only command here that asks anything, so the reader
- * is created for the one question rather than held for the whole invocation —
- * and `ghost init`, which does hold one, passes its own in instead of letting
- * a second reader compete for the same keypresses.
- */
-function confirmOn(
-  input: NodeJS.ReadableStream & { isTTY?: boolean },
-  out: NodeJS.WritableStream,
-): (question: string) => Promise<boolean> {
-  return async (question: string): Promise<boolean> => {
-    const { createInterface } = await import('node:readline/promises');
-    const rl = createInterface({ input, output: out, terminal: true });
-    try {
-      const answer = (await rl.question(`${question} [y/N]: `))
-        .trim()
-        .toLowerCase();
-      return answer === 'y' || answer === 'yes';
-    } finally {
-      rl.close();
-    }
-  };
 }
 
 /** A port from the command line, refused before anything binds. */
@@ -421,49 +394,6 @@ function buildProgram(deps: CliDeps = {}): Command {
     .description(t('extension.revoke.description'))
     .action(extensionAction('revoke'));
 
-  program
-    .command('install')
-    .description(t('install.description'))
-    .option('--presets-only', t('install.options.presetsOnly'), false)
-    // Declared as a pair rather than as one negatable flag, which is what
-    // makes "neither was passed" distinguishable from "no" — and that third
-    // state is the one that asks.
-    .option('--approve', t('install.options.approve'))
-    .option('--no-approve', t('install.options.noApprove'))
-    .action(
-      async (
-        options: { presetsOnly: boolean; approve?: boolean },
-        command: Command,
-      ) => {
-        const globals = command.parent?.opts<GlobalOptions>() ?? {
-          color: true,
-          verbose: false,
-        };
-        const input = deps.input ?? process.stdin;
-        const code = await runSetup({
-          presetsOnly: options.presetsOnly,
-          ...(options.approve === undefined
-            ? {}
-            : { approve: options.approve }),
-          // Only when there is somebody to answer. A pipe gets the safe
-          // default instead of a question it would answer with EOF.
-          ...(options.approve === undefined && input.isTTY === true
-            ? { confirm: confirmOn(input, out) }
-            : {}),
-          ...(globals.home === undefined ? {} : { home: globals.home }),
-          out: (line) => {
-            out.write(`${line}\n`);
-          },
-          errOut: (line) => {
-            errOut.write(`${line}\n`);
-          },
-          env,
-          t: translations,
-        });
-        command.setOptionValue('exitCode', code);
-      },
-    );
-
   const agent = program.command('agent').description(t('agent.description'));
 
   agent
@@ -514,6 +444,100 @@ function buildProgram(deps: CliDeps = {}): Command {
       });
       command.setOptionValue('exitCode', code);
     });
+
+  const preset = program.command('preset').description(t('preset.description'));
+
+  /** The three shared by every `preset` subcommand, in one place. */
+  const catalogueOptions = (command: Command): Command =>
+    command
+      .option('--from <dir>', t('preset.install.options.from'))
+      .option('--refresh', t('preset.install.options.refresh'), false)
+      .option('--offline', t('preset.install.options.offline'), false);
+
+  interface PresetCliOptions {
+    from?: string;
+    refresh: boolean;
+    offline: boolean;
+    force?: boolean;
+    approve?: boolean;
+  }
+
+  const presetAction =
+    (action: 'list' | 'install' | 'update') =>
+    async (...args: readonly unknown[]): Promise<void> => {
+      // `install` takes a variadic argument and the others take none, so the
+      // action's arity differs by one. Reading from the end rather than by
+      // position is what lets all three share this.
+      const command = args[args.length - 1] as Command;
+      const options = args[args.length - 2] as PresetCliOptions;
+      const ids = (action === 'install' ? args[0] : []) as readonly string[];
+
+      const globals = command.parent?.parent?.opts<GlobalOptions>() ?? {
+        color: true,
+        verbose: false,
+      };
+      const input = deps.input ?? process.stdin;
+      // Only when there is somebody to answer *and* nothing was named on the
+      // command line. A pipe gets the safe default rather than a question it
+      // would answer with EOF.
+      const interactive =
+        input.isTTY === true && !(action === 'install' && ids.length > 0);
+
+      const { openAsk } = await import('./ask.js');
+      const { runPreset } = await import('./preset.js');
+      const opened = interactive
+        ? await openAsk(input, out, globals.color, translations.t)
+        : undefined;
+      try {
+        const code = await runPreset({
+          action,
+          ids,
+          ...(options.from === undefined ? {} : { from: options.from }),
+          refresh: options.refresh,
+          offline: options.offline,
+          ...(options.force === undefined ? {} : { force: options.force }),
+          ...(options.approve === undefined
+            ? {}
+            : { approve: options.approve }),
+          ...(opened === undefined ? {} : { ask: opened.ask }),
+          ...(globals.home === undefined ? {} : { home: globals.home }),
+          out: (line) => {
+            out.write(`${line}\n`);
+          },
+          errOut: (line) => {
+            errOut.write(`${line}\n`);
+          },
+          env,
+          t: translations,
+        });
+        command.setOptionValue('exitCode', code);
+      } finally {
+        // Node keeps the process alive while a readline interface is open, so
+        // this is what makes `ghost preset install` exit rather than hang.
+        opened?.close();
+      }
+    };
+
+  catalogueOptions(
+    preset.command('list').description(t('preset.list.description')),
+  ).action(presetAction('list'));
+
+  catalogueOptions(
+    preset
+      .command('install')
+      .argument('[ids...]')
+      .description(t('preset.install.description'))
+      .option('--force', t('preset.install.options.force'), false)
+      // Declared as a pair rather than as one negatable flag, which is what
+      // makes "neither was passed" distinguishable from "no" — and that third
+      // state is the one that asks.
+      .option('--approve', t('preset.install.options.approve'))
+      .option('--no-approve', t('preset.install.options.noApprove')),
+  ).action(presetAction('install'));
+
+  catalogueOptions(
+    preset.command('update').description(t('preset.update.description')),
+  ).action(presetAction('update'));
 
   program
     .command('serve')

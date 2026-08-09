@@ -60,6 +60,7 @@ import {
   PROMPT_PLACEHOLDERS,
   RAW_PROMPT_PLACEHOLDERS,
   TOOL_POLICY_PLACEHOLDERS,
+  TOOLBOX_DEFAULT_KEY,
   TOOLBOX_PROMPT_PLACEHOLDERS,
   type AgentDefaults,
   type AgentEntry,
@@ -1266,10 +1267,22 @@ function Editor({
                   detail={tool.use}
                   risk="exec"
                   disabled={toolsOff}
-                  // The manifest's default until this agent overrides it. It is
-                  // a suggestion from the box's author, not a ceiling — the
-                  // programs are reachable through `exec` either way.
-                  permission={form.tools[tool.name] ?? tool.permission}
+                  // Three layers, most specific first: this agent's own
+                  // override, the per-box default a preset gave it (`*` being
+                  // the one for programs it did not name), then the manifest.
+                  // The row has to read the same one the turn will, or an agent
+                  // installed with four of twenty-four programs would show all
+                  // twenty-four as available here.
+                  //
+                  // None of them is a ceiling — the programs are reachable
+                  // through `exec` either way. `network.maxMode` is the
+                  // boundary, and it is intersected rather than overridden.
+                  permission={
+                    form.tools[tool.name] ??
+                    form.toolboxTools[tool.name] ??
+                    form.toolboxTools[TOOLBOX_DEFAULT_KEY] ??
+                    tool.permission
+                  }
                   // A toolbox program's schema is synthesised from the manifest
                   // and is not in `GET /api/tools`, so there are no argument
                   // boxes to offer — only the description, which is the part the

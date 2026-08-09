@@ -136,7 +136,7 @@ export class ToolboxStore {
       throw new GhostError(
         'config',
         `No toolbox is installed under "${name}".\n` +
-          `  Build and install one with \`catalogue/build.sh ${name}\`, or clear the agent's toolbox.`,
+          `  Build and install one with \`ghost preset install\`, or clear the agent's toolbox.`,
         { details: { name } },
       );
     }

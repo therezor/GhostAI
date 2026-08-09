@@ -34,7 +34,12 @@
 import { existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
-import { GhostError, loadConfig, saveConfig } from '@ghostbot/core';
+import {
+  GhostError,
+  loadConfig,
+  saveConfig,
+  type GhostPaths,
+} from '@ghostbot/core';
 import {
   DEFAULT_AGENT_ID,
   RESERVED_AGENT_IDS,
@@ -45,6 +50,7 @@ import {
 } from '@ghostbot/protocol';
 import { ToolboxStore, assertNetworkWithinCeiling } from '@ghostbot/security';
 
+import { catalogueAgentsDir, catalogueDir } from './catalogue.js';
 import type { Translations } from './i18n.js';
 import {
   findPreset,
@@ -76,6 +82,12 @@ export interface PresetPaths {
   readonly toolboxesDir: string;
   readonly presetsDir: string;
   readonly dbFile: string;
+  /**
+   * The catalogue's `agents/`, when there is a catalogue. `undefined` is the
+   * ordinary state on a fresh install and narrows the search to the operator's
+   * own presets rather than failing.
+   */
+  readonly catalogueAgentsDir?: string | undefined;
 }
 
 export function resolvePreset(arg: string, paths: PresetPaths): AgentPreset {
@@ -86,7 +98,7 @@ export function resolvePreset(arg: string, paths: PresetPaths): AgentPreset {
     arg.includes('/') || arg.includes('\\') || arg.endsWith('.json');
   if (explicitPath || existsSync(arg)) return readPreset(arg);
 
-  const dirs = presetDirs(paths.presetsDir);
+  const dirs = presetDirs(paths.presetsDir, paths.catalogueAgentsDir);
   const found = findPreset(dirs, arg);
   if (found !== undefined) return readPreset(found);
 
@@ -264,16 +276,35 @@ function list(
 
   // The filename is the agent id, so an id already in `agents.list` is one
   // already installed — no file has to be opened to know that.
-  const available = listAllPresets(presetDirs(paths.presetsDir)).filter(
-    (id) => config.agents.list[id] === undefined,
-  );
+  const available = listAllPresets(
+    presetDirs(paths.presetsDir, paths.catalogueAgentsDir),
+  ).filter((id) => config.agents.list[id] === undefined);
   if (available.length > 0) {
-    out('Presets not yet installed:');
-    for (const id of available) {
-      out(`    ghost agent install ${id}`);
-    }
+    out(`Presets not yet installed: ${available.join(', ')}`);
+    // One line rather than one per id, and it names the *other* command,
+    // because that is the one that also builds the toolbox an agent needs.
+    // `ghost agent install <id>` still works and is what a script wants; a
+    // person picking from a list wants the picker.
+    out('    ghost preset install');
   }
   return 0;
+}
+
+/** `PresetPaths` for this invocation, with the catalogue looked up once. */
+function presetPathsOf(
+  paths: GhostPaths,
+  options: AgentCliOptions,
+): PresetPaths {
+  const dir = catalogueDir({
+    catalogueDir: paths.catalogueDir,
+    ...(options.env === undefined ? {} : { env: options.env }),
+  });
+  return {
+    toolboxesDir: paths.toolboxesDir,
+    presetsDir: paths.presetsDir,
+    dbFile: paths.dbFile,
+    catalogueAgentsDir: dir === undefined ? undefined : catalogueAgentsDir(dir),
+  };
 }
 
 export function runAgent(options: AgentCliOptions): number {
@@ -285,8 +316,10 @@ export function runAgent(options: AgentCliOptions): number {
       ...(options.env === undefined ? {} : { env: options.env }),
     });
 
+    const paths = presetPathsOf(loaded.paths, options);
+
     if (options.action === 'list') {
-      return list(options, loaded.config, loaded.paths);
+      return list(options, loaded.config, paths);
     }
 
     if (options.name === undefined || options.name === '') {
@@ -295,7 +328,7 @@ export function runAgent(options: AgentCliOptions): number {
       );
       return 2;
     }
-    return install(options, loaded.config, loaded.file, loaded.paths);
+    return install(options, loaded.config, loaded.file, paths);
   } catch (error) {
     // `GhostError` messages are written to be read by the person who caused
     // them — they already name the file and what to do next.

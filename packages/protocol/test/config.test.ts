@@ -251,6 +251,9 @@ describe('AgentEntrySchema', () => {
     expect(agent.toolbox).toEqual({
       name: '',
       network: { mode: 'none', allow: [] },
+      // Empty means "take the manifest's own permission for every program",
+      // which is the only thing an agent that named no toolbox could mean.
+      tools: {},
     });
   });
 

@@ -217,7 +217,57 @@ describe('toAgentEntryPatch', () => {
     expect((entry as { toolbox: Record<string, unknown> }).toolbox).toEqual({
       name: 'ghost-research',
       network: { mode: 'open', allow: [] },
+      tools: {},
     });
+  });
+
+  it('carries the per-box defaults a preset wrote, which it cannot edit', () => {
+    // This screen edits `tools`, which sits above `toolbox.tools`. `toToolbox`
+    // rebuilds the object from named fields, so a field with nowhere to live on
+    // the form is one a save deletes — and an agent installed with two of a
+    // box's programs would quietly acquire the rest the first time somebody
+    // renamed it.
+    const stored = AgentEntrySchema.parse({
+      toolbox: {
+        name: 'recon',
+        network: { mode: 'open', allow: [] },
+        tools: { '*': 'deny', nmap: 'allow' },
+      },
+    });
+
+    const entry = parsed(
+      toAgentEntryPatch(
+        'reviewer',
+        form(toAgentEntryForm(stored, DEFAULTS)),
+        stored,
+        t,
+      ),
+    );
+
+    expect(
+      (entry as { toolbox: Record<string, unknown> }).toolbox.tools,
+    ).toEqual({ '*': 'deny', nmap: 'allow' });
+  });
+
+  it('drops the per-box defaults along with the box', () => {
+    // A default for a toolbox the agent no longer works in would take effect
+    // again the moment somebody picked one, which nobody asked for.
+    const stored = AgentEntrySchema.parse({
+      toolbox: { name: 'recon', tools: { '*': 'deny' } },
+    });
+
+    const entry = parsed(
+      toAgentEntryPatch(
+        'reviewer',
+        form({ ...toAgentEntryForm(stored, DEFAULTS), toolboxName: '' }),
+        stored,
+        t,
+      ),
+    );
+
+    expect(
+      (entry as { toolbox: Record<string, unknown> }).toolbox.tools,
+    ).toEqual({});
   });
 
   it('clears the allow-list when the mode stops using it', () => {
@@ -260,6 +310,7 @@ describe('toAgentEntryPatch', () => {
     expect((entry as { toolbox: Record<string, unknown> }).toolbox).toEqual({
       name: '',
       network: { mode: 'none', allow: [] },
+      tools: {},
     });
   });
 

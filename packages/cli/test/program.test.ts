@@ -80,15 +80,6 @@ describe('runCli', () => {
     expect(help.out).toContain('revoke');
   });
 
-  it('offers install, the one command that sets an install up', async () => {
-    const run = await cli(['--help']);
-    expect(run.out).toContain('install');
-
-    const help = await cli(['install', '--help']);
-    expect(help.code).toBe(0);
-    expect(help.out).toContain('--presets-only');
-  });
-
   it('offers agent, the preset installer, beside them', async () => {
     const run = await cli(['--help']);
     expect(run.out).toContain('agent');
@@ -97,6 +88,52 @@ describe('runCli', () => {
     expect(help.code).toBe(0);
     expect(help.out).toContain('install');
     expect(help.out).toContain('list');
+  });
+
+  it('offers preset, with its three subcommands and their flags', async () => {
+    const run = await cli(['--help']);
+    expect(run.out).toContain('preset');
+
+    const help = await cli(['preset', '--help']);
+    expect(help.code).toBe(0);
+    for (const name of ['install', 'list', 'update']) {
+      expect(help.out).toContain(name);
+    }
+
+    const install = await cli(['preset', 'install', '--help']);
+    expect(install.code).toBe(0);
+    // `--approve` and `--no-approve` are declared as a pair rather than as one
+    // negatable flag, which is what makes "neither was passed" a third state.
+    for (const flag of ['--from', '--refresh', '--offline', '--force']) {
+      expect(install.out).toContain(flag);
+    }
+    expect(install.out).toContain('--approve');
+    expect(install.out).toContain('--no-approve');
+  });
+
+  it('reads a preset subcommand’s options whether or not it takes arguments', async () => {
+    // `install` takes a variadic argument and `list` takes none, so the action
+    // is called with one more parameter for the first than for the second. The
+    // wiring reads from the end for that reason, and this is the case that
+    // catches it reading the wrong slot: with the options misread, `--from`
+    // would be `undefined` and the run would try to fetch.
+    const errOut = sink();
+    const code = await runCli(
+      [
+        'node',
+        'ghost',
+        '--home',
+        '/nonexistent-ghostai',
+        'preset',
+        'list',
+        '--from',
+        '/nonexistent-catalogue',
+      ],
+      { out: sink(), errOut, env: {} },
+    );
+
+    expect(code).toBe(1);
+    expect(errOut.text).toContain('No catalogue at /nonexistent-catalogue');
   });
 
   it('returns a nested subcommand failure as its exit code', async () => {

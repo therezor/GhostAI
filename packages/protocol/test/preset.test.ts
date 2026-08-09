@@ -1,17 +1,10 @@
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { describe, expect, it } from 'vitest';
 
 import {
   AgentEntrySchema,
   AgentPresetSchema,
   DEFAULT_AGENT_TOOLS,
-  ToolboxSchema,
   presetToAgentEntry,
-  type AgentPreset,
-  type Toolbox,
 } from '#src/index.js';
 
 const MINIMAL = { schema: 'ghostai.agent-preset/1', id: 'researcher' };
@@ -26,6 +19,7 @@ describe('AgentPresetSchema', () => {
     expect(preset.toolbox).toEqual({
       name: '',
       network: { mode: 'none', allow: [] },
+      tools: {},
     });
     expect(preset.subagents).toEqual([]);
     // Unset means inherit `agents.defaults`, which only an absent key can say.
@@ -53,6 +47,7 @@ describe('AgentPresetSchema', () => {
     expect(preset.toolbox).toEqual({
       name: 'web-research',
       network: { mode: 'open', allow: [] },
+      tools: {},
     });
     expect('image' in preset.toolbox).toBe(false);
   });
@@ -93,78 +88,4 @@ describe('presetToAgentEntry', () => {
     expect('id' in entry).toBe(false);
     expect('schema' in entry).toBe(false);
   });
-});
-
-/**
- * The catalogue is data no compiler checks, so this is the gate that keeps it
- * honest in CI without Docker. Two independent sweeps, because presets and
- * toolboxes are two directories now rather than one tree: every manifest
- * parses and matches its directory name, and every preset parses and matches
- * its filename. The third assertion joins them — a preset naming a toolbox may
- * not ask for more network than that toolbox's ceiling grants.
- */
-describe('the catalogue', () => {
-  const root = fileURLToPath(new URL('../../../catalogue/', import.meta.url));
-  const DUMMY_DIGEST = `sha256:${'0'.repeat(64)}`;
-  const NETWORK_ORDER = { none: 0, allowlist: 1, open: 2 } as const;
-
-  const toolboxes = readdirSync(join(root, 'toolboxes'), {
-    withFileTypes: true,
-  })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
-    .filter((name) =>
-      existsSync(join(root, 'toolboxes', name, 'toolbox.json')),
-    );
-
-  const presets = readdirSync(join(root, 'presets'))
-    .filter((entry) => entry.endsWith('.json'))
-    .map((entry) => entry.slice(0, -'.json'.length));
-
-  function manifestFor(name: string): Toolbox {
-    const text = readFileSync(
-      join(root, 'toolboxes', name, 'toolbox.json'),
-      'utf8',
-    ).replace('__IMAGE_ID__', DUMMY_DIGEST);
-    return ToolboxSchema.parse(JSON.parse(text));
-  }
-
-  function presetFor(id: string): AgentPreset {
-    return AgentPresetSchema.parse(
-      JSON.parse(readFileSync(join(root, 'presets', `${id}.json`), 'utf8')),
-    );
-  }
-
-  it('ships toolboxes and presets', () => {
-    expect(toolboxes.length).toBeGreaterThan(0);
-    expect(presets.length).toBeGreaterThan(0);
-  });
-
-  it.each(toolboxes)(
-    'toolboxes/%s: parses, and is named for its directory',
-    (name) => {
-      expect(manifestFor(name).name).toBe(name);
-    },
-  );
-
-  it.each(presets)('presets/%s.json: parses, and is named for its id', (id) => {
-    // The filename is the id the CLI installs under and lists, so the two
-    // disagreeing would install an agent nobody asked for.
-    expect(presetFor(id).id).toBe(id);
-  });
-
-  it.each(presets)(
-    'presets/%s.json: stays within its toolbox ceiling',
-    (id) => {
-      const preset = presetFor(id);
-      if (preset.toolbox.name === '') return; // runs on the host; nothing to check
-
-      expect(toolboxes).toContain(preset.toolbox.name);
-      // The runtime would intersect these anyway, but a shipped pair that
-      // disagrees is a documentation bug worth failing on.
-      expect(NETWORK_ORDER[preset.toolbox.network.mode]).toBeLessThanOrEqual(
-        NETWORK_ORDER[manifestFor(preset.toolbox.name).network.maxMode],
-      );
-    },
-  );
 });

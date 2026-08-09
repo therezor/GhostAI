@@ -92,6 +92,7 @@ describe('resolveGhostPaths', () => {
       sharedDir: join(root, 'shared'),
       toolboxesDir: join(root, 'toolboxes'),
       presetsDir: join(root, 'presets'),
+      catalogueDir: join(root, 'catalogue'),
       runsDir: join(root, 'runs'),
       configFile: join(root, 'config.json'),
       dbFile: join(root, 'ghost.db'),
@@ -111,6 +112,10 @@ describe('resolveGhostPaths', () => {
     const paths = resolveGhostPaths(options);
 
     expect(paths.presetsDir.startsWith(paths.workspace)).toBe(false);
+    // The fetched half of the same argument: these arrive over the network, so
+    // one writable through `write_file` would let injection pick the agent
+    // *and* the container it runs in.
+    expect(paths.catalogueDir.startsWith(paths.workspace)).toBe(false);
   });
 
   it('honours the home environment variable', () => {
