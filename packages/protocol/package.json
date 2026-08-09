@@ -1,6 +1,6 @@
 {
   "name": "@ghostbot/protocol",
-  "version": "1.0.1",
+  "version": "0.7.0",
   "description": "Zod schemas and derived types shared by every GhostAI package.",
   "type": "module",
   "license": "MIT",

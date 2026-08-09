@@ -1,6 +1,6 @@
 {
   "name": "@ghostbot/runtime",
-  "version": "1.0.1",
+  "version": "0.7.0",
   "description": "The shared composition root: config in, a running agent out.",
   "type": "module",
   "license": "MIT",

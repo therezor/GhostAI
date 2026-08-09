@@ -1,6 +1,6 @@
 {
   "name": "@ghostbot/mcp",
-  "version": "1.0.1",
+  "version": "0.7.0",
   "description": "MCP client, connection lifecycle, and the bridge onto the tool registry.",
   "type": "module",
   "license": "MIT",

@@ -35,6 +35,10 @@ npm install -g @ghostbot/cli && ghost serve
 Prints a URL and a one-time code. Open it, pick a model — done.<br>
 Needs Node ≥ 22.13. Nothing else.
 
+Want a team rather than one agent? `ghost preset install` picks from a
+[catalogue](https://github.com/therezor/GhostAI-presets) — a researcher, a coder, an
+analyst, a coordinator — and builds only the containers the ones you pick need.
+
 **[Get started](docs/getting-started.md)** · [Docs](docs/) ·
 [Security](docs/security.md)
 
@@ -144,6 +148,7 @@ More in [Web UI](docs/web-ui.md). Generated from the real app, not staged.
 | [**Skills**](docs/skills.md)                           | A folder in the workspace. The agent opens the sheet when it applies; ~20 tokens to index.                                                                     |
 | [**Memory**](docs/memory.md)                           | One markdown file per fact, committed beside the project.                                                                                                      |
 | [**Toolboxes**](docs/toolboxes.md)                     | Bound the blast radius: `exec` in a digest-pinned container — caps dropped, root read-only, network capped by the manifest, and no field an agent could widen. |
+| [**Agent presets**](docs/cli.md#ghost-preset)          | `ghost preset install` picks agents from a catalogue and builds only the containers those agents named. Nothing runs until you approve the container.          |
 | [**MCP servers**](docs/tools.md#mcp-servers)           | stdio, Streamable HTTP or SSE, with OAuth. Each agent picks which of their tools it may call.                                                                  |
 | [**Extensions**](docs/extensions.md)                   | Tools, channels, providers, prompt sections, commands. Approval is a digest over every byte.                                                                   |
 | [**Subagents**](docs/architecture.md#subagents)        | One agent hands work to another as an `ask_<id>` tool.                                                                                                         |

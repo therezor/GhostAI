@@ -1,6 +1,6 @@
 {
   "name": "@ghostbot/core",
-  "version": "1.0.1",
+  "version": "0.7.0",
   "description": "Canonical message types, session store, message bus, logger, clock.",
   "type": "module",
   "license": "MIT",
