@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { AgentEvent, TurnInput, TurnResult } from '@ghostbot/agent';
+import type { AgentEvent, TurnInput, TurnResult } from '@ghostwire/agent';
 import {
   GhostError,
   SessionStore,
   assistantMessage,
   userMessage,
-} from '@ghostbot/core';
+} from '@ghostwire/core';
 import {
   ConfigSchema,
   PROTOCOL_VERSION,
@@ -14,7 +14,7 @@ import {
   type Config,
   type ServerMessage,
   type ServerMessageType,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import { HubApprovalGate } from '#src/approvals.js';
 import {

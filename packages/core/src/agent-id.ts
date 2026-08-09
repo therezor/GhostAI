@@ -1,7 +1,7 @@
 /**
  * Agent id rules, re-exported.
  *
- * See `@ghostbot/protocol`'s `ids.ts` for the rules and why they live there.
+ * See `@ghostwire/protocol`'s `ids.ts` for the rules and why they live there.
  */
 
 export {
@@ -10,4 +10,4 @@ export {
   RESERVED_AGENT_IDS,
   deriveAgentId,
   isAgentId,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';

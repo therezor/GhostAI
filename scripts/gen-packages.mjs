@@ -159,7 +159,7 @@ const PACKAGES = {
     // a tool's arguments with zod. Nothing in this package's runtime graph
     // imports it.
     devDeps: { zod: '^4.0.0' },
-    // `@ghostbot/runtime`'s tests drive a connector to prove a settings save
+    // `@ghostwire/runtime`'s tests drive a connector to prove a settings save
     // reconciles the right servers, and the composition root has no more
     // business spawning a subprocess than this package does.
     subpaths: { './testkit': 'test/testkit/index.ts' },
@@ -286,7 +286,7 @@ const PACKAGES = {
     // strings, keys and streams; it has never heard of an agent, a session or a
     // translation key. Every string reaching it is already translated, which is
     // why a caller passes prose rather than a key — and because there is no
-    // `@ghostbot/*` in its manifest, an import of one does not resolve. The
+    // `@ghostwire/*` in its manifest, an import of one does not resolve. The
     // layering is a fact about the package graph, not a rule under review.
     deps: { picocolors: '^1.1.0' },
     // A fake terminal, importable from inside this package only.
@@ -294,7 +294,7 @@ const PACKAGES = {
     tsconfigNotes: {
       references: [
         'No references, and that absence is the point: this package depends on no',
-        '`@ghostbot/*` at all, which is what makes "domain-free" a fact the build',
+        '`@ghostwire/*` at all, which is what makes "domain-free" a fact the build',
         'graph enforces rather than a rule a reviewer has to remember.',
       ].join('\n'),
     },
@@ -315,14 +315,14 @@ const PACKAGES = {
       'channels',
       'tui',
     ],
-    // `@ghostbot/web` is a plain dependency and not an `internal`, because the
+    // `@ghostwire/web` is a plain dependency and not an `internal`, because the
     // relationship is not a TypeScript one: `resolveUiRoot` finds the built SPA
-    // through `require.resolve('@ghostbot/web/package.json')` and serves the
+    // through `require.resolve('@ghostwire/web/package.json')` and serves the
     // directory. A project reference would make `tsc -b` demand declarations
     // from a package whose tsconfig is `noEmit` — Vite owns its JavaScript, and
     // nothing here imports a type from it.
     deps: {
-      '@ghostbot/web': 'workspace:*',
+      '@ghostwire/web': 'workspace:*',
       commander: '^13.0.0',
       // The CLI holds the i18next instance directly: `translationsFor` picks a
       // locale from `GHOSTAI_LANG`, `config.ui.locale` and the POSIX chain, and
@@ -333,9 +333,28 @@ const PACKAGES = {
     // `ws` is the socket client `serve.test.ts` drives the running server with;
     // nothing in the CLI's runtime graph imports it.
     devDeps: { '@types/ws': '^8.5.0', ws: '^8.18.0' },
-    bin: { ghost: './dist/index.js' },
+    bin: { ghostai: './dist/index.js' },
   },
 };
+
+/**
+ * Directories whose published name is not `@ghostwire/<dirname>`.
+ *
+ * Only the CLI, and only because it is the one package a person types: `npm i
+ * -g @ghostwire/ghostai` installs the thing called ghostai, where
+ * `@ghostwire/ghostai` would name the layer rather than the product. The directory
+ * stays `packages/cli` — it is what every relative path, tsconfig reference and
+ * `pnpm --filter` in this repo already says, and renaming it would buy nothing
+ * a reader of the manifest cannot see.
+ */
+const PUBLISHED_AS = {
+  cli: 'ghostai',
+};
+
+/** The published name for a package directory. */
+function packageName(dir) {
+  return `@ghostwire/${PUBLISHED_AS[dir] ?? dir}`;
+}
 
 for (const [name, cfg] of Object.entries(PACKAGES)) {
   const dir = join(ROOT, 'packages', name);
@@ -343,11 +362,11 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
 
   const dependencies = { ...(cfg.deps ?? {}) };
   for (const dep of cfg.internal ?? []) {
-    dependencies[`@ghostbot/${dep}`] = 'workspace:*';
+    dependencies[packageName(dep)] = 'workspace:*';
   }
 
   const pkg = {
-    name: `@ghostbot/${name}`,
+    name: packageName(name),
     version: VERSION,
     description: cfg.description,
     type: 'module',
@@ -413,8 +432,8 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
     //
     // The negation is about what a published tarball should weigh.
     // `sourcemap: true` is right for a workspace and wrong for an install:
-    // `@ghostbot/web`'s maps alone are 8 MB of its 11.8 MB, and they map a
-    // built SPA that nobody installing `ghost` will ever step through — anyone
+    // `@ghostwire/web`'s maps alone are 8 MB of its 11.8 MB, and they map a
+    // built SPA that nobody installing `ghostai` will ever step through — anyone
     // debugging this has the repo.
     //
     // **`dist/**` rather than `dist`, and that is the whole trick.** npm packs
@@ -470,7 +489,7 @@ for (const [name, cfg] of Object.entries(PACKAGES)) {
   // Without a config of its own, a package running `vitest run` from its own
   // directory finds the *root* config and inherits its `projects` globs — which
   // are relative to the root, match nothing from inside `packages/x`, and fail
-  // with "No projects were found". So `pnpm --filter @ghostbot/x test` was broken
+  // with "No projects were found". So `pnpm --filter @ghostwire/x test` was broken
   // everywhere, which is why the build plan noticed it for `protocol` alone: it
   // is the package a contributor is most likely to run on its own.
   //

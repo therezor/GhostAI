@@ -28,11 +28,11 @@
  * small files, once per turn.
  */
 
-import { silentLogger, type Logger } from '@ghostbot/core';
+import { silentLogger, type Logger } from '@ghostwire/core';
 import {
   DEFAULT_SKILLS_TEMPLATE,
   renderPromptTemplate,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import {
   templateOr,
@@ -71,7 +71,7 @@ export function renderSkills(
 
   // `{{index}}` carries its own leading blank line, so a template that places it
   // straight after its prose leaves no gap when the catalogue is empty. See the
-  // convention noted beside the placeholders in `@ghostbot/protocol`.
+  // convention noted beside the placeholders in `@ghostwire/protocol`.
   return renderPromptTemplate(resolved, {
     path: SKILLS_DIRNAME,
     index: indexLines === '' ? '' : `\n\n${indexLines}`,

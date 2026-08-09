@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { isGhostError, type GhostError } from '@ghostbot/core';
+import { isGhostError, type GhostError } from '@ghostwire/core';
 
 import {
   toToolResult,

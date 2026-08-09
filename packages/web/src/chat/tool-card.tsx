@@ -53,7 +53,7 @@ import type {
   ApprovalScope,
   StoredMessage,
   ToolRisk,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import { cn } from '@/lib/cn.js';
 import { api } from '@/lib/api.js';

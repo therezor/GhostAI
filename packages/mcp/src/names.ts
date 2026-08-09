@@ -3,12 +3,12 @@
  *
  * The arithmetic — the character class, the 64-character cap, the digest tail
  * that keeps two truncated names apart — is `namespacedToolName` in
- * `@ghostbot/tools`, because the extension host needs exactly the same rule
+ * `@ghostwire/tools`, because the extension host needs exactly the same rule
  * under a different prefix and a copy would drift the first time the cap moved.
  * What is MCP's here is the prefix and nothing else.
  */
 
-import { namespacedToolName, namespacedToolNames } from '@ghostbot/tools';
+import { namespacedToolName, namespacedToolNames } from '@ghostwire/tools';
 
 const MCP_TOOL_PREFIX = 'mcp';
 
@@ -34,4 +34,4 @@ export function flattenToolNames(
   return namespacedToolNames(MCP_TOOL_PREFIX, serverId, toolNames);
 }
 
-export { isAdvertisableName } from '@ghostbot/tools';
+export { isAdvertisableName } from '@ghostwire/tools';

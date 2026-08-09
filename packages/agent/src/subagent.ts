@@ -7,10 +7,10 @@
  * session is created and the child's events are forwarded.
  *
  * **Why the loop and not a tool.** Every other capability a model has is a
- * `defineTool` in `@ghostbot/tools`, and this deliberately is not, for two
+ * `defineTool` in `@ghostwire/tools`, and this deliberately is not, for two
  * reasons that are both structural rather than stylistic:
  *
- *  - `@ghostbot/tools` sits *below* this package in the layer graph, so a tool
+ *  - `@ghostwire/tools` sits *below* this package in the layer graph, so a tool
  *    that started a turn would invert the dependency the layering rule exists to
  *    hold. A registry that could reach an `AgentLoop` is a registry that has the
  *    whole agent behind it.
@@ -24,13 +24,13 @@
  * a real turn on a real loop and not a special case of one.
  */
 
-import { GhostError } from '@ghostbot/core';
+import { GhostError } from '@ghostwire/core';
 import {
   defaultSubagentPrompt,
   type ToolDefinition,
   type ToolPermission,
-} from '@ghostbot/protocol';
-import type { ToolExecution } from '@ghostbot/tools';
+} from '@ghostwire/protocol';
+import type { ToolExecution } from '@ghostwire/tools';
 
 /**
  * How deep delegation may go.
@@ -94,7 +94,7 @@ const TASK_PARAMETERS: Readonly<Record<string, unknown>> = Object.freeze({
 function describeSubagent(binding: SubagentBinding): string {
   const own = binding.prompt.trim();
   if (own !== '') return own;
-  // The sentence itself lives in `@ghostbot/protocol` because the settings UI
+  // The sentence itself lives in `@ghostwire/protocol` because the settings UI
   // shows it as the field's placeholder, and a second copy over there would be
   // a promise about what the model reads that could quietly stop being true.
   return defaultSubagentPrompt(binding.label);

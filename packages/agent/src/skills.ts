@@ -37,7 +37,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { parseFrontmatter, silentLogger, type Logger } from '@ghostbot/core';
+import { parseFrontmatter, silentLogger, type Logger } from '@ghostwire/core';
 
 /** The folder inside the workspace that holds them. */
 export const SKILLS_DIRNAME = 'skills';

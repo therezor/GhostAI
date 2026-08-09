@@ -8,17 +8,17 @@
  *  1. A mock provider on 127.0.0.1:11500 speaking the `openai-chat` wire,
  *     scripted to call `list_dir` and then answer from what came back — the
  *     same shape `packages/e2e/src/harness/script.ts` gives the browser suite.
- *     It drives the **real** `ghost` binary through a real config, because a
+ *     It drives the **real** `ghostai` binary through a real config, because a
  *     recording of a mock is not a recording of the product.
  *  2. A throwaway install, seeded with one file for the agent to find.
- *  3. `scripts/ptyrec.py` records **bash** on a real pty, types `ghost chat`,
+ *  3. `scripts/ptyrec.py` records **bash** on a real pty, types `ghostai chat`,
  *     waits for the TUI, asks the question, and leaves. Keystrokes are
  *     scheduled so the run reproduces; the timings in the cast are the real
  *     ones, and every byte on screen came back through the pty from the
  *     programs themselves.
  *  4. `svg-term` renders the cast to a self-contained animated SVG.
  *
- * **Why a pty and not a pipe.** Piping `ghost chat` gets you the plain stream
+ * **Why a pty and not a pipe.** Piping `ghostai chat` gets you the plain stream
  * it writes for a machine: no session header, no composer, no status bar, no
  * spinner. That is a demo of the wrong thing. The child has to believe it is on
  * a terminal, and `script` needs a controlling terminal this repo's tooling does
@@ -68,7 +68,7 @@ function seedHome() {
     join(home, 'workspace', 'notes.md'),
     '# Notes\n\nRemember to water the plants.\n',
   );
-  // A real `ghost` on PATH, so the typed command is the one a reader will type.
+  // A real `ghostai` on PATH, so the typed command is the one a reader will type.
   const shim = join(home, 'bin', 'ghost');
   writeFileSync(
     shim,
@@ -148,7 +148,7 @@ function faintToGrey(castPath) {
 /** The take. Slow enough to read, short enough to loop. */
 const TAKE = [
   [0.9, ''],
-  ...type('ghost chat', 0.07),
+  ...type('ghostai chat', 0.07),
   [0.45, '\r'],
   [1.9, ''],
   ...type(QUESTION, 0.055),

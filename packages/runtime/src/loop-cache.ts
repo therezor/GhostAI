@@ -25,8 +25,8 @@
  *    eviction — so dropping the reference is the whole of closing one.
  */
 
-import type { AgentLoop } from '@ghostbot/agent';
-import { DEFAULT_AGENT_ID } from '@ghostbot/core';
+import type { AgentLoop } from '@ghostwire/agent';
+import { DEFAULT_AGENT_ID } from '@ghostwire/core';
 
 /**
  * Beyond this many live loops the least-recently-used is dropped.

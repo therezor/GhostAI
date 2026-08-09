@@ -18,7 +18,7 @@
 import {
   McpStatusResponseSchema,
   type McpStatusResponse,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import type { RouteDeps, RouteGroup } from './types.js';
 

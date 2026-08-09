@@ -321,10 +321,10 @@ negotiation, plural handling and right-to-left detection already work.
 
 ## Working on it
 
-Run `pnpm --filter @ghostbot/web dev` for an edit-reload loop; Vite proxies `/api` and
-`/ws` to a running `ghost serve`.
+Run `pnpm --filter @ghostwire/web dev` for an edit-reload loop; Vite proxies `/api` and
+`/ws` to a running `ghostai serve`.
 
-**Restart `ghost serve` after a production UI build.** It enumerates the UI directory once
+**Restart `ghostai serve` after a production UI build.** It enumerates the UI directory once
 at boot, so a rebuild underneath a running server serves the new `index.html` and 404s its
 hashed assets into the SPA fallback. The result is a blank page that looks like a crash
 and is not one.

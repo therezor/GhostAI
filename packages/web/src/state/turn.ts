@@ -25,7 +25,7 @@ import type {
   ServerMessage,
   StoredMessage,
   SubagentRunRef,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import {
   appendPendingUserMessage,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { silentLogger } from '@ghostbot/core';
+import { silentLogger } from '@ghostwire/core';
 
 import { BotApi } from '#src/telegram/api.js';
 import type { ChatState } from '#src/telegram/chats.js';

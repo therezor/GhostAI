@@ -1,5 +1,5 @@
 /**
- * Telegram, brought up by the real `ghost serve`.
+ * Telegram, brought up by the real `ghostai serve`.
  *
  * `packages/channels` already tests the channel against a scripted hub, and
  * `telegram.test.ts` tests the token precedence on its own. What neither can
@@ -127,9 +127,9 @@ async function start(
   return server;
 }
 
-describe('ghost serve with a bot configured', () => {
+describe('ghostai serve with a bot configured', () => {
   it('starts nothing when no token resolves', async () => {
-    // The normal case. `ghost serve` has to come up unchanged for everybody who
+    // The normal case. `ghostai serve` has to come up unchanged for everybody who
     // has never heard of this.
     const server = await start(home({ allowlist: [ALLOWED] }), {
       TELEGRAM_BOT_TOKEN: undefined,

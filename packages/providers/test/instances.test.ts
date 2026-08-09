@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ProviderConfig, ProvidersConfig } from '@ghostbot/protocol';
+import type { ProviderConfig, ProvidersConfig } from '@ghostwire/protocol';
 
 import {
   describeInstance,
@@ -117,7 +117,7 @@ describe('resolveInstance', () => {
   });
 
   it('synthesises an instance for a type nobody configured', () => {
-    // `ghost chat --provider ollama` on a machine with no config file worked
+    // `ghostai chat --provider ollama` on a machine with no config file worked
     // before instances existed and has to keep working.
     const resolved = resolveInstance({ providers: {}, provider: 'ollama' });
     expect(resolved?.id).toBe('ollama');

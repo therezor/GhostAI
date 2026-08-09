@@ -22,7 +22,7 @@
 import { useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type { Config } from '@ghostbot/protocol';
+import type { Config } from '@ghostwire/protocol';
 
 import {
   FieldGrid,

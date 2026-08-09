@@ -3,7 +3,7 @@ import {
   LoginResponseSchema,
   PROTOCOL_SCHEMAS,
   type ConfigPatch,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 import type { FastifySchema } from 'fastify';
 // `summary` and `operationId` are not fastify's — `@fastify/swagger` merges them
 // onto `FastifySchema`. `src/app.ts` is what imports the extension, and while the

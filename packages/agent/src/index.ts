@@ -1,5 +1,5 @@
 /**
- * @ghostbot/agent — the loop.
+ * @ghostwire/agent — the loop.
  *
  * This package turns a provider, a tool registry and a session store into a
  * turn: an async generator of `AgentEvent`s that a terminal renderer, a
@@ -7,7 +7,7 @@
  * above it is a projection of that one event stream, which is why there is no
  * `onToken` callback and no transport-shaped variant of the loop.
  *
- * **This package must never import `@ghostbot/server`.** The Python original
+ * **This package must never import `@ghostwire/server`.** The Python original
  * imported its web-layer agent manager from inside the agent loop; that cycle
  * is prevented here by the dependency direction, and the layering lint rule
  * exists to keep it prevented.

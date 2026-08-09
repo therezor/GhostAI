@@ -1,7 +1,7 @@
 /**
  * The tool approval gate.
  *
- * `@ghostbot/protocol` describes this end to end — a risk band per tool, a policy
+ * `@ghostwire/protocol` describes this end to end — a risk band per tool, a policy
  * per band, a scope per answer — but the loop is where it has to be read,
  * because the loop is the only thing that sits between a model asking for
  * `exec` and a shell running.
@@ -20,11 +20,11 @@
  *    turn is the only party that knows it is still waiting.
  *
  * An absent gate means nobody is there to ask, so an `ask` policy runs the tool:
- * that is what keeps `ghost chat` behaving as it did. A `deny` policy is refused
+ * that is what keeps `ghostai chat` behaving as it did. A `deny` policy is refused
  * either way, since refusing needs no one to answer.
  */
 
-import type { ApprovalScope, ToolRisk } from '@ghostbot/protocol';
+import type { ApprovalScope, ToolRisk } from '@ghostwire/protocol';
 
 /** One call, waiting on a decision. Mirrors the `tool.approvalRequest` event. */
 export interface ApprovalRequest {

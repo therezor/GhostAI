@@ -1,7 +1,7 @@
 /**
  * Wall clock ⇄ instant, and the two days a year it is hard.
  *
- * The DST cases mirror the ones in `@ghostbot/core`'s `cron.test.ts` on purpose.
+ * The DST cases mirror the ones in `@ghostwire/core`'s `cron.test.ts` on purpose.
  * The two implementations cannot share code — `core` reaches `node:sqlite` and
  * `self-contained.test.ts` keeps it out of the browser bundle — so what keeps
  * them honest is that they are held to the same answers.

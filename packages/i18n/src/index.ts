@@ -6,7 +6,7 @@
  * factory, and the key type that lets a package name a string without depending
  * on i18next to resolve it.
  *
- * The per-surface entry points are `@ghostbot/i18n/web` and `@ghostbot/i18n/cli`.
+ * The per-surface entry points are `@ghostwire/i18n/web` and `@ghostwire/i18n/cli`.
  * They exist so the CLI parses one bundle instead of three on every `--help`,
  * and so the browser never ships the terminal's strings.
  */

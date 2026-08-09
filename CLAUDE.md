@@ -29,7 +29,7 @@ it is written from the workflow, and this is the copy that goes stale:
 # job: check
 pnpm typecheck
 pnpm lint
-pnpm --filter @ghostbot/web exec tsx src/tokens/run-gates.ts   # design token gates
+pnpm --filter @ghostwire/web exec tsx src/tokens/run-gates.ts   # design token gates
 pnpm format:check                                             # ← the usual failure
 pnpm i18n:check                                               # extract, then diff the bundles
 pnpm test
@@ -40,7 +40,7 @@ pnpm test:coverage
 
 # job: e2e — Playwright, both colour schemes, against a real server
 pnpm build                                                    # a precondition, not a convenience
-pnpm --filter @ghostbot/e2e test:e2e
+pnpm --filter @ghostwire/e2e test:e2e
 ```
 
 Notes that save a cycle:
@@ -71,7 +71,7 @@ Notes that save a cycle:
   it is CI's fault:
 
   ```bash
-  pnpm --filter @ghostbot/e2e exec playwright test <spec> --repeat-each=6
+  pnpm --filter @ghostwire/e2e exec playwright test <spec> --repeat-each=6
   ```
 
 ### Never assert a transient state in an e2e test

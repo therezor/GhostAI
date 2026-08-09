@@ -30,13 +30,13 @@
  * an entry — it can only make reach the agent already had easier to find.
  */
 
-import { guardExec } from '@ghostbot/security';
+import { guardExec } from '@ghostwire/security';
 import {
   TOOLBOX_DEFAULT_KEY,
   type Toolbox,
   type ToolboxEntry,
   type ToolPermission,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 import { z } from 'zod';
 
 import {

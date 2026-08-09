@@ -30,7 +30,7 @@
  *    a 404, because that is the client asking for something wrong.
  */
 
-import { GhostError } from '@ghostbot/core';
+import { GhostError } from '@ghostwire/core';
 import {
   CommandListResponseSchema,
   RunCommandRequestSchema,
@@ -38,7 +38,7 @@ import {
   type CommandListResponse,
   type RunCommandRequest,
   type RunCommandResponse,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import type { FastifyRequest } from 'fastify';
 

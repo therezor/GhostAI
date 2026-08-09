@@ -3,7 +3,7 @@
  *
  * **This is not a YAML parser, and it must not grow into one.** Nothing in this
  * repository parses YAML — there is no `yaml`, `js-yaml` or `gray-matter` in any
- * manifest, and `@ghostbot/protocol` states the house position on dependencies
+ * manifest, and `@ghostwire/protocol` states the house position on dependencies
  * outright. What a skill's frontmatter actually holds is a `name` and a
  * `description`: two strings, not a tree. A parser for two strings is thirty
  * lines here; a parser for YAML is a dependency plus every construct it accepts
@@ -51,10 +51,10 @@
  * whole of what the memory format needs, and every step past it is a step
  * towards the YAML parser this file exists not to be.
  *
- * ## Why it lives in `@ghostbot/core`
+ * ## Why it lives in `@ghostwire/core`
  *
- * It started in `@ghostbot/agent` beside `skills.ts`, its only caller. The
- * `memory` tool is the second, and it is in `@ghostbot/tools`, which depends on
+ * It started in `@ghostwire/agent` beside `skills.ts`, its only caller. The
+ * `memory` tool is the second, and it is in `@ghostwire/tools`, which depends on
  * core and not on agent. One parser at the bottom of the graph beats two copies
  * of the same thirty lines drifting apart.
  */

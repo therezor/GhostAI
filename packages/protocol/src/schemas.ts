@@ -7,7 +7,7 @@
  *     "every schema converts" guarantee cannot quietly stop covering a schema
  *     someone added later — a new export with no registry entry fails the
  *     completeness assertion below it.
- *  2. `@ghostbot/server` feeds it to `@fastify/swagger` as the `$defs` pool for
+ *  2. `@ghostwire/server` feeds it to `@fastify/swagger` as the `$defs` pool for
  *     the generated OpenAPI 3.1 document.
  */
 

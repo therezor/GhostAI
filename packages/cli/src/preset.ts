@@ -1,5 +1,5 @@
 /**
- * `ghost preset` — pick agents from the catalogue, and get the boxes they need.
+ * `ghostai preset` — pick agents from the catalogue, and get the boxes they need.
  *
  * This replaces `ghost install`, which built every shipped toolbox and
  * installed every shipped agent because both shipped inside the CLI and there
@@ -33,16 +33,16 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-import { GhostError, ensureDir, loadConfig, saveConfig } from '@ghostbot/core';
-import { dockerEngine } from '@ghostbot/runtime';
-import { ToolboxStore, weakenedIn } from '@ghostbot/security';
+import { GhostError, ensureDir, loadConfig, saveConfig } from '@ghostwire/core';
+import { dockerEngine } from '@ghostwire/runtime';
+import { ToolboxStore, weakenedIn } from '@ghostwire/security';
 import {
   TOOLBOX_DEFAULT_KEY,
   type AgentEntry,
   type AgentPreset,
   type Config,
   type Toolbox,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import { planInstall, type PresetPaths } from './agent.js';
 import type { Ask } from './ask.js';
@@ -191,7 +191,7 @@ interface Offer {
 /**
  * Every preset on offer, operator's own and the catalogue's, deduplicated.
  *
- * Reads each one, unlike `ghost agent list` which reads only names: this has to
+ * Reads each one, unlike `ghostai agent list` which reads only names: this has to
  * show the toolbox and the label, and it is about to install them anyway. A
  * file that does not parse is a line in the report rather than the end of the
  * run — one broken preset in a directory must not hide the other seven.
@@ -205,7 +205,7 @@ function offers(
   const found: Offer[] = [];
   for (const id of listAllPresets(dirs)) {
     // Operator's directory first, so a local preset of the same name wins —
-    // the same resolution `ghost agent install <id>` uses, through the same
+    // the same resolution `ghostai agent install <id>` uses, through the same
     // function, because two answers to "which file is `coder`" is a bug
     // waiting for somebody to hit it.
     const path = findPreset(dirs, id);
@@ -270,7 +270,7 @@ function describeGrant(preset: AgentPreset, t: CliT): string {
  *     and `update` have nothing to do against one, so they say so rather than
  *     appearing to work.
  *  2. **Is a copy here, and is it good enough?** `--refresh` and
- *     `ghost preset update` are the two ways of saying it is not.
+ *     `ghostai preset update` are the two ways of saying it is not.
  *  3. Otherwise fetch, unless `--offline` forbids it.
  */
 function locate(options: PresetOptions, catalogueRoot: string): string {
@@ -372,7 +372,7 @@ export async function runPreset(options: PresetOptions): Promise<number> {
     if (chosen === undefined) {
       errOut(
         'Which presets? Pass ids, or run this in a terminal to pick from a list —\n' +
-          '  see `ghost preset list`.',
+          '  see `ghostai preset list`.',
       );
       return 2;
     }
@@ -469,7 +469,7 @@ async function install(
       'config',
       `This catalogue has no toolbox named ${missing.map((n) => `"${n}"`).join(', ')}.\n` +
         '  A preset naming a box the catalogue does not carry cannot be installed.\n' +
-        '  Update the catalogue with `ghost preset update`.',
+        '  Update the catalogue with `ghostai preset update`.',
       { details: { missing } },
     );
   }
@@ -568,7 +568,7 @@ function report(
     out('');
     out('Still unapproved. An agent cannot work in a toolbox until you');
     out('approve it:');
-    for (const { name } of pending) out(`    ghost toolbox approve ${name}`);
+    for (const { name } of pending) out(`    ghostai toolbox approve ${name}`);
   }
 
   const waiting = blocked.filter(
@@ -581,7 +581,7 @@ function report(
       for (const { id } of waiting) out(`    ${id}`);
       out('');
       out('Approve them, then re-run — or do both at once with');
-      out('`ghost preset install --approve`.');
+      out('`ghostai preset install --approve`.');
     } else {
       // Not an approval problem, so the reason is worth printing: an id that
       // cannot be an agent id, a network request above the box's ceiling.
@@ -608,7 +608,7 @@ function report(
     out('These agents delegate, and can now reach specialists they were not');
     out('given when they were installed. Refresh each roster when you want');
     out('it — this never overwrites an agent you may have edited:');
-    for (const id of stale) out(`    ghost agent install ${id} --force`);
+    for (const id of stale) out(`    ghostai agent install ${id} --force`);
   }
 }
 
@@ -719,7 +719,7 @@ function isApproved(paths: PresetPaths, name: string): boolean {
  * boxes this run's chosen agents named, so empty means nothing chosen needs a
  * container — and a box left unapproved from some earlier run is not this run's
  * business to ask about. The command that reports on those is
- * `ghost toolbox list`.
+ * `ghostai toolbox list`.
  *
  * It is also what keeps this off the database entirely on the common path: a
  * fresh install picking `nano` has no `ghost.db` yet, and opening one to

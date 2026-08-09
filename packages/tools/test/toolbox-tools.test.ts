@@ -4,8 +4,8 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { ToolboxSchema, type Toolbox } from '@ghostbot/protocol';
-import { WorkspaceJail } from '@ghostbot/security';
+import { ToolboxSchema, type Toolbox } from '@ghostwire/protocol';
+import { WorkspaceJail } from '@ghostwire/security';
 
 import { DEFAULT_TOOLS_CONFIG, type ToolContext } from '#src/define.js';
 import { ToolRegistry, withToolboxTools } from '#src/registry.js';

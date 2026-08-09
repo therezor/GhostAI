@@ -13,7 +13,7 @@
  *
  *  1. `<root>/presets/<id>.json` — an operator's own. Adding one is adding a
  *     file; there is no install step, because there is nothing to install.
- *  2. `agents/<id>.json` in the catalogue — the ones `ghost preset install`
+ *  2. `agents/<id>.json` in the catalogue — the ones `ghostai preset install`
  *     offers. Where that directory *is* is `catalogue.ts`'s question, and it
  *     is passed in here rather than resolved, because the answer depends on
  *     the root and on `--from`.
@@ -26,8 +26,8 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
-import { GhostError } from '@ghostbot/core';
-import { AgentPresetSchema, type AgentPreset } from '@ghostbot/protocol';
+import { GhostError } from '@ghostwire/core';
+import { AgentPresetSchema, type AgentPreset } from '@ghostwire/protocol';
 
 /** The extension every preset file carries. The stem is the agent id. */
 const PRESET_SUFFIX = '.json';

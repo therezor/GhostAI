@@ -1,4 +1,4 @@
-import { GhostError } from '@ghostbot/core';
+import { GhostError } from '@ghostwire/core';
 import { describe, expect, it } from 'vitest';
 
 import {

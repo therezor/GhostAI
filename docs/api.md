@@ -2,7 +2,7 @@
 
 REST and WebSocket on the same port as the UI. Default `http://127.0.0.1:3000`.
 
-Every schema in this document is a Zod object in `@ghostbot/protocol`, and the **OpenAPI
+Every schema in this document is a Zod object in `@ghostwire/protocol`, and the **OpenAPI
 3.1 document is generated from those same objects** — served at `/api/openapi.json`. A
 test reflects over the schema modules and fails if an exported schema was not registered,
 so the API description cannot drift from what the server validates against.
@@ -51,7 +51,7 @@ Listing endpoints use cursor pagination, never offset.
 | POST   | `/api/setup/claim`    | `public`   | Takes the one-time console code.                      |
 | POST   | `/api/setup/password` | `required` | The wizard's first password and every later rotation. |
 
-Passwords are at least 12 characters. The username defaults to `ghost`, is lower-cased by
+Passwords are at least 12 characters. The username defaults to `ghostai`, is lower-cased by
 the schema, and changing either revokes every other session.
 
 ### Settings

@@ -1,10 +1,10 @@
 /**
  * `GhostRuntime` as the server's routes want it.
  *
- * `@ghostbot/server` states a narrow `ServerRuntime` port rather than importing
+ * `@ghostwire/server` states a narrow `ServerRuntime` port rather than importing
  * the composition root, so that a route test needs neither a provider nor a
  * vault nor a workspace. This is the adapter on the other side of that port,
- * and it lives here because `ghost serve` is where the two halves are wired
+ * and it lives here because `ghostai serve` is where the two halves are wired
  * together in the first place.
  *
  * It is not a pass-through. Five things the port promises are implemented
@@ -36,7 +36,7 @@
 
 import { existsSync } from 'node:fs';
 
-import { DEFAULT_AGENT_ID, GhostError, saveConfig } from '@ghostbot/core';
+import { DEFAULT_AGENT_ID, GhostError, saveConfig } from '@ghostwire/core';
 import type {
   Config,
   ConfigPatch,
@@ -49,22 +49,22 @@ import type {
   RunCommandResponse,
   SetCredentialRequest,
   ToolDefinition,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 import {
   findProvider,
   listInstances,
   resolveConnection,
   type ChatResult,
-} from '@ghostbot/providers';
-import { ExtensionStore, ToolboxStore } from '@ghostbot/security';
-import { openVault, resolveAgent, type GhostRuntime } from '@ghostbot/runtime';
+} from '@ghostwire/providers';
+import { ExtensionStore, ToolboxStore } from '@ghostwire/security';
+import { openVault, resolveAgent, type GhostRuntime } from '@ghostwire/runtime';
 import type {
   AgentSummary,
   AgentView,
   ServerRuntime,
   ExtensionCounts,
-} from '@ghostbot/server';
-import type { CredentialVault, FetchImplementation } from '@ghostbot/security';
+} from '@ghostwire/server';
+import type { CredentialVault, FetchImplementation } from '@ghostwire/security';
 
 import { createModelCatalogue } from './models.js';
 
@@ -78,7 +78,7 @@ interface ServerRuntimeOptions {
   /** Injected so a test does not wait out a real timeout. */
   readonly modelTimeoutMs?: number;
   /**
-   * Rebuilds what only `ghost serve` owns, after an extension was loaded.
+   * Rebuilds what only `ghostai serve` owns, after an extension was loaded.
    *
    * The knot this unties: approving an extension can bring a `ChannelFactory`
    * with it, and `ChannelManager` fixes its factories at construction and

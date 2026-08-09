@@ -14,7 +14,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
-import { ConfigSchema, type ConfigPatch } from '@ghostbot/protocol';
+import { ConfigSchema, type ConfigPatch } from '@ghostwire/protocol';
 
 import { Providers } from '@/app/providers.js';
 import { createAppRouter } from '@/app/router.js';
@@ -59,8 +59,8 @@ const UNAPPROVED = {
   digest: 'b'.repeat(64),
   lastError:
     'Extension "zulip" is installed but has never been approved.\n' +
-    '  Review what it contributes with `ghost extension list`, then\n' +
-    '  `ghost extension approve zulip`.',
+    '  Review what it contributes with `ghostai extension list`, then\n' +
+    '  `ghostai extension approve zulip`.',
 };
 
 const SHELL_ROUTES: Record<string, StubRoute> = {
@@ -146,7 +146,7 @@ describe('the Extensions panel', () => {
         'Extension "zulip" is installed but has never been approved.',
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/ghost extension approve/)).toBeNull();
+    expect(screen.queryByText(/ghostai extension approve/)).toBeNull();
   });
 
   it('asks before approving, and says what is being granted', async () => {

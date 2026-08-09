@@ -25,7 +25,7 @@ import {
   textOf,
   type SessionStore,
   type StoredMessageRecord,
-} from '@ghostbot/core';
+} from '@ghostwire/core';
 
 /** How many rows `/messages` prints when no count is given. */
 export const DEFAULT_MESSAGE_LINES = 12;

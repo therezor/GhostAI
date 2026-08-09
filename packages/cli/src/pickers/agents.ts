@@ -11,14 +11,14 @@
  * layer is that it cannot do anything except turn data into a choice.
  *
  * `AgentSummary` is deliberately not reused. There are two of them — the wire
- * DTO in `@ghostbot/protocol` and the port in `@ghostbot/server` — and both are
+ * DTO in `@ghostwire/protocol` and the port in `@ghostwire/server` — and both are
  * shapes the *server* needs. The CLI already holds `runtime.agents`, whose
  * `label` is documented as never empty, so taking on either would be adopting a
  * translation nobody here has to make.
  */
 
-import type { EffectiveAgent } from '@ghostbot/runtime';
-import type { SelectItem } from '@ghostbot/tui';
+import type { EffectiveAgent } from '@ghostwire/runtime';
+import type { SelectItem } from '@ghostwire/tui';
 
 import type { CliT } from '../i18n.js';
 import type { Menu } from '../menu.js';

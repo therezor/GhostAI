@@ -71,7 +71,7 @@ inherit-unless-set — plus the keys below. The id also names the agent's direct
 session, shared by every agent that opens it.
 
 Entries are created three ways, and they all land in the same shape: the web UI's agent
-editor, editing this file by hand, and `ghost agent install`, which merges a preset —
+editor, editing this file by hand, and `ghostai agent install`, which merges a preset —
 a shipped agent definition — into this map ([CLI](cli.md#ghost-agent)). However an entry
 got here, it is edited the same way afterwards.
 
@@ -270,7 +270,7 @@ to remove an entry. `null` at `tools.mcpServers.<id>` deletes the server, and
 `null` at its `oauth` says it does not use OAuth.
 
 Two guards do **not** apply here, and the reasoning is in the module headers of
-`@ghostbot/mcp`. A stdio `command` does not go through `guardExec`: that guard
+`@ghostwire/mcp`. A stdio `command` does not go through `guardExec`: that guard
 constrains argv a _model_ wrote inside the workspace jail, and it refuses the
 absolute paths and `npx`-shaped invocations every MCP server uses. A `url` does
 not go through `guardedFetch`'s SSRF blocklist, because the commonest MCP
@@ -502,8 +502,8 @@ Agents are created, renamed and deleted through `PATCH /api/settings` (which car
 | Variable                    | Does                                                                       |
 | --------------------------- | -------------------------------------------------------------------------- |
 | `GHOSTAI_HOME`              | The root directory. Same as `--home`.                                      |
-| `GHOSTAI_PASSWORD`          | Fallback for `ghost serve --password`.                                     |
-| `GHOSTAI_USERNAME`          | Fallback for `ghost serve --username`.                                     |
+| `GHOSTAI_PASSWORD`          | Fallback for `ghostai serve --password`.                                   |
+| `GHOSTAI_USERNAME`          | Fallback for `ghostai serve --username`.                                   |
 | `GHOSTAI_LANG`              | Locale override. Ranks above `config.ui.locale`, which ranks above `LANG`. |
 | `GHOSTAI_LOG_LEVEL`         | Then `LOG_LEVEL`, then `info`.                                             |
 | `GHOSTAI_DEBUG`             | Any non-empty value prints stack traces instead of the friendly message.   |

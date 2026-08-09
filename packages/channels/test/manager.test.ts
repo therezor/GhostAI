@@ -4,8 +4,8 @@ import {
   textPart,
   type OutboundKind,
   type OutboundMessage,
-} from '@ghostbot/core';
-import type { ServerMessage } from '@ghostbot/protocol';
+} from '@ghostwire/core';
+import type { ServerMessage } from '@ghostwire/protocol';
 
 import {
   DEFAULT_ACCEPTED_KINDS,

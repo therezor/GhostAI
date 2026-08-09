@@ -1,9 +1,9 @@
 /**
  * The terminal's translation layer.
  *
- * **This is the one `@ghostbot/*` import `program.ts` makes at module scope**,
+ * **This is the one `@ghostwire/*` import `program.ts` makes at module scope**,
  * and the exception is deliberate rather than an oversight — see the rule at
- * the top of that file. Two things make it affordable: `@ghostbot/i18n/cli` is a
+ * the top of that file. Two things make it affordable: `@ghostwire/i18n/cli` is a
  * leaf with one dependency and no side effects, and it carries the `cli` and
  * `shared` bundles only, not the browser's. `program.test.ts` measures what
  * `--help` costs so the exception stays a measured one.
@@ -19,7 +19,7 @@
  *     order POSIX defines. These arrive as `de_DE.UTF-8`, which `normaliseLocale`
  *     turns back into a language tag.
  *
- * `ghost --help` and an argument-parse error resolve without step 2, because
+ * `ghostai --help` and an argument-parse error resolve without step 2, because
  * both run before any config has been read — and making `--help` load the
  * config to find out what language to print in would cost every invocation the
  * start-up budget this file exists to protect. An install whose `config.json`
@@ -31,8 +31,8 @@ import {
   resolveFirstLocale,
   type CliResources,
   type ResourceKeys,
-} from '@ghostbot/i18n';
-import { createCliI18n } from '@ghostbot/i18n/cli';
+} from '@ghostwire/i18n';
+import { createCliI18n } from '@ghostwire/i18n/cli';
 import type { i18n, TFunction } from 'i18next';
 
 /** The environment variables that name a language, most specific first. */

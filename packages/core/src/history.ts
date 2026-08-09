@@ -16,7 +16,7 @@
  * failure that is invisible until a session gets long enough.
  */
 
-import type { ChatMessage, ToolMessage } from '@ghostbot/protocol';
+import type { ChatMessage, ToolMessage } from '@ghostwire/protocol';
 
 /**
  * The first index from which every `tool` message has a matching preceding

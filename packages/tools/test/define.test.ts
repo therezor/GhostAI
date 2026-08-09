@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { isGhostError } from '@ghostbot/core';
+import { isGhostError } from '@ghostwire/core';
 
 import { assertNotAborted, defineTool, toToolResult } from '#src/define.js';
 import { createTestWorkspace } from '#testkit/workspace.js';

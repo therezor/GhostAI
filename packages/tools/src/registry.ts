@@ -34,19 +34,19 @@ import {
   toGhostError,
   truncateHeadTail,
   onAbort,
-} from '@ghostbot/core';
+} from '@ghostwire/core';
 import type {
   AbortSubscription,
   Clock,
   ErrorKind,
   Logger,
-} from '@ghostbot/core';
+} from '@ghostwire/core';
 import type {
   ToolDefinition,
   ToolPermission,
   ToolPermissions,
   ToolSource,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import {
   toToolResult,

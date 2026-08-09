@@ -1,6 +1,6 @@
 {
-  "name": "@ghostbot/mcp",
-  "version": "0.7.1",
+  "name": "@ghostwire/mcp",
+  "version": "0.7.0",
   "description": "MCP client, connection lifecycle, and the bridge onto the tool registry.",
   "type": "module",
   "license": "MIT",
@@ -57,10 +57,10 @@
     "lint": "eslint src test"
   },
   "dependencies": {
-    "@ghostbot/core": "workspace:*",
-    "@ghostbot/protocol": "workspace:*",
-    "@ghostbot/security": "workspace:*",
-    "@ghostbot/tools": "workspace:*",
+    "@ghostwire/core": "workspace:*",
+    "@ghostwire/protocol": "workspace:*",
+    "@ghostwire/security": "workspace:*",
+    "@ghostwire/tools": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.30.0"
   },
   "devDependencies": {

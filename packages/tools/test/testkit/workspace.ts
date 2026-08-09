@@ -12,8 +12,8 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { ToolsConfig } from '@ghostbot/protocol';
-import { WorkspaceJail } from '@ghostbot/security';
+import type { ToolsConfig } from '@ghostwire/protocol';
+import { WorkspaceJail } from '@ghostwire/security';
 
 import { DEFAULT_TOOLS_CONFIG, type ToolContext } from '#src/define.js';
 

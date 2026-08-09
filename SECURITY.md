@@ -6,7 +6,7 @@ Report privately through GitHub's
 [Report a vulnerability](https://github.com/therezor/GhostAI/security/advisories/new)
 form. Please do not open a public issue for anything exploitable.
 
-Include what you need to make it reproducible: the version (`ghost --version`), the
+Include what you need to make it reproducible: the version (`ghostai --version`), the
 configuration that matters (with credentials removed — `config.json` never contains any),
 and what an attacker gets. A proof of concept helps more than a description.
 

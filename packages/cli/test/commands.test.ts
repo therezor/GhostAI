@@ -8,10 +8,10 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { ModelsResponse } from '@ghostbot/protocol';
+import type { ModelsResponse } from '@ghostwire/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { ExtensionStore } from '@ghostbot/security';
+import { ExtensionStore } from '@ghostwire/security';
 
 import {
   commandRows,

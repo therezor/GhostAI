@@ -27,7 +27,7 @@
  * for an off-by-one to hide.
  */
 
-import type { ServerMessage } from '@ghostbot/protocol';
+import type { ServerMessage } from '@ghostwire/protocol';
 
 /**
  * A server event that belongs to a session's replayable history.

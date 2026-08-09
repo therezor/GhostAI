@@ -20,11 +20,11 @@
  * should say so.
  */
 
-import { GhostError } from '@ghostbot/core';
+import { GhostError } from '@ghostwire/core';
 import {
   ExtensionListResponseSchema,
   type ExtensionListResponse,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import type { RouteDeps, RouteGroup } from './types.js';
 

@@ -6,7 +6,7 @@ import { join, sep } from 'node:path';
 import fc from 'fast-check';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { isGhostError } from '@ghostbot/core';
+import { isGhostError } from '@ghostwire/core';
 
 import { WorkspaceJail, pathShapes, singleJail } from '#src/jail.js';
 

@@ -20,11 +20,11 @@
  * limit to reach the same answer.
  */
 
-import { GhostError, silentLogger, systemClock } from '@ghostbot/core';
-import type { Clock, Logger, TimerHandle } from '@ghostbot/core';
-import { systemRandom } from '@ghostbot/security';
-import type { McpServerState, McpServerStatus } from '@ghostbot/protocol';
-import type { AnyTool } from '@ghostbot/tools';
+import { GhostError, silentLogger, systemClock } from '@ghostwire/core';
+import type { Clock, Logger, TimerHandle } from '@ghostwire/core';
+import { systemRandom } from '@ghostwire/security';
+import type { McpServerState, McpServerStatus } from '@ghostwire/protocol';
+import type { AnyTool } from '@ghostwire/tools';
 
 import { bridgeTool } from './bridge.js';
 import { selectTools } from './filter.js';

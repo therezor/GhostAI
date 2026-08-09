@@ -14,7 +14,7 @@
  * an app to find out.
  */
 
-import { createWebI18n } from '@ghostbot/i18n/web';
+import { createWebI18n } from '@ghostwire/i18n/web';
 import {
   createContext,
   useContext,

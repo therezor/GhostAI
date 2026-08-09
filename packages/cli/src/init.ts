@@ -1,5 +1,5 @@
 /**
- * `ghost init` — the terminal half of first-run setup.
+ * `ghostai init` — the terminal half of first-run setup.
  *
  * The browser gets a wizard behind a one-time code; this is the same six
  * questions for someone who never intends to open one. It writes exactly two
@@ -12,8 +12,8 @@
  *
  *  - **No prompt library.** `chat.ts` already drives `node:readline/promises`
  *    with an `AbortSignal`, and six questions is not worth a dependency in a
- *    package whose whole point is that `ghost --help` loads almost nothing.
- *    The helpers are in `ask.ts`, which is where they moved when `ghost preset
+ *    package whose whole point is that `ghostai --help` loads almost nothing.
+ *    The helpers are in `ask.ts`, which is where they moved when `ghostai preset
  *    install` needed the same four, and they take their streams as arguments so
  *    a test drives them without a terminal.
  *
@@ -34,24 +34,24 @@ import {
   ConfigSchema,
   type Config,
   type ProviderConfig,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 import {
   GhostError,
   ensureDir,
   loadConfig,
   saveConfig,
   type LoadedConfig,
-} from '@ghostbot/core';
+} from '@ghostwire/core';
 import {
   PROVIDERS,
   createProvider,
   nextInstanceId,
   type ProviderSpec,
-} from '@ghostbot/providers';
-import { PROVIDER_CREDENTIAL_NAMESPACE, openVault } from '@ghostbot/runtime';
+} from '@ghostwire/providers';
+import { PROVIDER_CREDENTIAL_NAMESPACE, openVault } from '@ghostwire/runtime';
 import pc from 'picocolors';
 
-import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from '@ghostbot/i18n';
+import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from '@ghostwire/i18n';
 
 import { openAsk, type Ask } from './ask.js';
 import { translationsFor, type CliT } from './i18n.js';
@@ -155,8 +155,8 @@ export async function initCommand(options: InitOptions = {}): Promise<number> {
   // would write a config nobody chose.
   if (input.isTTY !== true) {
     errOut.write(
-      '✖ `ghost init` needs a terminal.\n' +
-        `  Edit ${loaded.file} directly, or run \`ghost serve\` and use the browser wizard.\n`,
+      '✖ `ghostai init` needs a terminal.\n' +
+        `  Edit ${loaded.file} directly, or run \`ghostai serve\` and use the browser wizard.\n`,
     );
     return 1;
   }
@@ -177,7 +177,7 @@ export async function initCommand(options: InitOptions = {}): Promise<number> {
     out.write(`  ${c.dim(t('init.workspace'))}  ${answers.workspace}\n\n`);
 
     out.write(
-      `\nRun ${c.cyan('ghost chat')} to talk to it, or ${c.cyan('ghost serve')} for the UI.\n`,
+      `\nRun ${c.cyan('ghostai chat')} to talk to it, or ${c.cyan('ghostai serve')} for the UI.\n`,
     );
     return 0;
   } catch (error) {

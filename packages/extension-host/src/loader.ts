@@ -25,7 +25,7 @@
 
 import { pathToFileURL } from 'node:url';
 
-import { GhostError } from '@ghostbot/core';
+import { GhostError } from '@ghostwire/core';
 
 import type { Extension } from './extension.js';
 

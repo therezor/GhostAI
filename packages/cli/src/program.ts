@@ -1,18 +1,18 @@
 /**
- * The `ghost` command line.
+ * The `ghostai` command line.
  *
  * Two rules shape this file, and both are about start-up cost:
  *
- *  - **Nothing from `@ghostbot/*` is imported at module scope, with one measured
- *    exception.** Only `commander` and types, which erase. `@ghostbot/core` alone
+ *  - **Nothing from `@ghostwire/*` is imported at module scope, with one measured
+ *    exception.** Only `commander` and types, which erase. `@ghostwire/core` alone
  *    pulls in pino, zod and `node:sqlite`, and the agent behind it pulls the
- *    provider adapters and the tool registry — none of which `ghost --help` has
+ *    provider adapters and the tool registry — none of which `ghostai --help` has
  *    any use for. The subcommand is loaded inside its action handler, and even
  *    `isGhostError` is imported inside the `catch` that needs it, on a path that
  *    has already failed. tsup's ESM code splitting makes that a real second
  *    chunk rather than a stylistic gesture.
  *
- *    The exception is `./i18n.js`, and through it `@ghostbot/i18n/cli`. Help text
+ *    The exception is `./i18n.js`, and through it `@ghostwire/i18n/cli`. Help text
  *    *is* the thing `--help` prints, so there is no later point to load it: the
  *    description of every flag on this page comes out of that bundle. What keeps
  *    it affordable is that the subpath carries the `cli` and `shared` bundles
@@ -20,9 +20,9 @@
  *    its own.
  *
  *    Measured on the built bundle: **3.4 ms to import, 0.9 ms to construct the
- *    instance**, against a `ghost --help` that takes ~50 ms end to end. Roughly
+ *    instance**, against a `ghostai --help` that takes ~50 ms end to end. Roughly
  *    a twelfth of the invocation, and the budget that was set for it was 10 ms.
- *    Re-measure with `node -e "import('@ghostbot/i18n/cli')"` around
+ *    Re-measure with `node -e "import('@ghostwire/i18n/cli')"` around
  *    `process.hrtime.bigint()` if this file grows another module-scope import;
  *    there is deliberately no test asserting the number, because a wall-clock
  *    budget on a shared CI runner is the transient assertion `CLAUDE.md` bans.
@@ -40,7 +40,7 @@
 
 import { Command, CommanderError } from 'commander';
 
-import type { LogLevel } from '@ghostbot/core';
+import type { LogLevel } from '@ghostwire/core';
 
 import { runAgent } from './agent.js';
 import type { ChatOptions } from './chat.js';
@@ -62,7 +62,7 @@ import type { ServeCommandOptions } from './serve.js';
  * bump is the root `package.json` plus `node scripts/gen-packages.mjs`; the
  * test above is what stops that pair from landing without this.
  */
-export const VERSION = '0.7.1';
+export const VERSION = '0.7.0';
 
 const LOG_LEVELS: readonly string[] = [
   'trace',
@@ -184,7 +184,7 @@ function buildProgram(deps: CliDeps = {}): Command {
     'Commands:': t('help.commands'),
   };
 
-  const program = new Command('ghost')
+  const program = new Command('ghostai')
     .description(t('program.description'))
     .version(VERSION, '-v, --version', t('help.outputVersion'))
     .helpOption('-h, --help', t('help.displayHelp'))
@@ -197,9 +197,9 @@ function buildProgram(deps: CliDeps = {}): Command {
       t('program.options.logLevel', { levels: LOG_LEVELS.join(', ') }),
     )
     // Global, beside `--log-level` rather than on `chat`, because that is where
-    // someone looks for it: `chat` is the default command, so `ghost --help` is
-    // the help for what plain `ghost` does, and a flag that governs plain
-    // `ghost` and is absent from that page may as well not exist.
+    // someone looks for it: `chat` is the default command, so `ghostai --help` is
+    // the help for what plain `ghostai` does, and a flag that governs plain
+    // `ghostai` and is absent from that page may as well not exist.
     //
     // No `-v`: the program already spends it on `--version`, and a short flag
     // meaning one thing before the subcommand and another after it is worse
@@ -209,7 +209,7 @@ function buildProgram(deps: CliDeps = {}): Command {
     // Commander builds its own five section headings into `formatHelp`, so
     // `styleTitle` — its hook for colouring them — is the only seam that reaches
     // them without reimplementing the formatter. Translating here rather than
-    // there is what keeps `ghost --help` from being English chrome around
+    // there is what keeps `ghostai --help` from being English chrome around
     // translated descriptions.
     //
     // Must precede the `.command()` calls below: each subcommand copies the
@@ -513,7 +513,7 @@ function buildProgram(deps: CliDeps = {}): Command {
         command.setOptionValue('exitCode', code);
       } finally {
         // Node keeps the process alive while a readline interface is open, so
-        // this is what makes `ghost preset install` exit rather than hang.
+        // this is what makes `ghostai preset install` exit rather than hang.
         opened?.close();
       }
     };
@@ -591,11 +591,11 @@ function buildProgram(deps: CliDeps = {}): Command {
  *
  * `isGhostError` is imported here rather than at the top of the file: this runs
  * only on a path that has already failed, so the cost of loading
- * `@ghostbot/core` is one nobody is waiting on — and keeping it off module scope
- * is what keeps `ghost --help` free of the whole dependency graph.
+ * `@ghostwire/core` is one nobody is waiting on — and keeping it off module scope
+ * is what keeps `ghostai --help` free of the whole dependency graph.
  */
 async function describeFailure(error: unknown, env: Env): Promise<string> {
-  const { isGhostError } = await import('@ghostbot/core');
+  const { isGhostError } = await import('@ghostwire/core');
   if (isGhostError(error)) {
     // Under `GHOSTAI_DEBUG` the stack is what was asked for; otherwise the
     // sentence the error carries is the whole of what a person needs.

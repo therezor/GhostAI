@@ -7,8 +7,8 @@
 
 import { describe, expect, it } from 'vitest';
 
-import type { ChatMessage } from '@ghostbot/protocol';
-import type { ChatResult } from '@ghostbot/providers';
+import type { ChatMessage } from '@ghostwire/protocol';
+import type { ChatResult } from '@ghostwire/providers';
 
 import {
   HEARTBEAT_RESULT_TOOL,

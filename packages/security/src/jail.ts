@@ -4,7 +4,7 @@
  * Every path that reaches the filesystem from a model, a channel, an extension or
  * an MCP server passes through here first. It is the only thing in GhostAI
  * permitted to decide that an agent-supplied path is acceptable, which is why
- * `@ghostbot/core` documents its own path helpers as *not* being a safety check.
+ * `@ghostwire/core` documents its own path helpers as *not* being a safety check.
  *
  * The workspace is a **root**, in the `chroot` sense. `/etc/passwd` addresses
  * `<workspace>/etc/passwd`; `../../secrets` addresses `<workspace>/secrets`;
@@ -63,7 +63,7 @@ import {
   sep,
 } from 'node:path';
 
-import { GhostError, ensureDir } from '@ghostbot/core';
+import { GhostError, ensureDir } from '@ghostwire/core';
 
 /**
  * Why a path was refused. Carried in the error's `details` for the audit log.
@@ -478,7 +478,7 @@ export class WorkspaceJail {
 /**
  * Supplies the jail a turn runs inside, keyed by its session's workspace.
  *
- * Declared here rather than in `@ghostbot/agent` because it is a statement about
+ * Declared here rather than in `@ghostwire/agent` because it is a statement about
  * jails: the tool registry, an MCP host and the file routes all need to reach
  * one workspace out of several, and none of them should have to depend on the
  * agent loop to say so.

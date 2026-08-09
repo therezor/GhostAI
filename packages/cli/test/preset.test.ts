@@ -1,5 +1,5 @@
 /**
- * `ghost preset` — the picker, the builds it triggers, and the refusals.
+ * `ghostai preset` — the picker, the builds it triggers, and the refusals.
  *
  * Ported from `setup.test.ts`, which tested the all-or-nothing `ghost install`
  * this replaced. Everything that touches the world is injected — the fetcher,
@@ -24,7 +24,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { Config } from '@ghostbot/protocol';
+import type { Config } from '@ghostwire/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { Ask } from '#src/ask.js';
@@ -218,7 +218,7 @@ afterEach(() => {
   rmSync(catalogue, { recursive: true, force: true });
 });
 
-describe('ghost preset list', () => {
+describe('ghostai preset list', () => {
   it('shows every preset, and which are already installed', async () => {
     await run({ ids: ['nano'] });
     out = [];
@@ -232,7 +232,7 @@ describe('ghost preset list', () => {
   });
 });
 
-describe('ghost preset install', () => {
+describe('ghostai preset install', () => {
   it('builds only the boxes the chosen agents asked for', async () => {
     // The whole reason the picker exists. `spare` is in the catalogue and
     // nobody named it, so it is never built.
@@ -269,7 +269,7 @@ describe('ghost preset install', () => {
     // policy nobody read, which is the failure the gate exists to stop.
     expect(await run({ ids: ['coder'] })).toBe(0);
 
-    expect(out.join('\n')).toContain('ghost toolbox approve coding');
+    expect(out.join('\n')).toContain('ghostai toolbox approve coding');
     expect(savedAgents().coder).toBeUndefined();
   });
 
@@ -330,7 +330,7 @@ describe('ghost preset install', () => {
     expect(asked).toEqual([]);
     expect(savedAgents().coder).toBeUndefined();
     expect(out.join('\n')).not.toContain('review this');
-    expect(out.join('\n')).toContain('ghost toolbox approve coding');
+    expect(out.join('\n')).toContain('ghostai toolbox approve coding');
   });
 
   it('holds back an agent whose box is not approved yet', async () => {
@@ -408,7 +408,7 @@ describe('ghost preset install', () => {
     expect(await run({ ids: ['lead'] })).toBe(0);
 
     expect(savedAgents().lead?.subagents).toEqual([]);
-    expect(out.join('\n')).toContain('ghost agent install lead --force');
+    expect(out.join('\n')).toContain('ghostai agent install lead --force');
   });
 
   it('stops before the first build when the daemon is unreachable', async () => {
@@ -477,7 +477,7 @@ describe('the picker', () => {
 
   it('refuses with a usage message when there is nobody to ask', async () => {
     expect(await run({})).toBe(2);
-    expect(errOut.join('\n')).toContain('ghost preset list');
+    expect(errOut.join('\n')).toContain('ghostai preset list');
   });
 
   it('shows how much of a box a preset asked for', async () => {
@@ -538,7 +538,7 @@ describe('finding the catalogue', () => {
   });
 });
 
-describe('ghost preset update', () => {
+describe('ghostai preset update', () => {
   it('always fetches, even when a copy is already here', async () => {
     // The bug this pins: `update` used to find the copy under the prefix,
     // return it, and report success having fetched nothing at all.

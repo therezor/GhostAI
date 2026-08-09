@@ -24,7 +24,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
-import { DEFAULT_AGENT_ID, type AgentSummary } from '@ghostbot/protocol';
+import { DEFAULT_AGENT_ID, type AgentSummary } from '@ghostwire/protocol';
 
 import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';

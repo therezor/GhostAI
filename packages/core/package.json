@@ -1,6 +1,6 @@
 {
-  "name": "@ghostbot/core",
-  "version": "0.7.1",
+  "name": "@ghostwire/core",
+  "version": "0.7.0",
   "description": "Canonical message types, session store, message bus, logger, clock.",
   "type": "module",
   "license": "MIT",
@@ -47,8 +47,8 @@
     "lint": "eslint src test"
   },
   "dependencies": {
-    "@ghostbot/i18n": "workspace:*",
-    "@ghostbot/protocol": "workspace:*",
+    "@ghostwire/i18n": "workspace:*",
+    "@ghostwire/protocol": "workspace:*",
     "pino": "^9.5.0",
     "zod": "^4.0.0"
   }

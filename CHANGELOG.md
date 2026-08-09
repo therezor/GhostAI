@@ -2,36 +2,27 @@
 
 The format is [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 uses [semantic versioning](https://semver.org/spec/v2.0.0.html). Every package in the
-repository carries the same version and they are released together; only `@ghostbot/cli`
+repository carries the same version and they are released together; only `@ghostwire/ghostai`
 is something you install by name.
-
-## [0.7.1] - 2026-08-09
-
-### Fixed
-
-- **`ghost preset install` looked for a package that no longer exists.** The
-  catalogue is published as `@ghostbot/presets`, not `@ghostbot/catalogue` — the
-  old name went out with 0.7.0 and was withdrawn from npm, so a 0.7.0 install
-  that ran `ghost preset install` without `--from` would fetch a name that
-  resolves to nothing. Upgrade, or pass `--from` with a checkout.
-- The version range the fetch asks for is `^1.0.0` rather than `^2.0.0`. The
-  major was there to step over a 1.x that kept its presets in `presets/` instead
-  of `agents/`; under a new package name there is no such history to skip.
 
 ## [0.7.0] - 2026-08-09
 
 The first release. Everything below is what it ships with rather than what changed.
 
-**0.7.0 rather than 1.0.0, deliberately.** An earlier build of this went out as 1.0.0 on
-the argument that the surface was what mattered — the config schema, the REST and
-WebSocket protocol, the tool contract, the extension contract and the eight prompt
-templates are what other people build against, and breaking one should cost a major
-version. That argument still holds and those interfaces have not moved. What was wrong
-was the confidence: the agent presets and toolboxes have since been extracted into a
-repository of their own, and the command that installs them was rewritten around a
-question the old one never asked. A surface that reshapes itself twice in two days is a
-0.x, whatever its interfaces promise. The 1.0.0 and 1.0.1 tags were withdrawn; this is
-what to install.
+**0.7.0 rather than 1.0.0, deliberately.** An earlier build went out as 1.0.0 on the
+argument that the surface was what mattered — the config schema, the REST and WebSocket
+protocol, the tool contract, the extension contract and the eight prompt templates are
+what other people build against, and breaking one should cost a major version. That
+argument still holds and those interfaces have not moved. What was wrong was the
+confidence: within two days the agent presets and toolboxes had been extracted into a
+repository of their own, the command that installs them was rewritten around a question
+the old one never asked, and the packages moved scope. A surface that reshapes itself
+that often is a 0.x whatever its interfaces promise.
+
+**The scope is `@ghostwire` and the command is `ghostai`.** Both were `@ghostbot` and
+`ghost` in the withdrawn builds. `ghost` is a common enough binary name to collide on a
+shared machine, and `@ghostbot/cli` named the layer rather than the product — what you
+install is the thing you type.
 
 The known limits at the bottom of this entry are missing features, not unfinished
 interfaces.
@@ -54,7 +45,7 @@ interfaces.
 
 - A web UI: streaming answers, tool cards, approval prompts, a file browser and editor,
   multiple workspaces, an agent editor, and a context inspector.
-- A CLI: `ghost chat` as a one-shot, a pipe target or a prompt with slash commands.
+- A CLI: `ghostai chat` as a one-shot, a pipe target or a prompt with slash commands.
 - REST and WebSocket on the same port, with an OpenAPI 3.1 document generated from the
   same Zod schemas the server validates against.
 - A Telegram bot over long polling, answering only the ids you list.
@@ -92,18 +83,18 @@ interfaces.
   entry, so a preset can express nothing a settings save could not: no model, no
   provider, and nothing from the toolbox manifest's side of the security boundary. One
   kind of preset and one lookup, whether or not the agent works in a container.
-- **`ghost preset install`** lists what the catalogue offers and installs the ones you
+- **`ghostai preset install`** lists what the catalogue offers and installs the ones you
   tick, building only the containers those particular agents named. Choosing agents that
   need no container is how an install with no Docker finishes. Approval is settled in the
   same run, because approving is what unblocks the agents: `--approve` and `--no-approve`
   answer it outright, and with neither it prints each toolbox's policy and asks — before
   the question, so a `y` is informed. A run with nobody to ask approves nothing.
-- **`ghost agent install <id>`** is the scriptable single-shot beside it, with `--force`
-  to overwrite an entry that may carry your own edits, and `ghost agent list` /
-  `ghost preset list` to see what exists.
+- **`ghostai agent install <id>`** is the scriptable single-shot beside it, with `--force`
+  to overwrite an entry that may carry your own edits, and `ghostai agent list` /
+  `ghostai preset list` to see what exists.
 - **The catalogue is a separate repository**,
   [`GhostAI-presets`](https://github.com/therezor/GhostAI-presets), published as
-  `@ghostbot/presets` and versioned on its own cadence. It is fetched on demand into
+  `@ghostwire/presets` and versioned on its own cadence. It is fetched on demand into
   `~/.ghostai/catalogue`; `--from` reads a checkout instead, for anyone writing a preset,
   and is never fetched over.
 - **A preset can take part of a box rather than all of it.** `toolbox.tools` maps a
@@ -139,5 +130,4 @@ them reads as more finished than it is.
   ships as a scheduled job's payload; delivery does not.
 - **Session search is by title and filter, not by message content.**
 
-[0.7.1]: https://github.com/therezor/GhostAI/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/therezor/GhostAI/releases/tag/v0.7.0

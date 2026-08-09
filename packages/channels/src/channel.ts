@@ -61,8 +61,8 @@ import type {
   OutboundKind,
   OutboundMessage,
   PublishResult,
-} from '@ghostbot/core';
-import type { ClientMessage } from '@ghostbot/protocol';
+} from '@ghostwire/core';
+import type { ClientMessage } from '@ghostwire/protocol';
 
 /**
  * An inbound message as a channel writes it: everything but the `channelId`,
@@ -123,7 +123,7 @@ export interface ChannelContext {
    *
    * `ChannelsConfigSchema` is a `looseObject` precisely so that installing an
    * extension that carries a channel does not require a schema change in
-   * `@ghostbot/protocol`, so
+   * `@ghostwire/protocol`, so
    * the channel parses its own settings — with its own Zod schema, if it has
    * one — and reports a bad block by refusing to start.
    */

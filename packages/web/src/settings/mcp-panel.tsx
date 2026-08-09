@@ -17,7 +17,7 @@ import { Plug, Pencil, Plus, Power, PowerOff, Trash2 } from 'lucide-react';
 import { useState, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from '@tanstack/react-router';
-import type { Config, McpServerStatus } from '@ghostbot/protocol';
+import type { Config, McpServerStatus } from '@ghostwire/protocol';
 
 import { Badge } from '@/components/ui/badge.js';
 import { Button } from '@/components/ui/button.js';

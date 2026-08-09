@@ -10,13 +10,13 @@
  * Not exported from `index.ts`: it is test scaffolding.
  */
 
-import type { AgentEvent, TurnInput, TurnResult } from '@ghostbot/agent';
-import type { SessionStore } from '@ghostbot/core';
+import type { AgentEvent, TurnInput, TurnResult } from '@ghostwire/agent';
+import type { SessionStore } from '@ghostwire/core';
 import {
   ConfigSchema,
   DEFAULT_AGENT_ID,
   type Config,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import { HubApprovalGate } from '#src/approvals.js';
 import { SessionHub, type TurnRunner } from '#src/hub.js';

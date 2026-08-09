@@ -159,7 +159,7 @@
   },
   "serve": {
     "agent": "Agent",
-    "agentUnconfigured": "not configured — add a provider in the UI, or run `ghost init`",
+    "agentUnconfigured": "not configured — add a provider in the UI, or run `ghostai init`",
     "auth": "Auth",
     "authDisabled": "disabled — anything that can reach {{host}} can drive this agent",
     "authEnabled": "enabled",
@@ -180,7 +180,7 @@
     "pressCtrlC": "Press Ctrl-C to stop.",
     "stopped": "Stopped.",
     "ui": "UI",
-    "uiUnbuilt": "not built — serving the API only (build @ghostbot/web to add it)",
+    "uiUnbuilt": "not built — serving the API only (build @ghostwire/web to add it)",
     "url": "URL",
     "workspace": "Workspace"
   },

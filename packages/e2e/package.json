@@ -1,5 +1,5 @@
 {
-  "name": "@ghostbot/e2e",
+  "name": "@ghostwire/e2e",
   "version": "0.0.0",
   "description": "End-to-end browser tests and the design-fidelity gate.",
   "type": "module",
@@ -14,14 +14,14 @@
     "baseline": "tsx src/fidelity/capture.ts"
   },
   "dependencies": {
-    "@ghostbot/agent": "workspace:*",
-    "@ghostbot/core": "workspace:*",
-    "@ghostbot/protocol": "workspace:*",
-    "@ghostbot/providers": "workspace:*",
-    "@ghostbot/runtime": "workspace:*",
-    "@ghostbot/server": "workspace:*",
-    "@ghostbot/tools": "workspace:*",
-    "@ghostbot/web": "workspace:*"
+    "@ghostwire/agent": "workspace:*",
+    "@ghostwire/core": "workspace:*",
+    "@ghostwire/protocol": "workspace:*",
+    "@ghostwire/providers": "workspace:*",
+    "@ghostwire/runtime": "workspace:*",
+    "@ghostwire/server": "workspace:*",
+    "@ghostwire/tools": "workspace:*",
+    "@ghostwire/web": "workspace:*"
   },
   "devDependencies": {
     "@playwright/test": "^1.50.0",

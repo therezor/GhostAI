@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { isGhostError, userMessage } from '@ghostbot/core';
+import { isGhostError, userMessage } from '@ghostwire/core';
 
 import { createProvider, resolveConnection } from '#src/factory.js';
 import { findProvider, type ProviderSpec } from '#src/registry.js';

@@ -31,8 +31,8 @@ import {
   type AutomationSchedule,
   type CreateAutomationJob,
   type UpdateAutomationJob,
-} from '@ghostbot/protocol';
-import { isGhostError } from '@ghostbot/core';
+} from '@ghostwire/protocol';
+import { isGhostError } from '@ghostwire/core';
 import type { FastifyReply } from 'fastify';
 
 import {

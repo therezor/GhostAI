@@ -62,7 +62,7 @@ import {
   type Logger,
   type SessionStore,
   type TurnStatsRecord,
-} from '@ghostbot/core';
+} from '@ghostwire/core';
 import {
   AgentDefaultsSchema,
   SUBAGENT_METADATA_KEY,
@@ -82,19 +82,19 @@ import {
   type ToolPromptOverrides,
   type ToolsConfig,
   type Usage,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 import {
   emptyUsage,
   type ChatProvider,
   type ChatRequest,
   type ChatResult,
-} from '@ghostbot/providers';
+} from '@ghostwire/providers';
 import {
   createToolOutputNonce,
   systemRandom,
   type JailResolver,
   type RandomSource,
-} from '@ghostbot/security';
+} from '@ghostwire/security';
 import {
   DEFAULT_TOOLS_CONFIG,
   type AutomationResolver,
@@ -103,7 +103,7 @@ import {
   type ToolContext,
   type ToolExecution,
   type ToolScope,
-} from '@ghostbot/tools';
+} from '@ghostwire/tools';
 
 import type { ApprovalGate } from './approval.js';
 import { materialiseAttachments, type AttachmentCache } from './attachments.js';
@@ -357,7 +357,7 @@ export interface AgentLoopOptions {
   readonly steering?: SteeringQueue;
   readonly clock?: Clock;
   readonly logger?: Logger;
-  /** The nonce source. Never pin this outside a test — see `@ghostbot/security`. */
+  /** The nonce source. Never pin this outside a test — see `@ghostwire/security`. */
   readonly random?: RandomSource;
   /** Turn ids. Injected so a test asserts on stable values. */
   readonly newId?: () => string;

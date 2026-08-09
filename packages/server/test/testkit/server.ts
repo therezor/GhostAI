@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-import type { Clock } from '@ghostbot/core';
+import type { Clock } from '@ghostwire/core';
 import {
   ConfigSchema,
   type Config,
@@ -23,7 +23,7 @@ import {
   type RunCommandRequest,
   type RunCommandResponse,
   type ToolDefinition,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import { createServer, type GhostServer, type UiOptions } from '#src/app.js';
 import type { PasswordHasher } from '#src/auth-store.js';

@@ -1,6 +1,6 @@
 {
-  "name": "@ghostbot/agent",
-  "version": "0.7.1",
+  "name": "@ghostwire/agent",
+  "version": "0.7.0",
   "description": "The agent loop, subagent manager, and context contributors.",
   "type": "module",
   "license": "MIT",
@@ -57,11 +57,11 @@
     "lint": "eslint src test"
   },
   "dependencies": {
-    "@ghostbot/core": "workspace:*",
-    "@ghostbot/protocol": "workspace:*",
-    "@ghostbot/providers": "workspace:*",
-    "@ghostbot/security": "workspace:*",
-    "@ghostbot/tools": "workspace:*"
+    "@ghostwire/core": "workspace:*",
+    "@ghostwire/protocol": "workspace:*",
+    "@ghostwire/providers": "workspace:*",
+    "@ghostwire/security": "workspace:*",
+    "@ghostwire/tools": "workspace:*"
   },
   "devDependencies": {
     "zod": "^4.0.0"

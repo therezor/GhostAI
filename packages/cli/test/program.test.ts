@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 
-import { GhostError } from '@ghostbot/core';
+import { GhostError } from '@ghostwire/core';
 import { describe, expect, it } from 'vitest';
 
 import type { ChatOptions } from '#src/chat.js';
@@ -32,7 +32,7 @@ async function cli(
   const out = sink();
   const errOut = sink();
   const calls: ChatOptions[] = [];
-  const code = await runCli(['node', 'ghost', ...args], {
+  const code = await runCli(['node', 'ghostai', ...args], {
     out,
     errOut,
     env: {},
@@ -139,7 +139,7 @@ describe('runCli', () => {
   it('returns a nested subcommand failure as its exit code', async () => {
     // The action on `agent install` receives the leaf command and records its
     // exit code there. A sweep of the top level alone read every nested
-    // failure as success — `ghost toolbox approve nope` printed the refusal
+    // failure as success — `ghostai toolbox approve nope` printed the refusal
     // and exited 0.
     const errOut = sink();
     const code = await runCli(
@@ -250,14 +250,14 @@ describe('runCli', () => {
   });
 
   it('--verbose asks for the install’s own reporting', async () => {
-    // Before the subcommand: it is a global, listed on `ghost --help`, which is
+    // Before the subcommand: it is a global, listed on `ghostai --help`, which is
     // where someone looks for it because `chat` is the default command.
     const run = await cli(['--verbose', 'chat', 'hi']);
     expect(run.calls[0]?.logLevel).toBe('info');
   });
 
   it('takes --verbose after the subcommand too, where a hand lands', async () => {
-    // Commander accepts a global option in either position, and `ghost chat
+    // Commander accepts a global option in either position, and `ghostai chat
     // --verbose` is what someone types who has already started the sentence.
     const run = await cli(['chat', '--verbose', 'hi']);
     expect(run.calls[0]?.logLevel).toBe('info');
@@ -308,7 +308,7 @@ describe('runCli', () => {
 
   it('includes the stack when GHOSTAI_DEBUG asks for it', async () => {
     const errOut = sink();
-    const code = await runCli(['node', 'ghost', 'chat', 'hi'], {
+    const code = await runCli(['node', 'ghostai', 'chat', 'hi'], {
       out: sink(),
       errOut,
       env: { GHOSTAI_DEBUG: '1' },
@@ -331,7 +331,7 @@ describe('runCli', () => {
   });
 });
 
-describe('ghost serve', () => {
+describe('ghostai serve', () => {
   /** The parser, with the server stubbed: nothing here binds a port. */
   async function serve(
     args: readonly string[],
@@ -340,7 +340,7 @@ describe('ghost serve', () => {
     const out = sink();
     const errOut = sink();
     const calls: ServeCommandOptions[] = [];
-    const code = await runCli(['node', 'ghost', ...args], {
+    const code = await runCli(['node', 'ghostai', ...args], {
       out,
       errOut,
       env,

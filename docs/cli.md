@@ -1,11 +1,11 @@
 # CLI
 
 **Who this is for:** anyone driving GhostAI from a terminal rather than a browser. It is
-the reference for `ghost` — every command, every flag, and every slash command inside the
+the reference for `ghostai` — every command, every flag, and every slash command inside the
 chat prompt. If you are setting up for the first time, start with
 [Getting started](getting-started.md) and come back here.
 
-One binary, `ghost`. The terminal and the browser are two views of one install, not two
+One binary, `ghostai`. The terminal and the browser are two views of one install, not two
 programs: they share a single `ghost.db`, so a session you start here is the row the
 browser sidebar lists, and a turn started from either goes through the same loop and the
 same approval gate.
@@ -14,16 +14,16 @@ same approval gate.
 
 ```
 ghost [chat] [message...]      talk to the agent — the default command
-ghost init                     configure this install, in a wizard
-ghost serve                    serve the web UI and the API on one port
-ghost preset    list | install [ids...] | update
-ghost agent     install <name-or-path> [--force] | list
-ghost toolbox   list | approve <id> | revoke <id>
-ghost extension list | approve <id> | revoke <id>
-ghost help [command]
+ghostai init                     configure this install, in a wizard
+ghostai serve                    serve the web UI and the API on one port
+ghostai preset    list | install [ids...] | update
+ghostai agent     install <name-or-path> [--force] | list
+ghostai toolbox   list | approve <id> | revoke <id>
+ghostai extension list | approve <id> | revoke <id>
+ghostai help [command]
 ```
 
-`chat` is the default, so `ghost "what changed today"` and `ghost chat "what changed
+`chat` is the default, so `ghost "what changed today"` and `ghostai chat "what changed
 today"` are the same command.
 
 ### Global flags
@@ -35,19 +35,19 @@ today"` are the same command.
 | `--verbose`           | Report what the install is doing, not only the answer.             |
 | `--no-color`          | Disable colour.                                                    |
 | `-v`, `--version`     | Print the version.                                                 |
-| `-h`, `--help`        | Print help. `ghost help <command>` does the same for one.          |
+| `-h`, `--help`        | Print help. `ghostai help <command>` does the same for one.        |
 
 The log level defaults to `error` — or `info` while serving, because a server that says
 nothing while it works reads as hung.
 
-## `ghost chat`
+## `ghostai chat`
 
 Three shapes, decided by how you call it:
 
 ```bash
-ghost chat                            # a prompt, with slash commands and Tab completion
-ghost chat "summarise notes.md"       # one turn, then exit
-git log --oneline -20 | ghost chat "what changed"   # a pipe target
+ghostai chat                            # a prompt, with slash commands and Tab completion
+ghostai chat "summarise notes.md"       # one turn, then exit
+git log --oneline -20 | ghostai chat "what changed"   # a pipe target
 ```
 
 | Flag                      | Does                                                     |
@@ -155,7 +155,7 @@ An extension can add commands of its own; they appear in this list and in `/help
 the same table, so one cannot exist in the completer and not the listing. See
 [Extensions](extensions.md).
 
-## `ghost init`
+## `ghostai init`
 
 The terminal half of the first-run wizard: language, workspace, provider, model. The
 provider step lists models from the endpoint itself, so on a machine running
@@ -165,7 +165,7 @@ It **needs a real terminal** and refuses a pipe rather than reading EOF as an an
 it writes nothing until every question has been answered — a wizard abandoned halfway
 leaves the install exactly as it was.
 
-## `ghost serve`
+## `ghostai serve`
 
 Serves the UI, the REST API and the WebSocket on one port.
 
@@ -186,26 +186,26 @@ worth knowing before you meet them:
 - **`--ui <dir>` must contain an `index.html`.** A directory that does not is an error at
   startup rather than a blank page later.
 
-If `@ghostbot/web` has not been built, `serve` says so and runs the API alone rather than
+If `@ghostwire/web` has not been built, `serve` says so and runs the API alone rather than
 serving nothing at a URL it just printed.
 
-## `ghost preset`
+## `ghostai preset`
 
 Picks agents out of the catalogue, and builds the containers those particular agents
 need. This is the command that puts a working team on a fresh machine:
 
 ```bash
-ghost preset install                  # pick from a list
-ghost preset install coder nano       # or name them, for a script
-ghost preset list                     # what is on offer, and what is installed
-ghost preset update                   # fetch the catalogue again
+ghostai preset install                  # pick from a list
+ghostai preset install coder nano       # or name them, for a script
+ghostai preset list                     # what is on offer, and what is installed
+ghostai preset update                   # fetch the catalogue again
 ```
 
-The catalogue is `@ghostbot/presets`, published from the
+The catalogue is `@ghostwire/presets`, published from the
 [`GhostAI-presets`](https://github.com/therezor/GhostAI-presets) repository and versioned
 on its own cadence. It is **fetched on demand** into `~/.ghostai/catalogue` — an npm
 prefix, so the package itself lands at
-`~/.ghostai/catalogue/node_modules/@ghostbot/catalogue`. Nothing is fetched at turn time
+`~/.ghostai/catalogue/node_modules/@ghostwire/catalogue`. Nothing is fetched at turn time
 and nothing is fetched twice: a copy already there is used until `--refresh` says
 otherwise.
 
@@ -216,7 +216,7 @@ otherwise.
 | `--offline`    | Never fetch. Fails rather than reaching a registry.              |
 | `--force`      | Overwrite agents of the same id, which may carry your edits.     |
 | `--approve`    | Approve the toolboxes this installs, without asking.             |
-| `--no-approve` | Approve nothing, and print the `ghost toolbox approve` lines.    |
+| `--no-approve` | Approve nothing, and print the `ghostai toolbox approve` lines.  |
 
 **A toolbox is built because an agent asked for it, never on its own.** You tick agents;
 the containers fall out of `toolbox.name` on the ones you ticked. Picking only agents
@@ -234,28 +234,28 @@ prints the commands instead. Passing `--approve` is how a script says yes.
 
 ```bash
 git clone https://github.com/therezor/GhostAI-presets
-ghost preset install --from ./GhostAI-presets
+ghostai preset install --from ./GhostAI-presets
 ```
 
 It is never fetched over. Pointing it at a typo fails rather than quietly using the
 registry copy, because a preset installed from somewhere other than where you edited it
 is a preset you have not tested.
 
-## `ghost agent`
+## `ghostai agent`
 
-Installs one agent preset by id or by path — the single-shot `ghost preset install` is
+Installs one agent preset by id or by path — the single-shot `ghostai preset install` is
 built on, and what a script wants when it knows the name. It never touches Docker and
-never fetches: use `ghost preset install` when the agent needs a container that is not
+never fetches: use `ghostai preset install` when the agent needs a container that is not
 built yet.
 
 A preset is a JSON file holding a system prompt, tool permissions, a toolbox reference
 and a delegation roster, and installing it writes one entry in `agents.list`:
 
 ```bash
-ghost agent list                      # configured agents, and presets not yet installed
-ghost agent install researcher        # a catalogue preset, by its id
-ghost agent install ./my-agent.json   # a preset you wrote, by path
-ghost agent install nano --force      # overwrite an existing agent of the same id
+ghostai agent list                      # configured agents, and presets not yet installed
+ghostai agent install researcher        # a catalogue preset, by its id
+ghostai agent install ./my-agent.json   # a preset you wrote, by path
+ghostai agent install nano --force      # overwrite an existing agent of the same id
 ```
 
 **There is one kind of preset.** A preset is `<id>.json` — the filename is the agent id
@@ -263,10 +263,10 @@ ghost agent install nano --force      # overwrite an existing agent of the same 
 `toolbox.name`. So there is one lookup, and the argument is either a path or an id
 searched in two directories:
 
-| Searched                       | Holds                                            |
-| ------------------------------ | ------------------------------------------------ |
-| `~/.ghostai/presets/<id>.json` | Yours. Drop a file in; that is the install.      |
-| `<catalogue>/agents/<id>.json` | The catalogue's, once `ghost preset` fetched it. |
+| Searched                       | Holds                                              |
+| ------------------------------ | -------------------------------------------------- |
+| `~/.ghostai/presets/<id>.json` | Yours. Drop a file in; that is the install.        |
+| `<catalogue>/agents/<id>.json` | The catalogue's, once `ghostai preset` fetched it. |
 
 Yours first, so a local preset wins over a catalogue one of the same name. Nothing is
 fetched _here_: both are files already on the box by the time this command runs, and a
@@ -287,14 +287,14 @@ A preset deliberately cannot name a model, a provider, or anything from the tool
 manifest's side of the security boundary. See
 [Toolboxes](toolboxes.md#agent-presets).
 
-## `ghost toolbox` and `ghost extension`
+## `ghostai toolbox` and `ghostai extension`
 
 Both are the same three verbs over a digest-based approval:
 
 ```bash
-ghost toolbox list            # every installed toolbox, and whether it is approved
-ghost toolbox approve <id>    # approve its current contents
-ghost toolbox revoke <id>     # stays installed, stops running
+ghostai toolbox list            # every installed toolbox, and whether it is approved
+ghostai toolbox approve <id>    # approve its current contents
+ghostai toolbox revoke <id>     # stays installed, stops running
 ```
 
 Approval records the sha256 of the exact bytes you reviewed, so **editing an installed
@@ -322,6 +322,6 @@ has the full list and [Providers](providers.md) explains the precedence.
 
 ## Exit codes
 
-`ghost` sets `process.exitCode` and returns rather than calling `process.exit`, so a
+`ghostai` sets `process.exitCode` and returns rather than calling `process.exit`, so a
 piped answer is never truncated by the process leaving before its output has flushed.
 `--help` and `--version` are successful exits.

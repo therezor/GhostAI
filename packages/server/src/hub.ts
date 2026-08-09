@@ -27,7 +27,7 @@
  *    `error` carry no `seq` and are the only frames sent to one client.
  *  - **`AgentEvent` + `seq` *is* `ServerMessage`.** Forwarding a turn is a
  *    counter and a broadcast, not a mapping table. `events.test.ts` in
- *    `@ghostbot/agent` holds that property from the other side.
+ *    `@ghostwire/agent` holds that property from the other side.
  *  - **Nothing an inbound frame contains can throw out of here.** Every frame is
  *    `safeParse`d and every failure is an `error` event on the socket that sent
  *    it. A hub that throws on a malformed frame is a hub a client can kill.
@@ -37,7 +37,7 @@
  * and its child process. There is no second cancellation path.
  */
 
-import type { AgentEvent, TurnInput, TurnResult } from '@ghostbot/agent';
+import type { AgentEvent, TurnInput, TurnResult } from '@ghostwire/agent';
 import {
   DEFAULT_WORKSPACE_ID,
   filePart,
@@ -50,7 +50,7 @@ import {
   type Logger,
   type SessionStore,
   type StoredMessageRecord,
-} from '@ghostbot/core';
+} from '@ghostwire/core';
 import {
   ClientMessageSchema,
   PROTOCOL_VERSION,
@@ -61,7 +61,7 @@ import {
   type ContentPart,
   type ErrorCode,
   type ServerMessage,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import { agentForTurn } from './agent-binding.js';
 import type { HubApprovalGate } from './approvals.js';
@@ -109,7 +109,7 @@ const RESUME_MESSAGE_LIMIT = 200;
  */
 const NO_MODEL_MESSAGE: string =
   'No model is configured. Add a provider and choose a model in Settings, ' +
-  'or run `ghost init` from a terminal.';
+  'or run `ghostai init` from a terminal.';
 
 /**
  * Idempotency keys remembered per session.

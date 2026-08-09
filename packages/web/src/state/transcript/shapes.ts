@@ -32,7 +32,7 @@ import type {
   StopReason,
   ToolRisk,
   Usage,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 // ---------------------------------------------------------------------------
 // Shapes

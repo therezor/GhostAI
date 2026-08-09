@@ -9,14 +9,14 @@
 
 import { existsSync } from 'node:fs';
 
-import type { GhostPaths } from '@ghostbot/core';
-import type { ProviderInstance } from '@ghostbot/providers';
+import type { GhostPaths } from '@ghostwire/core';
+import type { ProviderInstance } from '@ghostwire/providers';
 import {
   CredentialVault,
   keyFileStore,
   keychainStore,
   resolveVaultKey,
-} from '@ghostbot/security';
+} from '@ghostwire/security';
 
 /** The vault namespace provider API keys live under. */
 export const PROVIDER_CREDENTIAL_NAMESPACE = 'providers';
@@ -52,7 +52,7 @@ export function openVault(paths: GhostPaths): CredentialVault {
  * The vault is opened only when one already exists on disk, and that condition
  * is doing real work rather than saving a file read. `resolveVaultKey` writes a
  * key to the OS keychain the first time it runs, so opening the vault on every
- * `ghost chat` against a local Ollama would be a keychain entry created for an
+ * `ghostai chat` against a local Ollama would be a keychain entry created for an
  * install that never stores a credential.
  *
  * That check replaces a narrower one — "skip the vault entirely for a local

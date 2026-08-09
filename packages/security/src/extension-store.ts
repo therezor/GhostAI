@@ -10,7 +10,7 @@
  * naming the drift. Nobody has to remember to re-approve, because they cannot
  * avoid it.
  *
- * It lives in `@ghostbot/security` for the reason `ToolboxStore` does, and the
+ * It lives in `@ghostwire/security` for the reason `ToolboxStore` does, and the
  * layer graph makes it non-negotiable: `core` may not import `security`, and
  * the check needs `parseExtension`, `assertExtensionPolicy` and
  * `extensionDigest`. Keeping the table here also keeps the whole "may this code
@@ -34,8 +34,8 @@ import {
   isExtensionId,
   systemClock,
   type Clock,
-} from '@ghostbot/core';
-import type { ExtensionManifest, ExtensionState } from '@ghostbot/protocol';
+} from '@ghostwire/core';
+import type { ExtensionManifest, ExtensionState } from '@ghostwire/protocol';
 
 import {
   assertExtensionPolicy,
@@ -159,8 +159,8 @@ export class ExtensionStore {
         approvedAtMs: undefined,
         problem:
           `Extension "${id}" is installed but has never been approved.\n` +
-          `  Review what it contributes with \`ghost extension list\`, then\n` +
-          `  \`ghost extension approve ${id}\`.`,
+          `  Review what it contributes with \`ghostai extension list\`, then\n` +
+          `  \`ghostai extension approve ${id}\`.`,
       };
     }
     if (approval.digest !== digest) {
@@ -174,7 +174,7 @@ export class ExtensionStore {
         problem:
           `Extension "${id}" has changed since it was approved.\n` +
           '  The files on disk no longer match the ones that were reviewed, so it\n' +
-          `  will not be loaded. Review the change, then \`ghost extension approve ${id}\`.`,
+          `  will not be loaded. Review the change, then \`ghostai extension approve ${id}\`.`,
       };
     }
 

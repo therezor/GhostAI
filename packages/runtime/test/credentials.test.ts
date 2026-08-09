@@ -2,9 +2,9 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { resolveGhostPaths } from '@ghostbot/core';
-import { findProvider, type ProviderInstance } from '@ghostbot/providers';
-import { CredentialVault } from '@ghostbot/security';
+import { resolveGhostPaths } from '@ghostwire/core';
+import { findProvider, type ProviderInstance } from '@ghostwire/providers';
+import { CredentialVault } from '@ghostwire/security';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
@@ -50,7 +50,7 @@ describe('findCredential', () => {
 
   it('does not open a vault that does not exist yet', () => {
     // `resolveVaultKey` writes a key to the OS keychain the first time it runs,
-    // and `ghost chat` against Ollama must not create one. Passing `undefined`
+    // and `ghostai chat` against Ollama must not create one. Passing `undefined`
     // rather than `false` is the point: the real code path is exercised, and it
     // must not reach the keychain at all. `/nowhere` has no vault file.
     expect(

@@ -22,8 +22,8 @@
  *    depends on nothing.
  */
 
-import { abortedError } from '@ghostbot/core';
-import { defineTool, type AnyTool } from '@ghostbot/tools';
+import { abortedError } from '@ghostwire/core';
+import { defineTool, type AnyTool } from '@ghostwire/tools';
 import { z } from 'zod';
 
 import { toolCall, type Route } from './provider.js';

@@ -17,8 +17,8 @@
  * why at its own definition: `/exit`, `/output` and the admin-gated verbs.
  */
 
-import { GhostError, isGhostError, textOf } from '@ghostbot/core';
-import type { SessionStore } from '@ghostbot/core';
+import { GhostError, isGhostError, textOf } from '@ghostwire/core';
+import type { SessionStore } from '@ghostwire/core';
 
 import type { ChannelControlFrame } from '../channel.js';
 import type { ChatState } from './chats.js';
@@ -98,7 +98,7 @@ function clip(text: string): string {
  *
  * The terminal's rule, reimplemented rather than imported: it lives in
  * `packages/cli/src/messages.ts`, which this package cannot reach, and moving
- * it down into `@ghostbot/core` would touch the CLI for no gain to the CLI.
+ * it down into `@ghostwire/core` would touch the CLI for no gain to the CLI.
  * Twenty lines is the cheaper of the two.
  *
  * A negative reference counts back over **user messages only** — `-1` is the

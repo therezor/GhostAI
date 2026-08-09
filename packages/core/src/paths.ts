@@ -9,7 +9,7 @@
  *
  * These helpers know nothing about *safety*. Resolving a path here does not
  * make it legal for a tool to touch: that is `WorkspaceJail` in
- * `@ghostbot/security`, which verifies through `realpath` and is the only thing
+ * `@ghostwire/security`, which verifies through `realpath` and is the only thing
  * that may decide an agent-supplied path is acceptable.
  */
 
@@ -124,7 +124,7 @@ export interface GhostPaths {
    * preset *authors an agent*, naming its system prompt and its tool
    * permissions, so one writable through `write_file` would let prompt
    * injection compose the agent that runs next. Nothing here takes effect on
-   * its own — a preset is inert until `ghost agent install` merges it into
+   * its own — a preset is inert until `ghostai agent install` merges it into
    * `config.json`, which is an operator action at a terminal.
    *
    * Presets from the catalogue live under `catalogueDir`, not here. This
@@ -132,13 +132,13 @@ export interface GhostPaths {
    */
   readonly presetsDir: string;
   /**
-   * Where `ghost preset install` puts the fetched catalogue.
+   * Where `ghostai preset install` puts the fetched catalogue.
    *
-   * The catalogue is `@ghostbot/presets`, published from a repository of its
+   * The catalogue is `@ghostwire/presets`, published from a repository of its
    * own, so this is a package manager's output rather than something an
    * operator writes — the one directory under the root that is. It is an npm
    * prefix, which is why the package lands a level down at
-   * `<catalogueDir>/node_modules/@ghostbot/catalogue` instead of here directly:
+   * `<catalogueDir>/node_modules/@ghostwire/catalogue` instead of here directly:
    * letting npm own the extraction is what buys integrity checking and
    * `preset update` for free.
    *

@@ -9,7 +9,7 @@
  * `SelectItem.label` is a `string` and not a key.
  *
  * That boundary is not a convention. `package.json` here declares no
- * `@ghostbot/*` dependency at all, so an import of one does not resolve: the
+ * `@ghostwire/*` dependency at all, so an import of one does not resolve: the
  * layering is a fact about the package graph rather than a rule a reviewer has
  * to remember.
  *

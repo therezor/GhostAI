@@ -1,10 +1,10 @@
 /**
  * Where a scheduled job actually gets written.
  *
- * The store lives in `@ghostbot/server`, which is four layers above this package,
+ * The store lives in `@ghostwire/server`, which is four layers above this package,
  * so the tool cannot import it. The established answer is the one `runner.ts`
  * gives for `exec`: **the interface is declared down here, and the composition
- * root supplies the implementation.** `JailResolver` in `@ghostbot/security` is
+ * root supplies the implementation.** `JailResolver` in `@ghostwire/security` is
  * the same shape for the same reason.
  *
  * Worth stating, because the subagent design deliberately went the other way:
@@ -21,7 +21,7 @@
  * arguments a model wrote and cannot be trusted to say who it is.
  */
 
-import type { AutomationJob, CreateAutomationJob } from '@ghostbot/protocol';
+import type { AutomationJob, CreateAutomationJob } from '@ghostwire/protocol';
 
 import type { ToolboxRequest } from './runner.js';
 

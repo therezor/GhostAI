@@ -1,5 +1,5 @@
 /**
- * `ghost agent` — install agent presets, and list agents and presets.
+ * `ghostai agent` — install agent presets, and list agents and presets.
  *
  * `install` is a config merge, not a package manager. A preset is a JSON file
  * already on the box — bundled in this CLI, installed beside a toolbox
@@ -39,7 +39,7 @@ import {
   loadConfig,
   saveConfig,
   type GhostPaths,
-} from '@ghostbot/core';
+} from '@ghostwire/core';
 import {
   DEFAULT_AGENT_ID,
   RESERVED_AGENT_IDS,
@@ -47,8 +47,8 @@ import {
   presetToAgentEntry,
   type AgentPreset,
   type Config,
-} from '@ghostbot/protocol';
-import { ToolboxStore, assertNetworkWithinCeiling } from '@ghostbot/security';
+} from '@ghostwire/protocol';
+import { ToolboxStore, assertNetworkWithinCeiling } from '@ghostwire/security';
 
 import { catalogueAgentsDir, catalogueDir } from './catalogue.js';
 import type { Translations } from './i18n.js';
@@ -128,7 +128,7 @@ function assertInstallableId(id: string): void {
  * What one preset would do to the config, or why it cannot.
  *
  * Every rule an install applies lives behind this one function, because there
- * are two callers — `ghost agent install` and the bulk installer — and a rule
+ * are two callers — `ghostai agent install` and the bulk installer — and a rule
  * that existed twice would be a rule that disagrees with itself. The single
  * install turns a `blocked` into a `GhostError`; the bulk one turns it into a
  * line in its report and carries on.
@@ -283,9 +283,9 @@ function list(
     out(`Presets not yet installed: ${available.join(', ')}`);
     // One line rather than one per id, and it names the *other* command,
     // because that is the one that also builds the toolbox an agent needs.
-    // `ghost agent install <id>` still works and is what a script wants; a
+    // `ghostai agent install <id>` still works and is what a script wants; a
     // person picking from a list wants the picker.
-    out('    ghost preset install');
+    out('    ghostai preset install');
   }
   return 0;
 }
@@ -324,7 +324,7 @@ export function runAgent(options: AgentCliOptions): number {
 
     if (options.name === undefined || options.name === '') {
       errOut(
-        'Which preset? Pass a preset id or a file — see `ghost agent list`.',
+        'Which preset? Pass a preset id or a file — see `ghostai agent list`.',
       );
       return 2;
     }

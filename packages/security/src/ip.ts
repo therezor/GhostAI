@@ -25,7 +25,7 @@
  * for ranges no agent has a reason to fetch from.
  */
 
-import { GhostError } from '@ghostbot/core';
+import { GhostError } from '@ghostwire/core';
 
 export type IpFamily = 4 | 6;
 

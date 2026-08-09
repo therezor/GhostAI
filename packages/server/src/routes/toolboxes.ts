@@ -16,9 +16,9 @@ import {
   ToolboxListResponseSchema,
   type ToolboxListResponse,
   type ToolboxSummary,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
-import { weakenedIn } from '@ghostbot/security';
+import { weakenedIn } from '@ghostwire/security';
 
 import type { RouteDeps, RouteGroup } from './types.js';
 

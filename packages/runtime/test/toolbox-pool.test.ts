@@ -11,16 +11,16 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { GhostError } from '@ghostbot/core';
-import { ToolboxStore } from '@ghostbot/security';
-import type { AgentToolboxNetwork } from '@ghostbot/protocol';
+import { GhostError } from '@ghostwire/core';
+import { ToolboxStore } from '@ghostwire/security';
+import type { AgentToolboxNetwork } from '@ghostwire/protocol';
 
 import type {
   CommandRunner,
   RunOutcome,
   RunRequest,
   ToolboxRequest,
-} from '@ghostbot/tools';
+} from '@ghostwire/tools';
 
 import {
   OWNER_LABEL,
@@ -192,7 +192,7 @@ describe('ToolboxPool', () => {
   it('does not touch the container runtime until a turn needs one', () => {
     // Constructing the pool happens at boot, for any install with a sandboxed
     // agent. `docker ps` against a dead-but-present socket blocks for a minute,
-    // so a sweep here hung `ghost serve` before it bound its port.
+    // so a sweep here hung `ghostai serve` before it bound its port.
     install('research');
     store.approve('research');
     pool();

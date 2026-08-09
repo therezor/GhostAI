@@ -11,9 +11,9 @@ import {
   AgentDefaultsSchema,
   ConfigPatchSchema,
   type AgentDefaults,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 import { describe, expect, it } from 'vitest';
-import { createWebI18n } from '@ghostbot/i18n/web';
+import { createWebI18n } from '@ghostwire/i18n/web';
 
 /** English, resolved: these assertions compare the message a user would read. */
 const t = createWebI18n('en').getFixedT(null, 'web');

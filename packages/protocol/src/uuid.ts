@@ -6,7 +6,7 @@
  * plain strings. `crypto.randomUUID` only mints v4, which is why this is written
  * out rather than delegated.
  *
- * It lives in `@ghostbot/protocol` for the reason `ids.ts` gives at its head:
+ * It lives in `@ghostwire/protocol` for the reason `ids.ts` gives at its head:
  * both sides mint ids. The server names a session on `POST /api/sessions`, and
  * the browser names one in `lib/connection.ts` before the first message has been
  * sent. Two implementations of a rule whose whole job is that two things cannot

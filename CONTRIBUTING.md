@@ -7,14 +7,14 @@ git clone https://github.com/therezor/GhostAI.git
 cd GhostAI
 pnpm install
 pnpm build
-pnpm --filter @ghostbot/cli link --global    # gives you `ghost`
+pnpm --filter @ghostwire/ghostai link --global    # gives you `ghostai`
 ```
 
 Node ≥ 22.13, pnpm 11 (`corepack enable`). The Node floor is exact — `node:sqlite` was
 unflagged in 22.13, and 22.12 fails at startup rather than degrading.
 
-`link --global` points `ghost` at your working copy, so it shadows any
-`npm install -g @ghostbot/cli` you already had. `pnpm --filter @ghostbot/cli unlink --global`
+`link --global` points `ghostai` at your working copy, so it shadows any
+`npm install -g @ghostwire/ghostai` you already had. `pnpm --filter @ghostwire/ghostai unlink --global`
 puts the released one back.
 
 ## Before you open a pull request
@@ -26,13 +26,13 @@ never calls.
 ```bash
 pnpm typecheck
 pnpm lint
-pnpm --filter @ghostbot/web exec tsx src/tokens/run-gates.ts   # design token gates
+pnpm --filter @ghostwire/web exec tsx src/tokens/run-gates.ts   # design token gates
 pnpm format:check                                             # ← the usual failure
 pnpm i18n:check
 pnpm test
 pnpm build
 pnpm test:coverage                                            # stricter than pnpm test
-pnpm --filter @ghostbot/e2e test:e2e                           # needs the build above
+pnpm --filter @ghostwire/e2e test:e2e                           # needs the build above
 ```
 
 [Development](docs/development.md) is the full walkthrough — what each gate catches, the
@@ -86,7 +86,7 @@ the machine-checkable half of it — 80 columns, no leading or trailing undersco
 
 ## Reporting a bug
 
-Include the version (`ghost --version`), what you expected, what happened, and enough to
+Include the version (`ghostai --version`), what you expected, what happened, and enough to
 reproduce it. `--verbose` and `GHOSTAI_DEBUG=1` (which prints stack traces rather than the
 operator sentence) usually turn a vague report into a fixable one.
 

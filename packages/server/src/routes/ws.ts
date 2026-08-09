@@ -25,8 +25,8 @@
  */
 
 import type { WebSocket } from '@fastify/websocket';
-import { silentLogger, type Logger } from '@ghostbot/core';
-import type { ServerMessage } from '@ghostbot/protocol';
+import { silentLogger, type Logger } from '@ghostwire/core';
+import type { ServerMessage } from '@ghostwire/protocol';
 import type { FastifyRequest } from 'fastify';
 
 import { HttpError } from '../errors.js';

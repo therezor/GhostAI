@@ -12,11 +12,11 @@ git clone https://github.com/therezor/GhostAI.git
 cd GhostAI
 pnpm install
 pnpm build
-pnpm --filter @ghostbot/cli link --global   # gives you `ghost`
+pnpm --filter @ghostwire/ghostai link --global   # gives you `ghostai`
 ```
 
-That `ghost` shadows an `npm install -g @ghostbot/cli`, if you have one;
-`pnpm --filter @ghostbot/cli unlink --global` puts the released one back.
+That `ghostai` shadows an `npm install -g @ghostwire/ghostai`, if you have one;
+`pnpm --filter @ghostwire/ghostai unlink --global` puts the released one back.
 
 Node ≥ 22.13 and pnpm 11 (`corepack enable` — the version is pinned in the root
 `package.json`).
@@ -41,7 +41,7 @@ Run all of it before calling something done:
 # job: check
 pnpm typecheck
 pnpm lint
-pnpm --filter @ghostbot/web exec tsx src/tokens/run-gates.ts   # design token gates
+pnpm --filter @ghostwire/web exec tsx src/tokens/run-gates.ts   # design token gates
 pnpm format:check                                             # ← the usual failure
 pnpm i18n:check
 pnpm test
@@ -52,7 +52,7 @@ pnpm test:coverage
 
 # job: e2e — Playwright, both colour schemes, against a real server
 pnpm build                                                    # a precondition, not a convenience
-pnpm --filter @ghostbot/e2e test:e2e
+pnpm --filter @ghostwire/e2e test:e2e
 ```
 
 Notes that save a cycle:
@@ -67,25 +67,25 @@ Notes that save a cycle:
   not reproduce, re-run that spec under load before blaming CI:
 
   ```bash
-  pnpm --filter @ghostbot/e2e exec playwright test <spec> --repeat-each=6
+  pnpm --filter @ghostwire/e2e exec playwright test <spec> --repeat-each=6
   ```
 
 ### Scripts
 
-| Command                                | Does                                                                  |
-| -------------------------------------- | --------------------------------------------------------------------- |
-| `pnpm typecheck`                       | `tsc -b` across all project references                                |
-| `pnpm lint` / `lint:fix`               | ESLint with type-aware rules                                          |
-| `pnpm format` / `format:check`         | Prettier                                                              |
-| `pnpm test` / `test:watch`             | Vitest                                                                |
-| `pnpm test:coverage`                   | Vitest with the per-package gates enforced                            |
-| `pnpm build`                           | Turborepo build across the graph                                      |
-| `pnpm i18n:extract` / `i18n:check`     | Regenerate the locale bundles / fail if they are out of step          |
-| `pnpm --filter @ghostbot/web dev`      | Vite dev server, proxying `/api` and `/ws` to a running `ghost serve` |
-| `pnpm --filter @ghostbot/e2e test:e2e` | Playwright, both colour schemes                                       |
-| `pnpm screenshots`                     | Regenerate the documentation's images into `docs/screenshots/`        |
-| `pnpm demo`                            | Regenerate the animated terminal cast in the README                   |
-| `node scripts/gen-packages.mjs`        | Regenerate package manifests after changing the package graph         |
+| Command                                 | Does                                                                    |
+| --------------------------------------- | ----------------------------------------------------------------------- |
+| `pnpm typecheck`                        | `tsc -b` across all project references                                  |
+| `pnpm lint` / `lint:fix`                | ESLint with type-aware rules                                            |
+| `pnpm format` / `format:check`          | Prettier                                                                |
+| `pnpm test` / `test:watch`              | Vitest                                                                  |
+| `pnpm test:coverage`                    | Vitest with the per-package gates enforced                              |
+| `pnpm build`                            | Turborepo build across the graph                                        |
+| `pnpm i18n:extract` / `i18n:check`      | Regenerate the locale bundles / fail if they are out of step            |
+| `pnpm --filter @ghostwire/web dev`      | Vite dev server, proxying `/api` and `/ws` to a running `ghostai serve` |
+| `pnpm --filter @ghostwire/e2e test:e2e` | Playwright, both colour schemes                                         |
+| `pnpm screenshots`                      | Regenerate the documentation's images into `docs/screenshots/`          |
+| `pnpm demo`                             | Regenerate the animated terminal cast in the README                     |
+| `node scripts/gen-packages.mjs`         | Regenerate package manifests after changing the package graph           |
 
 ### Coverage gates
 
@@ -114,7 +114,7 @@ holds it.
 ## Releasing
 
 Fifteen packages publish, and they move in lockstep. Only one of them is something a
-person installs by name — `@ghostbot/cli`, which is what puts `ghost` on the PATH — but
+person installs by name — `@ghostwire/ghostai`, which is what puts `ghostai` on the PATH — but
 `pnpm publish` rewrites `workspace:*` to the **exact** version at pack time, so a package
 left behind on an old number does not degrade gracefully: it publishes a dependency that
 resolves to nothing. That is why there is one version and no changesets.
@@ -126,7 +126,7 @@ Three edits and a tag:
 #    "version": "1.1.0"  in package.json
 # 2. carry it into all fifteen manifests
 node scripts/gen-packages.mjs
-# 3. VERSION in packages/cli/src/program.ts        — what `ghost --version` prints
+# 3. VERSION in packages/cli/src/program.ts        — what `ghostai --version` prints
 # 4. SERVER_VERSION in packages/server/src/version.ts — what GET /api/status and
 #    the OpenAPI document report
 
@@ -152,8 +152,8 @@ Three things about the manifests, all of which cost an afternoon to find:
 
 - **`files` must say `dist/**`, not `dist`.** npm packs a bare directory name wholesale
   and never consults a later negation, so `['dist', '!dist/**/*.map']` ships every
-  sourcemap and looks like it worked. `@ghostbot/web` is 8 MB of maps on 11.8 MB total,
-  for a built SPA nobody installing `ghost` will step through.
+  sourcemap and looks like it worked. `@ghostwire/web` is 8 MB of maps on 11.8 MB total,
+  for a built SPA nobody installing `ghostai` will step through.
 - **The `development` export condition cannot be published.** It points at
   `./src/index.ts`, `src` is not in `files`, and Vite's dev server sets that condition —
   so a published package imported from one fails to resolve against a file that was never
@@ -164,13 +164,13 @@ Three things about the manifests, all of which cost an afternoon to find:
   `0.0.0` while every generated package had moved, and nothing about it looked wrong.
 
 Before a first publish, prove the graph resolves outside the workspace. This exercises
-`resolveUiRoot`'s `createRequire(...).resolve('@ghostbot/web/package.json')`, which is the
+`resolveUiRoot`'s `createRequire(...).resolve('@ghostwire/web/package.json')`, which is the
 resolution most likely to break once packages are laid out by a registry install rather
 than by pnpm's workspace links:
 
 ```bash
 pnpm build
-pnpm --filter @ghostbot/cli deploy /tmp/ghost-deploy --legacy
+pnpm --filter @ghostwire/ghostai deploy /tmp/ghost-deploy --legacy
 node /tmp/ghost-deploy/dist/index.js serve --port 3999   # should print a UI path
 pnpm install --frozen-lockfile                           # deploy leaves pnpm's state odd
 ```
@@ -200,14 +200,14 @@ seed rows written in a loop share a millisecond often enough to make a list orde
 
 `pnpm demo` regenerates `docs/screenshots/demo.svg`, the animated recording at the top of
 the README. `scripts/demo-provider.mjs` stands up a mock `openai-chat` endpoint,
-`scripts/ptyrec.py` records **bash** on a real pty — typing `ghost chat`, waiting for the
+`scripts/ptyrec.py` records **bash** on a real pty — typing `ghostai chat`, waiting for the
 TUI, asking a question — and `svg-term` renders the cast to a self-contained SVG. Every
 byte on screen came back through the pty from the real binary; the keystroke schedule is
 authored so the run reproduces.
 
 Three things that are not obvious:
 
-- **A pipe is not a terminal.** Piping `ghost chat` gets the plain stream it writes for a
+- **A pipe is not a terminal.** Piping `ghostai chat` gets the plain stream it writes for a
   machine — no session header, no composer, no status bar, no spinner. The child has to
   believe it is on a tty, and `script(1)` needs a controlling terminal that tooling does
   not always have. Python's `pty` is stdlib and needs nothing.
@@ -264,7 +264,7 @@ svg-term.
 ```
 
 Enforced two ways, both mechanical: pnpm's isolated `node_modules` means an undeclared
-`@ghostbot/x` import fails to _resolve_, not merely to lint; and `no-restricted-imports`
+`@ghostwire/x` import fails to _resolve_, not merely to lint; and `no-restricted-imports`
 bans the deep relative paths that would sneak across a boundary.
 
 The agent must never reach back into the HTTP server.
@@ -276,12 +276,12 @@ There is no CSS framework and there are three token gates. The full picture is i
 [Web UI](web-ui.md#design-tokens); the short version:
 
 - `styles/tokens.css` is the only file allowed a raw colour or a `px` literal.
-- `pnpm --filter @ghostbot/web lint` runs ESLint _and_ the gates.
+- `pnpm --filter @ghostwire/web lint` runs ESLint _and_ the gates.
 - `/tokens` in the running app renders every token and primitive on one page.
 - A contrast test resolves the sheet in both themes and holds every text-on-surface
   pairing to WCAG AA, so a seed edit that darkens text past the line fails the suite.
 
-**Restart `ghost serve` after a UI build.** `@fastify/static` enumerates the UI directory
+**Restart `ghostai serve` after a UI build.** `@fastify/static` enumerates the UI directory
 once at boot, so a rebuild underneath a running server serves the new `index.html` and
 404s its hashed assets into the SPA fallback — a blank page that looks like a crash and is
 not one. For an edit-reload loop use the Vite dev server instead.
@@ -290,8 +290,8 @@ not one. For an edit-reload loop use the Vite dev server instead.
 
 ```bash
 pnpm build
-pnpm --filter @ghostbot/e2e exec playwright install chromium   # once
-pnpm --filter @ghostbot/e2e test:e2e
+pnpm --filter @ghostwire/e2e exec playwright install chromium   # once
+pnpm --filter @ghostwire/e2e test:e2e
 ```
 
 Every spec boots its own server in-process against a scripted model, so nothing reaches
@@ -316,7 +316,7 @@ that the machine was slow, it does not belong in an `expect`.**
 `fidelity.spec.ts` compares the shell's geometry and colour ramps against a checkout of a
 reference build. That checkout is not in this repository and is not required — point
 `GHOSTAI_FIDELITY_ORIGINAL` at one to run the gate, and
-`pnpm --filter @ghostbot/e2e baseline` to write the side-by-side captures. Without it the
+`pnpm --filter @ghostwire/e2e baseline` to write the side-by-side captures. Without it the
 gate skips.
 
 ## Translations

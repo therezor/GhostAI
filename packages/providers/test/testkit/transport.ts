@@ -15,7 +15,7 @@
 
 import { Response, type RequestInit } from 'undici';
 
-import type { FetchImplementation } from '@ghostbot/security';
+import type { FetchImplementation } from '@ghostwire/security';
 
 export interface RecordedCall {
   readonly url: string;

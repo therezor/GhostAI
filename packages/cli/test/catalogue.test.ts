@@ -3,7 +3,7 @@
  *
  * The fetcher is injected throughout: nothing here reaches npm, and the one
  * thing that matters about the real one — that the package lands at
- * `<prefix>/node_modules/@ghostbot/catalogue` — is asserted by building that
+ * `<prefix>/node_modules/@ghostwire/catalogue` — is asserted by building that
  * path with the same function the resolver reads it with, so the two cannot
  * drift apart.
  */
@@ -12,7 +12,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { GhostError } from '@ghostbot/core';
+import { GhostError } from '@ghostwire/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {

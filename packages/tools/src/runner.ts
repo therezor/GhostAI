@@ -29,9 +29,9 @@ import {
   abortedError,
   systemClock,
   type Clock,
-} from '@ghostbot/core';
-import type { AgentToolboxNetwork } from '@ghostbot/protocol';
-import { createOutputCap, type ExecPlan } from '@ghostbot/security';
+} from '@ghostwire/core';
+import type { AgentToolboxNetwork } from '@ghostwire/protocol';
+import { createOutputCap, type ExecPlan } from '@ghostwire/security';
 
 /** Grace between asking a child to stop and insisting. */
 const KILL_GRACE_MS = 2_000;
@@ -92,9 +92,9 @@ export interface ToolboxRequest {
  * Supplies the runner a turn's `exec` uses.
  *
  * Declared here rather than beside its implementation for the same reason
- * `JailResolver` is declared in `@ghostbot/security`: `@ghostbot/agent` has to
+ * `JailResolver` is declared in `@ghostwire/security`: `@ghostwire/agent` has to
  * name the type and sits *below* the composition root that builds one. The
- * implementation — a pool of live containers — lives in `@ghostbot/runtime`.
+ * implementation — a pool of live containers — lives in `@ghostwire/runtime`.
  *
  * `undefined` means the host, so `exec` keeps `localRunner` as its own default
  * and nothing here has to know what running on the host means.

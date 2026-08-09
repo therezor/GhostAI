@@ -1,6 +1,6 @@
 {
-  "name": "@ghostbot/providers",
-  "version": "0.7.1",
+  "name": "@ghostwire/providers",
+  "version": "0.7.0",
   "description": "LLM provider registry, wire adapters, and resilience decorator.",
   "type": "module",
   "license": "MIT",
@@ -48,9 +48,9 @@
     "lint": "eslint src test"
   },
   "dependencies": {
-    "@ghostbot/core": "workspace:*",
-    "@ghostbot/protocol": "workspace:*",
-    "@ghostbot/security": "workspace:*",
+    "@ghostwire/core": "workspace:*",
+    "@ghostwire/protocol": "workspace:*",
+    "@ghostwire/security": "workspace:*",
     "gpt-tokenizer": "^2.8.0",
     "undici": "^7.2.0"
   }

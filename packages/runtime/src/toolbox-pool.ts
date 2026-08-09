@@ -29,8 +29,8 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 
-import { GhostError, type Clock, type Logger } from '@ghostbot/core';
-import type { Toolbox } from '@ghostbot/protocol';
+import { GhostError, type Clock, type Logger } from '@ghostwire/core';
+import type { Toolbox } from '@ghostwire/protocol';
 import {
   containerCreateArgv,
   containerIsGone,
@@ -40,13 +40,13 @@ import {
   type RunRequest,
   type RunnerResolver,
   type ToolboxRequest,
-} from '@ghostbot/tools';
+} from '@ghostwire/tools';
 import {
   assertNetworkWithinCeiling,
   effectiveNetwork,
   type ApprovedToolbox,
   type ToolboxStore,
-} from '@ghostbot/security';
+} from '@ghostwire/security';
 
 /** Beyond this many live containers the least-recently-used session is reaped. */
 const MAX_LIVE_TOOLBOXES: number = 4;
@@ -59,7 +59,7 @@ const TOOLBOX_IDLE_MS: number = 10 * 60_000;
  *
  * Without it, `reapOrphans` cannot tell an orphan from a *peer's live container*
  * — `ghostai.session` is on every sandbox this install ever starts, so a second
- * GhostAI process, a `ghost chat` beside a running `ghost serve`, or a restart
+ * GhostAI process, a `ghostai chat` beside a running `ghostai serve`, or a restart
  * that overlaps the old process by a second, would `rm --force` containers a
  * turn was executing in. The symptom is the daemon's "No such container" landing
  * in the model's tool result, which is the one this label exists to prevent.
@@ -255,7 +255,7 @@ export class ToolboxPool implements RunnerResolver {
    * pool is built whenever any agent names a profile, which happens at boot — and
    * `docker ps` against a socket whose daemon has gone away does not fail fast,
    * it blocks. Measured at 62 seconds. Sweeping at construction therefore hung
-   * `ghost serve` for a minute before it bound its port, on an install whose only
+   * `ghostai serve` for a minute before it bound its port, on an install whose only
    * sin was having a research agent configured while Docker was closed.
    *
    * Failure is logged rather than thrown: an orphan nobody could remove is

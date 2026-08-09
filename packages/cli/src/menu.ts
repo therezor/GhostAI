@@ -25,7 +25,7 @@ import {
   type SelectLabels,
   type TerminalInput,
   type TerminalOutput,
-} from '@ghostbot/tui';
+} from '@ghostwire/tui';
 
 import type { Env } from './i18n.js';
 

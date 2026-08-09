@@ -41,7 +41,7 @@ import {
   DEFAULT_AGENT_ID,
   deriveAgentId,
   type AgentEntry,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import { Badge } from '@/components/ui/badge.js';
 import { Button } from '@/components/ui/button.js';

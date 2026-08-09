@@ -13,8 +13,8 @@
  * spend it, and there is no second secret to mint, store and rotate.
  */
 
-import { isLoopbackHost, type Config } from '@ghostbot/protocol';
-import { systemClock, type Clock } from '@ghostbot/core';
+import { isLoopbackHost, type Config } from '@ghostwire/protocol';
+import { systemClock, type Clock } from '@ghostwire/core';
 import type {
   FastifyReply,
   FastifyRequest,
@@ -75,7 +75,7 @@ export function readCredential(request: FastifyRequest): string | undefined {
  *
  * The rule has to bend exactly that far and no further. Safari refuses to store
  * a `Secure` cookie over `http://`, including on localhost, so an unconditional
- * flag would make `ghost serve` unusable in one browser on the default bind.
+ * flag would make `ghostai serve` unusable in one browser on the default bind.
  * Everywhere else the flag stays on, and the consequence — a plain-HTTP LAN
  * bind cannot hold a session — is the correct outcome rather than a bug: a
  * session cookie crossing a network in the clear is the thing being prevented.

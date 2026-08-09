@@ -16,8 +16,8 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import type { Extension } from '@ghostbot/extension-host';
-import { defineTool } from '@ghostbot/tools';
+import type { Extension } from '@ghostwire/extension-host';
+import { defineTool } from '@ghostwire/tools';
 
 import {
   createRuntime,
@@ -90,7 +90,7 @@ async function withExtension(
 
 function approve(runtime: GhostRuntime, id: string): void {
   // Reaching the store through the same connection the runtime uses, which is
-  // what `ghost extension approve` does through its own `ExtensionStore`.
+  // what `ghostai extension approve` does through its own `ExtensionStore`.
   runtime.store.database
     .prepare(
       `INSERT INTO extension_approvals (id, digest, approved_at_ms)

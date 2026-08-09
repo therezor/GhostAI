@@ -23,7 +23,7 @@
  * ```
  *
  * This module is the disk half and nothing else: bytes to `Memory` and back.
- * What reaches the prompt, and at what budget, is `@ghostbot/agent`'s
+ * What reaches the prompt, and at what budget, is `@ghostwire/agent`'s
  * `memory-contributor.ts`.
  *
  * ## Why one file per fact
@@ -52,7 +52,7 @@
  * **Reading never throws.** A memory file is workspace content, which means it
  * is whatever a person or a previous turn left there. A malformed one costs that
  * memory, not every turn on the workspace — the same position
- * `@ghostbot/agent`'s `skills.ts` takes on a broken skill.
+ * `@ghostwire/agent`'s `skills.ts` takes on a broken skill.
  *
  * **Every write is atomic.** A temp file beside the target, then a rename, so a
  * crash midway cannot leave half a memory for the next turn to index.

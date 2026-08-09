@@ -14,9 +14,9 @@
  * starts, not when the operator presses Save, so the five values that vary are
  * holes the renderer fills.
  *
- * This lives in `@ghostbot/protocol` because three packages that share nothing
- * else need the identical text: `@ghostbot/agent` renders it, `@ghostbot/core`
- * prepends it when migrating an old config, and `@ghostbot/web` shows it in the
+ * This lives in `@ghostwire/protocol` because three packages that share nothing
+ * else need the identical text: `@ghostwire/agent` renders it, `@ghostwire/core`
+ * prepends it when migrating an old config, and `@ghostwire/web` shows it in the
  * editor. Core cannot import agent — the dependency runs the other way — and
  * the browser depends on this package and no other. A second copy of the text
  * in any of them is a copy that goes stale.
@@ -267,8 +267,8 @@ const DELIMITER_PLACEHOLDER: RegExp = /\{\{(?:nonce|tag)\}\}/;
  * Whether a template spells out the turn's tool-output delimiter.
  *
  * Here rather than beside any one caller because three of them asked the
- * question and two had already answered it differently: `@ghostbot/security`
- * tested a regex against the *effective* template, while `@ghostbot/runtime` and
+ * question and two had already answered it differently: `@ghostwire/security`
+ * tested a regex against the *effective* template, while `@ghostwire/runtime` and
  * the agent editor each did `.includes('{{tag}}') || .includes('{{nonce}}')` on
  * the raw string and papered over the difference with an `=== '' ? DEFAULT : …`
  * at the call site. Three spellings of one rule, and the placeholders they are
@@ -324,7 +324,7 @@ const GUIDELINES = `## Guidelines
 /**
  * What an agent says about itself when nobody has told it to say anything else.
  *
- * This is the text that used to be built by `identity()` in `@ghostbot/agent`,
+ * This is the text that used to be built by `identity()` in `@ghostwire/agent`,
  * with the five varying values turned into placeholders. It is the seed every
  * customised prompt starts from, so the wording matters more than it did when
  * it was unreachable: an operator's first edit is a diff against this.
@@ -513,7 +513,7 @@ tools.{{tools}}{{notes}}`;
 /**
  * The section that makes the tool-output delimiters mean something.
  *
- * Here rather than beside `wrapToolOutput` in `@ghostbot/security` for the same
+ * Here rather than beside `wrapToolOutput` in `@ghostwire/security` for the same
  * reason the identity template is here: the browser edits it, and the browser
  * depends on this package and no other. Security imports it — the layer graph
  * runs that way and not the other.

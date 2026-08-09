@@ -23,8 +23,8 @@ import {
   type SetupClaimRequest,
   type SetupPasswordRequest,
   type SetupStatusResponse,
-} from '@ghostbot/protocol';
-import { systemClock } from '@ghostbot/core';
+} from '@ghostwire/protocol';
+import { systemClock } from '@ghostwire/core';
 import type { FastifyReply } from 'fastify';
 
 import { clearSessionCookie, sessionOf, setSessionCookie } from '../auth.js';

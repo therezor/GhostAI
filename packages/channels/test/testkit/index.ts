@@ -1,5 +1,5 @@
 /**
- * `@ghostbot/channels/testkit` — the conformance suite and the hub it runs on.
+ * `@ghostwire/channels/testkit` — the conformance suite and the hub it runs on.
  *
  * A subpath rather than part of the package entry, because it imports `vitest`
  * and nothing in a running GhostAI should. It is exported at all — unlike the

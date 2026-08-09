@@ -1,7 +1,7 @@
 /**
- * `ghost extension` — list, approve and revoke extensions.
+ * `ghostai extension` — list, approve and revoke extensions.
  *
- * The same exception `ghost toolbox` is, for the same reason: approving code
+ * The same exception `ghostai toolbox` is, for the same reason: approving code
  * to load into the agent's own process is the one operator action that cannot
  * be delegated to the agent, and an install driven from a terminal needs a way
  * to perform it without opening a browser.
@@ -18,14 +18,14 @@
  * that shows only a name is a rubber stamp with extra steps.
  *
  * It writes only the approval row. Nothing here loads anything — a running
- * `ghost serve` reloads through `POST /api/extensions/:id/approve`, and this
+ * `ghostai serve` reloads through `POST /api/extensions/:id/approve`, and this
  * command is for the install that is not running yet or is being prepared.
  */
 
 import { DatabaseSync } from 'node:sqlite';
 
-import { GhostError, loadConfig } from '@ghostbot/core';
-import { ExtensionStore, type ExtensionResolution } from '@ghostbot/security';
+import { GhostError, loadConfig } from '@ghostwire/core';
+import { ExtensionStore, type ExtensionResolution } from '@ghostwire/security';
 
 import type { Translations } from './i18n.js';
 
@@ -96,7 +96,7 @@ export function runExtension(options: ExtensionOptions): number {
 
     const id = options.id;
     if (id === undefined || id === '') {
-      errOut('Which extension? Pass an id — see `ghost extension list`.');
+      errOut('Which extension? Pass an id — see `ghostai extension list`.');
       return 2;
     }
 

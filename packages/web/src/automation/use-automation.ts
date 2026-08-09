@@ -26,7 +26,7 @@ import type {
   AutomationRunListResponse,
   CreateAutomationJob,
   UpdateAutomationJob,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';

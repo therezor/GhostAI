@@ -32,8 +32,8 @@ import {
   workspaceDirFor,
   DEFAULT_WORKSPACE_ID,
   type GhostPaths,
-} from '@ghostbot/core';
-import { WorkspaceJail, type JailResolver } from '@ghostbot/security';
+} from '@ghostwire/core';
+import { WorkspaceJail, type JailResolver } from '@ghostwire/security';
 
 /**
  * Beyond this many live jails the least-recently-used is dropped.

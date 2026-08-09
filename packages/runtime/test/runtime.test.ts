@@ -9,9 +9,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-import { fakeServer, type FakeServer } from '@ghostbot/mcp/testkit';
-import type { ConfigPatch } from '@ghostbot/protocol';
-import { defineTool } from '@ghostbot/tools';
+import { fakeServer, type FakeServer } from '@ghostwire/mcp/testkit';
+import type { ConfigPatch } from '@ghostwire/protocol';
+import { defineTool } from '@ghostwire/tools';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -87,7 +87,7 @@ describe('createRuntime', () => {
 
   it('builds unconfigured when nothing names a provider, and refuses only the turn', () => {
     // Everything but the loop is useful without a model, and refusing to
-    // construct is what used to make `ghost serve` unable to come up on a bare
+    // construct is what used to make `ghostai serve` unable to come up on a bare
     // machine — leaving the settings UI that would fix it unreachable.
     const runtime = build({ home: tempHome() });
 
@@ -245,7 +245,7 @@ describe('reconfigure', () => {
   });
 
   it('leaves a construction-time override in place', () => {
-    // `ghost chat --model x` is a statement about this process; a settings save
+    // `ghostai chat --model x` is a statement about this process; a settings save
     // from a browser must not move the terminal session onto another model.
     const runtime = ollama({}, { model: 'pinned' });
     runtime.reconfigure({ agents: { defaults: { model: 'llama3' } } });
@@ -641,7 +641,7 @@ describe('reload', () => {
   });
 
   it('leaves a construction-time override in place', () => {
-    // Same rule as `reconfigure`: `ghost chat --model x` is a statement about
+    // Same rule as `reconfigure`: `ghostai chat --model x` is a statement about
     // this process, and an edit to the file must not move it.
     const home = tempHome({
       agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } },
@@ -792,7 +792,7 @@ describe('multiple agents', () => {
   });
 
   it('applies a process-wide model pin to every agent', () => {
-    // `ghost chat --model x` is a statement about this process; an agent that
+    // `ghostai chat --model x` is a statement about this process; an agent that
     // ignored it would be the more surprising rule.
     const home = tempHome({
       agents: {

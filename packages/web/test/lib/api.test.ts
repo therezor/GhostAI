@@ -13,7 +13,7 @@
 import {
   AuthSessionResponseSchema,
   StatusResponseSchema,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 

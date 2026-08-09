@@ -8,18 +8,18 @@
  * is the only one that touches the vault, the database and the keychain.
  *
  * It lives in its own package rather than in the CLI because there is more than
- * one consumer: `ghost chat`, the HTTP server, the scheduler and every channel
+ * one consumer: `ghostai chat`, the HTTP server, the scheduler and every channel
  * all need the same wiring, and wiring implemented twice is wiring that differs
  * in exactly the case nobody tested.
  *
  * The decisions here that are not obvious:
  *
- *  - **Provider resolution is `@ghostbot/providers`' order, not a second one.**
+ *  - **Provider resolution is `@ghostwire/providers`' order, not a second one.**
  *    `resolveInstance` runs explicit instance → provider type → the `auto`
  *    order, and returns `null` rather than guessing. Exactly one step follows
  *    that null: a provider whose `envKey` is set in the environment. An
  *    exported credential is an operator saying which provider they mean, and
- *    `OPENAI_API_KEY=… ghost chat` should not need a config file to work. What
+ *    `OPENAI_API_KEY=… ghostai chat` should not need a config file to work. What
  *    it will not do is fall back to *some* provider, because a request landing
  *    at an endpoint nobody chose fails as a 401 from somewhere unexpected.
  *
@@ -27,7 +27,7 @@
  *    resolvable provider, or none with a model, builds anyway: `loop` is
  *    `null`, `configured` is false, and everything that does not need a model —
  *    the store, the workspaces, the tool registry, every HTTP route but the
- *    turn — works. This is what lets `ghost serve` come up on a bare machine
+ *    turn — works. This is what lets `ghostai serve` come up on a bare machine
  *    and serve the settings UI that fixes it; refusing to construct meant the
  *    only cure for a missing config was to hand-write one. `requireLoop()` is
  *    where the refusal moved to, so a terminal turn still fails with the same
@@ -40,7 +40,7 @@
  *    runtime without taking the connection with it.
  *
  *  - **A construction-time `provider`/`model` override outlives a
- *    reconfigure.** `ghost chat --model x` is a statement about this process,
+ *    reconfigure.** `ghostai chat --model x` is a statement about this process,
  *    and a settings save from a browser must not silently move the terminal
  *    session onto another model. A caller that wants config to drive the model
  *    — the server does — simply passes neither.
@@ -63,7 +63,7 @@ import {
   SteeringQueue,
   subagentMap,
   type ApprovalGate,
-} from '@ghostbot/agent';
+} from '@ghostwire/agent';
 import {
   DEFAULT_AGENT_ID,
   GhostError,
@@ -77,13 +77,13 @@ import {
   type Clock,
   type GhostPaths,
   type Logger,
-} from '@ghostbot/core';
+} from '@ghostwire/core';
 import type {
   Config,
   ConfigPatch,
   McpServerStatus,
   ToolPermissions,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 import {
   PROVIDERS,
   resolveConnection,
@@ -92,7 +92,7 @@ import {
   type ProviderInstance,
   type ProviderSpec,
   type WireAdapters,
-} from '@ghostbot/providers';
+} from '@ghostwire/providers';
 import {
   ExtensionStore,
   ToolboxStore,
@@ -101,7 +101,7 @@ import {
   type FetchImplementation,
   type JailResolver,
   type WorkspaceJail,
-} from '@ghostbot/security';
+} from '@ghostwire/security';
 import {
   ToolRegistry,
   registerBuiltins,
@@ -113,14 +113,14 @@ import {
   type AutomationResolver,
   type RunnerResolver,
   type ToolSink,
-} from '@ghostbot/tools';
+} from '@ghostwire/tools';
 import {
   McpManager,
   sdkConnector,
   type BackoffOptions,
   type McpConnector,
-} from '@ghostbot/mcp';
-import { ExtensionHost, type ExtensionLoader } from '@ghostbot/extension-host';
+} from '@ghostwire/mcp';
+import { ExtensionHost, type ExtensionLoader } from '@ghostwire/extension-host';
 
 import {
   assertWritableAgentIds,
@@ -182,7 +182,7 @@ export interface RuntimeOptions {
    * Supplies the scheduler a turn's `automation` tool writes through.
    *
    * Injected rather than built here, because the store it needs is created by
-   * `createServer` — which happens *after* this runtime exists. `ghost serve`
+   * `createServer` — which happens *after* this runtime exists. `ghostai serve`
    * passes a resolver that delegates to one it fills in afterwards, the same
    * late binding `ServerOptions.scheduler` uses for the same knot.
    */
@@ -271,7 +271,7 @@ export interface GhostRuntime {
    * Drops the cached jail for one workspace, after its folder has moved.
    *
    * A method here rather than `evict` on `JailResolver`: that interface is
-   * `@ghostbot/security`'s, it is what decides whether a path may be touched,
+   * `@ghostwire/security`'s, it is what decides whether a path may be touched,
    * and widening it with a cache operation would put "forget this" in front of
    * every implementation of a containment boundary.
    */
@@ -376,7 +376,7 @@ export interface GhostRuntime {
    * The extension host, or `undefined` when this build has none.
    *
    * Exposed rather than kept private because two callers above this layer need
-   * it and neither belongs here: `ghost serve` collects the channel factories
+   * it and neither belongs here: `ghostai serve` collects the channel factories
    * extensions contributed, and the extensions route reports their status. Both
    * are read-only uses of it — loading is this class's job.
    */
@@ -478,7 +478,7 @@ function noProviderError(configFile: string): GhostError {
   return new GhostError(
     'config',
     'No provider could be resolved.\n' +
-      '  Run `ghost init` to configure one interactively, pass --provider <id> --model <model>,\n' +
+      '  Run `ghostai init` to configure one interactively, pass --provider <id> --model <model>,\n' +
       `  export the provider's API key variable, or set agents.defaults in ${configFile}.\n` +
       `  Known providers: ${ids}`,
   );
@@ -491,7 +491,7 @@ function noModelError(
   return new GhostError(
     'config',
     `No model configured for ${instance.spec.displayName}.\n` +
-      '  Run `ghost init`, pass --model <model>, or set agents.defaults.model in ' +
+      '  Run `ghostai init`, pass --model <model>, or set agents.defaults.model in ' +
       `${configFile}.`,
   );
 }
@@ -713,7 +713,7 @@ class Runtime implements GhostRuntime {
    *
    * The path an *approval* takes, which a settings save does not: approving is
    * a row in a table rather than an edit to `config.json`, so nothing else in
-   * this class would notice it. `ghost serve` composes this with a channel
+   * this class would notice it. `ghostai serve` composes this with a channel
    * rebuild, because a newly approved extension may have brought one.
    */
   async reloadExtensions(): Promise<void> {
@@ -1170,7 +1170,7 @@ class Runtime implements GhostRuntime {
    * `instance` on the runtime, and every other agent on first use.
    *
    * A construction-time `--provider` / `--model` pin wins for every agent, not
-   * just the default. `ghost chat --model x` is a statement about this process,
+   * just the default. `ghostai chat --model x` is a statement about this process,
    * and an agent that quietly ignored it would be the more surprising rule.
    */
   private resolveProvider(

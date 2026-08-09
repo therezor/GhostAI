@@ -3,9 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough, Readable } from 'node:stream';
 
-import type { AgentEvent, AgentLoop, TurnInput } from '@ghostbot/agent';
-import { SessionStore, hasOrphanedToolResult, textOf } from '@ghostbot/core';
-import type { FetchImplementation } from '@ghostbot/security';
+import type { AgentEvent, AgentLoop, TurnInput } from '@ghostwire/agent';
+import { SessionStore, hasOrphanedToolResult, textOf } from '@ghostwire/core';
+import type { FetchImplementation } from '@ghostwire/security';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { SIGINT_EXIT_CODE, chatCommand, runTurn } from '#src/chat.js';
@@ -1346,7 +1346,7 @@ describe('chatCommand', () => {
   });
 
   it('draws no frame at all when stdout is not a terminal', async () => {
-    // `ghost chat > log` still opens a prompt, because stdin is still a
+    // `ghostai chat > log` still opens a prompt, because stdin is still a
     // keyboard — but escape sequences written into a file are not a status bar,
     // they are noise in somebody's log. So that path gets a prompt, a newline
     // and `NO_MENU`, which is the whole of it.

@@ -1,5 +1,5 @@
 /**
- * `ghost toolbox` — list, approve and revoke toolboxes.
+ * `ghostai toolbox` — list, approve and revoke toolboxes.
  *
  * A fourth command on a surface the roadmap said would stay at three.
  * The exception is deliberate: approving a toolbox is the one operator action
@@ -18,9 +18,9 @@
  * rubber stamp with extra steps.
  */
 
-import { GhostError, loadConfig } from '@ghostbot/core';
-import { ToolboxStore, weakenedIn } from '@ghostbot/security';
-import type { Toolbox } from '@ghostbot/protocol';
+import { GhostError, loadConfig } from '@ghostwire/core';
+import { ToolboxStore, weakenedIn } from '@ghostwire/security';
+import type { Toolbox } from '@ghostwire/protocol';
 import { DatabaseSync } from 'node:sqlite';
 
 import type { Translations } from './i18n.js';
@@ -88,7 +88,7 @@ export function runToolbox(options: ToolboxOptions): number {
 
     const id = options.id;
     if (id === undefined || id === '') {
-      errOut('Which toolbox? Pass an id — see `ghost toolbox list`.');
+      errOut('Which toolbox? Pass an id — see `ghostai toolbox list`.');
       return 2;
     }
 

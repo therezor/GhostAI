@@ -188,7 +188,7 @@ each toolbox's `Dockerfile` and manifest. Ordinarily you never do this by hand �
 agent builds the box it needs:
 
 ```bash
-ghost preset install
+ghostai preset install
 ```
 
 For a box you are writing, `build.sh` in that repository does the same one at a time:
@@ -210,9 +210,9 @@ what makes a toolbox work on an air-gapped install.
 its hash is approved:
 
 ```bash
-ghost toolbox list
-ghost toolbox approve web-research
-ghost toolbox revoke web-research
+ghostai toolbox list
+ghostai toolbox approve web-research
+ghostai toolbox revoke web-research
 ```
 
 Approval records the sha256 of the manifest bytes as they are now. The manifest is a file
@@ -234,8 +234,8 @@ preset — a JSON file named for the agent id it installs, from your own
 `agents.list`:
 
 ```bash
-ghost preset install researcher   # builds its box too, if it needs one
-ghost agent install researcher    # config merge only, box must already be approved
+ghostai preset install researcher   # builds its box too, if it needs one
+ghostai agent install researcher    # config merge only, box must already be approved
 ```
 
 **A preset is not a per-toolbox file.** Every preset lives in that one directory whether
@@ -260,7 +260,7 @@ existing entry may carry your own edits.
 This repository ships no toolboxes. They live in
 [`GhostAI-presets`](https://github.com/therezor/GhostAI-presets) and are versioned there,
 so the authoritative list is that repository's `toolboxes/` — a table here would be a copy
-that goes stale on somebody else's release. `ghost preset list` prints what the catalogue
+that goes stale on somebody else's release. `ghostai preset list` prints what the catalogue
 you have actually carries, which is the answer that matters on your machine.
 
 What is worth stating here is why they are shaped the way they are, because each is a

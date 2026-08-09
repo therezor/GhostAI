@@ -8,7 +8,7 @@
  * alternative to advancing a clock is sleeping through the TTL.
  */
 
-import type { Clock } from '@ghostbot/core';
+import type { Clock } from '@ghostwire/core';
 
 export interface ManualClock extends Clock {
   advance(ms: number): void;

@@ -13,9 +13,9 @@ digest rather than a checkbox.
 ```
 
 ```bash
-ghost extension list        # what is installed, and what state each is in
-ghost extension approve hello
-ghost extension revoke hello
+ghostai extension list        # what is installed, and what state each is in
+ghostai extension approve hello
+ghostai extension revoke hello
 ```
 
 Or Settings → Extensions, which is the same three actions and reloads without a
@@ -54,8 +54,8 @@ an operator approved and the id the host registers under could differ.
 ## The entry module
 
 ```ts
-import type { Extension } from '@ghostbot/extension-host';
-import { defineTool } from '@ghostbot/tools';
+import type { Extension } from '@ghostwire/extension-host';
+import { defineTool } from '@ghostwire/tools';
 import { z } from 'zod';
 
 export const extension: Extension = {
@@ -96,7 +96,7 @@ is to say **after** an operator has already approved it:
 - **`removeNodeProtocol: false`.** tsup and esbuild rewrite `node:sqlite` to
   `sqlite`, a compatibility shim for node older than 14.18. `node:sqlite` has no
   unprefixed form, so the rewrite is unloadable.
-- **A `createRequire` banner.** Reaching `defineTool` pulls in `@ghostbot/core`,
+- **A `createRequire` banner.** Reaching `defineTool` pulls in `@ghostwire/core`,
   which pulls in `pino`, which is CommonJS and calls `require('node:os')` at
   module scope. An ESM bundle has no `require`, so the bundler emits a stub that
   throws `Dynamic require of "node:os" is not supported`.
@@ -114,7 +114,7 @@ is to say **after** an operator has already approved it:
 beside each.
 
 **Expect a large artifact.** The example is about sixty lines and builds to
-roughly 1.8 MB, because reaching `defineTool` bundles `@ghostbot/tools` and
+roughly 1.8 MB, because reaching `defineTool` bundles `@ghostwire/tools` and
 everything under it. That is the cost of the rule above rather than a mistake: an
 install directory has no `node_modules`, so an extension either carries what it
 imports or fails at load. An extension that defines its tools as plain objects
@@ -252,7 +252,7 @@ digest moves either, for the same reason — a second `activate` would run the s
 module and throw the same error.
 
 **Drift is noticed at the next reconcile, and the two surfaces say so
-differently.** `ghost extension list` reads the directory every time it runs, so
+differently.** `ghostai extension list` reads the directory every time it runs, so
 it reports `DRIFTED` the moment a file changes. `GET /api/extensions` and the
 Settings panel report what the _server has loaded_, which is still the old copy
 until something reconciles — a settings save, an approve or revoke, or a restart.
@@ -294,11 +294,11 @@ install air-gapped.
 
 ## Testing one
 
-`@ghostbot/extension-host/testkit` runs an extension through the host's own
+`@ghostwire/extension-host/testkit` runs an extension through the host's own
 recorder:
 
 ```ts
-import { extensionConformance } from '@ghostbot/extension-host/testkit';
+import { extensionConformance } from '@ghostwire/extension-host/testkit';
 
 extensionConformance({
   manifest,

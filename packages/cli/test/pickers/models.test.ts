@@ -1,4 +1,4 @@
-import type { ModelsResponse } from '@ghostbot/protocol';
+import type { ModelsResponse } from '@ghostwire/protocol';
 import { describe, expect, it } from 'vitest';
 
 import { translations } from '#src/i18n.js';

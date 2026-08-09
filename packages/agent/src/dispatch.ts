@@ -44,11 +44,11 @@ import {
   type Clock,
   type Logger,
   type TimerHandle,
-} from '@ghostbot/core';
-import type { ToolCall, ToolRisk, ToolsConfig } from '@ghostbot/protocol';
-import type { ChatResult } from '@ghostbot/providers';
-import { describeInjectionFindings, wrapToolOutput } from '@ghostbot/security';
-import type { ToolContext, ToolExecution, ToolScope } from '@ghostbot/tools';
+} from '@ghostwire/core';
+import type { ToolCall, ToolRisk, ToolsConfig } from '@ghostwire/protocol';
+import type { ChatResult } from '@ghostwire/providers';
+import { describeInjectionFindings, wrapToolOutput } from '@ghostwire/security';
+import type { ToolContext, ToolExecution, ToolScope } from '@ghostwire/tools';
 
 import {
   deniedNotice,

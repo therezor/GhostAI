@@ -27,14 +27,14 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 
-import { GhostError, systemClock, type Clock } from '@ghostbot/core';
+import { GhostError, systemClock, type Clock } from '@ghostwire/core';
 import {
   DEFAULT_USERNAME,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
   UsernameSchema,
-} from '@ghostbot/protocol';
-import { systemRandom, type RandomSource } from '@ghostbot/security';
+} from '@ghostwire/protocol';
+import { systemRandom, type RandomSource } from '@ghostwire/security';
 import type { Algorithm as Argon2Algorithm } from '@node-rs/argon2';
 
 /** Bytes of entropy in the secret half of a token. */
@@ -339,7 +339,7 @@ export class AuthStore {
    * Replacing rather than reusing: a restarted server prints a fresh code, and
    * the one in the previous run's scrollback stops working. That is the weaker
    * of the two properties — the stronger one is that the code exists at all,
-   * which is what lets `ghost serve` come up on a bare machine instead of
+   * which is what lets `ghostai serve` come up on a bare machine instead of
    * refusing to start and leaving the UI that would set a password unreachable.
    *
    * Refuses once a password exists, because there is nothing left to claim and

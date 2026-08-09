@@ -34,7 +34,7 @@ import {
   fetch as undiciFetch,
 } from 'undici';
 
-import { GhostError } from '@ghostbot/core';
+import { GhostError } from '@ghostwire/core';
 
 import {
   type AddressRange,

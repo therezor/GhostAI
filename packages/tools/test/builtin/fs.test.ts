@@ -9,7 +9,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { isGhostError, type GhostError } from '@ghostbot/core';
+import { isGhostError, type GhostError } from '@ghostwire/core';
 
 import { toToolResult, type AnyTool, type ToolContext } from '#src/define.js';
 import { createTestWorkspace, type TestWorkspace } from '#testkit/workspace.js';

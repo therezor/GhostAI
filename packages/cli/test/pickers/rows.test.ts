@@ -1,4 +1,4 @@
-import type { SessionSummaryRecord, WorkspaceRecord } from '@ghostbot/core';
+import type { SessionSummaryRecord, WorkspaceRecord } from '@ghostwire/core';
 import { describe, expect, it } from 'vitest';
 
 import { translations } from '#src/i18n.js';

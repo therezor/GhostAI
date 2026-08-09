@@ -13,7 +13,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import type { ExtensionCommand } from '@ghostbot/protocol';
+import type { ExtensionCommand } from '@ghostwire/protocol';
 
 import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';

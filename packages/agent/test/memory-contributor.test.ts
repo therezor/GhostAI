@@ -2,7 +2,7 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { saveMemory, type Memory } from '@ghostbot/core';
+import { saveMemory, type Memory } from '@ghostwire/core';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
@@ -19,7 +19,7 @@ afterEach(() => {
   }
 });
 
-/** A disposable workspace. See `@ghostbot/core`'s `memory.test.ts`. */
+/** A disposable workspace. See `@ghostwire/core`'s `memory.test.ts`. */
 function workspace(): string {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'ghostai-memctx-')));
   roots.push(root);

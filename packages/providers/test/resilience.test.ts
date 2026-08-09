@@ -7,8 +7,8 @@ import {
   textPart,
   toolMessage,
   userMessage,
-} from '@ghostbot/core';
-import type { ChatMessage } from '@ghostbot/protocol';
+} from '@ghostwire/core';
+import type { ChatMessage } from '@ghostwire/protocol';
 
 import { ProviderError, isProviderError } from '#src/errors.js';
 import { findProvider } from '#src/registry.js';

@@ -21,7 +21,7 @@ import type { TFunction } from 'i18next';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type { ModelInfo } from '@ghostbot/protocol';
+import type { ModelInfo } from '@ghostwire/protocol';
 
 import { useAgent } from '@/agents/agent-context.js';
 import { useAgentChoice } from '@/agents/use-agent-choice.js';

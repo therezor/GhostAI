@@ -7,7 +7,7 @@
  * from a browser reaches the right pending authorization.
  */
 
-import { silentLogger } from '@ghostbot/core';
+import { silentLogger } from '@ghostwire/core';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { CallbackListener } from '#src/callback.js';

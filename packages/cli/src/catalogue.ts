@@ -1,7 +1,7 @@
 /**
  * Finding the catalogue, and fetching it when it is not here yet.
  *
- * The catalogue is `@ghostbot/presets` — the agent presets and the toolbox
+ * The catalogue is `@ghostwire/presets` — the agent presets and the toolbox
  * definitions some of them run in — and it is published from a repository of
  * its own rather than living in this one. That is the whole reason this file
  * exists: presets used to be a workspace package that shipped inside the CLI,
@@ -13,9 +13,9 @@
  *
  *  1. An explicit directory — `--from`, or `GHOSTAI_CATALOGUE`. A checkout of
  *     the presets repository, which is what somebody writing a preset has.
- *  2. `<root>/catalogue/node_modules/@ghostbot/catalogue` — what `fetch` put
+ *  2. `<root>/catalogue/node_modules/@ghostwire/catalogue` — what `fetch` put
  *     there.
- *  3. `require.resolve('@ghostbot/presets/package.json')` — a global or
+ *  3. `require.resolve('@ghostwire/presets/package.json')` — a global or
  *     workspace install. Kept because it costs one `try` and it is what worked
  *     before the split; an operator who already has the package does not have
  *     to fetch a second copy of it.
@@ -38,19 +38,19 @@ import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 
-import { GhostError } from '@ghostbot/core';
+import { GhostError } from '@ghostwire/core';
 
 /** The package the catalogue is published as. */
-export const CATALOGUE_PACKAGE = '@ghostbot/presets';
+export const CATALOGUE_PACKAGE = '@ghostwire/presets';
 
 /**
  * The range `fetch` asks for.
  *
  * A range rather than `latest`, so a future breaking change to the layout has
  * to be adopted by editing this line rather than arriving on its own the next
- * time somebody runs `ghost preset update`.
+ * time somebody runs `ghostai preset update`.
  *
- * This package was briefly published as `@ghostbot/catalogue`, whose 1.x kept
+ * This package was briefly published as `@ghostwire/catalogue`, whose 1.x kept
  * its presets under `presets/` rather than `agents/`. The rename is what lets
  * this start at 1.0.0 rather than carrying a major bump to step over that
  * layout: under a new name there is no old layout to skip.
@@ -78,7 +78,7 @@ export function fetchedCatalogueDir(catalogueDir: string): string {
  *
  * Resolved on call rather than at import, for the reason `presets.ts` gives:
  * this must not do I/O while a module graph is still loading for
- * `ghost --help`.
+ * `ghostai --help`.
  */
 export function catalogueDir(
   options: CatalogueOptions = {},
@@ -155,7 +155,7 @@ export function assertCatalogueLayout(dir: string): string {
     'config',
     `${dir} holds no agents/ directory.\n` +
       `  ${CATALOGUE_PACKAGE} ${CATALOGUE_RANGE} is expected, and keeps its presets\n` +
-      '  in agents/. Run `ghost preset update` to fetch a current one, or pass\n' +
+      '  in agents/. Run `ghostai preset update` to fetch a current one, or pass\n' +
       '  --from with a checkout of the presets repository.',
     { details: { dir, range: CATALOGUE_RANGE } },
   );

@@ -15,8 +15,8 @@
  * to discover that; a red test in the extension's own repository is the right
  * one.
  *
- * Reachable as `@ghostbot/extension-host/testkit`, beside `@ghostbot/tools`'
- * and `@ghostbot/channels`', and for the same reason those two are exported: an
+ * Reachable as `@ghostwire/extension-host/testkit`, beside `@ghostwire/tools`'
+ * and `@ghostwire/channels`', and for the same reason those two are exported: an
  * implementation living outside this repository is exactly the one that has to
  * be able to check itself. It stays off the package entry — this file imports
  * `vitest`, and the entry is in the runtime graph of everything downstream.
@@ -24,8 +24,8 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { silentLogger, systemClock } from '@ghostbot/core';
-import type { ExtensionManifest } from '@ghostbot/protocol';
+import { silentLogger, systemClock } from '@ghostwire/core';
+import type { ExtensionManifest } from '@ghostwire/protocol';
 
 import type { Extension, ExtensionContext } from '#src/extension.js';
 import { RegistrationBag, type Registration } from '#src/registration.js';

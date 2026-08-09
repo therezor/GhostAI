@@ -1,13 +1,13 @@
 /**
  * What the routes need from below the transport, stated as an interface.
  *
- * `@ghostbot/runtime` is the composition root: it turns a config file into a
+ * `@ghostwire/runtime` is the composition root: it turns a config file into a
  * provider, a jail, a store, a registry and a loop. This package deliberately
  * does not import it. The dependency would type-check — nothing above the server
  * imports it back — but it would put the whole wiring graph behind every route
  * test, and the server would then be untestable without a provider, a workspace
  * and a vault. So the server states the *narrow* set of things a route actually
- * touches, and `ghost serve` supplies an adapter over `GhostRuntime`.
+ * touches, and `ghostai serve` supplies an adapter over `GhostRuntime`.
  *
  * The shape is deliberately made of calls rather than fields. `PATCH /api/settings`
  * rebuilds the provider, the jail and the loop, so a route holding a snapshot
@@ -15,7 +15,7 @@
  * Everything that a settings save can move is read through a function.
  */
 
-import type { SessionStore, WorkspaceStore } from '@ghostbot/core';
+import type { SessionStore, WorkspaceStore } from '@ghostwire/core';
 import type {
   ChannelStatus,
   ChatMessage,
@@ -32,10 +32,10 @@ import type {
   RunCommandResponse,
   SetCredentialRequest,
   ToolDefinition,
-} from '@ghostbot/protocol';
-import type { ChatResult, ToolChoice } from '@ghostbot/providers';
-import type { ToolboxListing, WorkspaceJail } from '@ghostbot/security';
-import type { PromptPreview, PromptPreviewInput } from '@ghostbot/agent';
+} from '@ghostwire/protocol';
+import type { ChatResult, ToolChoice } from '@ghostwire/providers';
+import type { ToolboxListing, WorkspaceJail } from '@ghostwire/security';
+import type { PromptPreview, PromptPreviewInput } from '@ghostwire/agent';
 
 /**
  * The agent as the status and context routes see it.
@@ -86,7 +86,7 @@ export interface AgentView {
 /**
  * Why an id did not name an agent that could run.
  *
- * Declared here rather than imported from `@ghostbot/runtime`, which this
+ * Declared here rather than imported from `@ghostwire/runtime`, which this
  * package deliberately does not depend on — the port describes what the server
  * needs, and an adapter supplies it.
  */

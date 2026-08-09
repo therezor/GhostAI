@@ -12,7 +12,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 
-import type { ServerMessage } from '@ghostbot/protocol';
+import type { ServerMessage } from '@ghostwire/protocol';
 
 import { startTestServer, type TestServer } from '#testkit/server.js';
 

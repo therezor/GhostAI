@@ -7,8 +7,8 @@
  * is only real if something appends mid-scroll. Two tests do.
  */
 
-import { assistantMessage, textOf, userMessage } from '@ghostbot/core';
-import { ConfigSchema } from '@ghostbot/protocol';
+import { assistantMessage, textOf, userMessage } from '@ghostwire/core';
+import { ConfigSchema } from '@ghostwire/protocol';
 import type {
   ChatMessage,
   ContextResponse,
@@ -16,7 +16,7 @@ import type {
   SessionMessagesResponse,
   SessionSummary,
   TurnStatsResponse,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { manualClock } from '#testkit/clock.js';

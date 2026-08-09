@@ -21,7 +21,7 @@
 import {
   ToolListResponseSchema,
   type ToolListResponse,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import type { RouteDeps, RouteGroup } from './types.js';
 

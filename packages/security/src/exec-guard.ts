@@ -47,8 +47,8 @@
 
 import { basename, extname } from 'node:path';
 
-import { GhostError } from '@ghostbot/core';
-import { type ExecToolConfig, ExecToolConfigSchema } from '@ghostbot/protocol';
+import { GhostError } from '@ghostwire/core';
+import { type ExecToolConfig, ExecToolConfigSchema } from '@ghostwire/protocol';
 
 import {
   pathShapes,

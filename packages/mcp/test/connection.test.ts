@@ -1,6 +1,6 @@
-import { GhostError } from '@ghostbot/core';
-import { McpServerConfigSchema } from '@ghostbot/protocol';
-import type { AnyTool } from '@ghostbot/tools';
+import { GhostError } from '@ghostwire/core';
+import { McpServerConfigSchema } from '@ghostwire/protocol';
+import type { AnyTool } from '@ghostwire/tools';
 import { describe, expect, it } from 'vitest';
 
 import { McpConnection } from '#src/connection.js';

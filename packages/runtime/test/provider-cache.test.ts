@@ -2,7 +2,7 @@ import {
   findProvider,
   type ChatProvider,
   type ProviderSpec,
-} from '@ghostbot/providers';
+} from '@ghostwire/providers';
 import { describe, expect, it } from 'vitest';
 
 import {

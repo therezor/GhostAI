@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { ServerMessage } from '@ghostbot/protocol';
+import type { ServerMessage } from '@ghostwire/protocol';
 
 import {
   ChannelManager,

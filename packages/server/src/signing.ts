@@ -24,7 +24,7 @@
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
-import { GhostError } from '@ghostbot/core';
+import { GhostError } from '@ghostwire/core';
 
 /** The `auth_secrets` row the signing key lives in. */
 export const MEDIA_SECRET_NAME = 'media_signing_key';

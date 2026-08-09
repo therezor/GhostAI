@@ -1,6 +1,6 @@
 {
-  "name": "@ghostbot/extension-host",
-  "version": "0.7.1",
+  "name": "@ghostwire/extension-host",
+  "version": "0.7.0",
   "description": "Discovers, authorises, loads and unloads extensions, and collects what they contribute.",
   "type": "module",
   "license": "MIT",
@@ -57,13 +57,13 @@
     "lint": "eslint src test"
   },
   "dependencies": {
-    "@ghostbot/agent": "workspace:*",
-    "@ghostbot/channels": "workspace:*",
-    "@ghostbot/core": "workspace:*",
-    "@ghostbot/protocol": "workspace:*",
-    "@ghostbot/providers": "workspace:*",
-    "@ghostbot/security": "workspace:*",
-    "@ghostbot/tools": "workspace:*"
+    "@ghostwire/agent": "workspace:*",
+    "@ghostwire/channels": "workspace:*",
+    "@ghostwire/core": "workspace:*",
+    "@ghostwire/protocol": "workspace:*",
+    "@ghostwire/providers": "workspace:*",
+    "@ghostwire/security": "workspace:*",
+    "@ghostwire/tools": "workspace:*"
   },
   "devDependencies": {
     "zod": "^4.0.0"

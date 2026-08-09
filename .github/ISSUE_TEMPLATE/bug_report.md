@@ -14,7 +14,7 @@ labels: bug
 
 **Version and environment**
 
-- `ghost --version`:
+- `ghostai --version`:
 - Node (`node --version`):
 - OS:
 - Provider and model:

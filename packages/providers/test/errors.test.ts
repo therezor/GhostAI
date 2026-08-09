@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isGhostError, toGhostError } from '@ghostbot/core';
+import { isGhostError, toGhostError } from '@ghostwire/core';
 
 import {
   PROVIDER_ERROR_REASONS,

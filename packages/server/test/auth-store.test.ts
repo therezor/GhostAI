@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 
-import type { Clock } from '@ghostbot/core';
-import type { RandomSource } from '@ghostbot/security';
+import type { Clock } from '@ghostwire/core';
+import type { RandomSource } from '@ghostwire/security';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {

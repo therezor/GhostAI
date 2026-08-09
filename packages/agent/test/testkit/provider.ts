@@ -5,7 +5,7 @@
  * answer, call one tool, call three, fail, stall — and a scripted provider is
  * how each of those becomes one line of a test instead of a mocked transport.
  * The real wire adapter is tested against `undici.MockAgent` in
- * `@ghostbot/providers`; nothing here is asserting anything about HTTP.
+ * `@ghostwire/providers`; nothing here is asserting anything about HTTP.
  *
  * Requests are recorded, because half of what this package must get right is in
  * the request rather than in the response: the system prompt's static prefix
@@ -13,8 +13,8 @@
  * frozen array every time, history arriving already aligned.
  */
 
-import { assistantMessage } from '@ghostbot/core';
-import type { ToolCall, Usage } from '@ghostbot/protocol';
+import { assistantMessage } from '@ghostwire/core';
+import type { ToolCall, Usage } from '@ghostwire/protocol';
 import {
   emptyUsage,
   findProvider,
@@ -24,7 +24,7 @@ import {
   type ChatStreamEvent,
   type FinishReason,
   type ProviderSpec,
-} from '@ghostbot/providers';
+} from '@ghostwire/providers';
 
 export interface ScriptedTurn {
   /** Text deltas, in order. Their concatenation is the message content. */

@@ -1,7 +1,7 @@
 /**
  * The Bot API, as much of it as a chat channel needs.
  *
- * Hand-written over `fetch`, the way `@ghostbot/providers` writes the
+ * Hand-written over `fetch`, the way `@ghostwire/providers` writes the
  * `openai-chat` adapter, and for the same two reasons: the surface actually
  * used here is seven methods, and a dependency that wraps the whole API brings
  * its own update loop, its own session store and its own opinion about
@@ -28,7 +28,7 @@
  * `fetch`, narrowed to what this file asks of it.
  *
  * Declared here rather than imported: `FetchImplementation` lives in
- * `@ghostbot/security`, which this package does not depend on and should not
+ * `@ghostwire/security`, which this package does not depend on and should not
  * start depending on for a type alias. The global `fetch` satisfies this.
  */
 export type FetchLike = (

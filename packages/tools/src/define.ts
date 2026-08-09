@@ -40,17 +40,17 @@
 
 import { z } from 'zod';
 
-import { GhostError, abortedError } from '@ghostbot/core';
-import type { Clock, Logger } from '@ghostbot/core';
+import { GhostError, abortedError } from '@ghostwire/core';
+import type { Clock, Logger } from '@ghostwire/core';
 import type {
   ToolAnnotations,
   ToolDefinition,
   ToolRisk,
   ToolSource,
   ToolsConfig,
-} from '@ghostbot/protocol';
-import { ToolsConfigSchema } from '@ghostbot/protocol';
-import type { WorkspaceJail } from '@ghostbot/security';
+} from '@ghostwire/protocol';
+import { ToolsConfigSchema } from '@ghostwire/protocol';
+import type { WorkspaceJail } from '@ghostwire/security';
 
 import type { AutomationPort } from './automation.js';
 import type { CommandRunner } from './runner.js';

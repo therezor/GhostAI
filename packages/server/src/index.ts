@@ -1,5 +1,5 @@
 /**
- * @ghostbot/server — the HTTP surface.
+ * @ghostwire/server — the HTTP surface.
  *
  * One Fastify instance on one port, serving the REST API, the WebSocket and the
  * built UI. It depends on `protocol`, `core` and `security`, and on nothing

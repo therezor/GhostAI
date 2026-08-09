@@ -47,14 +47,14 @@ import {
   type SignedUrl,
   type SignedUrlRequest,
   type UploadResponse,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 import {
   DEFAULT_WORKSPACE_ID,
   ensureDir,
   errnoOf,
   systemClock,
-} from '@ghostbot/core';
-import type { WorkspaceJail } from '@ghostbot/security';
+} from '@ghostwire/core';
+import type { WorkspaceJail } from '@ghostwire/security';
 import type { FastifyReply } from 'fastify';
 
 import { mediaClaimOf } from '../auth.js';

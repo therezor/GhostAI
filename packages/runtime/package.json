@@ -1,6 +1,6 @@
 {
-  "name": "@ghostbot/runtime",
-  "version": "0.7.1",
+  "name": "@ghostwire/runtime",
+  "version": "0.7.0",
   "description": "The shared composition root: config in, a running agent out.",
   "type": "module",
   "license": "MIT",
@@ -47,14 +47,14 @@
     "lint": "eslint src test"
   },
   "dependencies": {
-    "@ghostbot/agent": "workspace:*",
-    "@ghostbot/core": "workspace:*",
-    "@ghostbot/extension-host": "workspace:*",
-    "@ghostbot/mcp": "workspace:*",
-    "@ghostbot/protocol": "workspace:*",
-    "@ghostbot/providers": "workspace:*",
-    "@ghostbot/security": "workspace:*",
-    "@ghostbot/tools": "workspace:*"
+    "@ghostwire/agent": "workspace:*",
+    "@ghostwire/core": "workspace:*",
+    "@ghostwire/extension-host": "workspace:*",
+    "@ghostwire/mcp": "workspace:*",
+    "@ghostwire/protocol": "workspace:*",
+    "@ghostwire/providers": "workspace:*",
+    "@ghostwire/security": "workspace:*",
+    "@ghostwire/tools": "workspace:*"
   },
   "devDependencies": {
     "zod": "^4.0.0"

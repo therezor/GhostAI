@@ -1,6 +1,6 @@
-import { isAbortError, isGhostError } from '@ghostbot/core';
-import { DEFAULT_TOOLS_CONFIG, type ToolContext } from '@ghostbot/tools';
-import { WorkspaceJail } from '@ghostbot/security';
+import { isAbortError, isGhostError } from '@ghostwire/core';
+import { DEFAULT_TOOLS_CONFIG, type ToolContext } from '@ghostwire/tools';
+import { WorkspaceJail } from '@ghostwire/security';
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

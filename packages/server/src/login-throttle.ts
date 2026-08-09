@@ -42,7 +42,7 @@
 
 import type { DatabaseSync } from 'node:sqlite';
 
-import { GhostError, systemClock, type Clock } from '@ghostbot/core';
+import { GhostError, systemClock, type Clock } from '@ghostwire/core';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS auth_throttle (

@@ -72,7 +72,7 @@ const ERASE_BELOW = `${ESC}[0J`;
  * sat above the new frame, one copy per resize. Nothing the program can ask
  * tells it whether that happened, so the only sound answer is to assume it did.
  *
- * What is lost is whatever the operator's shell printed before `ghost` started.
+ * What is lost is whatever the operator's shell printed before `ghostai` started.
  * What is gained is that the conversation is reprinted whole, correctly folded,
  * with no stale copy behind it — and the conversation is what the scrollback of
  * a chat session is for.

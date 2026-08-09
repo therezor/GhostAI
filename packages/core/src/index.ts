@@ -1,9 +1,9 @@
 /**
- * @ghostbot/core — the shared spine.
+ * @ghostwire/core — the shared spine.
  *
  * Everything above `protocol` and below `security` depends on this package, so
  * what it may do is deliberately narrow: **no network and no `child_process`**.
- * Those belong to `@ghostbot/security`, which wraps them in the SSRF guard and
+ * Those belong to `@ghostwire/security`, which wraps them in the SSRF guard and
  * the argv exec guard respectively, and a direct `fetch` or `execFile` here
  * would be a way around both.
  *

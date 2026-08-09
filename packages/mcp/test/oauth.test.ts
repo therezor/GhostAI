@@ -1,4 +1,4 @@
-import { McpOAuthConfigSchema } from '@ghostbot/protocol';
+import { McpOAuthConfigSchema } from '@ghostwire/protocol';
 import { describe, expect, it } from 'vitest';
 
 import { VaultOAuthProvider } from '#src/oauth.js';

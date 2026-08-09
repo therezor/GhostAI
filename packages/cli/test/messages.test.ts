@@ -15,7 +15,7 @@ import {
   assistantMessage,
   toolMessage,
   userMessage,
-} from '@ghostbot/core';
+} from '@ghostwire/core';
 
 import { recentMessages, resolveSeq } from '#src/messages.js';
 

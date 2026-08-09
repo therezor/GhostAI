@@ -41,7 +41,7 @@ describe('the first frame', () => {
 
     expect(out.text).toContain('one\r\ntwo\r\nthree');
     // Nothing is erased on the way in: whatever the shell printed before
-    // `ghost` started is not this program's to throw away.
+    // `ghostai` started is not this program's to throw away.
     expect(out.text).not.toContain(`${ESC}[2J`);
   });
 

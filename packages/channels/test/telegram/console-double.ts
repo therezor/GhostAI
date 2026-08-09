@@ -21,12 +21,12 @@ import {
   WorkspaceStore,
   resolveGhostPaths,
   type Clock,
-} from '@ghostbot/core';
+} from '@ghostwire/core';
 import type {
   AgentSummary,
   ContextResponse,
   ModelsResponse,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import type {
   MemoryState,

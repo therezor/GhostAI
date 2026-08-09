@@ -1,5 +1,5 @@
 /**
- * `ghost init`, driven through its own streams.
+ * `ghostai init`, driven through its own streams.
  *
  * Two properties decide whether this landed, and neither is about the prompts:
  *
@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 
-import { ConfigSchema } from '@ghostbot/protocol';
+import { ConfigSchema } from '@ghostwire/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { initCommand, type InitOptions } from '#src/init.js';

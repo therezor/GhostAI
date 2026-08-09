@@ -8,7 +8,7 @@ import {
   resolveGhostPaths,
   type GhostPaths,
   type Logger,
-} from '@ghostbot/core';
+} from '@ghostwire/core';
 
 import { TELEGRAM_TOKEN_ENV_VAR, resolveTelegramToken } from '#src/telegram.js';
 
@@ -57,7 +57,7 @@ afterEach(() => {
 
 describe('resolveTelegramToken', () => {
   it('finds nothing on an install that never configured a bot', async () => {
-    // The normal case, and the one that has to stay cheap: `ghost serve` comes
+    // The normal case, and the one that has to stay cheap: `ghostai serve` comes
     // up unchanged for everybody who has never heard of this.
     expect(
       resolveTelegramToken({ paths: paths(), env: {}, settings: {} }),

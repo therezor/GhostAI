@@ -49,7 +49,7 @@ export type ErrorKind = (typeof ERROR_KINDS)[number];
  * Deliberately conservative. `provider` is false because the overwhelmingly
  * common cause is a malformed request, and blind retries against a 400 burn
  * quota to reach the same answer; the resilience decorator in
- * `@ghostbot/providers` overrides this per response, where the status code is
+ * `@ghostwire/providers` overrides this per response, where the status code is
  * actually known.
  */
 const RETRYABLE_BY_KIND: Readonly<Record<ErrorKind, boolean>> = {
@@ -83,7 +83,7 @@ interface GhostErrorOptions {
 
 export class GhostError extends Error {
   // `string`, not the literal, so a subclass can name itself — `ProviderError`
-  // in `@ghostbot/providers` is one. A literal here would make its own `name`
+  // in `@ghostwire/providers` is one. A literal here would make its own `name`
   // unassignable to the base property's type.
   override readonly name: string = 'GhostError';
   readonly kind: ErrorKind;
@@ -108,7 +108,7 @@ export class GhostError extends Error {
 /**
  * Structural, not `instanceof`.
  *
- * An extension resolving its own copy of `@ghostbot/core` produces a `GhostError`
+ * An extension resolving its own copy of `@ghostwire/core` produces a `GhostError`
  * from a different class identity, and `instanceof` would silently reclassify
  * every one of them as `internal`.
  */
@@ -189,7 +189,7 @@ export interface AbortSubscription {
  * Runs `onAbort` when the signal fires, and hands back a way to stop listening.
  *
  * Two lines of it are load-bearing and both were rediscovered independently in
- * `@ghostbot/agent` and `@ghostbot/tools`, each with a comment explaining it:
+ * `@ghostwire/agent` and `@ghostwire/tools`, each with a comment explaining it:
  *
  *  - **An already-aborted signal never fires `abort` again.** A watcher without
  *    the check waits out its full deadline on a turn that was cancelled a

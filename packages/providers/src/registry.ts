@@ -20,7 +20,7 @@
  * might accept it, and detection must reach that entry before a generic one.
  */
 
-import type { ProviderInfo } from '@ghostbot/protocol';
+import type { ProviderInfo } from '@ghostwire/protocol';
 
 /**
  * The request/response shape a provider speaks.

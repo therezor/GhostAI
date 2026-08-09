@@ -16,8 +16,8 @@ import {
   type Config,
   type ConfigPatch,
   type ServerMessage,
-} from '@ghostbot/protocol';
-import type { ChatResult } from '@ghostbot/providers';
+} from '@ghostwire/protocol';
+import type { ChatResult } from '@ghostwire/providers';
 
 import { AutomationStore, type CreateJobInput } from '#src/automation-store.js';
 import { HEARTBEAT_RESULT_TOOL, HEARTBEAT_TOOL } from '#src/heartbeat.js';

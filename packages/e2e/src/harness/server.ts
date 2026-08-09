@@ -1,7 +1,7 @@
 /**
  * The whole stack, on a port, with a model that cannot reach the network.
  *
- * This is `ghost serve`'s composition with two substitutions and nothing else:
+ * This is `ghostai serve`'s composition with two substitutions and nothing else:
  * the provider comes from a script instead of an HTTP adapter, and credentials
  * live in a `Map` instead of the OS keychain. Everything between the browser
  * and those two seams is the shipping code — the real `AgentLoop`, the real
@@ -12,7 +12,7 @@
  * Why the credentials are a `Map`: `openVault` mints a keychain entry the first
  * time it runs, and a test suite must not touch the operator's keychain — nor
  * can CI answer a keychain prompt. The vault's own behaviour is
- * `@ghostbot/security`'s to prove, at a coverage bar no browser test could
+ * `@ghostwire/security`'s to prove, at a coverage bar no browser test could
  * approach. What the browser suite is actually asserting about credentials is
  * that a key typed into the settings panel goes to exactly one request and
  * comes back as a boolean, and a `Map` behind the port shows that as clearly as
@@ -39,7 +39,7 @@ import {
   saveConfig,
   silentLogger,
   userMessage,
-} from '@ghostbot/core';
+} from '@ghostwire/core';
 import {
   ConfigSchema,
   DEFAULT_AGENT_TOOLS,
@@ -48,16 +48,16 @@ import {
   type ConfigPatch,
   type McpServerStatus,
   type SetCredentialRequest,
-} from '@ghostbot/protocol';
-import type { ChatProvider } from '@ghostbot/providers';
-import type { AutomationResolver } from '@ghostbot/tools';
+} from '@ghostwire/protocol';
+import type { ChatProvider } from '@ghostwire/providers';
+import type { AutomationResolver } from '@ghostwire/tools';
 import {
   ProviderCache,
   createRuntime,
   resolveAgent,
   resolveAgentOrDefault,
   type GhostRuntime,
-} from '@ghostbot/runtime';
+} from '@ghostwire/runtime';
 import {
   HubApprovalGate,
   Scheduler,
@@ -69,7 +69,7 @@ import {
   type GhostServer,
   type ServerRuntime,
   type ExtensionCounts,
-} from '@ghostbot/server';
+} from '@ghostwire/server';
 
 import { routedProvider } from './provider.js';
 import { ROUTES, waitTool } from './script.js';
@@ -168,14 +168,14 @@ export interface Harness {
 /**
  * The built SPA.
  *
- * Resolved through the package graph exactly as `ghost serve` resolves it, so
+ * Resolved through the package graph exactly as `ghostai serve` resolves it, so
  * "the UI is not built" fails here with a sentence rather than as a blank page
  * forty assertions later.
  */
 function uiRoot(): string {
   const require = createRequire(import.meta.url);
   const root = join(
-    dirname(require.resolve('@ghostbot/web/package.json')),
+    dirname(require.resolve('@ghostwire/web/package.json')),
     'dist',
   );
   return root;
@@ -223,7 +223,7 @@ export async function startHarness(
     // The host is a config decision — `assertBootPolicy` refuses a non-loopback
     // bind with authentication off, and it reads the config it was handed. The
     // port is not: `0` means "ask the OS", which the schema cannot express, so
-    // it belongs to `listen` exactly as it does in `ghost serve`.
+    // it belongs to `listen` exactly as it does in `ghostai serve`.
     server: { ...(options.config?.server ?? {}), host: '127.0.0.1' },
     // The install's own answer, pinned for the same reason the browser's is:
     // once a session exists, `config.ui.locale` outranks `Accept-Language`, so
@@ -342,7 +342,7 @@ export async function startHarness(
   engine.current = scheduler;
   scheduler.start();
 
-  // The same condition `ghost serve` mints on, so a spec sees the code the
+  // The same condition `ghostai serve` mints on, so a spec sees the code the
   // terminal would have printed.
   const setupCode = server.auth.hasPassword()
     ? undefined
@@ -395,7 +395,7 @@ function seedSession(runtime: GhostRuntime, session: SeedSession): void {
 /**
  * The `ServerRuntime` port, over the real runtime and an in-memory vault.
  *
- * A near-copy of the adapter `ghost serve` uses, and deliberately kept as one:
+ * A near-copy of the adapter `ghostai serve` uses, and deliberately kept as one:
  * the parts a browser can observe — a settings save that persists and takes
  * effect on the next turn, a credential that becomes a boolean and nothing else
  * — are the parts reproduced exactly. What is not reproduced is `openVault`,

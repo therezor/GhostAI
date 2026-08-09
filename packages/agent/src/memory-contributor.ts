@@ -35,11 +35,11 @@ import {
   silentLogger,
   type Logger,
   type Memory,
-} from '@ghostbot/core';
+} from '@ghostwire/core';
 import {
   DEFAULT_MEMORY_TEMPLATE,
   renderPromptTemplate,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import {
   templateOr,
@@ -102,7 +102,7 @@ export function renderMemorySection(
 /**
  * The path first, because that is the string handed back to `read_file`.
  *
- * `renderIndex` in `@ghostbot/core` writes the same memories as relative markdown
+ * `renderIndex` in `@ghostwire/core` writes the same memories as relative markdown
  * links, and the two are deliberately different: `MEMORY.md` sits inside
  * `memory/` and is read by a person, while this is read by a model that has to
  * pass the path to a tool. A prefix it reconstructs is one it can reconstruct

@@ -4,11 +4,11 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AgentLoop } from '@ghostbot/agent';
-import { ChannelManager } from '@ghostbot/channels';
-import { channelConformance } from '@ghostbot/channels/testkit';
-import { SessionStore, assistantMessage, textOf } from '@ghostbot/core';
-import { AgentDefaultsSchema, ConfigSchema } from '@ghostbot/protocol';
+import { AgentLoop } from '@ghostwire/agent';
+import { ChannelManager } from '@ghostwire/channels';
+import { channelConformance } from '@ghostwire/channels/testkit';
+import { SessionStore, assistantMessage, textOf } from '@ghostwire/core';
+import { AgentDefaultsSchema, ConfigSchema } from '@ghostwire/protocol';
 import {
   emptyUsage,
   findProvider,
@@ -16,10 +16,10 @@ import {
   type ChatResult,
   type ChatStreamEvent,
   type ProviderSpec,
-} from '@ghostbot/providers';
-import { WorkspaceJail, singleJail } from '@ghostbot/security';
-import { HubApprovalGate, SessionHub } from '@ghostbot/server';
-import { ToolRegistry } from '@ghostbot/tools';
+} from '@ghostwire/providers';
+import { WorkspaceJail, singleJail } from '@ghostwire/security';
+import { HubApprovalGate, SessionHub } from '@ghostwire/server';
+import { ToolRegistry } from '@ghostwire/tools';
 
 import { loopbackChannel, type LoopbackChannel } from '#src/loopback.js';
 

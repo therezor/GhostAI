@@ -1,10 +1,10 @@
-import { isGhostError } from '@ghostbot/core';
+import { isGhostError } from '@ghostwire/core';
 import {
   ConfigSchema,
   DEFAULT_AGENT_TOOLS,
   type Config,
   type ConfigPatch,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 import { describe, expect, it } from 'vitest';
 
 import {

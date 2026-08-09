@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ContentPart } from '@ghostbot/protocol';
+import type { ContentPart } from '@ghostwire/protocol';
 
 import type { Clock } from '#src/clock.js';
 import {

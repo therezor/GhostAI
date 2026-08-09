@@ -1,7 +1,7 @@
 import { PassThrough } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 
-import type { TerminalInput, TerminalOutput } from '@ghostbot/tui';
+import type { TerminalInput, TerminalOutput } from '@ghostwire/tui';
 
 import { createMenu, menuAvailable, NO_MENU } from '#src/menu.js';
 

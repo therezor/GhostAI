@@ -38,9 +38,9 @@
 import { mkdirSync, createWriteStream, type WriteStream } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { GhostError } from '@ghostbot/core';
-import type { Toolbox } from '@ghostbot/protocol';
-import type { EffectiveNetwork, ExecPlan } from '@ghostbot/security';
+import { GhostError } from '@ghostwire/core';
+import type { Toolbox } from '@ghostwire/protocol';
+import type { EffectiveNetwork, ExecPlan } from '@ghostwire/security';
 
 import {
   localRunner,

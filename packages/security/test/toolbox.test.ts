@@ -1,11 +1,11 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
-import { GhostError } from '@ghostbot/core';
+import { GhostError } from '@ghostwire/core';
 import type {
   AgentToolboxNetwork,
   ToolboxNetworkMode,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import {
   assertNetworkWithinCeiling,

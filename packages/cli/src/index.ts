@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * The `ghost` binary.
+ * The `ghostai` binary.
  *
  * Everything this file does is set an exit code. It sets `process.exitCode`
  * rather than calling `process.exit`, because `exit` tears the process down with
- * whatever is still buffered on stdout unwritten — and on a piped `ghost chat`,
+ * whatever is still buffered on stdout unwritten — and on a piped `ghostai chat`,
  * what is still buffered is the answer.
  */
 

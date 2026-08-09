@@ -37,7 +37,7 @@ jobs:
       # Named separately so a failure says which gate, on the summary page,
       # without anyone opening the log.
       - name: Design token gates
-        run: pnpm --filter @ghostbot/web exec tsx src/tokens/run-gates.ts
+        run: pnpm --filter @ghostwire/web exec tsx src/tokens/run-gates.ts
 
       - name: Format check
         run: pnpm format:check
@@ -89,7 +89,7 @@ jobs:
       # Only the browser the suite uses. `--with-deps` installs the shared
       # libraries a headless Chromium needs on a bare runner.
       - name: Install Chromium
-        run: pnpm --filter @ghostbot/e2e exec playwright install --with-deps chromium
+        run: pnpm --filter @ghostwire/e2e exec playwright install --with-deps chromium
 
       # Both colour schemes, because the projects are the themes: a component
       # that only works in dark is a failing test here rather than something
@@ -97,10 +97,10 @@ jobs:
       #
       # The fidelity gate skips itself — it measures against a checkout of the
       # product being replaced, which is not on a CI machine and is not going to
-      # be. It runs locally, and `pnpm --filter @ghostbot/e2e baseline` is what
+      # be. It runs locally, and `pnpm --filter @ghostwire/e2e baseline` is what
       # produces the pictures beside it.
       - name: End-to-end
-        run: pnpm --filter @ghostbot/e2e test:e2e
+        run: pnpm --filter @ghostwire/e2e test:e2e
 
       - if: failure()
         uses: actions/upload-artifact@v4

@@ -29,7 +29,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { DEFAULT_WORKSPACE_ID } from '@ghostbot/protocol';
+import { DEFAULT_WORKSPACE_ID } from '@ghostwire/protocol';
 
 const STORAGE_KEY = 'ghostai:workspace';
 

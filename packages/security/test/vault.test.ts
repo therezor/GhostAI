@@ -15,7 +15,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { isGhostError } from '@ghostbot/core';
+import { isGhostError } from '@ghostwire/core';
 
 import {
   type CommandResult,

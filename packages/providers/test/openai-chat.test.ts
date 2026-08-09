@@ -8,7 +8,7 @@ import {
   systemMessage,
   textPart,
   userMessage,
-} from '@ghostbot/core';
+} from '@ghostwire/core';
 
 import { isProviderError } from '#src/errors.js';
 import {

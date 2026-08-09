@@ -42,8 +42,8 @@ import {
   type TurnStatsResponse,
   type UpdateSessionRequest,
   type Usage,
-} from '@ghostbot/protocol';
-import { toStoredMessage, type SessionSummaryRecord } from '@ghostbot/core';
+} from '@ghostwire/protocol';
+import { toStoredMessage, type SessionSummaryRecord } from '@ghostwire/core';
 import type { FastifyReply } from 'fastify';
 
 import {

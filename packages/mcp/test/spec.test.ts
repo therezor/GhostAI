@@ -1,4 +1,4 @@
-import { McpServerConfigSchema } from '@ghostbot/protocol';
+import { McpServerConfigSchema } from '@ghostwire/protocol';
 import { describe, expect, it } from 'vitest';
 
 import {

@@ -120,7 +120,7 @@ a sheet with `read_file`: the tool is the intended path, not the only one.
 ### Seeing what a workspace holds
 
 The catalogue is in the agent's prompt, not on your screen. `/skills` prints it — the name
-and description of every sheet the workspace holds — in `ghost chat` and from the Telegram
+and description of every sheet the workspace holds — in `ghostai chat` and from the Telegram
 bot. It is a listing and nothing more; it is gated on the same `skill` permission, because
 a catalogue this agent cannot open is not worth printing.
 

@@ -1,5 +1,5 @@
 /**
- * `ghost chat` — a turn, or a conversation of them.
+ * `ghostai chat` — a turn, or a conversation of them.
  *
  * Three shapes over one implementation: a message on the command line runs a
  * single turn and exits, a piped stdin is read as that message, and an
@@ -28,20 +28,20 @@
 
 import pc from 'picocolors';
 
-import { describeContext, type AgentLoop } from '@ghostbot/agent';
+import { describeContext, type AgentLoop } from '@ghostwire/agent';
 import {
   DEFAULT_WORKSPACE_ID,
   createLogger,
   isAbortError,
   type LogLevel,
-} from '@ghostbot/core';
+} from '@ghostwire/core';
 import {
   DEFAULT_AGENT_ID,
   type ContentPart,
   type StopReason,
-} from '@ghostbot/protocol';
-import { findCredential } from '@ghostbot/runtime';
-import { agentForTurn } from '@ghostbot/server';
+} from '@ghostwire/protocol';
+import { findCredential } from '@ghostwire/runtime';
+import { agentForTurn } from '@ghostwire/server';
 import {
   CHROME_ROWS,
   columnsOf,
@@ -60,7 +60,7 @@ import {
   type TerminalInput,
   type TerminalOutput,
   type Theme,
-} from '@ghostbot/tui';
+} from '@ghostwire/tui';
 
 import { commandRowsFor, runSlashCommand } from './commands.js';
 import {
@@ -230,7 +230,7 @@ export async function runTurn(
   };
 }
 
-/** Everything piped in, for `ghost chat < prompt.txt`. */
+/** Everything piped in, for `ghostai chat < prompt.txt`. */
 async function readAll(input: NodeJS.ReadableStream): Promise<string> {
   const chunks: string[] = [];
   input.setEncoding('utf8');
@@ -291,7 +291,7 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
   const logTarget = {
     write: (text: string): boolean => {
       // A redirected stderr keeps the JSON: the thing reading it then is a
-      // program, and `ghost chat 2>chat.log | jq` has to keep working.
+      // program, and `ghostai chat 2>chat.log | jq` has to keep working.
       if (sink === undefined || !shareTerminal) return errOut.write(text);
       // Through the renderer rather than straight at the sink, because only it
       // knows whether a line is half-written — and a log line arriving in the
@@ -336,7 +336,7 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
   if (options.handleSignals !== false) process.on('SIGINT', onInterrupt);
 
   /**
-   * The same catalogue `ghost serve` offers its settings panel.
+   * The same catalogue `ghostai serve` offers its settings panel.
    *
    * Built here rather than reached for through the server port, which would
    * mean constructing a Fastify-shaped object with credential writes and
@@ -407,7 +407,7 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
     try {
       return await runTurn(
         // `requireLoopFor` rather than `loop`: an unconfigured install builds a
-        // runtime with no loop so that `ghost serve` can come up, and this is
+        // runtime with no loop so that `ghostai serve` can come up, and this is
         // the one caller that genuinely cannot proceed without one. The message
         // it throws names what to set.
         {
@@ -556,7 +556,7 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
         renderer.echo(content);
       },
       // `unref` so an animation frame never keeps the process alive: a turn
-      // that ends between two ticks must not leave `ghost` running.
+      // that ends between two ticks must not leave `ghostai` running.
       ticker: (tick) => {
         const timer = setInterval(tick, SPINNER_INTERVAL_MS);
         timer.unref();
@@ -732,7 +732,7 @@ async function repl(deps: ReplDeps): Promise<number> {
 /**
  * Lines in, lines out, for a stdout that is not a terminal.
  *
- * `ghost chat > log` and `ghost chat | tee` still open a prompt, because stdin
+ * `ghostai chat > log` and `ghostai chat | tee` still open a prompt, because stdin
  * is still a keyboard — but nothing here moves a cursor. There is no frame, no
  * status bar and no menu, and `NO_MENU` is what makes that last part a property
  * of the type rather than an `if` at every call site.

@@ -12,7 +12,7 @@
  *
  * What is no longer asserted anywhere is inheritance *on the screen*. The
  * config format still allows an absent field to fall through to
- * `agents.defaults`, and `@ghostbot/runtime` has the cases for it — but the
+ * `agents.defaults`, and `@ghostwire/runtime` has the cases for it — but the
  * editor fills every box from the defaults and writes them down, so the
  * assertions here are that an agent shows its own settings rather than a blank
  * where somebody else's would have been used.
@@ -27,7 +27,7 @@ import {
   ConfigSchema,
   defaultSubagentPrompt,
   type ConfigPatch,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import { Providers } from '@/app/providers.js';
 import { createAppRouter } from '@/app/router.js';
@@ -124,7 +124,7 @@ const patchesOf = (calls: readonly RecordedRequest[]): ConfigPatch[] =>
  * fails for a reason the product does not have.
  *
  * Shallow over `agents.list` is all these cases need; the real merge is
- * `@ghostbot/runtime`'s to prove, and `merge.test.ts` does.
+ * `@ghostwire/runtime`'s to prove, and `merge.test.ts` does.
  */
 function statefulSettings(base = CONFIG): Record<string, StubRoute> {
   let current = base;

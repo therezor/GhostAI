@@ -1,9 +1,9 @@
-import { GhostError } from '@ghostbot/core';
+import { GhostError } from '@ghostwire/core';
 import {
   McpServerConfigSchema,
   type McpServerConfig,
-} from '@ghostbot/protocol';
-import type { AnyTool } from '@ghostbot/tools';
+} from '@ghostwire/protocol';
+import type { AnyTool } from '@ghostwire/tools';
 import { describe, expect, it } from 'vitest';
 
 import { McpManager, type McpToolSink } from '#src/manager.js';

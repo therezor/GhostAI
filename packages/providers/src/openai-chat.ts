@@ -41,13 +41,13 @@ import type {
   ModelInfo,
   ToolCall,
   Usage,
-} from '@ghostbot/protocol';
-import { GhostError } from '@ghostbot/core';
+} from '@ghostwire/protocol';
+import { GhostError } from '@ghostwire/core';
 import {
   classifyAddress,
   parseIpLiteral,
   type FetchImplementation,
-} from '@ghostbot/security';
+} from '@ghostwire/security';
 
 import {
   ProviderError,

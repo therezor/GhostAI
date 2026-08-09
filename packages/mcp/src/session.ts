@@ -18,7 +18,7 @@
  * provider is.
  */
 
-import type { ToolAnnotations } from '@ghostbot/protocol';
+import type { ToolAnnotations } from '@ghostwire/protocol';
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
 
 import type { McpConnectionSpec } from './spec.js';
@@ -32,7 +32,7 @@ export interface McpToolDescriptor {
   readonly inputSchema: unknown;
   /**
    * Passed through unchanged, because `ToolAnnotationsSchema` in
-   * `@ghostbot/protocol` was written to mirror MCP's vocabulary exactly. There
+   * `@ghostwire/protocol` was written to mirror MCP's vocabulary exactly. There
    * is no mapping table here and there should never be one.
    */
   readonly annotations?: ToolAnnotations | undefined;

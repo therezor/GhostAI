@@ -6,7 +6,7 @@ import importX from 'eslint-plugin-import-x';
 /**
  * Package layering is enforced by two mechanisms working together:
  *
- *  1. pnpm's isolated node_modules. A package can only resolve `@ghostbot/x`
+ *  1. pnpm's isolated node_modules. A package can only resolve `@ghostwire/x`
  *     if it declares it in `dependencies`, so the dependency graph in the
  *     package manifests *is* the layer graph — an undeclared import fails to
  *     resolve rather than merely failing lint.
@@ -26,7 +26,7 @@ const crossPackageImportRule = {
         {
           group: ['../../*'],
           message:
-            'Deep relative imports across package boundaries are banned. Import the package by name (@ghostbot/<pkg>) and declare it in package.json dependencies.',
+            'Deep relative imports across package boundaries are banned. Import the package by name (@ghostwire/<pkg>) and declare it in package.json dependencies.',
         },
       ],
     },
@@ -292,7 +292,7 @@ export default tseslint.config(
      * One file in the CLI may open a readline interface, and no others.
      *
      * `ask.ts` keeps it, and is the only file that ever did after the prompts
-     * moved out of `init.ts` — a wizard and `ghost preset install` are both a
+     * moved out of `init.ts` — a wizard and `ghostai preset install` are both a
      * sequence of questions with nothing else on screen, which is what readline
      * is right for and always was. Concentrating it in one file is also what
      * makes the reader's *lifetime* reviewable: `openAsk` hands back the
@@ -318,7 +318,7 @@ export default tseslint.config(
             {
               group: ['../../*'],
               message:
-                'Deep relative imports across package boundaries are banned. Import the package by name (@ghostbot/<pkg>) and declare it in package.json dependencies.',
+                'Deep relative imports across package boundaries are banned. Import the package by name (@ghostwire/<pkg>) and declare it in package.json dependencies.',
             },
             {
               group: ['node:readline', 'node:readline/promises'],

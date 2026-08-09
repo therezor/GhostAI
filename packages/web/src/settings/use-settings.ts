@@ -27,7 +27,7 @@ import type {
   SetCredentialRequest,
   SettingsPatchRequest,
   SettingsResponse,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';

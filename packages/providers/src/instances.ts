@@ -18,7 +18,7 @@ import type {
   ProviderConfig,
   ProviderInstanceInfo,
   ProvidersConfig,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import {
   PROVIDERS,
@@ -109,7 +109,7 @@ export function findInstance(
 /**
  * An instance for a type that has none configured.
  *
- * `ghost chat --provider ollama` has to work on a machine with no config file,
+ * `ghostai chat --provider ollama` has to work on a machine with no config file,
  * and it did before instances existed. Rather than special-casing that path
  * everywhere downstream, resolution synthesises the instance the old code was
  * effectively using: id = the type, so even its vault lookup lands where a

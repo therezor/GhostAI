@@ -95,7 +95,7 @@ absent entry in an agent's map already means "not enabled", and an existing agen
 no capability until someone says so. See [Configuration](configuration.md#toolsmcpserversid)
 for the settings and the two security decisions behind them.
 
-Four things about the bridge are worth knowing before reading `@ghostbot/mcp`:
+Four things about the bridge are worth knowing before reading `@ghostwire/mcp`:
 
 - **The name is qualified and generated.** `mcp_<server>_<tool>`, sanitised into the
   `[A-Za-z0-9_-]{1,64}` every provider accepts, with a digest suffix when it would not
@@ -249,7 +249,7 @@ The split of responsibility is worth knowing:
   `tool.approvalRequest` for `ask`, and owns the deadline.
 - **The gate decides the answer.** It is whatever the transport installed.
 
-**With no gate installed, `ask` runs the tool.** That is what keeps `ghost chat` in a
+**With no gate installed, `ask` runs the tool.** That is what keeps `ghostai chat` in a
 terminal unchanged — the operator typing the request _is_ the approval, and a prompt with
 no UI to answer it would deadlock. Any transport that exposes the agent beyond its
 operator's keyboard must install a gate; the server does.

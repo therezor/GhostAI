@@ -14,7 +14,7 @@
  *    be named `<id>` or `<id>-<suffix>`, so one namespace check covers four
  *    registries and two extensions cannot silently fight over a name.
  *
- *  - **`entry` is a relative path, checked in `@ghostbot/security`.** It is the
+ *  - **`entry` is a relative path, checked in `@ghostwire/security`.** It is the
  *    module the host imports, and letting it escape the extension's own
  *    directory would make the digest cover something other than the code that
  *    runs.

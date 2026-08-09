@@ -64,7 +64,7 @@ describe('isGhostError', () => {
   });
 
   it('recognises one from another copy of the package', () => {
-    // An extension resolving its own @ghostbot/core produces a different class
+    // An extension resolving its own @ghostwire/core produces a different class
     // identity; an instanceof check would misclassify every one of these.
     const foreign = Object.assign(new Error('from an extension'), {
       kind: 'tool',

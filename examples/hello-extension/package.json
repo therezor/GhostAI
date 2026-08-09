@@ -1,5 +1,5 @@
 {
-  "name": "@ghostbot/example-hello-extension",
+  "name": "@ghostwire/example-hello-extension",
   "version": "0.0.0",
   "description": "A reference extension: the shortest complete implementation of the extension contract.",
   "private": true,
@@ -15,9 +15,9 @@
     "lint": "eslint src test"
   },
   "dependencies": {
-    "@ghostbot/extension-host": "workspace:*",
-    "@ghostbot/protocol": "workspace:*",
-    "@ghostbot/tools": "workspace:*",
+    "@ghostwire/extension-host": "workspace:*",
+    "@ghostwire/protocol": "workspace:*",
+    "@ghostwire/tools": "workspace:*",
     "zod": "^4.0.0"
   }
 }

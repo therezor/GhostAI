@@ -26,8 +26,8 @@
  *    fails in a way nobody can see.
  */
 
-import { GhostError } from '@ghostbot/core';
-import type { McpOAuthConfig } from '@ghostbot/protocol';
+import { GhostError } from '@ghostwire/core';
+import type { McpOAuthConfig } from '@ghostwire/protocol';
 import type {
   OAuthClientInformationMixed,
   OAuthClientMetadata,

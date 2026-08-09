@@ -1,10 +1,10 @@
 /**
- * `ghost agent`, the preset installer.
+ * `ghostai agent`, the preset installer.
  *
  * What is asserted here is the *merge*: that a preset lands in `agents.list`
  * exactly once, that the refusals fire before the write, and that the roster
  * snapshot offers only specialists that can answer. The preset shape itself is
- * `@ghostbot/protocol`'s, and the toolbox gate is `@ghostbot/security`'s —
+ * `@ghostwire/protocol`'s, and the toolbox gate is `@ghostwire/security`'s —
  * both already tested where they live.
  */
 
@@ -18,7 +18,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { Config } from '@ghostbot/protocol';
+import type { Config } from '@ghostwire/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { runAgent } from '#src/agent.js';
@@ -107,7 +107,7 @@ afterEach(() => {
   rmSync(home, { recursive: true, force: true });
 });
 
-describe('ghost agent install', () => {
+describe('ghostai agent install', () => {
   it('installs a preset from an explicit path', () => {
     const file = join(home, 'my-agent.json');
     writeFileSync(
@@ -146,7 +146,7 @@ describe('ghost agent install', () => {
     );
 
     expect(run('install', 'scout')).toBe(1);
-    expect(errOut.join('\n')).toContain('ghost toolbox approve research');
+    expect(errOut.join('\n')).toContain('ghostai toolbox approve research');
     expect(savedConfig).toThrow(); // nothing was written
   });
 
@@ -333,7 +333,7 @@ describe('the team-lead roster snapshot', () => {
   });
 });
 
-describe('ghost agent list', () => {
+describe('ghostai agent list', () => {
   it('shows the installed agents and the presets still available', () => {
     installPreset('nano', presetFor('nano'));
     installPreset('team-lead', presetFor('team-lead'));
@@ -359,7 +359,7 @@ describe('ghost agent list', () => {
     expect(text).toContain('Presets not yet installed: researcher, scribe');
     // One command, not one per id, and it names the picker rather than this
     // command — that is the one that also builds the toolbox an agent needs.
-    expect(text).toContain('ghost preset install');
+    expect(text).toContain('ghostai preset install');
   });
 
   it('names an available preset once', () => {

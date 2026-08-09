@@ -24,7 +24,7 @@
  *    once and then left to throw, which the manager logs and drops.
  */
 
-import type { Clock, Logger, OutboundKind } from '@ghostbot/core';
+import type { Clock, Logger, OutboundKind } from '@ghostwire/core';
 
 import type { BotApi, InlineKeyboardMarkup } from './api.js';
 import { TelegramApiError } from './api.js';

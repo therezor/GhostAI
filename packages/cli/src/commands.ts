@@ -23,8 +23,8 @@
  *
  * **Copy is deliberately absent.** A terminal has no portable clipboard, and
  * shelling out to `pbcopy`/`xclip`/`clip.exe` would put platform detection and a
- * `child_process` spawn into a package that has neither — which `@ghostbot/core`
- * bans below `@ghostbot/security` for exactly this class of convenience. A
+ * `child_process` spawn into a package that has neither — which `@ghostwire/core`
+ * bans below `@ghostwire/security` for exactly this class of convenience. A
  * terminal's selection *is* its copy mechanism.
  */
 
@@ -33,7 +33,7 @@ import {
   describeContext,
   readSkills,
   type ContextReport,
-} from '@ghostbot/agent';
+} from '@ghostwire/agent';
 import {
   DEFAULT_AGENT_ID,
   DEFAULT_WORKSPACE_ID,
@@ -43,10 +43,10 @@ import {
   readMemories,
   textOf,
   type SessionStore,
-} from '@ghostbot/core';
-import { estimateTokens } from '@ghostbot/providers';
-import { formatNumber } from '@ghostbot/i18n';
-import { newUuid, type ContentPart } from '@ghostbot/protocol';
+} from '@ghostwire/core';
+import { estimateTokens } from '@ghostwire/providers';
+import { formatNumber } from '@ghostwire/i18n';
+import { newUuid, type ContentPart } from '@ghostwire/protocol';
 
 import type { CliKey, CliT } from './i18n.js';
 import type { Menu } from './menu.js';

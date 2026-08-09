@@ -9,7 +9,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { createLogger, type Logger } from '@ghostbot/core';
+import { createLogger, type Logger } from '@ghostwire/core';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {

@@ -22,13 +22,13 @@ import type {
   Channel,
   ChannelContext,
   ChannelFactory,
-} from '@ghostbot/channels';
+} from '@ghostwire/channels';
 import {
   textPart,
   type OutboundKind,
   type OutboundMessage,
   type PublishResult,
-} from '@ghostbot/core';
+} from '@ghostwire/core';
 
 /** One line of the conversation, in the order it happened. */
 export interface LoopbackEntry {

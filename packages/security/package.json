@@ -1,6 +1,6 @@
 {
-  "name": "@ghostbot/security",
-  "version": "0.7.1",
+  "name": "@ghostwire/security",
+  "version": "0.7.0",
   "description": "Credential vault, workspace jail, SSRF-guarded fetch, exec argv guard.",
   "type": "module",
   "license": "MIT",
@@ -47,8 +47,8 @@
     "lint": "eslint src test"
   },
   "dependencies": {
-    "@ghostbot/core": "workspace:*",
-    "@ghostbot/protocol": "workspace:*",
+    "@ghostwire/core": "workspace:*",
+    "@ghostwire/protocol": "workspace:*",
     "undici": "^7.2.0"
   }
 }

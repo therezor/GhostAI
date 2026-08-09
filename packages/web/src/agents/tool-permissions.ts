@@ -7,7 +7,7 @@
  * tables would be two vocabularies for one config value.
  */
 
-import type { ToolPermission } from '@ghostbot/protocol';
+import type { ToolPermission } from '@ghostwire/protocol';
 
 import type { WebKey } from '@/i18n/keys.js';
 

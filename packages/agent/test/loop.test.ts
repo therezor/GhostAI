@@ -18,7 +18,7 @@ import {
   hasOrphanedToolResult,
   textOf,
   textPart,
-} from '@ghostbot/core';
+} from '@ghostwire/core';
 import {
   AgentDefaultsSchema,
   type AgentDefaults,
@@ -30,14 +30,14 @@ import {
   subagentRunsOf,
   type ToolPermissions,
   ToolboxSchema,
-} from '@ghostbot/protocol';
-import { ProviderError, type ChatRequest } from '@ghostbot/providers';
+} from '@ghostwire/protocol';
+import { ProviderError, type ChatRequest } from '@ghostwire/providers';
 import {
   WorkspaceJail,
   singleJail,
   toolOutputTag,
   type JailResolver,
-} from '@ghostbot/security';
+} from '@ghostwire/security';
 import {
   DEFAULT_TOOLS_CONFIG,
   ToolRegistry,
@@ -46,7 +46,7 @@ import {
   toolboxTools,
   withToolboxTools,
   type AnyTool,
-} from '@ghostbot/tools';
+} from '@ghostwire/tools';
 
 import {
   deniedToolResult,

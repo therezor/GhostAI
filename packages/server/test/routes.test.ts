@@ -12,9 +12,9 @@ import {
   type Config,
   type ProvidersResponse,
   type ToolDefinition,
-} from '@ghostbot/protocol';
-import { GhostError } from '@ghostbot/core';
-import { PROVIDERS } from '@ghostbot/providers';
+} from '@ghostwire/protocol';
+import { GhostError } from '@ghostwire/core';
+import { PROVIDERS } from '@ghostwire/providers';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { SERVER_VERSION } from '#src/version.js';

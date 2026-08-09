@@ -16,9 +16,9 @@
  * rather than quietly shown something else.
  */
 
-import { describeContext } from '@ghostbot/agent';
-import { toStoredMessage } from '@ghostbot/core';
-import type { ContextResponse } from '@ghostbot/protocol';
+import { describeContext } from '@ghostwire/agent';
+import { toStoredMessage } from '@ghostwire/core';
+import type { ContextResponse } from '@ghostwire/protocol';
 
 import type { ServerRuntime } from './runtime.js';
 
@@ -48,7 +48,7 @@ export async function buildContextResponse(
   const effectiveId = missing ? undefined : bound;
   const agent = runtime.agent(effectiveId);
 
-  // The measurement itself lives in `@ghostbot/agent`, so every surface reports
+  // The measurement itself lives in `@ghostwire/agent`, so every surface reports
   // the same numbers from the same code rather than a second implementation of
   // the windowing rules.
   const report = await describeContext({

@@ -1,7 +1,7 @@
 /**
- * Telegram, wired into `ghost serve`.
+ * Telegram, wired into `ghostai serve`.
  *
- * Two things live here, and both are here rather than in `@ghostbot/channels`
+ * Two things live here, and both are here rather than in `@ghostwire/channels`
  * for the same reason: this is the composition root, and it is the only place
  * that has a credential vault and an environment to read. `ChannelContext` has
  * neither, deliberately — a channel that could open the vault could read every
@@ -22,14 +22,14 @@
 
 import { existsSync } from 'node:fs';
 
-import { readSkills } from '@ghostbot/agent';
-import { telegramChannel, type TelegramConsole } from '@ghostbot/channels';
+import { readSkills } from '@ghostwire/agent';
+import { telegramChannel, type TelegramConsole } from '@ghostwire/channels';
 import type {
   ChannelFactory,
   MemoryState,
   SkillsState,
   TelegramChannel,
-} from '@ghostbot/channels';
+} from '@ghostwire/channels';
 import {
   DEFAULT_AGENT_ID,
   DEFAULT_WORKSPACE_ID,
@@ -37,15 +37,15 @@ import {
   type GhostPaths,
   type Logger,
   type SessionRecord,
-} from '@ghostbot/core';
-import type { ChannelStatus, ContextResponse } from '@ghostbot/protocol';
-import { estimateTokens } from '@ghostbot/providers';
+} from '@ghostwire/core';
+import type { ChannelStatus, ContextResponse } from '@ghostwire/protocol';
+import { estimateTokens } from '@ghostwire/providers';
 import {
   openVault,
   type EffectiveAgent,
   type GhostRuntime,
-} from '@ghostbot/runtime';
-import { buildContextResponse, type ServerRuntime } from '@ghostbot/server';
+} from '@ghostwire/runtime';
+import { buildContextResponse, type ServerRuntime } from '@ghostwire/server';
 
 /** The vault namespace a channel's credentials live under. */
 export const CHANNEL_CREDENTIAL_NAMESPACE = 'channels';
@@ -114,7 +114,7 @@ function createTelegramConsole(
     workspaces: runtime.workspaces,
     agents: () => server.agents(),
     models: async () =>
-      // `models` is optional on the port `@ghostbot/server` states, because a
+      // `models` is optional on the port `@ghostwire/server` states, because a
       // route test standing in for a runtime has no provider to ask. The real
       // adapter always has one.
       (await server.models?.()) ?? { models: [], errors: {} },
@@ -278,7 +278,7 @@ interface TelegramFactoriesOptions {
 /**
  * The Telegram factory, or nothing.
  *
- * Nothing is the normal case, and it has to stay cheap: `ghost serve` must come
+ * Nothing is the normal case, and it has to stay cheap: `ghostai serve` must come
  * up unchanged on the overwhelming majority of installs that have never heard
  * of a bot. A token that *does* resolve but is refused by the API is a
  * different matter — that fails startup, which is what `channel.ts` documents.

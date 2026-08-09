@@ -33,7 +33,7 @@ export default defineConfig({
   removeNodeProtocol: false,
   // The other half of bundling into ESM, and the one that is not obvious until
   // it fails at `import()` time. Reaching `defineTool` pulls in
-  // `@ghostbot/core`, which pulls in `pino`, which is CommonJS and calls
+  // `@ghostwire/core`, which pulls in `pino`, which is CommonJS and calls
   // `require('node:os')` at module scope. An ESM bundle has no `require`, so
   // esbuild emits a stub that throws "Dynamic require of ... is not supported".
   // This gives it a real one.

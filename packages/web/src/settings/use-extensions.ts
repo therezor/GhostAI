@@ -17,7 +17,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ExtensionListResponse } from '@ghostbot/protocol';
+import type { ExtensionListResponse } from '@ghostwire/protocol';
 import type { UseQueryResult } from '@tanstack/react-query';
 
 import { api } from '@/lib/api.js';

@@ -38,8 +38,8 @@ import {
   type Logger,
   type OutboundKind,
   type OutboundMessage,
-} from '@ghostbot/core';
-import { newUuid, type ApprovalScope } from '@ghostbot/protocol';
+} from '@ghostwire/core';
+import { newUuid, type ApprovalScope } from '@ghostwire/protocol';
 
 import type {
   Channel,
@@ -171,7 +171,7 @@ class Telegram implements TelegramChannel {
     }
 
     // A wrong token throws here, which fails `ChannelManager.start()` and so
-    // fails `ghost serve`. That is the documented contract.
+    // fails `ghostai serve`. That is the documented contract.
     const me = await this.api.getMe(this.context.signal);
     this.username = me.username;
 

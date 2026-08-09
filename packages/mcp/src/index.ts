@@ -1,7 +1,7 @@
 /**
- * @ghostbot/mcp — third-party tools, from servers an operator configured.
+ * @ghostwire/mcp — third-party tools, from servers an operator configured.
  *
- * It sits above `@ghostbot/tools` and below `@ghostbot/runtime`, and it is
+ * It sits above `@ghostwire/tools` and below `@ghostwire/runtime`, and it is
  * deliberately ignorant of everything on either side of that: it has never
  * heard of a config file, an HTTP route or a WebSocket. The composition root
  * hands `McpManager` a record of servers and a sink, and the rest — a

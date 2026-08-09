@@ -13,7 +13,7 @@
  *    line one. Every one of those is a `state` on a row with a sentence beside
  *    it, because a boot that refuses because of one extension out of five is a
  *    worse outcome than a boot that runs with four.
- *  - **Status is a list, not a log.** The panel and `ghost extension list` read
+ *  - **Status is a list, not a log.** The panel and `ghostai extension list` read
  *    `status()`; nothing has to grep anything.
  *
  * What it does *not* do is apply anything. `tools()`, `channels()`,
@@ -32,16 +32,16 @@
  * there, which is exactly what a turn during an MCP reconnect sees.
  */
 
-import { GhostError, type Clock, type Logger } from '@ghostbot/core';
-import type { ChannelFactory } from '@ghostbot/channels';
+import { GhostError, type Clock, type Logger } from '@ghostwire/core';
+import type { ChannelFactory } from '@ghostwire/channels';
 import type {
   ExtensionStatus,
   ExtensionsConfig,
   ExtensionCommand as ExtensionCommandDto,
-} from '@ghostbot/protocol';
-import type { ContextContributor } from '@ghostbot/agent';
-import type { ExtensionStore, ExtensionResolution } from '@ghostbot/security';
-import type { AnyTool } from '@ghostbot/tools';
+} from '@ghostwire/protocol';
+import type { ContextContributor } from '@ghostwire/agent';
+import type { ExtensionStore, ExtensionResolution } from '@ghostwire/security';
+import type { AnyTool } from '@ghostwire/tools';
 
 import type {
   CommandInput,
@@ -498,7 +498,7 @@ function settingsFor(
 }
 
 /**
- * Joined here rather than in `@ghostbot/security`, which already proved it safe.
+ * Joined here rather than in `@ghostwire/security`, which already proved it safe.
  *
  * `assertExtensionPolicy` resolved this exact pair through `realpath` and
  * refused anything landing outside the directory, so by the time an extension

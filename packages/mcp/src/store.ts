@@ -19,7 +19,7 @@
  * namespace but its own.
  */
 
-import type { CredentialVault } from '@ghostbot/security';
+import type { CredentialVault } from '@ghostwire/security';
 
 const MCP_CREDENTIAL_NAMESPACE = 'mcp_servers';
 

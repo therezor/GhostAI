@@ -12,7 +12,7 @@ import {
   defaultSubagentPrompt,
   subagentToolName,
   type SubagentRef,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import { Button } from '@/components/ui/button.js';
 import { SelectField, TextareaField } from '@/components/form/controls.js';

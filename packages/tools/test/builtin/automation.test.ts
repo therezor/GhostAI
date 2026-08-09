@@ -9,7 +9,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { AutomationJob } from '@ghostbot/protocol';
+import type { AutomationJob } from '@ghostwire/protocol';
 import type { AutomationOutcome, AutomationPort } from '#src/automation.js';
 import { toToolResult, type ToolContext } from '#src/define.js';
 import { createTestWorkspace, type TestWorkspace } from '#testkit/workspace.js';

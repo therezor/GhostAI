@@ -1,7 +1,7 @@
 /**
  * Reading `config.json`.
  *
- * The schema in `@ghostbot/protocol` deliberately contains no `.transform()`, so
+ * The schema in `@ghostwire/protocol` deliberately contains no `.transform()`, so
  * that every field stays representable as JSON Schema for the OpenAPI document
  * and the parsed type is identical to the input type. That leaves one job for
  * load time, and this is it: find the file, turn its absence into defaults
@@ -11,7 +11,7 @@
  *
  *  - **A missing config file is the normal first run**, not a failure. Every
  *    field has a default and `ConfigSchema.parse({})` yields a complete tree, so
- *    `ghost chat --provider ollama --model qwen3` has to work on a machine that
+ *    `ghostai chat --provider ollama --model qwen3` has to work on a machine that
  *    has never written a config. `fromFile` reports which happened, for the one
  *    caller that wants to say "no config found" in a diagnostic.
  *
@@ -31,7 +31,7 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import { ConfigSchema, type Config } from '@ghostbot/protocol';
+import { ConfigSchema, type Config } from '@ghostwire/protocol';
 
 import { GhostError, errnoOf } from './errors.js';
 import {

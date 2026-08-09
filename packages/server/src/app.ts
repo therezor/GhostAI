@@ -31,9 +31,9 @@ import {
   systemClock,
   type Clock,
   type Logger,
-} from '@ghostbot/core';
-import type { Config } from '@ghostbot/protocol';
-import type { RandomSource } from '@ghostbot/security';
+} from '@ghostwire/core';
+import type { Config } from '@ghostwire/protocol';
+import type { RandomSource } from '@ghostwire/security';
 import Fastify, {
   type FastifyBaseLogger,
   type FastifyInstance,
@@ -342,7 +342,7 @@ export async function createServer(
       info: {
         title: 'GhostAI',
         version: SERVER_VERSION,
-        description: 'Generated from the Zod schemas in @ghostbot/protocol.',
+        description: 'Generated from the Zod schemas in @ghostwire/protocol.',
       },
       components: {
         // The `$defs` pool: every protocol schema, so a route references rather
@@ -364,7 +364,7 @@ export async function createServer(
   });
 
   // Built here rather than by the caller, so the two callers that compose a
-  // server — `ghost serve` and the e2e harness — both get the automation
+  // server — `ghostai serve` and the e2e harness — both get the automation
   // surface without either remembering to. `createServer` awaits `app.ready()`,
   // after which no route can be added, so anything the routes need is decided
   // at this point or not at all.

@@ -1,10 +1,10 @@
 /**
- * `ghost extension`, the terminal half of the approval gate.
+ * `ghostai extension`, the terminal half of the approval gate.
  *
  * What is asserted here is the *review*: that the listing prints what an
  * operator has to weigh before approving, and that approving says what it
  * committed to. The gate itself — the digest, the drift, the four states — is
- * `@ghostbot/security`'s, and testing it again through a CLI would be testing
+ * `@ghostwire/security`'s, and testing it again through a CLI would be testing
  * the same branches with more scaffolding.
  */
 
@@ -60,7 +60,7 @@ afterEach(() => {
   rmSync(home, { recursive: true, force: true });
 });
 
-describe('ghost extension list', () => {
+describe('ghostai extension list', () => {
   it('says where to put one when there are none', () => {
     expect(run('list')).toBe(0);
     expect(out.join('\n')).toMatch(/No extensions installed under/);
@@ -99,7 +99,7 @@ describe('ghost extension list', () => {
 
     run('list');
 
-    expect(out.join('\n')).toMatch(/ghost extension approve slack/);
+    expect(out.join('\n')).toMatch(/ghostai extension approve slack/);
   });
 
   it('reports a broken extension rather than hiding it', () => {
@@ -114,7 +114,7 @@ describe('ghost extension list', () => {
   });
 });
 
-describe('ghost extension approve', () => {
+describe('ghostai extension approve', () => {
   it('records the digest and says what that commits to', () => {
     install('slack', { contributes: ['tools'] });
 
@@ -159,11 +159,11 @@ describe('ghost extension approve', () => {
     // A 2 rather than a 1: the operator's command line was wrong, not the
     // install.
     expect(run('approve')).toBe(2);
-    expect(errOut.join('\n')).toMatch(/ghost extension list/);
+    expect(errOut.join('\n')).toMatch(/ghostai extension list/);
   });
 });
 
-describe('ghost extension revoke', () => {
+describe('ghostai extension revoke', () => {
   it('forgets the approval and leaves the files alone', () => {
     install('slack');
     run('approve', 'slack');

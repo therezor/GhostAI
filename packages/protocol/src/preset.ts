@@ -2,7 +2,7 @@
  * An agent preset: an installable agent definition.
  *
  * A preset is a JSON file — beside a toolbox manifest, or bundled with the CLI
- * — that `ghost agent install` turns into an entry in `agents.list`. After
+ * — that `ghostai agent install` turns into an entry in `agents.list`. After
  * install it is ordinary agent config: the operator edits it in the UI, and
  * nothing remembers where it came from. That is the whole design — a preset is
  * a starting point, not a subscription, which is why there is no version field

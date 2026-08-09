@@ -24,7 +24,7 @@ import {
   rule,
   truncateToWidth,
   type Theme,
-} from '@ghostbot/tui';
+} from '@ghostwire/tui';
 
 import type { CliKey, CliT } from './i18n.js';
 

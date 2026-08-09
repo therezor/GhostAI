@@ -35,7 +35,7 @@ import {
 } from 'node:fs';
 import { dirname } from 'node:path';
 
-import { GhostError } from '@ghostbot/core';
+import { GhostError } from '@ghostwire/core';
 
 import { type RandomSource, systemRandom } from './random.js';
 

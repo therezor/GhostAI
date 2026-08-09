@@ -26,10 +26,10 @@ ollama pull qwen3     # a few gigabytes; this is the slow part
 ## 2. Install
 
 ```bash
-npm install -g @ghostbot/cli
+npm install -g @ghostwire/ghostai
 ```
 
-That puts `ghost` on your PATH. There is nothing to compile — `node:sqlite` is built into
+That puts `ghostai` on your PATH. There is nothing to compile — `node:sqlite` is built into
 Node — and the browser UI ships inside the package, so there is no second thing to install
 or serve.
 
@@ -44,11 +44,11 @@ git clone https://github.com/therezor/GhostAI.git
 cd GhostAI
 pnpm install
 pnpm build                                  # → packages/cli/dist/index.js
-pnpm --filter @ghostbot/cli link --global    # puts `ghost` on your PATH
+pnpm --filter @ghostwire/ghostai link --global    # puts `ghostai` on your PATH
 ```
 
 `pnpm build` is not optional even if you only want the API: the CLI serves the browser UI
-out of `@ghostbot/web/dist`, and without a build `ghost serve` says `UI  not built` and
+out of `@ghostwire/web/dist`, and without a build `ghostai serve` says `UI  not built` and
 runs the API alone. See [Development](development.md).
 
 </details>
@@ -56,7 +56,7 @@ runs the API alone. See [Development](development.md).
 ## 3. First run
 
 ```bash
-ghost serve
+ghostai serve
 ```
 
 It starts with nothing configured and prints a one-time code:
@@ -66,9 +66,9 @@ GhostAI is listening.
 
   URL        http://127.0.0.1:3000
   Auth       enabled
-  Agent      not configured — add a provider in the UI, or run `ghost init`
+  Agent      not configured — add a provider in the UI, or run `ghostai init`
   Workspace  /Users/you/.ghostai/workspace
-  UI         …/node_modules/@ghostbot/web/dist
+  UI         …/node_modules/@ghostwire/web/dist
 
 First run. Open the URL above and enter this one-time code:
 
@@ -98,8 +98,8 @@ Two things worth knowing here:
   files, manages workspaces and settings, and shows notifications — only the composer is
   disabled, and it says so and links to the panel that fixes it.
 
-Prefer the terminal? `ghost init` asks the same questions with no browser, then
-`ghost chat` talks to it. Both surfaces share one `ghost.db`, so a session you start in
+Prefer the terminal? `ghostai init` asks the same questions with no browser, then
+`ghostai chat` talks to it. Both surfaces share one `ghost.db`, so a session you start in
 one is the row the other lists.
 
 **Ready-made agents** — a researcher, an analyst for documents and data, a media
@@ -109,7 +109,7 @@ a no-tools fast lane — live in the separate
 updated on their own. One command fetches it and asks which ones you want:
 
 ```bash
-ghost preset install
+ghostai preset install
 ```
 
 Tick the agents you want and it does the rest — including building the container images
@@ -117,7 +117,7 @@ the ones you ticked need, which is why picking only `nano` needs no Docker at al
 stops short of one thing: an agent that works in a container cannot run until you
 **approve** that container, so the run prints what each box may do — its network ceiling,
 its limits, any hardening it switches off — and asks. Answering no is fine; it prints the
-`ghost toolbox approve <name>` line and you can read the manifest first.
+`ghostai toolbox approve <name>` line and you can read the manifest first.
 [Toolboxes](toolboxes.md) explains why approval is a step of its own.
 
 ## 4. Your first conversation
@@ -160,7 +160,7 @@ A single note is not much to work with. Either copy a project into the workspace
 GhostAI at one where it already lives:
 
 ```bash
-ghost serve --workspace ~/code/my-project
+ghostai serve --workspace ~/code/my-project
 ```
 
 Now browse and edit it on the **Files** screen, or just ask the agent to.
@@ -255,4 +255,4 @@ Not working? Two things account for most of it:
 
 - **The composer says no model is configured.** The provider saved but the model did not,
   or the endpoint is unreachable. Settings → Providers tests the connection.
-- **`ghost serve` prints `UI  not built`.** Run `pnpm build`.
+- **`ghostai serve` prints `UI  not built`.** Run `pnpm build`.

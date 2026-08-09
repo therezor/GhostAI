@@ -1,4 +1,4 @@
-import { ConfigSchema, type Config } from '@ghostbot/protocol';
+import { ConfigSchema, type Config } from '@ghostwire/protocol';
 import { describe, expect, it } from 'vitest';
 
 import { assertBootPolicy } from '#src/boot.js';

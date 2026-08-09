@@ -27,7 +27,7 @@ import type {
   AgentSummary,
   ExtensionCommand,
   ModelInfo,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import type { WebKey } from '@/i18n/keys.js';
 

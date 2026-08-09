@@ -7,19 +7,19 @@
  * time — is how a check and the filesystem call it guards end up looking at two
  * different files.
  *
- * `mimeTypeFor` and `readText` moved down to `@ghostbot/core` and are re-exported
+ * `mimeTypeFor` and `readText` moved down to `@ghostwire/core` and are re-exported
  * here so this module stays the one place the HTTP layer imports from. They had
  * to move: the agent loop turns an attached file into something a model can read
- * and has to reach the same verdict this route does, and `@ghostbot/agent` cannot
+ * and has to reach the same verdict this route does, and `@ghostwire/agent` cannot
  * import a server.
  */
 
 import { readdirSync, statSync, type Stats } from 'node:fs';
 import { basename, extname, join, relative } from 'node:path';
 
-import { mimeTypeFor } from '@ghostbot/core';
-import type { FileEntry } from '@ghostbot/protocol';
-import type { WorkspaceJail } from '@ghostbot/security';
+import { mimeTypeFor } from '@ghostwire/core';
+import type { FileEntry } from '@ghostwire/protocol';
+import type { WorkspaceJail } from '@ghostwire/security';
 
 export {
   DEFAULT_MIME_TYPE,
@@ -27,7 +27,7 @@ export {
   mimeTypeFor,
   readText,
   type WorkspaceText,
-} from '@ghostbot/core';
+} from '@ghostwire/core';
 
 /**
  * Types a browser executes in the origin that served them.

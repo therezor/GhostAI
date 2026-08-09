@@ -8,7 +8,7 @@ import {
   systemClock,
   type Clock,
   type GhostError,
-} from '@ghostbot/core';
+} from '@ghostwire/core';
 
 import { toToolResult, type AnyTool, type ToolContext } from '#src/define.js';
 import { memoryTool } from '#src/builtin/memory.js';

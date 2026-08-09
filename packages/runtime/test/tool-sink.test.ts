@@ -1,4 +1,4 @@
-import { ToolRegistry, defineTool, type AnyTool } from '@ghostbot/tools';
+import { ToolRegistry, defineTool, type AnyTool } from '@ghostwire/tools';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 

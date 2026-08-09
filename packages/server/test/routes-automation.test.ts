@@ -8,13 +8,13 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { ConfigSchema } from '@ghostbot/protocol';
+import { ConfigSchema } from '@ghostwire/protocol';
 import type {
   AutomationJob,
   AutomationJobListResponse,
   AutomationRun,
   AutomationRunListResponse,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import type { SchedulerPort } from '#src/scheduler.js';
 import { startTestServer, type TestServer } from '#testkit/server.js';

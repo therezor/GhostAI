@@ -56,13 +56,13 @@ importers:
 
   examples/hello-extension:
     dependencies:
-      '@ghostbot/extension-host':
+      '@ghostwire/extension-host':
         specifier: workspace:*
         version: link:../../packages/extension-host
-      '@ghostbot/protocol':
+      '@ghostwire/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@ghostbot/tools':
+      '@ghostwire/tools':
         specifier: workspace:*
         version: link:../../packages/tools
       zod:
@@ -71,47 +71,47 @@ importers:
 
   examples/loopback-channel:
     dependencies:
-      '@ghostbot/channels':
+      '@ghostwire/channels':
         specifier: workspace:*
         version: link:../../packages/channels
-      '@ghostbot/core':
+      '@ghostwire/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@ghostbot/protocol':
+      '@ghostwire/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
     devDependencies:
-      '@ghostbot/agent':
+      '@ghostwire/agent':
         specifier: workspace:*
         version: link:../../packages/agent
-      '@ghostbot/providers':
+      '@ghostwire/providers':
         specifier: workspace:*
         version: link:../../packages/providers
-      '@ghostbot/security':
+      '@ghostwire/security':
         specifier: workspace:*
         version: link:../../packages/security
-      '@ghostbot/server':
+      '@ghostwire/server':
         specifier: workspace:*
         version: link:../../packages/server
-      '@ghostbot/tools':
+      '@ghostwire/tools':
         specifier: workspace:*
         version: link:../../packages/tools
 
   packages/agent:
     dependencies:
-      '@ghostbot/core':
+      '@ghostwire/core':
         specifier: workspace:*
         version: link:../core
-      '@ghostbot/protocol':
+      '@ghostwire/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@ghostbot/providers':
+      '@ghostwire/providers':
         specifier: workspace:*
         version: link:../providers
-      '@ghostbot/security':
+      '@ghostwire/security':
         specifier: workspace:*
         version: link:../security
-      '@ghostbot/tools':
+      '@ghostwire/tools':
         specifier: workspace:*
         version: link:../tools
     devDependencies:
@@ -121,10 +121,10 @@ importers:
 
   packages/channels:
     dependencies:
-      '@ghostbot/core':
+      '@ghostwire/core':
         specifier: workspace:*
         version: link:../core
-      '@ghostbot/protocol':
+      '@ghostwire/protocol':
         specifier: workspace:*
         version: link:../protocol
       zod:
@@ -133,43 +133,43 @@ importers:
 
   packages/cli:
     dependencies:
-      '@ghostbot/agent':
+      '@ghostwire/agent':
         specifier: workspace:*
         version: link:../agent
-      '@ghostbot/channels':
+      '@ghostwire/channels':
         specifier: workspace:*
         version: link:../channels
-      '@ghostbot/core':
+      '@ghostwire/core':
         specifier: workspace:*
         version: link:../core
-      '@ghostbot/extension-host':
+      '@ghostwire/extension-host':
         specifier: workspace:*
         version: link:../extension-host
-      '@ghostbot/i18n':
+      '@ghostwire/i18n':
         specifier: workspace:*
         version: link:../i18n
-      '@ghostbot/protocol':
+      '@ghostwire/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@ghostbot/providers':
+      '@ghostwire/providers':
         specifier: workspace:*
         version: link:../providers
-      '@ghostbot/runtime':
+      '@ghostwire/runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@ghostbot/security':
+      '@ghostwire/security':
         specifier: workspace:*
         version: link:../security
-      '@ghostbot/server':
+      '@ghostwire/server':
         specifier: workspace:*
         version: link:../server
-      '@ghostbot/tools':
+      '@ghostwire/tools':
         specifier: workspace:*
         version: link:../tools
-      '@ghostbot/tui':
+      '@ghostwire/tui':
         specifier: workspace:*
         version: link:../tui
-      '@ghostbot/web':
+      '@ghostwire/web':
         specifier: workspace:*
         version: link:../web
       commander:
@@ -191,10 +191,10 @@ importers:
 
   packages/core:
     dependencies:
-      '@ghostbot/i18n':
+      '@ghostwire/i18n':
         specifier: workspace:*
         version: link:../i18n
-      '@ghostbot/protocol':
+      '@ghostwire/protocol':
         specifier: workspace:*
         version: link:../protocol
       pino:
@@ -206,28 +206,28 @@ importers:
 
   packages/e2e:
     dependencies:
-      '@ghostbot/agent':
+      '@ghostwire/agent':
         specifier: workspace:*
         version: link:../agent
-      '@ghostbot/core':
+      '@ghostwire/core':
         specifier: workspace:*
         version: link:../core
-      '@ghostbot/protocol':
+      '@ghostwire/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@ghostbot/providers':
+      '@ghostwire/providers':
         specifier: workspace:*
         version: link:../providers
-      '@ghostbot/runtime':
+      '@ghostwire/runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@ghostbot/server':
+      '@ghostwire/server':
         specifier: workspace:*
         version: link:../server
-      '@ghostbot/tools':
+      '@ghostwire/tools':
         specifier: workspace:*
         version: link:../tools
-      '@ghostbot/web':
+      '@ghostwire/web':
         specifier: workspace:*
         version: link:../web
     devDependencies:
@@ -252,25 +252,25 @@ importers:
 
   packages/extension-host:
     dependencies:
-      '@ghostbot/agent':
+      '@ghostwire/agent':
         specifier: workspace:*
         version: link:../agent
-      '@ghostbot/channels':
+      '@ghostwire/channels':
         specifier: workspace:*
         version: link:../channels
-      '@ghostbot/core':
+      '@ghostwire/core':
         specifier: workspace:*
         version: link:../core
-      '@ghostbot/protocol':
+      '@ghostwire/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@ghostbot/providers':
+      '@ghostwire/providers':
         specifier: workspace:*
         version: link:../providers
-      '@ghostbot/security':
+      '@ghostwire/security':
         specifier: workspace:*
         version: link:../security
-      '@ghostbot/tools':
+      '@ghostwire/tools':
         specifier: workspace:*
         version: link:../tools
     devDependencies:
@@ -286,16 +286,16 @@ importers:
 
   packages/mcp:
     dependencies:
-      '@ghostbot/core':
+      '@ghostwire/core':
         specifier: workspace:*
         version: link:../core
-      '@ghostbot/protocol':
+      '@ghostwire/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@ghostbot/security':
+      '@ghostwire/security':
         specifier: workspace:*
         version: link:../security
-      '@ghostbot/tools':
+      '@ghostwire/tools':
         specifier: workspace:*
         version: link:../tools
       '@modelcontextprotocol/sdk':
@@ -314,13 +314,13 @@ importers:
 
   packages/providers:
     dependencies:
-      '@ghostbot/core':
+      '@ghostwire/core':
         specifier: workspace:*
         version: link:../core
-      '@ghostbot/protocol':
+      '@ghostwire/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@ghostbot/security':
+      '@ghostwire/security':
         specifier: workspace:*
         version: link:../security
       gpt-tokenizer:
@@ -332,28 +332,28 @@ importers:
 
   packages/runtime:
     dependencies:
-      '@ghostbot/agent':
+      '@ghostwire/agent':
         specifier: workspace:*
         version: link:../agent
-      '@ghostbot/core':
+      '@ghostwire/core':
         specifier: workspace:*
         version: link:../core
-      '@ghostbot/extension-host':
+      '@ghostwire/extension-host':
         specifier: workspace:*
         version: link:../extension-host
-      '@ghostbot/mcp':
+      '@ghostwire/mcp':
         specifier: workspace:*
         version: link:../mcp
-      '@ghostbot/protocol':
+      '@ghostwire/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@ghostbot/providers':
+      '@ghostwire/providers':
         specifier: workspace:*
         version: link:../providers
-      '@ghostbot/security':
+      '@ghostwire/security':
         specifier: workspace:*
         version: link:../security
-      '@ghostbot/tools':
+      '@ghostwire/tools':
         specifier: workspace:*
         version: link:../tools
     devDependencies:
@@ -363,10 +363,10 @@ importers:
 
   packages/security:
     dependencies:
-      '@ghostbot/core':
+      '@ghostwire/core':
         specifier: workspace:*
         version: link:../core
-      '@ghostbot/protocol':
+      '@ghostwire/protocol':
         specifier: workspace:*
         version: link:../protocol
       undici:
@@ -390,22 +390,22 @@ importers:
       '@fastify/websocket':
         specifier: ^11.0.0
         version: 11.3.0
-      '@ghostbot/agent':
+      '@ghostwire/agent':
         specifier: workspace:*
         version: link:../agent
-      '@ghostbot/core':
+      '@ghostwire/core':
         specifier: workspace:*
         version: link:../core
-      '@ghostbot/protocol':
+      '@ghostwire/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@ghostbot/providers':
+      '@ghostwire/providers':
         specifier: workspace:*
         version: link:../providers
-      '@ghostbot/security':
+      '@ghostwire/security':
         specifier: workspace:*
         version: link:../security
-      '@ghostbot/tools':
+      '@ghostwire/tools':
         specifier: workspace:*
         version: link:../tools
       '@node-rs/argon2':
@@ -430,13 +430,13 @@ importers:
 
   packages/tools:
     dependencies:
-      '@ghostbot/core':
+      '@ghostwire/core':
         specifier: workspace:*
         version: link:../core
-      '@ghostbot/protocol':
+      '@ghostwire/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@ghostbot/security':
+      '@ghostwire/security':
         specifier: workspace:*
         version: link:../security
       zod:
@@ -457,10 +457,10 @@ importers:
       '@fontsource-variable/jetbrains-mono':
         specifier: ^5.3.0
         version: 5.3.0
-      '@ghostbot/i18n':
+      '@ghostwire/i18n':
         specifier: workspace:*
         version: link:../i18n
-      '@ghostbot/protocol':
+      '@ghostwire/protocol':
         specifier: workspace:*
         version: link:../protocol
       '@radix-ui/react-dialog':

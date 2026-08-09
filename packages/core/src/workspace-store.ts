@@ -9,10 +9,10 @@
  * broad view, and `WorkspaceJail` keeps named workspaces isolated from each
  * other because `../sibling` resolves outside their own root.
  *
- * **It lives in `@ghostbot/core`, not `@ghostbot/server`.** `AuthStore` and
+ * **It lives in `@ghostwire/core`, not `@ghostwire/server`.** `AuthStore` and
  * `NotificationStore` sit in the server on the argument that nothing below the
  * transport raises a notification or a login. That argument is false here:
- * `@ghostbot/runtime` builds a jail from an id and `@ghostbot/agent` binds a turn
+ * `@ghostwire/runtime` builds a jail from an id and `@ghostwire/agent` binds a turn
  * to one, and neither may import the server.
  *
  * **It is a table, not a JSON file.** The registry has a cross-table invariant

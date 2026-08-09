@@ -1,7 +1,7 @@
 /**
  * A pino record, as one line a person can read.
  *
- * The logger writes JSON because that is what a log is for — `ghost serve
+ * The logger writes JSON because that is what a log is for — `ghostai serve
  * 2>ghost.log` produces something `jq` can answer questions about, and every
  * field is there on purpose. In a chat window it is the wrong shape entirely: a
  * wall of `{"level":40,"time":1786007865399,…}` between two turns says nothing
@@ -18,7 +18,7 @@
  * most, a crash whose output is not a record at all.
  */
 
-import type { Palette } from '@ghostbot/tui';
+import type { Palette } from '@ghostwire/tui';
 
 /** pino's numeric levels. Anything else prints as the number it was. */
 const LEVELS: Readonly<Record<number, string>> = {
@@ -33,7 +33,7 @@ const LEVELS: Readonly<Record<number, string>> = {
 /**
  * How each level is painted.
  *
- * **The word stays whatever the colour does.** `@ghostbot/tui`'s theme states the
+ * **The word stays whatever the colour does.** `@ghostwire/tui`'s theme states the
  * rule this follows — colour is never the only signal — so `warn` reads as
  * `warn` under `NO_COLOR`, in a pipe, and to anyone who cannot tell the yellow
  * from the red. The colour is what makes it findable while scrolling, not what
@@ -63,7 +63,7 @@ function paintLevel(c: Palette, level: string): string {
  *
  * `time` goes because the line is being read as it happens; `pid` and
  * `hostname` because there is one process and it is this one; `name` because it
- * is `ghost` on every line this formatter will ever see.
+ * is `ghostai` on every line this formatter will ever see.
  */
 const NOISE: ReadonlySet<string> = new Set([
   'level',

@@ -21,13 +21,13 @@
  * fencing.
  */
 
-import { GhostError } from '@ghostbot/core';
-import type { ToolDefinition, ToolRisk, ToolSource } from '@ghostbot/protocol';
+import { GhostError } from '@ghostwire/core';
+import type { ToolDefinition, ToolRisk, ToolSource } from '@ghostwire/protocol';
 import {
   assertNotAborted,
   type AnyTool,
   type ToolResult,
-} from '@ghostbot/tools';
+} from '@ghostwire/tools';
 
 import {
   compileValidator,

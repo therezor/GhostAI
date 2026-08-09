@@ -34,8 +34,8 @@ import {
   type UpdateWorkspaceRequest,
   type WorkspaceListResponse,
   type WorkspaceSummary,
-} from '@ghostbot/protocol';
-import { DEFAULT_WORKSPACE_ID, type WorkspaceRecord } from '@ghostbot/core';
+} from '@ghostwire/protocol';
+import { DEFAULT_WORKSPACE_ID, type WorkspaceRecord } from '@ghostwire/core';
 import type { FastifyReply } from 'fastify';
 
 import { conflict, notFound } from '../errors.js';

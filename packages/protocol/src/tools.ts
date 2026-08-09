@@ -54,9 +54,9 @@ export type ToolPermissions = z.infer<typeof ToolPermissionsSchema>;
 /**
  * The tools that ship in the box.
  *
- * Here rather than in `@ghostbot/tools`, which is where they are actually
+ * Here rather than in `@ghostwire/tools`, which is where they are actually
  * defined, because two packages downstream need the *names* without the
- * implementations: `@ghostbot/security` refuses a toolbox that shadows one, and
+ * implementations: `@ghostwire/security` refuses a toolbox that shadows one, and
  * `DEFAULT_AGENT_TOOLS` in `config.ts` seeds a new agent with them. Both sit
  * below `tools` in the layer graph. `packages/tools` owns a test that this list
  * still matches `BUILTIN_TOOLS`, which is the only place both are visible.

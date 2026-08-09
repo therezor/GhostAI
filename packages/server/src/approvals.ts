@@ -44,13 +44,13 @@ import {
   systemClock,
   type Clock,
   type Logger,
-} from '@ghostbot/core';
+} from '@ghostwire/core';
 import type {
   ApprovalDecision,
   ApprovalGate,
   ApprovalRequest,
-} from '@ghostbot/agent';
-import type { ApprovalScope } from '@ghostbot/protocol';
+} from '@ghostwire/agent';
+import type { ApprovalScope } from '@ghostwire/protocol';
 
 /** What a client answered, kept past the call that produced it. */
 interface RememberedDecision {

@@ -2,9 +2,9 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { resolveGhostPaths } from '@ghostbot/core';
-import { findProvider, type ProviderInstance } from '@ghostbot/providers';
-import { CredentialVault } from '@ghostbot/security';
+import { resolveGhostPaths } from '@ghostwire/core';
+import { findProvider, type ProviderInstance } from '@ghostwire/providers';
+import { CredentialVault } from '@ghostwire/security';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
@@ -57,7 +57,7 @@ describe('findCredential', () => {
 
   it('does not open a vault that does not exist yet', () => {
     // The point: `resolveVaultKey` writes a key to the OS keychain the first
-    // time it runs, and `ghost chat` against Ollama must not create one.
+    // time it runs, and `ghostai chat` against Ollama must not create one.
     expect(
       findCredential(instance('ollama'), paths, {}, undefined),
     ).toBeUndefined();
@@ -133,7 +133,7 @@ describe('createChatRuntime', () => {
     // `resolveInstance` returns null rather than picking one, and a request
     // landing at an endpoint nobody chose fails as a 401 from somewhere
     // unexpected — so the turn stops and says what to set. The runtime itself
-    // still builds, because `ghost serve` shares it and has to come up.
+    // still builds, because `ghostai serve` shares it and has to come up.
     const home = tempHome();
     const runtime = build({ home, vault: false, env: {} });
 
@@ -141,7 +141,7 @@ describe('createChatRuntime', () => {
     expect(() => runtime.requireLoop()).toThrow(
       /No provider could be resolved/,
     );
-    expect(() => runtime.requireLoop()).toThrow(/ghost init/);
+    expect(() => runtime.requireLoop()).toThrow(/ghostai init/);
   });
 
   it('takes an exported API key as the operator naming a provider', () => {

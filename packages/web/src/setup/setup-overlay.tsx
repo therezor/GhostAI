@@ -22,7 +22,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type JSX, type SyntheticEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { SUPPORTED_LOCALES } from '@ghostbot/i18n';
+import { SUPPORTED_LOCALES } from '@ghostwire/i18n';
 
 import { useAppLocale } from '@/i18n/i18n-context.js';
 import { useSaveSettings } from '@/settings/use-settings.js';
@@ -31,7 +31,7 @@ import {
   DEFAULT_USERNAME,
   PASSWORD_MIN_LENGTH,
   type ProviderInfo,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import { ApiError, api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';

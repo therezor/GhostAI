@@ -1,6 +1,6 @@
 {
   "name": "ghostai-monorepo",
-  "version": "0.7.1",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.17.0",
@@ -19,7 +19,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "screenshots": "pnpm build && pnpm --filter @ghostbot/e2e exec playwright install chromium && pnpm --filter @ghostbot/e2e screenshots",
+    "screenshots": "pnpm build && pnpm --filter @ghostwire/e2e exec playwright install chromium && pnpm --filter @ghostwire/e2e screenshots",
     "demo": "pnpm build && node scripts/demo-cast.mjs",
     "check": "pnpm typecheck && pnpm lint && pnpm test",
     "i18n:extract": "i18next 'packages/web/src/**/*.{ts,tsx}' --config i18next-parser.web.js && i18next 'packages/cli/src/**/*.ts' --config i18next-parser.cli.js",

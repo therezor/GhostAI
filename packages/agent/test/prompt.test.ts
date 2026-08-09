@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { toolOutputTag } from '@ghostbot/security';
+import { toolOutputTag } from '@ghostwire/security';
 
-import { DEFAULT_WRAP_UP_TEMPLATE } from '@ghostbot/protocol';
+import { DEFAULT_WRAP_UP_TEMPLATE } from '@ghostwire/protocol';
 
 import {
   SECTION_SEPARATOR,

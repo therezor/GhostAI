@@ -5,7 +5,7 @@
  * argument `init.ts` made for hand-rolling them still holds and is the reason
  * this file exists rather than a dependency: `chat.ts` already drives
  * `node:readline/promises` with an `AbortSignal`, and a package whose whole
- * point is that `ghost --help` loads almost nothing does not buy a prompt
+ * point is that `ghostai --help` loads almost nothing does not buy a prompt
  * library for a numbered list.
  *
  * Everything takes its streams as arguments, so a test drives it without a
@@ -39,7 +39,7 @@ export interface OpenAsk {
  * `finally`.
  *
  * `node:readline/promises` is imported dynamically for the reason `program.ts`
- * imports everything dynamically: `ghost --help` must not pay for it.
+ * imports everything dynamically: `ghostai --help` must not pay for it.
  */
 export async function openAsk(
   input: NodeJS.ReadableStream & { isTTY?: boolean },

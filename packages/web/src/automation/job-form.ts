@@ -8,7 +8,7 @@
  *
  * **Cron is validated by shape here and by the server for real.** Five
  * non-empty fields is all this checks. Importing `parseCron` from
- * `@ghostbot/core` would agree with the server exactly — and would drag
+ * `@ghostwire/core` would agree with the server exactly — and would drag
  * `node:sqlite` into the browser bundle, which `self-contained.test.ts` exists
  * to prevent. The server answers a 422 naming the field, the panel renders it,
  * and then shows the server's own `state.nextRunAtMs` as a date — which is
@@ -20,13 +20,13 @@ import {
   formatDateTime,
   instantFromZonedInput,
   zonedInputValue,
-} from '@ghostbot/i18n';
+} from '@ghostwire/i18n';
 import type {
   AutomationJob,
   AutomationSchedule,
   CreateAutomationJob,
   UpdateAutomationJob,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import { parseNumber } from '@/components/form/fields.js';
 

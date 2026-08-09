@@ -42,7 +42,7 @@ function build(locale = 'en', strict = false): LooseT {
 describe('the instance', () => {
   it('translates on the line after init, without awaiting anything', () => {
     // `initAsync: false` is what buys this. Left on, i18next loads inside a
-    // setTimeout and this returns the key — and `ghost --help` has no await to
+    // setTimeout and this returns the key — and `ghostai --help` has no await to
     // hang on before printing.
     const t = build();
 
@@ -125,7 +125,7 @@ describe('the per-surface instances', () => {
   });
 
   it('keep the surfaces apart, so neither ships the other’s strings', () => {
-    // Not tidiness: `program.ts` parses the CLI bundle on every `ghost --help`.
+    // Not tidiness: `program.ts` parses the CLI bundle on every `ghostai --help`.
     const web = createWebI18n('en', false);
     const cli = createCliI18n('en', false);
 

@@ -22,12 +22,12 @@ Cloud providers are opt-in, not assumed.
 [![build](https://img.shields.io/github/actions/workflow/status/therezor/GhostAI/ci.yml?style=flat-square&color=3fb950&labelColor=0d1117)](.github/workflows/ci.yml)
 [![telemetry](https://img.shields.io/badge/telemetry-zero-3fb950?style=flat-square&labelColor=0d1117)](packages/web/test/self-contained.test.ts)
 [![runs](https://img.shields.io/badge/runs-offline-3fb950?style=flat-square&labelColor=0d1117)](packages/e2e/test/offline.spec.ts)
-[![npm](https://img.shields.io/npm/v/@ghostbot/cli?style=flat-square&color=3fb950&labelColor=0d1117)](https://www.npmjs.com/package/@ghostbot/cli)
+[![npm](https://img.shields.io/npm/v/@ghostwire/ghostai?style=flat-square&color=3fb950&labelColor=0d1117)](https://www.npmjs.com/package/@ghostwire/ghostai)
 
 </div>
 
 ```bash
-npm install -g @ghostbot/cli && ghost serve
+npm install -g @ghostwire/ghostai && ghostai serve
 ```
 
 <div align="center">
@@ -35,7 +35,7 @@ npm install -g @ghostbot/cli && ghost serve
 Prints a URL and a one-time code. Open it, pick a model — done.<br>
 Needs Node ≥ 22.13. Nothing else.
 
-Want a team rather than one agent? `ghost preset install` picks from a
+Want a team rather than one agent? `ghostai preset install` picks from a
 [catalogue](https://github.com/therezor/GhostAI-presets) — a researcher, a coder, an
 analyst, a coordinator — and builds only the containers the ones you pick need.
 
@@ -45,7 +45,7 @@ analyst, a coordinator — and builds only the containers the ones you pick need
 </div>
 
 <div align="center">
-  <img alt="A terminal recording: ghost chat is launched, asked what is in the workspace, calls the list_dir tool, and streams back an answer with a code block — finishing in 2 steps." src="docs/screenshots/demo.svg" width="100%">
+  <img alt="A terminal recording: ghostai chat is launched, asked what is in the workspace, calls the list_dir tool, and streams back an answer with a code block — finishing in 2 steps." src="docs/screenshots/demo.svg" width="100%">
 </div>
 
 <picture>
@@ -148,7 +148,7 @@ More in [Web UI](docs/web-ui.md). Generated from the real app, not staged.
 | [**Skills**](docs/skills.md)                           | A folder in the workspace. The agent opens the sheet when it applies; ~20 tokens to index.                                                                     |
 | [**Memory**](docs/memory.md)                           | One markdown file per fact, committed beside the project.                                                                                                      |
 | [**Toolboxes**](docs/toolboxes.md)                     | Bound the blast radius: `exec` in a digest-pinned container — caps dropped, root read-only, network capped by the manifest, and no field an agent could widen. |
-| [**Agent presets**](docs/cli.md#ghost-preset)          | `ghost preset install` picks agents from a catalogue and builds only the containers those agents named. Nothing runs until you approve the container.          |
+| [**Agent presets**](docs/cli.md#ghost-preset)          | `ghostai preset install` picks agents from a catalogue and builds only the containers those agents named. Nothing runs until you approve the container.        |
 | [**MCP servers**](docs/tools.md#mcp-servers)           | stdio, Streamable HTTP or SSE, with OAuth. Each agent picks which of their tools it may call.                                                                  |
 | [**Extensions**](docs/extensions.md)                   | Tools, channels, providers, prompt sections, commands. Approval is a digest over every byte.                                                                   |
 | [**Subagents**](docs/architecture.md#subagents)        | One agent hands work to another as an `ask_<id>` tool.                                                                                                         |
@@ -222,11 +222,11 @@ git clone https://github.com/therezor/GhostAI.git
 cd GhostAI
 pnpm install
 pnpm build                                  # → packages/cli/dist/index.js
-pnpm --filter @ghostbot/cli link --global    # gives you `ghost`
+pnpm --filter @ghostwire/ghostai link --global    # gives you `ghostai`
 ```
 
 Needs pnpm 11 (`corepack enable`). `pnpm build` is not optional — without it
-`ghost serve` says `UI  not built` and runs the API alone.
+`ghostai serve` says `UI  not built` and runs the API alone.
 
 </details>
 

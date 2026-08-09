@@ -9,7 +9,7 @@
  * the field would then mean one thing while the row it renders back means
  * another.
  *
- * **This duplicates `instantOfLocal` in `@ghostbot/core`'s `cron.ts`, on
+ * **This duplicates `instantOfLocal` in `@ghostwire/core`'s `cron.ts`, on
  * purpose.** That package reaches `node:sqlite` through its own imports, and
  * `packages/web`'s `self-contained.test.ts` exists to keep it out of the browser
  * bundle — so the browser cannot call the original however much it would like

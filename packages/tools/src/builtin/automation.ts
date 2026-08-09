@@ -28,7 +28,7 @@ import type {
   AutomationJob,
   AutomationSchedule,
   CreateAutomationJob,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import type { AutomationOutcome, AutomationRefusal } from '../automation.js';
 import {

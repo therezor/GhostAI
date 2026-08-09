@@ -1,5 +1,5 @@
 /**
- * `ghost serve` — the same agent, behind a port.
+ * `ghostai serve` — the same agent, behind a port.
  *
  * This is the second composition root, and the only place where every piece of
  * Phase 2 meets: one SQLite connection shared by the session store, the auth
@@ -39,7 +39,7 @@ import {
   ChannelManager,
   type ChannelFactory,
   type TelegramChannel,
-} from '@ghostbot/channels';
+} from '@ghostwire/channels';
 import {
   GhostError,
   createLogger,
@@ -48,13 +48,13 @@ import {
   silentLogger,
   type LogLevel,
   type Logger,
-} from '@ghostbot/core';
-import { instanceLabel } from '@ghostbot/providers';
+} from '@ghostwire/core';
+import { instanceLabel } from '@ghostwire/providers';
 import {
   createRuntime,
   resolveAgentOrDefault,
   type GhostRuntime,
-} from '@ghostbot/runtime';
+} from '@ghostwire/runtime';
 import {
   HubApprovalGate,
   Scheduler,
@@ -63,8 +63,8 @@ import {
   createServer,
   type GhostServer,
   type ServerRuntime,
-} from '@ghostbot/server';
-import type { AutomationResolver } from '@ghostbot/tools';
+} from '@ghostwire/server';
+import type { AutomationResolver } from '@ghostwire/tools';
 import pc from 'picocolors';
 
 import { translationsFor, type CliT } from './i18n.js';
@@ -100,7 +100,7 @@ export interface ServeOptions {
    * the sessions minted under the old credential moving with it.
    */
   readonly username?: string | undefined;
-  /** A built SPA to serve. Absent looks for `@ghostbot/web`, then serves the API alone. */
+  /** A built SPA to serve. Absent looks for `@ghostwire/web`, then serves the API alone. */
   readonly ui?: string | undefined;
   /**
    * Registered before the pumps start, ahead of the built-ins.
@@ -154,7 +154,7 @@ export interface RunningServer {
  *
  * An explicit `--ui` must exist — pointing at the wrong directory and getting a
  * silently API-only server is a worse afternoon than an error at startup. The
- * implicit path resolves `@ghostbot/web` from this package's own dependencies,
+ * implicit path resolves `@ghostwire/web` from this package's own dependencies,
  * so an install that shipped the bundle serves it and one that did not says so.
  */
 export function resolveUiRoot(
@@ -174,7 +174,7 @@ export function resolveUiRoot(
   try {
     const require = createRequire(import.meta.url);
     const root = join(
-      dirname(require.resolve('@ghostbot/web/package.json')),
+      dirname(require.resolve('@ghostwire/web/package.json')),
       'dist',
     );
     return existsSync(join(root, 'index.html')) ? root : undefined;
@@ -536,7 +536,7 @@ export async function startServer(
     // The producer for `tools.changed`, and the reason it hangs off the
     // *registry* rather than off the MCP manager: the extension host needs the
     // same seam in Phase 4, and the registry is the thing they have in common.
-    // `@ghostbot/mcp` calls `sink.replace`, the registry's revision moves, and
+    // `@ghostwire/mcp` calls `sink.replace`, the registry's revision moves, and
     // every open tab learns without either of them knowing a socket exists.
     //
     // It also closes a gap that predates MCP: switching `exec` off in the

@@ -2,7 +2,7 @@
  * The terminal's instance: `cli`, and nothing the browser renders.
  *
  * The split is not tidiness. `packages/cli/src/program.ts` imports this at
- * module scope on every invocation — including `ghost --help`, which is
+ * module scope on every invocation — including `ghostai --help`, which is
  * expected to be near-instant — so what it parses is one bundle rather than
  * three.
  */

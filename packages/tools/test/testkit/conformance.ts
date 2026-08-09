@@ -14,8 +14,8 @@
  * tool that gains a numeric argument gains its coercion test without anyone
  * remembering to write one.
  *
- * It is reachable from other packages as `@ghostbot/tools/testkit`, because two
- * of the three kinds of tool above are defined elsewhere — `@ghostbot/mcp` is the
+ * It is reachable from other packages as `@ghostwire/tools/testkit`, because two
+ * of the three kinds of tool above are defined elsewhere — `@ghostwire/mcp` is the
  * first — and a contract only verifiable from inside this package would go
  * unverified exactly where it matters. It stays off the package *entry* all the
  * same: this file imports `vitest`, and the entry is in the runtime dependency
@@ -24,7 +24,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { isAbortError, isGhostError } from '@ghostbot/core';
+import { isAbortError, isGhostError } from '@ghostwire/core';
 
 import type { AnyTool, ToolContext } from '#src/define.js';
 import { TOOL_NAME_PATTERN } from '#src/define.js';

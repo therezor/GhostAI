@@ -22,8 +22,8 @@
  *    a hundred; the oldest entries are dropped rather than kept forever.
  */
 
-import type { Clock } from '@ghostbot/core';
-import type { ApprovalScope } from '@ghostbot/protocol';
+import type { Clock } from '@ghostwire/core';
+import type { ApprovalScope } from '@ghostwire/protocol';
 
 import type { InlineKeyboardButton, InlineKeyboardMarkup } from './api.js';
 

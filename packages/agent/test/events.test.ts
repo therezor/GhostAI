@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { ServerMessageSchema } from '@ghostbot/protocol';
+import { ServerMessageSchema } from '@ghostwire/protocol';
 
 import type { AgentEvent, AgentEventType } from '#src/events.js';
 

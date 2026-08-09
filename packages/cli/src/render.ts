@@ -34,13 +34,17 @@ import type {
   AgentEvent,
   NestedAgentEvent,
   SubagentEvent,
-} from '@ghostbot/agent';
-import type { TurnStatsRecord } from '@ghostbot/core';
-import { tokensPerSecond, type ToolRisk, type Usage } from '@ghostbot/protocol';
-import { stripAnsi, type Palette } from '@ghostbot/tui';
+} from '@ghostwire/agent';
+import type { TurnStatsRecord } from '@ghostwire/core';
+import {
+  tokensPerSecond,
+  type ToolRisk,
+  type Usage,
+} from '@ghostwire/protocol';
+import { stripAnsi, type Palette } from '@ghostwire/tui';
 import pc from 'picocolors';
 
-import { DEFAULT_LOCALE } from '@ghostbot/i18n';
+import { DEFAULT_LOCALE } from '@ghostwire/i18n';
 
 import { translations, type CliKey, type CliT } from './i18n.js';
 
@@ -208,7 +212,7 @@ const STOP_REASONS: Partial<Record<string, CliKey>> = {
 };
 
 /**
- * `riskColor` stays here rather than moving to `@ghostbot/tui` with the rest of
+ * `riskColor` stays here rather than moving to `@ghostwire/tui` with the rest of
  * the palette: it takes a `ToolRisk`, and a package whose whole claim is that it
  * has never heard of an agent cannot be the one that knows `exec` is red.
  */
@@ -332,7 +336,7 @@ export class TurnRenderer {
         );
         return;
       case 'tool.approvalRequest':
-        // The terminal has no way to answer one — `ghost chat` installs no gate,
+        // The terminal has no way to answer one — `ghostai chat` installs no gate,
         // so an `ask` tool simply runs. Reaching here means the CLI is watching
         // a turn some other surface is driving, and saying so beats a gap.
         this.line(

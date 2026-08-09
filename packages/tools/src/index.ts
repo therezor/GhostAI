@@ -1,9 +1,9 @@
 /**
- * @ghostbot/tools — how the agent acts on the world.
+ * @ghostwire/tools — how the agent acts on the world.
  *
  * Everything a model can *do* enters through this package: a tool is defined
  * here, registered here, and called here, and there is no second path. That is
- * what makes the security boundary reviewable — `@ghostbot/security` decides
+ * what makes the security boundary reviewable — `@ghostwire/security` decides
  * whether a path, a binary or a host is acceptable, and this package is the only
  * caller that asks.
  *

@@ -8,7 +8,7 @@
  * which is exactly why the server persists `turn_stats` — so those are fetched
  * once per conversation and looked up by turn id.
  *
- * `tokensPerSecond` comes from `@ghostbot/protocol` rather than being computed
+ * `tokensPerSecond` comes from `@ghostwire/protocol` rather than being computed
  * here, because the terminal reports the same figure and two implementations of
  * one division eventually disagree about what to do with a zero.
  */
@@ -23,7 +23,7 @@ import {
   tokensPerSecond,
   type StopReason,
   type Usage,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import { api } from '@/lib/api.js';
 import { formatDuration } from '@/lib/format.js';

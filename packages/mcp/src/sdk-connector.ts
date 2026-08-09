@@ -36,14 +36,14 @@
  *
  *  - `env` is the SDK's own safe-to-inherit set plus what the entry names —
  *    never this process's whole environment, so a provider API key in
- *    `ghost serve`'s environment does not silently land inside third-party
+ *    `ghostai serve`'s environment does not silently land inside third-party
  *    code;
  *  - `stderr` is piped to the logger rather than the SDK's default `inherit`,
  *    which would interleave a server's diagnostics into GhostAI's own output;
  *  - the child is killed on `close()`.
  */
 
-import { GhostError, toGhostError, type Logger } from '@ghostbot/core';
+import { GhostError, toGhostError, type Logger } from '@ghostwire/core';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js';
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';

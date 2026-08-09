@@ -24,9 +24,9 @@ import {
   scriptedProvider,
   toolCall,
   type ScriptedTurn,
-} from '@ghostbot/agent/testkit';
-import { textOf } from '@ghostbot/core';
-import type { ChatMessage } from '@ghostbot/protocol';
+} from '@ghostwire/agent/testkit';
+import { textOf } from '@ghostwire/core';
+import type { ChatMessage } from '@ghostwire/protocol';
 import {
   findProvider,
   type ChatProvider,
@@ -34,7 +34,7 @@ import {
   type ChatResult,
   type ChatStreamEvent,
   type ProviderSpec,
-} from '@ghostbot/providers';
+} from '@ghostwire/providers';
 
 export interface Route {
   /** Matched against the most recent user message. */

@@ -15,7 +15,7 @@ import type {
   ContentPart,
   SubagentRunRef,
   ToolRisk,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import {
   type SubagentPart,

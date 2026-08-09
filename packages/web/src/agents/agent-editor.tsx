@@ -68,7 +68,7 @@ import {
   type ToolPermission,
   type ToolPromptOverride,
   namesDelimiter,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import { Badge } from '@/components/ui/badge.js';
 import { NoticeBlock } from '@/components/ui/notice.js';

@@ -16,7 +16,7 @@
  * **Every agent holds its own settings. Nothing on this screen inherits.** The
  * config format still allows an absent field to fall through to
  * `agents.defaults` — that is what makes a hand-written `config.json` short,
- * and `@ghostbot/runtime` still resolves it that way — but the editor no longer
+ * and `@ghostwire/runtime` still resolves it that way — but the editor no longer
  * *expresses* inheritance, because an empty box that silently means "whatever
  * the other screen says" is a setting you cannot read off the screen it is on.
  * So a form opened on an agent that stored nothing is filled from the defaults,
@@ -57,7 +57,7 @@ import {
   type SubagentRef,
   type ToolPermission,
   type ToolPromptOverride,
-} from '@ghostbot/protocol';
+} from '@ghostwire/protocol';
 
 import {
   msToSeconds,

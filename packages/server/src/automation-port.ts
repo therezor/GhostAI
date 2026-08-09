@@ -1,7 +1,7 @@
 /**
  * The `automation` tool's reach into the scheduler, scoped to one turn.
  *
- * Here rather than in `@ghostbot/tools` because this is where the stores are —
+ * Here rather than in `@ghostwire/tools` because this is where the stores are —
  * and because every guard below needs to read something the tool has no
  * business being told. The tool passes arguments a model wrote; it does not get
  * to claim which agent it is, which session it is in, or whether it is allowed
@@ -21,7 +21,7 @@
  *  - **`not-yours`** — an agent lists and deletes only what it created. The
  *    operator's own jobs are invisible to it.
  *
- * `refuseDelegation` in `@ghostbot/agent` is the nearest existing guard and does
+ * `refuseDelegation` in `@ghostwire/agent` is the nearest existing guard and does
  * **not** cover the first one: it works off `turn.chain`, which is empty for a
  * turn a person started — and the scheduler starts turns exactly the same way.
  * Origin is the only honest signal.
@@ -31,15 +31,15 @@ import {
   AUTOMATION_ORIGIN,
   type AutomationJob,
   type CreateAutomationJob,
-} from '@ghostbot/protocol';
-import type { SessionStore } from '@ghostbot/core';
+} from '@ghostwire/protocol';
+import type { SessionStore } from '@ghostwire/core';
 import type {
   AutomationOutcome,
   AutomationPort,
   AutomationResolver,
   ToolboxRequest,
-} from '@ghostbot/tools';
-import { isGhostError } from '@ghostbot/core';
+} from '@ghostwire/tools';
+import { isGhostError } from '@ghostwire/core';
 
 import type { AutomationStore } from './automation-store.js';
 import { firstRunAt } from './scheduler.js';

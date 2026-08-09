@@ -1,4 +1,4 @@
-import { PLAIN_THEME, visibleWidth } from '@ghostbot/tui';
+import { PLAIN_THEME, visibleWidth } from '@ghostwire/tui';
 import { describe, expect, it } from 'vitest';
 
 import {

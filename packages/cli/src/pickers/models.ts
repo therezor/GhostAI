@@ -13,8 +13,8 @@
  * shut".
  */
 
-import type { ModelsResponse } from '@ghostbot/protocol';
-import type { SelectItem } from '@ghostbot/tui';
+import type { ModelsResponse } from '@ghostwire/protocol';
+import type { SelectItem } from '@ghostwire/tui';
 
 import type { CliT } from '../i18n.js';
 import type { Menu } from '../menu.js';

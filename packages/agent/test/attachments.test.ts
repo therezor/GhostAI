@@ -8,9 +8,9 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { filePart, imagePart, textPart, userMessage } from '@ghostbot/core';
-import type { ContentPart } from '@ghostbot/protocol';
-import { WorkspaceJail } from '@ghostbot/security';
+import { filePart, imagePart, textPart, userMessage } from '@ghostwire/core';
+import type { ContentPart } from '@ghostwire/protocol';
+import { WorkspaceJail } from '@ghostwire/security';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {

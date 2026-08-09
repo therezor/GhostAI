@@ -20,8 +20,8 @@ accent's lightness is chosen so it is _not_ mistakable for `--fg-1`.
 **Run the gates before you believe you are done:**
 
 ```
-pnpm --filter @ghostbot/web lint    # eslint + the three token gates
-pnpm --filter @ghostbot/web test    # includes contrast + stylesheet assertions
+pnpm --filter @ghostwire/web lint    # eslint + the three token gates
+pnpm --filter @ghostwire/web test    # includes contrast + stylesheet assertions
 pnpm check                          # typecheck, lint, full suite
 ```
 

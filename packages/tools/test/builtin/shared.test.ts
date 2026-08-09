@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { GhostError, isGhostError } from '@ghostbot/core';
+import { GhostError, isGhostError } from '@ghostwire/core';
 
 import { fsFailure } from '#src/builtin/shared.js';
 

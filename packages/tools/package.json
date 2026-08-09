@@ -1,6 +1,6 @@
 {
-  "name": "@ghostbot/tools",
-  "version": "0.7.1",
+  "name": "@ghostwire/tools",
+  "version": "0.7.0",
   "description": "Tool definition helper, registry, and built-in tools.",
   "type": "module",
   "license": "MIT",
@@ -57,9 +57,9 @@
     "lint": "eslint src test"
   },
   "dependencies": {
-    "@ghostbot/core": "workspace:*",
-    "@ghostbot/protocol": "workspace:*",
-    "@ghostbot/security": "workspace:*",
+    "@ghostwire/core": "workspace:*",
+    "@ghostwire/protocol": "workspace:*",
+    "@ghostwire/security": "workspace:*",
     "zod": "^4.0.0"
   }
 }
