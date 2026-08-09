@@ -1,7 +1,7 @@
 /**
  * Finding the catalogue, and fetching it when it is not here yet.
  *
- * The catalogue is `@ghostbot/catalogue` — the agent presets and the toolbox
+ * The catalogue is `@ghostbot/presets` — the agent presets and the toolbox
  * definitions some of them run in — and it is published from a repository of
  * its own rather than living in this one. That is the whole reason this file
  * exists: presets used to be a workspace package that shipped inside the CLI,
@@ -15,7 +15,7 @@
  *     the presets repository, which is what somebody writing a preset has.
  *  2. `<root>/catalogue/node_modules/@ghostbot/catalogue` — what `fetch` put
  *     there.
- *  3. `require.resolve('@ghostbot/catalogue/package.json')` — a global or
+ *  3. `require.resolve('@ghostbot/presets/package.json')` — a global or
  *     workspace install. Kept because it costs one `try` and it is what worked
  *     before the split; an operator who already has the package does not have
  *     to fetch a second copy of it.
@@ -41,17 +41,21 @@ import { dirname, join } from 'node:path';
 import { GhostError } from '@ghostbot/core';
 
 /** The package the catalogue is published as. */
-export const CATALOGUE_PACKAGE = '@ghostbot/catalogue';
+export const CATALOGUE_PACKAGE = '@ghostbot/presets';
 
 /**
  * The range `fetch` asks for.
  *
- * A range rather than `latest`, and this major rather than the one before it,
- * because the layout changed: 1.x carried `presets/` and 2.x carries `agents/`.
- * Fetching `latest` would install whatever the next breaking change is without
- * anybody deciding to.
+ * A range rather than `latest`, so a future breaking change to the layout has
+ * to be adopted by editing this line rather than arriving on its own the next
+ * time somebody runs `ghost preset update`.
+ *
+ * This package was briefly published as `@ghostbot/catalogue`, whose 1.x kept
+ * its presets under `presets/` rather than `agents/`. The rename is what lets
+ * this start at 1.0.0 rather than carrying a major bump to step over that
+ * layout: under a new name there is no old layout to skip.
  */
-export const CATALOGUE_RANGE = '^2.0.0';
+export const CATALOGUE_RANGE = '^1.0.0';
 
 /** Points `catalogueDir` at a checkout, for somebody writing a preset. */
 export const CATALOGUE_ENV_VAR = 'GHOSTAI_CATALOGUE';
@@ -139,10 +143,10 @@ export function catalogueToolbox(
  * The refusal for a catalogue that resolved but holds no `agents/`.
  *
  * Its own sentence rather than an empty list, because the case that produces it
- * is specific and the fix is not guessable: `@ghostbot/catalogue` 1.x kept
- * presets under `presets/`, so an operator with the old package installed has a
+ * is specific and the fix is not guessable: a checkout from before the layout
+ * settled keeps its presets under `presets/`, so `--from` at one gives a
  * directory that exists, parses, and offers nothing. "No presets available"
- * would send them looking for a preset to write.
+ * would send somebody looking for a preset to write.
  */
 export function assertCatalogueLayout(dir: string): string {
   const agents = catalogueAgentsDir(dir);
@@ -150,9 +154,9 @@ export function assertCatalogueLayout(dir: string): string {
   throw new GhostError(
     'config',
     `${dir} holds no agents/ directory.\n` +
-      `  ${CATALOGUE_PACKAGE} ${CATALOGUE_RANGE} is expected; 1.x kept its presets\n` +
-      '  somewhere else. Run `ghost preset update` to fetch a current one, or\n' +
-      '  pass --from with a checkout of the presets repository.',
+      `  ${CATALOGUE_PACKAGE} ${CATALOGUE_RANGE} is expected, and keeps its presets\n` +
+      '  in agents/. Run `ghost preset update` to fetch a current one, or pass\n' +
+      '  --from with a checkout of the presets repository.',
     { details: { dir, range: CATALOGUE_RANGE } },
   );
 }

@@ -28,7 +28,7 @@ import type { Config } from '@ghostbot/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { Ask } from '#src/ask.js';
-import { fetchedCatalogueDir } from '#src/catalogue.js';
+import { CATALOGUE_RANGE, fetchedCatalogueDir } from '#src/catalogue.js';
 import { translationsFor } from '#src/i18n.js';
 import { runPreset, type PresetOptions } from '#src/preset.js';
 import { runToolbox } from '#src/toolbox.js';
@@ -505,7 +505,8 @@ describe('finding the catalogue', () => {
   });
 
   it('names the version when the layout is the old one', async () => {
-    // `@ghostbot/catalogue` 1.x kept its presets under `presets/`, so this is a
+    // A checkout from before the layout settled keeps its presets under
+    // `presets/` rather than `agents/`, so this is a
     // directory that exists, resolves, and offers nothing. "No presets
     // available" would send somebody looking for a preset to write.
     const old = mkdtempSync(join(tmpdir(), 'ghostai-preset-old-'));
@@ -513,7 +514,9 @@ describe('finding the catalogue', () => {
 
     expect(await run({ from: old })).toBe(1);
     expect(errOut.join('\n')).toContain('holds no agents/ directory');
-    expect(errOut.join('\n')).toContain('^2.0.0');
+    // The constant, not a copy of it: a range that moves should not need
+    // this line edited to keep passing.
+    expect(errOut.join('\n')).toContain(CATALOGUE_RANGE);
 
     rmSync(old, { recursive: true, force: true });
   });

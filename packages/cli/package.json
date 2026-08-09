@@ -1,6 +1,6 @@
 {
   "name": "@ghostbot/cli",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "GhostAI command line interface.",
   "type": "module",
   "license": "MIT",

@@ -201,7 +201,7 @@ ghost preset list                     # what is on offer, and what is installed
 ghost preset update                   # fetch the catalogue again
 ```
 
-The catalogue is `@ghostbot/catalogue`, published from the
+The catalogue is `@ghostbot/presets`, published from the
 [`GhostAI-presets`](https://github.com/therezor/GhostAI-presets) repository and versioned
 on its own cadence. It is **fetched on demand** into `~/.ghostai/catalogue` — an npm
 prefix, so the package itself lands at

@@ -1,6 +1,6 @@
 {
   "name": "@ghostbot/i18n",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "The translation layer: i18next instance, locale negotiation and locale-aware formatting primitives.",
   "type": "module",
   "license": "MIT",

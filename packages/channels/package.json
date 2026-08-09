@@ -1,6 +1,6 @@
 {
   "name": "@ghostbot/channels",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "The channel contract and the manager bridging MessageBus to the session hub.",
   "type": "module",
   "license": "MIT",

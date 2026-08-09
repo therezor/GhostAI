@@ -5,6 +5,19 @@ uses [semantic versioning](https://semver.org/spec/v2.0.0.html). Every package i
 repository carries the same version and they are released together; only `@ghostbot/cli`
 is something you install by name.
 
+## [0.7.1] - 2026-08-09
+
+### Fixed
+
+- **`ghost preset install` looked for a package that no longer exists.** The
+  catalogue is published as `@ghostbot/presets`, not `@ghostbot/catalogue` — the
+  old name went out with 0.7.0 and was withdrawn from npm, so a 0.7.0 install
+  that ran `ghost preset install` without `--from` would fetch a name that
+  resolves to nothing. Upgrade, or pass `--from` with a checkout.
+- The version range the fetch asks for is `^1.0.0` rather than `^2.0.0`. The
+  major was there to step over a 1.x that kept its presets in `presets/` instead
+  of `agents/`; under a new package name there is no such history to skip.
+
 ## [0.7.0] - 2026-08-09
 
 The first release. Everything below is what it ships with rather than what changed.
@@ -90,7 +103,7 @@ interfaces.
   `ghost preset list` to see what exists.
 - **The catalogue is a separate repository**,
   [`GhostAI-presets`](https://github.com/therezor/GhostAI-presets), published as
-  `@ghostbot/catalogue` and versioned on its own cadence. It is fetched on demand into
+  `@ghostbot/presets` and versioned on its own cadence. It is fetched on demand into
   `~/.ghostai/catalogue`; `--from` reads a checkout instead, for anyone writing a preset,
   and is never fetched over.
 - **A preset can take part of a box rather than all of it.** `toolbox.tools` maps a
@@ -126,4 +139,5 @@ them reads as more finished than it is.
   ships as a scheduled job's payload; delivery does not.
 - **Session search is by title and filter, not by message content.**
 
+[0.7.1]: https://github.com/therezor/GhostAI/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/therezor/GhostAI/releases/tag/v0.7.0

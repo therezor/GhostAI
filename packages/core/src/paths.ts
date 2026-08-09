@@ -134,7 +134,7 @@ export interface GhostPaths {
   /**
    * Where `ghost preset install` puts the fetched catalogue.
    *
-   * The catalogue is `@ghostbot/catalogue`, published from a repository of its
+   * The catalogue is `@ghostbot/presets`, published from a repository of its
    * own, so this is a package manager's output rather than something an
    * operator writes — the one directory under the root that is. It is an npm
    * prefix, which is why the package lands a level down at
