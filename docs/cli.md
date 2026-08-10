@@ -218,6 +218,17 @@ otherwise.
 | `--approve`    | Approve the toolboxes this installs, without asking.             |
 | `--no-approve` | Approve nothing, and print the `ghostai toolbox approve` lines.  |
 
+`install` also takes `-W, --workspace-id <id>`, which says where a preset's skill sheets
+are copied. It defaults to `default`, and a named workspace has to exist already. Note
+that it is `--workspace-id`, not `--workspace`: on `chat` and `serve` that name already
+means a _directory_.
+
+**Installing an agent may also write skill sheets.** A preset can name sheets in the
+catalogue's `skills/`, and they are copied into the workspace's — the report lists what it
+wrote, what it left alone because you may have edited it, and anything a preset named that
+this catalogue does not carry. Nothing there refuses: a missing sheet costs one index line
+in that agent's prompt. See [Skills](skills.md#sheets-a-preset-brings).
+
 **A toolbox is built because an agent asked for it, never on its own.** You tick agents;
 the containers fall out of `toolbox.name` on the ones you ticked. Picking only agents
 that need no container is how you install without Docker — there is no flag for it,
@@ -256,7 +267,12 @@ ghostai agent list                      # configured agents, and presets not yet
 ghostai agent install researcher        # a catalogue preset, by its id
 ghostai agent install ./my-agent.json   # a preset you wrote, by path
 ghostai agent install nano --force      # overwrite an existing agent of the same id
+ghostai agent install coder -W acme     # put its skill sheets in the acme workspace
 ```
+
+It copies a preset's skill sheets too, when a catalogue is already on the machine. It
+never fetches one, so on a box that has not run `ghostai preset update` every sheet a
+preset names is reported as missing and the agent installs regardless.
 
 **There is one kind of preset.** A preset is `<id>.json` — the filename is the agent id
 — whether or not the agent works in a container; one that does simply sets

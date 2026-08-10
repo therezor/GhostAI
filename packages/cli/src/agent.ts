@@ -42,6 +42,7 @@ import {
 } from '@ghostwire/core';
 import {
   DEFAULT_AGENT_ID,
+  DEFAULT_WORKSPACE_ID,
   RESERVED_AGENT_IDS,
   isAgentId,
   presetToAgentEntry,
@@ -50,7 +51,11 @@ import {
 } from '@ghostwire/protocol';
 import { ToolboxStore, assertNetworkWithinCeiling } from '@ghostwire/security';
 
-import { catalogueAgentsDir, catalogueDir } from './catalogue.js';
+import {
+  catalogueAgentsDir,
+  catalogueDir,
+  catalogueSkillsDir,
+} from './catalogue.js';
 import type { Translations } from './i18n.js';
 import {
   findPreset,
@@ -58,6 +63,7 @@ import {
   presetDirs,
   readPreset,
 } from './presets.js';
+import { installSkills, skillsTargetDir } from './skill-install.js';
 
 interface AgentCliOptions {
   readonly action: 'install' | 'list';
@@ -65,6 +71,8 @@ interface AgentCliOptions {
   readonly name?: string | undefined;
   /** Overwrite an existing `agents.list` entry with the same id. */
   readonly force?: boolean;
+  /** Which workspace a preset's skill sheets are copied into. */
+  readonly workspaceId?: string | undefined;
   readonly home?: string | undefined;
   readonly out: (line: string) => void;
   readonly errOut: (line: string) => void;
@@ -88,6 +96,14 @@ export interface PresetPaths {
    * own presets rather than failing.
    */
   readonly catalogueAgentsDir?: string | undefined;
+  /**
+   * The catalogue's `skills/`, when it has one. `undefined` skips the copy and
+   * reports every sheet a preset names as missing — which is the ordinary state
+   * for an operator's own preset on a box with no catalogue, not an error.
+   */
+  readonly catalogueSkillsDir?: string | undefined;
+  /** `<workspace>/skills` for this run. `undefined` skips the copy. */
+  readonly skillsDir?: string | undefined;
 }
 
 export function resolvePreset(arg: string, paths: PresetPaths): AgentPreset {
@@ -247,6 +263,36 @@ function install(
         ` Install it, then re-run with --force to refresh the roster.`,
     );
   }
+
+  // After the config write, and reported rather than enforced: a sheet that
+  // does not arrive costs the agent one index line, so nothing here is allowed
+  // to turn a successful install into a failed one.
+  const sheets = installSkills({
+    presetId: preset.id,
+    names: preset.skills,
+    catalogueSkillsDir: paths.catalogueSkillsDir,
+    targetDir: paths.skillsDir,
+    force: options.force === true,
+  });
+  if (sheets.written.length > 0) {
+    out(`    skills     ${sheets.written.map((s) => s.name).join(', ')}`);
+  }
+  if (sheets.kept.length > 0) {
+    out(
+      `    kept       ${sheets.kept.join(', ')} — already in the workspace.` +
+        ` Re-run with --force to overwrite them.`,
+    );
+  }
+  for (const name of sheets.missing) {
+    // The common case here rather than an edge: `agent install` never fetches,
+    // so an operator's own preset on a box with no catalogue lands entirely in
+    // this branch. The fix is the other command.
+    out(
+      `    skipped    skill "${name}" — not in this catalogue.` +
+        ` Run \`ghostai preset update\` to fetch a current one.`,
+    );
+  }
+  for (const warning of sheets.warnings) out(`    note       ${warning}`);
   out('');
   out('Edit it any time in the web UI under Agents. A running server picks');
   out('this up on its next settings save or restart.');
@@ -304,6 +350,11 @@ function presetPathsOf(
     presetsDir: paths.presetsDir,
     dbFile: paths.dbFile,
     catalogueAgentsDir: dir === undefined ? undefined : catalogueAgentsDir(dir),
+    catalogueSkillsDir: dir === undefined ? undefined : catalogueSkillsDir(dir),
+    skillsDir: skillsTargetDir(
+      paths,
+      options.workspaceId ?? DEFAULT_WORKSPACE_ID,
+    ),
   };
 }
 

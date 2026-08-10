@@ -167,11 +167,17 @@ function createTelegramConsole(
         : [];
 
       // Name and description only. A body runs to 12 KB and this is a listing.
+      // Every sheet is listed, with the ones this agent will not be told about
+      // marked — the catalogue is a property of the workspace, and hiding a
+      // sheet from the listing as well as from the prompt leaves nowhere to
+      // find out why it is not working.
+      const agentId = agent?.id ?? DEFAULT_AGENT_ID;
       return {
         granted,
         skills: skills.map((skill) => ({
           name: skill.name,
           description: skill.description,
+          mine: skill.agents.length === 0 || skill.agents.includes(agentId),
         })),
       };
     },

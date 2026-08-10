@@ -1323,6 +1323,11 @@ class Runtime implements GhostRuntime {
                 // are section templates a *contributor* owns rather than the
                 // prompt builder, so the composition root hands them over here.
                 template: agent.skillsPrompt,
+                // Which sheets this agent's catalogue advertises. From the
+                // resolved agent rather than from each turn's context: one loop
+                // serves one agent, and a session's `agentId` can differ from
+                // the loop's — see the contributor's own note.
+                agentId: agent.id,
                 logger: this.logger,
               }),
             ]

@@ -510,7 +510,13 @@ const COMMANDS: readonly TelegramCommand[] = [
 
       return {
         text: state.skills
-          .map((skill) => `\`${skill.name}\` — ${skill.description}`)
+          .map((skill) => {
+            // Marked rather than hidden: this is what the workspace holds, and
+            // a sheet missing from the list would be the harder thing to
+            // explain to whoever just wrote it.
+            const scope = skill.mine === false ? ' _(other agents)_' : '';
+            return `\`${skill.name}\` — ${skill.description}${scope}`;
+          })
           .join('\n'),
       };
     },

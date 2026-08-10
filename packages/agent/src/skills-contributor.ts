@@ -30,6 +30,7 @@
 
 import { silentLogger, type Logger } from '@ghostwire/core';
 import {
+  DEFAULT_AGENT_ID,
   DEFAULT_SKILLS_TEMPLATE,
   renderPromptTemplate,
 } from '@ghostwire/protocol';
@@ -39,7 +40,12 @@ import {
   type ContextContributor,
   type StaticPromptContext,
 } from './prompt.js';
-import { SKILLS_DIRNAME, readSkills, type Skill } from './skills.js';
+import {
+  SKILLS_DIRNAME,
+  readSkills,
+  skillsForAgent,
+  type Skill,
+} from './skills.js';
 
 /**
  * The section text for a catalogue.
@@ -92,6 +98,24 @@ interface SkillsContributorOptions {
    * section — the same contract the other seven templates keep.
    */
   readonly template?: string;
+  /**
+   * Whose catalogue this is — the agent whose loop the contributor hangs off,
+   * which the composition root already knows when it builds one.
+   *
+   * Deliberately not read from `StaticPromptContext.agentId`, which is the
+   * wrong answer twice over: the server omits it when a session has no binding,
+   * so it is `undefined` in `previewPrompt` exactly where the answer is knowable
+   * and is `default`; and on a turn it is the *session's* agent, which the loop
+   * documents can differ from the loop's own. Where they differ, this agent's
+   * `skillsPrompt` is the template being rendered, so this agent's scope is the
+   * one that applies.
+   *
+   * Absent means `default` rather than "advertise everything". There is one
+   * production call site and it always passes an id, so the fallback costs
+   * nothing — what it buys is that a bare `new SkillsContributor()` added later
+   * cannot quietly hand one agent's sheets to another.
+   */
+  readonly agentId?: string;
   readonly logger?: Logger;
 }
 
@@ -100,19 +124,28 @@ export class SkillsContributor implements ContextContributor {
   readonly name: string = 'skills';
 
   private readonly template: string;
+  private readonly agentId: string;
   private readonly logger: Logger;
 
   constructor(options: SkillsContributorOptions = {}) {
     this.template = options.template ?? '';
+    // Resolved here rather than at the point of use, so there is one fallback
+    // rather than one per call site waiting to disagree. `AgentLoop` does the
+    // same with the same constant.
+    this.agentId = options.agentId ?? DEFAULT_AGENT_ID;
     this.logger = options.logger ?? silentLogger;
   }
 
   async staticSection(
     context: StaticPromptContext,
   ): Promise<string | undefined> {
-    const skills = await readSkills(context.workspaceRoot, {
-      logger: this.logger,
-    });
+    const skills = skillsForAgent(
+      await readSkills(context.workspaceRoot, { logger: this.logger }),
+      this.agentId,
+    );
+    // After the filter, not before: an agent every sheet is scoped away from has
+    // an empty catalogue, and an empty catalogue is no section rather than a
+    // heading with nothing under it.
     if (skills.length === 0) return undefined;
 
     const section = renderSkills(skills, this.template);

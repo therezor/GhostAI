@@ -22,8 +22,25 @@ describe('AgentPresetSchema', () => {
       tools: {},
     });
     expect(preset.subagents).toEqual([]);
+    expect(preset.skills).toEqual([]);
     // Unset means inherit `agents.defaults`, which only an absent key can say.
     expect(preset.toolsEnabled).toBeUndefined();
+  });
+
+  it('refuses a skill name that could climb out of the skills folder', () => {
+    // The traversal boundary, and the reason `skills` is a slug rather than a
+    // string: the name becomes a path segment, it arrived over the network, and
+    // the copier is not the thing that should be judging it.
+    for (const name of ['..', '../evil', 'a/b', '~/x', 'Code Review', '']) {
+      expect(
+        AgentPresetSchema.safeParse({ ...MINIMAL, skills: [name] }).success,
+      ).toBe(false);
+    }
+
+    expect(
+      AgentPresetSchema.parse({ ...MINIMAL, skills: ['code-review', 'deploy'] })
+        .skills,
+    ).toEqual(['code-review', 'deploy']);
   });
 
   it('refuses a schema tag it does not recognise', () => {
@@ -87,5 +104,16 @@ describe('presetToAgentEntry', () => {
 
     expect('id' in entry).toBe(false);
     expect('schema' in entry).toBe(false);
+  });
+
+  it('carries no skills list into the entry', () => {
+    // Which sheets to copy is an instruction to the installer. An entry holding
+    // it would round-trip it into every settings save, and re-saving the agent
+    // would read as a request to copy them again.
+    const entry = presetToAgentEntry(
+      AgentPresetSchema.parse({ ...MINIMAL, skills: ['code-review'] }),
+    );
+
+    expect('skills' in entry).toBe(false);
   });
 });

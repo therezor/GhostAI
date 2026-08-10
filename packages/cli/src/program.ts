@@ -401,27 +401,37 @@ function buildProgram(deps: CliDeps = {}): Command {
     .argument('<name-or-path>')
     .description(t('agent.install.description'))
     .option('--force', t('agent.install.options.force'), false)
-    .action((name: string, options: { force: boolean }, command: Command) => {
-      const globals = command.parent?.parent?.opts<GlobalOptions>() ?? {
-        color: true,
-        verbose: false,
-      };
-      const code = runAgent({
-        action: 'install',
-        name,
-        force: options.force,
-        ...(globals.home === undefined ? {} : { home: globals.home }),
-        out: (line) => {
-          out.write(`${line}\n`);
-        },
-        errOut: (line) => {
-          errOut.write(`${line}\n`);
-        },
-        env,
-        t: translations,
-      });
-      command.setOptionValue('exitCode', code);
-    });
+    .option('-W, --workspace-id <id>', t('agent.install.options.workspaceId'))
+    .action(
+      (
+        name: string,
+        options: { force: boolean; workspaceId?: string },
+        command: Command,
+      ) => {
+        const globals = command.parent?.parent?.opts<GlobalOptions>() ?? {
+          color: true,
+          verbose: false,
+        };
+        const code = runAgent({
+          action: 'install',
+          name,
+          force: options.force,
+          ...(options.workspaceId === undefined
+            ? {}
+            : { workspaceId: options.workspaceId }),
+          ...(globals.home === undefined ? {} : { home: globals.home }),
+          out: (line) => {
+            out.write(`${line}\n`);
+          },
+          errOut: (line) => {
+            errOut.write(`${line}\n`);
+          },
+          env,
+          t: translations,
+        });
+        command.setOptionValue('exitCode', code);
+      },
+    );
   agent
     .command('list')
     .description(t('agent.list.description'))
@@ -460,6 +470,7 @@ function buildProgram(deps: CliDeps = {}): Command {
     offline: boolean;
     force?: boolean;
     approve?: boolean;
+    workspaceId?: string;
   }
 
   const presetAction =
@@ -499,6 +510,9 @@ function buildProgram(deps: CliDeps = {}): Command {
           ...(options.approve === undefined
             ? {}
             : { approve: options.approve }),
+          ...(options.workspaceId === undefined
+            ? {}
+            : { workspaceId: options.workspaceId }),
           ...(opened === undefined ? {} : { ask: opened.ask }),
           ...(globals.home === undefined ? {} : { home: globals.home }),
           out: (line) => {
@@ -528,6 +542,14 @@ function buildProgram(deps: CliDeps = {}): Command {
       .argument('[ids...]')
       .description(t('preset.install.description'))
       .option('--force', t('preset.install.options.force'), false)
+      // On `install` alone: `list` and `update` write nothing. Spelled
+      // `--workspace-id` because `--workspace` already means a *directory* on
+      // `chat` and `serve`, and one flag meaning two things is how somebody
+      // ends up passing a path here.
+      .option(
+        '-W, --workspace-id <id>',
+        t('preset.install.options.workspaceId'),
+      )
       // Declared as a pair rather than as one negatable flag, which is what
       // makes "neither was passed" distinguishable from "no" — and that third
       // state is the one that asks.

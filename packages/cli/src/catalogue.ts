@@ -114,6 +114,17 @@ export function catalogueToolboxesDir(dir: string): string | undefined {
   return subdir(dir, 'toolboxes');
 }
 
+/**
+ * One directory per skill sheet, each with a `SKILL.md`.
+ *
+ * Optional, like `toolboxes/` and unlike `agents/`: a catalogue that ships only
+ * agent presets is an ordinary catalogue, so this returns `undefined` rather
+ * than going through `assertCatalogueLayout`.
+ */
+export function catalogueSkillsDir(dir: string): string | undefined {
+  return subdir(dir, 'skills');
+}
+
 function subdir(dir: string, name: string): string | undefined {
   const path = join(dir, name);
   return existsSync(path) ? path : undefined;
@@ -137,6 +148,22 @@ export function catalogueToolbox(
   if (toolboxes === undefined) return undefined;
   const context = join(toolboxes, name);
   return existsSync(join(context, 'toolbox.json')) ? context : undefined;
+}
+
+/**
+ * One skill sheet's directory, or `undefined` when the catalogue lacks it.
+ *
+ * The same shape and the same argument as `catalogueToolbox`: a preset can name
+ * a sheet this catalogue has never heard of, and the `SKILL.md` has to be there
+ * as well as the directory. A directory without one would be copied, reported as
+ * installed, and then silently skipped by `readSkills` — the worst of the three
+ * outcomes, because nothing anywhere would say why.
+ */
+export function catalogueSkill(dir: string, name: string): string | undefined {
+  const skills = catalogueSkillsDir(dir);
+  if (skills === undefined) return undefined;
+  const sheet = join(skills, name);
+  return existsSync(join(sheet, 'SKILL.md')) ? sheet : undefined;
 }
 
 /**

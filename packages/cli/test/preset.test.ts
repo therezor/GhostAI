@@ -57,6 +57,34 @@ function writeAgent(id: string, preset: Record<string, unknown>): void {
   );
 }
 
+/** A sheet in the catalogue's `skills/`, optionally scoped and with extras. */
+function writeSkill(
+  name: string,
+  options: {
+    readonly agents?: string;
+    readonly extras?: Readonly<Record<string, string>>;
+  } = {},
+): void {
+  const dir = join(catalogue, 'skills', name);
+  mkdirSync(dir, { recursive: true });
+  const scope =
+    options.agents === undefined ? '' : `agents: ${options.agents}\n`;
+  writeFileSync(
+    join(dir, 'SKILL.md'),
+    `---\ndescription: What ${name} does.\n${scope}---\n\nBody of ${name}.\n`,
+  );
+  for (const [file, contents] of Object.entries(options.extras ?? {})) {
+    writeFileSync(join(dir, file), contents);
+  }
+}
+
+/** Where a workspace's sheets land. `default` is `<home>/workspace`. */
+function sheetPath(name: string, workspace = ''): string {
+  return workspace === ''
+    ? join(home, 'workspace', 'skills', name)
+    : join(home, 'workspace', workspace, 'skills', name);
+}
+
 function writeToolbox(
   name: string,
   overrides: Record<string, unknown> = {},
@@ -139,11 +167,15 @@ async function run(
     from?: string | null;
     build?: typeof fakeBuild;
     probe?: () => void;
+    workspaceId?: string;
   } = {},
 ): Promise<number> {
   return await runPreset({
     action: options.action ?? 'install',
     ...(options.ids === undefined ? {} : { ids: options.ids }),
+    ...(options.workspaceId === undefined
+      ? {}
+      : { workspaceId: options.workspaceId }),
     ...(options.ask === undefined ? {} : { ask: options.ask }),
     ...(options.approve === undefined ? {} : { approve: options.approve }),
     ...(options.force === undefined ? {} : { force: options.force }),
@@ -211,6 +243,8 @@ beforeEach(() => {
   });
   writeToolbox('coding');
   writeToolbox('spare');
+  writeSkill('code-review', { extras: { 'checklist.md': '- Read it.\n' } });
+  writeSkill('triage', { agents: 'lead' });
 });
 
 afterEach(() => {
@@ -251,6 +285,113 @@ describe('ghostai preset install', () => {
 
     expect(built).toEqual([]);
     expect(savedAgents().nano).toBeDefined();
+  });
+
+  it('copies the sheets a preset names into the default workspace', async () => {
+    writeAgent('scribe', { skills: ['code-review'] });
+
+    expect(await run({ ids: ['scribe'] })).toBe(0);
+
+    expect(
+      readFileSync(join(sheetPath('code-review', ''), 'SKILL.md'), 'utf8'),
+    ).toContain('Body of code-review.');
+    // The directory, not just the page — an attachment is the reason a sheet
+    // is a folder.
+    expect(
+      readFileSync(join(sheetPath('code-review', ''), 'checklist.md'), 'utf8'),
+    ).toBe('- Read it.\n');
+    expect(out.join('\n')).toContain('code-review  (2 files)');
+  });
+
+  it('copies nothing for a preset that names no sheets', async () => {
+    expect(await run({ ids: ['nano'] })).toBe(0);
+
+    expect(existsSync(join(home, 'workspace', 'skills'))).toBe(false);
+    expect(out.join('\n')).not.toContain('Skill sheets written');
+  });
+
+  it('leaves a sheet already in the workspace alone, and says so', async () => {
+    // Two presets naming one sheet, installed in separate runs. The second
+    // agent is new — so it installs — and finds the sheet already there.
+    writeAgent('scribe', { skills: ['code-review'] });
+    writeAgent('editor', { skills: ['code-review'] });
+    await run({ ids: ['scribe'] });
+    writeFileSync(join(sheetPath('code-review', ''), 'SKILL.md'), 'Mine.\n');
+    out = [];
+
+    expect(await run({ ids: ['editor'] })).toBe(0);
+
+    expect(
+      readFileSync(join(sheetPath('code-review', ''), 'SKILL.md'), 'utf8'),
+    ).toBe('Mine.\n');
+    expect(out.join('\n')).toContain('Re-run with --force to overwrite them.');
+  });
+
+  it('overwrites the sheets with --force, alongside the agent', async () => {
+    // One flag, because an operator asking for the preset back means the whole
+    // preset — the entry and the sheets it brought.
+    writeAgent('scribe', { skills: ['code-review'] });
+    await run({ ids: ['scribe'] });
+    writeFileSync(join(sheetPath('code-review', ''), 'SKILL.md'), 'Mine.\n');
+
+    expect(await run({ ids: ['scribe'], force: true })).toBe(0);
+
+    expect(
+      readFileSync(join(sheetPath('code-review', ''), 'SKILL.md'), 'utf8'),
+    ).toContain('Body of code-review.');
+  });
+
+  it('installs the agent even when a sheet is not in the catalogue', async () => {
+    // Unlike a missing toolbox, which refuses: an agent with one fewer index
+    // line runs, and an agent with no toolbox cannot.
+    writeAgent('scribe', { skills: ['ghost-ops'] });
+
+    expect(await run({ ids: ['scribe'] })).toBe(0);
+
+    expect(savedAgents().scribe).toBeDefined();
+    expect(out.join('\n')).toContain(
+      'Named by a preset but not in this catalogue:',
+    );
+    expect(out.join('\n')).toContain('ghost-ops');
+  });
+
+  it('warns when a sheet is scoped away from the agent that brought it', async () => {
+    writeAgent('scribe', { skills: ['triage'] });
+
+    expect(await run({ ids: ['scribe'] })).toBe(0);
+
+    expect(out.join('\n')).toContain(
+      'skill "triage" is scoped to lead, so the scribe agent will not see it',
+    );
+  });
+
+  it('copies no sheets for a preset that was blocked', async () => {
+    // Blocked presets are "left alone in case you have edited them", and
+    // overwriting their sheets would be the same edit by another route.
+    writeAgent('scribe', { skills: ['code-review'] });
+    await run({ ids: ['scribe'] });
+    rmSync(join(home, 'workspace', 'skills'), { recursive: true });
+    out = [];
+
+    // Second run without `--force`: the agent already exists, so it blocks.
+    expect(await run({ ids: ['scribe'] })).toBe(0);
+
+    expect(existsSync(sheetPath('code-review', ''))).toBe(false);
+  });
+
+  it('writes into a named workspace with -W, and refuses one that is absent', async () => {
+    writeAgent('scribe', { skills: ['code-review'] });
+    mkdirSync(join(home, 'workspace', 'acme'), { recursive: true });
+
+    expect(await run({ ids: ['scribe'], workspaceId: 'acme' })).toBe(0);
+    expect(existsSync(sheetPath('code-review', 'acme'))).toBe(true);
+    expect(existsSync(sheetPath('code-review', ''))).toBe(false);
+
+    // `workspaceDirFor` validates the shape of an id and joins; the registry
+    // is in SQLite and it never asks. Without the check a typo would create a
+    // tree no UI ever lists.
+    expect(await run({ ids: ['scribe'], workspaceId: 'typo' })).toBe(1);
+    expect(errOut.join('\n')).toContain('no typo workspace');
   });
 
   it('pins the built image id into the installed manifest', async () => {

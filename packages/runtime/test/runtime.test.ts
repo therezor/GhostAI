@@ -1029,6 +1029,46 @@ describe('skills', () => {
     expect(preview.staticPrompt).not.toContain('Read the diff.');
   });
 
+  it('gives each agent only the sheets scoped to it', async () => {
+    // The only test that proves `agentId: agent.id` reaches the contributor.
+    // Everything below the composition root can be green while this wiring is
+    // missing, and the feature would then be dead in production with a full
+    // unit suite passing — so it is asserted through two real loops.
+    const home = tempHome({
+      agents: {
+        defaults: { provider: 'ollama', model: 'qwen3:8b' },
+        list: {
+          coder: { enabled: true, label: 'Coder' },
+          writer: { enabled: true, label: 'Writer' },
+        },
+      },
+    });
+    for (const [name, scope] of [
+      ['code-review', ''],
+      ['refactor', 'agents: coder\n'],
+    ]) {
+      const dir = join(home, 'workspace', 'skills', name ?? '');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(
+        join(dir, 'SKILL.md'),
+        `---\ndescription: What ${name ?? ''} does.\n${scope ?? ''}---\n\nBody.\n`,
+      );
+    }
+    const runtime = build({ home });
+
+    const coder = await runtime
+      .requireLoopFor('coder')
+      .previewPrompt({ sessionKey: 'session-1' });
+    const writer = await runtime
+      .requireLoopFor('writer')
+      .previewPrompt({ sessionKey: 'session-2' });
+
+    expect(coder.staticPrompt).toContain('`skills/code-review/SKILL.md`');
+    expect(coder.staticPrompt).toContain('`skills/refactor/SKILL.md`');
+    expect(writer.staticPrompt).toContain('`skills/code-review/SKILL.md`');
+    expect(writer.staticPrompt).not.toContain('`skills/refactor/SKILL.md`');
+  });
+
   it('places no section when the workspace has no skills folder', async () => {
     const preview = await ollama()
       .requireLoop()

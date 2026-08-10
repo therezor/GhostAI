@@ -58,8 +58,44 @@ quotes stripped. Blank lines and `#` comments are skipped, and so is anything th
 read.
 
 That is a deliberate stopping point rather than a subset on the way to something. Nothing
-else in this repository parses YAML, and what a skill's frontmatter holds is two strings.
+else in this repository parses YAML, and what a skill's frontmatter holds is three strings.
 See the header of `packages/core/src/frontmatter.ts`.
+
+### Which agents see a sheet
+
+An optional `agents:` line narrows a sheet to the agents it names. Without one — which is
+every sheet written before this existed — it is in every agent's catalogue.
+
+```
+---
+description: How this repository refactors.
+agents: coder, team-lead
+---
+```
+
+Scope is declared in the file rather than by where the file sits, so a sheet stays in
+`skills/` beside the others and stays something a person can list, read and commit. It is
+a property of the **catalogue**: it decides which sheets an agent is _told about_, not
+which it may open. `read_file` and the `skill` tool will still open a sheet that was never
+advertised, and that is not a hole — a skill is prose, and the jail and the exec guard have
+never read a word of the prompt.
+
+**Comma-separated is the only form**, and that is a property of the reader rather than a
+preference. The frontmatter parser anchors a field on a letter, so a `- coder` block item
+never matches — it is discarded, and a YAML block list arrives here indistinguishable from
+an empty `agents:`. One concession is made to habit: a surrounding `[coder, writer]` is
+accepted, because that is the other thing somebody writes. Ids are lower-cased, trimmed and
+de-duplicated.
+
+**It fails open.** An `agents:` line that yields no usable id leaves the sheet visible to
+every agent, and logs a warning. The two ways of being wrong are not symmetric: a sheet
+shown too widely costs prompt that `/skills` will show you, and a sheet hidden from
+everybody is one that silently stopped working with nothing anywhere to find. An id that is
+not a legal agent id is dropped with a warning naming it; if that leaves nothing, the whole
+line falls open.
+
+A sheet can also be scoped by an agent that installs it — see
+[Sheets a preset brings](#sheets-a-preset-brings).
 
 ## What reaches the prompt
 
@@ -117,12 +153,21 @@ is granted** — `DEFAULT_AGENT_TOOLS` seeds a newly created agent, so a config 
 this has no `skill` key, and an absent tool is a denied one. And the model can still reach
 a sheet with `read_file`: the tool is the intended path, not the only one.
 
+The tool does **not** enforce `agents:`, and that follows from the same sentence. Scope
+decides what an agent is told about; a second copy of the rule inside the tool would gate
+one door while `read_file` walks past the other, which buys nothing and gives two rules the
+chance to disagree.
+
 ### Seeing what a workspace holds
 
 The catalogue is in the agent's prompt, not on your screen. `/skills` prints it — the name
 and description of every sheet the workspace holds — in `ghostai chat` and from the Telegram
 bot. It is a listing and nothing more; it is gated on the same `skill` permission, because
 a catalogue this agent cannot open is not worth printing.
+
+It lists **every** sheet, marking the ones scoped to other agents rather than dropping
+them. Somebody runs `/skills` precisely when a sheet is not working, and a listing that
+hid it would leave nowhere to find out why.
 
 ## The budget
 
@@ -132,6 +177,11 @@ a catalogue this agent cannot open is not worth printing.
 | `MAX_SKILLS`      | 100            | Index lines. Past it, the rest are not advertised at all. |
 | description       | 200 characters | One index line stays one line.                            |
 
+`MAX_SKILLS` is applied **before** scope, and that order is deliberate: the cap bounds the
+per-turn read, and applying it after would mean opening a thousand directories to find the
+twelve one agent sees. Past a hundred directories, then, which sheets an agent sees follows
+alphabetical order rather than who they are for.
+
 These are constants rather than settings. They exist to stop a workspace that has
 accumulated files quietly costing five figures of prompt on every turn, and that hazard
 does not vary by install the way a taste for long prompts does.
@@ -140,13 +190,16 @@ does not vary by install the way a taste for long prompts does.
 
 They are in the workspace, which is inside the jail, which means `write_file` and `exec`
 can both edit them. That is worth stating plainly rather than leaving to be discovered,
-because `packages/core/src/paths.ts` argues the opposite case — it reserves
-`~/.ghostai/agents/<id>/`, outside the jail, precisely so that prompt injection cannot
-rewrite what an agent believes.
+because there is a real argument for the opposite: a directory _beside_ the workspace
+would be one prompt injection could not reach, and so could not use to rewrite what an
+agent believes.
 
-That argument was overruled twice, on the same grounds. Skills are here, and so is
-[memory](memory.md); both are meant to be read, reviewed and committed beside the project
-they describe, and neither is that if it lives somewhere the agent cannot list.
+`packages/core/src/paths.ts` used to reserve `~/.ghostai/agents/<id>/` for exactly that.
+Nothing ever wrote to it. [Memory](memory.md) declined it, skills declined it, and
+per-agent skill scope declined it too — each on the same grounds, and each time because
+both are meant to be read, reviewed and committed beside the project they describe, and
+neither is that if it lives somewhere the agent cannot list. After a third pass the
+reservation was removed rather than kept for a fourth.
 
 The same attack exists here: a turn that is talked into writing `skills/deploy/SKILL.md`
 changes what a later turn on that workspace is told. What buys the risk is the thing that
@@ -195,8 +248,49 @@ cost the model cannot act on. Half a section whose own wording points at a tool 
 there is worse than no section, and an agent with no tools and a fixed instruction sheet is
 what `systemPrompt` is for.
 
+## Sheets a preset brings
+
+An agent preset may name sheets to copy in, as directory names under the catalogue's
+`skills/`:
+
+```json
+{ "schema": "ghostai.agent-preset/1", "id": "coder", "skills": ["code-review"] }
+```
+
+`ghostai preset install coder` then writes `<workspace>/skills/code-review/` and says so.
+`ghostai agent install` does the same when a catalogue is reachable; it never fetches one,
+so on a box that has not run `ghostai preset update` it reports the sheets as missing and
+installs the agent anyway.
+
+Four things about it, each of them a decision rather than an omission:
+
+- **It is a copy, not an install.** Byte for byte, with nothing rewritten and nothing
+  recorded. The sheet carries its own `agents:` line, so what an operator reads in the
+  catalogue is what lands in the workspace, and editing it afterwards is editing their own
+  file. If a sheet's `agents:` does not include the preset that brought it, the install
+  says so — that is legal, and usually a mistake.
+- **There is no approval gate and no hash.** A toolbox manifest gets one because it names
+  a container's boundary; a sheet is prose, and the preset's own `systemPrompt` — from the
+  same catalogue, over the same network — already sets the bar. Running the command at a
+  terminal is the operator action. See [Toolboxes](toolboxes.md).
+- **Nothing refuses.** A sheet that is missing, symlinked, or over the copier's bounds
+  costs that sheet and a line in the report. A missing _toolbox_ refuses, because an agent
+  without one cannot run at all; an agent with one fewer index line can.
+- **A sheet already in the workspace is left alone** unless `--force` is passed, which is
+  the same rule the `agents.list` entry follows and for the same reason: it may carry your
+  edits. `--force` overwrites file by file rather than emptying the directory first, so
+  anything you added inside a sheet folder survives.
+
+Sheets live in a workspace and a preset does not, so `-W, --workspace-id <id>` says which
+one. It defaults to `default`, and a named workspace has to exist already — the id is
+validated for shape but the registry lives in SQLite, so without that check a typo would
+create a tree no UI ever lists.
+
 ## What is not built yet
 
 - **No settings panel for the skills themselves.** They are authored by writing files, and
   no screen is planned: a skill is a folder committed beside the project rather than
   configuration, so no settings screen lists one as coming.
+- **Nothing uninstalls a sheet.** A preset copies files in; removing the agent leaves them,
+  because after the copy they are ordinary workspace files that may have been edited. Delete
+  the folder.

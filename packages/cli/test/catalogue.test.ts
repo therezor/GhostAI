@@ -21,6 +21,8 @@ import {
   CATALOGUE_RANGE,
   assertCatalogueLayout,
   catalogueAgentsDir,
+  catalogueSkill,
+  catalogueSkillsDir,
   catalogueToolbox,
   catalogueToolboxesDir,
   fetchCatalogue,
@@ -117,6 +119,35 @@ describe('the layout', () => {
     );
     expect(catalogueToolbox(dir, 'halfway')).toBeUndefined();
     expect(catalogueToolbox(dir, 'nowhere')).toBeUndefined();
+  });
+
+  it('treats skills/ as optional, the way toolboxes/ is', () => {
+    // A catalogue that ships only agent presets is an ordinary catalogue, so
+    // this is `undefined` rather than a trip through `assertCatalogueLayout`.
+    const bare = writeCatalogue(join(root, 'bare'));
+    expect(catalogueSkillsDir(bare)).toBeUndefined();
+    expect(() => assertCatalogueLayout(bare)).not.toThrow();
+
+    const dir = writeCatalogue(join(root, 'c'));
+    mkdirSync(join(dir, 'skills'), { recursive: true });
+    expect(catalogueSkillsDir(dir)).toBe(join(dir, 'skills'));
+  });
+
+  it('answers with a sheet only when the SKILL.md is there too', () => {
+    // The same argument `catalogueToolbox` makes: a directory with no sheet
+    // would be copied, reported as installed, and then silently skipped by
+    // `readSkills` — with nothing anywhere saying why.
+    const dir = writeCatalogue(join(root, 'c'));
+    mkdirSync(join(dir, 'skills', 'code-review'), { recursive: true });
+    writeFileSync(join(dir, 'skills', 'code-review', 'SKILL.md'), '');
+    mkdirSync(join(dir, 'skills', 'halfway'), { recursive: true });
+
+    expect(catalogueSkill(dir, 'code-review')).toBe(
+      join(dir, 'skills', 'code-review'),
+    );
+    expect(catalogueSkill(dir, 'halfway')).toBeUndefined();
+    expect(catalogueSkill(dir, 'nowhere')).toBeUndefined();
+    expect(catalogueSkill(join(root, 'bare'), 'code-review')).toBeUndefined();
   });
 });
 

@@ -73,7 +73,9 @@ export {
   SKILLS_DIRNAME,
   SKILL_FILENAME,
   SKILL_MAX_BYTES,
+  parseSkillAgents,
   readSkills,
+  skillsForAgent,
   type Skill,
 } from './skills.js';
 

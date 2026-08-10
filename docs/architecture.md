@@ -160,8 +160,7 @@ Everything under `~/.ghostai`, or `$GHOSTAI_HOME`. Directories are created `0700
 | `ghost.db`                | One SQLite file, one connection, one WAL.                                                                          |
 | `vault.json`, `vault.key` | The encrypted credential vault.                                                                                    |
 | `workspace/`              | The jail root. Named workspaces are subdirectories of it.                                                          |
-| `agents/<id>/`            | Per-agent state — **outside the jail**, so `write_file` cannot rewrite the agent's own prompt.                     |
-| `shared/<workspaceId>/`   | The layer agents in one folder share. Also outside the jail.                                                       |
+| `shared/<workspaceId>/`   | The layer agents in one folder share — **outside the jail**, so `write_file` cannot rewrite what an agent is told. |
 | `toolboxes/<name>/`       | Installed manifests. Outside the workspace, so injection cannot edit the policy the agent runs under.              |
 | `runs/<containerId>/`     | Sandbox command transcripts. Outside the workspace — a symlink-planting escape was demonstrated before this moved. |
 | `extensions/<id>/`        | Installed extensions. Approved by a digest over every byte, so state is written elsewhere.                         |

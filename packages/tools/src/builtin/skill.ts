@@ -23,6 +23,16 @@
  * The name is still the directory name, and the path is still derived rather
  * than taken: a `name` that tries to climb out of `skills/` is refused by the
  * jail, not by a check here that could be forgotten.
+ *
+ * ## A sheet's `agents:` scope is not enforced here, on purpose
+ *
+ * A `SKILL.md` may carry an `agents:` line naming who it is for, and this tool
+ * ignores it: it will open a sheet scoped to somebody else. Scope decides what
+ * an agent's *catalogue* advertises — what costs tokens in a prompt — and not
+ * what may be read. Checking it here would gate one door while `read_file`
+ * walks past the other, and would put a second copy of the parse in the package
+ * that already restates two constants rather than import them. See
+ * `docs/skills.md`.
  */
 
 import { readFile } from 'node:fs/promises';

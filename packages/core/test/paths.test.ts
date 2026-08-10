@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   HOME_ENV_VAR,
-  agentDirFor,
   ensureDir,
   extensionDataDirFor,
   extensionDirFor,
@@ -88,7 +87,6 @@ describe('resolveGhostPaths', () => {
     expect(paths).toEqual({
       root,
       workspace: join(root, 'workspace'),
-      agentsDir: join(root, 'agents'),
       sharedDir: join(root, 'shared'),
       toolboxesDir: join(root, 'toolboxes'),
       presetsDir: join(root, 'presets'),
@@ -189,37 +187,6 @@ describe('ensureDir', () => {
     // The vault keyfile and every session transcript live under directories
     // created this way; the default umask would leave them world-readable.
     expect(statSync(target).mode & 0o077).toBe(0);
-  });
-});
-
-describe('agentDirFor', () => {
-  const paths = resolveGhostPaths({ home: HOME, env: {} });
-
-  it('gives each agent a directory of its own', () => {
-    expect(agentDirFor(paths, 'reviewer')).toBe(
-      join(paths.agentsDir, 'reviewer'),
-    );
-  });
-
-  it('gives the default one too, rather than the parent', () => {
-    // Unlike a workspace, `default` is not the parent of the others — an agent
-    // whose memory sat one level up would see every other agent's.
-    expect(agentDirFor(paths, 'default')).toBe(
-      join(paths.agentsDir, 'default'),
-    );
-  });
-
-  it('keeps every agent out of the workspace the tools can reach', () => {
-    // The jail root is the workspace, so memory kept inside it would be
-    // writable by `write_file` — prompt injection as a way to rewrite the
-    // agent's own system prompt.
-    expect(agentDirFor(paths, 'reviewer').startsWith(paths.workspace)).toBe(
-      false,
-    );
-  });
-
-  it.each(['..', 'a/b', 'Reviewer', '', '~evil'])('refuses %j', (id) => {
-    expect(() => agentDirFor(paths, id)).toThrow(/Not an agent id/);
   });
 });
 

@@ -20,6 +20,7 @@ function make(name: string, body = `Body of ${name}.`): Skill {
     description: `What ${name} does.`,
     body,
     path: `skills/${name}/SKILL.md`,
+    agents: [],
   };
 }
 
@@ -86,15 +87,20 @@ afterEach(() => {
   }
 });
 
-function workspace(skills: Readonly<Record<string, string>> = {}): string {
+/** A sheet's frontmatter: its description, or that plus who it is scoped to. */
+type Sheet = string | { readonly description: string; readonly agents: string };
+
+function workspace(skills: Readonly<Record<string, Sheet>> = {}): string {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'ghostai-skillctx-')));
   roots.push(root);
-  for (const [name, description] of Object.entries(skills)) {
+  for (const [name, sheet] of Object.entries(skills)) {
     const dir = join(root, 'skills', name);
     mkdirSync(dir, { recursive: true });
+    const scope = typeof sheet === 'string' ? '' : `agents: ${sheet.agents}\n`;
+    const description = typeof sheet === 'string' ? sheet : sheet.description;
     writeFileSync(
       join(dir, 'SKILL.md'),
-      `---\ndescription: ${description}\n---\n\nBody of ${name}.\n`,
+      `---\ndescription: ${description}\n${scope}---\n\nBody of ${name}.\n`,
     );
   }
   return root;
@@ -133,5 +139,51 @@ describe('SkillsContributor', () => {
     expect(
       await contributor.staticSection(staticContext(workspace())),
     ).toBeUndefined();
+  });
+
+  it('indexes only the sheets this agent is meant to see', async () => {
+    const root = workspace({
+      'code-review': 'Review a diff.',
+      refactor: { description: 'Restructure code.', agents: 'coder' },
+      triage: { description: 'Sort the inbox.', agents: 'team-lead' },
+    });
+
+    const coder = await new SkillsContributor({
+      agentId: 'coder',
+    }).staticSection(staticContext(root));
+
+    expect(coder).toContain('code-review');
+    expect(coder).toContain('refactor');
+    expect(coder).not.toContain('triage');
+  });
+
+  it('places no section when every sheet is scoped away', async () => {
+    // The guard runs after the filter, so this is no section rather than a
+    // `## Skills` heading with nothing under it.
+    const root = workspace({
+      refactor: { description: 'Restructure code.', agents: 'coder' },
+    });
+
+    expect(
+      await new SkillsContributor({ agentId: 'writer' }).staticSection(
+        staticContext(root),
+      ),
+    ).toBeUndefined();
+  });
+
+  it('advertises a `default`-scoped sheet to a contributor given no id', async () => {
+    // Absent means `default`, not "advertise everything" — so a sheet scoped
+    // away from `default` stays away.
+    const root = workspace({
+      ops: { description: 'Run the deploy.', agents: 'default' },
+      refactor: { description: 'Restructure code.', agents: 'coder' },
+    });
+
+    const section = await new SkillsContributor().staticSection(
+      staticContext(root),
+    );
+
+    expect(section).toContain('ops');
+    expect(section).not.toContain('refactor');
   });
 });

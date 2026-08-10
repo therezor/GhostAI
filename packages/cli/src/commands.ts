@@ -869,7 +869,20 @@ async function skillsCommand(ctx: SlashContext): Promise<SlashOutcome> {
     skills.length === 0
       ? t('slash.notes.skillsEmpty', { path: SKILLS_DIRNAME })
       : skills
-          .map((skill) => `${skill.name}  ·  ${skill.description}`)
+          .map((skill) => {
+            // Every sheet, with the ones out of scope marked rather than
+            // hidden. This is what the workspace holds, and somebody running
+            // `/skills` because a sheet is not working needs to see it and be
+            // told why — not to find it missing from a list as well.
+            const scoped =
+              skill.agents.length > 0 && !skill.agents.includes(agentId);
+            const suffix = scoped
+              ? `  ·  ${t('slash.notes.skillsScope', {
+                  agents: skill.agents.join(', '),
+                })}`
+              : '';
+            return `${skill.name}  ·  ${skill.description}${suffix}`;
+          })
           .join('\n'),
   );
 

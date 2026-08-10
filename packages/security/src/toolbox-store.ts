@@ -16,7 +16,7 @@
  * decision inside the package that is meant to hold every such decision.
  *
  * The toolboxes directory sits **beside** the workspace, never inside it — the
- * same placement, and the same reason, as `agentsDir`: the jail root *is* the
+ * same placement, and the same reason, as `sharedDir`: the jail root *is* the
  * workspace, so a manifest kept in there would be writable by `write_file`, and
  * prompt injection would become a way to rewrite the policy the agent
  * runs under.

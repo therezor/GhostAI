@@ -16,7 +16,10 @@ import {
   MAX_DESCRIPTION_CHARS,
   MAX_SKILLS,
   SKILL_MAX_BYTES,
+  parseSkillAgents,
   readSkills,
+  skillsForAgent,
+  type Skill,
 } from '#src/skills.js';
 
 const roots: string[] = [];
@@ -85,6 +88,8 @@ describe('readSkills', () => {
         // Always POSIX separators: this string is handed to the model to pass
         // back to `read_file`.
         path: 'skills/code-review/SKILL.md',
+        // No `agents:` line, so every agent's catalogue carries it.
+        agents: [],
       },
     ]);
   });
@@ -226,5 +231,168 @@ describe('readSkills', () => {
     install(root, 'plain', '# Just markdown\n\nNo fence.');
 
     expect(await readSkills(root)).toEqual([]);
+  });
+
+  it('carries the agents a sheet is scoped to', async () => {
+    const root = workspace();
+    install(
+      root,
+      'refactor',
+      '---\ndescription: How to refactor.\nagents: coder\n---\n\nBody.\n',
+    );
+
+    expect((await readSkills(root))[0]?.agents).toEqual(['coder']);
+  });
+});
+
+describe('parseSkillAgents', () => {
+  function parse(value: string | undefined): {
+    readonly agents: readonly string[];
+    readonly messages: readonly string[];
+  } {
+    const log = capture();
+    const agents = parseSkillAgents(value, {
+      skill: 'refactor',
+      logger: log.logger,
+    });
+    return { agents, messages: log.messages() };
+  }
+
+  it('is every agent when the line is absent, and says nothing about it', () => {
+    // The overwhelmingly common case, and every sheet written before scope
+    // existed. A log line here would be a log line on every turn, forever.
+    const { agents, messages } = parse(undefined);
+
+    expect(agents).toEqual([]);
+    expect(messages).toEqual([]);
+  });
+
+  it('reads one id, and a comma-separated list', () => {
+    expect(parse('coder').agents).toEqual(['coder']);
+    expect(parse('coder, writer').agents).toEqual(['coder', 'writer']);
+  });
+
+  it('trims, lower-cases and de-duplicates', () => {
+    const { agents, messages } = parse('  coder ,  Writer , coder ');
+
+    expect(agents).toEqual(['coder', 'writer']);
+    // Lower-casing is not cosmetic: `isAgentId` rejects an upper-case id, so
+    // without it `Writer` would be dropped rather than matched.
+    expect(messages).toEqual([]);
+  });
+
+  it('accepts the YAML flow form somebody will write out of habit', () => {
+    expect(parse('[coder, writer]').agents).toEqual(['coder', 'writer']);
+    // The per-item unquote earns its place here and only here: the outer value
+    // is not quoted, so `frontmatter.ts` leaves the inner quotes alone.
+    expect(parse('[coder, "writer"]').agents).toEqual(['coder', 'writer']);
+  });
+
+  it('keeps the usable ids and warns about the rest', () => {
+    const { agents, messages } = parse('coder, Not An Id');
+
+    expect(agents).toEqual(['coder']);
+    expect(messages).toEqual([
+      'skill `agents:` names something that is not an agent id; those entries ' +
+        'are ignored',
+    ]);
+  });
+
+  it('falls open to every agent when nothing in the line is usable', () => {
+    // Not scoped-to-nobody. A sheet is prose, so being shown too widely costs
+    // prompt a person can see in `/skills`, and being hidden from everybody is
+    // a sheet that silently stopped working with nothing anywhere to find.
+    for (const value of ['', '!!, ??', '   ']) {
+      const { agents, messages } = parse(value);
+
+      expect(agents).toEqual([]);
+      expect(messages).toEqual([
+        'skill `agents:` names no usable agent id, so the sheet stays visible ' +
+          'to every agent; write it as `agents: coder, writer`',
+      ]);
+    }
+  });
+
+  it('warns exactly once, however many entries are bad', () => {
+    // `readSkills` re-reads on every turn, so a second line here is a second
+    // line forever.
+    expect(parse('!!, ??, coder, ***').messages).toHaveLength(1);
+  });
+});
+
+describe('a YAML block list under agents:', () => {
+  it('is read as an empty line, and warned about', async () => {
+    // The trap, and the reason the empty case warns at all. `parseFrontmatter`
+    // anchors its field pattern on a letter, so `- coder` never matches: it
+    // clears the parent and is discarded, leaving `agents: ''`. A block list is
+    // therefore indistinguishable from a bare `agents:` by the time the value
+    // is read, and this is a property of the frontmatter reader that nothing
+    // else in the suite pins.
+    const root = workspace();
+    install(
+      root,
+      'refactor',
+      '---\ndescription: How to refactor.\nagents:\n  - coder\n---\n\nBody.\n',
+    );
+    const log = capture();
+
+    expect((await readSkills(root, { logger: log.logger }))[0]?.agents).toEqual(
+      [],
+    );
+    expect(log.messages()).toContain(
+      'skill `agents:` names no usable agent id, so the sheet stays visible ' +
+        'to every agent; write it as `agents: coder, writer`',
+    );
+  });
+});
+
+describe('skillsForAgent', () => {
+  function sheet(name: string, agents: readonly string[]): Skill {
+    return {
+      name,
+      description: `The ${name} sheet.`,
+      body: 'Body.',
+      path: `skills/${name}/SKILL.md`,
+      agents,
+    };
+  }
+
+  const shared = sheet('code-review', []);
+  const scoped = sheet('refactor', ['coder']);
+  const shortlist = sheet('triage', ['coder', 'team-lead']);
+
+  it('gives every agent the unscoped sheets', () => {
+    expect(skillsForAgent([shared], 'writer')).toEqual([shared]);
+    expect(skillsForAgent([shared], 'default')).toEqual([shared]);
+  });
+
+  it('gives a scoped sheet only to the agents it names', () => {
+    expect(skillsForAgent([shared, scoped, shortlist], 'coder')).toEqual([
+      shared,
+      scoped,
+      shortlist,
+    ]);
+    expect(skillsForAgent([shared, scoped, shortlist], 'team-lead')).toEqual([
+      shared,
+      shortlist,
+    ]);
+    expect(skillsForAgent([shared, scoped, shortlist], 'writer')).toEqual([
+      shared,
+    ]);
+  });
+
+  it('scopes to `default` like any other agent', () => {
+    expect(skillsForAgent([sheet('a', ['default'])], 'default')).toHaveLength(
+      1,
+    );
+    expect(skillsForAgent([sheet('a', ['default'])], 'coder')).toEqual([]);
+  });
+
+  it('matches case-insensitively, since an id reaching it may not be folded', () => {
+    expect(skillsForAgent([scoped], 'Coder')).toEqual([scoped]);
+  });
+
+  it('is empty for an empty catalogue', () => {
+    expect(skillsForAgent([], 'coder')).toEqual([]);
   });
 });

@@ -710,6 +710,26 @@ describe('/skills', () => {
     expect(result.text).toContain('`code-review` — Review a diff.');
   });
 
+  it('marks a sheet this agent is not one of, rather than hiding it', async () => {
+    const h = harness();
+    h.console.setSkills({
+      granted: true,
+      skills: [
+        { name: 'deploy', description: 'Ship a release.', mine: true },
+        { name: 'triage', description: 'Sort the inbox.', mine: false },
+      ],
+    });
+
+    const result = await h.run('/skills');
+
+    expect(result.text).toContain(
+      '`triage` — Sort the inbox. _(other agents)_',
+    );
+    // `mine: true` is unmarked, and so is a summary from before the field
+    // existed — the listing has to stay readable on both.
+    expect(result.text).toContain('`deploy` — Ship a release.\n');
+  });
+
   it('is offered to a non-admin, because it only reads', async () => {
     const h = harness();
     const result = await h.run('/skills', { isAdmin: false });

@@ -18,7 +18,6 @@ import { isAbsolute, join, resolve, sep } from 'node:path';
 import { mkdirSync } from 'node:fs';
 
 import { GhostError } from './errors.js';
-import { isAgentId } from './agent-id.js';
 import { isExtensionId } from './extension-id.js';
 import { DEFAULT_WORKSPACE_ID, isWorkspaceId } from './workspace-id.js';
 
@@ -77,40 +76,38 @@ export interface GhostPaths {
    */
   readonly workspace: string;
   /**
-   * The parent of every agent's own directory, beside the workspace.
-   *
-   * **Nothing writes here yet, and memory is no longer what will.** This was
-   * described as the home of an agent's memory and skills, on the argument that
-   * the jail root *is* the workspace — so anything kept inside it is readable
-   * and **writable** by `write_file`, which turns prompt injection into a way of
-   * rewriting the agent's own system prompt.
-   *
-   * That argument is still true, and both features were placed inside the
-   * workspace anyway: `<workspace>/skills/` and `<workspace>/memory/`.
-   * The trade was taken deliberately in both cases — a skill sheet is meant to
-   * be committed beside the project it describes, and memory a person cannot see
-   * in a directory listing is memory they cannot correct. `docs/memory.md` and
-   * `docs/skills.md` each carry the argument and name the mitigation
-   * (`write_file: 'ask'`).
-   *
-   * The directory and `agentDirFor` are kept because the reasoning above is
-   * sound and a per-agent layer may still want it; `paths.test.ts` still asserts
-   * it stays outside the workspace.
-   */
-  readonly agentsDir: string;
-  /**
    * The parent of the layer agents working in one folder share.
    *
    * Keyed by workspace, not by agent: this is where facts about a *working
    * folder* live, which is the one thing several agents on one folder have a
-   * reason to pool. Outside the jail for the same reason as `agentsDir`.
+   * reason to pool.
+   *
+   * **Outside the jail, and every directory below says "for the same reason as
+   * `sharedDir`" meaning this one:** the jail root *is* the workspace, so
+   * anything kept inside it is readable and **writable** by `write_file`, which
+   * turns prompt injection into a way of rewriting what the agent is told.
+   *
+   * That argument does not win everywhere, and where it loses it loses on
+   * purpose. Memory and skills are both *inside* the workspace —
+   * `<workspace>/memory/` and `<workspace>/skills/` — because each is meant to
+   * be read, corrected and committed beside the project it describes, and a
+   * directory the agent cannot list is not that. `docs/memory.md` and
+   * `docs/skills.md` each carry the trade and name the mitigation
+   * (`write_file: 'ask'`). What stays out here is what an agent must not be able
+   * to author: container policy, and the presets that compose an agent.
+   *
+   * There was an `agentsDir` — `<root>/agents/<id>/`, reserved for exactly the
+   * per-agent layer this argument recommends. Nothing ever wrote to it: memory
+   * declined it, skills declined it, and per-agent skill scope declined it too,
+   * each on the grounds above. Three passes is enough; it is gone rather than
+   * reserved a fourth time.
    */
   readonly sharedDir: string;
   /**
    * Installed toolboxes — one directory per toolbox, each holding a
    * `toolbox.json`.
    *
-   * Outside the jail for the same reason as `agentsDir`: a manifest kept inside
+   * Outside the jail for the same reason as `sharedDir`: a manifest kept inside
    * the workspace would be writable by `write_file`, which turns prompt
    * injection into a way of rewriting the container policy the agent runs
    * under. The approval that makes a manifest usable lives in the database, not
@@ -222,7 +219,6 @@ export function resolveGhostPaths(
       options.workspace === undefined
         ? join(root, 'workspace')
         : resolvePath(expandHome(options.workspace, home), root),
-    agentsDir: join(root, 'agents'),
     sharedDir: join(root, 'shared'),
     toolboxesDir: join(root, 'toolboxes'),
     presetsDir: join(root, 'presets'),
@@ -264,33 +260,6 @@ export function workspaceDirFor(paths: GhostPaths, id: string): string {
 }
 
 /**
- * Creates a directory and returns it, so it composes inside an expression.
- *
- * `0o700` because the workspace holds the credential vault's fallback key,
- * session transcripts, and whatever the agent has been told; the default
- * `0o777 & ~umask` leaves all of that world-readable on a shared host.
- */
-/**
- * The directory one agent owns: its memory and its skills.
- *
- * The only place an agent id becomes a path, and it re-validates for the same
- * reason `workspaceDirFor` does — the id reaches here from a WebSocket frame,
- * a request body and an `agent_id` column an operator can edit by hand.
- *
- * Unlike a workspace, `default` gets a directory of its own rather than the
- * parent: there is nothing for it to be the parent *of*, and an agent whose
- * memory sat one level up would see every other agent's.
- */
-export function agentDirFor(paths: GhostPaths, id: string): string {
-  if (!isAgentId(id)) {
-    throw new GhostError('invalid_input', `Not an agent id: ${id}`, {
-      details: { id },
-    });
-  }
-  return join(paths.agentsDir, id);
-}
-
-/**
  * The directory holding what every agent in one workspace may share.
  *
  * Takes a *workspace* id, and validates it as one — the sharing axis is the
@@ -313,7 +282,7 @@ export function sharedDirFor(paths: GhostPaths, workspaceId: string): string {
 /**
  * Where one extension is installed.
  *
- * Re-validates for the reason `agentDirFor` does — an extension id reaches here
+ * Re-validates for the reason `workspaceDirFor` does — an extension id reaches here
  * from a `readdir`, from a route parameter and from `extensions.disabled` in a
  * hand-edited config file, and a single unchecked call site is the containment
  * argument gone.
@@ -342,6 +311,13 @@ function assertExtensionId(id: string): string {
   return id;
 }
 
+/**
+ * Creates a directory and returns it, so it composes inside an expression.
+ *
+ * `0o700` because the workspace holds the credential vault's fallback key,
+ * session transcripts, and whatever the agent has been told; the default
+ * `0o777 & ~umask` leaves all of that world-readable on a shared host.
+ */
 export function ensureDir(dir: string): string {
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   return dir;

@@ -26,6 +26,13 @@
  * `toolsEnabled` is the one `AgentDefaults` knob a preset may set, because one
  * preset exists specifically to switch it off: a no-tools agent whose every
  * request is the short cheap kind. Optional, so an ordinary preset inherits.
+ *
+ * `skills` is the one field that is *not* an `AgentEntry` field at all. It is an
+ * install instruction — which sheets to copy out of the catalogue and into the
+ * workspace — so `presetToAgentEntry` drops it rather than carrying it into
+ * config. Nothing remembers afterwards that a sheet arrived with a preset, which
+ * is the same "a preset is a starting point, not a subscription" rule the rest of
+ * this file keeps.
  */
 
 import { z } from 'zod';
@@ -38,6 +45,7 @@ import {
   SubagentRefSchema,
 } from './config.js';
 import type { AgentEntry } from './config.js';
+import { SLUG_ID_PATTERN } from './ids.js';
 import { ToolPermissionsSchema } from './tools.js';
 
 export const AgentPresetSchema = z.object({
@@ -73,6 +81,20 @@ export const AgentPresetSchema = z.object({
   tools: ToolPermissionsSchema.default({ ...DEFAULT_AGENT_TOOLS }),
   toolbox: AgentToolboxSchema.prefault({}),
   subagents: z.array(SubagentRefSchema).default([]),
+
+  /**
+   * Skill directories to copy out of the catalogue's `skills/` and into the
+   * workspace's, named by directory. An install instruction rather than agent
+   * config, so `presetToAgentEntry` drops it.
+   *
+   * `SLUG_ID_PATTERN` because each name becomes a path segment, and this one
+   * arrived over the network: `..`, `/` and a leading `~` are unrepresentable,
+   * so the copier never has to judge a traversal — a preset carrying one fails
+   * to parse. Deliberately stricter than what a *workspace* may hold, where a
+   * sheet directory is whatever a person named it and `readSkills` reads it
+   * happily. The bound is a floor under a bad publish, not a policy.
+   */
+  skills: z.array(z.string().regex(SLUG_ID_PATTERN)).max(32).default([]),
 });
 export type AgentPreset = z.infer<typeof AgentPresetSchema>;
 
@@ -85,9 +107,15 @@ export type AgentPreset = z.infer<typeof AgentPresetSchema>;
  * function knowing it exists. `toolsEnabled` is spread only when the preset
  * set it: an absent key inherits `agents.defaults`, and `undefined` written
  * into the patch would be a claim, not an absence.
+ *
+ * `skills` is named in the destructure rather than left to be stripped. Zod
+ * would drop it either way — `AgentEntrySchema` is not strict — but the spread
+ * above exists so that a *new `AgentEntry` field* picks up its default here
+ * without this function knowing about it, and a key that must never reach the
+ * entry is the opposite case. Naming it is what says so.
  */
 export function presetToAgentEntry(preset: AgentPreset): AgentEntry {
-  const { schema, id, toolsEnabled, ...fields } = preset;
+  const { schema, id, toolsEnabled, skills, ...fields } = preset;
   return AgentEntrySchema.parse({
     ...fields,
     ...(toolsEnabled === undefined ? {} : { toolsEnabled }),

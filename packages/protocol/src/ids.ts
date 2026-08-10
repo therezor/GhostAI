@@ -1,10 +1,11 @@
 /**
  * What may name a directory GhostAI creates from user input.
  *
- * Two things are named this way — a workspace and an agent — and both turn an
- * id that arrived over HTTP into a path. The rules are identical because the
- * reasons are identical, so they live here once rather than being copied and
- * then drifting apart in exactly the case nobody tested.
+ * Two things are named this way — a workspace and an agent — and both arrive
+ * over HTTP. A workspace id becomes a path; an agent id no longer does, but it
+ * keeps the identical rules, because the reasons that made them identical have
+ * not changed and two sets that agree today are two sets that drift apart in
+ * exactly the case nobody tested.
  *
  * The rules, and why each is a rule rather than a preference:
  *
@@ -129,9 +130,10 @@ export function deriveWorkspaceId(name: string): string {
 /**
  * What may name an agent.
  *
- * An agent id names a directory — `<root>/agents/<id>`, holding that agent's
- * memory and skills — and it arrives over HTTP on a session frame, so it gets
- * the same treatment a workspace id gets. The character rules and their
+ * An agent id is a key in `agents.list`, a column in the session table and a
+ * segment of a tool name, and it arrives over HTTP on a session frame — so it
+ * gets the same treatment a workspace id gets even though, unlike a workspace
+ * id, it never becomes a directory of its own. The character rules and their
  * rationale are at the top of this file.
  *
  * What is specific to an agent: **`default` is reserved**, because it names the

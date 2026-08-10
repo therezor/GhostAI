@@ -4,7 +4,8 @@
     "install": {
       "description": "Install one agent preset, by its id or by path.",
       "options": {
-        "force": "overwrite an existing agent with the same id"
+        "force": "overwrite an existing agent with the same id",
+        "workspaceId": "the workspace the preset's skill sheets are copied into (default: default)"
       }
     },
     "list": {
@@ -109,7 +110,8 @@
         "from": "install from a checkout of the presets repository instead of fetching",
         "noApprove": "approve nothing, and print the approve commands instead",
         "offline": "never fetch; use what is already on this machine",
-        "refresh": "fetch the catalogue again before reading it"
+        "refresh": "fetch the catalogue again before reading it",
+        "workspaceId": "the workspace the presets' skill sheets are copied into (default: default)"
       }
     },
     "installed": "installed",
@@ -261,6 +263,7 @@
       "shown": "shown",
       "skillsEmpty": "no skills yet — a folder with a SKILL.md in {{path}}/ becomes one",
       "skillsOff": "{{agent}} does not have the skill tool, so no catalogue reaches the prompt and it cannot open a sheet",
+      "skillsScope": "for {{agents}} only — not this agent",
       "unknownCommand": "unknown command: /{{name}}",
       "willLandIn": "new sessions will land in {{workspace}}",
       "willRunOn": "the next session runs on {{agent}}"

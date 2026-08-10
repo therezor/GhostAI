@@ -666,12 +666,18 @@ describe('/skills', () => {
   }
 
   /** A sheet on disk, as `readSkills` expects to find one. */
-  function sheet(runtime: ChatRuntime, name: string, description: string) {
+  function sheet(
+    runtime: ChatRuntime,
+    name: string,
+    description: string,
+    agents?: string,
+  ) {
     const dir = join(runtime.jail.root, 'skills', name);
     mkdirSync(dir, { recursive: true });
+    const scope = agents === undefined ? '' : `agents: ${agents}\n`;
     writeFileSync(
       join(dir, 'SKILL.md'),
-      `---\ndescription: ${description}\n---\n\nBody of ${name}.\n`,
+      `---\ndescription: ${description}\n${scope}---\n\nBody of ${name}.\n`,
     );
   }
 
@@ -717,6 +723,23 @@ describe('/skills', () => {
     expect(out.text).toContain('Ship a release.');
     expect(out.text).toContain('code-review');
     expect(out.text).toContain('Review a diff.');
+  });
+
+  it('lists a sheet scoped to another agent, and marks it', async () => {
+    // Marked rather than dropped. Somebody runs `/skills` precisely when a
+    // sheet is not working, and a listing that hides it leaves nowhere to find
+    // out why.
+    const runtime = runtimeIn();
+    sheet(runtime, 'deploy', 'Ship a release.');
+    sheet(runtime, 'triage', 'Sort the inbox.', 'lead');
+    const { ctx, out } = context(runtime, 'cli:1');
+
+    await runSlashCommand('/skills', ctx);
+
+    expect(out.text).toContain('triage');
+    expect(out.text).toContain('for lead only — not this agent');
+    // And the unscoped one carries no marking at all.
+    expect(out.text).toContain('deploy  ·  Ship a release.\n');
   });
 
   it('prints a name and nothing to type it into', async () => {

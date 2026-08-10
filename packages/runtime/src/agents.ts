@@ -569,7 +569,8 @@ export function resolveAgents(config: Config): {
     // the schema types this record's key as a plain string, deliberately, so
     // that a file carrying one still parses and can still be edited back out.
     // It is excluded rather than refused, because an id that cannot name a
-    // directory cannot run a turn either — see `agentDirFor`.
+    // directory cannot run a turn either — every id that reaches a path is
+    // re-validated on the way, as `workspaceDirFor` and `sharedDirFor` do.
     if (!isAgentId(id)) {
       warnings.push({
         agentId: id,

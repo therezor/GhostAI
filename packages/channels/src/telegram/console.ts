@@ -90,4 +90,13 @@ export interface SkillsState {
 export interface SkillSummary {
   readonly name: string;
   readonly description: string;
+  /**
+   * Whether this chat's agent is one the sheet is for.
+   *
+   * A boolean rather than the list of agent ids, so the renderer has one branch
+   * instead of a set membership test — deciding who a sheet is for is the
+   * console's job, and saying so is this layer's. Absent is `true`: every sheet
+   * written before scope existed is everyone's.
+   */
+  readonly mine?: boolean;
 }

@@ -35,18 +35,37 @@ const DIGEST = `sha256:${'d'.repeat(64)}`;
 function run(
   action: 'install' | 'list',
   name?: string,
-  options: { force?: boolean } = {},
+  options: {
+    force?: boolean;
+    workspaceId?: string;
+    env?: Readonly<Record<string, string | undefined>>;
+  } = {},
 ): number {
   return runAgent({
     action,
     ...(name === undefined ? {} : { name }),
     ...(options.force === undefined ? {} : { force: options.force }),
+    ...(options.workspaceId === undefined
+      ? {}
+      : { workspaceId: options.workspaceId }),
     home,
     out: (line) => out.push(line),
     errOut: (line) => errOut.push(line),
-    env: {},
+    env: options.env ?? {},
     t,
   });
+}
+
+/** A catalogue holding one skill sheet, reachable through `GHOSTAI_CATALOGUE`. */
+function catalogueWithSheet(name: string, agents?: string): string {
+  const dir = join(home, 'fixture-catalogue');
+  mkdirSync(join(dir, 'agents'), { recursive: true });
+  mkdirSync(join(dir, 'skills', name), { recursive: true });
+  writeFileSync(
+    join(dir, 'skills', name, 'SKILL.md'),
+    `---\ndescription: What ${name} does.\n${agents === undefined ? '' : `agents: ${agents}\n`}---\n\nBody of ${name}.\n`,
+  );
+  return dir;
 }
 
 /** A toolbox manifest on disk. Presets never live here — see `installPreset`. */
@@ -330,6 +349,49 @@ describe('the team-lead roster snapshot', () => {
     run('install', 'team-lead');
 
     expect(savedConfig().agents.list['team-lead']?.subagents).toEqual([]);
+  });
+
+  it('installs the agent and names the sheets when there is no catalogue', () => {
+    // The common case for this command rather than an edge: it never fetches,
+    // so an operator's own preset on a box that has never run `preset update`
+    // lands entirely here. The agent still installs.
+    installPreset('scribe', presetFor('scribe', { skills: ['code-review'] }));
+
+    expect(run('install', 'scribe')).toBe(0);
+
+    expect(savedConfig().agents.list.scribe).toBeDefined();
+    expect(out.join('\n')).toContain('skill "code-review" — not in this');
+    expect(out.join('\n')).toContain('ghostai preset update');
+  });
+
+  it('copies the sheets when a catalogue is reachable', () => {
+    installPreset('scribe', presetFor('scribe', { skills: ['code-review'] }));
+    const catalogue = catalogueWithSheet('code-review');
+
+    expect(
+      run('install', 'scribe', { env: { GHOSTAI_CATALOGUE: catalogue } }),
+    ).toBe(0);
+
+    expect(
+      readFileSync(
+        join(home, 'workspace', 'skills', 'code-review', 'SKILL.md'),
+        'utf8',
+      ),
+    ).toContain('Body of code-review.');
+    expect(out.join('\n')).toContain('skills     code-review');
+  });
+
+  it('notes a sheet scoped away from the agent that brought it', () => {
+    installPreset('scribe', presetFor('scribe', { skills: ['triage'] }));
+    const catalogue = catalogueWithSheet('triage', 'lead');
+
+    expect(
+      run('install', 'scribe', { env: { GHOSTAI_CATALOGUE: catalogue } }),
+    ).toBe(0);
+
+    expect(out.join('\n')).toContain(
+      'skill "triage" is scoped to lead, so the scribe agent will not see it',
+    );
   });
 });
 

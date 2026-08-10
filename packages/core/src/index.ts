@@ -35,7 +35,6 @@ export {
   expandHome,
   resolveGhostPaths,
   resolvePath,
-  agentDirFor,
   extensionDataDirFor,
   extensionDirFor,
   sharedDirFor,

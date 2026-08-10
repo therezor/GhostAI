@@ -37,6 +37,7 @@ import { GhostError, ensureDir, loadConfig, saveConfig } from '@ghostwire/core';
 import { dockerEngine } from '@ghostwire/runtime';
 import { ToolboxStore, weakenedIn } from '@ghostwire/security';
 import {
+  DEFAULT_WORKSPACE_ID,
   TOOLBOX_DEFAULT_KEY,
   type AgentEntry,
   type AgentPreset,
@@ -50,11 +51,17 @@ import {
   CATALOGUE_PACKAGE,
   assertCatalogueLayout,
   catalogueDir,
+  catalogueSkillsDir,
   catalogueToolbox,
   fetchCatalogue,
   type Fetcher,
 } from './catalogue.js';
 import type { CliT, Translations } from './i18n.js';
+import {
+  installSkills,
+  skillsTargetDir,
+  type SkillInstallResult,
+} from './skill-install.js';
 import {
   findPreset,
   listAllPresets,
@@ -87,6 +94,14 @@ export interface PresetOptions {
   readonly offline?: boolean;
   /** Overwrite an `agents.list` entry that may carry an operator's edits. */
   readonly force?: boolean;
+  /**
+   * Which workspace a preset's skill sheets are copied into.
+   *
+   * Absent is `default`. A preset is workspace-agnostic — it writes an
+   * `agents.list` entry, which every workspace shares — but a sheet lives in
+   * one, so this is the one thing an install has to be told.
+   */
+  readonly workspaceId?: string | undefined;
   /**
    * Approve what this run installs. `undefined` means ask, when `ask` is there
    * to ask with — and approve nothing when it is not.
@@ -351,6 +366,13 @@ export async function runPreset(options: PresetOptions): Promise<number> {
       presetsDir: loaded.paths.presetsDir,
       dbFile: loaded.paths.dbFile,
       catalogueAgentsDir: agentsDir,
+      catalogueSkillsDir: catalogueSkillsDir(dir),
+      // Resolved here rather than inside the copy, so a `-W` naming no
+      // workspace fails before anything is built or written.
+      skillsDir: skillsTargetDir(
+        loaded.paths,
+        options.workspaceId ?? DEFAULT_WORKSPACE_ID,
+      ),
     };
 
     const available = offers(paths, loaded.config, out);
@@ -548,8 +570,61 @@ async function install(
       : `Installed ${String(installed.length)} agents: ${installed.join(', ')}`,
   );
 
-  report(options, paths, config, wanted, blocked, stale);
+  // Only for the presets that actually installed. A blocked one was left alone
+  // "in case you have edited them", and overwriting its sheets would be the
+  // same edit by another route.
+  const sheets = installSheets(options, paths, ordered, installed);
+
+  report(options, paths, config, wanted, blocked, stale, sheets);
   return 0;
+}
+
+/** Every chosen preset's sheets, copied and folded into one result. */
+function installSheets(
+  options: PresetOptions,
+  paths: PresetPaths,
+  ordered: readonly Offer[],
+  installed: readonly string[],
+): SkillInstallResult {
+  const written: Array<{ name: string; files: number }> = [];
+  const kept: string[] = [];
+  const missing: string[] = [];
+  const warnings: string[] = [];
+
+  for (const offer of ordered) {
+    if (!installed.includes(offer.id)) continue;
+    const result = installSkills({
+      presetId: offer.id,
+      names: offer.preset.skills,
+      catalogueSkillsDir: paths.catalogueSkillsDir,
+      targetDir: paths.skillsDir,
+      force: options.force === true,
+    });
+    // Two presets can name one sheet. The second copy is a no-op the first
+    // already did, so the report should not say it twice either.
+    for (const sheet of result.written) {
+      if (!written.some((seen) => seen.name === sheet.name)) {
+        written.push(sheet);
+      }
+    }
+    for (const name of result.kept) {
+      if (!kept.includes(name)) kept.push(name);
+    }
+    for (const name of result.missing) {
+      if (!missing.includes(name)) missing.push(name);
+    }
+    warnings.push(...result.warnings);
+  }
+
+  return {
+    written,
+    // A sheet two presets both name is written by the first and then found
+    // already there by the second. Reporting it as both written and kept would
+    // be true of neither.
+    kept: kept.filter((name) => !written.some((sheet) => sheet.name === name)),
+    missing,
+    warnings,
+  };
 }
 
 /** Everything the operator still has to do, each with the command that does it. */
@@ -560,8 +635,37 @@ function report(
   wanted: readonly string[],
   blocked: ReadonlyArray<{ id: string; reason: string }>,
   stale: readonly string[],
+  sheets: SkillInstallResult,
 ): void {
   const { out } = options;
+
+  if (sheets.written.length > 0) {
+    out('');
+    out(`Skill sheets written to ${paths.skillsDir ?? ''}:`);
+    for (const { name, files } of sheets.written) {
+      out(`    ${name}  (${String(files)} file${files === 1 ? '' : 's'})`);
+    }
+  }
+
+  if (sheets.kept.length > 0) {
+    out('');
+    out('Already in the workspace, and left alone in case you have edited');
+    out('them:');
+    for (const name of sheets.kept) out(`    ${name}`);
+    out('');
+    out('Re-run with --force to overwrite them.');
+  }
+
+  if (sheets.missing.length > 0) {
+    out('');
+    out('Named by a preset but not in this catalogue:');
+    for (const name of sheets.missing) out(`    ${name}`);
+  }
+
+  for (const warning of sheets.warnings) {
+    out('');
+    out(warning);
+  }
 
   const pending = pendingApprovals(paths, wanted);
   if (pending.length > 0) {
