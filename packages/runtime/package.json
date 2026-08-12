@@ -1,6 +1,6 @@
 {
   "name": "@ghostwire/runtime",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "The shared composition root: config in, a running agent out.",
   "type": "module",
   "license": "MIT",

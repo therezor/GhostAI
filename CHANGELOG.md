@@ -5,6 +5,86 @@ uses [semantic versioning](https://semver.org/spec/v2.0.0.html). Every package i
 repository carries the same version and they are released together; only `@ghostwire/ghostai`
 is something you install by name.
 
+## [0.7.1] - 2026-08-12
+
+Skill sheets learn who they are for. A sheet was in every agent's catalogue or in
+none, which is the wrong granularity for a workspace a coder, a researcher and a
+lead all work in: every sheet cost every agent prompt on every turn, and the only
+way to narrow it was not to write the sheet.
+
+### Added
+
+- **`agents:` in a sheet's frontmatter**, narrowing it to the agents it names —
+  `agents: coder, team-lead`. A sheet without one is in every agent's catalogue, so
+  nothing written before this changes. Scope decides which sheets an agent is _told
+  about_, not which it may open: `read_file` and the `skill` tool still reach a sheet
+  that was never advertised, and that is not a hole — a skill is prose, and the jail
+  and the exec guard have never read a word of the prompt.
+- **It fails open.** A line that yields no usable id leaves the sheet visible to
+  every agent and logs a warning. The two ways of being wrong are not symmetric: a
+  sheet shown too widely costs prompt that `/skills` will show you, and a sheet
+  hidden from everybody is one that silently stopped working with nothing anywhere
+  to find.
+- **`skills` on an agent preset** — sheet directories under the catalogue's
+  `skills/`, copied into the workspace when the agent installs. A copy, byte for
+  byte, rather than an install: no hash, no approval gate, and nothing recorded
+  afterwards. A toolbox manifest earns one because it names a container's boundary;
+  a sheet is prose, and the preset's own `systemPrompt` — same catalogue, same
+  network — already set that bar.
+- **`-W, --workspace-id <id>` on `agent install` and `preset install`**, saying which
+  workspace those sheets land in. It defaults to `default`, and a named workspace has
+  to exist already. Spelled `--workspace-id` because `--workspace` already means a
+  _directory_ on `chat` and `serve`, and one flag meaning two things is how somebody
+  ends up passing a path to it.
+- **`/skills` marks sheets scoped to other agents** rather than dropping them.
+  Somebody runs it precisely when a sheet is not working, and a listing that hid it
+  would leave nowhere to find out why.
+
+### Changed
+
+- **Nothing about a sheet refuses.** One that is missing, symlinked or over the
+  copier's bounds costs that sheet and a line in the report, and the agent installs
+  regardless. A missing _toolbox_ still refuses, because an agent without one cannot
+  run at all; an agent with one fewer index line can.
+- **A sheet already in the workspace is left alone** unless `--force` is passed,
+  which is the rule the `agents.list` entry already followed and for the same reason:
+  it may carry your edits. `--force` overwrites file by file rather than emptying the
+  directory, so anything you added inside a sheet folder survives.
+- **`MAX_SKILLS` is applied before scope**, deliberately: the cap bounds the per-turn
+  read, and applying it after would mean opening a thousand directories to find the
+  twelve one agent sees. Past a hundred, which sheets an agent sees follows
+  alphabetical order rather than who they are for.
+- `ghostai agent install` copies a preset's sheets too when a catalogue is already on
+  the machine. It never fetches one, so on a box that has never run
+  `ghostai preset update` every sheet a preset names is reported missing, and the
+  agent installs anyway.
+
+### Removed
+
+- **`~/.ghostai/agents/<id>/`, and `agentDirFor` from `@ghostwire/core`.** The
+  directory was reserved so per-agent state could sit outside the jail, where prompt
+  injection could not rewrite what an agent believes. Nothing ever wrote to it:
+  memory declined it, skills declined it, and per-agent scope declined it too — each
+  time because a sheet is meant to be read, reviewed and committed beside the project
+  it describes, and it is none of those if it lives somewhere the agent cannot list.
+  After a third pass the reservation was removed rather than kept for a fourth. An
+  agent id is now a key in `agents.list`, a session column and a tool-name segment,
+  and never a directory; it keeps a workspace id's character rules regardless, since
+  two rule sets that agree today are two that drift apart in the case nobody tested.
+
+### The catalogue moves on its own
+
+Sheets a preset brings need a catalogue that carries them, and
+`@ghostwire/presets@1.0.0` has no `skills/` and no preset naming one. Nothing waits
+on the other: a preset that names no sheet copies none, and the half of this that
+reads sheets already in a workspace works today with no catalogue at all.
+
+The CLI asks npm for `@ghostwire/presets@^1.0.0` — any 1.x, with `--no-save` and
+`--no-package-lock`, so nothing pins a resolved version. A catalogue that adds
+`skills/` therefore reaches an existing install on the next `ghostai preset update`,
+with no upgrade of GhostAI itself. The two release on their own cadences by design;
+this entry describes what the app can do, not what today's catalogue asks it to.
+
 ## [0.7.0] - 2026-08-09
 
 The first release. Everything below is what it ships with rather than what changed.
@@ -130,4 +210,5 @@ them reads as more finished than it is.
   ships as a scheduled job's payload; delivery does not.
 - **Session search is by title and filter, not by message content.**
 
+[0.7.1]: https://github.com/therezor/GhostAI/releases/tag/v0.7.1
 [0.7.0]: https://github.com/therezor/GhostAI/releases/tag/v0.7.0

@@ -13,4 +13,4 @@
  * failure mode is a version that is wrong rather than one that is missing.
  * Their tests are what turn "forgot to bump it" into a red suite.
  */
-export const SERVER_VERSION = '0.7.0';
+export const SERVER_VERSION = '0.7.1';
