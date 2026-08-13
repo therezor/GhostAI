@@ -21,7 +21,7 @@
 
 import type { Dispatcher } from 'undici';
 
-import { GhostError } from '@ghostwire/core';
+import { GhostError, type Clock } from '@ghostwire/core';
 import type { ProviderConfig } from '@ghostwire/protocol';
 import type { FetchImplementation } from '@ghostwire/security';
 
@@ -43,6 +43,8 @@ export interface CreateProviderOptions {
   readonly requestTimeoutMs?: number | undefined;
   readonly streamIdleTimeoutMs?: number | undefined;
   readonly generateId?: (() => string) | undefined;
+  /** Reaches both the adapter's stream timings and the retry backoff. */
+  readonly clock?: Clock | undefined;
   /** `false` returns the bare adapter — for tests that assert wire behaviour. */
   readonly resilience?: ResilienceOptions | false | undefined;
   /** Wire adapters beyond the built-in one, supplied by extensions. */
@@ -76,11 +78,18 @@ export function createProvider(options: CreateProviderOptions): ChatProvider {
     requestTimeoutMs: options.requestTimeoutMs,
     streamIdleTimeoutMs: options.streamIdleTimeoutMs,
     generateId: options.generateId,
+    clock: options.clock,
   });
 
   return options.resilience === false
     ? provider
-    : withResilience(provider, options.resilience ?? {});
+    : withResilience(provider, {
+        // Spread second so an explicitly supplied `resilience.clock` still
+        // wins. This only supplies the default, which is what makes one
+        // `clock` on the outer options mean one clock for the whole stack.
+        ...(options.clock === undefined ? {} : { clock: options.clock }),
+        ...options.resilience,
+      });
 }
 
 /**

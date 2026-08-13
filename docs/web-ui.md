@@ -60,8 +60,10 @@ never drops a running turn.
   reload.
 - **Notices** badge prompt injection, degraded requests, provider fallback and truncated
   history.
-- **Turn info** — tokens in and out, cached tokens, elapsed, tokens per second, model,
-  provider, step count, stop reason.
+- **Turn info** — tokens in and out, cached tokens, elapsed, time to first token,
+  tokens per second, model, provider, step count, stop reason. Elapsed covers the
+  whole turn; first token is what a cold model load looks like; the rate divides by
+  generation time alone, so it stays steady across a cold and a warm run.
 - Markdown with highlighted code blocks.
 
 A tool card, expanded to show what the call returned:

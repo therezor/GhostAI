@@ -23,6 +23,7 @@
 
 import type { Dispatcher } from 'undici';
 
+import type { Clock } from '@ghostwire/core';
 import type { FetchImplementation } from '@ghostwire/security';
 import type {
   AssistantMessage,
@@ -97,6 +98,32 @@ export interface ChatResult {
   readonly usage: Usage;
   /** As reported by the provider, which may differ from what was requested. */
   readonly model: string;
+  /**
+   * Time spent emitting tokens: the first delta that carried content to the
+   * last one.
+   *
+   * Reported here rather than measured by the caller because this is the only
+   * scope that sees every kind of delta. A reply that is nothing but a tool
+   * call yields no text and no reasoning, so a consumer of `ChatStreamEvent`
+   * observes no deltas at all — while the provider spent real time generating
+   * the tool-call JSON, and charged real completion tokens for it. Measured
+   * outside, those tokens would have no time under them and would inflate
+   * whatever rate was derived from the pair.
+   *
+   * Absent when there was nothing to measure: a non-streaming request, or a
+   * stream replayed from one. `0` is its own answer — a stream whose content
+   * arrived in a single frame — and means the same thing to a caller as
+   * absence, since neither is a measurement you can divide by.
+   */
+  readonly generationMs?: number | undefined;
+  /**
+   * Request to first content delta: queueing, weight loading and prompt eval.
+   *
+   * On a local server this is dominated by the model load, which is why it is
+   * worth reporting separately rather than folding into the figure above. A
+   * cold start puts tens of seconds here and changes nothing about the rate.
+   */
+  readonly firstTokenMs?: number | undefined;
 }
 
 /**
@@ -155,6 +182,12 @@ export interface WireAdapterOptions {
   readonly streamIdleTimeoutMs?: number | undefined;
   /** Tool-call ids for providers that omit them. Injected so tests are stable. */
   readonly generateId?: (() => string) | undefined;
+  /**
+   * What `generationMs` and `firstTokenMs` are read off. Injected so tests are
+   * stable, the same way `generateId` is — a spaced-out stream can then be
+   * asserted exactly instead of approximately.
+   */
+  readonly clock?: Clock | undefined;
 }
 
 /**

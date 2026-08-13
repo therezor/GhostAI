@@ -805,6 +805,7 @@
     "cached": "Cached",
     "details": "Turn details",
     "elapsed": "Elapsed",
+    "firstToken": "First token",
     "in": "In",
     "model": "Model",
     "none": "No figures were recorded for this turn.",

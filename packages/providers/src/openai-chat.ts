@@ -42,7 +42,7 @@ import type {
   ToolCall,
   Usage,
 } from '@ghostwire/protocol';
-import { GhostError } from '@ghostwire/core';
+import { GhostError, systemClock } from '@ghostwire/core';
 import {
   classifyAddress,
   parseIpLiteral,
@@ -404,6 +404,7 @@ export function createOpenAIChatProvider(
   const generateId =
     options.generateId ??
     (() => `call_${crypto.randomUUID().replaceAll('-', '').slice(0, 16)}`);
+  const clock = options.clock ?? systemClock;
 
   // Created lazily, and only when no dispatcher was supplied, so an injected
   // `fetchImpl` — every test — never opens a connection pool.
@@ -543,6 +544,12 @@ export function createOpenAIChatProvider(
   async function* stream(
     request: ChatRequest,
   ): AsyncGenerator<ChatStreamEvent, void, undefined> {
+    // Before the request, not after its headers land. What `firstTokenMs` is
+    // for is the wait before anything is generated, and on a cold local server
+    // most of that wait is weight loading that happens while this call is
+    // outstanding. Starting the clock on the response would measure everything
+    // except the part worth measuring.
+    const requestedAt = clock.monotonic();
     const response = await post(
       'chat/completions',
       buildBody(spec, request, true),
@@ -565,6 +572,25 @@ export function createOpenAIChatProvider(
     let usage: Usage = emptyUsage();
     let model = request.model;
     const partials = new Map<number, PartialToolCall>();
+
+    // When the first frame carrying real content arrived, and the last.
+    let firstContentAt: number | undefined;
+    let lastContentAt: number | undefined;
+
+    /**
+     * Marks a frame that carried something the model generated.
+     *
+     * Guarded on *content* rather than called per chunk, because an
+     * OpenAI-compatible server routinely opens with a role-only frame
+     * (`delta: {role: "assistant"}`) and closes with a usage-only one. Timing
+     * from the opening frame would put the entire prompt-eval wait inside the
+     * generation window — the same mistake this whole measurement exists to
+     * undo, just one layer down.
+     */
+    const markContent = (): void => {
+      lastContentAt = clock.monotonic();
+      firstContentAt ??= lastContentAt;
+    };
 
     // Everything the socket can raise while the stream is being read — a reset
     // connection, an abort, a body timeout — arrives here as whatever undici
@@ -616,15 +642,25 @@ export function createOpenAIChatProvider(
       const delta = recordField(choice, 'delta');
       const deltaText = decodeContent(delta?.content);
       if (deltaText !== '') {
+        markContent();
         text += deltaText;
         yield { type: 'text', text: deltaText };
       }
       const deltaReasoning = decodeReasoning(delta);
       if (deltaReasoning !== '') {
+        markContent();
         reasoning += deltaReasoning;
         yield { type: 'reasoning', text: deltaReasoning };
       }
-      accumulateToolCalls(partials, arrayField(delta, 'tool_calls'));
+      // Marked even though nothing is yielded for it. A reply that is nothing
+      // but a tool call streams its JSON like any other output and is charged
+      // for as completion tokens, but `ChatStreamEvent` has no shape to carry
+      // it, so a consumer counting deltas sees an instant response. Timing it
+      // here is what keeps those tokens from being divided by somebody else's
+      // window.
+      const deltaToolCalls = arrayField(delta, 'tool_calls');
+      if (deltaToolCalls !== null && deltaToolCalls.length > 0) markContent();
+      accumulateToolCalls(partials, deltaToolCalls);
     }
 
     const toolCalls = [...partials.entries()]
@@ -642,6 +678,17 @@ export function createOpenAIChatProvider(
         finishReason: decodeFinishReason(finishReason, toolCalls.length > 0),
         usage,
         model,
+        // Omitted rather than zeroed when no frame carried content, so a
+        // caller can tell "nothing was generated" from "generated instantly".
+        // Fractional on purpose: the caller sums these across a turn and
+        // rounds once, and rounding here would lose most of a millisecond per
+        // request to no one's benefit.
+        ...(firstContentAt === undefined || lastContentAt === undefined
+          ? {}
+          : {
+              generationMs: lastContentAt - firstContentAt,
+              firstTokenMs: firstContentAt - requestedAt,
+            }),
       },
     };
   }

@@ -118,6 +118,9 @@ export function applyServerMessage(
           usage: undefined,
           iterations: 0,
           elapsedMs: undefined,
+          generationMs: undefined,
+          generationTokens: undefined,
+          firstTokenMs: undefined,
           // From `turn.start`, not only from `turn.end`: a turn that fails
           // never reaches its end, and without an address here the failure
           // could offer nothing to re-run.
@@ -154,6 +157,9 @@ export function applyServerMessage(
         usage: message.usage,
         iterations: message.iterations,
         elapsedMs: message.elapsedMs,
+        generationMs: message.generationMs,
+        generationTokens: message.generationTokens,
+        firstTokenMs: message.firstTokenMs,
         // Kept if the end does not restate it. `turn.start` already carried it,
         // and overwriting with `undefined` would take the address back off a
         // turn that had one — which is the whole thing this is here to preserve.

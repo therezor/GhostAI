@@ -161,8 +161,36 @@ export interface TurnEndEvent {
   readonly stopReason: StopReason;
   readonly usage?: Usage;
   readonly iterations: number;
-  /** Wall time across the whole turn — the divisor behind a tokens/s figure. */
+  /**
+   * Wall time across the whole turn.
+   *
+   * No longer the divisor behind a tokens/s figure, which is what it was built
+   * for and what made that figure wrong: it spans the model load, prompt eval,
+   * every tool call and every approval wait. `generationMs` is the divisor now;
+   * this is what a person means by "how long did that take".
+   */
   readonly elapsedMs?: number;
+  /**
+   * Time the model spent emitting tokens, summed over this turn's requests.
+   *
+   * Measured by the provider adapter rather than here, because only it sees
+   * every kind of delta — a reply that is nothing but a tool call reaches this
+   * loop as no deltas at all. Absent when no request could be measured.
+   */
+  readonly generationMs?: number;
+  /**
+   * The completion tokens produced inside `generationMs`.
+   *
+   * Paired with it because a reply that arrives in one frame — Ollama's shape
+   * for a bare tool call — is charged for its tokens and measured at zero. Both
+   * or neither, or the rate reports a model as faster than it is.
+   */
+  readonly generationTokens?: number;
+  /**
+   * Turn start to the first token anyone saw — where a cold model load shows
+   * up, and readable against `elapsedMs` because both start in the same place.
+   */
+  readonly firstTokenMs?: number;
   /**
    * The seqs this turn spans in storage.
    *

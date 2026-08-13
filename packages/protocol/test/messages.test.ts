@@ -5,6 +5,7 @@ import {
   StoredMessageSchema,
   UsageSchema,
   tokensPerSecond,
+  turnRate,
 } from '#src/messages.js';
 
 describe('ChatMessageSchema', () => {
@@ -227,6 +228,92 @@ describe('tokensPerSecond', () => {
       tokensPerSecond(
         { promptTokens: 10, completionTokens: 0, totalTokens: 10 },
         1000,
+      ),
+    ).toBeUndefined();
+  });
+});
+
+describe('turnRate', () => {
+  const usage = { promptTokens: 100, completionTokens: 250, totalTokens: 350 };
+
+  it('divides by generation time, not by the whole turn', () => {
+    // The bug this exists to fix, as one assertion. The turn took ten seconds
+    // because a local model spent nine of them loading its weights; it
+    // generated for one. The wall clock calls that 25 tok/s. It is 250.
+    expect(
+      turnRate(usage, {
+        generationMs: 1000,
+        generationTokens: 250,
+        elapsedMs: 10_000,
+      }),
+    ).toBe(250);
+  });
+
+  it('divides the timed tokens, not every token the turn was charged for', () => {
+    // The correction real Ollama forced. A turn that also made two bare tool
+    // calls is charged for their JSON, and those replies arrive in a single
+    // frame each — so they are measured at zero and must sit out of both
+    // sides. Here `usage` says 250 tokens and only 150 of them were timed:
+    // 150 over one second is 150 tok/s, not 250.
+    expect(
+      turnRate(usage, {
+        generationMs: 1000,
+        generationTokens: 150,
+        elapsedMs: 10_000,
+      }),
+    ).toBe(150);
+  });
+
+  it('falls back to the wall clock when nothing was measured', () => {
+    // Every turn recorded before generation time existed. Blanking their rate
+    // would be a regression wearing accuracy as a costume.
+    expect(turnRate(usage, { elapsedMs: 2000 })).toBe(125);
+    expect(turnRate(usage, { generationMs: undefined, elapsedMs: 2000 })).toBe(
+      125,
+    );
+  });
+
+  it('treats a zero window as unmeasured rather than as instant', () => {
+    // A reply whose content arrived in a single frame. `0` is a real reading
+    // and still not a divisor, so it takes the same branch as absence — which
+    // is why the guard tests for zero and not merely for undefined.
+    expect(
+      turnRate(usage, {
+        generationMs: 0,
+        generationTokens: 0,
+        elapsedMs: 2000,
+      }),
+    ).toBe(125);
+  });
+
+  it('needs both halves of the pair before it will use either', () => {
+    // Half a measurement is not a measurement. A window with no token count
+    // beside it would otherwise divide the turn's whole `completionTokens` by
+    // it — which is the overstatement this pairing exists to prevent.
+    expect(turnRate(usage, { generationMs: 1000, elapsedMs: 2000 })).toBe(125);
+    expect(
+      turnRate(usage, {
+        generationMs: 1000,
+        generationTokens: 0,
+        elapsedMs: 2000,
+      }),
+    ).toBe(125);
+    expect(turnRate(usage, { generationTokens: 150, elapsedMs: 2000 })).toBe(
+      125,
+    );
+  });
+
+  it('reports nothing when there is no divisor at all', () => {
+    expect(turnRate(usage, {})).toBeUndefined();
+    expect(turnRate(usage, { generationMs: 0 })).toBeUndefined();
+    expect(turnRate(usage, { generationMs: 1000 })).toBeUndefined();
+  });
+
+  it('reports nothing for a turn that produced no tokens', () => {
+    expect(
+      turnRate(
+        { promptTokens: 10, completionTokens: 0, totalTokens: 10 },
+        { generationMs: 1000 },
       ),
     ).toBeUndefined();
   });

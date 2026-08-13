@@ -291,6 +291,20 @@ export interface TurnStatsRecord {
   readonly stopReason: StopReason;
   readonly usage: Usage;
   /**
+   * Time the model spent emitting tokens, and how long the turn waited for its
+   * first one — the latter measured from the start of the turn, so it can be
+   * read against `endedAtMs - startedAtMs`.
+   *
+   * `NULL` rather than zero on a turn recorded before either was measured, and
+   * on one no request could measure — the same distinction the two optional
+   * usage counters draw, and the one a rate needs in order to know it should
+   * fall back to the wall clock instead.
+   */
+  readonly generationMs?: number;
+  /** The completion tokens produced inside `generationMs`, and only those. */
+  readonly generationTokens?: number;
+  readonly firstTokenMs?: number;
+  /**
    * Why it stopped, when `stopReason` is `error`.
    *
    * Absent on a turn that succeeded, and on any failure recorded before this
@@ -367,6 +381,15 @@ CREATE TABLE IF NOT EXISTS turn_stats (
   total_tokens      INTEGER NOT NULL DEFAULT 0,
   cached_tokens     INTEGER,
   reasoning_tokens  INTEGER,
+  -- What the model spent generating, and how long it waited to start. NULL on
+  -- every turn recorded before these were measured, which is what lets a rate
+  -- fall back to the wall clock rather than reporting nothing for old rows.
+  generation_ms     INTEGER,
+  -- The tokens produced inside generation_ms, which is not the same as
+  -- completion_tokens: a reply that arrives in one frame is charged for its
+  -- tokens and measured at zero, so it contributes to neither.
+  generation_tokens INTEGER,
+  first_token_ms    INTEGER,
   error             TEXT
 ) STRICT;
 
@@ -395,6 +418,9 @@ function rowToTurnStats(row: Row): TurnStatsRecord {
   // `error` in the row at all, and that is a turn with no recorded reason
   // rather than a corrupt one.
   const error = read.optionalString(row, 'error');
+  const generationMs = read.optionalInt(row, 'generation_ms');
+  const generationTokens = read.optionalInt(row, 'generation_tokens');
+  const firstTokenMs = read.optionalInt(row, 'first_token_ms');
   return {
     turnId: read.string(row, 'turn_id'),
     sessionKey: read.string(row, 'session_key'),
@@ -407,6 +433,9 @@ function rowToTurnStats(row: Row): TurnStatsRecord {
     iterations: read.int(row, 'iterations'),
     stopReason: read.string(row, 'stop_reason') as StopReason,
     usage: readUsage(row),
+    ...(generationMs === undefined ? {} : { generationMs }),
+    ...(generationTokens === undefined ? {} : { generationTokens }),
+    ...(firstTokenMs === undefined ? {} : { firstTokenMs }),
     ...(error === undefined ? {} : { error }),
   };
 }
@@ -600,6 +629,18 @@ export class SessionStore {
         `ALTER TABLE turn_stats ADD COLUMN workspace_id TEXT NOT NULL DEFAULT '${DEFAULT_WORKSPACE_ID}'`,
       ],
       ['error', 'ALTER TABLE turn_stats ADD COLUMN error TEXT'],
+      [
+        'generation_ms',
+        'ALTER TABLE turn_stats ADD COLUMN generation_ms INTEGER',
+      ],
+      [
+        'generation_tokens',
+        'ALTER TABLE turn_stats ADD COLUMN generation_tokens INTEGER',
+      ],
+      [
+        'first_token_ms',
+        'ALTER TABLE turn_stats ADD COLUMN first_token_ms INTEGER',
+      ],
     ] as const) {
       if (!present.has(column)) this.db.exec(ddl);
     }
@@ -1314,8 +1355,9 @@ export class SessionStore {
          (turn_id, session_key, agent_id, workspace_id, provider, model,
           started_at_ms, ended_at_ms,
           iterations, stop_reason, prompt_tokens, completion_tokens, total_tokens,
-          cached_tokens, reasoning_tokens, error)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          cached_tokens, reasoning_tokens,
+          generation_ms, generation_tokens, first_token_ms, error)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(turn_id) DO UPDATE SET
          agent_id = excluded.agent_id,
          workspace_id = excluded.workspace_id,
@@ -1326,6 +1368,9 @@ export class SessionStore {
          completion_tokens = excluded.completion_tokens,
          total_tokens = excluded.total_tokens, cached_tokens = excluded.cached_tokens,
          reasoning_tokens = excluded.reasoning_tokens,
+         generation_ms = excluded.generation_ms,
+         generation_tokens = excluded.generation_tokens,
+         first_token_ms = excluded.first_token_ms,
          error = excluded.error`,
     ).run(
       stats.turnId,
@@ -1343,6 +1388,9 @@ export class SessionStore {
       stats.usage.totalTokens,
       stats.usage.cachedTokens ?? null,
       stats.usage.reasoningTokens ?? null,
+      stats.generationMs ?? null,
+      stats.generationTokens ?? null,
+      stats.firstTokenMs ?? null,
       stats.error ?? null,
     );
   }

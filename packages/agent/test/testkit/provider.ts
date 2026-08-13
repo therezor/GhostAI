@@ -32,6 +32,16 @@ export interface ScriptedTurn {
   readonly reasoning?: readonly string[];
   readonly toolCalls?: readonly ToolCall[];
   readonly usage?: Partial<Usage>;
+  /**
+   * What the wire adapter would have measured for this request.
+   *
+   * Stated rather than timed, because the measurement itself belongs to the
+   * adapter and is tested there against a real SSE stream. What the loop owes
+   * is the arithmetic over several of these — summing one, keeping the first of
+   * the other — and that is clearest when the inputs are just written down.
+   */
+  readonly generationMs?: number;
+  readonly firstTokenMs?: number;
   /** Thrown instead of streaming. */
   readonly error?: unknown;
   /** Ends the stream without its `done` event — a truncated transport. */
@@ -67,6 +77,15 @@ function resultFor(turn: ScriptedTurn, model: string): ChatResult {
     finishReason,
     usage: { ...emptyUsage(), ...turn.usage },
     model,
+    // Omitted rather than zeroed when the script says nothing, so the default
+    // scripted turn looks like a request nothing could measure — which is what
+    // keeps every test written before these existed on the fallback path.
+    ...(turn.generationMs === undefined
+      ? {}
+      : { generationMs: turn.generationMs }),
+    ...(turn.firstTokenMs === undefined
+      ? {}
+      : { firstTokenMs: turn.firstTokenMs }),
   };
 }
 

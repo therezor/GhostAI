@@ -194,6 +194,68 @@ export function tokensPerSecond(
   return (usage.completionTokens * 1000) / elapsedMs;
 }
 
+/**
+ * The timings a rate can be derived from.
+ *
+ * Spelled `?: number | undefined` rather than a bare `?` because every caller
+ * holds variables that are already `number | undefined`, and under
+ * `exactOptionalPropertyTypes` a bare `?` would make each of them write a
+ * conditional spread to say nothing.
+ */
+export interface TurnTiming {
+  /** Time the model actually spent emitting tokens, where that was measured. */
+  readonly generationMs?: number | undefined;
+  /**
+   * The completion tokens produced inside `generationMs`, and only those.
+   *
+   * Not the turn's `completionTokens`, and the difference is the point: a
+   * request whose whole reply arrived in one frame — which is how Ollama sends
+   * a bare tool call, at any length — is charged for its tokens and measured at
+   * zero. Pairing them keeps a request out of both sides at once.
+   */
+  readonly generationTokens?: number | undefined;
+  /** Wall time across the whole turn, including everything that is not decoding. */
+  readonly elapsedMs?: number | undefined;
+}
+
+/**
+ * The rate to show a person, divided by generation time where there is any.
+ *
+ * `tokensPerSecond` divides by whatever it is handed; this decides what to hand
+ * it, and the whole-turn wall clock is the wrong answer. A local model loading
+ * its weights for forty seconds, a tool that runs for ten and an approval
+ * nobody answered for a minute all land in that clock, and the figure that
+ * comes out reports a model as slow when the model was not running.
+ *
+ * `generationMs` and `generationTokens` are one measurement taken twice — the
+ * time a provider spent streaming, and the tokens it reported for exactly the
+ * requests that were timed. Both are used or neither is, because a reply that
+ * arrived in a single frame has tokens and a window of zero, and pairing its
+ * tokens with another request's window is how a rate gets overstated. Measured
+ * against a real Ollama, a turn with two tool calls read 50.8 tok/s for a model
+ * that decodes at 19.
+ *
+ * The fallback is not a nicety. Every turn recorded before this was measured
+ * has only the wall clock, and blanking those rows would be a regression
+ * dressed as accuracy — so would blanking a turn whose every reply came in one
+ * frame. Both take the same branch, which is why this tests for zero and not
+ * merely for absence.
+ */
+export function turnRate(usage: Usage, timing: TurnTiming): number | undefined {
+  const { generationMs, generationTokens } = timing;
+  if (
+    generationMs !== undefined &&
+    generationMs > 0 &&
+    generationTokens !== undefined &&
+    generationTokens > 0
+  ) {
+    return (generationTokens * 1000) / generationMs;
+  }
+  return timing.elapsedMs === undefined
+    ? undefined
+    : tokensPerSecond(usage, timing.elapsedMs);
+}
+
 /** Why a turn stopped. Every value is terminal. */
 export const StopReasonSchema = z.enum([
   'complete',

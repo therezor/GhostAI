@@ -16,12 +16,18 @@ import {
   createOpenAIChatProvider,
 } from '#src/openai-chat.js';
 import { findProvider, type ProviderSpec } from '#src/registry.js';
+import type { ChatResult } from '#src/types.js';
+import { recordingClock } from '#testkit/clock.js';
 import { providerConformance } from '#testkit/conformance.js';
 import {
   completion,
+  finishChunk,
   mockTransport,
+  reasoningChunk,
   sseResponse,
   textChunk,
+  toolCallChunk,
+  usageChunk,
 } from '#testkit/transport.js';
 
 const specOf = (id: string): ProviderSpec => {
@@ -616,5 +622,158 @@ describe('the undici transport', () => {
         error.reason === 'rate_limit' &&
         error.status === 429,
     );
+  });
+});
+
+/**
+ * What the turn-stats rate divides by.
+ *
+ * Measured here rather than in the agent loop because this is the only scope
+ * that sees every kind of delta — the loop is handed `text` and `reasoning`,
+ * and nothing at all for a reply that is a bare tool call.
+ *
+ * Time is moved in two places, matching where it goes in life. `loadMs` is
+ * advanced inside the request handler, which is where a local server loads its
+ * weights: while the POST is outstanding. `stepMs` is advanced by the consumer
+ * between events — the adapter is a generator, so it suspends at each `yield`,
+ * and time that moves while it is suspended is time it reads on the next frame
+ * it parses.
+ */
+describe('stream timing', () => {
+  const base = {
+    model: 'test-model',
+    messages: [systemMessage('sys'), userMessage('hi')],
+  };
+
+  async function drain(
+    frames: readonly unknown[],
+    options: { readonly loadMs: number; readonly stepMs: number },
+  ): Promise<ChatResult | undefined> {
+    const clock = recordingClock();
+    const transport = mockTransport().push(() => {
+      clock.advance(options.loadMs);
+      return sseResponse(frames);
+    });
+    const provider = createOpenAIChatProvider({
+      spec: specOf('ollama'),
+      fetchImpl: transport.fetchImpl,
+      clock,
+    });
+
+    let result: ChatResult | undefined;
+    for await (const event of provider.stream(base)) {
+      if (event.type === 'done') result = event.result;
+      clock.advance(options.stepMs);
+    }
+    return result;
+  }
+
+  it('times generation from the first content frame, not from the request', async () => {
+    // The whole bug, in miniature: five seconds of weight loading and 100ms of
+    // generation. Charging the load to the rate is what reported a fast local
+    // model as a slow one.
+    const result = await drain(
+      [
+        textChunk('one'),
+        textChunk('two'),
+        usageChunk({ prompt_tokens: 10, completion_tokens: 2 }),
+      ],
+      { loadMs: 5000, stepMs: 100 },
+    );
+
+    expect(result?.generationMs).toBe(100);
+    expect(result?.firstTokenMs).toBe(5000);
+  });
+
+  it('opens a window for a reply that is nothing but a tool call', async () => {
+    // The case the whole placement rests on. Nothing is yielded for a
+    // tool-call frame, so a consumer counting deltas sees an instant response
+    // — while the provider streamed the JSON and charged completion tokens
+    // for it. Measured in the agent loop, those tokens would divide by a
+    // window they never entered.
+    //
+    // The assertion is that a window *exists*: `firstTokenMs` is only set by a
+    // frame this adapter judged to be content, so a guard that ignored
+    // `tool_calls` would report both fields undefined, exactly as the
+    // no-content case below does. The window itself is zero here only because
+    // this harness advances the clock on yielded events and these frames yield
+    // none — the multi-frame arithmetic is covered by the text case above.
+    const result = await drain(
+      [
+        toolCallChunk(0, { id: 'c1', name: 'read_file' }),
+        toolCallChunk(0, { argumentsJson: '{"path":"a"}' }),
+        finishChunk('tool_calls'),
+        usageChunk({ prompt_tokens: 10, completion_tokens: 12 }),
+      ],
+      { loadMs: 5000, stepMs: 100 },
+    );
+
+    expect(result?.firstTokenMs).toBe(5000);
+    expect(result?.generationMs).toBe(0);
+  });
+
+  it('reports nothing at all for a stream that carried no content', async () => {
+    // A role-only opening frame and a usage trailer are the two frames an
+    // OpenAI-compatible server sends around the content, and neither is
+    // content. Marking either would start the window on the prompt-eval wait —
+    // the same mistake one layer down. Absence here is what proves the guard:
+    // an unguarded mark would report `0` instead.
+    const result = await drain(
+      [
+        { choices: [{ index: 0, delta: { role: 'assistant' } }] },
+        usageChunk({ prompt_tokens: 10, completion_tokens: 0 }),
+      ],
+      { loadMs: 5000, stepMs: 100 },
+    );
+
+    expect(result?.generationMs).toBeUndefined();
+    expect(result?.firstTokenMs).toBeUndefined();
+  });
+
+  it('reports a zero window when the whole reply arrived in one frame', async () => {
+    // A real reading, not a missing one — and still not something to divide by,
+    // which is why `turnRate` treats it the same as absence.
+    const result = await drain(
+      [
+        textChunk('all of it'),
+        usageChunk({ prompt_tokens: 10, completion_tokens: 3 }),
+      ],
+      { loadMs: 5000, stepMs: 100 },
+    );
+
+    expect(result?.generationMs).toBe(0);
+    expect(result?.firstTokenMs).toBe(5000);
+  });
+
+  it('opens the window on reasoning, not only on prose', async () => {
+    // A model that thinks before it answers is generating throughout. Starting
+    // at the prose would price the reasoning at nothing.
+    const result = await drain(
+      [
+        reasoningChunk('hmm'),
+        textChunk('answer'),
+        usageChunk({ prompt_tokens: 10, completion_tokens: 5 }),
+      ],
+      { loadMs: 5000, stepMs: 100 },
+    );
+
+    expect(result?.generationMs).toBe(100);
+    expect(result?.firstTokenMs).toBe(5000);
+  });
+
+  it('leaves the timings off a non-streaming response', async () => {
+    // `chat` measures nothing, which is what makes the replay in
+    // `synthesiseStream` honest for free: it forwards this result untouched.
+    const transport = mockTransport().push(completion({ text: 'hi' }));
+    const provider = createOpenAIChatProvider({
+      spec: specOf('ollama'),
+      fetchImpl: transport.fetchImpl,
+      clock: recordingClock(),
+    });
+
+    const result = await provider.chat(base);
+
+    expect(result.generationMs).toBeUndefined();
+    expect(result.firstTokenMs).toBeUndefined();
   });
 });

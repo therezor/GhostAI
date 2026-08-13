@@ -917,6 +917,53 @@ export class AgentLoop {
     let errorMessage: string | undefined;
     let finalText = '';
     let usage: Usage = emptyUsage();
+    /**
+     * Time the model actually spent emitting tokens, summed over the requests
+     * that reported it.
+     *
+     * Accumulated beside `usage` and from the same `done` result, which is what
+     * keeps the two halves of a rate matched: a request that aborted or errored
+     * reports neither, so it contributes no tokens *and* no time. Measuring
+     * around the stream loop below instead would bank a partial window for
+     * tokens that were never counted.
+     *
+     * Fractional until the turn ends. `monotonic()` is `performance.now()`, and
+     * rounding per request would lose most of a millisecond each time across a
+     * turn that makes ten of them.
+     */
+    let generationMs = 0;
+    /**
+     * The completion tokens produced inside those windows, and only those.
+     *
+     * The other half of the pair, and not an optimisation —
+     * `usage.completionTokens` counts tokens this cannot time. Ollama emits a
+     * bare tool call as a *single* SSE frame however long its arguments are
+     * (measured: 225 tokens, one frame), so such a request reports a window of
+     * zero while charging for every token in it. Divided by somebody else's
+     * window those tokens read as free, and a turn with two tool calls reported
+     * 50.8 tok/s for a model that decodes at 19.
+     *
+     * So a request contributes to both sides or to neither. The cost is that
+     * the rate's numerator is no longer the `Out` figure beside it, which is
+     * why `generationMs` is plumbed but never given a row of its own: shown,
+     * it would invite exactly the division this avoids.
+     */
+    let generationTokens = 0;
+    /**
+     * Turn start to the first token anyone saw, once per turn.
+     *
+     * Measured from the *turn* rather than from the request that produced the
+     * token, because it sits beside `elapsedMs` and has to be readable against
+     * it: what a person means by "how long before anything appeared" includes
+     * the preamble, and — when the opening request measured nothing — the tool
+     * that ran before the request that finally did. Reporting that later
+     * request's own wait would say `50ms` on a turn somebody waited forty
+     * seconds through.
+     *
+     * Set once and never resummed. Only the first request pays the weight load,
+     * so accumulating would report a five-step turn as five cold starts.
+     */
+    let firstTokenMs: number | undefined;
     /** Set for exactly one iteration, then cleared. See `text-tool-call.ts`. */
     let correction: string | undefined;
     let correctedOnce = false;
@@ -1069,6 +1116,11 @@ export class AgentLoop {
         };
 
         let result: ChatResult | undefined;
+        // What the adapter reports is a duration from *its* request; what a
+        // reader wants is a duration from the turn. Captured here so the two
+        // can be added, which is also what makes the figure survive an opening
+        // request that measured nothing — see `firstTokenMs` above.
+        const requestedAt = this.clock.monotonic();
         try {
           for await (const event of this.chatProvider.stream(request)) {
             if (event.type === 'text') {
@@ -1129,6 +1181,24 @@ export class AgentLoop {
         }
 
         usage = accumulateUsage(usage, result.usage);
+        // Beside the usage it was measured against, and only ever from a
+        // result — see the declarations above for why the pairing is the point.
+        // Both sides together, and only when there is a window to speak of. A
+        // request whose content arrived in one frame measured a real `0`, and
+        // its tokens have to sit out with it — see `generationTokens` above.
+        if (result.generationMs !== undefined && result.generationMs > 0) {
+          generationMs += result.generationMs;
+          generationTokens += result.usage.completionTokens;
+        }
+        // Rebased onto the turn: everything before this request — the preamble,
+        // any earlier request, any tool that ran — is time the reader spent
+        // waiting for a first token, and a figure sitting next to `Elapsed` has
+        // to account for it. Adding a duration to an interval rather than
+        // subtracting two instants, so the adapter's clock and this one need
+        // not share an epoch.
+        if (firstTokenMs === undefined && result.firstTokenMs !== undefined) {
+          firstTokenMs = requestedAt - startedAt + result.firstTokenMs;
+        }
 
         if (result.message.toolCalls.length === 0) {
           lastSeq = this.store.append(sessionKey, result.message, {
@@ -1234,6 +1304,26 @@ export class AgentLoop {
     }
 
     const endedAtMs = this.clock.now();
+    /**
+     * The measured timings, rounded once and shared by both consumers below.
+     *
+     * Whole milliseconds because both schemas say `z.number().int()`, and a
+     * client that validates its frames would drop the one saying the turn
+     * ended. Built once rather than twice so the stored row and the event
+     * cannot come to disagree about the same turn.
+     *
+     * Omitted rather than zeroed when nothing was measured: absence is what
+     * separates "not measured" from "measured as zero", and `turnRate` needs
+     * that distinction to know when to fall back.
+     */
+    const timings = {
+      ...(generationMs > 0
+        ? { generationMs: Math.round(generationMs), generationTokens }
+        : {}),
+      ...(firstTokenMs === undefined
+        ? {}
+        : { firstTokenMs: Math.round(firstTokenMs) }),
+    };
     this.recordStats({
       turnId,
       sessionKey,
@@ -1250,6 +1340,7 @@ export class AgentLoop {
       iterations: iteration,
       stopReason,
       usage,
+      ...timings,
       ...(errorMessage === undefined ? {} : { error: errorMessage }),
     });
 
@@ -1260,6 +1351,7 @@ export class AgentLoop {
       usage,
       iterations: iteration,
       elapsedMs: endedAtMs - startedAtMs,
+      ...timings,
       firstSeq,
       lastSeq,
     };

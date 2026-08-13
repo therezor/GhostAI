@@ -429,22 +429,67 @@ describe('formatRate', () => {
   const usage = { promptTokens: 100, completionTokens: 250, totalTokens: 350 };
 
   it('reports completion tokens per second', () => {
-    expect(formatRate(usage, 1000)).toBe('250.0 tok/s');
+    expect(formatRate(usage, { elapsedMs: 1000 })).toBe('250.0 tok/s');
+  });
+
+  it('divides by generation time when the provider measured it', () => {
+    // The whole point of the change: the same turn, whose wall clock is ten
+    // seconds because the model spent nine of them loading its weights. The
+    // old divisor called this a 25 tok/s model; it is a 250 tok/s model that
+    // was not running for most of the turn.
+    expect(
+      formatRate(usage, {
+        generationMs: 1000,
+        generationTokens: 250,
+        elapsedMs: 10_000,
+      }),
+    ).toBe('250.0 tok/s');
+  });
+
+  it('divides only the tokens that were timed', () => {
+    // A turn that also made a bare tool call, which Ollama sends as a single
+    // frame — charged for, measured at zero, and so excluded from both sides.
+    expect(
+      formatRate(usage, {
+        generationMs: 1000,
+        generationTokens: 100,
+        elapsedMs: 10_000,
+      }),
+    ).toBe('100.0 tok/s');
+  });
+
+  it('falls back to the wall clock for a turn recorded before that', () => {
+    // Every row written by an older build, and any reply that arrived in a
+    // single frame. Blanking those would be a regression dressed as accuracy.
+    expect(
+      formatRate(usage, {
+        generationMs: 0,
+        generationTokens: 0,
+        elapsedMs: 1000,
+      }),
+    ).toBe('250.0 tok/s');
+    expect(
+      formatRate(usage, { generationMs: undefined, elapsedMs: 1000 }),
+    ).toBe('250.0 tok/s');
+    // Half a measurement is not a measurement.
+    expect(formatRate(usage, { generationMs: 1000, elapsedMs: 1000 })).toBe(
+      '250.0 tok/s',
+    );
   });
 
   it('reports nothing rather than dividing by an unmeasured turn', () => {
     // A turn that finished inside one millisecond is common on a scripted
     // provider and on a fast local model. A rate derived from that zero is a
     // number that looks measured and is not.
-    expect(formatRate(usage, 0)).toBeUndefined();
-    expect(formatRate(usage, undefined)).toBeUndefined();
+    expect(formatRate(usage, { elapsedMs: 0 })).toBeUndefined();
+    expect(formatRate(usage, {})).toBeUndefined();
   });
 
   it('reports nothing for a turn that produced no tokens', () => {
     expect(
       formatRate(
         { promptTokens: 10, completionTokens: 0, totalTokens: 10 },
-        500,
+        { elapsedMs: 500 },
       ),
     ).toBeUndefined();
   });

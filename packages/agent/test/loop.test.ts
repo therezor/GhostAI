@@ -30,6 +30,7 @@ import {
   subagentRunsOf,
   type ToolPermissions,
   ToolboxSchema,
+  turnRate,
 } from '@ghostwire/protocol';
 import { ProviderError, type ChatRequest } from '@ghostwire/providers';
 import {
@@ -2804,6 +2805,220 @@ describe('turn stats', () => {
     // seq 1 is the user message, seq 2 the answer.
     expect(end).toMatchObject({ firstSeq: 1, lastSeq: 2 });
     expect(end?.type === 'turn.end' && end.elapsedMs).toBeGreaterThanOrEqual(0);
+  });
+
+  describe('generation timing', () => {
+    /**
+     * The numbers behind the tokens/s figure, which used to divide by the whole
+     * turn — model load, tool calls, approval waits and all — and so reported a
+     * fast local model as a slow one whenever its weights were cold.
+     *
+     * The measurement itself belongs to the wire adapter, which is the only
+     * scope that sees a tool-call delta; `openai-chat.test.ts` covers it
+     * against a real SSE stream. What is asserted here is the arithmetic the
+     * loop owes on top: one figure summed, the other taken once.
+     */
+    const timed = (
+      generationMs: number,
+      firstTokenMs: number,
+    ): ScriptedTurn => ({
+      deltas: ['ok'],
+      usage: USAGE,
+      generationMs,
+      firstTokenMs,
+    });
+
+    const endOf = (
+      events: readonly AgentEvent[],
+    ): Extract<AgentEvent, { type: 'turn.end' }> | undefined => {
+      const end = events.find((event) => event.type === 'turn.end');
+      return end?.type === 'turn.end' ? end : undefined;
+    };
+
+    it('sums generation time and keeps the first wait', async () => {
+      // Two requests, and only the first paid the weight load. Summing the
+      // wait as well would report a five-step turn as five cold starts.
+      const { loop } = harness({
+        turns: [
+          {
+            ...timed(400, 9000),
+            toolCalls: [toolCall('c1', 'echo', { text: 'a' })],
+          },
+          timed(600, 50),
+        ],
+      });
+
+      const { events } = await runTurn(loop, {
+        sessionKey: SESSION,
+        content: 'hello',
+      });
+
+      expect(endOf(events)).toMatchObject({
+        generationMs: 1000,
+        generationTokens: USAGE.completionTokens * 2,
+        firstTokenMs: 9000,
+      });
+    });
+
+    it('leaves out the tokens of a reply that arrived in one frame', async () => {
+      // The correction a real Ollama forced. It emits a bare tool call as a
+      // *single* SSE frame however long the arguments are — 225 tokens in one
+      // frame, measured — so such a request reports a window of zero while
+      // still being charged for every token. Counted in the numerator against
+      // another request's window, a two-tool turn read 50.8 tok/s for a model
+      // that decodes at 19.
+      const { loop } = harness({
+        turns: [
+          {
+            // A bare tool call: charged for, and unmeasurable.
+            usage: {
+              promptTokens: 10,
+              completionTokens: 225,
+              totalTokens: 235,
+            },
+            generationMs: 0,
+            firstTokenMs: 3000,
+            toolCalls: [toolCall('c1', 'echo', { text: 'a' })],
+          },
+          timed(1000, 50),
+        ],
+      });
+
+      const { events } = await runTurn(loop, {
+        sessionKey: SESSION,
+        content: 'hello',
+      });
+      const end = endOf(events);
+
+      // The turn was charged for 225 + 20 tokens; only 20 of them were timed.
+      expect(end?.usage?.completionTokens).toBe(225 + USAGE.completionTokens);
+      expect(end).toMatchObject({
+        generationMs: 1000,
+        generationTokens: USAGE.completionTokens,
+      });
+      // 20 timed tokens over one timed second. Dividing all 245 by the same
+      // second — what the numerator used to be — would report 245 tok/s.
+      expect(turnRate({ ...USAGE }, { ...end })).toBe(20);
+    });
+
+    it('counts the wait before the request that finally measured one', async () => {
+      // An opening request that measured nothing — a single-frame reply, or a
+      // stream replayed after a parse failure — must not cost the turn its
+      // first-token figure altogether. But reporting the *later* request's own
+      // wait would be worse than reporting none: the eight seconds spent before
+      // it are exactly what the reader sat through, and a row saying `50ms`
+      // beside an `Elapsed` of eight seconds is a row that contradicts itself.
+      const clock = manualClock();
+      const { loop } = harness({
+        clock,
+        turns: [
+          {
+            deltas: ['ok'],
+            usage: USAGE,
+            toolCalls: [toolCall('c1', 'echo', { text: 'a' })],
+            // Time passing before the second request is issued.
+            onStream: () => {
+              clock.advance(8000);
+            },
+          },
+          timed(600, 50),
+        ],
+      });
+
+      const { events } = await runTurn(loop, {
+        sessionKey: SESSION,
+        content: 'hello',
+      });
+
+      // 8000 before the second request, plus the 50 it measured for itself.
+      expect(endOf(events)).toMatchObject({
+        generationMs: 600,
+        firstTokenMs: 8050,
+      });
+    });
+
+    it('omits both when no request could measure them', async () => {
+      // Every turn a build before this one recorded. Absence is what tells the
+      // rate to fall back to the wall clock rather than report nothing.
+      const { loop } = harness({ turns: [{ deltas: ['ok'], usage: USAGE }] });
+
+      const { events } = await runTurn(loop, {
+        sessionKey: SESSION,
+        content: 'hello',
+      });
+      const end = endOf(events);
+
+      expect(end?.generationMs).toBeUndefined();
+      expect(end?.firstTokenMs).toBeUndefined();
+    });
+
+    it('banks nothing for a request that failed', async () => {
+      // The pairing the whole placement rests on. A request that throws reports
+      // no usage, so `usage` never grows for it — and it must not grow the
+      // window either, or the turn divides real seconds by tokens it never
+      // counted and reports the model as slower than it is.
+      const { loop } = harness({
+        turns: [
+          {
+            ...timed(400, 9000),
+            toolCalls: [toolCall('c1', 'echo', { text: 'a' })],
+          },
+          { error: new Error('upstream died') },
+        ],
+      });
+
+      const { events } = await runTurn(loop, {
+        sessionKey: SESSION,
+        content: 'hello',
+      });
+
+      expect(endOf(events)).toMatchObject({
+        generationMs: 400,
+        firstTokenMs: 9000,
+      });
+    });
+
+    it('rounds to whole milliseconds, which the wire requires', async () => {
+      // `performance.now()` returns fractions and both schemas say
+      // `z.number().int()`. A client that validates its frames drops the one
+      // saying the turn ended, and the turn appears to hang forever.
+      const { loop } = harness({
+        turns: [
+          {
+            ...timed(400.4, 9000.6),
+            toolCalls: [toolCall('c1', 'echo', { text: 'a' })],
+          },
+          timed(600.3, 50.2),
+        ],
+      });
+
+      const { events } = await runTurn(loop, {
+        sessionKey: SESSION,
+        content: 'hello',
+      });
+
+      expect(endOf(events)).toMatchObject({
+        generationMs: 1001,
+        firstTokenMs: 9001,
+      });
+    });
+
+    it('records the same figures it reported', async () => {
+      // Built once and spread into both, so the stored row and the live event
+      // cannot come to disagree about the same turn.
+      const { loop, store } = harness({ turns: [timed(400, 9000)] });
+
+      const { events } = await runTurn(loop, {
+        sessionKey: SESSION,
+        content: 'hello',
+      });
+      const end = endOf(events);
+      const row = store.turnStats(SESSION)[0];
+
+      expect(row?.generationMs).toBe(end?.generationMs);
+      expect(row?.firstTokenMs).toBe(end?.firstTokenMs);
+      expect(row?.generationMs).toBe(400);
+    });
   });
 
   it('records why a failed turn failed', async () => {

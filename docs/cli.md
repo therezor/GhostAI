@@ -115,6 +115,14 @@ cache, so what these drop is always a suffix — see
 `/context` prints the same measurement the browser's context inspector draws and
 `GET /api/sessions/:key/context` returns, so all three agree.
 
+The tokens/s figure divides by the time the model spent generating, not by the
+turn's wall clock — so a cold local model that spent thirty seconds loading its
+weights reports the speed it actually decodes at rather than a thirtieth of it.
+Turns recorded before that was measured, and replies that arrived in a single
+frame, still divide by the wall clock and read as they always did. The browser's
+turn-info popover breaks the same turn down further, including the wait before
+the first token.
+
 **What a turn shows**
 
 | Command                     | What it does                            |

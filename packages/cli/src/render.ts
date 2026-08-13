@@ -37,8 +37,9 @@ import type {
 } from '@ghostwire/agent';
 import type { TurnStatsRecord } from '@ghostwire/core';
 import {
-  tokensPerSecond,
+  turnRate,
   type ToolRisk,
+  type TurnTiming,
   type Usage,
 } from '@ghostwire/protocol';
 import { stripAnsi, type Palette } from '@ghostwire/tui';
@@ -171,16 +172,18 @@ export function formatCount(value: number): string {
 /**
  * Completion tokens per second, as a phrase, or nothing.
  *
- * `tokensPerSecond` reports `undefined` for a turn that produced no tokens or
- * was measured at zero milliseconds, and both stay unreported here: a rate
- * derived from a zero is a number that looks measured and is not.
+ * Takes the whole timing bag rather than one number because the divisor is a
+ * choice — generation time where a provider reported it, whole-turn wall clock
+ * where it did not — and `turnRate` owns that choice for both this and the
+ * browser. It reports `undefined` for a turn that produced no tokens or was
+ * measured at zero milliseconds, and that stays unreported here: a rate derived
+ * from a zero is a number that looks measured and is not.
  */
 export function formatRate(
   usage: Usage,
-  elapsedMs: number | undefined,
+  timing: TurnTiming,
 ): string | undefined {
-  if (elapsedMs === undefined) return undefined;
-  const rate = tokensPerSecond(usage, elapsedMs);
+  const rate = turnRate(usage, timing);
   return rate === undefined ? undefined : `${rate.toFixed(1)} tok/s`;
 }
 
@@ -352,12 +355,9 @@ export class TurnRenderer {
         this.error(event.code, event.message, event.retryable);
         return;
       case 'turn.end':
-        this.turnEnd(
-          event.stopReason,
-          event.iterations,
-          event.usage,
-          event.elapsedMs,
-        );
+        // The event itself is the timing bag — it structurally satisfies
+        // `TurnTiming`, so there is nothing to assemble.
+        this.turnEnd(event.stopReason, event.iterations, event.usage, event);
         return;
     }
   }
@@ -553,7 +553,7 @@ export class TurnRenderer {
     stopReason: string,
     iterations: number,
     usage: Usage | undefined,
-    elapsedMs: number | undefined,
+    timing: TurnTiming,
   ): void {
     this.break();
     this.mode = 'idle';
@@ -570,8 +570,10 @@ export class TurnRenderer {
     if (usage !== undefined && usage.totalTokens > 0) {
       parts.push(formatUsage(usage));
     }
-    if (elapsedMs !== undefined) parts.push(formatDuration(elapsedMs));
-    const rate = usage === undefined ? undefined : formatRate(usage, elapsedMs);
+    if (timing.elapsedMs !== undefined) {
+      parts.push(formatDuration(timing.elapsedMs));
+    }
+    const rate = usage === undefined ? undefined : formatRate(usage, timing);
     if (rate !== undefined) parts.push(rate);
     this.line(this.c.dim(`  · ${parts.join(' · ')}`));
   }
@@ -592,7 +594,11 @@ export class TurnRenderer {
         formatUsage(row.usage),
         formatDuration(elapsedMs),
       ];
-      const rate = formatRate(row.usage, elapsedMs);
+      const rate = formatRate(row.usage, {
+        generationMs: row.generationMs,
+        generationTokens: row.generationTokens,
+        elapsedMs,
+      });
       if (rate !== undefined) parts.push(rate);
       this.line(this.c.dim(`  · ${parts.join(' · ')}`));
     }

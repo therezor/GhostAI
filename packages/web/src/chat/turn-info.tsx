@@ -8,9 +8,10 @@
  * which is exactly why the server persists `turn_stats` — so those are fetched
  * once per conversation and looked up by turn id.
  *
- * `tokensPerSecond` comes from `@ghostwire/protocol` rather than being computed
- * here, because the terminal reports the same figure and two implementations of
- * one division eventually disagree about what to do with a zero.
+ * `turnRate` comes from `@ghostwire/protocol` rather than being computed here,
+ * because the terminal reports the same figure and two implementations of one
+ * division eventually disagree about what to do with a zero — or, now, about
+ * which of two divisors to prefer.
  */
 
 import { useQuery } from '@tanstack/react-query';
@@ -20,7 +21,7 @@ import { useTranslation } from 'react-i18next';
 
 import {
   DEFAULT_WORKSPACE_ID,
-  tokensPerSecond,
+  turnRate,
   type StopReason,
   type Usage,
 } from '@ghostwire/protocol';
@@ -132,13 +133,23 @@ function TurnInfoBody({
     (row === undefined
       ? undefined
       : Math.max(0, row.endedAtMs - row.startedAtMs));
+  // The live turn first and the stored row second, the same fall-through every
+  // field above uses — which is what makes the panel identical before and after
+  // a reload.
+  const generationMs = turn.generationMs ?? row?.generationMs;
+  const generationTokens = turn.generationTokens ?? row?.generationTokens;
+  const firstTokenMs = turn.firstTokenMs ?? row?.firstTokenMs;
 
   if (usage === undefined) {
     return <p className="turn-info__empty">{t('turn.none')}</p>;
   }
 
-  const rate =
-    elapsedMs === undefined ? undefined : tokensPerSecond(usage, elapsedMs);
+  // `generationMs` and `generationTokens` are plumbed but never given rows of
+  // their own. The rate's numerator is deliberately not the `Out` figure above
+  // — a request whose reply arrived in one frame contributes to neither — and
+  // showing the pair would invite a reader to divide `Out` by it and read the
+  // mismatch as a bug.
+  const rate = turnRate(usage, { generationMs, generationTokens, elapsedMs });
 
   return (
     <dl className="turn-info">
@@ -167,6 +178,16 @@ function TurnInfoBody({
       )}
       {elapsedMs !== undefined && (
         <Row label={t('turn.elapsed')} value={formatDuration(elapsedMs)} />
+      )}
+      {/* What the reader waited through before anything appeared. On a local
+          model loading its weights this is most of the turn, and this is the
+          row that says so — the rate no longer does, because the rate no
+          longer divides by it. */}
+      {firstTokenMs !== undefined && (
+        <Row
+          label={t('turn.firstToken')}
+          value={formatDuration(firstTokenMs)}
+        />
       )}
       {/* Absent rather than zero when there is nothing to divide: a turn that
           produced no tokens has no rate, and one measured at zero milliseconds

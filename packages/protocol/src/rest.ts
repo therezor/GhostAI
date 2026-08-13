@@ -574,6 +574,18 @@ export const TurnStatsSchema = z.object({
   iterations: z.number().int().nonnegative().default(0),
   stopReason: StopReasonSchema,
   usage: UsageSchema,
+  /**
+   * What the turn spent generating, and how long it waited to start.
+   *
+   * Both absent on any turn recorded before they were measured, which is what
+   * `turnRate`'s fallback to the wall clock exists for. Named here as well as
+   * on `turn.end` because this is the only copy a reloaded page can reach —
+   * the live event is gone the moment it is delivered.
+   */
+  generationMs: z.number().int().nonnegative().optional(),
+  /** The tokens produced inside `generationMs`, and only those. */
+  generationTokens: z.number().int().nonnegative().optional(),
+  firstTokenMs: z.number().int().nonnegative().optional(),
   /** Why it stopped, when `stopReason` is `error`. */
   error: z.string().optional(),
 });

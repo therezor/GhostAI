@@ -453,8 +453,33 @@ export const TurnEndEventSchema = z.object({
   stopReason: StopReasonSchema,
   usage: UsageSchema.optional(),
   iterations: z.number().int().nonnegative().default(0),
-  /** Wall time from the first append to this event — the divisor for tokens/s. */
+  /**
+   * Wall time from the first append to this event.
+   *
+   * Deliberately *not* the divisor for tokens/s, though it used to be. It spans
+   * the model load, prompt eval, every tool call and every approval wait, and
+   * dividing tokens by all of it reports a generation speed that mostly
+   * measures things that were not generation. `generationMs` is the divisor;
+   * this is still what a person means by "how long did that take", and
+   * `turnRate` falls back to it when there is no window.
+   */
   elapsedMs: z.number().int().nonnegative().optional(),
+  /**
+   * Time the model spent emitting tokens, summed over the requests this turn
+   * made. Absent when nothing could be measured — see `turnRate`.
+   */
+  generationMs: z.number().int().nonnegative().optional(),
+  /**
+   * The completion tokens produced inside `generationMs`. Deliberately not the
+   * turn's `usage.completionTokens` — see `turnRate`.
+   */
+  generationTokens: z.number().int().nonnegative().optional(),
+  /**
+   * Turn start to the first token anyone saw: the preamble, queueing, weight
+   * loading and prompt eval. Measured from the turn rather than from the
+   * request, so it can be read against `elapsedMs`.
+   */
+  firstTokenMs: z.number().int().nonnegative().optional(),
   /**
    * The `seq` of the user message that started this turn, and of the last
    * message it appended.

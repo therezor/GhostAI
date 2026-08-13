@@ -1093,23 +1093,65 @@ describe('turn stats', () => {
     // `CREATE TABLE IF NOT EXISTS` does nothing to a table that already exists,
     // so a column added to the schema reaches a fresh install and no other.
     //
-    // The real schema with the two newest columns dropped back off it, rather
+    // The real schema with every migrated column dropped back off it, rather
     // than a hand-written stub: a stub would drift from the thing it stands in
-    // for, and this is exactly the shape an older build left behind.
+    // for, and this is exactly the shape an older build left behind. Each new
+    // entry in the ledger belongs in this list too — the whole failure mode is
+    // a column that reaches `CREATE TABLE` and never reaches `ALTER`.
     const database = new DatabaseSync(':memory:');
     new SessionStore({ database, clock: fixedClock }).close();
     database.exec('ALTER TABLE turn_stats DROP COLUMN workspace_id');
     database.exec('ALTER TABLE turn_stats DROP COLUMN error');
+    database.exec('ALTER TABLE turn_stats DROP COLUMN generation_ms');
+    database.exec('ALTER TABLE turn_stats DROP COLUMN generation_tokens');
+    database.exec('ALTER TABLE turn_stats DROP COLUMN first_token_ms');
 
     const store = new SessionStore({ database, clock: fixedClock });
     store.ensureSession('s');
     // Would throw `no such column` if the ledger had not run — which is what
     // the `error` column silently did before it was in the list.
-    store.recordTurnStats(stats('t1', { workspaceId: 'research' }));
+    store.recordTurnStats(
+      stats('t1', {
+        workspaceId: 'research',
+        generationMs: 400,
+        generationTokens: 88,
+        firstTokenMs: 9000,
+      }),
+    );
 
-    expect(store.turnStats('s')[0]?.workspaceId).toBe('research');
+    const row = store.turnStats('s')[0];
+    expect(row?.workspaceId).toBe('research');
+    expect(row?.generationMs).toBe(400);
+    expect(row?.generationTokens).toBe(88);
+    expect(row?.firstTokenMs).toBe(9000);
     store.close();
     database.close();
+  });
+
+  it('leaves the timings absent rather than zero when nothing measured them', () => {
+    // The distinction the rate depends on: absent means "fall back to the wall
+    // clock", and a zero would mean "this model generated nothing per second".
+    const store = makeStore();
+    store.ensureSession('s');
+    store.recordTurnStats(stats('t1'));
+
+    const row = store.turnStats('s')[0];
+    expect(row?.generationMs).toBeUndefined();
+    expect(row?.generationTokens).toBeUndefined();
+    expect(row?.firstTokenMs).toBeUndefined();
+    store.close();
+  });
+
+  it('overwrites the timings when a turn ends twice', () => {
+    // The upsert clause names every column or it silently keeps the first
+    // write's value — and the hub's failure path really does end a turn twice.
+    const store = makeStore();
+    store.ensureSession('s');
+    store.recordTurnStats(stats('t1', { generationMs: 400 }));
+    store.recordTurnStats(stats('t1', { generationMs: 900 }));
+
+    expect(store.turnStats('s')[0]?.generationMs).toBe(900);
+    store.close();
   });
 
   it('records the workspace the turn ran in, not where the session ends up', () => {

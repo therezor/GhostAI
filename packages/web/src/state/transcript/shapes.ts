@@ -209,8 +209,19 @@ export interface TurnItem {
   readonly stopReason: StopReason | undefined;
   readonly usage: Usage | undefined;
   readonly iterations: number;
-  /** Wall time for the whole turn — the divisor behind the tokens/s figure. */
+  /** Wall time for the whole turn, load and tools and approvals included. */
   readonly elapsedMs: number | undefined;
+  /**
+   * Time the model spent emitting tokens, and how long it waited to start.
+   *
+   * `generationMs` is the divisor behind the tokens/s figure — `elapsedMs` was,
+   * and reported a cold local model at a fraction of its real speed because the
+   * weight load sat in it. Both undefined on a turn nothing could measure.
+   */
+  readonly generationMs: number | undefined;
+  /** The tokens produced inside `generationMs`, and only those. */
+  readonly generationTokens: number | undefined;
+  readonly firstTokenMs: number | undefined;
   /**
    * The seqs this turn spans: the user message that started it, and the last
    * message it wrote. `firstSeq` is what Regenerate re-runs from and what
