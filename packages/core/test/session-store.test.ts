@@ -1098,6 +1098,11 @@ describe('turn stats', () => {
     // for, and this is exactly the shape an older build left behind. Each new
     // entry in the ledger belongs in this list too — the whole failure mode is
     // a column that reaches `CREATE TABLE` and never reaches `ALTER`.
+    //
+    // This is also what keeps comments out of the schema's column lists: DROP
+    // COLUMN rewrites the stored CREATE TABLE text by offset, and on the SQLite
+    // node 22 bundles a comment in the list makes the rewrite unparseable —
+    // green here on a newer node and red in CI.
     const database = new DatabaseSync(':memory:');
     new SessionStore({ database, clock: fixedClock }).close();
     database.exec('ALTER TABLE turn_stats DROP COLUMN workspace_id');

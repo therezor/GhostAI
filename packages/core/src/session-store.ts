@@ -314,15 +314,23 @@ export interface TurnStatsRecord {
 }
 
 const SCHEMA = `
+-- Nothing below puts a comment inside a column list, and that is a rule rather
+-- than a habit: SQLite stores this text verbatim in sqlite_master, and
+-- ALTER TABLE DROP COLUMN rewrites it by byte offset. On SQLite 3.51 — what
+-- node 22 bundles, which \`engines\` still supports — a comment in the list can
+-- make that rewrite produce SQL that no longer parses, and the table's schema
+-- is then unreadable. Each column's rationale therefore sits above its table.
+--
+-- \`sessions.workspace_id\` has no \`REFERENCES workspaces(id)\`: the two tables
+-- are created by two different stores in an order nothing guarantees. The
+-- relationship is held in code instead, which is also what lets a *detached*
+-- workspace's sessions keep resolving to their own files rather than falling
+-- into another's.
 CREATE TABLE IF NOT EXISTS sessions (
   key                   TEXT    PRIMARY KEY,
   title                 TEXT    NOT NULL DEFAULT '',
   origin                TEXT    NOT NULL DEFAULT 'web',
   agent_id              TEXT,
-  -- No \`REFERENCES workspaces(id)\`: the two tables are created by two
-  -- different stores in an order nothing guarantees. The relationship is held
-  -- in code instead, which is also what lets a *detached* workspace's sessions
-  -- keep resolving to their own files rather than falling into another's.
   workspace_id          TEXT    NOT NULL DEFAULT '${DEFAULT_WORKSPACE_ID}',
   created_at_ms         INTEGER NOT NULL,
   updated_at_ms         INTEGER NOT NULL,
@@ -362,13 +370,23 @@ CREATE TABLE IF NOT EXISTS messages (
 -- rather than as a message row, because everything in messages is replayed into
 -- every later provider request: an error appended to history would fail its way
 -- into the prompt forever. NULL for every turn that did not fail.
+--
+-- workspace_id is where this turn actually ran, not where the session is now. A
+-- session can be moved between workspaces mid-conversation, so the two
+-- genuinely differ and only this column can say which files a given turn could
+-- reach.
+--
+-- generation_ms is what the model spent generating and first_token_ms is how
+-- long the turn waited to start. NULL on every turn recorded before these were
+-- measured, which is what lets a rate fall back to the wall clock rather than
+-- reporting nothing for old rows. generation_tokens is the tokens produced
+-- inside generation_ms, which is not the same as completion_tokens: a reply
+-- that arrives in one frame is charged for its tokens and measured at zero, so
+-- it contributes to neither.
 CREATE TABLE IF NOT EXISTS turn_stats (
   turn_id           TEXT    PRIMARY KEY,
   session_key       TEXT    NOT NULL REFERENCES sessions(key) ON DELETE CASCADE,
   agent_id          TEXT    NOT NULL DEFAULT '',
-  -- Where this turn actually ran, not where the session is now. A session can
-  -- be moved between workspaces mid-conversation, so the two genuinely differ
-  -- and only this column can say which files a given turn could reach.
   workspace_id      TEXT    NOT NULL DEFAULT '${DEFAULT_WORKSPACE_ID}',
   provider          TEXT    NOT NULL DEFAULT '',
   model             TEXT    NOT NULL DEFAULT '',
@@ -381,13 +399,7 @@ CREATE TABLE IF NOT EXISTS turn_stats (
   total_tokens      INTEGER NOT NULL DEFAULT 0,
   cached_tokens     INTEGER,
   reasoning_tokens  INTEGER,
-  -- What the model spent generating, and how long it waited to start. NULL on
-  -- every turn recorded before these were measured, which is what lets a rate
-  -- fall back to the wall clock rather than reporting nothing for old rows.
   generation_ms     INTEGER,
-  -- The tokens produced inside generation_ms, which is not the same as
-  -- completion_tokens: a reply that arrives in one frame is charged for its
-  -- tokens and measured at zero, so it contributes to neither.
   generation_tokens INTEGER,
   first_token_ms    INTEGER,
   error             TEXT
