@@ -56,8 +56,14 @@ never drops a running turn.
   progress ticks for slow calls, and a flag when output was truncated.
 - **Approval prompts** show the arguments before the call runs, and take Approve once /
   this session / always, or Deny. See [Tools & permissions](tools.md#answering).
-- **Subagent cards** nest inside the call that started them, and can be reopened after a
-  reload.
+- **Subagent cards** nest inside the call that started them, and survive a reload
+  _during_ the delegation with everything the subagent had already written. The replay
+  ring cannot do that on its own — it holds 512 frames and a subagent emits one per token
+  — so the server keeps the running turn whole beside it and replays that instead,
+  including every nested step; see [API](api.md#sequencing-and-replay). The bound is
+  `server.turnLogMaxBytes`, and a turn that outgrows it falls back to picking the run up
+  from the moment the tab reattaches. A second tab, which has no cursor and so asks for no
+  replay at all, does that too, and fills in the rest when the turn ends.
 - **Notices** badge prompt injection, degraded requests, provider fallback and truncated
   history.
 - **Turn info** — tokens in and out, cached tokens, elapsed, time to first token,
@@ -139,7 +145,16 @@ definitions, session — with overflow stated in words rather than a clipped bar
 the same measurement the CLI's `/context` prints and `GET /api/sessions/:key/context`
 returns, so all three agree.
 
-This is the screen that answers "why did it forget what I said".
+**It moves while a turn runs.** The loop reports the figure at the end of every tool
+iteration on a `context.usage` frame, and the strip takes the numbers straight off it
+rather than refetching — the response carries the whole system prompt, every tool
+definition and every windowed message, and pulling that back forty times in one turn to
+move four integers is not a trade worth making. Opening the panel re-measures, because
+that is the moment anyone reads the lists rather than the total.
+
+This is the screen that answers "why did it forget what I said", and it used to answer it
+one turn late: a twenty-step turn appends most of a window before it ends, which is
+exactly when the question gets asked.
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="screenshots/context.light.png">

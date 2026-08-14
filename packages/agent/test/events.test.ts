@@ -95,6 +95,20 @@ const SAMPLES: Record<AgentEventType, AgentEvent> = {
     depth: 1,
     event: { type: 'assistant.delta', turnId: 'turn-2', text: 'Found it' },
   },
+  'context.usage': {
+    type: 'context.usage',
+    // No `turnId`, unlike everything above it: this describes the conversation
+    // rather than the turn that grew it.
+    sessionKey: 'web:1',
+    estimatedTokens: 2631,
+    contextWindowTokens: 65_536,
+    breakdown: {
+      systemPrompt: 1840,
+      tools: 560,
+      messages: 201,
+      runtimeBlock: 30,
+    },
+  },
 };
 
 describe('AgentEvent', () => {

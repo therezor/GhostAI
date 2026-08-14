@@ -50,8 +50,11 @@ export function mergeStoredHistory(
   subagentRuns: Readonly<Record<string, SubagentRunRef>> = {},
   failures: Readonly<Record<string, string>> = {},
 ): Transcript {
-  const base = withLiveRiskBands(
-    fromStoredMessages(messages, subagentRuns, failures),
+  const base = withAuthoritativeTurns(
+    withLiveRiskBands(
+      fromStoredMessages(messages, subagentRuns, failures),
+      existing,
+    ),
     existing,
   );
 
@@ -89,6 +92,44 @@ export function mergeStoredHistory(
 }
 
 /**
+ * The one turn where the socket outranks storage, put back whole.
+ *
+ * Every other item in the merge takes storage as the base, and that is the right
+ * default: a stored row is finished and a live one is whatever this tab has
+ * watched, so preferring the live copy in general would trade history for a
+ * tail. The exception is a turn the server has just replayed in full — see
+ * `TurnItem.authoritative`. There the live copy is the superset: it holds the
+ * iteration that has not been written yet, and it holds the nested subagent runs
+ * that never enter this session's history at all, since a delegation's steps are
+ * rows in the *child's* session.
+ *
+ * A whole-item replacement rather than a field-by-field merge, and that is the
+ * point rather than a shortcut. The card a delegation renders under hangs off a
+ * `ToolPart` that storage has no row for until the whole iteration finishes —
+ * `withLiveRiskBands` above can only copy a live `subagent` onto a stored tool
+ * part that already exists, so a merge would drop exactly the thing being
+ * rescued. Replacing the item leaves that function inert for this turn, which is
+ * the correct amount of work for it to do here.
+ *
+ * The stored item's *position* is kept: the tail it came from is what puts the
+ * turn after the question that started it.
+ */
+function withAuthoritativeTurns(
+  base: Transcript,
+  existing: Transcript,
+): Transcript {
+  const live = new Map<string, TranscriptItem>();
+  for (const item of existing) {
+    if (item.kind === 'turn' && item.authoritative) live.set(item.id, item);
+  }
+  if (live.size === 0) return base;
+
+  return base.map((item) =>
+    item.kind === 'turn' ? (live.get(item.id) ?? item) : item,
+  );
+}
+
+/**
  * Puts back the things storage cannot remember.
  *
  * Two of them, and they fail the same way — a call this tab *watched happen* is
@@ -107,6 +148,13 @@ export function mergeStoredHistory(
  *
  * Keyed on the call id, which the socket and the row genuinely share — unlike
  * the message id, which is why `mergeStoredHistory` needs a second key at all.
+ *
+ * The subagent case has one exception, and it is the whole reason
+ * `SubagentPart.partial` exists. A client that reloaded mid-delegation holds the
+ * *tail* of a run — right to render while it streams, wrong to preserve. Storage
+ * can supply the whole thing by then, so a partial card yields to the rebuild's
+ * `unloadedSubagent` ref and the card goes back to offering the full fetch.
+ * Carrying it over instead would freeze the half this tab happened to catch.
  */
 function withLiveRiskBands(base: Transcript, existing: Transcript): Transcript {
   const live = new Map<string, ToolPart>();
@@ -126,7 +174,18 @@ function withLiveRiskBands(base: Transcript, existing: Transcript): Transcript {
         if (part.kind !== 'tool') return part;
         const watched = live.get(part.id);
         if (watched === undefined) return part;
-        return { ...part, risk: watched.risk, subagent: watched.subagent };
+        // Yielding to storage is only an improvement when storage has something
+        // to yield to. `rememberSubagentRun` writes the parent's pointer
+        // best-effort and swallows its failures, so `subagentRuns` can be
+        // missing an entry for a run that genuinely happened — and swapping a
+        // half card for nothing at all would make the run vanish at the moment
+        // it finished.
+        const stored = part.subagent;
+        const subagent =
+          watched.subagent?.partial === true && stored !== undefined
+            ? stored
+            : watched.subagent;
+        return { ...part, risk: watched.risk, subagent };
       }),
     };
   });

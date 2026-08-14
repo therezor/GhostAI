@@ -30,6 +30,7 @@ const RUN: SubagentPart = {
   elapsedMs: undefined,
   done: false,
   loaded: true,
+  partial: false,
 };
 
 const DELEGATION: ToolPart = {
@@ -225,6 +226,77 @@ describe('a card that delegated', () => {
     // The task is already the card's argument; repeating it inside the run
     // would read as though the subagent had been asked twice.
     expect(screen.queryByText('the task')).not.toBeInTheDocument();
+  });
+
+  it('offers the fetch again for a delegation the subagent made itself', async () => {
+    // The recursion used to stop here. `subagentRuns` came back with the fetch
+    // and was thrown away, so a subagent that delegated rebuilt its inner call
+    // as a bare tool card — no run, and no way to ask for one.
+    stubApi({
+      '/api/sessions/sub-1/messages': [
+        200,
+        {
+          sessionKey: 'sub-1',
+          subagentRuns: {
+            m1: {
+              sessionKey: 'sub-2',
+              agentId: 'summariser',
+              label: 'Summariser',
+            },
+          },
+          messages: [
+            {
+              id: 'r1',
+              sessionKey: 'sub-1',
+              seq: 1,
+              createdAtMs: 0,
+              turnId: 't2',
+              message: {
+                role: 'assistant',
+                content: [],
+                toolCalls: [
+                  { id: 'm1', name: 'ask_summariser', argumentsJson: '{}' },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+      '/api/sessions/sub-2/messages': [
+        200,
+        {
+          sessionKey: 'sub-2',
+          subagentRuns: {},
+          messages: [
+            {
+              id: 'r2',
+              sessionKey: 'sub-2',
+              seq: 1,
+              createdAtMs: 0,
+              turnId: 't3',
+              message: {
+                role: 'assistant',
+                content: [{ type: 'text', text: 'Short.' }],
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    card({ status: 'ok' }, { done: true, loaded: false });
+    await open();
+
+    // The inner card is a tool card like any other, so it opens on its own.
+    // That it *has* something to open is the assertion.
+    await userEvent.click(
+      await screen.findByRole('button', { name: /ask_summariser/ }),
+    );
+
+    expect(
+      await screen.findByRole('region', { name: 'Subagent run: Summariser' }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText('Short.')).toBeInTheDocument();
   });
 
   it("says so when the subagent's session is gone", async () => {

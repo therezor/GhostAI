@@ -55,6 +55,7 @@ import {
   type ApprovalGate,
   type ApprovalRequest,
 } from '#src/approval.js';
+import { describeContext } from '#src/context.js';
 import type { AgentEvent, SubagentEvent } from '#src/events.js';
 import { CANCELLED_TOOL_RESULT } from '#src/dispatch.js';
 import {
@@ -717,6 +718,8 @@ describe('AgentLoop', () => {
       'turn.start',
       'tool.call',
       'tool.result',
+      // After the results are written, because that is what grew the history.
+      'context.usage',
       'assistant.delta',
       'turn.end',
     ]);
@@ -1430,6 +1433,7 @@ describe('AgentLoop', () => {
       'tool.call',
       'tool.result',
       'notice',
+      'context.usage',
       'assistant.delta',
       'turn.end',
     ]);
@@ -1674,6 +1678,7 @@ describe('AgentLoop approvals', () => {
       'tool.call',
       'tool.approvalRequest',
       'tool.result',
+      'context.usage',
       'assistant.delta',
       'turn.end',
     ]);
@@ -1741,6 +1746,7 @@ describe('AgentLoop approvals', () => {
       'tool.approvalRequest',
       'notice',
       'tool.result',
+      'context.usage',
       'assistant.delta',
       'turn.end',
     ]);
@@ -1805,6 +1811,9 @@ describe('AgentLoop approvals', () => {
       'tool.result',
       'tool.call',
       'tool.result',
+      // One per iteration, not one per call: the two results are written in a
+      // single transaction, so the history grows once.
+      'context.usage',
       'assistant.delta',
       'turn.end',
     ]);
@@ -3388,6 +3397,70 @@ describe('subagents', () => {
       // nothing about what made it; `sessions.origin` is where that lives.
       expect(event.sessionKey).not.toBe(SESSION);
     }
+  });
+
+  it('reports context for the conversation, never for a delegation', async () => {
+    const { events } = await runTurn(
+      delegationHarness({
+        childTools: [echoTool],
+        childTurns: [
+          { toolCalls: [toolCall('n1', 'echo', { text: 'hi' })] },
+          { deltas: ['Found it.'] },
+        ],
+      }).parent,
+      { sessionKey: SESSION, content: 'go' },
+    );
+
+    // The child's own loop ran a tool and wrote its results, which is exactly
+    // the point at which the root loop reports. It stays quiet, because its
+    // window describes a session nobody is reading — a bar that jumped to a
+    // subagent's figure would be describing a different conversation.
+    expect(nestedTypes(events)).not.toContain('context.usage');
+
+    // The parent reports once, for its own single iteration, and names the
+    // conversation on screen rather than the child's session.
+    const reported = events.filter((event) => event.type === 'context.usage');
+    expect(reported).toHaveLength(1);
+    expect(reported[0]).toMatchObject({ sessionKey: SESSION });
+  });
+
+  it('measures the window the same way the context route does', async () => {
+    // One measurement, two surfaces. `describeContext` is what
+    // `GET /api/sessions/:key/context` calls and what the CLI's `/context`
+    // prints; the frame has to agree with it or the bar and the panel beside it
+    // describe different conversations.
+    const { loop, store } = harness({
+      tools: [echoTool],
+      turns: [
+        { toolCalls: [toolCall('c1', 'echo', { text: 'hi there' })] },
+        { deltas: ['done'] },
+      ],
+    });
+
+    const { events } = await runTurn(loop, {
+      sessionKey: SESSION,
+      content: 'go',
+    });
+    const reported = events.find((event) => event.type === 'context.usage');
+
+    const report = await describeContext({
+      store,
+      loop,
+      tools: loop.toolDefinitions,
+      sessionKey: SESSION,
+      contextWindowTokens: 65_536,
+    });
+
+    // The frame is emitted mid-turn and this measures after it, so the message
+    // section has grown by the final answer. Everything the prompt decides is
+    // identical, which is the half a second implementation would get wrong.
+    expect(reported).toMatchObject({
+      contextWindowTokens: report?.contextWindowTokens,
+      breakdown: {
+        systemPrompt: report?.breakdown.systemPrompt,
+        tools: report?.breakdown.tools,
+      },
+    });
   });
 
   it('every nested event is a ServerMessage once the transport adds a seq', async () => {

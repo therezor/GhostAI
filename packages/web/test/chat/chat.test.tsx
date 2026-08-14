@@ -142,28 +142,35 @@ const START = {
   provider: 'ollama',
 } as const;
 
+/**
+ * Everything the shell asks for before it will render a chat.
+ *
+ * Named so a test that needs one more route can add it without restating the
+ * seven that have nothing to do with what it is asserting. `/context` is
+ * deliberately *absent*: unstubbed it rejects, the strip's query fails, and the
+ * strip renders nothing — which is the state every test here but one wants.
+ */
+const BASE_ROUTES: Record<string, [number, unknown]> = {
+  '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
+  // Claimed: the setup overlay mounts above the login one and would
+  // otherwise be deciding whether to open on an unstubbed request.
+  '/api/setup': [200, { required: false }],
+  '/api/status': [200, STATUS],
+  '/api/agents': [200, AGENTS],
+  '/api/sessions': [200, { sessions: [], total: 0 }],
+  '/api/notifications': [200, { notifications: [], unreadCount: 0, total: 0 }],
+  '/api/sessions/web%3A1/messages': [
+    200,
+    { sessionKey: SESSION, messages: [] },
+  ],
+};
+
 beforeEach(() => {
   seq = 0;
   ControlledSocket.opened.length = 0;
   vi.stubGlobal('WebSocket', ControlledSocket);
 
-  stubFetch({
-    '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
-    // Claimed: the setup overlay mounts above the login one and would
-    // otherwise be deciding whether to open on an unstubbed request.
-    '/api/setup': [200, { required: false }],
-    '/api/status': [200, STATUS],
-    '/api/agents': [200, AGENTS],
-    '/api/sessions': [200, { sessions: [], total: 0 }],
-    '/api/notifications': [
-      200,
-      { notifications: [], unreadCount: 0, total: 0 },
-    ],
-    '/api/sessions/web%3A1/messages': [
-      200,
-      { sessionKey: SESSION, messages: [] },
-    ],
-  });
+  stubFetch(BASE_ROUTES);
 });
 
 describe('a turn with tool calls', () => {
@@ -1378,5 +1385,77 @@ describe('reworking a session', () => {
         },
       ],
     });
+  });
+});
+
+describe('the context strip', () => {
+  const CONTEXT = {
+    sessionKey: SESSION,
+    systemPrompt: 'You are GhostAI.',
+    runtimeBlock: '',
+    tools: [],
+    messages: [],
+    estimatedTokens: 2_000,
+    contextWindowTokens: 10_000,
+    breakdown: { systemPrompt: 1_500, tools: 400, messages: 100 },
+  };
+
+  /**
+   * Counts what reaches the network, over whatever `stubFetch` installed.
+   *
+   * The count is half of what this case asserts — the strip following the frame
+   * is easy to get right by refetching, which is the implementation this exists
+   * to rule out.
+   */
+  function countingFetch(): () => number {
+    const inner = globalThis.fetch;
+    let calls = 0;
+    vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+      // All three forms, because `RequestInfo` is a union and a `Request`
+      // stringifies to `[object Request]` rather than to its url.
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url;
+      if (url.includes('/context')) calls += 1;
+      return inner(input, init);
+    });
+    return () => calls;
+  }
+
+  it('follows the turn as it grows, without refetching', async () => {
+    stubFetch({
+      ...BASE_ROUTES,
+      '/api/sessions/web%3A1/context': [200, CONTEXT],
+    });
+    const contextRequests = countingFetch();
+    mount();
+    await connect();
+
+    expect(
+      await screen.findByRole('button', { name: /2,000 of 10,000 · 20%/ }),
+    ).toBeInTheDocument();
+
+    // A step of a turn that is still running. The whole point of the frame:
+    // storage has grown, the turn is nowhere near `turn.end`, and the question
+    // "will the next message fit" is being asked right now.
+    deliver(START, {
+      type: 'context.usage',
+      sessionKey: SESSION,
+      estimatedTokens: 7_000,
+      contextWindowTokens: 10_000,
+      breakdown: { systemPrompt: 1_500, tools: 400, messages: 5_100 },
+    });
+
+    expect(
+      await screen.findByRole('button', { name: /7,000 of 10,000 · 70%/ }),
+    ).toBeInTheDocument();
+
+    // The numbers came off the frame. Refetching to learn them would pull the
+    // whole system prompt, every tool definition and every windowed message
+    // back over the wire, up to forty times in one turn, to move four integers.
+    expect(contextRequests()).toBe(1);
   });
 });

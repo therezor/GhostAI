@@ -563,6 +563,46 @@ export const SubagentEventSchema = z.object({
   event: NestedAgentEventSchema,
 });
 
+/**
+ * How much of the context window the next request would use, restated whenever
+ * the history grows.
+ *
+ * The bar under the composer used to move once a turn, because the only frame
+ * that refreshed it was `turn.end`. A turn that calls twenty tools appends tens
+ * of thousands of tokens before it ends, and "why did it forget what I said" is
+ * asked *during* that turn, not after it.
+ *
+ * Session-scoped rather than turn-scoped, and deliberately so: it describes the
+ * conversation, not the turn that happened to grow it. It carries no `turnId`
+ * for that reason, which is also what keeps it out of the client's set of
+ * events that grow a turn — replaying one onto a finished turn is a no-op
+ * rather than a duplicate.
+ *
+ * The numbers are `describeContext`'s, the same ones
+ * `GET /api/sessions/:key/context` returns and the CLI's `/context` prints.
+ * That is a requirement, not a coincidence: a bar and a panel that disagree
+ * about the same conversation are worse than a bar that is late.
+ *
+ * Emitted by the root loop only. A subagent's context belongs to the child's
+ * session, and a delegation that filled *its* window says nothing about the
+ * conversation the operator is looking at — which is why this is absent from
+ * `NestedAgentEventSchema` below.
+ */
+export const ContextUsageEventSchema = z.object({
+  type: z.literal('context.usage'),
+  seq,
+  sessionKey: z.string().min(1),
+  estimatedTokens: z.number().int().nonnegative(),
+  contextWindowTokens: z.number().int().positive(),
+  /**
+   * Section name to tokens — `systemPrompt`, `tools`, `messages`,
+   * `runtimeBlock`. A record rather than a fixed object, matching
+   * `SessionContextResponseSchema`, so the two are consumed by the same
+   * `summariseContext` and a new section is not a wire change.
+   */
+  breakdown: z.record(z.string(), z.number()).default({}),
+});
+
 export const SessionStatusEventSchema = z.object({
   type: z.literal('session.status'),
   seq,
@@ -591,6 +631,22 @@ export const SessionReplayEventSchema = z.object({
   messages: z.array(StoredMessageSchema),
   /** False when `lastSeq` fell outside the ring buffer and history was trimmed. */
   complete: z.boolean().default(true),
+  /**
+   * A turn whose frames follow this one, in full, and which they define.
+   *
+   * Only ever set alongside `complete: false`, which is the one case where a
+   * client is handed storage *and* frames — legal precisely because storage
+   * cannot describe a turn that has not ended, so the two cannot restate the
+   * same text. The named turn is the exception to that: its finished iterations
+   * *are* in the tail, and the frames repeat them. Hence "define" rather than
+   * "extend" — a client drops whatever it holds for this turn, from the tail it
+   * has just been given and from its own screen alike, and rebuilds it from the
+   * frames.
+   *
+   * Absent means what it always meant: the tail is history and the frames, if
+   * any, continue from its end.
+   */
+  resumingTurnId: z.string().min(1).optional(),
 });
 
 /**
@@ -656,6 +712,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   NoticeEventSchema,
   TurnEndEventSchema,
   SubagentEventSchema,
+  ContextUsageEventSchema,
   SessionStatusEventSchema,
   SessionResetEventSchema,
   SessionReplayEventSchema,

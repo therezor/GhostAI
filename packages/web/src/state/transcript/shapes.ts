@@ -173,6 +173,22 @@ export interface SubagentPart {
    * the subagent had done nothing.
    */
   readonly loaded: boolean;
+  /**
+   * True when this client joined the run after it had already started.
+   *
+   * The case is a reload during a delegation. The replay ring holds 512 frames
+   * and every nested delta is one of them, so a subagent of any length falls
+   * outside it; the tab comes back, the stored tail has no row for the
+   * iteration still running, and the frames that arrive from then on are the
+   * *middle* of a run whose beginning nothing has.
+   *
+   * Rendering that tail is right — it is what is happening, and the alternative
+   * is a blank card — but it must not be mistaken for the run. `withLiveRiskBands`
+   * carries a live card across the refetch at `turn.end` precisely so a finished
+   * run does not vanish, and without this flag the half a client happened to
+   * catch would win over the whole one storage can supply, permanently.
+   */
+  readonly partial: boolean;
 }
 
 export type TurnPart = TextPart | ReasoningPart | NoticePart | ToolPart;
@@ -232,6 +248,25 @@ export interface TurnItem {
   /** False while the turn is streaming — what drives the caret and the spinner. */
   readonly done: boolean;
   readonly failure: TurnFailure | undefined;
+  /**
+   * True when the server has replayed this turn in full and it therefore
+   * outranks the stored copy of itself.
+   *
+   * Storage and the socket describe the same turn from different ends. Storage
+   * has every iteration that finished and nothing of the one that is running;
+   * the socket has whatever this tab has watched. Ordinarily storage is the
+   * safer base, which is why `mergeStoredHistory` builds on it — a live turn is
+   * a *tail* and losing it costs less than losing the history under it.
+   *
+   * `session.replay { resumingTurnId }` inverts that for one turn, and only for
+   * it: the frames that follow are the whole turn from its `turn.start`, so the
+   * item they build is a superset of the stored one — it has the iteration
+   * storage cannot hold, and the nested subagent runs storage never holds. Set
+   * on the seat the replay puts down for those frames, read by
+   * `mergeStoredHistory`, and false everywhere else, so every path the server
+   * cannot make that promise on keeps the behaviour it had.
+   */
+  readonly authoritative: boolean;
 }
 
 export interface SteerItem {

@@ -101,6 +101,15 @@ const LONG_ANSWER: readonly string[] = [
  */
 export const SUBAGENT_TASK = 'find the note file';
 
+/**
+ * The task whose subagent is still working when the page reloads.
+ *
+ * A second task rather than a flag on the first: the route is chosen by the
+ * words in it, and a delegation that sometimes finished and sometimes did not
+ * would make every assertion about either one depend on which spec ran.
+ */
+export const SUBAGENT_HELD_TASK = 'inspect the folder and hold';
+
 export const ROUTES: readonly Route[] = [
   {
     // Prose, a fenced block and a reasoning trace: the three things the
@@ -176,6 +185,36 @@ export const ROUTES: readonly Route[] = [
     turns: [
       { toolCalls: [toolCall('call-nested', 'list_dir', { path: '.' })] },
       { deltas: ['There is one file: ', '`notes.md`.'] },
+    ],
+  },
+  {
+    // The caller's half of a delegation that is still running when the page
+    // reloads. Same shape as `delegate` above; a separate route so the two
+    // specs cannot end up asserting each other's transcript.
+    match: /\bhandover\b/i,
+    turns: [
+      {
+        toolCalls: [
+          toolCall('call-held', 'ask_researcher', { task: SUBAGENT_HELD_TASK }),
+        ],
+      },
+      { deltas: ['The researcher eventually answered.'] },
+    ],
+  },
+  {
+    // The subagent's half of it: do some visible work, then stop in a tool that
+    // does not finish. That is what makes "reload while a delegation is in
+    // flight" a durable state rather than a race — the run is held open for as
+    // long as the spec needs, and everything asserted after the reload happened
+    // before it.
+    match: /\binspect\b/i,
+    turns: [
+      { toolCalls: [toolCall('call-held-list', 'list_dir', { path: '.' })] },
+      {
+        deltas: ['I checked the folder.'],
+        toolCalls: [toolCall('call-held-wait', 'e2e_wait', { ms: 60_000 })],
+      },
+      { deltas: ['Unreachable unless the wait ends.'] },
     ],
   },
 ];

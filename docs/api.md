@@ -188,8 +188,17 @@ Turn events: `turn.start` · `assistant.delta` · `reasoning.delta` · `tool.cal
 `subagent.event`
 
 Session and connection: `connected` · `pong` · `error` · `message.ack` ·
-`message.queued` · `session.status` · `session.reset` · `session.replay` ·
-`session.truncated` · `notification` · `transcribe.result` · `tools.changed` · `steer`
+`message.queued` · `context.usage` · `session.status` · `session.reset` ·
+`session.replay` · `session.truncated` · `notification` · `transcribe.result` ·
+`tools.changed` · `steer`
+
+`context.usage` is filed here rather than with the turn events on purpose. It is emitted
+at the end of every tool iteration and reports what the _next_ request would cost —
+`estimatedTokens`, `contextWindowTokens` and the same `breakdown`
+`GET /api/sessions/:key/context` returns, from the same measurement. It carries no
+`turnId`, because it describes the conversation rather than the turn that grew it, and it
+is emitted by the root loop only: a subagent's window belongs to the child's session, and
+reporting it would move a meter that is describing somebody else's history.
 
 ### Sequencing and replay
 
@@ -200,6 +209,37 @@ turn instead of losing it.
 
 `connected`, `pong` and `error` are the only unsequenced frames; they are addressed to one
 client rather than to the session.
+
+Past the ring the answer is `session.replay { complete: false }` and the stored tail. **512
+frames is not many** — every nested delta of a delegation is one — so this is the ordinary
+outcome of reloading during a subagent, not a corner case.
+
+The ring is not the only thing retained, and this is the case the second structure exists
+for. The server also keeps the turn that is _running_, whole, from its `turn.start`
+(`server.turnLogMaxBytes`, default 16 MiB). Adjacent deltas of the same part are merged
+into one frame as they are retained, so a hundred thousand tokens of answer costs one
+entry and the budget is spent on tool output rather than on length. When a resume falls
+past the ring while such a turn is open, the reply is both halves at once —
+`session.replay { complete: false, resumingTurnId, messages }` followed by that turn's own
+frames:
+
+- **`messages`** is the stored tail, and it is history as usual.
+- **`resumingTurnId`** names the one turn the two sources overlap on. Its finished
+  iterations are in the tail _and_ in the frames. The frames are the fuller account: they
+  carry the iteration still streaming, and they carry the `subagent.event`s of every
+  delegation, which never enter the parent session's history at all. A client drops that
+  turn from the tail it was just handed **and** from whatever it still holds itself, then
+  rebuilds it from the frames. The user message that opened the turn is not dropped — no
+  frame recreates it.
+
+`resumingTurnId` is only ever set alongside `complete: false`; a covered resume is already
+sending those frames from the ring. It is also absent when nothing is running, and when
+the log overran its budget — a half-log would render a turn that began in the middle, so
+the server falls back to the stored tail alone rather than replaying part of one.
+
+A client is still expected to render a `subagent.event` whose delegating `tool.call` it
+never saw: the wrapper carries `agentId` and `label` so the card can name itself, and that
+is what the fallback path leaves it with.
 
 **The server emits deltas and the client accumulates.** The server never holds a second
 copy of the answer text.

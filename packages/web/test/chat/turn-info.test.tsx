@@ -45,6 +45,7 @@ const TURN: TurnItem = {
   lastSeq: 2,
   done: true,
   failure: undefined,
+  authoritative: false,
 };
 
 function sessionRow(

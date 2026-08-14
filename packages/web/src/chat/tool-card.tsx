@@ -52,6 +52,7 @@ import { useQuery } from '@tanstack/react-query';
 import type {
   ApprovalScope,
   StoredMessage,
+  SubagentRunRef,
   ToolRisk,
 } from '@ghostwire/protocol';
 
@@ -259,7 +260,9 @@ function SubagentRun({
     retry: false,
   });
 
-  const parts = run.loaded ? run.parts : partsOf(fetched.data?.messages ?? []);
+  const parts = run.loaded
+    ? run.parts
+    : partsOf(fetched.data?.messages ?? [], fetched.data?.subagentRuns ?? {});
 
   // Three states, named rather than derived from the query's flags at each use.
   // A *disabled* query reports `isPending` forever — it is waiting to be
@@ -310,9 +313,17 @@ function SubagentRun({
  * Its opening user message is dropped: it is the task, which the delegating
  * card already shows as its argument, and repeating it inside the run would
  * make every delegation read as though it had been asked twice.
+ *
+ * The runs are passed through because a subagent may itself have delegated, and
+ * they are what a nested `ask_*` call needs to become a card that offers to
+ * fetch its own run rather than a bare tool result. Without them the recursion
+ * stopped at the first level that had to be rebuilt from storage.
  */
-function partsOf(messages: readonly StoredMessage[]): readonly TurnPart[] {
-  return fromStoredMessages(messages).flatMap((item) =>
+function partsOf(
+  messages: readonly StoredMessage[],
+  subagentRuns: Readonly<Record<string, SubagentRunRef>>,
+): readonly TurnPart[] {
+  return fromStoredMessages(messages, subagentRuns).flatMap((item) =>
     item.kind === 'turn' ? item.parts : [],
   );
 }

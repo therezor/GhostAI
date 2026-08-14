@@ -260,8 +260,12 @@ export class TurnProjection {
       // and a chat transport has none — the messages it already delivered are
       // in someone's message history, where nothing can recall them. The retry
       // simply arrives as another answer.
+      // `context.usage` joins them: it exists to move a bar, and a chat app has
+      // no bar. Posting the figure as a line instead would be a token count
+      // arriving in someone's chat between two answers, unasked.
       case 'reasoning.delta':
       case 'tool.progress':
+      case 'context.usage':
       case 'connected':
       case 'pong':
       case 'message.ack':

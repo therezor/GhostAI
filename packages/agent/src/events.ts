@@ -21,6 +21,12 @@
  * The names are the protocol's dotted names rather than a local convention. A
  * CLI renderer and a WebSocket client then switch on the same strings, and the
  * 1:1 property stays visible at every call site instead of living in a comment.
+ *
+ * One member is not forwardable, which is a different claim from not being a
+ * `ServerMessage`. `ContextUsageEvent` is one, and `events.test.ts` proves it —
+ * but it sits outside `NestedAgentEvent`, so a subagent cannot wrap one and
+ * `wrapSubagentEvent` drops it. See that type for why measuring a child's
+ * window would be reporting the wrong conversation.
  */
 
 import type {
@@ -249,6 +255,27 @@ export interface SubagentEvent {
   readonly event: NestedAgentEvent;
 }
 
-export type AgentEvent = NestedAgentEvent | SubagentEvent;
+/**
+ * How much of the window the next request would use, after the history grew.
+ *
+ * Not a `NestedAgentEvent`, and the exclusion is the design. A subagent runs in
+ * a session of its own, so its context report describes a conversation nobody
+ * is reading; forwarding one would make the operator's bar jump to a figure
+ * belonging to a different history. Leaving it out of that union means a child
+ * that yields one fails to compile in `wrapSubagentEvent` rather than quietly
+ * reporting the wrong number.
+ *
+ * The measurement is `describeContext`'s, which is also what
+ * `GET /api/sessions/:key/context` returns — see `ContextUsageEventSchema`.
+ */
+export interface ContextUsageEvent {
+  readonly type: 'context.usage';
+  readonly sessionKey: string;
+  readonly estimatedTokens: number;
+  readonly contextWindowTokens: number;
+  readonly breakdown: Readonly<Record<string, number>>;
+}
+
+export type AgentEvent = NestedAgentEvent | SubagentEvent | ContextUsageEvent;
 
 export type AgentEventType = AgentEvent['type'];

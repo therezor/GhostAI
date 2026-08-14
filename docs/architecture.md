@@ -105,14 +105,31 @@ stamps a counter, and a test asserts that property rather than trusting it.
 
 `turn.start` · `assistant.delta` · `reasoning.delta` · `tool.call` · `tool.progress` ·
 `tool.approvalRequest` · `tool.result` · `notice` · `error` · `turn.end` ·
-`subagent.event`
+`subagent.event` · `context.usage`
 
 `tool.progress` is emitted on a fixed 15-second heartbeat while a tool runs, so a slow
 command looks alive rather than hung.
 
+`context.usage` is the one that is not about the turn. It goes out at the end of each
+iteration, once the tool results are written, and reports what the next request would
+cost — the same numbers `describeContext` gives the REST route and the CLI, measured from
+the prompt the iteration already composed rather than from a second assembly. Only the
+root loop emits it: a subagent measures its own session, which is not the one anybody is
+reading, and `ContextUsageEvent` sits outside `NestedAgentEvent` so that is a compile
+error rather than a convention.
+
 `notice` is the loop telling the operator something without derailing the turn:
 `prompt_injection`, `degraded`, `truncated_history`, `provider_fallback`,
 `approval_denied`, `agent_fallback`.
+
+The hub retains what it emits in two structures, because a reconnect and a reload ask
+different questions. The **replay ring** is bounded by a frame count and answers "what did
+I miss since `seq`", across turns. The **turn log** holds the turn that is running, whole,
+and answers "what has this turn done so far" — the one a reload asks, and the one no frame
+budget can answer, since a delegation spends a frame per token of its subagent. It merges
+adjacent deltas of the same part as it retains them, so its size follows the turn's output
+rather than its frame count, and it is bounded in bytes. See
+[API](api.md#sequencing-and-replay) for how the two are combined in a resume.
 
 ### History windowing
 

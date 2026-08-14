@@ -21,7 +21,7 @@ import {
 import type { ChatMessage, ToolDefinition } from '@ghostwire/protocol';
 import { estimateTokens } from '@ghostwire/providers';
 
-import type { AgentLoop } from './loop.js';
+import type { AgentLoop, PromptPreview } from './loop.js';
 
 interface ContextBreakdown {
   readonly systemPrompt: number;
@@ -93,6 +93,45 @@ export async function describeContext(
   const session = input.store.getSession(input.sessionKey);
   if (session === undefined) return undefined;
 
+  return measureContext({
+    store: input.store,
+    tools: input.tools,
+    sessionKey: input.sessionKey,
+    contextWindowTokens: input.contextWindowTokens,
+    prompt: await input.loop.previewPrompt({
+      sessionKey: input.sessionKey,
+      ...(input.channel === undefined ? {} : { channel: input.channel }),
+      ...(input.agentId === undefined ? {} : { agentId: input.agentId }),
+    }),
+  });
+}
+
+interface MeasureContextInput {
+  readonly store: SessionStore;
+  readonly tools: readonly ToolDefinition[];
+  readonly sessionKey: string;
+  /** Both halves of the system message, already assembled. */
+  readonly prompt: PromptPreview;
+  readonly contextWindowTokens: number;
+}
+
+/**
+ * The measurement, given a prompt somebody has already built.
+ *
+ * Split out of `describeContext` for one caller: the loop, which composes
+ * exactly this prompt on every iteration and can therefore report the context
+ * as it grows without paying for a second assembly. `previewPrompt` reaches
+ * `preamble`, and a `ContextContributor`'s `staticSection` may do I/O — running
+ * that once per iteration to draw a bar would be a real cost on a forty-step
+ * turn, and it is the whole reason this seam exists rather than the loop simply
+ * calling `describeContext`.
+ *
+ * Everything below the prompt is unchanged, so the two callers report the same
+ * numbers. They can differ by a few characters — the loop's runtime block names
+ * the iteration it is actually on, the preview always says 1 — which is under a
+ * token and is the only divergence by construction.
+ */
+export function measureContext(input: MeasureContextInput): ContextReport {
   // The same window the loop reads: the whole stored conversation, which
   // `historyForLLM` below then bounds exactly as a turn would.
   const records = input.store.messages(input.sessionKey, { afterSeq: 0 });
@@ -115,11 +154,7 @@ export async function describeContext(
     if (record !== undefined) messages.push(record);
   }
 
-  const { staticPrompt, runtimeBlock } = await input.loop.previewPrompt({
-    sessionKey: input.sessionKey,
-    ...(input.channel === undefined ? {} : { channel: input.channel }),
-    ...(input.agentId === undefined ? {} : { agentId: input.agentId }),
-  });
+  const { staticPrompt, runtimeBlock } = input.prompt;
 
   const promptTokens = estimateTokens(staticPrompt);
   const runtimeTokens = estimateTokens(runtimeBlock);

@@ -1167,8 +1167,156 @@ describe('SessionHub', () => {
         'user',
         'assistant',
       ]);
-      // No tail: storage and the ring would render the same text twice.
+      // No tail: storage and the ring would render the same text twice. And no
+      // turn named, because this turn never announced itself — without a
+      // `turn.start` the log has nothing it can promise is whole.
+      expect(replay?.resumingTurnId).toBeUndefined();
       expect(client.of('assistant.delta')).toEqual([]);
+    });
+
+    it('replays the open turn in full when the resume falls outside the ring', async () => {
+      const h = harness({ config: { replayBufferSize: 2 } });
+      const first = h.connect();
+      await send(first, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'hello',
+      });
+      const turn = h.runner.turn(0);
+      await turn.emit({
+        type: 'turn.start',
+        agentId: 'default',
+        sessionKey: SESSION,
+        turnId: turn.turnId,
+        model: 'm',
+        provider: 'p',
+      });
+      await turn.emit({
+        type: 'assistant.delta',
+        turnId: turn.turnId,
+        text: 'before ',
+      });
+      // A delegation, which is the case the ring cannot hold: one frame per
+      // token of the child, all of them before the reload.
+      await turn.emit({
+        type: 'subagent.event',
+        turnId: turn.turnId,
+        parentSessionKey: SESSION,
+        parentCallId: 'call-1',
+        agentId: 'researcher',
+        label: 'Researcher',
+        sessionKey: 'subagent:1',
+        depth: 1,
+        event: { type: 'assistant.delta', turnId: 'child', text: 'found it' },
+      });
+
+      // The tab reloads. Its cursor is the boundary before the turn began.
+      first.close();
+      const second = h.connect();
+      second.reset();
+      await send(second, {
+        type: 'session.resume',
+        sessionKey: SESSION,
+        lastSeq: 0,
+      });
+
+      const replay = second.of('session.replay')[0];
+      expect(replay?.complete).toBe(false);
+      expect(replay?.resumingTurnId).toBe(turn.turnId);
+      // The whole turn, from its start — including what happened before this
+      // connection existed, which is the point.
+      expect(second.of('turn.start')[0]?.turnId).toBe(turn.turnId);
+      expect(second.of('assistant.delta').map((frame) => frame.text)).toEqual([
+        'before ',
+      ]);
+      expect(
+        second.of('subagent.event').map((frame) => frame.event.type),
+      ).toEqual(['assistant.delta']);
+    });
+
+    it('names no turn once the log has overrun its budget', async () => {
+      const h = harness({
+        config: { replayBufferSize: 2, turnLogMaxBytes: 128 },
+      });
+      const first = h.connect();
+      await send(first, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'hello',
+      });
+      const turn = h.runner.turn(0);
+      await turn.emit({
+        type: 'turn.start',
+        agentId: 'default',
+        sessionKey: SESSION,
+        turnId: turn.turnId,
+        model: 'm',
+        provider: 'p',
+      });
+      await turn.emit({
+        type: 'assistant.delta',
+        turnId: turn.turnId,
+        text: 'x'.repeat(512),
+      });
+
+      first.close();
+      const second = h.connect();
+      second.reset();
+      await send(second, {
+        type: 'session.resume',
+        sessionKey: SESSION,
+        lastSeq: 0,
+      });
+
+      // A half-log would render a turn that began in the middle, so the answer
+      // falls back to the one the server gave before the log existed.
+      expect(second.of('session.replay')[0]?.resumingTurnId).toBeUndefined();
+      expect(second.of('assistant.delta')).toEqual([]);
+    });
+
+    it('leaves a covered resume to the ring, turn open or not', async () => {
+      const h = harness();
+      const first = h.connect();
+      await send(first, {
+        type: 'user.message',
+        sessionKey: SESSION,
+        content: 'hello',
+      });
+      const turn = h.runner.turn(0);
+      await turn.emit({
+        type: 'turn.start',
+        agentId: 'default',
+        sessionKey: SESSION,
+        turnId: turn.turnId,
+        model: 'm',
+        provider: 'p',
+      });
+      const seenSoFar =
+        first.frames.filter((frame) => 'seq' in frame).at(-1)?.seq ?? 0;
+      await turn.emit({
+        type: 'assistant.delta',
+        turnId: turn.turnId,
+        text: 'after',
+      });
+
+      const second = h.connect();
+      second.reset();
+      await send(second, {
+        type: 'session.resume',
+        sessionKey: SESSION,
+        lastSeq: seenSoFar,
+      });
+
+      // The default buffer covers the gap, so nothing about the log applies:
+      // sending both would be the duplicate the flag exists to prevent.
+      expect(second.of('session.replay')[0]).toMatchObject({
+        complete: true,
+        messages: [],
+      });
+      expect(second.of('session.replay')[0]?.resumingTurnId).toBeUndefined();
+      expect(second.of('assistant.delta').map((frame) => frame.text)).toEqual([
+        'after',
+      ]);
     });
 
     it('tells a client that has seen everything that it missed nothing', async () => {

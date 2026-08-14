@@ -347,6 +347,7 @@ class TurnCollector {
       case 'tool.result':
       case 'tool.approvalRequest':
       case 'subagent.event':
+      case 'context.usage':
       case 'session.status':
       case 'session.reset':
       case 'session.replay':

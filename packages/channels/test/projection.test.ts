@@ -363,6 +363,16 @@ describe('TurnProjection', () => {
         level: 'info',
         createdAtMs: 0,
       }),
+      // A bar's worth of numbers, and a chat app has no bar. Posting the figure
+      // as a line would put a token count in someone's conversation between two
+      // answers, unasked — and it arrives once per tool iteration.
+      event({
+        type: 'context.usage',
+        sessionKey: 's',
+        estimatedTokens: 2631,
+        contextWindowTokens: 65_536,
+        breakdown: { systemPrompt: 1840, tools: 560, messages: 231 },
+      }),
     ]);
 
     expect(drafts).toEqual([]);

@@ -107,6 +107,7 @@ import {
 
 import type { ApprovalGate } from './approval.js';
 import { materialiseAttachments, type AttachmentCache } from './attachments.js';
+import { measureContext } from './context.js';
 import {
   TOOL_HEARTBEAT_MS,
   ToolDispatcher,
@@ -1276,6 +1277,38 @@ export class AgentLoop {
           turnId,
         });
         lastSeq = written.at(-1)?.seq ?? 0;
+
+        // The history just grew, which is the only thing that moves the number.
+        // Emitted here rather than at `turn.end` because a turn that calls
+        // twenty tools appends most of a window before it ends, and "will this
+        // fit" is asked while that is happening — a bar that moves once a turn
+        // is a bar that answers after the question stopped mattering.
+        //
+        // Measured from the prompt this iteration already composed, so the only
+        // new work is the pass over the messages. See `measureContext`.
+        //
+        // Root loop only. A subagent's context belongs to its own session, and
+        // reporting it would move the operator's bar to a figure describing a
+        // conversation they are not reading. `ContextUsageEvent` is deliberately
+        // outside `NestedAgentEvent`, so this is enforced by the compiler at
+        // `wrapSubagentEvent` rather than by this condition alone.
+        if (rootSessionKey === sessionKey) {
+          const report = measureContext({
+            store: this.store,
+            tools: toolDefinitions,
+            sessionKey,
+            prompt,
+            contextWindowTokens: this.config.contextWindowTokens,
+          });
+          yield {
+            type: 'context.usage',
+            sessionKey,
+            estimatedTokens: report.estimatedTokens,
+            contextWindowTokens: report.contextWindowTokens,
+            breakdown: { ...report.breakdown },
+          };
+        }
+
         if (tools.cancelled) {
           stopReason = 'aborted';
           break;
@@ -1476,7 +1509,7 @@ export class AgentLoop {
       // way past would need a wrapper generator anyway.
       let next = await run.next();
       while (next.done !== true) {
-        yield this.wrapSubagentEvent(
+        const wrapped = this.wrapSubagentEvent(
           turn,
           call.id,
           binding,
@@ -1484,6 +1517,7 @@ export class AgentLoop {
           depth,
           next.value,
         );
+        if (wrapped !== undefined) yield wrapped;
         next = await run.next();
       }
 
@@ -1504,6 +1538,15 @@ export class AgentLoop {
    * wrapped again: only `turnId` is rewritten to this turn's, because the rest
    * of its address already names the grandchild's delegating call. That is what
    * keeps the payload non-recursive at any depth — see `SubagentEventSchema`.
+   *
+   * `context.usage` is dropped, and `undefined` is the honest answer rather
+   * than a wrapped one. A child measures *its own* session, and a delegation
+   * that filled its window says nothing about the conversation on screen — so
+   * there is no address to give the frame and nothing sensible to show. The
+   * loop already declines to emit one below the root, so this branch should be
+   * unreachable; it exists because `ContextUsageEvent` sits outside
+   * `NestedAgentEvent`, which is what turns "a subagent must not report
+   * context" from a convention into a compile error here.
    */
   private wrapSubagentEvent(
     turn: TurnScope,
@@ -1512,10 +1555,11 @@ export class AgentLoop {
     sessionKey: string,
     depth: number,
     event: AgentEvent,
-  ): AgentEvent {
+  ): AgentEvent | undefined {
     if (event.type === 'subagent.event') {
       return { ...event, turnId: turn.turnId };
     }
+    if (event.type === 'context.usage') return undefined;
     return {
       type: 'subagent.event',
       turnId: turn.turnId,

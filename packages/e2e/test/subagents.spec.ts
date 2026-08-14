@@ -182,6 +182,84 @@ test.describe('a delegating agent', () => {
   });
 });
 
+/**
+ * The reload that used to lose the run.
+ *
+ * Its own server, because the thing under test is what happens when the replay
+ * ring cannot cover the gap — and with a ring of any size these scripted turns
+ * fit inside it, so the fallback would never be reached. `replayBufferSize: 0`
+ * makes every resume incomplete, which is what a real delegation does to a
+ * ring of 512 within a second of streaming.
+ *
+ * Nothing transient is asserted. The subagent stops in a tool that does not
+ * finish, so "a delegation is in flight" is a state the spec holds rather than
+ * a moment it has to catch, and everything checked after the reload was on
+ * screen before it.
+ */
+test.describe('reloading mid-delegation', () => {
+  test.use({
+    harnessOptions: {
+      config: {
+        server: { replayBufferSize: 0 },
+        agents: {
+          list: {
+            researcher: {
+              label: 'Researcher',
+              tools: {
+                list_dir: 'allow',
+                read_file: 'allow',
+                e2e_wait: 'allow',
+              },
+            },
+            default: {
+              subagents: [
+                {
+                  id: 'researcher',
+                  prompt: 'Ask when you need to look something up.',
+                  permission: 'allow',
+                },
+              ],
+            },
+          },
+        },
+      },
+    },
+  });
+
+  test('comes back to what the subagent had already done', async ({ app }) => {
+    await app
+      .getByRole('textbox', { name: 'Message' })
+      .fill('handover to the researcher');
+    await app.getByRole('button', { name: 'Send' }).click();
+
+    const before = app.getByRole('region', {
+      name: 'Tool call: ask_researcher',
+    });
+    await expand(before.getByRole('button', { name: /ask_researcher/ }));
+    const beforeRun = before.getByRole('region', {
+      name: 'Subagent run: Researcher',
+    });
+    // The run is now held open by a tool that does not return, so both of these
+    // stay on screen for as long as this test takes.
+    await expect(
+      beforeRun.getByRole('region', { name: 'Tool call: list_dir' }),
+    ).toBeVisible();
+    await expect(beforeRun.getByText('I checked the folder.')).toBeVisible();
+
+    await app.reload();
+
+    // Nothing new can arrive — the subagent is still inside `e2e_wait` — so
+    // everything below is the run as it was before the reload, replayed.
+    const { card, header } = delegation(app);
+    await expand(header);
+    const run = card.getByRole('region', { name: 'Subagent run: Researcher' });
+    await expect(
+      run.getByRole('region', { name: 'Tool call: list_dir' }),
+    ).toBeVisible();
+    await expect(run.getByText('I checked the folder.')).toBeVisible();
+  });
+});
+
 test.describe('the agent editor', () => {
   test('shows the delegation the config declares', async ({ app }) => {
     await app.getByRole('link', { name: 'Agents' }).click();

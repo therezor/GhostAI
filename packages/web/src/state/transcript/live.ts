@@ -90,16 +90,28 @@ export function applyServerMessage(
       // A `turn.start` for a turn already in the transcript is a replayed
       // frame, not a second turn — the ring re-sends by design, and appending
       // would leave an empty turn above the real one for every resume. It is
-      // still worth the session key it carries, which a turn reconstructed from
-      // a mid-turn resume does not have.
+      // still worth everything it names that the existing item lacks: the seat a
+      // `resumingTurnId` replay puts down knows only the id, and a turn
+      // reconstructed by `orphanTurn` knows no more. Filled rather than
+      // overwritten, so a replayed frame cannot blank a turn that has the real
+      // values already.
       if (
         items.some((item) => item.kind === 'turn' && item.id === message.turnId)
       ) {
-        return updateTurn(items, message.turnId, (turn) =>
-          turn.sessionKey === ''
-            ? { ...turn, sessionKey: message.sessionKey }
+        const filled = updateTurn(items, message.turnId, (turn) =>
+          turn.sessionKey === '' || turn.model === '' || turn.provider === ''
+            ? {
+                ...turn,
+                sessionKey:
+                  turn.sessionKey === '' ? message.sessionKey : turn.sessionKey,
+                model: turn.model === '' ? message.model : turn.model,
+                provider:
+                  turn.provider === '' ? message.provider : turn.provider,
+                firstSeq: turn.firstSeq ?? message.firstSeq,
+              }
             : turn,
         );
+        return stampUserSeq(filled, message.turnId, message.firstSeq);
       }
       // The optimistic bubble this tab drew has no storage address until the
       // server names one. Stamping it here rather than only at `turn.end` is
@@ -128,6 +140,10 @@ export function applyServerMessage(
           lastSeq: undefined,
           done: false,
           failure: undefined,
+          // A turn this client watched start is one it has all of, but nothing
+          // has promised that — the flag is a statement about a replay, and the
+          // path that makes it is the one that sets it.
+          authoritative: false,
         },
       ];
     }
@@ -200,11 +216,50 @@ export function applyServerMessage(
     case 'session.reset':
       return EMPTY_TRANSCRIPT;
 
-    case 'session.replay':
+    case 'session.replay': {
       // Two answers, and `complete` is which one this is. Covered by the ring:
       // the frames themselves follow, so there is nothing to rebuild. Past it:
       // the stored tail is the transcript, and the live frames resume on top.
-      return message.complete ? items : fromStoredMessages(message.messages);
+      if (message.complete) return items;
+
+      // Past the ring, storage is the base — but it cannot hold a turn that has
+      // not finished, and this frame also arrives on a *reconnect*, where the
+      // page never went away and that turn is on screen. Rebuilding over it
+      // deleted the answer the user was watching, in front of them, mid-stream.
+      //
+      // So the unfinished tail is carried across, exactly as `session.truncated`
+      // below carries pending bubbles: anything storage cannot describe yet, and
+      // nothing storage can. On a reload there is no such tail and this is the
+      // plain rebuild it was before.
+      const resuming = message.resumingTurnId;
+      const stored = fromStoredMessages(message.messages).filter(
+        // The one turn the two sources overlap on. Its finished iterations are
+        // in the tail *and* in the frames about to arrive, and the frames are
+        // the fuller account — they carry the iteration still running and the
+        // nested subagent runs that never enter this session's history at all.
+        // The user bubble that opened it is not dropped: it is storage's alone,
+        // and no frame recreates it.
+        (item) => item.kind !== 'turn' || item.id !== resuming,
+      );
+      const known = new Set(stored.map((item) => item.id));
+      const live = items.filter(
+        (item) =>
+          !known.has(item.id) &&
+          item.id !== resuming &&
+          ((item.kind === 'turn' && !item.done) ||
+            (item.kind === 'user' && item.pending)),
+      );
+      // A seat for the frames, rather than letting them land on an `orphanTurn`
+      // built by the first one that arrives. Two things need it: the flag, which
+      // is a statement about this replay and not about any single frame, and the
+      // ordering — the turn belongs after the question storage just supplied,
+      // not after whatever else was still live.
+      const seat: readonly TranscriptItem[] =
+        resuming === undefined
+          ? []
+          : [{ ...orphanTurn(resuming), authoritative: true }];
+      return [...stored, ...seat, ...live];
+    }
 
     case 'session.truncated': {
       // The frame carries the surviving tail, so this is a rebuild rather than
@@ -223,10 +278,15 @@ export function applyServerMessage(
       return [...fromStoredMessages(message.messages), ...pending];
     }
 
+    // `context.usage` is not a transcript entry: it describes the conversation
+    // rather than adding to it, and the bar it moves lives under the composer.
+    // `use-connection.ts` is where it lands, in the query cache the strip and
+    // the inspector both read.
     case 'connected':
     case 'pong':
     case 'message.queued':
     case 'session.status':
+    case 'context.usage':
     case 'notification':
     case 'tools.changed':
       return items;
@@ -432,7 +492,18 @@ function applySubagentEvent(
   items: Transcript,
   message: Extract<ServerMessage, { type: 'subagent.event' }>,
 ): Transcript {
-  return updateTurn(items, message.turnId, (turn) => {
+  return updateTurn(items, message.turnId, (opened) => {
+    // A turn rebuilt by `orphanTurn` has no session key, and the address below
+    // is half made of one — so without this the match fails on every frame and
+    // a delegation the user reloaded into is invisible for the rest of the
+    // turn. At depth 1 the parent session *is* this turn's, which is the only
+    // depth that can say so: deeper frames name a child's session. Filled only
+    // when it is missing, so a `turn.start` that did arrive still wins.
+    const turn =
+      opened.sessionKey === '' && message.depth === 1
+        ? { ...opened, sessionKey: message.parentSessionKey }
+        : opened;
+
     const parts = updateNestedTool(
       turn.parts,
       turn.sessionKey,
@@ -447,6 +518,20 @@ function applySubagentEvent(
     );
     return parts === turn.parts ? turn : { ...turn, parts };
   });
+}
+
+/**
+ * The tool name a delegation to `agentId` runs under.
+ *
+ * Restated from `subagentDefinition` in `@ghostwire/agent` rather than
+ * imported, for the same reason the nonce envelope in `parts.ts` is: that
+ * package is Node, and pulling it into a browser bundle for one string rule is
+ * a far worse trade than four characters of duplication. Only ever used to
+ * label a card rebuilt after a reload — when the `tool.call` arrived, its own
+ * name is the one on screen.
+ */
+function delegationToolName(agentId: string): string {
+  return `ask_${agentId.replaceAll('-', '_')}`;
 }
 
 function seedSubagent(
@@ -465,6 +550,10 @@ function seedSubagent(
     done: false,
     // Live events *are* the whole run, so nothing needs fetching.
     loaded: true,
+    // The delegating call is on screen, so its run began where this client was
+    // watching. The other seeding path — a card invented because the call was
+    // never seen — sets this itself. See `updateNestedTool`.
+    partial: false,
   };
 }
 
@@ -517,13 +606,22 @@ function applySubagentPart(
 }
 
 /**
- * Finds the delegating call anywhere in a part tree and updates it.
+ * Finds the delegating call anywhere in a part tree and updates it, creating it
+ * when this client never saw it made.
  *
- * Returns `parts` unchanged when the call is not there — which happens on a
- * resume that landed mid-delegation. Creating a placeholder card would be worse
- * than dropping the frame: the caller's `tool.call` carries the tool's *name*,
- * and a card invented here would be a subagent's transcript under a heading that
- * says "tool".
+ * The creation path is the reload case, and it is not rare: the replay ring
+ * holds 512 frames and a subagent emits one per token, so a tab that refreshes
+ * mid-delegation comes back past the `tool.call` that started it. This used to
+ * return `parts` unchanged there, and the argument for doing so was that
+ * *"a card invented here would be a subagent's transcript under a heading that
+ * says 'tool'"* — which was true when the wrapper carried less than it does.
+ * It carries `agentId` now, and the tool a delegation runs under is
+ * `ask_<agentId>` with hyphens replaced, so the heading is derivable and
+ * correct. Dropping the frame instead meant the run stayed invisible until the
+ * turn ended.
+ *
+ * Still returns `parts` unchanged when the address names a *different* session
+ * — that is the recursion missing its subtree, not an absent card.
  */
 function updateNestedTool(
   parts: readonly TurnPart[],
@@ -531,6 +629,31 @@ function updateNestedTool(
   message: Extract<ServerMessage, { type: 'subagent.event' }>,
   update: (tool: ToolPart) => ToolPart,
 ): readonly TurnPart[] {
+  if (
+    sessionKey === message.parentSessionKey &&
+    findTool(parts, message.parentCallId) === undefined
+  ) {
+    return [
+      ...parts,
+      update(
+        seedTool(
+          message.parentCallId,
+          delegationToolName(message.agentId),
+          undefined,
+          'safe',
+          'running',
+          // Marked here, and this is the only place that can know: a card
+          // invented because its call was missed is by definition holding the
+          // middle of a run. `session.replay` answers an incomplete resume by
+          // sending the stored tail and delivering no frames at all, so the
+          // absence of the `tool.call` is not a dropped frame — it is the whole
+          // beginning of the delegation. See `SubagentPart.partial`.
+          { ...seedSubagent(message), partial: true },
+        ),
+      ),
+    ];
+  }
+
   const next = parts.map((part) => {
     if (part.kind !== 'tool') return part;
 

@@ -68,6 +68,7 @@ import type { HubApprovalGate } from './approvals.js';
 import { resolveError } from './errors.js';
 import type { AgentMissReason } from './runtime.js';
 import { ReplayBuffer, type SequencedServerMessage } from './replay.js';
+import { TurnLog } from './turn-log.js';
 
 /**
  * How many messages one session may hold while a turn runs.
@@ -287,6 +288,11 @@ interface SessionState {
   /** Last `seq` emitted. Monotonic for the session's lifetime in this process. */
   seq: number;
   readonly ring: ReplayBuffer;
+  /**
+   * The turn that is running, kept whole — the ring answers across turns, this
+   * answers within one. See `turn-log.ts` for why one structure cannot do both.
+   */
+  readonly turnLog: TurnLog;
   readonly clients: Set<Connection>;
   readonly queue: QueuedTurn[];
   running: RunningTurn | undefined;
@@ -334,6 +340,18 @@ function toContent(
     );
   }
   return parts;
+}
+
+/**
+ * The turn a resume can be handed in full, if there is one.
+ *
+ * `complete` is the whole question: a log that overran its byte budget holds a
+ * *middle*, and replaying a middle over a stored tail would render a turn that
+ * began halfway through. Naming nothing there is what makes the fallback the
+ * behaviour the server had before the log existed rather than something worse.
+ */
+function openTurnOf(state: SessionState): string | undefined {
+  return state.turnLog.complete ? state.turnLog.openTurnId : undefined;
 }
 
 /** The first schema complaint, short enough to put on a wire. */
@@ -551,6 +569,9 @@ export class SessionHub {
   sessionCleared(sessionKey: string): void {
     const state = this.sessions.get(sessionKey);
     if (state === undefined || state.clients.size === 0) return;
+    // Before the event, so a resume racing it cannot be handed the frames of a
+    // turn whose conversation no longer exists.
+    state.turnLog.clear();
     this.emit(state, { type: 'session.reset', sessionKey });
   }
 
@@ -906,6 +927,10 @@ export class SessionHub {
    */
   private rewind(state: SessionState, seq: number): void {
     const result = this.store.truncateAfter(state.key, seq - 1);
+    // The turn the log was holding is part of what was just deleted. Cleared
+    // before the event, so a resume racing it cannot be sent frames describing
+    // messages that are no longer in the store.
+    state.turnLog.clear();
     this.emit(state, {
       type: 'session.truncated',
       sessionKey: state.key,
@@ -1187,6 +1212,7 @@ export class SessionHub {
       key,
       seq: 0,
       ring: new ReplayBuffer(this.config.server.replayBufferSize),
+      turnLog: new TurnLog(this.config.server.turnLogMaxBytes),
       clients: new Set(),
       queue: [],
       running: undefined,
@@ -1242,12 +1268,20 @@ export class SessionHub {
   /**
    * Rebuilds a reconnecting client.
    *
-   * Two answers, and the flag is which one it got. Covered by the ring: the
-   * events after `lastSeq` verbatim, which is strictly more than storage holds —
-   * it includes the deltas of a turn still running. Past the ring: the stored
-   * tail instead, `complete: false`, and the client refetches the rest from
-   * REST. Never both, because a stored assistant message and the deltas that
-   * produced it are the same text twice.
+   * Three answers now, and the first two are the original pair. Covered by the
+   * ring: the events after `lastSeq` verbatim, which is strictly more than
+   * storage holds — it includes the deltas of a turn still running. Past the
+   * ring with nothing running: the stored tail instead, `complete: false`, and
+   * the client refetches the rest from REST. Never both, because a stored
+   * assistant message and the deltas that produced it are the same text twice.
+   *
+   * The third is past the ring *while a turn is running*, which is the ordinary
+   * outcome of reloading during a delegation — a subagent spends a frame per
+   * token and the ring is counted in frames. Here the answer is both, and it is
+   * legal because the log names the one turn the two sources overlap on:
+   * `resumingTurnId` tells the client to drop that turn from the tail it was
+   * just handed and rebuild it from the frames, which are the whole of it. The
+   * rest of the tail is history the frames say nothing about.
    */
   private resume(
     connection: Connection,
@@ -1256,6 +1290,10 @@ export class SessionHub {
   ): void {
     const state = this.move(connection, sessionKey);
     const slice = state.ring.after(lastSeq);
+    // Only consulted when the ring falls short: while the ring covers the gap it
+    // is already sending these frames, and sending them twice from two places
+    // would be the duplicate this whole path exists to avoid.
+    const resuming = slice.complete ? undefined : openTurnOf(state);
 
     this.emit(state, {
       type: 'session.replay',
@@ -1266,21 +1304,32 @@ export class SessionHub {
             .messages(state.key, { limit: RESUME_MESSAGE_LIMIT, fromEnd: true })
             .map(toStoredMessage),
       complete: slice.complete,
+      ...(resuming === undefined ? {} : { resumingTurnId: resuming }),
     });
 
     if (!slice.complete) {
       this.logger.info(
-        { sessionKey: state.key, lastSeq, ringSize: state.ring.size },
-        'resume fell outside the replay buffer',
+        {
+          sessionKey: state.key,
+          lastSeq,
+          ringSize: state.ring.size,
+          resumingTurnId: resuming,
+          turnLogFrames: state.turnLog.size,
+        },
+        resuming === undefined
+          ? 'resume fell outside the replay buffer'
+          : 'resume fell outside the replay buffer; replaying the open turn',
       );
-      return;
+      if (resuming === undefined) return;
     }
 
     // Re-sends, not new events: the same frames with the same `seq`, to the one
     // connection that missed them. They therefore arrive *after* an envelope
     // carrying a higher number, which is why a client tracks the maximum `seq`
     // it has seen rather than the last one it was handed.
-    for (const message of slice.messages) this.deliver(connection, message);
+    const frames =
+      resuming === undefined ? slice.messages : state.turnLog.frames();
+    for (const message of frames) this.deliver(connection, message);
   }
 
   private status(state: SessionState): void {
@@ -1327,6 +1376,7 @@ export class SessionHub {
     // through `ServerMessageSchema`, so the runtime shape is checked too.
     const message: SequencedServerMessage = { ...event, seq: state.seq };
     state.ring.push(message);
+    state.turnLog.push(message);
     this.broadcastToSession(state, message);
   }
 

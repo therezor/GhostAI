@@ -67,6 +67,9 @@ export function unloadedSubagent(run: SubagentRunRef): SubagentPart {
     elapsedMs: undefined,
     done: true,
     loaded: false,
+    // Nothing is being shown, so there is no half of anything on screen. The
+    // card offers to fetch the whole run, which is the opposite of partial.
+    partial: false,
   };
 }
 
@@ -145,6 +148,7 @@ export function orphanTurn(turnId: string): TurnItem {
     lastSeq: undefined,
     done: false,
     failure: undefined,
+    authoritative: false,
   };
 }
 

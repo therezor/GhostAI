@@ -284,6 +284,14 @@ export class TurnRenderer {
       this.subagent(event);
       return;
     }
+    // The terminal has the same figure in its header, and refreshes it at the
+    // same turn boundaries `/context` measures at — so it has the staleness
+    // this event exists to fix, just less visibly than a bar sitting under a
+    // composer. Wiring `contextLabel()` to it is the obvious follow-up; what
+    // stops it being free is that the header redraws the whole prompt line, and
+    // doing that mid-stream is the thing `packages/tui` was written to make
+    // safe rather than something to bolt on here.
+    if (event.type === 'context.usage') return;
     this.render(event, this.sessionKey);
   }
 

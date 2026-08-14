@@ -93,13 +93,19 @@ export function ContextBody({
   const context = useQuery({
     queryKey: queryKeys.context(sessionKey),
     queryFn: ({ signal }) => api.context(sessionKey, signal),
-    // No zero stale time any more, and the reason changed rather than the
-    // requirement. This used to be fetched only when a button was pressed, so
-    // re-measuring on every open was the only way to be current. The strip
-    // under the composer is always mounted, and `queryKeys.context` sits under
-    // the `['sessions']` prefix that `use-connection.ts` invalidates on every
-    // `turn.end` — so the number is refreshed by the thing that changes it,
-    // rather than by rebuilding the whole system prompt on a timer.
+    // Re-measures on open, and the reason is the strip rather than the timer it
+    // used to be. `use-connection.ts` patches the *totals* into this cache from
+    // every `context.usage` frame, so mid-turn the bar and the figure here are
+    // current while `messages`, `tools` and `systemPrompt` are the last fetch's
+    // — a panel whose header says 41k over a list that adds up to 23k. Opening
+    // it is the one moment anyone reads those lists, so it is the right moment
+    // to pay for them.
+    //
+    // Still no `staleTime: 0`. The strip under the composer shares this key and
+    // is always mounted; zeroing it would make every background revalidation
+    // rebuild the whole system prompt, which is what that setting was removed
+    // for in the first place.
+    refetchOnMount: 'always',
   });
 
   if (context.isPending) {

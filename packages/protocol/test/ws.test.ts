@@ -241,6 +241,22 @@ describe('session replay', () => {
       messages: [],
     });
     expect(parsed).toMatchObject({ complete: true });
+    // Absent, rather than defaulted: no key at all is what every replay before
+    // the in-flight turn log carried, and it means the tail is history that
+    // nothing about to arrive overlaps.
+    expect(parsed).not.toHaveProperty('resumingTurnId');
+  });
+
+  it('names the turn whose frames follow and redefine it', () => {
+    const parsed = ServerMessageSchema.parse({
+      type: 'session.replay',
+      seq: 9,
+      sessionKey: 's',
+      messages: [],
+      complete: false,
+      resumingTurnId: 't1',
+    });
+    expect(parsed).toMatchObject({ resumingTurnId: 't1' });
   });
 
   it('carries stored messages with their tool-call pairing intact', () => {
@@ -457,5 +473,55 @@ describe('AttachmentSchema', () => {
         content: 'hi',
       }).attachments,
     ).toEqual([]);
+  });
+});
+
+describe('context.usage', () => {
+  const frame = {
+    type: 'context.usage',
+    seq: 4,
+    sessionKey: 'web:1',
+    estimatedTokens: 2631,
+    contextWindowTokens: 65_536,
+    breakdown: {
+      systemPrompt: 1840,
+      tools: 560,
+      messages: 201,
+      runtimeBlock: 30,
+    },
+  };
+
+  it('carries the same breakdown shape the context route returns', () => {
+    const parsed = ServerMessageSchema.parse(frame);
+    if (parsed.type !== 'context.usage') throw new Error('unreachable');
+    expect(parsed.estimatedTokens).toBe(2631);
+    expect(parsed.breakdown).toEqual(frame.breakdown);
+  });
+
+  it('defaults the breakdown, so a total with no sections still parses', () => {
+    const parsed = ServerMessageSchema.parse({
+      type: 'context.usage',
+      seq: 4,
+      sessionKey: 'web:1',
+      estimatedTokens: 10,
+      contextWindowTokens: 100,
+    });
+    if (parsed.type !== 'context.usage') throw new Error('unreachable');
+    expect(parsed.breakdown).toEqual({});
+  });
+
+  it('is sequenced, so a reconnecting tab is told the current figure', () => {
+    // It enters the ring like every other session-scoped frame, and replaying
+    // one is idempotent: it sets a number rather than appending to anything.
+    expect(isSequencedServerMessage(ServerMessageSchema.parse(frame))).toBe(
+      true,
+    );
+  });
+
+  it('names the session and not the turn', () => {
+    // Deliberate. It describes the conversation, not the turn that grew it —
+    // which is what keeps it out of the client's set of turn-growing events,
+    // where a replayed frame onto a finished turn would have to be dropped.
+    expect(Object.keys(frame)).not.toContain('turnId');
   });
 });

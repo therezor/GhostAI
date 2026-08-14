@@ -7,14 +7,22 @@
  * the route would do exactly that.
  *
  * What this adds on top of `connection.ts` is the part that needs React: the
- * Query cache. Three server events invalidate fetched state, and none of them
- * can be discovered by polling — a turn ending changes the session list's
- * message counts, a notification changes the sidebar badge, and `tools.changed`
- * means an MCP server or an extension moved under the settings panel's feet.
+ * Query cache. Several server events move fetched state, and none of them can
+ * be discovered by polling — a turn ending changes the session list's message
+ * counts, a notification changes the sidebar badge, and `tools.changed` means an
+ * MCP server or an extension moved under the settings panel's feet.
+ *
+ * One of them **writes** rather than invalidates. `context.usage` already
+ * carries the numbers, so refetching to learn them would re-download the whole
+ * system prompt, every tool definition and every windowed message — up to forty
+ * times in one turn — to change four integers. It is patched straight into the
+ * cache instead.
  */
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
+
+import type { ContextResponse } from '@ghostwire/protocol';
 
 import { queryKeys } from '@/lib/query.js';
 import { useTurnStore } from '@/state/turn.js';
@@ -69,6 +77,34 @@ export function useConnection(sessionKey: string | undefined): void {
             });
             return;
 
+          case 'context.usage':
+            // Patched into the cache rather than held beside it, so the strip
+            // and the inspector cannot disagree: a bar reading 41k that opens a
+            // panel reading 23k is worse than a bar that was late.
+            //
+            // Only the totals. `messages`, `tools` and `systemPrompt` are the
+            // last fetch's and stay that way — `ContextBody` refetches when it
+            // opens, which is the moment anyone looks at them.
+            //
+            // `previous === undefined` is a real case, not a guard for form's
+            // sake: the socket mints a session key before any row exists, so
+            // this route 404s on a conversation nobody has spoken in yet.
+            // Seeding an entry here would put a bar under the composer of a
+            // conversation that does not exist.
+            queryClient.setQueryData<ContextResponse>(
+              queryKeys.context(message.sessionKey),
+              (previous) =>
+                previous === undefined
+                  ? previous
+                  : {
+                      ...previous,
+                      estimatedTokens: message.estimatedTokens,
+                      contextWindowTokens: message.contextWindowTokens,
+                      breakdown: message.breakdown,
+                    },
+            );
+            return;
+
           case 'notification':
             void queryClient.invalidateQueries({
               queryKey: queryKeys.notifications,
@@ -80,6 +116,20 @@ export function useConnection(sessionKey: string | undefined): void {
               description: message.body,
               role: message.level === 'error' ? 'danger' : message.level,
             });
+            return;
+
+          case 'session.replay':
+            // Only the incomplete answer needs anything. The frame carries a
+            // bare `messages` array — no `subagentRuns`, no `failures` — so the
+            // rebuild it drives loses the pointers that let a finished
+            // delegation be fetched back and the reason a failed turn failed.
+            // The REST history carries all three, and `mergeStoredHistory` puts
+            // them under whatever the socket has built since.
+            if (!message.complete) {
+              void queryClient.invalidateQueries({
+                queryKey: queryKeys.messages(message.sessionKey),
+              });
+            }
             return;
 
           case 'session.truncated':

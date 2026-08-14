@@ -144,6 +144,7 @@ export const PROTOCOL_SCHEMAS = {
   TurnEndEvent: ws.TurnEndEventSchema,
   NestedAgentEvent: ws.NestedAgentEventSchema,
   SubagentEvent: ws.SubagentEventSchema,
+  ContextUsageEvent: ws.ContextUsageEventSchema,
   SessionStatusEvent: ws.SessionStatusEventSchema,
   SessionResetEvent: ws.SessionResetEventSchema,
   SessionReplayEvent: ws.SessionReplayEventSchema,
