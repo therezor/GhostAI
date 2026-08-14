@@ -62,7 +62,7 @@ import type { ServeCommandOptions } from './serve.js';
  * bump is the root `package.json` plus `node scripts/gen-packages.mjs`; the
  * test above is what stops that pair from landing without this.
  */
-export const VERSION = '0.7.1';
+export const VERSION = '0.7.2';
 
 const LOG_LEVELS: readonly string[] = [
   'trace',

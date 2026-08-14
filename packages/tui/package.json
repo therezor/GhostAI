@@ -1,6 +1,6 @@
 {
   "name": "@ghostwire/tui",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "A domain-free terminal toolkit: key decoding, display-width text, and a transient selection region.",
   "type": "module",
   "license": "MIT",

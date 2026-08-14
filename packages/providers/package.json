@@ -1,6 +1,6 @@
 {
   "name": "@ghostwire/providers",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "LLM provider registry, wire adapters, and resilience decorator.",
   "type": "module",
   "license": "MIT",

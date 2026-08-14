@@ -1,11 +1,50 @@
 # Changelog
 
-The format is [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
+The sections are [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)'s — Added,
+Changed, Fixed, Removed — without its release dates, which the tags carry. This project
 uses [semantic versioning](https://semver.org/spec/v2.0.0.html). Every package in the
 repository carries the same version and they are released together; only `@ghostwire/ghostai`
 is something you install by name.
 
-## [0.7.1] - 2026-08-12
+## [0.7.2]
+
+Two screens stopped lying about a turn that is still running: a reload during a
+delegation lost the run, and the context bar billed text the model never saw.
+
+### Added
+
+- **A reload mid-turn comes back to the whole turn**, nested subagent steps
+  included. The server keeps the running turn beside the replay ring, and a
+  resume past the ring gets both the stored tail and that turn's frames.
+- **`server.turnLogMaxBytes`** (default 16 MiB) bounds that retention. Only a
+  session with an open turn holds one; `0` turns it off.
+- **The context bar moves while a turn runs**, on a new `context.usage` frame
+  emitted at the end of every tool iteration.
+- **Time to first token** in the turn-info popover, beside elapsed.
+
+### Changed
+
+- **Tokens/s divides by generation time, not the turn's wall clock**, so a cold
+  model load or a slow tool no longer reports the model as slow. Older turns
+  keep the wall-clock figure.
+- **The context inspector prices the request, not the stored records.** The
+  model's reasoning and a tool's `risk`/`source` are no longer counted or shown;
+  both halves of the prompt are priced inside the messages they are sent in.
+  Expect the figure to move on the same conversation.
+- The retry ladder sizes history the same way, so a context-length retry cuts
+  what it means to.
+- `GET /api/sessions/:key/context` no longer returns `reasoning`. The transcript
+  endpoints still do.
+
+### Fixed
+
+- **`node:sqlite`'s experimental warning no longer prints** on every command
+  that touches a session. Only that one message is dropped.
+- A subagent whose delegating call was never seen — the usual outcome of
+  reloading mid-delegation — renders as a card instead of being dropped.
+- A _reconnect_ past the replay ring no longer deletes the answer on screen.
+
+## [0.7.1]
 
 Skill sheets learn who they are for. A sheet was in every agent's catalogue or in
 none, which is the wrong granularity for a workspace a coder, a researcher and a
@@ -85,7 +124,7 @@ The CLI asks npm for `@ghostwire/presets@^1.0.0` — any 1.x, with `--no-save` a
 with no upgrade of GhostAI itself. The two release on their own cadences by design;
 this entry describes what the app can do, not what today's catalogue asks it to.
 
-## [0.7.0] - 2026-08-09
+## [0.7.0]
 
 The first release. Everything below is what it ships with rather than what changed.
 
@@ -210,5 +249,6 @@ them reads as more finished than it is.
   ships as a scheduled job's payload; delivery does not.
 - **Session search is by title and filter, not by message content.**
 
+[0.7.2]: https://github.com/therezor/GhostAI/releases/tag/v0.7.2
 [0.7.1]: https://github.com/therezor/GhostAI/releases/tag/v0.7.1
 [0.7.0]: https://github.com/therezor/GhostAI/releases/tag/v0.7.0

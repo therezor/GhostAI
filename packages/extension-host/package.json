@@ -1,6 +1,6 @@
 {
   "name": "@ghostwire/extension-host",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "Discovers, authorises, loads and unloads extensions, and collects what they contribute.",
   "type": "module",
   "license": "MIT",
