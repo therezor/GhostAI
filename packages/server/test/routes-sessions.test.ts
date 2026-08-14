@@ -800,6 +800,45 @@ describe('GET /api/sessions/:key/context', () => {
     ]);
   });
 
+  /**
+   * The panel shows the request, and the request has never carried reasoning.
+   *
+   * Asserted against the transcript's own payload in the same case, because the
+   * two mappers deliberately differ now: dropping the field in
+   * `toStoredMessage` instead would have emptied the collapsible block beside
+   * every answer in the chat view.
+   */
+  it('sends no reasoning, while the transcript still does', async () => {
+    const test = await start();
+    test.runtime.store.append('web-1', userMessage('hello'));
+    test.runtime.store.append(
+      'web-1',
+      assistantMessage('hi', { reasoning: 'thinking about it' }),
+    );
+
+    const context = await test.server.app.inject({
+      method: 'GET',
+      url: '/api/sessions/web-1/context',
+      headers: test.headers,
+    });
+    const transcript = await test.server.app.inject({
+      method: 'GET',
+      url: '/api/sessions/web-1/messages',
+      headers: test.headers,
+    });
+
+    const measured = context.json<ContextResponse>().messages.at(-1)?.message;
+    expect(
+      measured?.role === 'assistant' && measured.reasoning,
+    ).toBeUndefined();
+    const shown = transcript
+      .json<SessionMessagesResponse>()
+      .messages.at(-1)?.message;
+    expect(shown?.role === 'assistant' && shown.reasoning).toBe(
+      'thinking about it',
+    );
+  });
+
   it('names the agent it measured, and says nothing was substituted', async () => {
     const test = await start();
     test.runtime.store.ensureSession('web-1');

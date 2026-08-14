@@ -18,12 +18,31 @@
 
 import { describeContext } from '@ghostwire/agent';
 import { toStoredMessage } from '@ghostwire/core';
-import type { ContextResponse } from '@ghostwire/protocol';
+import type { ContextResponse, StoredMessage } from '@ghostwire/protocol';
 
 import type { ServerRuntime } from './runtime.js';
 
 /** The slice of the runtime this needs. Structural, so a test can stand in. */
 type ContextRuntime = Pick<ServerRuntime, 'agents' | 'agent' | 'store'>;
+
+/**
+ * The message as the request carries it: without the model's own reasoning.
+ *
+ * Applied here rather than in `toStoredMessage`, and the difference matters.
+ * That mapper serves the transcript endpoints too, where `reasoning` is the
+ * collapsible block beside an answer and deleting it would empty a feature.
+ * This route answers "what is in the window", the wire has never carried
+ * reasoning, and a payload that shipped it invited the panel to show it — which
+ * is the bug this is closing rather than a rendering choice left to the client.
+ *
+ * The two mappers now deliberately differ; anything reading both should expect
+ * that.
+ */
+function withoutReasoning(stored: StoredMessage): StoredMessage {
+  if (stored.message.role !== 'assistant') return stored;
+  const { reasoning, ...message } = stored.message;
+  return { ...stored, message };
+}
 
 /**
  * Measures one session, or `undefined` when there is nothing to measure.
@@ -70,7 +89,7 @@ export async function buildContextResponse(
     systemPrompt: report.systemPrompt,
     runtimeBlock: report.runtimeBlock,
     tools: [...report.tools],
-    messages: report.messages.map(toStoredMessage),
+    messages: report.messages.map(toStoredMessage).map(withoutReasoning),
     estimatedTokens: report.estimatedTokens,
     contextWindowTokens: report.contextWindowTokens,
     breakdown: { ...report.breakdown },

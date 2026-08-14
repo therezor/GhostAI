@@ -195,7 +195,10 @@ Session and connection: `connected` · `pong` · `error` · `message.ack` ·
 `context.usage` is filed here rather than with the turn events on purpose. It is emitted
 at the end of every tool iteration and reports what the _next_ request would cost —
 `estimatedTokens`, `contextWindowTokens` and the same `breakdown`
-`GET /api/sessions/:key/context` returns, from the same measurement. It carries no
+`GET /api/sessions/:key/context` returns, from the same measurement — which prices the
+encoded request rather than the stored records, so a field the wire never carries (an
+assistant's `reasoning`, a tool's `risk`) is neither sent in that response nor counted in
+the breakdown. It carries no
 `turnId`, because it describes the conversation rather than the turn that grew it, and it
 is emitted by the root loop only: a subagent's window belongs to the child's session, and
 reporting it would move a meter that is describing somebody else's history.

@@ -39,7 +39,7 @@ import {
 import type { ChatMessage } from '@ghostwire/protocol';
 
 import { type ProviderError, toProviderError } from './errors.js';
-import { estimateTokens } from './tokens.js';
+import { estimateMessageTokens } from './measure.js';
 import type {
   ChatProvider,
   ChatRequest,
@@ -149,6 +149,14 @@ const TRUNCATION_FRACTION = 0.35;
  * counts say nothing: ten one-line exchanges and one pasted stack trace are the
  * same number and nowhere near the same request.
  *
+ * Measured on the *body*, through the same encoder the request is built with.
+ * The distinction is not cosmetic here: a rejection for context length is about
+ * what the provider received, and pricing the stored records instead inflates
+ * the total by text that was never sent — the model's own reasoning. `target`
+ * is a fraction of that total, so an inflated one is reached while less real
+ * history has been cut, and the retry can fail on length again and burn another
+ * rung of the ladder.
+ *
  * The system message is preserved wherever the cut lands — it is the agent's
  * instructions, not conversation — and the survivors are realigned so a `tool`
  * result never outlives the `assistant` message that requested it. Cutting
@@ -162,7 +170,7 @@ export function truncateOldestTurns(
   const body = system === null ? messages : messages.slice(1);
   if (body.length <= 1) return null;
 
-  const sizes = body.map((message) => estimateTokens(JSON.stringify(message)));
+  const sizes = body.map(estimateMessageTokens);
   const target =
     sizes.reduce((total, size) => total + size, 0) * TRUNCATION_FRACTION;
 

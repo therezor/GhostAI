@@ -115,3 +115,7 @@ export {
 } from './factory.js';
 
 export { estimateTokens, loadTokenCounter } from './tokens.js';
+
+// The encoders themselves stay internal: the question this package answers for
+// the rest of the tree is "how big would this request be", not "build me one".
+export { estimateMessageTokens, estimateToolTokens } from './measure.js';

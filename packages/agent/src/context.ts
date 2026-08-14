@@ -3,11 +3,20 @@
  *
  * This is the measurement behind the context strip in the web UI and `/context`
  * in the CLI, and it lives here for a reason worth stating: it cannot live in
- * `@ghostwire/core`, which has no access to `estimateTokens` or to the prompt the
+ * `@ghostwire/core`, which has no access to the estimators or to the prompt the
  * loop assembles; and it must not live in `@ghostwire/server`, because the CLI
  * drives `AgentLoop` in-process and never speaks HTTP. `@ghostwire/agent` already
  * depends on both halves, so putting it here adds no dependency edge and gives
  * both front ends one implementation instead of two that drift.
+ *
+ * **The figures are of the request body, not of what is stored.** They come from
+ * `estimateMessageTokens` and `estimateToolTokens`, which run the same encoder
+ * the transport sends with (`wire-encode.ts`) — so a field that never reaches a
+ * provider is never billed. Two of them used to be: an assistant record's
+ * `reasoning`, which is kept beside the answer to be shown and excluded from
+ * history replay, and a tool's `risk` and `source`, which drive an approval
+ * prompt and a badge. That is a second reason this cannot move down to `core`:
+ * pricing the body is `@ghostwire/providers`' knowledge.
  *
  * It returns storage *records* rather than wire types. The REST layer narrows
  * them with `toStoredMessage`; the terminal never needs to.
@@ -15,17 +24,31 @@
 
 import {
   historyForLLM,
+  systemMessage,
+  userMessage,
   type SessionStore,
   type StoredMessageRecord,
 } from '@ghostwire/core';
 import type { ChatMessage, ToolDefinition } from '@ghostwire/protocol';
-import { estimateTokens } from '@ghostwire/providers';
+import {
+  estimateMessageTokens,
+  estimateToolTokens,
+} from '@ghostwire/providers';
 
 import type { AgentLoop, PromptPreview } from './loop.js';
+import { runtimeReminder } from './prompt.js';
 
 interface ContextBreakdown {
   readonly systemPrompt: number;
   readonly tools: number;
+  /**
+   * The window, priced as the body carries it.
+   *
+   * Which is why adding a reasoning model to a conversation does not move this
+   * number: `reasoning` is stored beside the answer and dropped by
+   * `encodeMessage`, so it costs nothing on the wire and is charged nothing
+   * here.
+   */
   readonly messages: number;
   /**
    * The trailing turn: live state, the turn's delimiter, a correction.
@@ -48,6 +71,13 @@ export interface ContextReport {
    *
    * Empty in `raw` mode, where the operator's one template is the whole system
    * message and there is no second half to show.
+   *
+   * **The strings here are for reading; the figures beside them are
+   * body-shaped.** `breakdown.runtimeBlock` prices this text inside the message
+   * the loop wraps it in, so it is deliberately larger than an estimate of the
+   * string alone — and the same goes for `systemPrompt`. Someone eventually
+   * notices the two do not match and "fixes" one of them; this is the note
+   * saying which way round it goes.
    */
   readonly runtimeBlock: string;
   /**
@@ -56,6 +86,10 @@ export interface ContextReport {
    * Returned as well as measured, because the breakdown says `tools: 1,240` and
    * the only follow-up question anyone has is *which* tools. A number with
    * nothing behind it is the part of an inspector that gets asked about.
+   *
+   * The list is fuller than the figure: `risk` and `source` are on every entry
+   * because the panel badges them, and neither is billed, because neither is
+   * sent. See `encodeTools`.
    */
   readonly tools: readonly ToolDefinition[];
   /** The window as it would be sent, in storage order. */
@@ -140,6 +174,13 @@ export function measureContext(input: MeasureContextInput): ContextReport {
   // returned messages the *same objects* that went in. That identity is how
   // each one is matched back to the stored row carrying its id and seq —
   // without it there would be no way to say which row a window entry came from.
+  //
+  // Which is the rule for anyone measuring something new here: nothing between
+  // `historyForLLM` and the loop below may build a new message. Projecting to
+  // the wire shape *before* this point silently empties `messages` — every
+  // lookup misses, the panel's list goes blank, and the token figure still
+  // looks right, so nothing fails. The projection belongs inside the reduce,
+  // where it allocates a throwaway and returns a number.
   const byMessage = new Map<ChatMessage, StoredMessageRecord>(
     records.map((record) => [record.message, record]),
   );
@@ -156,11 +197,20 @@ export function measureContext(input: MeasureContextInput): ContextReport {
 
   const { staticPrompt, runtimeBlock } = input.prompt;
 
-  const promptTokens = estimateTokens(staticPrompt);
-  const runtimeTokens = estimateTokens(runtimeBlock);
-  const toolTokens = estimateTokens(JSON.stringify(input.tools));
+  // Priced as the request carries them, envelopes and all: the two halves of the
+  // prompt are messages by the time they are sent, not strings, and the loop
+  // omits the trailing one entirely in raw mode and `tools` entirely when there
+  // are none. Both ternaries below are those two omissions — see `loop.ts`,
+  // where the same conditions build the request.
+  const promptTokens = estimateMessageTokens(systemMessage(staticPrompt));
+  const runtimeTokens =
+    runtimeBlock === ''
+      ? 0
+      : estimateMessageTokens(userMessage(runtimeReminder(runtimeBlock)));
+  const toolTokens =
+    input.tools.length === 0 ? 0 : estimateToolTokens(input.tools);
   const messageTokens = window.reduce(
-    (total, message) => total + estimateTokens(JSON.stringify(message)),
+    (total, message) => total + estimateMessageTokens(message),
     0,
   );
 

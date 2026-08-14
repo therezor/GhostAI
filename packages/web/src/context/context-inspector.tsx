@@ -324,6 +324,13 @@ function ToolEntry({ tool }: { readonly tool: ToolDefinition }): JSX.Element {
  * Tool results are shown whole. They are the entries most likely to be the
  * reason a window filled up, and this is the one screen where the envelope and
  * the full untruncated output are the point rather than noise.
+ *
+ * An assistant's `reasoning` is not shown, and the route does not send it. This
+ * screen is what the request contains, and the wire has never carried it — a
+ * dimmed block of it here read as "this is in your window", which is the
+ * question the screen exists to answer and the one answer it was getting wrong.
+ * The transcript still shows it, in the collapsible block beside the answer,
+ * where it is a record of what the model did rather than a claim about cost.
  */
 function MessageEntry({
   stored,
@@ -348,8 +355,6 @@ function MessageEntry({
           .join('');
 
   const calls = message.role === 'assistant' ? message.toolCalls : [];
-  const reasoning =
-    message.role === 'assistant' ? (message.reasoning ?? '') : '';
 
   return (
     <li className="stack context__message">
@@ -357,9 +362,6 @@ function MessageEntry({
         <Badge tone="neutral">{message.role}</Badge>
         <span className="context__message-seq">#{stored.seq}</span>
       </p>
-      {reasoning !== '' && (
-        <pre className="context__text context__text--dim">{reasoning}</pre>
-      )}
       {text !== '' && <pre className="context__text">{text}</pre>}
       {calls.map((call) => (
         <pre key={call.id} className="context__text">

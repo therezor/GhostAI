@@ -156,9 +156,24 @@ This is the screen that answers "why did it forget what I said", and it used to 
 one turn late: a twenty-step turn appends most of a window before it ends, which is
 exactly when the question gets asked.
 
+**It shows what is sent, and counts what is sent.** The panel prices every section as
+the request body carries it — through the same encoder the provider is spoken to with —
+so what a model never receives is neither listed nor billed. That is why an assistant's
+reasoning is absent here while the transcript still shows it in the collapsible block
+beside the answer: the wire has never carried it, and a dimmed copy of it on this screen
+read as "this is in your window". A tool's risk band is the same rule seen from the
+other side — badged in the list, because it decides whether a call needs approving, and
+not in the figure, because no model has seen one.
+
+One divergence is left, and it goes the other way: a file attachment is counted as the
+reference the window holds, while the request carries the file's contents. A session
+with large attachments therefore reads low. Expanding them to measure would mean reading
+every attached file again at the end of every tool iteration, which is a real cost on a
+long turn to move a bar.
+
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="screenshots/context.light.png">
-  <img alt="The context inspector: 2,631 of 65,536 tokens, broken down into system prompt, tool definitions, session and live state." src="screenshots/context.dark.png">
+  <img alt="The context inspector: 2,456 of 65,536 tokens, broken down into system prompt, tool definitions, session and live state." src="screenshots/context.dark.png">
 </picture>
 
 ## Files

@@ -292,6 +292,43 @@ describe('the context inspector: what is in each section', () => {
     expect(screen.getByText('#1')).toBeVisible();
   });
 
+  it('shows the answer without the thinking behind it', async () => {
+    // The route does not send `reasoning` — this asserts the panel would not
+    // render one if a stale client or an older server did. What the screen
+    // claims is the request, and the request has never carried it; the
+    // transcript beside it still shows the collapsible block.
+    const user = mount({
+      '/api/sessions/web%3A1/context': [
+        200,
+        {
+          ...CONTEXT,
+          messages: [
+            ...CONTEXT.messages,
+            {
+              id: 'm2',
+              sessionKey: 'web:1',
+              seq: 2,
+              createdAtMs: 2,
+              message: {
+                role: 'assistant',
+                content: [{ type: 'text', text: 'the answer' }],
+                toolCalls: [],
+                reasoning: 'first I considered the alternatives',
+              },
+            },
+          ],
+        },
+      ],
+    });
+    await open(user);
+
+    await user.click(await screen.findByText('Session (2 messages)'));
+    expect(screen.getByText('the answer')).toBeVisible();
+    expect(
+      screen.queryByText(/first I considered the alternatives/),
+    ).not.toBeInTheDocument();
+  });
+
   it('says so rather than showing an empty box for an agent with no tools', async () => {
     const user = mount({
       '/api/sessions/web%3A1/context': [200, { ...CONTEXT, tools: [] }],

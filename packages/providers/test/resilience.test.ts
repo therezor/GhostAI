@@ -409,6 +409,32 @@ describe('truncateOldestTurns', () => {
     expect(kept!.length).toBeLessThan(messages.length);
   });
 
+  it('cuts the same history whether or not the turns carry reasoning', () => {
+    // The rejection this recovers from is about what the provider received, and
+    // reasoning is not part of that. Pricing it would inflate the total, so the
+    // 35% target would be reached after cutting less real history — and the
+    // retry could fail on length again and burn another rung of the ladder.
+    const thought = 'x'.repeat(4000);
+    const plain: readonly ChatMessage[] = [
+      systemMessage('rules'),
+      long('a'),
+      assistantMessage('answered'),
+      long('b'),
+      assistantMessage('answered'),
+      long('c'),
+    ];
+    // The same conversation, differing in that one field and nothing else.
+    const thinking = plain.map((message) =>
+      message.role === 'assistant'
+        ? assistantMessage('answered', { reasoning: thought })
+        : message,
+    );
+
+    expect(truncateOldestTurns(thinking)?.length).toBe(
+      truncateOldestTurns(plain)?.length,
+    );
+  });
+
   it('keeps the trailing runtime turn, which carries the live half of the prompt', () => {
     // It cuts from the front, so this holds by construction — but the tool-pair
     // realignment runs over the whole array, and dropping this message would

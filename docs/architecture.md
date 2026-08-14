@@ -113,7 +113,10 @@ command looks alive rather than hung.
 `context.usage` is the one that is not about the turn. It goes out at the end of each
 iteration, once the tool results are written, and reports what the next request would
 cost — the same numbers `describeContext` gives the REST route and the CLI, measured from
-the prompt the iteration already composed rather than from a second assembly. Only the
+the prompt the iteration already composed rather than from a second assembly. The
+measurement runs through `wire-encode.ts`, the module the transport builds its body
+with, so the figures price the request rather than the stored records and nothing the
+provider never receives is billed to the window. Only the
 root loop emits it: a subagent measures its own session, which is not the one anybody is
 reading, and `ContextUsageEvent` sits outside `NestedAgentEvent` so that is a compile
 error rather than a convention.

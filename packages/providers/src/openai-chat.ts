@@ -14,16 +14,10 @@
  * repair anything. Those belong to `withResilience` and to `historyForLLM`, in
  * one place each, rather than smeared across every adapter that will follow.
  *
- * Two encoding decisions are worth stating, because both are bug-compatibility
- * with the ecosystem rather than preference:
- *
- *  - **Text-only content collapses to a plain string.** The array-of-parts form
- *    is correct per the OpenAI schema, and several local servers reject it for
- *    `system` and `tool` messages. The string form is understood everywhere.
- *  - **Tool-call arguments cross the wire verbatim.** A model emitting malformed
- *    JSON is routine; parsing it here would turn that into a transport-layer
- *    exception. The string is preserved so the tool registry can reject it as a
- *    typed tool error the model gets to see and retry against.
+ * The first of those three lives next door, in `wire-encode.ts`, because the
+ * body's shape has a second reader: the context inspector prices what this
+ * adapter would send, and the two must be the same function rather than two
+ * descriptions of it. Decoding stays here — nothing else has any use for it.
  */
 
 import {
@@ -36,8 +30,6 @@ import {
 
 import type {
   AssistantMessage,
-  ChatMessage,
-  ContentPart,
   ModelInfo,
   ToolCall,
   Usage,
@@ -72,6 +64,7 @@ import {
   type ProviderSpec,
 } from './registry.js';
 import { parseSse, readByteStream } from './sse.js';
+import { encodeMessage, encodeTools } from './wire-encode.js';
 import {
   emptyUsage,
   type ChatProvider,
@@ -144,89 +137,6 @@ function joinPath(base: URL, path: string): string {
   return `${base.href.replace(/\/+$/, '')}/${path}`;
 }
 
-// ---------------------------------------------------------------------------
-// Encoding
-// ---------------------------------------------------------------------------
-
-type WireContentPart =
-  | { type: 'text'; text: string }
-  | { type: 'image_url'; image_url: { url: string } };
-
-interface WireToolCall {
-  readonly id: string;
-  readonly type: 'function';
-  readonly function: { readonly name: string; readonly arguments: string };
-}
-
-interface WireMessage {
-  readonly role: string;
-  readonly content: string | readonly WireContentPart[] | null;
-  readonly tool_calls?: readonly WireToolCall[];
-  readonly tool_call_id?: string;
-}
-
-function encodePart(part: ContentPart): WireContentPart {
-  if (part.type === 'text') return { type: 'text', text: part.text };
-  // A `file` part is a workspace reference, and this wire format has nowhere to
-  // put one — it is meant to have been turned into text or an image by
-  // `materialiseAttachments` before the request got here. Reaching this branch
-  // means a caller went straight to a provider, so render the reference rather
-  // than dropping it: a model told the path can still reach for a tool, and a
-  // silently missing attachment is the failure this whole change was about.
-  if (part.type === 'file') {
-    return {
-      type: 'text',
-      text: `[attachment: ${part.path} · ${part.mimeType}]`,
-    };
-  }
-  // An inline image becomes a data URI; a signed URL is passed through for the
-  // provider to fetch. Both are what `image_url` accepts.
-  const url =
-    part.data === undefined
-      ? (part.url ?? '')
-      : `data:${part.mimeType};base64,${part.data}`;
-  return { type: 'image_url', image_url: { url } };
-}
-
-function encodeContent(
-  parts: readonly ContentPart[],
-): string | readonly WireContentPart[] {
-  const encoded = parts.map(encodePart);
-  return encoded.every((part) => part.type === 'text')
-    ? encoded.map((part) => part.text).join('\n')
-    : encoded;
-}
-
-function encodeMessage(message: ChatMessage): WireMessage {
-  switch (message.role) {
-    case 'system':
-      return { role: 'system', content: message.content };
-    case 'user':
-      return { role: 'user', content: encodeContent(message.content) };
-    case 'tool':
-      return {
-        role: 'tool',
-        content: message.content,
-        tool_call_id: message.toolCallId,
-      };
-    case 'assistant': {
-      const content = encodeContent(message.content);
-      const toolCalls = message.toolCalls.map<WireToolCall>((call) => ({
-        id: call.id,
-        type: 'function',
-        function: { name: call.name, arguments: call.argumentsJson },
-      }));
-      return {
-        role: 'assistant',
-        // `null`, not `""`: an assistant turn that only called tools has no text,
-        // and several providers reject an empty string where they accept null.
-        content: content === '' && toolCalls.length > 0 ? null : content,
-        ...(toolCalls.length === 0 ? {} : { tool_calls: toolCalls }),
-      };
-    }
-  }
-}
-
 /**
  * What "do not think" is, absent a `reasoningOffBody` on the spec.
  *
@@ -275,14 +185,7 @@ function buildBody(
   }
 
   if (request.tools !== undefined && request.tools.length > 0) {
-    body.tools = request.tools.map((tool) => ({
-      type: 'function',
-      function: {
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.parameters,
-      },
-    }));
+    body.tools = encodeTools(request.tools);
     if (request.toolChoice !== undefined) body.tool_choice = request.toolChoice;
   }
 

@@ -72,6 +72,13 @@ The context inspector reports the two halves separately, so the figure you can a
 what each step of a turn costs again — is a number on the screen rather than an
 inference.
 
+**The figures are of the request body.** Each half is priced inside the message it is
+sent in rather than as bare text, and anything the wire does not carry is not counted:
+the model's own reasoning, which is kept beside the answer to be shown and left out of
+history, and a tool's `risk` and `source`, which drive an approval prompt and a badge.
+The measurement runs through the same encoder the transport uses, so a field that stops
+being sent stops being counted in the same change.
+
 ## The eight templates
 
 All eight live on the agent, in `config.json`, and all eight are edited in the agent
