@@ -12,8 +12,10 @@ on:
 permissions:
   # For the GitHub Release and its attached tarballs.
   contents: write
-  # For `--provenance`. It also needs each package's `repository` field to name
-  # this repository, which `scripts/gen-packages.mjs` writes.
+  # For the OIDC token npm exchanges for a publish credential, and for the
+  # provenance it then generates. Provenance also needs each package's
+  # `repository` field to name this repository, which `scripts/gen-packages.mjs`
+  # writes.
   id-token: write
 
 jobs:
@@ -118,10 +120,33 @@ jobs:
       # `--no-git-checks` because a tagged checkout is a detached HEAD, which
       # pnpm otherwise refuses. `-r` skips `private: true` on its own, which is
       # what leaves `@ghostwire/e2e` and both `examples/*` behind.
+      #
+      # **No token and no `--provenance`, both deliberately.** This publishes
+      # through npm's trusted publishing: pnpm exchanges the workflow's OIDC
+      # token for a short-lived, workflow-scoped credential, which is why the
+      # `NPM_TOKEN` secret is gone — there is no long-lived token in this
+      # repository to leak or to expire. Each of the fifteen packages names
+      # `therezor/GhostAI` and this file by name as its trusted publisher, so a
+      # publish from anywhere else is refused by the registry rather than by us.
+      #
+      # `--provenance` is dropped because trusted publishing generates the
+      # attestation *registry-side* and the flag is documented as unnecessary.
+      # It is not merely redundant. With the flag, the runner builds the
+      # attestation itself and writes it to Sigstore's public transparency log
+      # — and that write is what stopped 0.7.3: the client created an entry,
+      # hit a transient error, retried, and collided with the entry it had just
+      # made (`409 an equivalent entry already exists`, a different UUID every
+      # attempt). Three runs failed identically at the first package. Nothing
+      # here can retry its way past that, so the release stopped doing the
+      # write.
+      #
+      # If this step ever fails with a 404 on `PUT`, read it as "not
+      # authorised" rather than "no such package" — npm answers an unauthorised
+      # publish with 404 so it does not leak whether a name exists. The usual
+      # cause is a package whose trusted publisher was never configured, or one
+      # naming a different workflow file.
       - name: Publish to npm
-        run: pnpm -r publish --access public --no-git-checks --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm -r publish --access public --no-git-checks
 
       # The air-gapped route: the same tarballs, attached to the release, for an
       # install that never reaches a registry.

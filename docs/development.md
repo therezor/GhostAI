@@ -130,7 +130,7 @@ node scripts/gen-packages.mjs
 # 4. SERVER_VERSION in packages/server/src/version.ts — what GET /api/status and
 #    the OpenAPI document report
 
-git commit -am 'Release 1.1.0' && git tag v1.1.0 && git push --follow-tags
+git commit -am 'Release 1.1.0' && git tag v1.1.0 && git push origin main v1.1.0
 ```
 
 Steps 3 and 4 are the hand edits, literals rather than a read of the manifest on purpose:
@@ -143,10 +143,34 @@ The agent presets and toolboxes are no longer part of this repository — they l
 separately versioned [`GhostAI-presets`](https://github.com/therezor/GhostAI-presets)
 repository and are released on their own cadence.
 
+**Name the tag in the push.** `--follow-tags` is the spelling this said for three
+releases and it pushes _annotated_ tags only, so a `git tag v1.1.0` goes nowhere: the
+commit lands, the release never fires, and nothing says so. Either name the tag as above
+or make it annotated with `git tag -a`.
+
 The tag fires [`release.yml`](../.github/workflows/release.yml), which runs the whole
 gate again — a tag can be pushed from a branch CI never saw — checks the tag against the
-manifests, publishes with `--provenance`, and attaches the tarballs to a GitHub release
-for an install that never reaches a registry.
+manifests, publishes, and attaches the tarballs to a GitHub release for an install that
+never reaches a registry.
+
+Publishing is npm's **trusted publishing**, so there is no token in this repository.
+pnpm exchanges the workflow's OIDC token for a short-lived credential, and each of the
+fifteen packages names `therezor/GhostAI` and `release.yml` as its trusted publisher
+under _Settings → Trusted Publisher_ on npm. Two consequences worth knowing before a
+release goes red:
+
+- **A package added later has to be configured before its first publish**, and it cannot
+  be — a trusted publisher is set on a package that exists. Publish the first version of
+  a new package by hand, then configure it.
+- **An unauthorised publish answers `404` on `PUT`, not `403`.** npm does that so a
+  refusal does not leak whether a name is taken, which means "not found" almost always
+  means "not configured, or configured against a different workflow file".
+
+The attestation is generated registry-side and `--provenance` is deliberately _not_
+passed. With it, the runner writes to Sigstore's transparency log itself, and that write
+is what stopped 0.7.3 — three runs in a row died on the first package with `409 an
+equivalent entry already exists`, a different UUID each time, the client colliding with
+an entry it had created seconds earlier.
 
 Three things about the manifests, all of which cost an afternoon to find:
 
