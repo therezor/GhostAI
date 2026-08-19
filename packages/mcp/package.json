@@ -1,6 +1,6 @@
 {
   "name": "@ghostwire/mcp",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "description": "MCP client, connection lifecycle, and the bridge onto the tool registry.",
   "type": "module",
   "license": "MIT",

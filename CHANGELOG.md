@@ -6,6 +6,34 @@ uses [semantic versioning](https://semver.org/spec/v2.0.0.html). Every package i
 repository carries the same version and they are released together; only `@ghostwire/ghostai`
 is something you install by name.
 
+## [0.7.3]
+
+The terminal UI, on the terminals it had been quietly failing on. Everything
+secondary was drawn with an attribute a good many emulators do not implement,
+colour was forced on whatever the environment said, and the frame only took the
+window once you resized it.
+
+### Fixed
+
+- **Secondary text is bright black rather than faint.** `dim` was SGR 2, which
+  is _optional_ in ECMA-48 — the Linux kernel console and PuTTY do colour
+  perfectly well without implementing it, so every hint, header label and status
+  row drew at the weight of ordinary prose there. SGR 90 is a colour, and a
+  terminal that ignores it renders plain text, which is what those terminals were
+  already doing. Bound once, in `paletteFor`, rather than at forty call sites.
+- **`NO_COLOR`, `FORCE_COLOR`, `TERM=dumb` and a redirected stdout are honoured
+  again.** `--no-color` is a negated flag, and commander gives one of those the
+  value `true` at registration — so every ordinary run passed an explicit "yes,
+  colour" and picocolors' own detection was never consulted. `ghostai chat > log`
+  had been writing escape codes into the log. Colour in a pipe now needs
+  `FORCE_COLOR`; `CI` still keeps it on, so CI output is unchanged.
+- **`ghostai chat` takes the window on the way in**, instead of on the first
+  resize. The first frame was printed wherever the shell left the cursor, and a
+  width change was the first thing that cleared and homed it. It clears the
+  screen, not the scrollback behind it — a resize still drops the scrollback,
+  because a rewrap can strand fragments of a frame we drew up there, and on the
+  way in there is nothing of ours to strand.
+
 ## [0.7.2]
 
 Two screens stopped lying about a turn that is still running: a reload during a
@@ -249,6 +277,7 @@ them reads as more finished than it is.
   ships as a scheduled job's payload; delivery does not.
 - **Session search is by title and filter, not by message content.**
 
+[0.7.3]: https://github.com/therezor/GhostAI/releases/tag/v0.7.3
 [0.7.2]: https://github.com/therezor/GhostAI/releases/tag/v0.7.2
 [0.7.1]: https://github.com/therezor/GhostAI/releases/tag/v0.7.1
 [0.7.0]: https://github.com/therezor/GhostAI/releases/tag/v0.7.0
