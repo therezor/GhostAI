@@ -33,12 +33,22 @@ today"` are the same command.
 | `--home <dir>`        | The GhostAI root. Beats `$GHOSTAI_HOME`, which beats `~/.ghostai`. |
 | `--log-level <level>` | `trace`, `debug`, `info`, `warn`, `error` or `fatal`.              |
 | `--verbose`           | Report what the install is doing, not only the answer.             |
-| `--no-color`          | Disable colour.                                                    |
+| `--no-color`          | Disable colour. Rarely needed — see below.                         |
 | `-v`, `--version`     | Print the version.                                                 |
 | `-h`, `--help`        | Print help. `ghostai help <command>` does the same for one.        |
 
 The log level defaults to `error` — or `info` while serving, because a server that says
 nothing while it works reads as hung.
+
+Colour is detected rather than assumed: `NO_COLOR`, `FORCE_COLOR`, `TERM=dumb` and
+"stdout is a file rather than a terminal" are all honoured, so `ghostai chat > log`
+writes prose and not escape codes. `--no-color` is the override for the case detection
+gets wrong.
+
+Secondary text — the header labels, the hints, the status rows — is bright black rather
+than the faint attribute. Faint is optional in ECMA-48, and the Linux console and PuTTY
+are two of the terminals that do colour perfectly well without implementing it; on those
+every one of those rows drew at the weight of ordinary prose.
 
 ## `ghostai chat`
 
@@ -69,6 +79,12 @@ inside it. Reaching for the wrong one moves your files rather than switching fol
 
 `--json` is the scripting surface. Each line is one event from the same stream the web UI
 consumes, so a script can watch tool calls go by rather than waiting for prose.
+
+The prompt takes the window on the way in: the frame is drawn from the top of a cleared
+screen rather than from wherever the shell left the cursor. It clears the screen only —
+whatever your shell had printed is still in the scrollback, one scroll up. A pipe gets
+none of this: a stdout that is not a terminal gets a plain prompt and no escape sequences
+at all.
 
 ### Slash commands
 

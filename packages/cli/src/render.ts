@@ -15,7 +15,7 @@
  *    may not end on a newline, and a tool card printed straight after one would
  *    land mid-sentence. `#atLineStart` tracks the cursor so a break is emitted
  *    exactly when one is needed, and never twice.
- *  - **Colour as an injected boolean.** `pc.createColors(false)` returns the same
+ *  - **Colour as an injected boolean.** `paletteFor(false)` returns the same
  *    interface with identity formatters, so tests assert on the text rather than
  *    on escape sequences, and `--no-color` is one flag rather than a branch at
  *    every call site.
@@ -42,8 +42,7 @@ import {
   type TurnTiming,
   type Usage,
 } from '@ghostwire/protocol';
-import { stripAnsi, type Palette } from '@ghostwire/tui';
-import pc from 'picocolors';
+import { paletteFor, stripAnsi, type Palette } from '@ghostwire/tui';
 
 import { DEFAULT_LOCALE } from '@ghostwire/i18n';
 
@@ -272,7 +271,7 @@ export class TurnRenderer {
 
   constructor(options: TurnRendererOptions) {
     this.out = options.out;
-    this.c = pc.createColors(options.colors);
+    this.c = paletteFor(options.colors);
     this.showReasoning = options.showReasoning ?? true;
     this.showStats = options.showStats ?? true;
     this.t = options.t ?? translations(DEFAULT_LOCALE).t;

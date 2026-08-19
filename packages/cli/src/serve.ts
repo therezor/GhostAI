@@ -65,7 +65,7 @@ import {
   type ServerRuntime,
 } from '@ghostwire/server';
 import type { AutomationResolver } from '@ghostwire/tools';
-import pc from 'picocolors';
+import { paletteFor } from '@ghostwire/tui';
 
 import { translationsFor, type CliT } from './i18n.js';
 
@@ -662,7 +662,7 @@ export function banner(
   colors: boolean | undefined,
   t: CliT,
 ): string {
-  const c = pc.createColors(colors);
+  const c = paletteFor(colors);
   const authEnabled = running.server.config.server.auth.enabled;
   const host = running.server.config.server.host;
   const instance = running.runtime.instance;

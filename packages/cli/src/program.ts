@@ -89,7 +89,7 @@ interface CliDeps {
 interface GlobalOptions {
   readonly home?: string;
   readonly logLevel?: string;
-  readonly color: boolean;
+  readonly color?: boolean;
   readonly verbose: boolean;
 }
 
@@ -224,6 +224,29 @@ function buildProgram(deps: CliDeps = {}): Command {
     // flag, and `runCli` never gets to decide what the exit code means.
     .exitOverride();
 
+  /**
+   * `undefined` unless a colour flag was actually typed.
+   *
+   * `--no-color` is a *negated* option, and commander gives one of those the
+   * value `true` the moment it is registered — so `opts().color` reads `true`
+   * on every ordinary run, and passing that on is an explicit "yes, colour".
+   * `pc.createColors(true)` then never consults its own detection, which is the
+   * only thing in the program that looks at `NO_COLOR`, `FORCE_COLOR`,
+   * `TERM=dumb` or whether stdout is a file. `ghostai chat > log` wrote escape
+   * codes into the log for exactly that reason.
+   *
+   * So the value is not the signal; the *source* is. Commander records where an
+   * option's value came from, and `'default'` is precisely "nobody said". That
+   * is the one case that has to reach the palette as nothing at all.
+   *
+   * Reads `opts()` rather than answering `false` outright, so a later `--color`
+   * needs no change here.
+   */
+  const colorChoice = (): boolean | undefined =>
+    program.getOptionValueSource('color') === 'default'
+      ? undefined
+      : program.opts<GlobalOptions>().color;
+
   program
     .command('chat', { isDefault: true })
     .description(t('chat.description'))
@@ -245,7 +268,6 @@ function buildProgram(deps: CliDeps = {}): Command {
     .action(
       async (words: string[], options: ChatCliOptions, command: Command) => {
         const globals = command.parent?.opts<GlobalOptions>() ?? {
-          color: true,
           verbose: false,
         };
         const level = resolveLogLevel(globals.logLevel, t);
@@ -272,7 +294,7 @@ function buildProgram(deps: CliDeps = {}): Command {
           tools: options.tools,
           // `--json` writes machine-readable output to the same stream; colouring
           // it would corrupt the JSON for the script reading it.
-          colors: options.json ? false : globals.color,
+          colors: options.json ? false : colorChoice(),
           out,
           errOut,
           // An explicit `--log-level` wins over `--verbose`, because it is the
@@ -294,12 +316,11 @@ function buildProgram(deps: CliDeps = {}): Command {
     .description(t('init.description'))
     .action(async (options: unknown, command: Command) => {
       const globals = command.parent?.opts<GlobalOptions>() ?? {
-        color: true,
         verbose: false,
       };
       const code = await runInit({
         ...(globals.home === undefined ? {} : { home: globals.home }),
-        colors: globals.color,
+        colors: colorChoice(),
         out,
         errOut,
         env,
@@ -315,7 +336,6 @@ function buildProgram(deps: CliDeps = {}): Command {
     (action: 'list' | 'approve' | 'revoke') =>
     (id: string | undefined, options: unknown, command: Command) => {
       const globals = command.parent?.parent?.opts<GlobalOptions>() ?? {
-        color: true,
         verbose: false,
       };
       const code = runToolbox({
@@ -358,7 +378,6 @@ function buildProgram(deps: CliDeps = {}): Command {
     (action: 'list' | 'approve' | 'revoke') =>
     (id: string | undefined, options: unknown, command: Command) => {
       const globals = command.parent?.parent?.opts<GlobalOptions>() ?? {
-        color: true,
         verbose: false,
       };
       const code = runExtension({
@@ -409,7 +428,6 @@ function buildProgram(deps: CliDeps = {}): Command {
         command: Command,
       ) => {
         const globals = command.parent?.parent?.opts<GlobalOptions>() ?? {
-          color: true,
           verbose: false,
         };
         const code = runAgent({
@@ -437,7 +455,6 @@ function buildProgram(deps: CliDeps = {}): Command {
     .description(t('agent.list.description'))
     .action((options: unknown, command: Command) => {
       const globals = command.parent?.parent?.opts<GlobalOptions>() ?? {
-        color: true,
         verbose: false,
       };
       const code = runAgent({
@@ -484,7 +501,6 @@ function buildProgram(deps: CliDeps = {}): Command {
       const ids = (action === 'install' ? args[0] : []) as readonly string[];
 
       const globals = command.parent?.parent?.opts<GlobalOptions>() ?? {
-        color: true,
         verbose: false,
       };
       const input = deps.input ?? process.stdin;
@@ -497,7 +513,7 @@ function buildProgram(deps: CliDeps = {}): Command {
       const { openAsk } = await import('./ask.js');
       const { runPreset } = await import('./preset.js');
       const opened = interactive
-        ? await openAsk(input, out, globals.color, translations.t)
+        ? await openAsk(input, out, colorChoice(), translations.t)
         : undefined;
       try {
         const code = await runPreset({
@@ -572,7 +588,6 @@ function buildProgram(deps: CliDeps = {}): Command {
     .option('--ui <dir>', t('serve.options.ui'))
     .action(async (options: ServeCliOptions, command: Command) => {
       const globals = command.parent?.opts<GlobalOptions>() ?? {
-        color: true,
         verbose: false,
       };
       const level = resolveLogLevel(globals.logLevel, t);
@@ -597,7 +612,7 @@ function buildProgram(deps: CliDeps = {}): Command {
         // that says nothing about the requests it is serving. `--verbose` is
         // one notch below that, the same relative move it makes on `chat`.
         logLevel: level ?? (globals.verbose ? 'debug' : 'info'),
-        colors: globals.color,
+        colors: colorChoice(),
         out,
         errOut,
         env,

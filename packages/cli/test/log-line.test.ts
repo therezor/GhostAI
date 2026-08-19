@@ -7,15 +7,14 @@
  * readable is worse than showing an ugly one.
  */
 
-import pc from 'picocolors';
 import { describe, expect, it } from 'vitest';
 
-import { stripAnsi } from '@ghostwire/tui';
+import { paletteFor, stripAnsi } from '@ghostwire/tui';
 
 import { formatLogLine } from '#src/log-line.js';
 
 /** The identity palette, so every assertion below is about text. */
-const PLAIN = pc.createColors(false);
+const PLAIN = paletteFor(false);
 
 const record = (fields: Record<string, unknown>): string =>
   `${JSON.stringify({ level: 40, time: 1786007865399, name: 'ghost', ...fields })}\n`;
@@ -107,7 +106,9 @@ describe('formatLogLine', () => {
 });
 
 describe('colour', () => {
-  const COLOUR = pc.createColors(true);
+  // The palette the CLI actually builds, so `dim` here is the bright black
+  // production emits rather than the faint attribute it stopped emitting.
+  const COLOUR = paletteFor(true);
   // `@ghostwire/tui`'s own, rather than a regex here. A literal escape character
   // is what `no-control-regex` rejects and what `grep` goes blind to — this
   // file already had one, invisible in every read of it.

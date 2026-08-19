@@ -49,7 +49,7 @@ export type { Editor } from './editor.js';
 export { createTranscript } from './transcript.js';
 export type { Transcript } from './transcript.js';
 
-export { PLAIN_THEME, themeFor, themeFrom } from './theme.js';
+export { PLAIN_THEME, paletteFor, themeFor, themeFrom } from './theme.js';
 export type { Palette, Style, Theme } from './theme.js';
 
 export { SelectList } from './select-list.js';

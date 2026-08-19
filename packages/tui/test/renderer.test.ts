@@ -40,9 +40,43 @@ describe('the first frame', () => {
     renderer.render();
 
     expect(out.text).toContain('one\r\ntwo\r\nthree');
-    // Nothing is erased on the way in: whatever the shell printed before
-    // `ghostai` started is not this program's to throw away.
+    // Nothing is erased on the way in, unless the caller asked for it. This is
+    // the library's default and it is the right one: a renderer drawing four
+    // rows of a picker under a shell prompt has no business erasing what the
+    // shell printed. `clearOnFirstFrame` is how a caller that owns the window
+    // says otherwise — see below.
     expect(out.text).not.toContain(`${ESC}[2J`);
+  });
+
+  it('takes the screen when the caller asked for it, and not the history', () => {
+    const out = fakeOutput({ columns: 20, rows: 10 });
+    const renderer = createRenderer({ output: out, clearOnFirstFrame: true });
+    renderer.setRoot(fixed(['one', 'two', 'three']));
+    renderer.render();
+
+    expect(out.text).toContain(`${ESC}[2J`);
+    expect(out.text).toContain(`${ESC}[H`);
+    // `3J` erases the scrollback *buffer*, and a resize sends it because a
+    // rewrap can strand fragments of this renderer's own frame up there. On the
+    // first frame there is nothing of ours to strand, so all it would erase is
+    // the operator's shell history.
+    expect(out.text).not.toContain(`${ESC}[3J`);
+  });
+
+  it('clears once, not on every frame after it', () => {
+    const out = fakeOutput({ columns: 20, rows: 10 });
+    const renderer = createRenderer({ output: out, clearOnFirstFrame: true });
+    const view = mutable(['one', 'two', 'three']);
+    renderer.setRoot(view.component);
+    renderer.render();
+
+    out.reset();
+    view.set(['one', 'two', 'THREE']);
+    renderer.render();
+
+    expect(out.text).not.toContain(`${ESC}[2J`);
+    expect(out.text).toContain('THREE');
+    expect(renderer.fullRedraws).toBe(1);
   });
 
   it('puts the terminal cursor where the marker was', () => {

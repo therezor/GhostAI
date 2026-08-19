@@ -78,6 +78,17 @@ const ERASE_BELOW = `${ESC}[0J`;
  * a chat session is for.
  */
 const CLEAR_ALL = `${ESC}[2J${ESC}[H${ESC}[3J`;
+/**
+ * The same, without the `3J` — the screen, not the history behind it.
+ *
+ * What the first frame gets. `CLEAR_ALL`'s third sequence is there because a
+ * rewrap can strand fragments of a frame *this renderer drew* up in the
+ * scrollback, and the only way to be sure they are gone is to drop it. On the
+ * first frame no frame has been drawn yet, so there is nothing of ours up there
+ * and `3J` would erase only the operator's own shell history — hours of it,
+ * bought for nothing.
+ */
+const CLEAR_SCREEN = `${ESC}[2J${ESC}[H`;
 const HIDE_CURSOR = `${ESC}[?25l`;
 const SHOW_CURSOR = `${ESC}[?25h`;
 const SYNC_ON = `${ESC}[?2026h`;
@@ -90,6 +101,24 @@ export interface RendererOptions {
   readonly rows?: number | undefined;
   /** Synchronized output around each frame. Default `true`. */
   readonly synchronized?: boolean;
+  /**
+   * Clear the screen for the first frame, as a width change already does.
+   *
+   * Off by default, and that default is the library's answer rather than the
+   * chat's: a renderer drawing four rows of a picker under a shell prompt has
+   * no business erasing what the shell printed. A caller that owns the window
+   * for the whole session does, and the frame then starts at the top of it
+   * instead of wherever the prompt happened to leave the cursor — which is the
+   * difference between "it laid out properly once I resized" and "it laid out".
+   *
+   * It also makes the row arithmetic true rather than usually-true.
+   * `printWhole` sets `viewportTop` from `lines.length - screenRows`, which
+   * assumes the frame begins at screen row 0; only a homed cursor makes that
+   * so. Without it a shell that had filled the window scrolls the frame further
+   * than `viewportTop` records, and a later differential render can address a
+   * row that is already in the scrollback.
+   */
+  readonly clearOnFirstFrame?: boolean;
 }
 
 interface Renderer {
@@ -150,6 +179,7 @@ function extractCursor(lines: readonly string[]): {
 export function createRenderer(options: RendererOptions): Renderer {
   const { output } = options;
   const synchronized = options.synchronized !== false;
+  const clearOnFirstFrame = options.clearOnFirstFrame === true;
 
   let root: Component | undefined;
   let previous: string[] = [];
@@ -235,13 +265,15 @@ export function createRenderer(options: RendererOptions): Renderer {
        */
       const fit = (line: string): string => truncateToWidth(line, columns);
 
-      const printWhole = (clear: boolean): void => {
+      const printWhole = (clear: 'none' | 'screen' | 'all'): void => {
         fullRedraws += 1;
         hardwareRow = Math.max(0, lines.length - 1);
         viewportTop = Math.max(0, lines.length - screenRows);
+        const erase =
+          clear === 'all' ? CLEAR_ALL : clear === 'screen' ? CLEAR_SCREEN : '';
         output.write(
           frame(
-            (clear ? CLEAR_ALL : '') +
+            erase +
               lines.map(fit).join('\r\n') +
               moveTo(cursorRow, cursorColumn),
           ),
@@ -252,7 +284,12 @@ export function createRenderer(options: RendererOptions): Renderer {
       // Nothing on screen yet, or the window moved and every row on it has
       // already been rewrapped by the terminal into places this cannot address.
       if (previous.length === 0 || widthChanged || heightChanged) {
-        printWhole(previous.length > 0);
+        // `previous.length > 0` is exactly "not the first frame". A resize
+        // drops the scrollback with the screen, for the reason `CLEAR_ALL`
+        // gives; a launch takes the screen only, and only if asked.
+        printWhole(
+          previous.length > 0 ? 'all' : clearOnFirstFrame ? 'screen' : 'none',
+        );
         return;
       }
 
@@ -275,7 +312,7 @@ export function createRenderer(options: RendererOptions): Renderer {
       // A row that has scrolled into the scrollback cannot be moved to, so the
       // only honest answer is to print the frame again.
       if (firstChanged < viewportTop) {
-        printWhole(true);
+        printWhole('all');
         return;
       }
 

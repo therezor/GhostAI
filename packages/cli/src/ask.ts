@@ -17,7 +17,7 @@
 
 import type { Interface } from 'node:readline/promises';
 
-import pc from 'picocolors';
+import { paletteFor } from '@ghostwire/tui';
 
 import type { CliT } from './i18n.js';
 
@@ -84,7 +84,7 @@ export function createAsk(
   colors: boolean | undefined,
   t: CliT,
 ): Ask {
-  const c = pc.createColors(colors);
+  const c = paletteFor(colors);
 
   const text = async (question: string, fallback?: string): Promise<string> => {
     const suffix =

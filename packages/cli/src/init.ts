@@ -49,7 +49,7 @@ import {
   type ProviderSpec,
 } from '@ghostwire/providers';
 import { PROVIDER_CREDENTIAL_NAMESPACE, openVault } from '@ghostwire/runtime';
-import pc from 'picocolors';
+import { paletteFor, type Palette } from '@ghostwire/tui';
 
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from '@ghostwire/i18n';
 
@@ -142,7 +142,7 @@ export async function initCommand(options: InitOptions = {}): Promise<number> {
   const out = options.out ?? process.stdout;
   const errOut = options.errOut ?? process.stderr;
   const input = options.input ?? process.stdin;
-  const c = pc.createColors(options.colors);
+  const c = paletteFor(options.colors);
   const listModels = options.listModels ?? fetchModels;
   const { t } = translationsFor(options.env ?? process.env);
 
@@ -200,7 +200,7 @@ async function collect(
   out: NodeJS.WritableStream,
   loaded: LoadedConfig,
   listModels: NonNullable<InitOptions['listModels']>,
-  c: ReturnType<typeof pc.createColors>,
+  c: Palette,
   t: CliT,
 ): Promise<Answers> {
   // First, and for the same reason the browser wizard asks first: every

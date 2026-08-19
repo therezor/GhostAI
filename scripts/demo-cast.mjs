@@ -34,8 +34,8 @@
 import { execFileSync, spawn } from 'node:child_process';
 import {
   mkdirSync,
-  mkdtempSync,
   readFileSync,
+  mkdtempSync,
   writeFileSync,
   rmSync,
   chmodSync,
@@ -68,8 +68,12 @@ function seedHome() {
     join(home, 'workspace', 'notes.md'),
     '# Notes\n\nRemember to water the plants.\n',
   );
-  // A real `ghostai` on PATH, so the typed command is the one a reader will type.
-  const shim = join(home, 'bin', 'ghost');
+  // A real `ghostai` on PATH, so the typed command is the one a reader will
+  // type. The name has to be the one `TAKE` types, or `PATH` shadows nothing
+  // and the take records whatever `ghostai` the operator happens to have
+  // installed — a recording of the last release rather than of this checkout,
+  // which is the one thing the header above says this script does not do.
+  const shim = join(home, 'bin', 'ghostai');
   writeFileSync(
     shim,
     `#!/bin/sh\nexec node ${join(ROOT, 'packages', 'cli', 'dist', 'index.js')} "$@"\n`,
@@ -113,33 +117,32 @@ const type = (text, perChar) => [...text].map((c) => [perChar, c]);
 const ESC = String.fromCharCode(27);
 
 /**
- * Makes the dim text actually dim.
+ * Makes the grey text actually grey.
  *
- * The CLI leans on SGR 2 (faint) for everything secondary — the header labels,
+ * The CLI leans on bright black for everything secondary — the header labels,
  * the timings, the byte counts, the whole status bar — a few hundred times in a
- * ten-second take. **svg-term ignores SGR 2**, so all of it renders at full
+ * ten-second take. **svg-term ignores SGR 90**, so all of it renders at full
  * white and the recording has no visual hierarchy at all: the workspace path
  * shouts as loudly as the answer. You can see it in the output, which carries
  * exactly three fills — white, green, cyan — and no grey.
  *
- * So faint is rewritten to faint *plus* an explicit 256-colour grey, which
+ * So bright black is rewritten to the 256-colour grey nearest it, which
  * svg-term does honour. This is a concession to the renderer, not a change to
- * what the program did: a real terminal draws SGR 2 grey, and this is how it
+ * what the program did: a real terminal draws SGR 90 grey, and this is how it
  * looks there.
  *
- * `22` resets intensity, so it needs `39` beside it to put the foreground back
- * — and only `39`, because `22` also ends bold and the wordmark relies on that.
+ * This used to rewrite SGR 2 instead, and had to patch `22` to `22;39` on the
+ * way out because faint and bold share a close. Bright black closes with `39`,
+ * which nothing else uses, so the wordmark's bold is no longer in the way —
+ * the reason the CLI stopped spending the role on an attribute in the first
+ * place is the same reason it is simpler to record.
  */
-function faintToGrey(castPath) {
+function brightBlackToGrey(castPath) {
   const lines = readFileSync(castPath, 'utf8').split('\n');
   const out = lines.map((line, i) => {
     if (i === 0 || line === '') return line;
     const event = JSON.parse(line);
-    event[2] = event[2]
-      .split(`${ESC}[2m`)
-      .join(`${ESC}[2;38;5;245m`)
-      .split(`${ESC}[22m`)
-      .join(`${ESC}[22;39m`);
+    event[2] = event[2].split(`${ESC}[90m`).join(`${ESC}[38;5;245m`);
     return JSON.stringify(event);
   });
   writeFileSync(castPath, out.join('\n'));
@@ -207,7 +210,7 @@ const record = (keys, castPath) => {
 try {
   const cast = join(work, 'ghost.cast');
   record(TAKE, cast);
-  faintToGrey(cast);
+  brightBlackToGrey(cast);
 
   mkdirSync(dirname(OUT), { recursive: true });
   execFileSync(

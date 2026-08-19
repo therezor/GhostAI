@@ -26,8 +26,6 @@
  * answer twice.
  */
 
-import pc from 'picocolors';
-
 import { describeContext, type AgentLoop } from '@ghostwire/agent';
 import {
   DEFAULT_WORKSPACE_ID,
@@ -52,6 +50,7 @@ import {
   DEFAULT_MAX_ROWS,
   isCtrl,
   openKeyboard,
+  paletteFor,
   spinnerFrame,
   themeFor,
   SPINNER_INTERVAL_MS,
@@ -273,9 +272,11 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
   });
 
   // The renderer keeps its own palette private, so this is a second one built
-  // from the same flag. `createColors(false)` is the identity, which is what
-  // makes `--no-color` and `NO_COLOR` one branch here rather than two.
-  const logColors = pc.createColors(options.colors ?? true);
+  // from the same flag. `paletteFor(false)` is the identity, which is what
+  // makes `--no-color` and `NO_COLOR` one branch here rather than two — and
+  // `undefined` is what lets picocolors answer for itself, which is the whole
+  // point of the flag no longer defaulting to `true`.
+  const logColors = paletteFor(options.colors);
 
   // Logs go to stderr at `warn` by default. On stdout they would interleave
   // with the answer, and at `info` a local model's per-request lines would bury
@@ -836,7 +837,12 @@ function plain(deps: ReplDeps): Surface {
  */
 function framed(deps: ReplDeps): Surface {
   const output: TerminalOutput = deps.out;
-  const frame = createRenderer({ output });
+  // The frame takes the window on the way in, the way it already did on the
+  // way through a resize. `framed` is only reached when `menuAvailable` has
+  // already said both streams are a terminal, `TERM` is not `dumb` and the
+  // window is at least twelve columns — so nothing that is not a terminal can
+  // reach this, and `plain` writes no escapes at all.
+  const frame = createRenderer({ output, clearOnFirstFrame: true });
   const transcript = createTranscript();
   const editor = createEditor({ theme: deps.theme });
   const keyboard = openKeyboard({ input: deps.input });

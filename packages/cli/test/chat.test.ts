@@ -1068,6 +1068,46 @@ describe('chatCommand', () => {
     store.close();
   });
 
+  it('takes the window on the way in, not on the first resize', async () => {
+    // What "it only opens properly after I resize it" was. The first frame used
+    // to be printed wherever the shell left the cursor, and the first width
+    // change was the first time the frame was drawn from the top of the screen.
+    //
+    // The scrollback behind it survives: a resize sends `3J` as well, because a
+    // rewrap can strand fragments of a frame this renderer drew up in the
+    // history. On the way in there is nothing of ours up there to strand, so
+    // all `3J` would erase is the operator's own shell history.
+    const home = tempHome();
+    const { fetchImpl } = transport();
+    const out = streamSink({ isTTY: true });
+    const input = Object.assign(new PassThrough(), {
+      isTTY: true,
+      setRawMode(): void {
+        /* a PassThrough has no mode to set */
+      },
+    });
+
+    const pending = chatCommand({
+      ...base,
+      home,
+      fetchImpl,
+      out: out.stream,
+      colors: false,
+      input,
+      sessionKey: 'cli:launch',
+    });
+
+    await waitFor(() => out.text().includes('ctrl-g for the menu'));
+    await quiet(out);
+
+    const ESC = String.fromCharCode(27);
+    expect(out.text()).toMatch(new RegExp(`${ESC}\\[2J${ESC}\\[H`, 'u'));
+    expect(out.text()).not.toMatch(new RegExp(`${ESC}\\[3J`, 'u'));
+
+    input.write('/exit\n');
+    expect(await pending).toBe(0);
+  });
+
   it('prints the whole frame again when the window changes width', async () => {
     // The resize fix, as the property that replaced the arithmetic. A terminal
     // rewraps its own screen before the process is told anything, so the rows a

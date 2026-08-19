@@ -2,7 +2,19 @@ import { describe, expect, it } from 'vitest';
 import pc from 'picocolors';
 
 import { stripAnsi } from '#src/text.js';
-import { PLAIN_THEME, themeFor, themeFrom, type Theme } from '#src/theme.js';
+import {
+  PLAIN_THEME,
+  paletteFor,
+  themeFor,
+  themeFrom,
+  type Theme,
+} from '#src/theme.js';
+
+const ESC = String.fromCharCode(27);
+/** SGR 2, "faint" — the attribute this package deliberately does not use. */
+const FAINT = `${ESC}[2m`;
+/** SGR 90, bright black — the colour it uses instead. */
+const BRIGHT_BLACK = `${ESC}[90m`;
 
 const ROLES: ReadonlyArray<keyof Theme> = [
   'text',
@@ -65,5 +77,36 @@ describe('the accent', () => {
   it('is the identity when colour is off, like every other role', () => {
     expect(themeFor(false).accent('x')).toBe('x');
     expect(PLAIN_THEME.accent('x')).toBe('x');
+  });
+});
+
+describe('secondary text', () => {
+  it('is a colour rather than the faint attribute', () => {
+    // SGR 2 is optional in ECMA-48, and the Linux kernel console and PuTTY are
+    // two of the terminals that do not implement it: colour worked there and
+    // every hint, header label and status row drew at the weight of ordinary
+    // prose. SGR 90 is a colour, and a terminal that ignores it draws plain
+    // text — which is what those terminals were already doing.
+    expect(paletteFor(true).dim('x')).toContain(BRIGHT_BLACK);
+    expect(paletteFor(true).dim('x')).not.toContain(FAINT);
+  });
+
+  it('reaches the theme by both routes into it', () => {
+    // `themeFor` builds through `paletteFor`, and `themeFrom` reads `gray`
+    // itself — so a caller holding a palette straight from picocolors cannot
+    // end up with the one attribute that does not render.
+    expect(themeFor(true).dim('x')).toContain(BRIGHT_BLACK);
+    expect(themeFrom(pc.createColors(true)).dim('x')).toContain(BRIGHT_BLACK);
+    expect(themeFor(true).dim('x')).not.toContain(FAINT);
+  });
+
+  it('leaves the plain path alone', () => {
+    // The rebinding is a no-op when colour is off: picocolors hands back the
+    // identity for `gray` as for everything else, which is what keeps
+    // `PLAIN_THEME` an accurate description of what a pipe gets.
+    const plain = paletteFor(false);
+    expect(plain.dim('hello')).toBe('hello');
+    expect(plain.green('hello')).toBe('hello');
+    expect(themeFor(false).dim('hello')).toBe('hello');
   });
 });

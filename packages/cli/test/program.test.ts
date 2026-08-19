@@ -241,6 +241,21 @@ describe('runCli', () => {
     expect(run.calls[0]?.colors).toBe(false);
   });
 
+  it('says nothing about colour when nobody asked, so the env can', async () => {
+    // The seam, and the whole of the fix. `--no-color` is a negated option, so
+    // commander gives `color` the value `true` at registration — and passing
+    // that on is an explicit "yes", which stops `NO_COLOR`, `FORCE_COLOR`,
+    // `TERM=dumb` and "stdout is a file" from being consulted at all.
+    // `undefined` is what lets picocolors answer for itself.
+    //
+    // Asserted here rather than by setting `NO_COLOR`: picocolors decides once,
+    // at module load, from the real `process.argv` and `process.stdout`, so a
+    // test that moved the environment underneath it would be testing the
+    // import order rather than this program.
+    const run = await cli(['chat', 'hi']);
+    expect(run.calls[0]?.colors).toBeUndefined();
+  });
+
   it('leaves the log level unset without --verbose, so chat picks its own', async () => {
     // `chatCommand` defaults to `error`: a chat prints the conversation, and a
     // warning about the install interrupts it on every turn to say the same
