@@ -102,11 +102,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+      # **No `registry-url` here, and that is the whole of it.** Giving it makes
+      # `setup-node` write an `.npmrc` containing
+      # `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` and export
+      # `NODE_AUTH_TOKEN=XXXXX-XXXXX-XXXXX-XXXXX`, a dummy, for every step in
+      # the job. So dropping the `NPM_TOKEN` env below did not leave the
+      # publish with no credential — it left it with a *fake* one, which pnpm
+      # duly sent as a bearer token. npm rejected it, and because a credential
+      # was present the OIDC exchange never got to be the auth source: both the
+      # exchange and the `PUT` answered 404, and 404 is what npm says instead of
+      # 403. pnpm/pnpm#11526 fixes the neighbouring case where the variable is
+      # *unset*; setup-node's placeholder resolves, so that fix does not reach
+      # this one.
+      #
+      # Nothing is lost by omitting it: `registry.npmjs.org` is already pnpm's
+      # default registry, and trusted publishing brings its own credential.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-          registry-url: 'https://registry.npmjs.org'
 
       - run: pnpm install --frozen-lockfile
 

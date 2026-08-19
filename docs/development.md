@@ -165,6 +165,14 @@ release goes red:
 - **An unauthorised publish answers `404` on `PUT`, not `403`.** npm does that so a
   refusal does not leak whether a name is taken, which means "not found" almost always
   means "not configured, or configured against a different workflow file".
+- **`actions/setup-node` must not be given `registry-url` in the publish job.** With it,
+  setup-node writes an `.npmrc` holding
+  `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` and exports that variable as the
+  dummy `XXXXX-XXXXX-XXXXX-XXXXX`. Removing the token from the step then leaves the
+  publish holding a _fake_ credential rather than none, pnpm sends it as a bearer token,
+  and OIDC never becomes the auth source — the exchange and the `PUT` both answer 404.
+  `registry.npmjs.org` is pnpm's default anyway, so the line buys nothing and costs the
+  release.
 
 The attestation is generated registry-side and `--provenance` is deliberately _not_
 passed. With it, the runner writes to Sigstore's transparency log itself, and that write
