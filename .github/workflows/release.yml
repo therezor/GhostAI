@@ -102,25 +102,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-      # **No `registry-url` here, and that is the whole of it.** Giving it makes
-      # `setup-node` write an `.npmrc` containing
-      # `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` and export
-      # `NODE_AUTH_TOKEN=XXXXX-XXXXX-XXXXX-XXXXX`, a dummy, for every step in
-      # the job. So dropping the `NPM_TOKEN` env below did not leave the
-      # publish with no credential — it left it with a *fake* one, which pnpm
-      # duly sent as a bearer token. npm rejected it, and because a credential
-      # was present the OIDC exchange never got to be the auth source: both the
-      # exchange and the `PUT` answered 404, and 404 is what npm says instead of
-      # 403. pnpm/pnpm#11526 fixes the neighbouring case where the variable is
-      # *unset*; setup-node's placeholder resolves, so that fix does not reach
-      # this one.
-      #
-      # Nothing is lost by omitting it: `registry.npmjs.org` is already pnpm's
-      # default registry, and trusted publishing brings its own credential.
+      # `registry-url` is what writes the `.npmrc` the token below is read
+      # through. Do not remove it while that token is the credential: without it
+      # there is no auth line at all. Note it also exports `NODE_AUTH_TOKEN` as
+      # the dummy `XXXXX-XXXXX-XXXXX-XXXXX` to every step that does not set it,
+      # so a step publishing without the `env` below sends a *fake* bearer
+      # token rather than none — which npm answers with 404, like everything
+      # else it refuses.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
 
       - run: pnpm install --frozen-lockfile
 
@@ -135,32 +128,29 @@ jobs:
       # pnpm otherwise refuses. `-r` skips `private: true` on its own, which is
       # what leaves `@ghostwire/e2e` and both `examples/*` behind.
       #
-      # **No token and no `--provenance`, both deliberately.** This publishes
-      # through npm's trusted publishing: pnpm exchanges the workflow's OIDC
-      # token for a short-lived, workflow-scoped credential, which is why the
-      # `NPM_TOKEN` secret is gone — there is no long-lived token in this
-      # repository to leak or to expire. Each of the fifteen packages names
-      # `therezor/GhostAI` and this file by name as its trusted publisher, so a
-      # publish from anywhere else is refused by the registry rather than by us.
+      # **A token, where this should be trusted publishing.** The scaffolding
+      # for that is here and configured — `id-token: write` above, every package
+      # naming `therezor/GhostAI` and this file as its trusted publisher — and
+      # npm's token exchange answers `404 OIDC token exchange error - package
+      # not found` regardless, for `@ghostwire/protocol` with the setting
+      # enabled as readily as without it. The same failure with the same string
+      # is open as npm/cli#8678 and community#202661, neither with a fix, so it
+      # is not something this repository can spell its way out of. Dropping the
+      # `env` below is the first thing to retry when they close.
       #
-      # `--provenance` is dropped because trusted publishing generates the
-      # attestation *registry-side* and the flag is documented as unnecessary.
-      # It is not merely redundant. With the flag, the runner builds the
-      # attestation itself and writes it to Sigstore's public transparency log
-      # — and that write is what stopped 0.7.3: the client created an entry,
-      # hit a transient error, retried, and collided with the entry it had just
-      # made (`409 an equivalent entry already exists`, a different UUID every
-      # attempt). Three runs failed identically at the first package. Nothing
-      # here can retry its way past that, so the release stopped doing the
-      # write.
-      #
-      # If this step ever fails with a 404 on `PUT`, read it as "not
-      # authorised" rather than "no such package" — npm answers an unauthorised
-      # publish with 404 so it does not leak whether a name exists. The usual
-      # cause is a package whose trusted publisher was never configured, or one
-      # naming a different workflow file.
+      # **If this fails on Sigstore rather than on auth, drop `--provenance`.**
+      # With a token it is the runner that builds the attestation and writes it
+      # to the public transparency log, and that write failed three runs running
+      # during 0.7.3 with `409 an equivalent entry already exists` — at the first
+      # package, a different UUID each time, the client colliding with an entry
+      # it had made seconds earlier. It is the flag that does it, not the token.
+      # The flag is kept because 0.7.2 published with it and every release
+      # before this one carries an attestation; a release without one is worth
+      # avoiding, and worth exactly one run to find out.
       - name: Publish to npm
-        run: pnpm -r publish --access public --no-git-checks
+        run: pnpm -r publish --access public --no-git-checks --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # The air-gapped route: the same tarballs, attached to the release, for an
       # install that never reaches a registry.

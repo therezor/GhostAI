@@ -153,32 +153,43 @@ gate again — a tag can be pushed from a branch CI never saw — checks the tag
 manifests, publishes, and attaches the tarballs to a GitHub release for an install that
 never reaches a registry.
 
-Publishing is npm's **trusted publishing**, so there is no token in this repository.
-pnpm exchanges the workflow's OIDC token for a short-lived credential, and each of the
-fifteen packages names `therezor/GhostAI` and `release.yml` as its trusted publisher
-under _Settings → Trusted Publisher_ on npm. Two consequences worth knowing before a
-release goes red:
+Publishing uses an `NPM_TOKEN` secret, and it is meant to use npm's **trusted
+publishing** instead — the workflow's own OIDC token exchanged for a short-lived
+credential, no long-lived secret here at all, and provenance generated registry-side.
+Everything needed for that is in place: `id-token: write` on the workflow, and all
+fifteen packages naming `therezor/GhostAI` and `release.yml` as their trusted publisher.
 
-- **A package added later has to be configured before its first publish**, and it cannot
-  be — a trusted publisher is set on a package that exists. Publish the first version of
-  a new package by hand, then configure it.
+**It does not work yet.** npm's token exchange answers `404 OIDC token exchange error -
+package not found`, and it does so for a package with its trusted publisher configured
+as readily as for one without — `@ghostwire/protocol` was enabled mid-investigation and
+the answer did not change. The same failure with the same string is open as
+[npm/cli#8678](https://github.com/npm/cli/issues/8678) and
+[community#202661](https://github.com/orgs/community/discussions/202661), neither with a
+fix. Dropping the token from the publish step is the first thing to retry when they
+close.
+
+Four things that cost a release between them, all of which read as something else:
+
 - **An unauthorised publish answers `404` on `PUT`, not `403`.** npm does that so a
-  refusal does not leak whether a name is taken, which means "not found" almost always
-  means "not configured, or configured against a different workflow file".
-- **`actions/setup-node` must not be given `registry-url` in the publish job.** With it,
-  setup-node writes an `.npmrc` holding
-  `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` and exports that variable as the
-  dummy `XXXXX-XXXXX-XXXXX-XXXXX`. Removing the token from the step then leaves the
-  publish holding a _fake_ credential rather than none, pnpm sends it as a bearer token,
-  and OIDC never becomes the auth source — the exchange and the `PUT` both answer 404.
-  `registry.npmjs.org` is pnpm's default anyway, so the line buys nothing and costs the
-  release.
-
-The attestation is generated registry-side and `--provenance` is deliberately _not_
-passed. With it, the runner writes to Sigstore's transparency log itself, and that write
-is what stopped 0.7.3 — three runs in a row died on the first package with `409 an
-equivalent entry already exists`, a different UUID each time, the client colliding with
-an entry it had created seconds earlier.
+  refusal does not leak whether a name is taken, so "not found" almost never means the
+  package is missing. It is also what the OIDC exchange returns, which is why the two
+  failures are so easy to confuse.
+- **If a release fails on Sigstore rather than on auth, drop `--provenance`.** Under a
+  token it is the runner that builds the attestation and writes it to the public
+  transparency log, and during 0.7.3 that write failed three runs running with `409 an
+equivalent entry already exists` — at the first package, a different UUID each time,
+  the client colliding with an entry it had made seconds earlier. The flag is what does
+  it, not the token. It is kept because every release so far carries an attestation and
+  a release without one is worth avoiding, but it is the first thing to remove when the
+  error names Sigstore.
+- **`registry-url` on `setup-node` cuts both ways.** It writes the `.npmrc` the token is
+  read through, so removing it while the token is the credential leaves no auth at all.
+  It also exports `NODE_AUTH_TOKEN` as the dummy `XXXXX-XXXXX-XXXXX-XXXXX` to every step
+  that does not set it — so a publish step without the `env` block sends a _fake_ bearer
+  token rather than none, and gets the same 404 as everything else.
+- **A package added later cannot be configured before its first publish**, since a
+  trusted publisher is set on a package that exists. Publish the first version by hand,
+  then configure it.
 
 Three things about the manifests, all of which cost an afternoon to find:
 
