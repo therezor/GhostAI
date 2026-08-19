@@ -102,16 +102,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-      # `registry-url` is what writes the `.npmrc` the token below is read
-      # through. Do not remove it while that token is the credential: without it
-      # there is no auth line at all. Note it also exports `NODE_AUTH_TOKEN` as
-      # the dummy `XXXXX-XXXXX-XXXXX-XXXXX` to every step that does not set it,
-      # so a step publishing without the `env` below sends a *fake* bearer
-      # token rather than none — which npm answers with 404, like everything
-      # else it refuses.
+      # **Node 24, where `verify` above runs 22.** Not a preference: trusted
+      # publishing is documented as needing npm CLI >= 11.5.1 and Node >=
+      # 22.14, and the `node-version: 22` this used to say resolves to a line
+      # whose bundled npm is 10.x. The floor is asserted below rather than
+      # trusted, because falling under it does not say so — it answers 404, the
+      # same as everything else npm refuses.
+      #
+      # `verify` keeps 22 deliberately. That job is where the engines floor is
+      # tested; this one only has to publish.
+      #
+      # `registry-url` writes the `.npmrc` npm reads its credential through, and
+      # is in npm's own example for this. It also exports `NODE_AUTH_TOKEN` as
+      # the dummy `XXXXX-XXXXX-XXXXX-XXXXX` to every step that does not set one.
+      # That is survivable for `npm publish`, which is what setup-node is built
+      # around; it was not for `pnpm publish`, which sent the dummy as a bearer
+      # token and never reached the exchange at all.
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
           registry-url: 'https://registry.npmjs.org'
 
@@ -124,38 +133,101 @@ jobs:
       - name: Build
         run: pnpm build
 
-      # `--no-git-checks` because a tagged checkout is a detached HEAD, which
-      # pnpm otherwise refuses. `-r` skips `private: true` on its own, which is
-      # what leaves `@ghostwire/e2e` and both `examples/*` behind.
+      # **Packed by pnpm, published by npm, and it has to be both.**
       #
-      # **A token, where this should be trusted publishing.** The scaffolding
-      # for that is here and configured — `id-token: write` above, every package
-      # naming `therezor/GhostAI` and this file as its trusted publisher — and
-      # npm's token exchange answers `404 OIDC token exchange error - package
-      # not found` regardless, for `@ghostwire/protocol` with the setting
-      # enabled as readily as without it. The same failure with the same string
-      # is open as npm/cli#8678 and community#202661, neither with a fix, so it
-      # is not something this repository can spell its way out of. Dropping the
-      # `env` below is the first thing to retry when they close.
+      # `npm publish` is the only client npm documents for trusted publishing —
+      # pnpm implements its own OIDC exchange and it is not the supported path;
+      # its `ERR_PNPM_AUTH_TOKEN_EXCHANGE` is a pnpm error code, not one of
+      # npm's. But npm has never heard of `workspace:*`, and rewriting those to
+      # the exact version at pack time is the whole reason this repository
+      # publishes through pnpm. Fifteen packages move in lockstep, so one left
+      # holding `workspace:*` publishes a dependency that resolves to nothing.
       #
-      # **If this fails on Sigstore rather than on auth, drop `--provenance`.**
-      # With a token it is the runner that builds the attestation and writes it
-      # to the public transparency log, and that write failed three runs running
-      # during 0.7.3 with `409 an equivalent entry already exists` — at the first
-      # package, a different UUID each time, the client colliding with an entry
-      # it had made seconds earlier. It is the flag that does it, not the token.
-      # The flag is kept because 0.7.2 published with it and every release
-      # before this one carries an attestation; a release without one is worth
-      # avoiding, and worth exactly one run to find out.
-      - name: Publish to npm
-        run: pnpm -r publish --access public --no-git-checks --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      # The air-gapped route: the same tarballs, attached to the release, for an
-      # install that never reaches a registry.
+      # So each half does the half it is good for: `pnpm pack` produces the
+      # tarballs, with `workspace:*` already resolved, and `npm publish` sends
+      # those tarballs. It also means the tarballs attached to the release below
+      # are the *same bytes* that went to the registry, where before they were a
+      # second, separate pack.
+      #
+      # **`pnpm -r exec` does not skip `private: true`.** `pnpm -r publish`
+      # does, which is where the belief comes from, and it is why this used to
+      # attach `@ghostwire/e2e` and both `examples/*` to the release as well —
+      # harmless while nothing published them, and not harmless now that the
+      # tarballs *are* what gets published. So they are packed and then pruned,
+      # by the flag itself rather than by a list of names that would go stale
+      # the next time a private package is added.
       - name: Pack tarballs
-        run: pnpm -r exec pnpm pack --pack-destination "$GITHUB_WORKSPACE/dist-tarballs"
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          dest="$GITHUB_WORKSPACE/dist-tarballs"
+          pnpm -r exec pnpm pack --pack-destination "$dest"
+          for tarball in "$dest"/*.tgz; do
+            private=$(tar -xzOf "$tarball" package/package.json \
+              | node -p "JSON.parse(require('node:fs').readFileSync(0,'utf8')).private ?? false")
+            if [ "$private" = true ]; then
+              echo "- $(basename "$tarball") is private"
+              rm "$tarball"
+            fi
+          done
+          echo "packed $(ls -1 "$dest"/*.tgz | wc -l) publishable tarballs"
+
+      # The floor, asserted. Below it the publish does not report a version
+      # problem, it reports 404 — so this fails with a sentence instead.
+      - name: npm is new enough to publish
+        run: |
+          need=11.5.1
+          have=$(npm --version)
+          if [ "$(printf '%s\n%s\n' "$need" "$have" | sort -V | head -n1)" != "$need" ]; then
+            echo "npm $have is below the $need trusted publishing needs." >&2
+            echo "Bump node-version above, or npm i -g npm@latest here." >&2
+            exit 1
+          fi
+          echo "npm $have, node $(node --version)"
+
+      # No token, and none wanted: the credential is the workflow's own OIDC
+      # token, exchanged by npm for a short-lived one scoped to this run. Every
+      # package names `therezor/GhostAI` and this file as its trusted publisher,
+      # so a publish from anywhere else is refused by the registry rather than
+      # by us. Provenance comes with it, generated registry-side — which is why
+      # `--provenance` is *not* passed, which is npm's own instruction for a
+      # trusted publish. It also avoids a flaky write: with the flag the runner
+      # builds the attestation itself and puts it in Sigstore's transparency
+      # log, and during 0.7.3 that write failed three runs running with `409 an
+      # equivalent entry already exists` — a different UUID each time, the
+      # client colliding with an entry it had made seconds earlier — and then
+      # succeeded on the fourth. Intermittent rather than deterministic, so a
+      # 409 here is worth one retry before it is worth a change.
+      #
+      # The already-published check is not politeness. `pnpm -r publish` skipped
+      # a version the registry already had; `npm publish` answers
+      # `EPUBLISHCONFLICT` and takes the whole job down with it. A release that
+      # got half way — which 0.7.3 did, leaving `@ghostwire/i18n` ahead of the
+      # other fourteen — must be able to run again and finish.
+      - name: Publish to npm
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          published=0
+          skipped=0
+          for tarball in "$GITHUB_WORKSPACE"/dist-tarballs/*.tgz; do
+            meta=$(tar -xzOf "$tarball" package/package.json)
+            name=$(printf '%s' "$meta" | node -p "JSON.parse(require('node:fs').readFileSync(0,'utf8')).name")
+            version=$(printf '%s' "$meta" | node -p "JSON.parse(require('node:fs').readFileSync(0,'utf8')).version")
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "= $name@$version is already on the registry"
+              skipped=$((skipped + 1))
+              continue
+            fi
+            echo "+ $name@$version"
+            npm publish "$tarball" --access public
+            published=$((published + 1))
+          done
+          echo "published $published, skipped $skipped"
+          if [ "$published" -eq 0 ] && [ "$skipped" -eq 0 ]; then
+            echo "No tarballs were found to publish." >&2
+            exit 1
+          fi
 
       - uses: softprops/action-gh-release@v2
         with:
