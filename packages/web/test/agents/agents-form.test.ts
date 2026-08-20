@@ -381,7 +381,7 @@ describe('toAgentEntryPatch', () => {
     expect(entry).toMatchObject({ toolTimeoutMs: 45_000 });
   });
 
-  it('ignores a reasoning effort that is not one of the four', () => {
+  it('ignores a reasoning effort the enum does not have', () => {
     const entry = parsed(
       toAgentEntryPatch(
         'reviewer',
@@ -391,6 +391,22 @@ describe('toAgentEntryPatch', () => {
       ),
     );
     expect(entry).not.toHaveProperty('reasoningEffort');
+  });
+
+  it('keeps `xhigh`, which the enum does have', () => {
+    // The counterpart to the case above, and the one that catches the failure
+    // mode of adding a level to the schema alone: `REASONING_EFFORTS` is what
+    // the guard checks, so a value missing from it is dropped on save without
+    // a word.
+    const entry = parsed(
+      toAgentEntryPatch(
+        'reviewer',
+        form({ reasoningEffort: 'xhigh' }),
+        EMPTY,
+        t,
+      ),
+    );
+    expect(entry).toMatchObject({ reasoningEffort: 'xhigh' });
   });
 
   it('always sends the whole tool map, so a tool can be removed', () => {

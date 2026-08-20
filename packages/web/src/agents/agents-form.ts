@@ -121,6 +121,7 @@ export const REASONING_EFFORTS: readonly ReasoningEffort[] = [
   'low',
   'medium',
   'high',
+  'xhigh',
 ];
 
 export function toAgentForm(defaults: AgentDefaults): AgentForm {

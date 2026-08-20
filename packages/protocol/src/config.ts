@@ -40,6 +40,10 @@ const OptionalDurationMs = z.number().int().nonnegative();
  * outright. `off` is a statement: this model thinks by default and I do not
  * want it to, so send whatever this wire spells that as. What that is per
  * endpoint lives in `ProviderSpec.reasoningOffBody`.
+ *
+ * `xhigh` is the other end and, unlike `off`, is not invented here: it is what
+ * Qwen3.8 calls its top rung and the level that model runs at unless told
+ * otherwise. It goes to the wire as it is written.
  */
 export const ReasoningEffortSchema = z.enum([
   'off',
@@ -47,6 +51,7 @@ export const ReasoningEffortSchema = z.enum([
   'low',
   'medium',
   'high',
+  'xhigh',
 ]);
 export type ReasoningEffort = z.infer<typeof ReasoningEffortSchema>;
 

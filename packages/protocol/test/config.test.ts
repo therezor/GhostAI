@@ -168,6 +168,15 @@ describe('ConfigSchema', () => {
     expect(AgentDefaultsSchema.parse({})).not.toHaveProperty('reasoningEffort');
   });
 
+  it('takes `xhigh`, which is a real level and not one of ours', () => {
+    // Qwen3.8 calls its top rung `xhigh` and runs there unless told otherwise.
+    // The enum has to be able to say it, because the alternative — leaving it
+    // out — is an install that cannot ask for the level its model defaults to.
+    const config = AgentDefaultsSchema.parse({ reasoningEffort: 'xhigh' });
+
+    expect(config.reasoningEffort).toBe('xhigh');
+  });
+
   it('leaves vision and tool calling on, so an existing install is unchanged', () => {
     // Both are opt-*out*. Defaulting either to false would silently take a
     // capability away from every agent already configured on a model that has it.

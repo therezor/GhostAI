@@ -28,19 +28,30 @@ Writes are atomic: validate, write `config.json.tmp` at mode `0600`, rename.
 
 What every agent inherits, and what an install with no named agents runs as.
 
-| Key                   | Type                         | Default  | Notes                                                                                                                                          |
-| --------------------- | ---------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `workspace`           | string                       | `''`     | Empty means `<root>/workspace`. Deliberately not the literal path, so moving the root with `GHOSTAI_HOME` moves the workspace with it.         |
-| `model`               | string                       | `''`     | Empty means **unconfigured**, not "pick one". There is no model-picking code; an empty model makes every turn refuse with a message saying so. |
-| `provider`            | string                       | `'auto'` | An instance id, a bare provider type, or `auto`.                                                                                               |
-| `maxTokens`           | int > 0                      | `8192`   | Output cap per response.                                                                                                                       |
-| `contextWindowTokens` | int > 0                      | `65536`  | What the context inspector measures against.                                                                                                   |
-| `temperature`         | 0–2                          | _unset_  | Unset means the request carries no `temperature` at all, which is the only correct answer for models that reject it.                           |
-| `maxToolIterations`   | int > 0                      | `40`     | Tool rounds in one turn.                                                                                                                       |
-| `toolTimeoutMs`       | int ≥ 0                      | `0`      |                                                                                                                                                |
-| `loopWallTimeoutMs`   | int ≥ 0                      | `0`      | Wall-clock cap on a turn, checked at the top of each iteration.                                                                                |
-| `subagentTimeoutMs`   | int ≥ 0                      | `0`      | Applies to delegations _this_ agent makes.                                                                                                     |
-| `reasoningEffort`     | `minimal\|low\|medium\|high` | _unset_  | Unset sends nothing.                                                                                                                           |
+| Key                   | Type                                     | Default  | Notes                                                                                                                                          |
+| --------------------- | ---------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workspace`           | string                                   | `''`     | Empty means `<root>/workspace`. Deliberately not the literal path, so moving the root with `GHOSTAI_HOME` moves the workspace with it.         |
+| `model`               | string                                   | `''`     | Empty means **unconfigured**, not "pick one". There is no model-picking code; an empty model makes every turn refuse with a message saying so. |
+| `provider`            | string                                   | `'auto'` | An instance id, a bare provider type, or `auto`.                                                                                               |
+| `maxTokens`           | int > 0                                  | `8192`   | Output cap per response.                                                                                                                       |
+| `contextWindowTokens` | int > 0                                  | `65536`  | What the context inspector measures against.                                                                                                   |
+| `temperature`         | 0–2                                      | _unset_  | Unset means the request carries no `temperature` at all, which is the only correct answer for models that reject it.                           |
+| `maxToolIterations`   | int > 0                                  | `40`     | Tool rounds in one turn.                                                                                                                       |
+| `toolTimeoutMs`       | int ≥ 0                                  | `0`      |                                                                                                                                                |
+| `loopWallTimeoutMs`   | int ≥ 0                                  | `0`      | Wall-clock cap on a turn, checked at the top of each iteration.                                                                                |
+| `subagentTimeoutMs`   | int ≥ 0                                  | `0`      | Applies to delegations _this_ agent makes.                                                                                                     |
+| `reasoningEffort`     | `off\|minimal\|low\|medium\|high\|xhigh` | _unset_  | Unset sends nothing, which is not the same as `off` — see below.                                                                               |
+
+`reasoningEffort` is sent as the wire's own `reasoning_effort`, verbatim, and only
+`off` is translated — into whatever the provider spells "do not think" as
+(`ProviderSpec.reasoningOffBody`). Which levels mean anything is the model's business,
+not this project's: `minimal` is OpenAI's, `xhigh` is Qwen3.8's top rung and its default.
+An endpoint that rejects the field has the parameter dropped and the turn retried, with a
+`degraded` notice saying so. An endpoint that _accepts and ignores_ it is the quiet case
+and there is no notice for it — Ollama replaces a model's chat template with a generic
+one, and the reasoning level lives in the template it discards, so the value has no
+effect there. llama.cpp's `llama-server` run with `--jinja` forwards it to the real
+template, and does.
 
 There is no key here for skills. Every sheet the workspace holds is indexed in the prompt
 and the agent opens the one it needs; see [Skills](skills.md). `pinnedSkills` and

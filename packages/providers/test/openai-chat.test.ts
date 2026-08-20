@@ -299,6 +299,7 @@ describe('openai-chat adapter', () => {
     const transport = mockTransport().push(
       completion({ text: 'ok' }),
       completion({ text: 'ok' }),
+      completion({ text: 'ok' }),
     );
     const provider = createOpenAIChatProvider({
       spec: specOf('ollama'),
@@ -308,10 +309,16 @@ describe('openai-chat adapter', () => {
     await provider.chat({ ...base, reasoningEffort: 'high' });
     expect(transport.calls[0]?.body.reasoning_effort).toBe('high');
 
+    // `xhigh` is Qwen3.8's own top rung rather than a level this project made
+    // up, so it travels as it is written — a translation here would spell it
+    // something the model has never been asked.
+    await provider.chat({ ...base, reasoningEffort: 'xhigh' });
+    expect(transport.calls[1]?.body.reasoning_effort).toBe('xhigh');
+
     // `off` is this project's word, not a wire value, so it may never reach the
     // body verbatim. Absent a spec saying otherwise it becomes OpenAI's `none`.
     await provider.chat({ ...base, reasoningEffort: 'off' });
-    expect(transport.calls[1]?.body.reasoning_effort).toBe('none');
+    expect(transport.calls[2]?.body.reasoning_effort).toBe('none');
   });
 
   it('spells `off` the way the table says, where a provider disagrees', async () => {
