@@ -210,22 +210,30 @@ jobs:
           fi
           echo "OIDC token endpoint present"
 
-      # **The exchange, asked directly, because npm will not tell you.**
-      # `lib/utils/oidc.js` logs every failure at `verbose` or `silly` and
-      # returns `undefined` — by design, since OIDC is optional to it. So a
-      # registry that refuses the exchange produces no message at all at default
-      # loglevel: the publish simply proceeds with no credential and dies as
-      # `ENEEDAUTH`, which describes the symptom and not the cause.
+      # **The exchange, asked directly, for every package, because npm will
+      # not tell you.** `lib/utils/oidc.js` logs each failure path at `verbose`
+      # or `silly` and returns `undefined` — by design, since OIDC is optional
+      # to it. So a registry that refuses the exchange produces no message at
+      # default loglevel: the publish proceeds with no credential and dies as
+      # `ENEEDAUTH`, which is the symptom and not the cause.
       #
-      # This runs the same two calls npm would and prints what the registry
-      # says. `404 ... package not found` here means the package has no trusted
-      # publisher configured under Settings → Trusted Publisher on npmjs.com, or
-      # one naming a different repository, workflow file or environment.
+      # Every package, not a sample. Trusted publishing is configured per
+      # package on npmjs.com, so a run that probed one would clear a repository
+      # whose other fourteen are unconfigured — and then discover them one
+      # failed publish at a time, a release cycle each. This reports the whole
+      # list at once, which is the shape the fix takes.
       - name: The registry accepts this workflow as a trusted publisher
         run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for tarball in "$GITHUB_WORKSPACE"/dist-tarballs/*.tgz; do
+            tar -xzOf "$tarball" package/package.json \
+              | node -p "JSON.parse(require('node:fs').readFileSync(0,'utf8')).name"
+          done > /tmp/names.txt
           node --input-type=module -e '
+            const { readFileSync } = await import("node:fs");
             const registry = "https://registry.npmjs.org";
-            const probe = "@ghostwire/protocol";
+            const names = readFileSync("/tmp/names.txt", "utf8").split("\n").filter(Boolean);
 
             const idUrl = new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
             idUrl.searchParams.set("audience", `npm:${new URL(registry).hostname}`);
@@ -239,28 +247,38 @@ jobs:
               console.error(`GitHub refused the id token: ${idRes.status}`);
               process.exit(1);
             }
+            // Never printed, only sent — the same thing npm does with it.
             const { value: idToken } = await idRes.json();
 
-            // Never printed, only sent — the same thing npm does with it.
-            const url = `${registry}/-/npm/v1/oidc/token/exchange/package/${encodeURIComponent(probe)}`;
-            const res = await fetch(url, {
-              method: "POST",
-              headers: { Authorization: `Bearer ${idToken}` },
-            });
-            const body = await res.text();
-            if (res.ok) {
-              console.log(`exchange ok for ${probe}`);
+            const refused = [];
+            for (const name of names) {
+              const url = `${registry}/-/npm/v1/oidc/token/exchange/package/${encodeURIComponent(name)}`;
+              const res = await fetch(url, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${idToken}` },
+              });
+              if (res.ok) {
+                console.log(`  ok       ${name}`);
+                continue;
+              }
+              let said = await res.text();
+              try { said = JSON.parse(said).message ?? said; } catch {}
+              console.log(`  REFUSED  ${name} — ${res.status}: ${said}`);
+              refused.push(name);
+            }
+
+            if (refused.length === 0) {
+              console.log(`all ${names.length} packages accept this workflow`);
               process.exit(0);
             }
-            let said = body;
-            try { said = JSON.parse(body).message ?? body; } catch {}
-            console.error(`The registry refused the exchange for ${probe}.`);
-            console.error(`  ${res.status}: ${said}`);
             console.error("");
-            console.error("Configure each package on npmjs.com under");
-            console.error("Settings → Trusted Publisher, naming this repository");
-            console.error("and .github/workflows/release.yml. If one names a");
-            console.error("GitHub environment, this job has to declare it too.");
+            console.error(`${refused.length} of ${names.length} packages have no trusted publisher for this workflow:`);
+            for (const name of refused) console.error(`  ${name}`);
+            console.error("");
+            console.error("On npmjs.com, for each: the package → Settings →");
+            console.error("Trusted Publisher → GitHub Actions, repository");
+            console.error("therezor/GhostAI, workflow release.yml. Leave the");
+            console.error("environment empty, or this job has to declare it too.");
             process.exit(1);
           '
 
