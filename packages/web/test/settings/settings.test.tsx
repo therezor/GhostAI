@@ -38,7 +38,7 @@ import { STATUS } from '@testkit/fixtures.js';
 
 const CONFIG = ConfigSchema.parse({
   agents: {
-    defaults: { model: 'llama3', provider: 'ollama', maxTokens: 4096 },
+    list: { default: { model: 'llama3', provider: 'ollama', maxTokens: 4096 } },
   },
   providers: {
     ollama: {

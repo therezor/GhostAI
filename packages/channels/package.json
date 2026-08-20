@@ -1,6 +1,6 @@
 {
   "name": "@ghostwire/channels",
-  "version": "0.7.3",
+  "version": "0.8.0",
   "description": "The channel contract and the manager bridging MessageBus to the session hub.",
   "type": "module",
   "license": "MIT",

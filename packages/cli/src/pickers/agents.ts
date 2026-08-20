@@ -33,7 +33,7 @@ interface AgentPickerDeps {
 
 /** What the row's right-hand column says about an agent. */
 function hintFor(agent: EffectiveAgent, t: CliT): string {
-  const model = agent.defaults.model;
+  const model = agent.settings.model;
   return model === '' ? t('menu.noModel') : model;
 }
 

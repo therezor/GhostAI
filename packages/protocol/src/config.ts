@@ -20,6 +20,7 @@
 
 import { z } from 'zod';
 
+import { DEFAULT_AGENT_ID } from './ids.js';
 import {
   ToolPermissionSchema,
   ToolPermissionsSchema,
@@ -104,8 +105,8 @@ type PatchShape<S extends z.ZodRawShape> = {
  * field the client never mentioned back to its default.
  *
  * It is up here with the other helpers rather than beside `ConfigPatchSchema`
- * because an agent's own settings are a patch over `agents.defaults` — the
- * inherit-unless-set shape is not only a wire concern.
+ * because a `ConfigPatch` is not the only place the shape is needed — the
+ * settings panel builds one, and so does every caller that saves a section.
  */
 function patchOf<S extends z.ZodRawShape>(
   schema: z.ZodObject<S>,
@@ -125,22 +126,42 @@ function patchOf<S extends z.ZodRawShape>(
 }
 
 // ---------------------------------------------------------------------------
-// Agent defaults
+// One agent's settings
 // ---------------------------------------------------------------------------
 
-export const AgentDefaultsSchema = z.object({
-  /**
-   * Empty means `<root>/workspace`, where the root is `GHOSTAI_HOME` or
-   * `~/.ghostai`.
-   *
-   * Deliberately *not* defaulted to the literal `~/.ghostai/workspace`: that
-   * string restates the default root, so an install that moved its root with
-   * `GHOSTAI_HOME` would keep a workspace back under the home directory —
-   * silently pointing the agent's filesystem tools at a tree the operator
-   * thought they had relocated. A relative path here is resolved against the
-   * root, never against the process working directory.
-   */
-  workspace: z.string().default(''),
+/**
+ * The working folder every agent shares.
+ *
+ * Root-level rather than on an agent, because an agent *works in* a workspace
+ * and does not own one: the folder is a property of the session, and several
+ * agents with separate identities opening the same one is the thing this is
+ * built around. `AgentEntrySchema` therefore cannot name it, and a test says so.
+ *
+ * Empty means `<root>/workspace`, where the root is `GHOSTAI_HOME` or
+ * `~/.ghostai`. Deliberately *not* defaulted to the literal `~/.ghostai/workspace`:
+ * that string restates the default root, so an install that moved its root with
+ * `GHOSTAI_HOME` would keep a workspace back under the home directory — silently
+ * pointing the agent's filesystem tools at a tree the operator thought they had
+ * relocated. A relative path here is resolved against the root, never against
+ * the process working directory.
+ *
+ * Merged per field like every other root key, which is what makes an omitted
+ * key preserve it. It must never move under a `REPLACE_WHOLESALE` path: there an
+ * omission *deletes*, so a settings save touching something else would silently
+ * reset the configured root.
+ */
+export const WorkspacePathSchema = z.string().default('');
+
+/**
+ * What one agent sends, and what it costs.
+ *
+ * Every agent states its own. There is no inheritance layer above this: a field
+ * an entry does not name is filled by the schema's own default, not by another
+ * agent's answer. That is the whole model, and it is why the two fields below
+ * that are `.optional()` with no default mean "send nothing and let the provider
+ * decide" rather than "look somewhere else".
+ */
+export const AgentSettingsSchema = z.object({
   /**
    * Empty means *unconfigured*, not "pick one for me".
    *
@@ -211,10 +232,10 @@ export const AgentDefaultsSchema = z.object({
    */
   toolsEnabled: z.boolean().default(true),
 });
-export type AgentDefaults = z.infer<typeof AgentDefaultsSchema>;
+export type AgentSettings = z.infer<typeof AgentSettingsSchema>;
 
-// The named agents that inherit from those defaults live further down, after
-// the tool schemas they override — see "Agents".
+// The named agents these belong to live further down, after the tool schemas
+// they override — see "Agents".
 
 // ---------------------------------------------------------------------------
 // Providers
@@ -259,9 +280,10 @@ export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;
  *
  * It used to be keyed by provider id, which capped the tree at one endpoint per
  * provider. The two are deliberately compatible: an old file's keys *are*
- * provider ids, so the migration in `@ghostwire/core` only has to write
- * `type` = the key, and every credential already in the vault keeps resolving
- * under the same string.
+ * provider ids, so adding `type` = the key is the whole of moving one over, and
+ * every credential already in the vault keeps resolving under the same string.
+ * There is no automatic migration — a file without `type` is an error naming the
+ * key, which is this project's rule for every old shape.
  */
 export const ProvidersConfigSchema = z
   .record(z.string(), ProviderConfigSchema)
@@ -451,7 +473,7 @@ export type ToolsConfig = z.infer<typeof ToolsConfigSchema>;
 // Agents
 // ---------------------------------------------------------------------------
 //
-// Below the tool schemas rather than beside `AgentDefaults`, because an agent
+// Below the tool schemas rather than beside `AgentSettings`, because an agent
 // overrides them: this is the one place in the tree where the dependency runs
 // from an agent to the tools rather than the other way round.
 
@@ -623,176 +645,190 @@ export const SubagentRefSchema = z.object({
 export type SubagentRef = z.infer<typeof SubagentRefSchema>;
 
 /**
- * One named agent.
+ * One named agent, complete.
  *
- * Built on `patchOf(AgentDefaultsSchema)` rather than restating the fields, so
- * every knob is inherit-unless-set and a field added to `AgentDefaults` later
- * becomes per-agent overridable without touching this schema.
+ * Built on `AgentSettingsSchema` rather than on a patch of it, so an entry that
+ * names three fields parses into an agent that states all of them: the rest come
+ * from the *schema's* defaults. Nothing is inherited from anywhere, which is what
+ * lets a reader answer "what does this agent run on" from the entry alone.
  *
- * `workspace` is omitted deliberately. The working folder is a property of the
- * session, shared by every agent that opens it; an agent able to pin its own
- * would break the one thing this feature is built around — several agents, one
- * folder, separate identities.
+ * The config stays as short as it ever was — `{ "label": "Coder", "model":
+ * "qwen3" }` is still a whole agent — because brevity was never coming from the
+ * inheritance, only the indirection was.
+ *
+ * `model` is the one field with no useful default: empty means *unconfigured*,
+ * and an agent in that state is listed, editable and refused a turn rather than
+ * quietly borrowing somebody else's. See `AgentSettingsSchema.model`.
+ *
+ * `workspace` is deliberately absent. The working folder is root-level and
+ * shared — see `WorkspacePathSchema`.
  */
-export const AgentEntrySchema = patchOf(AgentDefaultsSchema)
-  .omit({ workspace: true })
-  .extend({
-    /** Shown in the UI. Empty falls back to the id. */
-    label: z.string().default(''),
-    /**
-     * This agent's whole static system prompt, as a template.
-     *
-     * Not an addition to a built-in block — it replaces one. Empty means the
-     * built-in `DEFAULT_SYSTEM_PROMPT_TEMPLATE`, which is what keeps an install
-     * that never customised a prompt receiving improvements to it on upgrade.
-     * See `prompt.ts` for the placeholder set and the substitution rules.
-     */
-    systemPrompt: z.string().default(''),
-    /**
-     * The per-iteration half's live-state section, as a template.
-     *
-     * Beside `systemPrompt` and for the same reason — an operator owns what their
-     * agent is told — but with the opposite economics: this half is never cached,
-     * so every line is re-sent on every request of every turn. Empty means the
-     * built-in `DEFAULT_LIVE_STATE_TEMPLATE`. Its placeholder vocabulary is
-     * `LIVE_PROMPT_PLACEHOLDERS`, which is *not* the identity half's: `{{time}}`
-     * belongs only here, and `{{workspaceId}}` only there.
-     *
-     * Setting it to a single space is how an operator removes the section
-     * entirely, since empty means "use the built-in".
-     */
-    livePrompt: z.string().default(''),
-    /**
-     * What is appended in the last few iterations of a turn.
-     *
-     * Separate from `livePrompt` because it is conditional and a placeholder
-     * template cannot express a condition. Empty means the built-in
-     * `DEFAULT_WRAP_UP_TEMPLATE`; a single space silences it.
-     */
-    wrapUpPrompt: z.string().default(''),
-    /**
-     * Whether `systemPrompt` is the static half or the entire system message.
-     *
-     * `template` — the default — leaves the four templates around it in force.
-     * `raw` stops *placing* anything: no live-state block, no toolbox section, no
-     * tool-output policy unless the template names `{{toolbox}}`, `{{toolPolicy}}`
-     * and the rest.
-     *
-     * The three section templates below still decide what those placeholders
-     * render *to*, so raw controls the layout rather than discarding the wording.
-     * `livePrompt` is the exception and the only field raw ignores outright: its
-     * entire content is `{{time}}{{wrapUp}}`, both of which a raw template names
-     * directly.
-     */
-    promptMode: PromptModeSchema.default('template'),
-    /**
-     * The `## Running commands` section, as a template. Fills `{{platformPolicy}}`.
-     *
-     * Empty means the built-in for this agent's placement — `exec` on the host
-     * and `exec` in a toolbox get different defaults, and which one applies is
-     * decided by `toolbox.name` rather than by anything written here. A single
-     * space removes the section.
-     *
-     * Editing it does not widen anything. Where a command may reach is decided by
-     * `guardExec` and the workspace jail, neither of which reads the prompt; this
-     * is the sentence that tells the model what those two will do.
-     */
-    platformPrompt: z.string().default(''),
-    /**
-     * The `## Toolbox: <name>` advertisement, as a template.
-     *
-     * Only rendered when the agent has a toolbox — an empty `toolbox.name`
-     * produces no section whatever this says. Empty means the built-in; a single
-     * space removes it, which is how an operator whose own `systemPrompt`
-     * already describes the box stops paying for the preamble twice.
-     */
-    toolboxPrompt: z.string().default(''),
-    /**
-     * The `## Tool output policy` section, as a template.
-     *
-     * Editable like the rest, and the one that deserves a sentence about what
-     * that does and does not mean. The envelopes around tool results are emitted
-     * by the runtime and the nonce is regenerated per turn whatever this says —
-     * so this text is the *explanation* of a defence, not the defence. Deleting
-     * it leaves the fences in place and the model with no reason to respect them,
-     * which is why a template with no `{{nonce}}` and no `{{tag}}` saves with a
-     * warning rather than silently.
-     */
-    toolPolicyPrompt: z.string().default(''),
-    /**
-     * The `## Memory` section, as a template.
-     *
-     * Only rendered while the agent may call `memory` and the workspace has at
-     * least one — a permission of `deny` produces no section whatever this says,
-     * and neither does an empty `memory/` folder. Empty means the built-in; a
-     * single space removes the section, which is how an operator whose own
-     * `systemPrompt` already explains the folder stops paying for it twice.
-     *
-     * Its vocabulary is `MEMORY_PROMPT_PLACEHOLDERS`, and `{{index}}` is the one
-     * that matters: the generated lines are the section's content, and a
-     * template omitting it advertises a memory folder while naming nothing in
-     * it.
-     */
-    memoryPrompt: z.string().default(''),
-    /**
-     * The `## Skills` section, as a template.
-     *
-     * Only rendered while the agent may call `skill` and the workspace has at
-     * least one — a permission of `deny` produces no section whatever this says,
-     * and neither does an empty `skills/` folder. Empty means the built-in; a
-     * single space removes the section.
-     *
-     * Its vocabulary is `SKILLS_PROMPT_PLACEHOLDERS`. Unlike the memory
-     * template's, its `{{index}}` carries its own leading blank line, because it
-     * can be empty and a section should leave no gap where it would have been.
-     *
-     * The sheets themselves are not here. The template renders the catalogue;
-     * a body reaches the model only when the agent opens the file it names.
-     */
-    skillsPrompt: z.string().default(''),
-    /**
-     * Per-tool replacements for the description and the parameter descriptions
-     * the model is sent.
-     *
-     * Keyed by advertised tool name, so it reaches built-ins, toolbox programs,
-     * MCP and extension tools and `ask_<id>` subagent tools alike. For a subagent
-     * this wins over `subagents[].prompt`, being the more specific of the two.
-     *
-     * A key naming no advertised tool is a warning, not an error: a tool can
-     * leave the list because a toolbox was uninstalled or `exec` was disabled,
-     * and neither should stop an agent that was working a moment ago.
-     */
-    toolPrompts: ToolPromptOverridesSchema.default({}),
-    enabled: z.boolean().default(true),
-    /**
-     * Replaces, never merges. An entry that names three tools has three tools —
-     * the seed is what a *new* agent gets, not a floor every agent stands on,
-     * or switching a tool off would be impossible to express.
-     */
-    tools: ToolPermissionsSchema.default({ ...DEFAULT_AGENT_TOOLS }),
-    /** Merged over `tools.exec`, so one agent can hold a tighter allow-list. */
-    exec: patchOf(ExecToolConfigSchema).optional(),
-    toolbox: AgentToolboxSchema.prefault({}),
-    /**
-     * Agents this one may delegate to. Order is the order the model sees them.
-     *
-     * A list rather than a record keyed by id because the order is the
-     * operator's and a record has none — and because "the same agent twice" is
-     * a mistake `assertBuildable` should name, not a shape the schema silently
-     * collapses.
-     */
-    subagents: z.array(SubagentRefSchema).default([]),
-  });
+export const AgentEntrySchema = AgentSettingsSchema.extend({
+  /** Shown in the UI. Empty falls back to the id. */
+  label: z.string().default(''),
+  /**
+   * This agent's whole static system prompt, as a template.
+   *
+   * Not an addition to a built-in block — it replaces one. Empty means the
+   * built-in `DEFAULT_SYSTEM_PROMPT_TEMPLATE`, which is what keeps an install
+   * that never customised a prompt receiving improvements to it on upgrade.
+   * See `prompt.ts` for the placeholder set and the substitution rules.
+   */
+  systemPrompt: z.string().default(''),
+  /**
+   * The per-iteration half's live-state section, as a template.
+   *
+   * Beside `systemPrompt` and for the same reason — an operator owns what their
+   * agent is told — but with the opposite economics: this half is never cached,
+   * so every line is re-sent on every request of every turn. Empty means the
+   * built-in `DEFAULT_LIVE_STATE_TEMPLATE`. Its placeholder vocabulary is
+   * `LIVE_PROMPT_PLACEHOLDERS`, which is *not* the identity half's: `{{time}}`
+   * belongs only here, and `{{workspaceId}}` only there.
+   *
+   * Setting it to a single space is how an operator removes the section
+   * entirely, since empty means "use the built-in".
+   */
+  livePrompt: z.string().default(''),
+  /**
+   * What is appended in the last few iterations of a turn.
+   *
+   * Separate from `livePrompt` because it is conditional and a placeholder
+   * template cannot express a condition. Empty means the built-in
+   * `DEFAULT_WRAP_UP_TEMPLATE`; a single space silences it.
+   */
+  wrapUpPrompt: z.string().default(''),
+  /**
+   * Whether `systemPrompt` is the static half or the entire system message.
+   *
+   * `template` — the default — leaves the four templates around it in force.
+   * `raw` stops *placing* anything: no live-state block, no toolbox section, no
+   * tool-output policy unless the template names `{{toolbox}}`, `{{toolPolicy}}`
+   * and the rest.
+   *
+   * The three section templates below still decide what those placeholders
+   * render *to*, so raw controls the layout rather than discarding the wording.
+   * `livePrompt` is the exception and the only field raw ignores outright: its
+   * entire content is `{{time}}{{wrapUp}}`, both of which a raw template names
+   * directly.
+   */
+  promptMode: PromptModeSchema.default('template'),
+  /**
+   * The `## Running commands` section, as a template. Fills `{{platformPolicy}}`.
+   *
+   * Empty means the built-in for this agent's placement — `exec` on the host
+   * and `exec` in a toolbox get different defaults, and which one applies is
+   * decided by `toolbox.name` rather than by anything written here. A single
+   * space removes the section.
+   *
+   * Editing it does not widen anything. Where a command may reach is decided by
+   * `guardExec` and the workspace jail, neither of which reads the prompt; this
+   * is the sentence that tells the model what those two will do.
+   */
+  platformPrompt: z.string().default(''),
+  /**
+   * The `## Toolbox: <name>` advertisement, as a template.
+   *
+   * Only rendered when the agent has a toolbox — an empty `toolbox.name`
+   * produces no section whatever this says. Empty means the built-in; a single
+   * space removes it, which is how an operator whose own `systemPrompt`
+   * already describes the box stops paying for the preamble twice.
+   */
+  toolboxPrompt: z.string().default(''),
+  /**
+   * The `## Tool output policy` section, as a template.
+   *
+   * Editable like the rest, and the one that deserves a sentence about what
+   * that does and does not mean. The envelopes around tool results are emitted
+   * by the runtime and the nonce is regenerated per turn whatever this says —
+   * so this text is the *explanation* of a defence, not the defence. Deleting
+   * it leaves the fences in place and the model with no reason to respect them,
+   * which is why a template with no `{{nonce}}` and no `{{tag}}` saves with a
+   * warning rather than silently.
+   */
+  toolPolicyPrompt: z.string().default(''),
+  /**
+   * The `## Memory` section, as a template.
+   *
+   * Only rendered while the agent may call `memory` and the workspace has at
+   * least one — a permission of `deny` produces no section whatever this says,
+   * and neither does an empty `memory/` folder. Empty means the built-in; a
+   * single space removes the section, which is how an operator whose own
+   * `systemPrompt` already explains the folder stops paying for it twice.
+   *
+   * Its vocabulary is `MEMORY_PROMPT_PLACEHOLDERS`, and `{{index}}` is the one
+   * that matters: the generated lines are the section's content, and a
+   * template omitting it advertises a memory folder while naming nothing in
+   * it.
+   */
+  memoryPrompt: z.string().default(''),
+  /**
+   * The `## Skills` section, as a template.
+   *
+   * Only rendered while the agent may call `skill` and the workspace has at
+   * least one — a permission of `deny` produces no section whatever this says,
+   * and neither does an empty `skills/` folder. Empty means the built-in; a
+   * single space removes the section.
+   *
+   * Its vocabulary is `SKILLS_PROMPT_PLACEHOLDERS`. Unlike the memory
+   * template's, its `{{index}}` carries its own leading blank line, because it
+   * can be empty and a section should leave no gap where it would have been.
+   *
+   * The sheets themselves are not here. The template renders the catalogue;
+   * a body reaches the model only when the agent opens the file it names.
+   */
+  skillsPrompt: z.string().default(''),
+  /**
+   * Per-tool replacements for the description and the parameter descriptions
+   * the model is sent.
+   *
+   * Keyed by advertised tool name, so it reaches built-ins, toolbox programs,
+   * MCP and extension tools and `ask_<id>` subagent tools alike. For a subagent
+   * this wins over `subagents[].prompt`, being the more specific of the two.
+   *
+   * A key naming no advertised tool is a warning, not an error: a tool can
+   * leave the list because a toolbox was uninstalled or `exec` was disabled,
+   * and neither should stop an agent that was working a moment ago.
+   */
+  toolPrompts: ToolPromptOverridesSchema.default({}),
+  enabled: z.boolean().default(true),
+  /**
+   * Replaces, never merges. An entry that names three tools has three tools —
+   * the seed is what a *new* agent gets, not a floor every agent stands on,
+   * or switching a tool off would be impossible to express.
+   */
+  tools: ToolPermissionsSchema.default({ ...DEFAULT_AGENT_TOOLS }),
+  /** Merged over `tools.exec`, so one agent can hold a tighter allow-list. */
+  exec: patchOf(ExecToolConfigSchema).optional(),
+  toolbox: AgentToolboxSchema.prefault({}),
+  /**
+   * Agents this one may delegate to. Order is the order the model sees them.
+   *
+   * A list rather than a record keyed by id because the order is the
+   * operator's and a record has none — and because "the same agent twice" is
+   * a mistake `assertBuildable` should name, not a shape the schema silently
+   * collapses.
+   */
+  subagents: z.array(SubagentRefSchema).default([]),
+});
 export type AgentEntry = z.infer<typeof AgentEntrySchema>;
 
-/**
- * `defaults` is what every agent inherits and what an install with no named
- * agents runs as. `list` is keyed by an id the operator chooses, which also
- * names the agent's directory on disk — so it follows the workspace id rules.
- */
+/** Every agent this install has. There is nothing above them. */
 export const AgentsConfigSchema = z.object({
-  defaults: AgentDefaultsSchema.prefault({}),
-  list: z.record(z.string(), AgentEntrySchema).default({}),
+  /**
+   * Keyed by an id the operator chooses, which also names the agent's directory
+   * on disk — so it follows the workspace id rules.
+   *
+   * `default` is prefaulted into existence because it is the agent every unbound
+   * conversation runs on, and with no settings layer above it there is nothing
+   * else for it to resolve from. A fresh install therefore has exactly one agent,
+   * complete and unconfigured, rather than none.
+   *
+   * `prefault` rather than `default`, so the literal is parsed *through*
+   * `AgentEntrySchema` on every call and two parses cannot share one object.
+   */
+  list: z
+    .record(z.string(), AgentEntrySchema)
+    .prefault({ [DEFAULT_AGENT_ID]: {} }),
 });
 
 // ---------------------------------------------------------------------------
@@ -933,6 +969,8 @@ export const UiConfigSchema = z.object({
 // ---------------------------------------------------------------------------
 
 export const ConfigSchema = z.object({
+  /** The folder every agent works in. See `WorkspacePathSchema`. */
+  workspace: WorkspacePathSchema,
   agents: AgentsConfigSchema.prefault({}),
   providers: ProvidersConfigSchema,
   server: ServerConfigSchema.prefault({}),
@@ -954,29 +992,6 @@ export type Config = z.infer<typeof ConfigSchema>;
 export const ConfigPatchSchema = z.object({
   agents: z
     .object({
-      /**
-       * Two fields accept `null`, and only two.
-       *
-       * `agents.defaults` is a struct that merges per field, so an absent key
-       * means "not mentioned" and preserves what is there. That is right for
-       * every field with a default — and wrong for the two that are genuinely
-       * *optional*, because it left them impossible to clear: emptying the
-       * temperature box produced a patch that simply did not mention it, and
-       * the stored value survived a save that appeared to remove it.
-       *
-       * `null` is the one token the merge reads as a deletion (see
-       * `DELETE_BY_NULL` in `@ghostwire/runtime`). It is safe on exactly these
-       * two because both are `.optional()` in `AgentDefaultsSchema`, so a
-       * config with the key gone still re-parses. Doing the same to `model` or
-       * `maxTokens` would punch a hole in the struct and fail that re-parse,
-       * which is why this is a two-field exception rather than a rule.
-       */
-      defaults: patchOf(AgentDefaultsSchema)
-        .extend({
-          temperature: AgentDefaultsSchema.shape.temperature.nullable(),
-          reasoningEffort: AgentDefaultsSchema.shape.reasoningEffort.nullable(),
-        })
-        .optional(),
       /**
        * `null` deletes the agent; an object creates or updates one. Same
        * reasoning as `providers` below — an absent key means "not mentioned",
@@ -1061,7 +1076,7 @@ export const ConfigPatchSchema = z.object({
                * Needed because `oauth` is genuinely optional rather than
                * defaulted: "unset" is a real state, and an absent key already
                * means "not mentioned". The same reason
-               * `agents.defaults.temperature` is in `DELETE_BY_NULL`.
+               * an agent's entry replaces wholesale.
                */
               oauth: McpOAuthConfigSchema.nullable().optional(),
             })
@@ -1096,5 +1111,85 @@ export const ConfigPatchSchema = z.object({
     })
     .optional(),
   ui: patchOf(UiConfigSchema).optional(),
+  /**
+   * Stripped of its default, not `WorkspacePathSchema.optional()`.
+   *
+   * `.optional()` leaves the `ZodDefault` in place, so a patch parsed from `{}`
+   * would carry `workspace: ''` and every settings save would reset a configured
+   * root to "unset". That is the exact hazard `patchOf` exists to prevent, and
+   * this is the one root field that needs it written out by hand.
+   */
+  workspace: z.string().optional(),
 });
 export type ConfigPatch = z.infer<typeof ConfigPatchSchema>;
+
+// ---------------------------------------------------------------------------
+// Editing one agent's model and sampling settings
+// ---------------------------------------------------------------------------
+
+/**
+ * The fields a chat surface can move without opening the agent editor.
+ *
+ * `model` and `provider` are one setting and travel together: a model sent
+ * without the instance that offers it leaves `provider` naming an endpoint that
+ * has never heard of the model. Every caller has a whole `ModelInfo` in hand, so
+ * neither is optional-in-practice — they are optional here only because
+ * `/temperature` changes neither.
+ *
+ * `null` means *clear this*, and only the two genuinely optional fields accept
+ * it. Cleared means the request carries no such parameter and the provider
+ * applies its own — there is nothing above an agent for it to fall back to.
+ */
+export interface AgentSettingsChange {
+  readonly model?: string;
+  readonly provider?: string;
+  readonly temperature?: number | null;
+  readonly reasoningEffort?: ReasoningEffort | null;
+}
+
+/**
+ * A patch that moves one agent's model or sampling settings and nothing else.
+ *
+ * Written once because of the rule it encodes: **`agents.list.*` is in the
+ * merge's `REPLACE_WHOLESALE` list, so the patch *is* the agent.** A patch naming
+ * `model` alone does not set one field — it replaces the entry and takes the
+ * label, the system prompt, the tools, the toolbox and the subagent roster with
+ * it. So the stored entry is read, spread, and sent back whole, and clearing a
+ * field means deleting the key rather than nulling it.
+ *
+ * An id with no entry yields a patch that creates one. That is the honest answer
+ * for an agent deleted underneath a conversation: the turn will fall back to the
+ * default agent anyway, and writing a half-agent under a dead id would be worse
+ * than writing a whole one.
+ *
+ * Pure, and deliberately in `@ghostwire/protocol` rather than beside the merge it
+ * encodes. Both callers need it and only this package reaches both: the web
+ * bundle cannot import `@ghostwire/runtime` or `@ghostwire/core`, which open
+ * `node:sqlite` and the filesystem.
+ */
+export function agentSettingsPatch(
+  config: Config,
+  agentId: string,
+  changes: AgentSettingsChange,
+): ConfigPatch {
+  // Spread first, then apply — so every field this function does not know about
+  // survives the replacement it is about to be part of.
+  const next = {
+    ...(config.agents.list[agentId] ?? AgentEntrySchema.parse({})),
+  };
+  if (changes.model !== undefined) next.model = changes.model;
+  if (changes.provider !== undefined) next.provider = changes.provider;
+  // Deleted rather than nulled: the entry replaces wholesale, so an absent key
+  // is how "send no such parameter" is spelled. A `null` would reach
+  // `AgentEntrySchema` as a value and be rejected.
+  if (changes.temperature === null) delete next.temperature;
+  else if (changes.temperature !== undefined) {
+    next.temperature = changes.temperature;
+  }
+  if (changes.reasoningEffort === null) delete next.reasoningEffort;
+  else if (changes.reasoningEffort !== undefined) {
+    next.reasoningEffort = changes.reasoningEffort;
+  }
+
+  return { agents: { list: { [agentId]: next } } };
+}

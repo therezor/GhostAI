@@ -22,7 +22,13 @@ test.describe('agents', () => {
     harness,
   }) => {
     await app.request.patch(`${harness.url}/api/settings`, {
-      data: { agents: { list: { reviewer: { label: 'Reviewer' } } } },
+      data: {
+        agents: {
+          list: {
+            reviewer: { label: 'Reviewer', provider: 'ollama', model: 'qwen3' },
+          },
+        },
+      },
     });
 
     await app.goto(`${harness.url}/`);
@@ -42,7 +48,13 @@ test.describe('agents', () => {
     harness,
   }) => {
     await app.request.patch(`${harness.url}/api/settings`, {
-      data: { agents: { list: { reviewer: { label: 'Reviewer' } } } },
+      data: {
+        agents: {
+          list: {
+            reviewer: { label: 'Reviewer', provider: 'ollama', model: 'qwen3' },
+          },
+        },
+      },
     });
 
     await app.goto(`${harness.url}/`);
@@ -69,7 +81,13 @@ test.describe('agents', () => {
     harness,
   }) => {
     await app.request.patch(`${harness.url}/api/settings`, {
-      data: { agents: { list: { reviewer: { label: 'Reviewer' } } } },
+      data: {
+        agents: {
+          list: {
+            reviewer: { label: 'Reviewer', provider: 'ollama', model: 'qwen3' },
+          },
+        },
+      },
     });
 
     await app.goto(`${harness.url}/agents`);
@@ -112,9 +130,9 @@ test.describe('agents', () => {
       .poll(async () => {
         const response = await app.request.get(`${harness.url}/api/settings`);
         const body = (await response.json()) as {
-          config: { agents: { defaults: { maxTokens: number } } };
+          config: { agents: { list: { default: { maxTokens: number } } } };
         };
-        return body.config.agents.defaults.maxTokens;
+        return body.config.agents.list.default.maxTokens;
       })
       .toBe(2048);
   });
@@ -129,6 +147,8 @@ test.describe('agents', () => {
           list: {
             reviewer: {
               label: 'Reviewer',
+              provider: 'ollama',
+              model: 'qwen3',
               tools: { memory: 'allow', skill: 'allow' },
             },
           },
@@ -165,7 +185,13 @@ test.describe('agents', () => {
     harness,
   }) => {
     await app.request.patch(`${harness.url}/api/settings`, {
-      data: { agents: { list: { scribe: { label: 'Scribe' } } } },
+      data: {
+        agents: {
+          list: {
+            scribe: { label: 'Scribe', provider: 'ollama', model: 'qwen3' },
+          },
+        },
+      },
     });
 
     await app.goto(`${harness.url}/agents/scribe`);
@@ -191,15 +217,17 @@ test.describe('agents', () => {
     app,
     harness,
   }) => {
-    // Give the default agent something worth copying, on both halves of what it
-    // is: `agents.defaults` for the model and budget, its own entry for the
-    // prompt and the tools.
+    // Give the default agent something worth copying. One entry holds all of
+    // it — the model, the budget, the prompt and the tools — and the patch
+    // carries all of it, because `agents.list.*` replaces wholesale.
     await app.request.patch(`${harness.url}/api/settings`, {
       data: {
         agents: {
-          defaults: { maxTokens: 1234 },
           list: {
             default: {
+              provider: 'ollama',
+              model: 'qwen3',
+              maxTokens: 1234,
               systemPrompt: 'House style: be terse.',
               tools: { read_file: 'allow', exec: 'deny' },
             },
@@ -250,7 +278,13 @@ test.describe('agents', () => {
     // it is derived from the settings tree rather than part of it, so a save
     // that renamed an agent left the picker on the old name until a reload.
     await app.request.patch(`${harness.url}/api/settings`, {
-      data: { agents: { list: { reviewer: { label: 'Reviewer' } } } },
+      data: {
+        agents: {
+          list: {
+            reviewer: { label: 'Reviewer', provider: 'ollama', model: 'qwen3' },
+          },
+        },
+      },
     });
 
     await app.goto(`${harness.url}/agents/reviewer`);
@@ -285,6 +319,8 @@ test.describe('agents', () => {
           list: {
             reviewer: {
               label: 'Reviewer',
+              provider: 'ollama',
+              model: 'qwen3',
               tools: { read_file: 'allow', exec: 'deny' },
             },
           },
@@ -381,6 +417,8 @@ test.describe('agents', () => {
           list: {
             reviewer: {
               label: 'Reviewer',
+              provider: 'ollama',
+              model: 'qwen3',
               systemPrompt: '# {{name}}\n\nOnly ever read. Never write.',
               tools: { read_file: 'allow', exec: 'deny' },
             },
@@ -431,7 +469,13 @@ test.describe('agents', () => {
     harness,
   }) => {
     await app.request.patch(`${harness.url}/api/settings`, {
-      data: { agents: { list: { reviewer: { label: 'Reviewer' } } } },
+      data: {
+        agents: {
+          list: {
+            reviewer: { label: 'Reviewer', provider: 'ollama', model: 'qwen3' },
+          },
+        },
+      },
     });
 
     await app.goto(`${harness.url}/agents/reviewer`);
@@ -479,7 +523,13 @@ test.describe('agents', () => {
     harness,
   }) => {
     await app.request.patch(`${harness.url}/api/settings`, {
-      data: { agents: { list: { reviewer: { label: 'Reviewer' } } } },
+      data: {
+        agents: {
+          list: {
+            reviewer: { label: 'Reviewer', provider: 'ollama', model: 'qwen3' },
+          },
+        },
+      },
     });
 
     await app.goto(`${harness.url}/agents/reviewer`);
@@ -527,7 +577,13 @@ test.describe('agents', () => {
     // The other half of the contract: empty means "the built-in", so an install
     // that never customised a prompt keeps receiving improvements to it.
     await app.request.patch(`${harness.url}/api/settings`, {
-      data: { agents: { list: { plain: { label: 'Plain' } } } },
+      data: {
+        agents: {
+          list: {
+            plain: { label: 'Plain', provider: 'ollama', model: 'qwen3' },
+          },
+        },
+      },
     });
     await app.request.post(`${harness.url}/api/sessions`, {
       data: { key: 'web-plain-prompt', agentId: 'plain' },
@@ -551,7 +607,12 @@ test.describe('agents', () => {
       data: {
         agents: {
           list: {
-            reader: { label: 'Reader', tools: { read_file: 'allow' } },
+            reader: {
+              label: 'Reader',
+              provider: 'ollama',
+              model: 'qwen3',
+              tools: { read_file: 'allow' },
+            },
           },
         },
       },
@@ -598,7 +659,13 @@ test.describe('agents', () => {
     harness,
   }) => {
     await app.request.patch(`${harness.url}/api/settings`, {
-      data: { agents: { list: { writer: { label: 'Writer' } } } },
+      data: {
+        agents: {
+          list: {
+            writer: { label: 'Writer', provider: 'ollama', model: 'qwen3' },
+          },
+        },
+      },
     });
     await app.request.post(`${harness.url}/api/sessions`, {
       data: { key: 'web-bound', agentId: 'writer' },
@@ -632,7 +699,13 @@ test.describe('agents', () => {
     // in a file the operator edits, so it can go at any moment — and a
     // session must not become a thing that cannot take another turn.
     await app.request.patch(`${harness.url}/api/settings`, {
-      data: { agents: { list: { reviewer: { label: 'Reviewer' } } } },
+      data: {
+        agents: {
+          list: {
+            reviewer: { label: 'Reviewer', provider: 'ollama', model: 'qwen3' },
+          },
+        },
+      },
     });
     await app.request.post(`${harness.url}/api/sessions`, {
       data: { key: 'web-orphan', agentId: 'reviewer' },
@@ -684,9 +757,11 @@ test.describe('agents', () => {
       data: {
         agents: {
           list: {
-            reviewer: { label: 'Reviewer' },
+            reviewer: { label: 'Reviewer', provider: 'ollama', model: 'qwen3' },
             planner: {
               label: 'Planner',
+              provider: 'ollama',
+              model: 'qwen3',
               subagents: [
                 { id: 'reviewer', prompt: 'Check it.', permission: 'allow' },
               ],
@@ -725,9 +800,11 @@ test.describe('agents', () => {
       data: {
         agents: {
           list: {
-            reviewer: { label: 'Reviewer' },
+            reviewer: { label: 'Reviewer', provider: 'ollama', model: 'qwen3' },
             planner: {
               label: 'Planner',
+              provider: 'ollama',
+              model: 'qwen3',
               subagents: [
                 { id: 'reviewer', prompt: 'Check it.', permission: 'allow' },
               ],

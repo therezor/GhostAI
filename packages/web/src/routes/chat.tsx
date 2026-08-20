@@ -39,6 +39,7 @@ import { useTranslation } from 'react-i18next';
 import { useTurnStore } from '@/state/turn.js';
 import { toast } from '@/components/ui/toast.js';
 import { AgentPicker } from '@/agents/agent-picker.js';
+import { useAgentChoice } from '@/agents/use-agent-choice.js';
 import { WorkspacePicker } from '@/workspaces/workspace-picker.js';
 import { useAgent } from '@/agents/agent-context.js';
 import { Composer } from '@/chat/composer.js';
@@ -61,6 +62,10 @@ export function ChatRoute(): JSX.Element {
   const queueDepth = useTurnStore((state) => state.queueDepth);
   const connection = useTurnStore((state) => state.connection);
   const sessionKey = useTurnStore((state) => state.sessionKey);
+  // The same hook the picker and `/agent` use, so all three agree on which
+  // agent this conversation runs on. React Query dedupes the two queries behind
+  // it, so asking here costs nothing the picker was not already paying.
+  const agentChoice = useAgentChoice(sessionKey);
 
   const queryClient = useQueryClient();
 
@@ -223,6 +228,14 @@ export function ChatRoute(): JSX.Element {
               {...(sessionKey === undefined ? {} : { sessionKey })}
             />
           </div>
+        }
+        // What `/effort` marks as in force. Resolved here rather than in the
+        // composer because the binding lives behind `useAgentChoice`, which
+        // needs the session key the composer deliberately does not take.
+        agent={
+          agentChoice.match?.reasoningEffort === undefined
+            ? {}
+            : { effort: agentChoice.match.reasoningEffort }
         }
         // The line under the box is the budget's now: it is the one thing there
         // that changes, and it used to share the row with a keyboard hint that

@@ -121,7 +121,7 @@ describe('createChatRuntime', () => {
 
   it('reads the provider and model from the config file', () => {
     const home = tempHome({
-      agents: { defaults: { provider: 'ollama', model: 'llama3' } },
+      agents: { list: { default: { provider: 'ollama', model: 'llama3' } } },
     });
     const runtime = build({ home, vault: false, env: {} });
 
@@ -168,7 +168,7 @@ describe('createChatRuntime', () => {
 
   it('resolves the workspace from the config, relative to the home', () => {
     const home = tempHome({
-      agents: { defaults: { workspace: 'projects/alpha' } },
+      workspace: 'projects/alpha',
     });
     const runtime = build({
       home,
@@ -182,9 +182,7 @@ describe('createChatRuntime', () => {
   });
 
   it('lets an explicit workspace win over the config', () => {
-    const home = tempHome({
-      agents: { defaults: { workspace: 'from-config' } },
-    });
+    const home = tempHome({ workspace: 'from-config' });
     const workspace = join(tempHome(), 'from-flag');
     const runtime = build({
       home,
@@ -212,7 +210,7 @@ describe('createChatRuntime', () => {
 
   it('honours a configured apiBase over the registry default', () => {
     const home = tempHome({
-      agents: { defaults: { provider: 'ollama', model: 'm' } },
+      agents: { list: { default: { provider: 'ollama', model: 'm' } } },
       providers: {
         ollama: { type: 'ollama', apiBase: 'http://127.0.0.1:9999/v1' },
       },

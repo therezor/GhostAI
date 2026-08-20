@@ -12,7 +12,7 @@
  *
  * What is no longer asserted anywhere is inheritance *on the screen*. The
  * config format still allows an absent field to fall through to
- * `agents.defaults`, and `@ghostwire/runtime` has the cases for it — but the
+ * `agents.list.default`, and `@ghostwire/runtime` has the cases for it — but the
  * editor fills every box from the defaults and writes them down, so the
  * assertions here are that an agent shows its own settings rather than a blank
  * where somebody else's would have been used.
@@ -41,10 +41,13 @@ import { STATUS } from '@testkit/fixtures.js';
 
 const CONFIG = ConfigSchema.parse({
   agents: {
-    defaults: { model: 'llama3', provider: 'ollama', maxTokens: 4096 },
     list: {
+      default: { model: 'llama3', provider: 'ollama', maxTokens: 4096 },
       reviewer: {
         label: 'Reviewer',
+        provider: 'ollama',
+        model: 'llama3',
+        maxTokens: 4096,
         tools: { read_file: 'allow', list_dir: 'allow', exec: 'deny' },
       },
     },
@@ -358,8 +361,10 @@ describe('the agents index', () => {
         {
           config: ConfigSchema.parse({
             agents: {
-              defaults: { model: 'llama3', provider: 'ollama' },
-              list: { reviewer: { label: 'Reviewer', enabled: false } },
+              list: {
+                default: { model: 'llama3', provider: 'ollama' },
+                reviewer: { label: 'Reviewer', enabled: false },
+              },
             },
           }),
           credentialsPresent: {},
@@ -494,8 +499,8 @@ describe('the agents index', () => {
         {
           config: ConfigSchema.parse({
             agents: {
-              defaults: { model: 'llama3', provider: 'ollama' },
               list: {
+                default: { model: 'llama3', provider: 'ollama' },
                 reviewer: { label: 'Reviewer' },
                 'reviewer-copy': { label: 'Reviewer copy' },
               },
@@ -614,7 +619,7 @@ describe('the default agent', () => {
     });
 
     const [patch] = patchesOf(calls);
-    expect(patch?.agents?.defaults?.maxTokens).toBe(2048);
+    expect(patch?.agents?.list?.default?.maxTokens).toBe(2048);
     // The whole point of a deep-partial: the tool approvals this page never
     // showed must not be rewritten to their defaults by saving it.
     expect(Object.keys(patch ?? {})).toEqual(['agents']);
@@ -622,7 +627,7 @@ describe('the default agent', () => {
 
   it('never sends a workspace, so a save cannot move the sandbox', async () => {
     // The field is gone from the form; this is the assertion that keeps it out
-    // of the patch too. `agents.defaults` merges per field, so an omitted key
+    // of the patch too. `agents.list.default` merges per field, so an omitted key
     // preserves a configured root — but an emitted `''` would reset it, and the
     // two are indistinguishable in a diff.
     const { user, calls } = mount('/agents/default');
@@ -635,13 +640,13 @@ describe('the default agent', () => {
     await waitFor(() => {
       expect(patchesOf(calls)).toHaveLength(1);
     });
-    expect(patchesOf(calls)[0]?.agents?.defaults).not.toHaveProperty(
+    expect(patchesOf(calls)[0]?.agents?.list?.default).not.toHaveProperty(
       'workspace',
     );
   });
 
   it('writes its own prompt to its entry and its model to the defaults', async () => {
-    // The two halves of what the default agent is: `agents.defaults` is what a
+    // The two halves of what the default agent is: `agents.list.default` is what a
     // new agent is seeded from, `agents.list.default` is its own behaviour.
     const { user, calls } = mount('/agents/default');
 
@@ -658,7 +663,7 @@ describe('the default agent', () => {
     expect(patch?.agents?.list?.default).toMatchObject({
       systemPrompt: 'Be terse.',
     });
-    expect(patch?.agents?.defaults?.maxTokens).toBe(4096);
+    expect(patch?.agents?.list?.default?.maxTokens).toBe(4096);
   });
 
   it('refuses to send a patch it knows is invalid, and says which field', async () => {
@@ -1042,8 +1047,8 @@ describe('choosing a provider', () => {
 
   it('refuses to save an agent left with no model', async () => {
     // The clearing above is the way an operator most easily ends up here, and
-    // it used to save silently: `agents.defaults.model = ''` makes the runtime
-    // report `configured: false` and refuse every turn.
+    // saving it silently would be worse than refusing: an empty model makes the
+    // runtime report `configured: false` and refuse every turn on that agent.
     const { user, calls } = mount('/agents/default', TWO_PROVIDERS);
 
     await choose(user, 'Provider', /Ollama/);
@@ -1098,10 +1103,9 @@ describe('choosing a provider', () => {
 
 describe('a named agent', () => {
   it('shows the settings it runs on, not a blank box and a promise', async () => {
-    // The fixture's `reviewer` stores neither a model nor a budget. It used to
-    // render as "Inherit — llama3" and an empty number, which asked the reader
-    // to go and look up what this agent would actually do; the boxes now hold
-    // it, and the first save writes it down.
+    // Every box holds this agent's own value. There is nowhere else for one to
+    // come from, so a reader can answer "what does this run on" from the screen
+    // in front of them.
     mount('/agents/reviewer');
 
     expect(
@@ -1149,7 +1153,7 @@ describe('a named agent', () => {
   });
 
   it('writes the filled-in settings down on the first save', async () => {
-    // The point of prepopulating: after this, a change to `agents.defaults`
+    // The point of prepopulating: after this, a change to `agents.list.default`
     // does not silently move this agent. The edit is to an unrelated field —
     // saving *anything* is what commits the settings the form was filled with.
     const { user, calls } = mount('/agents/reviewer');
@@ -1336,6 +1340,8 @@ describe('a named agent', () => {
               list: {
                 reviewer: {
                   label: 'Reviewer',
+                  provider: 'ollama',
+                  model: 'llama3',
                   tools: { read_file: 'allow', mcp_linear_create_issue: 'ask' },
                 },
               },
@@ -1762,6 +1768,8 @@ describe('a named agent', () => {
               list: {
                 reviewer: {
                   label: 'Reviewer',
+                  provider: 'ollama',
+                  model: 'llama3',
                   systemPrompt: '# Reviewer\n\nRead only.',
                 },
               },
@@ -1834,10 +1842,12 @@ describe('a named agent', () => {
 describe('choosing a toolbox', () => {
   const BOXED = ConfigSchema.parse({
     agents: {
-      defaults: { model: 'llama3', provider: 'ollama', maxTokens: 4096 },
       list: {
+        default: { model: 'llama3', provider: 'ollama', maxTokens: 4096 },
         researcher: {
           label: 'Researcher',
+          provider: 'ollama',
+          model: 'llama3',
           toolbox: {
             name: 'web-research',
             network: { mode: 'open', allow: [] },
@@ -1984,6 +1994,8 @@ describe('choosing a toolbox', () => {
               list: {
                 researcher: {
                   label: 'Researcher',
+                  provider: 'ollama',
+                  model: 'llama3',
                   tools: { read_file: 'allow', search: 'deny' },
                   toolbox: {
                     name: 'web-research',
@@ -2160,6 +2172,8 @@ describe('subagents', () => {
               list: {
                 reviewer: {
                   label: 'Reviewer',
+                  provider: 'ollama',
+                  model: 'llama3',
                   tools: { read_file: 'allow' },
                   subagents: [
                     { id: 'default', prompt: 'Ask.', permission: 'allow' },

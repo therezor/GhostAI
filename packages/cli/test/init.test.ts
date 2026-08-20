@@ -129,7 +129,7 @@ describe('initCommand', () => {
     const written = configIn(home);
     expect(() => ConfigSchema.parse(written)).not.toThrow();
     expect(written).toMatchObject({
-      agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } },
+      agents: { list: { default: { provider: 'ollama', model: 'qwen3:8b' } } },
       providers: { ollama: { type: 'ollama', label: 'Laptop' } },
     });
   });
@@ -184,7 +184,7 @@ describe('initCommand', () => {
     expect(code).toBe(0);
     expect(output).toContain('Could not list models');
     expect(configIn(home)).toMatchObject({
-      agents: { defaults: { model: 'typed-by-hand' } },
+      agents: { list: { default: { model: 'typed-by-hand' } } },
     });
   });
 

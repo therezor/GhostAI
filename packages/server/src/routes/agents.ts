@@ -19,9 +19,9 @@
  * window in which the first has landed and the second has not.
  *
  * What this route adds that `GET /api/settings` cannot: the model each agent
- * would actually use, after inheritance from `agents.defaults` and after any
- * process-wide `--model` pin. A picker rendering the raw config would show an
- * empty string for every agent that inherits its model, which is most of them.
+ * would actually use, after any process-wide `--model` pin. A picker rendering
+ * the raw config would show what the file says rather than what a turn would
+ * send, and those differ whenever `--model` is in play.
  */
 
 import {

@@ -148,10 +148,33 @@ the first token.
 
 **Agents and models**
 
-| Command       | What it does                                        |
-| ------------- | --------------------------------------------------- |
-| `/agent [id]` | Show agents, or move this session onto one          |
-| `/model [id]` | Show the models this install can reach, or pick one |
+| Command            | What it does                                                  |
+| ------------------ | ------------------------------------------------------------- |
+| `/agent [id]`      | Show agents, or move this session onto one                    |
+| `/model [id]`      | Show the models this install can reach, or pick one           |
+| `/effort [level]`  | How hard to ask the model to think, or `default` to send none |
+| `/temperature [n]` | The sampling temperature, or `default` to send none           |
+
+`/agent`, `/model` and `/effort` open a picker when given no argument — arrow keys move,
+typing filters, and the cursor starts on what is in force. `/temperature` does not, and
+the asymmetry is the subject rather than an omission: a temperature is a number in a
+range, which a list cannot enumerate, so bare `/temperature` answers the question a
+picker would have answered by opening. On a pipe or a dumb terminal every one of them
+prints the listing instead, marking the current row with `*`.
+
+The last three **edit the agent this session runs on, and save** — the entry under
+`agents.list`, whether that is `default` or one you moved onto with `/agent`. There is
+no settings layer above an agent, so the agent is the only place these live: the change
+follows it everywhere it runs, and it is still there on the next launch.
+
+`/effort` and `/temperature` distinguish `off` from `default`. `off` sends a parameter
+asking the model not to think; `default` sends no reasoning parameter at all, which is
+the only thing that works against an endpoint that rejects the field. A temperature of
+`0` is a value in the same way — it is not an absence.
+
+`/model` refuses under `--model`. That flag is a statement about the process that the
+config cannot move, so a `/model` that appeared to work and changed nothing would be
+worse than one that will not.
 
 **Memory and skills**
 

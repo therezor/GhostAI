@@ -41,6 +41,7 @@ import {
   loadConfig,
   saveConfig,
   type LoadedConfig,
+  DEFAULT_AGENT_ID,
 } from '@ghostwire/core';
 import {
   PROVIDERS,
@@ -291,13 +292,19 @@ function write(
 ): void {
   const merged: Config = ConfigSchema.parse({
     ...loaded.config,
+    // The workspace is the install's; the model and provider are the default
+    // agent's. Two homes because they are two kinds of thing — an agent works
+    // *in* a workspace and does not own one.
+    workspace: answers.workspace,
     agents: {
       ...loaded.config.agents,
-      defaults: {
-        ...loaded.config.agents.defaults,
-        workspace: answers.workspace,
-        provider: answers.instanceId,
-        model: answers.model,
+      list: {
+        ...loaded.config.agents.list,
+        [DEFAULT_AGENT_ID]: {
+          ...loaded.config.agents.list[DEFAULT_AGENT_ID],
+          provider: answers.instanceId,
+          model: answers.model,
+        },
       },
     },
     providers: {

@@ -23,10 +23,12 @@
  * why at its own definition: `/new`, `/branch` and `/model`.
  */
 
-import type {
-  AgentSummary,
-  ExtensionCommand,
-  ModelInfo,
+import {
+  ReasoningEffortSchema,
+  type AgentSummary,
+  type ExtensionCommand,
+  type ModelInfo,
+  type ReasoningEffort,
 } from '@ghostwire/protocol';
 
 import type { WebKey } from '@/i18n/keys.js';
@@ -92,16 +94,30 @@ export interface CommandContext {
   branch(seq: number): Promise<string>;
   stop(): void;
   chooseAgent(id: string): Promise<void>;
+  /** The label of the agent this conversation runs on, for a note to name. */
+  readonly agentLabel: string;
   /**
    * The whole model, not its id.
    *
-   * A model and the endpoint that serves it are one setting: writing
-   * `agents.defaults.model` alone on a two-provider install leaves `provider`
-   * naming an instance that has never heard of it. The agent editor has always
-   * saved the pair for this reason, and `modelOptions` in
-   * `components/form/fields.ts` is the same rule read the other way round.
+   * A model and the endpoint that serves it are one setting: writing an agent's
+   * `model` alone on a two-provider install leaves `provider` naming an
+   * instance that has never heard of it. The agent editor has always saved the
+   * pair for this reason, and `modelOptions` in `components/form/fields.ts` is
+   * the same rule read the other way round.
    */
   setModel(model: ModelInfo): Promise<void>;
+  /**
+   * `null` clears, and clearing is not the same as `off`.
+   *
+   * Unset means the request carries no reasoning parameter at all and the
+   * provider applies its own — the only thing that works against an endpoint
+   * that rejects the field. `off` sends one asking for none. Both are offered
+   * because on a model that thinks unless told otherwise they are different
+   * turns. `temperature` is the same shape, with `0` as its own trap: it is a
+   * value, not an absence.
+   */
+  setEffort(effort: ReasoningEffort | null): Promise<void>;
+  setTemperature(temperature: number | null): Promise<void>;
   /**
    * The ids extensions currently contribute, fetched rather than compiled in.
    *
@@ -148,6 +164,22 @@ export interface WebCommand {
 export interface CommandValues {
   readonly agents: readonly AgentSummary[];
   readonly models: readonly ModelInfo[];
+  /**
+   * The effort this session's agent sends, absent when it states none.
+   *
+   * Here so `/effort` can mark the row in force, which is the whole reason the
+   * list is worth opening: the six levels are guessable and which one is
+   * running is not. Already inherited — it comes off `AgentSummary` — so absent
+   * means "this agent sends no reasoning parameter", not "unknown".
+   */
+  readonly effort: ReasoningEffort | undefined;
+  /**
+   * The two sentences `/effort`'s rows need, already prose.
+   *
+   * Supplied rather than written here, like every other string in this file:
+   * nothing in this table translates anything.
+   */
+  readonly effortHints: { readonly default: string; readonly off: string };
 }
 
 export interface ValueSuggestion {
@@ -155,7 +187,28 @@ export interface ValueSuggestion {
   readonly value: string;
   /** The line beside it, already prose. */
   readonly hint: string;
+  /**
+   * The row the list should open on.
+   *
+   * At most one, and only where "in force" means anything — `/agent` and
+   * `/model` write what a turn already uses, so their lists open at the top as
+   * they always have. It is the composer that acts on this; the table only
+   * says which row it is.
+   */
+  readonly current?: boolean;
 }
+
+/**
+ * The word for "send nothing and let the provider decide".
+ *
+ * The terminal spells it the same way; see `packages/cli/src/pickers/effort.ts`,
+ * which argues why the word is available at all.
+ *
+ * Not translated, for the reason a command name is not: it is typed, so it is
+ * what the parser matches on. A localised `default` is a word the parser does
+ * not know.
+ */
+const DEFAULT_LEVEL = 'default';
 
 const COMMANDS: readonly WebCommand[] = [
   {
@@ -271,11 +324,13 @@ const COMMANDS: readonly WebCommand[] = [
   },
 
   {
-    // **It persists, unlike the terminal's and the bot's.** Both of those call
-    // `runtime.reconfigure`, which lasts as long as the process — a browser has
-    // no process to scope a choice to, so this is `PATCH /api/settings`: the
-    // same write the Agents panel makes, against the same field. The note says
-    // so rather than leaving it to be discovered on the next restart.
+    // **It moves the agent this conversation runs on, and it saves.**
+    //
+    // An agent is the only place a model lives, so the agent the conversation is
+    // bound to is the one that moves. The rule about `agents.list.*` replacing
+    // wholesale rather than merging lives in `agentSettingsPatch`;
+    // `use-commands.ts` calls it. The terminal's `/model` does the same thing;
+    // the bot's is process-scoped, see `packages/cli/src/telegram.ts`.
     name: 'model',
     usage: '<id>',
     description: 'chat.commands.model',
@@ -302,7 +357,98 @@ const COMMANDS: readonly WebCommand[] = [
       return {
         kind: 'note',
         key: 'chat.commands.notes.modelSet',
-        values: { id },
+        values: { id, agent: ctx.agentLabel },
+      };
+    },
+  },
+
+  {
+    // `default` rather than an empty argument, because "send no reasoning
+    // parameter" is a real answer and needs a way to be said — see
+    // `CommandContext.setEffort`.
+    //
+    // The rows say which level is running and what unset would do, which is the
+    // only reason to open a list of six words you could have typed. Ordered as
+    // the ramp the levels are, never with the current one hoisted to the top:
+    // scrambling `minimal → xhigh` to put a marker first costs more than the
+    // marker is worth.
+    name: 'effort',
+    usage: '<level>',
+    description: 'chat.commands.effort',
+    values: (ctx) => [
+      {
+        value: DEFAULT_LEVEL,
+        hint: ctx.effortHints.default,
+        current: ctx.effort === undefined,
+      },
+      ...ReasoningEffortSchema.options.map((level) => ({
+        value: level,
+        hint: level === 'off' ? ctx.effortHints.off : '',
+        current: ctx.effort === level,
+      })),
+    ],
+    run: async ({ args, ctx }) => {
+      const level = args[0];
+      if (level === undefined) {
+        return {
+          kind: 'error',
+          key: 'chat.commands.errors.usageEffort',
+          values: { levels: ReasoningEffortSchema.options.join(', ') },
+        };
+      }
+      if (level === DEFAULT_LEVEL) {
+        await ctx.setEffort(null);
+        return {
+          kind: 'note',
+          key: 'chat.commands.notes.effortDefault',
+          values: { agent: ctx.agentLabel },
+        };
+      }
+      const parsed = ReasoningEffortSchema.safeParse(level);
+      if (!parsed.success) {
+        return {
+          kind: 'error',
+          key: 'chat.commands.errors.usageEffort',
+          values: { levels: ReasoningEffortSchema.options.join(', ') },
+        };
+      }
+      await ctx.setEffort(parsed.data);
+      return {
+        kind: 'note',
+        key: 'chat.commands.notes.effortSet',
+        values: { level: parsed.data, agent: ctx.agentLabel },
+      };
+    },
+  },
+
+  {
+    name: 'temperature',
+    usage: '<0-2>',
+    description: 'chat.commands.temperature',
+    run: async ({ args, ctx }) => {
+      const raw = args[0];
+      if (raw === undefined) {
+        return { kind: 'error', key: 'chat.commands.errors.usageTemperature' };
+      }
+      if (raw === DEFAULT_LEVEL) {
+        await ctx.setTemperature(null);
+        return {
+          kind: 'note',
+          key: 'chat.commands.notes.temperatureDefault',
+          values: { agent: ctx.agentLabel },
+        };
+      }
+      // `Number` rather than `parseFloat`, which reads `0.5abc` as `0.5`. A
+      // temperature that was half a typo is a refusal, not a guess.
+      const value = Number(raw);
+      if (!Number.isFinite(value) || value < 0 || value > 2) {
+        return { kind: 'error', key: 'chat.commands.errors.usageTemperature' };
+      }
+      await ctx.setTemperature(value);
+      return {
+        kind: 'note',
+        key: 'chat.commands.notes.temperatureSet',
+        values: { value, agent: ctx.agentLabel },
       };
     },
   },

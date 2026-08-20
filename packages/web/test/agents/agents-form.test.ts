@@ -1,8 +1,6 @@
 import {
-  AgentDefaultsSchema,
   AgentEntrySchema,
   ConfigPatchSchema,
-  type AgentDefaults,
   type AgentEntry,
 } from '@ghostwire/protocol';
 import { describe, expect, it } from 'vitest';
@@ -19,15 +17,14 @@ import {
   toAgentEnabledPatch,
   toAgentEntryForm,
   toAgentEntryPatch,
-  toDefaultAgentPatch,
   toNewAgentPatch,
-  toAgentForm,
   type AgentEntryForm,
 } from '@/agents/agents-form.js';
 
 const EMPTY = AgentEntrySchema.parse({});
 
-const DEFAULTS: AgentDefaults = AgentDefaultsSchema.parse({
+/** A stated agent, since nothing is filled in from anywhere else any more. */
+const STATED = AgentEntrySchema.parse({
   provider: 'ollama',
   model: 'llama3',
   maxTokens: 4096,
@@ -35,7 +32,7 @@ const DEFAULTS: AgentDefaults = AgentDefaultsSchema.parse({
 });
 
 function form(overrides: Partial<AgentEntryForm> = {}): AgentEntryForm {
-  return { ...toAgentEntryForm(EMPTY, DEFAULTS), ...overrides };
+  return { ...toAgentEntryForm(STATED), ...overrides };
 }
 
 /** Every patch this form produces has to survive the schema the server applies. */
@@ -47,10 +44,10 @@ function parsed(result: ReturnType<typeof toAgentEntryPatch>): unknown {
 }
 
 describe('toAgentEntryForm', () => {
-  it('fills a field the agent stored none of from the defaults', () => {
+  it('shows what the entry states, which the schema has already completed', () => {
     // Nothing on this screen inherits, so a blank box would be a claim that the
     // agent runs on no model and no budget — which is not what a turn would do.
-    const shown = toAgentEntryForm(EMPTY, DEFAULTS);
+    const shown = toAgentEntryForm(STATED);
 
     expect(shown.provider).toBe('ollama');
     expect(shown.model).toBe('llama3');
@@ -58,10 +55,19 @@ describe('toAgentEntryForm', () => {
     expect(shown.toolTimeoutSeconds).toBe('20');
   });
 
+  it('shows an unconfigured agent as unconfigured rather than borrowing a model', () => {
+    // An entry that states no model shows as unconfigured rather than holding
+    // somebody else's — there is nowhere for a borrowed one to come from.
+    const shown = toAgentEntryForm(EMPTY);
+
+    expect(shown.model).toBe('');
+    expect(shown.maxTokens).toBe('8192');
+  });
+
   it('leaves genuinely unset settings unset, rather than inventing values', () => {
     // Neither has a default: unset means the request carries no such parameter,
     // which is the only thing that works for a model that rejects it.
-    const shown = toAgentEntryForm(EMPTY, DEFAULTS);
+    const shown = toAgentEntryForm(EMPTY);
 
     expect(shown.temperature).toBe('');
     expect(shown.reasoningEffort).toBe('');
@@ -70,7 +76,6 @@ describe('toAgentEntryForm', () => {
   it('shows the fields that belong to the agent itself', () => {
     const shown = toAgentEntryForm(
       AgentEntrySchema.parse({ label: 'Reviewer', systemPrompt: 'Be terse.' }),
-      DEFAULTS,
     );
 
     expect(shown.label).toBe('Reviewer');
@@ -78,18 +83,17 @@ describe('toAgentEntryForm', () => {
     expect(shown.enabled).toBe(true);
   });
 
-  it('prefers what the agent stored over what the defaults say', () => {
+  it('keeps zero apart from absent, because zero is a temperature', () => {
     const shown = toAgentEntryForm(
       AgentEntrySchema.parse({
         model: 'qwen3:32b',
         temperature: 0,
         toolTimeoutMs: 30_000,
       }),
-      DEFAULTS,
     );
 
     expect(shown.model).toBe('qwen3:32b');
-    // Zero is a value, not an absence — it must not fall through to the default.
+    // Zero is a value, not an absence — it must not render as "the provider's own".
     expect(shown.temperature).toBe('0');
     expect(shown.toolTimeoutSeconds).toBe('30');
   });
@@ -99,7 +103,6 @@ describe('toAgentEntryForm', () => {
       AgentEntrySchema.parse({
         tools: { read_file: 'allow', exec: 'ask', write_file: 'deny' },
       }),
-      DEFAULTS,
     );
 
     expect(shown.tools).toEqual({
@@ -112,7 +115,7 @@ describe('toAgentEntryForm', () => {
 
 describe('toAgentEntryPatch', () => {
   it('writes the settings down, so the agent stops depending on the defaults', () => {
-    // The form was filled from `agents.defaults`; the point of saving it is
+    // The form was filled from `agents.list.default`; the point of saving it is
     // that a later change to those defaults no longer moves this agent.
     const entry = parsed(toAgentEntryPatch('reviewer', form(), EMPTY, t));
 
@@ -186,6 +189,8 @@ describe('toAgentEntryPatch', () => {
     // alone would drop the exec allow-list every time the prompt was saved —
     // silently, and with no way to notice from the screen.
     const stored = AgentEntrySchema.parse({
+      provider: 'ollama',
+      model: 'llama3',
       exec: { allowedBinaries: ['git'] },
     });
 
@@ -199,6 +204,8 @@ describe('toAgentEntryPatch', () => {
     // a field the screen shows must come from the screen, or clearing it in the
     // UI would silently keep the stored value.
     const stored = AgentEntrySchema.parse({
+      provider: 'ollama',
+      model: 'llama3',
       toolbox: {
         name: 'kali-pentest',
         network: { mode: 'allowlist', allow: ['10.0.0.0/8'] },
@@ -228,6 +235,8 @@ describe('toAgentEntryPatch', () => {
     // box's programs would quietly acquire the rest the first time somebody
     // renamed it.
     const stored = AgentEntrySchema.parse({
+      provider: 'ollama',
+      model: 'llama3',
       toolbox: {
         name: 'recon',
         network: { mode: 'open', allow: [] },
@@ -236,12 +245,7 @@ describe('toAgentEntryPatch', () => {
     });
 
     const entry = parsed(
-      toAgentEntryPatch(
-        'reviewer',
-        form(toAgentEntryForm(stored, DEFAULTS)),
-        stored,
-        t,
-      ),
+      toAgentEntryPatch('reviewer', form(toAgentEntryForm(stored)), stored, t),
     );
 
     expect(
@@ -253,13 +257,15 @@ describe('toAgentEntryPatch', () => {
     // A default for a toolbox the agent no longer works in would take effect
     // again the moment somebody picked one, which nobody asked for.
     const stored = AgentEntrySchema.parse({
+      provider: 'ollama',
+      model: 'llama3',
       toolbox: { name: 'recon', tools: { '*': 'deny' } },
     });
 
     const entry = parsed(
       toAgentEntryPatch(
         'reviewer',
-        form({ ...toAgentEntryForm(stored, DEFAULTS), toolboxName: '' }),
+        form({ ...toAgentEntryForm(stored), toolboxName: '' }),
         stored,
         t,
       ),
@@ -461,60 +467,21 @@ describe('toAgentEntryPatch', () => {
   });
 });
 
-describe('toDefaultAgentPatch', () => {
-  it('writes the model and budget to the defaults, and nothing else there', () => {
-    const result = toDefaultAgentPatch(toAgentForm(DEFAULTS), form(), EMPTY, t);
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error('unreachable');
-    expect(result.patch.agents?.defaults).toMatchObject({
-      model: 'llama3',
-      maxTokens: 4096,
-    });
-  });
-
-  it('never pins the default agent against its own defaults', () => {
-    // Its entry holds the prompt and the permissions; the model and the budget
-    // are `agents.defaults`. An override here would be a contradiction, and one
-    // that would silently stop the Model section on this screen from working.
-    const result = toDefaultAgentPatch(toAgentForm(DEFAULTS), form(), EMPTY, t);
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error('unreachable');
-
-    const own = result.patch.agents?.list?.default;
-    expect(own).not.toHaveProperty('model');
-    expect(own).not.toHaveProperty('provider');
-    expect(own).not.toHaveProperty('maxTokens');
-    expect(own).not.toHaveProperty('toolTimeoutMs');
-    expect(ConfigPatchSchema.safeParse(result.patch).success).toBe(true);
-  });
-
-  it('reports the defaults’ own errors rather than saving half of it', () => {
-    const result = toDefaultAgentPatch(
-      { ...toAgentForm(DEFAULTS), maxTokens: '' },
-      form(),
-      EMPTY,
-      t,
-    );
-
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error('unreachable');
-    expect(result.errors.maxTokens).toBe('Required');
-  });
-});
-
 describe('toNewAgentPatch', () => {
   const template: AgentEntry = AgentEntrySchema.parse({
+    provider: 'ollama',
+    model: 'llama3',
+    maxTokens: 4096,
+    toolTimeoutMs: 20_000,
     systemPrompt: 'House style: be terse.',
     tools: { read_file: 'allow', exec: 'deny' },
   });
 
   it('copies the model and budget the template would have run on', () => {
-    // The default agent's entry stores neither — they are `agents.defaults` —
-    // so a copy that took only what was written down would produce an agent
-    // holding nothing, on a screen that no longer inherits.
-    const patch = toNewAgentPatch('reviewer', 'Reviewer', template, DEFAULTS);
+    // Copied rather than omitted: an omitted field would take the schema's
+    // default, and an agent running on 8192 tokens because its template's 4096
+    // was left out is not a copy.
+    const patch = toNewAgentPatch('reviewer', 'Reviewer', template);
 
     expect(patch.agents?.list?.reviewer).toMatchObject({
       label: 'Reviewer',
@@ -527,7 +494,7 @@ describe('toNewAgentPatch', () => {
   });
 
   it('copies how the template behaves as well as what it runs on', () => {
-    const patch = toNewAgentPatch('reviewer', 'Reviewer', template, DEFAULTS);
+    const patch = toNewAgentPatch('reviewer', 'Reviewer', template);
 
     expect(patch.agents?.list?.reviewer).toMatchObject({
       systemPrompt: 'House style: be terse.',
@@ -538,14 +505,14 @@ describe('toNewAgentPatch', () => {
 
   it('carries a switched-off capability into the copy', () => {
     // Inheritance is the wrong default here: `AgentEntrySchema` makes these
-    // optional and `agents.defaults` says `true`, so an omitted `false` reads
+    // optional and `agents.list.default` says `true`, so an omitted `false` reads
     // as "ask the default" and comes back on. Duplicating an agent with vision
     // switched off produced one with vision switched on.
     const restricted = AgentEntrySchema.parse({
       visionEnabled: false,
       toolsEnabled: false,
     });
-    const patch = toNewAgentPatch('copy', 'Copy', restricted, DEFAULTS);
+    const patch = toNewAgentPatch('copy', 'Copy', restricted);
 
     expect(patch.agents?.list?.copy).toMatchObject({
       visionEnabled: false,
@@ -555,13 +522,13 @@ describe('toNewAgentPatch', () => {
 
   it('writes the capabilities the template inherited rather than omitting them', () => {
     // The default agent's entry stores neither, and the copy must still say so
-    // outright — otherwise it follows a later change to `agents.defaults` that
+    // outright — otherwise it follows a later change to `agents.list.default` that
     // the operator never made on its behalf.
-    const patch = toNewAgentPatch('copy', 'Copy', template, DEFAULTS);
+    const patch = toNewAgentPatch('copy', 'Copy', template);
 
     expect(patch.agents?.list?.copy).toMatchObject({
-      visionEnabled: DEFAULTS.visionEnabled,
-      toolsEnabled: DEFAULTS.toolsEnabled,
+      visionEnabled: STATED.visionEnabled,
+      toolsEnabled: STATED.toolsEnabled,
     });
   });
 
@@ -570,7 +537,7 @@ describe('toNewAgentPatch', () => {
       model: 'qwen3:32b',
       maxTokens: 512,
     });
-    const patch = toNewAgentPatch('copy', 'Copy', pinned, DEFAULTS);
+    const patch = toNewAgentPatch('copy', 'Copy', pinned);
 
     expect(patch.agents?.list?.copy).toMatchObject({
       model: 'qwen3:32b',
@@ -589,7 +556,7 @@ describe('toNewAgentPatch', () => {
       ],
     });
 
-    const patch = toNewAgentPatch('copy', 'Copy', delegating, DEFAULTS);
+    const patch = toNewAgentPatch('copy', 'Copy', delegating);
 
     expect(patch.agents?.list?.copy?.subagents).toEqual([]);
   });
@@ -605,7 +572,7 @@ describe('toNewAgentPatch', () => {
       toolPrompts: { exec: { description: 'Run a program.', fields: {} } },
     });
 
-    const patch = toNewAgentPatch('copy', 'Copy', customised, DEFAULTS);
+    const patch = toNewAgentPatch('copy', 'Copy', customised);
 
     expect(patch.agents?.list?.copy).toMatchObject({
       promptMode: 'raw',
@@ -622,7 +589,7 @@ describe('the templates an agent owns', () => {
     // Unlike the model and budget above. Empty is what "follow the built-in and
     // keep receiving improvements to it" is spelled as, so filling it in would
     // freeze every agent on today's wording the first time anything was saved.
-    const shown = toAgentEntryForm(EMPTY, DEFAULTS);
+    const shown = toAgentEntryForm(EMPTY);
 
     expect(shown.livePrompt).toBe('');
     expect(shown.platformPrompt).toBe('');
@@ -753,15 +720,19 @@ describe('subagents', () => {
   } as const;
 
   it('round-trips a stored ref through the form', () => {
-    const entry = AgentEntrySchema.parse({ subagents: [RESEARCHER] });
+    const entry = AgentEntrySchema.parse({
+      provider: 'ollama',
+      model: 'llama3',
+      subagents: [RESEARCHER],
+    });
 
-    expect(toAgentEntryForm(entry, DEFAULTS).subagents).toEqual([RESEARCHER]);
+    expect(toAgentEntryForm(entry).subagents).toEqual([RESEARCHER]);
   });
 
   it('fills in the defaults a bare ref leaves out', () => {
     const entry = AgentEntrySchema.parse({ subagents: [{ id: 'researcher' }] });
 
-    expect(toAgentEntryForm(entry, DEFAULTS).subagents).toEqual([
+    expect(toAgentEntryForm(entry).subagents).toEqual([
       { id: 'researcher', prompt: '', permission: 'allow' },
     ]);
   });
@@ -780,8 +751,7 @@ describe('subagents', () => {
       t,
     );
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok) throw new Error(JSON.stringify(result.errors));
     expect(result.patch.agents?.list?.main?.subagents).toEqual([RESEARCHER]);
   });
 
@@ -833,10 +803,14 @@ describe('subagents', () => {
   it('does not lose them when the prompt is the only thing edited', () => {
     // `agents.list.*` replaces wholesale, so a field the form fails to carry
     // through is erased on every save that touches anything else.
-    const entry = AgentEntrySchema.parse({ subagents: [RESEARCHER] });
+    const entry = AgentEntrySchema.parse({
+      provider: 'ollama',
+      model: 'llama3',
+      subagents: [RESEARCHER],
+    });
     const result = toAgentEntryPatch(
       'main',
-      { ...toAgentEntryForm(entry, DEFAULTS), systemPrompt: 'Be brief.' },
+      { ...toAgentEntryForm(entry), systemPrompt: 'Be brief.' },
       entry,
       t,
     );
@@ -856,18 +830,20 @@ describe('memory and skills', () => {
     });
     const absent = AgentEntrySchema.parse({ tools: { read_file: 'allow' } });
 
-    expect(toAgentEntryForm(granted, DEFAULTS).tools).toMatchObject({
+    expect(toAgentEntryForm(granted).tools).toMatchObject({
       memory: 'allow',
       skill: 'allow',
     });
-    expect(toAgentEntryForm(absent, DEFAULTS).tools.memory).toBeUndefined();
-    expect(toAgentEntryForm(absent, DEFAULTS).tools.skill).toBeUndefined();
+    expect(toAgentEntryForm(absent).tools.memory).toBeUndefined();
+    expect(toAgentEntryForm(absent).tools.skill).toBeUndefined();
   });
 
   it('writes the permission the switch stands for, and nothing beside it', () => {
     // The switch and the Tools row are one value. A second key here is what the
     // permission was chosen over, so the patch must carry no other trace.
     const stored = AgentEntrySchema.parse({
+      provider: 'ollama',
+      model: 'llama3',
       tools: { read_file: 'allow', memory: 'allow', skill: 'allow' },
     });
 
@@ -875,7 +851,7 @@ describe('memory and skills', () => {
       toAgentEntryPatch(
         'reviewer',
         {
-          ...toAgentEntryForm(stored, DEFAULTS),
+          ...toAgentEntryForm(stored),
           tools: { read_file: 'allow', memory: 'deny', skill: 'deny' },
         },
         stored,
@@ -912,6 +888,8 @@ describe('memory and skills', () => {
     // not touch would delete the rest of this agent. `ownFields` is what stops
     // that, and this is the assertion that keeps it honest.
     const stored = AgentEntrySchema.parse({
+      provider: 'ollama',
+      model: 'llama3',
       label: 'Reviewer',
       tools: { read_file: 'allow', memory: 'deny' },
       enabled: false,
@@ -921,7 +899,7 @@ describe('memory and skills', () => {
       toAgentEntryPatch(
         'reviewer',
         {
-          ...toAgentEntryForm(stored, DEFAULTS),
+          ...toAgentEntryForm(stored),
           memoryPrompt: '## What I know\n\n{{index}}',
         },
         stored,

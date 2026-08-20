@@ -31,6 +31,8 @@ import {
   DEFAULT_USERNAME,
   PASSWORD_MIN_LENGTH,
   type ProviderInfo,
+  DEFAULT_AGENT_ID,
+  agentSettingsPatch,
 } from '@ghostwire/protocol';
 
 import { ApiError, api } from '@/lib/api.js';
@@ -85,16 +87,24 @@ export function SetupOverlay(): JSX.Element | null {
 
   const required = setup.data?.required;
   const configured = status.data?.configured;
+  // Non-empty as soon as an endpoint resolves, which it does before a model is
+  // chosen — `resolveProvider` picks the instance and only then refuses on the
+  // missing model. So this is exactly "is there a provider already".
+  const hasProvider = (status.data?.provider ?? '') !== '';
 
   useEffect(() => {
     // Only ever *opens* the wizard. Once a step is showing, this must not move
     // it: every step changes one of these two flags, and re-deriving would walk
     // the user backwards the moment they finished a step.
     if (step !== null || required === undefined) return;
-    const first = initialStep({ setupRequired: required, configured });
+    const first = initialStep({
+      setupRequired: required,
+      configured,
+      hasProvider,
+    });
     if (first !== null) setFrom(first);
     setStep(first);
-  }, [step, required, configured]);
+  }, [step, required, configured, hasProvider]);
 
   if (step === null || step === 'done') return null;
 
@@ -176,7 +186,16 @@ export function SetupOverlay(): JSX.Element | null {
           />
         )}
         {step === 'model' && (
-          <ModelStep instanceId={instanceId} onDone={advance} />
+          // The already-resolved endpoint when the provider step was skipped,
+          // which is how a claimed install with a provider and no model opens.
+          // Without it this step would filter the catalogue by an empty id and
+          // then save an empty provider, which the schema refuses.
+          <ModelStep
+            instanceId={
+              instanceId === '' ? (status.data?.provider ?? '') : instanceId
+            }
+            onDone={advance}
+          />
         )}
 
         <div className="row setup-card__actions">
@@ -519,11 +538,37 @@ function ModelStep({
     queryFn: () => api.refreshModels(),
   });
 
+  const queryClient = useQueryClient();
   const save = useMutation({
-    mutationFn: (chosen: string) =>
-      api.patchSettings({
-        agents: { defaults: { provider: instanceId, model: chosen } },
-      }),
+    mutationFn: async (chosen: string) => {
+      // Onto the default agent, which is the one an install runs as before
+      // anyone has made another. The wizard configures *an agent*, because
+      // there is no settings layer above one.
+      //
+      // Through `agentSettingsPatch` rather than a literal, for the two reasons
+      // that function exists. `agents.list.*` replaces wholesale, so a patch
+      // naming the model alone would delete the prompt and tools of an agent
+      // that already had them — which is every install reaching this step with
+      // a provider already configured. And the endpoint comes from the *model*:
+      // `instanceId` is empty whenever the provider step was skipped, and the
+      // schema refuses an empty provider.
+      const settings = await queryClient.fetchQuery({
+        queryKey: queryKeys.settings,
+        queryFn: ({ signal }) => api.settings(signal),
+      });
+      // The catalogue knows which endpoint offers the model; `instanceId` is the
+      // fallback for a model typed by hand, which is what a provider that lists
+      // none leaves the operator doing.
+      const offeredBy = (models.data?.models ?? []).find(
+        (entry) => entry.id === chosen,
+      )?.providerId;
+      await api.patchSettings(
+        agentSettingsPatch(settings.config, DEFAULT_AGENT_ID, {
+          model: chosen,
+          provider: offeredBy ?? instanceId,
+        }),
+      );
+    },
     onSuccess: onDone,
   });
 

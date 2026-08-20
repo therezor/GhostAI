@@ -103,8 +103,8 @@ import { toolOutputPolicy, toolOutputTag } from '@ghostwire/security';
  * The separator between top-level sections. Also joins the two halves.
  *
  * Re-exported rather than declared: it is defined beside the prompt template in
- * `@ghostwire/protocol`, because the config migration there has to reproduce this
- * exact composition. Everything that imported it from this module still can.
+ * `@ghostwire/protocol`, so the template and the separator that joins its sections
+ * cannot drift. Everything that imported it from this module still can.
  */
 export { SECTION_SEPARATOR };
 

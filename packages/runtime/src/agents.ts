@@ -1,26 +1,23 @@
 /**
  * Config in, one agent's effective settings out.
  *
- * An agent is `agents.defaults` with an `agents.list` entry laid over it. That
- * is the whole model, and keeping it in one pure function is what stops the
- * inheritance rule from being re-derived — slightly differently each time — in
- * the loop cache, the settings route and the UI.
+ * An agent *is* its `agents.list` entry — there is nothing above it. The schema
+ * fills what the entry does not name, so this file resolves rather than merges,
+ * and "what does this agent run on" is answerable from one place.
  *
  * Three decisions worth stating, because each is the kind that looks arbitrary
  * later:
  *
- *  - **`default` is an agent, not the absence of one.** An install that has
- *    defined none still resolves to a complete `EffectiveAgent` under that id,
- *    so nothing downstream needs an "or the global settings" branch. It is also
- *    the only agent whose `enabled` flag is ignored: switching it off would
- *    leave an install with no agent at all, which is not a state anything above
- *    here can do anything useful with.
- *  - **Inheritance is per field, not per section.** An entry that names only
- *    `temperature` keeps the default model. Anything coarser makes an operator
- *    restate settings they did not want to change, which is how the two drift.
- *    `tools` is the deliberate exception — it replaces rather than merges,
- *    because a merge could add a tool and change a permission but never remove
- *    one, and switching a tool off has to be expressible.
+ *  - **`default` is an agent, not the absence of one.** The schema prefaults an
+ *    entry for it, so an install that has defined none still resolves to a
+ *    complete `EffectiveAgent` under that id and nothing downstream needs an
+ *    "or the global settings" branch. It is also the only agent whose `enabled`
+ *    flag is ignored: switching it off would leave an install with no agent at
+ *    all, which is not a state anything above here can do anything useful with.
+ *  - **An unconfigured agent is a state, not an error.** An entry with no model
+ *    parses, lists and edits; only a *turn* on it is refused, by
+ *    `Runtime#resolveProvider`. That is what lets an operator fix one from the
+ *    screen that shows it rather than from a server that will not boot.
  *  - **Resolution is where an unbuildable agent is refused.** A toolbox setting
  *    that cannot be honoured fails here, during `reconfigure`, which is
  *    all-or-nothing — so a settings save naming an unapproved toolbox is a 400
@@ -36,11 +33,11 @@ import {
 } from '@ghostwire/core';
 import type { SubagentBinding } from '@ghostwire/agent';
 import {
-  AgentDefaultsSchema,
   DEFAULT_AGENT_TOOLS,
   DEFAULT_LIVE_STATE_TEMPLATE,
   subagentToolName,
-  type AgentDefaults,
+  AgentEntrySchema,
+  type AgentSettings,
   type AgentEntry,
   type AgentTools,
   type AgentToolbox,
@@ -52,19 +49,7 @@ import {
 } from '@ghostwire/protocol';
 import { parseCidr } from '@ghostwire/security';
 
-/**
- * Which of an entry's fields belong to `AgentDefaults`.
- *
- * From the schema rather than from a parsed default object: `reasoningEffort` is
- * optional with no default, so it is *absent* from a parsed `agents.defaults` —
- * and a key walk over that instance would silently drop exactly the overrides an
- * operator went out of their way to set.
- */
-const AGENT_DEFAULT_KEYS: readonly string[] = Object.keys(
-  AgentDefaultsSchema.shape,
-);
-
-/** One agent, with every inherited field already resolved. */
+/** One agent, resolved. */
 export interface EffectiveAgent {
   readonly id: string;
   /** Never empty: falls back to the id, so a UI never has to. */
@@ -96,8 +81,8 @@ export interface EffectiveAgent {
   readonly promptMode: PromptMode;
   /** This agent's replacements for what its tools say about themselves. */
   readonly toolPrompts: ToolPromptOverrides;
-  /** Model, provider, temperature, effort, caps — the whole of `AgentDefaults`. */
-  readonly defaults: AgentDefaults;
+  /** Model, provider, temperature, effort, caps — this agent's own. */
+  readonly settings: AgentSettings;
   /** Which tools this agent may call, and what happens when it does. */
   readonly tools: AgentTools;
   /** `config.tools` with this agent's exec overrides applied. */
@@ -129,7 +114,8 @@ export interface AgentConfigWarning {
     | 'disabled_subagent'
     | 'illegal_agent_id'
     | 'tool_policy_missing_nonce'
-    | 'unknown_tool_prompt';
+    | 'unknown_tool_prompt'
+    | 'no_model';
   readonly message: string;
   readonly details: Readonly<Record<string, string>>;
 }
@@ -170,29 +156,6 @@ function defined<T extends object>(patch: T | undefined): Defined<T> {
   return Object.fromEntries(
     Object.entries(patch).filter(([, value]) => value !== undefined),
   ) as Defined<T>;
-}
-
-/**
- * The agent's `AgentDefaults`, field by field.
- *
- * Driven by `AGENT_DEFAULT_KEYS` rather than by the entry's own keys, because
- * the entry also carries fields that belong to the agent rather than to a turn
- * — `label`, `toolbox`, `tools` — and none of those belong in the block handed
- * to the loop. `workspace` is not among them: the schema omits it, so it can
- * only ever come from the defaults.
- */
-function mergeDefaults(
-  defaults: AgentDefaults,
-  entry: AgentEntry | undefined,
-): AgentDefaults {
-  if (entry === undefined) return defaults;
-  const overrides = defined(entry) as Record<string, unknown>;
-  const merged: Record<string, unknown> = { ...defaults };
-  for (const key of AGENT_DEFAULT_KEYS) {
-    const value = overrides[key];
-    if (value !== undefined) merged[key] = value;
-  }
-  return merged as AgentDefaults;
 }
 
 /** `config.tools`, narrowed by whatever this agent overrode. */
@@ -356,6 +319,17 @@ function assertBuildable(agent: EffectiveAgent, warn: WarningSink): void {
     });
   }
 
+  if (agent.settings.model === '') {
+    warn({
+      agentId: agent.id,
+      code: 'no_model',
+      message:
+        `Agent "${agent.id}" states no model, so a turn on it is refused.\n` +
+        '  Choose one in Settings → Agents, or set its `model` in the config file.',
+      details: { agentId: agent.id },
+    });
+  }
+
   if (name === '' && network.mode !== 'none') {
     throw new GhostError(
       'config',
@@ -396,7 +370,7 @@ function build(
     skillsPrompt: entry?.skillsPrompt ?? '',
     promptMode: entry?.promptMode ?? 'template',
     toolPrompts: entry?.toolPrompts ?? {},
-    defaults: mergeDefaults(config.agents.defaults, entry),
+    settings: entry ?? AgentEntrySchema.parse({}),
     // The `default` agent usually has no `agents.list` entry at all, and an
     // agent with no tools cannot do anything — so the seed is the fallback
     // here as well as the schema's, not only the schema's.

@@ -1,12 +1,14 @@
 /**
  * Slash commands in the composer, through the real server.
  *
- * Three things a component test cannot see, which is why these three and not
+ * Four things a component test cannot see, which is why these four and not
  * the whole table. The completion list has to open against the *installed*
  * agents rather than a stubbed listing. `/rename` has to reach
  * `PATCH /api/sessions/:key` and come back far enough for the sidebar to agree.
- * And a message that merely looks like a command has to survive the whole
- * journey to the model as prose.
+ * A message that merely looks like a command has to survive the whole journey
+ * to the model as prose. And `/model` has to move the agent the *session* is
+ * bound to — which needs a real settings tree, a real binding and a real turn,
+ * because the bug it fixes was invisible to every one of those in isolation.
  *
  * **Every assertion here is on a durable state.** The toast a command raises is
  * the textbook transient — it is on screen for a few seconds and whether a run
@@ -81,5 +83,126 @@ test.describe('slash commands', () => {
     await expect(
       app.getByText('/usr/bin/env is on the path', { exact: false }).first(),
     ).toBeVisible({ timeout: 15_000 });
+  });
+});
+
+test.describe('/model on a session bound to an agent of its own', () => {
+  /**
+   * A session on an agent of its own, which is the case that matters.
+   *
+   * A model lives on an agent and nowhere else, so `/model` has to move the one
+   * the conversation is bound to rather than any other. Two models have to be
+   * reachable for the command to have somewhere to go, and `providers.<id>.models`
+   * is what puts one in the catalogue without an endpoint to ask.
+   */
+  async function installCoder(
+    request: {
+      patch: (url: string, init: { data: unknown }) => Promise<unknown>;
+    },
+    url: string,
+  ): Promise<void> {
+    await request.patch(`${url}/api/settings`, {
+      data: {
+        providers: { ollama: { type: 'ollama', models: ['qwen3', 'gpt-oss'] } },
+        agents: {
+          list: {
+            coder: {
+              label: 'Coder',
+              provider: 'ollama',
+              model: 'llama3',
+              systemPrompt: 'You write code.',
+              tools: { read_file: 'allow' },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  test('moves that agent, leaves the install default alone, and the next turn follows', async ({
+    app,
+    harness,
+  }) => {
+    await installCoder(app.request, harness.url);
+
+    await app.goto(`${harness.url}/`);
+    await app.getByRole('button', { name: /^Agent: / }).click();
+    await app.getByRole('menuitemradio', { name: /Coder/ }).click();
+
+    // The catalogue has to offer it before the command can be about anything:
+    // `/model` refuses an id no endpoint published, and it needs the lookup
+    // anyway for the `providerId` half of the pair it writes.
+    const catalogue = await app.request.get(`${harness.url}/api/models`);
+    const offered = (await catalogue.json()) as {
+      models: Array<{ id: string }>;
+    };
+    expect(offered.models.map((model) => model.id)).toContain('gpt-oss');
+
+    const message = app.getByRole('textbox', { name: 'Message' });
+    await message.fill('/model gpt-oss');
+    // Escape first. `/model` completes its argument, so the value list is open
+    // and Enter would accept a row rather than send the line — the same reason
+    // the `/rename` case above asserts that Enter accepts.
+    await message.press('Escape');
+    await message.press('Enter');
+
+    // The durable half of the write, and the assertion the whole change exists
+    // for: the entry moved, it kept everything else it held — `agents.list.*`
+    // replaces wholesale, so a patch naming `model` alone would have taken the
+    // label, the prompt and the tools with it — and the default agent did not
+    // follow.
+    await expect
+      .poll(
+        async () => {
+          const response = await app.request.get(`${harness.url}/api/settings`);
+          const body = (await response.json()) as {
+            config: {
+              agents: {
+                defaults: { model: string };
+                list: Record<string, { model?: string }>;
+              };
+            };
+          };
+          return {
+            coder: body.config.agents.list.coder?.model,
+            defaults: body.config.agents.list.default?.model,
+          };
+        },
+        { timeout: 15_000 },
+      )
+      .toEqual({ coder: 'gpt-oss', defaults: 'qwen3' });
+
+    const settings = await app.request.get(`${harness.url}/api/settings`);
+    const config = (await settings.json()) as {
+      config: {
+        agents: {
+          list: Record<
+            string,
+            {
+              label: string;
+              systemPrompt: string;
+              tools: Record<string, string>;
+            }
+          >;
+        };
+      };
+    };
+    expect(config.config.agents.list.coder).toMatchObject({
+      label: 'Coder',
+      systemPrompt: 'You write code.',
+      tools: { read_file: 'allow' },
+    });
+
+    // And the turn that follows runs on it. `turn.start` carries the model the
+    // loop was built with, so this is the model the request actually named
+    // rather than a label read back off the settings tree.
+    await message.fill('stream a long answer');
+    await app.getByRole('button', { name: 'Send' }).click();
+    await expect(
+      app.getByTestId('transcript').getByText('Here is what I found.'),
+    ).toBeVisible({ timeout: 15_000 });
+
+    await app.getByRole('button', { name: 'Turn details' }).click();
+    await expect(app.getByRole('dialog').getByText('gpt-oss')).toBeVisible();
   });
 });

@@ -44,12 +44,14 @@ function build(options: RuntimeOptions = {}): GhostRuntime {
 
 /** A runtime on a config file, with a provider and model already resolved. */
 function ollama(
-  defaults: Record<string, unknown> = {},
+  agent: Record<string, unknown> = {},
   options: RuntimeOptions = {},
+  root: Record<string, unknown> = {},
 ): GhostRuntime {
   const home = tempHome({
+    ...root,
     agents: {
-      defaults: { provider: 'ollama', model: 'qwen3:8b', ...defaults },
+      list: { default: { provider: 'ollama', model: 'qwen3:8b', ...agent } },
     },
   });
   return build({ home, ...options });
@@ -106,7 +108,9 @@ describe('createRuntime', () => {
   });
 
   it('reports a provider with no model as unconfigured, naming the provider', () => {
-    const home = tempHome({ agents: { defaults: { provider: 'ollama' } } });
+    const home = tempHome({
+      agents: { list: { default: { provider: 'ollama' } } },
+    });
     const runtime = build({ home });
 
     expect(runtime.configured).toBe(false);
@@ -124,7 +128,9 @@ describe('createRuntime', () => {
       providers: {
         'ollama-gpu': { type: 'ollama', apiBase: 'http://gpu.lan:11434/v1' },
       },
-      agents: { defaults: { provider: 'ollama-gpu', model: 'qwen3:8b' } },
+      agents: {
+        list: { default: { provider: 'ollama-gpu', model: 'qwen3:8b' } },
+      },
     });
 
     expect(runtime.configured).toBe(true);
@@ -142,7 +148,7 @@ describe('createRuntime', () => {
           apiBase: 'http://gpu.lan:11434/v1',
         },
       },
-      agents: { defaults: { provider: 'gpu', model: 'qwen3:8b' } },
+      agents: { list: { default: { provider: 'gpu', model: 'qwen3:8b' } } },
     });
     const runtime = build({ home });
 
@@ -164,13 +170,8 @@ describe('createRuntime', () => {
 
   it('resolves the workspace from the config, relative to the home', () => {
     const home = tempHome({
-      agents: {
-        defaults: {
-          provider: 'ollama',
-          model: 'm',
-          workspace: 'projects/alpha',
-        },
-      },
+      workspace: 'projects/alpha',
+      agents: { list: { default: { provider: 'ollama', model: 'm' } } },
     });
     const runtime = build({ home });
 
@@ -184,7 +185,7 @@ describe('createRuntime', () => {
 
   it('lets an explicit workspace win over the config', () => {
     const workspace = join(tempHome(), 'from-flag');
-    const runtime = ollama({ workspace: 'from-config' }, { workspace });
+    const runtime = ollama({}, { workspace }, { workspace: 'from-config' });
 
     expect(runtime.paths.workspace).toBe(workspace);
   });
@@ -217,7 +218,7 @@ describe('createRuntime over a borrowed connection', () => {
 
   it('opens its own file when no connection is borrowed', () => {
     const home = tempHome({
-      agents: { defaults: { provider: 'ollama', model: 'm' } },
+      agents: { list: { default: { provider: 'ollama', model: 'm' } } },
     });
     const runtime = build({ home });
 
@@ -234,10 +235,10 @@ describe('reconfigure', () => {
     const before = runtime.loop;
 
     const config = runtime.reconfigure({
-      agents: { defaults: { model: 'llama3' } },
+      agents: { list: { default: { provider: 'ollama', model: 'llama3' } } },
     });
 
-    expect(config.agents.defaults.model).toBe('llama3');
+    expect(config.agents.list.default!.model).toBe('llama3');
     expect(runtime.model).toBe('llama3');
     expect(runtime.requireLoop().model).toBe('llama3');
     expect(runtime.loop).not.toBe(before);
@@ -248,10 +249,12 @@ describe('reconfigure', () => {
     // `ghostai chat --model x` is a statement about this process; a settings save
     // from a browser must not move the terminal session onto another model.
     const runtime = ollama({}, { model: 'pinned' });
-    runtime.reconfigure({ agents: { defaults: { model: 'llama3' } } });
+    runtime.reconfigure({
+      agents: { list: { default: { provider: 'ollama', model: 'llama3' } } },
+    });
 
     expect(runtime.model).toBe('pinned');
-    expect(runtime.config.agents.defaults.model).toBe('llama3');
+    expect(runtime.config.agents.list.default!.model).toBe('llama3');
   });
 
   it('re-registers the built-ins so a disabled exec disappears', () => {
@@ -296,13 +299,29 @@ describe('reconfigure', () => {
       'mcp',
     );
 
-    runtime.reconfigure({ agents: { defaults: { temperature: 0.9 } } });
+    runtime.reconfigure({
+      agents: {
+        list: {
+          default: { provider: 'ollama', model: 'qwen3:8b', temperature: 0.9 },
+        },
+      },
+    });
     expect(runtime.tools.has('mcp_demo_echo')).toBe(true);
   });
 
   it('applies a new tool timeout to the live registry', () => {
     const runtime = ollama();
-    runtime.reconfigure({ agents: { defaults: { toolTimeoutMs: 5_000 } } });
+    runtime.reconfigure({
+      agents: {
+        list: {
+          default: {
+            provider: 'ollama',
+            model: 'qwen3:8b',
+            toolTimeoutMs: 5_000,
+          },
+        },
+      },
+    });
     expect(runtime.tools.timeoutMs).toBe(5_000);
   });
 
@@ -344,7 +363,17 @@ describe('reconfigure', () => {
       await settle();
       const attempts = server.attempts;
 
-      runtime.reconfigure({ agents: { defaults: { temperature: 0.9 } } });
+      runtime.reconfigure({
+        agents: {
+          list: {
+            default: {
+              provider: 'ollama',
+              model: 'qwen3:8b',
+              temperature: 0.9,
+            },
+          },
+        },
+      });
       await settle();
 
       // The manager survives a reconfigure for the reason the registry does.
@@ -437,7 +466,15 @@ describe('reconfigure', () => {
     const runtime = ollama();
     runtime.requireLoop().steer('s1', 'actually, use TypeScript');
 
-    runtime.reconfigure({ agents: { defaults: { temperature: 0.2 } } });
+    // The whole entry: `agents.list.*` replaces wholesale, so a patch naming
+    // one field is a patch that deletes the rest.
+    runtime.reconfigure({
+      agents: {
+        list: {
+          default: { provider: 'ollama', model: 'qwen3:8b', temperature: 0.2 },
+        },
+      },
+    });
 
     expect(runtime.requireLoop().steering).toBe(runtime.steering);
     expect(runtime.steering.drain('s1')).toHaveLength(1);
@@ -447,11 +484,17 @@ describe('reconfigure', () => {
     const runtime = ollama();
     const jail = runtime.jail;
 
-    runtime.reconfigure({ agents: { defaults: { temperature: 0.4 } } });
+    runtime.reconfigure({
+      agents: {
+        list: {
+          default: { provider: 'ollama', model: 'qwen3:8b', temperature: 0.4 },
+        },
+      },
+    });
     expect(runtime.jail).toBe(jail);
 
     const moved = join(tempHome(), 'elsewhere');
-    runtime.reconfigure({ agents: { defaults: { workspace: moved } } });
+    runtime.reconfigure({ workspace: moved });
     expect(runtime.jail).not.toBe(jail);
     expect(runtime.paths.workspace).toBe(moved);
     expect(runtime.jail.root).toBe(realpathSync(moved));
@@ -461,7 +504,13 @@ describe('reconfigure', () => {
     const providers = new ProviderCache();
     const runtime = ollama({}, { providers });
 
-    runtime.reconfigure({ agents: { defaults: { temperature: 0.4 } } });
+    runtime.reconfigure({
+      agents: {
+        list: {
+          default: { provider: 'ollama', model: 'qwen3:8b', temperature: 0.4 },
+        },
+      },
+    });
     expect(providers.size).toBe(1);
 
     runtime.reconfigure({
@@ -486,21 +535,29 @@ describe('reconfigure', () => {
     const before = runtime.loop;
 
     expect(() =>
-      runtime.reconfigure({ agents: { defaults: { provider: 'anthropic' } } }),
+      runtime.reconfigure({
+        agents: { list: { default: { provider: 'anthropic', model: 'm' } } },
+      }),
     ).toThrow(/anthropic-messages/);
 
     expect(runtime.loop).toBe(before);
     expect(runtime.spec?.id).toBe('ollama');
-    expect(runtime.config.agents.defaults.provider).toBe('ollama');
+    expect(runtime.config.agents.list.default!.provider).toBe('ollama');
     expect(runtime.tools.has('read_file')).toBe(true);
   });
 
   it('rejects a patch the schema refuses without touching the runtime', () => {
     const runtime = ollama();
     expect(() =>
-      runtime.reconfigure({ agents: { defaults: { temperature: 40 } } }),
-    ).toThrow(/agents\.defaults\.temperature/);
-    expect(runtime.config.agents.defaults.temperature).toBeUndefined();
+      runtime.reconfigure({
+        agents: {
+          list: {
+            default: { provider: 'ollama', model: 'qwen3:8b', temperature: 40 },
+          },
+        },
+      }),
+    ).toThrow(/agents\.list\.default\.temperature/);
+    expect(runtime.config.agents.list.default!.temperature).toBeUndefined();
   });
 
   it('goes back to unconfigured when the model is cleared out of the config', () => {
@@ -510,7 +567,9 @@ describe('reconfigure', () => {
     const runtime = ollama();
     expect(runtime.configured).toBe(true);
 
-    runtime.reconfigure({ agents: { defaults: { model: '' } } });
+    runtime.reconfigure({
+      agents: { list: { default: { provider: 'ollama', model: '' } } },
+    });
 
     expect(runtime.configured).toBe(false);
     expect(runtime.loop).toBeNull();
@@ -536,7 +595,13 @@ describe('reconfigure', () => {
     expect(runtime.hasCredential).toBe(false);
 
     vault.set('providers/openai', 'sk-typed-in-the-ui');
-    runtime.reconfigure({ agents: { defaults: { temperature: 0.2 } } });
+    runtime.reconfigure({
+      agents: {
+        list: {
+          default: { provider: 'ollama', model: 'qwen3:8b', temperature: 0.2 },
+        },
+      },
+    });
     expect(runtime.hasCredential).toBe(true);
   });
 });
@@ -553,17 +618,17 @@ describe('reload', () => {
 
   it('picks up an edit made to the file since the runtime was built', () => {
     const home = tempHome({
-      agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } },
+      agents: { list: { default: { provider: 'ollama', model: 'qwen3:8b' } } },
     });
     const runtime = build({ home });
     const before = runtime.loop;
 
     rewrite(home, {
-      agents: { defaults: { provider: 'ollama', model: 'llama3' } },
+      agents: { list: { default: { provider: 'ollama', model: 'llama3' } } },
     });
     const config = runtime.reload();
 
-    expect(config.agents.defaults.model).toBe('llama3');
+    expect(config.agents.list.default!.model).toBe('llama3');
     expect(runtime.requireLoop().model).toBe('llama3');
     expect(runtime.loop).not.toBe(before);
   });
@@ -574,29 +639,31 @@ describe('reload', () => {
     // carries, which makes an undo in an editor look like it did nothing.
     const home = tempHome({
       agents: {
-        defaults: { provider: 'ollama', model: 'qwen3:8b', temperature: 0.9 },
+        list: {
+          default: { provider: 'ollama', model: 'qwen3:8b', temperature: 0.9 },
+        },
       },
     });
     const runtime = build({ home });
-    expect(runtime.config.agents.defaults.temperature).toBe(0.9);
+    expect(runtime.config.agents.list.default!.temperature).toBe(0.9);
 
     rewrite(home, {
-      agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } },
+      agents: { list: { default: { provider: 'ollama', model: 'qwen3:8b' } } },
     });
     runtime.reload();
 
-    expect(runtime.config.agents.defaults.temperature).toBeUndefined();
+    expect(runtime.config.agents.list.default!.temperature).toBeUndefined();
   });
 
   it('re-registers the built-ins, so a tool switched off in the file disappears', () => {
     const home = tempHome({
-      agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } },
+      agents: { list: { default: { provider: 'ollama', model: 'qwen3:8b' } } },
     });
     const runtime = build({ home });
     expect(runtime.tools.has('exec')).toBe(true);
 
     rewrite(home, {
-      agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } },
+      agents: { list: { default: { provider: 'ollama', model: 'qwen3:8b' } } },
       tools: { exec: { enable: false } },
     });
     runtime.reload();
@@ -607,14 +674,14 @@ describe('reload', () => {
 
   it('keeps the store and the steering queue, so a turn in flight is not disturbed', () => {
     const home = tempHome({
-      agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } },
+      agents: { list: { default: { provider: 'ollama', model: 'qwen3:8b' } } },
     });
     const runtime = build({ home });
     const store = runtime.store;
     runtime.requireLoop().steer('s1', 'actually, use TypeScript');
 
     rewrite(home, {
-      agents: { defaults: { provider: 'ollama', model: 'llama3' } },
+      agents: { list: { default: { provider: 'ollama', model: 'llama3' } } },
     });
     runtime.reload();
 
@@ -624,7 +691,7 @@ describe('reload', () => {
 
   it('changes nothing when the file cannot be built', () => {
     const home = tempHome({
-      agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } },
+      agents: { list: { default: { provider: 'ollama', model: 'qwen3:8b' } } },
     });
     const runtime = build({ home });
     const before = runtime.loop;
@@ -632,29 +699,31 @@ describe('reload', () => {
     // A provider that resolves to an adapter this build cannot construct — the
     // same failure `reconfigure` refuses, arriving through the file instead.
     rewrite(home, {
-      agents: { defaults: { provider: 'anthropic', model: 'claude-opus-5' } },
+      agents: {
+        list: { default: { provider: 'anthropic', model: 'claude-opus-5' } },
+      },
     });
 
     expect(() => runtime.reload()).toThrow(/anthropic-messages/u);
     expect(runtime.loop).toBe(before);
-    expect(runtime.config.agents.defaults.provider).toBe('ollama');
+    expect(runtime.config.agents.list.default!.provider).toBe('ollama');
   });
 
   it('leaves a construction-time override in place', () => {
     // Same rule as `reconfigure`: `ghostai chat --model x` is a statement about
     // this process, and an edit to the file must not move it.
     const home = tempHome({
-      agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } },
+      agents: { list: { default: { provider: 'ollama', model: 'qwen3:8b' } } },
     });
     const runtime = build({ home, model: 'pinned' });
 
     rewrite(home, {
-      agents: { defaults: { provider: 'ollama', model: 'llama3' } },
+      agents: { list: { default: { provider: 'ollama', model: 'llama3' } } },
     });
     runtime.reload();
 
     expect(runtime.model).toBe('pinned');
-    expect(runtime.config.agents.defaults.model).toBe('llama3');
+    expect(runtime.config.agents.list.default!.model).toBe('llama3');
   });
 });
 
@@ -666,8 +735,13 @@ describe('multiple agents', () => {
   ): GhostRuntime {
     const home = tempHome({
       agents: {
-        defaults: { provider: 'ollama', model: 'qwen3:8b', temperature: 0.1 },
-        list: { [id]: entry },
+        list: {
+          default: { provider: 'ollama', model: 'qwen3:8b', temperature: 0.1 },
+          // The provider is stated, not inherited. Nothing falls through to
+          // another agent any more, and `auto` cannot resolve one in a test
+          // env with no configured instance.
+          [id]: { provider: 'ollama', model: 'qwen3:8b', ...entry },
+        },
       },
     });
     return build({ home });
@@ -721,10 +795,10 @@ describe('multiple agents', () => {
     // The whole point of the feature: separate identities, one working folder.
     const runtime = withAgent({ model: 'qwen3:32b' });
 
+    // One workspace, and it is not an agent's to name: the field is root-level
+    // now, so an agent cannot even express a different one.
     expect(runtime.jails.forWorkspace('default').root).toBe(runtime.jail.root);
-    expect(
-      runtime.agents.every((agent) => agent.defaults.workspace === ''),
-    ).toBe(true);
+    expect(runtime.config.workspace).toBe('');
   });
 
   it('narrows one agent’s tools without touching the shared registry', () => {
@@ -741,8 +815,10 @@ describe('multiple agents', () => {
   it('refuses to build at all when an agent asks for an unbuildable sandbox', () => {
     const home = tempHome({
       agents: {
-        defaults: { provider: 'ollama', model: 'qwen3:8b' },
-        list: { boxed: { toolbox: { network: { mode: 'open' } } } },
+        list: {
+          default: { provider: 'ollama', model: 'qwen3:8b' },
+          boxed: { toolbox: { network: { mode: 'open' } } },
+        },
       },
     });
 
@@ -769,7 +845,9 @@ describe('multiple agents', () => {
     const before = runtime.requireLoopFor('reviewer');
 
     runtime.reconfigure({
-      agents: { list: { reviewer: { model: 'llama3' } } },
+      agents: {
+        list: { reviewer: { provider: 'ollama', model: 'llama3' } },
+      },
     });
     const after = runtime.requireLoopFor('reviewer');
 
@@ -782,7 +860,13 @@ describe('multiple agents', () => {
   it('adds an agent added by a patch', () => {
     const runtime = ollama();
 
-    runtime.reconfigure({ agents: { list: { writer: { label: 'Writer' } } } });
+    runtime.reconfigure({
+      agents: {
+        list: {
+          writer: { provider: 'ollama', model: 'qwen3:8b', label: 'Writer' },
+        },
+      },
+    });
 
     expect(runtime.agents.map((agent) => agent.id)).toEqual([
       'default',
@@ -796,8 +880,10 @@ describe('multiple agents', () => {
     // ignored it would be the more surprising rule.
     const home = tempHome({
       agents: {
-        defaults: { provider: 'ollama', model: 'qwen3:8b' },
-        list: { reviewer: { model: 'qwen3:32b' } },
+        list: {
+          default: { provider: 'ollama', model: 'qwen3:8b' },
+          reviewer: { provider: 'ollama', model: 'qwen3:32b' },
+        },
       },
     });
     const runtime = build({ home, model: 'pinned' });
@@ -812,11 +898,12 @@ describe('agent references surviving a delete', () => {
   function delegatingHome(): string {
     return tempHome({
       agents: {
-        defaults: { provider: 'ollama', model: 'qwen3:8b' },
         list: {
-          researcher: { label: 'Researcher' },
+          default: { provider: 'ollama', model: 'qwen3:8b' },
+          researcher: { label: 'Researcher', model: 'qwen3:8b' },
           main: {
             label: 'Main',
+            model: 'qwen3:8b',
             subagents: [
               {
                 id: 'researcher',
@@ -873,9 +960,10 @@ describe('agent references surviving a delete', () => {
     // `#build`, so throwing meant one hand-edited line stopped the server.
     const home = tempHome({
       agents: {
-        defaults: { provider: 'ollama', model: 'qwen3:8b' },
         list: {
+          default: { provider: 'ollama', model: 'qwen3:8b' },
           main: {
+            model: 'qwen3:8b',
             subagents: [{ id: 'ghost', prompt: '', permission: 'allow' }],
           },
         },
@@ -897,9 +985,10 @@ describe('agent references surviving a delete', () => {
   it('reports a tool prompt override naming a tool the agent does not have', () => {
     const home = tempHome({
       agents: {
-        defaults: { provider: 'ollama', model: 'qwen3:8b' },
         list: {
+          default: { provider: 'ollama', model: 'qwen3:8b' },
           main: {
+            model: 'qwen3:8b',
             // `read_file` is in the seeded map; `search` would come from a
             // toolbox this agent does not have.
             toolPrompts: {
@@ -927,9 +1016,10 @@ describe('agent references surviving a delete', () => {
     // meant to read it. So the dangling ref stays, and stays reported.
     const home = tempHome({
       agents: {
-        defaults: { provider: 'ollama', model: 'qwen3:8b' },
         list: {
+          default: { provider: 'ollama', model: 'qwen3:8b' },
           main: {
+            model: 'qwen3:8b',
             subagents: [{ id: 'ghost', prompt: '', permission: 'allow' }],
           },
         },
@@ -956,8 +1046,10 @@ describe('agent references surviving a delete', () => {
   it('still lets an odd id already on disk be deleted', () => {
     const home = tempHome({
       agents: {
-        defaults: { provider: 'ollama', model: 'qwen3:8b' },
-        list: { '../evil': { label: 'Sneaky' } },
+        list: {
+          default: { provider: 'ollama', model: 'qwen3:8b' },
+          '../evil': { label: 'Sneaky' },
+        },
       },
     });
     const runtime = build({ home });
@@ -968,12 +1060,18 @@ describe('agent references surviving a delete', () => {
   });
 
   it('resets the default agent rather than erroring when its entry is deleted', () => {
-    // `agents.list.default` is an *override* of an agent that always exists, so
-    // removing it means "back to inherited" rather than "delete the agent".
+    // Deleting `agents.list.default` means "back to the schema's answers"
+    // rather than "delete the agent": `default` is the one every unbound
+    // conversation runs on, so the schema prefaults it straight back.
     const home = tempHome({
       agents: {
-        defaults: { provider: 'ollama', model: 'qwen3:8b' },
-        list: { default: { label: 'House style' } },
+        list: {
+          default: {
+            provider: 'ollama',
+            model: 'qwen3:8b',
+            label: 'House style',
+          },
+        },
       },
     });
     const runtime = build({ home });
@@ -1000,7 +1098,9 @@ describe('skills', () => {
   ): GhostRuntime {
     const home = tempHome({
       agents: {
-        defaults: { provider: 'ollama', model: 'qwen3:8b', ...defaults },
+        list: {
+          default: { provider: 'ollama', model: 'qwen3:8b', ...defaults },
+        },
       },
     });
     const dir = join(home, 'workspace', 'skills', name);
@@ -1036,10 +1136,10 @@ describe('skills', () => {
     // unit suite passing — so it is asserted through two real loops.
     const home = tempHome({
       agents: {
-        defaults: { provider: 'ollama', model: 'qwen3:8b' },
         list: {
-          coder: { enabled: true, label: 'Coder' },
-          writer: { enabled: true, label: 'Writer' },
+          default: { provider: 'ollama', model: 'qwen3:8b' },
+          coder: { provider: 'ollama', model: 'qwen3:8b', label: 'Coder' },
+          writer: { provider: 'ollama', model: 'qwen3:8b', label: 'Writer' },
         },
       },
     });
@@ -1083,8 +1183,7 @@ describe('memory', () => {
    * A runtime whose workspace already holds a memory.
    *
    * `tools` is written onto the *default agent's entry*, because that is where
-   * a permission map lives — the whole point of the feature switch being the
-   * permission is that there is no key on `defaults` to set instead.
+   * a permission map lives and there is nowhere else it could go.
    */
   function withMemory(
     entry?: Record<string, unknown>,
@@ -1092,8 +1191,9 @@ describe('memory', () => {
   ): GhostRuntime {
     const home = tempHome({
       agents: {
-        defaults: { provider: 'ollama', model: 'qwen3:8b' },
-        ...(entry === undefined ? {} : { list: { default: entry } }),
+        list: {
+          default: { provider: 'ollama', model: 'qwen3:8b', ...entry },
+        },
       },
     });
     const dir = join(home, 'workspace', 'memory');
@@ -1231,12 +1331,14 @@ describe('memory', () => {
     // instruction sheet is what `systemPrompt` is for.
     const home = tempHome({
       agents: {
-        defaults: {
-          provider: 'ollama',
-          model: 'qwen3:8b',
-          toolsEnabled: false,
+        list: {
+          default: {
+            provider: 'ollama',
+            model: 'qwen3:8b',
+            toolsEnabled: false,
+            tools: { skill: 'allow' },
+          },
         },
-        list: { default: { tools: { skill: 'allow' } } },
       },
     });
     const dir = join(home, 'workspace', 'skills', 'code-review');
@@ -1253,8 +1355,13 @@ describe('memory', () => {
   it('drops the skills catalogue for an agent that denied that tool too', async () => {
     const home = tempHome({
       agents: {
-        defaults: { provider: 'ollama', model: 'qwen3:8b' },
-        list: { default: { tools: { skill: 'deny' } } },
+        list: {
+          default: {
+            provider: 'ollama',
+            model: 'qwen3:8b',
+            tools: { skill: 'deny' },
+          },
+        },
       },
     });
     const dir = join(home, 'workspace', 'skills', 'code-review');
@@ -1273,7 +1380,7 @@ describe('memory', () => {
     // rewrite, so it sits where a change invalidates the least. Asserted so it
     // cannot be quietly reversed.
     const home = tempHome({
-      agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } },
+      agents: { list: { default: { provider: 'ollama', model: 'qwen3:8b' } } },
     });
     const skills = join(home, 'workspace', 'skills', 'code-review');
     mkdirSync(skills, { recursive: true });

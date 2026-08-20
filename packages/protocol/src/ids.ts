@@ -138,12 +138,12 @@ export function deriveWorkspaceId(name: string): string {
  *
  * What is specific to an agent: **`default` is reserved**, because it names the
  * agent an install runs as before anyone has defined one — the settings under
- * `agents.defaults`, with no entry in `agents.list` behind it. It is a legal id
+ * the entry the schema prefaults into `agents.list`. It is a legal id
  * to *resolve*, and `agents.list.default` may be written to customise it; what
  * it is not is a name the UI lets an operator mint a second agent under.
  */
 
-/** The agent every install has, resolved from `agents.defaults`. */
+/** The agent every install has: `agents.list.default`, always present. */
 export const DEFAULT_AGENT_ID = 'default';
 
 /** 1–40 chars, lowercase alphanumerics and hyphens, no leading or trailing hyphen. */

@@ -150,7 +150,7 @@ import { ProviderCache } from './provider-cache.js';
 export interface RuntimeOptions {
   /** `GHOSTAI_HOME` override. */
   readonly home?: string | undefined;
-  /** Wins over `agents.defaults.workspace`, and keeps winning after a patch. */
+  /** Wins over the config's `workspace`, and keeps winning after a patch. */
   readonly workspace?: string | undefined;
   /** Pins the model for this process; config cannot move it. */
   readonly model?: string | undefined;
@@ -479,7 +479,7 @@ function noProviderError(configFile: string): GhostError {
     'config',
     'No provider could be resolved.\n' +
       '  Run `ghostai init` to configure one interactively, pass --provider <id> --model <model>,\n' +
-      `  export the provider's API key variable, or set agents.defaults in ${configFile}.\n` +
+      `  export the provider's API key variable, or add a provider in ${configFile}.\n` +
       `  Known providers: ${ids}`,
   );
 }
@@ -491,7 +491,7 @@ function noModelError(
   return new GhostError(
     'config',
     `No model configured for ${instance.spec.displayName}.\n` +
-      '  Run `ghostai init`, pass --model <model>, or set agents.defaults.model in ' +
+      "  Run `ghostai init`, pass --model <model>, or set this agent's model in " +
       `${configFile}.`,
   );
 }
@@ -504,7 +504,7 @@ function noModelError(
  * has a new config and no file read to hang it off.
  */
 function pathsFor(config: Config, options: RuntimeOptions): GhostPaths {
-  const configured = config.agents.defaults.workspace;
+  const configured = config.workspace;
   const workspace =
     options.workspace ?? (configured === '' ? undefined : configured);
   return resolveGhostPaths({
@@ -572,7 +572,12 @@ class Runtime implements GhostRuntime {
       ...(options.clock === undefined ? {} : { clock: options.clock }),
     });
     this.tools = new ToolRegistry({
-      timeoutMs: loaded.config.agents.defaults.toolTimeoutMs,
+      // The default agent's, because the registry is built once for the process
+      // while a timeout is per agent. A turn on another agent re-reads its own
+      // from `agent.settings` — this is the floor for anything built before an
+      // agent is chosen.
+      timeoutMs:
+        loaded.config.agents.list[DEFAULT_AGENT_ID]?.toolTimeoutMs ?? 0,
       logger: this.logger,
       ...(options.clock === undefined ? {} : { clock: options.clock }),
     });
@@ -879,7 +884,7 @@ class Runtime implements GhostRuntime {
       config,
       model === undefined || model === ''
         ? agent
-        : { ...agent, defaults: { ...agent.defaults, model } },
+        : { ...agent, settings: { ...agent.settings, model } },
       this.paths,
     );
     if (resolved.provider === null) return null;
@@ -1080,7 +1085,7 @@ class Runtime implements GhostRuntime {
 
     // Past here nothing throws, so the mutations below cannot leave the
     // registry describing a runtime that failed to build.
-    this.tools.timeoutMs = resolved.agent.defaults.toolTimeoutMs;
+    this.tools.timeoutMs = resolved.agent.settings.toolTimeoutMs;
     // Exact by source: an `exec` switched off in the settings panel has to
     // disappear from the definitions the model sees, and MCP and extension tools
     // registered on this same registry must survive that.
@@ -1185,8 +1190,8 @@ class Runtime implements GhostRuntime {
     readonly hasCredential: boolean;
     readonly unconfigured: GhostError | null;
   } {
-    const model = this.options.model ?? agent.defaults.model;
-    const providerId = this.options.provider ?? agent.defaults.provider;
+    const model = this.options.model ?? agent.settings.model;
+    const providerId = this.options.provider ?? agent.settings.provider;
 
     // `specs` rather than the built-in table alone, so `providers.<id>.type`
     // can name a provider this build did not ship. An extension that failed to
@@ -1290,7 +1295,7 @@ class Runtime implements GhostRuntime {
       jails,
       toolbox: agent.toolbox,
       ...toolboxPromptOf(built.prompts, agent.id),
-      config: agent.defaults,
+      config: agent.settings,
       toolsConfig: agent.toolsConfig,
       // The delegation half of what this agent may do. Beside `tools` and for
       // the same reason: both are resolved once, here, so a turn never asks the
@@ -1316,7 +1321,7 @@ class Runtime implements GhostRuntime {
       // false. The whole of it is cost with no way to act on it. An agent with
       // no tools and a fixed instruction sheet is what `systemPrompt` is for.
       contributors: [
-        ...(agent.defaults.toolsEnabled && granted(agent.tools, 'skill')
+        ...(agent.settings.toolsEnabled && granted(agent.tools, 'skill')
           ? [
               new SkillsContributor({
                 // Beside `memoryPrompt` below, and for the same reason: both
@@ -1334,7 +1339,7 @@ class Runtime implements GhostRuntime {
           : []),
         // After skills: sections are appended in order, so the cached prefix
         // grows at the end, and memory is the one a turn can rewrite.
-        ...(agent.defaults.toolsEnabled && granted(agent.tools, 'memory')
+        ...(agent.settings.toolsEnabled && granted(agent.tools, 'memory')
           ? [
               new MemoryContributor({
                 // The seventh section template, and the only one that does not

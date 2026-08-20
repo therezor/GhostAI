@@ -18,6 +18,7 @@ import {
   ConfigPatchSchema,
   ConfigSchema,
   McpTransportSchema,
+  ReasoningEffortSchema,
 } from './config.js';
 import {
   StopReasonSchema,
@@ -302,7 +303,7 @@ export type ProviderInfo = z.infer<typeof ProviderInfoSchema>;
  * One configured endpoint.
  *
  * `type` names the `ProviderInfo` it was created from; `id` is the operator's
- * key for this particular endpoint, and is what `agents.defaults.provider`
+ * key for this particular endpoint, and is what an agent's `provider`
  * names and what the vault stores its credential under.
  */
 export const ProviderInstanceInfoSchema = z.object({
@@ -631,6 +632,15 @@ export const AgentSummarySchema = z.object({
   label: z.string().min(1),
   model: z.string(),
   provider: z.string(),
+  /**
+   * The effort in force, absent when this agent states none.
+   *
+   * Absent means the agent sends no reasoning parameter at all, so the provider
+   * applies its own. Reported beside `model` so a client has the answer without
+   * reading the settings tree — and, like `model`, it is what a turn would send
+   * rather than what the file says, which differ under a `--model` pin.
+   */
+  reasoningEffort: ReasoningEffortSchema.optional(),
 });
 export type AgentSummary = z.infer<typeof AgentSummarySchema>;
 

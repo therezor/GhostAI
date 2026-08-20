@@ -1,22 +1,23 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  AgentDefaultsSchema,
+  AgentSettingsSchema,
   AgentEntrySchema,
   ConfigPatchSchema,
   ConfigSchema,
   DEFAULT_AGENT_TOOLS,
   McpServerConfigSchema,
+  agentSettingsPatch,
   isLoopbackHost,
 } from '#src/config.js';
 
 describe('ConfigSchema', () => {
   it('produces a fully populated tree from an empty object', () => {
     // Every nested block uses `.prefault({})`, so a brand-new install needs no
-    // config file at all and `config.agents.defaults.model` is never undefined.
+    // config file at all — including one agent, complete, under `default`.
     const config = ConfigSchema.parse({});
 
-    expect(config.agents.defaults.maxToolIterations).toBe(40);
+    expect(config.agents.list.default?.maxToolIterations).toBe(40);
     expect(config.server.port).toBe(3000);
     expect(config.server.auth.enabled).toBe(true);
     expect(config.tools.exec.enable).toBe(true);
@@ -63,10 +64,32 @@ describe('ConfigSchema', () => {
 
   it('preserves a partial override without dropping siblings', () => {
     const config = ConfigSchema.parse({
-      agents: { defaults: { temperature: 0.7 } },
+      agents: { list: { default: { temperature: 0.7 } } },
     });
-    expect(config.agents.defaults.temperature).toBe(0.7);
-    expect(config.agents.defaults.maxTokens).toBe(8192);
+    expect(config.agents.list.default?.temperature).toBe(0.7);
+    expect(config.agents.list.default?.maxTokens).toBe(8192);
+  });
+
+  it('gives a fresh install exactly one agent, complete and unconfigured', () => {
+    // There is no settings layer above an agent, so `default` has to exist for
+    // an unbound conversation to have anything to run on. Unconfigured is a
+    // state rather than an error: the model is empty and everything else is
+    // answered by the schema.
+    const agent = ConfigSchema.parse({}).agents.list.default;
+
+    expect(agent?.model).toBe('');
+    expect(agent?.provider).toBe('auto');
+    expect(agent?.maxTokens).toBe(8192);
+    // The two that are genuinely optional stay absent — that is what "let the
+    // provider decide" is spelled as.
+    expect(agent).not.toHaveProperty('temperature');
+    expect(agent).not.toHaveProperty('reasoningEffort');
+  });
+
+  it('does not share the prefaulted default agent between parses', () => {
+    const a = ConfigSchema.parse({});
+    const b = ConfigSchema.parse({});
+    expect(a.agents.list.default).not.toBe(b.agents.list.default);
   });
 
   it('accepts unknown channel blocks so a channel extension needs no schema change', () => {
@@ -122,25 +145,25 @@ describe('ConfigSchema', () => {
   });
 
   it('rejects a negative timeout but allows 0 as "no limit"', () => {
-    expect(AgentDefaultsSchema.safeParse({ toolTimeoutMs: -1 }).success).toBe(
+    expect(AgentSettingsSchema.safeParse({ toolTimeoutMs: -1 }).success).toBe(
       false,
     );
-    expect(AgentDefaultsSchema.parse({ toolTimeoutMs: 0 }).toolTimeoutMs).toBe(
+    expect(AgentSettingsSchema.parse({ toolTimeoutMs: 0 }).toolTimeoutMs).toBe(
       0,
     );
   });
 
   it('rejects a non-integer iteration cap', () => {
     expect(
-      AgentDefaultsSchema.safeParse({ maxToolIterations: 2.5 }).success,
+      AgentSettingsSchema.safeParse({ maxToolIterations: 2.5 }).success,
     ).toBe(false);
   });
 
   it('constrains temperature to a sane range', () => {
-    expect(AgentDefaultsSchema.safeParse({ temperature: 3 }).success).toBe(
+    expect(AgentSettingsSchema.safeParse({ temperature: 3 }).success).toBe(
       false,
     );
-    expect(AgentDefaultsSchema.safeParse({ temperature: -0.1 }).success).toBe(
+    expect(AgentSettingsSchema.safeParse({ temperature: -0.1 }).success).toBe(
       false,
     );
   });
@@ -148,12 +171,12 @@ describe('ConfigSchema', () => {
   it('omits an unset reasoning effort rather than defaulting it', () => {
     // A provider that does not support the parameter must not receive it at all;
     // `withResilience` drops it on a 400, and a default would mask that path.
-    expect(AgentDefaultsSchema.parse({})).not.toHaveProperty('reasoningEffort');
+    expect(AgentSettingsSchema.parse({})).not.toHaveProperty('reasoningEffort');
   });
 
   it('rejects an unknown reasoning effort', () => {
     expect(
-      AgentDefaultsSchema.safeParse({ reasoningEffort: 'extreme' }).success,
+      AgentSettingsSchema.safeParse({ reasoningEffort: 'extreme' }).success,
     ).toBe(false);
   });
 
@@ -162,17 +185,17 @@ describe('ConfigSchema', () => {
     // decides; `off` means it carries one asking for none. On a model that
     // thinks unless told otherwise those are two different turns, so the enum
     // has to be able to say the second.
-    const config = AgentDefaultsSchema.parse({ reasoningEffort: 'off' });
+    const config = AgentSettingsSchema.parse({ reasoningEffort: 'off' });
 
     expect(config.reasoningEffort).toBe('off');
-    expect(AgentDefaultsSchema.parse({})).not.toHaveProperty('reasoningEffort');
+    expect(AgentSettingsSchema.parse({})).not.toHaveProperty('reasoningEffort');
   });
 
   it('takes `xhigh`, which is a real level and not one of ours', () => {
     // Qwen3.8 calls its top rung `xhigh` and runs there unless told otherwise.
     // The enum has to be able to say it, because the alternative — leaving it
     // out — is an install that cannot ask for the level its model defaults to.
-    const config = AgentDefaultsSchema.parse({ reasoningEffort: 'xhigh' });
+    const config = AgentSettingsSchema.parse({ reasoningEffort: 'xhigh' });
 
     expect(config.reasoningEffort).toBe('xhigh');
   });
@@ -180,7 +203,7 @@ describe('ConfigSchema', () => {
   it('leaves vision and tool calling on, so an existing install is unchanged', () => {
     // Both are opt-*out*. Defaulting either to false would silently take a
     // capability away from every agent already configured on a model that has it.
-    const config = AgentDefaultsSchema.parse({});
+    const config = AgentSettingsSchema.parse({});
 
     expect(config.visionEnabled).toBe(true);
     expect(config.toolsEnabled).toBe(true);
@@ -237,12 +260,18 @@ describe('McpServerConfigSchema', () => {
 });
 
 describe('AgentEntrySchema', () => {
-  it('leaves every inherited field unset rather than defaulting it', () => {
-    // An agent that defaulted `model` would pin itself to the empty string and
-    // stop inheriting whatever `agents.defaults.model` later becomes.
+  it('completes itself from the schema, leaving only the two that mean "unset"', () => {
+    // The whole of the change: an entry is complete after parsing, so nothing
+    // downstream has to merge it with anything. `model` is the one field with no
+    // useful default — empty is *unconfigured*, which is a state an agent is
+    // listed and edited in and refused a turn in.
     const agent = AgentEntrySchema.parse({});
 
-    expect(agent).not.toHaveProperty('model');
+    expect(agent.model).toBe('');
+    expect(agent.provider).toBe('auto');
+    expect(agent.maxTokens).toBe(8192);
+    // Absent, not defaulted: unset means the request carries no such parameter
+    // and the provider applies its own, which is a different turn from any value.
     expect(agent).not.toHaveProperty('temperature');
     expect(agent).not.toHaveProperty('reasoningEffort');
   });
@@ -316,10 +345,10 @@ describe('AgentEntrySchema', () => {
 });
 
 describe('AgentsConfigSchema', () => {
-  it('starts with no named agents', () => {
+  it('starts with the default agent and nothing else', () => {
     const agents = ConfigSchema.parse({}).agents;
-    expect(agents.list).toEqual({});
-    expect(agents.defaults.provider).toBe('auto');
+    expect(Object.keys(agents.list)).toEqual(['default']);
+    expect(agents.list.default?.provider).toBe('auto');
   });
 
   it('keeps the scheduler block to the engine, with nothing describing a task', () => {
@@ -374,14 +403,13 @@ describe('ConfigPatchSchema', () => {
 
     expect(patch.agents?.list?.reviewer?.temperature).toBe(0);
     expect(patch.agents?.list?.reviewer).not.toHaveProperty('label');
-    expect(patch.agents).not.toHaveProperty('defaults');
   });
 
   it('accepts a single deeply nested field', () => {
     const patch = ConfigPatchSchema.parse({
-      agents: { defaults: { temperature: 0.5 } },
+      agents: { list: { coder: { temperature: 0.5 } } },
     });
-    expect(patch.agents?.defaults?.temperature).toBe(0.5);
+    expect(patch.agents?.list?.coder?.temperature).toBe(0.5);
   });
 
   it('does not fill in defaults for absent sections', () => {
@@ -494,5 +522,101 @@ describe('ConfigPatchSchema: the toolbox', () => {
 
     expect(patch.agents?.list?.boxed?.toolbox?.name).toBe('kali-pentest');
     expect(patch.agents?.list?.boxed?.toolbox?.network).toBeUndefined();
+  });
+});
+
+describe('agentSettingsPatch', () => {
+  /** A config with one named agent that overrides more than it inherits. */
+  function withCoder(): ReturnType<typeof ConfigSchema.parse> {
+    return ConfigSchema.parse({
+      agents: {
+        defaults: { model: 'qwen3', provider: 'ollama' },
+        list: {
+          coder: {
+            label: 'Coder',
+            systemPrompt: 'Write code.',
+            model: 'llama3',
+            provider: 'ollama',
+            temperature: 0.7,
+            tools: { read_file: 'allow' },
+          },
+        },
+      },
+    });
+  }
+
+  it('sends the agent back whole, because the subtree replaces wholesale', () => {
+    // The bug this function exists to make unwriteable, and it is the same rule
+    // for every agent now: `agents.list.*` is in `REPLACE_WHOLESALE`, so a patch
+    // naming `model` alone does not set one field — it replaces the entry.
+    const patch = agentSettingsPatch(ConfigSchema.parse({}), 'default', {
+      model: 'gpt-4o',
+      provider: 'openai',
+    });
+
+    const entry = patch.agents?.list?.default;
+    expect(entry?.model).toBe('gpt-4o');
+    expect(entry?.provider).toBe('openai');
+    expect(entry?.maxTokens).toBe(8192);
+  });
+
+  it('sends a named agent back whole, because that subtree replaces wholesale', () => {
+    // The bug this function exists to make unwriteable. `agents.list.*` is in
+    // `REPLACE_WHOLESALE` — the patch *is* the agent — so a patch naming
+    // `model` alone does not set one field, it replaces the entry and takes
+    // the label, the prompt and the tools with it.
+    const patch = agentSettingsPatch(withCoder(), 'coder', {
+      model: 'gpt-4o',
+      provider: 'openai',
+    });
+
+    const entry = patch.agents?.list?.coder;
+    expect(entry?.model).toBe('gpt-4o');
+    expect(entry?.provider).toBe('openai');
+    expect(entry?.label).toBe('Coder');
+    expect(entry?.systemPrompt).toBe('Write code.');
+    expect(entry?.temperature).toBe(0.7);
+    expect(entry?.tools).toEqual({ read_file: 'allow' });
+  });
+
+  it('clears on a named agent by omitting the key, never by nulling it', () => {
+    // The opposite mechanic to the default agent's, and the reason both live
+    // here rather than at two call sites. A `null` would reach
+    // `AgentEntrySchema` as a value and be rejected.
+    const patch = agentSettingsPatch(withCoder(), 'coder', {
+      temperature: null,
+    });
+
+    const entry = patch.agents?.list?.coder ?? undefined;
+    expect(Object.keys(entry ?? {})).not.toContain('temperature');
+    expect(entry?.label).toBe('Coder');
+  });
+
+  it('re-parses as a patch, so the merge is never handed an illegal tree', () => {
+    expect(
+      ConfigPatchSchema.safeParse(
+        agentSettingsPatch(withCoder(), 'coder', { model: 'gpt-4o' }),
+      ).success,
+    ).toBe(true);
+  });
+
+  it('writes a whole agent for an id that names no entry', () => {
+    // An agent deleted underneath a conversation. The patch creates a complete
+    // one rather than a fragment: half an agent under a dead id would be worse
+    // than a whole one, and the schema is what completes it.
+    const patch = agentSettingsPatch(withCoder(), 'ghost', { model: 'gpt-4o' });
+
+    const entry = patch.agents?.list?.ghost;
+    expect(entry?.model).toBe('gpt-4o');
+    expect(entry?.maxTokens).toBe(8192);
+  });
+
+  it('sends the entry back unchanged when nothing is mentioned', () => {
+    // `undefined` is dropped: an absent key in `changes` means "leave it", not
+    // "clear it" — `null` is what clears.
+    const patch = agentSettingsPatch(withCoder(), 'coder', {});
+
+    expect(patch.agents?.list?.coder?.model).toBe('llama3');
+    expect(patch.agents?.list?.coder?.label).toBe('Coder');
   });
 });

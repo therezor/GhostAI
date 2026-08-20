@@ -64,12 +64,12 @@ import {
   type TurnStatsRecord,
 } from '@ghostwire/core';
 import {
-  AgentDefaultsSchema,
+  AgentSettingsSchema,
   SUBAGENT_METADATA_KEY,
   SUBAGENT_ORIGIN,
   newUuid,
   withSubagentRun,
-  type AgentDefaults,
+  type AgentSettings,
   type AgentToolbox,
   type ContentPart,
   type ErrorCode,
@@ -297,7 +297,7 @@ export interface AgentLoopOptions {
   /** The toolbox's declared contents, injected into the static prompt. */
   readonly toolboxPrompt?: PromptToolbox;
   /** Defaults to the schema's defaults, so a caller without a config file works. */
-  readonly config?: AgentDefaults;
+  readonly config?: AgentSettings;
   readonly toolsConfig?: ToolsConfig;
   /** Overrides `config.model`. One of the two must be non-empty. */
   readonly model?: string;
@@ -455,7 +455,7 @@ export class AgentLoop {
   private readonly automation: AutomationResolver | undefined;
   private readonly toolbox: AgentToolbox;
   private readonly toolboxPrompt: PromptToolbox | undefined;
-  private readonly config: AgentDefaults;
+  private readonly config: AgentSettings;
   private readonly toolsConfig: ToolsConfig;
   private readonly modelId: string;
   private readonly contributors: readonly ContextContributor[];
@@ -487,7 +487,7 @@ export class AgentLoop {
       tools: {},
     };
     this.toolboxPrompt = options.toolboxPrompt;
-    this.config = options.config ?? AgentDefaultsSchema.parse({});
+    this.config = options.config ?? AgentSettingsSchema.parse({});
     this.toolsConfig = options.toolsConfig ?? DEFAULT_TOOLS_CONFIG;
     this.agent = options.agent;
     this.agentId = options.agent?.id ?? DEFAULT_AGENT_ID;

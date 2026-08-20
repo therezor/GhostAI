@@ -231,6 +231,47 @@ describe('the / autocomplete', () => {
     ]);
   });
 
+  it('opens the effort list on the level in force, and says which it is', async () => {
+    // The list is six words anyone could have typed — what makes it worth
+    // opening is that it says which one is running. The cursor starts there
+    // too, so accepting without touching an arrow key is a no-op rather than a
+    // silent change to whatever sat at the top.
+    const user = userEvent.setup();
+    stubFetch({ '/api/agents': [200, AGENTS] });
+    mount({ agent: { effort: 'high' } });
+
+    await user.type(box(), '/effort ');
+
+    const options = await screen.findAllByRole('option');
+    const at = options.findIndex((option) =>
+      option.textContent.startsWith('high'),
+    );
+    expect(box()).toHaveAttribute(
+      'aria-activedescendant',
+      `composer-commands-${String(at)}`,
+    );
+    expect(options[at]).toHaveTextContent('current');
+    // The ramp is left in its own order: hoisting the current row to the top
+    // would scramble minimal → xhigh to save a glance.
+    expect(options[0]?.textContent).toContain('default');
+  });
+
+  it('marks default when the agent states no effort of its own', async () => {
+    const user = userEvent.setup();
+    stubFetch({ '/api/agents': [200, AGENTS] });
+    mount({ agent: {} });
+
+    await user.type(box(), '/effort ');
+
+    const options = await screen.findAllByRole('option');
+    expect(options[0]).toHaveTextContent('default');
+    expect(options[0]).toHaveTextContent('current');
+    expect(box()).toHaveAttribute(
+      'aria-activedescendant',
+      'composer-commands-0',
+    );
+  });
+
   it('accepts a value with the mouse and closes', async () => {
     const user = userEvent.setup();
     stubFetch({ '/api/agents': [200, AGENTS] });

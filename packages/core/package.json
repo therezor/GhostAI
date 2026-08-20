@@ -1,6 +1,6 @@
 {
   "name": "@ghostwire/core",
-  "version": "0.7.3",
+  "version": "0.8.0",
   "description": "Canonical message types, session store, message bus, logger, clock.",
   "type": "module",
   "license": "MIT",

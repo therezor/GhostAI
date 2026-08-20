@@ -120,13 +120,19 @@ export function progressOf(step: SetupStep): SetupProgress {
 export function initialStep(input: {
   readonly setupRequired: boolean;
   readonly configured: boolean | undefined;
+  /** Whether an endpoint already resolves — `status.provider` is not empty. */
+  readonly hasProvider: boolean;
 }): SetupStep | null {
   if (input.setupRequired) return 'language';
   // Not "assume the worst": an unanswerable question is not a fresh install.
   if (input.configured === undefined) return null;
   // Nothing to do: a claimed, configured install is just the app.
   if (input.configured) return null;
-  return 'provider';
+  // Unconfigured is two different situations, and asking the wrong question is
+  // what makes the wizard feel like it is not listening. An install with an
+  // endpoint already resolving needs a *model*, and opening on "add a provider"
+  // in front of somebody who has one reads as the app having forgotten.
+  return input.hasProvider ? 'model' : 'provider';
 }
 
 interface SetupTitle {

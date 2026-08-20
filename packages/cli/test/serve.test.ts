@@ -64,7 +64,9 @@ function home(server: Record<string, unknown> = {}): string {
   writeFileSync(
     join(root, 'config.json'),
     JSON.stringify({
-      agents: { defaults: { provider: 'ollama', model: 'test-model' } },
+      agents: {
+        list: { default: { provider: 'ollama', model: 'test-model' } },
+      },
       server,
     }),
   );
@@ -193,13 +195,13 @@ describe('startServer', () => {
       method: 'PATCH',
       headers: { ...bearer(server), 'content-type': 'application/json' },
       body: JSON.stringify({
-        agents: { defaults: { model: 'another-model' } },
+        agents: { list: { default: { model: 'another-model' } } },
       }),
     });
 
     expect(response.status).toBe(200);
     // On disk, so the next boot uses it…
-    expect(configOf(root).agents.defaults.model).toBe('another-model');
+    expect(configOf(root).agents.list.default!.model).toBe('another-model');
     // …and in the loop, so the next turn does.
     expect(server.runtime.model).toBe('another-model');
   });

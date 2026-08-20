@@ -727,6 +727,19 @@
     color: var(--fg-3);
   }
 
+  /* Pushed to the end of the row, so it lands in the same column whatever the
+   * hint beside it is — a marker that drifts with the text length reads as part
+   * of the sentence rather than as a state. `auto` on the margin rather than
+   * `space-between` on the row, because the label and hint belong together at
+   * the start and only this one belongs at the far end. */
+  .composer__command-current {
+    margin-inline-start: auto;
+    padding-inline-start: var(--space-2);
+    font-size: var(--text-sm);
+    color: var(--fg-3);
+    white-space: nowrap;
+  }
+
   /* The hint on the left, whatever the route put beside it on the right.
    *
    * One row rather than two: both are ambient state about the box above them,

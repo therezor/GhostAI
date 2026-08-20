@@ -119,11 +119,21 @@ function createTelegramConsole(
       // adapter always has one.
       (await server.models?.()) ?? { models: [], errors: {} },
     setModel: (id) => {
-      // `reconfigure`, not `applySettings`: this is what the terminal's
-      // `/model` does — it moves the process without rewriting `config.json`,
-      // so a restart returns to whatever the operator actually configured.
-      runtime.reconfigure({ agents: { defaults: { model: id } } });
+      // `reconfigure`, not `applySettings`: this moves the process without
+      // rewriting `config.json`, so a restart returns to whatever the operator
+      // actually configured.
+      //
+      // Onto the default agent, because that is the one the bot's own
+      // conversations run on unless they have been bound elsewhere. Moving an
+      // agent the chat is *not* on is the bug this whole change is about, and
+      // aligning the bot's `/model` with the terminal's is a change to Telegram's
+      // behaviour that belongs with Telegram.
+      const entry = runtime.config.agents.list[DEFAULT_AGENT_ID];
+      runtime.reconfigure({
+        agents: { list: { [DEFAULT_AGENT_ID]: { ...entry, model: id } } },
+      });
     },
+
     context: async (sessionKey): Promise<ContextResponse | undefined> =>
       await buildContextResponse(server, sessionKey),
 

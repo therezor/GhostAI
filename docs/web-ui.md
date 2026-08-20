@@ -103,27 +103,42 @@ Type `/` in the composer and the completion list opens: arrow keys move, Enter o
 accepts, Escape closes. Focus never leaves the box, so the sentence you are part-way
 through is never interrupted.
 
-| Command           | What it does                                         |
-| ----------------- | ---------------------------------------------------- |
-| `/new`            | Starts a fresh session and goes to it                |
-| `/clear`          | Drops this session's transcript, keeping the session |
-| `/rename <title>` | Retitles this session                                |
-| `/stop`           | Aborts the turn that is running                      |
-| `/branch`         | Forks at your last message and continues in the fork |
-| `/agent <id>`     | Which agent this session runs on                     |
-| `/model <id>`     | Which model this install runs on                     |
+| Command              | What it does                                         |
+| -------------------- | ---------------------------------------------------- |
+| `/new`               | Starts a fresh session and goes to it                |
+| `/clear`             | Drops this session's transcript, keeping the session |
+| `/rename <title>`    | Retitles this session                                |
+| `/stop`              | Aborts the turn that is running                      |
+| `/branch`            | Forks at your last message and continues in the fork |
+| `/agent <id>`        | Which agent this session runs on                     |
+| `/model <id>`        | Which model this session's agent runs on             |
+| `/effort <level>`    | How hard that agent is asked to think                |
+| `/temperature <0-2>` | The sampling temperature that agent sends            |
 
-`/agent` and `/model` complete their argument as you type it, which is the browser's
-answer to the terminal's arrow-key menu and Telegram's picker keyboard. A command that
-needs nothing further closes the list as soon as it is spelled out, so `/stop` and Enter
-is one keypress.
+`/agent`, `/model` and `/effort` complete their argument as you type it, which is the
+browser's answer to the terminal's arrow-key menu and Telegram's picker keyboard.
+`/temperature` does not: its argument is a number in a range, which a list cannot
+enumerate. A command that needs nothing further closes the list as soon as it is spelled
+out, so `/stop` and Enter is one keypress.
 
-Three read differently from the terminal, on purpose. `/new` takes no title — nothing is
+The last three **edit the agent this session runs on, and save** — the same write the
+Agents panel makes, against the same fields. There is no settings layer above an agent,
+so the agent is the only place these live: the change follows it everywhere it runs, and
+it survives a restart.
+
+`/effort` lists its levels as you type, marks the one in force, and opens on it — so the
+question "what is it now" is answered by the list rather than by going to the Agents
+panel. `/temperature` does not list: its argument is a number in a range.
+
+Both take `default`, which is not the same as a low setting. `/effort off` sends a
+parameter asking the model not to think; `/effort default` sends no reasoning parameter
+at all, which is the only thing that works against an endpoint that rejects the field.
+`/temperature 0` is a value in the same way: it is not an absence.
+
+Two read differently from the terminal, on purpose. `/new` takes no title — nothing is
 stored until the first message, so there is nothing to title yet; use `/rename`.
 `/branch` takes no ref — every message on screen carries its own Branch action, so the
-only point a typed command usefully names is the last thing you said. And `/model`
-**persists**: the terminal's version lasts as long as the process, and a browser has no
-process to scope a choice to, so this writes the same field the Agents panel does.
+only point a typed command usefully names is the last thing you said.
 
 A message is only a command when it opens with a slash followed by nothing but lowercase
 letters, so `/usr/bin/env is on the path` reaches the model as the sentence it is. A

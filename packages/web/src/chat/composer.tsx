@@ -41,7 +41,11 @@ import {
   type ReactNode,
 } from 'react';
 
-import { newUuid, type Attachment } from '@ghostwire/protocol';
+import {
+  newUuid,
+  type Attachment,
+  type ReasoningEffort,
+} from '@ghostwire/protocol';
 
 import { cn } from '@/lib/cn.js';
 import { api } from '@/lib/api.js';
@@ -58,6 +62,12 @@ import {
 } from './command-complete.js';
 import type { RunCommand } from './use-commands.js';
 
+/** What the composer needs to know about the agent, and nothing more. */
+export interface ComposerAgent {
+  /** Absent when the agent sends no reasoning parameter at all. */
+  readonly effort?: ReasoningEffort | undefined;
+}
+
 interface ComposerProps {
   /**
    * A control at the start of the meta row — in practice the agent picker.
@@ -68,6 +78,18 @@ interface ComposerProps {
   readonly lead?: ReactNode;
   /** The readout at the end of the meta row. The context budget, in the app. */
   readonly meta?: ReactNode;
+  /**
+   * The agent this session runs on, for the commands that edit one.
+   *
+   * A resolved value rather than a session key, and passed rather than looked
+   * up, for the reason `meta` is a node: the binding lives behind
+   * `useAgentChoice`, which needs a session key this component deliberately
+   * does not take. The route has both and hands over the answer.
+   *
+   * Absent while the agent listing is in flight, which reads as "nothing to
+   * mark yet" — the same treatment an empty value list gets.
+   */
+  readonly agent?: ComposerAgent;
   readonly busy: boolean;
   readonly queueDepth: number;
   /** False while the socket is down — Send would only buffer. */
@@ -118,6 +140,7 @@ const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 export function Composer({
   lead,
   meta,
+  agent,
   busy,
   queueDepth,
   connected,
@@ -130,7 +153,9 @@ export function Composer({
   const { workspaceId } = useWorkspace();
   const [text, setText] = useState('');
   const [files, setFiles] = useState<readonly StagedFile[]>([]);
-  const [highlight, setHighlight] = useState(0);
+  // `undefined` until an arrow key moves it — see `active` below, which is what
+  // every reader uses. A number here means "the operator chose this row".
+  const [highlight, setHighlight] = useState<number | undefined>(undefined);
   const [dismissed, setDismissed] = useState(false);
   /**
    * The caret, as state rather than as a read of `textareaRef` during render.
@@ -176,9 +201,22 @@ export function Composer({
       : commandSuggestions(query, {
           agents: agents.data?.agents ?? [],
           models: models.data?.models ?? [],
+          effort: agent?.effort,
           t,
         });
   const open = suggestions.length > 0;
+
+  /**
+   * Which row the list opens on.
+   *
+   * `highlight` is `undefined` until an arrow key moves it, so a list whose
+   * rows describe an existing setting can open on the one in force — the
+   * browser's version of the terminal picker starting its cursor there. Every
+   * other list marks nothing and falls to the first row, which is what it did
+   * before there was anything to mark.
+   */
+  const marked = suggestions.findIndex((one) => one.current === true);
+  const active = highlight ?? (marked < 0 ? 0 : marked);
 
   const ready = files.every(
     (file) => file.attachment !== undefined || file.failed,
@@ -212,7 +250,9 @@ export function Composer({
       if (query === undefined) return;
       const next = applyCommand(text, query, suggestion);
       setText(next.text);
-      setHighlight(0);
+      // Back to "not moved", so accepting `/effort ` opens the level list on
+      // the one in force rather than on whichever row this accept sat at.
+      setHighlight(undefined);
       // Both halves, and both are needed. This one is what the *next render*
       // reads, so the popover recomputes against the caret as it will be —
       // which is what turns accepting `/agent ` into the agent list rather than
@@ -234,12 +274,14 @@ export function Composer({
         event.preventDefault();
         const step = event.key === 'ArrowDown' ? 1 : -1;
         setHighlight(
-          (value) => (value + step + suggestions.length) % suggestions.length,
+          (value) =>
+            ((value ?? active) + step + suggestions.length) %
+            suggestions.length,
         );
         return;
       }
       if (event.key === 'Enter' || event.key === 'Tab') {
-        const suggestion = suggestions[highlight];
+        const suggestion = suggestions[active];
         if (suggestion !== undefined) {
           event.preventDefault();
           accept(suggestion);
@@ -376,7 +418,7 @@ export function Composer({
                   key={suggestion.insert}
                   id={`${listboxId}-${String(index)}`}
                   role="option"
-                  aria-selected={index === highlight}
+                  aria-selected={index === active}
                   onMouseDown={(event) => {
                     // `mousedown`, not `click`: `click` fires after the blur
                     // that closes the popover, so the suggestion is gone by
@@ -386,7 +428,7 @@ export function Composer({
                   }}
                   className={cn(
                     'composer__command',
-                    index === highlight && 'composer__command--active',
+                    index === active && 'composer__command--active',
                   )}
                 >
                   <span className="composer__command-label">
@@ -395,6 +437,15 @@ export function Composer({
                   <span className="composer__command-hint truncate">
                     {suggestion.hint}
                   </span>
+                  {/* The row already in force, said out loud rather than left
+                      to the cursor position — the list opens on it, and a
+                      highlight alone cannot survive an arrow key. Its own
+                      element so it stays legible when the hint is truncated. */}
+                  {suggestion.current === true && (
+                    <span className="composer__command-current">
+                      {t('chat.commands.current')}
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -434,7 +485,7 @@ export function Composer({
                 setText(event.target.value);
                 setCaret(event.target.selectionStart);
                 setDismissed(false);
-                setHighlight(0);
+                setHighlight(undefined);
               }}
               // Every other way a caret moves: a click, an arrow key, a drag,
               // ⌘←. `onSelect` is the one event that covers all of them, and
@@ -464,7 +515,7 @@ export function Composer({
               {...(open
                 ? {
                     'aria-controls': listboxId,
-                    'aria-activedescendant': `${listboxId}-${String(highlight)}`,
+                    'aria-activedescendant': `${listboxId}-${String(active)}`,
                   }
                 : {})}
               className="composer__input"

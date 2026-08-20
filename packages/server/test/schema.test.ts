@@ -122,11 +122,11 @@ describe('zodValidatorCompiler', () => {
     // `ConfigPatch` is the case that matters: deep-partial, so parsing must not
     // put every default back into a patch that never mentioned them.
     const result = validate(PROTOCOL_SCHEMAS.ConfigPatch, {
-      agents: { defaults: { temperature: 0.5 } },
+      agents: { list: { default: { temperature: 0.5 } } },
     }) as { value: ConfigPatch };
 
     expect(result.value).toEqual({
-      agents: { defaults: { temperature: 0.5 } },
+      agents: { list: { default: { temperature: 0.5 } } },
     });
   });
 

@@ -21,7 +21,11 @@ import type { TFunction } from 'i18next';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type { ModelInfo } from '@ghostwire/protocol';
+import {
+  agentSettingsPatch,
+  type AgentSettingsChange,
+  type ModelInfo,
+} from '@ghostwire/protocol';
 
 import { useAgent } from '@/agents/agent-context.js';
 import { useAgentChoice } from '@/agents/use-agent-choice.js';
@@ -29,6 +33,7 @@ import { toast } from '@/components/ui/toast.js';
 import { api } from '@/lib/api.js';
 import { newSession, stopTurn } from '@/lib/connection.js';
 import { queryKeys } from '@/lib/query.js';
+import { afterSettingsWrite } from '@/settings/use-settings.js';
 import { useTurnStore } from '@/state/turn.js';
 import type { Transcript } from '@/state/transcript.js';
 import { useWorkspace } from '@/workspaces/workspace-context.js';
@@ -67,7 +72,7 @@ export function useCommands(): RunCommand {
   // session has been moved, and `/new` means the same thing the sidebar's New
   // session button means. `useAgentChoice` owns the other question.
   const { agentId } = useAgent();
-  const { agents, stored, choose } = useAgentChoice(sessionKey);
+  const { agents, current, stored, choose } = useAgentChoice(sessionKey);
 
   return useCallback(
     (text: string): boolean => {
@@ -77,6 +82,38 @@ export function useCommands(): RunCommand {
       // Every command that reaches a route needs one, and every one of those is
       // behind the `stored` guard — which is false when there is no key at all.
       const key = sessionKey ?? '';
+
+      /**
+       * Moves one field on the agent this conversation runs on.
+       *
+       * **The tree is fetched, not read from the cache.** `agents.list.*` is in
+       * the merge's `REPLACE_WHOLESALE` list — the patch *is* the agent — so
+       * `agentSettingsPatch` sends the stored entry back whole with one field
+       * changed. Spreading a cached copy would send back whatever the cache
+       * last saw: edit an agent's system prompt in the Agents panel, type
+       * `/model` here, and the pre-edit entry would be written over the edit.
+       * `ensureQueryData` — which `models()` above uses, correctly, for a list
+       * whose staleness is harmless — returns cached data without refetching,
+       * so it is exactly the wrong call here.
+       *
+       * `current` rather than the `agentId` preference: a conversation that has
+       * been moved runs on its stored binding, and this has to edit the agent
+       * that will actually answer.
+       */
+      const editAgent = async (changes: AgentSettingsChange): Promise<void> => {
+        const settings = await queryClient.fetchQuery({
+          queryKey: queryKeys.settings,
+          queryFn: ({ signal }) => api.settings(signal),
+        });
+        const saved = await api.patchSettings(
+          agentSettingsPatch(settings.config, current, changes),
+        );
+        // The shared fan-out rather than a list of its own — including
+        // `queryKeys.agents`, which is what moves the composer's picker onto
+        // the new model. See `afterSettingsWrite`.
+        afterSettingsWrite(queryClient, saved);
+      };
+
       const ctx: CommandContext = {
         sessionKey,
         workspaceId,
@@ -128,18 +165,19 @@ export function useCommands(): RunCommand {
           });
           return { message: answer.message, ok: answer.ok };
         },
+        agentLabel: agents.find((one) => one.id === current)?.label ?? current,
         setModel: async (model) => {
-          // Both halves, because they are one setting: `agents.defaults` merges
-          // per field, so sending the model alone would leave `provider` naming
-          // an instance that never offered it. This is the pair the agent
-          // editor's Save writes.
-          await api.patchSettings({
-            agents: {
-              defaults: { provider: model.providerId, model: model.id },
-            },
-          });
-          void queryClient.invalidateQueries({ queryKey: queryKeys.settings });
-          void queryClient.invalidateQueries({ queryKey: queryKeys.agents });
+          // Both halves, because they are one setting: an agent's `provider`
+          // and `model` are inherited per field, so sending the model alone
+          // would leave `provider` naming an instance that never offered it.
+          // This is the pair the agent editor's Save writes.
+          await editAgent({ provider: model.providerId, model: model.id });
+        },
+        setEffort: async (effort) => {
+          await editAgent({ reasoningEffort: effort });
+        },
+        setTemperature: async (temperature) => {
+          await editAgent({ temperature });
         },
       };
 
@@ -163,6 +201,7 @@ export function useCommands(): RunCommand {
       agents,
       busy,
       choose,
+      current,
       extensionCommands,
       navigate,
       queryClient,

@@ -40,8 +40,8 @@ export function openVault(paths: GhostPaths): CredentialVault {
  *
  * **Keyed by instance id, not provider id.** Two Ollama servers are two
  * instances and can hold different tokens. Nothing had to be migrated for this:
- * the config migration gives a pre-instance entry an id equal to its provider
- * id, which is the string its key was already stored under.
+ * a pre-instance entry's key *was* its provider id, so the id it takes on is the
+ * string its credential was already stored under.
  *
  * Returns `undefined` rather than throwing when there is none — a local model
  * server usually needs no key, and `createProvider` is what refuses a remote

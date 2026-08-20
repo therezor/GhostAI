@@ -14,12 +14,10 @@
  * starts, not when the operator presses Save, so the five values that vary are
  * holes the renderer fills.
  *
- * This lives in `@ghostwire/protocol` because three packages that share nothing
- * else need the identical text: `@ghostwire/agent` renders it, `@ghostwire/core`
- * prepends it when migrating an old config, and `@ghostwire/web` shows it in the
- * editor. Core cannot import agent — the dependency runs the other way — and
- * the browser depends on this package and no other. A second copy of the text
- * in any of them is a copy that goes stale.
+ * This lives in `@ghostwire/protocol` because packages that share nothing else
+ * need the identical text: `@ghostwire/agent` renders it and `@ghostwire/web`
+ * shows it in the editor. The browser depends on this package and no other, and
+ * a second copy of the text in either is a copy that goes stale.
  *
  * **Empty means the built-in.** A stored prompt of `''` renders
  * `DEFAULT_SYSTEM_PROMPT_TEMPLATE`, so an install that never customised one

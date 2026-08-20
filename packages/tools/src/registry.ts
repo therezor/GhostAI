@@ -367,7 +367,7 @@ export class ToolRegistry {
   /**
    * The one mutable setting on a registry.
    *
-   * `agents.defaults.toolTimeoutMs` is editable in the settings panel, and the
+   * An agent's `toolTimeoutMs` is editable in the settings panel, and the
    * alternative — building a new registry when it changes — would throw away
    * every MCP and extension registration on it, which is far more than the
    * operator asked to change. A call already in flight keeps the timeout it

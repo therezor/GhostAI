@@ -30,6 +30,7 @@ import type {
   ProviderTestResponse,
   RunCommandRequest,
   RunCommandResponse,
+  ReasoningEffort,
   SetCredentialRequest,
   ToolDefinition,
 } from '@ghostwire/protocol';
@@ -105,6 +106,8 @@ export interface AgentSummary {
   /** After inheritance, so a picker shows what a turn would actually use. */
   readonly model: string;
   readonly provider: string;
+  /** Absent means this agent sends no such parameter, so the provider decides. */
+  readonly reasoningEffort?: ReasoningEffort | undefined;
 }
 
 /** Counts `GET /api/status` reports for the two pluggable subsystems. */

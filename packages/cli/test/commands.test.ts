@@ -2,13 +2,14 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { ModelsResponse } from '@ghostwire/protocol';
+import type { Config, ModelsResponse } from '@ghostwire/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { ExtensionStore } from '@ghostwire/security';
@@ -298,27 +299,84 @@ describe('/model', () => {
     { id: 'llama3', providerId: 'ollama' },
   ];
 
-  it('moves this run onto the named model', async () => {
+  it('moves the default agent onto the named model', async () => {
     const runtime = runtimeIn();
     const { ctx, out } = context(runtime, 'cli:1', emptyCatalogue(MODELS));
 
     await runSlashCommand('/model qwen3', ctx);
 
     expect(runtime.model).toBe('qwen3');
-    expect(out.text).toContain('this run now uses qwen3');
+    expect(out.text).toContain('now runs qwen3');
   });
 
-  it('says the choice is not saved, because reconfigure is not a settings write', async () => {
-    // `reconfigure` and `saveConfig` are deliberately separate operations. A
-    // model chosen at a prompt lasts as long as the process, and the note is
-    // what stops that being a surprise on the next launch.
+  it('writes the provider beside the model, because the pair is the setting', () => {
+    // A model and the endpoint that serves it are one setting: writing the
+    // model alone leaves `provider` naming an instance that never offered it.
     const runtime = runtimeIn();
+    const { ctx } = context(runtime, 'cli:1', emptyCatalogue(MODELS));
+
+    return runSlashCommand('/model qwen3', ctx).then(() => {
+      expect(runtime.config.agents.list.default!.provider).toBe('ollama');
+    });
+  });
+
+  it('saves, so the next run starts where this one left off', async () => {
+    // The settings panel writes the same field and saves it, so a model chosen
+    // at the prompt has to survive the next launch too.
+    const runtime = runtimeIn();
+    const { ctx } = context(runtime, 'cli:1', emptyCatalogue(MODELS));
+
+    await runSlashCommand('/model qwen3', ctx);
+
+    const file = join(runtime.paths.root, 'config.json');
+    expect(existsSync(file)).toBe(true);
+    expect(
+      (JSON.parse(readFileSync(file, 'utf8')) as Config).agents.list.default!
+        .model,
+    ).toBe('qwen3');
+  });
+
+  it('edits the agent this session runs on, not the default', async () => {
+    // The reported bug. A model lives on the agent and nowhere else, so the
+    // agent the conversation is bound to is the one that has to move.
+    const runtime = runtimeIn();
+    runtime.reconfigure({
+      agents: {
+        list: {
+          coder: {
+            label: 'Coder',
+            systemPrompt: 'Write code.',
+            model: 'llama3',
+          },
+        },
+      },
+    });
+    runtime.store.updateSession('cli:1', { agentId: 'coder' });
     const { ctx, out } = context(runtime, 'cli:1', emptyCatalogue(MODELS));
 
     await runSlashCommand('/model qwen3', ctx);
 
-    expect(out.text).toContain('settings panel is where a choice is saved');
-    expect(existsSync(join(runtime.paths.root, 'config.json'))).toBe(false);
+    const entry = runtime.config.agents.list.coder;
+    expect(entry?.model).toBe('qwen3');
+    // The whole point of `agentSettingsPatch`: `agents.list.*` replaces
+    // wholesale, so a patch naming `model` alone would have taken these with
+    // it.
+    expect(entry?.label).toBe('Coder');
+    expect(entry?.systemPrompt).toBe('Write code.');
+    expect(runtime.config.agents.list.default!.model).toBe('');
+    expect(out.text).toContain('Coder');
+  });
+
+  it('refuses a model no endpoint offered', async () => {
+    // `/agent` has always checked its id; this one did not, and it needs the
+    // lookup anyway for the `providerId` half of the pair.
+    const runtime = runtimeIn();
+    const { ctx, out } = context(runtime, 'cli:1', emptyCatalogue(MODELS));
+
+    await runSlashCommand('/model nope', ctx);
+
+    expect(out.text).toContain('No model nope');
+    expect(runtime.config.agents.list.default!.model).toBe('');
   });
 
   it('refuses under --model rather than appearing to work', async () => {
@@ -371,6 +429,185 @@ describe('/model', () => {
     await runSlashCommand('/model', ctx);
 
     expect(out.text).toContain('no endpoint published a model list');
+  });
+});
+
+describe('/effort and /temperature', () => {
+  const homes: string[] = [];
+
+  function runtimeIn(): ChatRuntime {
+    const home = mkdtempSync(join(tmpdir(), 'ghostai-sample-'));
+    homes.push(home);
+    mkdirSync(join(home, 'workspace'), { recursive: true });
+    return createChatRuntime({ home });
+  }
+
+  afterEach(() => {
+    while (homes.length > 0) {
+      const dir = homes.pop();
+      if (dir !== undefined) rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  /** A menu that answers with whatever it was told, without drawing anything. */
+  function menuAnswering(value: string | undefined): Menu {
+    return {
+      available: true,
+      choose: <T>(): Promise<T | undefined> =>
+        Promise.resolve(value as T | undefined),
+    };
+  }
+
+  it('reports what is sent, and that sending none is a real answer', async () => {
+    // A temperature is a number in a range, which a list cannot enumerate — so
+    // bare `/temperature` answers the question a picker would have answered by
+    // opening, rather than opening one.
+    const runtime = runtimeIn();
+    const { ctx, out } = context(runtime, 'cli:1');
+
+    await runSlashCommand('/temperature', ctx);
+
+    expect(out.text).toContain('no temperature at all');
+  });
+
+  it('opens a picker on bare /effort, so the levels need not be memorised', async () => {
+    const runtime = runtimeIn();
+    const { ctx } = context(runtime, 'cli:1');
+
+    await runSlashCommand('/effort', {
+      ...ctx,
+      menu: menuAnswering('medium'),
+    });
+
+    expect(runtime.config.agents.list.default!.reasoningEffort).toBe('medium');
+  });
+
+  it('clears from the picker too, because default is a row like any other', async () => {
+    const runtime = runtimeIn();
+    const { ctx } = context(runtime, 'cli:1');
+    await runSlashCommand('/effort high', ctx);
+
+    await runSlashCommand('/effort', {
+      ...ctx,
+      menu: menuAnswering('default'),
+    });
+
+    expect(runtime.config.agents.list.default!.reasoningEffort).toBeUndefined();
+  });
+
+  it('changes nothing when the picker is cancelled', async () => {
+    const runtime = runtimeIn();
+    const { ctx } = context(runtime, 'cli:1');
+    await runSlashCommand('/effort high', ctx);
+
+    await runSlashCommand('/effort', {
+      ...ctx,
+      menu: menuAnswering(undefined),
+    });
+
+    expect(runtime.config.agents.list.default!.reasoningEffort).toBe('high');
+  });
+
+  it('lists the levels without a menu, so a pipe still gets an answer', async () => {
+    const runtime = runtimeIn();
+    const { ctx, out } = context(runtime, 'cli:1');
+    await runSlashCommand('/effort low', ctx);
+    out.text = '';
+
+    await runSlashCommand('/effort', ctx);
+
+    expect(out.text).toContain('* low');
+    expect(out.text).toContain('xhigh');
+    expect(runtime.config.agents.list.default!.reasoningEffort).toBe('low');
+  });
+
+  it('sets and saves an effort the schema knows', async () => {
+    const runtime = runtimeIn();
+    const { ctx, out } = context(runtime, 'cli:1');
+
+    await runSlashCommand('/effort high', ctx);
+
+    expect(runtime.config.agents.list.default!.reasoningEffort).toBe('high');
+    expect(out.text).toContain('effort high');
+    expect(
+      (
+        JSON.parse(
+          readFileSync(join(runtime.paths.root, 'config.json'), 'utf8'),
+        ) as Config
+      ).agents.list.default!.reasoningEffort,
+    ).toBe('high');
+  });
+
+  it('keeps off apart from cleared, because they are different requests', async () => {
+    // `off` sends a parameter asking for none; cleared sends no parameter at
+    // all, which is the only thing that works against an endpoint that rejects
+    // the field outright.
+    const runtime = runtimeIn();
+    const { ctx } = context(runtime, 'cli:1');
+
+    await runSlashCommand('/effort off', ctx);
+    expect(runtime.config.agents.list.default!.reasoningEffort).toBe('off');
+
+    await runSlashCommand('/effort default', ctx);
+    expect(runtime.config.agents.list.default!.reasoningEffort).toBeUndefined();
+  });
+
+  it('refuses a level nothing spells, naming the ones that exist', async () => {
+    const runtime = runtimeIn();
+    const { ctx, out } = context(runtime, 'cli:1');
+
+    await runSlashCommand('/effort maximum', ctx);
+
+    expect(out.text).toContain('minimal');
+    expect(runtime.config.agents.list.default!.reasoningEffort).toBeUndefined();
+  });
+
+  it('accepts a temperature in range, zero included', async () => {
+    // `0` is a value, not an absence.
+    const runtime = runtimeIn();
+    const { ctx } = context(runtime, 'cli:1');
+
+    await runSlashCommand('/temperature 0', ctx);
+
+    expect(runtime.config.agents.list.default!.temperature).toBe(0);
+  });
+
+  it.each(['-1', '2.5', 'warm', '0.5abc'])(
+    'refuses %s rather than guessing at it',
+    async (raw) => {
+      // `0.5abc` is the one `parseFloat` would have read as `0.5`.
+      const runtime = runtimeIn();
+      const { ctx, out } = context(runtime, 'cli:1');
+
+      await runSlashCommand(`/temperature ${raw}`, ctx);
+
+      expect(out.text).toContain('usage: /temperature');
+      expect(runtime.config.agents.list.default!.temperature).toBeUndefined();
+    },
+  );
+
+  it('edits the agent this session runs on, keeping the rest of it', async () => {
+    const runtime = runtimeIn();
+    runtime.reconfigure({
+      agents: {
+        list: {
+          coder: {
+            label: 'Coder',
+            systemPrompt: 'Write code.',
+            model: 'llama3',
+          },
+        },
+      },
+    });
+    runtime.store.updateSession('cli:1', { agentId: 'coder' });
+    const { ctx } = context(runtime, 'cli:1');
+
+    await runSlashCommand('/temperature 0.2', ctx);
+
+    const entry = runtime.config.agents.list.coder;
+    expect(entry?.temperature).toBe(0.2);
+    expect(entry?.systemPrompt).toBe('Write code.');
+    expect(runtime.config.agents.list.default!.temperature).toBeUndefined();
   });
 });
 

@@ -186,7 +186,10 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
     jail,
     jailFor,
     tools: options.tools ?? [],
-    contextWindowTokens: config.agents.defaults.contextWindowTokens,
+    // The default agent's, and it always exists: the schema prefaults an entry
+    // for it, so a parsed config has one whatever the fixture named.
+    contextWindowTokens:
+      config.agents.list[DEFAULT_AGENT_ID]?.contextWindowTokens ?? 65_536,
     systemPrompt: async ({ sessionKey }) => ({
       staticPrompt:
         options.systemPrompt ?? `# GhostAI\n\nSession: ${sessionKey}`,
@@ -214,7 +217,7 @@ export function createFakeRuntime(options: FakeRuntimeOptions): FakeRuntime {
       .map(([id, entry]) => ({
         id,
         label: entry.label === '' ? id : entry.label,
-        model: entry.model ?? agent.model,
+        model: entry.model,
         provider: agent.provider,
       })),
   ];

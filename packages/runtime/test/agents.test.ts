@@ -19,11 +19,39 @@ import {
 } from '#src/agents.js';
 import { mergeConfigPatch } from '#src/merge.js';
 
-const base = ConfigSchema.parse({});
+/**
+ * A configured install: the default agent states a model.
+ *
+ * `ConfigSchema.parse({})` would leave it empty, which is a real state and
+ * raises a `no_model` warning of its own — so a fixture that started there would
+ * make every warning assertion below count one it was not about.
+ */
+const base = ConfigSchema.parse({
+  agents: { list: { default: { provider: 'ollama', model: 'qwen3' } } },
+});
 
-/** Through the real merge, so the tests exercise the shape a save produces. */
+/**
+ * Through the real merge, so the tests exercise the shape a save produces.
+ *
+ * Every agent is given a model on the way out unless the patch named one. An
+ * agent that states none is a legitimate state and raises a `no_model` warning
+ * of its own — true, and not what any test below is about, so a fixture would
+ * otherwise have to restate a model it does not care about to keep the warning
+ * assertions counting only their own subject.
+ */
 function configWith(patch: ConfigPatch): Config {
-  return mergeConfigPatch(base, patch);
+  const merged = mergeConfigPatch(base, patch);
+  return {
+    ...merged,
+    agents: {
+      list: Object.fromEntries(
+        Object.entries(merged.agents.list).map(([id, entry]) => [
+          id,
+          entry.model === '' ? { ...entry, model: 'qwen3' } : entry,
+        ]),
+      ),
+    },
+  };
 }
 
 /** A config with `main` delegating to whatever the refs name. */
@@ -55,7 +83,7 @@ describe('resolveAgent', () => {
     expect(agent.id).toBe('default');
     expect(agent.label).toBe('default');
     expect(agent.systemPrompt).toBe('');
-    expect(agent.defaults).toEqual(base.agents.defaults);
+    expect(agent.settings).toEqual(base.agents.list.default);
     expect(agent.toolsConfig).toEqual(base.tools);
     expect(agent.tools).toEqual(DEFAULT_AGENT_TOOLS);
   });
@@ -64,48 +92,51 @@ describe('resolveAgent', () => {
     expect(resolveAgent(base, '').id).toBe('default');
   });
 
-  it('inherits every field the entry does not name', () => {
-    const config = configWith({
+  it('completes an entry from the schema, never from another agent', () => {
+    // The whole model. `reviewer` names two fields; the rest are the schema's
+    // answers, which is why the config stays short without anything inheriting.
+    // Straight through `mergeConfigPatch`, not `configWith`, because that
+    // helper fills a model in and an empty one is the subject here.
+    const config = mergeConfigPatch(base, {
       agents: { list: { reviewer: { label: 'Reviewer', temperature: 0 } } },
     });
     const agent = resolveAgent(config, 'reviewer');
 
-    expect(agent.defaults.temperature).toBe(0);
-    expect(agent.defaults.model).toBe(base.agents.defaults.model);
-    expect(agent.defaults.maxTokens).toBe(base.agents.defaults.maxTokens);
-    expect(agent.defaults.provider).toBe(base.agents.defaults.provider);
+    expect(agent.settings.temperature).toBe(0);
+    expect(agent.settings.model).toBe('');
+    expect(agent.settings.maxTokens).toBe(8192);
+    expect(agent.settings.provider).toBe('auto');
   });
 
-  it("takes the agent's override over the default, field by field", () => {
+  it('does not take a field from the default agent', () => {
+    // The reported bug, at its source: an agent that states no effort sends
+    // none, whatever any other agent says. Nothing falls through.
     const config = configWith({
       agents: {
-        defaults: { model: 'qwen3:8b', temperature: 0.7, maxTokens: 4096 },
-        list: { reviewer: { model: 'claude-opus-5', reasoningEffort: 'high' } },
+        list: {
+          default: { model: 'qwen3:8b', temperature: 0.7, maxTokens: 4096 },
+          reviewer: { model: 'claude-opus-5', reasoningEffort: 'high' },
+        },
       },
     });
     const agent = resolveAgent(config, 'reviewer');
 
-    expect(agent.defaults.model).toBe('claude-opus-5');
-    expect(agent.defaults.reasoningEffort).toBe('high');
-    // Untouched by the entry, so still the defaults'.
-    expect(agent.defaults.temperature).toBe(0.7);
-    expect(agent.defaults.maxTokens).toBe(4096);
+    expect(agent.settings.model).toBe('claude-opus-5');
+    expect(agent.settings.reasoningEffort).toBe('high');
+    expect(agent.settings.temperature).toBeUndefined();
+    expect(agent.settings.maxTokens).toBe(8192);
   });
 
-  it('carries an override for a field that has no default at all', () => {
-    // `reasoningEffort` is optional with no default, so it is absent from a
-    // parsed `agents.defaults`. A merge driven by the keys that happen to be
-    // present would drop exactly this one.
+  it('leaves the two genuinely optional fields absent, so the provider decides', () => {
     const config = configWith({
       agents: { list: { reviewer: { reasoningEffort: 'high' } } },
     });
 
-    expect(resolveAgent(config, 'reviewer').defaults.reasoningEffort).toBe(
+    expect(resolveAgent(config, 'reviewer').settings.reasoningEffort).toBe(
       'high',
     );
-    // And the default agent still has none.
     expect(
-      resolveAgent(config, undefined).defaults.reasoningEffort,
+      resolveAgent(config, undefined).settings.reasoningEffort,
     ).toBeUndefined();
   });
 
@@ -114,8 +145,8 @@ describe('resolveAgent', () => {
     // two models, and "this model cannot see" is a fact about one of them.
     const config = configWith({
       agents: {
-        defaults: { model: 'claude-opus-5' },
         list: {
+          default: { model: 'claude-opus-5' },
           local: {
             model: 'qwen3:8b',
             visionEnabled: false,
@@ -126,25 +157,26 @@ describe('resolveAgent', () => {
     });
 
     const local = resolveAgent(config, 'local');
-    expect(local.defaults.visionEnabled).toBe(false);
-    expect(local.defaults.toolsEnabled).toBe(false);
+    expect(local.settings.visionEnabled).toBe(false);
+    expect(local.settings.toolsEnabled).toBe(false);
 
     const fallback = resolveAgent(config, undefined);
-    expect(fallback.defaults.visionEnabled).toBe(true);
-    expect(fallback.defaults.toolsEnabled).toBe(true);
+    expect(fallback.settings.visionEnabled).toBe(true);
+    expect(fallback.settings.toolsEnabled).toBe(true);
   });
 
-  it('never lets an agent move its own workspace', () => {
+  it('never lets an agent name a workspace at all', () => {
+    // Root-level now, and `AgentEntrySchema` has no such field — so the folder
+    // several agents share cannot be pinned by one of them.
     const config = configWith({
-      agents: {
-        defaults: { workspace: '/tmp/shared' },
-        list: { reviewer: {} },
-      },
+      workspace: '/tmp/shared',
+      agents: { list: { reviewer: {} } },
     });
 
-    expect(resolveAgent(config, 'reviewer').defaults.workspace).toBe(
-      '/tmp/shared',
+    expect(resolveAgent(config, 'reviewer').settings).not.toHaveProperty(
+      'workspace',
     );
+    expect(config.workspace).toBe('/tmp/shared');
   });
 
   it('replaces the tool map rather than merging into the seed', () => {
@@ -476,7 +508,9 @@ describe('subagents', () => {
       code: 'missing_subagent',
     });
     expect(warnings[0]?.message).toMatch(/does not exist/);
-    expect(warnings[0]?.message).toMatch(/Known agents: researcher, main/);
+    expect(warnings[0]?.message).toMatch(
+      /Known agents: default, researcher, main/,
+    );
   });
 
   it('drops a disabled subagent, which is a different warning', () => {
@@ -610,6 +644,30 @@ describe('resolveAgentOrDefault', () => {
     expect(() => resolveAgentOrDefault(config, 'main')).toThrow(
       /not a CIDR block/,
     );
+  });
+});
+
+describe('an agent with no model', () => {
+  it('warns rather than refusing, so it can be fixed from the screen that lists it', () => {
+    // Unconfigured is a state, not an error: the config parses, the agent is
+    // listed and editable, and only a turn on it is refused. A schema that
+    // rejected an empty model would stop the server that serves the fix.
+    const config = mergeConfigPatch(base, {
+      agents: { list: { reviewer: { label: 'Reviewer' } } },
+    });
+    const { agents, warnings } = resolveAgents(config);
+
+    expect(agents.map((agent) => agent.id)).toEqual(['default', 'reviewer']);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({
+      agentId: 'reviewer',
+      code: 'no_model',
+    });
+    expect(warnings[0]?.message).toMatch(/Settings → Agents/);
+  });
+
+  it('says nothing about an agent that states one', () => {
+    expect(resolveAgents(base).warnings).toEqual([]);
   });
 });
 

@@ -285,6 +285,12 @@
       "agent": "Which agent this session runs on",
       "branch": "Fork this session at your last message",
       "clear": "Forget this session’s history, keeping the session",
+      "current": "current",
+      "effort": "How hard this session’s agent is asked to think",
+      "efforts": {
+        "default": "Sends none at all — the provider applies its own",
+        "off": "Sends one asking for none"
+      },
       "errors": {
         "failed": "The command did not go through",
         "noAgent": "No agent {{id}}.",
@@ -294,23 +300,30 @@
         "notRunning": "No turn is running.",
         "unknown": "No command /{{name}}. Type / to see them all.",
         "usageAgent": "Usage: /agent <id>",
+        "usageEffort": "Usage: /effort <{{levels}}> or /effort default",
         "usageModel": "Usage: /model <id>",
-        "usageRename": "Usage: /rename <title>"
+        "usageRename": "Usage: /rename <title>",
+        "usageTemperature": "Usage: /temperature <a number from 0 to 2> or /temperature default"
       },
       "label": "Commands",
-      "model": "Which model this install runs on",
+      "model": "Which model this session’s agent runs on",
       "new": "Start a fresh session",
       "notes": {
         "agentSet": "This session now runs on {{id}}.",
         "branched": "Branched at message {{seq}}.",
         "cleared": "History cleared.",
-        "modelSet": "Now running {{id}}. Saved as the default for this install.",
+        "effortDefault": "{{agent}} now sends no reasoning effort at all — the provider applies its own. Saved.",
+        "effortSet": "{{agent}} now sends effort {{level}}. Saved.",
+        "modelSet": "{{agent}} now runs {{id}}. Saved.",
         "renamed": "Renamed to “{{title}}”.",
         "started": "Started a new session.",
-        "stopping": "Stopping."
+        "stopping": "Stopping.",
+        "temperatureDefault": "{{agent}} now sends no temperature at all — the provider applies its own. Saved.",
+        "temperatureSet": "{{agent}} now sends temperature {{value}}. Saved."
       },
       "rename": "Retitle this session",
-      "stop": "Abort the turn that is running"
+      "stop": "Abort the turn that is running",
+      "temperature": "The sampling temperature this session’s agent sends"
     },
     "editMessage": "Edit message",
     "editThis": "Edit this message",

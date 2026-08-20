@@ -39,6 +39,7 @@ import {
   type StopReason,
 } from '@ghostwire/protocol';
 import { findCredential } from '@ghostwire/runtime';
+import { findProvider } from '@ghostwire/providers';
 import { agentForTurn } from '@ghostwire/server';
 import {
   CHROME_ROWS,
@@ -83,6 +84,7 @@ import { createModelCatalogue, type ModelCatalogue } from './models.js';
 import { TurnRenderer } from './render.js';
 import {
   createChatRuntime,
+  settingsOf,
   type ChatRuntime,
   type RuntimeOptions,
 } from './runtime.js';
@@ -465,7 +467,8 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
      */
     let context: ContextUsage | undefined;
     const measureContext = async (): Promise<void> => {
-      const loop = runtime.loopFor(agentForTurnQuietly());
+      const id = agentForTurnQuietly();
+      const loop = runtime.loopFor(id);
       if (loop === null) return;
       try {
         const report = await describeContext({
@@ -474,8 +477,10 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
           tools: runtime.tools.definitions(),
           sessionKey,
           channel: 'cli',
-          contextWindowTokens:
-            runtime.config.agents.defaults.contextWindowTokens,
+          // This agent's budget, not the install's. There is no install-wide
+          // one to fall back to: a window is a property of the model, and the
+          // model is a property of the agent.
+          contextWindowTokens: settingsOf(runtime, id).contextWindowTokens,
         });
         context =
           report === undefined
@@ -517,10 +522,32 @@ export async function chatCommand(options: ChatOptions = {}): Promise<number> {
        * in is worse than either answer.
        */
       const where = opened?.workspaceId ?? workspaceId ?? DEFAULT_WORKSPACE_ID;
+      const agent = runtime.agents.find((one) => one.id === id);
+      /**
+       * This conversation's agent, not the install's.
+       *
+       * `runtime.model` and `runtime.spec` describe the *default* agent, and
+       * the line above names the session's — so on a conversation moved onto
+       * another agent they would disagree, and the bar would report one agent's
+       * label over another's model.
+       *
+       * Off the loop rather than through a fresh resolve: `loopFor` hits the
+       * `LoopCache`, while `resolveProvider` opens the credential vault — and
+       * opening the vault can mint a keychain entry, which is far too much to
+       * do to redraw a status bar on every keystroke. `loopFor` throws for an
+       * id that names nothing runnable; `agentForTurnQuietly` has already
+       * ruled that out.
+       */
+      const loop = runtime.loopFor(id);
+      // `AgentLoop.provider` is the *spec* id — `ollama`, not the instance —
+      // so this is the same lookup `runtime.spec` does, asked about this
+      // agent's loop instead of the default one's.
+      const spec = loop === null ? null : findProvider(loop.provider);
       return {
-        agent: runtime.agents.find((one) => one.id === id)?.label ?? id,
-        model: runtime.model,
-        provider: runtime.spec?.displayName ?? lang.t('chat.noProvider'),
+        agent: agent?.label ?? id,
+        model: loop?.model ?? agent?.settings.model ?? '',
+        provider:
+          spec?.displayName ?? loop?.provider ?? lang.t('chat.noProvider'),
         workspace: runtime.paths.workspace,
         workspaceName: runtime.workspaces.get(where)?.name ?? where,
         session:

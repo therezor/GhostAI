@@ -106,7 +106,9 @@ function home(telegram?: Record<string, unknown>): string {
   writeFileSync(
     join(root, 'config.json'),
     JSON.stringify({
-      agents: { defaults: { provider: 'ollama', model: 'test-model' } },
+      agents: {
+        list: { default: { provider: 'ollama', model: 'test-model' } },
+      },
       ...(telegram === undefined ? {} : { channels: { telegram } }),
     }),
   );

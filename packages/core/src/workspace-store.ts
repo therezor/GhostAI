@@ -25,7 +25,7 @@
  * accepted one would hand an authenticated caller the whole filesystem. The
  * directory is derived from the id by `workspaceDirFor`, which also means
  * relocating `GHOSTAI_HOME` moves every workspace with it — the same reasoning
- * that made `agents.defaults.workspace` default to the empty string.
+ * that made the config's `workspace` default to the empty string.
  */
 
 import { renameSync, statSync } from 'node:fs';

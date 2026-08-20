@@ -20,8 +20,8 @@ import {
   textPart,
 } from '@ghostwire/core';
 import {
-  AgentDefaultsSchema,
-  type AgentDefaults,
+  AgentSettingsSchema,
+  type AgentSettings,
   type ApprovalScope,
   type ChatMessage,
   ServerMessageSchema,
@@ -109,7 +109,7 @@ interface HarnessOptions {
    * are about something other than the gate.
    */
   readonly permissions?: ToolPermissions;
-  readonly config?: Partial<AgentDefaults>;
+  readonly config?: Partial<AgentSettings>;
   readonly clock?: ManualClock;
   readonly loop?: Partial<AgentLoopOptions>;
 }
@@ -136,8 +136,8 @@ function harness(options: HarnessOptions = {}): Harness {
   const provider = scriptedProvider(options.turns ?? [{ deltas: ['ok'] }]);
   const steering = new SteeringQueue();
 
-  const config: AgentDefaults = {
-    ...AgentDefaultsSchema.parse({}),
+  const config: AgentSettings = {
+    ...AgentSettingsSchema.parse({}),
     model: 'test-model',
     maxToolIterations: 6,
     ...options.config,
@@ -3227,7 +3227,7 @@ function delegationHarness(
     readonly childTools?: readonly AnyTool[];
     readonly binding?: SubagentBinding;
     readonly resolveLoop?: (agentId: string) => AgentLoop | null;
-    readonly parentConfig?: Partial<AgentDefaults>;
+    readonly parentConfig?: Partial<AgentSettings>;
     readonly clock?: ManualClock;
     /** Overrides on the *parent* loop. The child is built from the others. */
     readonly loop?: Partial<AgentLoopOptions>;
@@ -3246,7 +3246,7 @@ function delegationHarness(
     store.close();
   });
 
-  const defaults = AgentDefaultsSchema.parse({});
+  const defaults = AgentSettingsSchema.parse({});
   const childRegistry = new ToolRegistry({ clock });
   childRegistry.registerAll(options.childTools ?? []);
 
@@ -3661,7 +3661,7 @@ describe('subagents', () => {
     });
     const registry = new ToolRegistry({ clock });
     registry.registerAll([echoTool]);
-    const defaults = AgentDefaultsSchema.parse({});
+    const defaults = AgentSettingsSchema.parse({});
 
     const researcher = new AgentLoop({
       provider: scriptedProvider([
@@ -3765,7 +3765,7 @@ describe('subagents', () => {
     cleanups.push(() => {
       store.close();
     });
-    const defaults = AgentDefaultsSchema.parse({});
+    const defaults = AgentSettingsSchema.parse({});
     const summariser: SubagentBinding = {
       toolName: 'ask_summariser',
       agentId: 'summariser',

@@ -74,9 +74,20 @@ function context(
       calls.push(`agent:${id}`);
       return Promise.resolve();
     },
+    agentLabel: 'Default',
     setModel: (model) => {
       // Both halves, because the pair is the setting.
       calls.push(`model:${model.providerId}/${model.id}`);
+      return Promise.resolve();
+    },
+    setEffort: (effort) => {
+      calls.push(`effort:${effort ?? 'cleared'}`);
+      return Promise.resolve();
+    },
+    setTemperature: (temperature) => {
+      calls.push(
+        `temperature:${temperature === null ? 'cleared' : String(temperature)}`,
+      );
       return Promise.resolve();
     },
     extensionCommands: [],
@@ -166,9 +177,11 @@ describe('the table', () => {
     const withValues = commandRows()
       .filter((command) => command.values !== undefined)
       .map((command) => command.name);
-    // A browser has no listing surface, so the two commands that take an id are
-    // the two that must be able to complete it.
-    expect(withValues).toEqual(['agent', 'model']);
+    // A browser has no listing surface, so a command whose argument is drawn
+    // from a fixed set must be able to offer it. `/temperature` is the
+    // exception and stays one: its argument is a number in a range, which a
+    // list cannot enumerate.
+    expect(withValues).toEqual(['agent', 'model', 'effort']);
   });
 });
 
@@ -298,20 +311,133 @@ describe('/agent', () => {
 
   it('offers every configured agent, labelled', () => {
     const values = commandRows().find((row) => row.name === 'agent')?.values;
-    expect(values?.({ agents: AGENTS, models: MODELS })).toEqual([
-      { value: 'default', hint: 'Default' },
+    expect(
+      values?.({
+        agents: AGENTS,
+        models: MODELS,
+        effort: undefined,
+        effortHints: { default: '', off: '' },
+      }),
+    ).toEqual([{ value: 'default', hint: 'Default' }]);
+  });
+});
+
+describe('/effort and /temperature', () => {
+  it('sets an effort the schema knows', async () => {
+    const ctx = context();
+    expect(await run('/effort high', ctx)).toEqual({
+      kind: 'note',
+      key: 'chat.commands.notes.effortSet',
+      values: { level: 'high', agent: 'Default' },
+    });
+    expect(ctx.calls).toEqual(['effort:high']);
+  });
+
+  it('names the agent it moved, whichever one that is', async () => {
+    const ctx = context({ agentLabel: 'Coder' });
+    expect(await run('/effort default', ctx)).toEqual({
+      kind: 'note',
+      key: 'chat.commands.notes.effortDefault',
+      values: { agent: 'Coder' },
+    });
+  });
+
+  it('marks the level in force, and default when the agent states none', async () => {
+    const values = commandRows().find((row) => row.name === 'effort')?.values;
+    const ask = (effort: 'high' | undefined) =>
+      values?.({
+        agents: AGENTS,
+        models: MODELS,
+        effort,
+        effortHints: { default: 'u', off: 'o' },
+      }) ?? [];
+
+    expect(ask('high').filter((one) => one.current === true)).toEqual([
+      { value: 'high', hint: '', current: true },
     ]);
+    // Stating no effort is a row like any other, so it is the marked one
+    // rather than the absence of a mark.
+    expect(ask(undefined).find((one) => one.current === true)?.value).toBe(
+      'default',
+    );
+  });
+
+  it('treats off as a level, not as a way to clear', async () => {
+    // The distinction the whole setting is built on: `off` sends a parameter
+    // asking for none, while cleared sends no parameter at all. On a model
+    // that thinks unless told otherwise they are different turns.
+    const ctx = context();
+    await run('/effort off', ctx);
+    expect(ctx.calls).toEqual(['effort:off']);
+  });
+
+  it('clears with default, which is the only way to say "send nothing"', async () => {
+    const ctx = context();
+    expect(await run('/effort default', ctx)).toEqual({
+      kind: 'note',
+      key: 'chat.commands.notes.effortDefault',
+      values: { agent: 'Default' },
+    });
+    expect(ctx.calls).toEqual(['effort:cleared']);
+  });
+
+  it('refuses a level nothing spells', async () => {
+    const ctx = context();
+    expect(await run('/effort maximum', ctx)).toMatchObject({
+      kind: 'error',
+      key: 'chat.commands.errors.usageEffort',
+    });
+    expect(ctx.calls).toEqual([]);
+  });
+
+  it('accepts a temperature in range, zero included', async () => {
+    // `0` is a value, not an absence, and the parse has to keep them apart.
+    const ctx = context();
+    expect(await run('/temperature 0', ctx)).toEqual({
+      kind: 'note',
+      key: 'chat.commands.notes.temperatureSet',
+      values: { value: 0, agent: 'Default' },
+    });
+    expect(ctx.calls).toEqual(['temperature:0']);
+  });
+
+  it.each(['-1', '2.5', 'warm', '0.5abc'])(
+    'refuses %s rather than guessing at it',
+    async (raw) => {
+      // `0.5abc` is the one `parseFloat` would have read as `0.5`. A
+      // temperature that was half a typo is a refusal.
+      const ctx = context();
+      expect(await run(`/temperature ${raw}`, ctx)).toEqual({
+        kind: 'error',
+        key: 'chat.commands.errors.usageTemperature',
+      });
+      expect(ctx.calls).toEqual([]);
+    },
+  );
+
+  it('clears a temperature with unset', async () => {
+    const ctx = context();
+    await run('/temperature default', ctx);
+    expect(ctx.calls).toEqual(['temperature:cleared']);
+  });
+
+  it('says what it needs when given nothing', async () => {
+    expect(await run('/temperature', context())).toMatchObject({
+      kind: 'error',
+      key: 'chat.commands.errors.usageTemperature',
+    });
   });
 });
 
 describe('/model', () => {
-  it('sets the install default', async () => {
+  it('moves the agent this session runs on, and names it', async () => {
     const ctx = context();
     expect(await run('/model test-model', ctx)).toEqual({
       kind: 'note',
       key: 'chat.commands.notes.modelSet',
-      values: { id: 'test-model' },
+      values: { id: 'test-model', agent: 'Default' },
     });
+    // Both halves, because the pair is the setting.
     expect(ctx.calls).toEqual(['model:ollama/test-model']);
   });
 

@@ -111,9 +111,43 @@ test.describe('an unclaimed install', () => {
   });
 });
 
-test.describe('a claimed install with no model', () => {
+test.describe('a claimed install with a provider but no model', () => {
+  // The shape an upgrade lands in: the endpoint is configured and resolves, and
+  // the only thing missing is the model each agent now has to state for itself.
   test.use({
-    harnessOptions: { config: { agents: { defaults: { model: '' } } } },
+    harnessOptions: {
+      config: {
+        providers: { ollama: { type: 'ollama', models: ['qwen3'] } },
+        agents: { list: { default: { model: '' } } },
+      },
+    },
+  });
+
+  test('asks for the model, not for the provider it already has', async ({
+    app,
+  }) => {
+    await expect(
+      app.getByRole('heading', { name: 'Choose a model' }),
+    ).toBeVisible();
+    await expect(
+      app.getByRole('heading', { name: 'Add a model provider' }),
+    ).toBeHidden();
+    // Nowhere behind this step was shown, so Back would lead somewhere the
+    // operator was never sent.
+    await expect(app.getByRole('button', { name: 'Back' })).toBeHidden();
+  });
+});
+
+test.describe('a claimed install with nothing configured', () => {
+  // `provider: 'auto'` with no `providers` block and no key in the environment
+  // resolves no endpoint at all — which is what makes this the install that
+  // genuinely needs the provider step, unlike the one above.
+  test.use({
+    harnessOptions: {
+      config: {
+        agents: { list: { default: { provider: 'auto', model: '' } } },
+      },
+    },
   });
 
   test('opens at the provider step rather than asking for a spent code', async ({

@@ -36,7 +36,7 @@ import {
 /**
  * Dotted paths whose object value is replaced, not merged. `*` matches one key.
  *
- * The distinction a generic merge cannot make: a *struct* (`agents.defaults`)
+ * The distinction a generic merge cannot make: a *struct* (`server`, `tools`)
  * is a set of independently editable fields, and a *record* is one value the UI
  * edits as a whole. Everything here is the latter.
  */
@@ -47,12 +47,13 @@ const REPLACE_WHOLESALE: readonly string[] = [
   // entry impossible to express — an absent key means "not mentioned".
   'tools.mcpServers.*.env',
   'tools.mcpServers.*.headers',
-  // An agent is edited as a whole, and almost every field on it is an
-  // *override* that may be absent. Merging per field would make clearing one
+  // An agent is edited as a whole. Merging per field would make clearing one
   // impossible to express: an absent key means "not mentioned", so an operator
-  // emptying the model box would silently keep the model they just deleted.
-  // Replacing means the patch is the agent — which is exactly what the editor
-  // sends, and what makes an empty box mean "inherit" all the way through.
+  // emptying the temperature box would silently keep the value they just
+  // deleted. Replacing means the patch *is* the agent — which is exactly what
+  // the editor sends, and what makes an empty box mean "send nothing" all the
+  // way through. The re-parse then fills whatever the patch did not name from
+  // the schema, so a replaced entry is still complete.
   //
   // Unlike `providers.*`, which merges per instance: a provider's fields all
   // have values, so none of them has a "cleared" state to express.
@@ -69,19 +70,14 @@ const REPLACE_WHOLESALE: readonly string[] = [
  *
  * Deliberately a list rather than a blanket rule. `null` anywhere else is a
  * value the schema either accepts or rejects, and letting it delete would mean
- * a patch could punch a hole in a struct — dropping `agents.defaults.model` and
- * failing the re-parse at best, silently reverting it at worst. Most entries
- * here name a *record whose entries an operator adds and removes*.
+ * a patch could punch a hole in a struct — dropping `server.port` and failing
+ * the re-parse at best, silently reverting it at worst. Every entry here names a
+ * *record whose entries an operator adds and removes*.
  *
- * The last two are the exception, and they are leaves rather than records.
- * `agents.defaults` merges per field, so an absent key preserves what is
- * stored — which is correct for every field that has a default and was wrong
- * for the only two that are genuinely optional. Emptying the temperature box
- * sent a patch that did not mention it, and the old value survived a save that
- * looked like it had removed one. They are safe to delete for the reason
- * `model` is not: both are `.optional()` in `AgentDefaultsSchema`, so a config
- * without them still parses. "Unset" is a real state for these two — it means
- * the request carries no such parameter at all — so it needs a way to be said.
+ * There is no leaf in this list. There used to be two — an agent's `temperature`
+ * and `reasoningEffort` — because the settings block they lived in merged per
+ * field and had no other way to say "remove this". An agent replaces wholesale,
+ * so omitting the key is already how that is said.
  */
 const DELETE_BY_NULL: readonly string[] = [
   'providers.*',
@@ -94,8 +90,6 @@ const DELETE_BY_NULL: readonly string[] = [
   // looked like it had removed one.
   'tools.mcpServers.*.oauth',
   'agents.list.*',
-  'agents.defaults.temperature',
-  'agents.defaults.reasoningEffort',
   // A record an operator adds to and removes from, like `providers.*`:
   // uninstalling an extension has to be able to take its settings with it.
   'extensions.settings.*',
@@ -138,7 +132,8 @@ function mergeValue(
    *
    * It went unnoticed because until `tools.mcpServers.<id>.oauth` no
    * delete-by-null path lived under a record entry an operator can create:
-   * `providers.*` has no nullable field and `agents.defaults` always exists.
+   * `providers.*` has no nullable field, and every other record entry was a
+   * whole value rather than a struct with a nullable leaf inside it.
    */
   const source = isPlainObject(base) ? base : {};
 

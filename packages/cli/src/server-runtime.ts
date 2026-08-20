@@ -323,10 +323,10 @@ export function createServerRuntime(
         // toolset no turn on this agent would ever send.
         tools:
           loop?.toolDefinitions ??
-          (agent.defaults.toolsEnabled
+          (agent.settings.toolsEnabled
             ? runtime.tools.select(agent.tools).definitions()
             : []),
-        contextWindowTokens: agent.defaults.contextWindowTokens,
+        contextWindowTokens: agent.settings.contextWindowTokens,
         // The loop's own composition, not a second assembly of it: memory and
         // skills arrive as contributors attached to that object, and a
         // reimplementation here could not see them.
@@ -359,8 +359,13 @@ export function createServerRuntime(
         label: agent.label,
         // After inheritance, and after any process-wide pin, so a picker shows
         // what a turn would actually use rather than what the file says.
-        model: runtime.loopFor(agent.id)?.model ?? agent.defaults.model,
+        model: runtime.loopFor(agent.id)?.model ?? agent.settings.model,
         provider: runtime.instance?.id ?? '',
+        // Absent means the agent sends none. There is nothing above it for the
+        // field to have come from.
+        ...(agent.settings.reasoningEffort === undefined
+          ? {}
+          : { reasoningEffort: agent.settings.reasoningEffort }),
       })),
 
     models: async (modelOptions): Promise<ModelsResponse> =>

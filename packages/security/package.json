@@ -1,6 +1,6 @@
 {
   "name": "@ghostwire/security",
-  "version": "0.7.3",
+  "version": "0.8.0",
   "description": "Credential vault, workspace jail, SSRF-guarded fetch, exec argv guard.",
   "type": "module",
   "license": "MIT",

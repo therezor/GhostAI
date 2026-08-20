@@ -145,7 +145,7 @@ describe('GET /api/settings', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
-      config: { agents: { defaults: { provider: 'auto' } } },
+      config: { agents: { list: { default: { provider: 'auto' } } } },
       credentialsPresent: { openai: true },
     });
   });
@@ -241,16 +241,18 @@ describe('PATCH /api/settings', () => {
       method: 'PATCH',
       url: '/api/settings',
       headers,
-      payload: { agents: { defaults: { temperature: 0.9 } } },
+      payload: { agents: { list: { default: { temperature: 0.9 } } } },
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().config.agents.defaults.temperature).toBe(0.9);
+    expect(response.json().config.agents.list.default!.temperature).toBe(0.9);
     // Untouched siblings keep their values rather than being reset to defaults,
     // which is the whole reason `ConfigPatch` is not `ConfigSchema.partial()`.
-    expect(response.json().config.agents.defaults.maxToolIterations).toBe(40);
+    expect(response.json().config.agents.list.default!.maxToolIterations).toBe(
+      40,
+    );
     expect(runtime.patches).toEqual([
-      { agents: { defaults: { temperature: 0.9 } } },
+      { agents: { list: { default: { temperature: 0.9 } } } },
     ]);
   });
 
@@ -260,7 +262,7 @@ describe('PATCH /api/settings', () => {
       method: 'PATCH',
       url: '/api/settings',
       headers,
-      payload: { agents: { defaults: { model: 'a-new-model' } } },
+      payload: { agents: { list: { default: { model: 'a-new-model' } } } },
     });
 
     const response = await server.app.inject({
@@ -268,7 +270,9 @@ describe('PATCH /api/settings', () => {
       url: '/api/settings',
       headers,
     });
-    expect(response.json().config.agents.defaults.model).toBe('a-new-model');
+    expect(response.json().config.agents.list.default!.model).toBe(
+      'a-new-model',
+    );
   });
 
   it('rejects a patch whose settings could never boot', async () => {
@@ -296,12 +300,12 @@ describe('PATCH /api/settings', () => {
       method: 'PATCH',
       url: '/api/settings',
       headers,
-      payload: { agents: { defaults: { temperature: 'warm' } } },
+      payload: { agents: { list: { default: { temperature: 'warm' } } } },
     });
 
     expect(response.statusCode).toBe(422);
     expect(Object.keys(response.json().error.details)).toEqual([
-      '/agents/defaults/temperature',
+      '/agents/list/default/temperature',
     ]);
   });
 
@@ -365,7 +369,7 @@ describe('PATCH /api/settings', () => {
 describe('POST /api/settings/reload', () => {
   it('re-reads the file and answers with what it is now serving', async () => {
     const edited = ConfigSchema.parse({
-      agents: { defaults: { model: 'edited-by-hand' } },
+      agents: { list: { default: { model: 'edited-by-hand' } } },
     });
     const { server, headers, runtime } = await start({
       onReload: () => edited,
@@ -381,13 +385,15 @@ describe('POST /api/settings/reload', () => {
     // The answer is the settings tree, not `{ ok: true }`: the question behind
     // the press is "what is it running now", and a bare acknowledgement sends
     // the caller straight back for it.
-    expect(response.json().config.agents.defaults.model).toBe('edited-by-hand');
+    expect(response.json().config.agents.list.default!.model).toBe(
+      'edited-by-hand',
+    );
     expect(runtime.reloads).toHaveLength(1);
   });
 
   it('serves the reloaded settings on the next read', async () => {
     const edited = ConfigSchema.parse({
-      agents: { defaults: { temperature: 0.9 } },
+      agents: { list: { default: { temperature: 0.9 } } },
     });
     const { server, headers } = await start({ onReload: () => edited });
     await server.app.inject({
@@ -401,7 +407,7 @@ describe('POST /api/settings/reload', () => {
       url: '/api/settings',
       headers,
     });
-    expect(response.json().config.agents.defaults.temperature).toBe(0.9);
+    expect(response.json().config.agents.list.default!.temperature).toBe(0.9);
   });
 
   it('reports a file that cannot be built, still serving the settings it had', async () => {

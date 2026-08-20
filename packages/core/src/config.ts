@@ -19,12 +19,12 @@
  *    alternative — falling back to defaults on a parse error — silently ignores
  *    everything the operator wrote, and the first sign of it is an agent talking
  *    to the wrong provider. Zod's issues are flattened into dotted paths because
- *    `agents.defaults.temperature` is something you can search a file for, and
+ *    `agents.list.default.temperature` is something you can search a file for, and
  *    `[ 'agents', 'defaults', 'temperature' ]` is not.
  *
  *  - **Paths are resolved twice, on purpose.** `configFile` lives under the root,
  *    so the root has to be resolved before the file can be read — but the file
- *    is what names the workspace. The second pass folds `agents.defaults.workspace`
+ *    is what names the workspace. The second pass folds the config's `workspace`
  *    in, with an explicit caller-supplied workspace still winning over both.
  */
 
@@ -160,8 +160,8 @@ export function saveConfig(file: string, config: Config): Config {
  * Precedence for the workspace is `--workspace`, then the config file, then
  * `<root>/workspace`. `options.workspace` is an explicit instruction for one
  * run and must not be overridden by whatever the config happens to say; an
- * empty `agents.defaults.workspace` means "unset", so a root moved with
- * `GHOSTAI_HOME` takes its workspace with it.
+ * empty `workspace` means "unset", so a root moved with `GHOSTAI_HOME` takes
+ * its workspace with it.
  */
 export function loadConfig(options: LoadConfigOptions = {}): LoadedConfig {
   const base = resolveGhostPaths(options);
@@ -183,7 +183,7 @@ export function loadConfig(options: LoadConfigOptions = {}): LoadedConfig {
   const config =
     text === undefined ? ConfigSchema.parse({}) : parseConfig(text, file);
 
-  const configured = config.agents.defaults.workspace;
+  const configured = config.workspace;
   const workspace =
     options.workspace ?? (configured === '' ? undefined : configured);
 

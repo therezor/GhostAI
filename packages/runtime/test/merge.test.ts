@@ -8,15 +8,15 @@ const base = ConfigSchema.parse({});
 describe('mergeConfigPatch', () => {
   it('leaves every field the patch does not mention', () => {
     // The whole point of `patchOf` over `.partial()`: saving one settings panel
-    // must not rewrite the siblings back to their defaults.
+    // must not rewrite the siblings back to their defaults. Asserted on a
+    // section that merges per field — `agents.list.*` is the deliberate
+    // exception and has its own case below.
     const merged = mergeConfigPatch(base, {
-      agents: { defaults: { temperature: 0.7 } },
+      server: { auth: { enabled: false } },
     });
 
-    expect(merged.agents.defaults.temperature).toBe(0.7);
-    expect(merged.agents.defaults.maxTokens).toBe(
-      base.agents.defaults.maxTokens,
-    );
+    expect(merged.server.auth.enabled).toBe(false);
+    expect(merged.server.port).toBe(base.server.port);
     expect(merged.tools).toEqual(base.tools);
   });
 
@@ -26,7 +26,9 @@ describe('mergeConfigPatch', () => {
 
   it('does not mutate the config it was given', () => {
     const before = structuredClone(base);
-    mergeConfigPatch(base, { agents: { defaults: { model: 'llama3' } } });
+    mergeConfigPatch(base, {
+      agents: { list: { default: { model: 'llama3' } } },
+    });
     expect(base).toEqual(before);
   });
 
@@ -209,10 +211,13 @@ describe('mergeConfigPatch', () => {
     });
 
     expect(cleared.agents.list.reviewer?.label).toBe('Reviewer');
-    expect(cleared.agents.list.reviewer?.model).toBeUndefined();
+    // `model` re-acquires the schema's empty string — unconfigured, which is
+    // the honest result of deleting the box's contents — while `temperature`
+    // goes back to genuinely absent, because that is its schema state.
+    expect(cleared.agents.list.reviewer?.model).toBe('');
     expect(cleared.agents.list.reviewer?.temperature).toBeUndefined();
     // And the other agents are untouched — the replacement is per id.
-    expect(cleared.agents.defaults).toEqual(base.agents.defaults);
+    expect(cleared.agents.list.default).toEqual(base.agents.list.default);
   });
 
   it('deletes an agent on an explicit null', () => {
@@ -221,9 +226,9 @@ describe('mergeConfigPatch', () => {
     });
     const one = mergeConfigPatch(two, { agents: { list: { writer: null } } });
 
-    expect(Object.keys(one.agents.list)).toEqual(['reviewer']);
-    // Deleting an agent must not disturb the defaults every other one inherits.
-    expect(one.agents.defaults).toEqual(base.agents.defaults);
+    expect(Object.keys(one.agents.list)).toEqual(['default', 'reviewer']);
+    // Deleting an agent must not disturb any other one.
+    expect(one.agents.list.default).toEqual(base.agents.list.default);
   });
 
   it("replaces an agent's tool map wholesale, so a tool can be removed", () => {
@@ -248,26 +253,23 @@ describe('mergeConfigPatch', () => {
 
   it('clears an optional default on an explicit null', () => {
     // The reported bug: emptying the temperature box, saving, reloading, and
-    // finding the old value still there. `agents.defaults` merges per field, so
-    // the patch that omitted the key preserved it — `null` is the only token
-    // that can say "remove this", and these two are safe to remove because both
-    // are optional in the schema and a config without them still parses.
+    // finding the old value still there. Wholesale replacement is what makes
+    // clearing expressible — omitting the key *is* removing it — so there is no
+    // longer a `null` token for these two anywhere.
     const warm = mergeConfigPatch(base, {
-      agents: { defaults: { temperature: 0.1, reasoningEffort: 'high' } },
+      agents: {
+        list: { default: { temperature: 0.1, reasoningEffort: 'high' } },
+      },
     });
-    expect(warm.agents.defaults.temperature).toBe(0.1);
+    expect(warm.agents.list.default?.temperature).toBe(0.1);
 
     const cleared = mergeConfigPatch(warm, {
-      agents: { defaults: { temperature: null, reasoningEffort: null } },
+      agents: { list: { default: { maxTokens: 4096 } } },
     });
 
-    expect(cleared.agents.defaults.temperature).toBeUndefined();
-    expect(cleared.agents.defaults.reasoningEffort).toBeUndefined();
-    // The neighbouring fields are untouched — this is a deletion, not a reset.
-    expect(cleared.agents.defaults.model).toBe(base.agents.defaults.model);
-    expect(cleared.agents.defaults.maxTokens).toBe(
-      base.agents.defaults.maxTokens,
-    );
+    expect(cleared.agents.list.default?.temperature).toBeUndefined();
+    expect(cleared.agents.list.default?.reasoningEffort).toBeUndefined();
+    expect(cleared.agents.list.default?.maxTokens).toBe(4096);
   });
 
   it('ignores a null on a path where deletion is not meaningful', () => {
@@ -276,21 +278,21 @@ describe('mergeConfigPatch', () => {
     expect(() =>
       mergeConfigPatch(base, {
         // Deliberately outside `DELETE_BY_NULL`; the schema is what refuses it.
-        agents: { defaults: { model: null as unknown as string } },
+        agents: { list: { default: { model: null as unknown as string } } },
       }),
     ).toThrow(/invalid settings/);
   });
 
   it('treats an explicit undefined as "not mentioned"', () => {
     // JSON cannot carry `undefined`; the only way it arrives is a JS caller
-    // spreading an optional field, and reading that as a deletion would drop a
-    // setting nobody named.
+    // spreading an optional field, and reading that as a value would be a claim
+    // rather than an absence.
     const merged = mergeConfigPatch(base, {
-      agents: { defaults: { model: undefined, temperature: 0.3 } },
+      server: { host: undefined, port: 4000 },
     });
 
-    expect(merged.agents.defaults.model).toBe(base.agents.defaults.model);
-    expect(merged.agents.defaults.temperature).toBe(0.3);
+    expect(merged.server.host).toBe(base.server.host);
+    expect(merged.server.port).toBe(4000);
   });
 
   it('keeps a channel extension block the schema does not name', () => {
@@ -305,8 +307,10 @@ describe('mergeConfigPatch', () => {
     // result is a `Config`. This one gets past `ConfigPatchSchema` because the
     // caller bypassed it — which a JS caller can, and a route will not.
     expect(() =>
-      mergeConfigPatch(base, { agents: { defaults: { temperature: 9 } } }),
-    ).toThrow(/agents\.defaults\.temperature/);
+      mergeConfigPatch(base, {
+        agents: { list: { default: { temperature: 9 } } },
+      }),
+    ).toThrow(/agents\.list\.default\.temperature/);
   });
 
   it('does not cascade a delete into another agent’s delegations', () => {

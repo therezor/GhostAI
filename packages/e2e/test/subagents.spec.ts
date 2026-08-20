@@ -48,6 +48,8 @@ test.use({
           // it is special — it is an ordinary entry, which is the design.
           researcher: {
             label: 'Researcher',
+            provider: 'ollama',
+            model: 'qwen3',
             tools: { list_dir: 'allow', read_file: 'allow' },
           },
           default: {
@@ -205,6 +207,8 @@ test.describe('reloading mid-delegation', () => {
           list: {
             researcher: {
               label: 'Researcher',
+              provider: 'ollama',
+              model: 'qwen3',
               tools: {
                 list_dir: 'allow',
                 read_file: 'allow',

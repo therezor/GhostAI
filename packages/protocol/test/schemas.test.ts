@@ -64,7 +64,7 @@ describe('generated shapes', () => {
   });
 
   it('carries defaults into the document so a client can see them', () => {
-    const json = z.toJSONSchema(PROTOCOL_SCHEMAS.AgentDefaults) as {
+    const json = z.toJSONSchema(PROTOCOL_SCHEMAS.AgentSettings) as {
       properties: Record<string, { default?: unknown }>;
     };
     expect(json.properties.maxToolIterations?.default).toBe(40);
@@ -75,12 +75,12 @@ describe('generated shapes', () => {
   });
 
   it('marks defaulted fields optional in input mode and present in output mode', () => {
-    const input = z.toJSONSchema(PROTOCOL_SCHEMAS.AgentDefaults, {
+    const input = z.toJSONSchema(PROTOCOL_SCHEMAS.AgentSettings, {
       io: 'input',
     }) as {
       required?: string[];
     };
-    const output = z.toJSONSchema(PROTOCOL_SCHEMAS.AgentDefaults) as {
+    const output = z.toJSONSchema(PROTOCOL_SCHEMAS.AgentSettings) as {
       required?: string[];
     };
     expect(input.required ?? []).not.toContain('maxToolIterations');

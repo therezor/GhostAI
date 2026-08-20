@@ -140,15 +140,14 @@ export function AgentsRoute(): JSX.Element {
   });
 
   const list = settings.data?.config.agents.list ?? {};
-  const defaults = settings.data?.config.agents.defaults;
 
   /**
    * The default first, then the operator's order.
    *
-   * `default` is included even when `agents.list` has no entry for it, which is
-   * every install that has not customised it. It is still an agent — every
-   * unbound conversation runs on it — and a list that showed only the ones
-   * written down would hide the one actually in use.
+   * `default` is named explicitly rather than trusted to be in `list`. The
+   * schema prefaults an entry for it, so in practice it always is — but it is
+   * the agent every unbound conversation runs on, and a list that could omit the
+   * one actually in use is not worth the line it would save.
    */
   const ids = useMemo(
     () => [
@@ -178,7 +177,7 @@ export function AgentsRoute(): JSX.Element {
       // the disabled ones entirely — so the stored value is the fallback, or a
       // switched-off agent would show a dash where its model is.
       const model =
-        resolved.find((agent) => agent.id === id)?.model ?? entry.model ?? '';
+        resolved.find((agent) => agent.id === id)?.model ?? entry.model;
       const isDefault = id === DEFAULT_AGENT_ID;
       return {
         id,
@@ -242,8 +241,6 @@ export function AgentsRoute(): JSX.Element {
    * indistinguishable from one that was broken.
    */
   const duplicate = (row: AgentRow): void => {
-    if (defaults === undefined) return;
-
     let label = `${row.label} copy`;
     let copyId = deriveAgentId(label);
     for (let n = 2; taken.has(copyId); n += 1) {
@@ -251,7 +248,7 @@ export function AgentsRoute(): JSX.Element {
       copyId = deriveAgentId(label);
     }
 
-    createThenOpen(copyId, toNewAgentPatch(copyId, label, row.entry, defaults));
+    createThenOpen(copyId, toNewAgentPatch(copyId, label, row.entry));
   };
 
   /**

@@ -6,6 +6,55 @@ uses [semantic versioning](https://semver.org/spec/v2.0.0.html). Every package i
 repository carries the same version and they are released together; only `@ghostwire/ghostai`
 is something you install by name.
 
+## [0.8.0]
+
+`agents.defaults` is gone, and with it the inheritance layer above an agent. Every agent
+now states its own settings; a field an entry does not name is filled by the schema, not
+by another agent's answer. This is a breaking change to the config format.
+
+### Removed
+
+- **`agents.defaults`.** It was one settings block above every agent, and an agent that
+  named no `model` took whichever one it held. That made "what does this agent run on"
+  unanswerable from the agent — the agent editor had already stopped expressing
+  inheritance and worked around the format by writing values down on save, and the
+  composer's `/model` reintroduced it every time somebody cleared a field. `AgentEntry`
+  is a complete schema now, so `{"label": "Coder", "model": "qwen3:8b"}` is still a whole
+  agent: the brevity came from the defaults, not from the indirection.
+
+  **An existing `config.json` is not migrated.** The section is dropped on load, and any
+  agent that was relying on it for a `model` comes up unconfigured: listed, editable, and
+  refused a turn with a message saying so. Set a model per agent, in Settings → Agents or
+  by hand. Everything else — budgets, timeouts, the two capability switches — comes from
+  the schema at the same values `agents.defaults` used to hold, so nothing else changes.
+
+### Changed
+
+- **`workspace` moved to the root of the config.** It was the one field in
+  `agents.defaults` that is not a turn setting: an agent _works in_ a workspace and does
+  not own one, which is why `AgentEntry` could never name it. `{"workspace": "…"}` now
+  sits beside `providers` and `server`.
+- **`/model`, `/effort` and `/temperature` edit the agent the session runs on**, in the
+  browser's composer and at the terminal's prompt, and both save. `/model` on a session
+  bound to an agent with its own model moves that agent, which is the one thing it could
+  not do before.
+- **`reasoningEffort` and `temperature` are per agent, and absent means the provider
+  decides.** There is nothing above an agent for a cleared field to fall back to, so the
+  word for that state is `default` — `/effort default`, `/temperature default`.
+- **The agent editor is one form.** The model and budget boxes used to write a different
+  subtree for the default agent than for every other; there is one subtree now, so
+  `maxToolIterations` and the turn timeout are editable on every agent rather than only
+  on `default`.
+- **`ghostai agent install` writes a model into the preset it installs**, copied from the
+  default agent. A preset ships none on purpose — one naming a model would break on every
+  machine that lacks it — and it used to inherit one.
+
+### Fixed
+
+- **The e2e harness ran every turn on the default agent's loop**, whatever agent the
+  session was bound to, so the suite could not see a per-agent model, prompt or toolset
+  at all.
+
 ## [0.7.3]
 
 The terminal UI, on the terminals it had been quietly failing on. Everything

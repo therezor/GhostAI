@@ -14,7 +14,7 @@
  *  - **No `model`, `provider`, `temperature` or token caps.** Those describe an
  *    install — which endpoints exist, what the hardware can hold — and a preset
  *    describes a role. A preset shipping a model id would break on every
- *    machine that lacks it; inheriting `agents.defaults` works on all of them.
+ *    machine that lacks it, so the installer copies the default agent's in.
  *  - **No `exec` patch and no `enabled` flag.** Install sets `enabled: true`,
  *    because installing a disabled agent is a contradiction; the exec
  *    allow-list is the operator's to tighten afterwards.
@@ -23,9 +23,10 @@
  *    the toolbox manifest, approved by hash, and has no representation here to
  *    reach. A preset can therefore express nothing a settings save could not.
  *
- * `toolsEnabled` is the one `AgentDefaults` knob a preset may set, because one
+ * `toolsEnabled` is the one settings knob a preset may set, because one
  * preset exists specifically to switch it off: a no-tools agent whose every
- * request is the short cheap kind. Optional, so an ordinary preset inherits.
+ * request is the short cheap kind. Optional, so an ordinary preset says nothing
+ * and takes the schema's `true`.
  *
  * `skills` is the one field that is *not* an `AgentEntry` field at all. It is an
  * install instruction — which sheets to copy out of the catalogue and into the
@@ -75,7 +76,7 @@ export const AgentPresetSchema = z.object({
   skillsPrompt: z.string().default(''),
   promptMode: PromptModeSchema.default('template'),
 
-  /** The one `AgentDefaults` knob a preset may set. Unset means inherit. */
+  /** The one settings knob a preset may set. Unset takes the schema's `true`. */
   toolsEnabled: z.boolean().optional(),
   /** Replaces, never merges — the same rule as `AgentEntry.tools`. */
   tools: ToolPermissionsSchema.default({ ...DEFAULT_AGENT_TOOLS }),
@@ -105,7 +106,7 @@ export type AgentPreset = z.infer<typeof AgentPresetSchema>;
  * so the entry's own defaults are applied by the schema that owns them — a
  * field added to `AgentEntry` later gets its default here without this
  * function knowing it exists. `toolsEnabled` is spread only when the preset
- * set it: an absent key inherits `agents.defaults`, and `undefined` written
+ * set it: an absent key takes the schema's default, and `undefined` written
  * into the patch would be a claim, not an absence.
  *
  * `skills` is named in the destructure rather than left to be stripped. Zod

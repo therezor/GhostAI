@@ -8,7 +8,7 @@ import { AgentLoop } from '@ghostwire/agent';
 import { ChannelManager } from '@ghostwire/channels';
 import { channelConformance } from '@ghostwire/channels/testkit';
 import { SessionStore, assistantMessage, textOf } from '@ghostwire/core';
-import { AgentDefaultsSchema, ConfigSchema } from '@ghostwire/protocol';
+import { AgentSettingsSchema, ConfigSchema } from '@ghostwire/protocol';
 import {
   emptyUsage,
   findProvider,
@@ -95,7 +95,7 @@ async function stack(answer = 'Hello from the agent.'): Promise<Stack> {
     tools: new ToolRegistry(),
     store,
     jails: singleJail(new WorkspaceJail({ root: join(base, 'workspace') })),
-    config: { ...AgentDefaultsSchema.parse({}), model: 'test-model' },
+    config: { ...AgentSettingsSchema.parse({}), model: 'test-model' },
     model: 'test-model',
   });
 

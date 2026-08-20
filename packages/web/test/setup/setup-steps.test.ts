@@ -88,13 +88,23 @@ describe('progressOf', () => {
 
 describe('initialStep', () => {
   it('starts at the language on an unclaimed install', () => {
-    expect(initialStep({ setupRequired: true, configured: false })).toBe(
-      'language',
-    );
+    expect(
+      initialStep({
+        setupRequired: true,
+        configured: false,
+        hasProvider: false,
+      }),
+    ).toBe('language');
   });
 
   it('does not open at all on a claimed, configured install', () => {
-    expect(initialStep({ setupRequired: false, configured: true })).toBeNull();
+    expect(
+      initialStep({
+        setupRequired: false,
+        configured: true,
+        hasProvider: true,
+      }),
+    ).toBeNull();
   });
 
   it('stays shut while the model question is unanswerable', () => {
@@ -102,16 +112,37 @@ describe('initialStep', () => {
     // Treating unknown as "not configured" would pop the wizard open in front
     // of the login form for anyone whose session had merely expired.
     expect(
-      initialStep({ setupRequired: false, configured: undefined }),
+      initialStep({
+        setupRequired: false,
+        configured: undefined,
+        hasProvider: false,
+      }),
     ).toBeNull();
   });
 
-  it('skips the credential steps for a claimed install with no model', () => {
+  it('skips the credential steps for a claimed install with nothing configured', () => {
     // The tab was closed after the password step. Asking for a code that no
     // longer exists would be a dead end on an install that is already claimed.
-    expect(initialStep({ setupRequired: false, configured: false })).toBe(
-      'provider',
-    );
+    expect(
+      initialStep({
+        setupRequired: false,
+        configured: false,
+        hasProvider: false,
+      }),
+    ).toBe('provider');
+  });
+
+  it('opens on the model when a provider is already configured', () => {
+    // Unconfigured is two situations. An install whose endpoint resolves needs
+    // a model and nothing else, and opening on "add a provider" in front of
+    // somebody who has one reads as the app having forgotten their settings.
+    expect(
+      initialStep({
+        setupRequired: false,
+        configured: false,
+        hasProvider: true,
+      }),
+    ).toBe('model');
   });
 });
 

@@ -23,7 +23,7 @@ describe('AgentPresetSchema', () => {
     });
     expect(preset.subagents).toEqual([]);
     expect(preset.skills).toEqual([]);
-    // Unset means inherit `agents.defaults`, which only an absent key can say.
+    // Absent means the schema's `true`, which only an absent key can say.
     expect(preset.toolsEnabled).toBeUndefined();
   });
 
@@ -87,9 +87,9 @@ describe('presetToAgentEntry', () => {
     expect(AgentEntrySchema.parse(entry)).toEqual(entry);
   });
 
-  it('leaves toolsEnabled out of the patch unless the preset set it', () => {
-    const inherited = presetToAgentEntry(AgentPresetSchema.parse(MINIMAL));
-    expect('toolsEnabled' in inherited).toBe(false);
+  it('takes the schema default for toolsEnabled unless the preset set it', () => {
+    const ordinary = presetToAgentEntry(AgentPresetSchema.parse(MINIMAL));
+    expect(ordinary.toolsEnabled).toBe(true);
 
     const disabled = presetToAgentEntry(
       AgentPresetSchema.parse({ ...MINIMAL, toolsEnabled: false }),

@@ -46,7 +46,14 @@ import {
 } from '@ghostwire/core';
 import { estimateTokens } from '@ghostwire/providers';
 import { formatNumber } from '@ghostwire/i18n';
-import { newUuid, type ContentPart } from '@ghostwire/protocol';
+import {
+  ReasoningEffortSchema,
+  agentSettingsPatch,
+  newUuid,
+  type ContentPart,
+  type ReasoningEffort,
+} from '@ghostwire/protocol';
+import { agentForTurn } from '@ghostwire/server';
 
 import type { CliKey, CliT } from './i18n.js';
 import type { Menu } from './menu.js';
@@ -57,11 +64,12 @@ import {
 } from './messages.js';
 import type { ModelCatalogue } from './models.js';
 import { agentListing, pickAgent } from './pickers/agents.js';
+import { DEFAULT_LEVEL, effortListing, pickEffort } from './pickers/effort.js';
 import { modelErrors, modelListing, pickModel } from './pickers/models.js';
 import { pickSession } from './pickers/sessions.js';
 import { pickWorkspace } from './pickers/workspaces.js';
 import type { TurnRenderer } from './render.js';
-import type { ChatRuntime } from './runtime.js';
+import { saveSettings, settingsOf, type ChatRuntime } from './runtime.js';
 
 /** What a slash command asks the REPL to do next. */
 export type SlashOutcome =
@@ -179,6 +187,8 @@ const HELP_LAYOUT: readonly HelpSection[] = [
     rows: [
       { syntax: '/agent [id]', key: 'slash.help.agent' },
       { syntax: '/model [id]', key: 'slash.help.model' },
+      { syntax: '/effort [level]', key: 'slash.help.effort' },
+      { syntax: '/temperature [n]', key: 'slash.help.temperature' },
     ],
   },
   {
@@ -486,6 +496,7 @@ async function dispatch(
     // ── Context and cost ──────────────────────────────────────
 
     case 'context': {
+      const agentId = agentForSettings(ctx);
       const loop = runtime.requireLoop();
       const report = await describeContext({
         store,
@@ -493,7 +504,8 @@ async function dispatch(
         tools: runtime.tools.definitions(),
         sessionKey: ctx.sessionKey,
         channel: 'cli',
-        contextWindowTokens: runtime.config.agents.defaults.contextWindowTokens,
+        // This agent's budget — see `settingsOf`.
+        contextWindowTokens: settingsOf(runtime, agentId).contextWindowTokens,
       });
       if (report === undefined) {
         renderer.note(t('slash.notes.nothingToMeasure'));
@@ -548,6 +560,12 @@ async function dispatch(
 
     case 'model':
       return await modelCommand(argv[0], ctx);
+
+    case 'effort':
+      return await sampleCommand(EFFORT, argv[0], ctx);
+
+    case 'temperature':
+      return await sampleCommand(TEMPERATURE, argv[0], ctx);
 
     // ── What a turn shows ─────────────────────────────────────
 
@@ -750,14 +768,48 @@ async function agentCommand(
 }
 
 /**
- * `/model` — what this install can reach, and which of them the next turn uses.
+ * Which agent the next turn in this conversation would run on.
  *
- * **It does not write `config.json`.** `GhostRuntime.reconfigure` and
- * `saveConfig` are deliberately separate operations — previewing a patch and
- * committing one are different things — and a model chosen at a prompt is the
- * former: it lasts as long as the process. The settings panel is where a choice
- * is made permanent, and saying so is cheaper than a `/model --save` nobody
- * asked for.
+ * `agentForTurn` is the hub's rule, imported rather than restated for the same
+ * reason `chat.ts` imports it: the stored session wins over the prompt's
+ * preference, because a history built under one agent's prompt and tools does
+ * not silently continue under another's. The fallback is the default agent,
+ * which is what a turn would land on anyway once a departed id stops resolving.
+ *
+ * This is the agent `/model`, `/effort` and `/temperature` edit. They change
+ * *an agent*, not a session — there is no per-conversation model — so the one
+ * thing they must get right is which agent that is.
+ */
+function agentForSettings(ctx: SlashContext): string {
+  const { runtime } = ctx;
+  return (
+    agentForTurn({
+      stored: runtime.store.getSession(ctx.sessionKey)?.agentId,
+      requested: ctx.agentId,
+      resolves: (id) => runtime.agents.some((agent) => agent.id === id),
+    }) ?? DEFAULT_AGENT_ID
+  );
+}
+
+/** That agent's label, for a note that has to name what it moved. */
+function agentLabel(ctx: SlashContext, agentId: string): string {
+  return (
+    ctx.runtime.agents.find((agent) => agent.id === agentId)?.label ?? agentId
+  );
+}
+
+/**
+ * `/model` — what this install can reach, and which of them this agent uses.
+ *
+ * **It edits the agent this conversation runs on, and it saves.** An agent is
+ * the only place a model lives, so the agent the conversation is bound to is the
+ * one that has to move; and the settings panel writes the same field, so this
+ * writes it the same way rather than scoping a half-edit to one process.
+ *
+ * The patch itself is `agentSettingsPatch`, which is where the rule that
+ * `agents.list.*` replaces wholesale lives. Do not build one here: a patch
+ * naming `model` alone does not set one field on a named agent, it replaces the
+ * agent and deletes its prompt, tools and toolbox with it.
  *
  * **It refuses outright under `--model`.** That flag is documented as a
  * statement about this process that the config cannot move, so a `/model` that
@@ -775,14 +827,39 @@ async function modelCommand(
   const chosen = id ?? (await chooseModel(ctx));
   if (chosen === undefined) return CONTINUE;
 
-  runtime.reconfigure({ agents: { defaults: { model: chosen } } });
-  renderer.note(t('slash.notes.modelSet', { model: chosen }));
+  // Validated even when typed straight past the picker. `/agent` refuses an id
+  // that names nothing, and this needs the lookup anyway: a model and the
+  // endpoint that serves it are one setting, and `providerId` is the half only
+  // the catalogue knows.
+  const catalogue = await ctx.models.list();
+  const info = catalogue.models.find((model) => model.id === chosen);
+  if (info === undefined) {
+    throw new GhostError(
+      'not_found',
+      t('slash.errors.noModel', { id: chosen }),
+    );
+  }
+
+  const agentId = agentForSettings(ctx);
+  saveSettings(
+    runtime,
+    agentSettingsPatch(runtime.config, agentId, {
+      model: info.id,
+      provider: info.providerId,
+    }),
+  );
+  renderer.note(
+    t('slash.notes.modelSet', {
+      model: info.id,
+      agent: agentLabel(ctx, agentId),
+    }),
+  );
   return CONTINUE;
 }
 
 /** The picker, or the listing, or a reason there is neither. */
 async function chooseModel(ctx: SlashContext): Promise<string | undefined> {
-  const { renderer, runtime, t } = ctx;
+  const { renderer, t } = ctx;
   const catalogue = await ctx.models.list();
 
   // Which endpoint went quiet, said out loud. A silently shorter list reads as
@@ -794,17 +871,178 @@ async function chooseModel(ctx: SlashContext): Promise<string | undefined> {
     return undefined;
   }
 
+  // The *conversation's* model, not the install's. `runtime.model` is the
+  // default agent's, and a conversation moved onto another agent runs on that
+  // one — so marking the current row means asking the agent, not the runtime.
+  const current = modelOfAgent(ctx, agentForSettings(ctx));
+
   if (!ctx.menu.available) {
-    renderer.note(modelListing(catalogue, runtime.model));
+    renderer.note(modelListing(catalogue, current));
     return undefined;
   }
 
-  return await pickModel({
-    menu: ctx.menu,
-    catalogue,
-    current: runtime.model,
-    t,
-  });
+  return await pickModel({ menu: ctx.menu, catalogue, current, t });
+}
+
+/**
+ * The model one agent would actually send, resolved.
+ *
+ * Off the agent's *loop* rather than through a fresh provider resolution, which
+ * is the same expression the server's port uses for `AgentSummary.model`.
+ * Resolving again would open the credential vault, and opening the vault can
+ * mint a keychain entry — too much to do to label a menu row.
+ *
+ * `loopFor` throws for an id that names nothing runnable, which cannot happen
+ * here: `agentForSettings` only returns an id that resolves, or the default.
+ */
+function modelOfAgent(ctx: SlashContext, agentId: string): string {
+  const { runtime } = ctx;
+  const configured =
+    runtime.agents.find((agent) => agent.id === agentId)?.settings.model ?? '';
+  return runtime.loopFor(agentId)?.model ?? configured;
+}
+
+/**
+ * One of the two settings `/effort` and `/temperature` move.
+ *
+ * `key` is where it lives in `AgentSettings`; `word` is what was typed. They
+ * differ for `reasoningEffort`, and the note quotes the second — a sentence
+ * about "reasoningEffort" is describing the config file rather than answering
+ * the person at the prompt.
+ */
+interface SampleField {
+  readonly key: 'temperature' | 'reasoningEffort';
+  readonly word: 'temperature' | 'effort';
+}
+
+const EFFORT: SampleField = { key: 'reasoningEffort', word: 'effort' };
+const TEMPERATURE: SampleField = { key: 'temperature', word: 'temperature' };
+
+/**
+ * `/effort` and `/temperature` — the two sampling settings that have a
+ * "say nothing at all" state.
+ *
+ * They are one function because they are one decision with two spellings.
+ * Unset is not a value: an absent `temperature` means the request carries no
+ * such parameter and the provider applies its own, which is the only thing that
+ * works against the endpoints that reject the field outright. So `default` is a
+ * word rather than a number, and it reaches `agentSettingsPatch` as the `null`
+ * that clears — which that function turns into a deleted key, because an entry
+ * replaces wholesale and an absent key is how "send nothing" is spelled.
+ *
+ * **Only one of the two can be picked from a menu**, and the asymmetry is the
+ * subject rather than an omission. Effort is an enum, so it has the same shape
+ * as `/model` and `/agent`: no argument opens the list, and what is in force is
+ * the row the cursor starts on. A temperature is a number in a range, which a
+ * list cannot enumerate — so bare `/temperature` answers the question a picker
+ * would have answered by opening, and says what is being sent now.
+ *
+ * Neither refuses under `--model`. That flag pins a model; it says nothing
+ * about how hard the model thinks.
+ */
+async function sampleCommand(
+  field: SampleField,
+  raw: string | undefined,
+  ctx: SlashContext,
+): Promise<SlashOutcome> {
+  const { renderer, runtime, t } = ctx;
+  const agentId = agentForSettings(ctx);
+  const agent = agentLabel(ctx, agentId);
+  // The command word, not the config key. It is syntax rather than prose — the
+  // same reason `CommandRow.syntax` is not translated — so a note that says
+  // "effort" is quoting what was typed.
+  const name = field.word;
+
+  const chosen = raw ?? (await chooseSample(field, agentId, ctx));
+  if (chosen === undefined) return CONTINUE;
+
+  if (chosen === DEFAULT_LEVEL) {
+    saveSettings(
+      runtime,
+      agentSettingsPatch(runtime.config, agentId, { [field.key]: null }),
+    );
+    renderer.note(t('slash.notes.sampleDefault', { field: name, agent }));
+    return CONTINUE;
+  }
+
+  const value = parseSample(field, chosen, t);
+  saveSettings(
+    runtime,
+    agentSettingsPatch(runtime.config, agentId, { [field.key]: value }),
+  );
+  renderer.note(
+    t('slash.notes.sampleSet', { field: name, value: String(value), agent }),
+  );
+  return CONTINUE;
+}
+
+/**
+ * The picker, the listing, or the readout — whichever the field and the
+ * terminal can offer.
+ *
+ * `undefined` means "nothing to apply", which covers all three of a cancelled
+ * menu, a listing printed to a pipe and a temperature reported rather than
+ * changed. The caller treats them alike, exactly as `modelCommand` treats a
+ * cancelled `chooseModel`.
+ */
+async function chooseSample(
+  field: SampleField,
+  agentId: string,
+  ctx: SlashContext,
+): Promise<string | undefined> {
+  const { renderer, runtime, t } = ctx;
+  const current = runtime.agents.find((one) => one.id === agentId)?.settings[
+    field.key
+  ];
+
+  if (field.key === 'reasoningEffort') {
+    const level = current as ReasoningEffort | undefined;
+    if (!ctx.menu.available) {
+      renderer.note(effortListing(level, t));
+      return undefined;
+    }
+    return await pickEffort({ menu: ctx.menu, current: level, t });
+  }
+
+  renderer.note(
+    current === undefined
+      ? t('slash.notes.sampleUnset', {
+          field: field.word,
+          agent: agentLabel(ctx, agentId),
+        })
+      : t('slash.notes.sampleIs', {
+          field: field.word,
+          value: String(current),
+          agent: agentLabel(ctx, agentId),
+        }),
+  );
+  return undefined;
+}
+
+/** The one value each field accepts, or why this is not one. */
+function parseSample(
+  field: SampleField,
+  raw: string,
+  t: CliT,
+): number | ReasoningEffort {
+  if (field.key === 'reasoningEffort') {
+    const levels: readonly string[] = ReasoningEffortSchema.options;
+    if (!levels.includes(raw)) {
+      throw new GhostError(
+        'invalid_input',
+        t('slash.errors.usageEffort', { levels: levels.join(', ') }),
+      );
+    }
+    return raw as ReasoningEffort;
+  }
+
+  // `Number` rather than `parseFloat`, which reads `0.5abc` as `0.5`. A
+  // temperature that was half a typo is a refusal, not a guess.
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0 || value > 2) {
+    throw new GhostError('invalid_input', t('slash.errors.usageTemperature'));
+  }
+  return value;
 }
 
 /**

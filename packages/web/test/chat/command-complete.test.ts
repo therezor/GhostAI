@@ -41,7 +41,12 @@ const models: readonly ModelInfo[] = [
  * hiding it behind a sentence that will be reworded.
  */
 const t = ((key: string): string => key) as unknown as TFunction;
-const deps: CompleteDeps = { agents, models, t };
+const deps: CompleteDeps = {
+  agents,
+  models,
+  effort: undefined,
+  t,
+};
 
 describe('the command under the caret', () => {
   it('opens on a bare slash', () => {
@@ -102,6 +107,8 @@ describe('what completes it', () => {
       '/branch',
       '/agent <id>',
       '/model <id>',
+      '/effort <level>',
+      '/temperature <0-2>',
     ]);
   });
 

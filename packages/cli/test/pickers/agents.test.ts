@@ -19,7 +19,7 @@ function agent(
   label: string,
   model = 'claude-opus-5',
 ): EffectiveAgent {
-  return { id, label, defaults: { model } } as unknown as EffectiveAgent;
+  return { id, label, settings: { model } } as unknown as EffectiveAgent;
 }
 
 const AGENTS = [

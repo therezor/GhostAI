@@ -200,21 +200,18 @@ export async function startHarness(
   // panel are looking at the same file rather than at a patch applied after.
   const config: Config = ConfigSchema.parse({
     ...(options.config ?? {}),
+    workspace,
     agents: {
       ...(options.config?.agents ?? {}),
-      defaults: {
-        provider: 'ollama',
-        model: 'qwen3',
-        workspace,
-        ...(options.config?.agents?.defaults ?? {}),
-      },
-      // The default agent gets an explicit tool map, because permission is per
-      // tool and absent means disabled — the seed covers the built-ins, and
-      // `e2e_wait` is registered below by the harness itself, so nothing else
-      // would ever enable it and every spec that waits would stall.
       list: {
         ...(options.config?.agents?.list ?? {}),
+        // The default agent gets an explicit tool map, because permission is per
+        // tool and absent means disabled — the seed covers the built-ins, and
+        // `e2e_wait` is registered below by the harness itself, so nothing else
+        // would ever enable it and every spec that waits would stall.
         default: {
+          provider: 'ollama',
+          model: 'qwen3',
           tools: { ...DEFAULT_AGENT_TOOLS, e2e_wait: 'allow' },
           ...(options.config?.agents?.list?.default ?? {}),
         },
@@ -278,7 +275,12 @@ export async function startHarness(
 
   const hub = new SessionHub({
     config: runtime.config,
-    loop: () => runtime.loop,
+    // Per agent, exactly as `serve.ts` wires it — otherwise every turn in every
+    // spec would run on the default agent's model, prompt and tools however the
+    // session was bound, and the suite would be blind to the one thing a binding
+    // is for. `loopFor` throws for an id that names nothing runnable, and the hub
+    // catches it on the frame that asked, which is the behaviour a browser sees.
+    loop: (agentId) => runtime.loopFor(agentId),
     // The real rule, off the live config, exactly as `serve.ts` wires it: a
     // spec that deletes an agent has to see the fallback a browser would.
     resolveAgentId: (agentId) => {
@@ -509,10 +511,10 @@ function harnessRuntime(
         // Empty when the agent advertises no tools, matching the real adapter:
         // a harness that reported a toolset the model would never be sent would
         // make the context panel pass here and be wrong in a browser.
-        tools: agent.defaults.toolsEnabled
+        tools: agent.settings.toolsEnabled
           ? runtime.tools.select(agent.tools).definitions()
           : [],
-        contextWindowTokens: agent.defaults.contextWindowTokens,
+        contextWindowTokens: agent.settings.contextWindowTokens,
         systemPrompt: async (input) =>
           (await loop?.previewPrompt(input)) ?? {
             staticPrompt:
@@ -549,8 +551,14 @@ function harnessRuntime(
       runtime.agents.map((agent) => ({
         id: agent.id,
         label: agent.label,
-        model: runtime.loopFor(agent.id)?.model ?? agent.defaults.model,
+        model: runtime.loopFor(agent.id)?.model ?? agent.settings.model,
         provider: runtime.instance?.id ?? '',
+        // Reported here so a spec sees what a browser sees — the harness is the
+        // other composition root, and a field only `server-runtime.ts` fills is
+        // one e2e is blind to.
+        ...(agent.settings.reasoningEffort === undefined
+          ? {}
+          : { reasoningEffort: agent.settings.reasoningEffort }),
       })),
 
     // Over the scripted provider, like everything else here. This is what lets

@@ -1,6 +1,6 @@
 {
   "name": "@ghostwire/web",
-  "version": "0.7.3",
+  "version": "0.8.0",
   "description": "The browser UI: design tokens, app shell, chat view.",
   "type": "module",
   "license": "MIT",

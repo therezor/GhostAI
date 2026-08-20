@@ -151,7 +151,7 @@ const PAYLOADS: Readonly<Record<string, Record<string, unknown>>> = {
     password: 'set-from-the-matrix',
     currentPassword: PASSWORD,
   },
-  'settings.patch': { agents: { defaults: { temperature: 0.5 } } },
+  'settings.patch': { agents: { list: { default: { temperature: 0.5 } } } },
   'settings.credential': {
     namespace: 'providers',
     key: 'openai',

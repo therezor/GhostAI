@@ -1,6 +1,6 @@
 {
   "name": "@ghostwire/agent",
-  "version": "0.7.3",
+  "version": "0.8.0",
   "description": "The agent loop, subagent manager, and context contributors.",
   "type": "module",
   "license": "MIT",

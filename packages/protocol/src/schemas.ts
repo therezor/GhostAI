@@ -55,7 +55,8 @@ export const PROTOCOL_SCHEMAS = {
   // config
   ReasoningEffort: config.ReasoningEffortSchema,
   PromptMode: config.PromptModeSchema,
-  AgentDefaults: config.AgentDefaultsSchema,
+  AgentSettings: config.AgentSettingsSchema,
+  WorkspacePath: config.WorkspacePathSchema,
   AgentsConfig: config.AgentsConfigSchema,
   ProviderConfig: config.ProviderConfigSchema,
   ProvidersConfig: config.ProvidersConfigSchema,

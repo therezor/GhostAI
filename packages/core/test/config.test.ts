@@ -41,7 +41,7 @@ afterEach(() => {
 describe('parseConfig', () => {
   it('fills every default from an empty object', () => {
     const config = parseConfig('{}', 'config.json');
-    expect(config.agents.defaults.provider).toBe('auto');
+    expect(config.agents.list.default?.provider).toBe('auto');
     expect(config.server.port).toBe(3000);
     expect(config.tools.approvalTimeoutMs).toBe(5 * 60 * 1000);
   });
@@ -60,18 +60,18 @@ describe('parseConfig', () => {
   });
 
   it('reports invalid settings as dotted paths, not as arrays', () => {
-    // The point of the flattening: `agents.defaults.temperature` is a string an
+    // The point of the flattening: `agents.list.default.temperature` is a string an
     // operator can search their config file for.
     try {
       parseConfig(
-        JSON.stringify({ agents: { defaults: { temperature: 9 } } }),
+        JSON.stringify({ agents: { list: { default: { temperature: 9 } } } }),
         'config.json',
       );
       expect.unreachable('should have thrown');
     } catch (error) {
       expect(isGhostError(error)).toBe(true);
       if (!isGhostError(error)) return;
-      expect(error.message).toContain('agents.defaults.temperature');
+      expect(error.message).toContain('agents.list.default.temperature');
       expect(error.details.issues).toHaveLength(1);
     }
   });
@@ -95,19 +95,19 @@ describe('loadConfig', () => {
 
     expect(loaded.fromFile).toBe(false);
     expect(loaded.file).toBe(join(root, 'config.json'));
-    expect(loaded.config.agents.defaults.maxToolIterations).toBe(40);
+    expect(loaded.config.agents.list.default?.maxToolIterations).toBe(40);
   });
 
   it('reads the file when there is one', () => {
     const root = tempHome();
     writeConfig(root, {
-      agents: { defaults: { model: 'qwen3:8b', provider: 'ollama' } },
+      agents: { list: { default: { model: 'qwen3:8b', provider: 'ollama' } } },
     });
 
     const loaded = loadConfig({ root });
     expect(loaded.fromFile).toBe(true);
-    expect(loaded.config.agents.defaults.model).toBe('qwen3:8b');
-    expect(loaded.config.agents.defaults.provider).toBe('ollama');
+    expect(loaded.config.agents.list.default?.model).toBe('qwen3:8b');
+    expect(loaded.config.agents.list.default?.provider).toBe('ollama');
   });
 
   it('refuses a provider entry that does not name a type', () => {
@@ -137,14 +137,14 @@ describe('loadConfig', () => {
     const root = tempHome();
     const loaded = loadConfig({ root, home: '/home/someone-else' });
 
-    expect(loaded.config.agents.defaults.workspace).toBe('');
+    expect(loaded.config.workspace).toBe('');
     expect(loaded.paths.workspace).toBe(join(root, 'workspace'));
   });
 
   it('folds the config workspace into the resolved paths', () => {
     const root = tempHome();
     writeConfig(root, {
-      agents: { defaults: { workspace: 'projects/alpha' } },
+      workspace: 'projects/alpha',
     });
 
     const loaded = loadConfig({ root });
@@ -156,7 +156,7 @@ describe('loadConfig', () => {
   it('expands ~ in the config workspace against the given home', () => {
     const root = tempHome();
     const home = tempHome();
-    writeConfig(root, { agents: { defaults: { workspace: '~/ghost-work' } } });
+    writeConfig(root, { workspace: '~/ghost-work' });
 
     const loaded = loadConfig({ root, home });
     expect(loaded.paths.workspace).toBe(join(home, 'ghost-work'));
@@ -164,7 +164,7 @@ describe('loadConfig', () => {
 
   it('lets an explicit workspace win over the config file', () => {
     const root = tempHome();
-    writeConfig(root, { agents: { defaults: { workspace: 'from-config' } } });
+    writeConfig(root, { workspace: 'from-config' });
 
     const loaded = loadConfig({ root, workspace: resolve(root, 'from-flag') });
     expect(loaded.paths.workspace).toBe(resolve(root, 'from-flag'));
@@ -224,7 +224,7 @@ describe('saveConfig', () => {
     saveConfig(file, parseConfig('{}', file));
 
     const text = readFileSync(file, 'utf8');
-    expect(text.startsWith('{\n  "agents"')).toBe(true);
+    expect(text.startsWith('{\n  "workspace"')).toBe(true);
     expect(text.endsWith('}\n')).toBe(true);
   });
 

@@ -60,7 +60,7 @@ the vault keep resolving.
 
 ## Resolution
 
-`agents.defaults.provider` — or an agent's own override — takes one of three forms:
+An agent's `provider` takes one of three forms:
 
 1. **An instance id.** Exact, and the common case.
 2. **A bare provider type.** Means "any enabled instance of that type, or a default one if

@@ -146,7 +146,7 @@ describe('extensions in the composition root', () => {
       },
     });
 
-    runtime.reconfigure({ agents: { defaults: { maxTokens: 4096 } } });
+    runtime.reconfigure({ agents: { list: { default: { maxTokens: 4096 } } } });
 
     expect(runtime.tools.sourceOf('ext_slack_greet')).toBe('extension');
   });
@@ -239,7 +239,7 @@ describe('extensions in the composition root', () => {
     // could see it.
     const home = tempHome({
       providers: { house: { type: 'slack-llm' } },
-      agents: { defaults: { provider: 'house', model: 'corp-1' } },
+      agents: { list: { default: { provider: 'house', model: 'corp-1' } } },
     });
     install(home, 'slack', ['providers']);
     const runtime = await withExtension(home, {
@@ -264,7 +264,7 @@ describe('extensions in the composition root', () => {
 
   it('adds an extension’s prompt section to the loop', async () => {
     const home = tempHome({
-      agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } },
+      agents: { list: { default: { provider: 'ollama', model: 'qwen3:8b' } } },
     });
     install(home, 'slack', ['context']);
     const runtime = await withExtension(home, {
@@ -284,7 +284,7 @@ describe('extensions in the composition root', () => {
 
   it('survives an extension that throws, and still builds a loop', async () => {
     const home = tempHome({
-      agents: { defaults: { provider: 'ollama', model: 'qwen3:8b' } },
+      agents: { list: { default: { provider: 'ollama', model: 'qwen3:8b' } } },
     });
     install(home, 'slack');
     const runtime = await withExtension(home, {

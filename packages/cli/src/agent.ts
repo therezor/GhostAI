@@ -208,7 +208,19 @@ export function planInstall(
   const roster = preset.subagents.filter(
     (ref) => config.agents.list[ref.id]?.enabled === true,
   );
-  const entry = { ...presetToAgentEntry(preset), subagents: roster };
+  // The model and the endpoint come from the default agent, not from the
+  // preset. A preset ships neither on purpose — one naming a model would break
+  // on every machine that lacks it — and with nothing to inherit from, an entry
+  // written without them would install an agent that cannot run a turn.
+  // Materialising them here is what the browser's Duplicate already does.
+  const seed = config.agents.list[DEFAULT_AGENT_ID];
+  const entry = {
+    ...presetToAgentEntry(preset),
+    ...(seed === undefined
+      ? {}
+      : { model: seed.model, provider: seed.provider }),
+    subagents: roster,
+  };
 
   return {
     ok: true,

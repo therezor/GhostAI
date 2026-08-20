@@ -24,23 +24,50 @@ Writes are atomic: validate, write `config.json.tmp` at mode `0600`, rename.
 
 ---
 
-## `agents.defaults`
+## `workspace`
 
-What every agent inherits, and what an install with no named agents runs as.
+The folder every agent works in, as a single root-level string.
+
+```json
+{ "workspace": "projects/alpha" }
+```
+
+Root-level rather than on an agent, because an agent _works in_ a workspace and does not
+own one: the folder is a property of the session, and several agents with separate
+identities opening the same one is what the feature is built around. `agents.list.<id>`
+therefore has no such key.
+
+Empty means `<root>/workspace`, where the root is `GHOSTAI_HOME` or `~/.ghostai`.
+Deliberately not defaulted to the literal `~/.ghostai/workspace`: that string restates
+the default root, so an install relocated with `GHOSTAI_HOME` would keep its workspace
+back under the home directory. A relative path is resolved against the root, never
+against the process working directory. `--workspace` wins over this for one run.
+
+## `agents.list.<id>`
+
+**Every agent states its own settings, and nothing inherits.** A field an entry does not
+name is filled by the schema's own default — the values in the table below — never by
+another agent's answer. So a hand-written entry stays short (`{"label": "Coder",
+"model": "qwen3:8b"}` is a whole agent) while "what does this agent run on" is
+answerable from the entry alone.
+
+`default` is prefaulted into existence: it is the agent every unbound conversation runs
+on, and with nothing above it there would otherwise be nothing for a fresh install to
+run. The id also names the agent's directory on disk, so it follows the workspace id
+rules.
 
 | Key                   | Type                                     | Default  | Notes                                                                                                                                          |
 | --------------------- | ---------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `workspace`           | string                                   | `''`     | Empty means `<root>/workspace`. Deliberately not the literal path, so moving the root with `GHOSTAI_HOME` moves the workspace with it.         |
-| `model`               | string                                   | `''`     | Empty means **unconfigured**, not "pick one". There is no model-picking code; an empty model makes every turn refuse with a message saying so. |
+| `model`               | string                                   | `''`     | Empty means **unconfigured**, not "pick one". The agent is still listed and editable; only a turn on it is refused, with a message saying so.  |
 | `provider`            | string                                   | `'auto'` | An instance id, a bare provider type, or `auto`.                                                                                               |
 | `maxTokens`           | int > 0                                  | `8192`   | Output cap per response.                                                                                                                       |
 | `contextWindowTokens` | int > 0                                  | `65536`  | What the context inspector measures against.                                                                                                   |
-| `temperature`         | 0–2                                      | _unset_  | Unset means the request carries no `temperature` at all, which is the only correct answer for models that reject it.                           |
+| `temperature`         | 0–2                                      | _unset_  | Absent means the request carries no `temperature` at all and the provider applies its own — the only correct answer for models that reject it. |
 | `maxToolIterations`   | int > 0                                  | `40`     | Tool rounds in one turn.                                                                                                                       |
 | `toolTimeoutMs`       | int ≥ 0                                  | `0`      |                                                                                                                                                |
 | `loopWallTimeoutMs`   | int ≥ 0                                  | `0`      | Wall-clock cap on a turn, checked at the top of each iteration.                                                                                |
 | `subagentTimeoutMs`   | int ≥ 0                                  | `0`      | Applies to delegations _this_ agent makes.                                                                                                     |
-| `reasoningEffort`     | `off\|minimal\|low\|medium\|high\|xhigh` | _unset_  | Unset sends nothing, which is not the same as `off` — see below.                                                                               |
+| `reasoningEffort`     | `off\|minimal\|low\|medium\|high\|xhigh` | _unset_  | Absent sends nothing, which is not the same as `off` — see below.                                                                              |
 
 `reasoningEffort` is sent as the wire's own `reasoning_effort`, verbatim, and only
 `off` is translated — into whatever the provider spells "do not think" as
@@ -53,13 +80,19 @@ one, and the reasoning level lives in the template it discards, so the value has
 effect there. llama.cpp's `llama-server` run with `--jinja` forwards it to the real
 template, and does.
 
+Four of these are editable from a session without opening the settings panel: `/model`,
+`/effort` and `/temperature` in the browser's composer and at the terminal's prompt write
+`model`, `provider`, `reasoningEffort` and `temperature` onto the agent that session runs
+on. They save, so a choice made at a prompt is the same choice on the next launch. See
+[the CLI reference](cli.md#slash-commands).
+
 There is no key here for skills. Every sheet the workspace holds is indexed in the prompt
 and the agent opens the one it needs; see [Skills](skills.md). `pinnedSkills` and
 `maxPinnedSkills` used to live in this table and are the worked example of the paragraph
 below — a `config.json` still carrying them parses, and loses them the next time it is
 written.
 
-`AgentDefaultsSchema` and `AgentEntrySchema` are plain zod objects, so they strip what they
+`AgentEntrySchema` is a plain zod object, so it strips what it
 do not know: a `config.json` carrying a key this table does not list parses without error
 and loses it on the next write. There is no migration and no error, which is the whole of
 the upgrade path — a declared key nothing reads is worse than a missing one, because it
@@ -73,13 +106,13 @@ Whether an agent may remember at all is **not** here: it is the `memory` tool's 
 in `agents.list.<id>.tools`. Skills work the same way through `skill`. One switch per
 feature, and it is the one already in the permission map.
 
-## `agents.list.<id>`
+### The rest of an entry
 
-Each entry is a **patch over `agents.defaults`** — every key above is overridable and
-inherit-unless-set — plus the keys below. The id also names the agent's directory on disk.
+Beside the settings above, an entry carries the keys below — what the agent _is_, rather
+than what a turn on it sends.
 
-`workspace` is deliberately not overridable: the working folder is a property of the
-session, shared by every agent that opens it.
+`workspace` is not among them, and cannot be: the working folder is root-level and shared
+by every agent that opens it. See [`workspace`](#workspace).
 
 Entries are created three ways, and they all land in the same shape: the web UI's agent
 editor, editing this file by hand, and `ghostai agent install`, which merges a preset —
@@ -399,6 +432,10 @@ they are tuning knobs, and a panel row for each would be four rows nobody reads.
 `admins` gates the commands that reach past one conversation — `/model`, which moves the
 whole install onto another model, and `/workspace new|rename|rm|move`.
 
+> The bot's `/model` is still the install-wide one described here, and still lasts only
+> as long as the process. The web UI's and the terminal's now edit the agent the session
+> runs on and save it; see [the CLI reference](cli.md#slash-commands).
+
 Telegram is registered only when a token resolves, so an install that has never configured
 a bot starts exactly as it did before. A token that resolves and is then refused by the
 API fails startup rather than leaving a channel silently dead.
@@ -518,7 +555,7 @@ The UI and CLI send deep-partial patches through `PATCH /api/settings`. The rule
   "absent") and `agents.list.*` (an agent is edited as a whole, and almost every field is
   an override that may legitimately be cleared).
 - **`null` deletes, and only at these paths** — `providers.*`, `tools.mcpServers.*`,
-  `agents.list.*`, `agents.defaults.temperature`, `agents.defaults.reasoningEffort`.
+  `agents.list.*`.
   Everywhere else `null` is a validation error.
 - **The merged tree is re-parsed** through the full schema, so a bad combination is a 400
   rather than a broken next boot.
@@ -557,12 +594,12 @@ and works. See [Providers](providers.md).
 
 ## CLI flags that override config
 
-| Flag                        | Overrides                                                  |
-| --------------------------- | ---------------------------------------------------------- |
-| `--home <dir>`              | The root. Same as `GHOSTAI_HOME`.                          |
-| `--host` / `--port`         | `server.host` / `server.port`.                             |
-| `--workspace <dir>`         | The workspace root — moves the whole tree.                 |
-| `--workspace-id <id>`       | Which workspace new sessions land in. A different thing.   |
-| `--model` / `--provider`    | `agents.defaults.model` / `.provider`, for one invocation. |
-| `--ui <dir>`                | Serve a UI built somewhere else.                           |
-| `--password` / `--username` | Sets the login credential without the wizard.              |
+| Flag                        | Overrides                                                |
+| --------------------------- | -------------------------------------------------------- |
+| `--home <dir>`              | The root. Same as `GHOSTAI_HOME`.                        |
+| `--host` / `--port`         | `server.host` / `server.port`.                           |
+| `--workspace <dir>`         | The workspace root — moves the whole tree.               |
+| `--workspace-id <id>`       | Which workspace new sessions land in. A different thing. |
+| `--model` / `--provider`    | Every agent's `model` / `provider`, for one invocation.  |
+| `--ui <dir>`                | Serve a UI built somewhere else.                         |
+| `--password` / `--username` | Sets the login credential without the wizard.            |

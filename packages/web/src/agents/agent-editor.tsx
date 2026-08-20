@@ -7,17 +7,12 @@
  * list picks; this edits; the back link returns.
  *
  * **The default agent is edited here too, and it is the reason Settings has no
- * "Agent" panel.** Its model and budget *are* `agents.defaults` — what a new
- * agent is seeded from — so editing them is editing that subtree, and a second
- * screen for the same fields was two doors into one room.
+ * "Agent" panel.** It is an entry in `agents.list` like any other, so a second
+ * screen for the same fields would be two doors into one room.
  *
- * **It is also the same screen, field for field.** It did not use to be: the
- * default agent got sections called "Model", "Budget" and "Workspace" while
- * every other agent got one called "Model and budget", with different labels,
- * different hints and a different shape. Two layouts for one concept meant an
- * operator learned the screen twice and could not tell which settings an agent
- * actually had. The only remaining difference is *which subtree a control
- * writes to*, which lives in one `bind` function here and in `onSave`.
+ * **It is the same screen, field for field**, with no branch anywhere for which
+ * agent is being edited: there is one subtree, so every control writes to the
+ * same place.
  *
  * **Nothing on this screen inherits.** Every box holds this agent's own value,
  * and one opened on an agent that stored none is filled from the defaults so
@@ -62,7 +57,6 @@ import {
   TOOL_POLICY_PLACEHOLDERS,
   TOOLBOX_DEFAULT_KEY,
   TOOLBOX_PROMPT_PLACEHOLDERS,
-  type AgentDefaults,
   type AgentEntry,
   type SubagentRef,
   type ToolPermission,
@@ -95,10 +89,7 @@ import {
   toAgentDeletePatch,
   toAgentEntryForm,
   toAgentEntryPatch,
-  toAgentForm,
-  toDefaultAgentPatch,
   type AgentEntryForm,
-  type AgentForm,
 } from './agents-form.js';
 import { useAgent } from './agent-context.js';
 import { SubagentRow } from './subagent-row.js';
@@ -106,36 +97,22 @@ import { TemplateEditor } from './template-editor.js';
 import { ToolRow, parameterFields } from './tool-row.js';
 
 /**
- * The fields both halves of the form hold as strings under the same name.
+ * The string-valued boxes on the form.
  *
- * Intersecting the two keeps `bind` honest: a field that exists on only one of
- * them — `loopWallTimeoutSeconds`, `tools` — cannot be bound this way, and
- * trying is a compile error rather than a control that silently edits nothing.
+ * Narrowed by value type rather than listed, so `tools` and `toolPrompts` cannot
+ * be bound this way and trying is a compile error rather than a control that
+ * silently edits nothing.
  */
 type StringField = {
-  [K in keyof AgentForm & keyof AgentEntryForm]: AgentForm[K] extends string
-    ? AgentEntryForm[K] extends string
-      ? K
-      : never
-    : never;
-}[keyof AgentForm & keyof AgentEntryForm];
+  [K in keyof AgentEntryForm]: AgentEntryForm[K] extends string ? K : never;
+}[keyof AgentEntryForm];
 
-/**
- * The same intersection for the switches.
- *
- * `enabled` is on the entry form only, so it falls out here exactly as
- * `loopWallTimeoutSeconds` does above — which is the point of writing the
- * constraint twice rather than loosening `StringField` to cover both.
- */
+/** The same, for the switches. */
 type BooleanField = {
-  [K in keyof AgentForm & keyof AgentEntryForm]: AgentForm[K] extends boolean
-    ? AgentEntryForm[K] extends boolean
-      ? K
-      : never
-    : never;
-}[keyof AgentForm & keyof AgentEntryForm];
+  [K in keyof AgentEntryForm]: AgentEntryForm[K] extends boolean ? K : never;
+}[keyof AgentEntryForm];
 
-/** One field, wherever this agent happens to keep it. */
+/** One box on the form. */
 interface Bound {
   readonly value: string;
   readonly set: (value: string) => void;
@@ -313,7 +290,6 @@ export function AgentCreateRoute(): JSX.Element {
       mode="create"
       agentId=""
       entry={template}
-      defaults={config.agents.defaults}
       list={config.agents.list}
     />
   );
@@ -364,7 +340,6 @@ export function AgentEditorRoute(): JSX.Element {
       mode="edit"
       agentId={agentId}
       entry={entry ?? AgentEntrySchema.parse({})}
-      defaults={config.agents.defaults}
       // The whole list, not the `/api/agents` listing: that one omits the
       // disabled agents, and a rename onto a switched-off agent's id is still
       // the collision the server refuses with a 409.
@@ -377,7 +352,6 @@ function Editor({
   mode,
   agentId,
   entry,
-  defaults,
   list,
 }: {
   /**
@@ -389,7 +363,6 @@ function Editor({
   readonly mode: 'create' | 'edit';
   readonly agentId: string;
   readonly entry: AgentEntry;
-  readonly defaults: AgentDefaults;
   readonly list: Readonly<Record<string, AgentEntry>>;
 }): JSX.Element {
   const { t } = useTranslation();
@@ -401,9 +374,8 @@ function Editor({
   const { save, saving } = useSaveSettings();
 
   const [form, setForm] = useState<AgentEntryForm>(() =>
-    toAgentEntryForm(entry, defaults),
+    toAgentEntryForm(entry),
   );
-  const [base, setBase] = useState<AgentForm>(() => toAgentForm(defaults));
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   const [dirty, setDirty] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -502,52 +474,27 @@ function Editor({
     setForm((current) => ({ ...current, [key]: value }));
     setDirty(true);
   };
-  const updateBase = <K extends keyof AgentForm>(
-    key: K,
-    value: AgentForm[K],
-  ): void => {
-    setBase((current) => ({ ...current, [key]: value }));
-    setDirty(true);
-  };
-
   /**
-   * Where each field lives for *this* agent.
+   * One box, wired to the form.
    *
-   * The default agent's model and budget are `agents.defaults`; every other
-   * agent's are on its own entry. That is the only difference left between the
-   * two screens, and deciding it once here is what lets the form below be
-   * written a single time.
+   * There is one subtree, so there is one place a field can live and no branch
+   * to take. `bind` survives the collapse as the thing that turns a key into the
+   * `{value, set}` pair the field components take.
    */
-  const bind = (key: StringField): Bound =>
-    isDefault
-      ? {
-          value: base[key],
-          set: (value) => {
-            updateBase(key, value);
-          },
-        }
-      : {
-          value: form[key],
-          set: (value) => {
-            update(key, value);
-          },
-        };
+  const bind = (key: StringField): Bound => ({
+    value: form[key],
+    set: (value) => {
+      update(key, value);
+    },
+  });
 
-  /** `bind`, for the two model-capability switches. Same split, same reason. */
-  const bindToggle = (key: BooleanField): Toggle =>
-    isDefault
-      ? {
-          checked: base[key],
-          set: (checked) => {
-            updateBase(key, checked);
-          },
-        }
-      : {
-          checked: form[key],
-          set: (checked) => {
-            update(key, checked);
-          },
-        };
+  /** `bind`, for the switches. */
+  const bindToggle = (key: BooleanField): Toggle => ({
+    checked: form[key],
+    set: (checked) => {
+      update(key, checked);
+    },
+  });
 
   const fields = {
     provider: bind('provider'),
@@ -557,6 +504,8 @@ function Editor({
     maxTokens: bind('maxTokens'),
     contextWindowTokens: bind('contextWindowTokens'),
     toolTimeoutSeconds: bind('toolTimeoutSeconds'),
+    maxToolIterations: bind('maxToolIterations'),
+    loopWallTimeoutSeconds: bind('loopWallTimeoutSeconds'),
   } satisfies Record<string, Bound>;
 
   const switches = {
@@ -915,9 +864,7 @@ function Editor({
     }
 
     const target = creating || renaming ? proposedId : agentId;
-    const result = isDefault
-      ? toDefaultAgentPatch(base, form, entry, t)
-      : toAgentEntryPatch(target, form, entry, t);
+    const result = toAgentEntryPatch(target, form, entry, t);
     if (!result.ok) {
       setErrors(result.errors);
       return;
@@ -975,8 +922,7 @@ function Editor({
   };
 
   const onRevert = (): void => {
-    setForm(toAgentEntryForm(entry, defaults));
-    setBase(toAgentForm(defaults));
+    setForm(toAgentEntryForm(entry));
     setIdDraft(agentId);
     // Remounts every `TemplateEditor`, which is what re-derives "does this agent
     // own this template" from the stored value. Without it a revert leaves each
@@ -1143,11 +1089,15 @@ function Editor({
             placeholder={t('agents.providerDefault')}
             hint={t('agents.temperatureHint')}
           />
+          {/* The same sentence as the temperature placeholder beside it, and
+              the same one `/effort` shows: a blank here means this agent sends
+              no reasoning parameter, so the provider applies its own. There is
+              nothing above an agent for it to mean anything else. */}
           <OptionalSelect
             label={t('agents.reasoningEffort')}
             bound={fields.reasoningEffort}
             options={REASONING_EFFORTS}
-            unsetLabel="The provider’s own"
+            unsetLabel={t('agents.providerDefault')}
           />
           {/* Below the model rather than beside the toolset, because that is
               what they are about: what this model can be asked to do, not what
@@ -1448,29 +1398,22 @@ function Editor({
             error={errors.toolTimeoutSeconds}
             hint={t('agents.zeroDisablesHint')}
           />
-          {isDefault && (
-            <TextField
-              label={t('agents.maxToolIterations')}
-              inputMode="numeric"
-              value={base.maxToolIterations}
-              error={errors.maxToolIterations}
-              onValueChange={(value) => {
-                updateBase('maxToolIterations', value);
-              }}
-            />
-          )}
-          {isDefault && (
-            <TextField
-              label={t('agents.turnTimeout')}
-              inputMode="numeric"
-              value={base.loopWallTimeoutSeconds}
-              error={errors.loopWallTimeoutSeconds}
-              onValueChange={(value) => {
-                updateBase('loopWallTimeoutSeconds', value);
-              }}
-              hint={t('agents.zeroDisablesHint')}
-            />
-          )}
+          {/* Per agent, like everything beside them. These two were the
+              default agent's alone while they lived in a subtree of their own;
+              a tool budget is as much a property of one agent as its model. */}
+          <BoundField
+            label={t('agents.maxToolIterations')}
+            bound={fields.maxToolIterations}
+            inputMode="numeric"
+            error={errors.maxToolIterations}
+          />
+          <BoundField
+            label={t('agents.turnTimeout')}
+            bound={fields.loopWallTimeoutSeconds}
+            inputMode="numeric"
+            error={errors.loopWallTimeoutSeconds}
+            hint={t('agents.zeroDisablesHint')}
+          />
         </FieldGrid>
       </Section>
 

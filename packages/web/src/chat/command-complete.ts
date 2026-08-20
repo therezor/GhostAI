@@ -21,7 +21,11 @@
 
 import type { TFunction } from 'i18next';
 
-import type { AgentSummary, ModelInfo } from '@ghostwire/protocol';
+import type {
+  AgentSummary,
+  ModelInfo,
+  ReasoningEffort,
+} from '@ghostwire/protocol';
 
 import { commandRows, findCommand } from './commands.js';
 
@@ -42,12 +46,21 @@ export interface CommandSuggestion {
   readonly insert: string;
   readonly label: string;
   readonly hint: string;
+  /**
+   * The row the list should open on, when one of them is already in force.
+   *
+   * Never set for a command row — there is no "current" command — and set by at
+   * most one value row. The composer reads it; nothing else does.
+   */
+  readonly current?: boolean;
 }
 
 /** What the value rows are drawn from, and the words for the command rows. */
 export interface CompleteDeps {
   readonly agents: readonly AgentSummary[];
   readonly models: readonly ModelInfo[];
+  /** What this session's agent sends now, so `/effort` can mark its row. */
+  readonly effort: ReasoningEffort | undefined;
   readonly t: TFunction;
 }
 
@@ -137,12 +150,25 @@ export function commandSuggestions(
   if (values === undefined) return [];
 
   const typed = query.query.toLowerCase();
-  return values({ agents: deps.agents, models: deps.models })
+  return values({
+    agents: deps.agents,
+    models: deps.models,
+    effort: deps.effort,
+    // Translated here rather than in the table, which holds no prose, and
+    // rather than in the composer, which would then be picking sentences for a
+    // command it knows nothing else about. This file already resolves
+    // `command.description` the same way.
+    effortHints: {
+      default: deps.t('chat.commands.efforts.default'),
+      off: deps.t('chat.commands.efforts.off'),
+    },
+  })
     .filter((one) => one.value.toLowerCase().startsWith(typed))
     .map((one) => ({
       insert: `${one.value} `,
       label: one.value,
       hint: one.hint,
+      ...(one.current === true ? { current: true } : {}),
     }));
 }
 

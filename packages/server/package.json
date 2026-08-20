@@ -1,6 +1,6 @@
 {
   "name": "@ghostwire/server",
-  "version": "0.7.3",
+  "version": "0.8.0",
   "description": "Fastify app, boot policy, authentication, and the session hub.",
   "type": "module",
   "license": "MIT",
