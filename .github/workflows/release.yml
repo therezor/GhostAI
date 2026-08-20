@@ -210,6 +210,60 @@ jobs:
           fi
           echo "OIDC token endpoint present"
 
+      # **The exchange, asked directly, because npm will not tell you.**
+      # `lib/utils/oidc.js` logs every failure at `verbose` or `silly` and
+      # returns `undefined` — by design, since OIDC is optional to it. So a
+      # registry that refuses the exchange produces no message at all at default
+      # loglevel: the publish simply proceeds with no credential and dies as
+      # `ENEEDAUTH`, which describes the symptom and not the cause.
+      #
+      # This runs the same two calls npm would and prints what the registry
+      # says. `404 ... package not found` here means the package has no trusted
+      # publisher configured under Settings → Trusted Publisher on npmjs.com, or
+      # one naming a different repository, workflow file or environment.
+      - name: The registry accepts this workflow as a trusted publisher
+        run: |
+          node --input-type=module -e '
+            const registry = "https://registry.npmjs.org";
+            const probe = "@ghostwire/protocol";
+
+            const idUrl = new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
+            idUrl.searchParams.set("audience", `npm:${new URL(registry).hostname}`);
+            const idRes = await fetch(idUrl, {
+              headers: {
+                Accept: "application/json",
+                Authorization: `Bearer ${process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}`,
+              },
+            });
+            if (!idRes.ok) {
+              console.error(`GitHub refused the id token: ${idRes.status}`);
+              process.exit(1);
+            }
+            const { value: idToken } = await idRes.json();
+
+            // Never printed, only sent — the same thing npm does with it.
+            const url = `${registry}/-/npm/v1/oidc/token/exchange/package/${encodeURIComponent(probe)}`;
+            const res = await fetch(url, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${idToken}` },
+            });
+            const body = await res.text();
+            if (res.ok) {
+              console.log(`exchange ok for ${probe}`);
+              process.exit(0);
+            }
+            let said = body;
+            try { said = JSON.parse(body).message ?? body; } catch {}
+            console.error(`The registry refused the exchange for ${probe}.`);
+            console.error(`  ${res.status}: ${said}`);
+            console.error("");
+            console.error("Configure each package on npmjs.com under");
+            console.error("Settings → Trusted Publisher, naming this repository");
+            console.error("and .github/workflows/release.yml. If one names a");
+            console.error("GitHub environment, this job has to declare it too.");
+            process.exit(1);
+          '
+
       # The floor, asserted. Below it the publish does not report a version
       # problem, it reports 404 — so this fails with a sentence instead.
       - name: npm is new enough to publish
