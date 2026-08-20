@@ -99,6 +99,16 @@ jobs:
   publish:
     needs: verify
     runs-on: ubuntu-latest
+    # Repeated from the workflow level, deliberately. Every run so far — the two
+    # at v0.8.0 and the trusted-publishing attempts before them — has come up
+    # with `Contents: write, Metadata: read` and no `IdToken`, so the exchange
+    # had nothing to ask with and npm fell through to "no credential". The
+    # top-level block reads as though it should be enough; it demonstrably was
+    # not, and a job that names what it needs is the version that cannot be
+    # quietly dropped.
+    permissions:
+      contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -183,6 +193,22 @@ jobs:
             fi
           done
           echo "packed $(ls -1 "$dest"/*.tgz | wc -l) publishable tarballs"
+
+      # The credential, asserted before it is needed. GitHub sets these two only
+      # when `id-token: write` is actually granted, and when it is not npm has
+      # nothing to exchange: it publishes with no auth at all and the failure
+      # arrives as `ENEEDAUTH`, or as a `404` on the `PUT` if anything else left
+      # a credential lying around. Neither says "the token was never issued",
+      # which is the one thing worth knowing.
+      - name: The OIDC token is available
+        run: |
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+            echo "No OIDC token endpoint: id-token: write was not granted." >&2
+            echo "Check Settings → Actions → General, and any org policy that" >&2
+            echo "restricts OIDC. Without it trusted publishing cannot work." >&2
+            exit 1
+          fi
+          echo "OIDC token endpoint present"
 
       # The floor, asserted. Below it the publish does not report a version
       # problem, it reports 404 — so this fails with a sentence instead.
