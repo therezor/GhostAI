@@ -6,6 +6,56 @@ uses [semantic versioning](https://semver.org/spec/v2.0.0.html). Every package i
 repository carries the same version and they are released together; only `@ghostwire/ghostai`
 is something you install by name.
 
+## [0.8.1]
+
+The 0.8.0 config change, and what it cost a browser tab that was already open.
+`/model` said it had saved a model it had not, in the one way a person can
+neither see nor act on — and while chasing it, three smaller disagreements about
+which agent a conversation runs on.
+
+### Changed
+
+- **Adjacent read-only tool calls run together.** A model that asks for six
+  files in one message had them fetched one after another, for no reason but the
+  shape of the loop. Grouping is _adjacent_ runs only, which is the safety
+  property and not a simplification: `read, read, write, read` becomes
+  `[read‖read]`, `write`, `read`, so a write is never reordered past a read. A
+  call that would prompt for approval and a delegation to a subagent are both
+  excluded, so nothing about who is asked what has changed — and results are
+  reported as they land rather than gathered at the end, so a fast read no
+  longer waits on the slowest member of its group. Eight at once, which is a
+  bound on open file handles rather than a knob to tune.
+
+### Fixed
+
+- **A settings patch naming a section this build does not have is refused
+  instead of silently discarded.** `ConfigPatchSchema` was a stripping object,
+  so a client sending a shape the server no longer knows got a 200 and a save
+  that changed nothing. That is not hypothetical: removing `agents.defaults` in
+  0.8.0 left every already-loaded browser tab still sending
+  `{agents: {defaults: …}}` for `/model`, and the answer was "the agent now runs
+  it. Saved." over a config the request never touched. It answers 422 naming the
+  key now — a refusal rather than a warning field, because the clients this
+  catches are old clients, and an old client does not read a new field but does
+  surface a 4xx. **If `/model` has been saying "Saved" without switching
+  anything, reload the page**: the fix is on both sides, and the client half only
+  reaches a tab that has fetched it.
+- **The agent switcher follows the conversation you open.** It was documented to
+  and never did: the only thing that moved it was a move you had just made by
+  hand, so arriving at a conversation bound to another agent any other way left
+  the control naming a different one — and a new conversation started from there
+  inherited the wrong agent. A binding whose agent has been deleted is still not
+  adopted, which is the case the control marks rather than follows.
+- **The welcome card names the model that will answer**, not the one this
+  browser last picked. An empty transcript is not an unbound conversation:
+  `/clear` leaves the binding in place and so does a branch nobody has spoken
+  in, and on either of those the one line whose whole job is to say what is about
+  to answer named another agent's model.
+- **A session whose stored `agentId` is empty is treated as unbound**, which is
+  what the server has always done with it. The picker offered to _move_ a
+  conversation that had never been bound, and `/model` edited an agent no turn on
+  that session would have used.
+
 ## [0.8.0]
 
 `agents.defaults` is gone, and with it the inheritance layer above an agent. Every agent
