@@ -24,6 +24,13 @@
  *    to a program in this agent's toolbox. What this file decides is whether to
  *    ask; what the answer is, and how long it holds, belong to the gate. See
  *    `approval.ts`.
+ *  - **Adjacent read-only calls run together; everything else runs in order.**
+ *    A model asks for six files in one message and they used to be fetched one
+ *    after another for no reason but the shape of the loop. Grouping is
+ *    *adjacent* runs only, which is the safety property rather than a
+ *    simplification: `read, read, write, read` becomes `[read‖read]`, `write`,
+ *    `read`, so a write is never reordered past a read. A delegation and a call
+ *    that would prompt are both excluded — see `isParallelEligible`.
  *
  * A subagent call is authorised here too, on the same path, and then handed
  * back to the loop through `SubagentDelegate` — delegation needs the loop
@@ -69,6 +76,19 @@ import type { SubagentBinding } from './subagent.js';
  * at all until they finish, so the loop is the only thing that can say.
  */
 export const TOOL_HEARTBEAT_MS = 15_000;
+
+/**
+ * How many read-only calls may be in flight at once.
+ *
+ * A bound rather than a tuning knob, which is why it is here and not in
+ * `ToolsConfig`: the calls it governs are read-only by definition, so there is
+ * no contention story an operator would need to tune against — no GPU, no
+ * shared container, no lock. What it stops is a model asking for two hundred
+ * files at once and opening two hundred file handles to answer.
+ *
+ * Eight, because the batches models actually emit are three to six.
+ */
+export const MAX_PARALLEL_TOOL_CALLS = 8;
 
 /** What a cancelled call records, so the `assistant` turn stays answered. */
 export const CANCELLED_TOOL_RESULT =
@@ -238,6 +258,12 @@ interface ToolCallOutcome {
   readonly pending: readonly ChatMessageInput[];
 }
 
+/** What one parallel group produced. Ordered as the model asked. */
+interface GroupOutcome {
+  readonly cancelled: boolean;
+  readonly messages: readonly ChatMessageInput[];
+}
+
 /**
  * Runs the tools one assistant turn asked for.
  *
@@ -299,96 +325,309 @@ export class ToolDispatcher {
     const pending: ChatMessageInput[] = [result.message];
     let cancelled = turn.signal.aborted;
 
-    for (const call of result.message.toolCalls) {
-      const risk = this.riskOf(call.name);
-      yield {
-        type: 'tool.call',
-        turnId: turn.turnId,
-        callId: call.id,
-        name: call.name,
-        args: parseToolArgs(call.argumentsJson),
-        risk,
-      };
+    for (const group of this.groupCalls(result.message.toolCalls)) {
+      // A group of one is the whole of the path that existed before
+      // parallelism, and it is the common case: no timer, no queue, nothing
+      // allocated that a single call did not allocate before.
+      const solo = group.length === 1 ? group[0] : undefined;
+      if (solo !== undefined) {
+        yield this.callEvent(solo, turn.turnId);
 
-      let execution: ToolExecution;
+        let execution: ToolExecution;
+        if (cancelled) {
+          execution = cancelledExecution(solo.name);
+        } else {
+          // Between the event and the execution, and nowhere else: a transport
+          // that gated it for itself would be one `if` away from an ungated one.
+          // A subagent is authorised here too — its binding carries a permission
+          // exactly as the scope carries a tool's, so `ask` gets the same prompt.
+          const refusal = yield* this.authorize(
+            solo,
+            this.riskOf(solo.name),
+            turn,
+          );
+          const binding = this.subagentFor(solo.name);
+          execution =
+            refusal ??
+            (binding === undefined
+              ? yield* this.executeWithHeartbeat(
+                  solo,
+                  turn.toolContext,
+                  turn.turnId,
+                )
+              : yield* this.delegate(solo, binding, turn));
+        }
+
+        if (execution.errorKind === 'aborted') cancelled = true;
+        pending.push(yield* this.finish(solo, execution, turn));
+        continue;
+      }
+
+      // Cancelled before the group started. Nothing runs, and every member
+      // still gets its `tool` message — the same rule the sequential path
+      // follows, applied to the whole run at once.
       if (cancelled) {
-        execution = cancelledExecution(call.name);
-      } else {
-        // Between the event and the execution, and nowhere else: a transport
-        // that gated it for itself would be one `if` away from an ungated one.
-        // A subagent is authorised here too — its binding carries a permission
-        // exactly as the scope carries a tool's, so `ask` gets the same prompt.
-        const refusal = yield* this.authorize(call, risk, turn);
-        const binding = this.subagentFor(call.name);
-        execution =
-          refusal ??
-          (binding === undefined
-            ? yield* this.executeWithHeartbeat(
-                call,
-                turn.toolContext,
-                turn.turnId,
-              )
-            : yield* this.delegate(call, binding, turn));
+        for (const call of group) {
+          yield this.callEvent(call, turn.turnId);
+          pending.push(
+            yield* this.finish(call, cancelledExecution(call.name), turn),
+          );
+        }
+        continue;
       }
 
-      if (execution.errorKind === 'aborted') cancelled = true;
-
-      // Truncate first, wrap second. The other order cuts the closing delimiter
-      // off the envelope, and a tool result the model cannot see the end of is
-      // a tool result it reads as continuing into the conversation.
-      const truncation = truncateHeadTail(
-        execution.content,
-        this.maxToolResultChars,
-      );
-      const wrapped = wrapToolOutput(truncation.text, {
-        toolName: call.name,
-        nonce: turn.nonce,
-      });
-      const truncated = truncation.truncated || execution.truncated;
-
-      pending.push({
-        role: 'tool',
-        toolCallId: call.id,
-        name: call.name,
-        content: wrapped.text,
-        isError: execution.isError,
-        truncated,
-      });
-
-      yield {
-        type: 'tool.result',
-        turnId: turn.turnId,
-        callId: call.id,
-        ok: !execution.isError,
-        content: truncation.text,
-        truncated,
-        // Whole milliseconds, because this event *is* a `ServerMessage` and the
-        // protocol says `z.number().int()`. `monotonic()` is `performance.now()`,
-        // which returns fractions — and a client that validates its frames drops
-        // the one that says the call finished, leaving a tool card spinning
-        // forever over a tool that returned in a millisecond.
-        durationMs: Math.round(execution.durationMs),
-      };
-
-      if (wrapped.findings.length > 0) {
-        this.logger.warn(
-          {
-            tool: call.name,
-            signals: wrapped.findings.map((finding) => finding.signal),
-          },
-          'prompt injection signals in tool output',
-        );
-        yield {
-          type: 'notice',
-          kind: 'prompt_injection',
-          message: describeInjectionFindings(wrapped.findings),
-          turnId: turn.turnId,
-          callId: call.id,
-        };
-      }
+      const outcome = yield* this.runParallel(group, turn);
+      if (outcome.cancelled) cancelled = true;
+      pending.push(...outcome.messages);
     }
 
     return { cancelled, pending };
+  }
+
+  /** The `tool.call` event a call announces itself with. */
+  private callEvent(call: ToolCall, turnId: string): AgentEvent {
+    return {
+      type: 'tool.call',
+      turnId,
+      callId: call.id,
+      name: call.name,
+      args: parseToolArgs(call.argumentsJson),
+      risk: this.riskOf(call.name),
+    };
+  }
+
+  /**
+   * Turns one finished execution into its `tool` message and the events that
+   * report it.
+   *
+   * Shared by both paths so there is one place that truncates, wraps and
+   * reports. The alternative is two copies of the truncate-then-wrap order, and
+   * getting that order wrong in one of them fails silently.
+   */
+  private *finish(
+    call: ToolCall,
+    execution: ToolExecution,
+    turn: TurnScope,
+  ): Generator<AgentEvent, ChatMessageInput> {
+    // Truncate first, wrap second. The other order cuts the closing delimiter
+    // off the envelope, and a tool result the model cannot see the end of is
+    // a tool result it reads as continuing into the conversation.
+    const truncation = truncateHeadTail(
+      execution.content,
+      this.maxToolResultChars,
+    );
+    const wrapped = wrapToolOutput(truncation.text, {
+      toolName: call.name,
+      nonce: turn.nonce,
+    });
+    const truncated = truncation.truncated || execution.truncated;
+
+    yield {
+      type: 'tool.result',
+      turnId: turn.turnId,
+      callId: call.id,
+      ok: !execution.isError,
+      content: truncation.text,
+      truncated,
+      // Whole milliseconds, because this event *is* a `ServerMessage` and the
+      // protocol says `z.number().int()`. `monotonic()` is `performance.now()`,
+      // which returns fractions — and a client that validates its frames drops
+      // the one that says the call finished, leaving a tool card spinning
+      // forever over a tool that returned in a millisecond.
+      durationMs: Math.round(execution.durationMs),
+    };
+
+    if (wrapped.findings.length > 0) {
+      this.logger.warn(
+        {
+          tool: call.name,
+          signals: wrapped.findings.map((finding) => finding.signal),
+        },
+        'prompt injection signals in tool output',
+      );
+      yield {
+        type: 'notice',
+        kind: 'prompt_injection',
+        message: describeInjectionFindings(wrapped.findings),
+        turnId: turn.turnId,
+        callId: call.id,
+      };
+    }
+
+    return {
+      role: 'tool',
+      toolCallId: call.id,
+      name: call.name,
+      content: wrapped.text,
+      isError: execution.isError,
+      truncated,
+    };
+  }
+
+  /**
+   * Whether this call may run beside its neighbours.
+   *
+   * `risk === 'safe'` is the whole predicate, and reusing it rather than adding
+   * a second field is deliberate: it already means "read-only, as declared by
+   * the tool or its server", and `bridge.ts` already trusts an MCP server's
+   * `readOnlyHint` to set that tool's *approval* bar — a strictly
+   * higher-stakes use of the same claim than setting a scheduling one. A second
+   * vocabulary for one fact is two things to keep in step.
+   *
+   * The lookup is `tools.get`, not `riskOf`, because `riskOf` answers `'safe'`
+   * for a name it cannot resolve. An invented name has to stay sequential and
+   * take its `not_found` on the ordinary path.
+   *
+   * `allow` is required, and that is what makes an approval prompt impossible
+   * inside a group — so there is no question of whose prompt appears first, and
+   * no ordering to get wrong. A `safe` tool an operator set to `ask` simply runs
+   * on its own, which is right: if every read is prompted, the prompts are the
+   * latency.
+   */
+  private isParallelEligible(call: ToolCall): boolean {
+    if (!this.toolsEnabled) return false;
+    // A delegation is a whole turn on another loop, not a tool call. Two of them
+    // at once is background agents, which this deliberately is not.
+    if (this.subagentFor(call.name) !== undefined) return false;
+    if (this.tools.get(call.name)?.risk !== 'safe') return false;
+    return this.tools.permissionFor(call.name) === 'allow';
+  }
+
+  /**
+   * Splits the batch into runs that may execute together.
+   *
+   * **Adjacent runs only.** See the header: a write must never be reordered
+   * past a read, and gathering every eligible call regardless of position would
+   * do exactly that.
+   */
+  private groupCalls(calls: readonly ToolCall[]): ToolCall[][] {
+    const groups: ToolCall[][] = [];
+    let run: ToolCall[] = [];
+    const flush = (): void => {
+      if (run.length > 0) {
+        groups.push(run);
+        run = [];
+      }
+    };
+
+    for (const call of calls) {
+      if (!this.isParallelEligible(call)) {
+        flush();
+        groups.push([call]);
+        continue;
+      }
+      run.push(call);
+      if (run.length === MAX_PARALLEL_TOOL_CALLS) flush();
+    }
+    flush();
+    return groups;
+  }
+
+  /**
+   * One group, in flight together.
+   *
+   * **One heartbeat for the group, not one per call.** `executeWithHeartbeat`
+   * yields nothing but `tool.progress`, and `authorize` and `delegate` are both
+   * excluded by `isParallelEligible` — so a group produces no concurrent event
+   * *streams* to interleave, only a liveness tick. That is what keeps this a
+   * loop over a completion queue rather than a generator-merging combinator.
+   *
+   * **Results are reported as they land, not gathered at the end.** A card
+   * resolving on its own is the behaviour every renderer already shows for a
+   * delegation; `Promise.all` here would leave a fast read spinning until the
+   * slowest member of its group finished.
+   *
+   * **The messages come back in the order the model asked**, whatever order
+   * they finished in, because the batch is a single `appendMany` upstairs and a
+   * `tool` message that does not follow its `tool_call` is a provider 400.
+   */
+  private async *runParallel(
+    group: readonly ToolCall[],
+    turn: TurnScope,
+  ): AsyncGenerator<AgentEvent, GroupOutcome> {
+    for (const call of group) {
+      yield this.callEvent(call, turn.turnId);
+    }
+
+    const startedAt = this.clock.monotonic();
+    const running = new Map<number, ToolCall>();
+    const done: Array<{
+      index: number;
+      call: ToolCall;
+      execution: ToolExecution;
+    }> = [];
+    const finished: Array<{ index: number; message: ChatMessageInput }> = [];
+    let failure: { error: unknown } | undefined;
+    let wake: (() => void) | undefined;
+
+    group.forEach((call, index) => {
+      running.set(index, call);
+      void this.tools.execute(call, turn.toolContext).then(
+        (execution) => {
+          done.push({ index, call, execution });
+          running.delete(index);
+          wake?.();
+        },
+        // `ToolRegistry.execute` says "never throws" and means it, so this is
+        // the seam a scope from somewhere else would come through. It is not
+        // the sequential path's `await`, where a rejection unwinds the turn:
+        // a rejection with no handler here is an *unhandled* one, which under
+        // Node's default takes the process down. Held, then rethrown below, so
+        // the turn fails exactly the way it does today.
+        (error: unknown) => {
+          failure ??= { error };
+          running.delete(index);
+          wake?.();
+        },
+      );
+    });
+
+    let cancelled = false;
+    for (;;) {
+      for (const entry of done.splice(0, done.length)) {
+        if (entry.execution.errorKind === 'aborted') cancelled = true;
+        finished.push({
+          index: entry.index,
+          message: yield* this.finish(entry.call, entry.execution, turn),
+        });
+      }
+      if (failure !== undefined) throw failure.error;
+      if (running.size === 0) break;
+
+      // Armed before the check below, so a call that finishes between the two
+      // resolves this promise rather than being missed until the next beat.
+      const settled = new Promise<void>((resolve) => {
+        wake = resolve;
+      });
+      if (done.length === 0) {
+        if (this.heartbeatMs > 0) {
+          const beat = this.tick(this.heartbeatMs);
+          const woke = await Promise.race([
+            settled.then(() => 'settled' as const),
+            beat.promise.then(() => 'beat' as const),
+          ]);
+          beat.cancel();
+          if (woke === 'beat') {
+            const elapsedMs = Math.round(this.clock.monotonic() - startedAt);
+            for (const call of running.values()) {
+              yield {
+                type: 'tool.progress',
+                turnId: turn.turnId,
+                callId: call.id,
+                elapsedMs,
+                message: `${call.name} is still running`,
+              };
+            }
+          }
+        } else {
+          await settled;
+        }
+      }
+      wake = undefined;
+    }
+
+    finished.sort((left, right) => left.index - right.index);
+    return { cancelled, messages: finished.map((entry) => entry.message) };
   }
 
   /**

@@ -1187,11 +1187,13 @@ describe('AgentLoop', () => {
 
     const results = events.filter((event) => event.type === 'tool.result');
     expect(results).toHaveLength(2);
-    expect(results[1]).toMatchObject({
-      callId: 'c2',
-      ok: false,
-      content: CANCELLED_TOOL_RESULT,
-    });
+    // `echo` is read-only and pre-approved, so it was dispatched alongside
+    // `slow` rather than after it — and a call that was genuinely in flight
+    // reports its own abort rather than `CANCELLED_TOOL_RESULT`, which means
+    // "never ran". The guarantee that matters is unchanged and asserted below:
+    // the call is *answered*. `dispatch.test.ts` covers the never-ran wording,
+    // which now belongs to a call in a later group.
+    expect(results[1]).toMatchObject({ callId: 'c2', ok: false });
 
     // The point of writing a result for a call that never ran: an `assistant`
     // turn with an unanswered `tool_call` is a provider 400 on the *next* turn,
