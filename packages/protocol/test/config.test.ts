@@ -389,6 +389,28 @@ describe('AgentsConfigSchema', () => {
 });
 
 describe('ConfigPatchSchema', () => {
+  /**
+   * The incident, encoded.
+   *
+   * Removing `agents.defaults` left every already-loaded browser tab sending
+   * the old shape for `/model`. A stripping schema turned that into a 200 and
+   * "the agent now runs it. Saved." over a config the request never touched —
+   * the only failure a person can neither see nor act on. A refusal names the
+   * key, and an old client's existing error path is what shows it.
+   */
+  it('refuses a section it does not have rather than dropping it', () => {
+    const stale = ConfigPatchSchema.safeParse({
+      agents: { defaults: { provider: 'ollama', model: 'qwen3' } },
+    });
+
+    expect(stale.success).toBe(false);
+    expect(JSON.stringify(stale.error?.issues)).toContain('defaults');
+  });
+
+  it('refuses an unknown key at the root, for the same reason', () => {
+    expect(ConfigPatchSchema.safeParse({ workspaces: {} }).success).toBe(false);
+  });
+
   it('accepts a null to delete a named agent', () => {
     const patch = ConfigPatchSchema.parse({
       agents: { list: { reviewer: null } },

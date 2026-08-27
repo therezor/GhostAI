@@ -986,12 +986,28 @@ export type Config = z.infer<typeof ConfigSchema>;
  * A settings patch from the UI or CLI.
  *
  * Deep-partial rather than `ConfigSchema.partial()`: the settings panel saves
- * one section at a time, so `{ agents: { defaults: { temperature: 0.5 } } }`
- * must validate without restating the sibling fields — and must not invent them.
+ * one section at a time, so `{ agents: { model: 'x' } }` must validate without
+ * restating the sibling fields — and must not invent them.
+ *
+ * **Strict, and that is the point.** A plain `z.object` *strips* a key it does
+ * not know, so a client writing a section this schema no longer has gets a 200
+ * and a save that changed nothing. That is not a hypothetical: removing
+ * `agents.defaults` left every already-loaded browser tab sending
+ * `{agents: {defaults: {provider, model}}}` for `/model`, and the answer was
+ * "the agent now runs it. Saved." over a config the request never touched.
+ * Refusing names the key instead, which is the only signal that reaches an old
+ * client — it does not read a new warning field, but its existing failure path
+ * does show a 4xx.
+ *
+ * Strict here and on `agents` alone, which is where the two shapes a client can
+ * be wrong about live: a whole section, and a block inside it. The nested
+ * `patchOf` blocks stay loose deliberately — `extensions.settings` holds shapes
+ * this layer cannot know, and a strict `agents.list.*` would refuse the entry
+ * the settings panel reads back and sends whole.
  */
-export const ConfigPatchSchema = z.object({
+export const ConfigPatchSchema = z.strictObject({
   agents: z
-    .object({
+    .strictObject({
       /**
        * `null` deletes the agent; an object creates or updates one. Same
        * reasoning as `providers` below — an absent key means "not mentioned",

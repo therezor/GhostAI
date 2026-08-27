@@ -234,6 +234,31 @@ describe('GET /api/settings', () => {
 });
 
 describe('PATCH /api/settings', () => {
+  /**
+   * A client sending a section this build does not have is refused, not obliged.
+   *
+   * The route's body schema is a *stripping* object no longer: an old browser
+   * tab kept sending `agents.defaults` for `/model` after that block was
+   * removed, and the answer was 200 with "the agent now runs it. Saved." over a
+   * config nothing had written. A 422 naming the key is what reaches a client
+   * too old to read anything new — its failure path already raises the message.
+   */
+  it('refuses a patch naming a section this build no longer has', async () => {
+    const { server, headers, runtime } = await start();
+
+    const response = await server.app.inject({
+      method: 'PATCH',
+      url: '/api/settings',
+      headers,
+      payload: { agents: { defaults: { provider: 'ollama', model: 'qwen3' } } },
+    });
+
+    expect(response.statusCode).toBe(422);
+    expect(JSON.stringify(response.json())).toContain('defaults');
+    // The refusal is the point: nothing was applied on the way to failing.
+    expect(runtime.patches).toEqual([]);
+  });
+
   it('applies a deep patch without rewriting untouched fields', async () => {
     const { server, headers, runtime } = await start();
 
