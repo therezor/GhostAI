@@ -15,6 +15,15 @@
  *    ignored for a session that already exists, deliberately, so this is the
  *    only way to move one.
  *
+ * Two effects keep the browser's remembered preference honest, and they move in
+ * opposite directions on purpose: a preference naming an agent that no longer
+ * exists is reset, and a preference that disagrees with the open
+ * conversation's binding is moved onto it. Each says why at its own definition.
+ *
+ * An `agentId` of `''` on the row is *not* a binding, for the reason
+ * `agentForTurn` gives on the server. That is the one place `??` was the wrong
+ * operator here.
+ *
  * **`choose` rejects rather than reporting.** The two callers say it
  * differently — the picker raises a toast of its own, the command folds the
  * failure into the sentence it was already going to print — and a hook that
@@ -65,7 +74,16 @@ export function useAgentChoice(sessionKey: string | undefined): AgentChoice {
     retry: false,
   });
 
-  const bound = stored.data?.agentId;
+  // **An empty `agentId` is not a binding.** The column is nullable and the DTO
+  // takes any string, so a row can hold `''` — and `agentForTurn` already
+  // treats that as unbound and runs the turn on the id the frame carried, which
+  // is this browser's preference. Reading `''` as a binding put the two on
+  // opposite sides of the same row: the picker offered to *move* a conversation
+  // that had never been bound, and `/model` edited an agent no turn on it would
+  // use. `??` cannot make this distinction, which is why it is spelled out.
+  const storedId = stored.data?.agentId;
+  const bound =
+    storedId === undefined || storedId === '' ? undefined : storedId;
   const current = bound ?? preferred;
   const rows = agents.data?.agents ?? [];
   const match = rows.find((row) => row.id === current);
@@ -86,6 +104,32 @@ export function useAgentChoice(sessionKey: string | undefined): AgentChoice {
     if (!missing || bound !== undefined) return;
     select(DEFAULT_AGENT_ID);
   }, [missing, bound, select]);
+
+  // The other direction, and the behaviour `agent-context.tsx` has always
+  // described: opening a conversation that belongs to another agent moves the
+  // switcher onto that agent, so the screens reading the preference agree with
+  // the row, and a new conversation started from here keeps the agent.
+  //
+  // Nothing called `adopt` outside `move.onSuccess` before this, so the
+  // preference only ever followed a session the operator had *moved* — every
+  // other way of arriving at a bound conversation left it naming a different
+  // agent, and the welcome card announced that other agent's model.
+  //
+  // **Only an id that resolves.** A binding survives its agent being deleted on
+  // purpose (see above), and adopting a dead one would spread it from the row
+  // it belongs to onto every conversation started afterwards. `match` is that
+  // check: `bound` being set means `current === bound`, so a match is this
+  // agent.
+  //
+  // The hook is mounted several times at once — the chat route, the picker and
+  // `useCommands` all ask the same question — so this effect runs from each of
+  // them. That is harmless rather than tolerated: `adopt` is idempotent, and it
+  // stops firing as soon as the preference equals the binding.
+  useEffect(() => {
+    if (bound === undefined || bound === preferred) return;
+    if (match === undefined) return;
+    adopt(bound);
+  }, [adopt, bound, match, preferred]);
 
   const move = useMutation({
     mutationFn: (agentId: string) =>

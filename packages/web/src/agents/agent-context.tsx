@@ -18,6 +18,11 @@
  * switcher follows an existing session rather than claiming to have changed it:
  * opening a conversation that belongs to another agent moves the control to
  * that agent, and starting a new one from there keeps it.
+ *
+ * Both callers of `adopt` are in `use-agent-choice.ts` — the effect that
+ * follows an open conversation's binding, and the move that has just changed
+ * one. This file holds no policy about *when* either happens: it has no
+ * listing, no session and no way to tell a live id from a deleted one.
  */
 
 import {

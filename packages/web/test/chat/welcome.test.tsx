@@ -1,10 +1,13 @@
 /**
  * The welcome card names the model that is about to answer.
  *
- * Worth its own file because the value it prints comes from two endpoints that
+ * Worth its own file because the value it prints comes from three sources that
  * disagree by design: `/api/status` carries the install's model, `/api/agents`
- * carries each agent's after inheritance. This screen used to read the first,
- * which is the wrong one for any agent that pins a model of its own.
+ * carries each agent's after inheritance, and which of those agents applies is
+ * either the session's stored binding or this browser's remembered preference.
+ * The screen has been wrong about two of the three — it read `/api/status`,
+ * which is wrong for any agent pinning a model, and then read the preference,
+ * which is wrong for any conversation bound to another agent.
  */
 
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
@@ -54,13 +57,31 @@ const AGENTS = {
   ],
 };
 
-function mount(): void {
+function mount(sessionKey?: string): void {
   render(
     <Providers client={testQueryClient()}>
-      <Welcome />
+      <Welcome {...(sessionKey === undefined ? {} : { sessionKey })} />
     </Providers>,
   );
 }
+
+/**
+ * A full `SessionSummary`, because the client parses what it is handed.
+ *
+ * A partial body is a failed parse and an empty query, which reads here as "the
+ * card ignored the binding" — the very bug under test, arriving for the wrong
+ * reason.
+ */
+const session = (agentId: string) => ({
+  key: 'web-1',
+  title: 'A cleared session',
+  messageCount: 0,
+  createdAtMs: 1,
+  updatedAtMs: 2,
+  origin: 'web',
+  workspaceId: 'default',
+  agentId,
+});
 
 /**
  * `localStorage`, stubbed per file rather than taken from the environment.
@@ -109,6 +130,27 @@ describe('the welcome card', () => {
       await screen.findByText('pinned-research-model'),
     ).toBeInTheDocument();
     expect(screen.getByText('lmstudio')).toBeInTheDocument();
+    expect(screen.queryByText('install-default-model')).not.toBeInTheDocument();
+  });
+
+  it('names the bound conversation’s model, not this browser’s pick', async () => {
+    // An empty transcript is not an unbound session: `/clear` leaves the
+    // binding in place and so does a branch nobody has spoken in. The card read
+    // the remembered preference, so on either of those it announced the model of
+    // an agent that was not going to answer.
+    localStorage.setItem('ghostai:agent', 'default');
+    stubFetch({
+      '/api/status': [200, STATUS],
+      '/api/agents': [200, AGENTS],
+      '/api/sessions/web-1': [200, session('researcher')],
+      '/api/auth/me': [200, { authenticated: true, authEnabled: false }],
+      '/api/setup': [200, { required: false }],
+    });
+    mount('web-1');
+
+    expect(
+      await screen.findByText('pinned-research-model'),
+    ).toBeInTheDocument();
     expect(screen.queryByText('install-default-model')).not.toBeInTheDocument();
   });
 

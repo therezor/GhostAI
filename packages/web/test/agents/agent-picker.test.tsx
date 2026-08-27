@@ -138,6 +138,71 @@ describe('the agent picker', () => {
     expect(localStorage.getItem(STORAGE_KEY)).toBe('writer');
   });
 
+  it('adopts the binding of the conversation it opens', async () => {
+    // `agent-context.tsx` has always described this, and nothing did it: the
+    // only caller of `adopt` was the move the operator had just made, so every
+    // other way of arriving at a bound conversation left the preference naming
+    // a different agent — and the welcome card announced that agent's model.
+    localStorage.setItem(STORAGE_KEY, 'default');
+    mount(
+      { '/api/sessions/web-1': [200, session('writer')] },
+      { sessionKey: 'web-1' },
+    );
+
+    await waitFor(() => {
+      expect(localStorage.getItem(STORAGE_KEY)).toBe('writer');
+    });
+  });
+
+  it('does not adopt a binding whose agent is gone', async () => {
+    // A binding outlives its agent on purpose. Adopting a dead one would carry
+    // it off the row it belongs to and onto every conversation started after,
+    // which is the opposite of the correction two cases above.
+    localStorage.setItem(STORAGE_KEY, 'default');
+    mount(
+      { '/api/sessions/web-1': [200, session('reviewer')] },
+      { sessionKey: 'web-1' },
+    );
+
+    await screen.findByRole('button', { name: /no longer configured/ });
+    expect(localStorage.getItem(STORAGE_KEY)).toBe('default');
+  });
+
+  describe('a row whose agentId is empty', () => {
+    // The column is nullable and the DTO takes any string, so `''` reaches the
+    // client — and `agentForTurn` on the server reads it as *unbound* and runs
+    // the turn on the id the frame carried. Reading it as a binding here put
+    // the two on opposite sides of one row.
+    it('is not a binding, so the choice is still this session\u2019s', async () => {
+      localStorage.setItem(STORAGE_KEY, 'writer');
+      mount(
+        { '/api/sessions/web-1': [200, session('')] },
+        { sessionKey: 'web-1' },
+      );
+
+      // The preference answers, rather than an empty label from the row.
+      expect(
+        await screen.findByRole('button', { name: 'Agent: Writer' }),
+      ).toBeInTheDocument();
+    });
+
+    it('is not moved, because there is nothing to move', async () => {
+      const calls = stubApi({
+        '/api/agents': [200, AGENTS],
+        '/api/sessions/web-1': [200, session('')],
+      });
+      render(
+        <Providers client={testQueryClient()}>
+          <AgentPicker sessionKey="web-1" />
+        </Providers>,
+      );
+
+      await screen.findByRole('button', { name: /Agent:/ });
+      expect(calls.filter((call) => call.method === 'PATCH')).toEqual([]);
+      expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    });
+  });
+
   it('keeps a remembered preference that still names an agent', async () => {
     localStorage.setItem(STORAGE_KEY, 'writer');
     mount();

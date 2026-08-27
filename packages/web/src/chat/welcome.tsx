@@ -13,6 +13,16 @@
  * researcher's pinned model announced the default instead. A screen whose one job
  * is to say what will answer has to be right about it, or it is worse than blank.
  *
+ * **And it is this conversation's agent, not this browser's preference.** The
+ * same argument one step further, because there are two answers and the screen
+ * had the weaker one: the remembered preference decides which agent a *new*
+ * conversation starts on, and the row's binding decides which one answers an
+ * existing one. This card renders for an empty transcript, which a bound
+ * conversation can have — `/clear` empties one and a branch can start empty —
+ * and there it was naming a different agent's model. `useAgentChoice` is the
+ * one place that rule lives, and the picker two lines below is reading it, so
+ * the card that says what will answer had better read the same thing.
+ *
  * **The suggested prompts are gone.** Three canned openers is a feature list
  * wearing the clothes of a shortcut: nobody wants to summarise the files in
  * this workspace, and an operator who did would type it faster than they could
@@ -34,34 +44,43 @@ import { useTranslation } from 'react-i18next';
 import { api } from '@/lib/api.js';
 import { queryKeys } from '@/lib/query.js';
 import { Badge } from '@/components/ui/badge.js';
-import { useAgent } from '@/agents/agent-context.js';
+import { useAgentChoice } from '@/agents/use-agent-choice.js';
 
-export function Welcome(): JSX.Element {
+export function Welcome({
+  sessionKey,
+}: {
+  /**
+   * The conversation this card is standing in for, when there is one.
+   *
+   * Optional because the card is also what a tab with no session at all shows,
+   * and because its own tests mount it as the leaf it is. Absent means there is
+   * no binding to read and the answer is the preference — which is the same
+   * answer `useAgentChoice` gives.
+   */
+  readonly sessionKey?: string;
+}): JSX.Element {
   const { t } = useTranslation();
-  const { agentId } = useAgent();
+  // `match` rather than the raw id: it is this conversation's agent as the
+  // listing resolves it, which is the same object the picker names.
+  const { match } = useAgentChoice(sessionKey);
 
   // `/api/status` carries the *install's* model, which is the wrong answer
   // whenever the selected agent overrides it: a researcher pinned to one model
   // showed the default here, and the screen whose entire job is to say what is
-  // about to answer said something else. `/api/agents` resolves each agent's
-  // model after inheritance and after any process-wide `--model` pin, which is
-  // the figure a turn will actually use.
-  const agents = useQuery({
-    queryKey: queryKeys.agents,
-    queryFn: ({ signal }) => api.agents(signal),
-  });
+  // about to answer said something else. `/api/agents` — which `useAgentChoice`
+  // reads — resolves each agent's model after inheritance and after any
+  // process-wide `--model` pin, which is the figure a turn will actually use.
   const status = useQuery({
     queryKey: queryKeys.status,
     queryFn: ({ signal }) => api.status(signal),
   });
 
-  const agent = agents.data?.agents.find((entry) => entry.id === agentId);
   // Falling back to the install's model rather than to nothing: an agent id held
   // in `localStorage` can name an agent that has since been deleted, and a blank
   // line reads as "no model configured" — which is a different and alarming
   // claim. The picker beside the composer is what corrects the stale id.
-  const provider = agent?.provider ?? status.data?.provider ?? '';
-  const model = agent?.model ?? status.data?.model ?? '';
+  const provider = match?.provider ?? status.data?.provider ?? '';
+  const model = match?.model ?? status.data?.model ?? '';
 
   return (
     <div className="stack welcome">

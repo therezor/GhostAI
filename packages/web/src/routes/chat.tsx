@@ -174,7 +174,11 @@ export function ChatRoute(): JSX.Element {
     <div className="chat">
       {empty ? (
         <div className="transcript__viewport">
-          <Welcome />
+          {/* The key, so the card names the agent *this* conversation runs on
+              rather than the one a new conversation would start on. An empty
+              transcript does not mean an unbound session: `/clear` leaves the
+              binding in place, and so does a branch nobody has spoken in. */}
+          <Welcome {...(sessionKey === undefined ? {} : { sessionKey })} />
         </div>
       ) : (
         <TranscriptView
