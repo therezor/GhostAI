@@ -168,8 +168,6 @@ export class ReconnectingSocket {
     return false;
   }
 
-  // -------------------------------------------------------------------------
-
   private dial(status: ConnectionStatus): void {
     this.setStatus(status);
 
@@ -307,8 +305,8 @@ export class ReconnectingSocket {
  * The socket URL for a session, on the origin serving the page.
  *
  * Derived from `location` rather than configured: the UI is served by the same
- * Fastify instance that owns `/ws`, and a configurable socket origin would be a
- * setting whose only correct value is the one this computes.
+ * process that owns `/ws`, and a configurable socket origin would be a setting
+ * whose only correct value is the one this computes.
  */
 export function socketUrl(
   sessionKey: string | undefined,

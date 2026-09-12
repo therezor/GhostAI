@@ -91,11 +91,10 @@ const STROKE_PROPERTIES = [
  * what lets `--accent-fg` — the correct token — through: it never matches
  * `--accent` followed by anything but whitespace and a `)`.
  *
- * This used to be half of the rule. The other half scanned for utility classes
- * like `text-accent`, which compiled to the same mistake through a different
- * spelling. With the utilities gone, every colour in the package is written as
- * a CSS declaration, so one pattern covers what two used to — and a rule with
- * one way to be broken is a rule that can actually be checked.
+ * One pattern rather than two: every colour in the package is written as a CSS
+ * declaration, so there is no second spelling — a utility class like
+ * `text-accent` — compiling to the same mistake. A rule with one way to be
+ * broken is a rule that can actually be checked.
  */
 const ACCENT_IN_CSS = new RegExp(
   String.raw`(?:^|[;{}])\s*(${STROKE_PROPERTIES.join('|')})\s*:[^;{}]*var\(\s*--accent\s*\)`,

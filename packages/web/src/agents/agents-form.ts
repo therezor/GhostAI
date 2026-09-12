@@ -62,15 +62,15 @@ export const UNSET_VALUE = '__unset__';
 /**
  * Why a model is required rather than merely encouraged.
  *
- * The screen used to offer "Resolved automatically" for it, on the reading of
- * the schema's "empty means resolve from whichever provider has credentials".
- * That sentence is about the **provider**: `resolveInstance` uses
- * the model as a hint when picking an endpoint. The model itself is never
- * invented — `GhostRuntime` turns an empty one into `noModelError`, hands the
- * loop a `null` provider, and the agent cannot run a turn at all.
+ * The schema's "empty means resolve from whichever provider has credentials"
+ * reads as though the screen could offer "Resolved automatically". That
+ * sentence is about the **provider**: `resolve_instance` uses the model as a
+ * hint when picking an endpoint. The model itself is never invented —
+ * `GhostRuntime` turns an empty one into `no_model_error`, hands the loop no
+ * provider, and the agent cannot run a turn at all.
  *
- * So the option was offering an unconfigured install as though it were a
- * setting. Blank is now a state the form refuses rather than one it saves.
+ * Such an option would offer an unconfigured install as though it were a
+ * setting. Blank is a state the form refuses rather than one it saves.
  */
 export const MODEL_REQUIRED =
   'Choose a model — an agent with none cannot run a turn.';

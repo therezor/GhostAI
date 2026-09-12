@@ -1,11 +1,11 @@
 /**
  * The context budget, under the composer that is about to spend it.
  *
- * This used to be a `Gauge` icon in the top-right corner of the header, which
- * is the furthest point in the layout from the box you type into. "Will this
- * message fit" is a question asked *while composing*, and the answer belongs
- * where the question is — so the number sits under the input, and the full
- * breakdown is one press away rather than the only way to see anything.
+ * "Will this message fit" is a question asked *while composing*, and the answer
+ * belongs where the question is. An icon in the corner of the header would be
+ * the furthest point in the layout from the box you type into — so the number
+ * sits under the input, and the full breakdown is one press away rather than
+ * the only way to see anything.
  *
  * A plain `<button>` with visible text rather than an icon control: it needs no
  * `aria-label`, and its accessible name is the figure it is showing.

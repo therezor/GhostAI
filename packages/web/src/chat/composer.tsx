@@ -129,11 +129,10 @@ interface StagedFile {
 /**
  * The largest upload the server will take.
  *
- * Mirrored from `MAX_UPLOAD_BYTES` in `packages/server/src/routes/files.ts`,
- * where it is a Fastify `bodyLimit` — enforced as the body arrives rather than
- * after it is all in memory. The copy is deliberate: the browser bundle cannot
- * import from the server, and a value that only exists there means the user
- * finds out by waiting for a 413.
+ * Mirrored from `MAX_UPLOAD_BYTES` in `ghostai-server`, where it is enforced as
+ * the body arrives rather than after it is all in memory. The copy is
+ * deliberate: the browser cannot import from the server, and a value that only
+ * exists there means the user finds out by waiting for a 413.
  */
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 

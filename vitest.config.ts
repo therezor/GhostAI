@@ -1,28 +1,15 @@
 import { defineConfig } from 'vitest/config';
 
 /**
- * Per-package coverage gates. `security` carries the strictest bar: the SSRF
- * guard, exec argv guard, workspace jail and tool-output nonce wrapping are
- * the code where an untested branch is a vulnerability, not just a bug.
+ * Per-package coverage gates.
+ *
+ * Two entries, because two packages are all that carry decision logic of their
+ * own now: everything the Rust workspace replaced has its bars in
+ * `scripts/coverage-gate.mjs` instead. `protocol` is not listed — it is schema
+ * declarations exercised by the whole suite, and a ratio over it measures the
+ * consumers rather than the package.
  */
 const THRESHOLDS: Record<string, { lines: number; branches: number }> = {
-  security: { lines: 95, branches: 95 },
-  core: { lines: 90, branches: 85 },
-  agent: { lines: 85, branches: 80 },
-  runtime: { lines: 85, branches: 80 },
-  // The same bar as `runtime`, and for the same reason: it is a composition
-  // seam whose whole job is to survive things going wrong. Every refusal here —
-  // an unapproved extension, one that throws in `activate`, one registering a
-  // name it may not — is a branch, and an untested one is a boot that dies on
-  // an install nobody could reproduce.
-  'extension-host': { lines: 85, branches: 80 },
-  // Above the 70/65 default: an untested branch in the auth surface is a way
-  // in, and the route manifest only guarantees what the matrix actually runs.
-  server: { lines: 85, branches: 80 },
-  // The bridge decides what a channel says on the operator's behalf, and the
-  // manager is the only thing standing between a channel and another channel's
-  // replies. Both are small enough that the default bar would prove nothing.
-  channels: { lines: 90, branches: 85 },
   // The token layer is the UI's `security`: an untested branch in the contrast
   // resolver or a gate regex is a rule that reports "clean" without checking.
   // Only the `.ts` half is measured — the components are `.tsx`, and the
@@ -35,22 +22,13 @@ const THRESHOLDS: Record<string, { lines: number; branches: number }> = {
   // to the wrong bundle rather than a crash — and there is no I/O here to make
   // the bar expensive to hold.
   i18n: { lines: 90, branches: 90 },
-  // The same argument `i18n` makes: a small package that is almost entirely
-  // pure decision logic with no I/O to make the bar expensive. An untested
-  // branch in the key decoder is an arrow key that silently does nothing on
-  // somebody else's terminal, and an untested branch in the width measurement
-  // is a menu that wraps and leaves fragments behind in the scrollback.
-  tui: { lines: 90, branches: 85 },
-  providers: { lines: 80, branches: 75 },
-  tools: { lines: 80, branches: 75 },
-  mcp: { lines: 80, branches: 75 },
 };
 
 export default defineConfig({
   test: {
-    // `examples/*` are workspace packages like any other: the loopback channel
-    // is what proves `channelConformance`, and a suite that does not run is a
-    // contract nothing holds.
+    // `examples/*` are workspace packages like any other: the hello extension
+    // is what proves an out-of-tree extension still speaks the JSON-RPC
+    // handshake, and a suite that does not run is a contract nothing holds.
     //
     // `packages/e2e` is the one exclusion. Its specs are Playwright's, and the
     // two runners' `test`/`expect` are different objects — vitest collecting a

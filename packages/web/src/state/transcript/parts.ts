@@ -29,10 +29,9 @@ import {
 /**
  * The nonce envelope, as the agent writes it.
  *
- * Duplicated from `packages/security/src/nonce.ts` rather than imported: that
- * package is Node — `node:crypto`, the workspace jail, the vault — and pulling
- * it into a browser bundle for one delimiter would be a far worse trade than
- * restating the pattern. `transcript.test.ts` pins the exact shape.
+ * Duplicated from `nonce.rs` in `ghostai-security` rather than imported: that
+ * crate is Rust, so the browser cannot reach it, and restating one delimiter is
+ * the cheaper half of the trade. `transcript.test.ts` pins the exact shape.
  */
 const TOOL_OUTPUT_ENVELOPE =
   /^<tool_output_([0-9a-f]{8,})\b[^>]*>\n([\s\S]*)\n<\/tool_output_\1>$/i;
@@ -172,10 +171,9 @@ export function replaceLast(
  * The words in a message, which is what the bubble shows.
  *
  * File parts contribute nothing here on purpose — they are rendered as chips by
- * `attachmentsOf` below. This is also what stopped `[Attachment: notes.csv
- * (text/csv)]` from appearing as literal text inside a reloaded bubble: the
- * server used to synthesise that line because a non-image attachment had
- * nowhere else to go.
+ * `attachmentsOf` below. It is also what keeps `[Attachment: notes.csv
+ * (text/csv)]` out of a reloaded bubble as literal text: a non-image attachment
+ * with nowhere else to go ends up synthesised into the words.
  */
 export function textOf(content: readonly ContentPart[]): string {
   return content

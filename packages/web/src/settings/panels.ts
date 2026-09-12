@@ -1,11 +1,9 @@
 /**
  * What Settings is made of, as data.
  *
- * Every panel here is built. There is deliberately no placeholder mechanism:
- * the screen used to carry entries that named a future phase instead of a form,
- * and they were removed along with the systems they advertised. A panel arrives
- * on this list when it has something to configure, which is the only state a
- * reader can act on.
+ * Every panel here is built. There is deliberately no placeholder mechanism: an
+ * entry naming a future phase instead of a form is not a state a reader can act
+ * on. A panel arrives on this list when it has something to configure.
  *
  * It is data rather than a `<Tabs>` written out by hand so the list can be
  * asserted about: `panels.test.ts` is what stops a panel reaching the tab strip

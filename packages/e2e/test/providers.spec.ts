@@ -20,6 +20,7 @@
 import type { Page } from '@playwright/test';
 
 import { expect, test } from '../src/fixtures.js';
+import { INSTANCE_ID } from '../src/harness/server.js';
 
 interface SettingsView {
   readonly config: {
@@ -235,7 +236,12 @@ test.describe('providers', () => {
       .poll(async () => {
         const view = await settingsOf(app, harness.url);
         return {
-          ids: Object.keys(view.config.providers),
+          // Everything but the harness's own endpoint, which every install the
+          // suite starts has and which this test did not make: the server is a
+          // real process now, and a real process needs a model to answer with.
+          ids: Object.keys(view.config.providers).filter(
+            (id) => id !== INSTANCE_ID,
+          ),
           key: view.credentialsPresent.ollama ?? false,
         };
       })

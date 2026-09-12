@@ -11,30 +11,42 @@ GhostAI, [Getting started](getting-started.md) is the page you want;
 git clone https://github.com/therezor/GhostAI.git
 cd GhostAI
 pnpm install
-pnpm build
-pnpm --filter @ghostwire/ghostai link --global   # gives you `ghostai`
+pnpm build                                       # the web bundle the binary embeds
+cargo build --release -p ghostai                 # → target/release/ghostai
 ```
 
-That `ghostai` shadows an `npm install -g @ghostwire/ghostai`, if you have one;
-`pnpm --filter @ghostwire/ghostai unlink --global` puts the released one back.
+The Rust workspace under `crates/` needs `rustup` (the compiler version is pinned in
+`rust-toolchain.toml` and installs itself on the first `cargo` command) and three cargo
+tools the gate runs:
 
-Node ≥ 22.13 and pnpm 11 (`corepack enable` — the version is pinned in the root
+```bash
+cargo install cargo-nextest cargo-llvm-cov cargo-deny --locked
+cargo build --workspace
+```
+
+Node 22 or newer and pnpm 11 (`corepack enable` — the version is pinned in the root
 `package.json`).
 
-The Node floor is `node:sqlite`, which means no native module to compile and no prebuilds
-to go missing. **22.13 is exact, not cautious**: the module landed in 22.5 behind
-`--experimental-sqlite` and was unflagged for the 22 line in 22.13, so 22.12 fails at
-startup with `ERR_UNKNOWN_BUILTIN_MODULE` rather than degrading. Node 22 and 24 also print
-`ExperimentalWarning: SQLite is an experimental feature` on every invocation; Node 26 does
-not.
+**Node is a build dependency now, not a runtime one.** It builds the web bundle and runs
+the four remaining TypeScript packages' tests; the binary it produces links no
+interpreter and reads no `node_modules`. The one place Node can still appear on a user's
+machine is an extension that happens to be written in JavaScript, and that runs as its
+own process over JSON-RPC — its interpreter is its business, not the product's. There is
+no version floor to state any more: `node:sqlite`, which is where the old 22.13 floor came
+from, has been replaced by SQLite compiled into the binary through `rusqlite`.
+
+A debug build is fine for everything except a demo: `cargo build -p ghostai --features
+test-hooks` is what the e2e harness looks for by default (`target/debug/ghostai`, unless
+`GHOSTAI_BIN` names another), and CI hands it a release build through that variable
+because the suite is slow enough already.
 
 ## The gate
 
-**`pnpm check` is not the CI gate.** It runs `typecheck`, `lint` and `test`, and CI runs
-six more things on top — most local sessions that end green and then fail CI fail on
-`format:check`, which `pnpm check` never calls.
+**`pnpm check` is not the CI gate.** It runs `typecheck`, `lint` and `test`; CI runs five
+more things in that job alone and three more jobs after it — most local sessions that end
+green and then fail CI fail on `format:check`, which `pnpm check` never calls.
 
-CI is [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), and it is three jobs.
+CI is [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), and it is four jobs.
 Run all of it before calling something done:
 
 ```bash
@@ -44,23 +56,35 @@ pnpm lint
 pnpm --filter @ghostwire/web exec tsx src/tokens/run-gates.ts   # design token gates
 pnpm format:check                                             # ← the usual failure
 pnpm i18n:check
+pnpm protocol:check                                           # emit the zod JSON Schemas, then diff them
 pnpm test
 pnpm build
 
 # job: coverage — per-package thresholds, stricter than the default
-pnpm test:coverage
+pnpm test:coverage                                            # the crates' bars are in the rust job
 
-# job: e2e — Playwright, both colour schemes, against a real server
-pnpm build                                                    # a precondition, not a convenience
-pnpm --filter @ghostwire/e2e test:e2e
+# job: e2e — Playwright, both colour schemes, against the real binary
+pnpm build                                                    # the SPA the binary embeds
+cargo build --release -p ghostai --features test-hooks        # the server under test
+GHOSTAI_BIN=target/release/ghostai pnpm --filter @ghostwire/e2e test:e2e
+
+# job: rust — the Cargo workspace under crates/
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo deny check                                              # advisories, licences, sources
+cargo nextest run --workspace
+cargo llvm-cov nextest --workspace --json --output-path coverage.json
+node scripts/coverage-gate.mjs coverage.json                  # per-crate bars
 ```
 
 Notes that save a cycle:
 
 - **`pnpm format:check` fails, `pnpm format` fixes it.** Prettier is not wired into
   `lint`. When it reports files you did not touch, format only your own.
-- **e2e needs `pnpm build` first.** It serves the built SPA through the real server;
-  without a build the harness fails at `resolveUiRoot`.
+- **e2e needs both builds first.** The suite spawns `ghostai serve` as a subprocess and
+  the binary embeds the SPA, so `pnpm build` comes before `cargo build`;
+  a missing binary fails with a sentence naming `cargo build`, and a missing bundle
+  fails the Rust build at compile time.
 - **The fidelity spec skips without a baseline.** `2 skipped` is the healthy result.
 - **A green local e2e run is evidence, not proof.** CI runs 2 workers on a shared runner;
   a laptop runs 5 with nothing competing. When CI reports a failure the local suite will
@@ -72,72 +96,88 @@ Notes that save a cycle:
 
 ### Scripts
 
-| Command                                 | Does                                                                    |
-| --------------------------------------- | ----------------------------------------------------------------------- |
-| `pnpm typecheck`                        | `tsc -b` across all project references                                  |
-| `pnpm lint` / `lint:fix`                | ESLint with type-aware rules                                            |
-| `pnpm format` / `format:check`          | Prettier                                                                |
-| `pnpm test` / `test:watch`              | Vitest                                                                  |
-| `pnpm test:coverage`                    | Vitest with the per-package gates enforced                              |
-| `pnpm build`                            | Turborepo build across the graph                                        |
-| `pnpm i18n:extract` / `i18n:check`      | Regenerate the locale bundles / fail if they are out of step            |
-| `pnpm --filter @ghostwire/web dev`      | Vite dev server, proxying `/api` and `/ws` to a running `ghostai serve` |
-| `pnpm --filter @ghostwire/e2e test:e2e` | Playwright, both colour schemes                                         |
-| `pnpm screenshots`                      | Regenerate the documentation's images into `docs/screenshots/`          |
-| `pnpm demo`                             | Regenerate the animated terminal cast in the README                     |
-| `node scripts/gen-packages.mjs`         | Regenerate package manifests after changing the package graph           |
+| Command                                 | Does                                                                       |
+| --------------------------------------- | -------------------------------------------------------------------------- |
+| `pnpm typecheck`                        | `tsc -b` across all project references                                     |
+| `pnpm lint` / `lint:fix`                | ESLint with type-aware rules                                               |
+| `pnpm format` / `format:check`          | Prettier                                                                   |
+| `pnpm test` / `test:watch`              | Vitest                                                                     |
+| `pnpm test:coverage`                    | Vitest with the per-package gates enforced (`vitest.config.ts`)            |
+| `pnpm build`                            | Turborepo build across the graph                                           |
+| `pnpm i18n:extract` / `i18n:check`      | Regenerate the locale bundles / fail if they are out of step               |
+| `pnpm --filter @ghostwire/web dev`      | Vite dev server, proxying `/api` and `/ws` to a running `ghostai serve`    |
+| `pnpm --filter @ghostwire/e2e test:e2e` | Playwright, both colour schemes                                            |
+| `pnpm screenshots`                      | Regenerate the documentation's images into `docs/screenshots/`             |
+| `pnpm demo`                             | Build, then regenerate the animated terminal cast in the README            |
+| `node scripts/gen-packages.mjs`         | Regenerate `packages/protocol`'s manifest; carry the version into the rest |
+| `cargo fmt --all --check` / `cargo fmt` | rustfmt, the Rust half of `format:check`                                   |
+| `cargo clippy ... -- -D warnings`       | Clippy with the workspace lint table; pedantic is an error in CI           |
+| `cargo deny check`                      | Advisories, licences, wildcard versions, git sources (`deny.toml`)         |
+| `cargo nextest run --workspace`         | The Rust tests                                                             |
+| `node scripts/coverage-gate.mjs`        | Per-crate coverage bars over a `cargo llvm-cov --json` report              |
 
 ### Coverage gates
 
-Enforced by `pnpm test:coverage`, blocking in CI. Default is 70 lines / 65 branches.
+Blocking in CI, and the table is split across two files because the toolchains are.
+Default is 70 lines / 65 branches on both sides.
 
-Thirteen packages are raised above it. The table lives in `vitest.config.ts`, with a
-comment on each entry saying what an untested branch there would actually cost:
+**The crates**, in `scripts/coverage-gate.mjs`, enforced by
+`cargo llvm-cov nextest --workspace --json` piped through it:
 
-| Package                                               | Lines | Branches |
-| ----------------------------------------------------- | ----- | -------- |
-| `security`                                            | 95    | 95       |
-| `i18n`                                                | 90    | 90       |
-| `core`, `channels`, `tui`                             | 90    | 85       |
-| `agent`, `runtime`, `extension-host`, `server`, `web` | 85    | 80       |
-| `providers`, `tools`, `mcp`                           | 80    | 75       |
-| everything else                                       | 70    | 65       |
+| Crate                                          | Lines | Branches |
+| ---------------------------------------------- | ----- | -------- |
+| `security`                                     | 95    | 95       |
+| `i18n`                                         | 90    | 90       |
+| `core`, `channels`, `tui`                      | 90    | 85       |
+| `agent`, `runtime`, `extension-host`, `server` | 85    | 80       |
+| `providers`, `tools`, `mcp`                    | 80    | 75       |
+| everything else                                | 70    | 65       |
 
-`security` carries the strictest bar because an untested branch there is a vulnerability,
-not just a bug. A new branch in a guard needs a test, or `pnpm test:coverage` fails while
-`pnpm test` passes.
+**The two remaining TypeScript packages that hold decision logic**, in
+`vitest.config.ts`, enforced by `pnpm test:coverage`: `web` at 85/80 and `i18n` at
+90/90. `protocol` is deliberately absent — it is schema declarations exercised by the
+whole suite, so a ratio over it would measure the consumers rather than the package.
 
-Only `packages/*/src/**` is measured. Nothing under `test/` counts, which is why a
-`testkit` — which runs on every test and scores 94–100% — no longer pads the package that
+`security` carries the strictest bar on either side because an untested branch there is a
+vulnerability, not just a bug. A new branch in a guard needs a test, or the coverage job
+fails while `pnpm test` and `cargo nextest` both pass.
+
+Two mechanical notes. `cargo llvm-cov` has a single threshold for the whole workspace,
+which is why the bars go through a script at all; "branches" there is llvm-cov's region
+coverage, the closest thing the stable toolchain measures. And only `src/` counts on
+either side — `crates/*/src/**` minus `testkit.rs` and `main.rs`, `packages/*/src/**.ts`
+— so a testkit, which runs on every test and scores 94–100%, no longer pads whatever
 holds it.
 
 ## Releasing
 
-Fifteen packages publish, and they move in lockstep. Only one of them is something a
-person installs by name — `@ghostwire/ghostai`, which is what puts `ghostai` on the PATH — but
-`pnpm publish` rewrites `workspace:*` to the **exact** version at pack time, so a package
-left behind on an old number does not degrade gracefully: it publishes a dependency that
-resolves to nothing. That is why there is one version and no changesets.
+One binary, four platforms, attached to a GitHub release. Nothing goes to npm: the
+product is `ghostai`, the web bundle is compiled into it, and an install is a download
+rather than a dependency tree.
 
-Three edits and a tag:
+There is still one version, and now it lives in two files that must agree — `Cargo.toml`
+is what the binary reports through `CARGO_PKG_VERSION`, and `package.json` is what the
+web bundle and the two remaining TypeScript packages carry. `crates/cli/tests/version.rs`
+fails when they disagree, and so does the release workflow, so a tag cannot ship a binary
+whose `--version` contradicts the release it came from.
+
+Two edits and a tag:
 
 ```bash
-# 1. the root version — the single source every manifest reads
-#    "version": "1.1.0"  in package.json
-# 2. carry it into all fifteen manifests
+# 1. the version, in both places
+#    "version": "1.1.0"   in package.json
+#    version = "1.1.0"    in Cargo.toml, under [workspace.package]
+# 2. carry the first into the remaining TypeScript manifests
 node scripts/gen-packages.mjs
-# 3. VERSION in packages/cli/src/program.ts        — what `ghostai --version` prints
-# 4. SERVER_VERSION in packages/server/src/version.ts — what GET /api/status and
-#    the OpenAPI document report
 
 git commit -am 'Release 1.1.0' && git tag v1.1.0 && git push origin main v1.1.0
 ```
 
-Steps 3 and 4 are the hand edits, literals rather than a read of the manifest on purpose:
-the bundle lands in `dist/`, so a relative read resolves differently in the workspace and
-in a published tarball — a version that is silently _wrong_ is worse than one that is
-missing. `program.test.ts` and `app.test.ts` each fail if you forget, which is how they
-are meant to be found.
+The hand-edited `VERSION` and `SERVER_VERSION` literals are gone. They existed because a
+bundle in `dist/` resolves a relative manifest read differently in the workspace and in a
+published tarball, and a silently wrong version is worse than a missing one. A compiled
+binary has no such ambiguity: `env!("CARGO_PKG_VERSION")` is fixed at build time and is
+what both `ghostai --version` and `GET /api/status` report.
 
 The agent presets and toolboxes are no longer part of this repository — they live in the
 separately versioned [`GhostAI-presets`](https://github.com/therezor/GhostAI-presets)
@@ -149,89 +189,37 @@ commit lands, the release never fires, and nothing says so. Either name the tag 
 or make it annotated with `git tag -a`.
 
 The tag fires [`release.yml`](../.github/workflows/release.yml), which runs the whole
-gate again — a tag can be pushed from a branch CI never saw — checks the tag against the
-manifests, publishes, and attaches the tarballs to a GitHub release for an install that
-never reaches a registry.
+gate again — both halves of it, because a tag can be pushed from a branch CI never saw —
+checks the tag against both manifests, builds, and attaches the tarballs and a
+`SHA256SUMS` file to the release.
 
-Publishing is npm's **trusted publishing**: no token lives in this repository at all.
-The workflow's own OIDC token is exchanged by npm for a short-lived credential scoped to
-that run, and each of the fifteen packages names `therezor/GhostAI` and `release.yml` as
-its trusted publisher under _Settings → Trusted Publisher_ on npm. Provenance comes with
-it, generated registry-side.
+**Each binary is built on its own architecture rather than cross-compiled.** The
+credential vault shells out to the platform keychain and the container runner signals
+process groups; both are platform code, and a cross-linker is one more thing that can be
+subtly wrong in a way only a user discovers. The matrix is `aarch64`/`x86_64` on macOS
+and on Linux.
 
-**Packed by pnpm, published by npm**, and it has to be both. `npm publish` is the only
-client npm documents for trusted publishing — pnpm implements its own OIDC exchange and
-it is not the supported path. But npm has never heard of `workspace:*`, and rewriting
-those to the exact version at pack time is the whole reason this repository publishes
-through pnpm at all. So `pnpm pack` makes the tarballs and `npm publish` sends them,
-which has the side benefit that the tarballs attached to the release are the same bytes
-that reached the registry rather than a second, separate pack.
+**Windows is deliberately absent.** The two modules above are POSIX here. The workspace
+jail was written platform-independent on purpose — it treats `\` as a separator and
+handles drive letters on every platform — so adding Windows later is a port of the
+keychain and the process teardown, not a rewrite.
 
-Five things cost a release between them, and every one of them reads as something else:
-
-- **npm answers an unauthorised `PUT` with `404`, not `403`**, so that a refusal does not
-  leak whether a name is taken. The OIDC exchange returns the same code, which is why the
-  two are so easy to mistake for each other, and why "not found" almost never means the
-  package is missing.
-- **The version floor is real and silent.** Trusted publishing needs npm ≥ 11.5.1 and
-  Node ≥ 22.14; `node-version: 22` resolves to a line bundling npm 10.x, and falling
-  under the floor does not say so — it answers 404 like everything else. The publish job
-  runs Node 24 and asserts the npm version outright, so it fails with a sentence.
-  `verify` stays on 22, because that is the job where the engines floor is tested.
-- **`pnpm -r exec` does not skip `private: true`.** `pnpm -r publish` does, which is
-  where the belief comes from. Packing with `exec` picks up `@ghostwire/e2e` and both
-  `examples/*`, so the pack step prunes them by the flag — by the flag rather than by a
-  list of names, which would go stale the next time a private package is added.
-- **`npm publish` fails a version the registry already has**, where `pnpm -r publish`
-  skipped it. A release that got half way must be able to run again and finish, so the
-  publish loop checks first. 0.7.3 needed exactly this: it published
-  `@ghostwire/i18n@0.7.3` and then died, leaving one package ahead of the other fourteen.
-- **`--provenance` must not be passed.** Trusted publishing generates the attestation
-  registry-side. Passing the flag puts it back on the runner, which writes to Sigstore's
-  public transparency log, and during 0.7.3 that write failed three runs running with
-  `409 an equivalent entry already exists` — at the first package, a different UUID each
-  time, the client colliding with an entry it had made seconds earlier — and then went
-  through on the fourth with nothing changed. Intermittent, not deterministic: a 409
-  there is worth one retry before it is worth a change.
-
-One more that is not a failure mode but will bite eventually: **a package added later
-cannot be given a trusted publisher until it exists.** Publish its first version by hand,
-then configure it.
-
-Three things about the manifests, all of which cost an afternoon to find:
-
-- **`files` must say `dist/**`, not `dist`.** npm packs a bare directory name wholesale
-  and never consults a later negation, so `['dist', '!dist/**/*.map']` ships every
-  sourcemap and looks like it worked. `@ghostwire/web` is 8 MB of maps on 11.8 MB total,
-  for a built SPA nobody installing `ghostai` will step through.
-- **The `development` export condition cannot be published.** It points at
-  `./src/index.ts`, `src` is not in `files`, and Vite's dev server sets that condition —
-  so a published package imported from one fails to resolve against a file that was never
-  in the tarball. `publishConfig.exports` drops it; the workspace keeps it, because it is
-  what lets `tsx` run the repo with no build.
-- **`web` and `i18n` are not generated.** They are hand-maintained, and the generator
-  patches only their release fields for exactly this reason — `i18n` was found sitting at
-  `0.0.0` while every generated package had moved, and nothing about it looked wrong.
-
-Before a first publish, prove the graph resolves outside the workspace. This exercises
-`resolveUiRoot`'s `createRequire(...).resolve('@ghostwire/web/package.json')`, which is the
-resolution most likely to break once packages are laid out by a registry install rather
-than by pnpm's workspace links:
-
-```bash
-pnpm build
-pnpm --filter @ghostwire/ghostai deploy /tmp/ghost-deploy --legacy
-node /tmp/ghost-deploy/dist/index.js serve --port 3999   # should print a UI path
-pnpm install --frozen-lockfile                           # deploy leaves pnpm's state odd
-```
+**The web bundle is a build input, not a separate artifact.** `rust-embed` compiles
+`packages/web/dist` into the binary, so `pnpm --filter @ghostwire/web build` runs before
+`cargo build` in every matrix job. Without it the build fails at compile time, which is
+the intended failure and one step earlier than resolving a path at startup used to give.
+For a build with no bundle — a headless server, or a CI job that only wants the tests —
+`GHOSTAI_HEADLESS_BUILD=1` skips the embed and `GET /` answers a JSON 404 with a
+sentence.
 
 ## Screenshots
 
 Every picture in the README and in [Web UI](web-ui.md) is generated. `pnpm screenshots`
-builds, boots the e2e harness — the real server, the real bundle, the real turn over a
-scripted provider — drives each screen to the state worth showing, and writes twenty PNGs
-into `docs/screenshots/`, one per screen per colour scheme. They are committed, because
-GitHub cannot run a build step to render a README.
+builds both halves — the bundle and the binary, because the harness spawns the real
+`ghostai serve` — boots that harness over a scripted provider, drives each screen to the
+state worth showing, and writes twenty PNGs into `docs/screenshots/`, one per screen per
+colour scheme. They are committed, because GitHub cannot run a build step to render a
+README.
 
 Regenerate them whenever the UI changes, and commit what comes out. **Two runs on one
 machine produce byte-identical files**, so an image that shows up in `git status` means
@@ -275,7 +263,11 @@ the repaint that erases the footer. `ptyrec.py` now holds partial sequences in a
 incremental decoder. If either artifact comes back, that is where to look — not at
 svg-term.
 
-## Conventions
+## TypeScript conventions
+
+Four packages are still TypeScript — `protocol`, `i18n`, `web` and `e2e` — and these are
+theirs. The rules that used to live here about the runtime (cancellation, exec, injected
+clocks) moved with the code; see [Rust conventions](#rust-conventions) below.
 
 - **ESM only.** `"type": "module"` everywhere, `.js` extensions in relative imports
   (NodeNext resolution).
@@ -287,24 +279,68 @@ svg-term.
 - **`tsup` owns the JavaScript, `tsc -b` owns the types.** `emitDeclarationOnly` keeps
   `tsc` from overwriting the bundle, `clean: false` keeps `tsup` from deleting the
   declarations. `pnpm build` runs both in that order. Delete `dist` to force a full
-  rebuild.
-- **Zod is the single source of truth** for config, wire messages and tool parameters.
-  Types come from `z.infer`, JSON Schema from `z.toJSONSchema`. Never hand-write a type a
-  schema could produce — and every exported `*Schema` must be registered in `schemas.ts`,
-  which a test enforces.
+  rebuild. (`web` is a Vite app and does neither; `e2e` is never built at all.)
+- **Zod is the single source of truth** for the wire — config, messages and tool
+  parameters. Types come from `z.infer`, JSON Schema from `z.toJSONSchema`. Never
+  hand-write a type a schema could produce, and every exported `*Schema` must be
+  registered in `schemas.ts`, which a test enforces. `crates/protocol` mirrors the result
+  and a drift test compares the two JSON Schema documents, so a schema edited on one side
+  only fails CI rather than reaching a browser.
 - **Errors are values, not strings.** Never branch on a substring of an error message.
   Return a typed discriminated union with a `kind`.
-- **One cancellation mechanism.** A single `AbortSignal` threads from the request through
-  the loop, the provider fetch, tool execution and any child process. No parallel
-  `_running` flags, no bespoke timeouts.
-- **No shell, ever.** `exec` takes `argv: string[]` and calls `execFile` with
-  `shell: false`. A lint rule fails the build on `shell: true`.
 - **No `Math.random()`.** Inject a generator so tests are deterministic; use `node:crypto`
   for anything security-relevant. Also lint-enforced.
 - **Injected `Clock` and `fetch`.** Tests use fake timers and a mock dispatcher; nothing
   sleeps and nothing touches the network.
 
-### Layering
+## Rust conventions
+
+Everything under `crates/` is one crate per former TypeScript package, same names and
+the same layering as the diagram below. Cargo `[dependencies]` are the mechanical
+enforcement: a crate that does not list `ghostai-server` cannot `use` it.
+
+- **rustfmt and clippy own the style.** `rustfmt.toml` is defaults plus a 100-column
+  width (rustfmt's own default; the 80-column rule is Google's TypeScript guide).
+  `[workspace.lints]` in the root `Cargo.toml` denies `clippy::all` and warns on
+  `pedantic`, which CI promotes to an error with `-D warnings`. A new `#[allow]` needs a
+  one-line comment saying why. `clippy.toml` holds the `doc_markdown` allow-list of
+  product names and the denied methods.
+- **`#![forbid(unsafe_code)]`** in every crate. Anything needing unsafe goes through a
+  dependency.
+- **Errors are values.** `ghostai_core::GhostError { kind, message, retryable, details }`
+  with the closed fifteen-variant `ErrorKind` and its per-kind `retryable` defaults;
+  `thiserror` below the binary, `anyhow` only in `crates/cli/src/main.rs`. Never branch
+  on a message substring.
+- **One cancellation mechanism.** `tokio_util::sync::CancellationToken`, threaded from
+  the transport through the hub, the loop, the provider request, the tool and the
+  child process; `child_token()` is how a timeout composes. No running flags.
+- **Streams, not generators.** A turn is a stream of events plus a completion; dropping
+  the stream cancels the token, which is the "abandoning the iterator unwinds the turn"
+  property in Rust.
+- **Injected `Clock` and `RandomSource`.** `rand::rng`, `rand::random` and
+  `SystemTime::now` are clippy-denied. Tests pause tokio's clock.
+- **No shell, ever.** `Command::new(argv[0]).args(&argv[1..])`.
+- **Serialisation is the wire contract.** `#[serde(rename_all = "camelCase")]`,
+  `#[serde(default)]` on every field zod `.default()`s in the client-to-server
+  direction, `deny_unknown_fields` only where zod uses `strictObject`,
+  `schemars::JsonSchema` on every mirrored type.
+- **Tests live in `crates/<crate>/tests/` mirroring `src/`**, the same rule as
+  `packages/<pkg>/test/`; coverage measures `src/` only. Inline `#[cfg(test)]` is for a
+  private helper with no public path, with a line saying why. Property tests use
+  `proptest`. A testkit is `src/testkit.rs` behind a `testkit` cargo feature.
+- **Port reasoning, not commentary.** A comment survives the port only if it is still
+  true in Rust. Anything about Node, tsup, zod inference, `node:sqlite`, pino,
+  `AbortSignal`, async generators, the module registry or a TypeScript identifier that
+  no longer exists is deleted, not translated. No "ported from `x.ts`" breadcrumbs.
+- **One version.** The root `Cargo.toml` and the root `package.json` must agree;
+  `crates/cli/tests/version.rs` fails when they do not, and `env!("CARGO_PKG_VERSION")`
+  is what `ghostai --version` and `GET /api/status` report.
+- **Dependencies are pinned exact** in `[workspace.dependencies]` and `cargo deny` is the
+  analogue of pnpm's release-age policy: no git sources, no wildcards, an allow-listed
+  licence set. Cargo has no release-age hold, so `cargo update` is reviewed rather than
+  delayed.
+
+## Layering
 
 ```
 { protocol, i18n } → core → security → { providers, tools } → { mcp, agent } ─┬→ runtime → server ┐
@@ -313,9 +349,11 @@ svg-term.
                     tui                                                                           ┘
 ```
 
-Enforced two ways, both mechanical: pnpm's isolated `node_modules` means an undeclared
-`@ghostwire/x` import fails to _resolve_, not merely to lint; and `no-restricted-imports`
-bans the deep relative paths that would sneak across a boundary.
+Every name on that diagram except `web` is a crate under `crates/`, and Cargo is the
+enforcement: a crate that does not list `ghostai-server` in `[dependencies]` cannot `use`
+it, which is a compile error rather than a lint. `web` is the TypeScript half, and pnpm's
+isolated `node_modules` does the same job for it — an undeclared `@ghostwire/x` import
+fails to _resolve_.
 
 The agent must never reach back into the HTTP server.
 [Architecture](architecture.md#layering) explains why `tui` sits beside the roots.
@@ -331,22 +369,32 @@ There is no CSS framework and there are three token gates. The full picture is i
 - A contrast test resolves the sheet in both themes and holds every text-on-surface
   pairing to WCAG AA, so a seed edit that darkens text past the line fails the suite.
 
-**Restart `ghostai serve` after a UI build.** `@fastify/static` enumerates the UI directory
-once at boot, so a rebuild underneath a running server serves the new `index.html` and
-404s its hashed assets into the SPA fallback — a blank page that looks like a crash and is
-not one. For an edit-reload loop use the Vite dev server instead.
+**A UI build does not reach a running binary.** `rust-embed` compiles the bundle in, so
+the server is serving the copy that existed when it was _built_ — rebuilding
+`packages/web/dist` underneath it changes nothing at all until `cargo build` runs again.
+For an edit-reload loop use the Vite dev server, which proxies `/api` and `/ws` to a
+running `ghostai serve`; to test a bundle against the real server without a recompile,
+`ghostai serve --ui packages/web/dist` reads it from disk instead, which is what the e2e
+harness does.
 
 ## End-to-end tests
 
 ```bash
 pnpm build
+cargo build -p ghostai --features test-hooks
 pnpm --filter @ghostwire/e2e exec playwright install chromium   # once
 pnpm --filter @ghostwire/e2e test:e2e
 ```
 
-Every spec boots its own server in-process against a scripted model, so nothing reaches
-the network and nothing shares state. **The colour scheme is a Playwright project**, which
+Every spec spawns its own `ghostai serve` against a scripted model, so nothing reaches the
+network and nothing shares state. **The colour scheme is a Playwright project**, which
 means every assertion runs twice.
+
+The binary is the real one, which is the point of the rebuild: `test-hooks` is a cargo
+feature rather than a code path, so what the suite drives differs from a release build
+only in the seams the harness needs to reach. `GHOSTAI_BIN` names the binary when it is
+not `target/debug/ghostai`, and a missing one fails with a sentence naming `cargo build`
+rather than as twenty timed-out specs.
 
 ### Never assert a transient state
 
@@ -384,11 +432,13 @@ compile error rather than a string that renders as itself.
 
 ## Areas that touch more than they look like they do
 
-**Auth.** The credential surface spans `packages/protocol/src/rest.ts` (DTOs — and every
-exported `*Schema` must also be registered in `schemas.ts`), `packages/server/src/`
-(`auth-store.ts`, `login-throttle.ts`, `routes/auth.ts`, `manifest.ts`), the two web
-overlays, the Account settings panel, **and the e2e harness** — the last of which only
-unit tests plus e2e catches.
+**Auth.** The credential surface spans both halves of the wire
+(`packages/protocol/src/rest.ts`, where every exported `*Schema` must also be registered
+in `schemas.ts`, and its mirror `crates/protocol/src/rest.rs`), `crates/server/src/`
+(`auth_store.rs`, `auth.rs`, `login_throttle.rs`, `signing.rs`, `boot.rs`,
+`routes/auth.rs` and `manifest.rs`, the last because the auth-matrix test iterates it),
+the two web overlays, the Account settings panel, **and the e2e harness** — the last of
+which only unit tests plus e2e catches.
 
 **Config.** A new key means the schema, the patch merge rules if it is a record, the
 settings panel, and this documentation. A key that parses but is never read should say so

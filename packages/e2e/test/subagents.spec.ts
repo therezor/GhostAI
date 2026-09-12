@@ -32,11 +32,29 @@ function delegation(app: Page): { card: Locator; header: Locator } {
   return { card, header: card.getByRole('button', { name: /ask_researcher/ }) };
 }
 
-/** Opens the disclosure if it is closed, so a test never depends on auto-open. */
+/**
+ * Settles the disclosure open, so a test never depends on auto-open.
+ *
+ * A poll rather than read-once-then-click, and the difference is the repo rule
+ * about transient state wearing a different hat. `open` is `useState` seeded
+ * from the tool's status and pushed open again when a *live* subagent run
+ * appears — so "it is closed" is a fact with a shelf life, and a click aimed at
+ * it can cross the component's own state change or land on a card React has
+ * just remounted with its initial value. Against an in-process server those two
+ * were the same frame and nothing could get between them. Against a process
+ * they are not, and a card that ended up closed took the run, the nested card
+ * and every assertion below it off the screen with it.
+ *
+ * Open is the durable state, so this waits for open.
+ */
 async function expand(header: Locator): Promise<void> {
-  if ((await header.getAttribute('aria-expanded')) === 'false') {
-    await header.click();
-  }
+  await expect
+    .poll(async () => {
+      if ((await header.getAttribute('aria-expanded')) === 'true') return true;
+      await header.click();
+      return (await header.getAttribute('aria-expanded')) === 'true';
+    })
+    .toBe(true);
 }
 
 test.use({

@@ -3,6 +3,7 @@
   "version": "0.8.1",
   "description": "Zod schemas and derived types shared by every GhostAI package.",
   "type": "module",
+  "private": true,
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -11,18 +12,6 @@
   },
   "homepage": "https://github.com/therezor/GhostAI",
   "bugs": "https://github.com/therezor/GhostAI/issues",
-  "publishConfig": {
-    "access": "public",
-    "exports": {
-      ".": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      }
-    }
-  },
-  "engines": {
-    "node": ">=22.13"
-  },
   "exports": {
     ".": {
       "development": "./src/index.ts",
@@ -35,16 +24,12 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": [
-    "dist/**",
-    "!dist/**/*.map",
-    "!dist/.tsbuildinfo"
-  ],
   "scripts": {
     "build": "tsup && tsc -b",
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "lint": "eslint src test"
+    "lint": "eslint src test",
+    "schema:dump": "tsx scripts/emit-schemas.ts"
   },
   "dependencies": {
     "zod": "^4.0.0"

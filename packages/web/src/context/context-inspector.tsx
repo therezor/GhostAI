@@ -52,10 +52,10 @@ const FALLBACK_FILL = 'context-fill--fallback';
 /**
  * The full breakdown, opened from the strip under the composer.
  *
- * The trigger is not here any more. It used to be a `Gauge` button in the
- * header, which put the measurement about as far from the composer as the
- * layout allows — see `context-strip.tsx`, which is both the trigger and the
- * one-line version of this.
+ * The trigger is not here: see `context-strip.tsx`, which is both the trigger
+ * and the one-line version of this. It sits under the composer rather than in
+ * the header, which would put the measurement about as far from the box you
+ * type into as the layout allows.
  */
 export function ContextDialog({
   sessionKey,

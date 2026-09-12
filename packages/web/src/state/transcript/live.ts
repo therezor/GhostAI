@@ -523,12 +523,11 @@ function applySubagentEvent(
 /**
  * The tool name a delegation to `agentId` runs under.
  *
- * Restated from `subagentDefinition` in `@ghostwire/agent` rather than
- * imported, for the same reason the nonce envelope in `parts.ts` is: that
- * package is Node, and pulling it into a browser bundle for one string rule is
- * a far worse trade than four characters of duplication. Only ever used to
- * label a card rebuilt after a reload — when the `tool.call` arrived, its own
- * name is the one on screen.
+ * Restated from `subagent_definition` in `ghostai-agent` rather than imported,
+ * for the same reason the nonce envelope in `parts.ts` is: that crate is Rust,
+ * so the browser cannot reach it, and four characters of duplication is the
+ * cheaper half of the trade. Only ever used to label a card rebuilt after a
+ * reload — when the `tool.call` arrived, its own name is the one on screen.
  */
 function delegationToolName(agentId: string): string {
   return `ask_${agentId.replaceAll('-', '_')}`;
@@ -611,14 +610,11 @@ function applySubagentPart(
  *
  * The creation path is the reload case, and it is not rare: the replay ring
  * holds 512 frames and a subagent emits one per token, so a tab that refreshes
- * mid-delegation comes back past the `tool.call` that started it. This used to
- * return `parts` unchanged there, and the argument for doing so was that
- * *"a card invented here would be a subagent's transcript under a heading that
- * says 'tool'"* — which was true when the wrapper carried less than it does.
- * It carries `agentId` now, and the tool a delegation runs under is
+ * mid-delegation comes back past the `tool.call` that started it. Returning
+ * `parts` unchanged there would leave the run invisible until the turn ended.
+ * The wrapper carries `agentId`, and the tool a delegation runs under is
  * `ask_<agentId>` with hyphens replaced, so the heading is derivable and
- * correct. Dropping the frame instead meant the run stayed invisible until the
- * turn ended.
+ * correct — this is not a subagent's transcript under a heading that guesses.
  *
  * Still returns `parts` unchanged when the address names a *different* session
  * — that is the recursion missing its subtree, not an absent card.

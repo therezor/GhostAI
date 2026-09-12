@@ -11,12 +11,12 @@
  * whose time passed while the process was down should do, and how much history
  * to keep per job.
  *
- * **The timezone is not here, and used to be.** It moved to Appearance, because
- * it stopped being a scheduler setting the moment it also became the zone every
- * timestamp in the UI is rendered in — one install-wide answer to "whose clock",
- * read by the scheduler and by every screen. `engineTzMoved` says so where the
- * knob used to be, so an operator looking for it is told rather than left to
- * conclude it was removed.
+ * **The timezone is not here.** It belongs to Appearance, because it stopped
+ * being a scheduler setting the moment it also became the zone every timestamp
+ * in the UI is rendered in — one install-wide answer to "whose clock", read by
+ * the scheduler and by every screen. `engineTzMoved` says so on this screen, so
+ * an operator looking for it is told rather than left to conclude it was
+ * removed.
  *
  * There is deliberately no heartbeat block. A heartbeat *is* a job — its
  * interval is the job's schedule, its task file and decision model are the
@@ -132,8 +132,8 @@ export function AutomationPanel({
           }}
         />
       </FieldGrid>
-      {/* Where the timezone knob was. An operator who came here looking for it
-          needs to be sent somewhere, not to find a gap. */}
+      {/* An operator who comes here looking for the timezone needs to be sent
+          somewhere, not to find a gap. */}
       <p className="settings-field__hint">{t('automation.engineTzMoved')}</p>
       <SaveBar
         dirty={dirty}

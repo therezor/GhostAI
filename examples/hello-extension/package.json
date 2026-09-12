@@ -5,19 +5,7 @@
   "private": true,
   "type": "module",
   "license": "MIT",
-  "imports": {
-    "#src/*": "./src/*"
-  },
   "scripts": {
-    "build": "tsup && tsc -b",
-    "typecheck": "tsc -b",
-    "test": "vitest run",
-    "lint": "eslint src test"
-  },
-  "dependencies": {
-    "@ghostwire/extension-host": "workspace:*",
-    "@ghostwire/protocol": "workspace:*",
-    "@ghostwire/tools": "workspace:*",
-    "zod": "^4.0.0"
+    "test": "vitest run"
   }
 }

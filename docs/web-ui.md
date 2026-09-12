@@ -64,8 +64,9 @@ never drops a running turn.
   `server.turnLogMaxBytes`, and a turn that outgrows it falls back to picking the run up
   from the moment the tab reattaches. A second tab, which has no cursor and so asks for no
   replay at all, does that too, and fills in the rest when the turn ends.
-- **Notices** badge prompt injection, degraded requests, provider fallback and truncated
-  history.
+- **Notices** badge prompt injection, degraded requests, provider fallback, truncated
+  history, a denied approval, a fallback to another agent, and a turn that ran with tools
+  switched off.
 - **Turn info** — tokens in and out, cached tokens, elapsed, time to first token,
   tokens per second, model, provider, step count, stop reason. Elapsed covers the
   whole turn; first token is what a cold model load looks like; the rate divides by
@@ -371,7 +372,9 @@ negotiation, plural handling and right-to-left detection already work.
 Run `pnpm --filter @ghostwire/web dev` for an edit-reload loop; Vite proxies `/api` and
 `/ws` to a running `ghostai serve`.
 
-**Restart `ghostai serve` after a production UI build.** It enumerates the UI directory once
-at boot, so a rebuild underneath a running server serves the new `index.html` and 404s its
-hashed assets into the SPA fallback. The result is a blank page that looks like a crash
-and is not one.
+**There is nothing to restart after a production UI build.** The bundle is compiled into
+the binary, so a rebuild produces a new `ghostai` rather than moving files underneath a
+running one — which removes the gotcha this paragraph used to warn about, where a fresh
+`index.html` was served beside 404ing hashed assets and the result was a blank page that
+looked like a crash and was not one. `--ui <dir>` serves a directory instead, and is the
+escape hatch for working on the UI itself.

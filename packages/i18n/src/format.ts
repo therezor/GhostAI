@@ -56,8 +56,8 @@ export function formatDate(
  * Separate from `formatDate` rather than an option on it, because the two
  * answer different questions and the wrong one is silently wrong: a file's
  * modified date reads better without a time, and a scheduled job's next run is
- * *only* about the time. `formatDate` used to be the sole option, which is why
- * "Next run" rendered as `8 Aug 2026` and dropped the one field it existed for.
+ * *only* about the time — rendered through `formatDate` it reads `8 Aug 2026`
+ * and drops the one field it exists for.
  *
  * `timeZoneName: 'short'` is not decoration. Once an install can render in a
  * zone that is not the reader's own, an unlabelled `09:00` is a number the
@@ -213,9 +213,7 @@ export function pluralCategory(
   return pluralRules(locale).select(count);
 }
 
-// ---------------------------------------------------------------------------
 // Memoised constructors
-// ---------------------------------------------------------------------------
 
 const numberFormats = new Map<string, Intl.NumberFormat>();
 const compactNumberFormats = new Map<string, Intl.NumberFormat>();

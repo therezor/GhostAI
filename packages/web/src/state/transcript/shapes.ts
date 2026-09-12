@@ -34,9 +34,7 @@ import type {
   Usage,
 } from '@ghostwire/protocol';
 
-// ---------------------------------------------------------------------------
 // Shapes
-// ---------------------------------------------------------------------------
 
 export interface UserItem {
   readonly kind: 'user';

@@ -410,9 +410,7 @@ describe('the file browser', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // The editor
-// ---------------------------------------------------------------------------
 
 /** Opens `notes.md` and hands back its textarea. */
 async function openEditor(
@@ -586,9 +584,7 @@ describe('the file editor', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Creating, filtering and sorting
-// ---------------------------------------------------------------------------
 
 describe('creating entries', () => {
   it('creates a folder in the directory being looked at', async () => {

@@ -1,7 +1,8 @@
 /**
  * REST DTOs.
  *
- * These are the objects `@fastify/swagger` turns into the OpenAPI 3.1 document.
+ * These are the objects the server publishes under `components.schemas` in the
+ * OpenAPI 3.1 document.
  * The API reference is generated from them and never hand-maintained, so it
  * cannot drift from the routes it documents.
  *
@@ -30,9 +31,7 @@ import { ToolDefinitionSchema, ToolPermissionSchema } from './tools.js';
 import { AutomationJobSchema, AutomationRunSchema } from './automation.js';
 import { ExtensionContributionSchema } from './extension.js';
 
-// ---------------------------------------------------------------------------
 // Envelopes
-// ---------------------------------------------------------------------------
 
 /**
  * The single error shape for every non-2xx response, so a client has one branch
@@ -73,9 +72,7 @@ export const PaginationQuerySchema = z.object({
 });
 export type PaginationQuery = z.infer<typeof PaginationQuerySchema>;
 
-// ---------------------------------------------------------------------------
 // Status
-// ---------------------------------------------------------------------------
 
 export const StatusResponseSchema = z.object({
   version: z.string(),
@@ -99,11 +96,10 @@ export const StatusResponseSchema = z.object({
   /**
    * The default workspace's id, never its path.
    *
-   * `workspace` used to carry `jail.root` — an absolute host path, so every
-   * authenticated client learned the operator's username and directory layout,
-   * which is the one string that turns a blind traversal attempt into a
-   * targeted one. Absolute paths do not cross this boundary in either
-   * direction.
+   * Carrying `jail.root` here — an absolute host path — would teach every
+   * authenticated client the operator's username and directory layout, which is
+   * the one string that turns a blind traversal attempt into a targeted one.
+   * Absolute paths do not cross this boundary in either direction.
    */
   workspaceId: z.string().min(1),
   workspaceCount: z.number().int().positive(),
@@ -127,9 +123,7 @@ export const HealthResponseSchema = z.object({
 });
 export type HealthResponse = z.infer<typeof HealthResponseSchema>;
 
-// ---------------------------------------------------------------------------
 // Settings
-// ---------------------------------------------------------------------------
 
 /**
  * Something the settings say that could not be honoured, but did not stop the
@@ -272,13 +266,11 @@ export const SetCredentialRequestSchema = z.object({
 });
 export type SetCredentialRequest = z.infer<typeof SetCredentialRequestSchema>;
 
-// ---------------------------------------------------------------------------
 // Providers and models
-// ---------------------------------------------------------------------------
 
 /**
  * A provider *type*, projected from the `PROVIDERS` table in
- * `@ghostwire/providers`. The catalogue an operator adds an endpoint from.
+ * `ghostai-providers`. The catalogue an operator adds an endpoint from.
  *
  * It carries no credential flag. A credential belongs to a configured
  * instance — two Ollama entries can have different tokens — so the boolean
@@ -294,7 +286,6 @@ export const ProviderInfoSchema = z.object({
   isOAuth: z.boolean(),
   defaultApiBase: z.string().optional(),
   envKey: z.string().optional(),
-  /** The endpoint can be asked for its own model list. */
   supportsModelListing: z.boolean(),
 });
 export type ProviderInfo = z.infer<typeof ProviderInfoSchema>;
@@ -364,7 +355,7 @@ export type ModelsResponse = z.infer<typeof ModelsResponseSchema>;
  * which is the thing the check exists to happen before.
  */
 export const ProviderTestRequestSchema = z.object({
-  /** A `@ghostwire/providers` registry id. */
+  /** A `ghostai-providers` registry id. */
   type: z.string().min(1),
   /** Empty means the type's own default endpoint. */
   apiBase: z.string().default(''),
@@ -399,9 +390,7 @@ export const ProviderTestResponseSchema = z.object({
 });
 export type ProviderTestResponse = z.infer<typeof ProviderTestResponseSchema>;
 
-// ---------------------------------------------------------------------------
 // Sessions
-// ---------------------------------------------------------------------------
 
 export const SessionSummarySchema = z.object({
   key: z.string().min(1),
@@ -613,9 +602,7 @@ export const BranchSessionRequestSchema = z.object({
 });
 export type BranchSessionRequest = z.infer<typeof BranchSessionRequestSchema>;
 
-// ---------------------------------------------------------------------------
 // Agents
-// ---------------------------------------------------------------------------
 
 /**
  * One agent, as a picker needs it.
@@ -650,9 +637,7 @@ export const AgentListResponseSchema = z.object({
 });
 export type AgentListResponse = z.infer<typeof AgentListResponseSchema>;
 
-// ---------------------------------------------------------------------------
 // Tools
-// ---------------------------------------------------------------------------
 
 export const ToolListResponseSchema = z.object({
   tools: z.array(ToolDefinitionSchema),
@@ -715,9 +700,7 @@ export const ToolboxListResponseSchema = z.object({
 });
 export type ToolboxListResponse = z.infer<typeof ToolboxListResponseSchema>;
 
-// ---------------------------------------------------------------------------
 // MCP servers
-// ---------------------------------------------------------------------------
 
 /**
  * Where one configured MCP server is right now.
@@ -727,10 +710,10 @@ export type ToolboxListResponse = z.infer<typeof ToolboxListResponseSchema>;
  * this says what is. Folding the second into the first would mean writing
  * "unreachable" into `config.json`.
  *
- * Declared in `@ghostwire/protocol` rather than in `@ghostwire/mcp` so that the
+ * Declared in `@ghostwire/protocol` rather than in `ghostai-mcp` so that the
  * server and the browser can name it without either of them depending on the
  * client package — the same reason `ToolDefinition` lives here rather than in
- * `@ghostwire/tools`.
+ * `ghostai-tools`.
  */
 export const McpServerStateSchema = z.enum([
   'connecting',
@@ -778,9 +761,7 @@ export const McpStatusResponseSchema = z.object({
 });
 export type McpStatusResponse = z.infer<typeof McpStatusResponseSchema>;
 
-// ---------------------------------------------------------------------------
 // Extensions
-// ---------------------------------------------------------------------------
 
 /**
  * What an extension is doing right now.
@@ -898,9 +879,7 @@ export const RunCommandResponseSchema = z.object({
 });
 export type RunCommandResponse = z.infer<typeof RunCommandResponseSchema>;
 
-// ---------------------------------------------------------------------------
 // Files
-// ---------------------------------------------------------------------------
 
 export const FileEntrySchema = z.object({
   /** Workspace-relative, always. Absolute paths never cross this boundary. */
@@ -1046,9 +1025,7 @@ export const MoveFileRequestSchema = z.object({
 });
 export type MoveFileRequest = z.infer<typeof MoveFileRequestSchema>;
 
-// ---------------------------------------------------------------------------
 // Workspaces
-// ---------------------------------------------------------------------------
 
 /**
  * A workspace as the switcher and the manager see it.
@@ -1114,9 +1091,7 @@ export const MoveSessionsResponseSchema = z.object({
 });
 export type MoveSessionsResponse = z.infer<typeof MoveSessionsResponseSchema>;
 
-// ---------------------------------------------------------------------------
 // Notifications
-// ---------------------------------------------------------------------------
 
 export const NotificationSchema = z.object({
   id: z.string().min(1),
@@ -1147,9 +1122,7 @@ export type NotificationListResponse = z.infer<
   typeof NotificationListResponseSchema
 >;
 
-// ---------------------------------------------------------------------------
 // Automation
-// ---------------------------------------------------------------------------
 
 export const AutomationJobListResponseSchema = z.object({
   jobs: z.array(AutomationJobSchema),
@@ -1168,9 +1141,7 @@ export type AutomationRunListResponse = z.infer<
   typeof AutomationRunListResponseSchema
 >;
 
-// ---------------------------------------------------------------------------
 // Auth
-// ---------------------------------------------------------------------------
 
 /**
  * The login name an install starts with.
@@ -1292,9 +1263,7 @@ export const AuthSessionResponseSchema = z.object({
 });
 export type AuthSessionResponse = z.infer<typeof AuthSessionResponseSchema>;
 
-// ---------------------------------------------------------------------------
 // First-run setup
-// ---------------------------------------------------------------------------
 
 /**
  * Whether this install still has to be claimed.
@@ -1313,11 +1282,11 @@ export type SetupStatusResponse = z.infer<typeof SetupStatusResponseSchema>;
 /**
  * The one-time code printed to the console on first launch.
  *
- * It exists because the alternative was worse in both directions: the server
- * used to refuse to start without a password, so the UI that would set one was
- * unreachable — and a server that simply started unauthenticated would be a
- * shell-capable agent answering to whoever reached the port first. A code that
- * only the operator's own terminal can see closes that gap without either.
+ * It exists because both alternatives are worse: refusing to start without a
+ * password leaves the UI that would set one unreachable, and starting
+ * unauthenticated is a shell-capable agent answering to whoever reaches the
+ * port first. A code that only the operator's own terminal can see closes that
+ * gap without either.
  */
 export const SetupClaimRequestSchema = z.object({
   code: z.string().min(1),

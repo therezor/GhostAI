@@ -13,7 +13,7 @@
  *    schema so the child's own defaults apply, which `.default()` (output-typed
  *    in Zod 4) could not do without restating every leaf.
  *  - **No `.transform()` anywhere.** Normalisation (trimming an `apiBase` to
- *    `undefined`, expanding `~`) happens at load time in `@ghostwire/core`, which
+ *    `undefined`, expanding `~`) happens at load time in `ghostai-core`, which
  *    keeps input and output types identical and every schema here
  *    representable as JSON Schema for the OpenAPI document.
  */
@@ -125,9 +125,7 @@ function patchOf<S extends z.ZodRawShape>(
   return z.object(shape) as unknown as z.ZodObject<PatchShape<S>>;
 }
 
-// ---------------------------------------------------------------------------
 // One agent's settings
-// ---------------------------------------------------------------------------
 
 /**
  * The working folder every agent shares.
@@ -212,7 +210,7 @@ export const AgentSettingsSchema = z.object({
    * see it, let me open it" and the request being rejected outright.
    *
    * The reactive half of this already existed: `stripImages` in
-   * `@ghostwire/providers` removes images *after* an endpoint has refused them.
+   * `ghostai-providers` removes images *after* an endpoint has refused them.
    * This is the same repair moved to before the round trip, for the case where
    * the operator already knows.
    */
@@ -237,9 +235,7 @@ export type AgentSettings = z.infer<typeof AgentSettingsSchema>;
 // The named agents these belong to live further down, after the tool schemas
 // they override — see "Agents".
 
-// ---------------------------------------------------------------------------
 // Providers
-// ---------------------------------------------------------------------------
 
 /**
  * One configured endpoint. API keys are deliberately absent: they live in the
@@ -251,12 +247,12 @@ export type AgentSettings = z.infer<typeof AgentSettingsSchema>;
  * — a laptop and a GPU box — are two entries with the same `type` and different
  * `apiBase`, which the previous shape (one entry per provider id) could not
  * express at all. It is validated against the registry table by
- * `@ghostwire/providers`, not here: this package sits upstream of that table and
+ * `ghostai-providers`, not here: this package sits upstream of that table and
  * cannot see it, which is the same reason `ProvidersConfig` is a record rather
  * than one named field per provider.
  */
 export const ProviderConfigSchema = z.object({
-  /** A `@ghostwire/providers` registry id — `ollama`, `openai`, `custom`. */
+  /** A `ghostai-providers` registry id — `ollama`, `openai`, `custom`. */
   type: z.string().min(1),
   /** Shown in the UI. Empty falls back to the type's display name. */
   label: z.string().default(''),
@@ -278,10 +274,10 @@ export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;
 /**
  * Keyed by *instance* id, which is an operator's label rather than a provider id.
  *
- * It used to be keyed by provider id, which capped the tree at one endpoint per
- * provider. The two are deliberately compatible: an old file's keys *are*
- * provider ids, so adding `type` = the key is the whole of moving one over, and
- * every credential already in the vault keeps resolving under the same string.
+ * Keying by provider id instead would cap the tree at one endpoint per
+ * provider. The two spellings are deliberately compatible: a file whose keys
+ * *are* provider ids needs only `type` = the key to move over, and every
+ * credential already in the vault keeps resolving under the same string.
  * There is no automatic migration — a file without `type` is an error naming the
  * key, which is this project's rule for every old shape.
  */
@@ -290,9 +286,7 @@ export const ProvidersConfigSchema = z
   .default({});
 export type ProvidersConfig = z.infer<typeof ProvidersConfigSchema>;
 
-// ---------------------------------------------------------------------------
 // Server
-// ---------------------------------------------------------------------------
 
 export const AuthConfigSchema = z.object({
   /**
@@ -362,7 +356,7 @@ export const ServerConfigSchema = z.object({
  *
  * A pure predicate rather than a schema refinement: the caller needs to explain
  * *why* startup was refused, and cross-field validation would also make this
- * schema unrepresentable as JSON Schema. `@ghostwire/server` calls it during
+ * schema unrepresentable as JSON Schema. `ghostai-server` calls it during
  * boot; `0.0.0.0` and `::` are the wildcard binds that must count as remote.
  */
 export function isLoopbackHost(host: string): boolean {
@@ -376,9 +370,7 @@ export function isLoopbackHost(host: string): boolean {
   return /^127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(h);
 }
 
-// ---------------------------------------------------------------------------
 // Tools
-// ---------------------------------------------------------------------------
 
 export const ExecToolConfigSchema = z.object({
   enable: z.boolean().default(true),
@@ -438,10 +430,9 @@ export const ToolsConfigSchema = z.object({
   /**
    * How long to wait for a decision before treating an `ask` call as denied.
    *
-   * A timeout rather than a policy, which is why it survived the band table
-   * that used to live beside it: whether a tool asks at all is now a property
-   * of the agent (`agents.list.<id>.tools`), but how long the prompt stays open
-   * is a property of the deployment and has nowhere else to be.
+   * A timeout rather than a policy: whether a tool asks at all is a property of
+   * the agent (`agents.list.<id>.tools`), but how long the prompt stays open is
+   * a property of the deployment and has nowhere else to be.
    */
   approvalTimeoutMs: z
     .number()
@@ -469,9 +460,7 @@ export const ToolsConfigSchema = z.object({
 });
 export type ToolsConfig = z.infer<typeof ToolsConfigSchema>;
 
-// ---------------------------------------------------------------------------
 // Agents
-// ---------------------------------------------------------------------------
 //
 // Below the tool schemas rather than beside `AgentSettings`, because an agent
 // overrides them: this is the one place in the tree where the dependency runs
@@ -487,7 +476,7 @@ export type ToolsConfig = z.infer<typeof ToolsConfigSchema>;
  * means "anything not denied", and deliberately so: an allow-list of *binaries*
  * is a narrowing of one tool an operator already turned on, while this is the
  * list of tools themselves, and a newly created agent quietly holding every
- * tool the registry happens to carry is the failure this replaces.
+ * tool the registry happens to carry is the failure this shape prevents.
  *
  * Which is why a new agent is not born empty either — see `DEFAULT_AGENT_TOOLS`.
  *
@@ -553,7 +542,7 @@ export type AgentToolboxNetwork = z.infer<typeof AgentToolboxNetworkSchema>;
  * the machine running GhostAI, inside the workspace jail. A named toolbox routes
  * `exec` into that toolbox's container instead.
  *
- * This replaces what used to be `sandbox`, because the two were one idea wearing
+ * There is no separate `sandbox` key, because the two would be one idea wearing
  * two words: "where exec runs" *is* "which box of tools the agent has".
  *
  * **There is no `image`, `runtime`, `caps` or `limits` here, deliberately.**
@@ -567,7 +556,7 @@ export type AgentToolboxNetwork = z.infer<typeof AgentToolboxNetworkSchema>;
 /**
  * The key in `AgentToolbox.tools` standing for "every entry not named above".
  *
- * Here rather than in `@ghostwire/tools`, which is where it is resolved, because
+ * Here rather than in `ghostai-tools`, which is where it is resolved, because
  * three packages need the *spelling* without the resolution: the runtime reads
  * it, the web editor shows the permission a row actually resolves to, and the
  * CLI reports what an install granted.
@@ -831,19 +820,16 @@ export const AgentsConfigSchema = z.object({
     .prefault({ [DEFAULT_AGENT_ID]: {} }),
 });
 
-// ---------------------------------------------------------------------------
 // Scheduler, channels, extensions
-// ---------------------------------------------------------------------------
 
 /**
  * The engine, and nothing about any one job.
  *
  * Every key here is true of the *scheduler*; none of them describes a task.
- * That line is the whole shape of this block, and it is worth stating because
- * this schema used to break it: a `heartbeat` sub-block carried an
- * `intervalMin`, a `file`, a `model`, an `agentId`, a `sessionKey` and its own
- * `enabled`, which is a second way to describe one scheduled job — and the one
- * nothing read.
+ * That line is the whole shape of this block, and it is worth stating because a
+ * `heartbeat` sub-block would break it: an `intervalMin`, a `file`, a `model`,
+ * an `agentId`, a `sessionKey` and its own `enabled` is a second way to
+ * describe one scheduled job.
  *
  * A heartbeat **is** a job. Its interval is the job's schedule, its file and
  * model are the job's payload, and its on/off is the job's own flag. Two
@@ -964,9 +950,7 @@ export const UiConfigSchema = z.object({
   timezone: z.string().min(1).default('UTC'),
 });
 
-// ---------------------------------------------------------------------------
 // Root
-// ---------------------------------------------------------------------------
 
 export const ConfigSchema = z.object({
   /** The folder every agent works in. See `WorkspacePathSchema`. */
@@ -1139,9 +1123,7 @@ export const ConfigPatchSchema = z.strictObject({
 });
 export type ConfigPatch = z.infer<typeof ConfigPatchSchema>;
 
-// ---------------------------------------------------------------------------
 // Editing one agent's model and sampling settings
-// ---------------------------------------------------------------------------
 
 /**
  * The fields a chat surface can move without opening the agent editor.
@@ -1178,10 +1160,9 @@ export interface AgentSettingsChange {
  * default agent anyway, and writing a half-agent under a dead id would be worse
  * than writing a whole one.
  *
- * Pure, and deliberately in `@ghostwire/protocol` rather than beside the merge it
- * encodes. Both callers need it and only this package reaches both: the web
- * bundle cannot import `@ghostwire/runtime` or `@ghostwire/core`, which open
- * `node:sqlite` and the filesystem.
+ * Pure, and deliberately in `@ghostwire/protocol` rather than beside the merge
+ * it encodes. Both callers need it and only this package reaches both: the web
+ * bundle cannot import `ghostai-runtime` or `ghostai-core` at all.
  */
 export function agentSettingsPatch(
   config: Config,

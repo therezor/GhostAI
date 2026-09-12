@@ -27,7 +27,7 @@ rather than a text box.
 **Only the `openai-chat` adapter exists.** Four wire protocols are named
 (`openai-chat`, `anthropic-messages`, `gemini-generate`, `openai-responses`) and one is
 implemented. Selecting a wire that has no adapter is a loud configuration error, not a
-silent fallback: `createProvider` refuses at construction rather than letting a
+silent fallback: `create_provider` refuses at construction rather than letting a
 misconfiguration surface as a 404 mid-turn. Reaching one of those providers today means
 pointing an instance at an endpoint that speaks `openai-chat`.
 
@@ -90,17 +90,20 @@ install never creates a keychain entry it did not need.
 Over HTTP the vault is write-only: `PUT /api/settings/credentials` stores one, and nothing
 reads one back out. What a client can see is a per-instance `credentialsPresent` boolean.
 
-The provider base URL deliberately does **not** go through `guardedFetch` — the common
+The provider base URL deliberately does **not** go through the guarded fetch — the common
 case is loopback, which the SSRF guard exists to refuse. What is enforced instead is
 narrower and matches the actual risk: an API key is never sent over plain HTTP to a public
 address.
 
 ## Resilience
 
-`withResilience` decorates both streaming and non-streaming calls. Its retry ladder is
-declarative: on a rejection that names a parameter the endpoint does not support, it drops
-`reasoning_effort`, then `tool_choice`, then images, then the oldest turns — each step a
-narrower request rather than the same one again.
+`with_resilience` decorates both streaming and non-streaming calls. Its retry ladder is
+declarative, six steps, and the order _is_ the policy — each step costs more than the one
+above it. It drops `prompt_cache_key`, then merges the trailing turn, then drops
+`reasoning_effort`, then `tool_choice`, then images, then the oldest turns: a cache-routing
+hint costs nothing, a message boundary costs little, `reasoning_effort` costs answer
+quality, an image costs information the user supplied, and a turn costs the conversation's
+memory. Each is tried only after the one above it has failed or does not apply.
 
 **A stream that has already emitted output is never retried.** Retrying it would either
 duplicate text the user has read or silently replace it.
@@ -111,9 +114,17 @@ on a substring of a provider's message — a `notice` with kind `provider_fallba
 
 ## Token accounting
 
-Two counters on purpose. A cheap `ceil(length / 4)` estimate is allocation-free and safe
-in hot paths; a real tokenizer is loaded lazily on first use (about 40 ms and 50 MB) and
-cached, for the places where accuracy matters.
+One estimator, deliberately: `ceil(length / 4)`, with no tables and no allocation. It
+answers one question — "roughly how big is this?" — which the degradation ladder asks when
+deciding how many turns to drop after a context-length rejection. That runs on the failure
+path, so it must not be slower than the success path.
+
+**There is no exact tokenizer, and that is a decision rather than a gap.** A per-provider
+one would mean shipping megabytes of vocabulary per provider to sharpen an estimate that
+exists to decide _whether_ to truncate, not exactly where. Nothing in the tree sizes
+against a hard limit, so nothing needs one. What the estimate is applied to matters more
+than its precision: it measures the wire-encoded body rather than the stored records, so
+nothing the provider never receives is counted.
 
 Cached-prompt tokens are read back from the response and surfaced per turn, so the effect
 of the [prompt caching split](prompts.md#two-halves-and-why) is visible in the UI's turn

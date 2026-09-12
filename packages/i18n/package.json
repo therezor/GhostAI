@@ -15,11 +15,6 @@
       "types": "./dist/web.d.ts",
       "default": "./dist/web.js"
     },
-    "./cli": {
-      "development": "./src/cli.ts",
-      "types": "./dist/cli.d.ts",
-      "default": "./dist/cli.js"
-    },
     "./locales/*": "./locales/*",
     "./package.json": "./package.json"
   },
@@ -28,12 +23,6 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": [
-    "dist/**",
-    "!dist/**/*.map",
-    "!dist/.tsbuildinfo",
-    "locales"
-  ],
   "scripts": {
     "build": "tsup && tsc -b",
     "typecheck": "tsc -b",
@@ -50,26 +39,5 @@
   },
   "homepage": "https://github.com/therezor/GhostAI",
   "bugs": "https://github.com/therezor/GhostAI/issues",
-  "publishConfig": {
-    "access": "public",
-    "exports": {
-      ".": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
-      "./web": {
-        "types": "./dist/web.d.ts",
-        "default": "./dist/web.js"
-      },
-      "./cli": {
-        "types": "./dist/cli.d.ts",
-        "default": "./dist/cli.js"
-      },
-      "./locales/*": "./locales/*",
-      "./package.json": "./package.json"
-    }
-  },
-  "engines": {
-    "node": ">=22.13"
-  }
+  "private": true
 }

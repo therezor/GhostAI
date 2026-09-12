@@ -11,3 +11,9 @@ coverage/
 .vitest-cache/
 packages/web/dist/
 .idea
+
+# Rust
+target/
+**/*.profraw
+lcov.info
+coverage.json

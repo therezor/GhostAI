@@ -1,13 +1,12 @@
 /**
  * The workspaces list.
  *
- * This used to be a dialog hanging off the sidebar switcher, and moving it to a
- * page is not a cosmetic promotion. A workspace is a folder the agent works in
- * and a scope every conversation belongs to; it is the same *kind* of thing as
- * a file or an agent, and it was the only one of the three whose management
- * lived in a modal — with its own row stylesheet, its own inline rename form,
- * and a delete that fired on a single click with nothing between it and the
- * folder. Two of those were bugs that only looked like styling.
+ * A page rather than a dialog hanging off the sidebar switcher, and that is not
+ * a cosmetic distinction. A workspace is a folder the agent works in and a
+ * scope every conversation belongs to — the same *kind* of thing as a file or
+ * an agent. Managing it in a modal buys a second row stylesheet, an inline
+ * rename form, and a delete one click away from the folder; the last two are
+ * bugs that only look like styling.
  *
  * So: the same `page page--wide` frame as Files and Agents, the same
  * `list-toolbar` and `SearchFilter`, the same `DataList`, the same kebab, and

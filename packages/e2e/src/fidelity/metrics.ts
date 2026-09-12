@@ -29,7 +29,6 @@
 export interface Metrics {
   /** The left column, including its border. */
   readonly sidebarWidth: number;
-  /** The bar above the session. */
   readonly headerHeight: number;
   /** The measure a message is set to — the reason long answers stay readable. */
   readonly chatWidth: number;

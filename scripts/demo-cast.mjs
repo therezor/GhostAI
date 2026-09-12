@@ -8,8 +8,9 @@
  *  1. A mock provider on 127.0.0.1:11500 speaking the `openai-chat` wire,
  *     scripted to call `list_dir` and then answer from what came back — the
  *     same shape `packages/e2e/src/harness/script.ts` gives the browser suite.
- *     It drives the **real** `ghostai` binary through a real config, because a
- *     recording of a mock is not a recording of the product.
+ *     It drives the **real** `ghostai` binary — `target/release/ghostai`, which
+ *     `pnpm demo` builds first — through a real config, because a recording of
+ *     a mock is not a recording of the product.
  *  2. A throwaway install, seeded with one file for the agent to find.
  *  3. `scripts/ptyrec.py` records **bash** on a real pty, types `ghostai chat`,
  *     waits for the TUI, asks the question, and leaves. Keystrokes are
@@ -33,6 +34,7 @@
 
 import { execFileSync, spawn } from 'node:child_process';
 import {
+  existsSync,
   mkdirSync,
   readFileSync,
   mkdtempSync,
@@ -47,6 +49,11 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'docs', 'screenshots', 'demo.svg');
 const REC = join(ROOT, 'scripts', 'ptyrec.py');
+// The release build, which is what `pnpm demo` builds. A debug binary records
+// the same pixels, so `GHOSTAI_BIN` is here for the case where one is already
+// to hand rather than as a knob the cast depends on.
+const BIN =
+  process.env.GHOSTAI_BIN ?? join(ROOT, 'target', 'release', 'ghostai');
 const PORT = 11500;
 const MODEL = 'qwen3:8b';
 const QUESTION = 'what is in the workspace?';
@@ -73,21 +80,26 @@ function seedHome() {
   // and the take records whatever `ghostai` the operator happens to have
   // installed — a recording of the last release rather than of this checkout,
   // which is the one thing the header above says this script does not do.
+  //
+  // A shim rather than a symlink because `GHOSTAI_BIN` is allowed to name a
+  // binary anywhere, and `exec` keeps the process count the same either way.
   const shim = join(home, 'bin', 'ghostai');
-  writeFileSync(
-    shim,
-    `#!/bin/sh\nexec node ${join(ROOT, 'packages', 'cli', 'dist', 'index.js')} "$@"\n`,
-  );
+  writeFileSync(shim, `#!/bin/sh\nexec ${BIN} "$@"\n`);
   chmodSync(shim, 0o755);
 
+  // The agent is complete in itself: there is nothing above an agent to inherit
+  // a provider or a model from, so the entry names both. An entry that named
+  // neither would come up listed, editable and refused a turn — which is a
+  // correct screen and a useless recording.
   writeFileSync(
     join(home, 'config.json'),
     JSON.stringify(
       {
         agents: {
-          defaults: { provider: 'local', model: MODEL },
           list: {
             default: {
+              provider: 'local',
+              model: MODEL,
               tools: {
                 read_file: 'allow',
                 list_dir: 'allow',
@@ -160,6 +172,17 @@ const TAKE = [
   // on the finished conversation rather than on the TUI tearing down.
   [4.5, ''],
 ];
+
+// Before anything is spawned. A missing binary is otherwise a ten-second
+// recording of `bash: ghostai: command not found`, which succeeds, overwrites
+// the committed SVG, and looks like a UI change in `git status`.
+if (!existsSync(BIN)) {
+  process.stderr.write(
+    `No ghostai binary at ${BIN}.\n` +
+      'Run `pnpm build && cargo build --release -p ghostai`, or set GHOSTAI_BIN.\n',
+  );
+  process.exit(1);
+}
 
 // A child process, not a server in this one: `execFileSync` below blocks this
 // event loop for the whole take, and an in-process server would accept nothing.

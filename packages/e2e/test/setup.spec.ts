@@ -139,12 +139,20 @@ test.describe('a claimed install with a provider but no model', () => {
 });
 
 test.describe('a claimed install with nothing configured', () => {
-  // `provider: 'auto'` with no `providers` block and no key in the environment
-  // resolves no endpoint at all — which is what makes this the install that
-  // genuinely needs the provider step, unlike the one above.
+  // `provider: 'auto'` with an empty `providers` map and no key in the
+  // environment resolves no endpoint at all — which is what makes this the
+  // install that genuinely needs the provider step, unlike the one above.
+  //
+  // The empty map has to be written out. Every harness now starts a real
+  // server, and a real server needs an endpoint to answer with, so the default
+  // config carries one; naming `providers` at all is what replaces it. The
+  // in-process harness could leave the line out because its model was injected
+  // rather than configured — which was the one thing about it a browser could
+  // never have seen.
   test.use({
     harnessOptions: {
       config: {
+        providers: {},
         agents: { list: { default: { provider: 'auto', model: '' } } },
       },
     },

@@ -47,19 +47,17 @@ import {
 /** Version of the wire protocol. Bumped on any breaking envelope change. */
 export const PROTOCOL_VERSION = 2 as const;
 
-// ---------------------------------------------------------------------------
 // Client → server
-// ---------------------------------------------------------------------------
 
 /**
  * An upload attached to a message: a file in the workspace, named by its path.
  *
- * The path, and only the path. The field this replaces was "signed URL *or*
- * workspace-relative path", and that ambiguity is what broke attachments: the
- * web sent a signed URL, the server put it where a provider would try to fetch
- * it, and `/api/media/<token>` means nothing outside this origin — and expires
- * ten minutes later even here. A path is stable, resolvable by the file tools,
- * and signable on demand when a browser needs to draw it.
+ * The path, and only the path. Accepting "signed URL *or* workspace-relative
+ * path" is the ambiguity that breaks attachments: the web sends a signed URL,
+ * the server puts it where a provider would try to fetch it, and
+ * `/api/media/<token>` means nothing outside this origin — and expires ten
+ * minutes later even here. A path is stable, resolvable by the file tools, and
+ * signable on demand when a browser needs to draw it.
  */
 export const AttachmentSchema = z.object({
   mimeType: z.string().min(1),
@@ -104,7 +102,7 @@ export const UserMessageRequestSchema = z.object({
 });
 
 /**
- * Stop the in-flight turn. Threads through to the single `AbortSignal` that
+ * Stop the in-flight turn. Threads through to the single cancellation token that
  * reaches the provider fetch, the running tool and the child process. One
  * cancellation mechanism, so there is no path where the loop stops but the
  * `exec` child keeps running.
@@ -222,9 +220,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 
-// ---------------------------------------------------------------------------
 // Server → client
-// ---------------------------------------------------------------------------
 
 /** Sequence number carried by every session-scoped server event. */
 const seq = z.number().int().nonnegative();
@@ -456,7 +452,7 @@ export const TurnEndEventSchema = z.object({
   /**
    * Wall time from the first append to this event.
    *
-   * Deliberately *not* the divisor for tokens/s, though it used to be. It spans
+   * Deliberately *not* the divisor for tokens/s. It spans
    * the model load, prompt eval, every tool call and every approval wait, and
    * dividing tokens by all of it reports a generation speed that mostly
    * measures things that were not generation. `generationMs` is the divisor;
@@ -567,10 +563,10 @@ export const SubagentEventSchema = z.object({
  * How much of the context window the next request would use, restated whenever
  * the history grows.
  *
- * The bar under the composer used to move once a turn, because the only frame
- * that refreshed it was `turn.end`. A turn that calls twenty tools appends tens
- * of thousands of tokens before it ends, and "why did it forget what I said" is
- * asked *during* that turn, not after it.
+ * Refreshing only on `turn.end` would move the bar under the composer once a
+ * turn. A turn that calls twenty tools appends tens of thousands of tokens
+ * before it ends, and "why did it forget what I said" is asked *during* that
+ * turn, not after it.
  *
  * Session-scoped rather than turn-scoped, and deliberately so: it describes the
  * conversation, not the turn that happened to grow it. It carries no `turnId`

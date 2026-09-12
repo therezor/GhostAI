@@ -191,6 +191,12 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/coverage/**',
       '**/*.tsbuildinfo',
+      // The Rust workspace. Its test fixtures include `.mjs` files — an
+      // extension is a script a host spawns, so a fixture extension is a real
+      // one — but they are Cargo's inputs, not this repository's TypeScript,
+      // and they belong to no tsconfig by construction.
+      'crates/**',
+      'target/**',
       // Config for `i18next-parser`, which loads them itself. They are outside
       // every package's `tsconfig`, so the type-aware rules have no project to
       // resolve them against — and adding a tsconfig for three declarative
@@ -288,49 +294,6 @@ export default tseslint.config(
     },
   },
   {
-    /**
-     * One file in the CLI may open a readline interface, and no others.
-     *
-     * `ask.ts` keeps it, and is the only file that ever did after the prompts
-     * moved out of `init.ts` — a wizard and `ghostai preset install` are both a
-     * sequence of questions with nothing else on screen, which is what readline
-     * is right for and always was. Concentrating it in one file is also what
-     * makes the reader's *lifetime* reviewable: `openAsk` hands back the
-     * `close` its caller has to run, because node keeps the process alive while
-     * an interface is open.
-     *
-     * The REPL no longer has one. readline draws its own line, at a row it
-     * measured for itself, by moving up over a row count it cached, and every
-     * one of those numbers is invalidated by a resize before the process is
-     * told the window moved — which is exactly the bug that took the frame
-     * away from it. `chat.ts` builds a renderer and an editor instead, and the
-     * ban is what stops a second owner of stdin from appearing beside them.
-     * The symptom of one would be dropped keystrokes rather than anything that
-     * looks like a layering mistake.
-     */
-    files: ['packages/cli/src/**/*.ts'],
-    ignores: ['packages/cli/src/ask.ts'],
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              group: ['../../*'],
-              message:
-                'Deep relative imports across package boundaries are banned. Import the package by name (@ghostwire/<pkg>) and declare it in package.json dependencies.',
-            },
-            {
-              group: ['node:readline', 'node:readline/promises'],
-              message:
-                'The REPL owns stdin through `openKeyboard`, and readline would be a second owner of it. A caller that needs a menu takes a `Menu`.',
-            },
-          ],
-        },
-      ],
-    },
-  },
-  {
     // Tests may be looser: fixtures use non-null assertions and unsafe casts freely.
     files: [
       '**/*.test.{ts,tsx}',
@@ -358,12 +321,19 @@ export default tseslint.config(
     },
   },
   {
-    // Config files and scripts live outside every package tsconfig, so
-    // type-aware rules cannot resolve them. Lint them syntactically only.
+    // Config files, scripts, and an extension's own entry script live outside
+    // every package tsconfig, so type-aware rules cannot resolve them. Lint
+    // them syntactically only.
+    //
+    // The extension case is not an oversight to fix later: an extension is a
+    // program the host *spawns*, shipped as the file that runs. Giving it a
+    // tsconfig would mean giving it a build, and the whole point of the
+    // reference extension is that an author needs neither.
     files: [
       '**/*.config.{js,mjs,ts}',
       'scripts/**/*.{js,mjs,ts}',
       'eslint.config.js',
+      'examples/*/index.mjs',
     ],
     extends: [tseslint.configs.disableTypeChecked],
     languageOptions: { globals: { console: 'readonly', process: 'readonly' } },

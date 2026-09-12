@@ -2,9 +2,171 @@
 
 The sections are [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)'s — Added,
 Changed, Fixed, Removed — without its release dates, which the tags carry. This project
-uses [semantic versioning](https://semver.org/spec/v2.0.0.html). Every package in the
-repository carries the same version and they are released together; only `@ghostwire/ghostai`
-is something you install by name.
+uses [semantic versioning](https://semver.org/spec/v2.0.0.html). There is one version for
+the whole repository, carried by the root `Cargo.toml` and the root `package.json`, which
+a test holds equal; what you install is one binary, `ghostai`.
+
+## [Unreleased]
+
+**GhostAI is a Rust program now, shipped as one binary.** Twelve TypeScript
+packages — the core, the security guards, the providers, the tools, the MCP
+client, the agent loop, the channels, the extension host, the runtime, the
+server, the terminal UI and the command line — were rewritten as crates under
+`crates/` and then deleted: 484 files and about 127,000 lines. What a person
+installs is a single executable with the browser UI compiled into it, rather than
+a package manager's dependency tree.
+
+Four packages stayed TypeScript, and the reason is the same one in each case: a
+browser has to read them. `protocol` is the zod schemas the web app validates
+against, so it remains the source of truth and Rust mirrors it; `i18n` is the
+translation layer the UI loads; `web` is the UI; `e2e` is the Playwright suite,
+which now drives the real binary as a subprocess instead of a server it had built
+in-process. The port is covered by 3,955 Rust tests, 1,887 vitest tests and 314
+Playwright specs across two colour schemes.
+
+**If you have an extension written against `ghostai.extension/1`, it will not
+load.** That is the one hard break in this release; see below.
+
+### Changed
+
+- **Extensions are separate processes speaking JSON-RPC, and the wire is MCP's.**
+  A v1 extension was an ES module the host `import`ed into its own process: it
+  exported `activate`, received a context object with five `register*` methods,
+  and shared a heap — and an address space — with the agent, the vault and the
+  server. A v2 extension is an argv the host spawns, talking JSON-RPC 2.0 over its
+  own stdio, one object per line. That is exactly MCP's stdio transport, which has
+  a consequence worth stating plainly: **a plain MCP server, one that has never
+  heard of GhostAI, is already a valid tools-only extension.** The `ghostai/`
+  methods that carry channels, providers, prompt sections and commands are
+  additions on top of a handshake it already speaks, and a server that answers
+  `-32601` to all of them still works.
+
+  The manifest changes with it — `"schema": "ghostai.extension/2"`, and `entry`
+  (a module path) becomes `command` (an argv). **A v1 bundle lands on its row as
+  `failed`, with a sentence saying why**, rather than being adapted: the
+  difference between the two is a process boundary, and there is no version of
+  "load this module" a host that spawns can honour. Both versions still parse, so
+  the refusal has an id, a label and a `contributes` list to render — a union
+  would have made it a parse error with nothing to hang a row on. The only
+  migration is to rewrite the entry point as a program, and
+  `examples/hello-extension` is that rewrite: about two hundred lines of
+  dependency-free Node, and the reference for what the contract now is. The
+  trust class is unchanged — the
+  child still has full access to the operating system, and approval is still a
+  digest over every byte — but a crash is now a process dying rather than an
+  exception in the agent's stack, and `failed` on an extension's row means its
+  process died.
+
+- **Installing is a download.** Each release attaches four tarballs —
+  `aarch64`/`x86_64` × macOS/Linux — and a `SHA256SUMS` file. Each binary is built
+  on its own architecture rather than cross-compiled, because the credential vault
+  talks to the platform keychain and the container runner signals process groups;
+  both are platform code, and a cross-linker is one more thing that can be subtly
+  wrong in a way only a user discovers. Windows is still absent for the same two
+  reasons.
+
+- **SQLite is compiled in rather than borrowed from the host.** `node:sqlite` set
+  the old Node 22.13 floor; `rusqlite` with the bundled library removes the
+  question entirely. The database format did not move — an existing `ghost.db`,
+  `config.json`, `vault.json` and `vault.key` are read as they are, which is
+  asserted against files the deleted TypeScript wrote (see `fixtures/`).
+
+- **Node is a build dependency, not a runtime one.** It builds the web bundle and
+  runs the four remaining packages' tests. The only way it reaches a user's
+  machine now is an extension that happens to be written in JavaScript, and that
+  brings its own interpreter as a child process.
+
+### Added
+
+- **A Rust workspace and a fourth CI job.** `rust-toolchain.toml` pins the
+  compiler, the root `Cargo.toml` pins every dependency exact and carries the lint
+  table (`clippy::all` denied, `pedantic` an error in CI, `#![forbid(unsafe_code)]`
+  in every crate), and `deny.toml` is the supply-chain policy — advisories,
+  licences, no git sources, no wildcards. The job runs format, clippy, deny, the
+  tests and per-crate coverage bars through `scripts/coverage-gate.mjs`, which
+  exists because `cargo llvm-cov` has one threshold for a whole workspace and
+  `security` has to be held to 95/95 while a cosmetic crate is held to 70/65.
+
+- **`fixtures/` — a parity oracle, in a form both languages read.** Fifteen
+  families of cases were generated from the TypeScript implementation before it
+  was deleted, and the Rust tests assert against the same bytes. Twelve of them
+  are frozen now, which is the correct end state: the specification they record no
+  longer exists as code, so nothing can quietly re-derive them to match a port
+  that disagrees.
+
+- **A drift gate over the wire contract.** `packages/protocol` emits one JSON
+  Schema document per registered schema and `crates/protocol` emits its own; CI
+  diffs them. A schema edited on one side only fails the build rather than
+  reaching a browser.
+
+### Fixed
+
+- **A history fetch could delete an answer that was already on screen.** This one
+  was live in the shipped product, not something the port introduced. The socket
+  mints a session key on the first message, the URL gains it, and the history
+  request that fires on that change is in flight while the turn is still
+  streaming. Against a server on the same machine it lands in a millisecond and
+  holds everything; against one a network away — or a busy one — it lands holding
+  the rows that existed when it was _asked_, which is a turn missing its last
+  answer. That was taken as the base of the merge, so text the tab had already
+  displayed was deleted, and no later fetch put it back: the invalidation that
+  would have refetched fires while the request is still open and is deduplicated
+  into it. The turn stayed truncated until something forced a reload. A stored
+  rebuild that knows _less_ about a turn than the socket does no longer replaces
+  it.
+
+The other three never reached a user: they were found in the port, in the port's
+own code, before the first binary shipped. They are recorded because the
+counterfactual is the interesting part — had that binary gone out carrying them,
+each would have failed on first use, on every install:
+
+- **`PATH` reached no tool's child process.** The crates take an owned
+  environment map rather than reading the process, so that a test does not have to
+  mutate global state — and the list of names copied into that map did not include
+  `PATH`. `exec`'s own allow-list then filtered an environment that had none, so
+  every command named without a leading slash failed with "No such file or
+  directory". `node --version` is the shape of it: a command an operator would
+  call ordinary.
+
+- **`POST /api/automation/jobs/:id/run` answered "this build has no scheduler".**
+  A knot that had genuinely come untied: the scheduler is built over the job
+  store, the job store is created while the server is built, and the server's
+  routes need the scheduler — so the server was handed `None` and nothing ever
+  handed it anything else. Both `Run now` and every route that asks the engine to
+  re-read what is due were affected.
+
+- **An install with a provider but no model reported no provider at all**, so the
+  first-run wizard asked for a provider when it should have asked for a model.
+  The status route read the endpoint off the agent's _loop_, and an agent with no
+  model has no loop — which made "configured an endpoint, did not pick a model"
+  indistinguishable from "configured nothing". It reads the resolved instance when
+  there is no loop now; `configured` remains the flag to branch on for "can this
+  take a turn".
+
+### Removed
+
+- **npm publishing.** Nothing in this repository is published to a registry any
+  more. The trusted-publishing job, the `pnpm pack` loop, the per-package
+  `publishConfig` and the `files` negations that existed to keep source maps out
+  of a tarball are all gone with it, and the remaining manifests are `private`.
+
+- **The twelve TypeScript packages the crates replace**, their tsup configs, their
+  root `tsconfig.json` references, their coverage thresholds and
+  `examples/loopback-channel` — which is now a conformance test in
+  `crates/channels/tests`.
+
+- **`@ghostwire/i18n/cli`.** The terminal's i18next instance had no consumer left:
+  the Rust CLI embeds `locales/en/cli.json` with `include_str!` and generates a
+  typed constant per key in `build.rs`, so the JSON is still the type and a key
+  that is not in the bundle is a compile error. The bundle itself and the
+  `./locales/*` export are unchanged, because that is what both sides read.
+
+- **The hand-edited `VERSION` and `SERVER_VERSION` literals.** They existed
+  because a bundle in `dist/` resolves a relative manifest read differently in a
+  workspace and in a published tarball, and a silently wrong version is worse than
+  a missing one. A compiled binary has no such ambiguity:
+  `env!("CARGO_PKG_VERSION")` is fixed at build time and is what both
+  `ghostai --version` and `GET /api/status` report.
 
 ## [0.8.1]
 

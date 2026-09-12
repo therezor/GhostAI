@@ -8,18 +8,19 @@
  * explicit.
  *
  * **The model named here is the selected agent's, not the install's.** That
- * distinction is the whole value of the line: an agent may pin its own model, and
- * this screen used to read `/api/status` — so a conversation about to run on a
- * researcher's pinned model announced the default instead. A screen whose one job
- * is to say what will answer has to be right about it, or it is worse than blank.
+ * distinction is the whole value of the line: an agent may pin its own model, so
+ * reading `/api/status` here would announce the install default to a
+ * conversation about to run on a researcher's pinned model. A screen whose one
+ * job is to say what will answer has to be right about it, or it is worse than
+ * blank.
  *
  * **And it is this conversation's agent, not this browser's preference.** The
- * same argument one step further, because there are two answers and the screen
- * had the weaker one: the remembered preference decides which agent a *new*
- * conversation starts on, and the row's binding decides which one answers an
- * existing one. This card renders for an empty transcript, which a bound
- * conversation can have — `/clear` empties one and a branch can start empty —
- * and there it was naming a different agent's model. `useAgentChoice` is the
+ * same argument one step further, because there are two answers and the
+ * preference is the weaker one: it decides which agent a *new* conversation
+ * starts on, while the row's binding decides which one answers an existing one.
+ * This card renders for an empty transcript, which a bound conversation can
+ * have — `/clear` empties one and a branch can start empty — so the preference
+ * would name a different agent's model there. `useAgentChoice` is the
  * one place that rule lives, and the picker two lines below is reading it, so
  * the card that says what will answer had better read the same thing.
  *
@@ -29,11 +30,10 @@
  * read three sentences to find it. They also cost the screen its shape, putting
  * a list of buttons between the one paragraph that matters and the box.
  *
- * What is here instead is the keyboard hint, which used to live under the
- * composer on every render for the life of the install. It is true forever and
- * worth reading once, so it belongs on the screen somebody sees before they
- * have sent anything — not in the line under the box, where it was crowding out
- * the context budget.
+ * What is here instead is the keyboard hint. It is true forever and worth
+ * reading once, so it belongs on the screen somebody sees before they have sent
+ * anything — not under the composer on every render, where it crowds out the
+ * context budget.
  */
 
 import { useQuery } from '@tanstack/react-query';

@@ -13,12 +13,11 @@
  * handed to a stranger. It is chosen once, in the dialog that creates the
  * instance, and read back here as a fact.
  *
- * **"Fetch models" is the connection test.** There used to be two buttons that
- * did the same round trip: one asked "does this answer" and one asked "what is
- * on it", and `GET /models` is the single request behind both. So there is one
- * button, its failure is the reachability answer, and its success is the
- * catalogue — which is also what makes the check worth pressing when nothing is
- * wrong.
+ * **"Fetch models" is the connection test.** "Does this answer" and "what is on
+ * it" are the same round trip — `GET /models` is the single request behind
+ * both — so they are one button: its failure is the reachability answer and its
+ * success is the catalogue, which is also what makes the check worth pressing
+ * when nothing is wrong.
  *
  * The catalogue it fetches is *not* written into the Models field. That field
  * is the list an operator typed, and it exists for endpoints nothing can

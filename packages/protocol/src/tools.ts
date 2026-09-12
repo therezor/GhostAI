@@ -10,10 +10,10 @@
  * `risk` survives as **metadata**. It is declared by the tool, it rides on the
  * `tool.call` and `tool.approvalRequest` events so a card can badge itself, and
  * it seeds the permission a newly created agent starts a tool at. It decides
- * nothing at call time. It used to: a band-to-policy table in config was the
- * gate, which meant `search` and a port scanner in the same toolbox were one
- * setting, and an agent's tool list was a separate allow/deny pair that could
- * admit a tool the table then refused.
+ * nothing at call time: a band-to-policy table as the gate would make `search`
+ * and a port scanner in the same toolbox one setting, and would leave an
+ * agent's tool list a separate allow/deny pair that could admit a tool the
+ * table then refused.
  */
 
 import { z } from 'zod';
@@ -54,9 +54,9 @@ export type ToolPermissions = z.infer<typeof ToolPermissionsSchema>;
 /**
  * The tools that ship in the box.
  *
- * Here rather than in `@ghostwire/tools`, which is where they are actually
+ * Here rather than in `ghostai-tools`, which is where they are actually
  * defined, because two packages downstream need the *names* without the
- * implementations: `@ghostwire/security` refuses a toolbox that shadows one, and
+ * implementations: `ghostai-security` refuses a toolbox that shadows one, and
  * `DEFAULT_AGENT_TOOLS` in `config.ts` seeds a new agent with them. Both sit
  * below `tools` in the layer graph. `packages/tools` owns a test that this list
  * still matches `BUILTIN_TOOLS`, which is the only place both are visible.
@@ -117,9 +117,7 @@ export type ToolDefinition = z.infer<typeof ToolDefinitionSchema>;
 export const ApprovalScopeSchema = z.enum(['once', 'session', 'always']);
 export type ApprovalScope = z.infer<typeof ApprovalScopeSchema>;
 
-// ---------------------------------------------------------------------------
 // Rewriting what a tool says about itself
-// ---------------------------------------------------------------------------
 
 /**
  * An operator's replacement for one tool's prose.

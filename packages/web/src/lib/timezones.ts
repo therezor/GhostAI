@@ -1,10 +1,9 @@
 /**
  * The IANA zone list, and the sentinel the picker uses for "this browser's".
  *
- * Lived in `automation/job-form.ts` while a job could carry a zone of its own.
- * It cannot any more — there is one install-wide `ui.timezone` — so the list
- * belongs beside the other formatting primitives rather than inside the feature
- * that used to own it.
+ * Beside the other formatting primitives rather than inside `automation/
+ * job-form.ts`: a job carries no zone of its own, so the list belongs to
+ * formatting rather than to the scheduler.
  */
 
 /**

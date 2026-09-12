@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import { createI18n } from '#src/instance.js';
-import { createCliI18n } from '#src/cli.js';
 import { createWebI18n } from '#src/web.js';
 
 const RESOURCES = {
@@ -106,30 +105,20 @@ describe('strict mode', () => {
   });
 });
 
-describe('the per-surface instances', () => {
-  it('give the browser its own bundle', () => {
+describe('the browser instance', () => {
+  it('gets its own bundle', () => {
     const i18n = createWebI18n('en', false);
 
     expect(i18n.t('settings.title')).toBe('Settings');
   });
 
-  it('give the terminal its own bundle', () => {
-    // Addressed as `cli:` rather than bare: the type-level `defaultNS` is `web`,
-    // so a CLI file that reaches for the unscoped `t` fails to compile. That is
-    // deliberate — see the note in `types.ts`.
-    const i18n = createCliI18n('en', false);
-
-    expect(i18n.t('cli:program.description')).toBe(
-      'A self-hosted agent that runs where your files are.',
-    );
-  });
-
-  it('keep the surfaces apart, so neither ships the other’s strings', () => {
-    // Not tidiness: `program.ts` parses the CLI bundle on every `ghostai --help`.
+  it('never ships the terminal’s strings', () => {
+    // The one surviving per-surface instance, and the split still earns the
+    // assertion: `cli` is the Rust binary's bundle, embedded there with
+    // `include_str!`, and a browser that loaded it would be shipping copy no
+    // screen can render.
     const web = createWebI18n('en', false);
-    const cli = createCliI18n('en', false);
 
     expect(web.hasResourceBundle('en', 'cli')).toBe(false);
-    expect(cli.hasResourceBundle('en', 'web')).toBe(false);
   });
 });

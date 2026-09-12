@@ -187,7 +187,8 @@
     "pressCtrlC": "Press Ctrl-C to stop.",
     "stopped": "Stopped.",
     "ui": "UI",
-    "uiUnbuilt": "not built — serving the API only (build @ghostwire/web to add it)",
+    "uiBundled": "bundled with this binary",
+    "uiUnbuilt": "not bundled — serving the API only (this binary was built without the web UI)",
     "url": "URL",
     "workspace": "Workspace"
   },

@@ -1091,6 +1091,85 @@ describe('merging a fetched history', () => {
     expect(turnOf(merged).parts).toHaveLength(1);
   });
 
+  it('keeps a watched turn whole against a history fetched before it ended', () => {
+    // The request went out when the socket minted the session key, and answered
+    // after the turn finished — so it carries the tool row and not the answer
+    // that followed it. Taking it as the base deleted text that was already on
+    // screen, and nothing fetched again: the invalidation that would have
+    // refetched fires while this request is still open and is deduplicated into
+    // it. Only a reload put the answer back.
+    const live = play(
+      START,
+      {
+        type: 'tool.call',
+        turnId: 't1',
+        callId: 'c1',
+        name: 'list_dir',
+        args: {},
+        risk: 'safe',
+      },
+      {
+        type: 'tool.result',
+        turnId: 't1',
+        callId: 'c1',
+        ok: true,
+        content: 'notes.md',
+        truncated: false,
+        durationMs: 1,
+      },
+      { type: 'assistant.delta', turnId: 't1', text: 'the answer' },
+    );
+
+    const merged = mergeStoredHistory(live, [
+      row,
+      stored('m2', 't1', {
+        role: 'assistant',
+        content: [],
+        toolCalls: [{ id: 'c1', name: 'list_dir', argumentsJson: '{}' }],
+      }),
+      stored('m3', 't1', {
+        role: 'tool',
+        toolCallId: 'c1',
+        name: 'list_dir',
+        content: 'notes.md',
+        isError: false,
+        truncated: false,
+      }),
+    ]);
+
+    expect(turnOf(merged).parts).toHaveLength(2);
+    expect(turnOf(merged).parts.at(-1)).toMatchObject({
+      kind: 'text',
+      text: 'the answer',
+    });
+  });
+
+  it('takes storage once it holds everything the socket showed', () => {
+    // The other direction, and the reason the test is on what each side *has*
+    // rather than on whether the turn is running: a rebuild that has caught up
+    // is the better base, because it carries the row ids that make a finished
+    // turn editable and `withLiveRiskBands` puts back the detail rows cannot
+    // hold.
+    const live = play(START, {
+      type: 'assistant.delta',
+      turnId: 't1',
+      text: 'the answer',
+    });
+
+    const merged = mergeStoredHistory(live, [
+      row,
+      stored('m2', 't1', {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'the answer, as stored' }],
+        toolCalls: [],
+      }),
+    ]);
+
+    expect(turnOf(merged).parts).toMatchObject([
+      { kind: 'text', text: 'the answer, as stored' },
+    ]);
+  });
+
   it('keeps a replayed turn whole against the stored half of itself', () => {
     // The refetch that follows an incomplete replay lands mid-turn, and storage
     // holds the iterations that finished — as a turn marked `done`, under the

@@ -2,9 +2,9 @@
  * The Providers panel: the list, and the way into each endpoint.
  *
  * The list is what the operator has *configured*, not what the registry knows,
- * and that inversion is the whole change: a provider used to be a row that
- * always existed and might have settings, and is now an endpoint that exists
- * because someone added it. Two Ollama servers are two rows.
+ * and that inversion is the whole point: a provider is an endpoint that exists
+ * because someone added it, not a row that always exists and might have
+ * settings. Two Ollama servers are two rows.
  *
  * Shaped like Agents, because it is the same kind of thing: a list that picks,
  * a `RowActions` kebab for the acts that need no form, and **an editor route**
@@ -173,7 +173,7 @@ export function ProvidersPanel(): JSX.Element {
                   {/* The endpoint is what tells two Ollama servers apart, so it
                       stays on the row rather than being shed on a phone. It
                       breaks anywhere it has to — a URL with no spaces in it is
-                      the string that used to push this list off the screen. */}
+                      what pushes a list like this off the screen. */}
                   <span className="data-list__code">{instance.apiBase}</span>
                   {/* A badge with a word in it, not a bare coloured dot: colour
                       alone is the one encoding some readers do not receive. */}

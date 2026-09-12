@@ -132,9 +132,8 @@ export function SubagentRow({
         }
         value={subagentRef.prompt}
         // The sentence the model would actually read, not an invented example
-        // of one an operator might write — which is what this used to hold, and
-        // left "leave it empty for a generic one" as the only clue about a
-        // default nobody could see.
+        // of one an operator might write — which would leave "leave it empty for
+        // a generic one" as the only clue about a default nobody can see.
         //
         // A placeholder rather than a prefilled value on purpose: it is built
         // from the *target's* current label, so it follows a rename. Written
